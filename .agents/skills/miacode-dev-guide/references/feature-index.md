@@ -392,6 +392,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `PreviewAudioWorker.{h,cpp}`, `PreviewAudioWorkerProtocol.h`, `PreviewAudioCommandQueue.*`, and
   `PreviewAudioWorkerFactory.*` — worker-thread backend ownership, command/completion transport,
   lifecycle snapshots, generation gates, and serialized shutdown.
+- Process-wide BASS device lifetime: `PreviewBassDeviceLease.{h,cpp}` — serializes only
+  `BASS_GetDevice` / `BASS_Init` / final `BASS_Free` for preview, waveform, and export owners;
+  existing devices are borrowed and never freed by the lease.
 - Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}`
   (Windows/macOS, real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
   `MiniaudioPreviewAudioBackend.{h,cpp}` (no-BASS compatibility, SoundTouch stretch).

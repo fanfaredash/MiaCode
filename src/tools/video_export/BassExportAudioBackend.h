@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VideoExportAudioBackend.h"
+#include "audio/PreviewBassDeviceLease.h"
 
 namespace miacode::video_export {
 
@@ -22,7 +23,7 @@ private:
     bool initializeBass(QString* errorMessage);
     void shutdownBass();
 
-    bool ownsBassInit_ = false;
+    miacode::preview_audio::PreviewBassDeviceLease bassDeviceLease_;
 };
 
 }  // namespace miacode::video_export

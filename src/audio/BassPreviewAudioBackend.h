@@ -11,6 +11,7 @@
 #include "common/PreviewAudioMixConfig.h"
 #include "BassPreviewDebugLogRouting.h"
 #include "BassPreviewSfxSchedulerPolicy.h"
+#include "PreviewBassDeviceLease.h"
 #include "PreviewAudioBackend.h"
 #include "PreviewAudioHealth.h"
 
@@ -317,7 +318,7 @@ private:
     quint32 masterMixer_ = 0;
     quint32 pluginAac_ = 0;
     quint32 pluginOpus_ = 0;
-    bool registeredBassDeviceRef_ = false;
+    miacode::preview_audio::PreviewBassDeviceLease bassDeviceLease_;
     void* bassFxModule_ = nullptr;
     void* bassFxTempoCreate_ = nullptr;
     RetainedPlaybackMode retainedPlaybackMode_ = RetainedPlaybackMode::None;

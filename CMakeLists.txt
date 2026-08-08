@@ -711,6 +711,8 @@ target_sources(MiaCode PRIVATE
     src/audio/PreviewAudioWorkerFactory.cpp
     src/audio/PreviewAudioWorker.h
     src/audio/PreviewAudioWorker.cpp
+    src/audio/PreviewBassDeviceLease.h
+    src/audio/PreviewBassDeviceLease.cpp
     src/tools/video_export/VideoExportAudioRenderPlan.h
     src/tools/video_export/VideoExportAudioRenderPlan.cpp
     src/tools/video_export/VideoExportAudioBackend.h
@@ -1051,6 +1053,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioWorkerFactory.cpp
             src/audio/PreviewAudioWorker.h
             src/audio/PreviewAudioWorker.cpp
+            src/audio/PreviewBassDeviceLease.h
+            src/audio/PreviewBassDeviceLease.cpp
             src/tools/probe/SoundtouchProbe.cpp
             src/audio/PreviewAudioSettings.h
             src/audio/PreviewAudioSettings.cpp
@@ -1514,6 +1518,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioWorkerFactory.h
             src/audio/PreviewAudioWorker.h
             src/audio/PreviewAudioWorker.cpp
+            src/audio/PreviewBassDeviceLease.h
+            src/audio/PreviewBassDeviceLease.cpp
         LIBS Qt6::Core soundtouch
         INCLUDES src src/audio src/common src/preview src/timeline
     )
@@ -1594,6 +1600,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/BassPreviewDebugLogRouting.h
         LIBS Qt6::Core
         INCLUDES src src/common src/preview src/audio
+    )
+
+    miacode_add_dev_tool(preview_bass_device_lease_spec TEST
+        SOURCES
+            src/tools/preview/PreviewBassDeviceLeaseSpec.cpp
+            src/audio/PreviewBassDeviceLease.h
+            src/audio/PreviewBassDeviceLease.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/audio
     )
 
     miacode_add_dev_tool(preview_audio_health_spec TEST

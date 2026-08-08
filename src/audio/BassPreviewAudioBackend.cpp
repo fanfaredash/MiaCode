@@ -54,19 +54,8 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
         masterMixer_ = 0;
     }
     unloadBassFx();
-    if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
-        --gBassDeviceRefCount;
-        registeredBassDeviceRef_ = false;
-    }
-    if (engineInitialized_ && gBassDeviceRefCount == 0) {
-        BASS_Stop();
-        noteBassErr("dtor/bass_stop");
-        BASS_Free();
-        noteBassErr("dtor/bass_free");
-        engineInitialized_ = false;
-    } else if (engineInitialized_) {
-        engineInitialized_ = false;
-    }
+    bassDeviceLease_.release();
+    engineInitialized_ = false;
 #endif
 }
 

@@ -37,20 +37,6 @@
 
 using namespace miacode::audio::bass_detail;
 
-// God-file split: the mutable file-static BASS device reference counter is
-// shared across the BassPreviewAudioBackend translation units (declared
-// `extern` in BassPreviewAudioBackendImpl.h). It is DEFINED here, exactly
-// once, in the engine-init TU that owns BASS_Init / BASS_Free.
-#ifdef MIACODE_HAS_BASS_AUDIO
-namespace miacode {
-namespace audio {
-namespace bass_detail {
-int gBassDeviceRefCount = 0;
-}  // namespace bass_detail
-}  // namespace audio
-}  // namespace miacode
-#endif
-
 bool BassPreviewAudioBackend::ensureBassFxLoaded()
 {
     MC_OP("BassPreviewAudioBackend::ensureBassFxLoaded");
@@ -194,23 +180,24 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
             true);
         return false;
     }
-    if (!registeredBassDeviceRef_) {
-        if (gBassDeviceRefCount == 0) {
-            if (!BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr)) {
-                const int errorCode = static_cast<int>(BASS_ErrorGetCode());
-                lastNativeErrorCode_ = errorCode;
-                noteBassErrCode("engine_init/bass_init", errorCode);
-                _mc_op_.fail(QStringLiteral("BASS_Init err=%1").arg(errorCode));
-                appendAudioDebugLog(QString("bass_init_failed err=%1").arg(errorCode));
-                appendBassDebugLog(
-                    miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
-                    QString("reused=0 elapsed_ms=%1 ok=0 reason=bass_init").arg(timer.elapsed()),
-                    true);
-                return false;
-            }
+    if (!bassDeviceLease_.acquired()) {
+        bassDeviceLease_ = miacode::preview_audio::PreviewBassDeviceLease::acquire({
+            [] { return static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(BASS_GetDevice()); },
+            [this] { return BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr) != FALSE; },
+            [] { BASS_Free(); },
+        });
+        if (!bassDeviceLease_.acquired()) {
+            const int errorCode = static_cast<int>(BASS_ErrorGetCode());
+            lastNativeErrorCode_ = errorCode;
+            noteBassErrCode("engine_init/bass_init", errorCode);
+            _mc_op_.fail(QStringLiteral("BASS_Init err=%1").arg(errorCode));
+            appendAudioDebugLog(QString("bass_init_failed err=%1").arg(errorCode));
+            appendBassDebugLog(
+                miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
+                QString("reused=0 elapsed_ms=%1 ok=0 reason=bass_init").arg(timer.elapsed()),
+                true);
+            return false;
         }
-        ++gBassDeviceRefCount;
-        registeredBassDeviceRef_ = true;
     }
     loadOptionalPlugins();
     masterMixer_ = BASS_Mixer_StreamCreate(
@@ -222,13 +209,7 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
         lastNativeErrorCode_ = errorCode;
         noteBassErrCode("engine_init/master_mixer_create", errorCode);
         appendAudioDebugLog(QString("bass_master_mixer_failed err=%1").arg(errorCode));
-        if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
-            --gBassDeviceRefCount;
-            registeredBassDeviceRef_ = false;
-        }
-        if (gBassDeviceRefCount == 0) {
-            BASS_Free();
-        }
+        bassDeviceLease_.release();
         appendBassDebugLog(
             miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
             QString("reused=0 elapsed_ms=%1 ok=0 reason=master_mixer").arg(timer.elapsed()),
@@ -251,13 +232,7 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
         noteBassErrCode("engine_init/master_play_once", errorCode);
         BASS_StreamFree(masterMixer_);
         masterMixer_ = 0;
-        if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
-            --gBassDeviceRefCount;
-            registeredBassDeviceRef_ = false;
-        }
-        if (gBassDeviceRefCount == 0) {
-            BASS_Free();
-        }
+        bassDeviceLease_.release();
         appendBassDebugLog(
             miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
             QString("reused=0 elapsed_ms=%1 ok=0 reason=master_play").arg(timer.elapsed()),

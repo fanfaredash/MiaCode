@@ -5,9 +5,8 @@
 // anonymous namespace during the god-file split; the only changes are the move
 // into the named namespace miacode::audio::bass_detail and the addition of
 // `inline` / `inline constexpr` linkage so the helpers can be shared across TUs
-// without ODR violations. The mutable file-static reference counter
-// gBassDeviceRefCount is declared `extern` here and DEFINED exactly once in
-// BassPreviewAudioBackend_EngineInit.cpp.
+// without ODR violations. Process-wide BASS device lifetime is owned by
+// PreviewBassDeviceLease, outside these implementation translation units.
 //
 // NOTE: this header is included by each TU *after* that TU's #include block
 // (Qt headers + common headers + the platform BASS headers guarded by
@@ -370,7 +369,6 @@ inline QString bassDebugOperationLabel(miacode::preview_audio::bass::BassDebugOp
 
 #ifdef MIACODE_HAS_BASS_AUDIO
 typedef DWORD (WINAPI* BassFxTempoCreateProc)(DWORD handle, DWORD flags);
-extern int gBassDeviceRefCount;
 #endif
 
 }  // namespace bass_detail
