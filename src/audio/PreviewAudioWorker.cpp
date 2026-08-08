@@ -13,6 +13,7 @@ namespace {
 
 using SteadyClock = std::chrono::steady_clock;
 thread_local PreviewAudioWorker* currentPreviewAudioWorker = nullptr;
+constexpr std::size_t kNonGuiCompletionRetentionCapacity = 128;
 
 qint64 steadyNowNs()
 {
@@ -58,9 +59,11 @@ struct PreviewAudioWorker::RuntimeState {
 
 PreviewAudioWorker::PreviewAudioWorker(
     PreviewAudioBackendFactory factory,
-    CompletionCallback completionCallback)
+    CompletionCallback completionCallback,
+    std::thread::id facadeOwningThreadId)
     : factory_(std::move(factory))
     , completionCallback_(std::move(completionCallback))
+    , facadeOwningThreadId_(facadeOwningThreadId)
 {
     thread_ = std::thread([this] { run(); });
 }
@@ -99,6 +102,9 @@ WorkerPostResult PreviewAudioWorker::post(PreviewAudioCommand command)
             result = queue_.enqueue(std::move(command));
         }
     }
+    if (result.retiredSequence != 0) {
+        markCompletionRetiredForNonGui(result.retiredSequence);
+    }
     if (result.accepted) {
         wakeCv_.notify_one();
     }
@@ -109,6 +115,62 @@ PreviewAudioSnapshot PreviewAudioWorker::snapshot() const
 {
     std::lock_guard lock(snapshotMutex_);
     return snapshot_;
+}
+
+NonGuiBarrierWaitStatus PreviewAudioWorker::waitForReadyForNonGui(
+    std::chrono::milliseconds timeout)
+{
+    if (std::this_thread::get_id() == facadeOwningThreadId_) {
+        return NonGuiBarrierWaitStatus::FacadeOwningThread;
+    }
+
+    std::unique_lock lock(nonGuiBarrierMutex_);
+    if (nonGuiLifecycle_ != WorkerLifecycle::Ready && !nonGuiShuttingDown_
+        && nonGuiWaitEnrollmentObserverForTest_) {
+        nonGuiWaitEnrollmentObserverForTest_();
+    }
+    if (!nonGuiBarrierCv_.wait_for(lock, timeout, [this] {
+            return nonGuiLifecycle_ == WorkerLifecycle::Ready || nonGuiShuttingDown_;
+        })) {
+        return NonGuiBarrierWaitStatus::Timeout;
+    }
+    return nonGuiShuttingDown_ ? NonGuiBarrierWaitStatus::ShuttingDown
+                               : NonGuiBarrierWaitStatus::Ready;
+}
+
+NonGuiBarrierWaitStatus PreviewAudioWorker::waitForCompletionForNonGui(
+    quint64 sequence,
+    std::chrono::milliseconds timeout)
+{
+    if (std::this_thread::get_id() == facadeOwningThreadId_) {
+        return NonGuiBarrierWaitStatus::FacadeOwningThread;
+    }
+
+    std::unique_lock lock(nonGuiBarrierMutex_);
+    if (!nonGuiCompletions_.contains(sequence)
+        && !retiredNonGuiCompletions_.contains(sequence)
+        && !nonGuiShuttingDown_
+        && nonGuiWaitEnrollmentObserverForTest_) {
+        nonGuiWaitEnrollmentObserverForTest_();
+    }
+    if (!nonGuiBarrierCv_.wait_for(lock, timeout, [this, sequence] {
+            return nonGuiCompletions_.contains(sequence)
+                || retiredNonGuiCompletions_.contains(sequence)
+                || nonGuiShuttingDown_;
+        })) {
+        return NonGuiBarrierWaitStatus::Timeout;
+    }
+
+    if (nonGuiShuttingDown_) {
+        return NonGuiBarrierWaitStatus::ShuttingDown;
+    }
+    if (nonGuiCompletions_.contains(sequence)) {
+        return NonGuiBarrierWaitStatus::Completed;
+    }
+    if (retiredNonGuiCompletions_.contains(sequence)) {
+        return NonGuiBarrierWaitStatus::CompletionRetired;
+    }
+    return NonGuiBarrierWaitStatus::ShuttingDown;
 }
 
 void PreviewAudioWorker::shutdownAndJoin()
@@ -127,11 +189,16 @@ void PreviewAudioWorker::shutdownAndJoin()
         std::scoped_lock gateLock(callbackMutex_, wakeMutex_);
         callbackDeliveryEnabled_ = false;
         acceptingPosts_.store(false, std::memory_order_release);
+        {
+            std::lock_guard barrierLock(nonGuiBarrierMutex_);
+            nonGuiShuttingDown_ = true;
+        }
         PreviewAudioCommand shutdown = makeHigh(CommandKind::Shutdown);
         shutdown.identity.sequence = nextCommandSequence_.fetch_add(1, std::memory_order_relaxed);
         shutdown.enqueuedAtNs = steadyNowNs();
         queue_.beginShutdown(std::move(shutdown));
     }
+    nonGuiBarrierCv_.notify_all();
     wakeCv_.notify_one();
     {
         std::unique_lock callbackLock(callbackMutex_);
@@ -640,6 +707,7 @@ void PreviewAudioWorker::publishLifecycle(
         snapshot_.workerThreadId = workerThreadId_.load(std::memory_order_acquire);
     }
     stateCv_.notify_all();
+    publishNonGuiLifecycle(lifecycle);
 }
 
 bool PreviewAudioWorker::publishAssetLifecycleIfCurrent(
@@ -682,6 +750,7 @@ void PreviewAudioWorker::publishBackendLifecycle(
         snapshot_.workerThreadId = workerThreadId_.load(std::memory_order_acquire);
     }
     stateCv_.notify_all();
+    publishNonGuiLifecycle(lifecycle);
 }
 
 bool PreviewAudioWorker::publishCompletion(
@@ -737,6 +806,9 @@ bool PreviewAudioWorker::publishCompletion(
         }
     }
     stateCv_.notify_all();
+    if (lifecycle) {
+        publishNonGuiLifecycle(*lifecycle);
+    }
     deliverCompletion(completion);
     return true;
 }
@@ -761,8 +833,66 @@ void PreviewAudioWorker::finishCompletion(
     deliverCompletion(completion);
 }
 
+void PreviewAudioWorker::publishNonGuiLifecycle(WorkerLifecycle lifecycle)
+{
+    {
+        std::lock_guard lock(nonGuiBarrierMutex_);
+        nonGuiLifecycle_ = lifecycle;
+        if (lifecycle == WorkerLifecycle::ShuttingDown || lifecycle == WorkerLifecycle::Stopped) {
+            nonGuiShuttingDown_ = true;
+        }
+    }
+    nonGuiBarrierCv_.notify_all();
+}
+
+void PreviewAudioWorker::setNonGuiWaitEnrollmentObserverForTest(std::function<void()> observer)
+{
+    std::lock_guard lock(nonGuiBarrierMutex_);
+    nonGuiWaitEnrollmentObserverForTest_ = std::move(observer);
+}
+
+void PreviewAudioWorker::markCompletionRetiredForNonGui(quint64 sequence)
+{
+    {
+        std::lock_guard lock(nonGuiBarrierMutex_);
+        rememberRetiredCompletionForNonGuiLocked(sequence);
+    }
+    nonGuiBarrierCv_.notify_all();
+}
+
+void PreviewAudioWorker::rememberRetiredCompletionForNonGuiLocked(quint64 sequence)
+{
+    if (sequence == 0 || !retiredNonGuiCompletions_.insert(sequence).second) {
+        return;
+    }
+    retiredNonGuiCompletionOrder_.push_back(sequence);
+    while (retiredNonGuiCompletionOrder_.size() > kNonGuiCompletionRetentionCapacity) {
+        retiredNonGuiCompletions_.erase(retiredNonGuiCompletionOrder_.front());
+        retiredNonGuiCompletionOrder_.pop_front();
+    }
+}
+
+void PreviewAudioWorker::retainCompletionForNonGui(const PreviewAudioCompletion& completion)
+{
+    std::lock_guard lock(nonGuiBarrierMutex_);
+    const auto [_, inserted] = nonGuiCompletions_.insert_or_assign(
+        completion.identity.sequence,
+        completion);
+    if (inserted) {
+        nonGuiCompletionOrder_.push_back(completion.identity.sequence);
+    }
+    while (nonGuiCompletionOrder_.size() > kNonGuiCompletionRetentionCapacity) {
+        const quint64 retiredSequence = nonGuiCompletionOrder_.front();
+        nonGuiCompletionOrder_.pop_front();
+        nonGuiCompletions_.erase(retiredSequence);
+        rememberRetiredCompletionForNonGuiLocked(retiredSequence);
+    }
+    nonGuiBarrierCv_.notify_all();
+}
+
 void PreviewAudioWorker::deliverCompletion(const PreviewAudioCompletion& completion)
 {
+    retainCompletionForNonGui(completion);
     {
         std::lock_guard lock(callbackMutex_);
         if (!callbackDeliveryEnabled_ || !completionCallback_) {
@@ -797,6 +927,7 @@ void PreviewAudioWorker::rejectQueuedCommands(CommandError error)
         deliverCompletion(completion);
     }
     stateCv_.notify_all();
+    nonGuiBarrierCv_.notify_all();
 }
 
 bool PreviewAudioWorker::isCurrentAssetGeneration(quint64 generation) const

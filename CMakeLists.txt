@@ -1543,6 +1543,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
         endif()
     endif()
 
+    miacode_add_dev_tool(preview_audio_non_gui_barrier_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioNonGuiBarrierSpec.cpp
+            src/audio/PreviewAudioSettings.h
+            src/audio/PreviewAudioSettings.cpp
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+            src/audio/PreviewAudioWorkerFactory.h
+            src/audio/PreviewAudioWorker.h
+            src/audio/PreviewAudioWorker.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/audio src/common src/timeline
+    )
+
     miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
         SOURCES
             src/tools/preview/TouchPadAuthoringStateSpec.cpp

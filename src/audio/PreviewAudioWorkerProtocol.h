@@ -66,6 +66,15 @@ enum class WorkerLifecycle {
     Stopped,
 };
 
+enum class NonGuiBarrierWaitStatus {
+    Ready,
+    Completed,
+    Timeout,
+    ShuttingDown,
+    CompletionRetired,
+    FacadeOwningThread,
+};
+
 enum class CommandClass {
     High,
     Ordered,

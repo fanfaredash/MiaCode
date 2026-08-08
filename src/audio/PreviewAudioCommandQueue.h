@@ -13,6 +13,7 @@ struct EnqueueResult {
     bool replaced = false;
     bool coalesced = false;
     CommandError error = CommandError::None;
+    quint64 retiredSequence = 0;
 };
 
 class PreviewAudioCommandQueue

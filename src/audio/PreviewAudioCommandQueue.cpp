@@ -7,14 +7,17 @@ namespace miacode::preview_audio {
 
 namespace {
 
-EnqueueResult accepted(bool replaced = false, bool coalesced = false)
+EnqueueResult accepted(
+    bool replaced = false,
+    bool coalesced = false,
+    quint64 retiredSequence = 0)
 {
-    return {true, replaced, coalesced, CommandError::None};
+    return {true, replaced, coalesced, CommandError::None, retiredSequence};
 }
 
 EnqueueResult rejected(CommandError error)
 {
-    return {false, false, false, error};
+    return {false, false, false, error, 0};
 }
 
 template <typename Container>
@@ -90,7 +93,7 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
     if (command.kind == CommandKind::DeviceChangePause) {
         if (devicePause_) {
             if (canCoalesce(devicePause_->command, command)) {
-                return accepted(false, true);
+                return accepted(false, true, command.identity.sequence);
             }
             return rejected(CommandError::QueueFull);
         }
@@ -137,8 +140,9 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
             if (command.identity.generation < slot->command.identity.generation) {
                 return rejected(CommandError::Stale);
             }
+            const quint64 retiredSequence = slot->command.identity.sequence;
             slot = makeEntry(std::move(command));
-            return accepted(true, false);
+            return accepted(true, false, retiredSequence);
         }
         slot = makeEntry(std::move(command));
         return accepted();

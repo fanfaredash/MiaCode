@@ -5,15 +5,21 @@
 #include "PreviewAudioWorkerProtocol.h"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace miacode::preview_audio {
+
+class PreviewAudioNonGuiBarrierSpecAccess;
 
 class PreviewAudioWorker
 {
@@ -24,7 +30,8 @@ public:
 
     explicit PreviewAudioWorker(
         PreviewAudioBackendFactory factory = productionPreviewAudioBackendFactory(),
-        CompletionCallback completionCallback = {});
+        CompletionCallback completionCallback = {},
+        std::thread::id facadeOwningThreadId = std::this_thread::get_id());
     ~PreviewAudioWorker();
 
     PreviewAudioWorker(const PreviewAudioWorker&) = delete;
@@ -32,9 +39,22 @@ public:
 
     WorkerPostResult post(PreviewAudioCommand command);
     PreviewAudioSnapshot snapshot() const;
+
+    // These barriers are for non-GUI callers only. Calling them from the facade-owning
+    // thread is a contract violation and returns FacadeOwningThread without waiting.
+    // Completed and CompletionRetired are non-consuming: every caller observes the
+    // same status while its bounded entry is retained (up to 128 completed and 128
+    // retired sequences). Callers that need a result must wait before that window
+    // is exhausted.
+    NonGuiBarrierWaitStatus waitForReadyForNonGui(std::chrono::milliseconds timeout);
+    NonGuiBarrierWaitStatus waitForCompletionForNonGui(
+        quint64 sequence,
+        std::chrono::milliseconds timeout);
     void shutdownAndJoin();
 
 private:
+    friend class PreviewAudioNonGuiBarrierSpecAccess;
+
     struct BackendSnapshot;
     struct RuntimeState;
 
@@ -72,6 +92,11 @@ private:
         const BackendSnapshot* backendSnapshot = nullptr,
         std::optional<WorkerLifecycle> lifecycle = std::nullopt,
         bool requireCurrentAssetGeneration = false);
+    void publishNonGuiLifecycle(WorkerLifecycle lifecycle);
+    void setNonGuiWaitEnrollmentObserverForTest(std::function<void()> observer);
+    void markCompletionRetiredForNonGui(quint64 sequence);
+    void rememberRetiredCompletionForNonGuiLocked(quint64 sequence);
+    void retainCompletionForNonGui(const PreviewAudioCompletion& completion);
     void deliverCompletion(const PreviewAudioCompletion& completion);
     void rejectQueuedCommands(CommandError error);
     bool isCurrentAssetGeneration(quint64 generation) const;
@@ -97,9 +122,20 @@ private:
     std::mutex shutdownMutex_;
     std::condition_variable stateCv_;
 
+    std::mutex nonGuiBarrierMutex_;
+    std::condition_variable nonGuiBarrierCv_;
+    std::unordered_map<quint64, PreviewAudioCompletion> nonGuiCompletions_;
+    std::deque<quint64> nonGuiCompletionOrder_;
+    std::unordered_set<quint64> retiredNonGuiCompletions_;
+    std::deque<quint64> retiredNonGuiCompletionOrder_;
+    WorkerLifecycle nonGuiLifecycle_ = WorkerLifecycle::Constructing;
+    bool nonGuiShuttingDown_ = false;
+    std::function<void()> nonGuiWaitEnrollmentObserverForTest_;
+
     std::atomic_bool acceptingPosts_{true};
     std::atomic<quint64> nextCommandSequence_{1};
     std::atomic<quint64> workerThreadId_{0};
+    const std::thread::id facadeOwningThreadId_;
     std::thread thread_;
 };
 
