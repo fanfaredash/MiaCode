@@ -233,6 +233,7 @@ BassPreviewAudioBackend::Sample* BassPreviewAudioBackend::sampleForKind(const QS
 void BassPreviewAudioBackend::reloadAssets(const PreviewAudioSettings& settings)
 {
     MC_OP("BassPreviewAudioBackend::reloadAssets");
+    lastNativeErrorCode_ = 0;
     settings_ = settings;
     settings_.normalize();
     invalidateRetainedPlaybackState(QStringLiteral("reload_assets"));

@@ -19,6 +19,8 @@ public:
 
     QString backendId() const override;
     bool canBePrimary(QString* reason = nullptr) const override;
+    int nativeErrorCode() const noexcept override;
+    void clearNativeErrorCode() noexcept override;
 
     void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir) override;
     void reloadAssets(const PreviewAudioSettings& settings) override;
@@ -145,9 +147,12 @@ private:
     void armBackgroundTrackClock(double timelineSecond);
     void clearBackgroundTrackClockAnchor();
     void applyVolumes();
-    bool playKindInternal(const QString& kind, double gain = 1.0);
+    bool playKindInternal(
+        const QString& kind,
+        double gain = 1.0,
+        int* nativeErrorCode = nullptr);
     void reconcileTouchholdVoice(double second);
-    bool playTouchholdAudition();
+    bool playTouchholdAudition(int* nativeErrorCode = nullptr);
 
     PreviewAudioSettings settings_;
     PreviewTimingSettings timingSettings_;
@@ -164,6 +169,7 @@ private:
     double lastStretchedClockDriftLogSecond_ = -1.0;
     double lastStretchedClockDriftDeltaMs_ = 0.0;
     bool engineInitialized_ = false;
+    int lastNativeErrorCode_ = 0;
     Voice* touchholdVoice_ = nullptr;
     int touchholdOwnerSpanIndex_ = -1;
     Voice* backgroundTrackVoice_ = nullptr;

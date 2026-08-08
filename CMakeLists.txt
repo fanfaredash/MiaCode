@@ -707,6 +707,10 @@ target_include_directories(MiaCode PRIVATE
 
 target_sources(MiaCode PRIVATE
     src/common/PreviewAudioMixConfig.h
+    src/audio/PreviewAudioWorkerFactory.h
+    src/audio/PreviewAudioWorkerFactory.cpp
+    src/audio/PreviewAudioWorker.h
+    src/audio/PreviewAudioWorker.cpp
     src/tools/video_export/VideoExportAudioRenderPlan.h
     src/tools/video_export/VideoExportAudioRenderPlan.cpp
     src/tools/video_export/VideoExportAudioBackend.h
@@ -1040,6 +1044,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(soundtouch_probe
         SOURCES
             src/audio/PreviewAudioBackend.h
+            src/audio/PreviewAudioWorkerProtocol.h
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewAudioWorkerFactory.h
+            src/audio/PreviewAudioWorkerFactory.cpp
+            src/audio/PreviewAudioWorker.h
+            src/audio/PreviewAudioWorker.cpp
             src/tools/probe/SoundtouchProbe.cpp
             src/audio/PreviewAudioSettings.h
             src/audio/PreviewAudioSettings.cpp
@@ -1478,6 +1489,59 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/common src/audio src/timeline
     )
+
+    miacode_add_dev_tool(preview_audio_worker_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioWorkerSpec.cpp
+            ${_miacode_log_core}
+            src/common/Mmcss.h
+            src/common/Mmcss.cpp
+            src/audio/PreviewAudioSettings.h
+            src/audio/PreviewAudioSettings.cpp
+            src/audio/MiniaudioPreviewAudioBackend.h
+            src/audio/MiniaudioPreviewAudioBackend.cpp
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+            src/audio/PreviewAudioWorkerFactory.h
+            src/audio/PreviewAudioWorker.h
+            src/audio/PreviewAudioWorker.cpp
+        LIBS Qt6::Core soundtouch
+        INCLUDES src src/audio src/common src/preview src/timeline
+    )
+    target_compile_definitions(preview_audio_worker_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+    if (WIN32 OR APPLE)
+        target_sources(preview_audio_worker_spec PRIVATE
+            src/audio/BassPreviewAudioBackend.h
+            src/audio/BassPreviewAudioBackend.cpp
+            src/audio/BassPreviewAudioBackend_EngineInit.cpp
+            src/audio/BassPreviewAudioBackend_Assets.cpp
+            src/audio/BassPreviewAudioBackend_Transport.cpp
+            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+            src/audio/BassPreviewAudioBackend_EventDrain.cpp
+        )
+        target_compile_definitions(preview_audio_worker_spec PRIVATE MIACODE_HAS_BASS_AUDIO=1)
+        target_include_directories(preview_audio_worker_spec PRIVATE third_party/bass/include)
+        if (WIN32)
+            target_link_libraries(preview_audio_worker_spec PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+                avrt
+            )
+            add_custom_command(TARGET preview_audio_worker_spec POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
+                    $<TARGET_FILE_DIR:preview_audio_worker_spec>
+            )
+        elseif (APPLE)
+            target_link_libraries(preview_audio_worker_spec PRIVATE
+                "${MIACODE_BASS_MACOS_DIR}/libbass.dylib"
+                "${MIACODE_BASS_MACOS_DIR}/libbassmix.dylib"
+            )
+        endif()
+    endif()
 
     miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
         SOURCES

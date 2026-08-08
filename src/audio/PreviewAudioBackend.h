@@ -36,6 +36,8 @@ public:
 
     virtual QString backendId() const = 0;
     virtual bool canBePrimary(QString* reason = nullptr) const = 0;
+    virtual int nativeErrorCode() const noexcept { return 0; }
+    virtual void clearNativeErrorCode() noexcept {}
 
     virtual void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir) = 0;
     virtual void reloadAssets(const PreviewAudioSettings& settings) = 0;

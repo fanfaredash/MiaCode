@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PreviewAudioBackend.h"
 #include "PreviewAudioSettings.h"
 #include "common/PreviewTimingSettings.h"
 #include "timeline/TimelineData.h"
@@ -98,6 +99,16 @@ struct PreviewAudioCommand {
     double rate = 1.0;
     double gain = 1.0;
     bool option = false;
+
+    qint64 enqueuedAtNs = 0;
+};
+
+struct WorkerPostResult {
+    bool accepted = false;
+    bool replaced = false;
+    bool coalesced = false;
+    CommandError error = CommandError::None;
+    quint64 sequence = 0;
 };
 
 struct PreviewAudioCompletion {
@@ -106,7 +117,12 @@ struct PreviewAudioCompletion {
     CommandError error = CommandError::None;
     bool success = true;
     double value = 0.0;
+    PausePreviewResult pauseResult;
     QString detail;
+    int nativeErrorCode = 0;
+    quint64 workerThreadId = 0;
+    qint64 queueDelayNs = 0;
+    qint64 executionDurationNs = 0;
 };
 
 struct PreviewAudioSnapshot {
@@ -119,6 +135,15 @@ struct PreviewAudioSnapshot {
     bool backgroundTrackRunning = false;
     double preparedSecond = 0.0;
     double authoritativeSecond = 0.0;
+    double backgroundPlaybackSecond = 0.0;
+    RetainedPlaybackMode retainedPlaybackMode = RetainedPlaybackMode::None;
+    RetainedBgmState retainedBgmState = RetainedBgmState::NoneLoaded;
+    bool lastSuccess = true;
+    double lastValue = 0.0;
+    QString backendId;
+    QString detail;
+    int nativeErrorCode = 0;
+    quint64 workerThreadId = 0;
 };
 
 struct CommandPolicy {

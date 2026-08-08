@@ -43,6 +43,17 @@ void appendAudioDebugLog(const QString& message)
     }
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
 }
+
+bool acceptMiniaudioResult(ma_result result, int* nativeErrorCode)
+{
+    if (result == MA_SUCCESS) {
+        return true;
+    }
+    if (nativeErrorCode != nullptr) {
+        *nativeErrorCode = static_cast<int>(result);
+    }
+    return false;
+}
 }
 
 struct QtPreviewSfxRuntime::EngineState {
@@ -332,6 +343,16 @@ struct QtPreviewSfxRuntime::StretchedBackgroundState {
 QString QtPreviewSfxRuntime::backendId() const
 {
     return QStringLiteral("miniaudio");
+}
+
+int QtPreviewSfxRuntime::nativeErrorCode() const noexcept
+{
+    return lastNativeErrorCode_;
+}
+
+void QtPreviewSfxRuntime::clearNativeErrorCode() noexcept
+{
+    lastNativeErrorCode_ = 0;
 }
 
 bool QtPreviewSfxRuntime::canBePrimary(QString* reason) const

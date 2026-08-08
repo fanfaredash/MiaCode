@@ -588,15 +588,20 @@ void BassPreviewAudioBackend::restoreTouchholdVoices(double second)
 }
 
 
-bool BassPreviewAudioBackend::playKindInternal(const QString& kind, double gain)
+bool BassPreviewAudioBackend::playKindInternal(
+    const QString& kind,
+    double gain,
+    int* nativeErrorCode)
 {
+    if (nativeErrorCode != nullptr) {
+        *nativeErrorCode = 0;
+    }
 #ifdef MIACODE_HAS_BASS_AUDIO
     Sample* sample = sampleForKind(kind);
     if (sample == nullptr) {
         return false;
     }
-    sample->playOneShot(gain);
-    return true;
+    return sample->playOneShot(gain, nativeErrorCode);
 #else
     Q_UNUSED(kind);
     Q_UNUSED(gain);
@@ -607,6 +612,7 @@ bool BassPreviewAudioBackend::playKindInternal(const QString& kind, double gain)
 bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
 {
     MC_OP("BassPreviewAudioBackend::audition");
+    lastNativeErrorCode_ = 0;
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (!initializeAudioEngine() || masterMixer_ == 0) {
         return false;
@@ -617,7 +623,7 @@ bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
         playbackSession_.masterRunning = true;
         audioHealthPlaybackRunning_.store(true, std::memory_order_release);
     }
-    const bool started = playKindInternal(kind, gain);
+    const bool started = playKindInternal(kind, gain, &lastNativeErrorCode_);
     // This path emits a real note sound while bypassing the scheduler, the group
     // cursor, and therefore both group-level logs. Unlogged, an audition was
     // indistinguishable from "no sound was played at all" in a capture — which is

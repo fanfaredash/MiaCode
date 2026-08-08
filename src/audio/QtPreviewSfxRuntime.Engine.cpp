@@ -10,7 +10,9 @@ bool QtPreviewSfxRuntime::initializeAudioEngine()
     engineConfig.sampleRate = miacode::preview_audio::kMixSampleRate;
 
     engineState_ = new EngineState();
-    if (ma_engine_init(&engineConfig, &engineState_->engine) != MA_SUCCESS) {
+    const ma_result engineInitResult = ma_engine_init(&engineConfig, &engineState_->engine);
+    if (engineInitResult != MA_SUCCESS) {
+        lastNativeErrorCode_ = static_cast<int>(engineInitResult);
         delete engineState_;
         engineState_ = nullptr;
         engineInitialized_ = false;

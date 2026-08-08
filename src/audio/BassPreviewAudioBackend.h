@@ -29,6 +29,8 @@ public:
 
     QString backendId() const override;
     bool canBePrimary(QString* reason = nullptr) const override;
+    int nativeErrorCode() const noexcept override;
+    void clearNativeErrorCode() noexcept override;
 
     void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir) override;
     void reloadAssets(const PreviewAudioSettings& settings) override;
@@ -200,7 +202,10 @@ private:
         const QString& reason,
         miacode::preview_audio::bass::BassDebugRoute route);
     bool maybeStartPendingBackgroundTrack(double second);
-    bool playKindInternal(const QString& kind, double gain = 1.0);
+    bool playKindInternal(
+        const QString& kind,
+        double gain = 1.0,
+        int* nativeErrorCode = nullptr);
     // What reconcileTouchholdVoice() did, so the caller can log it after releasing
     // schedulerMutex_. The audio-thread path reaches this function from triggerGroup(),
     // i.e. under that lock, and a log write there is the stall the buffer-health probe
@@ -308,6 +313,7 @@ private:
     quint32 deviceSampleRate_ = static_cast<quint32>(miacode::preview_audio::kMixSampleRate);
     double preparedTimelinePlaybackRate_ = 1.0;
     bool engineInitialized_ = false;
+    int lastNativeErrorCode_ = 0;
     quint32 masterMixer_ = 0;
     quint32 pluginAac_ = 0;
     quint32 pluginOpus_ = 0;

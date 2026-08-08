@@ -248,15 +248,18 @@ inline void noteBassErrCode(const char* ctx, int code)
 #endif
 }
 
-inline void noteBassErr(const char* ctx)
+inline int noteBassErr(const char* ctx)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
     // Split from noteBassErrCode so a caller that must query the code inside a locked
     // region can still emit the line after unlocking: the scheduler mutex is shared
     // with the BASS mixer callback, where a log write is a stall hazard.
-    noteBassErrCode(ctx, static_cast<int>(BASS_ErrorGetCode()));
+    const int code = static_cast<int>(BASS_ErrorGetCode());
+    noteBassErrCode(ctx, code);
+    return code;
 #else
     Q_UNUSED(ctx);
+    return 0;
 #endif
 }
 

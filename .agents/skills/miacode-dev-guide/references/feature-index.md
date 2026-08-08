@@ -388,9 +388,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - Facade: `QtPreviewSfxRuntime.{h,cpp}` (+ include-split `.Assets/.Timeline/.Background/.Engine/.Voices.cpp`)
   — backend selection, prepare/commit/pause/resume/seek surface.
-- Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}` (Windows,
-  real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
-  `MiniaudioPreviewAudioBackend.{h,cpp}` (non-Windows compatibility, SoundTouch stretch).
+- Staged worker boundary (compiled, not yet adopted by the facade):
+  `PreviewAudioWorker.{h,cpp}`, `PreviewAudioWorkerProtocol.h`, `PreviewAudioCommandQueue.*`, and
+  `PreviewAudioWorkerFactory.*` — worker-thread backend ownership, command/completion transport,
+  lifecycle snapshots, generation gates, and serialized shutdown.
+- Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}`
+  (Windows/macOS, real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
+  `MiniaudioPreviewAudioBackend.{h,cpp}` (no-BASS compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
 - BreakSlide尾音欢呼关闭 is an immediate app-level preference at

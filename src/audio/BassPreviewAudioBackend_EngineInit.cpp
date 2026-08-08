@@ -62,14 +62,20 @@ bool BassPreviewAudioBackend::ensureBassFxLoaded()
     _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
     const HMODULE module = LoadLibraryW(reinterpret_cast<LPCWSTR>(libraryPath.utf16()));
     if (module == nullptr) {
-        _mc_op_.fail(QStringLiteral("LoadLibraryW failed err=%1").arg(::GetLastError()));
+        const DWORD errorCode = ::GetLastError();
+        lastNativeErrorCode_ = static_cast<int>(errorCode);
+        _mc_op_.fail(
+            QStringLiteral("LoadLibraryW failed err=%1").arg(static_cast<qulonglong>(errorCode)));
         appendAudioDebugLog(QString("bass_fx_load_failed path=%1").arg(libraryPath));
         return false;
     }
     FARPROC proc = GetProcAddress(module, "BASS_FX_TempoCreate");
     if (proc == nullptr) {
+        const DWORD errorCode = ::GetLastError();
+        lastNativeErrorCode_ = static_cast<int>(errorCode);
         FreeLibrary(module);
-        _mc_op_.fail(QStringLiteral("GetProcAddress BASS_FX_TempoCreate missing"));
+        _mc_op_.fail(QStringLiteral("GetProcAddress BASS_FX_TempoCreate missing err=%1")
+                         .arg(static_cast<qulonglong>(errorCode)));
         appendAudioDebugLog(QString("bass_fx_symbol_missing path=%1").arg(libraryPath));
         return false;
     }
@@ -191,8 +197,11 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     if (!registeredBassDeviceRef_) {
         if (gBassDeviceRefCount == 0) {
             if (!BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr)) {
-                _mc_op_.fail(QStringLiteral("BASS_Init err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
-                appendAudioDebugLog(QString("bass_init_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
+                const int errorCode = static_cast<int>(BASS_ErrorGetCode());
+                lastNativeErrorCode_ = errorCode;
+                noteBassErrCode("engine_init/bass_init", errorCode);
+                _mc_op_.fail(QStringLiteral("BASS_Init err=%1").arg(errorCode));
+                appendAudioDebugLog(QString("bass_init_failed err=%1").arg(errorCode));
                 appendBassDebugLog(
                     miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
                     QString("reused=0 elapsed_ms=%1 ok=0 reason=bass_init").arg(timer.elapsed()),
@@ -209,7 +218,10 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
         miacode::preview_audio::kMixChannels,
         BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP | BASS_MIXER_POSEX);
     if (masterMixer_ == 0) {
-        appendAudioDebugLog(QString("bass_master_mixer_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
+        const int errorCode = static_cast<int>(BASS_ErrorGetCode());
+        lastNativeErrorCode_ = errorCode;
+        noteBassErrCode("engine_init/master_mixer_create", errorCode);
+        appendAudioDebugLog(QString("bass_master_mixer_failed err=%1").arg(errorCode));
         if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
             --gBassDeviceRefCount;
             registeredBassDeviceRef_ = false;
@@ -233,8 +245,25 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     // buffers and was the root cause of the multi-cycle audio-tearing bug per
     // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.2. Sample audibility is now
     // gated entirely by the BASS_MIXER_CHAN_PAUSE flag on each per-sample source.
-    BASS_ChannelPlay(masterMixer_, FALSE);
-    noteBassErr("engine_init/master_play_once");
+    if (!BASS_ChannelPlay(masterMixer_, FALSE)) {
+        const int errorCode = static_cast<int>(BASS_ErrorGetCode());
+        lastNativeErrorCode_ = errorCode;
+        noteBassErrCode("engine_init/master_play_once", errorCode);
+        BASS_StreamFree(masterMixer_);
+        masterMixer_ = 0;
+        if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
+            --gBassDeviceRefCount;
+            registeredBassDeviceRef_ = false;
+        }
+        if (gBassDeviceRefCount == 0) {
+            BASS_Free();
+        }
+        appendBassDebugLog(
+            miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
+            QString("reused=0 elapsed_ms=%1 ok=0 reason=master_play").arg(timer.elapsed()),
+            true);
+        return false;
+    }
     engineInitialized_ = true;
     // Started after engineInitialized_, so the sampler never queries a half-built engine.
     startAudioHealthSampler();

@@ -75,6 +75,16 @@ QString BassPreviewAudioBackend::backendId() const
     return QStringLiteral("bass");
 }
 
+int BassPreviewAudioBackend::nativeErrorCode() const noexcept
+{
+    return lastNativeErrorCode_;
+}
+
+void BassPreviewAudioBackend::clearNativeErrorCode() noexcept
+{
+    lastNativeErrorCode_ = 0;
+}
+
 QString BassPreviewAudioBackend::resolveTrackPath(const QString& chartPath) const
 {
     // Resolved-path warmup cache removed (2026-06-03). It keyed on the chart-path

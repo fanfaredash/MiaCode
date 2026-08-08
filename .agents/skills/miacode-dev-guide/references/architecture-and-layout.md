@@ -90,8 +90,8 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
   deprecated *preview* worker.)
 - New preview/export rendering work adds a `core/scene/` state builder or a
   `preview/quick_scene/` layer; do not reintroduce a painter/OpenGL fallback path.
-- Realtime preview BGM timing is backend-owned: Windows uses BASS/BASS_FX for all rates;
-  non-Windows uses the stretched SoundTouch path with an engine-time anchor clock.
+- Realtime preview BGM timing is backend-owned: Windows/macOS BASS builds use BASS/BASS_FX for
+  all rates; builds without BASS use the stretched SoundTouch path with an engine-time anchor clock.
 - Asset lookup is file-based and convention-driven, not database-driven.
 - **UI localization has ONE inline entry point: `UiText::localized(en, zh, ja = {})`**
   (`src/app/ui/UiText.h`). Simplified Chinese is the reference language. Do NOT reintroduce the

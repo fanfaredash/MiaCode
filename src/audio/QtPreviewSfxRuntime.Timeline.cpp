@@ -19,6 +19,7 @@ void QtPreviewSfxRuntime::setWarmupResolvedPaths(const QString& chartPath, const
 
 void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
 {
+    lastNativeErrorCode_ = 0;
     settings_ = settings;
     settings_.normalize();
     retainedPlayback_.mode = RetainedPlaybackMode::None;
