@@ -494,8 +494,17 @@
         bool previewStartupVideoPrepareStarted_ = false;
         bool previewStartupVideoPrepared_ = false;
         bool previewStartupVideoStarted_ = false;
+        quint64 previewStartupAudioGeneration_ = 0;
+        quint64 previewStartupPendingPrepareSequence_ = 0;
+        quint64 previewStartupPendingRetainedSequence_ = 0;
+        quint64 previewPlayingSeekAudioGeneration_ = 0;
+        quint64 previewPlayingSeekPendingSequence_ = 0;
+        bool previewPlayingSeekCenterView_ = false;
         double previewStartupRequestedSecond_ = 0.0;
+        double previewStartupVisualSecond_ = 0.0;
         double previewStartupPreparedSecond_ = 0.0;
+        double previewPlayingSeekVisualSecond_ = 0.0;
+        double previewPlayingSeekWorkerSecond_ = 0.0;
         QElapsedTimer qtPreviewElapsed_;
         QElapsedTimer qtPreviewWatchdogElapsed_;
         qint64 qtPreviewNextFixedTickDueNs_ = -1;

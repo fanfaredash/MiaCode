@@ -9,6 +9,7 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "audio/PreviewAudioPlaybackFlowPolicy.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -103,7 +104,14 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
             || !timelineTabIsForeground()) {
             return;
         }
-        const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
+        miacode::preview_audio::playback_flow::State playbackFlowState;
+        playbackFlowState.pendingPlayingSeekSequence = state_.previewPlayingSeekPendingSequence_;
+        playbackFlowState.visualSecond = state_.previewPlayingSeekVisualSecond_;
+        const miacode::preview_audio::playback_flow::TickDecision tickDecision =
+            miacode::preview_audio::playback_flow::decidePlayingTick(
+                playbackFlowState,
+                qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond()));
+        const double second = tickDecision.visualSecond;
         state_.timelineQuickStateBridge_->setPlayheadSeconds(second, state_.previewProgressFollowEnabled_);
         state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.qtPreviewLastTimelineSecond_ = second;
@@ -137,6 +145,20 @@ void MainWindow::TimelineSection::onQtPreviewTick()
     }
     const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
     const double fallbackSecond = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
+    miacode::preview_audio::playback_flow::State playbackFlowState;
+    playbackFlowState.pendingPlayingSeekSequence = state_.previewPlayingSeekPendingSequence_;
+    playbackFlowState.visualSecond = state_.previewPlayingSeekVisualSecond_;
+    const miacode::preview_audio::playback_flow::TickDecision tickDecision =
+        miacode::preview_audio::playback_flow::decidePlayingTick(playbackFlowState, fallbackSecond);
+    if (tickDecision.holdsPendingPlayingSeek) {
+        applyQtPreviewPosition(tickDecision.visualSecond, false);
+        if (previewCanvasUsesFrameSwappedPacing()) {
+            requestNextDisplayRefreshPreviewFrame();
+        } else {
+            requestNextFixedIntervalPreviewFrame();
+        }
+        return;
+    }
     // extensionManager_ is created unconditionally at bootstrap, so without the
     // subscriber pre-check this built two nested QJsonObjects on every playback
     // tick (60-180 Hz) for an event that, with no extension subscribed, nothing

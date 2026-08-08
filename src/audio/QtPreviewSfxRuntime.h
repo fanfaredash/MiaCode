@@ -23,6 +23,14 @@ public:
         miacode::preview_audio::WorkerPostResult post;
     };
 
+    // The fallback is a snapshot only. The caller must wait for the completion
+    // carrying this identity before treating the worker second as authoritative.
+    struct PlaybackSubmission {
+        miacode::preview_audio::CommandIdentity identity;
+        miacode::preview_audio::WorkerPostResult post;
+        double fallbackSecond = 0.0;
+    };
+
     explicit QtPreviewSfxRuntime(QObject* parent = nullptr);
     explicit QtPreviewSfxRuntime(
         miacode::preview_audio::PreviewAudioBackendFactory factory,
@@ -46,7 +54,10 @@ public:
 
     // These return the most recent worker snapshot until their asynchronous command
     // completion arrives. They never wait for, or directly enter, the audio backend.
-    double preparePreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate);
+    PlaybackSubmission preparePreviewPlaybackTransaction(
+        double startSecond,
+        bool resumeFromPause,
+        double playbackRate);
     void commitPreparedPreviewPlayback();
     void cancelPreparedPreviewPlayback();
     double preparedStartSecond() const;
@@ -64,8 +75,8 @@ public:
         quint64 deviceSequence,
         quint64 pauseToken,
         double pauseSecond);
-    double resumeRetainedPreviewPlaybackTransaction();
-    double seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying);
+    PlaybackSubmission resumeRetainedPreviewPlaybackTransaction();
+    PlaybackSubmission seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying);
     void resetRetainedPreviewPlaybackTransaction(double targetSecond);
     void clearRetainedPreviewPlaybackTransaction();
     RetainedPlaybackMode retainedPlaybackMode() const;

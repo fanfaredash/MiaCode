@@ -4,6 +4,7 @@
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
+#include "audio/PreviewAudioPlaybackFlowPolicy.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
@@ -114,22 +115,55 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
                 .arg(fromChartSecond, 0, 'f', 6)
                 .arg(clampedSecond, 0, 'f', 6)
                 .arg(state_.previewPlaybackRate_, 0, 'f', 3));
-        const double effectiveSecond =
+        const double workerSecondBeforeSeek = state_.previewSfxRuntime_->authoritativePlaybackSecond();
+        const QtPreviewSfxRuntime::PlaybackSubmission submission =
             state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(clampedSecond, true);
-        state_.qtPreviewStartSecond_ = effectiveSecond;
-        miacode::mainwindow::shared::writePreviewPauseSecond(
-            state_.qtPreviewPauseSecond_, effectiveSecond, state_.qtPreviewPlaying_, "seek_preview_to_second");
-        state_.qtPreviewElapsed_.restart();
-        state_.qtPreviewTimelineElapsed_.restart();
-        state_.qtPreviewPendingTimelineSecond_ = effectiveSecond;
+        if (!submission.post.accepted) {
+            appendPreviewPlaybackLog(
+                QStringLiteral("playing_seek_submission_rejected"),
+                QString("txn=%1 generation=%2 sequence=%3 error=%4")
+                    .arg(submission.identity.transactionId)
+                    .arg(submission.identity.generation)
+                    .arg(submission.identity.sequence)
+                    .arg(static_cast<int>(submission.post.error)));
+            return;
+        }
+        miacode::preview_audio::playback_flow::State running;
+        running.audioPrepared = true;
+        running.uiPlaying = state_.qtPreviewPlaying_;
+        const miacode::preview_audio::playback_flow::State pending =
+            miacode::preview_audio::playback_flow::beginPlayingRetainedSeek(
+                running,
+                miacode::preview_audio::playback_flow::Request{
+                    submission.identity.generation,
+                    submission.identity.transactionId,
+                    submission.identity.sequence,
+                    clampedSecond,
+                },
+                workerSecondBeforeSeek,
+                centerView);
+        state_.previewPlayingSeekAudioGeneration_ = pending.currentGeneration;
+        state_.previewPlayingSeekPendingSequence_ = pending.pendingPlayingSeekSequence;
+        state_.previewPlayingSeekCenterView_ = pending.pendingPlayingSeekCenterView;
+        state_.previewPlayingSeekVisualSecond_ = pending.visualSecond;
+        state_.previewPlayingSeekWorkerSecond_ = pending.effectiveWorkerSecond;
+        state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
         state_.qtPreviewPendingTimelineCenterView_ = centerView;
         state_.qtPreviewTimelineDirty_ = true;
         state_.qtPreviewLastTimelineSecond_ = -1.0;
         if (state_.previewCanvas_ != nullptr) {
-            state_.previewCanvas_->setPlayheadSeconds(effectiveSecond, true);
+            state_.previewCanvas_->setPlayheadSeconds(clampedSecond, false);
         }
-        owner_.syncPreviewStageMediaRoutePlayback(effectiveSecond);
-        applyQtPreviewPosition(effectiveSecond, centerView);
+        owner_.syncPreviewStageMediaRoutePlayback(clampedSecond);
+        updatePreviewSliderPosition(clampedSecond);
+        appendPreviewPlaybackLog(
+            QStringLiteral("playing_seek_requested"),
+            QString("txn=%1 generation=%2 sequence=%3 visual=%4 fallback=%5")
+                .arg(submission.identity.transactionId)
+                .arg(submission.identity.generation)
+                .arg(submission.identity.sequence)
+                .arg(clampedSecond, 0, 'f', 6)
+                .arg(submission.fallbackSecond, 0, 'f', 6));
         return;
     }
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
@@ -433,6 +467,10 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     // on resume.
     owner_.applyPreviewAudioSettingsToRuntime();
     cancelPreviewStartupSync();
+    clearPreviewPlayingRetainedSeek();
+    const double startupWorkerSecond = state_.previewSfxRuntime_ != nullptr
+        ? state_.previewSfxRuntime_->authoritativePlaybackSecond()
+        : 0.0;
     applyLatestTimelinePreviewStateToPausedPreview();
     const double requestedSecond = qBound(0.0, second, previewDurationSeconds());
     if (state_.previewPendingPlayInteractionId_ != 0) {
@@ -505,46 +543,6 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     state_.pausedSeekMediaPending_ = false;
     state_.pausedSeekMediaSubmittedGeneration_ = 0;
     state_.pausedSeekMediaAckGeneration_ = 0;
-    if (resumeFromPause && state_.previewSfxRuntime_ != nullptr) {
-        const QtPreviewSfxRuntime::RetainedPlaybackMode retainedMode =
-            state_.previewSfxRuntime_->retainedPlaybackMode();
-        if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
-            || retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedAnchored) {
-            double effectiveStartSecond = 0.0;
-            if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
-                && qAbs(state_.previewSfxRuntime_->authoritativePlaybackSecond() - requestedSecond)
-                    <= kTimelineZeroSecondTolerance) {
-                effectiveStartSecond = state_.previewSfxRuntime_->resumeRetainedPreviewPlaybackTransaction();
-            } else {
-                effectiveStartSecond =
-                    state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(requestedSecond, true);
-            }
-            applyPlaybackClockState(effectiveStartSecond);
-            state_.qtPreviewPendingTimelineSecond_ = effectiveStartSecond;
-            state_.qtPreviewPendingTimelineCenterView_ = true;
-            state_.qtPreviewTimelineDirty_ = true;
-            state_.qtPreviewLastTimelineSecond_ = -1.0;
-            if (state_.timelineQuickStateBridge_ != nullptr) {
-                state_.timelineQuickStateBridge_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
-                state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
-                state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, false);
-            }
-            if (state_.previewCanvas_ != nullptr) {
-                state_.previewCanvas_->setPlayheadSeconds(effectiveStartSecond, true);
-            }
-            if (hasVideoMedia) {
-                owner_.startPreviewStageMediaRoutePlayback(effectiveStartSecond);
-            }
-            appendPreviewPlaybackLog(
-                QStringLiteral("retained_start"),
-                QString("txn=%1 effective=%2 retained_mode=%3")
-                    .arg(playbackTxn)
-                    .arg(effectiveStartSecond, 0, 'f', 6)
-                    .arg(static_cast<int>(retainedMode)));
-            finalizeQtPreviewPlaybackStart(effectiveStartSecond);
-            return true;
-        }
-    }
     state_.previewStartupSyncPending_ = true;
     state_.previewLateVideoStartPending_ = false;
     state_.previewStartupAudioPrepared_ = false;
@@ -554,7 +552,12 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     state_.previewStartupVideoPrepareStarted_ = hasVideoMedia;
     state_.previewStartupVideoPrepared_ = false;
     state_.previewStartupVideoStarted_ = false;
-    state_.previewStartupRequestedSecond_ = requestedSecond;
+    state_.previewStartupAudioGeneration_ = 0;
+    state_.previewStartupPendingPrepareSequence_ = 0;
+    state_.previewStartupPendingRetainedSequence_ = 0;
+    state_.previewStartupRequestedSecond_ = 0.0;
+    state_.previewStartupVisualSecond_ = 0.0;
+    state_.previewStartupPreparedSecond_ = 0.0;
     appendPreviewPlaybackLog(
         QStringLiteral("start_request"),
         QString("txn=%1 requested=%2 resume=%3 rate=%4 has_video=%5 duration=%6")
@@ -565,50 +568,111 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
             .arg(hasVideoMedia ? 1 : 0)
             .arg(previewDurationSeconds(), 0, 'f', 6));
 
-    double effectiveStartSecond = startSecond;
-    if (state_.previewSfxRuntime_ != nullptr) {
-        effectiveStartSecond = state_.previewSfxRuntime_->preparePreviewPlaybackTransaction(
+    QtPreviewSfxRuntime::PlaybackSubmission audioSubmission;
+    bool retainedStartup = false;
+    bool retainedStartupUsedSeek = false;
+    int retainedModeValue = -1;
+    if (resumeFromPause && state_.previewSfxRuntime_ != nullptr) {
+        const QtPreviewSfxRuntime::RetainedPlaybackMode retainedMode =
+            state_.previewSfxRuntime_->retainedPlaybackMode();
+        if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
+            || retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedAnchored) {
+            retainedStartup = true;
+            retainedModeValue = static_cast<int>(retainedMode);
+            if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
+                && qAbs(state_.previewSfxRuntime_->authoritativePlaybackSecond() - requestedSecond)
+                    <= kTimelineZeroSecondTolerance) {
+                audioSubmission = state_.previewSfxRuntime_->resumeRetainedPreviewPlaybackTransaction();
+            } else {
+                retainedStartupUsedSeek = true;
+                audioSubmission = state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(
+                    requestedSecond,
+                    true);
+            }
+        }
+    }
+    if (!retainedStartup && state_.previewSfxRuntime_ != nullptr) {
+        audioSubmission = state_.previewSfxRuntime_->preparePreviewPlaybackTransaction(
             startSecond,
             resumeFromPause,
             state_.previewPlaybackRate_);
     }
-    state_.previewStartupAudioPrepared_ = true;
-    state_.previewStartupPreparedSecond_ = effectiveStartSecond;
-    appendPreviewPlaybackLog(
-        QStringLiteral("audio_prepared"),
-        QString("txn=%1 effective=%2")
-            .arg(playbackTxn)
-            .arg(effectiveStartSecond, 0, 'f', 6));
+    state_.previewStartupAudioGeneration_ = audioSubmission.identity.generation;
+    if (retainedStartup) {
+        state_.previewStartupPendingRetainedSequence_ = audioSubmission.identity.sequence;
+    } else {
+        state_.previewStartupPendingPrepareSequence_ = audioSubmission.identity.sequence;
+    }
+    if (!audioSubmission.post.accepted) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("audio_submission_rejected"),
+            QString("txn=%1 generation=%2 sequence=%3 retained=%4 error=%5")
+                .arg(playbackTxn)
+                .arg(audioSubmission.identity.generation)
+                .arg(audioSubmission.identity.sequence)
+                .arg(retainedStartup ? 1 : 0)
+                .arg(static_cast<int>(audioSubmission.post.error)));
+        cancelPreviewStartupSync();
+        return false;
+    }
 
-    applyPlaybackClockState(effectiveStartSecond);
+    // The visual playhead is intentionally optimistic. The completion handler
+    // writes previewStartupPreparedSecond_ only after the worker confirms it.
+    const double visualStartSecond = retainedStartup ? requestedSecond : startSecond;
+    const miacode::preview_audio::playback_flow::CompletionKind startupCompletionKind =
+        !retainedStartup
+            ? miacode::preview_audio::playback_flow::CompletionKind::Prepare
+            : (retainedStartupUsedSeek
+                   ? miacode::preview_audio::playback_flow::CompletionKind::RetainedSeek
+                   : miacode::preview_audio::playback_flow::CompletionKind::RetainedResume);
+    const miacode::preview_audio::playback_flow::State pendingStartup =
+        miacode::preview_audio::playback_flow::beginStartupPlayback(
+            {},
+            miacode::preview_audio::playback_flow::Request{
+                audioSubmission.identity.generation,
+                audioSubmission.identity.transactionId,
+                audioSubmission.identity.sequence,
+                visualStartSecond,
+            },
+            startupCompletionKind,
+            startupWorkerSecond);
+    state_.previewStartupAudioGeneration_ = pendingStartup.currentGeneration;
+    state_.previewStartupPendingPrepareSequence_ = pendingStartup.pendingPrepareSequence;
+    state_.previewStartupPendingRetainedSequence_ = pendingStartup.pendingRetainedSequence;
+    state_.previewStartupRequestedSecond_ = pendingStartup.requestedVisualSecond;
+    state_.previewStartupVisualSecond_ = pendingStartup.visualSecond;
+    state_.previewStartupPreparedSecond_ = pendingStartup.effectiveWorkerSecond;
+    applyPlaybackClockState(visualStartSecond);
     state_.pausedPreviewMediaSeekPending_ = false;
-    state_.qtPreviewPendingTimelineSecond_ = effectiveStartSecond;
+    state_.qtPreviewPendingTimelineSecond_ = visualStartSecond;
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewLastTimelineSecond_ = -1.0;
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
         state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
-        state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, false);
+        state_.timelineQuickStateBridge_->setPlayheadSeconds(visualStartSecond, false);
     }
     if (state_.previewCanvas_ != nullptr) {
         if (!resumeFromPause) {
             state_.previewCanvas_->resetProfilingSession();
         }
-        state_.previewCanvas_->setPlayheadSeconds(effectiveStartSecond, true);
+        state_.previewCanvas_->setPlayheadSeconds(visualStartSecond, true);
     }
-    if (hasVideoMedia) {
-        if (state_.previewStageMediaHost_ != nullptr) {
-            // Tag already stamped above the branch; this is the functional guard.
-            state_.previewStageMediaHost_->preparePlaybackStart(effectiveStartSecond, playbackTxn);
-        }
-        appendPreviewPlaybackLog(
-            QStringLiteral("weak_video_prepare_started"),
-            QString("txn=%1 second=%2")
-                .arg(playbackTxn)
-                .arg(effectiveStartSecond, 0, 'f', 6));
+    if (hasVideoMedia && state_.previewStageMediaHost_ != nullptr) {
+        // The stage-media callback stays on the GUI thread and remains part of
+        // the existing strong-group prepare/commit handshake.
+        state_.previewStageMediaHost_->preparePlaybackStart(visualStartSecond, playbackTxn);
     }
-    tryCommitPreviewStartupSync();
+    appendPreviewPlaybackLog(
+        retainedStartup ? QStringLiteral("retained_start_request") : QStringLiteral("audio_prepare_requested"),
+        QString("txn=%1 generation=%2 sequence=%3 visual=%4 fallback=%5 retained_mode=%6")
+            .arg(playbackTxn)
+            .arg(audioSubmission.identity.generation)
+            .arg(audioSubmission.identity.sequence)
+            .arg(visualStartSecond, 0, 'f', 6)
+            .arg(audioSubmission.fallbackSecond, 0, 'f', 6)
+            .arg(retainedModeValue));
     return true;
 }
 
@@ -627,8 +691,13 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
     bool pauseSecondCaptured = false;
     if (hadStartupSync && !wasPlaying) {
+        miacode::preview_audio::playback_flow::State pendingStartup;
+        pendingStartup.visualSecond = state_.previewStartupVisualSecond_;
         miacode::mainwindow::shared::writePreviewPauseSecond(
-            state_.qtPreviewPauseSecond_, state_.previewStartupPreparedSecond_, state_.qtPreviewPlaying_, "stop_qt_preview_playback");
+            state_.qtPreviewPauseSecond_,
+            miacode::preview_audio::playback_flow::visualSecondAfterStartupCancellation(pendingStartup),
+            state_.qtPreviewPlaying_,
+            "stop_qt_preview_playback");
         pauseSecondCaptured = true;
     }
     if (!pauseSecondCaptured) {
@@ -637,6 +706,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         pauseSecondCaptured = true;
     }
     cancelPreviewStartupSync();
+    clearPreviewPlayingRetainedSeek();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     if (!keepPosition) {

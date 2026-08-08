@@ -513,6 +513,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioWorkerProtocol.h
+    src/audio/PreviewAudioPlaybackFlowPolicy.h
     src/audio/PreviewAudioCommandQueue.h
     src/audio/PreviewAudioCommandQueue.cpp
     src/audio/PreviewAudioSettings.h
@@ -1492,6 +1493,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         SOURCES
             src/tools/preview/PreviewAudioWorkerProtocolSpec.cpp
             src/audio/PreviewAudioWorkerProtocol.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/audio src/timeline
+    )
+
+    miacode_add_dev_tool(preview_audio_playback_flow_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioPlaybackFlowPolicySpec.cpp
+            src/audio/PreviewAudioPlaybackFlowPolicy.h
         LIBS Qt6::Core
         INCLUDES src src/common src/audio src/timeline
     )

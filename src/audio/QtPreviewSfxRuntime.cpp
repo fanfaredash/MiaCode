@@ -136,7 +136,7 @@ void QtPreviewSfxRuntime::setPlaybackTransactionId(quint64 transactionId)
     transactionId_ = transactionId;
 }
 
-double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(
+QtPreviewSfxRuntime::PlaybackSubmission QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(
     double startSecond,
     bool resumeFromPause,
     double playbackRate)
@@ -146,9 +146,13 @@ double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(
     command.second = startSecond;
     command.option = resumeFromPause;
     command.rate = playbackRate;
-    post(std::move(command));
     const PreviewAudioSnapshot snapshot = lastSnapshot();
-    return snapshot.preparedSecond != 0.0 ? snapshot.preparedSecond : startSecond;
+    PlaybackSubmission submission;
+    submission.identity = command.identity;
+    submission.fallbackSecond = snapshot.preparedSecond != 0.0 ? snapshot.preparedSecond : startSecond;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
 }
 
 void QtPreviewSfxRuntime::commitPreparedPreviewPlayback()
@@ -233,20 +237,31 @@ QtPreviewSfxRuntime::DevicePauseRequest QtPreviewSfxRuntime::requestDeviceChange
     return request;
 }
 
-double QtPreviewSfxRuntime::resumeRetainedPreviewPlaybackTransaction()
+QtPreviewSfxRuntime::PlaybackSubmission QtPreviewSfxRuntime::resumeRetainedPreviewPlaybackTransaction()
 {
-    post(makeCommand(CommandKind::ResumeRetained));
-    return authoritativePlaybackSecond();
+    PreviewAudioCommand command = makeCommand(CommandKind::ResumeRetained);
+    PlaybackSubmission submission;
+    submission.identity = command.identity;
+    submission.fallbackSecond = authoritativePlaybackSecond();
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
 }
 
-double QtPreviewSfxRuntime::seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying)
+QtPreviewSfxRuntime::PlaybackSubmission QtPreviewSfxRuntime::seekRetainedPreviewPlaybackTransaction(
+    double targetSecond,
+    bool continuePlaying)
 {
     PreviewAudioCommand command = makeCommand(CommandKind::SeekRetained);
     command.identity.generation = advancePlaybackGeneration();
     command.second = targetSecond;
     command.option = continuePlaying;
-    post(std::move(command));
-    return targetSecond;
+    PlaybackSubmission submission;
+    submission.identity = command.identity;
+    submission.fallbackSecond = targetSecond;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
 }
 
 void QtPreviewSfxRuntime::resetRetainedPreviewPlaybackTransaction(double targetSecond)
@@ -420,23 +435,22 @@ void QtPreviewSfxRuntime::handleCompletion(const Completion& completion)
         handleSnapshot(worker_->snapshot());
     }
     emit commandCompleted(completion);
-    if (!completion.success) {
-        return;
-    }
     switch (completion.kind) {
     case CommandKind::Prepare:
         emit previewPrepared(completion);
         break;
     case CommandKind::Commit:
     case CommandKind::Start:
-    case CommandKind::ResumeRetained:
         emit previewPlaybackStarted(completion);
+        break;
+    case CommandKind::ResumeRetained:
+    case CommandKind::SeekRetained:
+        emit retainedPlaybackCompleted(completion);
         break;
     case CommandKind::ManualPause:
     case CommandKind::DeviceChangePause:
         emit previewPlaybackPaused(completion);
         break;
-    case CommandKind::SeekRetained:
     case CommandKind::ResetRetained:
     case CommandKind::ClearRetained:
         emit retainedPlaybackCompleted(completion);

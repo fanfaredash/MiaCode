@@ -4,6 +4,10 @@
 
 #include "audio/PreviewAudioDeviceChangePolicy.h"
 
+namespace miacode::preview_audio {
+struct PreviewAudioCompletion;
+}
+
 class MainWindow::TimelineSection {
 public:
     TimelineSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
@@ -204,6 +208,9 @@ public:
     void pausePreviewForAudioDeviceChange(miacode::preview_audio::device_change::Change change);
     void handlePreviewStartupCanvasPresented();
     void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);
+    void handlePreviewAudioPrepared(const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void handlePreviewRetainedPlaybackCompleted(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
@@ -222,7 +229,12 @@ private:
     bool cachedPreviewFollowBindingContainsSecond(double second) const;
     void cachePreviewFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding);
     void cancelPreviewStartupSync();
+    void clearPreviewPlayingRetainedSeek();
     void tryCommitPreviewStartupSync();
+    void handlePreviewAudioStartupCompletion(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void handlePreviewPlayingRetainedSeekCompletion(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
     void scheduleDeferredPreviewUiTail(
         bool applyPreviewVisualSettings,
         bool applyDeferredAnalysis,
