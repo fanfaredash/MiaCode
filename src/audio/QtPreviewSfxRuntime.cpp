@@ -304,6 +304,11 @@ QtPreviewSfxRuntime::RetainedBgmState QtPreviewSfxRuntime::retainedBgmState() co
     return lastSnapshot().retainedBgmState;
 }
 
+quint64 QtPreviewSfxRuntime::playbackGeneration() const noexcept
+{
+    return playbackGeneration_;
+}
+
 double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
 {
     return lastSnapshot().authoritativeSecond;

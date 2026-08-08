@@ -161,6 +161,7 @@ inline PauseDecision decidePauseCompletion(PauseState state, const PauseCompleti
     decision.state = state;
     if (completion.kind == PauseKind::Manual) {
         decision.matchesPending = state.pendingManualPauseSequence != 0
+            && completion.generation == state.currentGeneration
             && completion.generation == state.pendingManualPauseGeneration
             && completion.transactionId == state.pendingManualPauseTransactionId
             && completion.sequence == state.pendingManualPauseSequence;

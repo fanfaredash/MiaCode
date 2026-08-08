@@ -21,24 +21,37 @@ EnqueueResult rejected(CommandError error)
 }
 
 template <typename Container>
-void eraseStalePlayback(Container& entries, quint64 generation)
+void eraseStalePlayback(
+    Container& entries,
+    quint64 generation,
+    std::vector<PreviewAudioCommand>* invalidatedCommands = nullptr)
 {
     entries.erase(
         std::remove_if(
             entries.begin(),
             entries.end(),
-            [generation](const auto& entry) {
-                return commandPolicy(entry.command.kind).invalidatedByPlaybackBoundary
+            [generation, invalidatedCommands](auto& entry) {
+                const bool stale = commandPolicy(entry.command.kind).invalidatedByPlaybackBoundary
                     && entry.command.identity.generation < generation;
+                if (stale && invalidatedCommands != nullptr) {
+                    invalidatedCommands->push_back(std::move(entry.command));
+                }
+                return stale;
             }),
         entries.end());
 }
 
 template <typename Entry>
-void resetStalePlayback(std::optional<Entry>& entry, quint64 generation)
+void resetStalePlayback(
+    std::optional<Entry>& entry,
+    quint64 generation,
+    std::vector<PreviewAudioCommand>* invalidatedCommands = nullptr)
 {
     if (entry && commandPolicy(entry->command.kind).invalidatedByPlaybackBoundary
         && entry->command.identity.generation < generation) {
+        if (invalidatedCommands != nullptr) {
+            invalidatedCommands->push_back(std::move(entry->command));
+        }
         entry.reset();
     }
 }
@@ -161,24 +174,29 @@ EnqueueResult PreviewAudioCommandQueue::enqueueDeviceChangePauseBarrier(PreviewA
     if (shuttingDown_) {
         return rejected(CommandError::ShuttingDown);
     }
+    EnqueueResult result = accepted();
     minimumPlaybackGeneration_ = std::max(minimumPlaybackGeneration_, command.identity.generation);
-    eraseStalePlayback(high_, minimumPlaybackGeneration_);
-    eraseStalePlayback(ordered_, minimumPlaybackGeneration_);
-    eraseStalePlayback(auditions_, minimumPlaybackGeneration_);
-    resetStalePlayback(shutdown_, minimumPlaybackGeneration_);
-    resetStalePlayback(devicePause_, minimumPlaybackGeneration_);
-    resetStalePlayback(manualPause_, minimumPlaybackGeneration_);
-    resetStalePlayback(syncBackgroundTrack_, minimumPlaybackGeneration_);
-    resetStalePlayback(drainEvents_, minimumPlaybackGeneration_);
+    eraseStalePlayback(high_, minimumPlaybackGeneration_, &result.invalidatedCommands);
+    eraseStalePlayback(ordered_, minimumPlaybackGeneration_, &result.invalidatedCommands);
+    eraseStalePlayback(auditions_, minimumPlaybackGeneration_, &result.invalidatedCommands);
+    resetStalePlayback(shutdown_, minimumPlaybackGeneration_, &result.invalidatedCommands);
+    resetStalePlayback(devicePause_, minimumPlaybackGeneration_, &result.invalidatedCommands);
+    resetStalePlayback(manualPause_, minimumPlaybackGeneration_, &result.invalidatedCommands);
+    resetStalePlayback(syncBackgroundTrack_, minimumPlaybackGeneration_, &result.invalidatedCommands);
+    resetStalePlayback(drainEvents_, minimumPlaybackGeneration_, &result.invalidatedCommands);
 
     if (devicePause_) {
         if (canCoalesce(devicePause_->command, command)) {
-            return accepted(false, true, command.identity.sequence);
+            result.coalesced = true;
+            result.retiredSequence = command.identity.sequence;
+            return result;
         }
-        return rejected(CommandError::QueueFull);
+        result.accepted = false;
+        result.error = CommandError::QueueFull;
+        return result;
     }
     devicePause_ = makeEntry(std::move(command));
-    return accepted();
+    return result;
 }
 
 EnqueueResult PreviewAudioCommandQueue::beginShutdown(PreviewAudioCommand shutdown)

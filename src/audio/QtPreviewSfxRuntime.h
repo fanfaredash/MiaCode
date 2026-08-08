@@ -88,6 +88,7 @@ public:
     void clearRetainedPreviewPlaybackTransaction();
     RetainedPlaybackMode retainedPlaybackMode() const;
     RetainedBgmState retainedBgmState() const;
+    quint64 playbackGeneration() const noexcept;
     double authoritativePlaybackSecond() const;
     void stopSfxVoices();
     double syncPreviewPlaybackClockTransaction(double fallbackSecond);

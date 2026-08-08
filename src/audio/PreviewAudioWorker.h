@@ -132,6 +132,9 @@ private:
     void sampleHealth(
         PreviewAudioBackend& backend,
         RuntimeState& state);
+    bool hasDeferredDevicePauseInvalidations() const;
+    std::optional<PreviewAudioCommand> takeDeferredDevicePauseInvalidation();
+    void deliverDevicePauseBarrierStale(PreviewAudioCommand command);
     void rejectQueuedCommands(CommandError error);
     bool isCurrentAssetGeneration(quint64 generation) const;
 
@@ -146,6 +149,9 @@ private:
 
     std::mutex wakeMutex_;
     std::condition_variable wakeCv_;
+
+    mutable std::mutex deferredDevicePauseInvalidationsMutex_;
+    std::deque<PreviewAudioCommand> deferredDevicePauseInvalidations_;
 
     std::mutex callbackMutex_;
     std::condition_variable callbackCv_;

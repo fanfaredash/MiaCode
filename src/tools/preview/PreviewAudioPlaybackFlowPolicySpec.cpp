@@ -344,6 +344,30 @@ bool verifyManualPauseCompletionRequiresItsImmutableIdentity(QTextStream& err)
     return ok;
 }
 
+bool verifyNewerGenerationSupersedesManualPauseCompletion(QTextStream& err)
+{
+    const PauseState pending = beginManualPause(
+        PauseState{},
+        PauseRequest{PauseKind::Manual, 81, 811, 1811, 0, 0, 15.0});
+    PauseState superseded = pending;
+    // A retained reset after reanchoring advances the runtime generation before the
+    // asynchronous manual pause completion returns.
+    superseded.currentGeneration = 82;
+    superseded.authoritativeRetainedSecond = 9.0;
+    superseded.retainedMode = 2;
+    superseded.retainedBgmState = 2;
+    const PauseDecision stale = decidePauseCompletion(
+        superseded,
+        PauseCompletion{PauseKind::Manual, 81, 811, 1811, 0, 0, 15.25, 1, 1, true, false});
+
+    return expect(!stale.matchesPending && !stale.commitsRetainedState
+                      && stale.state.authoritativeRetainedSecond == 9.0
+                      && stale.state.retainedMode == 2
+                      && stale.state.retainedBgmState == 2,
+                  "a newer retained-reset generation makes an old manual pause completion diagnostic-only",
+                  err);
+}
+
 bool verifyDevicePauseTokenCoalescesAndPlaySupersedesIt(QTextStream& err)
 {
     PauseState state;
@@ -399,6 +423,7 @@ int main()
     ok &= verifyFailedOrDegradedPrepareLeavesUiPaused(err);
     ok &= verifyPendingInitializersPreserveWorkerSecond(err);
     ok &= verifyManualPauseCompletionRequiresItsImmutableIdentity(err);
+    ok &= verifyNewerGenerationSupersedesManualPauseCompletion(err);
     ok &= verifyDevicePauseTokenCoalescesAndPlaySupersedesIt(err);
     if (ok) {
         out << "preview_audio_playback_flow_policy_spec ok" << Qt::endl;

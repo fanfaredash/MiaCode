@@ -187,9 +187,11 @@ void MainWindow::TimelineSection::handlePreviewRetainedPlaybackCompleted(
             ? PauseKind::Manual
             : PauseKind::DeviceChange;
         PauseState pending;
-        pending.currentGeneration = pauseKind == PauseKind::Manual
-            ? state_.previewPendingManualPauseGeneration_
-            : state_.previewPendingDevicePauseGeneration_;
+        pending.currentGeneration = state_.previewSfxRuntime_ != nullptr
+            ? state_.previewSfxRuntime_->playbackGeneration()
+            : (pauseKind == PauseKind::Manual
+                   ? state_.previewPendingManualPauseGeneration_
+                   : state_.previewPendingDevicePauseGeneration_);
         pending.deviceSequence = state_.previewAudioDeviceChangeSequence_;
         pending.pendingManualPauseGeneration = state_.previewPendingManualPauseGeneration_;
         pending.pendingManualPauseTransactionId = state_.previewPendingManualPauseTransactionId_;

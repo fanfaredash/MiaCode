@@ -1793,7 +1793,7 @@ bool verifyDevicePauseBarrierDropsOlderQueuedPlayback(QTextStream& err)
     const WorkerPostResult oldSeek = worker.post(commandFor(CommandKind::SeekRetained, 40, 1, 401));
     PreviewAudioCommand pause = commandFor(CommandKind::DeviceChangePause, 41, 1, 401);
     pause.identity.pauseToken = 501;
-    const WorkerPostResult devicePause = worker.post(std::move(pause));
+    const WorkerPostResult devicePause = worker.postDeviceChangePauseBarrier(std::move(pause));
     const WorkerPostResult laterPlay = worker.post(commandFor(CommandKind::Start, 42, 1, 402));
     ok &= expect(oldStart.accepted && oldCommit.accepted && oldResume.accepted && oldSeek.accepted
                      && devicePause.accepted && laterPlay.accepted,

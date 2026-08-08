@@ -5,6 +5,7 @@
 #include <deque>
 #include <mutex>
 #include <optional>
+#include <vector>
 
 namespace miacode::preview_audio {
 
@@ -14,6 +15,7 @@ struct EnqueueResult {
     bool coalesced = false;
     CommandError error = CommandError::None;
     quint64 retiredSequence = 0;
+    std::vector<PreviewAudioCommand> invalidatedCommands;
 };
 
 class PreviewAudioCommandQueue

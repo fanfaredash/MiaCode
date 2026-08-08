@@ -152,11 +152,17 @@ WorkerPostResult PreviewAudioWorker::postDeviceChangePauseBarrier(PreviewAudioCo
             return {false, false, false, CommandError::ShuttingDown, sequence};
         }
         result = queue_.enqueueDeviceChangePauseBarrier(std::move(command));
+        if (!result.invalidatedCommands.empty()) {
+            std::lock_guard invalidatedLock(deferredDevicePauseInvalidationsMutex_);
+            for (PreviewAudioCommand& invalidated : result.invalidatedCommands) {
+                deferredDevicePauseInvalidations_.push_back(std::move(invalidated));
+            }
+        }
     }
     if (result.retiredSequence != 0) {
         markCompletionRetiredForNonGui(result.retiredSequence);
     }
-    if (result.accepted) {
+    if (result.accepted || !result.invalidatedCommands.empty()) {
         wakeCv_.notify_one();
     }
     return {result.accepted, result.replaced, result.coalesced, result.error, sequence};
@@ -300,10 +306,22 @@ void PreviewAudioWorker::run()
     PreviewAudioHealthSampleSchedule healthSchedule(SteadyClock::now());
     for (;;) {
         std::optional<PreviewAudioCommand> command;
+        std::optional<PreviewAudioCommand> invalidatedCommand;
         {
             std::unique_lock wakeLock(wakeMutex_);
-            wakeCv_.wait_until(wakeLock, healthSchedule.deadline(), [this] { return !queue_.empty(); });
-            command = queue_.takeNext();
+            wakeCv_.wait_until(wakeLock, healthSchedule.deadline(), [this] {
+                return !queue_.empty() || hasDeferredDevicePauseInvalidations();
+            });
+            if (state.pauseBarrierGeneration != 0) {
+                invalidatedCommand = takeDeferredDevicePauseInvalidation();
+            }
+            if (!invalidatedCommand) {
+                command = queue_.takeNext();
+            }
+        }
+        if (invalidatedCommand) {
+            deliverDevicePauseBarrierStale(std::move(*invalidatedCommand));
+            continue;
         }
         const SteadyClock::time_point now = SteadyClock::now();
         if (!command) {
@@ -1106,6 +1124,9 @@ void PreviewAudioWorker::deliverSnapshot(const PreviewAudioSnapshot& snapshot)
 
 void PreviewAudioWorker::rejectQueuedCommands(CommandError error)
 {
+    while (std::optional<PreviewAudioCommand> command = takeDeferredDevicePauseInvalidation()) {
+        deliverDevicePauseBarrierStale(std::move(*command));
+    }
     while (std::optional<PreviewAudioCommand> command = queue_.takeNext()) {
         PreviewAudioCompletion completion;
         completion.kind = command->kind;
@@ -1119,6 +1140,38 @@ void PreviewAudioWorker::rejectQueuedCommands(CommandError error)
     }
     stateCv_.notify_all();
     nonGuiBarrierCv_.notify_all();
+}
+
+bool PreviewAudioWorker::hasDeferredDevicePauseInvalidations() const
+{
+    std::lock_guard lock(deferredDevicePauseInvalidationsMutex_);
+    return !deferredDevicePauseInvalidations_.empty();
+}
+
+std::optional<PreviewAudioCommand> PreviewAudioWorker::takeDeferredDevicePauseInvalidation()
+{
+    std::lock_guard lock(deferredDevicePauseInvalidationsMutex_);
+    if (deferredDevicePauseInvalidations_.empty()) {
+        return std::nullopt;
+    }
+    PreviewAudioCommand command = std::move(deferredDevicePauseInvalidations_.front());
+    deferredDevicePauseInvalidations_.pop_front();
+    return command;
+}
+
+void PreviewAudioWorker::deliverDevicePauseBarrierStale(PreviewAudioCommand command)
+{
+    const qint64 nowNs = steadyNowNs();
+    PreviewAudioCompletion completion;
+    completion.kind = command.kind;
+    completion.identity = command.identity;
+    completion.error = CommandError::Stale;
+    completion.success = false;
+    completion.detail = QStringLiteral("device pause barrier removed queued playback command");
+    completion.workerThreadId = workerThreadId_.load(std::memory_order_acquire);
+    completion.queueDelayNs = std::max<qint64>(0, nowNs - command.enqueuedAtNs);
+    completion.executionDurationNs = 0;
+    deliverCompletion(completion);
 }
 
 bool PreviewAudioWorker::isCurrentAssetGeneration(quint64 generation) const
