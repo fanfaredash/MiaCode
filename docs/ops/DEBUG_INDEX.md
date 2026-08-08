@@ -148,10 +148,11 @@ FFmpeg binary + extra readback toggle:
 
 - `MIACODE_FFMPEG` / `MIACODE_FFMPEG_PATH` — override the ffmpeg executable path used by export (and the dialog's ffmpeg probe).
 - `MIACODE_EXPORT_DISABLE_PBO_READBACK=1` — extra PBO-readback opt-out, narrower than `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`.
+- `MIACODE_EXPORT_PREMULTIPLIED_PIPE=0` — restore straight-RGBA CPU conversion for Fast D3D11 export. Unset/default keeps premultiplied RGBA and uses FFmpeg `overlay alpha=premultiplied`; HighQuality and OpenGL remain straight RGBA.
 
 Render-session backend (P5 — hidden, diagnostic):
 
-- `MIACODE_EXPORT_RENDER_BACKEND` — `d3d11_qrhi` (default) | `opengl` | `auto`. Selects the offscreen chart-render session for CLI export and the export worker. The default `d3d11_qrhi` path puts the export process on the Direct3D11 Qt Quick graphics API and drives `PreviewQuickD3D11ExportSession` (device created on the P3-policy adapter via `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8 target, synchronous CopyResource+Map readback — no PBO pipeline). Init failure auto-falls back to the OpenGL session (`render_backend_fallback` export-log line: `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `opengl` is the explicit rollback path. `auto` is currently identical to `d3d11_qrhi`. Windows-only; unknown values keep OpenGL. Selected backend, adapter LUID and readback mode appear in the `render_backend` export-log summary line.
+- `MIACODE_EXPORT_RENDER_BACKEND` — `d3d11_qrhi` (default) | `opengl` | `auto`. Selects the offscreen chart-render session for CLI export and the export worker. The default `d3d11_qrhi` path puts the export process on the Direct3D11 Qt Quick graphics API and drives `PreviewQuickD3D11ExportSession` (device created on the P3-policy adapter via `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8 target, three-texture staging-ring CopyResource+Map readback). Init failure auto-falls back to the OpenGL session (`render_backend_fallback` export-log line: `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `opengl` is the explicit rollback path. `auto` is currently identical to `d3d11_qrhi`. Windows-only; unknown values keep OpenGL. Selected backend, adapter LUID and readback mode appear in the `render_backend` export-log summary line; `render_stage_timing_summary` reports state/polish/sync/submit averages.
 
 ## GPU Device Policy (P3/P4 — hidden, diagnostic)
 
@@ -169,7 +170,6 @@ Still active:
 
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
-- `MIACODE_EXTENSION_DEV_PATHS` (extension system only; platform path-list separated development extension paths scanned in addition to the user extension directory; each entry may point directly at an extension root or at a parent directory containing extension roots)
 - `MIACODE_BASS_BGM_RATE_MODE` (Windows/macOS BASS preview BGM; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening)
 - `MIACODE_BASS_BGM_TEMPO_PRESET` (Windows/macOS BASS preview BGM, only when tempo mode is active; BASS_FX window presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`)
 - `MIACODE_BASS_BGM_TEMPO_PARAMS` (Windows/macOS BASS preview BGM, only when tempo mode is active; overrides preset with custom `sequence_ms,seek_ms,overlap_ms`, accepting comma, slash, semicolon, pipe, `x`, or spaces as separators)

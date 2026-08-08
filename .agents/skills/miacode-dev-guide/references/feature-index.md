@@ -424,8 +424,20 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,
   `VideoExportRuntimePolicy.*`. Key fns: `exportFullPreview`, `exportPreparedTask`,
   `buildVideoExportAudioRenderPlan`, `chooseVideoEncoder`.
+- File-size presets are independent from render quality: `Standard` preserves the legacy encoder
+  tuning, `Compact` lowers video/audio limits while retaining PV, and the two ultra-compact modes
+  lower them again; `UltraCompactWithPv` retains PV while `UltraCompact` excludes video backgrounds
+  during export only (falling back to a sibling still image).
+  Owners: `VideoExportDialog*` (UI/persistence), `VideoExportRuntimePolicy.*` (policy),
+  `VideoExportEncoder.cpp` (encoder arguments), and `VideoExportPreparedTask.cpp` (media/GOP/audio).
 - Snapshot boundary (contract): `VideoExportSnapshot.{h,cpp}` (`toJson`, `fromJson`,
   `buildVideoExportTaskFromSnapshot`).
+- Export-video HUD compatibility: the Visuals checkbox "Fix HUD font line spacing" persists as
+  `fix_hud_text_layout` (default off), flows through `VideoExportTask` and the snapshot boundary,
+  and enables device-bound font metrics plus glyph-safe line advances in the export-page preview
+  and exported frames. Leaving the export-video page restores the normal preview to legacy layout.
+  With the checkbox off, `PreviewQuickHudLayer` must retain the legacy chart-info/object-stats
+  metrics and baseline formulas so unaffected users' output does not move.
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
 - **Export hub page (E-C hybrid since 2026-06-11 — phases 1+2 of the export-page migration,
@@ -978,6 +990,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,
   `LatencyTestChartBuilder.*` (an in-sidebar page + sandbox audition).
+- **Selectable offline decoder:** `src/audio/OfflineAudioDecoder.*` owns the shared mono decode
+  boundary. The latency page persists `latency/audioDecoder` and offers **BASS** (default where
+  compiled, including OGG Vorbis support) plus the original **miniaudio** path. Selection is strict:
+  a decode failure is reported instead of silently falling back to the other backend, and changing
+  the selection invalidates the cached analysis envelopes. Other `decodeMonoTrack` callers retain
+  miniaudio as their source-compatible default.
 - **UI** is one "谱面参数" (Chart Parameters) card holding three grid rows
   (label / spin / 自动检测 / result) for BPM, 偏移 (Offset), and `clock_count`, plus the
   audition card; the audio/video media-tools launcher sits in the page back-bar (not on
@@ -997,7 +1015,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the batch pass rate 52.8%→63.0% @10ms — see `docs/OFFSET_DETECTION_BASELINE_v1_ZH.md`.
 - **Offline batch evaluator:** `LatencyBatchTest.cpp` → dev tool **`latency_offset_batch`**
   (built behind `MIACODE_BUILD_DEV_TOOLS`, NOT a CTest case; own miniaudio-impl TU
-  `LatencyBatchAudioImpl.cpp`, decode-only). Walks a root for `maidata.txt`+`track.*` projects,
+  `LatencyBatchAudioImpl.cpp`, decode-only, and uses the miniaudio decoder default). Walks a root
+  for `maidata.txt`+`track.*` projects,
   parses declared BPM (`&wholebpm`→`&bpm`→inline `(NNN)`) + `&first`, runs `detectOffset`, and
   scores the error **folded modulo one 8th-note** (an integer number of 8th-notes = 0 error).
   Every `DetectionTuning` field is a CLI flag (`--transient-weight`, `--phase-penalty`,

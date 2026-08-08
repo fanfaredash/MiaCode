@@ -35,6 +35,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
 #include "app/ui/AppBackgroundSettings.h"
+#include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
 class QByteArray;
@@ -321,6 +322,7 @@ private slots:
     void onBatchExportPreviewVideo();
     void onPackAsZip();
     void onNetBatchDownload();
+    void onNetBatchUpload();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onSkinSettings();

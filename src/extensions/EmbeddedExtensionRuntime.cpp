@@ -1,6 +1,10 @@
 #include "EmbeddedExtensionRuntime.h"
 
+#include <algorithm>
+#include <utility>
+
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonDocument>
 #include <QTextStream>
@@ -85,6 +89,14 @@ public:
         return hostCall(QStringLiteral("commands/getCommands"));
     }
 
+    Q_INVOKABLE QJSValue setChecked(const QString& command, bool checked)
+    {
+        return hostCall(QStringLiteral("commands/setChecked"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("checked"), checked},
+        });
+    }
+
     Q_INVOKABLE QJSValue getInternalCommands()
     {
         return hostCall(QStringLiteral("commands/getInternalCommands"));
@@ -115,6 +127,11 @@ public:
         QJsonObject params = runtime_->scriptValueToJson(options);
         params.insert(QStringLiteral("items"), QJsonArray::fromStringList(items.toVariant().toStringList()));
         return hostCall(QStringLiteral("window/showQuickPick"), params);
+    }
+
+    Q_INVOKABLE QJSValue focusEditor()
+    {
+        return hostCall(QStringLiteral("window/focusEditor"));
     }
 
     Q_INVOKABLE QJSValue createStatusBarItem(const QJSValue& options)
@@ -327,6 +344,29 @@ public:
     Q_INVOKABLE QJSValue getSelection()
     {
         return hostCall(QStringLiteral("editor/getSelection"));
+    }
+
+    Q_INVOKABLE QJSValue subscribe(const QString& pattern, const QJSValue& options, const QJSValue& callback)
+    {
+        if (kind_ != Kind::Events || runtime_ == nullptr) {
+            return QJSValue();
+        }
+        const quint64 id = runtime_->registerEventCallback(pattern, runtime_->scriptValueToJson(options), callback);
+        if (id == 0) {
+            return QJSValue();
+        }
+        hostCall(QStringLiteral("events/register"), QJsonObject{
+            {QStringLiteral("kind"), pattern},
+            {QStringLiteral("subscriptionId"), static_cast<double>(id)},
+        });
+        return runtime_->disposableValue(id);
+    }
+
+    Q_INVOKABLE void unsubscribe(double subscriptionId)
+    {
+        if (kind_ == Kind::Events && runtime_ != nullptr && subscriptionId > 0.0) {
+            runtime_->unregisterEventCallback(static_cast<quint64>(subscriptionId));
+        }
     }
 
     Q_INVOKABLE QJSValue getText()
@@ -681,6 +721,20 @@ public:
     Q_INVOKABLE QJSValue setSpeed(double value)
     {
         return hostCall(QStringLiteral("preview/setSpeed"), QJsonObject{{QStringLiteral("value"), value}});
+    }
+
+    Q_INVOKABLE QJSValue setMineSkinEnabled(bool enabled)
+    {
+        return hostCall(
+            QStringLiteral("preview/setMineSkinEnabled"),
+            QJsonObject{{QStringLiteral("enabled"), enabled}});
+    }
+
+    Q_INVOKABLE QJSValue setMineSfxEnabled(bool enabled)
+    {
+        return hostCall(
+            QStringLiteral("preview/setMineSfxEnabled"),
+            QJsonObject{{QStringLiteral("enabled"), enabled}});
     }
 
     Q_INVOKABLE QJSValue addOverlay(const QJSValue& overlay)
@@ -1286,10 +1340,12 @@ private:
 
     QJSValue registerCallbackContribution(const QString& kind, const QJSValue& callback)
     {
+        quint64 id = 0;
         if (runtime_ != nullptr) {
-            runtime_->registerEventCallback(kind, callback);
+            id = runtime_->registerEventCallback(kind, QJsonObject{}, callback);
         }
-        return hostCall(QStringLiteral("events/register"), QJsonObject{{QStringLiteral("kind"), kind}});
+        hostCall(QStringLiteral("events/register"), QJsonObject{{QStringLiteral("kind"), kind}});
+        return runtime_ != nullptr ? runtime_->disposableValue(id) : QJSValue();
     }
 
     EmbeddedExtensionRuntime* runtime_ = nullptr;
@@ -1300,6 +1356,9 @@ private:
 EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     : QObject(parent)
 {
+    eventFlushTimer_.setSingleShot(true);
+    eventFlushTimer_.setInterval(0);
+    connect(&eventFlushTimer_, &QTimer::timeout, this, &EmbeddedExtensionRuntime::flushPendingEvents);
     auto* commands = new BridgeObject(this, BridgeObject::Kind::Commands);
     auto* window = new BridgeObject(this, BridgeObject::Kind::Window);
     auto* workspace = new BridgeObject(this, BridgeObject::Kind::Workspace);
@@ -1418,7 +1477,9 @@ void EmbeddedExtensionRuntime::stop()
     }
     deactivateExtensions();
     commandCallbacks_.clear();
-    eventCallbacksByKind_.clear();
+    eventFlushTimer_.stop();
+    eventCallbacks_.clear();
+    pendingEvents_.clear();
     extensionById_.clear();
     commandOwnerById_.clear();
     loadedExports_.clear();
@@ -1484,12 +1545,11 @@ bool EmbeddedExtensionRuntime::executeCommand(const QString& command, QString* e
 
 int EmbeddedExtensionRuntime::registeredEventCallbackCount(const QString& kind) const
 {
-    if (!kind.trimmed().isEmpty()) {
-        return eventCallbacksByKind_.value(kind).size();
-    }
     int count = 0;
-    for (auto it = eventCallbacksByKind_.constBegin(); it != eventCallbacksByKind_.constEnd(); ++it) {
-        count += it.value().size();
+    for (const EventCallback& callback : eventCallbacks_) {
+        if (kind.trimmed().isEmpty() || callback.pattern == kind) {
+            ++count;
+        }
     }
     return count;
 }
@@ -1497,51 +1557,133 @@ int EmbeddedExtensionRuntime::registeredEventCallbackCount(const QString& kind) 
 QJsonArray EmbeddedExtensionRuntime::registeredEventCallbacksForDevtools() const
 {
     QJsonArray callbacks;
-    for (auto it = eventCallbacksByKind_.constBegin(); it != eventCallbacksByKind_.constEnd(); ++it) {
-        QHash<QString, int> countsByExtension;
-        for (const EventCallback& callback : it.value()) {
-            countsByExtension[callback.extensionId] += 1;
-        }
-        for (auto countIt = countsByExtension.constBegin(); countIt != countsByExtension.constEnd(); ++countIt) {
-            callbacks.append(QJsonObject{
-                {QStringLiteral("kind"), it.key()},
-                {QStringLiteral("extensionId"), countIt.key()},
-                {QStringLiteral("count"), countIt.value()},
-            });
-        }
+    for (const EventCallback& callback : eventCallbacks_) {
+        callbacks.append(QJsonObject{
+            {QStringLiteral("subscriptionId"), static_cast<double>(callback.id)},
+            {QStringLiteral("kind"), callback.pattern},
+            {QStringLiteral("extensionId"), callback.extensionId},
+            {QStringLiteral("received"), static_cast<double>(callback.received)},
+            {QStringLiteral("delivered"), static_cast<double>(callback.delivered)},
+            {QStringLiteral("coalesced"), static_cast<double>(callback.coalesced)},
+            {QStringLiteral("dropped"), static_cast<double>(callback.dropped)},
+            {QStringLiteral("errors"), static_cast<double>(callback.errors)},
+            {QStringLiteral("peakQueueDepth"), callback.peakQueueDepth},
+            {QStringLiteral("lastDurationNs"), static_cast<double>(callback.lastDurationNs)},
+            {QStringLiteral("averageDurationNs"), callback.delivered > 0 ? static_cast<double>(callback.totalDurationNs) / callback.delivered : 0.0},
+            {QStringLiteral("suspended"), callback.suspended},
+        });
     }
     return callbacks;
 }
 
-void EmbeddedExtensionRuntime::dispatchEvent(const QString& kind, const QJsonObject& payload)
+void EmbeddedExtensionRuntime::dispatchEvent(const QString& kind, const QJsonObject& payload, bool coalescible)
 {
     if (!running_ || kind.trimmed().isEmpty()) {
         return;
     }
-    const QVector<EventCallback> callbacks = eventCallbacksByKind_.value(kind);
-    if (callbacks.isEmpty()) {
-        return;
-    }
     QJsonObject event = payload;
     event.insert(QStringLiteral("kind"), kind);
+    event.insert(QStringLiteral("name"), kind);
+    event.insert(QStringLiteral("version"), 1);
+    event.insert(QStringLiteral("sequence"), static_cast<double>(nextEventSequence_++));
+    event.insert(QStringLiteral("timestampMs"), static_cast<double>(QDateTime::currentMSecsSinceEpoch()));
     if (!event.contains(QStringLiteral("timestamp"))) {
         event.insert(QStringLiteral("timestamp"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
     }
-    const QJSValue eventValue = jsonToScriptValue(event);
-    const QString previousCallExtensionId = currentCallExtensionId_;
-    for (const EventCallback& record : callbacks) {
-        QJSValue callback = record.callback;
-        if (!callback.isCallable()) {
+
+    const auto matchesPattern = [&kind](const QString& pattern) {
+        if (pattern == kind) {
+            return true;
+        }
+        return pattern.endsWith(QLatin1Char('*')) && kind.startsWith(pattern.left(pattern.size() - 1));
+    };
+    QHash<quint64, QString> ownerBySubscription;
+    for (const EventCallback& callback : std::as_const(eventCallbacks_)) {
+        ownerBySubscription.insert(callback.id, callback.extensionId);
+    }
+    QHash<QString, int> queueDepthByExtension;
+    for (const PendingEvent& pending : std::as_const(pendingEvents_)) {
+        ++queueDepthByExtension[ownerBySubscription.value(pending.subscriptionId)];
+    }
+    for (EventCallback& callback : eventCallbacks_) {
+        if (callback.suspended || !matchesPattern(callback.pattern)) {
             continue;
         }
-        currentCallExtensionId_ = record.extensionId;
-        QJSValue result = callback.call(QJSValueList{eventValue});
+        bool filterMatches = true;
+        for (auto it = callback.filter.constBegin(); it != callback.filter.constEnd(); ++it) {
+            const QJsonValue actual = event.contains(it.key()) ? event.value(it.key()) : payload.value(it.key());
+            if (actual != it.value()) {
+                filterMatches = false;
+                break;
+            }
+        }
+        if (!filterMatches) {
+            continue;
+        }
+        ++callback.received;
+        if (coalescible) {
+            auto pendingIt = std::find_if(pendingEvents_.begin(), pendingEvents_.end(), [&](const PendingEvent& pending) {
+                return pending.coalescible && pending.subscriptionId == callback.id && pending.kind == kind;
+            });
+            if (pendingIt != pendingEvents_.end()) {
+                pendingIt->event = event;
+                ++callback.coalesced;
+                continue;
+            }
+        }
+        const int extensionQueueDepth = queueDepthByExtension.value(callback.extensionId);
+        if (coalescible && extensionQueueDepth >= 512) {
+            ++callback.dropped;
+            continue;
+        }
+        pendingEvents_.append(PendingEvent{callback.id, kind, event, coalescible});
+        queueDepthByExtension[callback.extensionId] = extensionQueueDepth + 1;
+        callback.peakQueueDepth = qMax(callback.peakQueueDepth, extensionQueueDepth + 1);
+    }
+    if (!pendingEvents_.isEmpty() && !eventFlushTimer_.isActive()) {
+        eventFlushTimer_.start(coalescible ? 16 : 0);
+    }
+}
+
+void EmbeddedExtensionRuntime::flushPendingEvents()
+{
+    const QVector<PendingEvent> pending = std::exchange(pendingEvents_, {});
+    const QString previousCallExtensionId = currentCallExtensionId_;
+    for (const PendingEvent& delivery : pending) {
+        auto callbackIt = std::find_if(eventCallbacks_.begin(), eventCallbacks_.end(), [&](const EventCallback& callback) {
+            return callback.id == delivery.subscriptionId;
+        });
+        if (callbackIt == eventCallbacks_.end() || callbackIt->suspended || !callbackIt->callback.isCallable()) {
+            continue;
+        }
+        currentCallExtensionId_ = callbackIt->extensionId;
+        QElapsedTimer timer;
+        timer.start();
+        QJSValue result = callbackIt->callback.call(QJSValueList{jsonToScriptValue(delivery.event)});
+        callbackIt->lastDurationNs = timer.nsecsElapsed();
+        callbackIt->totalDurationNs += callbackIt->lastDurationNs;
+        ++callbackIt->delivered;
+        callbackIt->consecutiveSlowCallbacks = callbackIt->lastDurationNs > 16000000
+            ? callbackIt->consecutiveSlowCallbacks + 1
+            : 0;
         if (result.isError()) {
+            ++callbackIt->errors;
             emit runtimeErrorMessage(QStringLiteral("Event callback '%1' failed for %2: %3")
-                                         .arg(kind, record.extensionId, describeError(result)));
+                                         .arg(delivery.kind, callbackIt->extensionId, describeError(result)));
+            if (callbackIt->errors >= 5) {
+                callbackIt->suspended = true;
+            }
+        }
+        if (callbackIt->consecutiveSlowCallbacks >= 5) {
+            callbackIt->suspended = true;
+            emit runtimeErrorMessage(QStringLiteral("Event subscription '%1' was suspended for repeatedly exceeding 16 ms.")
+                                         .arg(delivery.kind));
         }
     }
     currentCallExtensionId_ = previousCallExtensionId;
+    if (!pendingEvents_.isEmpty() && !eventFlushTimer_.isActive()) {
+        eventFlushTimer_.start(0);
+    }
 }
 
 QJsonObject EmbeddedExtensionRuntime::requestHost(const QString& method, const QJsonObject& params)
@@ -1574,9 +1716,12 @@ QJSValue EmbeddedExtensionRuntime::jsonToScriptValue(const QJsonObject& object)
     return engine_.toScriptValue(object.toVariantMap());
 }
 
-QJSValue EmbeddedExtensionRuntime::disposableValue()
+QJSValue EmbeddedExtensionRuntime::disposableValue(quint64 subscriptionId)
 {
-    return engine_.evaluate(QStringLiteral("({ dispose: function() {} })"));
+    if (subscriptionId == 0) {
+        return engine_.evaluate(QStringLiteral("({ dispose: function() {} })"));
+    }
+    return engine_.evaluate(QStringLiteral("({ dispose: function() { miacode.events.unsubscribe(%1); } })").arg(subscriptionId));
 }
 
 void EmbeddedExtensionRuntime::registerCommand(const QString& command, const QJSValue& callback)
@@ -1593,14 +1738,28 @@ void EmbeddedExtensionRuntime::registerCommand(const QString& command, const QJS
     emit extensionCommandRegistered(command);
 }
 
-void EmbeddedExtensionRuntime::registerEventCallback(const QString& kind, const QJSValue& callback)
+quint64 EmbeddedExtensionRuntime::registerEventCallback(const QString& pattern, const QJsonObject& options, const QJSValue& callback)
 {
-    if (kind.trimmed().isEmpty() || !callback.isCallable()) {
+    const QString normalizedPattern = pattern.trimmed();
+    if (normalizedPattern.isEmpty() || !callback.isCallable()
+        || (normalizedPattern.contains(QLatin1Char('*')) && !normalizedPattern.endsWith(QLatin1Char('*')))) {
         emit runtimeErrorMessage(QStringLiteral("events.register requires an event kind and callback."));
-        return;
+        return 0;
     }
     const QString owner = currentCallExtensionId_.isEmpty() ? currentExtensionId_ : currentCallExtensionId_;
-    eventCallbacksByKind_[kind].append(EventCallback{owner, callback});
+    const quint64 id = nextEventSubscriptionId_++;
+    eventCallbacks_.append(EventCallback{id, owner, normalizedPattern, options.value(QStringLiteral("filter")).toObject(), callback});
+    return id;
+}
+
+void EmbeddedExtensionRuntime::unregisterEventCallback(quint64 id)
+{
+    eventCallbacks_.erase(std::remove_if(eventCallbacks_.begin(), eventCallbacks_.end(), [id](const EventCallback& callback) {
+        return callback.id == id;
+    }), eventCallbacks_.end());
+    pendingEvents_.erase(std::remove_if(pendingEvents_.begin(), pendingEvents_.end(), [id](const PendingEvent& event) {
+        return event.subscriptionId == id;
+    }), pendingEvents_.end());
 }
 
 bool EmbeddedExtensionRuntime::activateExtension(const QJsonObject& extension, QString* errorMessage)

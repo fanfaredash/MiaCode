@@ -1,0 +1,218 @@
+{
+  "active": true,
+  "current_phase": "pending-approval",
+  "state": {
+    "interview_id": "6e6cb5a4-de48-4c5d-a1fc-f3934220645a",
+    "type": "brownfield",
+    "initial_idea": "参考 leebufan/Ultimate-Vocal-Remover，为 MiaCode 设计一个方便用户在本地分离人声和伴奏的工具。",
+    "initial_context_summary": null,
+    "rounds": [
+      {
+        "round": 1,
+        "component_id": "separation-engine",
+        "target_dimension": "constraints",
+        "question": "是否采用首次使用时下载引擎和模型，以及是否接受纯扩展启动独立分离窗口？",
+        "answer": "采用纯 MiaCode 扩展；安装后出现人声伴奏分离选项，由独立窗口执行组件下载、配置、进度、取消和错误处理；开发项目放在桌面文件夹，MiaCode 主程序代码不修改。",
+        "scores": {
+          "goal": 0.65,
+          "constraints": 0.30,
+          "criteria": 0.10,
+          "context": 0.80
+        },
+        "ambiguity": 0.5525,
+        "completed_at": "2026-07-30T14:15:20.8758605Z"
+      },
+      {
+        "round": 2,
+        "component_id": "distribution-quality",
+        "target_dimension": "criteria",
+        "question": "首版是否采用 track_BGM 伴奏质量 > 稳定性 > CPU 速度 > 下载体积 > track_Vocal 人声质量的优先级？",
+        "answer": "符合。",
+        "scores": {
+          "goal": 0.80,
+          "constraints": 0.40,
+          "criteria": 0.35,
+          "context": 0.85
+        },
+        "ambiguity": 0.405,
+        "completed_at": "2026-07-30T14:17:54.9326750Z"
+      },
+      {
+        "round": 3,
+        "component_id": "separation-engine",
+        "target_dimension": "criteria",
+        "question": "首版是否只支持一个由 MiaCode 扩展固定版本和校验和的推荐二轨模型，而不复刻 UVR 完整模型选择器？",
+        "answer": "是。",
+        "scores": {
+          "goal": 0.85,
+          "constraints": 0.55,
+          "criteria": 0.50,
+          "context": 0.90
+        },
+        "ambiguity": 0.305,
+        "completed_at": "2026-07-30T14:20:35.2130040Z"
+      },
+      {
+        "round": 4,
+        "component_id": "distribution-quality",
+        "target_dimension": "constraints",
+        "mode": "contrarian",
+        "question": "Windows 与 macOS 是否必须同时首发，还是先完成 Windows MVP、再在真实 Mac 上补 macOS？",
+        "answer": "先 Windows。",
+        "scores": {
+          "goal": 0.90,
+          "constraints": 0.75,
+          "criteria": 0.55,
+          "context": 0.95
+        },
+        "ambiguity": 0.2175,
+        "completed_at": "2026-07-30T14:23:24.4915752Z"
+      },
+      {
+        "round": 5,
+        "component_id": "distribution-quality",
+        "target_dimension": "criteria",
+        "question": "是否接受 Windows MVP 的输入格式、输出音频、质量样本、时长误差、覆盖、下载校验和取消清理验收基线？",
+        "answer": "接受。",
+        "scores": {
+          "goal": 0.95,
+          "constraints": 0.85,
+          "criteria": 0.90,
+          "context": 0.95
+        },
+        "ambiguity": 0.0875,
+        "completed_at": "2026-07-30T14:24:36.0059324Z"
+      }
+    ],
+    "current_ambiguity": 0.0875,
+    "threshold": 0.2,
+    "threshold_source": "default",
+    "codebase_context": {
+      "media_tools_entry": "src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp:onMediaProcessingTools",
+      "recommended_job_pattern": "src/tools/media/PvBatchCompressionDialog.cpp + PvBatchCompressionWorker.cpp",
+      "chart_audio_resolver": "src/common/ChartAssetPaths.h",
+      "media_reload_helpers": "DialogsSection::releasePreviewMediaForFileOperation/reloadPreviewMediaAfterFileOperation",
+      "distribution_constraint": "No packaged Python/ML runtime exists; Windows and macOS packaging and third-party notices must be extended."
+    },
+    "topology": {
+      "status": "confirmed",
+      "confirmed_at": "2026-07-30T10:12:32.0955983Z",
+      "components": [
+        {
+          "id": "separation-engine",
+          "name": "分离引擎与模型交付",
+          "description": "由 MiaCode 扩展启动独立辅助程序；辅助程序首次使用时下载并管理本地推理运行时，以及一个固定版本和校验和的推荐二轨模型；CPU 保底并评估可选 GPU。",
+          "status": "active",
+          "evidence": ["参考 Ultimate Vocal Remover", "MiaCode 当前没有打包 Python/ML 运行时"],
+          "clarity_scores": {"goal": 0.95, "constraints": 0.85, "criteria": 0.85, "context": 0.95},
+          "weakest_dimension": "criteria"
+        },
+        {
+          "id": "workflow-ui",
+          "name": "MiaCode 工作流与界面",
+          "description": "安装扩展后出现人声伴奏分离命令；扩展启动独立窗口，允许选择任意音频并默认使用当前谱面目录的 track 音频，窗口展示配置、下载/分离进度、取消和错误。",
+          "status": "active",
+          "evidence": ["现有 media_tools.audio_video_processing 入口", "现有长任务 QThread/worker 模式"],
+          "clarity_scores": {"goal": 0.95, "constraints": 0.90, "criteria": 0.90, "context": 0.95},
+          "weakest_dimension": "criteria"
+        },
+        {
+          "id": "output-integration",
+          "name": "输出与谱面集成",
+          "description": "仅在输入音频所在的当前文件夹生成 track_Vocal 和 track_BGM，原有音频文件保持不变。",
+          "status": "active",
+          "evidence": ["src/common/ChartAssetPaths.h", "预览媒体释放与重载 helper"],
+          "clarity_scores": {"goal": 0.98, "constraints": 0.95, "criteria": 0.95, "context": 0.95},
+          "weakest_dimension": "criteria"
+        },
+        {
+          "id": "distribution-quality",
+          "name": "发布、许可与质量标准",
+          "description": "首发并完整验证 Windows x64；macOS 延后到真实 Mac 环境构建、签名和验证。按 track_BGM 伴奏质量 > 稳定性 > CPU 速度 > 下载体积 > track_Vocal 人声质量的顺序确定模型、许可和验收边界。",
+          "status": "active",
+          "evidence": ["UVR 代码为 MIT，但依赖和模型需单独审查", "MiaCode Windows/macOS packaging rules"],
+          "clarity_scores": {"goal": 0.95, "constraints": 0.85, "criteria": 0.90, "context": 0.95},
+          "weakest_dimension": "constraints"
+        }
+      ],
+      "deferrals": [],
+      "last_targeted_component_id": "distribution-quality"
+    },
+    "challenge_modes_used": ["contrarian"],
+    "ontology_snapshots": [
+      {
+        "round": 1,
+        "entities": [
+          {"name": "MiaCodeExtension", "type": "integration", "fields": ["manifest", "permissions", "menu command"], "relationships": ["launches CompanionApp"]},
+          {"name": "CompanionApp", "type": "runtime application", "fields": ["platform", "version", "status"], "relationships": ["manages SeparationRuntime", "processes AudioInput"]},
+          {"name": "SeparationRuntime", "type": "local engine", "fields": ["backend", "version", "checksum"], "relationships": ["loads ModelPackage"]},
+          {"name": "ModelPackage", "type": "downloaded asset", "fields": ["version", "size", "license", "checksum"], "relationships": ["used by SeparationRuntime"]},
+          {"name": "AudioInput", "type": "user file", "fields": ["path", "format"], "relationships": ["defaults from ChartFolder", "produces StemOutput"]},
+          {"name": "StemOutput", "type": "generated file", "fields": ["track_Vocal", "track_BGM"], "relationships": ["written beside AudioInput"]},
+          {"name": "ChartFolder", "type": "MiaCode context", "fields": ["path", "track file"], "relationships": ["provides default AudioInput"]}
+        ],
+        "stability_ratio": null,
+        "matching_reasoning": "Round 1 baseline; all seven entities are new."
+      },
+      {
+        "round": 2,
+        "entities": [
+          {"name": "MiaCodeExtension", "type": "integration", "fields": ["manifest", "permissions", "menu command"], "relationships": ["launches CompanionApp"]},
+          {"name": "CompanionApp", "type": "runtime application", "fields": ["platform", "version", "status"], "relationships": ["manages SeparationRuntime", "processes AudioInput"]},
+          {"name": "SeparationRuntime", "type": "local engine", "fields": ["backend", "version", "checksum"], "relationships": ["loads ModelPackage"]},
+          {"name": "ModelPackage", "type": "downloaded asset", "fields": ["version", "size", "license", "checksum"], "relationships": ["used by SeparationRuntime", "selected by BGM quality priority"]},
+          {"name": "AudioInput", "type": "user file", "fields": ["path", "format"], "relationships": ["defaults from ChartFolder", "produces StemOutput"]},
+          {"name": "StemOutput", "type": "generated file", "fields": ["track_Vocal", "track_BGM", "BGM-first quality priority"], "relationships": ["written beside AudioInput"]},
+          {"name": "ChartFolder", "type": "MiaCode context", "fields": ["path", "track file"], "relationships": ["provides default AudioInput"]}
+        ],
+        "stability_ratio": 1.0,
+        "matching_reasoning": "All seven Round 1 entities matched by name; no entities were added, removed, or renamed."
+      },
+      {
+        "round": 3,
+        "entities": [
+          {"name": "MiaCodeExtension", "type": "integration", "fields": ["manifest", "permissions", "menu command"], "relationships": ["launches CompanionApp"]},
+          {"name": "CompanionApp", "type": "runtime application", "fields": ["platform", "version", "status"], "relationships": ["manages SeparationRuntime", "processes AudioInput"]},
+          {"name": "SeparationRuntime", "type": "local engine", "fields": ["backend", "version", "checksum"], "relationships": ["loads one curated ModelPackage"]},
+          {"name": "ModelPackage", "type": "downloaded asset", "fields": ["fixed version", "size", "license", "checksum", "two-stem model"], "relationships": ["used by SeparationRuntime", "selected by BGM quality priority"]},
+          {"name": "AudioInput", "type": "user file", "fields": ["path", "format"], "relationships": ["defaults from ChartFolder", "produces StemOutput"]},
+          {"name": "StemOutput", "type": "generated file", "fields": ["track_Vocal", "track_BGM", "BGM-first quality priority"], "relationships": ["written beside AudioInput"]},
+          {"name": "ChartFolder", "type": "MiaCode context", "fields": ["path", "track file"], "relationships": ["provides default AudioInput"]}
+        ],
+        "stability_ratio": 1.0,
+        "matching_reasoning": "All seven prior entities matched by name; ModelPackage and SeparationRuntime gained fixed single-model constraints."
+      },
+      {
+        "round": 4,
+        "entities": [
+          {"name": "MiaCodeExtension", "type": "integration", "fields": ["manifest", "permissions", "menu command", "Windows-first"], "relationships": ["launches CompanionApp"]},
+          {"name": "CompanionApp", "type": "runtime application", "fields": ["Windows x64 MVP", "version", "status"], "relationships": ["manages SeparationRuntime", "processes AudioInput"]},
+          {"name": "SeparationRuntime", "type": "local engine", "fields": ["backend", "version", "checksum"], "relationships": ["loads one curated ModelPackage"]},
+          {"name": "ModelPackage", "type": "downloaded asset", "fields": ["fixed version", "size", "license", "checksum", "two-stem model"], "relationships": ["used by SeparationRuntime", "selected by BGM quality priority"]},
+          {"name": "AudioInput", "type": "user file", "fields": ["path", "format"], "relationships": ["defaults from ChartFolder", "produces StemOutput"]},
+          {"name": "StemOutput", "type": "generated file", "fields": ["track_Vocal", "track_BGM", "BGM-first quality priority"], "relationships": ["written beside AudioInput"]},
+          {"name": "ChartFolder", "type": "MiaCode context", "fields": ["path", "track file"], "relationships": ["provides default AudioInput"]}
+        ],
+        "stability_ratio": 1.0,
+        "matching_reasoning": "All seven prior entities matched by name; platform scope narrowed to Windows x64 MVP without ontology changes."
+      },
+      {
+        "round": 5,
+        "entities": [
+          {"name": "MiaCodeExtension", "type": "integration", "fields": ["manifest", "permissions", "menu command", "Windows-first"], "relationships": ["launches CompanionApp"]},
+          {"name": "CompanionApp", "type": "runtime application", "fields": ["Windows x64 MVP", "version", "download progress", "separation progress", "cancellation", "errors"], "relationships": ["manages SeparationRuntime", "processes AudioInput"]},
+          {"name": "SeparationRuntime", "type": "local engine", "fields": ["backend", "version", "checksum", "CPU baseline"], "relationships": ["loads one curated ModelPackage"]},
+          {"name": "ModelPackage", "type": "downloaded asset", "fields": ["fixed version", "size", "license", "checksum", "two-stem model"], "relationships": ["used by SeparationRuntime", "selected by BGM quality priority"]},
+          {"name": "AudioInput", "type": "user file", "fields": ["path", "MP3/WAV/FLAC/OGG"], "relationships": ["defaults from ChartFolder", "produces StemOutput"]},
+          {"name": "StemOutput", "type": "generated file", "fields": ["track_Vocal.wav", "track_BGM.wav", "44.1 kHz stereo", "BGM-first quality priority"], "relationships": ["written beside AudioInput", "never replaces AudioInput"]},
+          {"name": "ChartFolder", "type": "MiaCode context", "fields": ["path", "track file"], "relationships": ["provides default AudioInput"]}
+        ],
+        "stability_ratio": 1.0,
+        "matching_reasoning": "All seven prior entities matched by name; final acceptance fields were added without ontology changes."
+      }
+    ],
+    "created_at": "2026-07-30T09:12:15.3699862Z",
+    "spec_path": ".omc/specs/deep-interview-miacode-vocal-separator-extension.md",
+    "status": "pending_approval"
+  }
+}

@@ -3,6 +3,9 @@
 
 #include "tools/video_export/BatchExportPanel.h"
 #include "tools/video_export/BatchExportTaskLayout.h"
+#include "tools/video_export/VideoExportDialogInternal.h"
+
+#include <iterator>
 
 namespace {
 
@@ -85,6 +88,36 @@ bool verifyTaskDifficultyGridUsesFourColumns(QTextStream& err)
     return true;
 }
 
+bool verifyExportFpsOptionsIncludeThirty(QTextStream& err)
+{
+    using miacode::video_export::dialog_detail::kFpsOptions;
+    using miacode::video_export::dialog_detail::normaliseExportFps;
+
+    const QList<int> expectedOptions{30, 60, 120};
+    if (!require(
+            QList<int>(std::begin(kFpsOptions), std::end(kFpsOptions)) == expectedOptions,
+            QStringLiteral("export FPS dropdown options must be 30, 60, and 120"),
+            err)) {
+        return false;
+    }
+
+    return require(normaliseExportFps(30) == 30,
+                   QStringLiteral("30 FPS must remain selectable after preference normalization"),
+                   err)
+        && require(normaliseExportFps(60) == 60,
+                   QStringLiteral("60 FPS must remain selectable after preference normalization"),
+                   err)
+        && require(normaliseExportFps(120) == 120,
+                   QStringLiteral("120 FPS must remain selectable after preference normalization"),
+                   err)
+        && require(normaliseExportFps(45) == 60,
+                   QStringLiteral("halfway FPS values should snap upward"),
+                   err)
+        && require(normaliseExportFps(90) == 120,
+                   QStringLiteral("90 FPS should still map to the 120 FPS option"),
+                   err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -100,6 +133,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyTaskDifficultyGridUsesFourColumns(err)) {
+        return 1;
+    }
+    if (!verifyExportFpsOptionsIncludeThirty(err)) {
         return 1;
     }
 

@@ -253,6 +253,31 @@ void MainWindow::WindowSection::setHoveredTouchPad(const QString& pad)
 
 void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWidget* now)
 {
+    if (owner_.extensionManager_ != nullptr) {
+        const auto focusRole = [this](QWidget* widget) {
+            if (widget == nullptr) {
+                return QStringLiteral("none");
+            }
+            if (widget == ui_.editorWidget_ || (ui_.editorWidget_ != nullptr && ui_.editorWidget_->isAncestorOf(widget))) {
+                return QStringLiteral("editor");
+            }
+            if (widget == ui_.timelineView_ || (ui_.timelineView_ != nullptr && ui_.timelineView_->isAncestorOf(widget))) {
+                return QStringLiteral("timeline");
+            }
+            return QStringLiteral("window");
+        };
+        owner_.extensionManager_->publishEvent(QStringLiteral("window.focus.changed"), QJsonObject{
+            {QStringLiteral("source"), QStringLiteral("userInterface")},
+            {QStringLiteral("data"), QJsonObject{
+                {QStringLiteral("previous"), focusRole(old)},
+                {QStringLiteral("current"), focusRole(now)},
+            }},
+        });
+        owner_.extensionManager_->publishEvent(QStringLiteral("editor.focus.changed"), QJsonObject{
+            {QStringLiteral("source"), QStringLiteral("userInterface")},
+            {QStringLiteral("data"), QJsonObject{{QStringLiteral("focused"), focusRole(now) == QStringLiteral("editor")}}},
+        });
+    }
     this->logFocusDebug(
         quickShellFocusBridgeActive()
             ? QStringLiteral("app_focus_changed_quick_shell")

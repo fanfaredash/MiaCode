@@ -255,6 +255,26 @@ int main(int argc, char** argv)
             QStringLiteral("mine slide head star emits NO slide-head-tap diagnostic"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 0,
             QStringLiteral("mine slide emits NO slide-too-fast diagnostic"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideHeadTap) == 0,
+            QStringLiteral("mine slide emits NO static slide-head-tap reference"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::TapOnSlide) == 0,
+            QStringLiteral("mine slide emits NO static tap-on-slide reference"));
+        expect(analyzed.visibleEntries.isEmpty(),
+            QStringLiteral("mine slide emits NO visible Muri panel entry"));
+    }
+
+    {
+        // The normal `8` in the anchor repro emits SlideHeadTap. Mine-ifying
+        // only the affected note must suppress both runtime and static paths.
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n8>3[4:1],,,,,\n8m,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("mine affected-note repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideHeadTap) == 0,
+            QStringLiteral("mine affected note emits NO runtime slide-head-tap diagnostic"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideHeadTap) == 0,
+            QStringLiteral("mine affected note emits NO static slide-head-tap reference"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::SlideHeadTap) == 0,
+            QStringLiteral("mine affected note emits NO visible slide-head-tap entry"));
     }
 
     {

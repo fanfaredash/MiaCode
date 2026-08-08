@@ -28,6 +28,7 @@ struct PreviewAudioSettings {
     double fireworkVolume = 0.30;
     double fireworkRestoreVolume = 0.30;
     bool breakSlideTailCheerMuted = false;
+    bool mineSfxEnabled = true;
 
     static double clamp(double value);
     static double clampGlobal(double value);

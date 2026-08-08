@@ -88,13 +88,13 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         }
 
         const QImage& basePointImage =
-            (marker.isMine && !state.skin.touchPointMineImage.isNull())
+            (state.render.useMineSkin && marker.isMine && !state.skin.touchPointMineImage.isNull())
                 ? state.skin.touchPointMineImage
                 : (marker.isBreak && !state.skin.touchPointBreakImage.isNull())
                     ? state.skin.touchPointBreakImage
                     : ((marker.isEach && !state.skin.touchPointEachImage.isNull()) ? state.skin.touchPointEachImage : state.skin.touchPointImage);
         const QImage& baseCornerImage =
-            (marker.isMine && !state.skin.touchCornerMineImage.isNull())
+            (state.render.useMineSkin && marker.isMine && !state.skin.touchCornerMineImage.isNull())
                 ? state.skin.touchCornerMineImage
                 : (marker.isBreak && !state.skin.touchCornerBreakImage.isNull())
                     ? state.skin.touchCornerBreakImage
@@ -156,7 +156,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         // pops to 1.0 instantly rather than tracking the front touch's pre-hit fade.
         if (isFrontOnSensor && sensorList.size() >= kTouchOverlapBorder2Threshold) {
             const TimelineNoteMarker& secondMarker = markers.markerAt(sensorList.at(1));
-            const QImage* secondBorder2 = (secondMarker.isMine && !state.skin.touchBorder2MineImage.isNull())
+            const QImage* secondBorder2 = (state.render.useMineSkin && secondMarker.isMine && !state.skin.touchBorder2MineImage.isNull())
                 ? &state.skin.touchBorder2MineImage
                 : secondMarker.isBreak
                     ? &state.skin.touchBorder2BreakImage
@@ -175,7 +175,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             }
             if (sensorList.size() >= kTouchOverlapBorder3Threshold) {
                 const TimelineNoteMarker& thirdMarker = markers.markerAt(sensorList.at(2));
-                const QImage* thirdBorder3 = (thirdMarker.isMine && !state.skin.touchBorder3MineImage.isNull())
+                const QImage* thirdBorder3 = (state.render.useMineSkin && thirdMarker.isMine && !state.skin.touchBorder3MineImage.isNull())
                     ? &state.skin.touchBorder3MineImage
                     : thirdMarker.isBreak
                         ? &state.skin.touchBorder3BreakImage

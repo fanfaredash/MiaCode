@@ -326,6 +326,22 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
     const QVector<TimelineNoteMarker>& noteMarkers,
     double collideThresholdSeconds)
 {
+    // Mines are autoplay dodge notes. Filter them once at the public static
+    // analysis boundary so they cannot be either side of any static rule.
+    const auto isMineMarker = [](const TimelineNoteMarker& marker) {
+        return marker.isMine || marker.trackMine;
+    };
+    if (std::any_of(noteMarkers.cbegin(), noteMarkers.cend(), isMineMarker)) {
+        QVector<TimelineNoteMarker> judgeableMarkers;
+        judgeableMarkers.reserve(noteMarkers.size());
+        for (const TimelineNoteMarker& marker : noteMarkers) {
+            if (!isMineMarker(marker)) {
+                judgeableMarkers.append(marker);
+            }
+        }
+        return buildStaticMuriReferences(judgeableMarkers, collideThresholdSeconds);
+    }
+
     const QVector<StaticHeadStarTarget> headStarTargets = buildStaticHeadStarTargets(noteMarkers);
     const QSet<QString> slideKeysWithTapOnSlideHead = buildSlideKeysWithTapOnSlideHead(noteMarkers);
     const double normalizedCollideThresholdSeconds = qBound(

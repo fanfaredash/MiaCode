@@ -45,6 +45,16 @@ Use this by default when the user asks to build the current project, rebuild the
 
 ## Before Every Build
 
+- Enforce one build at a time for this repository. Before starting any configure, compile,
+  test-build, package, or rebuild command, inspect running `cmake`, `MSBuild`, `cl`, and
+  `link` process command lines for either
+  `D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev` or its `build-devtools` tree.
+- If a matching build exists, terminate its build-root process tree first. Then terminate
+  any orphaned compiler/linker processes that can still be attributed to this repository,
+  and re-check until zero matching build processes remain. Do not start the requested
+  build while an earlier MiaCode build is still running.
+- Never terminate an unrelated repository's build. If a process cannot be attributed to
+  MiaCode from its command line or parent process tree, leave it running.
 - Check whether `D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools\Release\MiaCode.exe` is occupied by a running `MiaCode` process. If it is, directly close that process before building.
 - Confirm `C:\Users\kanago\Desktop\MiaCode.exe.lnk` targets `D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools\Release\MiaCode.exe` and uses working directory `D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools\Release`; update the shortcut if it does not.
 - Confirm the executable reached through `C:\Users\kanago\Desktop\MiaCode.exe.lnk` is a fresh build for the current code. If the target exe's `LastWriteTime` is older than the latest commit time or relevant source file updates, rebuild before treating the desktop shortcut as current.
@@ -55,9 +65,25 @@ Use this by default when the user asks to build the current project, rebuild the
 - If linking fails because `build-devtools\Release\MiaCode.exe` cannot be opened, directly close the running `MiaCode` process whose `Path` is that executable.
 - After closing the occupied process, rerun the same concurrent build command once.
 
+## Build Artifact Cleanup Requires Approval
+
+- Obtain the user's explicit approval immediately before running any command that cleans or
+  deletes developer build artifacts. This includes `cmake --build ... --target clean`, MSBuild
+  `Clean` / `Rebuild`, deleting files under `build-devtools`, and removing or recreating the
+  `build-devtools` directory.
+- A request to build, rebuild, fix a compile error, stop a build, or verify the app does **not**
+  authorize cleanup. A previous approval does not carry over to a later cleanup operation.
+- If incremental build artifacts appear corrupt or locked, first stop attributable MiaCode build
+  processes and retry the same incremental build when appropriate. If cleanup is still needed,
+  explain the exact paths/target and reason, then wait for approval before proceeding.
+- Stopping an active build process is not artifact cleanup and does not require this additional
+  approval when the user asks to stop or when the one-build-at-a-time precheck requires it.
+
 ## Guardrails
 
 - Use `ALL_BUILD` concurrent builds for normal local verification.
+- Never run a clean/rebuild target or delete development build output without the explicit cleanup
+  approval required above.
 - Do not switch to low-concurrency build commands as a fallback.
 - Do not add a fixed outer parallelism such as `--parallel 8` unless the user asks for a specific job count; plain `--parallel` lets CMake/MSBuild choose.
 - Keep `--config Release` for routine compile/test/verification work, matching `miacode-dev-guide`.

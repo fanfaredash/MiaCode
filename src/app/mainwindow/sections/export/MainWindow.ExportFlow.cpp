@@ -669,6 +669,11 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
             }
             owner_.savePortableState();
         },
+        [this](bool enabled) {
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setFixHudTextLayout(enabled);
+            }
+        },
         [this](double ratio) {
             owner_.setPreviewCanvasAspectRatio(ratio, false);
         },
@@ -804,6 +809,7 @@ void MainWindow::ExportSection::endExportPreviewSession()
     teardownExportPreviewAuditionScene();
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setSuppressDebugInfo(false);
+        owner_.previewCanvas_->setFixHudTextLayout(false);
         owner_.previewCanvas_->setShowChartInfoHud(false);
         owner_.previewCanvas_->setChartInfo(QString(), QString(), QString(), QString());
     }

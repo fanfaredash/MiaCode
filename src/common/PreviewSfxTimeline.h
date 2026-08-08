@@ -249,7 +249,8 @@ inline void buildTimeline(
     double playbackRate,
     const PreviewTimingSettings& timingSettings,
     QVector<Event>* events,
-    QVector<TouchholdSpan>* touchholdSpans
+    QVector<TouchholdSpan>* touchholdSpans,
+    bool mineSfxEnabled = true
 )
 {
     if (events == nullptr || touchholdSpans == nullptr) {
@@ -287,14 +288,12 @@ inline void buildTimeline(
     };
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        const QString type = marker.type.toLower();
-        // Mine notes (simai `m`) are "avoid" notes — autoplay always dodges
-        // them, so they emit NO answer/judge/break/ex/touch/touchhold SFX.
-        // This single guard covers realtime preview AND video export (both
-        // call buildTimeline). Slides use trackMine.
-        if (marker.isMine || marker.trackMine) {
+        if (!mineSfxEnabled && (marker.isMine || marker.trackMine)) {
             continue;
         }
+        const QString type = marker.type.toLower();
+        // Enabled mines keep their avoid-note semantics while emitting the
+        // same type-based SFX as ordinary notes.
         const double answerCompensationSeconds =
             miacode::preview_sfx_timing::answerPreTriggerChartSeconds(playbackRate);
         if (type == QLatin1String("tap")) {

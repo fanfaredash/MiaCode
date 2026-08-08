@@ -270,8 +270,21 @@ void BassPreviewAudioBackend::setChartPath(const QString& chartPath)
 void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
 {
     MC_OP("BassPreviewAudioBackend::applyLevels");
+    const bool rebuildMineSfx = settings_.mineSfxEnabled != settings.mineSfxEnabled;
+    const double anchorSecond =
+        (playbackSession_.eventGroupIndex > 0
+         && playbackSession_.eventGroupIndex - 1 < preparedGroups_.size())
+            ? preparedGroups_[playbackSession_.eventGroupIndex - 1].second
+            : -1.0;
     settings_ = settings;
     settings_.normalize();
+    if (rebuildMineSfx && !preparedTimeline_.sourceNoteMarkers.isEmpty()) {
+        rebuildPreparedTimeline(
+            preparedTimeline_.sourceNoteMarkers,
+            preparedTimelinePlaybackRate_,
+            timingSettings_);
+        pauseTouchholdVoices();
+    }
     applySampleLevels();
     // rebuildPreparedGroups() re-collapses the event groups (breakSlideTailCheer
     // muting changes grouping), which can shift indices, so the cursor must be
@@ -285,13 +298,11 @@ void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
     // the latency page funnel through applyLevels) — is the long-suspected
     // "stray play/audition event". Anchoring to the last-fired group preserves
     // the fired/unfired boundary regardless of whether we're playing or paused.
-    const double anchorSecond =
-        (playbackSession_.eventGroupIndex > 0
-         && playbackSession_.eventGroupIndex - 1 < preparedGroups_.size())
-            ? preparedGroups_[playbackSession_.eventGroupIndex - 1].second
-            : -1.0;
     rebuildPreparedGroups();
     resetCursor(anchorSecond, false);
+    if (rebuildMineSfx && playbackSession_.masterRunning) {
+        restoreTouchholdVoices(authoritativeSecond());
+    }
 }
 
 void BassPreviewAudioBackend::clearPreparedTimeline()
@@ -333,7 +344,8 @@ void BassPreviewAudioBackend::rebuildPreparedTimeline(
         playbackRate,
         timingSettings_,
         &preparedTimeline_.events,
-        &preparedTimeline_.touchholdSpans);
+        &preparedTimeline_.touchholdSpans,
+        settings_.mineSfxEnabled);
     rebuildPreparedGroups();
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::RebuildTimeline,

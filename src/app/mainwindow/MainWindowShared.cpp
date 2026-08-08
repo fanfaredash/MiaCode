@@ -764,6 +764,9 @@ QString previewFullscreenPauseButtonStyleSheet(bool active)
 
 QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible)
 {
+    if (color == UiTheme::colors().accent) {
+        return UiTheme::menuSelectionCheckIcon(visible);
+    }
     QPixmap pixmap(14, 14);
     pixmap.fill(Qt::transparent);
     if (visible) {

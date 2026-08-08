@@ -1,6 +1,6 @@
 # MiaCode Extension System v1
 
-MiaCode v1 extensions are local packages loaded from the install-root `extensions` directory or development paths. v1 is a small closed loop, not a broad platform catalog: public APIs must be real, callable, and documented.
+MiaCode v1 extensions are local packages loaded exclusively from the install-root `extensions` directory. v1 is a small closed loop, not a broad platform catalog: public APIs must be real, callable, and documented.
 
 ## Runtime
 
@@ -14,10 +14,8 @@ function deactivate() {}
 module.exports = { activate, deactivate };
 ```
 
-- Discovery paths:
-  - `<install-root>/extensions`
-  - `MIACODE_EXTENSION_DEV_PATHS`
-  - `<app-dir>/extensions-dev`
+- Discovery path: `<install-root>/extensions`.
+- This is the only runtime extension source. Environment variables and development directories do not add search roots.
 - Preferences > Extensions lists discovered extensions and supports enable/disable/refresh.
 
 ## Manifest
@@ -30,6 +28,12 @@ Supported contribution points in v1:
 - `contributes.menus["tools/menu"]`
 - `contributes.menus["menubar/beforeHelp"]`
 - `contributes.languages`
+
+Checkable extension menu commands use the same canonical selection indicator as
+the built-in Preview Mode actions. `commands.setChecked` must update both the
+QAction checked state and `UiTheme::menuSelectionCheckIcon(checked)`; relying on
+the platform-default QAction checkmark is not conformant. See
+`docs/specs/ui/UI_MENU_SELECTION_INDICATOR_SPEC_ZH.md`.
 
 ## API Status
 
@@ -53,7 +57,7 @@ Implemented v1 Open Bridge entry points:
 - `open.forbiddenTargets`: legacy discovery name for experimental raw targets.
 - `open.describeForbiddenTarget`: legacy describe name for one experimental raw target.
 
-The stable registered facade objects are `app`, `workspace`, `document`, `editor`, `timeline`, `preview`, `validation`, `analysis`, `export`, `ui`, `input`, `providers`, `shortcuts`, and `extensions`. Experimental raw targets such as `MainWindow`, `QWidget`, `QQuickItem`, `QSGNode`, `QPainter`, `QRhi`, D3D/DirectComposition, `PreviewRuntime`, preview scene/layer internals, `TimelineQuickItem`, `SimaiDocument`, `PlainCodeEditor`, arbitrary `QObject`, `QProcess`, `shell.execute`, `renderer.raw`, `internal.raw`, security internals, and update internals are appended to the same Open Bridge list with `stability: "experimentalRaw"`.
+The stable registered facade objects are `app`, `window`, `workspace`, `document`, `editor`, `timeline`, `preview`, `validation`, `analysis`, `export`, `ui`, `input`, `providers`, `shortcuts`, and `extensions`. Experimental raw targets such as `MainWindow`, `QWidget`, `QQuickItem`, `QSGNode`, `QPainter`, `QRhi`, D3D/DirectComposition, `PreviewRuntime`, preview scene/layer internals, `TimelineQuickItem`, `SimaiDocument`, `PlainCodeEditor`, arbitrary `QObject`, `QProcess`, `shell.execute`, `renderer.raw`, `internal.raw`, security internals, and update internals are appended to the same Open Bridge list with `stability: "experimentalRaw"`.
 
 A method may be described as `implemented` only when it has either a `hostMethod` or `command` route that is callable. Planned methods must be marked `planned`, not silently left to fail at `open.call`. Each experimental raw target exposes `inspect` and `callUnsafe`; these are intentionally unstable descriptors for trusted/local development.
 
@@ -78,6 +82,26 @@ event back into JavaScript:
 
 Callbacks run under the registering extension's identity, so API calls made
 inside an event callback still use that extension's manifest permissions.
+
+Extensions can also use the unified event bus:
+
+```js
+const subscription = miacode.events.subscribe(
+  "timeline.*",
+  { filter: { source: "pointer" } },
+  event => miacode.window.focusEditor()
+)
+```
+
+Exact names and trailing namespace wildcards are supported. Delivery is queued;
+continuous events are coalesced by subscription and event name, while interaction
+boundaries remain ordered and non-droppable. Subscriptions are disposable and are
+automatically cleared when the runtime stops. DevTools reports received, delivered,
+coalesced, dropped, queue-depth, callback-duration, error, and suspension metrics.
+
+The first host-originated namespaces cover editor text/selection/focus, timeline
+interaction/wheel, preview playback/position, bottom-tab changes, window focus, and
+workspace document opening.
 
 `miacode.devtools` is a stable diagnostic facade. It is not raw renderer,
 QWidget, QML, or QObject access. It exposes:
@@ -157,6 +181,7 @@ Core:
 - Open Bridge discovery/calls: `open.list`, `open.describe`, `open.call`, `open.forbiddenTargets`, `open.describeForbiddenTarget`
 - SDK convenience wrappers over Open Bridge/host methods: `app.openAboutDialog`, `editor.undo`, `editor.redo`, `editor.cut`, `editor.copy`, `editor.paste`, `editor.selectAll`, `ui.registerPetOverlay`
 - internal command discovery with `commands.getInternalCommands` and allowlisted `commands.executeInternal`
+- checked menu-command state controlled by the owning extension through `commands.setChecked`
 
 Document/editor:
 
@@ -187,6 +212,7 @@ Validation/timeline/preview/UI:
 - timeline markers, bands, vertical lines, and clear
 - preview playback controls and speed
 - preview render-state query
+- preview mine-note skin selection (`setMineSkinEnabled`), without changing mine semantics
 - preview text overlays: add/update/remove/clear/list/render/hit-test
 - controlled pet overlays with extension-local resources
 - bottom-tab extension views

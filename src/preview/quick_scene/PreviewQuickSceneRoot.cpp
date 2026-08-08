@@ -330,6 +330,10 @@ void updateLayerSlotProfiled(
     UpdateFn&& updateFn
 )
 {
+    if (layerStats == nullptr) {
+        updateLayerSlot(slot, enabled, std::forward<UpdateFn>(updateFn));
+        return;
+    }
     QElapsedTimer timer;
     timer.start();
     updateLayerSlot(slot, enabled, std::forward<UpdateFn>(updateFn));
@@ -915,7 +919,11 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 .arg(statsBeforeReset.retainedTextureCount));
     }
     textures->beginFrame();
+    const bool layerProfilingEnabled =
+        miacode::debug_options::previewProfileOutputEnabled() || renderDiagEnabled;
     layerProfileStats_.clear();
+    QVector<PreviewTextureLayerStats>* const layerStatsForFrame =
+        layerProfilingEnabled ? &layerProfileStats_ : nullptr;
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
     std::shared_ptr<const miacode::preview::scene::PreviewFrameState> runtimeStateSnapshot;
     if (runtime_ != nullptr) {
@@ -990,8 +998,11 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.maimuriDxJudgeLayer(), playheadSeconds, &maimuriDxJudgeCursor_);
 
     const auto applyWindowCounts =
-        [this](const char* layerName, qint64 candidateCount, qint64 activeCount) {
-            PreviewTextureLayerStats& layerStat = ensureLayerProfileStat(&layerProfileStats_, layerName);
+        [layerStatsForFrame](const char* layerName, qint64 candidateCount, qint64 activeCount) {
+            if (layerStatsForFrame == nullptr) {
+                return;
+            }
+            PreviewTextureLayerStats& layerStat = ensureLayerProfileStat(layerStatsForFrame, layerName);
             layerStat.candidateCount = candidateCount;
             layerStat.activeCount = activeCount;
         };
@@ -1001,7 +1012,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::StageBackgroundLayer),
         "stage_background",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
@@ -1038,7 +1049,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::BackdropLayer),
         "backdrop",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return backdropLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
@@ -1046,7 +1057,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MuriPadStateLayer),
         "muri_pad",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return muriPadLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
@@ -1054,7 +1065,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MuriActionLayer),
         "muri_action",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return muriActionLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
@@ -1063,7 +1074,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeFireworkLayer),
         "judge_firework",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             QSGNode* node = judgeFireworkLayer_.updateNode(
                 oldChild,
@@ -1091,7 +1102,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::GuideLayer),
         "guide",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return guideLayer_.updateNode(
                 oldChild,
@@ -1107,7 +1118,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::GuideLayer),
         "touch_hover",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return touchHoverLayer_.updateNode(
                 oldChild,
@@ -1120,7 +1131,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TrackLayer),
         "track",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return trackLayer_.updateNode(
                 oldChild,
@@ -1140,7 +1151,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::SlideMotionLayer),
         "slide_motion",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return slideMotionLayer_.updateNode(
                 oldChild,
@@ -1164,7 +1175,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::ChartReviewLayer),
         "slide_shape_native",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return chartReviewShapeLayer_.updateNode(
                 oldChild,
@@ -1180,7 +1191,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MaimuriDxJudgeLayer),
         "slide_shape_dx",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return maimuriDxJudgeShapeLayer_.updateNode(
                 oldChild,
@@ -1196,7 +1207,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeTouchLayer),
         "touch_judge",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return touchJudgeLayer_.updateNode(
                 oldChild,
@@ -1216,7 +1227,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::HeadLayer),
         "head",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return headLayer_.updateNode(
                 oldChild,
@@ -1232,7 +1243,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TouchLayer),
         "touch",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return touchLayer_.updateNode(
                 oldChild,
@@ -1248,7 +1259,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TouchHoldLayer),
         "touch_hold",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return touchHoldLayer_.updateNode(
                 oldChild,
@@ -1268,7 +1279,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeLayer),
         "judge_effect",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return judgeEffectLayer_.updateNode(
                 oldChild,
@@ -1288,7 +1299,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::ChartReviewLayer),
         "chart_review",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return chartReviewLayer_.updateNode(
                 oldChild,
@@ -1309,7 +1320,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MaimuriDxJudgeLayer),
         "maimuri_dx_judge",
-        &layerProfileStats_,
+        layerStatsForFrame,
         [&](QSGNode* oldChild) {
             return maimuriDxJudgeLayer_.updateNode(
                 oldChild,

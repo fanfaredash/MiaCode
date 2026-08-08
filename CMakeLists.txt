@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.7")
+set(MIACODE_VERSION_PRERELEASE "beta.8")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -212,6 +212,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/InputShortcutGesture.h
     src/common/InputShortcutGesture.cpp
     src/common/ChartAssetPaths.h
+    src/audio/OfflineAudioDecoder.h
+    src/audio/OfflineAudioDecoder.cpp
     src/common/Id3TagReader.h
     src/common/Id3TagReader.cpp
     src/common/TimelineThemeConfig.h
@@ -313,6 +315,20 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/net/NetBatchDownloadWorker.cpp
     src/tools/net/NetBatchDownloadDialog.h
     src/tools/net/NetBatchDownloadDialog.cpp
+    src/tools/net/NetBatchUploadWorker.h
+    src/tools/net/NetBatchUploadScanner.h
+    src/tools/net/NetBatchUploadScanner.cpp
+    src/tools/net/NetUploadDiagnostics.h
+    src/tools/net/NetUploadDiagnostics.cpp
+    src/tools/net/NetBatchUploadWorker.cpp
+    src/tools/net/NetBatchUploadDialog.h
+    src/tools/net/NetBatchUploadDialog.cpp
+    src/tools/media/PvBatchCompressionScanner.h
+    src/tools/media/PvBatchCompressionScanner.cpp
+    src/tools/media/PvBatchCompressionWorker.h
+    src/tools/media/PvBatchCompressionWorker.cpp
+    src/tools/media/PvBatchCompressionDialog.h
+    src/tools/media/PvBatchCompressionDialog.cpp
     src/tools/cover_export/CoverLayoutModel.h
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverCompositionState.h
@@ -814,17 +830,15 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 target_link_libraries(MiaCode PRIVATE Qt6::Svg)
 
 set(MIACODE_BUNDLED_EXTENSIONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/extensions/bundled")
-if (EXISTS "${MIACODE_BUNDLED_EXTENSIONS_DIR}")
-    add_custom_command(TARGET MiaCode POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_FILE_DIR:MiaCode>/extensions"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${MIACODE_BUNDLED_EXTENSIONS_DIR}"
-            "$<TARGET_FILE_DIR:MiaCode>/extensions"
-        COMMENT "Deploying bundled extensions next to MiaCode.exe"
-        VERBATIM
-    )
-endif()
+add_custom_command(TARGET MiaCode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:MiaCode>/extensions"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${MIACODE_BUNDLED_EXTENSIONS_DIR}"
+        "$<TARGET_FILE_DIR:MiaCode>/extensions"
+    COMMENT "Deploying bundled extensions next to MiaCode.exe"
+    VERBATIM
+)
 
 # ---------------------------------------------------------------------------
 # QtAVPlayer (FFmpeg) — preview background-video decode backend.
@@ -1102,6 +1116,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/latency/LatencyBatchAudioImpl.cpp
             src/tools/latency/LatencyAnalysis.h
             src/tools/latency/LatencyAnalysis.cpp
+            src/audio/OfflineAudioDecoder.h
+            src/audio/OfflineAudioDecoder.cpp
         LIBS Qt6::Core
         INCLUDES src src/tools/latency
     )
@@ -1521,7 +1537,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/video_export/BatchExportTaskLayout.cpp
             src/tools/video_export/BatchExportSelectionState.cpp
         LIBS Qt6::Core Qt6::Widgets
-        INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
+        INCLUDES src src/app/ui src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
     )
 
     miacode_add_dev_tool(video_export_intro_mode_spec TEST
@@ -1568,6 +1584,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/net/NetClientSpec.cpp
             src/tools/net/NetClient.h
             src/tools/net/NetClient.cpp
+            src/tools/net/NetBatchUploadScanner.h
+            src/tools/net/NetBatchUploadScanner.cpp
+            src/tools/net/NetUploadDiagnostics.h
+            src/tools/net/NetUploadDiagnostics.cpp
+            src/tools/media/PvBatchCompressionScanner.h
+            src/tools/media/PvBatchCompressionScanner.cpp
             src/tools/zip_export/ChartZipPackager.h
             src/tools/zip_export/ChartZipPackager.cpp
             src/common/ChartAssetPaths.h

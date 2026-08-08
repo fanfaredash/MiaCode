@@ -8,6 +8,7 @@
 #include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "tools/media/PvBatchCompressionDialog.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/Id3TagReader.h"
@@ -496,9 +497,9 @@ bool compressVideoUnder20Mb(
     if (preservedCompressed != nullptr) {
         *preservedCompressed = false;
     }
-    constexpr qint64 kTargetBytes = 20LL * 1024LL * 1024LL;
-    constexpr int kAudioBitrateKbps = 96;
-    constexpr int kMinVideoBitrateKbps = 120;
+    constexpr qint64 kTargetBytes = miacode::media::kPvCompressionTargetBytes;
+    constexpr int kAudioBitrateKbps = miacode::media::kPvCompressionAudioBitrateKbps;
+    constexpr int kMinVideoBitrateKbps = miacode::media::kPvCompressionMinVideoBitrateKbps;
     const QFileInfo videoInfo(videoPath);
     const qint64 originalBytes = videoInfo.size();
     if (originalBytes > 0 && originalBytes <= kTargetBytes) {
@@ -522,9 +523,11 @@ bool compressVideoUnder20Mb(
     }
 
     const qint64 outputTargetBytes = originalBytes > 0
-        ? std::min(kTargetBytes, static_cast<qint64>(std::floor(static_cast<double>(originalBytes) * 0.86)))
+        ? std::min(kTargetBytes, static_cast<qint64>(std::floor(
+              static_cast<double>(originalBytes) * miacode::media::kPvCompressionShrinkRatio)))
         : kTargetBytes;
-    const double targetBits = static_cast<double>(outputTargetBytes) * 8.0 * 0.965;
+    const double targetBits = static_cast<double>(outputTargetBytes) * 8.0
+        * miacode::media::kPvCompressionMuxSafetyRatio;
     int totalBitrateKbps = static_cast<int>(std::floor(targetBits / durationSeconds / 1000.0));
     int videoBitrateKbps = std::max(kMinVideoBitrateKbps, totalBitrateKbps - kAudioBitrateKbps);
 
@@ -787,7 +790,7 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     // Size gate up-front: if the video is already under 20 MiB there is nothing
     // to compress, so say so immediately instead of making the user confirm
     // first and only then discovering there's no work to do.
-    constexpr qint64 kCompressTargetBytes = 20LL * 1024LL * 1024LL;
+    constexpr qint64 kCompressTargetBytes = miacode::media::kPvCompressionTargetBytes;
     const qint64 videoSizeBytes = videoInfo.size();
     if (videoSizeBytes > 0 && videoSizeBytes <= kCompressTargetBytes) {
         QMessageBox::information(
@@ -945,6 +948,9 @@ void MainWindow::DialogsSection::onMediaProcessingTools()
         { UiText::text(QStringLiteral("media_tools.compress_video")),
           UiText::text(QStringLiteral("media_tools.compress_the_background_video_under")),
           &MainWindow::DialogsSection::onCompressBackgroundVideo },
+        { UiText::text(QStringLiteral("media_tools.batch_pv_title")),
+          UiText::text(QStringLiteral("media_tools.batch_pv_description")),
+          &MainWindow::DialogsSection::onBatchCompressPv },
         { UiText::text(QStringLiteral("media_tools.prepend_track_silence")),
           UiText::text(QStringLiteral("media_tools.insert_silence_at_the_start")),
           &MainWindow::DialogsSection::onPrependTrackSilence },
@@ -970,7 +976,12 @@ void MainWindow::DialogsSection::onMediaProcessingTools()
         // Each button runs its existing handler, which shows its own
         // confirm prompt and a determinate progress bar. The dialog stays
         // open (modal) so several tools can be run in one sitting.
-        connect(button, &QPushButton::clicked, &dialog, [this, handler = entry.handler]() {
+        connect(button, &QPushButton::clicked, &dialog, [this, &dialog, handler = entry.handler]() {
+            if (handler == &MainWindow::DialogsSection::onBatchCompressPv) {
+                dialog.accept();
+                QTimer::singleShot(0, &owner_, [this]() { onBatchCompressPv(); });
+                return;
+            }
             (this->*handler)();
         });
         cardLayout->addWidget(button, 0, Qt::AlignTop);
@@ -1014,6 +1025,17 @@ void MainWindow::DialogsSection::onMediaProcessingTools()
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
 
     dialog.exec();
+}
+
+void MainWindow::DialogsSection::onBatchCompressPv()
+{
+    MC_OP("MainWindow::DialogsSection::onBatchCompressPv");
+    miacode::media::PvBatchCompressionDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
+    owner_.pvBatchCompressionDialog_ = &dialog;
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
+    dialog.exec();
+    owner_.pvBatchCompressionDialog_ = nullptr;
 }
 
 void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)

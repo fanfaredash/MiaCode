@@ -44,12 +44,15 @@ struct VideoExportSnapshot {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    int audioBitrateKbps = 192;
     VideoExportPreset preset = VideoExportPreset::HighQuality;
+    VideoExportSizePreset sizePreset = VideoExportSizePreset::Standard;
     bool fullRangeExport = true;
     QString outputPath;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     bool showChartInfoHud = false;
+    bool fixHudTextLayout = false;
     // Count-in on/off. The clock_count VALUE is always re-derived from the chart;
     // only this gate is serialized. Default true so legacy / CLI / batch snapshots
     // keep emitting the count-in; the video dialog's checkbox toggles it.

@@ -106,8 +106,6 @@ constexpr ResolutionPreset kResolutionPresets[] = {
     {2560, 1440, "2560x1440 (16:9)", 16.0 / 9.0},
 };
 
-constexpr int kFpsOptions[] = {60, 120};
-
 // (The HUD-font library helpers + the font-settings dialog moved to
 // tools/video_export/HudFontSettings.cpp on 2026-06-10, shared with the main
 // window's 视频设置 dialog.)
@@ -553,6 +551,7 @@ VideoExportDialog::VideoExportDialog(
     PreviewTimestampCallback previewTimestampCallback,
     PreviewObjectStatsCallback previewObjectStatsCallback,
     PreviewChartInfoCallback previewChartInfoCallback,
+    PreviewHudTextLayoutCallback previewHudTextLayoutCallback,
     PreviewAspectRatioCallback previewAspectRatioCallback,
     PreviewBrightnessCallback previewBrightnessCallback,
     PreviewLayoutScaleCallback previewLayoutScaleCallback,
@@ -573,6 +572,7 @@ VideoExportDialog::VideoExportDialog(
     , previewTimestampCallback_(std::move(previewTimestampCallback))
     , previewObjectStatsCallback_(std::move(previewObjectStatsCallback))
     , previewChartInfoCallback_(std::move(previewChartInfoCallback))
+    , previewHudTextLayoutCallback_(std::move(previewHudTextLayoutCallback))
     , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
     , previewBrightnessCallback_(std::move(previewBrightnessCallback))
     , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
@@ -758,7 +758,7 @@ VideoExportDialog::VideoExportDialog(
     addOptionField(0, 0, UiText::text(QStringLiteral("dialog.video_export.resolution")), resolutionCombo_);
 
     // FPS dropdown (row 0, col 1).
-    selectedFps_ = baseTask_.fps >= 90 ? 120 : 60;
+    selectedFps_ = normaliseExportFps(baseTask_.fps);
     fpsCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
     for (int fps : kFpsOptions) {
         fpsCombo_->addItem(QStringLiteral("%1 FPS").arg(fps), fps);
@@ -827,6 +827,38 @@ VideoExportDialog::VideoExportDialog(
         1,
         UiText::text(QStringLiteral("dialog.video_export.preset")),
         presetCombo_
+    );
+
+    selectedSizePreset_ = baseTask_.sizePreset;
+    sizePresetCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.standard")),
+        static_cast<int>(VideoExportSizePreset::Standard));
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.compact")),
+        static_cast<int>(VideoExportSizePreset::Compact));
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.ultra_compact_with_pv")),
+        static_cast<int>(VideoExportSizePreset::UltraCompactWithPv));
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.ultra_compact")),
+        static_cast<int>(VideoExportSizePreset::UltraCompact));
+    sizePresetCombo_->setCurrentIndex(
+        qMax(0, sizePresetCombo_->findData(static_cast<int>(selectedSizePreset_))));
+    miacode::ui::applyDialogComboBoxStyle(sizePresetCombo_, 12);
+    connect(sizePresetCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedSizePreset_ =
+            static_cast<VideoExportSizePreset>(sizePresetCombo_->itemData(index).toInt());
+        persistExportOnlySettings();
+    });
+    addOptionField(
+        2,
+        0,
+        UiText::text(QStringLiteral("dialog.video_export.size_preset")),
+        sizePresetCombo_
     );
 
     outputPageLayout->addWidget(optionsGrid, 0);
@@ -1048,6 +1080,11 @@ VideoExportDialog::VideoExportDialog(
         optionsContent_
     );
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
+    fixHudTextLayoutCheck_ = new QCheckBox(
+        UiText::text(QStringLiteral("dialog.video_export.option.fix_hud_text_layout")),
+        optionsContent_
+    );
+    fixHudTextLayoutCheck_->setChecked(baseTask_.fixHudTextLayout);
     clockCountCheck_ = new QCheckBox(
         UiText::text(QStringLiteral("video_export.enable_clock_count_1"))
             .arg(baseTask_.clockCount),
@@ -1292,7 +1329,8 @@ VideoExportDialog::VideoExportDialog(
     hudTogglesLayout->addWidget(showTimestampCheck_, 0, 1, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showObjectStatsCheck_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showChartInfoCheck_, 1, 1, Qt::AlignLeft | Qt::AlignVCenter);
-    hudTogglesLayout->addWidget(clockCountCheck_, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(fixHudTextLayoutCheck_, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(clockCountCheck_, 3, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
 
     // ("添加片头" moved to its own "片头" tab, built below.)
     visualsPageLayout->addWidget(hudToggles, 0);
@@ -1554,6 +1592,10 @@ VideoExportDialog::VideoExportDialog(
         syncLivePreviewChartInfoVisibility();
         initialShowChartInfo_ = checked;
     });
+    connect(fixHudTextLayoutCheck_, &QCheckBox::toggled, this, [this]() {
+        persistExportOnlySettings();
+        syncLivePreviewHudTextLayout();
+    });
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         if (previewSmoothBrightnessCallback_) {
             previewSmoothBrightnessCallback_(checked);
@@ -1596,6 +1638,7 @@ VideoExportDialog::VideoExportDialog(
     previewSlider_->installEventFilter(this);
 
     loadPersistedSettings();
+    syncLivePreviewHudTextLayout();
     miacode::ui::busyTick();
     initialResolutionAspectRatio_ = selectedResolutionAspectRatio();
     syncRangeUi();

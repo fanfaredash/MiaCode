@@ -28,10 +28,15 @@ Implications:
   above PLUS suppression: parser (`SimaiNativeParser.{cpp,TouchTap,Slide}`) ↔ mirror
   (`TimelineQuickModel`) ↔ `ChartBatchTransform` (must accept+emit it, not `return false`) ↔
   `ChartNormalization` round-trip ↔ skin selectors (`PreviewSkinSelectors` + the touch/touch-hold
-  layers, mine OVERRIDES break/each) ↔ timeline icons ↔ **SFX/Muri suppression** (`PreviewSfxTimeline`
-  `buildTimeline`, `MuriAnalyzer` pad windows, `MuriRuntimeModelBuilder` judgeable notes) ↔ specs.
+  layers, mine OVERRIDES break/each) ↔ timeline icons ↔ type-based SFX (`PreviewSfxTimeline`
+  `buildTimeline`) plus **Muri suppression** (`MuriAnalyzer` pad windows,
+  `MuriRuntimeModelBuilder` judgeable notes, and `MuriStaticChecker` cause/affected
+  candidates all exclude `isMine || trackMine`) ↔ specs.
   Mines deliberately DO count in `PreviewProgressStatsCache` (product decision). Skin art =
-  `<base>_mine.png` (skinSTD only; skinDX deferred).
+  `<base>_mine.png`; `PreviewRenderState::useMineSkin` is presentation-only and may be controlled
+  through the bundled extension, so every preview selector/layer must fall back to normal art when
+  it is false without clearing the mine flags. In that normal-art mode, EX mine heads must also
+  restore the normal EX overlay (`3xm` renders like `3x`, not `3`).
 - Negative HS (`<HS*-N>`, ON by default — `SimaiNativeParser::g_allowNegativeHs` defaults true;
   opt-out `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` at boot sets it false): sign lives in `PreviewTapTiming.directionSign`
   (magnitude/sign split in `previewTapTimingForEffectiveFlowSpeed`); `sampleTapApproach` reverse
@@ -214,6 +219,24 @@ export settings (and shared timing offsets, static Muri thresholds) must be adde
 serialization sides; worker protocol changes reflect in both `main.cpp` and MainWindow worker-event
 handling.
 
+`audioBitrateKbps` and `sizePreset` are part of this boundary. Single and batch snapshot builders
+must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize them; and
+`buildVideoExportTaskFromSnapshot` must restore them before `exportPreparedTask`. The
+`UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
+PV in the prepared export task, never in the live/export-page preview.
+
+`fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
+`render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame
+state's device-aware, glyph-safe HUD line layout. The dialog also applies it as a temporary live
+preview override while the export-video page is active; `restoreLivePreviewState` and
+`endExportPreviewSession` force it false on exit. The false branch preserves the original chart-info
+and object-stats baseline calculations. The enabled branch derives same-font line advances from
+device-bound glyph top/bottom bounds and cross-font advances from the previous glyph bottom to the
+next glyph top (with typographic ascent/descent as a floor). The chart-info first baseline also uses
+the actual glyph top so custom-font overshoot cannot intrude into the configured HUD padding.
+`MIACODE_PREVIEW_HUD_PAINT_DIAG=1` records the flag plus the resolved HUD font metrics, calculated
+advances, and chart-info visible top.
+
 ## 9. Shared render state flows through preview and export
 
 Shared settings (background brightness outer/inner, layout square scale, outline diameter ratio
@@ -278,6 +301,11 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
 - The controller's `QTimer` is a ~30Hz UI poll ONLY: it mirrors `qtPreviewPlaying_` +
   `qtPreviewPauseSecond_` onto the page's own widgets (audition button + position label) via
   `auditionStateChanged` / `playheadAdvanced`. It does NOT drive playback.
+- BPM/offset analysis audio is decoded independently of the audition transport through
+  `src/audio/OfflineAudioDecoder.*`. `LatencyDetectionPage` persists a strict BASS/miniaudio
+  selection under `latency/audioDecoder`; switching it clears both cached envelopes. BASS is the
+  supported OGG Vorbis path, while miniaudio preserves the original WAV/MP3/FLAC behavior. Do not
+  silently cross-fallback, because the visible selector is also the user's diagnostic control.
 - Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's preview
   state, then re-dispatches audio levels (see below). `setOnPage` flips `onPage_` BEFORE running
   install/teardown, so the level dispatch reads the correct mode at both edges.

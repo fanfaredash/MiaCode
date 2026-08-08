@@ -1,5 +1,7 @@
 #include "ExtensionManager.h"
 
+#include <utility>
+
 #include <QAction>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -28,6 +30,7 @@
 #include <QUrl>
 
 #include "ExtensionOpenBridge.h"
+#include "UiTheme.h"
 #include "UiText.h"
 
 namespace miacode::extensions {
@@ -652,6 +655,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("commands.describe"), QStringLiteral("commands/describe"), QStringLiteral("commands.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Describe an extension command.")),
         apiDescriptor(QStringLiteral("commands.register"), QStringLiteral("commands/register"), QString(), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Register a command callback from the owning extension.")),
         apiDescriptor(QStringLiteral("commands.execute"), QStringLiteral("commands/execute"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Execute an extension command.")),
+        apiDescriptor(QStringLiteral("commands.setChecked"), QStringLiteral("commands/setChecked"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Set the checked state of an extension's own menu command.")),
         apiDescriptor(QStringLiteral("commands.executeInternal"), QStringLiteral("commands/executeInternal"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Execute an allowlisted MiaCode internal command.")),
         apiDescriptor(QStringLiteral("commands.getInternalCommands"), QStringLiteral("commands/getInternalCommands"), QStringLiteral("commands.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List allowlisted MiaCode internal commands.")),
 
@@ -661,6 +665,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("window.showInputBox"), QStringLiteral("window/showInputBox"), QStringLiteral("ui.prompt"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Show a text input dialog.")),
         apiDescriptor(QStringLiteral("window.showQuickPick"), QStringLiteral("window/showQuickPick"), QStringLiteral("ui.prompt"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Show a simple selection dialog.")),
         apiDescriptor(QStringLiteral("window.createStatusBarItem"), QStringLiteral("window/createStatusBarItem"), QStringLiteral("ui.status"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show a temporary status bar message.")),
+        apiDescriptor(QStringLiteral("window.focusEditor"), QStringLiteral("window/focusEditor"), QStringLiteral("ui.prompt"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Focus the active chart editor.")),
 
         apiDescriptor(QStringLiteral("workspace.getActiveDocument"), QStringLiteral("workspace/getActiveDocument"), QStringLiteral("workspace.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get the active document snapshot.")),
         apiDescriptor(QStringLiteral("workspace.applyDocumentEdit"), QStringLiteral("workspace/applyDocumentEdit"), QStringLiteral("document.edit"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Replace active document text.")),
@@ -739,6 +744,8 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("preview.stop"), QStringLiteral("preview/stop"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Stop preview.")),
         apiDescriptor(QStringLiteral("preview.seek"), QStringLiteral("preview/seek"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Seek preview.")),
         apiDescriptor(QStringLiteral("preview.setSpeed"), QStringLiteral("preview/setSpeed"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Set preview speed.")),
+        apiDescriptor(QStringLiteral("preview.setMineSkinEnabled"), QStringLiteral("preview/setMineSkinEnabled"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Choose dedicated or normal sprites for mine notes.")),
+        apiDescriptor(QStringLiteral("preview.setMineSfxEnabled"), QStringLiteral("preview/setMineSfxEnabled"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Enable or mute type-based SFX for mine notes.")),
         apiDescriptor(QStringLiteral("preview.addOverlay"), QStringLiteral("preview/addOverlay"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Add a rendered text overlay above the preview.")),
         apiDescriptor(QStringLiteral("preview.updateOverlay"), QStringLiteral("preview/updateOverlay"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Update a preview overlay.")),
         apiDescriptor(QStringLiteral("preview.removeOverlay"), QStringLiteral("preview/removeOverlay"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Remove a preview overlay.")),
@@ -773,7 +780,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("input.registerKeyGesture"), QStringLiteral("input/registerKeyGesture"), QStringLiteral("input.listen"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled key gesture that invokes an extension command.")),
         apiDescriptor(QStringLiteral("input.registerMouseGesture"), QStringLiteral("input/registerMouseGesture"), QStringLiteral("input.listen"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled mouse gesture that invokes an extension command.")),
         apiDescriptor(QStringLiteral("input.getGestures"), QStringLiteral("input/getGestures"), QStringLiteral("input.listen"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List registered extension input gestures.")),
-        apiDescriptor(QStringLiteral("events.register"), QStringLiteral("events/register"), QStringLiteral("events.subscribe"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Register an extension event subscription descriptor.")),
+        apiDescriptor(QStringLiteral("events.subscribe"), QStringLiteral("events/register"), QStringLiteral("events.subscribe"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Subscribe to an exact event name or namespace wildcard with optional filters.")),
         apiDescriptor(QStringLiteral("providers.registerHoverProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor hover provider descriptor.")),
         apiDescriptor(QStringLiteral("providers.registerCompletionProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor completion provider descriptor.")),
         apiDescriptor(QStringLiteral("providers.registerCodeActionProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor code-action provider descriptor.")),
@@ -887,6 +894,13 @@ void ExtensionManager::appendExtensionLog(const QString& severity, const QString
 QJsonObject ExtensionManager::devtoolsSnapshotForUi() const
 {
     return devtoolsSnapshot(QString());
+}
+
+void ExtensionManager::publishEvent(const QString& name, const QJsonObject& payload, bool coalescible)
+{
+    if (runtime_ != nullptr && runtime_->isRunning()) {
+        runtime_->dispatchEvent(name, payload, coalescible);
+    }
 }
 
 void ExtensionManager::refreshExtensions()
@@ -1385,7 +1399,9 @@ QString ExtensionManager::permissionForMethod(const QString& method, const QJson
             ? QStringLiteral("settings.read")
             : QStringLiteral("settings.write");
     }
-    if (method == QStringLiteral("commands/execute") || method == QStringLiteral("commands/executeInternal")) {
+    if (method == QStringLiteral("commands/execute")
+        || method == QStringLiteral("commands/executeInternal")
+        || method == QStringLiteral("commands/setChecked")) {
         return QStringLiteral("commands.execute");
     }
     if (method == QStringLiteral("commands/getCommands") || method == QStringLiteral("commands/getInternalCommands")) {
@@ -1725,6 +1741,19 @@ void ExtensionManager::appendDevtoolsCall(const QString& method, const QJsonObje
     }
     if (!entry.value(QStringLiteral("ok")).toBool(true)) {
         appendExtensionLog(QStringLiteral("warning"), QStringLiteral("host API call failed"), entry);
+    } else if (isRawOrExperimentalCall(entry)
+               || method == QStringLiteral("process/spawn")
+               || method == QStringLiteral("shell/execute")) {
+        appendExtensionLog(QStringLiteral("info"), QStringLiteral("host API call accepted"), entry);
+    }
+}
+
+void ExtensionManager::refreshMenuSelectionIcons()
+{
+    for (QAction* action : std::as_const(commandActions_)) {
+        if (action != nullptr && action->isCheckable()) {
+            action->setIcon(UiTheme::menuSelectionCheckIcon(action->isChecked()));
+        }
     }
 }
 
@@ -2185,6 +2214,24 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
         }
         return okValue(commands);
     }
+    if (method == QStringLiteral("commands/setChecked")) {
+        const QString command = params.value(QStringLiteral("command")).toString();
+        const QString extensionId = params.value(QStringLiteral("extensionId")).toString();
+        if (commandOwnerById_.value(command) != extensionId) {
+            return errorObject(QStringLiteral("Extensions may only change their own command state."));
+        }
+        QAction* action = commandActions_.value(command);
+        if (action == nullptr) {
+            return errorObject(QStringLiteral("Command menu action is unavailable: %1").arg(command));
+        }
+        action->setCheckable(true);
+        action->setChecked(params.value(QStringLiteral("checked")).toBool());
+        action->setIcon(UiTheme::menuSelectionCheckIcon(action->isChecked()));
+        return okValue(QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("checked"), action->isChecked()},
+        });
+    }
     if (method == QStringLiteral("commands/getInternalCommands")) {
         if (!callbacks_.mainWindowRequest) {
             return errorObject(QStringLiteral("MainWindow command registry is not available."));
@@ -2223,6 +2270,7 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
         return okValue(QJsonObject{
             {QStringLiteral("version"), QCoreApplication::applicationVersion()},
             {QStringLiteral("applicationName"), QCoreApplication::applicationName()},
+            {QStringLiteral("processId"), static_cast<double>(QCoreApplication::applicationPid())},
             {QStringLiteral("platform"), QSysInfo::productType()},
             {QStringLiteral("platformVersion"), QSysInfo::productVersion()},
             {QStringLiteral("architecture"), QSysInfo::currentCpuArchitecture()},

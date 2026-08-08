@@ -334,3 +334,10 @@ elif abs(delta + 50ms) <= 233.3ms:
 else:
     bad
 ```
+
+## Mine-note suppression
+
+Mine markers are dodge notes and do not participate in Muri detection by default.
+Both runtime analysis and static-reference analysis exclude markers where
+`isMine || trackMine`. A mine can be neither the cause nor the affected side of
+a Muri result, so the merged panel must receive no entry produced by a mine.

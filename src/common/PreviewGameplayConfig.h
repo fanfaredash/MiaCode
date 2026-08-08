@@ -181,7 +181,7 @@ inline constexpr double kSlideTrackFadeInSeconds = kSlideTrackAppearLeadInSecond
 inline constexpr double kTouchDurationSeconds = 0.5;
 
 inline constexpr double kJudgeEffectDurationSeconds = 0.71666664;
-inline constexpr double kJudgeEffectTouchDurationSeconds = 0.33333334;
+inline constexpr double kJudgeEffectTouchDurationSeconds = 0.25;
 inline constexpr double kJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
 inline constexpr double kJudgeEffectFireworkDurationSeconds = 1.3333334;
 

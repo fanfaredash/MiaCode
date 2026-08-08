@@ -97,13 +97,13 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         }
 
         const QImage& pointBase =
-            (marker.isMine && !state.skin.touchPointMineImage.isNull())
+            (state.render.useMineSkin && marker.isMine && !state.skin.touchPointMineImage.isNull())
                 ? state.skin.touchPointMineImage
                 : (marker.isBreak && !state.skin.touchPointBreakImage.isNull())
                     ? state.skin.touchPointBreakImage
                     : ((marker.isEach && !state.skin.touchPointEachImage.isNull()) ? state.skin.touchPointEachImage : state.skin.touchPointImage);
         const QImage& borderBase =
-            (marker.isMine && !state.skin.touchHoldBorderMineImage.isNull())
+            (state.render.useMineSkin && marker.isMine && !state.skin.touchHoldBorderMineImage.isNull())
                 ? state.skin.touchHoldBorderMineImage
                 : (marker.isBreak && !state.skin.touchHoldBreakBorderImage.isNull())
                     ? state.skin.touchHoldBreakBorderImage

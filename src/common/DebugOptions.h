@@ -706,6 +706,11 @@ inline ExportRenderBackendRequest exportRenderBackendRequest()
     return ExportRenderBackendRequest::OpenGl;
 }
 
+inline std::optional<bool> exportPremultipliedPipeOverride()
+{
+    return envOptionalFlagValue("MIACODE_EXPORT_PREMULTIPLIED_PIPE");
+}
+
 inline bool hasDebugArg(const QStringList& args)
 {
     return args.contains(QStringLiteral("--debug"));

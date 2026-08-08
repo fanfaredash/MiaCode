@@ -184,9 +184,11 @@ public:
     void setSuppressDebugInfo(bool suppress);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
+    void setFixHudTextLayout(bool enabled);
     void setCenterDisplayMode(miacode::preview_gameplay::CenterDisplayMode mode);
     void setSuppressObjectStatsHud(bool suppress);
     void setShowChartInfoHud(bool show);
+    void setUseMineSkin(bool enabled);
     void setChartInfo(const QString& title,
                       const QString& artist,
                       const QString& difficultyLabel,
@@ -194,6 +196,7 @@ public:
     bool showTimestamp() const;
     bool showObjectStatsHud() const;
     bool showChartInfoHud() const;
+    bool useMineSkin() const;
     miacode::preview_gameplay::CenterDisplayMode centerDisplayMode() const;
 
     void reset();

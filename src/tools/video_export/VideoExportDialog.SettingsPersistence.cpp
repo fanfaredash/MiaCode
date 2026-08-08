@@ -97,6 +97,26 @@ VideoExportPreset videoExportPresetFromStoredValue(const QJsonValue& value, Vide
     return fallback;
 }
 
+VideoExportSizePreset videoExportSizePresetFromStoredValue(
+    const QJsonValue& value,
+    VideoExportSizePreset fallback)
+{
+    const QString token = value.toString().trimmed();
+    if (token.compare(QStringLiteral("compact"), Qt::CaseInsensitive) == 0) {
+        return VideoExportSizePreset::Compact;
+    }
+    if (token.compare(QStringLiteral("ultra_compact"), Qt::CaseInsensitive) == 0) {
+        return VideoExportSizePreset::UltraCompact;
+    }
+    if (token.compare(QStringLiteral("ultra_compact_with_pv"), Qt::CaseInsensitive) == 0) {
+        return VideoExportSizePreset::UltraCompactWithPv;
+    }
+    if (token.compare(QStringLiteral("standard"), Qt::CaseInsensitive) == 0) {
+        return VideoExportSizePreset::Standard;
+    }
+    return fallback;
+}
+
 }  // namespace
 
 void VideoExportDialog::loadPersistedSettings()
@@ -118,7 +138,7 @@ void VideoExportDialog::loadPersistedSettings()
     }
 
     const int savedFps = settings.value(QStringLiteral("fps")).toInt(selectedFps_);
-    selectedFps_ = savedFps >= 90 ? 120 : 60;
+    selectedFps_ = normaliseExportFps(savedFps);
     if (fpsCombo_ != nullptr) {
         const QSignalBlocker blocker(fpsCombo_);
         fpsCombo_->setCurrentIndex(qMax(0, fpsCombo_->findData(selectedFps_)));
@@ -143,6 +163,15 @@ void VideoExportDialog::loadPersistedSettings()
             qMax(0, presetCombo_->findData(static_cast<int>(selectedPreset_))));
     }
 
+    selectedSizePreset_ = videoExportSizePresetFromStoredValue(
+        settings.value(QStringLiteral("size_preset")),
+        selectedSizePreset_);
+    if (sizePresetCombo_ != nullptr) {
+        const QSignalBlocker blocker(sizePresetCombo_);
+        sizePresetCombo_->setCurrentIndex(
+            qMax(0, sizePresetCombo_->findData(static_cast<int>(selectedSizePreset_))));
+    }
+
     // App-level count-in preference. Keep the historical opt-in default for
     // users who have not selected this option before.
     if (clockCountCheck_ != nullptr) {
@@ -150,6 +179,12 @@ void VideoExportDialog::loadPersistedSettings()
         clockCountCheck_->setChecked(
             settings.value(QStringLiteral("clock_count_enabled"))
                 .toBool(clockCountCheck_->isChecked()));
+    }
+
+    if (fixHudTextLayoutCheck_ != nullptr) {
+        const QSignalBlocker blocker(fixHudTextLayoutCheck_);
+        fixHudTextLayoutCheck_->setChecked(
+            settings.value(QStringLiteral("fix_hud_text_layout")).toBool(false));
     }
 
     // App-level "add intro" preference (persists across sessions).
@@ -220,7 +255,11 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.insert(QStringLiteral("fps"), task.fps);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), task.audioBitrateKbps);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
+    settings.insert(
+        QStringLiteral("size_preset"),
+        miacode::video_export::videoExportSizePresetToken(task.sizePreset));
     settings.insert(QStringLiteral("clock_count_enabled"), task.clockCountEnabled);
+    settings.insert(QStringLiteral("fix_hud_text_layout"), task.fixHudTextLayout);
     appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
 }
@@ -233,8 +272,13 @@ void VideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("fps"), selectedFps_);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), selectedAudioBitrateKbps_);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
+    settings.insert(
+        QStringLiteral("size_preset"),
+        miacode::video_export::videoExportSizePresetToken(selectedSizePreset_));
     settings.insert(QStringLiteral("clock_count_enabled"),
                     clockCountCheck_ != nullptr && clockCountCheck_->isChecked());
+    settings.insert(QStringLiteral("fix_hud_text_layout"),
+                    fixHudTextLayoutCheck_ != nullptr && fixHudTextLayoutCheck_->isChecked());
     appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
 }

@@ -57,6 +57,7 @@ QList<NetChartSummary> filterChartsByLocalDateRange(
     const QDate& startDate,
     const QDate& endDate);
 QString formatLevels(const QStringList& levels);
+QString netUserSpaceReferer(const QString& username);
 QString chartDirectoryPathForTitle(const QString& outputDirectory, const QString& title, const QString& chartId);
 QString uniqueZipPathForTitle(const QString& outputDirectory, const QString& title);
 bool packNetChartZip(

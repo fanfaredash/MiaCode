@@ -108,8 +108,9 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: raw-video pipe queue depth, pipe buffer sizing, connect timeout, writer chunk size, and bounded producer blocking behavior
   - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` is derived from frame size using `32 * (1920*1080) / (width*height)`, clamped to `8..128`, and then scaled by `2` so the effective queued-frame budget is `16..256`; `RawVideoPipePlan::requestedBufferBytes` now targets `2 * max(frameBytes, 1 MiB)` so the OS-side raw pipe buffer is also doubled
   - Rule: keep transport-level tuning local while it only shapes export stability/performance at the ffmpeg rawvideo boundary
-- `src/tools/video_export/VideoExportDialog.cpp`
-  - Owns: export-dialog UI sizing and preview control constants
+- `src/tools/video_export/VideoExportDialog.cpp` and `src/tools/video_export/VideoExportDialogInternal.h`
+  - Owns: export-dialog UI sizing, preview control constants, audio bitrate options, and selectable export FPS values
+  - Current tuning note: `kFpsOptions` is shared across the split VideoExportDialog translation units and currently exposes `30`, `60`, and `120` FPS for both single-export and batch-export settings panels; `normaliseExportFps(...)` snaps stored/custom task FPS to those options with halfway values choosing the higher option.
   - Rule: local UI constants usually stay local unless reused across dialogs
 - `src/tools/cover_export/CoverStudioPanel.cpp`
   - Owns: Cover Studio editor-only preview sizing and visual zoom constants
@@ -137,10 +138,18 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: toolbox media-prepend ffmpeg defaults and local file conventions
   - Current tuning note: prepended background-video black frames are encoded as `1920x1080` at `30 FPS`, the original video is letterboxed into that canvas, output uses x264 `CRF 18` / `veryfast`, and the generated background video is video-only. Prepended `track.mp3` silence uses stereo `44100 Hz` anullsrc and libmp3lame `-q:a 2`. Backups are fixed at `track_bak.mp3` for audio and `<video-stem>_bak.mp4` for video. Blank duration defaults detect beat count from `&clock_count=` / `&clockcount=` before falling back to `4`, and BPM from `&wholebpm=` before the first half-width chart BPM token before falling back to `120`.
   - Rule: keep local while this remains a single toolbox operation; promote if export, preview, or batch tooling starts sharing the same media-mutation policy
+- `src/tools/media/PvBatchCompressionScanner.h`
+  - Owns: shared single-file and batch-video compression size/bitrate tuning
+  - Current tuning note: target size is `20 MiB`, audio is `96 kbps`, video has a `120 kbps` floor, requested output is capped at `86%` of input, and bitrate planning reserves a `0.965` mux-safety ratio. Both the current-chart compressor and batch worker read these constants.
+  - Rule: keep these values shared between single and batch video compression; changes must preserve the final guard that rejects output larger than the input or over the target.
 - `src/tools/net/NetClient.cpp`, `src/tools/net/NetBatchDownloadWorker.cpp`, and `src/tools/net/NetBatchDownloadDialog.cpp`
   - Owns: Net public-resource download defaults and local chart-folder conventions
   - Current tuning note: network requests use a local `60 s` timeout. User-ID queries prefer one `uploader:<ID>` list request and only try limited case-variant fallback queries if fuzzy matching is enabled and the exact uploader request returns no rows; tag-only queries may use additional case/plain-text variants when fuzzy matching is enabled. Resource downloads run on a background worker thread, retry up to `3` attempts with an `800 ms` retry wait, chart-to-chart queue pacing is `250 ms`, and successful folder downloads use the fixed file set `track.mp3`, `bg.jpg`, and `maidata.txt`. Optional zip packaging writes those same three entries. Diagnostics report per-resource `KiB/s` / `MiB/s`, per-chart slowest resource, and queue-average speed.
   - Rule: keep local while this remains a single Net toolbox operation; promote if other importers/downloaders start sharing the same remote-resource policy
+- `src/tools/net/NetBatchUploadWorker.cpp`, `src/tools/net/NetUploadDiagnostics.cpp`
+  - Owns: Net batch-upload timeout, pacing, rate-limit retry, and diagnostic safety bounds
+  - Current tuning note: requests time out after `90 s`; completed non-fatal items pause `5 s` before the next upload; HTTP 429 / Cloudflare 1015 retries once after `Retry-After` with a `60 s` fallback and clamps parsed waits to `3600 s`. Timeout POSTs are not retried. Failure details include the complete response body and selected non-sensitive headers, never request credentials, cookies, or multipart bodies.
+  - Rule: keep these values local to Net upload while only this state-changing endpoint uses them; any retry expansion must preserve the duplicate-upload risk boundary.
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp`
   - Owns: wrapped Validation/Muri issue-row padding, minimum row height, and ignored-row opacity used by the shared rich-text list delegate
   - Rule: keep local while these values only shape diagnostics-list rendering in the main window and are not reused by other widgets or the Quick frontend

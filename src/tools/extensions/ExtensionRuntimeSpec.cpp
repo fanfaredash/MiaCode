@@ -2,6 +2,8 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -44,11 +46,17 @@ int main(int argc, char** argv)
     ok = expect(writeText(mainPath, QStringLiteral(R"(
 function activate(context) {
   context.log("activate");
+  miacode.commands.setChecked("runtime-test.toggle", true);
   miacode.devtools.snapshot();
   miacode.events.onDidChangeText(function(event) {
     context.log("event:" + event.kind + ":" + event.textLength);
     miacode.devtools.diagnose("preview.seek");
   });
+  context.subscriptions.push(miacode.events.subscribe(
+    "timeline.*",
+    { filter: { source: "pointer" } },
+    function(event) { context.log("generic:" + event.name + ":" + event.data.second); }
+  ));
 }
 module.exports = { activate: activate };
 )")),
@@ -61,6 +69,7 @@ module.exports = { activate: activate };
     QStringList logMessages;
     QStringList runtimeErrors;
     QStringList eventRegistrations;
+    bool commandChecked = false;
 
     miacode::extensions::EmbeddedExtensionRuntime runtime;
     QObject::connect(&runtime, &miacode::extensions::EmbeddedExtensionRuntime::runtimeErrorMessage, [&](const QString& message) {
@@ -73,6 +82,12 @@ module.exports = { activate: activate };
         }
         if (method == QStringLiteral("events/register")) {
             eventRegistrations.append(params.value(QStringLiteral("kind")).toString());
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("commands/setChecked")) {
+            commandChecked = params.value(QStringLiteral("command")).toString() == QStringLiteral("runtime-test.toggle")
+                && params.value(QStringLiteral("checked")).toBool()
+                && params.value(QStringLiteral("extensionId")).toString() == QStringLiteral("local.runtime-test");
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("devtools/snapshot")) {
@@ -99,6 +114,7 @@ module.exports = { activate: activate };
     ok = expect(runtime.start(QJsonArray{extension}, &error), QStringLiteral("runtime should start: %1").arg(error)) && ok;
     ok = expect(runtimeErrors.isEmpty(), QStringLiteral("runtime errors: %1").arg(runtimeErrors.join(QStringLiteral(" | ")))) && ok;
     ok = expect(snapshotCalls == 1, QStringLiteral("devtools.snapshot should be callable during activation")) && ok;
+    ok = expect(commandChecked, QStringLiteral("commands.setChecked should preserve command state and extension identity")) && ok;
     ok = expect(runtime.registeredEventCallbackCount(QStringLiteral("events/document.onDidChangeText")) == 1,
                 QStringLiteral("document change callback should be stored")) &&
          ok;
@@ -109,6 +125,20 @@ module.exports = { activate: activate };
     runtime.dispatchEvent(QStringLiteral("events/document.onDidChangeText"), QJsonObject{
         {QStringLiteral("textLength"), 42},
     });
+    runtime.dispatchEvent(QStringLiteral("timeline.interaction.updated"), QJsonObject{
+        {QStringLiteral("source"), QStringLiteral("pointer")},
+        {QStringLiteral("data"), QJsonObject{{QStringLiteral("second"), 1.0}}},
+    }, true);
+    runtime.dispatchEvent(QStringLiteral("timeline.interaction.updated"), QJsonObject{
+        {QStringLiteral("source"), QStringLiteral("pointer")},
+        {QStringLiteral("data"), QJsonObject{{QStringLiteral("second"), 2.0}}},
+    }, true);
+    QElapsedTimer eventWait;
+    eventWait.start();
+    while (eventWait.elapsed() < 100
+           && (diagnoseCalls < 1 || !logMessages.join(QLatin1Char('\n')).contains(QStringLiteral("generic:")))) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
 
     ok = expect(diagnoseCalls == 1, QStringLiteral("event callback should call devtools.diagnose")) && ok;
     ok = expect(diagnoseExtensionId == extensionId,
@@ -116,6 +146,9 @@ module.exports = { activate: activate };
          ok;
     ok = expect(logMessages.join(QLatin1Char('\n')).contains(QStringLiteral("event:events/document.onDidChangeText:42")),
                 QStringLiteral("event callback should receive payload")) &&
+         ok;
+    ok = expect(logMessages.join(QLatin1Char('\n')).contains(QStringLiteral("generic:timeline.interaction.updated:2")),
+                QStringLiteral("generic wildcard callback should receive latest coalesced payload")) &&
          ok;
 
     runtime.stop();

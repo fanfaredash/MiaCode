@@ -198,7 +198,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportTimer.start();
     appendVideoExportLog(
         QStringLiteral("export_begin"),
-        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 preset=%12")
+        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 preset=%12 sizePreset=%13 audioKbps=%14")
             .arg(task.outputPath, task.chartPath, task.backgroundMediaPath, task.trackPath, task.skinDirectory)
             .arg(task.noteMarkers.size())
             .arg(task.exportStartSeconds, 0, 'f', 6)
@@ -207,6 +207,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(task.outputHeight)
             .arg(task.fps)
             .arg(videoExportPresetToken(task.preset))
+            .arg(miacode::video_export::videoExportSizePresetToken(task.sizePreset))
+            .arg(miacode::video_export::effectiveVideoExportAudioBitrateKbps(
+                task.sizePreset, task.audioBitrateKbps))
     );
     if (task.skinDirectory.trimmed().isEmpty()) {
         result.message = QStringLiteral("Skin directory is empty.");
@@ -282,6 +285,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const int frameHeight = qMax(1, task.outputHeight);
     const QSize frameSize(frameWidth, frameHeight);
     const QString explicitMediaPath = normalizePath(task.backgroundMediaPath);
+    const miacode::video_export::VideoExportSizePolicy sizePolicy =
+        miacode::video_export::videoExportSizePolicy(task.sizePreset);
     // Phase 4c — `task.backgroundMediaPath` is filled by the snapshot
     // builder using `resolveChartVideoPath` (`&video=` override first,
     // then sibling fallback). Trust that as the final choice when it
@@ -289,13 +294,15 @@ VideoExportResult VideoExportController::exportPreparedTask(
     // path inverts the priority (sibling first), which would silently
     // override the chart-author's explicit `&video=` choice.
     QString mediaPath;
+    const bool includeVideoBackground = !sizePolicy.disableVideoBackground;
     if (miacode::chart_assets::isSupportedBackgroundMediaPath(
-            explicitMediaPath, /*includeVideoCandidates=*/true)) {
+            explicitMediaPath, includeVideoBackground)) {
         mediaPath = explicitMediaPath;
     } else {
         mediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
             task.chartPath,
-            explicitMediaPath);
+            explicitMediaPath,
+            includeVideoBackground);
     }
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
@@ -312,10 +319,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
               task.staticTapOnSlideThresholdSeconds);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 fullRange=%10 markerFilter=marker.second within simulatedWindow frameWindow=%11..%12 visibleWindow=%13..%14 totalSeconds=%15 alignedSeconds=%16 frameCount=%17 size=%18x%19")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 videoBackgroundEnabled=%4 track=%5 hasTrack=%6 segmentStart=%7 segmentEnd=%8 leadIn=%9 timelineOrigin=%10 fullRange=%11 markerFilter=marker.second within simulatedWindow frameWindow=%12..%13 visibleWindow=%14..%15 totalSeconds=%16 alignedSeconds=%17 frameCount=%18 size=%19x%20")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
+            .arg(includeVideoBackground ? 1 : 0)
             .arg(trackPath)
             .arg(hasTrack ? 1 : 0)
             .arg(audioRenderPlan.segmentStartSecond, 0, 'f', 6)
@@ -406,6 +414,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     appendVideoExportLog(
         QStringLiteral("audio_backend_select"),
         QStringLiteral("backend=%1 path=%2").arg(audioBackend->backendId(), mixedAudioWavPath));
+    QElapsedTimer audioMixTimer;
+    audioMixTimer.start();
     if (!audioBackend->renderMixedTrackToWav(audioRenderPlan, mixedAudioWavPath, &audioBackendError)) {
         result.message = QStringLiteral("Unable to generate mixed export audio track.");
         result.details = withExportLogPath(audioBackendError);
@@ -417,7 +427,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
     }
     appendVideoExportLog(
         QStringLiteral("audio_mix_ok"),
-        QStringLiteral("backend=%1 output=%2").arg(audioBackend->backendId(), mixedAudioWavPath));
+        QStringLiteral("backend=%1 output=%2 elapsedMs=%3")
+            .arg(audioBackend->backendId(), mixedAudioWavPath)
+            .arg(audioMixTimer.elapsed()));
+    const qint64 audioMixElapsedMs = audioMixTimer.elapsed();
 
     if (setProgressPercent(5, QStringLiteral("Starting ffmpeg..."))) {
         result.message = QStringLiteral("canceled");
@@ -796,16 +809,16 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const SystemMemoryInfo memoryInfo = querySystemMemoryInfo();
     appendVideoExportLog(QStringLiteral("memory_snapshot"), memoryInfoToLog(memoryInfo));
     QString encoderProbeLog;
-    // ffmpeg/encoder parameters are pinned to the HighQuality preset for both
-    // export-quality modes. task.preset now selects only the readback path
-    // (PBO vs synchronous), never the encode bitrate/x264 tuning — so Fast
-    // trades readback speed without ever lowering output encode quality.
+    // The export preset controls both readback and encoder tuning. Fast prefers
+    // hardware encoding and uses a faster libx264 fallback; HighQuality keeps
+    // the existing compactness-oriented policy.
     const VideoEncoderConfig encoderConfig = chooseVideoEncoder(
         ffmpegPath,
         frameWidth,
         frameHeight,
         task.fps,
-        VideoExportPreset::HighQuality,
+        task.preset,
+        task.sizePreset,
         memoryInfo,
         exportConfig,
         &encoderProbeLog
@@ -945,6 +958,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
             offscreenInitError.isEmpty() ? result.message : offscreenInitError);
         return result;
     }
+    const bool usePremultipliedPipe = miacode::video_export::shouldUsePremultipliedExportPipe(
+        d3d11SessionActive,
+        task.preset == VideoExportPreset::Fast,
+        exportConfig.premultipliedPipeOverride);
+    exportCanvas.setPreservePremultipliedReadback(usePremultipliedPipe);
 
     // Pre-roll maimai track-start intro (full-range exports only). The audio
     // plan already front-padded the timeline by introLeadSeconds, so frames
@@ -971,8 +989,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
                     .arg(task.intro.difficulty));
         }
     }
-    // The "导出质量 / Export Quality" toggle (task.preset) selects the
-    // readback path:
+    // On OpenGL, the export preset selects the readback path:
     //   HighQuality (default) -> synchronous non-PBO readback
     //       (renderOverlayFrameOffscreen): glReadPixels through a CPU pointer
     //       the driver must serialize, so it cannot tear. ~20-30% slower at
@@ -981,8 +998,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     //       GL drivers prone to per-frame horizontal-band tearing that the
     //       in-engine fence could not fully prevent (observed on a GL 4.6
     //       context whose fence wait never failed). Speed-over-fidelity.
-    // The ffmpeg/encoder parameters are HighQuality in BOTH modes (the toggle
-    // only changes the readback path), so Fast never lowers encode quality.
+    // D3D11 uses its staging-ring pipeline in both presets because it retains
+    // the same deterministic Map/convert contract as the synchronous path.
     //
     // MIACODE_EXPORT_DISABLE_PBO_READBACK=1 is a hard diagnostic override that
     // forces the synchronous path regardless of the quality choice.
@@ -992,10 +1009,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
         qEnvironmentVariableIntValue("MIACODE_EXPORT_DISABLE_PBO_READBACK") == 1;
     const bool requestOffscreenPboReadback =
         useOffscreenGpu
-        && !d3d11SessionActive
         && exportConfig.renderBackend.requestOffscreenPboReadback
         && !disablePboReadbackViaEnv
-        && !highQualityForcesSyncReadback;
+        && (d3d11SessionActive || !highQualityForcesSyncReadback);
     QString offscreenPboError;
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
@@ -1003,15 +1019,17 @@ VideoExportResult VideoExportController::exportPreparedTask(
     }
     if (d3d11SessionActive) {
         appendVideoExportLog(
-            QStringLiteral("pbo_readback_disabled_by_backend"),
-            QStringLiteral("render_backend=d3d11_qrhi readback=synchronous_staging_map"));
+            QStringLiteral("d3d11_readback_pipeline"),
+            QStringLiteral("render_backend=d3d11_qrhi requested=%1 enabled=%2 stagingTextures=3")
+                .arg(requestOffscreenPboReadback ? 1 : 0)
+                .arg(useOffscreenPboReadback ? 1 : 0));
     }
     if (disablePboReadbackViaEnv) {
         appendVideoExportLog(
             QStringLiteral("pbo_readback_disabled_via_env"),
             QStringLiteral("MIACODE_EXPORT_DISABLE_PBO_READBACK=1"));
     }
-    if (highQualityForcesSyncReadback) {
+    if (highQualityForcesSyncReadback && !d3d11SessionActive) {
         appendVideoExportLog(
             QStringLiteral("pbo_readback_disabled_by_quality"),
             QStringLiteral("exportQuality=high_quality readback=synchronous"));
@@ -1022,7 +1040,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     // LUID) so a support log can compare the export GPU against the GUI's
     // `quick_shell/device` line at a glance.
     const QString exportReadbackMode = useOffscreenPboReadback
-        ? QStringLiteral("offscreen_pbo")
+        ? (d3d11SessionActive ? QStringLiteral("d3d11_staging_ring")
+                              : QStringLiteral("offscreen_pbo"))
         : (useOffscreenGpu
                ? (d3d11SessionActive ? QStringLiteral("d3d11_staging_map_sync")
                                      : QStringLiteral("offscreen_gpu_direct"))
@@ -1053,9 +1072,25 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(d3d11SessionActive ? exportCanvas.d3d11RenderTargetFormatForDebug()
                                     : QStringLiteral("GL_RGBA8"))
     );
+    appendVideoExportLog(
+        QStringLiteral("premultiplied_pipe"),
+        QStringLiteral("override=%1 enabled=%2 backend=%3 preset=%4")
+            .arg(exportConfig.premultipliedPipeOverride.has_value()
+                     ? (exportConfig.premultipliedPipeOverride.value() ? QStringLiteral("on")
+                                                                       : QStringLiteral("off"))
+                     : QStringLiteral("default"))
+            .arg(usePremultipliedPipe ? 1 : 0)
+            .arg(d3d11SessionActive ? QStringLiteral("d3d11_qrhi")
+                                    : QStringLiteral("opengl"))
+            .arg(task.preset == VideoExportPreset::Fast ? QStringLiteral("fast")
+                                                        : QStringLiteral("high_quality")));
 
-    // Raw RGBA frames are packed after conversion to non-premultiplied RGBA8888.
-    const QString overlayAlphaMode = QStringLiteral("straight");
+    // Fast D3D11 preserves premultiplied bytes by default and changes ffmpeg's
+    // overlay alpha mode. HighQuality, OpenGL, and the rollback override keep
+    // packing straight RGBA8888.
+    const QString overlayAlphaMode = usePremultipliedPipe
+        ? QStringLiteral("premultiplied")
+        : QStringLiteral("straight");
     filterParts << QStringLiteral("[base][overlay_src]overlay=0:0:format=rgb:alpha=%1[vout]")
                        .arg(overlayAlphaMode);
 
@@ -1073,7 +1108,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
          << QStringLiteral("-frames:v")
          << QString::number(frameCount)
          << QStringLiteral("-g")
-         << QString::number(qMax(1, task.fps * 2))
+         << QString::number(qMax(1, task.fps * sizePolicy.gopSeconds))
          << QStringLiteral("-c:v")
          << encoderConfig.codec
          << QStringLiteral("-pix_fmt")
@@ -1087,7 +1122,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
          // ceiling for stereo at 44.1/48 kHz; below 96k AAC quality
          // collapses, so 96k is our floor.
          << QStringLiteral("%1k")
-                .arg(qBound(96, task.audioBitrateKbps, 320));
+                .arg(miacode::video_export::effectiveVideoExportAudioBitrateKbps(
+                    task.sizePreset, task.audioBitrateKbps));
     if (previewCapped) {
         // -frames:v already stops the video at the capped count; -shortest trims the
         // (still full-length) audio so the preview output ends with the video.
@@ -1108,6 +1144,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     QProcess ffmpeg;
     ffmpeg.setProcessChannelMode(QProcess::MergedChannels);
+    QElapsedTimer encodePipelineTimer;
+    encodePipelineTimer.start();
     ffmpeg.start(ffmpegPath, args, QIODevice::ReadOnly);
     if (!ffmpeg.waitForStarted(5000)) {
         result.message = QStringLiteral("Failed to start ffmpeg.");
@@ -1321,6 +1359,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
         const qint64 renderNs = readyFrame.renderNs;
         const qint64 offscreenDrawNs = readyFrame.offscreenDrawNs;
         const qint64 offscreenReadbackNs = readyFrame.offscreenReadbackNs;
+        const qint64 stateUpdateNs = readyFrame.stateUpdateNs;
+        const qint64 polishNs = readyFrame.polishNs;
+        const qint64 syncNs = readyFrame.syncNs;
+        const qint64 renderSubmitNs = readyFrame.renderSubmitNs;
         const bool usedOffscreenPath = readyFrame.usedOffscreenPath;
         const int fallbackCount = readyFrame.fallbackCount;
         const bool usedGpuRenderer = readyFrame.usedGpuRenderer;
@@ -1505,6 +1547,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         qint64 packedFrameSize = 0;
         if (!preparePackedRgbaFrame(
                 frame,
+                usePremultipliedPipe,
                 &convertedRgbaFrame,
                 &packedFrameScratch,
                 &packedFrameData,
@@ -1534,7 +1577,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
         // Sampling is gated to a tiny fixed set of frames (0, 1, 30, 60,
         // 120) and a handful of fixed positions to keep the log to
         // <= 5 short lines per export.
-        if (packedFrameData != nullptr
+        if (!usePremultipliedPipe
+            && packedFrameData != nullptr
             && packedFrameSize >= static_cast<qint64>(frameWidth) * frameHeight * 4
             && frameWidth > 0
             && frameHeight > 0
@@ -1733,6 +1777,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
         frameStats.writeTotalNs += writeNs;
         frameStats.offscreenDrawTotalNs += qMax<qint64>(0, offscreenDrawNs);
         frameStats.offscreenReadbackTotalNs += qMax<qint64>(0, offscreenReadbackNs);
+        frameStats.stateUpdateTotalNs += qMax<qint64>(0, stateUpdateNs);
+        frameStats.polishTotalNs += qMax<qint64>(0, polishNs);
+        frameStats.syncTotalNs += qMax<qint64>(0, syncNs);
+        frameStats.renderSubmitTotalNs += qMax<qint64>(0, renderSubmitNs);
         if (renderNs > frameStats.renderMaxNs) {
             frameStats.renderMaxNs = renderNs;
             frameStats.renderMaxFrame = frameIndex;
@@ -1894,6 +1942,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
         return true;
     };
 
+    QElapsedTimer frameProductionTimer;
+    frameProductionTimer.start();
     for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
         if (ffmpeg.state() != QProcess::Running) {
             const QString processSnapshot = describeProcessForLog(ffmpeg);
@@ -2075,6 +2125,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             return result;
         }
     }
+    const qint64 frameProductionElapsedMs = frameProductionTimer.elapsed();
 
     appendVideoExportLog(
         QStringLiteral("frame_timing_summary"),
@@ -2107,6 +2158,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(frameStats.offscreenReadbackMaxNs / 1000000.0, 0, 'f', 3)
             .arg(frameStats.offscreenReadbackMaxFrame)
     );
+    appendVideoExportLog(
+        QStringLiteral("render_stage_timing_summary"),
+        QStringLiteral("frames=%1 avgStateMs=%2 avgPolishMs=%3 avgSyncMs=%4 avgSubmitMs=%5")
+            .arg(frameCount)
+            .arg((frameStats.stateUpdateTotalNs / 1000000.0) / qMax(1, frameCount), 0, 'f', 3)
+            .arg((frameStats.polishTotalNs / 1000000.0) / qMax(1, frameCount), 0, 'f', 3)
+            .arg((frameStats.syncTotalNs / 1000000.0) / qMax(1, frameCount), 0, 'f', 3)
+            .arg((frameStats.renderSubmitTotalNs / 1000000.0) / qMax(1, frameCount), 0, 'f', 3));
     appendVideoExportLog(
         QStringLiteral("raw_pipe_summary"),
         QStringLiteral(
@@ -2247,6 +2306,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             &result)) {
         return result;
     }
+    const qint64 encodePipelineElapsedMs = encodePipelineTimer.elapsed();
     if (ffmpeg.exitStatus() != QProcess::NormalExit) {
         result.message = QStringLiteral("ffmpeg process failed.");
         const QString processSnapshot = describeProcessForLog(ffmpeg);
@@ -2322,6 +2382,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     QProcess remuxProcess;
     remuxProcess.setProcessChannelMode(QProcess::MergedChannels);
+    QElapsedTimer remuxTimer;
+    remuxTimer.start();
     remuxProcess.start(ffmpegPath, remuxArgs, QIODevice::ReadOnly);
     if (!remuxProcess.waitForStarted(5000)) {
         result.message = QStringLiteral("Failed to start ffmpeg remux stage.");
@@ -2365,6 +2427,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         QFile::remove(remuxStagePath);
         return result;
     }
+    const qint64 remuxElapsedMs = remuxTimer.elapsed();
 
     QString promoteError;
     if (!replaceOutputFileAtomicallyBestEffort(remuxStagePath, task.outputPath, &promoteError)) {
@@ -2395,8 +2458,23 @@ VideoExportResult VideoExportController::exportPreparedTask(
     result.success = true;
     result.message = QStringLiteral("ok");
     appendVideoExportLog(
+        QStringLiteral("stage_timing_summary"),
+        QStringLiteral("audioMixMs=%1 frameProductionMs=%2 encodePipelineMs=%3 remuxMs=%4")
+            .arg(audioMixElapsedMs)
+            .arg(frameProductionElapsedMs)
+            .arg(encodePipelineElapsedMs)
+            .arg(remuxElapsedMs));
+    const qint64 exportElapsedMs = exportTimer.elapsed();
+    const double realtimeFactor = exportElapsedMs > 0
+        ? alignedTotalSeconds * 1000.0 / static_cast<double>(exportElapsedMs)
+        : 0.0;
+    appendVideoExportLog(
         QStringLiteral("export_success"),
-        QStringLiteral("output=%1 elapsedMs=%2").arg(task.outputPath).arg(exportTimer.elapsed())
+        QStringLiteral("output=%1 elapsedMs=%2 outputSeconds=%3 realtimeFactor=%4")
+            .arg(task.outputPath)
+            .arg(exportElapsedMs)
+            .arg(alignedTotalSeconds, 0, 'f', 3)
+            .arg(realtimeFactor, 0, 'f', 3)
     );
     return result;
 }

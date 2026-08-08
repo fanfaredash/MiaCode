@@ -7,10 +7,17 @@
 
 namespace miacode::chart_transform {
 
+enum class ChartNormalizationSyntax {
+    Fpd,
+    Hinata,
+};
+
 struct ChartNormalizationOptions {
     bool startAtNewMeasure = true;
     bool reduceTo384Grid = true;
     bool splitEveryFourMeasures = true;
+    ChartNormalizationSyntax syntax = ChartNormalizationSyntax::Fpd;
+    int sectionMeasureCount = 4;
 };
 
 struct ChartNormalizationResult {
@@ -27,6 +34,10 @@ inline constexpr auto kChartNormalizeReduceTo384GridPreferenceKey =
     "chart_normalize_reduce_to_384_grid";
 inline constexpr auto kChartNormalizeSplitEveryFourMeasuresPreferenceKey =
     "chart_normalize_split_every_four_measures";
+inline constexpr auto kChartNormalizeSyntaxPreferenceKey =
+    "chart_normalize_syntax";
+inline constexpr auto kChartNormalizeSectionMeasureCountPreferenceKey =
+    "chart_normalize_section_measure_count";
 
 ChartNormalizationOptions chartNormalizationOptionsFromPreferences(
     const QJsonObject& preview,

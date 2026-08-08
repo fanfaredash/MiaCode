@@ -428,9 +428,11 @@ bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* e
     updated.fps = qMax(1, selectedFps_);
     updated.audioBitrateKbps = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
     updated.preset = selectedPreset_;
+    updated.sizePreset = selectedSizePreset_;
     updated.showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
     updated.showChartInfoHud = showChartInfoCheck_ != nullptr && showChartInfoCheck_->isChecked();
+    updated.fixHudTextLayout = fixHudTextLayoutCheck_ != nullptr && fixHudTextLayoutCheck_->isChecked();
     updated.clockCountEnabled = clockCountCheck_ != nullptr && clockCountCheck_->isChecked();
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
@@ -506,7 +508,7 @@ void VideoExportDialog::applyThemeStyles()
 
     // Dialog dropdowns (miacode::ui::createDialogComboBox).
     for (QComboBox* combo : {resolutionCombo_, fpsCombo_, audioBitrateCombo_,
-                             presetCombo_, backgroundScaleModeCombo_}) {
+                             presetCombo_, sizePresetCombo_, backgroundScaleModeCombo_}) {
         miacode::ui::applyDialogComboBoxStyle(combo, 12);
     }
 
@@ -832,9 +834,11 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.fps = qMax(1, selectedFps_);
     updated.audioBitrateKbps = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
     updated.preset = selectedPreset_;
+    updated.sizePreset = selectedSizePreset_;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr ? showObjectStatsCheck_->isChecked() : false;
     updated.showChartInfoHud = showChartInfoCheck_ != nullptr ? showChartInfoCheck_->isChecked() : false;
+    updated.fixHudTextLayout = fixHudTextLayoutCheck_ != nullptr && fixHudTextLayoutCheck_->isChecked();
     // clock_count count-in is opt-in. The VALUE stays = the chart's (already copied
     // via `updated = baseTask_`); only the on/off flag changes — so the label and
     // the document's &clock_count= are never affected.

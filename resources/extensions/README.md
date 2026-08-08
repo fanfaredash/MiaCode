@@ -111,14 +111,14 @@ module.exports = { activate, deactivate };
 
 | Area / 范围 | APIs / API |
 | --- | --- |
-| Commands / 命令 | `miacode.commands.registerCommand`, `executeCommand`, `getCommands`, `getInternalCommands`, `executeInternal` |
+| Commands / 命令 | `miacode.commands.registerCommand`, `executeCommand`, `setChecked`, `getCommands`, `getInternalCommands`, `executeInternal` |
 | Window / 窗口 | `showInformationMessage`, `showWarningMessage`, `showErrorMessage`, `showInputBox`, `showQuickPick`, `createStatusBarItem` |
 | Workspace / 工作区 | `getActiveDocument`, `applyDocumentEdit`, `getChartMetadata`, `updateChartMetadata`, `save`, `saveAs` |
 | Document / 文档 | `query`, `edit`, `getDifficulties`, `getActiveDifficulty`, `replaceActiveDifficultyText`, `format` |
 | Editor / 编辑器 | `getText`, `getSelection`, `getVisibleRange`, `revealRange`, `getParsedSnapshot`, `getCurrentToken`, `insertText`, `replaceSelection`, `replaceRange`, `undo`, `redo`, `showHover`, `showCompletions`, `showCodeActions` |
 | Providers / 提供器 | `miacode.providers.registerHoverProvider`, `registerCompletionProvider`, `registerCodeActionProvider`, `collectHover`, `collectCompletions`, `collectCodeActions`, `showHover`, `showCompletions`, `showCodeActions` |
 | Timeline / 时间轴 | `getSnapshot`, `getZoomState`, `getVisibleRange`, `getMarkersAtSecond`, `seek`, `zoomIn`, `zoomOut`, `stepZoomPreset`, `setZoomScale`, `scrollToSecond`, `setFollowPreview`, `setFollowProgress` |
-| Preview / 预览 | `getState`, `getRenderState`, `play`, `pause`, `stop`, `seek`, `setSpeed`, `addOverlay`, `clearOverlays` |
+| Preview / 预览 | `getState`, `getRenderState`, `play`, `pause`, `stop`, `seek`, `setSpeed`, `setMineSkinEnabled`, `addOverlay`, `clearOverlays` |
 | Input / 输入 | `miacode.input.registerWheelGesture`, `registerKeyGesture`, `registerMouseGesture`, `getGestures` |
 | Shortcuts / 快捷键 | `getEditableShortcuts`, `getKeybinding`, `registerShortcut`, `registerCommandShortcut` |
 | UI / 界面 | `registerToolbarButton`, `registerBottomTabView`, `registerSidebarView`, `registerPreferencesPage`, `registerFloatingPanel`, `registerPetOverlay`, `registerSceneOverlay`, `renderWebView`, `renderCanvasView`, `getViews` |

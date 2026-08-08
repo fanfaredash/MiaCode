@@ -67,6 +67,7 @@ public:
         QString* errorMessage = nullptr
     );
     void shutdownOffscreenRenderer();
+    void setPreservePremultipliedReadback(bool preserve);
     bool supportsOffscreenPboReadback(QString* errorMessage = nullptr) const;
     void resetOffscreenPboReadback();
 
@@ -106,6 +107,10 @@ public:
     int cpuFallbackCountLastFrameForDebug() const;
     qint64 offscreenDrawNsLastFrameForDebug() const;
     qint64 offscreenReadbackNsLastFrameForDebug() const;
+    qint64 stateUpdateNsLastFrameForDebug() const;
+    qint64 polishNsLastFrameForDebug() const;
+    qint64 syncNsLastFrameForDebug() const;
+    qint64 renderSubmitNsLastFrameForDebug() const;
     // P1 — actual GL renderer string for the offscreen export session (empty
     // until the offscreen renderer is initialized).
     QString lastGlRendererForDebug() const { return session_.lastGlRenderer(); }

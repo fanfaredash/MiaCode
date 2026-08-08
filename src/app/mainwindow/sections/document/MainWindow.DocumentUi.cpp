@@ -1415,6 +1415,17 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
     owner_.loadProjectValidationPreferences();
     updateDirtyState();
     owner_.updateWindowTitle();
+    if (owner_.extensionManager_ != nullptr) {
+        owner_.extensionManager_->publishEvent(QStringLiteral("workspace.document.opened"), QJsonObject{
+            {QStringLiteral("source"), QStringLiteral("workspace")},
+            {QStringLiteral("data"), QJsonObject{
+                {QStringLiteral("uri"), state_.currentFilePath_.isEmpty()
+                    ? QStringLiteral("untitled:active")
+                    : QUrl::fromLocalFile(state_.currentFilePath_).toString()},
+                {QStringLiteral("difficultyCount"), state_.document_.difficultyIds().size()},
+            }},
+        });
+    }
 }
 
 void MainWindow::DocumentSection::clearTimelineAndPreview()

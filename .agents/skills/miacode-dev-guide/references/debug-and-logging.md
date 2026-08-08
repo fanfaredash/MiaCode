@@ -179,7 +179,8 @@ the H2 single-device summary in `docs/ops/DEBUG_INDEX.md`.
 `VideoExportRuntimePolicy.h`): `MIACODE_EXPORT_DIAG_*` (REPEAT, CROP_BOTTOM, MAX_LINES,
 OBJECT_{HASH,TRACE,TRACE_MAX_LINES,DIFF_THRESHOLD}, COMPARE_{RENDER_PATHS,RADIUS,MAX_LINES,LOG_THRESHOLD},
 PIPE_HASH(`_MAX_LINES`), RAW_DUMP_PATH, LOG_ALL_REPEATS); backend forcing
-`MIACODE_EXPORT_{ENABLE_GPU_RENDER,ENABLE_OFFSCREEN_PBO,DISABLE_OFFSCREEN_PBO,DISABLE_PBO_READBACK}`;
+`MIACODE_EXPORT_{ENABLE_GPU_RENDER,ENABLE_OFFSCREEN_PBO,DISABLE_OFFSCREEN_PBO,DISABLE_PBO_READBACK,
+PREMULTIPLIED_PIPE}`;
 encoder `MIACODE_EXPORT_{SKIP_ENCODER_RUNTIME_PROBE,FORCE_ENCODER,ENCODER_MODE,ENCODER_THREADS,
 FILTER_THREADS,X264_PRESET,X264_CRF,X264_BFRAMES}`.
 `MIACODE_EXPORT_RENDER_BACKEND` (**P5 — default `d3d11_qrhi`**, `exportRenderBackendRequest()` in
@@ -188,16 +189,24 @@ export + the export worker. `d3d11_qrhi` makes `main.cpp` put the export process
 Quick graphics API and `VideoExportPreparedTask` drive the new
 `src/preview/runtime/PreviewQuickD3D11ExportSession` (device on the P3-policy adapter imported via
 `fromDeviceAndContext` — export has NO video-decode bridge, so a non-default adapter is safe here,
-unlike GUI surfaces; `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8_UNORM target; synchronous
-CopyResource+Map readback, top-down so no vertical flip, same premultiplied→straight RGBA convert as
-GL). No PBO path — `supportsOffscreenPboReadback` returns false on d3d11 so the loop uses the sync
-branch. Init failure auto-falls-back to the OpenGL session in-process (graphics API flipped back;
+unlike GUI surfaces; `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8_UNORM target; a three-texture
+staging ring overlaps frame N rendering with Map/readback of N-2, top-down so no vertical flip).
+Fast D3D11 export preserves premultiplied RGBA by default and pairs it with FFmpeg
+`overlay=...:alpha=premultiplied`, avoiding the scalar per-pixel unpremultiply pass;
+`MIACODE_EXPORT_PREMULTIPLIED_PIPE=0` restores straight RGBA conversion. HighQuality and OpenGL keep
+straight RGBA. Init failure auto-falls-back to the OpenGL session in-process (graphics API flipped back;
 export log `render_backend_fallback` `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `auto`
 currently == `d3d11_qrhi`; set `MIACODE_EXPORT_RENDER_BACKEND=opengl` for rollback. Session backend dispatch lives
 in `VideoExportQuickRenderBackend` (`setRenderSessionBackend`); selected backend/adapter
 LUID/rt_format/readback_mode appear in the `render_backend` export-log summary line. Sync pair: the
 D3D11 session mirrors the OpenGL session's scene mounting (scene root + HUD + intro overlay +
 DCompFallbackActive override) — change both together.
+
+The current FFmpeg subprocess path is intentionally CPU-frame based: bundled `h264_mf` accepts only
+`nv12`/`yuv420p`, bundled FFmpeg has no D3D11 overlay filter, and the export filter graph still owns
+PV/mask/alpha/audio composition. A true GPU-direct encoder therefore requires a separate in-process
+D3D11 compositor + RGBA-to-NV12 + Media Foundation/libav hardware-frame pipeline; do not label a
+download/re-upload bridge as zero-copy.
 
 Current default: unset `MIACODE_EXPORT_RENDER_BACKEND` selects `d3d11_qrhi`; set it to `opengl` for
 the stable OpenGL rollback path. `auto` remains equivalent to `d3d11_qrhi`.

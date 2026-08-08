@@ -32,6 +32,10 @@ class PreviewQuickSceneRoot;
 struct PreviewQuickExportRenderStats {
     qint64 renderNs = 0;
     qint64 readbackNs = 0;
+    qint64 stateUpdateNs = 0;
+    qint64 polishNs = 0;
+    qint64 syncNs = 0;
+    qint64 renderSubmitNs = 0;
 };
 
 class PreviewQuickExportSession : public QObject

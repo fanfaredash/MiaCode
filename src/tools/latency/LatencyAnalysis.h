@@ -4,6 +4,8 @@
 #include <QString>
 #include <QVector>
 
+#include "audio/OfflineAudioDecoder.h"
+
 namespace miacode::latency_analysis {
 
 // Default analysis sample rate (mono PCM target for decoding).
@@ -96,7 +98,11 @@ struct OffsetDetectionInputs {
 
 // Decode an audio file to mono float PCM at the requested sample rate.
 // Returns an empty DecodedAudio on failure (missing file, decoder error).
-DecodedAudio decodeMonoTrack(const QString& trackPath, int sampleRate = kAnalysisSampleRate);
+DecodedAudio decodeMonoTrack(
+    const QString& trackPath,
+    int sampleRate = kAnalysisSampleRate,
+    miacode::audio_decode::BackendPreference backend =
+        miacode::audio_decode::BackendPreference::Miniaudio);
 
 // Energy-flux envelope used as the primary signal for BPM detection.
 // `tuning` controls the energy mix + baseline decay; defaults reproduce the

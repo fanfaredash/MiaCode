@@ -144,7 +144,7 @@ PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
             continue;
         }
 
-        const QImage* baseImage = selectSlideMovingStarImage(state.skin, marker);
+        const QImage* baseImage = selectSlideMovingStarImage(state.skin, marker, state.render.useMineSkin);
         if (baseImage == nullptr || baseImage->isNull()) {
             continue;
         }

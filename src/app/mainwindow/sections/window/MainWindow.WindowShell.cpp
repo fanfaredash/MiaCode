@@ -17,8 +17,11 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
+#include "extensions/ExtensionManager.h"
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
+#include "tools/net/NetBatchUploadDialog.h"
+#include "tools/media/PvBatchCompressionDialog.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/BatchExportPanel.h"
 #include "app/ui/AppBackgroundPainter.h"
@@ -1001,6 +1004,12 @@ void MainWindow::WindowSection::applyUiTheme()
     if (!owner_.embeddedBatchExportPanel_.isNull()) {
         owner_.embeddedBatchExportPanel_->applyThemeStyles();
     }
+    if (!owner_.netBatchUploadDialog_.isNull()) {
+        static_cast<miacode::net::NetBatchUploadDialog*>(owner_.netBatchUploadDialog_.data())->applyThemeStyles();
+    }
+    if (!owner_.pvBatchCompressionDialog_.isNull()) {
+        static_cast<miacode::media::PvBatchCompressionDialog*>(owner_.pvBatchCompressionDialog_.data())->applyThemeStyles();
+    }
     if (owner_.metadataEmptyHintLabel_ != nullptr) {
         owner_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
     }
@@ -1147,6 +1156,9 @@ void MainWindow::WindowSection::applyUiTheme()
         owner_.previewStatsCard_->setStyleSheet(QString());
     }
     owner_.updateEditorValidationSummary();
+    if (owner_.extensionManager_ != nullptr) {
+        owner_.extensionManager_->refreshMenuSelectionIcons();
+    }
     owner_.updatePauseButtonAppearance();
     owner_.updatePreviewFullscreenButtonAppearance();
     owner_.update();

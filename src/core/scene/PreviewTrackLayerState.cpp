@@ -222,7 +222,8 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         const PreviewAnimatedSpriteEffect effect = breakFlashEffect(marker);
         for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
             const int imageIndex = imageIndices.value(pointIndex, pointIndex);
-            const QImage* baseImage = selectWifiTrackImage(state.skin, marker, imageIndex, 0);
+            const QImage* baseImage = selectWifiTrackImage(
+                state.skin, marker, imageIndex, 0, state.render.useMineSkin);
             if (baseImage == nullptr || baseImage->isNull()) {
                 continue;
             }
@@ -250,7 +251,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                 continue;
             }
 
-            const QImage* baseImage = selectSlideTrackImage(state.skin, marker);
+            const QImage* baseImage = selectSlideTrackImage(state.skin, marker, state.render.useMineSkin);
             if (baseImage == nullptr || baseImage->isNull()) {
                 continue;
             }
