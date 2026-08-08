@@ -386,12 +386,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 7. Preview audio & SFX scheduling — `src/audio/`
 
-- Facade: `QtPreviewSfxRuntime.{h,cpp}` (+ include-split `.Assets/.Timeline/.Background/.Engine/.Voices.cpp`)
-  — backend selection, prepare/commit/pause/resume/seek surface.
-- Staged worker boundary (compiled, not yet adopted by the facade):
-  `PreviewAudioWorker.{h,cpp}`, `PreviewAudioWorkerProtocol.h`, `PreviewAudioCommandQueue.*`, and
-  `PreviewAudioWorkerFactory.*` — worker-thread backend ownership, command/completion transport,
-  lifecycle snapshots, generation gates, and serialized shutdown.
+- Facade: `QtPreviewSfxRuntime.{h,cpp}` — GUI-owned command/subscription surface. It posts value
+  commands to `PreviewAudioWorker`, reads published snapshots for synchronous fallbacks, and delivers
+  worker completions through queued Qt signals; it never owns a native backend.
+- Worker boundary: `PreviewAudioWorker.{h,cpp}`, `PreviewAudioWorkerProtocol.h`,
+  `PreviewAudioCommandQueue.*`, and `PreviewAudioWorkerFactory.*` — worker-thread backend ownership,
+  command/completion transport, lifecycle and health snapshots, generation gates, and serialized
+  shutdown.
 - Process-wide BASS device lifetime: `PreviewBassDeviceLease.{h,cpp}` — serializes only
   `BASS_GetDevice` / `BASS_Init` / final `BASS_Free` for preview, waveform, and export owners;
   existing devices are borrowed and never freed by the lease.

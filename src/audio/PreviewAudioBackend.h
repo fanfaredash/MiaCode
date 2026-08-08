@@ -6,6 +6,7 @@
 #include "common/PreviewSfxTimeline.h"
 #include "common/PreviewTimingSettings.h"
 #include "PreviewAudioSettings.h"
+#include "PreviewAudioHealth.h"
 
 namespace miacode::preview_audio {
 
@@ -27,6 +28,17 @@ struct PausePreviewResult {
     double pauseSecond = 0.0;
     RetainedPlaybackMode retainedMode = RetainedPlaybackMode::None;
     RetainedBgmState retainedBgmState = RetainedBgmState::NoneLoaded;
+};
+
+// Collected only by PreviewAudioWorker on the backend-owning thread. Backends that
+// have no native health source return this empty payload without allocating a sampler.
+struct PreviewAudioHealthSample {
+    health::ChannelActivity mixerActivity = health::ChannelActivity::Unknown;
+    health::ChannelActivity backgroundActivity = health::ChannelActivity::Unknown;
+    health::BufferSnapshot buffer;
+    double bgmRawSecond = -1.0;
+    qint64 sampledAtMs = 0;
+    quint64 sequence = 0;
 };
 
 class PreviewAudioBackend
@@ -109,6 +121,7 @@ public:
     {
         stopAll();
     }
+    virtual PreviewAudioHealthSample sampleHealth() { return {}; }
 };
 
 }  // namespace miacode::preview_audio

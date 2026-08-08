@@ -153,6 +153,7 @@ struct PreviewAudioSnapshot {
     QString detail;
     int nativeErrorCode = 0;
     quint64 workerThreadId = 0;
+    PreviewAudioHealthSample healthSample;
 };
 
 struct CommandPolicy {

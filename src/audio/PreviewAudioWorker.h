@@ -21,17 +21,40 @@ namespace miacode::preview_audio {
 
 class PreviewAudioNonGuiBarrierSpecAccess;
 
+class PreviewAudioHealthSampleSchedule
+{
+public:
+    using Clock = std::chrono::steady_clock;
+
+    explicit PreviewAudioHealthSampleSchedule(Clock::time_point startedAt)
+        : deadline_(startedAt + kInterval)
+    {
+    }
+
+    bool isDue(Clock::time_point now) const { return now >= deadline_; }
+    Clock::time_point deadline() const { return deadline_; }
+    void markSampled(Clock::time_point sampledAt) { deadline_ = sampledAt + kInterval; }
+
+private:
+    static constexpr auto kInterval = std::chrono::seconds(1);
+    Clock::time_point deadline_;
+};
+
 class PreviewAudioWorker
 {
 public:
     // Invoked synchronously on the worker thread. The callback must not call
     // shutdownAndJoin() or destroy its PreviewAudioWorker.
     using CompletionCallback = std::function<void(const PreviewAudioCompletion&)>;
+    // Invoked synchronously on the worker thread after a snapshot publication.
+    // GUI facades must queue delivery to their QObject receiver.
+    using SnapshotCallback = std::function<void(const PreviewAudioSnapshot&)>;
 
     explicit PreviewAudioWorker(
         PreviewAudioBackendFactory factory = productionPreviewAudioBackendFactory(),
         CompletionCallback completionCallback = {},
-        std::thread::id facadeOwningThreadId = std::this_thread::get_id());
+        std::thread::id facadeOwningThreadId = std::this_thread::get_id(),
+        SnapshotCallback snapshotCallback = {});
     ~PreviewAudioWorker();
 
     PreviewAudioWorker(const PreviewAudioWorker&) = delete;
@@ -75,6 +98,12 @@ private:
         const QString& detail = {},
         const CommandIdentity* identity = nullptr,
         int nativeErrorCode = 0);
+    PreviewAudioSnapshot updateLifecycleSnapshot(
+        WorkerLifecycle lifecycle,
+        CommandError error,
+        const QString& detail,
+        const CommandIdentity* identity,
+        int nativeErrorCode);
     bool publishAssetLifecycleIfCurrent(
         WorkerLifecycle lifecycle,
         const CommandIdentity& identity);
@@ -98,6 +127,10 @@ private:
     void rememberRetiredCompletionForNonGuiLocked(quint64 sequence);
     void retainCompletionForNonGui(const PreviewAudioCompletion& completion);
     void deliverCompletion(const PreviewAudioCompletion& completion);
+    void deliverSnapshot(const PreviewAudioSnapshot& snapshot);
+    void sampleHealth(
+        PreviewAudioBackend& backend,
+        RuntimeState& state);
     void rejectQueuedCommands(CommandError error);
     bool isCurrentAssetGeneration(quint64 generation) const;
 
@@ -116,6 +149,7 @@ private:
     std::mutex callbackMutex_;
     std::condition_variable callbackCv_;
     CompletionCallback completionCallback_;
+    SnapshotCallback snapshotCallback_;
     bool callbackDeliveryEnabled_ = true;
     std::size_t callbacksInFlight_ = 0;
 

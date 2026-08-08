@@ -1,105 +1,117 @@
 #include "QtPreviewSfxRuntime.h"
 
-#include "BassPreviewAudioBackend.h"
-#include "MiniaudioPreviewAudioBackend.h"
-#include "common/DebugLog.h"
-#include "common/DebugOptions.h"
+#include <QMetaObject>
 
-#include <QElapsedTimer>
+#include <utility>
 
-namespace {
-
-bool runtimeAudioDebugEnabled()
-{
-    return miacode::debug_options::audioDebugOutputEnabled();
-}
-
-void appendAudioDebugLog(const QString& message)
-{
-    if (!runtimeAudioDebugEnabled()) {
-        return;
-    }
-    miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
-}
-
-}  // namespace
+using namespace miacode::preview_audio;
 
 QtPreviewSfxRuntime::QtPreviewSfxRuntime(QObject* parent)
-    : QObject(parent)
-    , backend_(createBackend())
+    : QtPreviewSfxRuntime(productionPreviewAudioBackendFactory(), parent)
 {
-    appendAudioDebugLog(QString("QtPreviewSfxRuntime created backend=%1").arg(backend_->backendId()));
+}
+
+QtPreviewSfxRuntime::QtPreviewSfxRuntime(PreviewAudioBackendFactory factory, QObject* parent)
+    : QObject(parent)
+    , callbackState_(std::make_shared<CallbackState>())
+{
+    const std::shared_ptr<CallbackState> callbackState = callbackState_;
+    worker_ = std::make_unique<PreviewAudioWorker>(
+        std::move(factory),
+        [this, callbackState](const PreviewAudioCompletion& completion) {
+            if (!callbackState->deliveryEnabled.load(std::memory_order_acquire)) {
+                return;
+            }
+            QMetaObject::invokeMethod(
+                this,
+                [this, callbackState, completion] {
+                    if (callbackState->deliveryEnabled.load(std::memory_order_acquire)) {
+                        handleCompletion(completion);
+                    }
+                },
+                Qt::QueuedConnection);
+        },
+        std::this_thread::get_id(),
+        [this, callbackState](const PreviewAudioSnapshot& snapshot) {
+            if (!callbackState->deliveryEnabled.load(std::memory_order_acquire)) {
+                return;
+            }
+            QMetaObject::invokeMethod(
+                this,
+                [this, callbackState, snapshot] {
+                    if (callbackState->deliveryEnabled.load(std::memory_order_acquire)) {
+                        handleSnapshot(snapshot);
+                    }
+                },
+                Qt::QueuedConnection);
+        });
 }
 
 QtPreviewSfxRuntime::~QtPreviewSfxRuntime()
 {
-    const QString backendId = backend_ != nullptr ? backend_->backendId() : QStringLiteral("null");
-    appendAudioDebugLog(QString("QtPreviewSfxRuntime destroying backend=%1").arg(backendId));
-    QElapsedTimer timer;
-    timer.start();
-    backend_.reset();
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("app_shutdown/preview_audio"),
-        QStringLiteral("destroy_backend"),
-        timer.elapsed(),
-        QStringLiteral("backend=%1").arg(backendId)
-    );
+    shutdownWorker();
 }
 
-std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> QtPreviewSfxRuntime::createBackend() const
+void QtPreviewSfxRuntime::setWarmupResolvedPaths(
+    const QString& chartPath,
+    const QString& trackPath,
+    const QString& sfxDir)
 {
-#ifdef MIACODE_HAS_BASS_AUDIO
-    auto bassBackend = std::make_unique<BassPreviewAudioBackend>();
-    QString bassReason;
-    const bool bassReady = bassBackend->canBePrimary(&bassReason);
-    appendAudioDebugLog(
-        QString("preview_audio_backend selected=bass ready=%1 reason=%2")
-            .arg(bassReady ? 1 : 0)
-            .arg(bassReason));
-    return bassBackend;
-#endif
-    return std::make_unique<MiniaudioPreviewAudioBackend>();
-}
-
-void QtPreviewSfxRuntime::setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir)
-{
-    backend_->setWarmupResolvedPaths(chartPath, trackPath, sfxDir);
+    PreviewAudioCommand command = makeCommand(CommandKind::SetWarmupResolvedPaths);
+    command.identity.assetGeneration = ++assetGeneration_;
+    command.chartPath = chartPath;
+    command.trackPath = trackPath;
+    command.sfxDirectory = sfxDir;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
 {
-    backend_->reloadAssets(settings);
+    PreviewAudioCommand command = makeCommand(CommandKind::ReloadAssets);
+    command.settings = settings;
+    post(std::move(command));
 }
 
 bool QtPreviewSfxRuntime::audioEngineInitialized() const
 {
-    return backend_->audioEngineInitialized();
+    return lastSnapshot().backendReady;
 }
 
 void QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
 {
-    backend_->setChartPath(chartPath);
+    PreviewAudioCommand command = makeCommand(CommandKind::SetChartPath);
+    command.identity.assetGeneration = ++assetGeneration_;
+    command.chartPath = chartPath;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::setBackgroundTrackOffsetSeconds(double seconds)
 {
-    backend_->setBackgroundTrackOffsetSeconds(seconds);
+    PreviewAudioCommand command = makeCommand(CommandKind::SetBackgroundOffset);
+    command.value = seconds;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::setBackgroundTrackPlaybackRate(double rate)
 {
-    backend_->setBackgroundTrackPlaybackRate(rate);
+    PreviewAudioCommand command = makeCommand(CommandKind::SetBackgroundRate);
+    command.rate = rate;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::applyPlaybackRateAtChartSecond(double rate, double chartSecond)
 {
-    backend_->applyPlaybackRateAtChartSecond(rate, chartSecond);
+    PreviewAudioCommand command = makeCommand(CommandKind::ApplyRateAtSecond);
+    command.rate = rate;
+    command.second = chartSecond;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::applyLevels(const PreviewAudioSettings& settings)
 {
-    backend_->applyLevels(settings);
+    PreviewAudioCommand command = makeCommand(CommandKind::ApplyLevels);
+    command.settings = settings;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::configureTimeline(
@@ -107,37 +119,51 @@ void QtPreviewSfxRuntime::configureTimeline(
     double playbackRate,
     const PreviewTimingSettings& timingSettings)
 {
-    backend_->configureTimeline(noteMarkers, playbackRate, timingSettings);
+    PreviewAudioCommand command = makeCommand(CommandKind::ConfigureTimeline);
+    command.noteMarkers = noteMarkers;
+    command.rate = playbackRate;
+    command.timingSettings = timingSettings;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::clearTimeline()
 {
-    backend_->clearTimeline();
+    post(makeCommand(CommandKind::ClearTimeline));
 }
 
 void QtPreviewSfxRuntime::setPlaybackTransactionId(quint64 transactionId)
 {
-    backend_->setPlaybackTransactionId(transactionId);
+    transactionId_ = transactionId;
 }
 
-double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate)
+double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(
+    double startSecond,
+    bool resumeFromPause,
+    double playbackRate)
 {
-    return backend_->preparePreviewPlaybackTransaction(startSecond, resumeFromPause, playbackRate);
+    PreviewAudioCommand command = makeCommand(CommandKind::Prepare);
+    command.identity.generation = advancePlaybackGeneration();
+    command.second = startSecond;
+    command.option = resumeFromPause;
+    command.rate = playbackRate;
+    post(std::move(command));
+    const PreviewAudioSnapshot snapshot = lastSnapshot();
+    return snapshot.preparedSecond != 0.0 ? snapshot.preparedSecond : startSecond;
 }
 
 void QtPreviewSfxRuntime::commitPreparedPreviewPlayback()
 {
-    backend_->commitPreparedPreviewPlayback();
+    post(makeCommand(CommandKind::Commit));
 }
 
 void QtPreviewSfxRuntime::cancelPreparedPreviewPlayback()
 {
-    backend_->cancelPreparedPreviewPlayback();
+    post(makeCommand(CommandKind::Cancel));
 }
 
 double QtPreviewSfxRuntime::preparedStartSecond() const
 {
-    return backend_->preparedStartSecond();
+    return lastSnapshot().preparedSecond;
 }
 
 void QtPreviewSfxRuntime::applyPausedPreviewState(
@@ -147,135 +173,320 @@ void QtPreviewSfxRuntime::applyPausedPreviewState(
     double playbackRate,
     const PreviewTimingSettings& timingSettings)
 {
-    backend_->applyPausedPreviewState(noteMarkers, noteMarkersChanged, pauseSecond, playbackRate, timingSettings);
+    PreviewAudioCommand command = makeCommand(CommandKind::ApplyPausedState);
+    command.noteMarkers = noteMarkers;
+    command.option = noteMarkersChanged;
+    command.second = pauseSecond;
+    command.rate = playbackRate;
+    command.timingSettings = timingSettings;
+    post(std::move(command));
 }
 
-double QtPreviewSfxRuntime::startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate)
+double QtPreviewSfxRuntime::startPreviewPlaybackTransaction(
+    double startSecond,
+    bool resumeFromPause,
+    double playbackRate)
 {
-    return backend_->startPreviewPlaybackTransaction(startSecond, resumeFromPause, playbackRate);
+    PreviewAudioCommand command = makeCommand(CommandKind::Start);
+    command.identity.generation = advancePlaybackGeneration();
+    command.second = startSecond;
+    command.option = resumeFromPause;
+    command.rate = playbackRate;
+    post(std::move(command));
+    return startSecond;
 }
 
 QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::capturePausedPreviewTransaction()
 {
-    return backend_->capturePausedPreviewTransaction();
+    PreviewAudioCommand command = makeCommand(CommandKind::ManualPause);
+    command.identity.generation = advancePlaybackGeneration();
+    post(std::move(command));
+    return lastPauseResult();
 }
 
 QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::pausePreviewPlaybackTransaction()
 {
-    return backend_->pausePreviewPlaybackTransaction();
+    PreviewAudioCommand command = makeCommand(CommandKind::ManualPause);
+    command.identity.generation = advancePlaybackGeneration();
+    post(std::move(command));
+    return lastPauseResult();
+}
+
+QtPreviewSfxRuntime::DevicePauseRequest QtPreviewSfxRuntime::requestDeviceChangePause(
+    quint64 transactionId,
+    quint64 deviceSequence,
+    quint64 pauseToken,
+    double pauseSecond)
+{
+    deviceSequence_ = std::max(deviceSequence_, deviceSequence);
+    PreviewAudioCommand command = makeCommand(CommandKind::DeviceChangePause);
+    command.identity.generation = advancePlaybackGeneration();
+    command.identity.transactionId = transactionId;
+    command.identity.deviceSequence = deviceSequence_;
+    command.identity.pauseToken = pauseToken;
+    command.second = pauseSecond;
+
+    DevicePauseRequest request;
+    request.identity = command.identity;
+    request.post = post(std::move(command));
+    request.identity.sequence = request.post.sequence;
+    return request;
 }
 
 double QtPreviewSfxRuntime::resumeRetainedPreviewPlaybackTransaction()
 {
-    return backend_->resumeRetainedPreviewPlaybackTransaction();
+    post(makeCommand(CommandKind::ResumeRetained));
+    return authoritativePlaybackSecond();
 }
 
 double QtPreviewSfxRuntime::seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying)
 {
-    return backend_->seekRetainedPreviewPlaybackTransaction(targetSecond, continuePlaying);
+    PreviewAudioCommand command = makeCommand(CommandKind::SeekRetained);
+    command.identity.generation = advancePlaybackGeneration();
+    command.second = targetSecond;
+    command.option = continuePlaying;
+    post(std::move(command));
+    return targetSecond;
 }
 
 void QtPreviewSfxRuntime::resetRetainedPreviewPlaybackTransaction(double targetSecond)
 {
-    backend_->resetRetainedPreviewPlaybackTransaction(targetSecond);
+    PreviewAudioCommand command = makeCommand(CommandKind::ResetRetained);
+    command.identity.generation = advancePlaybackGeneration();
+    command.second = targetSecond;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::clearRetainedPreviewPlaybackTransaction()
 {
-    backend_->clearRetainedPreviewPlaybackTransaction();
+    post(makeCommand(CommandKind::ClearRetained));
 }
 
 QtPreviewSfxRuntime::RetainedPlaybackMode QtPreviewSfxRuntime::retainedPlaybackMode() const
 {
-    return backend_->retainedPlaybackMode();
+    return lastSnapshot().retainedPlaybackMode;
 }
 
 QtPreviewSfxRuntime::RetainedBgmState QtPreviewSfxRuntime::retainedBgmState() const
 {
-    return backend_->retainedBgmState();
+    return lastSnapshot().retainedBgmState;
 }
 
 double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
 {
-    return backend_->authoritativePlaybackSecond();
+    return lastSnapshot().authoritativeSecond;
 }
 
 void QtPreviewSfxRuntime::stopSfxVoices()
 {
-    backend_->stopSfxVoices();
+    post(makeCommand(CommandKind::StopSfxVoices));
 }
 
 double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
-    return backend_->syncPreviewPlaybackClockTransaction(fallbackSecond);
+    const PreviewAudioSnapshot snapshot = lastSnapshot();
+    return snapshot.sequence != 0 ? snapshot.authoritativeSecond : fallbackSecond;
 }
 
 void QtPreviewSfxRuntime::resetCursor(double second, bool includeCurrentSecond)
 {
-    backend_->resetCursor(second, includeCurrentSecond);
+    PreviewAudioCommand command = makeCommand(CommandKind::ResetCursor);
+    command.second = second;
+    command.option = includeCurrentSecond;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::drainEvents(double second)
 {
-    backend_->drainEvents(second);
+    PreviewAudioCommand command = makeCommand(CommandKind::DrainEvents);
+    command.second = second;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::pauseTouchholdVoices()
 {
-    backend_->pauseTouchholdVoices();
+    post(makeCommand(CommandKind::PauseTouchhold));
 }
 
 void QtPreviewSfxRuntime::restoreTouchholdVoices(double second)
 {
-    backend_->restoreTouchholdVoices(second);
+    PreviewAudioCommand command = makeCommand(CommandKind::RestoreTouchhold);
+    command.second = second;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
 {
-    backend_->syncBackgroundTrack(timelineSecond);
+    PreviewAudioCommand command = makeCommand(CommandKind::SyncBackgroundTrack);
+    command.second = timelineSecond;
+    post(std::move(command));
 }
 
 bool QtPreviewSfxRuntime::hasBackgroundTrack() const
 {
-    return backend_->hasBackgroundTrack();
+    return lastSnapshot().backgroundTrackAvailable;
 }
 
 bool QtPreviewSfxRuntime::isBackgroundTrackRunning() const
 {
-    return backend_->isBackgroundTrackRunning();
+    return lastSnapshot().backgroundTrackRunning;
 }
 
 void QtPreviewSfxRuntime::startBackgroundTrack(double second)
 {
-    backend_->startBackgroundTrack(second);
+    PreviewAudioCommand command = makeCommand(CommandKind::StartBackground);
+    command.second = second;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::seekBackgroundTrack(double second)
 {
-    backend_->seekBackgroundTrack(second);
+    PreviewAudioCommand command = makeCommand(CommandKind::SeekBackground);
+    command.second = second;
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::pauseBackgroundTrack()
 {
-    backend_->pauseBackgroundTrack();
+    post(makeCommand(CommandKind::PauseBackground));
 }
 
 double QtPreviewSfxRuntime::backgroundPlaybackSecond() const
 {
-    return backend_->backgroundPlaybackSecond();
+    return lastSnapshot().backgroundPlaybackSecond;
 }
 
 bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)
 {
-    return backend_->audition(kind, gain);
+    PreviewAudioCommand command = makeCommand(CommandKind::Audition);
+    command.auditionKind = kind;
+    command.gain = gain;
+    return post(std::move(command)).accepted;
 }
 
 void QtPreviewSfxRuntime::stopAll()
 {
-    backend_->stopAll();
+    PreviewAudioCommand command = makeCommand(CommandKind::StopAll);
+    command.identity.generation = advancePlaybackGeneration();
+    post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::prepareForShutdown()
 {
-    backend_->prepareForShutdown();
+    shutdownWorker();
+}
+
+WorkerPostResult QtPreviewSfxRuntime::post(PreviewAudioCommand command)
+{
+    const CommandKind kind = command.kind;
+    const CommandIdentity identity = command.identity;
+    if (!acceptingCommands_.load(std::memory_order_acquire) || worker_ == nullptr) {
+        return {false, false, false, CommandError::ShuttingDown, 0};
+    }
+    WorkerPostResult result = worker_->post(std::move(command));
+    if (!result.accepted) {
+        PreviewAudioCompletion completion;
+        completion.kind = kind;
+        completion.identity = identity;
+        completion.identity.sequence = result.sequence;
+        completion.error = result.error;
+        completion.success = false;
+        completion.detail = QStringLiteral("preview audio facade rejected command before worker execution");
+        handleCompletion(completion);
+    }
+    return result;
+}
+
+PreviewAudioCommand QtPreviewSfxRuntime::makeCommand(CommandKind kind) const
+{
+    PreviewAudioCommand command;
+    command.kind = kind;
+    command.identity.generation = playbackGeneration_;
+    command.identity.assetGeneration = assetGeneration_;
+    command.identity.transactionId = transactionId_;
+    command.identity.deviceSequence = deviceSequence_;
+    return command;
+}
+
+quint64 QtPreviewSfxRuntime::advancePlaybackGeneration()
+{
+    ++playbackGeneration_;
+    return playbackGeneration_;
+}
+
+void QtPreviewSfxRuntime::handleCompletion(const Completion& completion)
+{
+    if (worker_ != nullptr) {
+        handleSnapshot(worker_->snapshot());
+    }
+    emit commandCompleted(completion);
+    if (!completion.success) {
+        return;
+    }
+    switch (completion.kind) {
+    case CommandKind::Prepare:
+        emit previewPrepared(completion);
+        break;
+    case CommandKind::Commit:
+    case CommandKind::Start:
+    case CommandKind::ResumeRetained:
+        emit previewPlaybackStarted(completion);
+        break;
+    case CommandKind::ManualPause:
+    case CommandKind::DeviceChangePause:
+        emit previewPlaybackPaused(completion);
+        break;
+    case CommandKind::SeekRetained:
+    case CommandKind::ResetRetained:
+    case CommandKind::ClearRetained:
+        emit retainedPlaybackCompleted(completion);
+        break;
+    case CommandKind::Audition:
+        emit auditionCompleted(completion);
+        break;
+    default:
+        break;
+    }
+}
+
+void QtPreviewSfxRuntime::handleSnapshot(const PreviewAudioSnapshot& snapshot)
+{
+    bool readyChanged = false;
+    {
+        std::lock_guard lock(snapshotMutex_);
+        readyChanged = lastSnapshot_.backendReady != snapshot.backendReady;
+        lastSnapshot_ = snapshot;
+    }
+    if (readyChanged) {
+        emit backendReadyChanged(snapshot.backendReady);
+    }
+}
+
+PreviewAudioSnapshot QtPreviewSfxRuntime::lastSnapshot() const
+{
+    std::lock_guard lock(snapshotMutex_);
+    return lastSnapshot_;
+}
+
+QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::lastPauseResult() const
+{
+    const PreviewAudioSnapshot snapshot = lastSnapshot();
+    return {
+        snapshot.backgroundTrackAvailable,
+        snapshot.authoritativeSecond,
+        snapshot.retainedPlaybackMode,
+        snapshot.retainedBgmState,
+    };
+}
+
+void QtPreviewSfxRuntime::shutdownWorker()
+{
+    acceptingCommands_.store(false, std::memory_order_release);
+    if (callbackState_ != nullptr) {
+        callbackState_->deliveryEnabled.store(false, std::memory_order_release);
+    }
+    if (worker_ != nullptr) {
+        worker_->shutdownAndJoin();
+        worker_.reset();
+    }
 }

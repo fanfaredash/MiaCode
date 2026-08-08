@@ -1,10 +1,12 @@
 #pragma once
 
+#include "PreviewAudioWorker.h"
+
+#include <atomic>
 #include <memory>
+#include <mutex>
 
 #include <QObject>
-
-#include "PreviewAudioBackend.h"
 
 class QtPreviewSfxRuntime : public QObject
 {
@@ -14,8 +16,17 @@ public:
     using PausePreviewResult = miacode::preview_audio::PausePreviewResult;
     using RetainedPlaybackMode = miacode::preview_audio::RetainedPlaybackMode;
     using RetainedBgmState = miacode::preview_audio::RetainedBgmState;
+    using Completion = miacode::preview_audio::PreviewAudioCompletion;
+
+    struct DevicePauseRequest {
+        miacode::preview_audio::CommandIdentity identity;
+        miacode::preview_audio::WorkerPostResult post;
+    };
 
     explicit QtPreviewSfxRuntime(QObject* parent = nullptr);
+    explicit QtPreviewSfxRuntime(
+        miacode::preview_audio::PreviewAudioBackendFactory factory,
+        QObject* parent = nullptr);
     ~QtPreviewSfxRuntime() override;
 
     void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir);
@@ -32,6 +43,9 @@ public:
         const PreviewTimingSettings& timingSettings);
     void clearTimeline();
     void setPlaybackTransactionId(quint64 transactionId);
+
+    // These return the most recent worker snapshot until their asynchronous command
+    // completion arrives. They never wait for, or directly enter, the audio backend.
     double preparePreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate);
     void commitPreparedPreviewPlayback();
     void cancelPreparedPreviewPlayback();
@@ -45,6 +59,11 @@ public:
     double startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate);
     PausePreviewResult capturePausedPreviewTransaction();
     PausePreviewResult pausePreviewPlaybackTransaction();
+    DevicePauseRequest requestDeviceChangePause(
+        quint64 transactionId,
+        quint64 deviceSequence,
+        quint64 pauseToken,
+        double pauseSecond);
     double resumeRetainedPreviewPlaybackTransaction();
     double seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying);
     void resetRetainedPreviewPlaybackTransaction(double targetSecond);
@@ -67,10 +86,44 @@ public:
     double backgroundPlaybackSecond() const;
     bool audition(const QString& kind, double gain = 1.0);
     void stopAll();
+
+    // The only GUI-facing wait. Destructor shutdown uses the same sequence after
+    // producer and callback delivery have been disabled.
     void prepareForShutdown();
 
-private:
-    std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> createBackend() const;
+signals:
+    void backendReadyChanged(bool ready);
+    void commandCompleted(const QtPreviewSfxRuntime::Completion& completion);
+    void previewPrepared(const QtPreviewSfxRuntime::Completion& completion);
+    void previewPlaybackStarted(const QtPreviewSfxRuntime::Completion& completion);
+    void previewPlaybackPaused(const QtPreviewSfxRuntime::Completion& completion);
+    void retainedPlaybackCompleted(const QtPreviewSfxRuntime::Completion& completion);
+    void auditionCompleted(const QtPreviewSfxRuntime::Completion& completion);
 
-    std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> backend_;
+private:
+    struct CallbackState {
+        std::atomic_bool deliveryEnabled{true};
+    };
+
+    miacode::preview_audio::WorkerPostResult post(miacode::preview_audio::PreviewAudioCommand command);
+    miacode::preview_audio::PreviewAudioCommand makeCommand(
+        miacode::preview_audio::CommandKind kind) const;
+    quint64 advancePlaybackGeneration();
+    void handleCompletion(const Completion& completion);
+    void handleSnapshot(const miacode::preview_audio::PreviewAudioSnapshot& snapshot);
+    miacode::preview_audio::PreviewAudioSnapshot lastSnapshot() const;
+    PausePreviewResult lastPauseResult() const;
+    void shutdownWorker();
+
+    std::unique_ptr<miacode::preview_audio::PreviewAudioWorker> worker_;
+    std::shared_ptr<CallbackState> callbackState_;
+    mutable std::mutex snapshotMutex_;
+    miacode::preview_audio::PreviewAudioSnapshot lastSnapshot_;
+    std::atomic_bool acceptingCommands_{true};
+    quint64 playbackGeneration_ = 1;
+    quint64 assetGeneration_ = 1;
+    quint64 transactionId_ = 0;
+    quint64 deviceSequence_ = 0;
 };
+
+Q_DECLARE_METATYPE(QtPreviewSfxRuntime::Completion)

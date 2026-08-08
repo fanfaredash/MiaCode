@@ -1062,6 +1062,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/MiniaudioPreviewAudioBackend.cpp
             src/audio/QtPreviewSfxRuntime.h
             src/audio/QtPreviewSfxRuntime.cpp
+            src/common/Mmcss.h
+            src/common/Mmcss.cpp
             ${_miacode_log_core}
         LIBS Qt6::Concurrent Qt6::Core Qt6::Gui Qt6::Widgets soundtouch
         INCLUDES
@@ -1518,6 +1520,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioWorkerFactory.h
             src/audio/PreviewAudioWorker.h
             src/audio/PreviewAudioWorker.cpp
+            src/audio/QtPreviewSfxRuntime.h
+            src/audio/QtPreviewSfxRuntime.cpp
             src/audio/PreviewBassDeviceLease.h
             src/audio/PreviewBassDeviceLease.cpp
         LIBS Qt6::Core soundtouch
@@ -1563,6 +1567,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(preview_audio_non_gui_barrier_spec TEST
         SOURCES
             src/tools/preview/PreviewAudioNonGuiBarrierSpec.cpp
+            ${_miacode_log_core}
+            src/common/Mmcss.h
+            src/common/Mmcss.cpp
             src/audio/PreviewAudioSettings.h
             src/audio/PreviewAudioSettings.cpp
             src/audio/PreviewAudioCommandQueue.h

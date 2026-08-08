@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include <QEventLoop>
 #include <QFile>
 #include <QProcess>
 #include <QTextStream>
@@ -19,6 +20,7 @@
 
 #include "audio/MiniaudioPreviewAudioBackend.h"
 #include "audio/PreviewAudioWorker.h"
+#include "audio/QtPreviewSfxRuntime.h"
 #ifdef MIACODE_HAS_BASS_AUDIO
 #include "audio/BassPreviewAudioBackend.h"
 #endif
@@ -381,6 +383,15 @@ public:
     void stopSfxVoices() override { call(QStringLiteral("stopSfxVoices")); }
     void stopAll() override { call(QStringLiteral("stopAll")); }
     void prepareForShutdown() override { call(QStringLiteral("prepareForShutdown")); }
+    PreviewAudioHealthSample sampleHealth() override
+    {
+        call(QStringLiteral("sampleHealth"));
+        PreviewAudioHealthSample sample;
+        sample.mixerActivity = miacode::preview_audio::health::ChannelActivity::Playing;
+        sample.backgroundActivity = miacode::preview_audio::health::ChannelActivity::Playing;
+        sample.sampledAtMs = 1234;
+        return sample;
+    }
 
 private:
     void call(const QString& name) const
@@ -473,6 +484,290 @@ struct CompletionLog {
     std::vector<PreviewAudioCompletion> completions;
 };
 
+bool waitForLifecycle(
+    PreviewAudioWorker& worker,
+    WorkerLifecycle lifecycle,
+    std::chrono::milliseconds timeout = 2s);
+
+bool processEventsUntil(
+    const std::function<bool()>& predicate,
+    std::chrono::milliseconds timeout = 2s)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!predicate() && std::chrono::steady_clock::now() < deadline) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        std::this_thread::sleep_for(1ms);
+    }
+    return predicate();
+}
+
+bool verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    bool ok = true;
+    std::vector<PreviewAudioCompletion> completions;
+    bool backendReady = false;
+    bool prepared = false;
+    bool started = false;
+    bool paused = false;
+    bool retainedCompleted = false;
+    bool auditionCompleted = false;
+
+    {
+        QtPreviewSfxRuntime runtime(fakeFactory(state));
+        QObject::connect(&runtime, &QtPreviewSfxRuntime::backendReadyChanged, [&backendReady](bool ready) {
+            backendReady = ready;
+        });
+        QObject::connect(&runtime, &QtPreviewSfxRuntime::commandCompleted,
+                         [&completions](const PreviewAudioCompletion& completion) {
+                             completions.push_back(completion);
+                         });
+        QObject::connect(&runtime, &QtPreviewSfxRuntime::previewPrepared,
+                         [&prepared](const PreviewAudioCompletion&) { prepared = true; });
+        QObject::connect(&runtime, &QtPreviewSfxRuntime::previewPlaybackStarted,
+                         [&started](const PreviewAudioCompletion&) { started = true; });
+        QObject::connect(&runtime, &QtPreviewSfxRuntime::previewPlaybackPaused,
+                         [&paused](const PreviewAudioCompletion&) { paused = true; });
+        QObject::connect(&runtime, &QtPreviewSfxRuntime::retainedPlaybackCompleted,
+                         [&retainedCompleted](const PreviewAudioCompletion&) { retainedCompleted = true; });
+        QObject::connect(&runtime, &QtPreviewSfxRuntime::auditionCompleted,
+                         [&auditionCompleted](const PreviewAudioCompletion&) { auditionCompleted = true; });
+
+        ok &= expect(processEventsUntil([&] { return backendReady; }),
+                     "facade publishes ready state from the worker snapshot", err);
+
+        {
+            std::lock_guard lock(state->mutex);
+            state->blockedMethod = QStringLiteral("applyLevels");
+            state->releaseBlockedMethod = false;
+        }
+        const auto mutatorStart = std::chrono::steady_clock::now();
+        runtime.applyLevels(PreviewAudioSettings());
+        const auto mutatorElapsed = std::chrono::steady_clock::now() - mutatorStart;
+        ok &= expect(mutatorElapsed < 50ms,
+                     "facade mutators return while the backend remains blocked", err);
+        ok &= expect(state->waitForCall(QStringLiteral("applyLevels")),
+                     "facade forwards work to the worker", err);
+
+        // All public calls are owner-thread fire-and-forget operations or snapshot reads.
+        runtime.setWarmupResolvedPaths(QStringLiteral("chart"), QStringLiteral("track"), QStringLiteral("sfx"));
+        runtime.reloadAssets(PreviewAudioSettings());
+        runtime.setChartPath(QStringLiteral("chart"));
+        runtime.setBackgroundTrackOffsetSeconds(0.5);
+        runtime.setBackgroundTrackPlaybackRate(1.25);
+        runtime.applyPlaybackRateAtChartSecond(1.25, 3.0);
+        runtime.configureTimeline({}, 1.0, PreviewTimingSettings());
+        runtime.clearTimeline();
+        runtime.setPlaybackTransactionId(77);
+        runtime.preparePreviewPlaybackTransaction(2.0, false, 1.0);
+        runtime.commitPreparedPreviewPlayback();
+        runtime.cancelPreparedPreviewPlayback();
+        runtime.applyPausedPreviewState({}, false, 2.0, 1.0, PreviewTimingSettings());
+        runtime.startPreviewPlaybackTransaction(2.0, false, 1.0);
+        runtime.capturePausedPreviewTransaction();
+        runtime.pausePreviewPlaybackTransaction();
+        runtime.resumeRetainedPreviewPlaybackTransaction();
+        runtime.seekRetainedPreviewPlaybackTransaction(2.0, true);
+        runtime.resetRetainedPreviewPlaybackTransaction(2.0);
+        runtime.clearRetainedPreviewPlaybackTransaction();
+        runtime.stopSfxVoices();
+        runtime.resetCursor(2.0, false);
+        runtime.drainEvents(2.0);
+        runtime.pauseTouchholdVoices();
+        runtime.restoreTouchholdVoices(2.0);
+        runtime.syncBackgroundTrack(2.0);
+        runtime.startBackgroundTrack(2.0);
+        runtime.seekBackgroundTrack(2.0);
+        runtime.pauseBackgroundTrack();
+        runtime.audition(QStringLiteral("judge"));
+        runtime.stopAll();
+
+        {
+            std::lock_guard lock(state->mutex);
+            state->blockedMethod.clear();
+            state->releaseBlockedMethod = true;
+            state->cv.notify_all();
+        }
+        ok &= expect(state->waitForCall(QStringLiteral("audition")),
+                     "worker drains the facade command queue", err);
+        ok &= expect(processEventsUntil([&] {
+                         return !completions.empty()
+                             && prepared && started && paused && retainedCompleted && auditionCompleted;
+                     }),
+                     "facade delivers categorized worker completions", err);
+        const auto snapshotCallsBefore = state->callNames();
+        const qsizetype backgroundSyncCallsBefore = state->callCount(QStringLiteral("syncBackgroundTrack"));
+        Q_UNUSED(runtime.audioEngineInitialized());
+        Q_UNUSED(runtime.preparedStartSecond());
+        Q_UNUSED(runtime.retainedPlaybackMode());
+        Q_UNUSED(runtime.retainedBgmState());
+        Q_UNUSED(runtime.authoritativePlaybackSecond());
+        Q_UNUSED(runtime.hasBackgroundTrack());
+        Q_UNUSED(runtime.isBackgroundTrackRunning());
+        Q_UNUSED(runtime.backgroundPlaybackSecond());
+        const double snapshotClock = runtime.authoritativePlaybackSecond();
+        ok &= expect(runtime.syncPreviewPlaybackClockTransaction(2.0) == snapshotClock,
+                     "facade clock synchronization returns its latest snapshot", err);
+        ok &= expect(!state->waitForCallCount(
+                         QStringLiteral("syncBackgroundTrack"), backgroundSyncCallsBefore + 1, 100ms),
+                     "facade clock synchronization does not mutate background playback", err);
+        ok &= expect(state->callNames() == snapshotCallsBefore,
+                     "facade getters do not synchronously enter the backend", err);
+        ok &= expect(std::all_of(completions.cbegin(), completions.cend(), [](const auto& completion) {
+                         return completion.identity.sequence != 0
+                             && (completion.identity.generation != 0
+                                 || completion.identity.assetGeneration != 0
+                                 || completion.identity.transactionId != 0
+                                 || completion.identity.deviceSequence != 0);
+                     }),
+                     "facade completions retain command sequence generation transaction and device identity", err);
+        const auto devicePause = runtime.requestDeviceChangePause(77, 9, 13, 2.0);
+        ok &= expect(devicePause.post.accepted
+                         && devicePause.identity.sequence == devicePause.post.sequence
+                         && devicePause.identity.generation > 0
+                         && devicePause.identity.transactionId == 77
+                         && devicePause.identity.deviceSequence == 9
+                         && devicePause.identity.pauseToken == 13,
+                     "facade device pause advances generation and returns its worker identity", err);
+        ok &= expect(processEventsUntil([&] {
+                         return std::any_of(completions.cbegin(), completions.cend(), [&](const auto& completion) {
+                             return completion.kind == CommandKind::DeviceChangePause
+                                 && completion.identity.sequence == devicePause.identity.sequence
+                                 && completion.identity.generation == devicePause.identity.generation
+                                 && completion.identity.transactionId == devicePause.identity.transactionId
+                                 && completion.identity.deviceSequence == devicePause.identity.deviceSequence
+                                 && completion.identity.pauseToken == devicePause.identity.pauseToken;
+                         });
+                     }),
+                     "facade delivers the device-pause completion with its immutable identity", err);
+        runtime.prepareForShutdown();
+    }
+
+    auto pendingState = std::make_shared<FakeState>();
+    int destroyedReceiverCallbacks = 0;
+    auto* runtime = new QtPreviewSfxRuntime(fakeFactory(pendingState));
+    QObject::connect(runtime, &QtPreviewSfxRuntime::commandCompleted,
+                     [&destroyedReceiverCallbacks](const PreviewAudioCompletion&) {
+                         ++destroyedReceiverCallbacks;
+                     });
+    runtime->applyLevels(PreviewAudioSettings());
+    ok &= expect(pendingState->waitForCall(QStringLiteral("applyLevels")),
+                 "pending facade callback test reaches the backend", err);
+    delete runtime;
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    ok &= expect(destroyedReceiverCallbacks == 0,
+                 "destroyed facade drops pending callbacks without dereferencing its receiver", err);
+    return ok;
+}
+
+bool verifyWorkerSamplesHealthOnItsBackendThread(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    PreviewAudioWorker worker(fakeFactory(state));
+    bool ok = true;
+    ok &= expect(waitForLifecycle(worker, WorkerLifecycle::Ready),
+                 "health sampling worker becomes ready", err);
+    ok &= expect(state->waitForCall(QStringLiteral("sampleHealth"), 1500ms),
+                 "worker invokes backend health sampling on its scheduler deadline", err);
+    const PreviewAudioSnapshot snapshot = worker.snapshot();
+    ok &= expect(snapshot.healthSample.sequence != 0
+                     && snapshot.healthSample.sampledAtMs == 1234,
+                 "worker publishes the latest health payload in its snapshot", err);
+    const std::vector<CallRecord> calls = [&] {
+        std::lock_guard lock(state->mutex);
+        return state->calls;
+    }();
+    const auto factory = std::find_if(calls.cbegin(), calls.cend(), [](const CallRecord& call) {
+        return call.name == QStringLiteral("factory");
+    });
+    const auto healthSample = std::find_if(calls.cbegin(), calls.cend(), [](const CallRecord& call) {
+        return call.name == QStringLiteral("sampleHealth");
+    });
+    ok &= expect(factory != calls.cend() && healthSample != calls.cend()
+                     && factory->threadId == healthSample->threadId,
+                 "health sampling shares the backend-owning worker thread", err);
+    worker.shutdownAndJoin();
+    return ok;
+}
+
+bool verifyHealthSamplingDeadlineIsDeterministic(QTextStream& err)
+{
+    using Clock = std::chrono::steady_clock;
+    const Clock::time_point start;
+    PreviewAudioHealthSampleSchedule schedule(start);
+    bool ok = true;
+    ok &= expect(!schedule.isDue(start + 999ms),
+                 "health sampling does not run before its one-second deadline", err);
+    ok &= expect(schedule.isDue(start + 1s),
+                 "health sampling runs at its one-second deadline", err);
+    schedule.markSampled(start + 1s);
+    ok &= expect(!schedule.isDue(start + 1999ms) && schedule.isDue(start + 2s),
+                 "health sampling advances its deadline from the sampled instant", err);
+    return ok;
+}
+
+bool verifyAssetLifecycleSnapshotCallbackRunsOutsideGenerationLock(QTextStream& err)
+{
+    QFile file(
+        QStringLiteral(MIACODE_SOURCE_ROOT)
+        + QStringLiteral("/src/audio/PreviewAudioWorker.cpp"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return expect(false, "preview audio worker source is readable", err);
+    }
+    const QString source = QString::fromUtf8(file.readAll());
+    const qsizetype functionStart = source.indexOf(
+        QStringLiteral("bool PreviewAudioWorker::publishAssetLifecycleIfCurrent("));
+    const qsizetype functionEnd = source.indexOf(
+        QStringLiteral("void PreviewAudioWorker::publishBackendLifecycle("), functionStart);
+    if (functionStart < 0 || functionEnd < 0) {
+        return expect(false, "asset lifecycle publication function is present", err);
+    }
+    const QString function = source.mid(functionStart, functionEnd - functionStart);
+    const qsizetype lockStart = function.indexOf(QStringLiteral("std::lock_guard assetLock"));
+    const qsizetype snapshotUpdate = function.indexOf(
+        QStringLiteral("updateLifecycleSnapshot("), lockStart);
+    const qsizetype lockScopeEnd = function.indexOf(
+        QStringLiteral("    }\n    stateCv_.notify_all()"), lockStart);
+    const qsizetype deliver = function.indexOf(QStringLiteral("deliverSnapshot("), lockStart);
+    bool ok = true;
+    ok &= expect(lockStart >= 0, "asset generation check uses a scoped lock", err);
+    ok &= expect(snapshotUpdate > lockStart && snapshotUpdate < lockScopeEnd,
+                 "asset lifecycle snapshot state is updated while the generation lock is held", err);
+    ok &= expect(lockScopeEnd > lockStart,
+                 "asset generation lock is released before callback delivery", err);
+    ok &= expect(deliver > lockScopeEnd,
+                 "asset lifecycle snapshot callback runs after releasing the generation lock", err);
+    return ok;
+}
+
+bool verifyWorkerReschedulesHealthAfterBlockingSample(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod = QStringLiteral("sampleHealth");
+        state->releaseBlockedMethod = false;
+    }
+
+    PreviewAudioWorker worker(fakeFactory(state));
+    bool ok = true;
+    ok &= expect(state->waitForCall(QStringLiteral("sampleHealth"), 1500ms),
+                 "worker enters the scheduled health sample", err);
+    const qsizetype samplesBeforeRelease = state->callCount(QStringLiteral("sampleHealth"));
+    std::this_thread::sleep_for(1100ms);
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod.clear();
+        state->releaseBlockedMethod = true;
+        state->cv.notify_all();
+    }
+    ok &= expect(!state->waitForCallCount(
+                     QStringLiteral("sampleHealth"), samplesBeforeRelease + 1, 100ms),
+                 "worker schedules the next health sample after a blocking query returns", err);
+    worker.shutdownAndJoin();
+    return ok;
+}
+
 struct ThrowingCopyCallbackState {
     bool waitFor(quint64 sequence, std::chrono::milliseconds timeout = 2s)
     {
@@ -517,7 +812,7 @@ private:
     std::shared_ptr<ThrowingCopyCallbackState> state_;
 };
 
-bool waitForLifecycle(PreviewAudioWorker& worker, WorkerLifecycle lifecycle, std::chrono::milliseconds timeout = 2s)
+bool waitForLifecycle(PreviewAudioWorker& worker, WorkerLifecycle lifecycle, std::chrono::milliseconds timeout)
 {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     do {
@@ -1763,6 +2058,57 @@ int runThrowingCopyCallbackChild(QTextStream& err)
     return ok ? 0 : 2;
 }
 
+int runReentrantAssetLifecycleChild(QTextStream& err)
+{
+    auto backendState = std::make_shared<FakeState>();
+    auto completions = std::make_shared<CompletionLog>();
+    std::atomic<PreviewAudioWorker*> workerAddress{nullptr};
+    std::atomic_bool supersedingAssetPosted{false};
+    std::atomic_bool reentrantPostAccepted{false};
+
+    PreviewAudioWorker worker(
+        fakeFactory(backendState),
+        [completions](const PreviewAudioCompletion& completion) {
+            completions->append(completion);
+        },
+        std::this_thread::get_id(),
+        [&workerAddress, &supersedingAssetPosted, &reentrantPostAccepted](
+            const PreviewAudioSnapshot& snapshot) {
+            if (snapshot.lifecycle != WorkerLifecycle::Loading
+                || supersedingAssetPosted.exchange(true, std::memory_order_acq_rel)) {
+                return;
+            }
+            PreviewAudioWorker* worker = workerAddress.load(std::memory_order_acquire);
+            if (worker == nullptr) {
+                return;
+            }
+            const WorkerPostResult posted = worker->post(
+                commandFor(CommandKind::SetChartPath, 0, 2, 0));
+            reentrantPostAccepted.store(posted.accepted, std::memory_order_release);
+        });
+    workerAddress.store(&worker, std::memory_order_release);
+
+    bool ok = true;
+    ok &= expect(waitForLifecycle(worker, WorkerLifecycle::Ready),
+                 "reentrant child worker ready", err);
+    const WorkerPostResult chartPath = worker.post(
+        commandFor(CommandKind::SetChartPath, 0, 1, 0));
+    const WorkerPostResult reload = worker.post(
+        commandFor(CommandKind::ReloadAssets, 0, 1, 0));
+    PreviewAudioCompletion reloadCompletion;
+    ok &= expect(chartPath.accepted && reload.accepted,
+                 "reentrant child queues the initial asset commands", err);
+    ok &= expect(completions->waitFor(reload.sequence, &reloadCompletion, 2s),
+                 "reentrant child reload completes without deadlock", err);
+    ok &= expect(supersedingAssetPosted.load(std::memory_order_acquire)
+                     && reentrantPostAccepted.load(std::memory_order_acquire),
+                 "loading snapshot callback posts a superseding asset command", err);
+    ok &= expect(reloadCompletion.error == CommandError::Stale,
+                 "superseded reload does not publish a ready completion", err);
+    worker.shutdownAndJoin();
+    return ok ? 0 : 2;
+}
+
 bool verifyThrowingCallbackCopyCannotEscapeWorker(QTextStream& err)
 {
     QProcess child;
@@ -1786,6 +2132,29 @@ bool verifyThrowingCallbackCopyCannotEscapeWorker(QTextStream& err)
                   "persistent throwing-copy callback cannot terminate the worker process", err);
 }
 
+bool verifyAssetLifecycleCallbackCanReenterWorker(QTextStream& err)
+{
+    QProcess child;
+    child.setProcessChannelMode(QProcess::MergedChannels);
+    child.start(
+        QCoreApplication::applicationFilePath(),
+        {QStringLiteral("--reentrant-asset-lifecycle-child")});
+    if (!child.waitForStarted(2'000)) {
+        return expect(false, "reentrant asset lifecycle child process starts", err);
+    }
+    if (!child.waitForFinished(5'000)) {
+        child.kill();
+        child.waitForFinished();
+        return expect(false, "reentrant asset lifecycle callback does not deadlock", err);
+    }
+    const bool exitedNormally = child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0;
+    if (!exitedNormally) {
+        err << child.readAll() << Qt::endl;
+    }
+    return expect(exitedNormally,
+                  "reentrant asset lifecycle callback can post without deadlock", err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -1796,8 +2165,17 @@ int main(int argc, char* argv[])
     if (QCoreApplication::arguments().contains(QStringLiteral("--throwing-copy-callback-child"))) {
         return runThrowingCopyCallbackChild(err);
     }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--reentrant-asset-lifecycle-child"))) {
+        return runReentrantAssetLifecycleChild(err);
+    }
 
     bool ok = true;
+    ok &= verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(err);
+    ok &= verifyWorkerSamplesHealthOnItsBackendThread(err);
+    ok &= verifyHealthSamplingDeadlineIsDeterministic(err);
+    ok &= verifyAssetLifecycleSnapshotCallbackRunsOutsideGenerationLock(err);
+    ok &= verifyAssetLifecycleCallbackCanReenterWorker(err);
+    ok &= verifyWorkerReschedulesHealthAfterBlockingSample(err);
     ok &= verifyOwnershipLifecycleAndDispatch(err);
     ok &= verifyFactoryFailureAndExplicitRecovery(err);
     ok &= verifyReloadFailureAndAssetStaleness(err);

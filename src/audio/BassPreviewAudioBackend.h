@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <memory>
-#include <thread>
 
 #include <QObject>
 #include <QHash>
@@ -83,6 +82,7 @@ public:
     bool audition(const QString& kind, double gain = 1.0) override;
     void stopAll() override;
     void prepareForShutdown() override;
+    miacode::preview_audio::PreviewAudioHealthSample sampleHealth() override;
 
 private:
     struct Sample;
@@ -130,8 +130,6 @@ private:
         double lastStatusLogSecond = -1.0;
         // Underrun / buffer-health probe state. Separate from lastStatusLogSecond so the
         // (much coarser) health cadence and the ~1 Hz bass_status cadence stay independent.
-        double lastHealthLogSecond = -1.0;
-        miacode::preview_audio::health::StallTracker stallTracker;
         double lastTriggeredGroupSecond = -1.0;
         int lastTriggeredGroupIndex = -1;
         int triggeredGroupCount = 0;
@@ -238,66 +236,16 @@ private:
     // BassPreviewAudioBackendImpl.h because ScheduledMixerAction is private here.
     static QString scheduledMixerActionLabel(ScheduledMixerAction action);
     void logPlaybackStatus(double authoritativeSecond, double fallbackSecond);
-    // Underrun / buffer-level probe. Polled at tick rate (cheap BASS_ChannelIsActive
-    // calls) so a stall edge is caught immediately; the fuller buffer-health line
-    // self-throttles to health::kHealthSampleIntervalSeconds.
-    void logAudioHealth(double authoritativeSecond);
-
-    // ---- audio-health sampling: BASS queries, off the GUI thread ------------------
-    //
-    // BASS_ChannelIsActive / BASS_Mixer_ChannelIsActive / BASS_ChannelGetData all take
-    // BASS's internal device lock. During a Windows audio endpoint switch BASS holds that
-    // lock while it tears the old output device down and builds the new one, which on the
-    // captures behind this change meant 2.0-4.5 s. logAudioHealth used to make those calls
-    // ON THE GUI THREAD, at tick rate, so the GUI thread parked on that lock for the whole
-    // switch -- and Qt's threaded render loop parks with it at the next sync, which is why
-    // both visual threads died together while audio played on undisturbed.
-    //
-    // Bracketing all 27 stall episodes across five captures put the GUI thread's last log
-    // line at this probe 18 times; at 3.9% of GUI-thread lines, chance predicts 1. So the
-    // probe is moved off the GUI thread entirely rather than merely called less often:
-    // a sampler thread owns every BASS query, and the GUI thread reads the published
-    // snapshot. When BASS blocks now, only the sampler blocks, and it is the one thread
-    // with nothing waiting on it.
-    struct HealthSample {
-        miacode::preview_audio::health::ChannelActivity mixerActivity =
-            miacode::preview_audio::health::ChannelActivity::Unknown;
-        miacode::preview_audio::health::ChannelActivity backgroundActivity =
-            miacode::preview_audio::health::ChannelActivity::Unknown;
-        miacode::preview_audio::health::BufferSnapshot buffer;
-        // The BGM stream's own position. Sampled here rather than via
-        // Sample::currentSec() on the GUI thread, because that is
-        // BASS_Mixer_ChannelGetPosition + BASS_ChannelBytes2Seconds -- two more calls on
-        // the same device lock, and logPlaybackStatus made them while holding
-        // schedulerMutex_, so a blocked GUI thread also stalled the mixer callback.
-        // -1.0 when there is no background track, matching the previous sentinel.
-        double bgmRawSecond = -1.0;
-        // Wall-clock age of this sample, so a reader can tell a fresh snapshot from one
-        // frozen by a sampler that is itself stuck in BASS -- which is now the visible
-        // signature of the endpoint switch instead of a frozen UI.
-        qint64 sampledAtMs = 0;
-        quint64 sequence = 0;
-    };
-
+    // Legacy transition hooks retained for engine/asset paths. Health is now sampled by
+    // PreviewAudioWorker, so these do not create a competing sampler thread.
     void startAudioHealthSampler();
     void stopAudioHealthSampler();
     void publishAudioHealthHandles();
 
-    std::thread audioHealthSamplerThread_;
-    std::atomic_bool audioHealthSamplerStop_{false};
-    // Handles only, never C++ objects: a BASS handle is an integer, so a stale one makes
-    // BASS return an error instead of dereferencing freed memory. This is what lets the
-    // sampler run without any lifetime coupling to backgroundTrackSample_.
-    std::atomic<quint32> audioHealthMixerHandle_{0};
-    std::atomic<quint32> audioHealthSourceHandle_{0};
-    // Gates the BASS queries on playback actually running. Without it the sampler polls
-    // the device 10x a second for the whole process lifetime, including while idle --
-    // strictly more contact with BASS than the per-tick probe it replaced, which at least
-    // only ran while playing. A user hit a ~2 s hitch shortly after launch on the first
-    // build of this sampler; idle polling is the part of it that was never wanted.
+    // Retained for transport paths that already bracket active playback. The worker reads
+    // it when taking the once-per-second BASS sample; it is not an independent producer.
     std::atomic_bool audioHealthPlaybackRunning_{false};
-    mutable QMutex audioHealthSampleMutex_;
-    HealthSample audioHealthSample_;
+    miacode::preview_audio::PreviewAudioHealthSample latestHealthSample_;
     void logPreparedEventWindow(double startSecond) const;
     QString groupSignature(const CollapsedEventGroup& group) const;
     static void onMixerGroupSync(quint32 handle, quint32 channel, quint32 data, void* user);

@@ -287,7 +287,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     }
 
     // G1 Commit 6: capture the canonical pause-second from the wall-clock master
-    // BEFORE handing pause control to the runtime. With BASS_ChannelGetPosition no
+    // BEFORE handing pause control to the runtime. With a channel-position query no
     // longer consulted in BassPreviewAudioBackend::authoritativeSecond
     // (PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §5.3 / §6.1 step 6), the runtime's
     // returned pauseSecond would be stale; the wall-clock value is the truth, so we

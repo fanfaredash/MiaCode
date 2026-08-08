@@ -1,5 +1,9 @@
 #include "PreviewAudioWorker.h"
 
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/Mmcss.h"
+
 #include <algorithm>
 #include <chrono>
 #include <exception>
@@ -35,6 +39,19 @@ QString exceptionDetail(const std::exception& error)
     return QString::fromUtf8(error.what());
 }
 
+bool runtimeAudioDebugEnabled()
+{
+    return miacode::debug_options::audioDebugOutputEnabled();
+}
+
+void appendAudioDebugLog(const QString& message)
+{
+    if (!runtimeAudioDebugEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
+}
+
 }  // namespace
 
 struct PreviewAudioWorker::BackendSnapshot {
@@ -55,14 +72,18 @@ struct PreviewAudioWorker::RuntimeState {
     QString sfxDirectory;
     quint64 warmupAssetGeneration = 0;
     bool hasWarmupPaths = false;
+    health::StallTracker healthStallTracker;
+    double lastHealthLogSecond = -1.0;
 };
 
 PreviewAudioWorker::PreviewAudioWorker(
     PreviewAudioBackendFactory factory,
     CompletionCallback completionCallback,
-    std::thread::id facadeOwningThreadId)
+    std::thread::id facadeOwningThreadId,
+    SnapshotCallback snapshotCallback)
     : factory_(std::move(factory))
     , completionCallback_(std::move(completionCallback))
+    , snapshotCallback_(std::move(snapshotCallback))
     , facadeOwningThreadId_(facadeOwningThreadId)
 {
     thread_ = std::thread([this] { run(); });
@@ -246,14 +267,20 @@ void PreviewAudioWorker::run()
             QStringLiteral("unknown preview audio backend factory failure"));
     }
 
+    PreviewAudioHealthSampleSchedule healthSchedule(SteadyClock::now());
     for (;;) {
         std::optional<PreviewAudioCommand> command;
         {
             std::unique_lock wakeLock(wakeMutex_);
-            wakeCv_.wait(wakeLock, [this] { return !queue_.empty(); });
+            wakeCv_.wait_until(wakeLock, healthSchedule.deadline(), [this] { return !queue_.empty(); });
             command = queue_.takeNext();
         }
+        const SteadyClock::time_point now = SteadyClock::now();
         if (!command) {
+            if (backend != nullptr && healthSchedule.isDue(now)) {
+                sampleHealth(*backend, state);
+                healthSchedule.markSampled(SteadyClock::now());
+            }
             continue;
         }
         if (command->kind == CommandKind::Shutdown) {
@@ -261,6 +288,11 @@ void PreviewAudioWorker::run()
             break;
         }
         execute(std::move(*command), backend, state);
+        const SteadyClock::time_point afterCommand = SteadyClock::now();
+        if (backend != nullptr && healthSchedule.isDue(afterCommand)) {
+            sampleHealth(*backend, state);
+            healthSchedule.markSampled(SteadyClock::now());
+        }
     }
 
     publishLifecycle(WorkerLifecycle::ShuttingDown, CommandError::ShuttingDown);
@@ -679,6 +711,64 @@ PreviewAudioWorker::BackendSnapshot PreviewAudioWorker::captureBackendSnapshot(
     return state;
 }
 
+void PreviewAudioWorker::sampleHealth(PreviewAudioBackend& backend, RuntimeState& state)
+{
+    PreviewAudioHealthSample sample;
+    try {
+        sample = backend.sampleHealth();
+    } catch (...) {
+        return;
+    }
+
+    PreviewAudioSnapshot publishedSnapshot;
+    {
+        std::lock_guard lock(snapshotMutex_);
+        sample.sequence = nextSnapshotSequence(snapshot_.healthSample.sequence);
+        snapshot_.sequence = nextSnapshotSequence(snapshot_.sequence);
+        snapshot_.healthSample = sample;
+        snapshot_.workerThreadId = workerThreadId_.load(std::memory_order_acquire);
+        publishedSnapshot = snapshot_;
+    }
+    stateCv_.notify_all();
+    deliverSnapshot(publishedSnapshot);
+
+    if (!runtimeAudioDebugEnabled()) {
+        return;
+    }
+
+    const bool underrun = health::isUnderrun(sample.mixerActivity)
+        || health::isUnderrun(sample.backgroundActivity);
+    const double authoritativeSecond = publishedSnapshot.authoritativeSecond;
+    const health::StallEdge edge = health::updateStall(
+        &state.healthStallTracker,
+        underrun,
+        authoritativeSecond);
+    if (edge != health::StallEdge::None) {
+        appendAudioDebugLog(health::stallEdgePayload(
+            edge,
+            publishedSnapshot.identity.transactionId,
+            authoritativeSecond,
+            sample.mixerActivity,
+            sample.backgroundActivity,
+            state.healthStallTracker));
+    }
+    if (!health::shouldLogHealth(authoritativeSecond, state.lastHealthLogSecond)) {
+        return;
+    }
+    state.lastHealthLogSecond = authoritativeSecond;
+    const miacode::mmcss::LastRegistrationStatus mmcss =
+        miacode::mmcss::lastRegistrationStatus();
+    appendAudioDebugLog(health::healthPayload(
+        publishedSnapshot.identity.transactionId,
+        authoritativeSecond,
+        sample.mixerActivity,
+        sample.backgroundActivity,
+        state.healthStallTracker,
+        sample.buffer,
+        /*mmcssRegisteredOnAudioThreads=*/false,
+        mmcss.everRegistered ? mmcss.lastTaskClass : QString()));
+}
+
 void PreviewAudioWorker::publishLifecycle(
     WorkerLifecycle lifecycle,
     CommandError error,
@@ -686,6 +776,25 @@ void PreviewAudioWorker::publishLifecycle(
     const CommandIdentity* identity,
     int nativeErrorCode)
 {
+    const PreviewAudioSnapshot publishedSnapshot = updateLifecycleSnapshot(
+        lifecycle,
+        error,
+        detail,
+        identity,
+        nativeErrorCode);
+    stateCv_.notify_all();
+    publishNonGuiLifecycle(lifecycle);
+    deliverSnapshot(publishedSnapshot);
+}
+
+PreviewAudioSnapshot PreviewAudioWorker::updateLifecycleSnapshot(
+    WorkerLifecycle lifecycle,
+    CommandError error,
+    const QString& detail,
+    const CommandIdentity* identity,
+    int nativeErrorCode)
+{
+    PreviewAudioSnapshot publishedSnapshot;
     {
         std::lock_guard lock(snapshotMutex_);
         snapshot_.sequence = nextSnapshotSequence(snapshot_.sequence);
@@ -705,20 +814,31 @@ void PreviewAudioWorker::publishLifecycle(
         snapshot_.detail = detail;
         snapshot_.nativeErrorCode = error == CommandError::None ? 0 : nativeErrorCode;
         snapshot_.workerThreadId = workerThreadId_.load(std::memory_order_acquire);
+        publishedSnapshot = snapshot_;
     }
-    stateCv_.notify_all();
-    publishNonGuiLifecycle(lifecycle);
+    return publishedSnapshot;
 }
 
 bool PreviewAudioWorker::publishAssetLifecycleIfCurrent(
     WorkerLifecycle lifecycle,
     const CommandIdentity& identity)
 {
-    std::lock_guard assetLock(assetGenerationMutex_);
-    if (identity.assetGeneration != latestAssetGeneration_) {
-        return false;
+    PreviewAudioSnapshot publishedSnapshot;
+    {
+        std::lock_guard assetLock(assetGenerationMutex_);
+        if (identity.assetGeneration != latestAssetGeneration_) {
+            return false;
+        }
+        publishedSnapshot = updateLifecycleSnapshot(
+            lifecycle,
+            CommandError::None,
+            {},
+            &identity,
+            0);
     }
-    publishLifecycle(lifecycle, CommandError::None, {}, &identity);
+    stateCv_.notify_all();
+    publishNonGuiLifecycle(lifecycle);
+    deliverSnapshot(publishedSnapshot);
     return true;
 }
 
@@ -727,6 +847,7 @@ void PreviewAudioWorker::publishBackendLifecycle(
     const BackendSnapshot& backendState,
     const CommandIdentity* identity)
 {
+    PreviewAudioSnapshot publishedSnapshot;
     {
         std::lock_guard lock(snapshotMutex_);
         snapshot_.sequence = nextSnapshotSequence(snapshot_.sequence);
@@ -748,9 +869,11 @@ void PreviewAudioWorker::publishBackendLifecycle(
         snapshot_.detail.clear();
         snapshot_.nativeErrorCode = 0;
         snapshot_.workerThreadId = workerThreadId_.load(std::memory_order_acquire);
+        publishedSnapshot = snapshot_;
     }
     stateCv_.notify_all();
     publishNonGuiLifecycle(lifecycle);
+    deliverSnapshot(publishedSnapshot);
 }
 
 bool PreviewAudioWorker::publishCompletion(
@@ -759,6 +882,7 @@ bool PreviewAudioWorker::publishCompletion(
     std::optional<WorkerLifecycle> lifecycle,
     bool requireCurrentAssetGeneration)
 {
+    PreviewAudioSnapshot publishedSnapshot;
     {
         std::unique_lock assetLock(assetGenerationMutex_, std::defer_lock);
         if (requireCurrentAssetGeneration) {
@@ -804,11 +928,13 @@ bool PreviewAudioWorker::publishCompletion(
             snapshot_.retainedPlaybackMode = backendState->retainedMode;
             snapshot_.retainedBgmState = backendState->retainedBgmState;
         }
+        publishedSnapshot = snapshot_;
     }
     stateCv_.notify_all();
     if (lifecycle) {
         publishNonGuiLifecycle(*lifecycle);
     }
+    deliverSnapshot(publishedSnapshot);
     deliverCompletion(completion);
     return true;
 }
@@ -911,6 +1037,26 @@ void PreviewAudioWorker::deliverCompletion(const PreviewAudioCompletion& complet
     }
     callbackCv_.notify_all();
     stateCv_.notify_all();
+}
+
+void PreviewAudioWorker::deliverSnapshot(const PreviewAudioSnapshot& snapshot)
+{
+    {
+        std::lock_guard lock(callbackMutex_);
+        if (!callbackDeliveryEnabled_ || !snapshotCallback_) {
+            return;
+        }
+        ++callbacksInFlight_;
+    }
+    try {
+        snapshotCallback_(snapshot);
+    } catch (...) {
+    }
+    {
+        std::lock_guard lock(callbackMutex_);
+        --callbacksInFlight_;
+    }
+    callbackCv_.notify_all();
 }
 
 void PreviewAudioWorker::rejectQueuedCommands(CommandError error)
