@@ -86,25 +86,8 @@ constexpr int kDialogActionButtonMinWidth = 92;
 constexpr int kRangeSetButtonWidth = 72;
 constexpr int kPreviewScrubRenderIntervalMs = 33;
 
-struct ResolutionPreset {
-    int width = 1080;
-    int height = 1080;
-    const char* label = "1080x1080 (1:1)";
-    double aspectRatio = 1.0;
-};
-
-constexpr ResolutionPreset kResolutionPresets[] = {
-    {720, 720, "720x720 (1:1)", 1.0},
-    {1024, 1024, "1024x1024 (1:1)", 1.0},
-    {960, 720, "960x720 (4:3)", 4.0 / 3.0},
-    {1280, 720, "1280x720 (16:9)", 16.0 / 9.0},
-    {1080, 1080, "1080x1080 (1:1)", 1.0},
-    {1440, 1080, "1440x1080 (4:3)", 4.0 / 3.0},
-    {1920, 1080, "1920x1080 (16:9)", 16.0 / 9.0},
-    {1440, 1440, "1440x1440 (1:1)", 1.0},
-    {1920, 1440, "1920x1440 (4:3)", 4.0 / 3.0},
-    {2560, 1440, "2560x1440 (16:9)", 16.0 / 9.0},
-};
+using ResolutionPreset = miacode::video_export::VideoExportResolutionPreset;
+inline constexpr auto& kResolutionPresets = miacode::video_export::kVideoExportResolutionPresets;
 
 // (The HUD-font library helpers + the font-settings dialog moved to
 // tools/video_export/HudFontSettings.cpp on 2026-06-10, shared with the main
@@ -212,38 +195,31 @@ public:
 protected:
     QString textFromValue(double value) const override
     {
-        const qint64 totalMs = qMax<qint64>(0, qRound64(value * 1000.0));
-        const qint64 minutes = totalMs / 60000;
-        const qint64 sec = (totalMs / 1000) % 60;
-        const qint64 ms = totalMs % 1000;
-        return QStringLiteral("%1:%2:%3")
-            .arg(minutes, 2, 10, QChar('0'))
-            .arg(sec, 2, 10, QChar('0'))
-            .arg(ms, 3, 10, QChar('0'));
+        return miacode::video_export::formatVideoExportTimestamp(value);
     }
 
     double valueFromText(const QString& text) const override
     {
         double parsed = 0.0;
-        return parseTimestampText(text, &parsed) ? parsed : 0.0;
+        return miacode::video_export::parseVideoExportTimestamp(text, &parsed) ? parsed : 0.0;
     }
 
     void fixup(QString& input) const override
     {
         double parsed = 0.0;
-        if (parseTimestampText(input, &parsed)) {
+        if (miacode::video_export::parseVideoExportTimestamp(input, &parsed)) {
             input = textFromValue(parsed);
             return;
         }
-        input = sanitizeTimestampText(input);
+        input = miacode::video_export::sanitizeVideoExportTimestamp(input);
     }
 
     QValidator::State validate(QString& text, int& pos) const override
     {
         Q_UNUSED(pos);
-        const QString sanitized = sanitizeTimestampText(text);
+        const QString sanitized = miacode::video_export::sanitizeVideoExportTimestamp(text);
         double parsed = 0.0;
-        if (parseTimestampText(sanitized, &parsed)) {
+        if (miacode::video_export::parseVideoExportTimestamp(sanitized, &parsed)) {
             return QValidator::Acceptable;
         }
         static const QRegularExpression partial(QStringLiteral("^\\s*\\d*(:\\d{0,2}(:\\d{0,3})?)?\\s*$"));
@@ -258,53 +234,6 @@ protected:
         return QValidator::Invalid;
     }
 
-private:
-    static QString sanitizeTimestampText(QString text)
-    {
-        text.replace(QChar(0xff1a), QLatin1Char(':'));
-        return text.trimmed();
-    }
-
-    static bool parseTimestampText(const QString& text, double* seconds)
-    {
-        const QString sanitized = sanitizeTimestampText(text);
-        static const QRegularExpression re(QStringLiteral("^(\\d+)(?::(\\d{1,2}))?(?::(\\d{1,3}))?$"));
-        const QRegularExpressionMatch match = re.match(sanitized);
-        if (!match.hasMatch()) {
-            return false;
-        }
-
-        bool minOk = false;
-        const int minutes = match.captured(1).toInt(&minOk);
-        if (!minOk || minutes < 0) {
-            return false;
-        }
-
-        int sec = 0;
-        if (match.captured(2).length() > 0) {
-            bool secOk = false;
-            sec = match.captured(2).toInt(&secOk);
-            if (!secOk || sec < 0 || sec > 59) {
-                return false;
-            }
-        }
-
-        int ms = 0;
-        if (match.captured(3).length() > 0) {
-            bool msOk = false;
-            ms = match.captured(3).toInt(&msOk);
-            if (!msOk || ms < 0 || ms > 999) {
-                return false;
-            }
-        }
-
-        if (seconds != nullptr) {
-            *seconds = static_cast<double>(minutes) * 60.0
-                + static_cast<double>(sec)
-                + static_cast<double>(ms) / 1000.0;
-        }
-        return true;
-    }
 };
 
 // Export-range selector: a full-duration lane with a highlighted [start, end]

@@ -623,7 +623,9 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
     QProgressDialog* progressDialog,
     bool* canceledByUser,
     QString* errorMessage,
-    const std::function<void(int percent, const QString& rawMessage)>& progressCallback
+    const std::function<void(int percent, const QString& rawMessage)>& progressCallback,
+    const std::function<bool()>& cancellationRequested,
+    const std::function<void()>& retryingCallback
 )
 {
     MC_OP("MainWindow::ExportSection::runVideoExportWorkerSync");
@@ -721,7 +723,8 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
                 process.readAllStandardError(),
                 kVideoExportWorkerStderrBufferMaxBytes);
             parseStdoutLines();
-            if (progressDialog != nullptr && progressDialog->wasCanceled()) {
+            if ((progressDialog != nullptr && progressDialog->wasCanceled())
+                || (cancellationRequested && cancellationRequested())) {
                 if (canceledByUser != nullptr) {
                     *canceledByUser = true;
                 }
@@ -763,7 +766,9 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
         if (shouldRetry) {
             firstCrashDiagnostics = attemptDiagnostics;
             forceDisableOffscreenPbo = true;
-            if (progressDialog != nullptr) {
+            if (retryingCallback) {
+                retryingCallback();
+            } else if (progressDialog != nullptr) {
                 progressDialog->setRange(0, 100);
                 progressDialog->setValue(0);
                 progressDialog->setLabelText(
@@ -948,6 +953,7 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
         this->clearVideoExportWorkerState();
         return false;
     }
+    emit owner_.videoExportWorkerRunningChanged(true);
     return true;
 }
 
@@ -1440,6 +1446,9 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
     owner_.videoExportWorkerForceDisablePbo_ = false;
     this->endInlineExportProgress();
     owner_.videoExportUseInlineProgress_ = false;
+    if (hadWorkerProcess) {
+        emit owner_.videoExportWorkerRunningChanged(false);
+    }
     if (hadProgressDialog || hadWorkerProcess) {
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,

@@ -4,6 +4,19 @@
 
 class MainWindow::ExportSection {
 public:
+    struct BatchExportResult {
+        bool canceled = false;
+        int successCount = 0;
+        QStringList failedCharts;
+        QStringList exportedFiles;
+    };
+
+    struct BatchExportCallbacks {
+        std::function<void(int percent, const QString& label)> progressChanged;
+        std::function<bool()> cancellationRequested;
+        std::function<void()> retrying;
+    };
+
     ExportSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
 
     void applySharedExportTaskSettings(const VideoExportTask& task);
@@ -49,6 +62,8 @@ public:
         const QStringList& chartDirectories,
         const QList<int>& selectedDifficultyIds,
         const QString& outputDirectory,
+        BatchExportResult* result,
+        const BatchExportCallbacks& callbacks,
         QString* errorMessage);
 
     bool buildVideoExportSnapshot(
@@ -77,7 +92,9 @@ public:
         QProgressDialog* progressDialog,
         bool* canceledByUser,
         QString* errorMessage,
-        const std::function<void(int percent, const QString& rawMessage)>& progressCallback = {}
+        const std::function<void(int percent, const QString& rawMessage)>& progressCallback = {},
+        const std::function<bool()>& cancellationRequested = {},
+        const std::function<void()>& retryingCallback = {}
     );
     bool launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage);
     void handleVideoExportWorkerStdout();
@@ -129,6 +146,14 @@ private:
     void teardownExportPreviewAuditionScene();
     void handleEmbeddedExportConfirmed();
     void handleBatchExportConfirmed();
+    bool runBatchExport(
+        const VideoExportTask& templateTask,
+        const QStringList& chartDirectories,
+        const QList<int>& selectedDifficultyIds,
+        const QString& outputDirectory,
+        BatchExportResult* result,
+        const BatchExportCallbacks& callbacks,
+        QString* errorMessage);
     // ---- Inline export progress on the preview transport (A3 amended) ----
     void beginInlineExportProgress();
     // percent < 0 keeps the current percent (label-only update); an empty

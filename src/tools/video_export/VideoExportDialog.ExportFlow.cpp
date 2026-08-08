@@ -896,8 +896,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     // there. Only a non-zero start needs the freeze-then-go pre-roll.
     // The epsilon tolerates spinbox / floating-point slop (the dialog
     // displays at 1 ms precision).
-    constexpr double kFullRangeEpsilonSeconds = 0.01;
-    updated.fullRangeExport = selectedRangeStart <= kFullRangeEpsilonSeconds;
+    updated.fullRangeExport = miacode::video_export::isFullRangeVideoExport(selectedRangeStart);
     // The maimai intro is a full-range-only pre-roll; clips starting
     // mid-chart never get it regardless of the checkbox. (A clip starting
     // at chart 0 counts as full-range, so it may carry the intro.)
@@ -917,7 +916,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
             .arg(selectedRangeEnd, 0, 'f', 9)
             .arg(totalDurationSeconds_, 0, 'f', 9)
             .arg(updated.fullRangeExport ? 1 : 0)
-            .arg(kFullRangeEpsilonSeconds, 0, 'f', 6));
+            .arg(miacode::video_export::kFullRangeVideoExportStartEpsilonSeconds, 0, 'f', 6));
 
     const QFileInfo outputInfo(updated.outputPath);
     const QDir outputDir = outputInfo.absoluteDir();

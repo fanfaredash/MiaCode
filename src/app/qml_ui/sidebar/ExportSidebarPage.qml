@@ -6,7 +6,6 @@ Rectangle {
     id: root
 
     required property var pages
-    property string selectedAction: "video"
 
     color: Theme.colors.background.surface
     clip: true
@@ -40,29 +39,17 @@ Rectangle {
                 width: parent.width
                 text: qsTr("视频导出")
                 selected: root.pages.activePageId === "export"
-                          && root.selectedAction === "video"
-                onClicked: {
-                    root.selectedAction = "video"
-                    root.pages.openVideoExportPage()
-                }
+                onClicked: root.pages.openVideoExportPage()
             }
             NavRow {
                 width: parent.width
                 text: qsTr("封面导出")
-                selected: root.selectedAction === "cover"
-                onClicked: {
-                    root.selectedAction = "cover"
-                    root.pages.openCoverExport()
-                }
+                onClicked: root.pages.openCoverExport()
             }
             NavRow {
                 width: parent.width
                 text: qsTr("打包 ZIP")
-                selected: root.selectedAction === "zip"
-                onClicked: {
-                    root.selectedAction = "zip"
-                    root.pages.packAsZip()
-                }
+                onClicked: root.pages.packAsZip()
             }
         }
 

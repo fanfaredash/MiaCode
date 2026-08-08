@@ -12,6 +12,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "VideoExportController.h"
+#include "VideoExportSettings.h"
 
 #include <QColor>
 #include <QDir>
@@ -21,36 +22,19 @@
 
 namespace miacode::video_export::dialog_detail {
 
-inline constexpr int kAudioBitrateOptionsKbps[] = {128, 160, 192, 256, 320};
-inline constexpr int kFpsOptions[] = {30, 60, 120};
-
 inline int normaliseAudioBitrateKbps(int requested)
 {
-    int closest = kAudioBitrateOptionsKbps[0];
-    int closestDelta = qAbs(requested - closest);
-    for (int candidate : kAudioBitrateOptionsKbps) {
-        const int delta = qAbs(requested - candidate);
-        if (delta < closestDelta) {
-            closest = candidate;
-            closestDelta = delta;
-        }
-    }
-    return closest;
+    return miacode::video_export::normalizedVideoExportAudioBitrateKbps(requested);
 }
 
 inline int normaliseExportFps(int requested)
 {
-    int closest = kFpsOptions[0];
-    int closestDelta = qAbs(requested - closest);
-    for (int candidate : kFpsOptions) {
-        const int delta = qAbs(requested - candidate);
-        if (delta < closestDelta || (delta == closestDelta && candidate > closest)) {
-            closest = candidate;
-            closestDelta = delta;
-        }
-    }
-    return closest;
+    return miacode::video_export::normalizedVideoExportFps(requested);
 }
+
+inline constexpr auto& kAudioBitrateOptionsKbps =
+    miacode::video_export::kVideoExportAudioBitrateOptionsKbps;
+inline constexpr auto& kFpsOptions = miacode::video_export::kVideoExportFpsOptions;
 
 inline QString exportDialogPresetLabel(VideoExportPreset preset)
 {

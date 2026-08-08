@@ -9,38 +9,26 @@
 #include "core/video/PreviewRenderSettings.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/VideoExportPreferences.h"
+#include "tools/video_export/VideoExportSettings.h"
 
 #include <QDesktopServices>
+#include <QCoreApplication>
 #include <QDir>
+#include <QEventLoop>
 #include <QFileDialog>
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QSettings>
 #include <QUrl>
 
+#include <utility>
+
 namespace {
 
-struct ResolutionPreset {
-    int width = 0;
-    int height = 0;
-    const char* label = nullptr;
-};
-
-constexpr ResolutionPreset kResolutionPresets[] = {
-    {720, 720, "720x720 (1:1)"},
-    {1024, 1024, "1024x1024 (1:1)"},
-    {960, 720, "960x720 (4:3)"},
-    {1280, 720, "1280x720 (16:9)"},
-    {1080, 1080, "1080x1080 (1:1)"},
-    {1440, 1080, "1440x1080 (4:3)"},
-    {1920, 1080, "1920x1080 (16:9)"},
-    {1440, 1440, "1440x1440 (1:1)"},
-    {1920, 1440, "1920x1440 (4:3)"},
-    {2560, 1440, "2560x1440 (16:9)"},
-};
-
-constexpr int kFpsOptions[] = {30, 60, 120};
-constexpr int kAudioBitrateOptions[] = {128, 160, 192, 256, 320};
+inline constexpr auto& kResolutionPresets = miacode::video_export::kVideoExportResolutionPresets;
+inline constexpr auto& kFpsOptions = miacode::video_export::kVideoExportFpsOptions;
+inline constexpr auto& kAudioBitrateOptions =
+    miacode::video_export::kVideoExportAudioBitrateOptionsKbps;
 
 }  // namespace
 
@@ -48,6 +36,13 @@ QmlExportSession::QmlExportSession(MainWindow& backend, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
 {
+    connect(&backend, &MainWindow::videoExportWorkerRunningChanged, this, [this](bool running) {
+        if (batchExportRunning_ || exportRunning_ == running) {
+            return;
+        }
+        exportRunning_ = running;
+        emit exportRunningChanged();
+    });
 }
 
 QString QmlExportSession::activeTab() const
@@ -58,7 +53,7 @@ QString QmlExportSession::activeTab() const
 QVariantList QmlExportSession::resolutionOptions() const
 {
     QVariantList list;
-    for (const ResolutionPreset& preset : kResolutionPresets) {
+    for (const auto& preset : kResolutionPresets) {
         QVariantMap row;
         row.insert(QStringLiteral("label"), QString::fromLatin1(preset.label));
         row.insert(QStringLiteral("width"), preset.width);
@@ -260,6 +255,7 @@ void QmlExportSession::leave()
     pageSessionActive_ = false;
     emit pageSessionActiveChanged();
     savePreferences();
+    hasSeededTask_ = false;
     stopAudition();
     setUnavailableReason(QString());
 }
@@ -288,6 +284,9 @@ void QmlExportSession::setActiveTab(const QString& tabId)
     }
     activeTab_ = next;
     emit activeTabChanged();
+    if (activeTab_ == QLatin1String("batch") && settingsTab_ == QLatin1String("range")) {
+        setSettingsTab(QStringLiteral("output"));
+    }
     if (pageSessionActive_) {
         syncAudition();
     }
@@ -336,8 +335,14 @@ void QmlExportSession::refreshFromDocument()
 void QmlExportSession::applyPreferences()
 {
     const QJsonObject settings = miacode::video_export::loadDialogPreferences();
-    const int savedWidth = settings.value(QStringLiteral("resolution_width")).toInt(task_.outputWidth);
-    const int savedHeight = settings.value(QStringLiteral("resolution_height")).toInt(task_.outputHeight);
+    // Keep the established first-run defaults shared with the Widgets dialog.
+    task_.clockCountEnabled = false;
+    task_.fixHudTextLayout = false;
+    task_.intro.mode = QStringLiteral("auto");
+    task_.intro.lvRenderMode = QStringLiteral("atlas");
+    miacode::video_export::applyVideoExportPreferences(settings, &task_);
+    const int savedWidth = task_.outputWidth;
+    const int savedHeight = task_.outputHeight;
     resolutionIndex_ = 1;
     for (int i = 0; i < static_cast<int>(std::size(kResolutionPresets)); ++i) {
         if (kResolutionPresets[i].width == savedWidth && kResolutionPresets[i].height == savedHeight) {
@@ -347,71 +352,12 @@ void QmlExportSession::applyPreferences()
     }
     task_.outputWidth = kResolutionPresets[resolutionIndex_].width;
     task_.outputHeight = kResolutionPresets[resolutionIndex_].height;
-    task_.fps = settings.value(QStringLiteral("fps")).toInt(task_.fps);
-    task_.audioBitrateKbps = settings.value(QStringLiteral("audio_bitrate_kbps")).toInt(task_.audioBitrateKbps);
-    const QString preset = settings.value(QStringLiteral("preset")).toString();
-    task_.preset = preset == QLatin1String("fast") ? VideoExportPreset::Fast : VideoExportPreset::HighQuality;
-    const QString sizePreset = settings.value(QStringLiteral("size_preset")).toString();
-    if (sizePreset == QLatin1String("compact")) {
-        task_.sizePreset = VideoExportSizePreset::Compact;
-    } else if (sizePreset == QLatin1String("ultra_compact_with_pv")) {
-        task_.sizePreset = VideoExportSizePreset::UltraCompactWithPv;
-    } else if (sizePreset == QLatin1String("ultra_compact")) {
-        task_.sizePreset = VideoExportSizePreset::UltraCompact;
-    } else {
-        task_.sizePreset = VideoExportSizePreset::Standard;
-    }
-    task_.fixHudTextLayout = settings.value(QStringLiteral("fix_hud_text_layout")).toBool(false);
-    task_.clockCountEnabled = settings.value(QStringLiteral("clock_count_enabled")).toBool(false);
-    task_.intro.enabled = settings.value(QStringLiteral("add_intro")).toBool(task_.intro.enabled);
-    const QString bgMode = settings.value(QStringLiteral("intro_background_mode")).toString(task_.intro.backgroundMode);
-    task_.intro.backgroundMode = bgMode;
-    task_.intro.customBackgroundPath =
-        settings.value(QStringLiteral("intro_background_custom_path")).toString(task_.intro.customBackgroundPath);
-    task_.intro.blurBackground = settings.value(QStringLiteral("intro_background_blur")).toBool(task_.intro.blurBackground);
-    task_.intro.mode = settings.value(QStringLiteral("intro_card_type")).toString(QStringLiteral("auto"));
-    task_.intro.cardShadow = settings.value(QStringLiteral("intro_card_shadow")).toBool(task_.intro.cardShadow);
-    const bool levelText = settings.value(QStringLiteral("intro_level_text_render")).toBool(false);
-    task_.intro.lvRenderMode = levelText ? QStringLiteral("text") : QStringLiteral("atlas");
 }
 
 void QmlExportSession::savePreferences() const
 {
     QJsonObject settings = miacode::video_export::loadDialogPreferences();
-    settings.insert(QStringLiteral("resolution_width"), task_.outputWidth);
-    settings.insert(QStringLiteral("resolution_height"), task_.outputHeight);
-    settings.insert(QStringLiteral("fps"), task_.fps);
-    settings.insert(QStringLiteral("audio_bitrate_kbps"), task_.audioBitrateKbps);
-    settings.insert(
-        QStringLiteral("preset"),
-        task_.preset == VideoExportPreset::Fast ? QStringLiteral("fast") : QStringLiteral("high_quality"));
-    QString sizeKey = QStringLiteral("standard");
-    switch (task_.sizePreset) {
-    case VideoExportSizePreset::Compact:
-        sizeKey = QStringLiteral("compact");
-        break;
-    case VideoExportSizePreset::UltraCompactWithPv:
-        sizeKey = QStringLiteral("ultra_compact_with_pv");
-        break;
-    case VideoExportSizePreset::UltraCompact:
-        sizeKey = QStringLiteral("ultra_compact");
-        break;
-    case VideoExportSizePreset::Standard:
-    default:
-        break;
-    }
-    settings.insert(QStringLiteral("size_preset"), sizeKey);
-    settings.insert(QStringLiteral("fix_hud_text_layout"), task_.fixHudTextLayout);
-    settings.insert(QStringLiteral("clock_count_enabled"), task_.clockCountEnabled);
-    settings.insert(QStringLiteral("add_intro"), task_.intro.enabled);
-    settings.insert(QStringLiteral("intro_background_mode"), task_.intro.backgroundMode);
-    settings.insert(QStringLiteral("intro_background_custom_path"), task_.intro.customBackgroundPath);
-    settings.insert(QStringLiteral("intro_background_blur"), task_.intro.blurBackground);
-    settings.insert(QStringLiteral("intro_card_type"), task_.intro.mode);
-    settings.insert(QStringLiteral("intro_card_shadow"), task_.intro.cardShadow);
-    settings.insert(
-        QStringLiteral("intro_level_text_render"),
-        task_.intro.lvRenderMode.compare(QStringLiteral("text"), Qt::CaseInsensitive) == 0);
+    miacode::video_export::appendVideoExportPreferences(&settings, task_);
     miacode::video_export::saveDialogPreferences(settings);
 }
 
@@ -425,9 +371,16 @@ void QmlExportSession::seedFromDifficulty(int difficultyId)
         return;
     }
     setUnavailableReason(QString());
-        task_ = backend_->exportSection_->buildVideoExportSeedTaskPublic(difficultyId);
+    VideoExportTask seededTask = backend_->exportSection_->buildVideoExportSeedTaskPublic(difficultyId);
+    if (hasSeededTask_) {
+        miacode::video_export::copyVideoExportUserSettings(task_, &seededTask);
+    }
+    task_ = std::move(seededTask);
     chartDurationSeconds_ = qMax(0.0, task_.contentDurationSeconds);
-    applyPreferences();
+    if (!hasSeededTask_) {
+        applyPreferences();
+        hasSeededTask_ = true;
+    }
     task_.exportStartSeconds = 0.0;
     task_.contentDurationSeconds = chartDurationSeconds_;
     task_.fullRangeExport = true;
@@ -458,6 +411,17 @@ void QmlExportSession::syncAudition()
     backend_->exportSection_->startQmlExportAudition(selectedDifficultyId_, task_);
 }
 
+void QmlExportSession::applyLivePreviewSettings()
+{
+    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+        return;
+    }
+    VideoExportTask liveTask = task_;
+    applyOwnerLiveFields(&liveTask);
+    backend_->exportSection_->applySharedExportTaskSettings(liveTask);
+    syncAudition();
+}
+
 void QmlExportSession::stopAudition()
 {
     if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
@@ -484,7 +448,7 @@ VideoExportTask QmlExportSession::buildRequestedTask() const
     VideoExportTask task = task_;
     task.outputWidth = kResolutionPresets[qBound(0, resolutionIndex_, static_cast<int>(std::size(kResolutionPresets)) - 1)].width;
     task.outputHeight = kResolutionPresets[qBound(0, resolutionIndex_, static_cast<int>(std::size(kResolutionPresets)) - 1)].height;
-    task.fullRangeExport = task.exportStartSeconds <= 0.01;
+    task.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task.exportStartSeconds);
     task.intro.enabled = task.intro.enabled && task.fullRangeExport;
     applyOwnerLiveFields(&task);
     return task;
@@ -496,16 +460,36 @@ void QmlExportSession::startExport()
         return;
     }
     if (activeTab_ == QLatin1String("batch")) {
-        // Batch path: reuse existing Tools-menu batch flow with current prefs.
-        // Full QML batch queue runner can expand later; for now open the shared
-        // embedded batch path is not used — launch via ExportSection helper.
+        savePreferences();
+        batchCancellationRequested_ = false;
+        batchExportRunning_ = true;
+        exportRunning_ = true;
+        emit exportRunningChanged();
+        MainWindow::ExportSection::BatchExportResult result;
+        MainWindow::ExportSection::BatchExportCallbacks callbacks;
+        callbacks.progressChanged = [](int, const QString&) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        };
+        callbacks.cancellationRequested = [this]() {
+            return batchCancellationRequested_;
+        };
+        VideoExportTask batchTask = buildRequestedTask();
+        // Batch is always full-range, so keep the user's intro preference even
+        // if the single-export range currently starts after chart zero.
+        batchTask.intro.enabled = task_.intro.enabled;
         QString error;
-        if (!backend_->exportSection_->launchQmlBatchExport(
-                buildRequestedTask(),
-                chartDirectories_,
-                batchSelectedDifficultyIds_,
-                batchOutputDirectory_,
-                &error)) {
+        const bool launched = backend_->exportSection_->launchQmlBatchExport(
+            batchTask,
+            chartDirectories_,
+            batchSelectedDifficultyIds_,
+            batchOutputDirectory_,
+            &result,
+            callbacks,
+            &error);
+        batchExportRunning_ = false;
+        exportRunning_ = false;
+        emit exportRunningChanged();
+        if (!launched) {
             UiDialogs::showMessageBox(
                 QMessageBox::Critical,
                 backend_,
@@ -513,7 +497,40 @@ void QmlExportSession::startExport()
                 error.isEmpty()
                     ? UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"))
                     : error);
+            return;
         }
+        if (result.canceled) {
+            UiDialogs::showMessageBox(
+                QMessageBox::Information,
+                backend_,
+                UiText::text(QStringLiteral("dialog.batch_export.title")),
+                UiText::text(QStringLiteral("dialog.batch_export.message.canceled")));
+            return;
+        }
+        const auto shortenDetails = [](QString details) {
+            return details.size() > 3000 ? details.left(3000) + QStringLiteral("\n...") : details;
+        };
+        const QString successDetails = shortenDetails(result.exportedFiles.join(QLatin1Char('\n')));
+        if (result.failedCharts.isEmpty()) {
+            UiDialogs::showMessageBox(
+                QMessageBox::Information,
+                backend_,
+                UiText::text(QStringLiteral("dialog.batch_export.title")),
+                UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(result.successCount)
+                    + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails));
+            return;
+        }
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            backend_,
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
+                .arg(result.successCount).arg(result.failedCharts.size())
+                + (successDetails.isEmpty() ? QString()
+                    : QStringLiteral("\n\n")
+                        + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
+                        + QStringLiteral("\n") + successDetails)
+                + QStringLiteral("\n\n") + shortenDetails(result.failedCharts.join(QLatin1Char('\n'))));
         return;
     }
 
@@ -544,9 +561,11 @@ void QmlExportSession::cancelExport()
     if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
         return;
     }
+    if (batchExportRunning_) {
+        batchCancellationRequested_ = true;
+        return;
+    }
     backend_->exportSection_->cancelVideoExportWorker();
-    exportRunning_ = false;
-    emit exportRunningChanged();
 }
 
 void QmlExportSession::browseOutputPath()
@@ -648,6 +667,38 @@ void QmlExportSession::setExportEndToCurrentPreview()
     setExportEndSeconds(backend_->currentPreviewAuthoritativeAudioClockSecond());
 }
 
+QString QmlExportSession::setExportStartText(const QString& text)
+{
+    double seconds = 0.0;
+    const QString normalized = miacode::video_export::sanitizeVideoExportTimestamp(text);
+    bool parsed = false;
+    if (normalized.contains(QLatin1Char(':'))) {
+        parsed = miacode::video_export::parseVideoExportTimestamp(normalized, &seconds);
+    } else {
+        seconds = normalized.toDouble(&parsed);
+    }
+    if (parsed) {
+        setExportStartSeconds(seconds);
+    }
+    return QString::number(task_.exportStartSeconds, 'f', 3);
+}
+
+QString QmlExportSession::setExportEndText(const QString& text)
+{
+    double seconds = 0.0;
+    const QString normalized = miacode::video_export::sanitizeVideoExportTimestamp(text);
+    bool parsed = false;
+    if (normalized.contains(QLatin1Char(':'))) {
+        parsed = miacode::video_export::parseVideoExportTimestamp(normalized, &seconds);
+    } else {
+        seconds = normalized.toDouble(&parsed);
+    }
+    if (parsed) {
+        setExportEndSeconds(seconds);
+    }
+    return QString::number(exportEndSeconds(), 'f', 3);
+}
+
 void QmlExportSession::setOutputPath(const QString& path)
 {
     if (task_.outputPath == path) {
@@ -666,6 +717,7 @@ void QmlExportSession::setResolutionIndex(int index)
     task_.outputWidth = kResolutionPresets[index].width;
     task_.outputHeight = kResolutionPresets[index].height;
     emit outputChanged();
+    savePreferences();
     if (pageSessionActive_) {
         syncAudition();
     }
@@ -678,6 +730,7 @@ void QmlExportSession::setFps(int fps)
     }
     task_.fps = fps;
     emit outputChanged();
+    savePreferences();
 }
 
 void QmlExportSession::setAudioBitrateKbps(int kbps)
@@ -687,6 +740,7 @@ void QmlExportSession::setAudioBitrateKbps(int kbps)
     }
     task_.audioBitrateKbps = kbps;
     emit outputChanged();
+    savePreferences();
 }
 
 void QmlExportSession::setPresetIndex(int index)
@@ -697,6 +751,7 @@ void QmlExportSession::setPresetIndex(int index)
     }
     task_.preset = next;
     emit outputChanged();
+    savePreferences();
 }
 
 void QmlExportSession::setSizePresetIndex(int index)
@@ -720,27 +775,28 @@ void QmlExportSession::setSizePresetIndex(int index)
     }
     task_.sizePreset = next;
     emit outputChanged();
+    savePreferences();
 }
 
 void QmlExportSession::setBackgroundBrightnessOuter(double value)
 {
     task_.backgroundBrightnessOuter = value;
     emit videoChanged();
-    syncAudition();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setBackgroundBrightnessInner(double value)
 {
     task_.backgroundBrightnessInner = value;
     emit videoChanged();
-    syncAudition();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setLayoutSquareScale(double value)
 {
     task_.layoutSquareScale = value;
     emit videoChanged();
-    syncAudition();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setBackgroundScaleModeIndex(int index)
@@ -761,38 +817,43 @@ void QmlExportSession::setBackgroundScaleModeIndex(int index)
     }
     task_.backgroundScaleMode = next;
     emit videoChanged();
-    syncAudition();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setSmoothBrightness(bool value)
 {
     task_.smoothBrightness = value;
     emit videoChanged();
-    syncAudition();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setShowTimestamp(bool value)
 {
     task_.showTimestamp = value;
     emit videoChanged();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setShowObjectStatsHud(bool value)
 {
     task_.showObjectStatsHud = value;
     emit videoChanged();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setShowChartInfoHud(bool value)
 {
     task_.showChartInfoHud = value;
     emit videoChanged();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setFixHudTextLayout(bool value)
 {
     task_.fixHudTextLayout = value;
     emit videoChanged();
+    syncAudition();
+    savePreferences();
 }
 
 void QmlExportSession::setClockCountEnabled(bool value)
@@ -800,20 +861,27 @@ void QmlExportSession::setClockCountEnabled(bool value)
     task_.clockCountEnabled = value;
     emit videoChanged();
     syncAudition();
+    savePreferences();
 }
 
 void QmlExportSession::setTapFlowSpeed(double value)
 {
+    if (!qIsFinite(value)) {
+        return;
+    }
     task_.tapFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(value);
     emit gameplayChanged();
-    syncAudition();
+    applyLivePreviewSettings();
 }
 
 void QmlExportSession::setTouchFlowSpeed(double value)
 {
+    if (!qIsFinite(value)) {
+        return;
+    }
     task_.touchFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(value);
     emit gameplayChanged();
-    syncAudition();
+    applyLivePreviewSettings();
 }
 
 QVariantList QmlExportSession::skinOptions() const
@@ -984,6 +1052,7 @@ void QmlExportSession::setIntroEnabled(bool value)
 {
     task_.intro.enabled = value;
     emit introChanged();
+    savePreferences();
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
@@ -993,6 +1062,7 @@ void QmlExportSession::setIntroBackgroundModeIndex(int index)
 {
     task_.intro.backgroundMode = index == 1 ? QStringLiteral("custom") : QStringLiteral("jacket");
     emit introChanged();
+    savePreferences();
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
@@ -1002,6 +1072,7 @@ void QmlExportSession::setIntroCustomBackgroundPath(const QString& path)
 {
     task_.intro.customBackgroundPath = path;
     emit introChanged();
+    savePreferences();
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
@@ -1011,6 +1082,7 @@ void QmlExportSession::setIntroBlurBackground(bool value)
 {
     task_.intro.blurBackground = value;
     emit introChanged();
+    savePreferences();
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
@@ -1026,6 +1098,7 @@ void QmlExportSession::setIntroModeIndex(int index)
         task_.intro.mode = QStringLiteral("DX");
     }
     emit introChanged();
+    savePreferences();
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
@@ -1035,6 +1108,7 @@ void QmlExportSession::setIntroCardShadow(bool value)
 {
     task_.intro.cardShadow = value;
     emit introChanged();
+    savePreferences();
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
@@ -1044,6 +1118,7 @@ void QmlExportSession::setIntroLevelTextRender(bool value)
 {
     task_.intro.lvRenderMode = value ? QStringLiteral("text") : QStringLiteral("atlas");
     emit introChanged();
+    savePreferences();
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
@@ -1051,25 +1126,27 @@ void QmlExportSession::setIntroLevelTextRender(bool value)
 
 void QmlExportSession::setExportStartSeconds(double value)
 {
+    if (!qIsFinite(value)) {
+        return;
+    }
     const double clamped = qBound(0.0, value, chartDurationSeconds_);
     task_.exportStartSeconds = clamped;
     if (task_.exportStartSeconds + task_.contentDurationSeconds > chartDurationSeconds_) {
         task_.contentDurationSeconds = qMax(0.0, chartDurationSeconds_ - task_.exportStartSeconds);
     }
-    task_.fullRangeExport = task_.exportStartSeconds <= 0.01;
-    if (!task_.fullRangeExport) {
-        task_.intro.enabled = false;
-    }
+    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
     emit rangeChanged();
     emit introChanged();
 }
 
 void QmlExportSession::setExportEndSeconds(double value)
 {
+    if (!qIsFinite(value)) {
+        return;
+    }
     const double end = qBound(task_.exportStartSeconds, value, chartDurationSeconds_);
     task_.contentDurationSeconds = qMax(0.0, end - task_.exportStartSeconds);
-    task_.fullRangeExport = task_.exportStartSeconds <= 0.01
-        && qAbs(task_.contentDurationSeconds - chartDurationSeconds_) <= 0.01;
+    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
     emit rangeChanged();
 }
 

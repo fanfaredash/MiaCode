@@ -146,9 +146,9 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
 - `&clock_count=` is a defaulted (`4`) count-in metadata field (`src/common/ChartClockCount.h`), editable from the latency settings page + metadata "Other &xx Fields" and materialized by `SimaiDocument::ensureDefaultClockCount`; its export count-in uses full-range lead-in `2.0s`,
   partial preload `1.0s` (`src/common/VideoExportConfig.h`). Full-vs-partial classification: any range
   STARTING at chart 0 counts as full-range even if it ends early (count-down lead-in, no frozen
-  preload / pause glyph); only start > 0 is partial. Decided in TWO places that must stay in sync:
-  `VideoExportDialog.cpp` (`updated.fullRangeExport`) and `MainWindow.ExportSnapshot.cpp`
-  (`fullRangeExport`). The export hub's single and batch embedded panels both re-seed the audition
+  preload / pause glyph); only start > 0 is partial. The UI-side decision is shared by v1 and v2 via
+  `miacode::video_export::isFullRangeVideoExport` in `VideoExportSettings`; snapshot construction must copy that task value
+  unchanged. The export hub's single and batch embedded panels both re-seed the audition
   clock after installation and on the shared checkbox signal; batch badge changes use the current
   batch setting but do not change its selected output difficulties.
 
@@ -224,6 +224,12 @@ must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize t
 `buildVideoExportTaskFromSnapshot` must restore them before `exportPreparedTask`. The
 `UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
 PV in the prepared export task, never in the live/export-page preview.
+
+v1 Widgets and v2 QML are presentation adapters over the same export contracts. Fixed options,
+preference tokens, timestamp parsing and zero-start range classification live in
+`VideoExportSettings`; batch preflight/execution lives in `ExportSection::runBatchExport`; snapshot
+serialization and rendering remain below both. A new setting or batch rule must be added once at the
+shared layer, then surfaced independently in each UI without copying backend logic.
 
 `fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
 `render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame

@@ -84,25 +84,114 @@ Rectangle {
             wrapMode: Text.WordWrap
         }
 
-        // ---- Single export ----
+        // ---- Shared single/batch export settings ----
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: root.session && root.session.activeTab === "export"
-                     && !(root.session && root.session.unavailableReason)
+            visible: root.session && !(root.session && root.session.unavailableReason)
             spacing: 8
+
+            // Batch-only inputs stay above the shared settings tabs. The
+            // settings form below is the single source for both export modes.
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.session && root.session.activeTab === "batch"
+                spacing: 10
+
+                Text {
+                    text: qsTr("难度")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Repeater {
+                        model: root.session ? root.session.batchDifficultyChecks : []
+                        delegate: AppSwitch {
+                            required property var modelData
+                            text: modelData.name
+                            checked: modelData.checked
+                            onToggled: if (root.session) root.session.setBatchDifficultyChecked(modelData.id, checked)
+                        }
+                    }
+                }
+
+                Text {
+                    text: qsTr("输出文件夹")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    AppTextField {
+                        Layout.fillWidth: true
+                        text: root.session ? root.session.batchOutputDirectory : ""
+                        onEditingFinished: if (root.session) root.session.batchOutputDirectory = text
+                    }
+                    AppButton {
+                        text: qsTr("浏览...")
+                        onClicked: if (root.session) root.session.browseBatchOutputDirectory()
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: qsTr("谱面文件夹")
+                        color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        Layout.fillWidth: true
+                    }
+                    AppButton {
+                        text: qsTr("添加")
+                        onClicked: if (root.session) root.session.addChartDirectories()
+                    }
+                    AppButton {
+                        text: qsTr("清空")
+                        onClicked: if (root.session) root.session.clearChartDirectories()
+                    }
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(contentHeight, root.height * 0.2)
+                    clip: true
+                    model: root.session ? root.session.chartDirectories : []
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: RowLayout {
+                        width: ListView.view.width
+                        required property int index
+                        required property string modelData
+                        Text {
+                            Layout.fillWidth: true
+                            text: modelData
+                            elide: Text.ElideMiddle
+                            color: Theme.colors.text.active
+                            font.family: Theme.uiFont
+                        }
+                        AppButton {
+                            text: qsTr("移除")
+                            onClicked: if (root.session) root.session.removeChartDirectory(index)
+                        }
+                    }
+                }
+            }
 
             Row {
                 spacing: 4
                 Repeater {
-                    model: [
-                        { id: "output", label: qsTr("输出") },
-                        { id: "video", label: qsTr("视频") },
-                        { id: "gameplay", label: qsTr("游戏") },
-                        { id: "skin", label: qsTr("皮肤") },
-                        { id: "intro", label: qsTr("片头") },
-                        { id: "range", label: qsTr("导出区间") }
-                    ]
+                    model: {
+                        const tabs = [
+                            { id: "output", label: qsTr("输出") },
+                            { id: "video", label: qsTr("视频") },
+                            { id: "gameplay", label: qsTr("游戏") },
+                            { id: "skin", label: qsTr("皮肤") },
+                            { id: "intro", label: qsTr("片头") }
+                        ]
+                        if (root.session && root.session.activeTab === "export")
+                            tabs.push({ id: "range", label: qsTr("导出区间") })
+                        return tabs
+                    }
                     delegate: AppTab {
                         required property var modelData
                         panelTab: true
@@ -135,12 +224,14 @@ Rectangle {
                         Layout.fillWidth: true
 
                         Text {
+                            visible: root.session && root.session.activeTab === "export"
                             text: qsTr("输出")
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
                         }
                         RowLayout {
+                            visible: root.session && root.session.activeTab === "export"
                             Layout.fillWidth: true
                             AppTextField {
                                 Layout.fillWidth: true
@@ -347,7 +438,12 @@ Rectangle {
                             AppTextField {
                                 Layout.preferredWidth: 80
                                 text: root.session ? root.session.tapFlowSpeed.toFixed(2) : "7.50"
-                                onEditingFinished: if (root.session) root.session.tapFlowSpeed = Number(text)
+                                onEditingFinished: {
+                                    if (!root.session) return
+                                    var value = Number(text)
+                                    if (isFinite(value)) root.session.tapFlowSpeed = value
+                                    text = root.session.tapFlowSpeed.toFixed(2)
+                                }
                             }
                         }
                         RowLayout {
@@ -360,7 +456,12 @@ Rectangle {
                             AppTextField {
                                 Layout.preferredWidth: 80
                                 text: root.session ? root.session.touchFlowSpeed.toFixed(2) : "7.50"
-                                onEditingFinished: if (root.session) root.session.touchFlowSpeed = Number(text)
+                                onEditingFinished: {
+                                    if (!root.session) return
+                                    var value = Number(text)
+                                    if (isFinite(value)) root.session.touchFlowSpeed = value
+                                    text = root.session.touchFlowSpeed.toFixed(2)
+                                }
                             }
                         }
                     }
@@ -431,7 +532,9 @@ Rectangle {
                         AppSwitch {
                             text: qsTr("添加片头")
                             checked: root.session ? root.session.introEnabled : false
-                            enabled: root.session ? root.session.fullRangeExport : false
+                            enabled: root.session
+                                     ? root.session.activeTab === "batch" || root.session.fullRangeExport
+                                     : false
                             onToggled: if (root.session) root.session.introEnabled = checked
                         }
                         RowLayout {
@@ -493,7 +596,8 @@ Rectangle {
 
                     // Range
                     ColumnLayout {
-                        visible: root.session && root.session.settingsTab === "range"
+                        visible: root.session && root.session.activeTab === "export"
+                                 && root.session.settingsTab === "range"
                         spacing: 10
                         Layout.fillWidth: true
                         RowLayout {
@@ -506,7 +610,7 @@ Rectangle {
                             AppTextField {
                                 Layout.preferredWidth: 100
                                 text: root.session ? root.session.exportStartSeconds.toFixed(3) : "0"
-                                onEditingFinished: if (root.session) root.session.exportStartSeconds = Number(text)
+                                onEditingFinished: if (root.session) text = root.session.setExportStartText(text)
                             }
                             AppButton {
                                 text: qsTr("设为当前")
@@ -523,7 +627,7 @@ Rectangle {
                             AppTextField {
                                 Layout.preferredWidth: 100
                                 text: root.session ? root.session.exportEndSeconds.toFixed(3) : "0"
-                                onEditingFinished: if (root.session) root.session.exportEndSeconds = Number(text)
+                                onEditingFinished: if (root.session) text = root.session.setExportEndText(text)
                             }
                             AppButton {
                                 text: qsTr("设为当前")
@@ -559,108 +663,5 @@ Rectangle {
             }
         }
 
-        // ---- Batch ----
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.session && root.session.activeTab === "batch"
-                     && !(root.session && root.session.unavailableReason)
-            spacing: 10
-
-            Text {
-                text: qsTr("难度")
-                color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
-            }
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    model: root.session ? root.session.batchDifficultyChecks : []
-                    delegate: AppSwitch {
-                        required property var modelData
-                        text: modelData.name
-                        checked: modelData.checked
-                        onToggled: if (root.session) root.session.setBatchDifficultyChecked(modelData.id, checked)
-                    }
-                }
-            }
-
-            Text {
-                text: qsTr("输出文件夹")
-                color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                AppTextField {
-                    Layout.fillWidth: true
-                    text: root.session ? root.session.batchOutputDirectory : ""
-                    onEditingFinished: if (root.session) root.session.batchOutputDirectory = text
-                }
-                AppButton {
-                    text: qsTr("浏览...")
-                    onClicked: if (root.session) root.session.browseBatchOutputDirectory()
-                }
-            }
-
-            RowLayout {
-                Text {
-                    text: qsTr("谱面文件夹")
-                    color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
-                    Layout.fillWidth: true
-                }
-                AppButton {
-                    text: qsTr("添加")
-                    onClicked: if (root.session) root.session.addChartDirectories()
-                }
-                AppButton {
-                    text: qsTr("清空")
-                    onClicked: if (root.session) root.session.clearChartDirectories()
-                }
-            }
-            ListView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                model: root.session ? root.session.chartDirectories : []
-                delegate: RowLayout {
-                    width: ListView.view.width
-                    required property int index
-                    required property string modelData
-                    Text {
-                        Layout.fillWidth: true
-                        text: modelData
-                        elide: Text.ElideMiddle
-                        color: Theme.colors.text.active
-                        font.family: Theme.uiFont
-                    }
-                    AppButton {
-                        text: qsTr("移除")
-                        onClicked: if (root.session) root.session.removeChartDirectory(index)
-                    }
-                }
-            }
-
-            Text {
-                Layout.fillWidth: true
-                text: qsTr("输出 / 视频 / 片头等共享设置请切换到「导出」标签页配置。")
-                color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.secondaryFontSize
-                wrapMode: Text.WordWrap
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Item { Layout.fillWidth: true }
-                AppButton {
-                    text: qsTr("开始导出")
-                    emphasized: true
-                    onClicked: if (root.session) root.session.startExport()
-                }
-            }
-        }
     }
 }

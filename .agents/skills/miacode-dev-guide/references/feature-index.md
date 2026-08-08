@@ -410,9 +410,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 8. Video export — `src/tools/video_export/`
 
-- Settings host + batch page: `VideoExportDialog.{h,cpp}` (single-export dialog and the shared
-  tab host), `BatchExportPanel.{h,cpp}` + `BatchExportSelectionState.cpp` (embedded batch queue
-  form), `VideoExportPreferences.h`. The former `BatchVideoExportDialog` is deleted.
+- UI-independent settings contract: `VideoExportSettings.{h,cpp}` owns the resolution/FPS/audio
+  option sets, preference token parsing/writing, range timestamp parsing, the zero-start full-range
+  predicate, and the user-setting merge used when a UI re-seeds another difficulty.
+- UI hosts stay separate: v1 uses `VideoExportDialog.{h,cpp}` plus `BatchExportPanel.{h,cpp}` /
+  `BatchExportSelectionState.cpp`; v2 uses `app/qml_ui/export/ExportVideoPage.qml` plus
+  `QmlExportSession`. Both adapt to `VideoExportSettings` and `ExportSection`; do not move layout or
+  presentation policy into the shared backend. In v2, single and batch modes use one settings-tab
+  layout: batch-only difficulty/output-directory/chart-directory inputs sit above it, while the
+  single-file output path and range tab remain single-export-only. Never replace those batch
+  settings with instructional text that sends the user to the other mode. The former
+  `BatchVideoExportDialog` is deleted.
 - Controller + pipeline: `VideoExportController.{h,cpp}` (⚠ ~5000 lines — see god-file list),
   `VideoExportQuickRenderBackend.*`, `VideoExportAudioRenderPlan.*`, `VideoExportAudioBackend.h`,
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,
@@ -434,6 +442,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   metrics and baseline formulas so unaffected users' output does not move.
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
+- Batch execution owner: `ExportSection::runBatchExport` performs directory/chart preflight,
+  difficulty expansion, sequential snapshot/worker execution, cancellation and result collection.
+  v1 supplies `QProgressDialog` callbacks; v2 supplies QML-session callbacks and presents the result
+  in its own adapter. Do not add a second batch loop in either UI.
 - **Export hub page (E-C hybrid since 2026-06-11 — phases 1+2 of the export-page migration,
   implementation record; kept as local private notes):**
   `src/tools/export_page/ExportLauncherPage.{h,cpp}` (`miacode::export_page::ExportLauncherPage`,

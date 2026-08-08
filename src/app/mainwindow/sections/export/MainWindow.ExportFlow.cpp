@@ -1198,6 +1198,163 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
     }
 }
 
+bool MainWindow::ExportSection::runBatchExport(
+    const VideoExportTask& templateTask,
+    const QStringList& chartDirectories,
+    const QList<int>& selectedDifficultyIds,
+    const QString& outputDirectory,
+    BatchExportResult* result,
+    const BatchExportCallbacks& callbacks,
+    QString* errorMessage)
+{
+    if (result == nullptr) {
+        return false;
+    }
+    *result = BatchExportResult{};
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+    if (chartDirectories.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_chart_dirs"));
+        }
+        return false;
+    }
+    if (selectedDifficultyIds.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_difficulties"));
+        }
+        return false;
+    }
+    if (outputDirectory.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_output_dir"));
+        }
+        return false;
+    }
+    if (!QDir().mkpath(outputDirectory)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.output_dir_create_failed"))
+                + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory);
+        }
+        return false;
+    }
+
+    struct BatchExportJob {
+        QString chartDirectory;
+        int difficultyId = 0;
+        QString difficultyToken;
+        QString displayName;
+    };
+    QVector<BatchExportJob> jobs;
+    jobs.reserve(chartDirectories.size() * selectedDifficultyIds.size());
+    for (const QString& chartDirectory : chartDirectories) {
+        const QFileInfo directoryInfo(chartDirectory);
+        const QString folderName = directoryInfo.fileName();
+        const QString trackPath = miacode::chart_assets::resolveTrackPathForDirectory(directoryInfo.absoluteFilePath());
+        const QString chartPath = resolveChartPathFromCliInput(directoryInfo.absoluteFilePath());
+        if (trackPath.isEmpty() || chartPath.isEmpty()) {
+            result->failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
+                + UiText::text(trackPath.isEmpty()
+                    ? QStringLiteral("dialog.batch_export.error.missing_track_file")
+                    : QStringLiteral("dialog.batch_export.error.missing_chart_file")));
+            continue;
+        }
+        bool usedSystemEncoding = false;
+        const QString chartText = readTextFileWithFallbackEncoding(chartPath, &usedSystemEncoding);
+        if (chartText.isNull()) {
+            result->failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
+                + UiText::text(QStringLiteral("dialog.batch_export.error.read_chart_failed"))
+                    .arg(QFileInfo(chartPath).fileName()));
+            continue;
+        }
+        const SimaiDocument document = SimaiDocument::fromText(chartText);
+        int matchedDifficulties = 0;
+        for (int difficultyId : selectedDifficultyIds) {
+            if (document.difficulty(difficultyId) == nullptr) {
+                continue;
+            }
+            ++matchedDifficulties;
+            const QString token = SimaiDocument::difficultyShortName(difficultyId);
+            jobs.append({chartDirectory, difficultyId, token,
+                         QStringLiteral("%1 [%2]").arg(folderName, token)});
+        }
+        if (matchedDifficulties == 0) {
+            QStringList requested;
+            for (int difficultyId : selectedDifficultyIds) {
+                requested.append(SimaiDocument::difficultyShortName(difficultyId));
+            }
+            result->failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
+                + UiText::text(QStringLiteral("dialog.batch_export.error.no_selected_difficulties_in_folder"))
+                    .arg(requested.join(QStringLiteral(", "))));
+        }
+    }
+
+    const int totalJobs = qMax(1, jobs.size());
+    for (int index = 0; index < jobs.size(); ++index) {
+        const BatchExportJob& job = jobs.at(index);
+        if (callbacks.progressChanged) {
+            callbacks.progressChanged(
+                qRound(static_cast<double>(index) * 100.0 / totalJobs),
+                UiText::text(QStringLiteral("dialog.batch_export.progress.exporting_named"))
+                    .arg(index + 1).arg(jobs.size()).arg(job.displayName));
+        }
+        if (callbacks.cancellationRequested && callbacks.cancellationRequested()) {
+            result->canceled = true;
+            break;
+        }
+
+        VideoExportSnapshot snapshot;
+        QString failureText;
+        if (!buildVideoExportSnapshotForChartDirectory(
+                job.chartDirectory,
+                job.difficultyId,
+                job.difficultyToken,
+                templateTask,
+                outputDirectory,
+                &snapshot,
+                &failureText)) {
+            result->failedCharts.append(job.displayName + QStringLiteral(" - ") + failureText);
+            continue;
+        }
+        bool canceledThisItem = false;
+        const auto updateBatchProgress = [&callbacks, index, totalJobs, &job](
+                                             int percent,
+                                             const QString& rawMessage) {
+            if (!callbacks.progressChanged) {
+                return;
+            }
+            const double overall = (static_cast<double>(index) + qBound(0, percent, 100) / 100.0)
+                / static_cast<double>(totalJobs);
+            callbacks.progressChanged(
+                qBound(0, qRound(overall * 100.0), 100),
+                UiText::text(QStringLiteral("dialog.batch_export.progress.current_item"))
+                    .arg(job.displayName).arg(localizeExportWorkerMessageForUiLanguage(rawMessage)));
+        };
+        if (!runVideoExportWorkerSync(
+                snapshot,
+                nullptr,
+                &canceledThisItem,
+                &failureText,
+                updateBatchProgress,
+                callbacks.cancellationRequested,
+                callbacks.retrying)) {
+            if (canceledThisItem) {
+                result->canceled = true;
+                break;
+            }
+            result->failedCharts.append(job.displayName + QStringLiteral(" - ") + failureText);
+            continue;
+        }
+        ++result->successCount;
+        result->exportedFiles.append(QFileInfo(snapshot.outputPath).fileName());
+    }
+    if (callbacks.progressChanged) {
+        callbacks.progressChanged(100, QString());
+    }
+    return true;
+}
+
 void MainWindow::ExportSection::handleBatchExportConfirmed()
 {
     QPointer<miacode::video_export::BatchExportPanel> panel = owner_.embeddedBatchExportPanel_;
@@ -1236,57 +1393,6 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
         return;
     }
 
-    struct BatchExportJob {
-        QString chartDirectory;
-        int difficultyId = 0;
-        QString difficultyToken;
-        QString displayName;
-    };
-    QStringList failedCharts;
-    QVector<BatchExportJob> jobs;
-    jobs.reserve(chartDirectories.size() * selectedDifficultyIds.size());
-    for (const QString& chartDirectory : chartDirectories) {
-        const QFileInfo directoryInfo(chartDirectory);
-        const QString folderName = directoryInfo.fileName();
-        const QString trackPath = miacode::chart_assets::resolveTrackPathForDirectory(directoryInfo.absoluteFilePath());
-        const QString chartPath = resolveChartPathFromCliInput(directoryInfo.absoluteFilePath());
-        if (trackPath.isEmpty() || chartPath.isEmpty()) {
-            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
-                + UiText::text(trackPath.isEmpty()
-                    ? QStringLiteral("dialog.batch_export.error.missing_track_file")
-                    : QStringLiteral("dialog.batch_export.error.missing_chart_file")));
-            continue;
-        }
-        bool usedSystemEncoding = false;
-        const QString chartText = readTextFileWithFallbackEncoding(chartPath, &usedSystemEncoding);
-        if (chartText.isNull()) {
-            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
-                + UiText::text(QStringLiteral("dialog.batch_export.error.read_chart_failed"))
-                    .arg(QFileInfo(chartPath).fileName()));
-            continue;
-        }
-        const SimaiDocument document = SimaiDocument::fromText(chartText);
-        int matchedDifficulties = 0;
-        for (int difficultyId : selectedDifficultyIds) {
-            if (document.difficulty(difficultyId) == nullptr) {
-                continue;
-            }
-            ++matchedDifficulties;
-            const QString token = SimaiDocument::difficultyShortName(difficultyId);
-            jobs.append({chartDirectory, difficultyId, token,
-                         QStringLiteral("%1 [%2]").arg(folderName, token)});
-        }
-        if (matchedDifficulties == 0) {
-            QStringList requested;
-            for (int difficultyId : selectedDifficultyIds) {
-                requested.append(SimaiDocument::difficultyShortName(difficultyId));
-            }
-            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
-                + UiText::text(QStringLiteral("dialog.batch_export.error.no_selected_difficulties_in_folder"))
-                    .arg(requested.join(QStringLiteral(", "))));
-        }
-    }
-
     QProgressDialog progress(
         UiText::text(QStringLiteral("dialog.batch_export.progress.preparing")),
         systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
@@ -1313,57 +1419,53 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
     progress.setAutoReset(false);
     UiDialogs::configureDialogPreviewShortcuts(&progress);
     owner_.windowSection_->applySystemWindowBackdrop(&progress);
-    progress.show();
 
-    QStringList exportedFiles;
-    bool canceled = false;
-    int successCount = 0;
-    const int totalJobs = qMax(1, jobs.size());
-    for (int index = 0; index < jobs.size(); ++index) {
-        const BatchExportJob& job = jobs.at(index);
-        progress.setValue(qRound(static_cast<double>(index) * 100.0 / totalJobs));
-        progress.setLabelText(UiText::text(QStringLiteral("dialog.batch_export.progress.exporting_named"))
-            .arg(index + 1).arg(jobs.size()).arg(job.displayName));
+    BatchExportResult result;
+    QString launchError;
+    BatchExportCallbacks callbacks;
+    callbacks.progressChanged = [&progress](int percent, const QString& label) {
+        if (!progress.isVisible()) {
+            progress.show();
+        }
+        progress.setValue(percent);
+        if (!label.isEmpty()) {
+            progress.setLabelText(label);
+        }
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        if (progress.wasCanceled()) {
-            canceled = true;
-            break;
-        }
-        VideoExportSnapshot snapshot;
-        QString validationFailure;
-        if (!buildVideoExportSnapshotForChartDirectory(
-                job.chartDirectory, job.difficultyId, job.difficultyToken, requestedTask,
-                outputDirectory, &snapshot, &validationFailure)) {
-            failedCharts.append(job.displayName + QStringLiteral(" - ") + validationFailure);
-            continue;
-        }
-        QString failureText;
-        bool canceledThisItem = false;
-        const auto updateBatchProgress = [&progress, index, totalJobs, &job](int percent, const QString& rawMessage) {
-            const double overall = (static_cast<double>(index) + qBound(0, percent, 100) / 100.0)
-                / static_cast<double>(totalJobs);
-            progress.setValue(qBound(0, qRound(overall * 100.0), 100));
-            progress.setLabelText(UiText::text(QStringLiteral("dialog.batch_export.progress.current_item"))
-                .arg(job.displayName).arg(localizeExportWorkerMessageForUiLanguage(rawMessage)));
-        };
-        if (!runVideoExportWorkerSync(snapshot, &progress, &canceledThisItem, &failureText, updateBatchProgress)) {
-            if (canceledThisItem) {
-                canceled = true;
-                break;
-            }
-            failedCharts.append(job.displayName + QStringLiteral(" - ") + failureText);
-            continue;
-        }
-        ++successCount;
-        exportedFiles.append(QFileInfo(snapshot.outputPath).fileName());
-    }
-    progress.setValue(100);
+    };
+    callbacks.cancellationRequested = [&progress]() {
+        return progress.wasCanceled();
+    };
+    callbacks.retrying = [&progress]() {
+        progress.setRange(0, 100);
+        progress.setValue(0);
+        progress.setLabelText(UiText::text(QStringLiteral("dialog.video_export.progress.retrying_safe_mode")));
+    };
+    const bool launched = runBatchExport(
+        requestedTask,
+        chartDirectories,
+        selectedDifficultyIds,
+        outputDirectory,
+        &result,
+        callbacks,
+        &launchError);
     progress.hide();
     if (!panel.isNull()) {
         panel->setBatchExportRunning(false);
     }
 
-    if (canceled) {
+    if (!launched) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Critical,
+            &owner_,
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            launchError.isEmpty()
+                ? UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"))
+                : launchError);
+        return;
+    }
+
+    if (result.canceled) {
         UiDialogs::showMessageBox(
             QMessageBox::Information, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
             UiText::text(QStringLiteral("dialog.batch_export.message.canceled")));
@@ -1372,23 +1474,23 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
     const auto shortenDetails = [](QString details) {
         return details.size() > 3000 ? details.left(3000) + QStringLiteral("\n...") : details;
     };
-    const QString successDetails = shortenDetails(exportedFiles.join(QLatin1Char('\n')));
-    if (failedCharts.isEmpty()) {
+    const QString successDetails = shortenDetails(result.exportedFiles.join(QLatin1Char('\n')));
+    if (result.failedCharts.isEmpty()) {
         UiDialogs::showMessageBox(
             QMessageBox::Information, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(successCount)
+            UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(result.successCount)
                 + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails));
         return;
     }
     UiDialogs::showMessageBox(
         QMessageBox::Warning, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
         UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
-            .arg(successCount).arg(failedCharts.size())
+            .arg(result.successCount).arg(result.failedCharts.size())
             + (successDetails.isEmpty() ? QString()
                 : QStringLiteral("\n\n")
                     + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
                     + QStringLiteral("\n") + successDetails)
-            + QStringLiteral("\n\n") + shortenDetails(failedCharts.join(QLatin1Char('\n'))));
+            + QStringLiteral("\n\n") + shortenDetails(result.failedCharts.join(QLatin1Char('\n'))));
 }
 
 VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTaskPublic(int difficultyId)
@@ -1418,6 +1520,8 @@ bool MainWindow::ExportSection::startQmlExportAudition(int difficultyId, const V
         owner_.previewCanvas_->setTapFlowSpeed(visualTask.tapFlowSpeed);
         owner_.previewCanvas_->setTouchFlowSpeed(visualTask.touchFlowSpeed);
         owner_.previewCanvas_->setFixHudTextLayout(visualTask.fixHudTextLayout);
+        owner_.previewCanvas_->setShowTimestamp(visualTask.showTimestamp);
+        owner_.previewCanvas_->setShowObjectStatsHud(visualTask.showObjectStatsHud);
         owner_.previewCanvas_->setShowChartInfoHud(visualTask.showChartInfoHud);
     }
     if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
@@ -1459,89 +1563,20 @@ bool MainWindow::ExportSection::launchQmlBatchExport(
     const QStringList& chartDirectories,
     const QList<int>& selectedDifficultyIds,
     const QString& outputDirectory,
+    BatchExportResult* result,
+    const BatchExportCallbacks& callbacks,
     QString* errorMessage)
 {
-    if (chartDirectories.isEmpty()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_chart_dirs"));
-        }
-        return false;
-    }
-    if (selectedDifficultyIds.isEmpty()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_difficulties"));
-        }
-        return false;
-    }
-    if (outputDirectory.trimmed().isEmpty()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_output_dir"));
-        }
-        return false;
-    }
-    // Seed the existing batch panel confirm path by synthesizing a one-shot run:
-    // reuse handleBatchExportConfirmed's loop via a temporary panel is heavy.
-    // Call the same snapshot/worker path per chart as handleBatchExportConfirmed.
-    Q_UNUSED(templateTask);
-    // Delegate to the Tools-menu batch entry after storing QML selections is
-    // incomplete without a panel. For the QML shell, surface a clear error until
-    // the batch runner is fully ported — single-export remains fully wired.
-    if (errorMessage != nullptr) {
-        *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"));
-    }
-    // Prefer running the known-good batch confirm implementation by temporarily
-    // constructing settings into a BatchExportPanel is avoided (v1 untouched).
-    // Instead invoke onBatchExportPreviewVideo only opens v1 UI — blocked here.
-    // Implement a direct loop mirroring handleBatchExportConfirmed.
     VideoExportTask requestedTask = templateTask;
     applySharedExportTaskSettings(requestedTask);
     requestedTask.exportStartSeconds = 0.0;
     requestedTask.fullRangeExport = true;
-
-    if (!QDir().mkpath(outputDirectory)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.output_dir_create_failed"));
-        }
-        return false;
-    }
-
-    // Mirror handleBatchExportConfirmed: run sequential exports.
-    // Keep this in ExportFlow by calling the private confirm handler body —
-    // for maintainability, call into a shared helper. Minimal: one chart first.
-    int successCount = 0;
-    QStringList failedCharts;
-    for (const QString& chartDirectory : chartDirectories) {
-        for (int difficultyId : selectedDifficultyIds) {
-            VideoExportSnapshot snapshot;
-            QString launchError;
-            const QString token = SimaiDocument::difficultyShortName(difficultyId);
-            if (!buildVideoExportSnapshotForChartDirectory(
-                    chartDirectory,
-                    difficultyId,
-                    token,
-                    requestedTask,
-                    outputDirectory,
-                    &snapshot,
-                    &launchError)
-                || !runVideoExportWorkerSync(snapshot, nullptr, nullptr, &launchError)) {
-                failedCharts.append(chartDirectory + QStringLiteral(" / ") + token + QStringLiteral(": ") + launchError);
-                continue;
-            }
-            ++successCount;
-        }
-    }
-    if (successCount == 0) {
-        if (errorMessage != nullptr) {
-            *errorMessage = failedCharts.isEmpty()
-                ? UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"))
-                : failedCharts.join(QLatin1Char('\n'));
-        }
-        return false;
-    }
-    if (!failedCharts.isEmpty() && errorMessage != nullptr) {
-        *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
-            .arg(successCount)
-            .arg(failedCharts.size());
-    }
-    return failedCharts.isEmpty();
+    return runBatchExport(
+        requestedTask,
+        chartDirectories,
+        selectedDifficultyIds,
+        outputDirectory,
+        result,
+        callbacks,
+        errorMessage);
 }

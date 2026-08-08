@@ -281,6 +281,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportDialog.SettingsPersistence.cpp
     src/tools/video_export/VideoExportDialog.IntroControls.cpp
     src/tools/video_export/VideoExportDialog.ExportFlow.cpp
+    src/tools/video_export/VideoExportSettings.h
+    src/tools/video_export/VideoExportSettings.cpp
     src/tools/video_export/HudFontSettings.h
     src/tools/video_export/HudFontSettings.cpp
     src/tools/video_export/FontLibrary.h

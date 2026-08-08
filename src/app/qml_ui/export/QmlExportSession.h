@@ -165,6 +165,8 @@ public:
     Q_INVOKABLE void setBatchDifficultyChecked(int difficultyId, bool checked);
     Q_INVOKABLE void setExportStartToCurrentPreview();
     Q_INVOKABLE void setExportEndToCurrentPreview();
+    Q_INVOKABLE QString setExportStartText(const QString& text);
+    Q_INVOKABLE QString setExportEndText(const QString& text);
     Q_INVOKABLE void startExport();
     Q_INVOKABLE void cancelExport();
 
@@ -222,6 +224,7 @@ private:
     void seedFromDifficulty(int difficultyId);
     void rebuildDifficultyList();
     void syncAudition();
+    void applyLivePreviewSettings();
     void stopAudition();
     void applyPreferences();
     void savePreferences() const;
@@ -235,6 +238,9 @@ private:
     MainWindow* backend_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;
+    bool hasSeededTask_ = false;
+    bool batchExportRunning_ = false;
+    bool batchCancellationRequested_ = false;
     int selectedDifficultyId_ = 0;
     QString activeTab_ = QStringLiteral("export");
     QString settingsTab_ = QStringLiteral("output");

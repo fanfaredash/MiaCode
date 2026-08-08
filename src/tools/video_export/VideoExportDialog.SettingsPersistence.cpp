@@ -67,58 +67,6 @@
 
 using namespace miacode::video_export::dialog_detail;
 
-namespace {
-
-QString videoExportPresetToken(VideoExportPreset preset)
-{
-    switch (preset) {
-    case VideoExportPreset::HighQuality:
-        return QStringLiteral("high_quality");
-    case VideoExportPreset::Fast:
-    default:
-        return QStringLiteral("fast");
-    }
-}
-
-VideoExportPreset videoExportPresetFromStoredValue(const QJsonValue& value, VideoExportPreset fallback)
-{
-    if (value.isString()) {
-        const QString token = value.toString().trimmed();
-        if (token.compare(QStringLiteral("high_quality"), Qt::CaseInsensitive) == 0) {
-            return VideoExportPreset::HighQuality;
-        }
-        if (token.compare(QStringLiteral("high_compression"), Qt::CaseInsensitive) == 0) {
-            return VideoExportPreset::HighQuality;
-        }
-        if (token.compare(QStringLiteral("fast"), Qt::CaseInsensitive) == 0) {
-            return VideoExportPreset::Fast;
-        }
-    }
-    return fallback;
-}
-
-VideoExportSizePreset videoExportSizePresetFromStoredValue(
-    const QJsonValue& value,
-    VideoExportSizePreset fallback)
-{
-    const QString token = value.toString().trimmed();
-    if (token.compare(QStringLiteral("compact"), Qt::CaseInsensitive) == 0) {
-        return VideoExportSizePreset::Compact;
-    }
-    if (token.compare(QStringLiteral("ultra_compact"), Qt::CaseInsensitive) == 0) {
-        return VideoExportSizePreset::UltraCompact;
-    }
-    if (token.compare(QStringLiteral("ultra_compact_with_pv"), Qt::CaseInsensitive) == 0) {
-        return VideoExportSizePreset::UltraCompactWithPv;
-    }
-    if (token.compare(QStringLiteral("standard"), Qt::CaseInsensitive) == 0) {
-        return VideoExportSizePreset::Standard;
-    }
-    return fallback;
-}
-
-}  // namespace
-
 void VideoExportDialog::loadPersistedSettings()
 {
     const QJsonObject settings = miacode::video_export::loadDialogPreferences();
@@ -153,7 +101,7 @@ void VideoExportDialog::loadPersistedSettings()
             qMax(0, audioBitrateCombo_->findData(selectedAudioBitrateKbps_)));
     }
 
-    selectedPreset_ = videoExportPresetFromStoredValue(
+    selectedPreset_ = miacode::video_export::videoExportPresetFromPreference(
         settings.value(QStringLiteral("preset")),
         selectedPreset_
     );
@@ -163,7 +111,7 @@ void VideoExportDialog::loadPersistedSettings()
             qMax(0, presetCombo_->findData(static_cast<int>(selectedPreset_))));
     }
 
-    selectedSizePreset_ = videoExportSizePresetFromStoredValue(
+    selectedSizePreset_ = miacode::video_export::videoExportSizePresetFromPreference(
         settings.value(QStringLiteral("size_preset")),
         selectedSizePreset_);
     if (sizePresetCombo_ != nullptr) {
@@ -254,7 +202,9 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.insert(QStringLiteral("resolution_height"), task.outputHeight);
     settings.insert(QStringLiteral("fps"), task.fps);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), task.audioBitrateKbps);
-    settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
+    settings.insert(
+        QStringLiteral("preset"),
+        miacode::video_export::videoExportPreferencePresetToken(task.preset));
     settings.insert(
         QStringLiteral("size_preset"),
         miacode::video_export::videoExportSizePresetToken(task.sizePreset));
@@ -271,7 +221,9 @@ void VideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("resolution_height"), selectedResolution().height());
     settings.insert(QStringLiteral("fps"), selectedFps_);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), selectedAudioBitrateKbps_);
-    settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
+    settings.insert(
+        QStringLiteral("preset"),
+        miacode::video_export::videoExportPreferencePresetToken(selectedPreset_));
     settings.insert(
         QStringLiteral("size_preset"),
         miacode::video_export::videoExportSizePresetToken(selectedSizePreset_));

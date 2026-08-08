@@ -161,6 +161,7 @@ public:
 
 signals:
     void previewStageMediaHostInitialized(PreviewStageMediaHost* host);
+    void videoExportWorkerRunningChanged(bool running);
     // Issue #3 fix — emitted whenever the user changes the preview canvas
     // frame-rate option in Render Settings. Carries the SyncInterval
     // value (1, 2, 3) for the DComp renderer's Present(N, 0) call.
