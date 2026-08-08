@@ -21,10 +21,8 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "../third_party/miniaudio/miniaudio.h"
 
-#define QtPreviewSfxRuntime MiniaudioPreviewAudioBackend
-
 namespace {
-constexpr double kQtPreviewSfxEpsilonSeconds = miacode::preview_sfx_timeline::kTimelineEpsilonSeconds;
+constexpr double kMiniaudioPreviewSfxEpsilonSeconds = miacode::preview_sfx_timeline::kTimelineEpsilonSeconds;
 
 bool runtimeAudioDebugEnabled()
 {
@@ -56,11 +54,11 @@ bool acceptMiniaudioResult(ma_result result, int* nativeErrorCode)
 }
 }
 
-struct QtPreviewSfxRuntime::EngineState {
+struct MiniaudioPreviewAudioBackend::EngineState {
     ma_engine engine{};
 };
 
-struct QtPreviewSfxRuntime::Voice {
+struct MiniaudioPreviewAudioBackend::Voice {
     ma_decoder decoder{};
     bool decoderInitialized = false;
     ma_sound sound{};
@@ -69,7 +67,7 @@ struct QtPreviewSfxRuntime::Voice {
     ma_uint64 frameCount = 0;
 };
 
-struct QtPreviewSfxRuntime::StretchedBackgroundState {
+struct MiniaudioPreviewAudioBackend::StretchedBackgroundState {
     ma_data_source_base dataSource{};
     QString trackPath;
     double playbackRate = 1.0;
@@ -340,22 +338,22 @@ struct QtPreviewSfxRuntime::StretchedBackgroundState {
     }
 };
 
-QString QtPreviewSfxRuntime::backendId() const
+QString MiniaudioPreviewAudioBackend::backendId() const
 {
     return QStringLiteral("miniaudio");
 }
 
-int QtPreviewSfxRuntime::nativeErrorCode() const noexcept
+int MiniaudioPreviewAudioBackend::nativeErrorCode() const noexcept
 {
     return lastNativeErrorCode_;
 }
 
-void QtPreviewSfxRuntime::clearNativeErrorCode() noexcept
+void MiniaudioPreviewAudioBackend::clearNativeErrorCode() noexcept
 {
     lastNativeErrorCode_ = 0;
 }
 
-bool QtPreviewSfxRuntime::canBePrimary(QString* reason) const
+bool MiniaudioPreviewAudioBackend::canBePrimary(QString* reason) const
 {
     if (reason != nullptr) {
         *reason = QStringLiteral("miniaudio compatibility backend");
@@ -364,10 +362,8 @@ bool QtPreviewSfxRuntime::canBePrimary(QString* reason) const
 }
 
 
-#include "QtPreviewSfxRuntime.Timeline.cpp"
-#include "QtPreviewSfxRuntime.Background.cpp"
-#include "QtPreviewSfxRuntime.Assets.cpp"
-#include "QtPreviewSfxRuntime.Engine.cpp"
-#include "QtPreviewSfxRuntime.Voices.cpp"
-
-#undef QtPreviewSfxRuntime
+#include "MiniaudioPreviewAudioBackend.Timeline.cpp"
+#include "MiniaudioPreviewAudioBackend.Background.cpp"
+#include "MiniaudioPreviewAudioBackend.Assets.cpp"
+#include "MiniaudioPreviewAudioBackend.Engine.cpp"
+#include "MiniaudioPreviewAudioBackend.Voices.cpp"

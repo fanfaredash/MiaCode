@@ -110,6 +110,20 @@ bool verifyWindowsBassFxLoaderCachesImmediateErrors(QTextStream& err)
     return ok;
 }
 
+bool verifyMiniaudioImplementationHasNoFacadeAlias(QTextStream& err)
+{
+    QFile file(
+        QStringLiteral(MIACODE_SOURCE_ROOT)
+        + QStringLiteral("/src/audio/MiniaudioPreviewAudioBackend.cpp"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return expect(false, "miniaudio backend source is readable", err);
+    }
+    const QString source = QString::fromUtf8(file.readAll());
+    return expect(
+        !source.contains(QStringLiteral("#define QtPreviewSfxRuntime MiniaudioPreviewAudioBackend")),
+        "miniaudio backend does not alias the facade implementation", err);
+}
+
 struct CallRecord {
     QString name;
     std::thread::id threadId;
@@ -1242,6 +1256,72 @@ bool verifyProductionNativeErrorCachesStartClear(QTextStream& err)
     return ok;
 }
 
+bool verifyProductionMiniaudioFactoryRunsOnWorker(QTextStream& err)
+{
+    struct FactoryState {
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool called = false;
+        QString backendId;
+        quint64 factoryThreadId = 0;
+    };
+
+    const std::thread::id callerThread = std::this_thread::get_id();
+    auto state = std::make_shared<FactoryState>();
+    const auto threadToken = [](std::thread::id id) {
+        quint64 token = static_cast<quint64>(std::hash<std::thread::id>{}(id));
+        return token == 0 ? quint64(1) : token;
+    };
+    const quint64 callerThreadId = threadToken(callerThread);
+    PreviewAudioWorker worker(
+        [state, threadToken] {
+            std::unique_ptr<PreviewAudioBackend> backend =
+                productionPreviewAudioBackendFactory()();
+            {
+                std::lock_guard lock(state->mutex);
+                state->called = true;
+                state->backendId = backend != nullptr
+                    ? backend->backendId()
+                    : QStringLiteral("null");
+                state->factoryThreadId = threadToken(std::this_thread::get_id());
+            }
+            state->cv.notify_all();
+            return backend;
+        },
+        {});
+
+    bool ok = true;
+    {
+        std::unique_lock lock(state->mutex);
+        ok &= expect(
+            state->cv.wait_for(lock, 2s, [&] { return state->called; }),
+            "production miniaudio factory runs on the worker", err);
+        ok &= expect(
+            state->backendId == QStringLiteral("miniaudio"),
+            "non-BASS production factory creates the miniaudio backend", err);
+        ok &= expect(
+            state->factoryThreadId != callerThreadId,
+            "factory test executes outside the caller thread", err);
+    }
+
+    const PreviewAudioSnapshot constructed = worker.snapshot();
+    quint64 factoryThreadId = 0;
+    {
+        std::lock_guard lock(state->mutex);
+        factoryThreadId = state->factoryThreadId;
+    }
+    ok &= expect(
+        factoryThreadId != 0 && constructed.workerThreadId == factoryThreadId,
+        "production backend construction is identified by the worker thread", err);
+    worker.shutdownAndJoin();
+    const PreviewAudioSnapshot stopped = worker.snapshot();
+    ok &= expect(
+        stopped.lifecycle == WorkerLifecycle::Stopped
+            && stopped.workerThreadId == factoryThreadId,
+        "production backend is destroyed before the same worker publishes Stopped", err);
+    return ok;
+}
+
 bool verifyExceptionBoundaryAndReservedPauseTiming(QTextStream& err)
 {
     auto state = std::make_shared<FakeState>();
@@ -1728,6 +1808,8 @@ int main(int argc, char* argv[])
     ok &= verifyNativeErrorPropagationAndClearing(err);
     ok &= verifyLifecycleFailuresCaptureNativeError(err);
     ok &= verifyProductionNativeErrorCachesStartClear(err);
+    ok &= verifyProductionMiniaudioFactoryRunsOnWorker(err);
+    ok &= verifyMiniaudioImplementationHasNoFacadeAlias(err);
     ok &= verifyWindowsBassFxLoaderCachesImmediateErrors(err);
     ok &= verifyExceptionBoundaryAndReservedPauseTiming(err);
     ok &= verifyWarmupTimingIncludesSnapshotGetters(err);

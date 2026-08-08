@@ -1,20 +1,19 @@
 #pragma once
 
-#include <QObject>
 #include <QString>
 #include <QVector>
 
 #include "common/PreviewAudioMixConfig.h"
 #include "PreviewAudioBackend.h"
 
-class MiniaudioPreviewAudioBackend final : public QObject, public miacode::preview_audio::PreviewAudioBackend
+class MiniaudioPreviewAudioBackend final : public miacode::preview_audio::PreviewAudioBackend
 {
 public:
     using PausePreviewResult = miacode::preview_audio::PausePreviewResult;
     using RetainedPlaybackMode = miacode::preview_audio::RetainedPlaybackMode;
     using RetainedBgmState = miacode::preview_audio::RetainedBgmState;
 
-    explicit MiniaudioPreviewAudioBackend(QObject* parent = nullptr);
+    MiniaudioPreviewAudioBackend();
     ~MiniaudioPreviewAudioBackend() override;
 
     QString backendId() const override;

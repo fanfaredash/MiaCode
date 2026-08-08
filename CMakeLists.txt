@@ -1490,6 +1490,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/audio src/timeline
     )
 
+    # Keep this copy of the production factory on the no-BASS route even when
+    # the worker spec also compiles the platform BASS backend sources.
+    add_library(preview_audio_worker_spec_miniaudio_factory OBJECT
+        src/audio/PreviewAudioWorkerFactory.cpp
+    )
+    target_link_libraries(preview_audio_worker_spec_miniaudio_factory PRIVATE Qt6::Core)
+    target_include_directories(preview_audio_worker_spec_miniaudio_factory PRIVATE src src/audio)
+
     miacode_add_dev_tool(preview_audio_worker_spec TEST
         SOURCES
             src/tools/preview/PreviewAudioWorkerSpec.cpp
@@ -1508,6 +1516,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioWorker.cpp
         LIBS Qt6::Core soundtouch
         INCLUDES src src/audio src/common src/preview src/timeline
+    )
+    target_sources(preview_audio_worker_spec PRIVATE
+        $<TARGET_OBJECTS:preview_audio_worker_spec_miniaudio_factory>
     )
     target_compile_definitions(preview_audio_worker_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
