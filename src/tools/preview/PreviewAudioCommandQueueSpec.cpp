@@ -448,6 +448,44 @@ bool verifyDevicePauseBoundaryInvalidatesQueuedPlayback(QTextStream& err)
     return ok;
 }
 
+bool verifyRejectedDevicePauseBarrierPreservesQueue(QTextStream& err)
+{
+    bool ok = true;
+    PreviewAudioCommandQueue queue;
+    const auto firstBarrier = queue.enqueueDeviceChangePauseBarrier(
+        numbered(devicePause(30, 300, 701), 1));
+    const auto retainedStart = queue.enqueue(
+        numbered(makeOrdered(CommandKind::Start, 30, 300), 2));
+    const auto rejectedBarrier = queue.enqueueDeviceChangePauseBarrier(
+        numbered(devicePause(31, 301, 702), 3));
+    const auto lowerGenerationStart = queue.enqueue(
+        numbered(makeOrdered(CommandKind::Start, 30, 300), 4));
+
+    ok &= expect(firstBarrier.accepted && retainedStart.accepted,
+                 "first device barrier and its current-generation playback are queued", err);
+    ok &= expect(!rejectedBarrier.accepted && !rejectedBarrier.coalesced
+                     && rejectedBarrier.error == CommandError::QueueFull
+                     && rejectedBarrier.invalidatedCommands.empty(),
+                 "an occupied device barrier rejects without invalidating queued playback", err);
+    ok &= expect(lowerGenerationStart.accepted,
+                 "rejected higher barrier does not advance the playback watermark", err);
+
+    const auto pause = queue.takeNext();
+    const auto retained = queue.takeNext();
+    const auto later = queue.takeNext();
+    ok &= expect(pause && pause->kind == CommandKind::DeviceChangePause
+                     && pause->identity.sequence == 1
+                     && pause->identity.pauseToken == 701,
+                 "the occupied device pause retains its immutable identity", err);
+    ok &= expect(retained && retained->kind == CommandKind::Start
+                     && retained->identity.sequence == 2,
+                 "queued playback survives the rejected higher barrier", err);
+    ok &= expect(later && later->kind == CommandKind::Start
+                     && later->identity.sequence == 4,
+                 "later current-generation playback remains runnable", err);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -464,6 +502,7 @@ int main()
     ok &= verifyPlaybackInvalidation(err);
     ok &= verifyInvalidationWatermark(err);
     ok &= verifyDevicePauseBoundaryInvalidatesQueuedPlayback(err);
+    ok &= verifyRejectedDevicePauseBarrierPreservesQueue(err);
     if (ok) {
         out << "preview_audio_command_queue_spec ok" << Qt::endl;
     }

@@ -1844,6 +1844,69 @@ bool verifyDevicePauseBarrierDropsOlderQueuedPlayback(QTextStream& err)
     return ok;
 }
 
+bool verifyDevicePauseBarrierRejectsOccupiedReservation(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    auto completions = std::make_shared<CompletionLog>();
+    PreviewAudioWorker worker(fakeFactory(state), [completions](const auto& completion) {
+        completions->append(completion);
+    });
+    bool ok = true;
+    ok &= expect(waitForLifecycle(worker, WorkerLifecycle::Ready),
+                 "occupied-barrier worker ready", err);
+
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod = QStringLiteral("applyLevels");
+        state->releaseBlockedMethod = false;
+    }
+    const WorkerPostResult blocker = worker.post(commandFor(CommandKind::ApplyLevels, 50, 1, 0));
+    const bool blockerEntered = state->waitForCall(QStringLiteral("applyLevels"));
+    ok &= expect(blocker.accepted && blockerEntered,
+                 "worker is held before occupied device barriers are submitted", err);
+    if (!blockerEntered) {
+        worker.shutdownAndJoin();
+        return false;
+    }
+
+    PreviewAudioCommand first = commandFor(CommandKind::DeviceChangePause, 51, 1, 501);
+    first.identity.deviceSequence = 7;
+    first.identity.pauseToken = 701;
+    const WorkerPostResult firstBarrier = worker.postDeviceChangePauseBarrier(std::move(first));
+    PreviewAudioCommand duplicate = commandFor(CommandKind::DeviceChangePause, 51, 1, 501);
+    duplicate.identity.deviceSequence = 8;
+    duplicate.identity.pauseToken = 702;
+    const WorkerPostResult rejectedDuplicate = worker.postDeviceChangePauseBarrier(std::move(duplicate));
+    ok &= expect(firstBarrier.accepted,
+                 "first device barrier reserves the worker slot", err);
+    ok &= expect(!rejectedDuplicate.accepted && !rejectedDuplicate.coalesced
+                     && rejectedDuplicate.error == CommandError::QueueFull,
+                 "an occupied worker barrier is rejected instead of returning an unmatched completion identity",
+                 err);
+
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod.clear();
+        state->releaseBlockedMethod = true;
+        state->cv.notify_all();
+    }
+
+    PreviewAudioCompletion ignored;
+    PreviewAudioCompletion firstCompletion;
+    ok &= expect(completions->waitFor(blocker.sequence, &ignored),
+                 "occupied-barrier worker blocker completes", err);
+    ok &= expect(completions->waitFor(firstBarrier.sequence, &firstCompletion)
+                     && firstCompletion.success
+                     && firstCompletion.identity.deviceSequence == 7
+                     && firstCompletion.identity.pauseToken == 701,
+                 "the one accepted barrier receives its matching immutable completion", err);
+    ok &= expect(completions->size() == 2
+                     && state->callCount(QStringLiteral("pause")) == 1,
+                 "the rejected duplicate produces neither a worker completion nor a backend pause", err);
+    worker.shutdownAndJoin();
+    return ok;
+}
+
 bool verifyDevicePauseRetainsCoreResultWhenCleanupFails(QTextStream& err)
 {
     auto state = std::make_shared<FakeState>();
@@ -2274,6 +2337,7 @@ int main(int argc, char* argv[])
     ok &= verifyExceptionBoundaryAndReservedPauseTiming(err);
     ok &= verifyWarmupTimingIncludesSnapshotGetters(err);
     ok &= verifyDevicePauseBarrierDropsOlderQueuedPlayback(err);
+    ok &= verifyDevicePauseBarrierRejectsOccupiedReservation(err);
     ok &= verifyDevicePauseRetainsCoreResultWhenCleanupFails(err);
     ok &= verifyShutdownWaitsForAuthorizedCallback(err);
     ok &= verifyWorkerThreadShutdownIsRejected(err);

@@ -174,6 +174,13 @@ EnqueueResult PreviewAudioCommandQueue::enqueueDeviceChangePauseBarrier(PreviewA
     if (shuttingDown_) {
         return rejected(CommandError::ShuttingDown);
     }
+    // A barrier's caller records the queued command's complete identity for its
+    // eventual completion. MainWindow coalesces duplicate device notifications
+    // before this point, so an occupied reserved slot must reject atomically.
+    if (devicePause_) {
+        return rejected(CommandError::QueueFull);
+    }
+
     EnqueueResult result = accepted();
     minimumPlaybackGeneration_ = std::max(minimumPlaybackGeneration_, command.identity.generation);
     eraseStalePlayback(high_, minimumPlaybackGeneration_, &result.invalidatedCommands);
@@ -185,16 +192,6 @@ EnqueueResult PreviewAudioCommandQueue::enqueueDeviceChangePauseBarrier(PreviewA
     resetStalePlayback(syncBackgroundTrack_, minimumPlaybackGeneration_, &result.invalidatedCommands);
     resetStalePlayback(drainEvents_, minimumPlaybackGeneration_, &result.invalidatedCommands);
 
-    if (devicePause_) {
-        if (canCoalesce(devicePause_->command, command)) {
-            result.coalesced = true;
-            result.retiredSequence = command.identity.sequence;
-            return result;
-        }
-        result.accepted = false;
-        result.error = CommandError::QueueFull;
-        return result;
-    }
     devicePause_ = makeEntry(std::move(command));
     return result;
 }
