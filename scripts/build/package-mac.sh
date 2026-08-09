@@ -227,6 +227,14 @@ fi
 ffmpeg_src="$ROOT_DIR/third_party/ffmpeg/macos/ffmpeg"
 if [[ -f "$ffmpeg_src" && -s "$ffmpeg_src" ]]; then
   ffmpeg_bin_dir="$DIST_DIR/MiaCode.app/Contents/MacOS/ffmpeg"
+  # A locally runnable app bundle can already contain a direct `ffmpeg` file
+  # beside MiaCode. Release packages use the documented `ffmpeg/ffmpeg`
+  # layout; normalize the copied bundle before creating that directory.
+  if [[ -e "$ffmpeg_bin_dir" || -L "$ffmpeg_bin_dir" ]]; then
+    if [[ ! -d "$ffmpeg_bin_dir" ]]; then
+      rm -f "$ffmpeg_bin_dir"
+    fi
+  fi
   mkdir -p "$ffmpeg_bin_dir"
   cp "$ffmpeg_src" "$ffmpeg_bin_dir/ffmpeg"
   chmod +x "$ffmpeg_bin_dir/ffmpeg"
