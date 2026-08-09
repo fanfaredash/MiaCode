@@ -164,6 +164,12 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
   must match current `assetGeneration`; a device pause must also match the first captured
   `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
   facade and the specs.
+- A chart-path change followed by an asset reload is one asset transaction, not two independently
+  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. It carries the path on the
+  `ReloadAssets` command and `PreviewAudioWorker::executeReload` applies it before the backend reload
+  in that same `assetGeneration`; posting `setChartPath` immediately before a separate reload lets
+  stale-command pruning drop the required path update and leaves BGM unloaded. This is shared by
+  MainWindow startup/chart-reload paths and `soundtouch_probe`.
 - `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
   GUI/video state before submitting the reserved high-priority device pause. The worker later stops
   audio/SFX; it does not advance the playhead and it must not auto-resume after a device recovers.

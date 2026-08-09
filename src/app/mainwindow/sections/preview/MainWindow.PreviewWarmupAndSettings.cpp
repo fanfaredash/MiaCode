@@ -144,9 +144,8 @@ void MainWindow::PreviewSection::ensurePreviewSfxRuntimePrepared()
         state_.previewSfxWarmupTrackPath_,
         state_.previewSfxWarmupSfxDir_
     );
-    state_.previewSfxRuntime_->setChartPath(state_.currentFilePath_);
     const QtPreviewSfxRuntime::AssetSubmission reload =
-        state_.previewSfxRuntime_->reloadAssets(state_.previewAudioSettings_);
+        state_.previewSfxRuntime_->reloadAssetsForChart(state_.currentFilePath_, state_.previewAudioSettings_);
     state_.previewSfxRuntimePrepared_ = false;
     state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
         ? reload.identity.assetGeneration

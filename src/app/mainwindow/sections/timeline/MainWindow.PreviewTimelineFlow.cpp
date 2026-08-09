@@ -653,9 +653,9 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
         state_.previewCanvas_->setPlayheadSeconds(state_.qtPreviewPauseSecond_, false);
     }
     if (state_.previewSfxRuntime_ != nullptr && pathChanged) {
-        state_.previewSfxRuntime_->setChartPath(state_.currentFilePath_);
         const QtPreviewSfxRuntime::AssetSubmission reload =
-            state_.previewSfxRuntime_->reloadAssets(state_.previewAudioSettings_);
+            state_.previewSfxRuntime_->reloadAssetsForChart(
+                state_.currentFilePath_, state_.previewAudioSettings_);
         state_.previewSfxRuntimePrepared_ = false;
         state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
             ? reload.identity.assetGeneration

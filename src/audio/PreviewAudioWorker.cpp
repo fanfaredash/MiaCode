@@ -72,6 +72,8 @@ struct PreviewAudioWorker::RuntimeState {
     QString sfxDirectory;
     quint64 warmupAssetGeneration = 0;
     bool hasWarmupPaths = false;
+    QString activeChartPath;
+    bool hasActiveChartPath = false;
     quint64 pauseBarrierGeneration = 0;
     health::StallTracker healthStallTracker;
     double lastHealthLogSecond = -1.0;
@@ -569,6 +571,8 @@ void PreviewAudioWorker::execute(
             completion.detail = QStringLiteral("worker asset command dispatch invariant failed");
             break;
         case CommandKind::SetChartPath:
+            state.activeChartPath = command.chartPath;
+            state.hasActiveChartPath = true;
             backend->setChartPath(command.chartPath);
             break;
         case CommandKind::SetBackgroundOffset:
@@ -697,6 +701,10 @@ void PreviewAudioWorker::executeReload(
     RuntimeState& state,
     PreviewAudioCompletion& completion)
 {
+    if (command.applyChartPathBeforeReload) {
+        state.activeChartPath = command.chartPath;
+        state.hasActiveChartPath = true;
+    }
     if (!publishAssetLifecycleIfCurrent(WorkerLifecycle::Loading, command.identity)) {
         completion.success = false;
         completion.error = CommandError::Stale;
@@ -704,7 +712,8 @@ void PreviewAudioWorker::executeReload(
         return;
     }
     try {
-        if (backend == nullptr) {
+        const bool createdBackend = backend == nullptr;
+        if (createdBackend) {
             backend = factory_ ? factory_() : nullptr;
             if (backend == nullptr) {
                 completion.success = false;
@@ -718,6 +727,10 @@ void PreviewAudioWorker::executeReload(
             }
         } else {
             backend->clearNativeErrorCode();
+        }
+        if (command.applyChartPathBeforeReload
+            || (createdBackend && state.hasActiveChartPath)) {
+            backend->setChartPath(state.activeChartPath);
         }
         backend->reloadAssets(command.settings);
         if (!backend->audioEngineInitialized()) {

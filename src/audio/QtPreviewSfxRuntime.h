@@ -51,6 +51,9 @@ public:
 
     AssetSubmission setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir);
     AssetSubmission reloadAssets(const PreviewAudioSettings& settings);
+    // Posts one asset-generation command that first applies chartPath, then
+    // reloads its dependent BGM/SFX assets on the worker thread.
+    AssetSubmission reloadAssetsForChart(const QString& chartPath, const PreviewAudioSettings& settings);
     bool audioEngineInitialized() const;
     AssetSubmission setChartPath(const QString& chartPath);
     void setBackgroundTrackOffsetSeconds(double seconds);

@@ -81,6 +81,22 @@ QtPreviewSfxRuntime::AssetSubmission QtPreviewSfxRuntime::reloadAssets(const Pre
     return submission;
 }
 
+QtPreviewSfxRuntime::AssetSubmission QtPreviewSfxRuntime::reloadAssetsForChart(
+    const QString& chartPath,
+    const PreviewAudioSettings& settings)
+{
+    PreviewAudioCommand command = makeCommand(CommandKind::ReloadAssets);
+    command.identity.assetGeneration = ++assetGeneration_;
+    command.chartPath = chartPath;
+    command.applyChartPathBeforeReload = true;
+    command.settings = settings;
+    AssetSubmission submission;
+    submission.identity = command.identity;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
+}
+
 bool QtPreviewSfxRuntime::audioEngineInitialized() const
 {
     const PreviewAudioSnapshot snapshot = lastSnapshot();

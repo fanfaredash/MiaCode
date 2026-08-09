@@ -55,8 +55,7 @@ int main(int argc, char* argv[])
     settings.normalize();
 
     QtPreviewSfxRuntime runtime;
-    runtime.setChartPath(chartPath);
-    const QtPreviewSfxRuntime::AssetSubmission reload = runtime.reloadAssets(settings);
+    const QtPreviewSfxRuntime::AssetSubmission reload = runtime.reloadAssetsForChart(chartPath, settings);
     runtime.setBackgroundTrackOffsetSeconds(0.0);
     runtime.setBackgroundTrackPlaybackRate(rate);
     const miacode::preview_audio::WorkerPostResult start = runtime.startBackgroundTrack(0.0);

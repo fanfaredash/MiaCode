@@ -204,6 +204,7 @@ struct FakeState {
     int factoryNullsRemaining = 0;
     bool blockFactory = false;
     bool releaseFactory = false;
+    std::vector<QString> chartPaths;
 };
 
 class FakeBackend final : public PreviewAudioBackend
@@ -274,7 +275,12 @@ public:
         return state_->engineInitialized;
     }
 
-    void setChartPath(const QString&) override { call(QStringLiteral("setChartPath")); }
+    void setChartPath(const QString& chartPath) override
+    {
+        call(QStringLiteral("setChartPath"));
+        std::lock_guard lock(state_->mutex);
+        state_->chartPaths.push_back(chartPath);
+    }
     void setBackgroundTrackOffsetSeconds(double) override { call(QStringLiteral("setBackgroundOffset")); }
     void setBackgroundTrackPlaybackRate(double) override { call(QStringLiteral("setBackgroundRate")); }
     void applyPlaybackRateAtChartSecond(double, double) override { call(QStringLiteral("applyRateAtSecond")); }
@@ -1282,6 +1288,66 @@ bool verifyReloadFailureAndAssetStaleness(QTextStream& err)
                      && recoveryReloadCall != recoveryCalls.cend()
                      && recoveryWarmupCall < recoveryReloadCall,
                  "recovery backend call order is warmup then reload", err);
+    worker.shutdownAndJoin();
+    return ok;
+}
+
+bool verifyReloadAtomicallyAppliesChartPath(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    auto completions = std::make_shared<CompletionLog>();
+    PreviewAudioWorker worker(fakeFactory(state), [completions](const auto& completion) {
+        completions->append(completion);
+    });
+    bool ok = true;
+    ok &= expect(waitForLifecycle(worker, WorkerLifecycle::Ready),
+                 "atomic reload worker ready", err);
+
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod = QStringLiteral("applyLevels");
+        state->releaseBlockedMethod = false;
+    }
+    const WorkerPostResult blocker = worker.post(commandFor(CommandKind::ApplyLevels, 1, 0, 0));
+    ok &= expect(blocker.accepted && state->waitForCall(QStringLiteral("applyLevels")),
+                 "atomic reload test blocks the worker before asset commands", err);
+
+    PreviewAudioCommand obsoletePath = commandFor(CommandKind::SetChartPath, 1, 40, 0);
+    obsoletePath.chartPath = QStringLiteral("obsolete-chart");
+    PreviewAudioCommand reload = commandFor(CommandKind::ReloadAssets, 1, 41, 0);
+    reload.chartPath = QStringLiteral("current-chart");
+    reload.applyChartPathBeforeReload = true;
+    const WorkerPostResult obsoletePost = worker.post(std::move(obsoletePath));
+    const WorkerPostResult reloadPost = worker.post(std::move(reload));
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod.clear();
+        state->releaseBlockedMethod = true;
+        state->cv.notify_all();
+    }
+
+    PreviewAudioCompletion obsoleteCompletion;
+    PreviewAudioCompletion reloadCompletion;
+    ok &= expect(completions->waitFor(obsoletePost.sequence, &obsoleteCompletion)
+                     && obsoleteCompletion.error == CommandError::Stale,
+                 "superseded standalone chart-path command remains stale", err);
+    ok &= expect(completions->waitFor(reloadPost.sequence, &reloadCompletion)
+                     && reloadCompletion.success,
+                 "current atomic reload succeeds", err);
+
+    const std::vector<QString> calls = state->callNames();
+    const auto setChartPath = std::find(calls.cbegin(), calls.cend(), QStringLiteral("setChartPath"));
+    const auto reloadAssets = std::find(calls.cbegin(), calls.cend(), QStringLiteral("reloadAssets"));
+    std::vector<QString> chartPaths;
+    {
+        std::lock_guard lock(state->mutex);
+        chartPaths = state->chartPaths;
+    }
+    ok &= expect(setChartPath != calls.cend() && reloadAssets != calls.cend()
+                     && setChartPath < reloadAssets,
+                 "atomic reload applies its chart path before rebuilding assets", err);
+    ok &= expect(chartPaths.size() == 1 && chartPaths.front() == QStringLiteral("current-chart"),
+                 "atomic reload applies only the current chart path", err);
     worker.shutdownAndJoin();
     return ok;
 }
@@ -2415,6 +2481,7 @@ int main(int argc, char* argv[])
     ok &= verifyOwnershipLifecycleAndDispatch(err);
     ok &= verifyFactoryFailureAndExplicitRecovery(err);
     ok &= verifyReloadFailureAndAssetStaleness(err);
+    ok &= verifyReloadAtomicallyAppliesChartPath(err);
     ok &= verifyAcceptedAssetGenerationGuardsFinalPublication(err);
     ok &= verifyQueuedReloadUsesLoadingGenerationGate(err);
     ok &= verifyRejectedAssetPostDoesNotSupersedeReload(err);
