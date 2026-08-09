@@ -294,6 +294,7 @@ public:
     double preparePreviewPlaybackTransaction(double second, bool, double) override
     {
         call(QStringLiteral("prepare"));
+        notePlaybackEngineFailure();
         return second + 0.25;
     }
     void commitPreparedPreviewPlayback() override { call(QStringLiteral("commit")); }
@@ -310,6 +311,7 @@ public:
     double startPreviewPlaybackTransaction(double second, bool, double) override
     {
         call(QStringLiteral("start"));
+        notePlaybackEngineFailure();
         return second + 0.5;
     }
     PausePreviewResult capturePausedPreviewTransaction() override
@@ -325,11 +327,13 @@ public:
     double resumeRetainedPreviewPlaybackTransaction() override
     {
         call(QStringLiteral("resumeRetained"));
+        notePlaybackEngineFailure();
         return 5.0;
     }
     double seekRetainedPreviewPlaybackTransaction(double second, bool) override
     {
         call(QStringLiteral("seekRetained"));
+        notePlaybackEngineFailure();
         return second + 0.75;
     }
     void resetRetainedPreviewPlaybackTransaction(double) override { call(QStringLiteral("resetRetained")); }
@@ -387,6 +391,7 @@ public:
         return state_->auditionAccepted;
     }
     void stopSfxVoices() override { call(QStringLiteral("stopSfxVoices")); }
+    void invalidateOutputDevice() override { call(QStringLiteral("invalidateOutputDevice")); }
     void stopAll() override { call(QStringLiteral("stopAll")); }
     void prepareForShutdown() override { call(QStringLiteral("prepareForShutdown")); }
     PreviewAudioHealthSample sampleHealth() override
@@ -400,6 +405,14 @@ public:
     }
 
 private:
+    void notePlaybackEngineFailure() const
+    {
+        std::lock_guard lock(state_->mutex);
+        if (!state_->engineInitialized) {
+            state_->nativeError = 37;
+        }
+    }
+
     void call(const QString& name) const
     {
         std::unique_lock lock(state_->mutex);
@@ -651,6 +664,38 @@ bool verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(QTextStream& er
                          });
                      }),
                      "facade delivers the device-pause completion with its immutable identity", err);
+        const qsizetype callsBeforePausedRouteChange = state->callNames().size();
+        const auto pausedRouteChange = runtime.requestDeviceChangeCutoff();
+        ok &= expect(pausedRouteChange.post.accepted
+                         && !pausedRouteChange.armedPlaybackWasCut
+                         && pausedRouteChange.outputRouteInvalidationOnly
+                         && pausedRouteChange.identity.sequence == pausedRouteChange.post.sequence,
+                     "paused device change posts a route-invalidation barrier without a second cutoff", err);
+        ok &= expect(processEventsUntil([&] {
+                         return std::any_of(completions.cbegin(), completions.cend(), [&](const auto& completion) {
+                             return completion.kind == CommandKind::DeviceChangePause
+                                 && completion.identity.sequence == pausedRouteChange.identity.sequence;
+                         });
+                     }),
+                     "paused route-invalidation barrier delivers its completion", err);
+        const std::vector<QString> callsAfterPausedRouteChange = state->callNames();
+        const auto routeCallsBegin = callsAfterPausedRouteChange.cbegin()
+            + callsBeforePausedRouteChange;
+        const auto hasRouteCall = [routeCallsBegin, &callsAfterPausedRouteChange](const char* name) {
+            return std::find(routeCallsBegin,
+                             callsAfterPausedRouteChange.cend(),
+                             QString::fromLatin1(name)) != callsAfterPausedRouteChange.cend();
+        };
+        ok &= expect(hasRouteCall("pauseBackground")
+                         && hasRouteCall("pauseTouchhold")
+                         && hasRouteCall("stopSfxVoices")
+                         && hasRouteCall("invalidateOutputDevice")
+                         && !hasRouteCall("pause")
+                         && !hasRouteCall("resetCursor"),
+                     "paused route invalidation tears down the old endpoint without writing a second pause clock", err);
+        ok &= expect(runtime.beginManualPlaybackAfterDeviceCutoff()
+                         && !runtime.beginManualPlaybackAfterDeviceCutoff(),
+                     "paused route invalidation forces exactly the next explicit Play onto cold Prepare", err);
         runtime.prepareForShutdown();
     }
 
@@ -1073,8 +1118,9 @@ bool verifyOwnershipLifecycleAndDispatch(QTextStream& err)
                          && completion.executionDurationNs >= 0,
                      "completion carries worker and timing diagnostics", err);
         if (kind == CommandKind::ManualPause || kind == CommandKind::DeviceChangePause) {
+            const double expectedPauseSecond = kind == CommandKind::DeviceChangePause ? 2.0 : 4.75;
             ok &= expect(completion.pauseResult.usedBackgroundTrack
-                             && completion.pauseResult.pauseSecond == 4.75
+                             && completion.pauseResult.pauseSecond == expectedPauseSecond
                              && completion.pauseResult.retainedMode == RetainedPlaybackMode::PausedExact
                              && completion.pauseResult.retainedBgmState == RetainedBgmState::LoadedUsable
                              && completion.value == completion.pauseResult.pauseSecond,
@@ -2128,10 +2174,10 @@ bool verifyDevicePauseRetainsCoreResultWhenCleanupFails(QTextStream& err)
                      "device-pause preserves the first failure detail and native error", err);
         if (testCase.corePauseSucceeds) {
             ok &= expect(completion.pauseResult.usedBackgroundTrack
-                             && completion.pauseResult.pauseSecond == 4.75
+                             && completion.pauseResult.pauseSecond == 2.0
                              && completion.pauseResult.retainedMode == RetainedPlaybackMode::PausedExact
                              && completion.pauseResult.retainedBgmState == RetainedBgmState::LoadedUsable
-                             && completion.value == 4.75,
+                             && completion.value == 2.0,
                          "cleanup failure preserves the core pause result", err);
         } else {
             ok &= expect(!completion.pauseResult.usedBackgroundTrack
@@ -2155,6 +2201,44 @@ bool verifyDevicePauseRetainsCoreResultWhenCleanupFails(QTextStream& err)
             std::lock_guard lock(state->mutex);
             state->failureRules.clear();
         }
+    }
+
+    worker.shutdownAndJoin();
+    return ok;
+}
+
+bool verifyPlaybackCommandReportsUnavailableEngine(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    auto completions = std::make_shared<CompletionLog>();
+    PreviewAudioWorker worker(fakeFactory(state), [completions](const auto& completion) {
+        completions->append(completion);
+    });
+
+    bool ok = true;
+    ok &= expect(waitForLifecycle(worker, WorkerLifecycle::Ready),
+                 "unavailable-engine worker ready", err);
+    {
+        std::lock_guard lock(state->mutex);
+        state->engineInitialized = false;
+    }
+    const std::vector<CommandKind> playbackCommands{
+        CommandKind::Prepare,
+        CommandKind::Start,
+        CommandKind::ResumeRetained,
+        CommandKind::SeekRetained,
+    };
+    quint64 generation = 60;
+    for (const CommandKind kind : playbackCommands) {
+        const WorkerPostResult posted = worker.post(commandFor(kind, generation++, 1, 91));
+        PreviewAudioCompletion completion;
+        ok &= expect(posted.accepted && completions->waitFor(posted.sequence, &completion),
+                     "unavailable-engine playback completion received", err);
+        ok &= expect(!completion.success
+                         && completion.error == CommandError::BackendFailure
+                         && completion.nativeErrorCode == 37
+                         && completion.detail.contains(QStringLiteral("audio engine unavailable")),
+                     "unavailable engine is reported as a real playback failure", err);
     }
 
     worker.shutdownAndJoin();
@@ -2303,7 +2387,10 @@ bool verifyShutdownGateAndIdempotence(QTextStream& err)
     WorkerPostResult rejected;
     do {
         rejected = worker.post(commandFor(CommandKind::StopAll, 2, 1, 0));
-        if (!rejected.accepted) {
+        // A blocked worker can fill the bounded high-priority queue before the
+        // shutdown thread gets its first scheduling slice. QueueFull is not the
+        // producer gate: keep polling until shutdown itself closes the gate.
+        if (!rejected.accepted && rejected.error == CommandError::ShuttingDown) {
             break;
         }
         std::this_thread::yield();
@@ -2497,6 +2584,7 @@ int main(int argc, char* argv[])
     ok &= verifyDevicePauseBarrierDropsOlderQueuedPlayback(err);
     ok &= verifyDevicePauseBarrierRejectsOccupiedReservation(err);
     ok &= verifyDevicePauseRetainsCoreResultWhenCleanupFails(err);
+    ok &= verifyPlaybackCommandReportsUnavailableEngine(err);
     ok &= verifyShutdownWaitsForAuthorizedCallback(err);
     ok &= verifyWorkerThreadShutdownIsRejected(err);
     ok &= verifyShutdownGateAndIdempotence(err);

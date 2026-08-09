@@ -3,6 +3,10 @@
 #include <QObject>
 
 #include "PreviewAudioDeviceChangePolicy.h"
+#include "PreviewAudioDeviceCutoff.h"
+
+#include <functional>
+#include <mutex>
 
 class QMediaDevices;
 
@@ -20,23 +24,40 @@ class PreviewAudioDeviceWatcher : public QObject
 
 public:
     using Change = miacode::preview_audio::device_change::Change;
+    using DeviceCutoff = miacode::preview_audio::PreviewAudioDeviceCutoff;
+    // This callback is deliberately synchronous and must be safe to invoke on
+    // Core Audio's MTA callback thread.  It only posts an audio-worker barrier;
+    // GUI work remains on this QObject's thread through deviceCutoffRequested.
+    using DirectCutoffHandler = std::function<DeviceCutoff(Change)>;
 
     explicit PreviewAudioDeviceWatcher(QObject* parent = nullptr);
     ~PreviewAudioDeviceWatcher() override;
 
+    void setDirectCutoffHandler(DirectCutoffHandler handler);
+
     // Called by the Windows Core Audio endpoint callback. The callback itself may
-    // run outside the Qt GUI thread; this method only queues the lightweight
-    // notification back to this QObject's thread.
-    void handleNativeDefaultOutputChanged();
+    // run outside the Qt GUI thread; it first posts the audio cutoff barrier, then
+    // queues only the GUI-freeze notification back to this QObject's thread.
+    void handleNativeOutputChanged(Change change);
 
 signals:
+    void deviceCutoffRequested(const PreviewAudioDeviceWatcher::DeviceCutoff& cutoff);
     void outputConfigurationChanged(Change change);
 
 private:
+    // QMediaDevices is the portability fallback. On Windows it is created only when
+    // Core Audio endpoint notification registration is unavailable: enumerating Qt's
+    // output list synchronously on the GUI thread may block in AudioSes during a
+    // hotplug, whereas IMMNotificationClient already tells us that the topology moved.
+    void enableQtFallback();
+    DeviceCutoff requestDirectCutoff(Change change);
+    void deliverNativeOutputChange(const DeviceCutoff& cutoff);
     void handleAudioOutputsChanged();
 
     QMediaDevices* mediaDevices_ = nullptr;
     miacode::preview_audio::device_change::OutputSnapshot snapshot_;
     void* nativeEndpointNotificationClient_ = nullptr;
     bool nativeComInitialized_ = false;
+    std::mutex directCutoffHandlerMutex_;
+    DirectCutoffHandler directCutoffHandler_;
 };

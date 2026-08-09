@@ -1498,12 +1498,18 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // implementation with a separate, unproven report (问题 4), so auto-pausing there
     // would interrupt playback on no evidence.
     previewAudioDeviceWatcher_ = new PreviewAudioDeviceWatcher(this);
+    previewAudioDeviceWatcher_->setDirectCutoffHandler(
+        [runtime = previewSfxRuntime_](PreviewAudioDeviceWatcher::Change) {
+            return runtime != nullptr
+                ? runtime->requestDeviceChangeCutoff()
+                : miacode::preview_audio::PreviewAudioDeviceCutoff{};
+        });
     connect(previewAudioDeviceWatcher_,
-            &PreviewAudioDeviceWatcher::outputConfigurationChanged,
+            &PreviewAudioDeviceWatcher::deviceCutoffRequested,
             this,
-            [this](PreviewAudioDeviceWatcher::Change change) {
+            [this](const PreviewAudioDeviceWatcher::DeviceCutoff& cutoff) {
                 if (timelineSection_ != nullptr) {
-                    timelineSection_->pausePreviewForAudioDeviceChange(change);
+                    timelineSection_->applyPreviewAudioDeviceCutoff(cutoff);
                 }
             });
     logStartupStage("preview_audio_device_watcher_created");

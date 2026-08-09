@@ -220,6 +220,30 @@ bool verifyPriorityAndLatestReplacement(QTextStream& err)
     return ok;
 }
 
+bool verifyDeviceCutoffIsImmediateHighPriority(QTextStream& err)
+{
+    bool ok = true;
+    PreviewAudioCommandQueue queue;
+    ok &= expect(queue.enqueue(numbered(makeHigh(CommandKind::StopAll, 22), 1)).accepted,
+                 "ordinary high command accepted before cutoff", err);
+    ok &= expect(queue.enqueue(numbered(makeHigh(CommandKind::ManualPause, 22, 9), 2)).accepted,
+                 "manual pause accepted before cutoff", err);
+    ok &= expect(queue.enqueueDeviceChangePauseBarrier(numbered(devicePause(22, 9, 701), 3)).accepted,
+                 "device cutoff barrier accepted", err);
+
+    const auto first = queue.takeNext();
+    const auto second = queue.takeNext();
+    const auto third = queue.takeNext();
+    ok &= expect(first && first->kind == CommandKind::DeviceChangePause
+                     && first->identity.sequence == 3,
+                 "device cutoff runs before older high-priority work", err);
+    ok &= expect(second && second->identity.sequence == 1,
+                 "ordinary high FIFO resumes after device cutoff", err);
+    ok &= expect(third && third->identity.sequence == 2,
+                 "manual pause remains queued after device cutoff", err);
+    return ok;
+}
+
 bool verifyLatestGenerationOrdering(QTextStream& err)
 {
     bool ok = true;
@@ -497,6 +521,7 @@ int main()
     ok &= verifyCapacitiesAndReservedSlots(err);
     ok &= verifyManualPauseReserveAndOrdinarySpill(err);
     ok &= verifyPriorityAndLatestReplacement(err);
+    ok &= verifyDeviceCutoffIsImmediateHighPriority(err);
     ok &= verifyLatestGenerationOrdering(err);
     ok &= verifyLatestReplacementRefreshesFifoOrder(err);
     ok &= verifyPlaybackInvalidation(err);

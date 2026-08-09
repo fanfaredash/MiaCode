@@ -2,10 +2,14 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/UiHangWatchdog.h"
 
 #include <QAudioDevice>
+#include <QElapsedTimer>
 #include <QMetaObject>
 #include <QMediaDevices>
+
+#include <chrono>
 
 #ifdef Q_OS_WIN
 #include <mmdeviceapi.h>
@@ -20,16 +24,48 @@ namespace {
 using miacode::preview_audio::device_change::OutputSnapshot;
 using miacode::preview_audio::device_change::makeOutputSnapshot;
 
-OutputSnapshot currentOutputSnapshot()
+OutputSnapshot currentOutputSnapshot(const char* source)
 {
+    // This is only reached by the Qt fallback. Mark and time its synchronous
+    // Qt Multimedia enumeration so the watchdog and the log can distinguish that
+    // call from a GUI backlog ahead of it.
+    MIACODE_HANG_PHASE("audio/device_qt_snapshot", QString::fromUtf8(source));
+    QElapsedTimer elapsed;
+    const bool trace = miacode::debug_options::audioDebugOutputEnabled();
+    if (trace) {
+        elapsed.start();
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QStringLiteral("preview/audio_device"),
+            QStringLiteral("action=qt_snapshot_begin source=%1").arg(QLatin1String(source)));
+    }
     QStringList outputIds;
     const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
     outputIds.reserve(outputs.size());
     for (const QAudioDevice& output : outputs) {
         outputIds.append(QString::fromUtf8(output.id()));
     }
-    return makeOutputSnapshot(std::move(outputIds),
-                              QString::fromUtf8(QMediaDevices::defaultAudioOutput().id()));
+    OutputSnapshot snapshot = makeOutputSnapshot(
+        std::move(outputIds), QString::fromUtf8(QMediaDevices::defaultAudioOutput().id()));
+    if (trace) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QStringLiteral("preview/audio_device"),
+            QStringLiteral("action=qt_snapshot_end source=%1 elapsed_ms=%2 outputs=%3 default_output=%4")
+                .arg(QLatin1String(source))
+                .arg(elapsed.elapsed())
+                .arg(snapshot.outputIds.size())
+                .arg(snapshot.defaultOutputId.isEmpty() ? QStringLiteral("(none)")
+                                                        : snapshot.defaultOutputId));
+    }
+    return snapshot;
+}
+
+qint64 monotonicNowNs()
+{
+    return static_cast<qint64>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
 }
 
 }  // namespace
@@ -98,9 +134,23 @@ public:
         owner_ = nullptr;
     }
 
-    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override
+    {
+        notifyOwner(PreviewAudioDeviceWatcher::Change::OutputListChanged);
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override
+    {
+        notifyOwner(PreviewAudioDeviceWatcher::Change::OutputListChanged);
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override
+    {
+        notifyOwner(PreviewAudioDeviceWatcher::Change::OutputListChanged);
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
 
     HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(
@@ -108,19 +158,24 @@ public:
         ERole role,
         LPCWSTR) override
     {
-        if (flow != eRender || role != eConsole) {
+        if (flow != eRender || (role != eConsole && role != eMultimedia)) {
             return S_OK;
         }
-        // Held across the call, not just across the read: the owner may start destructing
-        // between a bare null check and the dereference. See detachOwner().
-        const std::lock_guard<std::mutex> lock(ownerMutex_);
-        if (owner_ != nullptr) {
-            owner_->handleNativeDefaultOutputChanged();
-        }
+        notifyOwner(PreviewAudioDeviceWatcher::Change::DefaultOutputChanged);
         return S_OK;
     }
 
 private:
+    void notifyOwner(PreviewAudioDeviceWatcher::Change change)
+    {
+        // Held across the call, not just across the read: the owner may start destructing
+        // between a bare null check and the dereference. See detachOwner().
+        const std::lock_guard<std::mutex> lock(ownerMutex_);
+        if (owner_ != nullptr) {
+            owner_->handleNativeOutputChanged(change);
+        }
+    }
+
     ~PreviewAudioNativeEndpointNotificationClient() = default;
 
     std::mutex ownerMutex_;
@@ -132,17 +187,7 @@ private:
 
 PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
     : QObject(parent)
-    , mediaDevices_(new QMediaDevices(this))
-    , snapshot_(currentOutputSnapshot())
 {
-    // Use AutoConnection so a notification already delivered on the GUI thread enters
-    // the snapshot comparison immediately instead of waiting behind other queued GUI
-    // work. If Qt raises it from another thread, Qt still queues it to this object's
-    // thread, keeping the consumer's BASS/timeline pause path off the notifier stack.
-    connect(mediaDevices_, &QMediaDevices::audioOutputsChanged,
-            this, &PreviewAudioDeviceWatcher::handleAudioOutputsChanged,
-            Qt::AutoConnection);
-
 #ifdef Q_OS_WIN
     // Sentinel for "this step was never reached", so the log can tell "CoCreateInstance
     // never ran" from "CoCreateInstance failed". Facility 0x7ff is unassigned, so no real
@@ -193,6 +238,14 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
         }
     }
 
+    // IMMNotificationClient is authoritative once registration succeeds. In particular,
+    // never create QMediaDevices on that path: its synchronous output snapshot has been
+    // observed blocking the GUI thread in AudioSes during a hotplug. The fallback remains
+    // available on Core Audio registration failure.
+    if (nativeEndpointNotificationClient_ == nullptr) {
+        enableQtFallback();
+    }
+
     // Without this line a capture that contains no `action=native_default_output_changed`
     // is ambiguous: the user may simply never have switched devices, or this listener may
     // never have armed. Mirrors `action=registration` in
@@ -203,18 +256,22 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
             miacode::debug_log::Channel::Audio,
             QStringLiteral("preview/audio_device"),
             QStringLiteral("action=native_registration com_hr=0x%1 com_owned=%2 "
-                           "enumerator_hr=0x%3 register_hr=0x%4 registered=%5 outputs=%6 "
-                           "default_output=%7")
+                           "enumerator_hr=0x%3 register_hr=0x%4 registered=%5 source=%6 "
+                           "fallback_outputs=%7 fallback_default_output=%8")
                 .arg(static_cast<quint32>(comResult), 8, 16, QLatin1Char('0'))
                 .arg(nativeComInitialized_ ? 1 : 0)
                 .arg(static_cast<quint32>(enumeratorResult), 8, 16, QLatin1Char('0'))
                 .arg(static_cast<quint32>(registerResult), 8, 16, QLatin1Char('0'))
                 .arg(nativeEndpointNotificationClient_ != nullptr ? 1 : 0)
+                .arg(nativeEndpointNotificationClient_ != nullptr
+                         ? QStringLiteral("core_audio")
+                         : QStringLiteral("qt_fallback"))
                 .arg(snapshot_.outputIds.size())
                 .arg(snapshot_.defaultOutputId.isEmpty() ? QStringLiteral("(none)")
                                                          : snapshot_.defaultOutputId));
     }
 #else
+    enableQtFallback();
     // There is no native endpoint listener off Windows — QMediaDevices is the only
     // source of device-change notifications here. Emitted so a non-Windows capture reads
     // as "not supported on this platform" rather than "armed and never fired".
@@ -225,6 +282,23 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
             QStringLiteral("action=native_registration supported=0"));
     }
 #endif
+}
+
+void PreviewAudioDeviceWatcher::enableQtFallback()
+{
+    if (mediaDevices_ != nullptr) {
+        return;
+    }
+
+    mediaDevices_ = new QMediaDevices(this);
+    snapshot_ = currentOutputSnapshot("qt_fallback_constructor");
+    // Use AutoConnection so a notification already delivered on the GUI thread enters
+    // the snapshot comparison immediately instead of waiting behind other queued GUI
+    // work. If Qt raises it from another thread, Qt still queues it to this object's
+    // thread, keeping the consumer's BASS/timeline pause path off the notifier stack.
+    connect(mediaDevices_, &QMediaDevices::audioOutputsChanged,
+            this, &PreviewAudioDeviceWatcher::handleAudioOutputsChanged,
+            Qt::AutoConnection);
 }
 
 PreviewAudioDeviceWatcher::~PreviewAudioDeviceWatcher()
@@ -258,73 +332,132 @@ PreviewAudioDeviceWatcher::~PreviewAudioDeviceWatcher()
         CoUninitialize();
     }
 #endif
+    // On Windows detachOwner() above is a barrier for an in-flight native callback;
+    // on other platforms this simply releases the fallback handler during teardown.
+    setDirectCutoffHandler({});
 }
 
-void PreviewAudioDeviceWatcher::handleNativeDefaultOutputChanged()
+void PreviewAudioDeviceWatcher::setDirectCutoffHandler(DirectCutoffHandler handler)
+{
+    const std::lock_guard<std::mutex> lock(directCutoffHandlerMutex_);
+    directCutoffHandler_ = std::move(handler);
+}
+
+PreviewAudioDeviceWatcher::DeviceCutoff PreviewAudioDeviceWatcher::requestDirectCutoff(Change change)
+{
+    DirectCutoffHandler handler;
+    {
+        const std::lock_guard<std::mutex> lock(directCutoffHandlerMutex_);
+        handler = directCutoffHandler_;
+    }
+    DeviceCutoff cutoff;
+    cutoff.change = change;
+    if (handler) {
+        cutoff = handler(change);
+        cutoff.change = change;
+    }
+    return cutoff;
+}
+
+void PreviewAudioDeviceWatcher::handleNativeOutputChanged(Change change)
 {
 #ifdef Q_OS_WIN
-    QMetaObject::invokeMethod(this, [this]() {
-        // The emit stays UNCONDITIONAL on purpose. This callback is the whole point of
-        // f82cfa64: Core Audio tells us the default output moved BEFORE Qt re-enumerates,
-        // so routing this through the snapshot comparison would usually find nothing
-        // changed yet and no pause would happen at all.
-        //
-        // Re-baseline the snapshot first, though. The Qt notification for this same
-        // physical event arrives shortly after and previously always compared as changed
-        // (the native path never touched snapshot_), emitting a second time for one device
-        // switch. That second emit was harmless -- the preview is already paused, so
-        // shouldPausePreview() swallows it -- but it duplicated log rows and hid which of
-        // the two paths a capture actually came through. Adopting the current state here
-        // makes the follow-up comparison find no delta.
-        //
-        // Runs on this object's thread (queued), the same thread as
-        // handleAudioOutputsChanged(), so snapshot_ needs no further synchronisation.
-        const QString previousDefaultOutputId = snapshot_.defaultOutputId;
-        snapshot_ = currentOutputSnapshot();
-        if (miacode::debug_options::audioDebugOutputEnabled()) {
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Audio,
-                QStringLiteral("preview/audio_device"),
-                QStringLiteral("action=native_default_output_changed default_before=%1 "
-                               "default_after=%2 outputs=%3")
-                    .arg(previousDefaultOutputId.isEmpty() ? QStringLiteral("(none)")
-                                                           : previousDefaultOutputId)
-                    .arg(snapshot_.defaultOutputId.isEmpty() ? QStringLiteral("(none)")
-                                                             : snapshot_.defaultOutputId)
-                    .arg(snapshot_.outputIds.size()));
-        }
-        emit outputConfigurationChanged(Change::DefaultOutputChanged);
-    }, Qt::QueuedConnection);
+    // Core Audio calls on its MTA. Queue the worker cutoff before posting GUI work:
+    // the operating system is allowed to move a default-following stream meanwhile.
+    const DeviceCutoff cutoff = requestDirectCutoff(change);
+    QMetaObject::invokeMethod(this, [this, cutoff] { deliverNativeOutputChange(cutoff); },
+                              Qt::QueuedConnection);
 #endif
+}
+
+void PreviewAudioDeviceWatcher::deliverNativeOutputChange(const DeviceCutoff& cutoff)
+{
+    DeviceCutoff delivered = cutoff;
+    delivered.guiDeliveryMonotonicNs = monotonicNowNs();
+    if (miacode::debug_options::audioDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QStringLiteral("preview/audio_device"),
+            QStringLiteral("action=native_output_event change=%1 cutoff_armed=%2 cutoff_posted=%3 "
+                           "cutoff_second=%4 event_ns=%5 gui_delivery_ns=%6 gui_delay_ms=%7 "
+                           "route_only=%8 emergency_attempted=%9 emergency_ok=%10 emergency_device=%11 "
+                           "emergency_error=%12 emergency_begin_ns=%13 emergency_end_ns=%14 generation=%15 "
+                           "sequence=%16 source=core_audio")
+                .arg(QLatin1String(changeName(delivered.change)))
+                .arg(delivered.armedPlaybackWasCut ? 1 : 0)
+                .arg(delivered.post.accepted ? 1 : 0)
+                .arg(delivered.cutoffSecond, 0, 'f', 6)
+                .arg(delivered.eventMonotonicNs)
+                .arg(delivered.guiDeliveryMonotonicNs)
+                .arg(delivered.eventMonotonicNs > 0
+                         ? static_cast<double>(delivered.guiDeliveryMonotonicNs - delivered.eventMonotonicNs) / 1'000'000.0
+                         : -1.0,
+                     0,
+                     'f',
+                     3)
+                .arg(delivered.outputRouteInvalidationOnly ? 1 : 0)
+                .arg(delivered.emergencyPauseAttempted ? 1 : 0)
+                .arg(delivered.emergencyPauseSucceeded ? 1 : 0)
+                .arg(delivered.emergencyPauseDeviceIndex)
+                .arg(delivered.emergencyPauseError)
+                .arg(delivered.emergencyPauseStartedNs)
+                .arg(delivered.emergencyPauseFinishedNs)
+                .arg(delivered.identity.generation)
+                .arg(delivered.identity.sequence));
+    }
+    if (delivered.armedPlaybackWasCut) {
+        emit deviceCutoffRequested(delivered);
+    }
+    emit outputConfigurationChanged(delivered.change);
 }
 
 void PreviewAudioDeviceWatcher::handleAudioOutputsChanged()
 {
     const OutputSnapshot previous = snapshot_;
-    OutputSnapshot current = currentOutputSnapshot();
+    OutputSnapshot current = currentOutputSnapshot("qt_signal");
     const Change change = compareSnapshots(previous, current);
     if (change == Change::None) {
         return;
     }
     snapshot_ = std::move(current);
 
-    // Audio channel, so this lands in miacode_audio_debug.log next to the
-    // `preview/playback pause_exact` it causes and the `bass_status` / `bgm_delta_ms`
-    // rows used to judge the desync.
+    // Qt is used only on non-Windows or after Windows native registration failed.
+    // It uses the same atomic cutoff protocol as the Core Audio source.
+    DeviceCutoff cutoff = requestDirectCutoff(change);
+    cutoff.guiDeliveryMonotonicNs = monotonicNowNs();
     if (miacode::debug_options::audioDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Audio,
             QStringLiteral("preview/audio_device"),
             QStringLiteral("action=outputs_changed change=%1 outputs_before=%2 outputs_after=%3 "
-                           "default_before=%4 default_after=%5")
+                           "default_before=%4 default_after=%5 cutoff_armed=%6 cutoff_posted=%7 "
+                           "cutoff_second=%8 event_ns=%9 gui_delivery_ns=%10 gui_delay_ms=%11 route_only=%12 "
+                           "generation=%13 sequence=%14")
                 .arg(QLatin1String(changeName(change)))
                 .arg(previous.outputIds.size())
                 .arg(snapshot_.outputIds.size())
                 .arg(previous.defaultOutputId.isEmpty() ? QStringLiteral("(none)")
                                                         : previous.defaultOutputId)
                 .arg(snapshot_.defaultOutputId.isEmpty() ? QStringLiteral("(none)")
-                                                         : snapshot_.defaultOutputId));
+                                                         : snapshot_.defaultOutputId)
+                .arg(cutoff.armedPlaybackWasCut ? 1 : 0)
+                .arg(cutoff.post.accepted ? 1 : 0)
+                .arg(cutoff.cutoffSecond, 0, 'f', 6)
+                .arg(cutoff.eventMonotonicNs)
+                .arg(cutoff.guiDeliveryMonotonicNs)
+                .arg(cutoff.eventMonotonicNs > 0
+                         ? static_cast<double>(cutoff.guiDeliveryMonotonicNs - cutoff.eventMonotonicNs) / 1'000'000.0
+                         : -1.0,
+                     0,
+                     'f',
+                     3)
+                .arg(cutoff.outputRouteInvalidationOnly ? 1 : 0)
+                .arg(cutoff.identity.generation)
+                .arg(cutoff.identity.sequence));
     }
 
+    if (cutoff.armedPlaybackWasCut) {
+        emit deviceCutoffRequested(cutoff);
+    }
     emit outputConfigurationChanged(change);
 }

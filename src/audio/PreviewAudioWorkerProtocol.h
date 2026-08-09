@@ -112,6 +112,10 @@ struct PreviewAudioCommand {
     double rate = 1.0;
     double gain = 1.0;
     bool option = false;
+    // DeviceChangePause uses this to perform endpoint teardown for a real output
+    // change observed while the preview is already paused.  It skips the transport
+    // pause/clock write, but keeps the high-priority barrier and output invalidation.
+    bool deviceRouteInvalidationOnly = false;
 
     qint64 enqueuedAtNs = 0;
 };

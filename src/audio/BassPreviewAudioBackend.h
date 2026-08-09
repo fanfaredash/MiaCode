@@ -67,6 +67,7 @@ public:
     RetainedBgmState retainedBgmState() const override;
     double authoritativePlaybackSecond() const override;
     void stopSfxVoices() override;
+    void invalidateOutputDevice() override;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond) override;
     void resetCursor(double second, bool includeCurrentSecond) override;
     void drainEvents(double second) override;
@@ -267,6 +268,9 @@ private:
     quint32 pluginAac_ = 0;
     quint32 pluginOpus_ = 0;
     miacode::preview_audio::PreviewBassDeviceLease bassDeviceLease_;
+    int bassOutputDeviceIndex_ = -1;
+    QString bassOutputEndpointId_;
+    bool outputDeviceRebuildRequired_ = false;
     void* bassFxModule_ = nullptr;
     void* bassFxTempoCreate_ = nullptr;
     RetainedPlaybackMode retainedPlaybackMode_ = RetainedPlaybackMode::None;

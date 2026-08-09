@@ -458,6 +458,14 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     if (!initializeAudioEngine()) {
         return startSecond;
     }
+    if (outputDeviceRebuildRequired_) {
+        // A device cutoff destroys the old BASS streams.  Recreate assets only on
+        // this explicit play path, never as part of the route-change callback.
+        initializeAssets();
+        outputDeviceRebuildRequired_ = false;
+        appendAudioDebugLog(QString("bass_output_rebuild_on_explicit_play txn=%1")
+                                .arg(playbackTransactionId_));
+    }
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
     setBackgroundTrackPlaybackRate(playbackRate);
     stopPlaybackSession();

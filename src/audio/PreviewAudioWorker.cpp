@@ -244,10 +244,14 @@ void PreviewAudioWorker::shutdownAndJoin()
         return;
     }
 
+    // Close producers before contending for wakeMutex_. A producer may post in a
+    // tight loop while shutdown is trying to acquire that lock; waiting to close the
+    // gate until after the lock lets it starve shutdown and accepts stale audio work.
+    acceptingPosts_.store(false, std::memory_order_release);
+
     {
         std::scoped_lock gateLock(callbackMutex_, wakeMutex_);
         callbackDeliveryEnabled_ = false;
-        acceptingPosts_.store(false, std::memory_order_release);
         {
             std::lock_guard barrierLock(nonGuiBarrierMutex_);
             nonGuiShuttingDown_ = true;
@@ -541,18 +545,29 @@ void PreviewAudioWorker::execute(
             completion.success = false;
             break;
         case CommandKind::DeviceChangePause: {
-            attemptDevicePauseStep([&] {
-                backend->setPlaybackTransactionId(command.identity.transactionId);
-            });
-            attemptDevicePauseStep([&] {
-                const PausePreviewResult result = backend->pausePreviewPlaybackTransaction();
-                completion.pauseResult = result;
-                completion.value = result.pauseSecond;
-            });
+            if (!command.deviceRouteInvalidationOnly) {
+                attemptDevicePauseStep([&] {
+                    backend->setPlaybackTransactionId(command.identity.transactionId);
+                });
+                attemptDevicePauseStep([&] {
+                    PausePreviewResult result = backend->pausePreviewPlaybackTransaction();
+                    // The native callback captured the one authoritative cutoff time.
+                    // Cleanup can run later, but must never publish a second clock sample.
+                    result.pauseSecond = command.second;
+                    completion.pauseResult = result;
+                    completion.value = command.second;
+                });
+            }
             attemptDevicePauseStep([&] { backend->pauseBackgroundTrack(); });
             attemptDevicePauseStep([&] { backend->pauseTouchholdVoices(); });
             attemptDevicePauseStep([&] { backend->stopSfxVoices(); });
-            attemptDevicePauseStep([&] { backend->resetCursor(command.second, false); });
+            if (!command.deviceRouteInvalidationOnly) {
+                attemptDevicePauseStep([&] { backend->resetCursor(command.second, false); });
+            }
+            // Do not retain a BASS stream after a physical route change.  Releasing the
+            // old endpoint here makes the next user-initiated play rebuild the assets on
+            // the new endpoint; it cannot resume buffers that were cut mid-sample.
+            attemptDevicePauseStep([&] { backend->invalidateOutputDevice(); });
             break;
         }
         case CommandKind::ManualPause: {
@@ -606,6 +621,12 @@ void PreviewAudioWorker::execute(
                 command.second,
                 command.option,
                 command.rate);
+            if (!backend->audioEngineInitialized()) {
+                completion.success = false;
+                completion.error = CommandError::BackendFailure;
+                completion.detail = QStringLiteral("audio engine unavailable after prepare");
+                completion.nativeErrorCode = backend->nativeErrorCode();
+            }
             break;
         case CommandKind::Commit:
             backend->commitPreparedPreviewPlayback();
@@ -618,12 +639,30 @@ void PreviewAudioWorker::execute(
                 command.second,
                 command.option,
                 command.rate);
+            if (!backend->audioEngineInitialized()) {
+                completion.success = false;
+                completion.error = CommandError::BackendFailure;
+                completion.detail = QStringLiteral("audio engine unavailable after start");
+                completion.nativeErrorCode = backend->nativeErrorCode();
+            }
             break;
         case CommandKind::ResumeRetained:
             completion.value = backend->resumeRetainedPreviewPlaybackTransaction();
+            if (!backend->audioEngineInitialized()) {
+                completion.success = false;
+                completion.error = CommandError::BackendFailure;
+                completion.detail = QStringLiteral("audio engine unavailable after retained resume");
+                completion.nativeErrorCode = backend->nativeErrorCode();
+            }
             break;
         case CommandKind::SeekRetained:
             completion.value = backend->seekRetainedPreviewPlaybackTransaction(command.second, command.option);
+            if (!backend->audioEngineInitialized()) {
+                completion.success = false;
+                completion.error = CommandError::BackendFailure;
+                completion.detail = QStringLiteral("audio engine unavailable after retained seek");
+                completion.nativeErrorCode = backend->nativeErrorCode();
+            }
             break;
         case CommandKind::ResetRetained:
             backend->resetRetainedPreviewPlaybackTransaction(command.second);

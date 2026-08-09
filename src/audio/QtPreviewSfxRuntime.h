@@ -1,11 +1,13 @@
 #pragma once
 
+#include "PreviewAudioDeviceCutoff.h"
 #include "PreviewAudioWorker.h"
 
 #include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 #include <QObject>
 
@@ -91,6 +93,19 @@ public:
         quint64 deviceSequence,
         quint64 pauseToken,
         double pauseSecond);
+    // These three functions form the native device-change path. They are safe to
+    // call from Core Audio's MTA callback: no QObject state is touched and the only
+    // side effect is a thread-safe worker barrier post.  A call made while playback
+    // is already paused posts a route-invalidation-only barrier so the next explicit
+    // Play cannot retain the old endpoint.
+    void armDeviceChangeCutoffClock(double startSecond, double playbackRate, quint64 transactionId);
+    void disarmDeviceChangeCutoffClock();
+    miacode::preview_audio::PreviewAudioDeviceCutoff requestDeviceChangeCutoff();
+    // The GUI calls this only for an explicit subsequent play request. The return
+    // value forces that first request onto the cold Prepare path, never retained
+    // resume, after a physical cutoff.
+    bool beginManualPlaybackAfterDeviceCutoff();
+    std::optional<Completion> takeCompletedDeviceChangeCutoff(quint64 sequence);
     PlaybackSubmission resumeRetainedPreviewPlaybackTransaction();
     PlaybackSubmission seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying);
     void resetRetainedPreviewPlaybackTransaction(double targetSecond);
@@ -142,6 +157,14 @@ private:
         std::atomic_bool deliveryEnabled{true};
     };
 
+    struct DeviceChangeCutoffClock {
+        bool armed = false;
+        std::chrono::steady_clock::time_point anchoredAt;
+        double startSecond = 0.0;
+        double playbackRate = 1.0;
+        quint64 transactionId = 0;
+    };
+
     miacode::preview_audio::WorkerPostResult post(miacode::preview_audio::PreviewAudioCommand command);
     miacode::preview_audio::WorkerPostResult postDeviceChangePauseBarrier(
         miacode::preview_audio::PreviewAudioCommand command);
@@ -155,14 +178,22 @@ private:
     void shutdownWorker();
 
     std::unique_ptr<miacode::preview_audio::PreviewAudioWorker> worker_;
+    // Guards the one non-GUI producer (the Core Audio callback) against worker
+    // teardown. GUI methods stay on QObject's thread and retain their existing model.
+    std::mutex workerLifecycleMutex_;
     std::shared_ptr<CallbackState> callbackState_;
     mutable std::mutex snapshotMutex_;
     miacode::preview_audio::PreviewAudioSnapshot lastSnapshot_;
     std::atomic_bool acceptingCommands_{true};
-    quint64 playbackGeneration_ = 1;
-    quint64 assetGeneration_ = 1;
-    quint64 transactionId_ = 0;
-    quint64 deviceSequence_ = 0;
+    std::atomic<quint64> playbackGeneration_{1};
+    std::atomic<quint64> assetGeneration_{1};
+    std::atomic<quint64> transactionId_{0};
+    std::atomic<quint64> deviceSequence_{0};
+    std::atomic_bool deviceCutoffActive_{false};
+    std::mutex deviceChangeCutoffClockMutex_;
+    DeviceChangeCutoffClock deviceChangeCutoffClock_;
+    std::mutex completedDeviceCutoffMutex_;
+    std::optional<Completion> completedDeviceCutoff_;
 };
 
 Q_DECLARE_METATYPE(QtPreviewSfxRuntime::Completion)

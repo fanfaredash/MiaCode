@@ -103,6 +103,10 @@ public:
     // that tail outlives the route switch and is heard as a stray note AFTER the
     // preview has visibly stopped. Default no-op, so the miniaudio backend is unchanged.
     virtual void stopSfxVoices() {}
+    // A physical output-route change invalidates the old transport. Backends that own
+    // a concrete endpoint release it here; the next explicit play rebuilds on the
+    // current endpoint instead of resuming cut-off buffers on a replacement device.
+    virtual void invalidateOutputDevice() {}
     virtual double syncPreviewPlaybackClockTransaction(double fallbackSecond) = 0;
     virtual void resetCursor(double second, bool includeCurrentSecond) = 0;
     virtual void drainEvents(double second) = 0;

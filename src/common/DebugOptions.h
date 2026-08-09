@@ -242,6 +242,17 @@ inline int uiHangIdleHeartbeatMs()
     return value > 0 ? value : 5000;
 }
 
+// Windows-only destructive diagnostic. Disabled by default: when positive, the
+// watchdog terminates the process once its GUI-heartbeat age reaches this value.
+// An external dump collector can then capture every thread at the actual blocking
+// point, instead of after the GUI loop has resumed. It has no effect without runtime
+// debug output because the watchdog is not installed in that mode.
+inline int uiHangCrashAfterMs()
+{
+    const int value = envIntValue("MIACODE_UI_HANG_CRASH_AFTER_MS", 0);
+    return value > 0 ? value : 0;
+}
+
 inline bool previewFixedTimerHighResolutionEnabled()
 {
     return envFlagEnabled("MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES");

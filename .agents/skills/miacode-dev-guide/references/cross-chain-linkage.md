@@ -171,8 +171,11 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
   stale-command pruning drop the required path update and leaves BGM unloaded. This is shared by
   MainWindow startup/chart-reload paths and `soundtouch_probe`.
 - `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
-  GUI/video state before submitting the reserved high-priority device pause. The worker later stops
-  audio/SFX; it does not advance the playhead and it must not auto-resume after a device recovers.
+  GUI/video state before submitting the reserved high-priority device pause. On Windows, a successful
+  IMM registration is the sole hotplug source: do not construct or synchronously enumerate
+  `QMediaDevices` on that path, because its AudioSes RPC can block the GUI during a switch. Qt remains
+  the registration-failure and non-Windows fallback. The worker later stops audio/SFX; it does not
+  advance the playhead and it must not auto-resume after a device recovers.
 - `PreviewBassDeviceLease` is shared by preview, waveform, and export BASS lifecycle users. Keep
   BASS global device init/free serialization there, but keep normal channel work within its owner.
 

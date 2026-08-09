@@ -44,6 +44,30 @@ same change.
 - Tools: `src/tools/{latency,muri,video_export,chart_transform,...}`
 - Shared config headers + logging + oplog: `src/common/`
 
+### Preview-audio device-cutoff contract (Windows, updated 2026-08-09)
+
+- `PreviewAudioDeviceWatcher` uses IMM endpoint callbacks as the sole Windows source when
+  native registration succeeds; it creates `QMediaDevices` only as the Windows-registration
+  fallback and on non-Windows. Its direct-cutoff handler may run on Core Audio's MTA, so it calls only
+  `QtPreviewSfxRuntime::requestDeviceChangeCutoff()`. That method closes the playback
+  generation and synchronously invokes `PreviewBassEmergencyPause` on the previously
+  bound concrete BASS output; GUI freezing is delivered later by `deviceCutoffRequested`
+  to `TimelineSection`.
+- `QtPreviewSfxRuntime` captures the cutoff chart-second from its monotonic playback
+  anchor and posts one `DeviceChangePause` worker barrier. The GUI must use that
+  captured second and identity, never sample a second clock or post a duplicate pause.
+- If the same notification arrives while the clock is not armed, the runtime still
+  posts a route-invalidation-only barrier. It must release the concrete endpoint and
+  retained stream without emitting a GUI pause or clock sample; the next explicit Play
+  must cold-Prepare. The paused PV/BG/outline policy is applied synchronously with the
+  GUI playing-state flip, never through a deferred UI-tail callback.
+- Windows BASS must set `BASS_CONFIG_DEV_DEFAULT=FALSE` exactly once before its first
+  enumeration/init, then bind `BASS_Init` to the resolved Core Audio endpoint ID. BASS
+  does not reopen that configuration window after `BASS_Free`, so rebuilds must reuse
+  the first configuration result rather than call `BASS_SetConfig` again. On a cutoff
+  the backend destroys its streams/device lease; only the next explicit Play may rebuild
+  assets on the current endpoint. Do not reintroduce `BASS_Init(-1)` on this path.
+
 > Note: `src/simai/`, `src/preview/scene/`, `src/preview/audio/`, `src/preview/video/` are
 > OLD paths from before the "first-unification" reorg. They no longer exist. `src/render/`
 > and `src/sources/` are also gone (DComp removal, 2026-08-07). If a doc or comment points

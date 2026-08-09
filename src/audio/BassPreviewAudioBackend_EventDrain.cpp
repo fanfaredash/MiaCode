@@ -1,5 +1,7 @@
 #include "BassPreviewAudioBackend.h"
 
+#include "PreviewBassEmergencyPause.h"
+
 #include "BassPreviewDebugLogRouting.h"
 #include "BassPreviewRetainedState.h"
 #include "common/ChartAssetPaths.h"
@@ -655,5 +657,6 @@ void BassPreviewAudioBackend::prepareForShutdown()
 {
     MC_OP("BassPreviewAudioBackend::prepareForShutdown");
     shuttingDown_.store(true, std::memory_order_release);
+    miacode::preview_audio::PreviewBassEmergencyPause::disarm();
     stopAll();
 }

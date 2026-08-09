@@ -348,6 +348,12 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
         state_.qtPreviewElapsed_.restart();
         state_.qtPreviewTimelineStartSecond_ = chartNow;
         state_.qtPreviewTimelineElapsed_.restart();
+        if (state_.previewSfxRuntime_ != nullptr) {
+            state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
+                chartNow,
+                state_.previewPlaybackRate_,
+                state_.activePreviewPlaybackTransactionId_);
+        }
     }
     if (ui_.previewSpeedButton_ != nullptr) {
         QString rateText = QString::number(state_.previewPlaybackRate_, 'f', 2);
@@ -510,8 +516,12 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     // audio-channel lines with the runtime channel's preview/resource_gauge — the
     // correlation docs/audit/AUDIO_CLOCK_DESYNC_AUDIT_ZH.md phase A asks an
     // investigator to use.
+    bool forceFreshAudioPrepare = false;
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setPlaybackTransactionId(playbackTxn);
+        // Only an explicit Play request reopens command submission after a physical
+        // device cutoff. The previous session's queued/tail audio stays discarded.
+        forceFreshAudioPrepare = state_.previewSfxRuntime_->beginManualPlaybackAfterDeviceCutoff();
     }
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->setPlaybackTransactionId(playbackTxn);
@@ -572,7 +582,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     bool retainedStartup = false;
     bool retainedStartupUsedSeek = false;
     int retainedModeValue = -1;
-    if (resumeFromPause && state_.previewSfxRuntime_ != nullptr) {
+    if (resumeFromPause && !forceFreshAudioPrepare && state_.previewSfxRuntime_ != nullptr) {
         const QtPreviewSfxRuntime::RetainedPlaybackMode retainedMode =
             state_.previewSfxRuntime_->retainedPlaybackMode();
         if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
@@ -758,6 +768,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     resetVisualClockSmoothing();
     requestPausedPreviewSeek(state_.qtPreviewPauseSecond_, false, true);
     if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->disarmDeviceChangeCutoffClock();
         state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(state_.qtPreviewPauseSecond_);
     }
     updatePreviewSliderPosition(state_.qtPreviewPauseSecond_);

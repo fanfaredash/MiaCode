@@ -1,5 +1,7 @@
 #include "BassPreviewAudioBackend.h"
 
+#include "PreviewBassEmergencyPause.h"
+
 #include "BassPreviewDebugLogRouting.h"
 #include "BassPreviewRetainedState.h"
 #include "common/ChartAssetPaths.h"
@@ -42,6 +44,7 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
     appendAudioDebugLog("BassPreviewAudioBackend destroying");
     shuttingDown_.store(true, std::memory_order_release);
 #ifdef MIACODE_HAS_BASS_AUDIO
+    miacode::preview_audio::PreviewBassEmergencyPause::disarm();
     // PreviewAudioWorker serializes health sampling with shutdown on this backend thread.
     stopPlaybackSession();
     resetAssets();

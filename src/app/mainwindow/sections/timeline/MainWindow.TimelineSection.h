@@ -3,6 +3,7 @@
 #include "../../MainWindow.h"
 
 #include "audio/PreviewAudioDeviceChangePolicy.h"
+#include "audio/PreviewAudioDeviceCutoff.h"
 
 namespace miacode::preview_audio {
 struct PreviewAudioCompletion;
@@ -203,9 +204,11 @@ public:
     // audio-device auto-pause, the one path where a process stall makes the two diverge
     // measurably — the divergence is logged as pause_audio_stall_observed and acted on by
     // nobody, because at a device switch the stalled audio is lost rather than deferred.
-    enum class PauseSecondSource { WallClock, AudioPosition };
+    enum class PauseSecondSource { WallClock, AudioPosition, NativeDeviceCutoff };
     void pauseQtPreviewPlaybackExact(PauseSecondSource pauseSecondSource = PauseSecondSource::WallClock);
     void pausePreviewForAudioDeviceChange(miacode::preview_audio::device_change::Change change);
+    void applyPreviewAudioDeviceCutoff(
+        const miacode::preview_audio::PreviewAudioDeviceCutoff& cutoff);
     void handlePreviewStartupCanvasPresented();
     void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);
     void handlePreviewAudioPrepared(const miacode::preview_audio::PreviewAudioCompletion& completion);

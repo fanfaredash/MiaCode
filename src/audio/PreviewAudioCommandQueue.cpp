@@ -218,6 +218,20 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
         ManualPause,
     };
 
+    // A device-cutoff barrier is a safety boundary, not merely another high-priority
+    // action.  It must run before an already-queued StopAll/manual pause/ordinary
+    // command so no stale playback command can observe the newly selected output.
+    if (shutdown_) {
+        PreviewAudioCommand command = std::move(shutdown_->command);
+        shutdown_.reset();
+        return command;
+    }
+    if (devicePause_) {
+        PreviewAudioCommand command = std::move(devicePause_->command);
+        devicePause_.reset();
+        return command;
+    }
+
     Source source = Source::None;
     quint64 firstOrder = std::numeric_limits<quint64>::max();
     const auto consider = [&source, &firstOrder](Source candidate, const Entry* entry) {
@@ -230,8 +244,6 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
         firstOrder = high_.front().order;
         source = Source::Ordinary;
     }
-    consider(Source::Shutdown, shutdown_ ? &*shutdown_ : nullptr);
-    consider(Source::DevicePause, devicePause_ ? &*devicePause_ : nullptr);
     consider(Source::ManualPause, manualPause_ ? &*manualPause_ : nullptr);
 
     if (source == Source::None) {

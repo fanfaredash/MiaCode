@@ -53,6 +53,15 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 
 ## High-Risk Sync Areas
 
+- Windows preview-audio device cutoff spans `PreviewAudioDeviceWatcher` (Core Audio
+  callback; `QMediaDevices` is only the native-registration fallback), `QtPreviewSfxRuntime` (generation/cutoff second),
+  `PreviewBassEmergencyPause` (synchronous old-output pause), `PreviewAudioWorker`
+  (stream cleanup), `BassPreviewAudioBackend` (concrete endpoint rebuild), and
+  `TimelineSection` (single GUI freeze second). Keep the cutoff second and generation
+  single-source. A change while paused still needs a route-invalidation-only worker
+  barrier (no second GUI clock sample); the first explicit post-change Play must use
+  cold Prepare, never retained resume. Pause-hide PV/BG/outline state is synchronous
+  with the GUI playing-state flip, not a deferred UI-tail action.
 - Runtime SFX timeline and export SFX timeline must stay aligned.
 - Background media resolution is implemented in both preview-time and export-time code.
 - Track path resolution is implemented in multiple places.

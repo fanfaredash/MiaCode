@@ -514,11 +514,14 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/audio/PreviewAudioPlaybackFlowPolicy.h
     src/audio/PreviewAudioCommandQueue.h
     src/audio/PreviewAudioCommandQueue.cpp
+    src/audio/PreviewBassEmergencyPause.h
+    src/audio/PreviewBassEmergencyPause.cpp
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
     src/audio/MiniaudioPreviewAudioBackend.cpp
     src/audio/PreviewAudioDeviceChangePolicy.h
+    src/audio/PreviewAudioDeviceCutoff.h
     src/audio/PreviewAudioDeviceWatcher.h
     src/audio/PreviewAudioDeviceWatcher.cpp
     src/audio/QtPreviewSfxRuntime.h
@@ -1047,6 +1050,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioWorkerProtocol.h
             src/audio/PreviewAudioCommandQueue.h
             src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewBassEmergencyPause.h
+            src/audio/PreviewBassEmergencyPause.cpp
             src/audio/PreviewAudioWorkerFactory.h
             src/audio/PreviewAudioWorkerFactory.cpp
             src/audio/PreviewAudioWorker.h
@@ -1083,6 +1088,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         target_link_libraries(soundtouch_probe PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+            avrt
         )
         add_custom_command(TARGET soundtouch_probe POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1528,6 +1534,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioWorker.cpp
             src/audio/QtPreviewSfxRuntime.h
             src/audio/QtPreviewSfxRuntime.cpp
+            src/audio/PreviewBassEmergencyPause.h
+            src/audio/PreviewBassEmergencyPause.cpp
             src/audio/PreviewBassDeviceLease.h
             src/audio/PreviewBassDeviceLease.cpp
         LIBS Qt6::Core soundtouch
@@ -1587,6 +1595,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/audio src/common src/timeline
     )
+    if (WIN32)
+        target_link_libraries(preview_audio_non_gui_barrier_spec PRIVATE avrt)
+    endif()
 
     miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
         SOURCES

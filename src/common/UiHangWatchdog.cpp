@@ -15,6 +15,10 @@
 #include <thread>
 #include <utility>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 namespace miacode::hang_watchdog {
 namespace {
 
@@ -54,6 +58,11 @@ std::atomic<bool> g_enabled{false};
 std::atomic<bool> g_stop{false};
 std::atomic<qint64> g_lastHeartbeatMs{0};
 std::atomic<quint64> g_nextGeneration{0};
+#ifdef Q_OS_WIN
+// A debugger may continue the first chance fast-fail notification, so the guard is
+// still required even though the normal fail-fast path never returns.
+std::atomic_bool g_diagnosticCrashTriggered{false};
+#endif
 std::once_flag g_threadOnce;
 std::thread g_thread;
 std::mutex g_phaseMutex;
@@ -187,12 +196,52 @@ void appendStallReport(
         payload);
 }
 
+void maybeTriggerDiagnosticCrash(
+    qint64 crashAfterMs,
+    qint64 heartbeatAgeMs,
+    const PhaseState& phase)
+{
+#ifdef Q_OS_WIN
+    if (crashAfterMs <= 0 || heartbeatAgeMs < crashAfterMs) {
+        return;
+    }
+    bool expected = false;
+    if (!g_diagnosticCrashTriggered.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel, std::memory_order_acquire)) {
+        return;
+    }
+
+    // This is deliberately raised by the watchdog while the GUI heartbeat is stale:
+    // the resulting full dump contains the blocked GUI call stack, not its recovered
+    // continuation. The line also identifies the dump trigger in the runtime log.
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/hang_watchdog"),
+        QStringLiteral("action=diagnostic_crash heartbeat_age_ms=%1 crash_after_ms=%2 "
+                       "phase_active=%3 phase=%4")
+            .arg(heartbeatAgeMs)
+            .arg(crashAfterMs)
+            .arg(phase.active ? 1 : 0)
+            .arg(phase.phase.isEmpty() ? QStringLiteral("(none)") : phase.phase),
+        /*force=*/true,
+        miacode::debug_log::Level::Fatal);
+    ::RaiseFailFastException(nullptr, nullptr, 0);
+    // STATUS_FAIL_FAST_EXCEPTION is not exposed by every Windows SDK we support.
+    constexpr UINT kFailFastExitCode = 0xC0000409u;
+    ::TerminateProcess(::GetCurrentProcess(), kFailFastExitCode);
+#else
+    Q_UNUSED(heartbeatAgeMs);
+    Q_UNUSED(phase);
+#endif
+}
+
 void watchdogLoop()
 {
     // Sampled once, not per loop: an env lookup every 500 ms is waste, and a threshold
     // that changed mid-session would make a capture impossible to interpret.
     const qint64 activePhaseTimeoutMs = activePhaseHangMs();
     const qint64 idleHeartbeatTimeoutMs = idleHeartbeatHangMs();
+    const qint64 diagnosticCrashAfterMs = miacode::debug_options::uiHangCrashAfterMs();
 
     policy::Trigger reportedTrigger = policy::Trigger::None;
     quint64 reportedGeneration = 0;
@@ -269,6 +318,7 @@ void watchdogLoop()
             ? qMax<qint64>(0, now - lastHeartbeat)
             : 0;
         const PhaseState phase = snapshotPhase();
+        maybeTriggerDiagnosticCrash(diagnosticCrashAfterMs, heartbeatAge, phase);
         // Classified before the stall block so the stall row can carry the hang verdict for
         // the same poll. Pure function, no side effects — evaluating it early changes
         // nothing except what the log can say.
@@ -397,10 +447,11 @@ void installGuiHeartbeat(QObject* owner)
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/hang_watchdog"),
         QStringLiteral("action=installed heartbeat_ms=%1 active_phase_timeout_ms=%2 "
-                       "idle_heartbeat_timeout_ms=%3")
+                       "idle_heartbeat_timeout_ms=%3 diagnostic_crash_after_ms=%4")
             .arg(kHeartbeatIntervalMs)
             .arg(activePhaseHangMs())
-            .arg(idleHeartbeatHangMs()));
+            .arg(idleHeartbeatHangMs())
+            .arg(miacode::debug_options::uiHangCrashAfterMs()));
 }
 
 void setPhase(const char* phase, const QString& detail)
