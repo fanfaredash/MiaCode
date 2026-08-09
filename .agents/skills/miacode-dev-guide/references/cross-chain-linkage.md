@@ -230,7 +230,12 @@ PV in the prepared export task, never in the live/export-page preview.
 state's device-aware, glyph-safe HUD line layout. The dialog also applies it as a temporary live
 preview override while the export-video page is active; `restoreLivePreviewState` and
 `endExportPreviewSession` force it false on exit. The false branch preserves the original chart-info
-and object-stats baseline calculations.
+and object-stats baseline calculations. The enabled branch derives same-font line advances from
+device-bound glyph top/bottom bounds and cross-font advances from the previous glyph bottom to the
+next glyph top (with typographic ascent/descent as a floor). The chart-info first baseline also uses
+the actual glyph top so custom-font overshoot cannot intrude into the configured HUD padding.
+`MIACODE_PREVIEW_HUD_PAINT_DIAG=1` records the flag plus the resolved HUD font metrics, calculated
+advances, and chart-info visible top.
 
 ## 9. Shared render state flows through preview and export
 
