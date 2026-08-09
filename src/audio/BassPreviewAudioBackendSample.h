@@ -558,16 +558,32 @@ struct BassPreviewAudioBackend::Sample {
         noteBassErr("sample_play/clear_pause_flag");
     }
 
-    void playOneShot(double eventGain)
+    bool playOneShot(double eventGain, int* nativeErrorCode = nullptr)
     {
+        if (nativeErrorCode != nullptr) {
+            *nativeErrorCode = 0;
+        }
         if (!valid()) {
-            return;
+            return false;
         }
         applyVolume(eventGain);
-        BASS_Mixer_ChannelSetPosition(source, 0, BASS_POS_BYTE);
-        noteBassErr("sample_one_shot/seek_zero");
-        BASS_Mixer_ChannelFlags(source, 0, BASS_MIXER_CHAN_PAUSE);
-        noteBassErr("sample_one_shot/clear_pause_flag");
+        const bool seeked = BASS_Mixer_ChannelSetPosition(source, 0, BASS_POS_BYTE);
+        const int seekError = noteBassErr("sample_one_shot/seek_zero");
+        if (!seeked) {
+            if (nativeErrorCode != nullptr) {
+                *nativeErrorCode = seekError;
+            }
+            return false;
+        }
+        const DWORD flags = BASS_Mixer_ChannelFlags(source, 0, BASS_MIXER_CHAN_PAUSE);
+        const int flagsError = noteBassErr("sample_one_shot/clear_pause_flag");
+        if (flags == static_cast<DWORD>(-1)) {
+            if (nativeErrorCode != nullptr) {
+                *nativeErrorCode = flagsError;
+            }
+            return false;
+        }
+        return true;
     }
 
     void pause()

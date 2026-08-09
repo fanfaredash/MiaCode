@@ -398,8 +398,7 @@ void reclaimGeometriesFromTree(QSGNode* parent, TimelineQuickGeometryPool* pool)
 // Coalesces consecutive textured quads sharing a texture into a single
 // QSGGeometryNode with N*6 vertices (triangle list — 2 triangles per
 // quad). On a texture transition, finishes the current batch as a node
-// and starts a new accumulator. Mirrors PreviewDCompSpritePipeline's
-// DrawRun coalescing on the new pipeline side.
+// and starts a new accumulator.
 
 TimelineQuickSpriteBatchBuilder::TimelineQuickSpriteBatchBuilder(QSGNode* parent,
                                                                   TimelineQuickGeometryPool* pool)

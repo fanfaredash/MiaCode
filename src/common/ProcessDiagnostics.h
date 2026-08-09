@@ -1,7 +1,10 @@
 #pragma once
 
+#include <QList>
 #include <QString>
 #include <QtGlobal>
+
+class QObject;
 
 // Process-resource & leak-hunt diagnostics. Split out of common/DebugLog.h so the
 // logging header stays a pure channelized writer (see the note there). These sample
@@ -17,6 +20,60 @@ namespace miacode::diag {
 // appendLine(Channel::Runtime, "preview/resource_gauge", …) so a monotonic climb across
 // edit→play→pause cycles localises the leak (handles vs GPU/memory vs QObject churn).
 QString processResourceGaugePayload();
+
+// Install one debug-only GUI-thread timer that records a process resource
+// baseline immediately and then every 30 seconds. Idempotent per owner.
+// Each tick also emits the per-adapter VRAM gauge described below.
+void installPeriodicProcessResourceGauge(QObject* owner);
+
+// ---------------------------------------------------------------------------
+// Per-adapter VRAM gauge (DXGI, Windows only)
+// ---------------------------------------------------------------------------
+// Why per-ADAPTER and not per-device: on the reported failing machine (i5-1155G7 +
+// MX450 2 GB + Iris Xe) MiaCode straddles both GPUs — the root window is bound to the
+// high-performance adapter while the preview composite surface stays on the default
+// adapter — and OBS's NVENC encoder lands on the same 2 GB card as the root window.
+// Once this process's CurrentUsage crosses Budget, DXGI evicts resources to system
+// memory and every subsequent frame re-uploads them over PCIe. That is a cliff, not a
+// slope, which is the leading explanation for the ~10x density collapse. Seeing it
+// requires Budget-vs-CurrentUsage for EACH adapter over time, not one combined number.
+//
+// QueryVideoMemoryInfo reports THIS PROCESS's usage and THIS PROCESS's budget (the
+// budget the OS is currently willing to grant us, which shrinks as other processes take
+// VRAM), so a shrinking budget is itself the signature of third-party contention.
+struct AdapterVideoMemorySample {
+    int index = -1;
+    QString description;
+    QString luid;                        // hex form of DXGI_ADAPTER_DESC1::AdapterLuid
+    quint32 vendorId = 0;
+    quint32 deviceId = 0;
+    bool software = false;               // DXGI_ADAPTER_FLAG_SOFTWARE (WARP)
+    bool queried = false;                // IDXGIAdapter3::QueryVideoMemoryInfo succeeded
+    quint64 dedicatedVideoMemoryMb = 0;  // static capacity, from the adapter desc
+    quint64 sharedSystemMemoryMb = 0;
+    quint64 localBudgetMb = 0;           // DXGI_MEMORY_SEGMENT_GROUP_LOCAL (real VRAM)
+    quint64 localUsageMb = 0;
+    quint64 localReservedMb = 0;
+    quint64 nonLocalBudgetMb = 0;        // DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL (sysmem)
+    quint64 nonLocalUsageMb = 0;
+    quint64 nonLocalReservedMb = 0;
+};
+
+// Enumerate every DXGI adapter and sample this process's video-memory budget/usage on
+// each. Returns an empty list on non-Windows or when DXGI is unavailable. Cheap enough
+// for the 30 s gauge; do NOT call per frame (it creates and releases a DXGI factory).
+QList<AdapterVideoMemorySample> sampleAdapterVideoMemory();
+
+// Render one sample as a stable `key=value` payload. Pure and platform-independent so
+// the log format is covered by a spec on macOS too.
+QString formatAdapterVideoMemoryPayload(const AdapterVideoMemorySample& sample);
+
+// Combined LOCAL + NON_LOCAL CurrentUsage (KB) for one already-obtained IDXGIAdapter,
+// passed as void* so this header stays free of DXGI types. Returns -1 when unavailable.
+// This is the shared primitive behind BOTH the per-adapter gauge above and the timeline
+// leak gauge's `gpu_kb` (timeline/quick/TimelineQuickItem.cpp), which previously carried
+// its own copy of the same QueryVideoMemoryInfo call.
+qint64 adapterProcessVideoMemoryUsageKb(void* dxgiAdapter);
 
 // RAII memory-delta tracer for the leak hunt. On construction (only when runtime debug output
 // is enabled) it samples process private bytes; on destruction it samples again and logs

@@ -192,20 +192,20 @@ bool BassExportAudioBackend::initializeBass(QString* errorMessage)
     }
     return false;
 #else
-    if (ownsBassInit_) {
+    if (bassDeviceLease_.acquired()) {
         return true;
     }
-    const DWORD currentDevice = BASS_GetDevice();
-    if (currentDevice != static_cast<DWORD>(-1)) {
-        return true;
-    }
-    if (!BASS_Init(0, kMixSampleRate, BASS_DEVICE_NOSPEAKER, nullptr, nullptr)) {
+    bassDeviceLease_ = miacode::preview_audio::PreviewBassDeviceLease::acquire({
+        [] { return static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(BASS_GetDevice()); },
+        [] { return BASS_Init(0, kMixSampleRate, BASS_DEVICE_NOSPEAKER, nullptr, nullptr) != FALSE; },
+        [] { BASS_Free(); },
+    });
+    if (!bassDeviceLease_.acquired()) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("BASS_Init failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode()));
         }
         return false;
     }
-    ownsBassInit_ = true;
     return true;
 #endif
 }
@@ -213,10 +213,7 @@ bool BassExportAudioBackend::initializeBass(QString* errorMessage)
 void BassExportAudioBackend::shutdownBass()
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
-    if (ownsBassInit_) {
-        BASS_Free();
-        ownsBassInit_ = false;
-    }
+    bassDeviceLease_.release();
 #endif
 }
 

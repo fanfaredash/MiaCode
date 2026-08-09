@@ -354,8 +354,6 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     "掉帧→必须重启/闪退" root cause (`docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md` §8). Any
     new ad-hoc `createTextureFromImage` + texture-node site must declare ownership explicitly
     (repository-cached textures stay `setOwnsTexture(false)` — the repository deletes them).
-- DComp path (**OFF by default**): `src/sources/*Source` → `src/render/compositor` →
-  `src/render/backend_d3d11/PreviewDComp*` + `TimelineRenderView`.
 
 ## 7. Preview audio & SFX scheduling — `src/audio/`
 
@@ -366,6 +364,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `MiniaudioPreviewAudioBackend.{h,cpp}` (non-Windows compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
+- **Output-device change → auto-pause** (BASS platforms only): `PreviewAudioDeviceWatcher.{h,cpp}`
+  (owns the `QMediaDevices` observer + snapshot) + `PreviewAudioDeviceChangePolicy.h` (pure decision,
+  CTest `preview_audio_device_change_policy_spec`) → `TimelineSection::pausePreviewForAudioDeviceChange`
+  in `sections/timeline/MainWindow.PreviewPlaybackState.cpp`, wired in `sections/frame/MainWindow.FrameBootstrap.cpp`.
+  A hotplug or default-output switch pauses a playing preview; the user's resume is what re-anchors
+  the transport. See `docs/superpowers/specs/2026-08-06-preview-audio-device-autopause-design.md` —
+  in-place re-anchoring was tried three times and removed.
 - MainWindow hooks: `MainWindow.cpp` (`ensurePreviewSfxRuntimePrepared`,
   `applyPreviewAudioSettingsToRuntime`); playback clock authority:
   `sections/timeline/MainWindow.TimelinePlayback.cpp` (`currentPreviewAuthoritativeAudioClockSecond`).
@@ -624,7 +629,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     as `CoverComposerView` (bare `QQuickWindow` + `grabWindow()` on the process RHI = D3D11; **no
     `QQuickView`, no forced OpenGL** — it is NOT the export worker), but it hosts a
     **`PreviewQuickSceneRoot`** (the same C++ chart scene the live preview + video export use; no
-    QML/engine needed) with `setDCompFallbackActive(true)` + `kPreviewExportOverlayRenderLayers`
+    QML/engine needed) with `kPreviewExportOverlayRenderLayers`
     (everything except the song-background media) captured over **transparent**, so the playfield
     (outline ring + notes + judge) composites as a layer over the cover's own background.
     `bootstrap(task)` maps the `VideoExportTask` → base `PreviewFrameState` ONCE (mirrors
@@ -654,7 +659,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
       `import` must resolve in both the live engine AND the export engine (even though the export path
       never instantiates the type). C++ `bindLiveChartScene` (called from the QML `Loader.onItemChanged`
       via the `chartSceneBinder` root property, set on the LIVE path only) configures the scene exactly
-      like `SceneFrameRenderer`: `kPreviewExportOverlayRenderLayers` + `setDCompFallbackActive(true)` +
+      like `SceneFrameRenderer`: `kPreviewExportOverlayRenderLayers` +
       the SHARED `PreviewFrameState` borrowed from the dialog's `SceneFrameRenderer`
       (`frameState()`/`setPlayheadSeconds()`), plus `clip:true` on the scene root for square-box parity
       with the export framebuffer. The export render (`editable=false` → `chartSceneBinder` null → the

@@ -1,6 +1,7 @@
 #include "core/scene/PreviewPreparedSceneCache.h"
 
 #include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewJudgeOverlayShared.h"
 #include "core/scene/PreviewMarkerDrawOrder.h"
@@ -174,8 +175,16 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     // HS diagnostic: once per cache rebuild, log a histogram of marker
     // hsMultiplier values. Routed through the Runtime channel so it
     // appears in miacode_runtime_debug.log alongside other scene-cache
-    // diagnostics. Cheap (one map insertion per marker, one log line).
-    {
+    // diagnostics.
+    //
+    // Gated on the channel BEFORE the payload is built. "One map insertion per
+    // marker" is only cheap when rebuilds are rare — but the firework PSO
+    // warm-up re-centers its synthetic marker on every playhead change while
+    // armed, so for the first seconds of playback this ran per frame: a QHash
+    // over every marker in the chart plus a QTextStream summary, all discarded
+    // inside appendLine() because the Runtime channel is off in a default
+    // release run.
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
         QHash<double, int> hsHist;
         for (const TimelineNoteMarker& marker : state.noteMarkers) {
             hsHist[marker.hsMultiplier]++;

@@ -14,8 +14,10 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
   windeployqt `$<CONFIG:Debug>` at `:1179`/`:1190`). Leave it unless it gets in the way; it is
   not a second supported product config.
 - Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
-- **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export/audio and DComp
-  sources inside `if(WIN32)`; guard their owning members/includes/call sites with `Q_OS_WIN`.
+- **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export and D3D11 sources
+  inside `if(WIN32)`; guard their owning members/includes/call sites with `Q_OS_WIN`. Realtime
+  preview BASS is enabled on both Windows and macOS when `MIACODE_HAS_BASS_AUDIO` is defined;
+  miniaudio is the compatibility backend for builds without that definition.
   Published preview snapshots use `std::shared_ptr<const PreviewFrameState>` plus the free
   `std::atomic_load_explicit` / `std::atomic_store_explicit` overloads — do not replace this with
   `std::atomic<std::shared_ptr<...>>`, which is rejected by the supported macOS libc++ toolchain.
@@ -44,8 +46,15 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
   `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`, `preview_head_layer_spec`,
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
-  `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
-  `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
+  `preview_sfx_timeline_spec`, `preview_audio_settings_spec`,
+  `preview_audio_command_queue_spec`, `preview_audio_worker_protocol_spec`,
+  `preview_audio_worker_spec` (also compile-checks the production miniaudio backend and, on
+  Windows/macOS, the production BASS backend), `preview_audio_non_gui_barrier_spec`,
+  `preview_bass_device_lease_spec`, `preview_audio_playback_flow_policy_spec`,
+  `preview_audio_device_change_policy_spec`, `preview_audio_health_spec`,
+  `bass_preview_retained_state_spec`, `bass_preview_debug_log_routing_spec`,
+  `bass_preview_sfx_scheduler_policy_spec`, `ui_hang_watchdog_policy_spec`,
+  `log_pruning_policy_spec`, `quickshell_preview_surface_policy_spec`,
   `video_export_runtime_policy_spec`, `video_export_intro_mode_spec`,
   `video_export_audio_render_plan_spec`,
   `touch_pad_authoring_state_spec`,

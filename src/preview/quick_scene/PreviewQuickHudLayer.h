@@ -16,11 +16,9 @@ struct PreviewFrameState;
 
 namespace miacode::preview::hud {
 
-// Phase 4f — standalone HUD painter, used by both the legacy
-// PreviewQuickHudLayer (via QQuickPaintedItem::paint) and the DComp
-// path (which rasterises into an offscreen QImage and uploads it as
-// a textured sprite). All inputs are read-only; painter must be set
-// up to draw within the canvas's local coordinate space (top-left
+// Phase 4f — standalone HUD painter, used by PreviewQuickHudLayer via
+// QQuickPaintedItem::paint. All inputs are read-only; painter must be
+// set up to draw within the canvas's local coordinate space (top-left
 // origin, size canvasSize).
 void paintPreviewHudOverlay(
     QPainter& painter,
@@ -40,11 +38,6 @@ class PreviewQuickHudLayer : public QQuickPaintedItem
 {
     Q_OBJECT
     Q_PROPERTY(QObject* runtime READ runtimeObject WRITE setRuntimeObject NOTIFY runtimeChanged)
-    // Issue #4 fix — pair to PreviewQuickSceneRoot::dcompFallbackActive.
-    // QML sets this on the fullscreen instance so the HUD renders via
-    // the legacy QQuickPaintedItem path inside the fullscreen window.
-    Q_PROPERTY(bool dcompFallbackActive READ dcompFallbackActive
-               WRITE setDCompFallbackActive NOTIFY dcompFallbackActiveChanged)
 
 public:
     explicit PreviewQuickHudLayer(QQuickItem* parent = nullptr);
@@ -56,12 +49,8 @@ public:
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
     void paint(QPainter* painter) override;
 
-    bool dcompFallbackActive() const { return dcompFallbackActive_; }
-    void setDCompFallbackActive(bool active);
-
 signals:
     void runtimeChanged();
-    void dcompFallbackActiveChanged();
 
 private:
     void requestThrottledUpdate();
@@ -81,5 +70,4 @@ private:
     QElapsedTimer hudUpdateThrottleTimer_;
     qint64 lastHudUpdateMs_ = -1;
     bool hudUpdatePending_ = false;
-    bool dcompFallbackActive_ = false;
 };

@@ -119,6 +119,7 @@ scripts/build/*
 !scripts/debug/
 scripts/debug/*
 !scripts/debug/Start_MiaCode_Debug.bat
+!scripts/debug/Start_MiaCode_IdleFreezeRepro.ps1
 !scripts/debug/Start_MiaCode_QtPluginDiag.bat
 !scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat
 !scripts/ffmpeg/

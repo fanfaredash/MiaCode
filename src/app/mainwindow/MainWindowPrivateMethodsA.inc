@@ -245,6 +245,7 @@
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();
+    void emitChartSwitchResourceGauge();
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     void updatePreviewWorkspaceLayout();

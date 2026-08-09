@@ -1,52 +1,15 @@
 #include "timeline/TimelineSlowRefresh.h"
 
 #include "common/MuriTypes.h"
+#include "timeline/TimelineMarkerOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriStaticChecker.h"
 
 namespace {
 
-double shiftedTimelineSecond(double second, double offsetSeconds)
-{
-    if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
-        return second;
-    }
-    return second + offsetSeconds;
-}
-
-QVector<TimelineBeatMarker> shiftedBeatMarkers(
-    const QVector<TimelineBeatMarker>& beatMarkers,
-    double offsetSeconds)
-{
-    QVector<TimelineBeatMarker> shifted = beatMarkers;
-    for (TimelineBeatMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-    }
-    return shifted;
-}
-
-QVector<TimelineNoteMarker> shiftedNoteMarkers(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    double offsetSeconds)
-{
-    QVector<TimelineNoteMarker> shifted = noteMarkers;
-    for (TimelineNoteMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-        if (marker.endSecond >= 0.0) {
-            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
-        }
-        if (marker.slideTraceSecond >= 0.0) {
-            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
-        }
-        if (marker.availableSecond >= 0.0) {
-            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
-        }
-        for (double& shootSecond : marker.slideSegmentShootSeconds) {
-            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
-        }
-    }
-    return shifted;
-}
+using miacode::timeline::offset::NonFiniteHandling;
+using miacode::timeline::offset::shiftedBeatMarkers;
+using miacode::timeline::offset::shiftedNoteMarkers;
 
 QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
 {
@@ -166,7 +129,8 @@ TimelinePreviewRefreshState buildTimelinePreviewRefreshState(
     double firstSeconds)
 {
     TimelinePreviewRefreshState state;
-    state.shiftedNoteMarkers = shiftedNoteMarkers(parseResult.noteMarkers, firstSeconds);
+    state.shiftedNoteMarkers =
+        shiftedNoteMarkers(parseResult.noteMarkers, firstSeconds, NonFiniteHandling::PassThrough);
     state.noteMarkerSignature = noteMarkerSignature(state.shiftedNoteMarkers);
     return state;
 }
@@ -182,7 +146,8 @@ TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(
     result.chartText = request.chartText;
     result.firstSeconds = request.firstSeconds;
     result.parseResult = parseResult;
-    result.shiftedBeatMarkers = shiftedBeatMarkers(result.parseResult.beatMarkers, request.firstSeconds);
+    result.shiftedBeatMarkers = shiftedBeatMarkers(
+        result.parseResult.beatMarkers, request.firstSeconds, NonFiniteHandling::PassThrough);
     result.shiftedNoteMarkers = previewState.shiftedNoteMarkers;
     result.noteMarkerSignature = previewState.noteMarkerSignature;
     result.durationSeconds = computeDurationSeconds(

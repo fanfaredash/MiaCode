@@ -520,17 +520,22 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
     Q_UNUSED(oldRate);
     // The whole reason for the migration: QAVPlayer::setSpeed applies the rate
     // inside QtAVPlayer's own decode loop. It does NOT rebuild a Qt converter
-    // pipeline mid-flight, so it cannot race the QSG/DComp D3D11 texture
+    // pipeline mid-flight, so it cannot race the QSG D3D11 texture
     // sampler — i.e. the "倍速闪退" crash class is structurally gone, and all
     // the deferred-apply / recover-rebuild scaffolding below is unnecessary.
     if (player_ != nullptr) {
         player_->setSpeed(static_cast<qreal>(playbackRate_));
     }
-    appendPreviewStageMediaLog(
-        QStringLiteral("playback_rate"),
-        QString("rate=%1 kind=%2")
-            .arg(playbackRate_, 0, 'f', 3)
-            .arg(debugMediaTypeName()));
+    const miacode::diagnostics::StageRateKey rateKey{
+        playbackRate_, static_cast<int>(mediaKind_)};
+    if (playbackRateLogGate_.shouldEmit(
+            miacode::diagnostics::PlaybackRateLogKind::Ordinary, rateKey)) {
+        appendPreviewStageMediaLog(
+            QStringLiteral("playback_rate"),
+            QString("rate=%1 kind=%2")
+                .arg(playbackRate_, 0, 'f', 3)
+                .arg(debugMediaTypeName()));
+    }
 #elif defined(HAVE_QT_MULTIMEDIA)
     if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
         syncVideoFrameBeaconBudget_ = 24;
@@ -891,4 +896,3 @@ void PreviewStageMediaHost::setVideoDecodePreference(bool preferSoftware)
     }
 #endif
 }
-

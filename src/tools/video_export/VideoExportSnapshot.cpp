@@ -5,6 +5,7 @@
 #include "SimaiNativeParser.h"
 #include "common/ChartClockCount.h"
 #include "common/ChartAssetPaths.h"
+#include "timeline/TimelineMarkerOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 
 #include <QDir>
@@ -13,20 +14,13 @@
 
 namespace {
 
-QString backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
-{
-    switch (mode) {
-    case PreviewBackgroundScaleMode::FitContain:
-        return QStringLiteral("fit");
-    case PreviewBackgroundScaleMode::SquareFitContain:
-        return QStringLiteral("square_fit");
-    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
-        return QStringLiteral("inner_circle_fit_outer_fill");
-    case PreviewBackgroundScaleMode::FillCrop:
-    default:
-        return QStringLiteral("fill");
-    }
-}
+using miacode::timeline::offset::NonFiniteHandling;
+using miacode::timeline::offset::parsedFirstSeconds;
+using miacode::timeline::offset::shiftedNoteMarkers;
+
+// backgroundScaleModeToken moved to core/video/PreviewRenderSettings.h (same tokens,
+// unchanged) so the preview runtime's scale-mode diagnostics name the modes the same
+// way this snapshot serialises them.
 
 QString outlineVariantToken(PreviewOutlineVariant variant)
 {
@@ -145,43 +139,6 @@ RenderMode renderModeFromToken(const QString& token)
         : RenderMode::Native;
 }
 
-double parsedFirstSeconds(const QString& rawValue)
-{
-    bool ok = false;
-    const QString trimmed = rawValue.trimmed();
-    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&ok);
-    return (trimmed.isEmpty() || ok) ? value : 0.0;
-}
-
-double shiftedTimelineSecond(double second, double offsetSeconds)
-{
-    return second + offsetSeconds;
-}
-
-QVector<TimelineNoteMarker> shiftedNoteMarkers(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    double offsetSeconds
-)
-{
-    QVector<TimelineNoteMarker> shifted = noteMarkers;
-    for (TimelineNoteMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-        if (marker.endSecond >= 0.0) {
-            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
-        }
-        if (marker.slideTraceSecond >= 0.0) {
-            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
-        }
-        if (marker.availableSecond >= 0.0) {
-            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
-        }
-        for (double& shootSecond : marker.slideSegmentShootSeconds) {
-            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
-        }
-    }
-    return shifted;
-}
-
 QString jsonString(const QJsonObject& object, const char* key)
 {
     return object.value(QLatin1String(key)).toString();
@@ -217,7 +174,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("layout_square_scale"), layoutSquareScale);
     render.insert(QStringLiteral("smooth_brightness"), smoothBrightness);
     render.insert(QStringLiteral("outline_variant"), outlineVariantToken(outlineVariant));
-    render.insert(QStringLiteral("background_scale_mode"), backgroundScaleModeToken(backgroundScaleMode));
+    render.insert(QStringLiteral("background_scale_mode"), QString::fromLatin1(backgroundScaleModeToken(backgroundScaleMode)));
     render.insert(QStringLiteral("tap_flow_speed"), tapFlowSpeed);
     render.insert(QStringLiteral("touch_flow_speed"), touchFlowSpeed);
     render.insert(QStringLiteral("slide_earlier_second_and_text_on_top"), slideEarlierSecondAndTextOnTop);
@@ -511,7 +468,8 @@ bool buildVideoExportTaskFromSnapshot(
     );
     built.trackPath = snapshot.trackPath;
     built.skinDirectory = snapshot.skinDirectory;
-    built.noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
+    built.noteMarkers =
+        shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds, NonFiniteHandling::Propagate);
     built.audioSettings = snapshot.audioSettings;
     built.audioSettings.normalize();
     built.timingSettings = snapshot.timingSettings;

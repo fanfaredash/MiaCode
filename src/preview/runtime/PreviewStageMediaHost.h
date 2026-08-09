@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/LogEmissionPolicy.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/video/PreviewRenderSettings.h"
 
@@ -171,11 +172,30 @@ private:
                                      qint64 ageMs);
     void updateClockDelta();
     void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
+    // The inner-circle VideoOutput is only rendered in InnerCircleFitOuterFill
+    // (background scale mode 3); in every other mode it is bound but invisible,
+    // so feeding it decoded frames buys nothing and retains a decode-pool
+    // surface. True only when a distinct inner sink exists AND that mode is on.
+    bool innerVideoSinkActive() const;
+    // What refreshInnerVideoSinkForScaleMode() actually did, so the scale-mode log
+    // line can state the outcome instead of the intent — "entered mode 3 but there
+    // was no retained frame to prime" and "primed with the current frame" are the
+    // two halves of the "wrong first frame after switching" report, and only the
+    // callee can tell them apart.
+    enum class InnerVideoSinkRefresh {
+        None,     // no distinct inner sink, or entering the mode with no retained frame
+        Primed,   // retained frame pushed, so the mode shows the current frame at once
+        Cleared,  // frame released, so the sink stops pinning a decode-pool surface
+    };
+    // Push the retained frame into the inner sink so a mid-playback switch into
+    // InnerCircleFitOuterFill shows the current frame without waiting for the
+    // next decode; clear it when leaving the mode so nothing stays pinned.
+    InnerVideoSinkRefresh refreshInnerVideoSinkForScaleMode();
 #ifdef MIACODE_USE_QTAVPLAYER
     // QtAVPlayer frame path: a decoded QAVVideoFrame (already converted to a
     // QVideoFrame and tagged with its presentation pts in seconds) is pushed
-    // to the QML sink here, mirrored into the toImage() DComp fallback, and
-    // used to settle the paused-seek / prepared-start handshakes by pts.
+    // to the QML sink here and used to settle the paused-seek /
+    // prepared-start handshakes by pts.
     void handleDecodedVideoFrame(const QVideoFrame& frame, double ptsSeconds, double durationSeconds, quint64 sourceGeneration);
     // Settle the paused-seek / prepared-start acks once the decoded media time
     // [start,end] (frame pts..pts+dur, or the seeked() position as a point)
@@ -234,7 +254,7 @@ private:
     double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
 #ifdef MIACODE_USE_QTAVPLAYER
     // FFmpeg decode backend. setSpeed() runs inside QtAVPlayer's own decode
-    // loop (no Qt converter rebuild) so rate changes never race the QSG/DComp
+    // loop (no Qt converter rebuild) so rate changes never race the QSG
     // texture sampler — the class of crash the QMediaPlayer scaffolding below
     // existed to paper over. No QAudioOutput: the video's own audio track is
     // intentionally never played (song audio is BASS-owned).
@@ -261,6 +281,7 @@ private:
     quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;
+    miacode::diagnostics::PlaybackRateLogGate playbackRateLogGate_;
     int syncVideoFrameBeaconBudget_ = 0;
     int syncMediaStatusBeaconBudget_ = 0;
     // G2 Commit 1: Qt 6.8 FFmpeg's QMediaPlayer::setPlaybackRate has a race

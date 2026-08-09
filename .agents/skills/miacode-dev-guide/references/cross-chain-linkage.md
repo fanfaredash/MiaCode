@@ -63,8 +63,7 @@ Implications:
   `SlideShapeOnly` slot between `slide_motion` and `judge_effect` (below notes/touch/tap-judge), and a
   `JudgeTextOnly` slot on top. So each judge enum bit drives 2 slots; keep
   `kPreviewQuickSceneLayerSlotCount` equal to the number of `layerSlotAt(root, slotIndex++)` calls when
-  adding/removing slots. The off-by-default DComp path (`src/sources/chart/ChartReviewSource.*`,
-  `MaimuriDxJudgeSource.*`, sorted by `zOrder()`) still draws both groups in one pass — a known divergence.
+  adding/removing slots.
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.
@@ -153,6 +152,32 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   batch setting but do not change its selected output difficulties.
 
 If one side changes, inspect the other in the same patch.
+
+### 4a. Preview-audio GUI to worker boundary
+
+Realtime preview is not an export worker: `QtPreviewSfxRuntime` stays in the GUI thread as the
+facade while `PreviewAudioWorker` owns its native backend on one `std::thread`. MainWindow startup,
+timeline ticks, settings audition, latency sandbox, and `soundtouch_probe` all submit typed value
+commands through the bounded queue; only probe/spec code may wait on the non-GUI completion barrier.
+
+- Playback completions must match current `generation` and `transactionId`; reload/ready completions
+  must match current `assetGeneration`; a device pause must also match the first captured
+  `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
+  facade and the specs.
+- A chart-path change followed by an asset reload is one asset transaction, not two independently
+  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. It carries the path on the
+  `ReloadAssets` command and `PreviewAudioWorker::executeReload` applies it before the backend reload
+  in that same `assetGeneration`; posting `setChartPath` immediately before a separate reload lets
+  stale-command pruning drop the required path update and leaves BGM unloaded. This is shared by
+  MainWindow startup/chart-reload paths and `soundtouch_probe`.
+- `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
+  GUI/video state before submitting the reserved high-priority device pause. On Windows, a successful
+  IMM registration is the sole hotplug source: do not construct or synchronously enumerate
+  `QMediaDevices` on that path, because its AudioSes RPC can block the GUI during a switch. Qt remains
+  the registration-failure and non-Windows fallback. The worker later stops audio/SFX; it does not
+  advance the playhead and it must not auto-resume after a device recovers.
+- `PreviewBassDeviceLease` is shared by preview, waveform, and export BASS lifecycle users. Keep
+  BASS global device init/free serialization there, but keep normal channel work within its owner.
 
 ## 5. Background-media resolution & host route ownership
 

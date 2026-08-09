@@ -38,9 +38,6 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "timeline/quick/TimelineQuickTextureCache.h"
 #include "timeline/quick/TimelineQuickWaveformLayer.h"
-#ifdef Q_OS_WIN
-#include "render/backend_d3d11/TimelineRenderView.h"
-#endif
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -92,6 +89,11 @@ void accumulateSceneGraphStats(const QSGNode* node, SceneGraphStats* out)
 // QueryVideoMemoryInfo isolates the GPU portion: if gpu_kb climbs monotonically while our
 // node/geometry/texture counts stay flat, the leak is Qt-internal RHI deferred release. Reads the
 // RHI's ID3D11Device via QSGRendererInterface on the render thread (where it is valid). KB, or -1.
+//
+// The QueryVideoMemoryInfo call itself now lives in miacode::diag (common/ProcessDiagnostics)
+// so the 30 s per-adapter VRAM gauge and this per-pause leak gauge share one implementation.
+// What stays here is the render-thread-only part: getting from the QQuickWindow to an
+// IDXGIAdapter. The returned value is unchanged (LOCAL + NON_LOCAL CurrentUsage, KB).
 qint64 timelineGpuProcessMemoryKb(QQuickWindow* window)
 {
 #ifdef Q_OS_WIN
@@ -117,24 +119,7 @@ qint64 timelineGpuProcessMemoryKb(QQuickWindow* window)
     qint64 usageKb = -1;
     IDXGIAdapter* adapter = nullptr;
     if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) && adapter != nullptr) {
-        IDXGIAdapter3* adapter3 = nullptr;
-        if (SUCCEEDED(adapter->QueryInterface(
-                __uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
-            && adapter3 != nullptr) {
-            quint64 totalBytes = 0;
-            DXGI_QUERY_VIDEO_MEMORY_INFO info;
-            ZeroMemory(&info, sizeof(info));
-            if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
-                totalBytes += info.CurrentUsage;
-            }
-            ZeroMemory(&info, sizeof(info));
-            if (SUCCEEDED(
-                    adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
-                totalBytes += info.CurrentUsage;
-            }
-            usageKb = static_cast<qint64>(totalBytes / 1024ull);
-            adapter3->Release();
-        }
+        usageKb = miacode::diag::adapterProcessVideoMemoryUsageKb(adapter);
         adapter->Release();
     }
     dxgiDevice->Release();
@@ -813,6 +798,20 @@ void appendTimelineRenderMapDiagnostics(
         renderMapPointPayload(QStringLiteral("entry"), state, stateBridge->playbackEntrySeconds()));
 }
 
+void appendSceneRebuildSummary(const miacode::diagnostics::RebuildSummary& summary)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/quick_scene"),
+        QStringLiteral("action=scene_state_rebuild_summary window_start_ms=%1 rebuild_count=%2 "
+                       "total_elapsed_ms=%3 max_elapsed_ms=%4 last_lines=%5")
+            .arg(summary.windowStartMs)
+            .arg(summary.rebuildCount)
+            .arg(summary.totalElapsedMs)
+            .arg(summary.maxElapsedMs)
+            .arg(summary.lastLines));
+}
+
 }  // namespace
 
 TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
@@ -833,13 +832,6 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
     heldHorizontalKeyScrollTimer_.setInterval(kTimelineKeyHoldTickIntervalMs);
     connect(&heldHorizontalKeyScrollTimer_, &QTimer::timeout, this, &TimelineQuickItem::applyHeldHorizontalKeyScrollTick);
 
-    // Phase 3c — DComp tracker placeholder. The TimelineRenderView's
-    // tryDiscoverTrackedItem looks up by this objectName via
-    // QObject::findChild on the QQuickWindow.  Even when the env flag
-    // is off (no view created) we still set the name so a later
-    // toggle-on Just Works. Same pattern as PreviewQuickSceneRoot's
-    // preview_dcomp_track_target.
-    setObjectName(QStringLiteral("timeline_dcomp_track_target"));
     // Phase 3e-diag — force-log every TimelineQuickItem construction so
     // we can identify if QML is creating multiple instances (which
     // would explain the two-popup symptom in the user's log).
@@ -854,50 +846,19 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
                 .arg(reinterpret_cast<quintptr>(this), 0, 16),
             /*force=*/true);
     }
-    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
-#ifdef Q_OS_WIN
-        dcompView_ = std::make_unique<miacode::preview::dcomp::TimelineRenderView>(this);
-        // Attach to the host window once we're parented into a scene,
-        // and tell the view we ARE its tracked item — bypassing the
-        // findChild-by-objectName dance, which fails in the
-        // sceneGraphInitialized → onWindowGeometryChanged path because
-        // the QQuickItem is constructed lazily by QML and isn't in
-        // the window's child tree at the right moment. The popup
-        // would otherwise stay sized to the full QQuickWindow client
-        // area, drawing timeline rects/lines at the window's top-left
-        // instead of inside the timeline pane.
-        dcompWindowConnection_ = connect(
-            this, &QQuickItem::windowChanged, this,
-            [this](QQuickWindow* w) {
-                if (dcompView_ != nullptr) {
-                    dcompView_->attachToWindow(w);
-                    dcompView_->setTrackedQuickItem(this);
-                }
-            });
-        if (window() != nullptr) {
-            dcompView_->attachToWindow(window());
-            dcompView_->setTrackedQuickItem(this);
-        }
-#endif
-    }
 }
 
 TimelineQuickItem::~TimelineQuickItem()
 {
+    if (const auto summary = sceneRebuildLogWindow_.flushForDestruction(); summary.has_value()) {
+        appendSceneRebuildSummary(*summary);
+    }
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("timeline/quick_item"),
         QStringLiteral("action=destruct ptr=0x%1")
             .arg(reinterpret_cast<quintptr>(this), 0, 16),
         /*force=*/true);
-#ifdef Q_OS_WIN
-    if (dcompWindowConnection_) {
-        QObject::disconnect(dcompWindowConnection_);
-        dcompWindowConnection_ = QMetaObject::Connection();
-    }
-#endif
-    // dcompView_'s unique_ptr destructor handles renderer.stop() +
-    // core.shutdown() ordering through TimelineRenderView::~TimelineRenderView.
 }
 
 TimelineQuickStateBridge* TimelineQuickItem::stateBridge() const
@@ -1228,21 +1189,6 @@ void TimelineQuickItem::syncSourceState()
         updateReadyState(false);
     }
     update();
-    // Phase 3c — also push the latest state to the DComp render view.
-    // syncSourceState fires on every renderStateChanged from the bridge,
-    // so this is the natural hook for keeping the render view in sync.
-    // No-op when the env flag is off (dcompView_ stays nullptr).
-    pushSceneStateToDComp();
-}
-
-void TimelineQuickItem::pushSceneStateToDComp()
-{
-#ifdef Q_OS_WIN
-    if (dcompView_ == nullptr) {
-        return;
-    }
-    dcompView_->setSceneState(currentSceneState());
-#endif
 }
 
 void TimelineQuickItem::updateReadyState(bool ready)
@@ -1311,13 +1257,6 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
                           stateBridge_->zoomScale() + 1.0)
         || !qFuzzyCompare(cachedSceneBuildContentScale_ + 1.0,
                           stateBridge_->contentScale() + 1.0);
-    if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/quick_scene"),
-            QStringLiteral("action=scene_state_rebuild_begin reason=current_scene_state count=%1")
-                .arg(sceneStateRebuildCount_ + 1));
-    }
     QElapsedTimer timer;
     if (rebuildNeeded) {
         timer.start();
@@ -1354,8 +1293,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.showSlideTracks = stateBridge_->showSlideTracks();
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
-    // Phase 9d-native — header-control state for native rendering of
-    // the zoom button in the DComp pipeline.
+    // Phase 9d-native — header-control state for the zoom button,
+    // emitted by the builder and drawn by TimelineQuickHeaderLayer.
     request.zoomControlPressedPart = zoomControlPressedPart_;
     request.zoomControlHoveredPart = zoomControlHoveredPart_;
     request.settingsControlHovered = settingsControlHovered_;
@@ -1392,13 +1331,28 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildContentScale_ = stateBridge_->contentScale();
     }
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/quick_scene"),
-            QStringLiteral("action=scene_state_rebuild_end reason=current_scene_state count=%1 elapsed_ms=%2 lines=%3")
-                .arg(sceneStateRebuildCount_ + 1)
-                .arg(timer.elapsed())
-                .arg(stateBridge_->renderSnapshot().lines.size()));
+        const qint64 elapsedMs = timer.elapsed();
+        const auto decision = sceneRebuildLogWindow_.observe(
+            QDateTime::currentMSecsSinceEpoch(),
+            elapsedMs,
+            QString::number(stateBridge_->renderSnapshot().lines.size()));
+        if (decision.summary.has_value()) {
+            appendSceneRebuildSummary(*decision.summary);
+        }
+        if (decision.emitIndividual) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/quick_scene"),
+                QStringLiteral("action=scene_state_rebuild_begin reason=current_scene_state count=%1")
+                    .arg(sceneStateRebuildCount_ + 1));
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/quick_scene"),
+                QStringLiteral("action=scene_state_rebuild_end reason=current_scene_state count=%1 elapsed_ms=%2 lines=%3")
+                    .arg(sceneStateRebuildCount_ + 1)
+                    .arg(decision.individualElapsedMs)
+                    .arg(decision.individualLastLines));
+        }
     }
     if (rebuildNeeded) {
         ++sceneStateRebuildCount_;
@@ -1473,34 +1427,6 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 {
     Q_UNUSED(data);
 
-    // Phase 3e — when DComp-exclusive mode is on for the timeline, the
-    // TimelineRenderView is the authoritative timeline renderer. This
-    // QSG path produces nothing: discard any existing scene-graph
-    // subtree and return null so Qt skips this layer entirely. The
-    // QQuickItem itself stays alive (so DComp's tracked-item geometry
-    // tracking still works), but its bounding rect contributes no
-    // pixels to the QSG scene.
-    //
-    // Mirrors PreviewQuickSceneRoot::updatePaintNode's gate at line
-    // 526 (`previewDCompExclusiveEnabled`) — same pattern, same
-    // behaviour. Without this gate, both the QSG layers and the DComp
-    // pipeline would render the same timeline content into different
-    // surfaces, producing the "two timelines" symptom the user
-    // observed (one rendered by QML+QSG, one by DComp; whichever DWM
-    // composites on top wins visually, with the other showing through
-    // transparent regions).
-    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
-#ifdef Q_OS_WIN
-        if (oldNode != nullptr) {
-            delete oldNode;
-        }
-        updateReadyState(true);
-        // Still push state to DComp side as before.
-        pushSceneStateToDComp();
-        return nullptr;
-#endif
-    }
-
     QElapsedTimer paintNodeTimer;
     paintNodeTimer.start();
     if (!canBecomeReady()) {
@@ -1525,6 +1451,23 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         resetNodeTreeBeforeTextureInvalidation = true;
     }
 
+    // Capacity flush — a runaway guard, expected never to fire in normal use. The
+    // cache had no other bound: window / skin / DPR only fire on configuration
+    // changes, and the theme invalidation deliberately spares the `note|` and `hold_`
+    // prefixes, which are exactly the keys that grow (slide-arrow rotation is derived
+    // from on-screen geometry and quantised to 0.1 degrees, so every chart contributes
+    // a fresh batch that never retires — measured at ~30 per chart switch). But the
+    // same capture showed paint time does not scale with cache size, so this is here
+    // to bound residency in a pathological session, NOT to keep the cache small; see
+    // the limits in TimelineQuickTextureCache.cpp for why firing it routinely would be
+    // a net loss. Routed through the same reset flag as every other invalidation so it
+    // inherits the ordering contract below: node tree first, textures second.
+    const bool textureCapacityFlushRequired =
+        textures_ != nullptr && textures_->capacityFlushRequired();
+    if (textureCapacityFlushRequired) {
+        resetNodeTreeBeforeTextureInvalidation = true;
+    }
+
     miacode::timeline::TimelineSceneState state = currentSceneState();
     const quint64 themeSignature = timelineThemeSignatureHash(state);
     if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
@@ -1544,7 +1487,38 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 
     textures_->setWindow(window());
     textures_->setSkinDirectory(targetSkinDirectory);
-    if (pendingDprInvalidation_) {
+    // The capacity flush is a superset of both partial invalidations, so it wins and
+    // consumes their pending flags. Checked first (rather than as a third `else if`)
+    // because a theme invalidation landing in the same frame would otherwise remove
+    // only the text keys, leave the cache still over its cap, and defer the real flush
+    // by a frame.
+    if (textureCapacityFlushRequired) {
+        // The guard is expected never to fire, which is exactly why it is worth one
+        // line when it does: the flush costs a node-tree teardown plus a re-upload of
+        // the working set, and this line is the only thing that could later attribute
+        // that hitch. Snapshot BEFORE invalidateAll() — it zeroes every count, so a
+        // read afterwards would report an empty cache instead of the one that tripped
+        // the cap. Render thread (appendLine is mutex-guarded + async, and the debug
+        // predicate is a relaxed atomic load), same as the leak-gauge emission below.
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            const TimelineQuickTextureCacheCapacity capacity = textures_->capacitySnapshot();
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/texture_cache"),
+                QStringLiteral(
+                    "action=capacity_flush tex=%1 tex_bytes=%2 pixmaps=%3 tex_limit=%4 "
+                    "tex_byte_limit=%5 pixmap_limit=%6")
+                    .arg(capacity.textureCount)
+                    .arg(capacity.textureBytes)
+                    .arg(capacity.pixmapCount)
+                    .arg(capacity.textureCountLimit)
+                    .arg(capacity.textureByteLimit)
+                    .arg(capacity.pixmapCountLimit));
+        }
+        textures_->invalidateAll();
+        pendingDprInvalidation_ = false;
+        pendingThemeInvalidation_ = false;
+    } else if (pendingDprInvalidation_) {
         textures_->invalidateDprDependent();
         pendingDprInvalidation_ = false;
         pendingThemeInvalidation_ = false;

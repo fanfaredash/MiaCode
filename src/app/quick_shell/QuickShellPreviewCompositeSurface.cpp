@@ -1,6 +1,7 @@
 #include "QuickShellPreviewCompositeSurface.h"
 
 #include "MainEntrypoints.h"
+#include "app/WindowVisibilityDiagnostics.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -55,6 +56,17 @@ QuickShellPreviewCompositeSurface::QuickShellPreviewCompositeSurface(QObject* pa
     view_->setResizeMode(QQuickView::SizeRootObjectToView);
     view_->setPersistentGraphics(true);
     view_->setPersistentSceneGraph(true);
+    // Occlusion / minimize transitions for the preview surface, plus a one-shot record of
+    // the two lines above: persistent graphics means hiding or minimizing this window does
+    // NOT release its GPU resources. On the reported 2 GB MX450 — shared with an NVENC
+    // encoder and the root window — that is load-bearing context for reading the VRAM
+    // gauge, so the log states it rather than leaving the reader to infer it.
+    miacode::app::window_diag::installWindowVisibilityDiagnostics(
+        view_, QStringLiteral("preview_composite"));
+    miacode::app::window_diag::logSurfaceGraphicsPersistence(
+        QStringLiteral("preview_composite"),
+        /*persistentGraphics=*/true,
+        /*persistentSceneGraph=*/true);
     connect(view_, &QQuickView::statusChanged, this, [this](QQuickView::Status status) {
         if (status == QQuickView::Ready) {
             bindRootObject();

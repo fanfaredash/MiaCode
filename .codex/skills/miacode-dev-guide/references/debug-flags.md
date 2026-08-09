@@ -127,15 +127,17 @@ Dev-tool-only parser repro hook:
   - Windows-only A/B switch for fixed 60/120 preview pacing; while fixed-FPS realtime preview is playing it requests `timeBeginPeriod(1)` and releases it on stop, mode switch, or shutdown
   - default is off; DisplayRefresh pacing does not use it
   - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp`
-- `MIACODE_PREVIEW_VISUAL_SMOOTHING`
-  - bounds the per-frame visual playhead delta so render-time variance doesn't propagate audio-time jumps straight into the rendered scene; large drift > 50ms triggers a snap (treated as seek)
-  - default is on; set to `0` to pass audio time through unchanged
-  - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp` (`applyVisualClockSmoothing`)
 - `MIACODE_PREVIEW_QSG_RENDER_TIMING`
   - sets `QSG_RENDER_TIMING=1` and `QT_LOGGING_RULES+=qt.scenegraph.time.*=true` before `QApplication` construction, then installs a `QtMessageHandler` that routes those messages to the runtime log under `runtime/preview/qsg_timing`
   - use to diagnose stutter that the offscreen-renderer perf instrumentation can't see — i.e. when `renderer_perf max_frame_total_ms` is well under the vsync budget but `fixed_gate_present wait_ms` and `fixed_gate_tick gate_wait_ms` still spike
   - default off; flag is read once at startup so it must be in the environment before the exe launches
   - owners: `src/common/DebugOptions.h`, `src/app/main.cpp`
+- `MIACODE_ENABLE_DIAG_MODULE_LIST`
+  - enables the supplementary pre-Qt process-module list in the startup beacon; disabled by default so third-party/injected-module traversal cannot prevent normal startup
+  - owner: `src/app/startup_diagnostics_win32.cpp`
+- `MIACODE_ENABLE_DIAG_D3D11`
+  - enables the supplementary startup D3D11 diagnostic probe; disabled by default so vendor graphics drivers are not loaded before Qt initializes
+  - owner: `src/app/startup_diagnostics_win32.cpp`
 - `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS`
   - Tier 2A predictive playhead. Biases the rendered visual time forward by N display intervals (scaled by current playback rate) so the frame represents audio time at the moment it's actually visible — eliminates the perceived "audio leads video by one frame" lag from the GUI→render→composite→present pipeline
   - default `1.0` (≈16.7ms at 60Hz); set to `0` to disable, allowed range `[0, 4]`
@@ -158,13 +160,13 @@ Dev-tool-only parser repro hook:
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`
   - enables PNG dumps for preview compare samples
   - applies to both `preview_gl/video_compare` and `preview/present_compare`
-  - owner: `src/common/DebugImageCompare.h`
+  - owner: accessor `previewCompareDumpFramesEnabled()` in `src/common/DebugOptions.h`; the sole consumer (`src/common/DebugImageCompare.h`) was deleted as orphan code, so the accessor currently has no production caller
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES`
   - caps dumped samples per compare stream; `0` means no cap
-  - owner: `src/common/DebugImageCompare.h`
+  - owner: accessor `previewCompareDumpMaxSamples()` in `src/common/DebugOptions.h`; no production caller since `DebugImageCompare.h` was deleted
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_DIR`
   - overrides the preview compare PNG dump root directory
-  - owner: `src/common/DebugImageCompare.h`
+  - owner: accessor `previewCompareDumpDirectoryOverride()` in `src/common/DebugOptions.h`; no production caller since `DebugImageCompare.h` was deleted
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES`
   - disables OpenGL driver message logging inside debug mode
   - current impact is limited because the active preview/export path is Qt Quick on an explicitly forced OpenGL backend, not the removed `PreviewCanvas` logger stack
@@ -225,6 +227,7 @@ The `app_shutdown` runtime tag now traces `lastWindowClosed`, periodic post-clos
 QuickShell accepted root-window closes now notify C++ from QML before the window hide tail, logging `root_close_accepted_notify` and `accepted_close_shutdown_*`; the immediate pass shuts down preview and closes the hidden backend `MainWindow`, then a queued pre-quit pass logs `accepted_close_destroy_*` while destroying the QML engine, native surfaces, controller, style bridge, and backend before explicitly requesting `quit()`.
 The `close_timing/*` runtime tags now record close-path duration totals in milliseconds for document save-confirm work, QuickShell relay work, legacy window close hooks, export-worker teardown, and `aboutToQuit` export temp-dir cleanup so exit long tails can be triaged from one debug session.
 The `preview/playback` audio tag now traces realtime preview start transactions. Strong-sync startup should log `action=start_request`, `action=audio_prepared`, `action=canvas_presented`, and `action=commit` under one `txn`, while weak-video startup adds `action=weak_video_prepare_started`, `action=weak_video_ready_before_commit`, or `action=late_video_start_after_commit`.
+The `preview/audio_device` audio tag records one row per real output change. `event_ns` is the Core Audio/Qt notification timestamp, `gui_delivery_ns` and `gui_delay_ms` show when the GUI loop could process it, `cutoff_armed` distinguishes a playing cutoff from `route_only=1` paused-state endpoint invalidation, and `cutoff_posted` / generation / sequence correlate the worker barrier. `action=qt_snapshot_begin/end` brackets each synchronous `QMediaDevices` enumeration and supplies its source (`qt_signal` / `native_delivery`) plus elapsed milliseconds; the bracket is also a `ui/hang_watchdog` phase named `audio/device_qt_snapshot`, so a stall can be attributed to that exact path rather than merely correlated with hotplug. The matching `preview/playback` rows carry the same timestamps for a playing cutoff, while `action=pause_visual_state_applied inline=1` confirms that outline/PV/BG policy ran in the pause state transition rather than the deferred UI tail.
 The `preview/stage_media` audio tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
 The `preview/waveform` audio tag records waveform cache/request/apply evidence: memory/disk/build/placeholder source, normalized track id, file stamp, duration, top-level column count, milliseconds per column, first-column onset at `0.02` / `0.05` / `0.10` amplitude, and peak-column position. `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG=1` additionally keeps focused placeholder breadcrumbs under `preview/waveform_align`, raises `bass_status` cadence to `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS` (default `250 ms`), and emits runtime `timeline/render_map` state/sample rows with visible range, scroll, primitive counts, waveform/grid/note first-visible coordinates, playhead/cursor/entry second-to-X roundtrips, the waveform column under the playhead, and the strongest waveform column in a small playhead-centered window.
 The audio log emits `stretched_clock_drift` for low-noise stretched-BGM drift sampling; current fields are `fallback`, `bg`, `delta_ms`, `rate`, `engine_now_frame`, `start_engine_frame`, and `tick_bg_gap_ms` (`fallback - backgroundTrackLastTimelineSecond`) so engine-time anchor drift can be separated from tick-to-tick catch-up.

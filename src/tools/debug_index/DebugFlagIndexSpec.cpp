@@ -39,6 +39,14 @@ const QSet<QString> kRetiredFlags = {
     QStringLiteral("MIACODE_PREVIEW_SESSION_SCRIPT"),
     QStringLiteral("MIACODE_DISABLE_GL_DEBUG_MESSAGES"),
     QStringLiteral("MIACODE_PREVIEW_DONT_CREATE_NATIVE_WIDGET_SIBLINGS"),
+    QStringLiteral("MIACODE_PREVIEW_VISUAL_SMOOTHING"),
+    QStringLiteral("MIACODE_SKIP_DIAG_D3D11"),
+    QStringLiteral("MIACODE_TIMELINE_USE_DCOMP"),
+    QStringLiteral("MIACODE_PREVIEW_USE_DCOMP"),
+    QStringLiteral("MIACODE_PREVIEW_DCOMP_EXCLUSIVE"),
+    QStringLiteral("MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND"),
+    QStringLiteral("MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA"),
+    QStringLiteral("MIACODE_PREVIEW_DCOMP_QUIESCE_QSG"),
 };
 
 // This spec embeds flag-name literals (the retired allowlist above), which are
