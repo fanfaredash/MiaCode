@@ -115,7 +115,7 @@ void appendWatchdogReport(
                    .arg(QString::fromLatin1(policy::stackCaptureDecisionName(stackDecision)))
                    .arg(capturesSoFar);
     if (suppressionSummary.has_value()) {
-        payload += QStringLiteral(" suppressed_count=%1 episode_id=%2 suppressed_trigger=%3")
+        payload += QStringLiteral(" suppressed_count=%1 episode_id=%2 trigger=%3")
                        .arg(suppressionSummary->suppressedCount)
                        .arg(suppressionSummary->episodeId)
                        .arg(QString::fromLatin1(

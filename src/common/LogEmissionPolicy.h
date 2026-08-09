@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QGlobal.h>
+#include <QtGlobal>
 #include <QString>
 
 #include <optional>
