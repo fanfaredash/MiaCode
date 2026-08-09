@@ -68,6 +68,10 @@ public:
     bool undoDeletedDifficultyField();
     void clearChartSelectionTransformUndoEntries();
     void syncChartSelectionTransformUndoState();
+    void recordChartCursorUndoEntry(
+        const QTextCursor& originalCursor,
+        const QTextCursor& transformedCursor,
+        double previewSecond);
     void recordChartSelectionUndoRestoreAfterNextEdit(int originalAnchor, int originalPosition);
     bool undoChartEditorWithSelectionRestore();
     bool redoChartEditorWithSelectionRestore();
@@ -150,7 +154,11 @@ private:
     void setChartBottomTabsMode(bool enabled);
     void pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold);
     void updateLastObservedChartEditorUndoRedoSteps();
-    void recordChartSelectionTransformUndoEntry(int originalAnchor, int originalPosition, const QTextCursor& transformedCursor);
+    void recordChartSelectionTransformUndoEntry(
+        int originalAnchor,
+        int originalPosition,
+        const QTextCursor& transformedCursor,
+        double previewSecond = -1.0);
     const SelectionTransformUndoEntry* findChartSelectionTransformUndoEntry(int undoStepAfterApply) const;
     bool restoreChartSelectionTransformCursor(const SelectionTransformUndoEntry& entry, bool transformedSelection);
 

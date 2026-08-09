@@ -640,6 +640,7 @@ private:
         int originalPosition = -1;
         int transformedAnchor = -1;
         int transformedPosition = -1;
+        double previewSecond = -1.0;
     };
 
 public:

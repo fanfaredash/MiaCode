@@ -232,6 +232,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/editor/PlainCodeEditor.BracketCompletion.cpp
     src/editor/PlainCodeEditor.Input.cpp
     src/editor/PlainCodeEditor.Bookmarks.cpp
+    src/editor/BookmarkCommentSyntax.h
+    src/editor/BookmarkCommentSyntax.cpp
     src/editor/TouchPadAuthoringEdit.h
     src/editor/TouchPadAuthoringEdit.cpp
     src/editor/BracketCompletionPopup.h
@@ -1297,6 +1299,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/PlainCodeEditor.BracketCompletion.cpp
             src/editor/PlainCodeEditor.Input.cpp
             src/editor/PlainCodeEditor.Bookmarks.cpp
+            src/editor/BookmarkCommentSyntax.h
+            src/editor/BookmarkCommentSyntax.cpp
             src/editor/TouchPadAuthoringEdit.h
             src/editor/TouchPadAuthoringEdit.cpp
             src/editor/BracketCompletionPopup.h

@@ -353,13 +353,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         applyEditorOverwriteModeEnabled(enabled, true);
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::activateBookmarkAtLine);
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkCreateRequested, this, [this](int line) {
-        if (editorSection_ != nullptr) {
-            // Dialog-free creation: default name now, inline rename in the
-            // sidebar for the final name (see the bookmark redesign spec).
-            editorSection_->createBookmarkAtLine(line, true);
-        }
-    });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkRenameRequested, this, [this](int line) {
         if (documentSection_ != nullptr) {
             documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
@@ -368,11 +361,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(editor, &PlainCodeEditor::lineNumberBookmarkDeleteRequested, this, [this](int line) {
         if (editorSection_ != nullptr) {
             editorSection_->deleteBookmarkAtLineWithConfirmation(line);
-        }
-    });
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkMoveRequested, this, [this](int fromLine, int toLine) {
-        if (editorSection_ != nullptr) {
-            editorSection_->replaceBookmarkLine(fromLine, toLine);
         }
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkContextMenuRequested, this,
@@ -1344,6 +1332,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         QTextCursor cursor = editor->textCursor();
+        const QTextCursor originalCursor = cursor;
         const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
             editor->toPlainText(), cursor.position(), pad, backtickSeparator);
         if (!editPlan.valid) {
@@ -1362,6 +1351,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         editor->setTextCursor(cursor);
+        if (documentSection_ != nullptr) {
+            documentSection_->recordChartCursorUndoEntry(
+                originalCursor,
+                cursor,
+                hasTokenSecond ? qMax(0.0, tokenSecond - (1.0 / 60.0)) : -1.0);
+        }
         editor->setFocus(Qt::OtherFocusReason);
         if (hasTokenSecond) {
             seekPreviewDiscreteToSecond(qMax(0.0, tokenSecond - (1.0 / 60.0)), true);
