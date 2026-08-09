@@ -20,10 +20,24 @@ int main()
     using miacode::preview_audio::bass::SfxSchedulerAnchor;
     using miacode::preview_audio::bass::chartSecondForMixerSecond;
     using miacode::preview_audio::bass::mixerSecondForChartSecond;
+    using miacode::preview_audio::bass::shouldLogDisarm;
 
     QTextStream err(stderr);
     QTextStream out(stdout);
     bool ok = true;
+
+    ok &= require(
+        shouldLogDisarm(true, false, -1),
+        QStringLiteral("an active scheduler disarm remains visible"), err);
+    ok &= require(
+        shouldLogDisarm(false, true, -1),
+        QStringLiteral("a disarm with a sync remains visible"), err);
+    ok &= require(
+        shouldLogDisarm(false, false, 0),
+        QStringLiteral("a disarm with a group remains visible"), err);
+    ok &= require(
+        !shouldLogDisarm(false, false, -1),
+        QStringLiteral("only a proven no-op disarm is suppressed"), err);
 
     const SfxSchedulerAnchor oneX {10.0, 120.0, 1.0};
     ok &= require(

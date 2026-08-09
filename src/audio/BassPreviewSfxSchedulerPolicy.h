@@ -4,6 +4,11 @@
 
 namespace miacode::preview_audio::bass {
 
+inline bool shouldLogDisarm(bool wasActive, bool hadSync, int groupIndex) noexcept
+{
+    return wasActive || hadSync || groupIndex != -1;
+}
+
 // The master mixer is intentionally never stopped.  Each live preview session
 // therefore records the mixer position that corresponds to its chart-second
 // anchor, allowing SFX BASS_SYNC_POS positions to remain meaningful across

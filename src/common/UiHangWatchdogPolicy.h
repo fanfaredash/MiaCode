@@ -2,12 +2,53 @@
 
 #include <QtGlobal>
 
+#include <optional>
+
 namespace miacode::hang_watchdog::policy {
 
 enum class Trigger {
     None,
     ActivePhase,
     IdleHeartbeat,
+};
+
+struct SuppressedReportSummary {
+    quint64 episodeId = 0;
+    int suppressedCount = 0;
+    Trigger trigger = Trigger::None;
+};
+
+// Holds only the state needed to explain repeated will_report=0 polls. The
+// emitter decides where to write a returned summary; this policy never logs.
+class SuppressionEpisode
+{
+public:
+    std::optional<SuppressedReportSummary> observe(bool willReport, Trigger trigger)
+    {
+        if (!willReport) {
+            if (!episode_.has_value()) {
+                episode_ = SuppressedReportSummary{nextEpisodeId_++, 0, trigger};
+            }
+            ++episode_->suppressedCount;
+            episode_->trigger = trigger;
+            return std::nullopt;
+        }
+        return endEpisode();
+    }
+
+    std::optional<SuppressedReportSummary> endEpisode()
+    {
+        if (!episode_.has_value()) {
+            return std::nullopt;
+        }
+        const auto summary = episode_;
+        episode_.reset();
+        return summary;
+    }
+
+private:
+    quint64 nextEpisodeId_ = 1;
+    std::optional<SuppressedReportSummary> episode_;
 };
 
 inline bool monitorPauseRequiresRearm(qint64 monitorLoopGapMs, qint64 expectedMonitorLoopMs)

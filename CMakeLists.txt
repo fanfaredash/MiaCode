@@ -1822,6 +1822,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src
     )
 
+    miacode_add_dev_tool(log_pruning_policy_spec TEST
+        SOURCES
+            src/tools/debug_index/LogPruningPolicySpec.cpp
+            src/common/LogEmissionPolicy.h
+            src/common/UiHangWatchdogPolicy.h
+            src/audio/BassPreviewSfxSchedulerPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
     miacode_add_dev_tool(process_diagnostics_spec TEST
         SOURCES
             src/tools/debug_index/ProcessDiagnosticsSpec.cpp

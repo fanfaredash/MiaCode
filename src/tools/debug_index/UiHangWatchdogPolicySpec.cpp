@@ -24,6 +24,32 @@ int main()
     QTextStream out(stdout);
     bool ok = true;
 
+    policy::SuppressionEpisode suppressionEpisode;
+    ok &= require(
+        !suppressionEpisode.observe(false, Trigger::IdleHeartbeat).has_value(),
+        QStringLiteral("first suppressed report opens an episode"), err);
+    ok &= require(
+        !suppressionEpisode.observe(false, Trigger::ActivePhase).has_value(),
+        QStringLiteral("later suppressed report increments the same episode"), err);
+    const auto suppressionSummary = suppressionEpisode.observe(true, Trigger::ActivePhase);
+    ok &= require(
+        suppressionSummary.has_value()
+            && suppressionSummary->episodeId == 1
+            && suppressionSummary->suppressedCount == 2
+            && suppressionSummary->trigger == Trigger::ActivePhase,
+        QStringLiteral("next report flushes its suppression count id and trigger"), err);
+    ok &= require(
+        !suppressionEpisode.endEpisode().has_value(),
+        QStringLiteral("flushed suppression episode closes cleanly"), err);
+    suppressionEpisode.observe(false, Trigger::IdleHeartbeat);
+    const auto shutdownSummary = suppressionEpisode.endEpisode();
+    ok &= require(
+        shutdownSummary.has_value()
+            && shutdownSummary->episodeId == 2
+            && shutdownSummary->suppressedCount == 1
+            && shutdownSummary->trigger == Trigger::IdleHeartbeat,
+        QStringLiteral("episode end flushes its pending suppression summary"), err);
+
     ok &= require(policy::classify(false, 0, true, 4999, 2000, 5000) == Trigger::None,
                   QStringLiteral("inactive heartbeat below threshold"), err);
     ok &= require(policy::classify(false, 0, true, 5000, 2000, 5000) == Trigger::IdleHeartbeat,
