@@ -8,29 +8,38 @@
 
 **Tech Stack:** C++17, Qt 6 Core/Widgets/QML, `std::thread`/`std::condition_variable`, BASS/BASSmix/BASS_FX, miniaudio/SoundTouch, CMake dev-tool specs, CTest, `miacode::debug_log`.
 
-## Task Status (2026-08-08)
+## Task Status (2026-08-09)
 
 - [x] Task 1: Typed Protocol And Bounded Command Queue
 - [x] Task 2: Worker Ownership, Snapshot Publication, And Failure Recovery
-- [ ] Task 3: Non-GUI Completion Barrier
-- [ ] Task 4: Make Miniaudio A Real Backend Implementation
-- [ ] Task 5: Serialize Process-Wide BASS Device Lifetime
-- [ ] Task 6: Convert QtPreviewSfxRuntime Into A Non-Blocking Facade
-- [ ] Task 7: Migrate Startup, Retained Resume, And Seek State Machines
-- [ ] Task 8: Immediate Manual And Device-Change Pause
-- [ ] Task 9: Migrate Ticks, Warmup, Dialog, Latency, Probe, And Shutdown
-- [ ] Task 10: Pure Log-Pruning Policies
-- [ ] Task 11: Wire Audio, Media, Watchdog, And Scene Log Gates
-- [ ] Task 12: Wire QuickShell And Background Edge Logging
-- [ ] Task 13: Documentation And Complete Verification
+- [x] Task 3: Non-GUI Completion Barrier
+- [x] Task 4: Make Miniaudio A Real Backend Implementation
+- [x] Task 5: Serialize Process-Wide BASS Device Lifetime
+- [x] Task 6: Convert QtPreviewSfxRuntime Into A Non-Blocking Facade
+- [x] Task 7: Migrate Startup, Retained Resume, And Seek State Machines
+- [x] Task 8: Immediate Manual And Device-Change Pause
+- [x] Task 9: Migrate Ticks, Warmup, Dialog, Latency, Probe, And Shutdown
+- [x] Task 10: Pure Log-Pruning Policies
+- [x] Task 11: Wire Audio, Media, Watchdog, And Scene Log Gates
+- [x] Task 12: Wire QuickShell And Background Edge Logging
+- [ ] Task 13: Documentation And Complete Verification (implementation complete; acceptance pending)
 
-Completed commits: `db8a83d1`, `55d33f34`, `29c245d1`, `adb3c964`, `a1e70c05`, and `7e7423b7`.
+Implementation commits are recorded in the branch history; the final integration commits are
+`97daa12e` and `137d2032`.
+
+Verification status (2026-08-09):
+
+- The affected Release targets build successfully with `--parallel 1`; focused CTest passes 14/14.
+- Full CTest passes 53/56. The three stable failures are pre-existing and outside this change:
+  `oplog_self_test`, `plain_code_editor_spec`, and `preview_firework_lifecycle_spec`.
+- Windows BASS hardware acceptance for repeated output-device changes and shutdown during an
+  in-flight change remains outstanding because this worktree is running on macOS.
 
 ---
 
 ## Working Rules
 
-- Work only in `/Users/caoyusen/.codex/worktrees/MiaCode/windows-idle-freeze-diagnostics` on `codex/windows-idle-freeze-diagnostics`.
+- Work only in `/Users/caoyusen/.codex/worktrees/MiaCode/windows-idle-freeze-diagnostics` on `dev-preview-audio-worker-autopause-log-pruning`.
 - Preserve the unrelated main-workspace edit in `src/wrapper/MiaCodeLauncher.cpp`; never stage it from `/Users/caoyusen/Desktop/MiaCode`.
 - Follow `@superpowers:test-driven-development`: add one behavioral spec, run it and observe the expected failure, then add only the implementation needed to pass.
 - Follow `@miacode-dev-guide`: `src/audio` remains the only module that links native audio libraries; MainWindow files orchestrate but do not own worker mechanics.
