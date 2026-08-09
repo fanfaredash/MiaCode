@@ -92,6 +92,19 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
   `preview/quick_scene/` layer; do not reintroduce a painter/OpenGL fallback path.
 - Realtime preview BGM timing is backend-owned: Windows/macOS BASS builds use BASS/BASS_FX for
   all rates; builds without BASS use the stretched SoundTouch path with an engine-time anchor clock.
+- `QtPreviewSfxRuntime` is a GUI-thread facade only. Every native preview-audio construction,
+  backend call, health sample, and destruction belongs to the in-process `PreviewAudioWorker`
+  `std::thread`; GUI code submits owned value commands and reads immutable snapshots.
+- Worker completions cross one typed acceptance boundary: playback results require the current
+  generation plus transaction, asset-ready results require the current asset generation, and a
+  device pause also requires its immutable pause token. Do not add one-off completion checks in
+  MainWindow call sites.
+- A real output-device change freezes GUI/video progress before its reserved worker pause is
+  submitted. It is an explicit, permanent pause: only a later user Play action may resume it.
+  Never turn device recovery into automatic playback recovery.
+- `PreviewBassDeviceLease` serializes the process-wide `BASS_GetDevice`, `BASS_Init`, and final
+  `BASS_Free` lifetime edges only. It must not wrap ordinary channel/mixer work or extend the
+  worker lock scope around native callbacks.
 - Asset lookup is file-based and convention-driven, not database-driven.
 - **UI localization has ONE inline entry point: `UiText::localized(en, zh, ja = {})`**
   (`src/app/ui/UiText.h`). Simplified Chinese is the reference language. Do NOT reintroduce the

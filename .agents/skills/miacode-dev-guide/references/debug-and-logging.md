@@ -47,6 +47,22 @@ gated `appendLine`; don't reintroduce that pattern.)
   re-read per log line). If code/tests mutate one of those env vars at runtime, call
   `debug_options::refreshDebugCategoryCache()` to re-snapshot. `MIACODE_SKIP_ASYNCLOG_FLUSH` is read once.
 
+### Proven no-op pruning
+
+`src/common/LogEmissionPolicy.h` contains pure state machines only: no `DebugLog.h`, callbacks, or
+I/O. Owners retain their own gate for their lifecycle. The logging policy intentionally suppresses
+only these repeat families:
+
+- BASS scheduler `action=disarm` only when `was_active=0 had_sync=0 group_idx=-1`.
+- Ordinary `preview/stage_media action=playback_rate` repeats for the same `(rate, media kind)`;
+  deferred, flushed, and error paths still emit, and a chart/media change resets the gate.
+- `ui/hang_watchdog action=report_gate will_report=0` repeats. The next stale report, or a
+  trigger-clear/rearm/shutdown episode-end line, carries `suppressed_count`, `episode_id`, and trigger.
+- `<2 ms` timeline scene rebuilds become one-second summaries; slow/error rebuilds and
+  `action=update_paint_node_stats` remain individual evidence.
+- QuickShell repeated mouse/background/surface signatures. A changed watched object, background
+  settings, surface handle/size, or any workspace sync taking `>=50 ms` still emits.
+
 ### Log file locations
 - Shared dir env: `MIACODE_LOG_DIR`. Default: project-local `.miacode/logs/` once a chart is
   bound, else app-local `logs/` next to the executable.

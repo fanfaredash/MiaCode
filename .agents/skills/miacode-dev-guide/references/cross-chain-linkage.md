@@ -153,6 +153,23 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
 
 If one side changes, inspect the other in the same patch.
 
+### 4a. Preview-audio GUI to worker boundary
+
+Realtime preview is not an export worker: `QtPreviewSfxRuntime` stays in the GUI thread as the
+facade while `PreviewAudioWorker` owns its native backend on one `std::thread`. MainWindow startup,
+timeline ticks, settings audition, latency sandbox, and `soundtouch_probe` all submit typed value
+commands through the bounded queue; only probe/spec code may wait on the non-GUI completion barrier.
+
+- Playback completions must match current `generation` and `transactionId`; reload/ready completions
+  must match current `assetGeneration`; a device pause must also match the first captured
+  `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
+  facade and the specs.
+- `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
+  GUI/video state before submitting the reserved high-priority device pause. The worker later stops
+  audio/SFX; it does not advance the playhead and it must not auto-resume after a device recovers.
+- `PreviewBassDeviceLease` is shared by preview, waveform, and export BASS lifecycle users. Keep
+  BASS global device init/free serialization there, but keep normal channel work within its owner.
+
 ## 5. Background-media resolution & host route ownership
 
 > Updated 2026-05-29: `PreviewMediaController` and `src/preview/video/` were removed. Background

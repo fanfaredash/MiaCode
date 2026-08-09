@@ -390,9 +390,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   commands to `PreviewAudioWorker`, reads published snapshots for synchronous fallbacks, and delivers
   worker completions through queued Qt signals; it never owns a native backend.
 - Worker boundary: `PreviewAudioWorker.{h,cpp}`, `PreviewAudioWorkerProtocol.h`,
-  `PreviewAudioCommandQueue.*`, and `PreviewAudioWorkerFactory.*` — worker-thread backend ownership,
-  command/completion transport, lifecycle and health snapshots, generation gates, and serialized
-  shutdown.
+  `PreviewAudioCommandQueue.*`, and `PreviewAudioWorkerFactory.*` — one non-`QObject`
+  `std::thread` owns backend construction/use/destruction and periodic health samples. The bounded
+  queue reserves capacity for shutdown/manual/device pause, keeps BGM sync/event drain latest-only,
+  and carries only owned value payloads.
+- Completion contract: `generation` + `transactionId` accepts playback results, `assetGeneration`
+  accepts reload/ready results, and device-pause completions additionally match the first immutable
+  `pauseToken`. `PreviewAudioNonGuiBarrierSpec` covers worker/probe waits; GUI MainWindow paths must
+  consume queued completions instead of blocking.
+- Device behavior: `PreviewAudioDeviceWatcher` reports a real device topology/default change to the
+  MainWindow, which captures and visibly freezes the pause second before enqueueing its reserved
+  device pause. The completion leaves playback paused until an explicit Play action.
 - Process-wide BASS device lifetime: `PreviewBassDeviceLease.{h,cpp}` — serializes only
   `BASS_GetDevice` / `BASS_Init` / final `BASS_Free` for preview, waveform, and export owners;
   existing devices are borrowed and never freed by the lease.
