@@ -48,7 +48,7 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
         return true;
     }
     const double effectiveGain = qMax(0.0, gain);
-    const double effectiveVolume = qBound(0.0, volume * effectiveGain, 1.5);
+    const double effectiveVolume = qBound(0.0, volume * effectiveGain, 2.0);
     ma_sound_stop(&voice->sound);
     ma_sound_set_volume(&voice->sound, static_cast<float>(effectiveVolume));
     ma_sound_seek_to_pcm_frame(&voice->sound, 0);

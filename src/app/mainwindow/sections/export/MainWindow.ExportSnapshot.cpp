@@ -685,6 +685,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     // keeps CLI / batch emitting it). The clock_count VALUE is re-derived worker-side.
     built.clockCountEnabled = requestedTask.clockCountEnabled;
     built.introSoundFileName = requestedTask.introSoundFileName;
+    built.introSoundVolume = requestedTask.introSoundVolume;
     built.intro = buildIntroBannerSpec(
         owner_.document_,
         resolvedDifficultyId,
@@ -896,6 +897,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     // clock_count value itself is rebuilt from each chart in the worker.
     built.clockCountEnabled = requestedTask.clockCountEnabled;
     built.introSoundFileName = requestedTask.introSoundFileName;
+    built.introSoundVolume = requestedTask.introSoundVolume;
     built.intro = buildIntroBannerSpec(
         document,
         difficultyId,

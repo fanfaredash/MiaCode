@@ -150,6 +150,8 @@ signals:
     // Embedded mode only: 添加片头 toggled or a 片头 setting changed — the host
     // refreshes the negative-time intro region (slider range + overlay).
     void introPreviewSettingsChanged();
+    void introSoundFileNameChanged(const QString& fileName);
+    void introSoundVolumeChanged(double volume);
     // Embedded mode only: the "Enable clock_count" checkbox toggled — the host
     // re-seeds the export-page audition's count-in so the preview matches what
     // will be exported (WYSIWYG).
@@ -206,6 +208,7 @@ private:
     // Sub-control gating: background path row follows the combo, card
     // sub-options follow the card toggle, everything follows 添加片头.
     void syncIntroControlsEnabled();
+    void importIntroSound();
     void browseIntroBackground();
     // Current intro spec = baseTask_.intro (chart payload) + the tab's styling
     // controls. The preview receives a resolved DX/Standard mode; the export
@@ -269,6 +272,8 @@ private:
     bool rangePreviewPlaying_ = false;
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
+    // Shared gate for all combo/spin controls on this export surface.
+    bool disableSelectionWheelChanges_ = true;
     bool initialShowTimestamp_ = true;
     bool initialShowObjectStats_ = false;
     bool initialShowChartInfo_ = false;
@@ -296,6 +301,10 @@ private:
     QCheckBox* fixHudTextLayoutCheck_ = nullptr;
     QCheckBox* clockCountCheck_ = nullptr;
     QCheckBox* addIntroCheck_ = nullptr;
+    QComboBox* introSoundCombo_ = nullptr;
+    QPushButton* introSoundImportButton_ = nullptr;
+    QSlider* introSoundVolumeSlider_ = nullptr;
+    miacode::ui::EditableValueLabel* introSoundVolumeValueLabel_ = nullptr;
     // ---- "片头" tab controls ----
     QComboBox* introBackgroundCombo_ = nullptr;
     QLineEdit* introBackgroundPathEdit_ = nullptr;

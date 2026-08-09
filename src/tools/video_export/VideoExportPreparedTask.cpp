@@ -795,9 +795,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
                            .arg(audioInputIndex)
                            .arg(totalSecondsText)
                            .arg(kMixSampleRate);
-        filterParts << QStringLiteral("[%1:a]aresample=%2,aformat=channel_layouts=stereo[introaud]")
+        filterParts << QStringLiteral("[%1:a]aresample=%2,aformat=channel_layouts=stereo,volume=%3[introaud]")
                            .arg(introAudioInputIndex)
-                           .arg(kMixSampleRate);
+                           .arg(kMixSampleRate)
+                           .arg(QString::number(qBound(0.0, task.introSoundVolume, 2.0), 'f', 6));
         filterParts << QStringLiteral("[mainaud][introaud]amix=inputs=2:normalize=0:duration=first[aout]");
     } else {
         filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[aout]")
