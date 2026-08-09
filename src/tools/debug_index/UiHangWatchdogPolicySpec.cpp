@@ -133,7 +133,7 @@ int main()
         policy::classifyHeartbeatStall(false, 600000, 1000, true) == StallTransition::Ended,
         QStringLiteral("unarmed heartbeat closes an open episode"), err);
 
-    // Tokens are greppable contract, same as the stack-capture decisions above.
+    // Stall transition tokens are a greppable log contract.
     ok &= require(QLatin1String(policy::stallTransitionName(StallTransition::Began))
                       == QLatin1String("began"),
                   QStringLiteral("stall began token"), err);
@@ -143,95 +143,6 @@ int main()
     ok &= require(QLatin1String(policy::stallTransitionName(StallTransition::None))
                       == QLatin1String("none"),
                   QStringLiteral("stall none token"), err);
-
-    // ---- stack capture decision -------------------------------------------------
-    // A hang report that arrives without a stack must say why. These five decisions are
-    // the complete set of answers, and each maps to a token an operator greps for in the
-    // `stack=` field of `action=gui_thread_stale`.
-    using policy::StackCaptureDecision;
-    ok &= require(policy::classifyStackCapture(true, Trigger::IdleHeartbeat, 100000, 0, 0, 30000, 16)
-                      == StackCaptureDecision::Capture,
-                  QStringLiteral("first hang is classified as a capture"), err);
-    ok &= require(policy::classifyStackCapture(false, Trigger::IdleHeartbeat, 100000, 0, 0, 30000, 16)
-                      == StackCaptureDecision::SkipDisabled,
-                  QStringLiteral("a session disabled by a timeout is classified as such"), err);
-    ok &= require(policy::classifyStackCapture(true, Trigger::None, 100000, 0, 0, 30000, 16)
-                      == StackCaptureDecision::SkipNoTrigger,
-                  QStringLiteral("no trigger is classified as no trigger"), err);
-    ok &= require(
-        policy::classifyStackCapture(true, Trigger::IdleHeartbeat, 900000, 100000, 16, 30000, 16)
-            == StackCaptureDecision::SkipBudget,
-        QStringLiteral("an exhausted session budget is classified as budget"), err);
-    ok &= require(
-        policy::classifyStackCapture(true, Trigger::IdleHeartbeat, 105000, 100000, 1, 30000, 16)
-            == StackCaptureDecision::SkipInterval,
-        QStringLiteral("a repeat inside the interval is classified as interval"), err);
-    ok &= require(
-        policy::classifyStackCapture(true, Trigger::IdleHeartbeat, 130000, 100000, 1, 30000, 16)
-            == StackCaptureDecision::Capture,
-        QStringLiteral("an elapsed interval is classified as a capture"), err);
-
-    // Veto order is reported verbatim, so it is contract: disabled outranks budget
-    // outranks interval. "We stopped capturing entirely" is the fact worth surfacing.
-    ok &= require(
-        policy::classifyStackCapture(false, Trigger::IdleHeartbeat, 105000, 100000, 16, 30000, 16)
-            == StackCaptureDecision::SkipDisabled,
-        QStringLiteral("disabled outranks budget and interval"), err);
-    ok &= require(
-        policy::classifyStackCapture(true, Trigger::IdleHeartbeat, 105000, 100000, 16, 30000, 16)
-            == StackCaptureDecision::SkipBudget,
-        QStringLiteral("budget outranks interval"), err);
-
-    // The classifier is the only decision point; the boolean gate must never disagree.
-    struct StackCaptureCase {
-        bool sessionEnabled;
-        Trigger trigger;
-        qint64 nowMs;
-        qint64 lastCaptureAtMs;
-        int capturesSoFar;
-        qint64 minIntervalMs;
-        int maxCaptures;
-    };
-    const StackCaptureCase cases[] = {
-        {true, Trigger::IdleHeartbeat, 100000, 0, 0, 30000, 16},
-        {false, Trigger::IdleHeartbeat, 100000, 0, 0, 30000, 16},
-        {true, Trigger::None, 100000, 0, 0, 30000, 16},
-        {true, Trigger::IdleHeartbeat, 900000, 100000, 16, 30000, 16},
-        {true, Trigger::IdleHeartbeat, 105000, 100000, 1, 30000, 16},
-        {true, Trigger::IdleHeartbeat, 130000, 100000, 1, 30000, 16},
-        {true, Trigger::ActivePhase, 900000, 100000, 16, 30000, 0},
-        {false, Trigger::None, 0, 0, 0, 30000, 16},
-    };
-    for (const StackCaptureCase& item : cases) {
-        const bool gate = policy::shouldCaptureStack(
-            item.sessionEnabled, item.trigger, item.nowMs, item.lastCaptureAtMs,
-            item.capturesSoFar, item.minIntervalMs, item.maxCaptures);
-        const bool classified = policy::classifyStackCapture(
-                                    item.sessionEnabled, item.trigger, item.nowMs,
-                                    item.lastCaptureAtMs, item.capturesSoFar,
-                                    item.minIntervalMs, item.maxCaptures)
-            == StackCaptureDecision::Capture;
-        ok &= require(gate == classified,
-                      QStringLiteral("shouldCaptureStack agrees with the classifier"), err);
-    }
-
-    // Tokens are what an operator greps (`stack=skipped_budget`), so pin them.
-    ok &= require(QLatin1String(policy::stackCaptureDecisionName(StackCaptureDecision::Capture))
-                      == QLatin1String("capture"),
-                  QStringLiteral("capture decision token"), err);
-    ok &= require(QLatin1String(policy::stackCaptureDecisionName(StackCaptureDecision::SkipDisabled))
-                      == QLatin1String("skipped_disabled"),
-                  QStringLiteral("disabled decision token"), err);
-    ok &= require(QLatin1String(policy::stackCaptureDecisionName(StackCaptureDecision::SkipBudget))
-                      == QLatin1String("skipped_budget"),
-                  QStringLiteral("budget decision token"), err);
-    ok &= require(QLatin1String(policy::stackCaptureDecisionName(StackCaptureDecision::SkipInterval))
-                      == QLatin1String("skipped_interval"),
-                  QStringLiteral("interval decision token"), err);
-    ok &= require(
-        QLatin1String(policy::stackCaptureDecisionName(StackCaptureDecision::SkipNoTrigger))
-            == QLatin1String("skipped_no_trigger"),
-        QStringLiteral("no-trigger decision token"), err);
 
     if (ok) {
         out << "UI hang watchdog policy spec passed." << Qt::endl;

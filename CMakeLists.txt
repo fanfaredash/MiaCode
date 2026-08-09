@@ -236,8 +236,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/UiHangWatchdog.h
     src/common/UiHangWatchdog.cpp
     src/common/UiHangWatchdogPolicy.h
-    src/common/ThreadStackCapture.h
-    src/common/ThreadStackCapture.cpp
     src/common/ProcessDiagnostics.h
     src/common/ProcessDiagnostics.cpp
     src/common/GpuDevicePolicy.h
@@ -749,7 +747,6 @@ if (WIN32)
                      # (GpuDevicePolicy, ProcessDiagnostics, TimelineQuickItem)
         User32       # RegisterPowerSettingNotification
         Wtsapi32     # Session lock/unlock notifications for idle-freeze diagnostics
-        dbghelp      # StackWalk64 + Sym* for the hang watchdog's GUI-thread self stack walk
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1844,19 +1841,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
     if (WIN32)
         # Per-adapter VRAM gauge: CreateDXGIFactory1 + IDXGIAdapter3::QueryVideoMemoryInfo.
         target_link_libraries(process_diagnostics_spec PRIVATE dxgi)
-    endif()
-
-    miacode_add_dev_tool(thread_stack_capture_spec TEST
-        SOURCES
-            src/tools/debug_index/ThreadStackCaptureSpec.cpp
-            src/common/ThreadStackCapture.h
-            src/common/ThreadStackCapture.cpp
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-    if (WIN32)
-        # StackWalk64 / SymFromAddr for the GUI-thread self stack walk.
-        target_link_libraries(thread_stack_capture_spec PRIVATE dbghelp)
     endif()
 
     miacode_add_dev_tool(windows_idle_event_diagnostics_spec TEST

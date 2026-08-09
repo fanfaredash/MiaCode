@@ -8,6 +8,8 @@
 > **勘误（2026-08-07，修复实施后）**：本报告有两条结论经复核为**错误，已撤回**。
 > - **R-5（MMCSS 说明失实）撤回**。`src/preview/quick_scene/PreviewQuickSceneRoot.cpp:798` **确实**在默认路径上把 QSG 渲染线程注册进 MMCSS（task class `Games`，仅 `MIACODE_DISABLE_MMCSS=1` 可关）。原判断源于一次被 `head -20` 截断的 grep。分支原有的注释与 `DEBUG_INDEX.md` 描述**是准确的**，`PreviewAudioHealthSpec.cpp` 也已断言 `app_mmcss_task_class=Games`。未做任何修改。
 > - **O-1 / R-2（`TimelineView` 为死代码）撤回**。`src/app/cli_video_export.cpp:346` 的 `MainWindow window;` 使用默认实参 `quickShellBootstrapMode = false`，因此 `--export-video` CLI 导出路径**会**构造 `TimelineView`，并通过 `attachReferenceView()` 与 `TimelineQuickStateBridge` 双向绑定。原判断遗漏了这个 `MainWindow` 构造点。3468 行代码是活的，未删除。
+
+> **后续变更（2026-08-09）**：为避免 Windows 用户遇到线程句柄/安全软件拦截导致的错误弹窗，watchdog 的 GUI 线程栈获取路径（`ThreadStackCapture`、`dbghelp`、`gui_thread_stack`）已从当前开发分支移除。本文中关于自栈回溯、`SymInitialize`、栈预算和超时的条目属于历史审计记录，不代表当前产品能力；当前仍保留 heartbeat、stall episode 和 hang report。
 >
 > 其余结论经实施与编译/测试验证后成立。
 

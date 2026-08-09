@@ -114,7 +114,7 @@ $evidenceRoot = "D:\miacode-idle-freeze"
 - `[runtime/idle/resource_gauge] action=sample sample=0` 应在启动后出现，随后约每 30 秒一条。
 - `[runtime/idle/vram_gauge] action=adapter_scan` 应与上面同一节拍出现，`adapter_count` 在这台机器上应为 **2**，随后每块适配器各一条 `action=sample`，含 `local_budget_mb` / `local_usage_mb` / `local_over_budget`。
 - `[runtime/window/visibility] action=installed` 应对 `surface=root_window` 与 `surface=preview_composite` 各出现一次；同时应有一条 `action=graphics_persistence surface=preview_composite persistent_graphics=1`，它说明**最小化不会释放预览的显存**。
-- `[runtime/ui/hang_watchdog] action=installed` 应含 `stack_capture=1`；若为 `0`，GUI 线程栈抓取未就绪，冻结时拿不到栈。
+- `[runtime/ui/hang_watchdog] action=installed` 应记录 heartbeat 与 hang threshold；当前 watchdog 不执行 GUI 线程栈获取，也不会加载 Windows 符号组件。
 - 开启 `MIACODE_PREVIEW_FRAME_PACING_DIAG=1` 后，播放时应出现 `render_frame_profile` 行。
 - 播放时音频日志应出现 `bass_audio_health`（约每 5 秒一条）。
 - 显示器状态改变应出现 `[runtime/windows/environment_event] action=console_display_state console_display_state=off|on|dimmed`。
@@ -149,37 +149,13 @@ procdump.exe -accepteula -ma $targetPid (Join-Path $runDir "miacode-freeze-$targ
 
 日志中若出现 `[runtime/ui/hang_watchdog] action=gui_thread_stale trigger=idle_heartbeat`，其 `heartbeat_age_ms` 给出 GUI 心跳停止时间。若完全没有该行，仍须保留 dump；同时用启动身份和资源采样行确认日志目录及诊断构建是否正确。
 
-**dump 传不动时，日志里的 GUI 线程栈就是替代品。** 紧随上面那行之后应出现：
-
-```
-[runtime/ui/hang_watchdog] action=gui_thread_stack ... capture_index=0 capture=captured captured=1 frame_count=NN
-[runtime/ui/hang_watchdog_stack] capture_index=0 frame=00 addr=0x... module=MiaCode.exe module_offset=0x... symbol=...
-```
-
-- `symbol=(nosym)` 是用户机上的正常结果（没有 PDB）——**但先看同一行的 `sym_ready=`再下这个结论**。`sym_ready=1` 才说明符号句柄已就绪、`(nosym)` 确实只是缺 PDB；`sym_ready=0` 说明 `SymInitialize` 根本没起来，这一轮**任何**帧都不可能有符号，属于故障，需连同启动时的 `action=stack_symbols sym_attempted=… sym_ready=… sym_err=…` 一起回传（`sym_err=` 是 `SymInitialize` 的 `GetLastError()`）。`module` + `module_offset` 两种情况下都有效，用**同一次构建**的 PDB 离线还原即可，所以务必同时保留该构建的 PDB。
-- `captured=0` 时看 `reason=`：`not_registered` 表示启动时没拿到 GUI 线程句柄；`same_thread` / `suspend_failed` / `resume_failed` 属于异常，需连同日志一起回传。
-- 每次冻结最多抓 16 份栈、每 30 秒一份，用 `capture_index=` 对应。多份栈**帧完全一致**说明真的卡死不动；帧在变化说明是极慢而非死锁。
-- 长时间冻结里大多数 `action=gui_thread_stale` 行后面**本来就没有栈**，这不是故障。该行自带 `stack=` 说明原因：`capture` 表示紧接着有栈；`skipped_interval` 表示还在 30 秒间隔内；`skipped_budget` 表示 16 份配额已用完（`captures_so_far=` 给出已抓份数）；`skipped_disabled` 表示先前某次 `capture=timeout` 已永久关闭抓栈，本轮必须改用 ProcDump。
-
-### `capture=timeout`：本轮拿不到栈，改用 ProcDump
-
-若出现：
-
-```
-[runtime/ui/hang_watchdog] action=gui_thread_stack ... capture=timeout reason=timeout forced_resume=1 session_disabled=1
-```
-
-含义是：抓栈线程在挂起窗口内被卡住（`StackWalk64` 内部要拿 dbghelp / loader 锁，而这把锁很可能正被**被它挂起的那个 GUI 线程**持有），看门狗在 2 秒超时后**自己把 GUI 线程恢复了**，并在本次会话内**永久关闭抓栈**；之后的尝试记为 `reason=disabled_after_timeout`。
-
-这是有意为之的保护：宁可拿不到栈，也不能让诊断把 GUI 线程永久挂起，把一次可能可恢复的卡顿变成必然的硬死机。
-
-**操作要求：本轮没有栈证据，必须改用 ProcDump 取完整 dump（见上面的命令），并在回执里注明这一轮是 `capture=timeout`。** 同时这条线索本身也有价值——它强烈暗示 GUI 线程当时卡在 loader / 符号相关路径上。
+**watchdog 不再获取 GUI 线程栈。** 为避免 Windows 用户遇到线程句柄、权限或安全软件拦截导致的错误弹窗，watchdog 只记录 heartbeat、stall episode 和 hang report；不会执行 GUI 线程挂起、符号初始化或栈遍历。发生冻结时，必须使用本指南前面的 ProcDump 流程获取完整 dump。
 
 ## 5. 必须回传的证据
 
 - 本次完整时间戳目录，包括 `phase0.json`、`powercfg.txt`、全部日志和 `process_snapshot.txt`；
 - **OBS 编码器类型（x264 / NVENC）与输出设置**，以及浏览器当时播放的分辨率；
-- 完整 `.dmp`（能传就传；传不动时以 `ui/hang_watchdog_stack` 的栈行 + 该构建的 PDB 替代。**若本轮是 `capture=timeout`，`.dmp` 不是可选项而是必需项**）；
+- 完整 `.dmp`（能传就传；当前 watchdog 不提供 GUI 栈文本替代，因此冻结取证必须使用 ProcDump 或其他 dump 工具）；
 - 冻结发生的准确时间、当时的窗口状态（最小化 / 被遮挡 / 前台）和触发步骤；
 - 两个 Profile 的相同条件、相同时长结果；
 - 日志中的 `dropped=` 计数；非零表示部分证据窗口可能已丢失。

@@ -30,10 +30,12 @@ Implementation commits are recorded in the branch history; the final integration
 Verification status (2026-08-09):
 
 - The affected Release targets build successfully with `--parallel 1`; focused CTest passes 14/14.
-- Full CTest passes 53/56. The three stable failures are pre-existing and outside this change:
+- Full CTest passes 52/55. The three stable failures are pre-existing and outside this change:
   `oplog_self_test`, `plain_code_editor_spec`, and `preview_firework_lifecycle_spec`.
 - Windows BASS hardware acceptance for repeated output-device changes and shutdown during an
   in-flight change remains outstanding because this worktree is running on macOS.
+- Follow-up on this branch removes the watchdog's Windows GUI stack-capture path to avoid
+  permission/security-product error dialogs; heartbeat, stall, and hang reporting remain.
 
 ---
 

@@ -5,7 +5,6 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
-#include "common/ThreadStackCapture.h"
 
 #include <QCoreApplication>
 #include <QTimer>
@@ -36,11 +35,6 @@ qint64 idleHeartbeatHangMs()
 {
     return static_cast<qint64>(miacode::debug_options::uiHangIdleHeartbeatMs());
 }
-// Stack captures are budgeted separately from the 5 s report cadence — see
-// policy::shouldCaptureStack for why.
-constexpr qint64 kStackCaptureIntervalMs = 30000;
-constexpr int kMaxStackCapturesPerSession = 16;
-
 // Sub-hang stall episodes — see policy::classifyHeartbeatStall for why this exists at all.
 // 1 s is four missed 250 ms heartbeats and two monitor polls: comfortably outside normal
 // scheduling jitter, and far enough below the 2 s active-phase threshold to cover the band
@@ -89,17 +83,11 @@ QString logWriterStatsPayload()
         .arg(stats.workerRunning ? 1 : 0);
 }
 
-// `stackDecision` / `capturesSoFar` are what makes a bare report readable: without them a
-// stale row that carries no stack is indistinguishable from one whose capture broke. The
-// decision is computed by the caller BEFORE this runs, but the stack itself is still
-// emitted after — the report stays the first line of the incident.
 void appendWatchdogReport(
     policy::Trigger trigger,
     const PhaseState& phase,
     qint64 nowMs,
     qint64 heartbeatAgeMs,
-    policy::StackCaptureDecision stackDecision,
-    int capturesSoFar,
     const std::optional<policy::SuppressedReportSummary>& suppressionSummary)
 {
     miacode::oplog::flushShadowToDisk();
@@ -111,9 +99,6 @@ void appendWatchdogReport(
         .arg(heartbeatAgeMs)
         .arg(phase.phase.isEmpty() ? QStringLiteral("(none)") : phase.phase)
         .arg(phase.generation);
-    payload += QStringLiteral(" stack=%1 captures_so_far=%2")
-                   .arg(QString::fromLatin1(policy::stackCaptureDecisionName(stackDecision)))
-                   .arg(capturesSoFar);
     if (suppressionSummary.has_value()) {
         payload += QStringLiteral(" suppressed_count=%1 episode_id=%2 trigger=%3")
                        .arg(suppressionSummary->suppressedCount)
@@ -202,100 +187,8 @@ void appendStallReport(
         payload);
 }
 
-// Suspend the GUI thread, walk it, resume it, then log the frames. Runs on the watchdog
-// thread only, immediately after a hang report, and only within the budget granted by
-// policy::shouldCaptureStack.
-//
-// This is the log's substitute for a crash dump: affected users cannot practically
-// transfer a full `.dmp`, so the stack has to arrive as text. Emitted at Level::Fatal so
-// every line takes the durable synchronous-flush path — a stack that is still sitting in
-// the async writer's queue when the process is killed is worth nothing.
-policy::StackCaptureOutcome appendGuiThreadStackReport(
-    policy::Trigger trigger, qint64 heartbeatAgeMs, int captureIndex)
-{
-    const miacode::diag::StackCaptureResult stack =
-        miacode::diag::captureRegisteredThreadStack();
-    // Queried after the capture, not cached from startup: captureRegisteredThreadStack's
-    // lazy fallback can be the call that performs the attempt, so a startup snapshot could
-    // under-report. Carried on the header so a reader holding one stack can tell
-    // symbol=(nosym) "no PDB on this machine" (sym_ready=1, the documented normal case)
-    // from "the symbol handler never came up" (sym_ready=0) without scrolling back to the
-    // startup line.
-    const miacode::diag::SymbolHandlerStatus symbols = miacode::diag::stackWalkSymbolStatus();
-    const policy::StackCaptureOutcome outcome =
-        stack.timedOut ? policy::StackCaptureOutcome::TimedOut
-        : stack.captured ? policy::StackCaptureOutcome::Captured
-                         : policy::StackCaptureOutcome::Failed;
-    QString header =
-        QStringLiteral("action=gui_thread_stack trigger=%1 heartbeat_age_ms=%2 capture_index=%3 "
-                       "capture=%4 supported=%5 captured=%6 frame_count=%7 suspended_us=%8 "
-                       "sym_ready=%9 sym_invaded=%10")
-            .arg(QString::fromLatin1(policy::triggerName(trigger)))
-            .arg(heartbeatAgeMs)
-            .arg(captureIndex)
-            .arg(QString::fromLatin1(policy::stackCaptureOutcomeName(outcome)))
-            .arg(stack.supported ? 1 : 0)
-            .arg(stack.captured ? 1 : 0)
-            .arg(stack.frameCount)
-            .arg(stack.suspendedUs)
-            .arg(symbols.ready ? 1 : 0)
-            .arg(symbols.invadedProcess ? 1 : 0);
-    if (!stack.skipReason.isEmpty()) {
-        header += QStringLiteral(" reason=%1").arg(stack.skipReason);
-    }
-    if (stack.lastErrorCode != 0) {
-        header += QStringLiteral(" errno=%1").arg(stack.lastErrorCode);
-    }
-    if (outcome == policy::StackCaptureOutcome::TimedOut) {
-        // Say plainly what happened and what it costs, because this is the one outcome
-        // where the diagnostic itself had to intervene in the process it was observing.
-        header += QStringLiteral(" forced_resume=1 session_disabled=1");
-    }
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("ui/hang_watchdog"),
-        header,
-        /*force=*/true,
-        miacode::debug_log::Level::Fatal);
-    for (const QString& frame : stack.frames) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("ui/hang_watchdog_stack"),
-            QStringLiteral("capture_index=%1 %2").arg(captureIndex).arg(frame),
-            /*force=*/true,
-            miacode::debug_log::Level::Fatal);
-    }
-    return outcome;
-}
-
 void watchdogLoop()
 {
-    // dbghelp is warmed on this thread — never on the GUI thread, and never lazily during a
-    // hang — but NOT at the first instruction. SymInitialize enumerates the loaded modules
-    // and takes the loader lock, and this thread starts from installGuiHeartbeat(), which
-    // runs just after the QApplication constructor while the GUI thread is still loading Qt
-    // platform plugins and graphics backends. Both want the loader lock, and the watchdog
-    // loses: it would sit blocked through exactly the startup window it is meant to watch.
-    //
-    // So wait for the first GUI heartbeat. That is the cheapest available proof that the
-    // event loop is running and plugin loading is done — the quiet moment the eager call
-    // was reaching for and, at startup, could not actually have. The idle trigger is
-    // disarmed until that same heartbeat anyway, so this costs no coverage it had before.
-    // A marked-phase hang before the first heartbeat still gets a stack: the lazy fallback
-    // inside captureRegisteredThreadStack performs the attempt itself.
-    //
-    // Its own line rather than a field on `action=installed`: that line is written on the
-    // GUI thread and installGuiHeartbeat() returns before this thread has necessarily run,
-    // so folding the result in would need a handshake the diagnostic has no business
-    // introducing. Not force/Fatal either — this is a startup fact recorded long before
-    // any hang, not hang evidence that has to survive a kill.
-    // Prepared inside the monitor loop below, on the first poll that sees a heartbeat --
-    // NOT by blocking here until one arrives. Marked-phase detection is live before the
-    // first heartbeat (policy::classify only gates the *idle* trigger on it), so stopping
-    // the loop to wait would trade one startup blind spot for a worse one.
-    const qint64 symbolWaitStartMs = steadyMs();
-    bool symbolsPrepared = false;
-
     // Sampled once, not per loop: an env lookup every 500 ms is waste, and a threshold
     // that changed mid-session would make a capture impossible to interpret.
     const qint64 activePhaseTimeoutMs = activePhaseHangMs();
@@ -304,9 +197,6 @@ void watchdogLoop()
     policy::Trigger reportedTrigger = policy::Trigger::None;
     quint64 reportedGeneration = 0;
     qint64 reportedAtMs = 0;
-    qint64 lastStackCaptureAtMs = 0;
-    int stackCaptureCount = 0;
-    bool stackCaptureSessionEnabled = true;
     policy::SuppressionEpisode suppressionEpisode;
     qint64 previousMonitorWakeMs = steadyMs();
     bool stallOpen = false;
@@ -378,22 +268,6 @@ void watchdogLoop()
         const qint64 heartbeatAge = heartbeatArmed
             ? qMax<qint64>(0, now - lastHeartbeat)
             : 0;
-        if (!symbolsPrepared && heartbeatArmed) {
-            symbolsPrepared = true;
-            const miacode::diag::SymbolHandlerStatus symbols =
-                miacode::diag::prepareStackWalkSymbols();
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Runtime,
-                QStringLiteral("ui/hang_watchdog"),
-                QStringLiteral("action=stack_symbols sym_attempted=%1 sym_ready=%2 sym_err=%3 "
-                               "sym_invaded=%4 sym_invade_err=%5 waited_for_heartbeat_ms=%6")
-                    .arg(symbols.attempted ? 1 : 0)
-                    .arg(symbols.ready ? 1 : 0)
-                    .arg(symbols.lastErrorCode)
-                    .arg(symbols.invadedProcess ? 1 : 0)
-                    .arg(symbols.invadeErrorCode)
-                    .arg(qMax<qint64>(0, now - symbolWaitStartMs)));
-        }
         const PhaseState phase = snapshotPhase();
         // Classified before the stall block so the stall row can carry the hang verdict for
         // the same poll. Pure function, no side effects — evaluating it early changes
@@ -469,29 +343,11 @@ void watchdogLoop()
                 .arg(phase.generation)
                 .arg(reportedGeneration)
                 .arg(kRepeatedReportMs));
-        // Decided before the report is written so the report can state it, but acted on
-        // only after — the stale line must stay the first line of the incident.
-        const policy::StackCaptureDecision stackDecision = policy::classifyStackCapture(
-            stackCaptureSessionEnabled,
-            trigger,
-            now,
-            lastStackCaptureAtMs,
-            stackCaptureCount,
-            kStackCaptureIntervalMs,
-            kMaxStackCapturesPerSession);
         appendWatchdogReport(
-            trigger, phase, now, heartbeatAge, stackDecision, stackCaptureCount, suppressionSummary);
+            trigger, phase, now, heartbeatAge, suppressionSummary);
         reportedTrigger = trigger;
         reportedGeneration = phase.generation;
         reportedAtMs = now;
-        if (stackDecision == policy::StackCaptureDecision::Capture) {
-            const policy::StackCaptureOutcome outcome =
-                appendGuiThreadStackReport(trigger, heartbeatAge, stackCaptureCount);
-            lastStackCaptureAtMs = now;
-            ++stackCaptureCount;
-            stackCaptureSessionEnabled =
-                policy::stackCaptureSessionEnabledAfter(stackCaptureSessionEnabled, outcome);
-        }
     }
     if (const auto summary = suppressionEpisode.endEpisode(); summary.has_value()) {
         appendSuppressionEpisodeEnd(*summary, "shutdown");
@@ -514,13 +370,6 @@ void installGuiHeartbeat(QObject* owner)
     // app.exec(), while marked phase monitoring remains available immediately.
     g_lastHeartbeatMs.store(0, std::memory_order_release);
 
-    // installGuiHeartbeat runs ON the GUI thread, which is the only place a real handle
-    // to it can be duplicated (GetCurrentThread() is a pseudo-handle). Do it here so the
-    // watchdog thread can suspend-and-walk the GUI thread when the heartbeat dies.
-    QString stackTargetReason;
-    const bool stackTargetRegistered =
-        miacode::diag::registerStackWalkTargetThread(&stackTargetReason);
-
     auto* timer = new QTimer(owner);
     timer->setObjectName(QStringLiteral("MiaCodeGuiHangHeartbeat"));
     timer->setInterval(static_cast<int>(kHeartbeatIntervalMs));
@@ -541,9 +390,6 @@ void installGuiHeartbeat(QObject* owner)
             if (g_thread.joinable()) {
                 g_thread.join();
             }
-            // Only after the watchdog thread is joined — releasing the handle while it
-            // could still be mid-capture would close a handle in use.
-            miacode::diag::releaseStackWalkTargetThread();
         });
     }
 
@@ -551,16 +397,10 @@ void installGuiHeartbeat(QObject* owner)
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/hang_watchdog"),
         QStringLiteral("action=installed heartbeat_ms=%1 active_phase_timeout_ms=%2 "
-                       "idle_heartbeat_timeout_ms=%3 stack_capture=%4 stack_capture_reason=%5 "
-                       "stack_capture_interval_ms=%6 stack_capture_max=%7 stack_frame_cap=%8")
+                       "idle_heartbeat_timeout_ms=%3")
             .arg(kHeartbeatIntervalMs)
             .arg(activePhaseHangMs())
-            .arg(idleHeartbeatHangMs())
-            .arg(stackTargetRegistered ? 1 : 0)
-            .arg(stackTargetReason.isEmpty() ? QStringLiteral("(none)") : stackTargetReason)
-            .arg(kStackCaptureIntervalMs)
-            .arg(kMaxStackCapturesPerSession)
-            .arg(miacode::diag::kMaxCapturedStackFrames));
+            .arg(idleHeartbeatHangMs()));
 }
 
 void setPhase(const char* phase, const QString& detail)
