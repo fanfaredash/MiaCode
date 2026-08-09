@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/LogEmissionPolicy.h"
+
 #include <memory>
 
 #include <QObject>
@@ -80,6 +82,7 @@ private:
     // rate has to survive the filtering. GUI-thread only, so a plain member is
     // enough; mutable for the same reason as the signature above.
     mutable int suppressedFocusFilterCount_ = 0;
+    miacode::diagnostics::MousePressLogGate mousePressLogGate_;
     bool previewSeekArmed_ = false;
     bool rootWindowCloseRelayScheduled_ = false;
     bool rootWindowCloseRelayActive_ = false;

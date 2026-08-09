@@ -58,6 +58,34 @@ void logBackgroundDiag(const QString& payload)
         payload);
 }
 
+QString backgroundSettingsSignature(const AppBackgroundSettings& settings)
+{
+    const AppBackgroundOverlaySettings& overlays = settings.overlays;
+    return QStringLiteral(
+               "enabled=%1 image=%2 opacity=%3 blur=%4 overlays=%5,%6,%7,%8,%9,%10,%11,%12,"
+               "%13,%14,%15,%16 size_mode=%17 position=%18")
+        .arg(settings.enabled ? 1 : 0)
+        .arg(settings.imagePath)
+        .arg(settings.opacity, 0, 'f', 6)
+        .arg(settings.blur)
+        .arg(overlays.toolbarAlphaDark)
+        .arg(overlays.toolbarAlphaLight)
+        .arg(overlays.statusAlphaDark)
+        .arg(overlays.statusAlphaLight)
+        .arg(overlays.panelAlphaDark)
+        .arg(overlays.panelAlphaLight)
+        .arg(overlays.cardAlphaDark)
+        .arg(overlays.cardAlphaLight)
+        .arg(overlays.editorHeaderAlphaDark)
+        .arg(overlays.editorHeaderAlphaLight)
+        .arg(overlays.inputAlphaDark)
+        .arg(overlays.inputAlphaLight)
+        .arg(overlays.codeEditorAlphaDark)
+        .arg(overlays.codeEditorAlphaLight)
+        .arg(static_cast<int>(settings.sizeMode))
+        .arg(static_cast<int>(settings.position));
+}
+
 void paintSurfaceBackdrop(QWidget* widget)
 {
     if (widget == nullptr) {
@@ -131,14 +159,17 @@ void AppBackgroundPainter::setSettings(const AppBackgroundSettings& settings)
         && normalized.overlays.codeEditorAlphaLight == settings_.overlays.codeEditorAlphaLight
         && normalized.sizeMode == settings_.sizeMode
         && normalized.position == settings_.position) {
-        logBackgroundDiag(QStringLiteral(
-            "action=set_settings_unchanged enabled=%1 opacity=%2 image_path=%3")
-            .arg(settings_.enabled ? 1 : 0)
-            .arg(settings_.opacity)
-            .arg(quotedDiag(settings_.imagePath)));
+        if (unchangedSettingsLogGate_.shouldEmit(backgroundSettingsSignature(normalized))) {
+            logBackgroundDiag(QStringLiteral(
+                "action=set_settings_unchanged enabled=%1 opacity=%2 image_path=%3")
+                .arg(settings_.enabled ? 1 : 0)
+                .arg(settings_.opacity)
+                .arg(quotedDiag(settings_.imagePath)));
+        }
         return;
     }
 
+    unchangedSettingsLogGate_.reset();
     logBackgroundDiag(QStringLiteral(
         "action=set_settings enabled=%1 opacity=%2 blur=%3 image_path=%4")
         .arg(normalized.enabled ? 1 : 0)

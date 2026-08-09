@@ -58,6 +58,52 @@ int main()
         playbackRate.shouldEmit(miacode::diagnostics::PlaybackRateLogKind::Ordinary, stageA),
         QStringLiteral("chart or media reset permits the same ordinary rate"), err);
 
+    miacode::diagnostics::MousePressLogGate mousePress;
+    const quint64 firstMousePress = mousePress.beginPress();
+    ok &= expect(firstMousePress == 1, QStringLiteral("native press entry starts sequence one"), err);
+    ok &= expect(
+        mousePress.shouldEmit(QStringLiteral("watched=editor|focus=editor|armed=1")),
+        QStringLiteral("first complete mouse signature emits"), err);
+    ok &= expect(
+        !mousePress.shouldEmit(QStringLiteral("watched=editor|focus=editor|armed=1")),
+        QStringLiteral("identical watched-object signature suppresses within one press"), err);
+    ok &= expect(
+        mousePress.shouldEmit(QStringLiteral("watched=sidebar|focus=editor|armed=1")),
+        QStringLiteral("mismatching watched-object signature remains visible"), err);
+    const quint64 secondMousePress = mousePress.beginPress();
+    ok &= expect(secondMousePress == 2, QStringLiteral("later native press increments sequence"), err);
+    ok &= expect(
+        mousePress.shouldEmit(QStringLiteral("watched=editor|focus=editor|armed=1")),
+        QStringLiteral("new mouse press resets its signature lifecycle"), err);
+
+    miacode::diagnostics::EdgeLogGate<QString> backgroundSettings;
+    const QString backgroundA = QStringLiteral("enabled=1 path=/tmp/a.png opacity=0.2");
+    const QString backgroundB = QStringLiteral("enabled=1 path=/tmp/b.png opacity=0.2");
+    ok &= expect(backgroundSettings.shouldEmit(backgroundA),
+                 QStringLiteral("first unchanged background settings record emits"), err);
+    ok &= expect(!backgroundSettings.shouldEmit(backgroundA),
+                 QStringLiteral("unchanged background settings suppress within lifecycle"), err);
+    ok &= expect(backgroundSettings.shouldEmit(backgroundB),
+                 QStringLiteral("real background settings change emits"), err);
+    backgroundSettings.reset();
+    ok &= expect(backgroundSettings.shouldEmit(backgroundB),
+                 QStringLiteral("new background lifecycle emits unchanged signature once"), err);
+
+    miacode::diagnostics::SurfaceLogGate surfaceLog;
+    const miacode::diagnostics::SurfaceSizeKey surfaceA{0x100U, 800, 600};
+    const miacode::diagnostics::SurfaceSizeKey surfaceB{0x200U, 800, 600};
+    ok &= expect(surfaceLog.shouldEmit(surfaceA, false),
+                 QStringLiteral("first surface handle and size emits"), err);
+    ok &= expect(!surfaceLog.shouldEmit(surfaceA, false),
+                 QStringLiteral("unchanged surface handle and size suppresses"), err);
+    ok &= expect(surfaceLog.shouldEmit(surfaceB, false),
+                 QStringLiteral("surface host replacement emits"), err);
+    ok &= expect(surfaceLog.shouldEmit(surfaceB, true),
+                 QStringLiteral("slow workspace call bypasses surface gate"), err);
+    surfaceLog.reset();
+    ok &= expect(surfaceLog.shouldEmit(surfaceB, false),
+                 QStringLiteral("surface lifecycle reset permits unchanged state"), err);
+
     miacode::diagnostics::RebuildWindow rebuild;
     auto first = rebuild.observe(100, 1, QStringLiteral("line-a"));
     auto second = rebuild.observe(200, 1, QStringLiteral("line-b"));

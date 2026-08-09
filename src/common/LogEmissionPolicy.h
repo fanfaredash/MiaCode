@@ -63,6 +63,52 @@ private:
     EdgeLogGate<StageRateKey> ordinaryRateGate_;
 };
 
+class MousePressLogGate
+{
+public:
+    quint64 beginPress() noexcept
+    {
+        signatureGate_.reset();
+        return ++sequence_;
+    }
+
+    bool shouldEmit(const QString& completeSignature)
+    {
+        return signatureGate_.shouldEmit(completeSignature);
+    }
+
+private:
+    quint64 sequence_ = 0;
+    EdgeLogGate<QString> signatureGate_;
+};
+
+struct SurfaceSizeKey {
+    quintptr handle = 0;
+    int width = 0;
+    int height = 0;
+
+    friend bool operator==(const SurfaceSizeKey& left, const SurfaceSizeKey& right) noexcept
+    {
+        return left.handle == right.handle
+            && left.width == right.width
+            && left.height == right.height;
+    }
+};
+
+class SurfaceLogGate
+{
+public:
+    bool shouldEmit(const SurfaceSizeKey& key, bool abnormal)
+    {
+        return abnormal || ordinaryGate_.shouldEmit(key);
+    }
+
+    void reset() noexcept { ordinaryGate_.reset(); }
+
+private:
+    EdgeLogGate<SurfaceSizeKey> ordinaryGate_;
+};
+
 struct RebuildSummary {
     qint64 windowStartMs = -1;
     int rebuildCount = 0;

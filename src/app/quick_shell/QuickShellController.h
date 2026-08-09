@@ -1,6 +1,7 @@
 #pragma once
 
 #include "QuickShellContracts.h"
+#include "common/LogEmissionPolicy.h"
 
 #include <QObject>
 #include <QKeySequence>
@@ -212,4 +213,6 @@ private:
     bool exportPageActive_ = false;
     bool previewSpeedToastInitialized_ = false;
     bool closeConfirmedExternally_ = false;
+    miacode::diagnostics::SurfaceLogGate sidebarSurfaceLogGate_;
+    miacode::diagnostics::SurfaceLogGate workspaceSurfaceLogGate_;
 };

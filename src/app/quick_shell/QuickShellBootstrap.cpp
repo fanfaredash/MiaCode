@@ -591,6 +591,7 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
     }
 
     if (!controller_->previewFullscreen() && event->type() == QEvent::MouseButtonPress) {
+        const quint64 mousePressSequence = mousePressLogGate_.beginPress();
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
         const QPoint globalPos = mouseEvent != nullptr ? mouseEvent->globalPosition().toPoint() : QPoint();
         const bool previouslyArmed = previewSeekArmed_;
@@ -606,17 +607,34 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
                 hotRect = window->property("previewSeekHotRect").toRectF();
             }
         }
-        appendQuickShellArrowDispatchLog(
-            QStringLiteral("mouse_press_arm"),
-            QStringLiteral("global=%1,%2 hot_rect=%3,%4,%5x%6 prev_armed=%7 new_armed=%8 watched={%9} focus_widget={%10} button=%11")
-                .arg(globalPos.x()).arg(globalPos.y())
-                .arg(hotRect.x()).arg(hotRect.y()).arg(hotRect.width()).arg(hotRect.height())
-                .arg(previouslyArmed ? 1 : 0)
-                .arg(previewSeekArmed_ ? 1 : 0)
-                .arg(describeFocusObject(watched))
-                .arg(describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget())))
-                .arg(mouseEvent != nullptr ? static_cast<int>(mouseEvent->button()) : -1)
-        );
+        const QString watchedDescription = describeFocusObject(watched);
+        const QString focusWidgetDescription =
+            describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget()));
+        const QString mouseSignature = QStringLiteral(
+                                         "global=%1,%2|hot_rect=%3,%4,%5x%6|prev_armed=%7|new_armed=%8|"
+                                         "watched=%9|focus_widget=%10|button=%11")
+                                         .arg(globalPos.x()).arg(globalPos.y())
+                                         .arg(hotRect.x()).arg(hotRect.y()).arg(hotRect.width()).arg(hotRect.height())
+                                         .arg(previouslyArmed ? 1 : 0)
+                                         .arg(previewSeekArmed_ ? 1 : 0)
+                                         .arg(watchedDescription)
+                                         .arg(focusWidgetDescription)
+                                         .arg(mouseEvent != nullptr ? static_cast<int>(mouseEvent->button()) : -1);
+        if (mousePressLogGate_.shouldEmit(mouseSignature)) {
+            appendQuickShellArrowDispatchLog(
+                QStringLiteral("mouse_press_arm"),
+                QStringLiteral("press_sequence=%1 global=%2,%3 hot_rect=%4,%5,%6x%7 "
+                               "prev_armed=%8 new_armed=%9 watched={%10} focus_widget={%11} button=%12")
+                    .arg(mousePressSequence)
+                    .arg(globalPos.x()).arg(globalPos.y())
+                    .arg(hotRect.x()).arg(hotRect.y()).arg(hotRect.width()).arg(hotRect.height())
+                    .arg(previouslyArmed ? 1 : 0)
+                    .arg(previewSeekArmed_ ? 1 : 0)
+                    .arg(watchedDescription)
+                    .arg(focusWidgetDescription)
+                    .arg(mouseEvent != nullptr ? static_cast<int>(mouseEvent->button()) : -1)
+            );
+        }
     }
 
     if (!controller_->previewFullscreen()) {
