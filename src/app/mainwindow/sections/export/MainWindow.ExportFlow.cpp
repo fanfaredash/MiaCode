@@ -16,6 +16,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
+#include "common/PreviewSfxAssets.h"
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
@@ -772,6 +773,27 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
                     refreshInjectedSkin();
                 }
             });
+    }
+    connect(dialog, &VideoExportDialog::introSoundFileNameChanged, &owner_, [this](const QString& fileName) {
+        owner_.previewIntroSoundFileName_ =
+            miacode::preview_sfx::normalizeIntroSoundFileName(fileName);
+        miacode::preview_sfx::setSelectedIntroSoundFileName(owner_.previewIntroSoundFileName_);
+        if (owner_.previewSfxRuntime_ != nullptr
+            && owner_.previewSfxRuntime_->audioEngineInitialized()) {
+            owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
+        }
+        owner_.savePortableState();
+    });
+    connect(dialog, &VideoExportDialog::introSoundVolumeChanged, &owner_, [this](double volume) {
+        miacode::preview_sfx::setSelectedIntroSoundVolume(volume);
+        if (owner_.previewSfxRuntime_ != nullptr
+            && owner_.previewSfxRuntime_->audioEngineInitialized()) {
+            owner_.previewSfxRuntime_->applyLevels(owner_.previewAudioSettings_);
+        }
+    });
+    if (owner_.previewSfxRuntime_ != nullptr
+        && owner_.previewSfxRuntime_->audioEngineInitialized()) {
+        owner_.previewSfxRuntime_->applyLevels(owner_.previewAudioSettings_);
     }
     return dialog;
 }

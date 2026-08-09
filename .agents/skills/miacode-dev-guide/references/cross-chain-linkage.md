@@ -225,6 +225,13 @@ must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize t
 `UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
 PV in the prepared export task, never in the live/export-page preview.
 
+The selected intro sound and its independent `introSoundVolume` follow the same single/batch
+snapshot boundary. The dialog persists the 0..2 volume (0%..200%), applies it immediately through
+`QtPreviewSfxRuntime::applyLevels`, and export restores it from `intro.sound_volume` before the
+prepared FFmpeg intro-audio filter applies the multiplier. This is an independent multiplier: the
+preview `track_start` level must not inherit the normal global/answer SFX attenuation, matching the
+export filter. Keep preview and export volume behavior aligned when changing this setting.
+
 `fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
 `render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame
 state's device-aware, glyph-safe HUD line layout. The dialog also applies it as a temporary live

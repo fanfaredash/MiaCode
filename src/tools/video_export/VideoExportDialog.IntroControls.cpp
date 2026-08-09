@@ -8,6 +8,7 @@
 #include "UiTheme.h"
 #include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "core/scene/PreviewHudState.h"
 #include "tools/video_export/HudFontSettings.h"
 #include "tools/video_export/IntroPreviewWidget.h"
@@ -163,6 +164,9 @@ void VideoExportDialog::syncIntroControlsEnabled()
         && addIntroCheck_->isEnabled() && addIntroCheck_->isChecked();
     const bool customBg = introBackgroundCombo_ != nullptr
         && introBackgroundCombo_->currentData().toString() == QStringLiteral("custom");
+    if (introSoundCombo_ != nullptr) introSoundCombo_->setEnabled(introOn);
+    if (introSoundImportButton_ != nullptr) introSoundImportButton_->setEnabled(introOn);
+    if (introSoundVolumeSlider_ != nullptr) introSoundVolumeSlider_->setEnabled(introOn);
     if (introBackgroundCombo_ != nullptr) introBackgroundCombo_->setEnabled(introOn);
     if (introBackgroundPathEdit_ != nullptr) introBackgroundPathEdit_->setEnabled(introOn && customBg);
     if (introBackgroundBrowse_ != nullptr) introBackgroundBrowse_->setEnabled(introOn && customBg);
@@ -170,6 +174,49 @@ void VideoExportDialog::syncIntroControlsEnabled()
     if (introCardModeCombo_ != nullptr) introCardModeCombo_->setEnabled(introOn);
     if (introCardShadowCheck_ != nullptr) introCardShadowCheck_->setEnabled(introOn);
     if (introLevelTextCheck_ != nullptr) introLevelTextCheck_->setEnabled(introOn);
+}
+
+void VideoExportDialog::importIntroSound()
+{
+    const QString selectedPath = QFileDialog::getOpenFileName(
+        this,
+        UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound")),
+        QString(),
+        QStringLiteral("Audio (*.wav *.mp3 *.ogg *.flac)"));
+    if (selectedPath.isEmpty()) {
+        return;
+    }
+
+    const QString musicDirectory = miacode::preview_sfx::assetMusicDirectory();
+    if (musicDirectory.isEmpty() || !QDir().mkpath(musicDirectory)) {
+        return;
+    }
+
+    const QFileInfo sourceInfo(selectedPath);
+    QString importedName = sourceInfo.fileName();
+    QString importedPath = QDir(musicDirectory).filePath(importedName);
+    if (QFileInfo(selectedPath).canonicalFilePath() != QFileInfo(importedPath).canonicalFilePath()) {
+        int suffix = 2;
+        while (QFileInfo::exists(importedPath)) {
+            importedName = QStringLiteral("%1_%2.%3")
+                .arg(sourceInfo.completeBaseName())
+                .arg(suffix++)
+                .arg(sourceInfo.suffix());
+            importedPath = QDir(musicDirectory).filePath(importedName);
+        }
+        if (!QFile::copy(selectedPath, importedPath)) {
+            return;
+        }
+    }
+
+    int index = introSoundCombo_ != nullptr ? introSoundCombo_->findData(importedName) : -1;
+    if (introSoundCombo_ != nullptr && index < 0) {
+        introSoundCombo_->addItem(importedName, importedName);
+        index = introSoundCombo_->count() - 1;
+    }
+    if (introSoundCombo_ != nullptr) {
+        introSoundCombo_->setCurrentIndex(index);
+    }
 }
 
 void VideoExportDialog::browseIntroBackground()
