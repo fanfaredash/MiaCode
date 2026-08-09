@@ -200,12 +200,14 @@ void BassPreviewAudioBackend::disarmSfxScheduler(const char* reason)
     // a session that never re-anchors just stops producing anchor rows, which reads
     // identically to a session that was never armed.
     noteBassErrCode("sfx_scheduler/remove_sync", removeSyncError);
-    appendAudioDebugLog(
-        QString("bass_sfx_scheduler action=disarm reason=%1 was_active=%2 had_sync=%3 group_idx=%4")
-            .arg(QLatin1String(reason))
-            .arg(wasActive ? 1 : 0)
-            .arg(hadSync ? 1 : 0)
-            .arg(groupIndex));
+    if (miacode::preview_audio::bass::shouldLogDisarm(wasActive, hadSync, groupIndex)) {
+        appendAudioDebugLog(
+            QString("bass_sfx_scheduler action=disarm reason=%1 was_active=%2 had_sync=%3 group_idx=%4")
+                .arg(QLatin1String(reason))
+                .arg(wasActive ? 1 : 0)
+                .arg(hadSync ? 1 : 0)
+                .arg(groupIndex));
+    }
 #else
     Q_UNUSED(reason);
 #endif

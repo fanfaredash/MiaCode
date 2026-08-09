@@ -798,6 +798,20 @@ void appendTimelineRenderMapDiagnostics(
         renderMapPointPayload(QStringLiteral("entry"), state, stateBridge->playbackEntrySeconds()));
 }
 
+void appendSceneRebuildSummary(const miacode::diagnostics::RebuildSummary& summary)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/quick_scene"),
+        QStringLiteral("action=scene_state_rebuild_summary window_start_ms=%1 rebuild_count=%2 "
+                       "total_elapsed_ms=%3 max_elapsed_ms=%4 last_lines=%5")
+            .arg(summary.windowStartMs)
+            .arg(summary.rebuildCount)
+            .arg(summary.totalElapsedMs)
+            .arg(summary.maxElapsedMs)
+            .arg(summary.lastLines));
+}
+
 }  // namespace
 
 TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
@@ -836,6 +850,9 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
 
 TimelineQuickItem::~TimelineQuickItem()
 {
+    if (const auto summary = sceneRebuildLogWindow_.flushForDestruction(); summary.has_value()) {
+        appendSceneRebuildSummary(*summary);
+    }
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("timeline/quick_item"),
@@ -1240,13 +1257,6 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
                           stateBridge_->zoomScale() + 1.0)
         || !qFuzzyCompare(cachedSceneBuildContentScale_ + 1.0,
                           stateBridge_->contentScale() + 1.0);
-    if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/quick_scene"),
-            QStringLiteral("action=scene_state_rebuild_begin reason=current_scene_state count=%1")
-                .arg(sceneStateRebuildCount_ + 1));
-    }
     QElapsedTimer timer;
     if (rebuildNeeded) {
         timer.start();
@@ -1321,13 +1331,28 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildContentScale_ = stateBridge_->contentScale();
     }
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/quick_scene"),
-            QStringLiteral("action=scene_state_rebuild_end reason=current_scene_state count=%1 elapsed_ms=%2 lines=%3")
-                .arg(sceneStateRebuildCount_ + 1)
-                .arg(timer.elapsed())
-                .arg(stateBridge_->renderSnapshot().lines.size()));
+        const qint64 elapsedMs = timer.elapsed();
+        const auto decision = sceneRebuildLogWindow_.observe(
+            QDateTime::currentMSecsSinceEpoch(),
+            elapsedMs,
+            QString::number(stateBridge_->renderSnapshot().lines.size()));
+        if (decision.summary.has_value()) {
+            appendSceneRebuildSummary(*decision.summary);
+        }
+        if (decision.emitIndividual) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/quick_scene"),
+                QStringLiteral("action=scene_state_rebuild_begin reason=current_scene_state count=%1")
+                    .arg(sceneStateRebuildCount_ + 1));
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/quick_scene"),
+                QStringLiteral("action=scene_state_rebuild_end reason=current_scene_state count=%1 elapsed_ms=%2 lines=%3")
+                    .arg(sceneStateRebuildCount_ + 1)
+                    .arg(decision.individualElapsedMs)
+                    .arg(decision.individualLastLines));
+        }
     }
     if (rebuildNeeded) {
         ++sceneStateRebuildCount_;

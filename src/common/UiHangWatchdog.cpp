@@ -99,7 +99,8 @@ void appendWatchdogReport(
     qint64 nowMs,
     qint64 heartbeatAgeMs,
     policy::StackCaptureDecision stackDecision,
-    int capturesSoFar)
+    int capturesSoFar,
+    const std::optional<policy::SuppressedReportSummary>& suppressionSummary)
 {
     miacode::oplog::flushShadowToDisk();
     const qint64 activeMs = phase.active ? qMax<qint64>(0, nowMs - phase.startMs) : 0;
@@ -113,6 +114,13 @@ void appendWatchdogReport(
     payload += QStringLiteral(" stack=%1 captures_so_far=%2")
                    .arg(QString::fromLatin1(policy::stackCaptureDecisionName(stackDecision)))
                    .arg(capturesSoFar);
+    if (suppressionSummary.has_value()) {
+        payload += QStringLiteral(" suppressed_count=%1 episode_id=%2 suppressed_trigger=%3")
+                       .arg(suppressionSummary->suppressedCount)
+                       .arg(suppressionSummary->episodeId)
+                       .arg(QString::fromLatin1(
+                           policy::triggerName(suppressionSummary->trigger)));
+    }
     if (!phase.detail.trimmed().isEmpty()) {
         payload += QStringLiteral(" detail=\"%1\"").arg(phase.detail.trimmed());
     }
@@ -124,6 +132,21 @@ void appendWatchdogReport(
         payload,
         /*force=*/true,
         miacode::debug_log::Level::Fatal);
+}
+
+void appendSuppressionEpisodeEnd(
+    const policy::SuppressedReportSummary& summary,
+    const char* reason)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/hang_watchdog"),
+        QStringLiteral("action=report_gate_suppression_end reason=%1 suppressed_count=%2 "
+                       "episode_id=%3 trigger=%4")
+            .arg(QLatin1String(reason))
+            .arg(summary.suppressedCount)
+            .arg(summary.episodeId)
+            .arg(QString::fromLatin1(policy::triggerName(summary.trigger))));
 }
 
 // One row per sub-hang stall episode edge. Info, not Fatal: a 1–5 s stall is a
@@ -284,6 +307,7 @@ void watchdogLoop()
     qint64 lastStackCaptureAtMs = 0;
     int stackCaptureCount = 0;
     bool stackCaptureSessionEnabled = true;
+    policy::SuppressionEpisode suppressionEpisode;
     qint64 previousMonitorWakeMs = steadyMs();
     bool stallOpen = false;
     qint64 stallBaselineHeartbeatMs = 0;
@@ -339,6 +363,9 @@ void watchdogLoop()
             reportedTrigger = policy::Trigger::None;
             reportedGeneration = 0;
             reportedAtMs = 0;
+            if (const auto summary = suppressionEpisode.endEpisode(); summary.has_value()) {
+                appendSuppressionEpisodeEnd(*summary, "monitor_rearm");
+            }
             // Drop any open stall episode WITHOUT reporting an end: its baseline was taken
             // against a heartbeat timeline that the rearm above has just discarded, so the
             // only duration we could print would be the machine's sleep, not a GUI stall.
@@ -418,38 +445,30 @@ void watchdogLoop()
             reportedGeneration,
             reportedAtMs,
             kRepeatedReportMs);
-        if (trigger != policy::Trigger::None) {
-            // The last unobserved link. logs 16 established that the threshold reaches this
-            // loop (idle_timeout_ms=800) and that classify() returns idle_heartbeat on nine
-            // separate polls -- and still not one gui_thread_stale row exists, with no
-            // monitor_rearm, no durable-fallback file, a single watchdog thread, and the
-            // Fatal durable path demonstrably working elsewhere in the same capture.
-            //
-            // Everything between that verdict and the file is these three statements, and
-            // none of them said anything. This row closes that gap from the OTHER side: it
-            // is Info, so it travels the async queue rather than the synchronous Fatal path,
-            // and therefore cannot be lost by whatever is losing the report. If this row
-            // appears with will_report=1 and no gui_thread_stale follows, the loss is inside
-            // appendWatchdogReport or the Fatal write itself; if will_report=0, shouldReport
-            // is declining and the four inputs below say exactly why.
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Runtime,
-                QStringLiteral("ui/hang_watchdog"),
-                QStringLiteral("action=report_gate trigger=%1 will_report=%2 "
-                               "last_trigger=%3 last_reported_at_ms=%4 age_since_report_ms=%5 "
-                               "phase_generation=%6 last_phase_generation=%7 repeat_ms=%8")
-                    .arg(QString::fromLatin1(policy::triggerName(trigger)))
-                    .arg(willReport ? 1 : 0)
-                    .arg(QString::fromLatin1(policy::triggerName(reportedTrigger)))
-                    .arg(reportedAtMs)
-                    .arg(reportedAtMs > 0 ? now - reportedAtMs : -1)
-                    .arg(phase.generation)
-                    .arg(reportedGeneration)
-                    .arg(kRepeatedReportMs));
-        }
-        if (!willReport) {
+        if (trigger == policy::Trigger::None) {
+            if (const auto summary = suppressionEpisode.endEpisode(); summary.has_value()) {
+                appendSuppressionEpisodeEnd(*summary, "trigger_cleared");
+            }
             continue;
         }
+        if (!willReport) {
+            suppressionEpisode.observe(false, trigger);
+            continue;
+        }
+        const auto suppressionSummary = suppressionEpisode.observe(true, trigger);
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("ui/hang_watchdog"),
+            QStringLiteral("action=report_gate trigger=%1 will_report=1 "
+                           "last_trigger=%2 last_reported_at_ms=%3 age_since_report_ms=%4 "
+                           "phase_generation=%5 last_phase_generation=%6 repeat_ms=%7")
+                .arg(QString::fromLatin1(policy::triggerName(trigger)))
+                .arg(QString::fromLatin1(policy::triggerName(reportedTrigger)))
+                .arg(reportedAtMs)
+                .arg(reportedAtMs > 0 ? now - reportedAtMs : -1)
+                .arg(phase.generation)
+                .arg(reportedGeneration)
+                .arg(kRepeatedReportMs));
         // Decided before the report is written so the report can state it, but acted on
         // only after — the stale line must stay the first line of the incident.
         const policy::StackCaptureDecision stackDecision = policy::classifyStackCapture(
@@ -460,7 +479,8 @@ void watchdogLoop()
             stackCaptureCount,
             kStackCaptureIntervalMs,
             kMaxStackCapturesPerSession);
-        appendWatchdogReport(trigger, phase, now, heartbeatAge, stackDecision, stackCaptureCount);
+        appendWatchdogReport(
+            trigger, phase, now, heartbeatAge, stackDecision, stackCaptureCount, suppressionSummary);
         reportedTrigger = trigger;
         reportedGeneration = phase.generation;
         reportedAtMs = now;
@@ -472,6 +492,9 @@ void watchdogLoop()
             stackCaptureSessionEnabled =
                 policy::stackCaptureSessionEnabledAfter(stackCaptureSessionEnabled, outcome);
         }
+    }
+    if (const auto summary = suppressionEpisode.endEpisode(); summary.has_value()) {
+        appendSuppressionEpisodeEnd(*summary, "shutdown");
     }
 }
 

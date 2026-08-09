@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/LogEmissionPolicy.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/video/PreviewRenderSettings.h"
 
@@ -280,6 +281,7 @@ private:
     quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;
+    miacode::diagnostics::PlaybackRateLogGate playbackRateLogGate_;
     int syncVideoFrameBeaconBudget_ = 0;
     int syncMediaStatusBeaconBudget_ = 0;
     // G2 Commit 1: Qt 6.8 FFmpeg's QMediaPlayer::setPlaybackRate has a race

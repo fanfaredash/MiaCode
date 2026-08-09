@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "common/LogEmissionPolicy.h"
 #include "timeline/TimelineSceneState.h"
 
 class QHoverEvent;
@@ -177,6 +178,7 @@ private:
     mutable quint64 cachedSceneBuildNotesRevision_ = 0;
     mutable quint64 cachedSceneBuildOverlayRevision_ = 0;
     mutable quint64 sceneStateRebuildCount_ = 0;
+    mutable miacode::diagnostics::RebuildWindow sceneRebuildLogWindow_;
     // Per-second timing of updatePaintNode itself, so we can locate the
     // actual cost (currentSceneState walk, layer updateNode work, QSG
     // sync handoff). Logged once per second to avoid spamming the

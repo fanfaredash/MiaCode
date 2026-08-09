@@ -39,6 +39,30 @@ struct StageRateKey {
     }
 };
 
+enum class PlaybackRateLogKind {
+    Ordinary,
+    Deferred,
+    Flushed,
+    Error,
+};
+
+// Only successful, ordinary rate changes are candidates for edge suppression.
+// Deferred, flushed, and error diagnostics describe distinct backend states and
+// must remain visible even when their rate and media kind match the last value.
+class PlaybackRateLogGate
+{
+public:
+    bool shouldEmit(PlaybackRateLogKind kind, const StageRateKey& key)
+    {
+        return kind != PlaybackRateLogKind::Ordinary || ordinaryRateGate_.shouldEmit(key);
+    }
+
+    void reset() noexcept { ordinaryRateGate_.reset(); }
+
+private:
+    EdgeLogGate<StageRateKey> ordinaryRateGate_;
+};
+
 struct RebuildSummary {
     qint64 windowStartMs = -1;
     int rebuildCount = 0;

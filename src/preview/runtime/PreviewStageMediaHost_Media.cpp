@@ -218,6 +218,7 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
     chartPath_ = normalizedChartPath;
     chartVideoOverridePath_ = chartVideoOverridePath;
     mediaStamp_ = mediaStamp;
+    playbackRateLogGate_.reset();
     clearMedia();
     if (chartPath_.isEmpty()) {
         appendPreviewStageMediaLog(QStringLiteral("set_chart_path"), QStringLiteral("chart=(empty) kind=none"));
@@ -674,4 +675,3 @@ void PreviewStageMediaHost::bindVideoOutput()
     appendPreviewStageMediaLog(QStringLiteral("bind_video_output"), QStringLiteral("attached=1 sink=0"));
 #endif
 }
-

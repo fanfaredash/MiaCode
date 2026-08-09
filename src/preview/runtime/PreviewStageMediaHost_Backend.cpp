@@ -526,11 +526,16 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
     if (player_ != nullptr) {
         player_->setSpeed(static_cast<qreal>(playbackRate_));
     }
-    appendPreviewStageMediaLog(
-        QStringLiteral("playback_rate"),
-        QString("rate=%1 kind=%2")
-            .arg(playbackRate_, 0, 'f', 3)
-            .arg(debugMediaTypeName()));
+    const miacode::diagnostics::StageRateKey rateKey{
+        playbackRate_, static_cast<int>(mediaKind_)};
+    if (playbackRateLogGate_.shouldEmit(
+            miacode::diagnostics::PlaybackRateLogKind::Ordinary, rateKey)) {
+        appendPreviewStageMediaLog(
+            QStringLiteral("playback_rate"),
+            QString("rate=%1 kind=%2")
+                .arg(playbackRate_, 0, 'f', 3)
+                .arg(debugMediaTypeName()));
+    }
 #elif defined(HAVE_QT_MULTIMEDIA)
     if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
         syncVideoFrameBeaconBudget_ = 24;
@@ -891,4 +896,3 @@ void PreviewStageMediaHost::setVideoDecodePreference(bool preferSoftware)
     }
 #endif
 }
-

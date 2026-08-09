@@ -37,6 +37,27 @@ int main()
     ok &= expect(!stageGate.shouldEmit(stageA), QStringLiteral("same stage rate suppresses"), err);
     ok &= expect(stageGate.shouldEmit(stageB), QStringLiteral("media kind change emits"), err);
 
+    miacode::diagnostics::PlaybackRateLogGate playbackRate;
+    ok &= expect(
+        playbackRate.shouldEmit(miacode::diagnostics::PlaybackRateLogKind::Ordinary, stageA),
+        QStringLiteral("first ordinary stage rate emits"), err);
+    ok &= expect(
+        !playbackRate.shouldEmit(miacode::diagnostics::PlaybackRateLogKind::Ordinary, stageA),
+        QStringLiteral("unchanged ordinary stage rate suppresses"), err);
+    ok &= expect(
+        playbackRate.shouldEmit(miacode::diagnostics::PlaybackRateLogKind::Deferred, stageA),
+        QStringLiteral("deferred playback rate bypasses ordinary gate"), err);
+    ok &= expect(
+        playbackRate.shouldEmit(miacode::diagnostics::PlaybackRateLogKind::Flushed, stageA),
+        QStringLiteral("flushed playback rate bypasses ordinary gate"), err);
+    ok &= expect(
+        playbackRate.shouldEmit(miacode::diagnostics::PlaybackRateLogKind::Error, stageA),
+        QStringLiteral("playback rate error bypasses ordinary gate"), err);
+    playbackRate.reset();
+    ok &= expect(
+        playbackRate.shouldEmit(miacode::diagnostics::PlaybackRateLogKind::Ordinary, stageA),
+        QStringLiteral("chart or media reset permits the same ordinary rate"), err);
+
     miacode::diagnostics::RebuildWindow rebuild;
     auto first = rebuild.observe(100, 1, QStringLiteral("line-a"));
     auto second = rebuild.observe(200, 1, QStringLiteral("line-b"));
