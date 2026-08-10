@@ -36,6 +36,7 @@ private:
     void populateTable();
     void removeSelectedRows();
     void clearQueue();
+    void rebuildJobsFromTable();
     void uploadQueue();
     void startUpload(const QSet<int>& rows);
     void setBusy(bool busy);
