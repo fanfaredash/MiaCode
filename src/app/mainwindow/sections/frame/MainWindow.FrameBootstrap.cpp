@@ -16,6 +16,7 @@
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
 #include "editor/TouchPadAuthoringEdit.h"
+#include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
@@ -353,13 +354,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         applyEditorOverwriteModeEnabled(enabled, true);
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::activateBookmarkAtLine);
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkCreateRequested, this, [this](int line) {
-        if (editorSection_ != nullptr) {
-            // Dialog-free creation: default name now, inline rename in the
-            // sidebar for the final name (see the bookmark redesign spec).
-            editorSection_->createBookmarkAtLine(line, true);
-        }
-    });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkRenameRequested, this, [this](int line) {
         if (documentSection_ != nullptr) {
             documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
@@ -368,11 +362,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(editor, &PlainCodeEditor::lineNumberBookmarkDeleteRequested, this, [this](int line) {
         if (editorSection_ != nullptr) {
             editorSection_->deleteBookmarkAtLineWithConfirmation(line);
-        }
-    });
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkMoveRequested, this, [this](int fromLine, int toLine) {
-        if (editorSection_ != nullptr) {
-            editorSection_->replaceBookmarkLine(fromLine, toLine);
         }
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkContextMenuRequested, this,
@@ -1344,6 +1333,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         QTextCursor cursor = editor->textCursor();
+        const QTextCursor originalCursor = cursor;
         const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
             editor->toPlainText(), cursor.position(), pad, backtickSeparator);
         if (!editPlan.valid) {
@@ -1362,6 +1352,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         editor->setTextCursor(cursor);
+        if (documentSection_ != nullptr) {
+            documentSection_->recordChartCursorUndoEntry(
+                originalCursor,
+                cursor,
+                hasTokenSecond ? qMax(0.0, tokenSecond - (1.0 / 60.0)) : -1.0);
+        }
         editor->setFocus(Qt::OtherFocusReason);
         if (hasTokenSecond) {
             seekPreviewDiscreteToSecond(qMax(0.0, tokenSecond - (1.0 / 60.0)), true);
@@ -1448,7 +1444,71 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("preview_controls_and_stats_ready");
 
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::commandCompleted,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                using namespace miacode::preview_audio;
+                if (completion.kind != CommandKind::ReloadAssets
+                    || completion.identity.sequence != state_.previewSfxRuntimePreparationSequence_
+                    || !acceptsAssetCompletion(
+                        state_.previewSfxRuntimePreparationAssetGeneration_, completion)) {
+                    return;
+                }
+                state_.previewSfxRuntimePrepared_ = completion.success
+                    && previewSfxRuntime_ != nullptr
+                    && previewSfxRuntime_->audioEngineInitialized();
+                state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
+                state_.previewSfxRuntimePreparationSequence_ = 0;
+            });
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::previewPrepared,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->handlePreviewAudioPrepared(completion);
+                }
+            });
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::retainedPlaybackCompleted,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->handlePreviewRetainedPlaybackCompleted(completion);
+                }
+            });
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::previewPlaybackPaused,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->handlePreviewRetainedPlaybackCompleted(completion);
+                }
+            });
     logStartupStage("preview_sfx_runtime_created");
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // BASS-only on purpose. docs/audit/AUDIO_CLOCK_DESYNC_AUDIT_ZH.md fixes the
+    // device-change desync (问题 3) to the BASS transport's anchor model on Windows and
+    // macOS. Linux runs MiniaudioPreviewAudioBackend, a different seek/clock
+    // implementation with a separate, unproven report (问题 4), so auto-pausing there
+    // would interrupt playback on no evidence.
+    previewAudioDeviceWatcher_ = new PreviewAudioDeviceWatcher(this);
+    previewAudioDeviceWatcher_->setDirectCutoffHandler(
+        [runtime = previewSfxRuntime_](PreviewAudioDeviceWatcher::Change) {
+            return runtime != nullptr
+                ? runtime->requestDeviceChangeCutoff()
+                : miacode::preview_audio::PreviewAudioDeviceCutoff{};
+        });
+    connect(previewAudioDeviceWatcher_,
+            &PreviewAudioDeviceWatcher::deviceCutoffRequested,
+            this,
+            [this](const PreviewAudioDeviceWatcher::DeviceCutoff& cutoff) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->applyPreviewAudioDeviceCutoff(cutoff);
+                }
+            });
+    logStartupStage("preview_audio_device_watcher_created");
+#endif
     connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
         timelineSection_->handlePreviewStartupCanvasPresented();
         if (!qtPreviewPlaying_) {

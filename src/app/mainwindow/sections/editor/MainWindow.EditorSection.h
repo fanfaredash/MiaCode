@@ -29,7 +29,6 @@ public:
     // editor text. An empty name removes an existing explicit label and falls
     // back to automatic naming.
     bool renameBookmark(int difficultyId, int line, const QString& name);
-    void replaceBookmarkLine(int fromLine, int toLine);
     void refreshEditorBookmarkLines();
     void syncBookmarksFromEditorText(int changePosition = -1, int charsRemoved = 0, int charsAdded = 0);
     // Rebuilds the derived sidebar index after a document is assigned.

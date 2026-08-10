@@ -8,6 +8,7 @@
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "common/UiHangWatchdog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
@@ -63,11 +64,6 @@ bool wantsCliVideoExport(const QStringList& arguments)
 bool wantsCliVideoExportWorker(const QStringList& arguments)
 {
     return arguments.contains(QStringLiteral("--export-video-worker"));
-}
-
-bool wantsQuickShellBeta(const QStringList& arguments)
-{
-    return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
 // Force-show the first-run welcome / initial-config dialog even when
@@ -393,11 +389,9 @@ int main(int argc, char* argv[])
 #endif
 
     // Detect Apple Silicon Windows VM (Windows-on-ARM running x86/x64
-    // emulation). When detected, previewUseDCompEnabled() auto-falls-back
-    // to false — the legacy QSG-only render path (beta19-equivalent),
-    // which doesn't create any popup HWNDs that would otherwise crash
-    // under that emulation.
-    // Logged once at startup so support can confirm the fallback fired.
+    // emulation). Logged once at startup so support can tell from a bug
+    // report which environment the run came from — several graphics
+    // crashes have only ever reproduced under that emulation.
     if (miacode::debug_options::runningOnArm64WindowsEmulation()) {
         miacode::debug_log::appendStartupTimingStage(
             QStringLiteral("arm64_emulation_detected"),
@@ -405,9 +399,7 @@ int main(int argc, char* argv[])
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("startup/preview_path"),
-            QStringLiteral("reason=arm64_windows_emulation "
-                          "dcomp=false "
-                          "fallback=qsg_only_legacy"));
+            QStringLiteral("reason=arm64_windows_emulation"));
     }
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=after_arm64_probe");
@@ -431,6 +423,7 @@ int main(int argc, char* argv[])
 #endif
     QApplication app(argc, argv);
     miacode::hang_watchdog::installGuiHeartbeat(&app);
+    miacode::diag::installPeriodicProcessResourceGauge(&app);
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=after_qapplication_construct");
 #endif
@@ -617,26 +610,6 @@ int main(int argc, char* argv[])
     // QuickShellBootstrap. GUI-only: CLI runs above never show windows.
     UiNativeWindowTheme::installAutoApplyFilter();
 
-    // Phase 3a of the v2-refactor — `--quick-shell-beta` becomes the
-    // canonical opt-in for the new DComp pipeline. Setting the env vars
-    // here (before any code that reads them via envFlagEnabled) makes
-    // the flag self-contained: users running with --quick-shell-beta no
-    // longer need to also set MIACODE_PREVIEW_USE_DCOMP=1 in their
-    // shell, and the same release build covers both legacy QSG and
-    // DComp paths via this single argv check.
-    //
-    // We use qputenv(..., "1") only when the env var is currently
-    // *unset*, so an explicit MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND=0 in
-    // the launching shell still wins (lets the user A/B without
-    // rebuilding). previewUseDCompEnabled defers to envFlagEnabled
-    // which checks the live env on every call, so setting it here is
-    // sufficient.
-    const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
-    if (quickShellBetaRequested) {
-        if (qEnvironmentVariableIsEmpty("MIACODE_PREVIEW_USE_DCOMP")) {
-            qputenv("MIACODE_PREVIEW_USE_DCOMP", QByteArrayLiteral("1"));
-        }
-    }
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QElapsedTimer appExecElapsed;

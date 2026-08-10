@@ -135,10 +135,6 @@ bool SceneFrameRenderer::ensureWindow(QString* errorMessage)
     // content item gives it both its visual parent and QObject ownership.
     sceneRoot_ = new PreviewQuickSceneRoot(window_->contentItem());
     sceneRoot_->setZ(0.0);
-    // Force the QSG chart-render path even when DComp is enabled globally
-    // (--quick-shell-beta) — otherwise updatePaintNode short-circuits to nullptr
-    // and the grab is blank. Same override the export session uses.
-    sceneRoot_->setDCompFallbackActive(true);
     sceneRoot_->setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);
     sceneRoot_->setFrameState(&frameState_);
 

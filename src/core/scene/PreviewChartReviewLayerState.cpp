@@ -184,7 +184,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     const bool showTapJudgeOverlay = state.muriRenderOptions.showChartReviewTapJudgeOverlay;
     const bool showBreakJudgeOverlay = state.muriRenderOptions.showChartReviewBreakJudgeOverlay;
     const bool showTouchJudgeOverlay = state.muriRenderOptions.showChartReviewTouchJudgeOverlay;
-    if (state.muriRenderOptions.renderMode != RenderMode::Native
+    if (state.muriRenderOptions.renderMode == RenderMode::MaimuriDxStyle
         || (!showSlideJudgeOverlay && !showTapJudgeOverlay && !showBreakJudgeOverlay && !showTouchJudgeOverlay)
         || !hasAnyChartReviewJudgeAssets(state.judgeOverlay)) {
         return sprites;

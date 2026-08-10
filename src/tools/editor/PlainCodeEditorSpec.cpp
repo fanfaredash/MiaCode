@@ -1,5 +1,6 @@
 #include "editor/PlainCodeEditor.h"
 #include "editor/BracketCompletionPopup.h"
+#include "editor/BookmarkCommentSyntax.h"
 #include "editor/TouchPadAuthoringEdit.h"
 #include "common/AdoptedWidgetCoordinates.h"
 
@@ -179,6 +180,10 @@ int main(int argc, char** argv)
                     QStringLiteral("prefix-like area number is not an exact pad match"));
     expectTouchEdit(QStringLiteral("A1h[4:1]"), 0, false, QStringLiteral("A1h[4:1]/A1"),
                     QStringLiteral("touch hold is not removed as an ordinary touch"));
+    expectTouchEdit(QStringLiteral("A1f"), 0, false, QString(),
+                    QStringLiteral("firework touch toggles as its base pad"));
+    expectTouchEdit(QStringLiteral("A1f/B2"), 0, false, QStringLiteral("B2"),
+                    QStringLiteral("firework first pad removal keeps the next item"));
     expectTouchEdit(QStringLiteral("1/A1  "), 2, false, QStringLiteral("1  "),
                     QStringLiteral("toggle deletion preserves trailing token whitespace"));
     expectTouchEdit(QStringLiteral(" A1/B2"), 0, false, QStringLiteral(" B2"),
@@ -218,6 +223,17 @@ int main(int argc, char** argv)
         expect(document.toPlainText() == QLatin1String("1/A1/B2"),
                QStringLiteral("touch authoring deletion is one undo step"), out, &failed);
     }
+
+    expect(
+        miacode::editor::isBookmarkCommentMarker(QStringLiteral("1 || note"), 2),
+        QStringLiteral("ordinary double-pipe comment starts a bookmark"),
+        out,
+        &failed);
+    expect(
+        !miacode::editor::isBookmarkCommentMarker(QStringLiteral("1 ||| annotation"), 2),
+        QStringLiteral("triple-pipe annotation does not start a bookmark"),
+        out,
+        &failed);
 
     expect(
         miacode::editor::normalizedHalfWidthText(QStringLiteral("、")) == QLatin1String("/"),
@@ -422,6 +438,32 @@ int main(int argc, char** argv)
         QStringLiteral("Ctrl+Shift+_ key press is forwarded as Ctrl+Shift+- by PlainCodeEditor"),
         out,
         &failed);
+    {
+        PlainCodeEditor gutterEditor;
+        gutterEditor.resize(480, 240);
+        gutterEditor.setPlainText(QStringLiteral("1,"));
+        gutterEditor.show();
+        QApplication::processEvents();
+
+        QWidget* gutter = gutterEditor.childAt(QPoint(2, 4));
+        QMouseEvent gutterDoubleClick(
+            QEvent::MouseButtonDblClick,
+            QPointF(2, 4),
+            QPointF(2, 4),
+            QPointF(gutter != nullptr ? gutter->mapToGlobal(QPoint(2, 4)) : QPoint()),
+            Qt::LeftButton,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        if (gutter != nullptr) {
+            QApplication::sendEvent(gutter, &gutterDoubleClick);
+        }
+        expect(
+            gutter != nullptr
+                && gutterEditor.metaObject()->indexOfSignal("lineNumberBookmarkCreateRequested(int)") < 0,
+            QStringLiteral("double-click bookmark creation is removed from the gutter API"),
+            out,
+            &failed);
+    }
     {
         PlainCodeEditor completionEditor;
         completionEditor.resize(480, 240);

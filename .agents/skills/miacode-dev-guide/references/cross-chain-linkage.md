@@ -63,8 +63,7 @@ Implications:
   `SlideShapeOnly` slot between `slide_motion` and `judge_effect` (below notes/touch/tap-judge), and a
   `JudgeTextOnly` slot on top. So each judge enum bit drives 2 slots; keep
   `kPreviewQuickSceneLayerSlotCount` equal to the number of `layerSlotAt(root, slotIndex++)` calls when
-  adding/removing slots. The off-by-default DComp path (`src/sources/chart/ChartReviewSource.*`,
-  `MaimuriDxJudgeSource.*`, sorted by `zOrder()`) still draws both groups in one pass — a known divergence.
+  adding/removing slots.
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.
@@ -154,6 +153,32 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
 
 If one side changes, inspect the other in the same patch.
 
+### 4a. Preview-audio GUI to worker boundary
+
+Realtime preview is not an export worker: `QtPreviewSfxRuntime` stays in the GUI thread as the
+facade while `PreviewAudioWorker` owns its native backend on one `std::thread`. MainWindow startup,
+timeline ticks, settings audition, latency sandbox, and `soundtouch_probe` all submit typed value
+commands through the bounded queue; only probe/spec code may wait on the non-GUI completion barrier.
+
+- Playback completions must match current `generation` and `transactionId`; reload/ready completions
+  must match current `assetGeneration`; a device pause must also match the first captured
+  `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
+  facade and the specs.
+- A chart-path change followed by an asset reload is one asset transaction, not two independently
+  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. It carries the path on the
+  `ReloadAssets` command and `PreviewAudioWorker::executeReload` applies it before the backend reload
+  in that same `assetGeneration`; posting `setChartPath` immediately before a separate reload lets
+  stale-command pruning drop the required path update and leaves BGM unloaded. This is shared by
+  MainWindow startup/chart-reload paths and `soundtouch_probe`.
+- `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
+  GUI/video state before submitting the reserved high-priority device pause. On Windows, a successful
+  IMM registration is the sole hotplug source: do not construct or synchronously enumerate
+  `QMediaDevices` on that path, because its AudioSes RPC can block the GUI during a switch. Qt remains
+  the registration-failure and non-Windows fallback. The worker later stops audio/SFX; it does not
+  advance the playhead and it must not auto-resume after a device recovers.
+- `PreviewBassDeviceLease` is shared by preview, waveform, and export BASS lifecycle users. Keep
+  BASS global device init/free serialization there, but keep normal channel work within its owner.
+
 ## 5. Background-media resolution & host route ownership
 
 > Updated 2026-05-29: `PreviewMediaController` and `src/preview/video/` were removed. Background
@@ -225,12 +250,24 @@ must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize t
 `UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
 PV in the prepared export task, never in the live/export-page preview.
 
+The selected intro sound and its independent `introSoundVolume` follow the same single/batch
+snapshot boundary. The dialog persists the 0..2 volume (0%..200%), applies it immediately through
+`QtPreviewSfxRuntime::applyLevels`, and export restores it from `intro.sound_volume` before the
+prepared FFmpeg intro-audio filter applies the multiplier. This is an independent multiplier: the
+preview `track_start` level must not inherit the normal global/answer SFX attenuation, matching the
+export filter. Keep preview and export volume behavior aligned when changing this setting.
+
 `fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
 `render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame
 state's device-aware, glyph-safe HUD line layout. The dialog also applies it as a temporary live
 preview override while the export-video page is active; `restoreLivePreviewState` and
 `endExportPreviewSession` force it false on exit. The false branch preserves the original chart-info
-and object-stats baseline calculations.
+and object-stats baseline calculations. The enabled branch derives same-font line advances from
+device-bound glyph top/bottom bounds and cross-font advances from the previous glyph bottom to the
+next glyph top (with typographic ascent/descent as a floor). The chart-info first baseline also uses
+the actual glyph top so custom-font overshoot cannot intrude into the configured HUD padding.
+`MIACODE_PREVIEW_HUD_PAINT_DIAG=1` records the flag plus the resolved HUD font metrics, calculated
+advances, and chart-info visible top.
 
 ## 9. Shared render state flows through preview and export
 

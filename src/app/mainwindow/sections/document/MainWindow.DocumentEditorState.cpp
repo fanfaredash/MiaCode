@@ -130,7 +130,8 @@ void MainWindow::DocumentSection::syncChartSelectionTransformUndoState()
 void MainWindow::DocumentSection::recordChartSelectionTransformUndoEntry(
     int originalAnchor,
     int originalPosition,
-    const QTextCursor& transformedCursor)
+    const QTextCursor& transformedCursor,
+    double previewSecond)
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     if (editor == nullptr || editor->document() == nullptr) {
@@ -149,6 +150,7 @@ void MainWindow::DocumentSection::recordChartSelectionTransformUndoEntry(
     entry.originalPosition = originalPosition;
     entry.transformedAnchor = transformedCursor.anchor();
     entry.transformedPosition = transformedCursor.position();
+    entry.previewSecond = previewSecond;
     state_.chartSelectionTransformUndoEntries_.append(entry);
     logSelectionRestore(
         QStringLiteral("record"),
@@ -166,6 +168,18 @@ void MainWindow::DocumentSection::recordChartSelectionTransformUndoEntry(
             .arg(state_.chartSelectionTransformUndoEntries_.size())
     );
     updateLastObservedChartEditorUndoRedoSteps();
+}
+
+void MainWindow::DocumentSection::recordChartCursorUndoEntry(
+    const QTextCursor& originalCursor,
+    const QTextCursor& transformedCursor,
+    double previewSecond)
+{
+    recordChartSelectionTransformUndoEntry(
+        originalCursor.anchor(),
+        originalCursor.position(),
+        transformedCursor,
+        previewSecond);
 }
 
 void MainWindow::DocumentSection::recordChartSelectionUndoRestoreAfterNextEdit(
@@ -255,6 +269,9 @@ bool MainWindow::DocumentSection::restoreChartSelectionTransformCursor(
     );
     editor->setFocus(Qt::ShortcutFocusReason);
     applySelection(editor);
+    if (entry.previewSecond >= 0.0) {
+        owner_.seekPreviewDiscreteToSecond(entry.previewSecond, true);
+    }
     logSelectionRestore(
         QStringLiteral("restore_immediate"),
         QStringLiteral("mode=%1 focus_after=%2 current={%3}")

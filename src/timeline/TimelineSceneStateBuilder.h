@@ -52,10 +52,9 @@ struct TimelineSceneBuildRequest {
     bool showSlideTracks = true;
     bool playheadIndicatorSuppressed = false;
     bool dragActive = false;
-    // Phase 9d-native — header control state. The DComp path renders
-    // the zoom visual natively in the popup composition plane because
-    // DWM stacks the popup HWND above the QQuickWindow's surface and
-    // QML siblings can't paint above it.
+    // Phase 9d-native — header control state. Drives the zoom visual
+    // emitted into TimelineSceneState and drawn by
+    // TimelineQuickHeaderLayer; the QML ToolButton handles input only.
     int zoomControlPressedPart = 0;
     int zoomControlHoveredPart = 0;
     bool settingsControlHovered = false;

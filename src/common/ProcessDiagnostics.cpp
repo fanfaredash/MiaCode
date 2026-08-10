@@ -3,22 +3,66 @@
 #include "DebugLog.h"
 #include "DebugOptions.h"
 
+#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QString>
+#include <QTimer>
 
 #include <atomic>
+#include <chrono>
+#include <memory>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <psapi.h>
+#include <dxgi1_4.h>
 #if defined(_MSC_VER)
 #pragma comment(lib, "psapi.lib")
+#pragma comment(lib, "dxgi.lib")
 #endif
 #endif
 
 namespace miacode::diag {
+
+namespace {
+
+constexpr int kPeriodicResourceGaugeIntervalMs = 30000;
+
+QString applicationStateName()
+{
+    const auto* app = qobject_cast<QGuiApplication*>(QCoreApplication::instance());
+    if (app == nullptr) {
+        return QStringLiteral("not_gui");
+    }
+    switch (app->applicationState()) {
+    case Qt::ApplicationSuspended:
+        return QStringLiteral("suspended");
+    case Qt::ApplicationHidden:
+        return QStringLiteral("hidden");
+    case Qt::ApplicationInactive:
+        return QStringLiteral("inactive");
+    case Qt::ApplicationActive:
+        return QStringLiteral("active");
+    }
+    return QStringLiteral("unknown");
+}
+
+#ifdef Q_OS_WIN
+constexpr quint64 kBytesPerMb = 1024ull * 1024ull;
+
+quint64 bytesToMb(quint64 bytes)
+{
+    return bytes / kBytesPerMb;
+}
+#endif
+
+}  // namespace
 
 QString processResourceGaugePayload()
 {
@@ -67,6 +111,224 @@ QString processResourceGaugePayload()
         "gdi_objects=0 user_objects=0 kernel_handles=0 working_set_mb=0 peak_working_set_mb=0 "
         "private_mb=0 commit_mb=0 paged_pool_kb=0 nonpaged_pool_kb=0 page_faults=0");
 #endif
+}
+
+qint64 adapterProcessVideoMemoryUsageKb(void* dxgiAdapter)
+{
+#ifdef Q_OS_WIN
+    if (dxgiAdapter == nullptr) {
+        return -1;
+    }
+    auto* adapter = static_cast<IDXGIAdapter*>(dxgiAdapter);
+    IDXGIAdapter3* adapter3 = nullptr;
+    if (FAILED(adapter->QueryInterface(__uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
+        || adapter3 == nullptr) {
+        return -1;
+    }
+    quint64 totalBytes = 0;
+    bool any = false;
+    DXGI_QUERY_VIDEO_MEMORY_INFO info;
+    ZeroMemory(&info, sizeof(info));
+    if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
+        totalBytes += info.CurrentUsage;
+        any = true;
+    }
+    ZeroMemory(&info, sizeof(info));
+    if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
+        totalBytes += info.CurrentUsage;
+        any = true;
+    }
+    adapter3->Release();
+    return any ? static_cast<qint64>(totalBytes / 1024ull) : -1;
+#else
+    Q_UNUSED(dxgiAdapter);
+    return -1;
+#endif
+}
+
+QList<AdapterVideoMemorySample> sampleAdapterVideoMemory()
+{
+    QList<AdapterVideoMemorySample> samples;
+#ifdef Q_OS_WIN
+    // Cached rather than created and destroyed on every 30 s sample. CreateDXGIFactory1
+    // touches the graphics driver DLLs, and doing that on the GUI thread on a timer means
+    // periodically contending with the two QSG render threads for the same DXGI objects --
+    // a self-inflicted hitch in a probe whose whole purpose is to measure hitches.
+    //
+    // IsCurrent() is what keeps the cache honest: it goes false when the adapter set
+    // changes, which is exactly when a stale factory would start under-reporting. On a
+    // hybrid laptop -- the configuration these captures come from -- that is not
+    // hypothetical.
+    //
+    // Deliberately never released. It is a process-lifetime singleton, and releasing a COM
+    // object from a static destructor runs after COM may already have been torn down. A
+    // single leaked factory in a debug-only probe is the cheaper side of that trade.
+    static IDXGIFactory1* factory = nullptr;
+    if (factory != nullptr && factory->IsCurrent() == FALSE) {
+        factory->Release();
+        factory = nullptr;
+    }
+    if (factory == nullptr
+        && (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))
+            || factory == nullptr)) {
+        factory = nullptr;
+        return samples;
+    }
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index) {
+        if (adapter == nullptr) {
+            continue;
+        }
+        AdapterVideoMemorySample sample;
+        sample.index = static_cast<int>(index);
+        DXGI_ADAPTER_DESC1 desc;
+        ZeroMemory(&desc, sizeof(desc));
+        if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+            sample.description = QString::fromWCharArray(desc.Description).trimmed();
+            sample.luid = QStringLiteral("0x%1%2")
+                              .arg(static_cast<quint32>(desc.AdapterLuid.HighPart), 8, 16, QLatin1Char('0'))
+                              .arg(static_cast<quint32>(desc.AdapterLuid.LowPart), 8, 16, QLatin1Char('0'));
+            sample.vendorId = static_cast<quint32>(desc.VendorId);
+            sample.deviceId = static_cast<quint32>(desc.DeviceId);
+            sample.software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
+            sample.dedicatedVideoMemoryMb = bytesToMb(static_cast<quint64>(desc.DedicatedVideoMemory));
+            sample.sharedSystemMemoryMb = bytesToMb(static_cast<quint64>(desc.SharedSystemMemory));
+        }
+        IDXGIAdapter3* adapter3 = nullptr;
+        if (SUCCEEDED(adapter->QueryInterface(
+                __uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
+            && adapter3 != nullptr) {
+            DXGI_QUERY_VIDEO_MEMORY_INFO info;
+            ZeroMemory(&info, sizeof(info));
+            if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
+                sample.queried = true;
+                sample.localBudgetMb = bytesToMb(info.Budget);
+                sample.localUsageMb = bytesToMb(info.CurrentUsage);
+                sample.localReservedMb = bytesToMb(info.CurrentReservation);
+            }
+            ZeroMemory(&info, sizeof(info));
+            if (SUCCEEDED(
+                    adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
+                sample.queried = true;
+                sample.nonLocalBudgetMb = bytesToMb(info.Budget);
+                sample.nonLocalUsageMb = bytesToMb(info.CurrentUsage);
+                sample.nonLocalReservedMb = bytesToMb(info.CurrentReservation);
+            }
+            adapter3->Release();
+        }
+        samples.append(sample);
+        adapter->Release();
+        adapter = nullptr;
+    }
+    // No factory->Release() here: the factory outlives this call by design, see above.
+    // The per-adapter interfaces above are still released each pass -- those are cheap to
+    // re-enumerate and holding them would pin adapters across a device change.
+#endif
+    return samples;
+}
+
+QString formatAdapterVideoMemoryPayload(const AdapterVideoMemorySample& sample)
+{
+    // over_budget is the actual alarm: once CurrentUsage exceeds the Budget DXGI grants
+    // this process, the driver starts evicting to system memory and every frame pays a
+    // PCIe re-upload. Precomputed here so an operator can grep `local_over_budget=1`
+    // without doing arithmetic across two fields.
+    const int localOverBudget =
+        (sample.localBudgetMb > 0 && sample.localUsageMb > sample.localBudgetMb) ? 1 : 0;
+    const int nonLocalOverBudget =
+        (sample.nonLocalBudgetMb > 0 && sample.nonLocalUsageMb > sample.nonLocalBudgetMb) ? 1 : 0;
+    return QStringLiteral(
+               "adapter=%1 desc=\"%2\" luid=%3 vendor=0x%4 device=0x%5 software=%6 queried=%7 "
+               "dedicated_mb=%8 shared_mb=%9 local_budget_mb=%10 local_usage_mb=%11 "
+               "local_reserved_mb=%12 local_over_budget=%13 nonlocal_budget_mb=%14 "
+               "nonlocal_usage_mb=%15 nonlocal_reserved_mb=%16 nonlocal_over_budget=%17")
+        .arg(sample.index)
+        .arg(sample.description.isEmpty() ? QStringLiteral("(unknown)") : sample.description)
+        .arg(sample.luid.isEmpty() ? QStringLiteral("(none)") : sample.luid)
+        .arg(sample.vendorId, 4, 16, QLatin1Char('0'))
+        .arg(sample.deviceId, 4, 16, QLatin1Char('0'))
+        .arg(sample.software ? 1 : 0)
+        .arg(sample.queried ? 1 : 0)
+        .arg(sample.dedicatedVideoMemoryMb)
+        .arg(sample.sharedSystemMemoryMb)
+        .arg(sample.localBudgetMb)
+        .arg(sample.localUsageMb)
+        .arg(sample.localReservedMb)
+        .arg(localOverBudget)
+        .arg(sample.nonLocalBudgetMb)
+        .arg(sample.nonLocalUsageMb)
+        .arg(sample.nonLocalReservedMb)
+        .arg(nonLocalOverBudget);
+}
+
+void installPeriodicProcessResourceGauge(QObject* owner)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    if (owner == nullptr) {
+        owner = QCoreApplication::instance();
+    }
+    if (owner == nullptr
+        || owner->findChild<QTimer*>(
+            QStringLiteral("MiaCodePeriodicResourceGauge"),
+            Qt::FindDirectChildrenOnly) != nullptr) {
+        return;
+    }
+
+    auto* timer = new QTimer(owner);
+    timer->setObjectName(QStringLiteral("MiaCodePeriodicResourceGauge"));
+    timer->setInterval(kPeriodicResourceGaugeIntervalMs);
+
+    const auto startedAt = std::chrono::steady_clock::now();
+    const auto sampleCounter = std::make_shared<quint64>(0);
+    const auto emitSample = [sampleCounter, startedAt]() {
+        const qint64 uptimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startedAt).count();
+        const quint64 sample = (*sampleCounter)++;
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("idle/resource_gauge"),
+            QStringLiteral("action=sample sample=%1 uptime_ms=%2 app_state=%3 %4")
+                .arg(sample)
+                .arg(qMax<qint64>(0, uptimeMs))
+                .arg(applicationStateName())
+                .arg(processResourceGaugePayload()));
+
+        // Per-adapter VRAM on the same cadence. The scan line is emitted even when zero
+        // adapters are found so the reader can tell "probe ran, DXGI unavailable" from
+        // "diagnostics never installed".
+        const QList<AdapterVideoMemorySample> adapters = sampleAdapterVideoMemory();
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("idle/vram_gauge"),
+            QStringLiteral("action=adapter_scan sample=%1 uptime_ms=%2 adapter_count=%3")
+                .arg(sample)
+                .arg(qMax<qint64>(0, uptimeMs))
+                .arg(adapters.size()));
+        for (const AdapterVideoMemorySample& adapter : adapters) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("idle/vram_gauge"),
+                QStringLiteral("action=sample sample=%1 uptime_ms=%2 %3")
+                    .arg(sample)
+                    .arg(qMax<qint64>(0, uptimeMs))
+                    .arg(formatAdapterVideoMemoryPayload(adapter)));
+        }
+    };
+
+    QObject::connect(timer, &QTimer::timeout, timer, emitSample);
+    // The first sample used to run synchronously, right here. installPeriodicProcessResourceGauge
+    // is called just after the QApplication constructor, so that put a CreateDXGIFactory1 --
+    // which loads the vendor graphics driver DLLs -- on the GUI thread BEFORE Qt has
+    // initialised its own RHI. This branch already turned the D3D11 startup probe off by
+    // default for precisely that reason; this was the same hazard left in place next to it.
+    //
+    // Posting it instead keeps the sample (uptime_ms just reads a little later) while
+    // moving the driver load behind the event loop, where Qt has already chosen and
+    // initialised its backend.
+    QTimer::singleShot(0, timer, emitSample);
+    timer->start();
 }
 
 static qint64 stageScopePrivateBytes()

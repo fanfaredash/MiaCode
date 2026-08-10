@@ -68,6 +68,11 @@ void MainWindow::clearPreviewObjectStats()
     timelineSection_->clearPreviewObjectStats();
 }
 
+void MainWindow::emitChartSwitchResourceGauge()
+{
+    timelineSection_->emitChartSwitchResourceGauge();
+}
+
 int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
 {
     return timelineSection_->updatePreviewStatsLayoutMode(hostWidth);

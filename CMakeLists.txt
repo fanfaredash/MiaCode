@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.7")
+set(MIACODE_VERSION_PRERELEASE "beta.9")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -59,6 +59,39 @@ option(MIACODE_BUILD_DEV_TOOLS "Build developer helper tools" OFF)
 # top level for `ctest` to discover them; it is harmless when no tests exist.
 enable_testing()
 
+set(MIACODE_GIT_REVISION "unknown")
+set(MIACODE_GIT_DIRTY "unknown")
+find_package(Git QUIET)
+if (GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short=12 HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE MIACODE_GIT_REVISION_RESULT
+        OUTPUT_VARIABLE MIACODE_GIT_REVISION_OUTPUT
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if (MIACODE_GIT_REVISION_RESULT EQUAL 0
+        AND NOT "${MIACODE_GIT_REVISION_OUTPUT}" STREQUAL "")
+        set(MIACODE_GIT_REVISION "${MIACODE_GIT_REVISION_OUTPUT}")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=normal -- .
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE MIACODE_GIT_DIRTY_RESULT
+            OUTPUT_VARIABLE MIACODE_GIT_DIRTY_OUTPUT
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if (MIACODE_GIT_DIRTY_RESULT EQUAL 0)
+            if ("${MIACODE_GIT_DIRTY_OUTPUT}" STREQUAL "")
+                set(MIACODE_GIT_DIRTY "0")
+            else()
+                set(MIACODE_GIT_DIRTY "1")
+            endif()
+        endif()
+    endif()
+endif()
+
 configure_file(
     src/app/AppVersion.h.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/AppVersion.h
@@ -90,6 +123,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
+    src/app/WindowsIdleEventDiagnostics.h
+    src/app/WindowsIdleEventDiagnostics.cpp
+    src/app/WindowVisibilityDiagnostics.h
+    src/app/WindowVisibilityDiagnostics.cpp
     src/app/gpu_adapter_probe.cpp
     src/app/gpu_device_provider.cpp
     src/app/gpu_high_performance_hint.cpp
@@ -200,6 +237,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/DebugLog.cpp
     src/common/UiHangWatchdog.h
     src/common/UiHangWatchdog.cpp
+    src/common/UiHangWatchdogPolicy.h
     src/common/ProcessDiagnostics.h
     src/common/ProcessDiagnostics.cpp
     src/common/GpuDevicePolicy.h
@@ -210,7 +248,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/CrashRecovery.cpp
     src/common/Mmcss.h
     src/common/Mmcss.cpp
-    src/common/DebugImageCompare.h
     src/common/InputShortcutGesture.h
     src/common/InputShortcutGesture.cpp
     src/common/ChartAssetPaths.h
@@ -234,6 +271,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/editor/PlainCodeEditor.BracketCompletion.cpp
     src/editor/PlainCodeEditor.Input.cpp
     src/editor/PlainCodeEditor.Bookmarks.cpp
+    src/editor/BookmarkCommentSyntax.h
+    src/editor/BookmarkCommentSyntax.cpp
     src/editor/TouchPadAuthoringEdit.h
     src/editor/TouchPadAuthoringEdit.cpp
     src/editor/BracketCompletionPopup.h
@@ -476,66 +515,21 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickHudLayer.cpp
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
-    src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
-    src/render/source.h
-    src/render/compositor.h
-    src/render/compositor.cpp
-    src/render/snapshot_builder.h
-    src/sources/chart/StageBackgroundSource.h
-    src/sources/chart/StageBackgroundSource.cpp
-    src/sources/chart/BackdropSource.h
-    src/sources/chart/BackdropSource.cpp
-    src/sources/chart/MuriPadSource.h
-    src/sources/chart/MuriPadSource.cpp
-    src/sources/chart/MuriActionSource.h
-    src/sources/chart/MuriActionSource.cpp
-    src/sources/chart/JudgeFireworkSource.h
-    src/sources/chart/JudgeFireworkSource.cpp
-    src/sources/chart/GuideSource.h
-    src/sources/chart/GuideSource.cpp
-    src/sources/chart/TrackSource.h
-    src/sources/chart/TrackSource.cpp
-    src/sources/chart/SlideMotionSource.h
-    src/sources/chart/SlideMotionSource.cpp
-    src/sources/chart/JudgeEffectSource.h
-    src/sources/chart/JudgeEffectSource.cpp
-    src/sources/chart/TouchJudgeSource.h
-    src/sources/chart/TouchJudgeSource.cpp
-    src/sources/chart/HeadSource.h
-    src/sources/chart/HeadSource.cpp
-    src/sources/chart/TouchSource.h
-    src/sources/chart/TouchSource.cpp
-    src/sources/chart/TouchHoldSource.h
-    src/sources/chart/TouchHoldSource.cpp
-    src/sources/chart/ChartReviewSource.h
-    src/sources/chart/ChartReviewSource.cpp
-    src/sources/chart/MaimuriDxJudgeSource.h
-    src/sources/chart/MaimuriDxJudgeSource.cpp
-    src/sources/chart/HudSource.h
-    src/sources/chart/HudSource.cpp
-    src/sources/timeline/TimelineGridSource.h
-    src/sources/timeline/TimelineGridSource.cpp
-    src/sources/timeline/TimelineGridLinesSource.h
-    src/sources/timeline/TimelineGridLinesSource.cpp
-    src/sources/timeline/TimelineLaneOverlaySource.h
-    src/sources/timeline/TimelineLaneOverlaySource.cpp
-    src/sources/timeline/TimelineWaveformSource.h
-    src/sources/timeline/TimelineWaveformSource.cpp
-    src/sources/timeline/TimelineNotesSource.h
-    src/sources/timeline/TimelineNotesSource.cpp
-    src/sources/timeline/TimelineHeaderSource.h
-    src/sources/timeline/TimelineHeaderSource.cpp
-    src/sources/timeline/TimelineOverlaySource.h
-    src/sources/timeline/TimelineOverlaySource.cpp
-    src/sources/timeline/TimelineLabelCache.h
-    src/sources/timeline/TimelineLabelCache.cpp
-    src/sources/timeline/TimelineSpriteAssetCache.h
-    src/sources/timeline/TimelineSpriteAssetCache.cpp
     src/audio/PreviewAudioBackend.h
+    src/audio/PreviewAudioWorkerProtocol.h
+    src/audio/PreviewAudioPlaybackFlowPolicy.h
+    src/audio/PreviewAudioCommandQueue.h
+    src/audio/PreviewAudioCommandQueue.cpp
+    src/audio/PreviewBassEmergencyPause.h
+    src/audio/PreviewBassEmergencyPause.cpp
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
     src/audio/MiniaudioPreviewAudioBackend.cpp
+    src/audio/PreviewAudioDeviceChangePolicy.h
+    src/audio/PreviewAudioDeviceCutoff.h
+    src/audio/PreviewAudioDeviceWatcher.h
+    src/audio/PreviewAudioDeviceWatcher.cpp
     src/audio/QtPreviewSfxRuntime.h
     src/audio/QtPreviewSfxRuntime.cpp
     src/core/chart/transform/ChartBatchTransform.h
@@ -578,6 +572,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickStateBridge.cpp
     src/timeline/quick/TimelineQuickTextureCache.h
     src/timeline/quick/TimelineQuickTextureCache.cpp
+    src/timeline/quick/TimelineQuickTextureCachePolicy.h
     src/timeline/quick/TimelineQuickLayerUtils.h
     src/timeline/quick/TimelineQuickLayerUtils.cpp
     src/timeline/quick/TimelineQuickGridLayer.h
@@ -720,6 +715,12 @@ target_include_directories(MiaCode PRIVATE
 
 target_sources(MiaCode PRIVATE
     src/common/PreviewAudioMixConfig.h
+    src/audio/PreviewAudioWorkerFactory.h
+    src/audio/PreviewAudioWorkerFactory.cpp
+    src/audio/PreviewAudioWorker.h
+    src/audio/PreviewAudioWorker.cpp
+    src/audio/PreviewBassDeviceLease.h
+    src/audio/PreviewBassDeviceLease.cpp
     src/tools/video_export/VideoExportAudioRenderPlan.h
     src/tools/video_export/VideoExportAudioRenderPlan.cpp
     src/tools/video_export/VideoExportAudioBackend.h
@@ -743,34 +744,18 @@ if (WIN32 OR APPLE)
 endif()
 
 if (WIN32)
-    target_sources(MiaCode PRIVATE
-        src/render/backend_d3d11/PreviewDCompCore.h
-        src/render/backend_d3d11/PreviewDCompCore.cpp
-        src/render/backend_d3d11/TimelineRenderView.h
-        src/render/backend_d3d11/TimelineRenderView.cpp
-        src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
-        src/render/PreviewDCompRenderer.h
-        src/render/PreviewDCompRenderer.cpp
-        src/render/backend_d3d11/PreviewDCompSpritePipeline.h
-        src/render/backend_d3d11/PreviewDCompSpritePipeline.cpp
-        src/render/backend_d3d11/PreviewDCompTextureCache.h
-        src/render/backend_d3d11/PreviewDCompTextureCache.cpp
-        src/render/backend_d3d11/PreviewDCompSurface.h
-        src/render/backend_d3d11/PreviewDCompSurface.cpp
-        src/render/backend_d3d11/PreviewPopupHwndTracker.h
-        src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
-        src/render/backend_d3d11/OwnerHwndTracker.h
-        src/render/backend_d3d11/OwnerHwndTracker.cpp
-    )
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
         winmm
+        ole32       # Windows Core Audio endpoint notification COM API
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
-        d3d11        # DComp preview path (src/render/backend_d3d11) — see docs plan §3 Phase 1
-        dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
-        dcomp        # DCompositionCreateDevice + visual tree
-        d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
+        d3d11        # Shared preview device, D3D11 export session, QuickShell composite
+                     # surface, stage-media host (src/preview/runtime, src/app)
+        dxgi         # Adapter enumeration + per-process VRAM gauge
+                     # (GpuDevicePolicy, ProcessDiagnostics, TimelineQuickItem)
+        User32       # RegisterPowerSettingNotification
+        Wtsapi32     # Session lock/unlock notifications for idle-freeze diagnostics
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1068,6 +1053,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(soundtouch_probe
         SOURCES
             src/audio/PreviewAudioBackend.h
+            src/audio/PreviewAudioWorkerProtocol.h
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewBassEmergencyPause.h
+            src/audio/PreviewBassEmergencyPause.cpp
+            src/audio/PreviewAudioWorkerFactory.h
+            src/audio/PreviewAudioWorkerFactory.cpp
+            src/audio/PreviewAudioWorker.h
+            src/audio/PreviewAudioWorker.cpp
+            src/audio/PreviewBassDeviceLease.h
+            src/audio/PreviewBassDeviceLease.cpp
             src/tools/probe/SoundtouchProbe.cpp
             src/audio/PreviewAudioSettings.h
             src/audio/PreviewAudioSettings.cpp
@@ -1075,6 +1071,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/MiniaudioPreviewAudioBackend.cpp
             src/audio/QtPreviewSfxRuntime.h
             src/audio/QtPreviewSfxRuntime.cpp
+            src/common/Mmcss.h
+            src/common/Mmcss.cpp
             ${_miacode_log_core}
         LIBS Qt6::Concurrent Qt6::Core Qt6::Gui Qt6::Widgets soundtouch
         INCLUDES
@@ -1096,6 +1094,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         target_link_libraries(soundtouch_probe PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+            avrt
         )
         add_custom_command(TARGET soundtouch_probe POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1289,6 +1288,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/app/ui src/core/chart src/core/chart/parser src/timeline src/tools
     )
 
+    miacode_add_dev_tool(timeline_marker_offset_spec TEST
+        SOURCES
+            src/tools/timeline/TimelineMarkerOffsetSpec.cpp
+            src/timeline/TimelineMarkerOffset.h
+            src/timeline/TimelineData.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/timeline
+    )
+
     miacode_add_dev_tool(plain_code_editor_spec TEST
         SOURCES
             src/tools/editor/PlainCodeEditorSpec.cpp
@@ -1299,6 +1307,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/PlainCodeEditor.BracketCompletion.cpp
             src/editor/PlainCodeEditor.Input.cpp
             src/editor/PlainCodeEditor.Bookmarks.cpp
+            src/editor/BookmarkCommentSyntax.h
+            src/editor/BookmarkCommentSyntax.cpp
             src/editor/TouchPadAuthoringEdit.h
             src/editor/TouchPadAuthoringEdit.cpp
             src/editor/BracketCompletionPopup.h
@@ -1395,6 +1405,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document src/core/chart/parser src/timeline
     )
 
+    miacode_add_dev_tool(preview_slide_vanilla_trim_spec TEST
+        SOURCES
+            src/tools/preview/PreviewSlideVanillaTrimSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            src/core/scene/PreviewTrackShared.h
+            src/core/scene/PreviewTrackShared.cpp
+            src/core/scene/PreviewSceneConstants.h
+            src/common/MuriTypes.h
+            src/common/MuriTypes.cpp
+            src/timeline/TimelineData.h
+            resources/slide_data.qrc
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES
+            src src/common src/preview src/core/scene src/core/chart
+            src/core/chart/document src/core/chart/parser src/timeline
+    )
+
     miacode_add_dev_tool(preview_realtime_object_hot_path_spec TEST
         SOURCES
             src/tools/preview/PreviewRealtimeObjectHotPathSpec.cpp
@@ -1451,6 +1479,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/preview src/preview/quick_scene
     )
 
+    miacode_add_dev_tool(timeline_quick_texture_cache_policy_spec TEST
+        SOURCES
+            src/tools/timeline/TimelineQuickTextureCachePolicySpec.cpp
+            src/timeline/quick/TimelineQuickTextureCachePolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/timeline src/timeline/quick
+    )
+
     miacode_add_dev_tool(preview_sfx_timeline_spec TEST
         SOURCES
             src/tools/preview/PreviewSfxTimelineSpec.cpp
@@ -1473,6 +1509,123 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/common src/preview src/audio
     )
+
+    miacode_add_dev_tool(preview_audio_command_queue_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioCommandQueueSpec.cpp
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/audio src/timeline
+    )
+
+    miacode_add_dev_tool(preview_audio_worker_protocol_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioWorkerProtocolSpec.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/audio src/timeline
+    )
+
+    miacode_add_dev_tool(preview_audio_playback_flow_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioPlaybackFlowPolicySpec.cpp
+            src/audio/PreviewAudioPlaybackFlowPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/audio src/timeline
+    )
+
+    # Keep this copy of the production factory on the no-BASS route even when
+    # the worker spec also compiles the platform BASS backend sources.
+    add_library(preview_audio_worker_spec_miniaudio_factory OBJECT
+        src/audio/PreviewAudioWorkerFactory.cpp
+    )
+    target_link_libraries(preview_audio_worker_spec_miniaudio_factory PRIVATE Qt6::Core)
+    target_include_directories(preview_audio_worker_spec_miniaudio_factory PRIVATE src src/audio)
+
+    miacode_add_dev_tool(preview_audio_worker_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioWorkerSpec.cpp
+            ${_miacode_log_core}
+            src/common/Mmcss.h
+            src/common/Mmcss.cpp
+            src/audio/PreviewAudioSettings.h
+            src/audio/PreviewAudioSettings.cpp
+            src/audio/MiniaudioPreviewAudioBackend.h
+            src/audio/MiniaudioPreviewAudioBackend.cpp
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+            src/audio/PreviewAudioWorkerFactory.h
+            src/audio/PreviewAudioWorker.h
+            src/audio/PreviewAudioWorker.cpp
+            src/audio/QtPreviewSfxRuntime.h
+            src/audio/QtPreviewSfxRuntime.cpp
+            src/audio/PreviewBassEmergencyPause.h
+            src/audio/PreviewBassEmergencyPause.cpp
+            src/audio/PreviewBassDeviceLease.h
+            src/audio/PreviewBassDeviceLease.cpp
+        LIBS Qt6::Core soundtouch
+        INCLUDES src src/audio src/common src/preview src/timeline
+    )
+    target_sources(preview_audio_worker_spec PRIVATE
+        $<TARGET_OBJECTS:preview_audio_worker_spec_miniaudio_factory>
+    )
+    target_compile_definitions(preview_audio_worker_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+    if (WIN32 OR APPLE)
+        target_sources(preview_audio_worker_spec PRIVATE
+            src/audio/BassPreviewAudioBackend.h
+            src/audio/BassPreviewAudioBackend.cpp
+            src/audio/BassPreviewAudioBackend_EngineInit.cpp
+            src/audio/BassPreviewAudioBackend_Assets.cpp
+            src/audio/BassPreviewAudioBackend_Transport.cpp
+            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+            src/audio/BassPreviewAudioBackend_EventDrain.cpp
+        )
+        target_compile_definitions(preview_audio_worker_spec PRIVATE MIACODE_HAS_BASS_AUDIO=1)
+        target_include_directories(preview_audio_worker_spec PRIVATE third_party/bass/include)
+        if (WIN32)
+            target_link_libraries(preview_audio_worker_spec PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+                avrt
+            )
+            add_custom_command(TARGET preview_audio_worker_spec POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
+                    $<TARGET_FILE_DIR:preview_audio_worker_spec>
+            )
+        elseif (APPLE)
+            target_link_libraries(preview_audio_worker_spec PRIVATE
+                "${MIACODE_BASS_MACOS_DIR}/libbass.dylib"
+                "${MIACODE_BASS_MACOS_DIR}/libbassmix.dylib"
+            )
+        endif()
+    endif()
+
+    miacode_add_dev_tool(preview_audio_non_gui_barrier_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioNonGuiBarrierSpec.cpp
+            ${_miacode_log_core}
+            src/common/Mmcss.h
+            src/common/Mmcss.cpp
+            src/audio/PreviewAudioSettings.h
+            src/audio/PreviewAudioSettings.cpp
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+            src/audio/PreviewAudioWorkerFactory.h
+            src/audio/PreviewAudioWorker.h
+            src/audio/PreviewAudioWorker.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/audio src/common src/timeline
+    )
+    if (WIN32)
+        target_link_libraries(preview_audio_non_gui_barrier_spec PRIVATE avrt)
+    endif()
 
     miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
         SOURCES
@@ -1501,6 +1654,39 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/audio
     )
 
+    miacode_add_dev_tool(preview_bass_device_lease_spec TEST
+        SOURCES
+            src/tools/preview/PreviewBassDeviceLeaseSpec.cpp
+            src/audio/PreviewBassDeviceLease.h
+            src/audio/PreviewBassDeviceLease.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/audio
+    )
+
+    miacode_add_dev_tool(preview_audio_health_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioHealthSpec.cpp
+            src/audio/PreviewAudioHealth.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/preview src/audio
+    )
+
+    miacode_add_dev_tool(preview_audio_device_change_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioDeviceChangePolicySpec.cpp
+            src/audio/PreviewAudioDeviceChangePolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/preview src/audio
+    )
+
+    miacode_add_dev_tool(bass_preview_sfx_scheduler_policy_spec TEST
+        SOURCES
+            src/tools/preview/BassPreviewSfxSchedulerPolicySpec.cpp
+            src/audio/BassPreviewSfxSchedulerPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/preview src/audio
+    )
+
     # Simulation spec for the preview audio/stage-media cache mechanism: the
     # content-stamp skip decision (size:mtime, NOT path-only) and the live,
     # uncached track/bg resolvers. Drives the real production functions against
@@ -1521,6 +1707,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/app/quick_shell
     )
+    target_compile_definitions(quickshell_preview_surface_policy_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(video_export_runtime_policy_spec TEST
         SOURCES
@@ -1648,8 +1836,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
 
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,
-    # debug-category gating, DComp cascade), the safety net for any future
-    # table-driven registry refactor.
+    # debug-category gating), the safety net for any future table-driven
+    # registry refactor.
     miacode_add_dev_tool(debug_options_spec TEST
         SOURCES
             src/tools/debug_index/DebugOptionsSpec.cpp
@@ -1657,6 +1845,75 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/common
     )
+
+    miacode_add_dev_tool(process_identity_fields_spec TEST
+        SOURCES
+            src/tools/debug_index/ProcessIdentityFieldsSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(ui_hang_watchdog_policy_spec TEST
+        SOURCES
+            src/tools/debug_index/UiHangWatchdogPolicySpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(log_pruning_policy_spec TEST
+        SOURCES
+            src/tools/debug_index/LogPruningPolicySpec.cpp
+            src/common/LogEmissionPolicy.h
+            src/common/UiHangWatchdogPolicy.h
+            src/audio/BassPreviewSfxSchedulerPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(process_diagnostics_spec TEST
+        SOURCES
+            src/tools/debug_index/ProcessDiagnosticsSpec.cpp
+            src/common/ProcessDiagnostics.h
+            src/common/ProcessDiagnostics.cpp
+            ${_miacode_log_core}
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
+    if (WIN32)
+        # Per-adapter VRAM gauge: CreateDXGIFactory1 + IDXGIAdapter3::QueryVideoMemoryInfo.
+        target_link_libraries(process_diagnostics_spec PRIVATE dxgi)
+    endif()
+
+    miacode_add_dev_tool(windows_idle_event_diagnostics_spec TEST
+        SOURCES
+            src/tools/debug_index/WindowsIdleEventDiagnosticsSpec.cpp
+            src/app/WindowsIdleEventDiagnostics.h
+            src/app/WindowsIdleEventDiagnostics.cpp
+            ${_miacode_log_core}
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    if (WIN32)
+        target_link_libraries(windows_idle_event_diagnostics_spec PRIVATE User32 Wtsapi32)
+    endif()
+
+    miacode_add_dev_tool(window_visibility_diagnostics_spec TEST
+        SOURCES
+            src/tools/debug_index/WindowVisibilityDiagnosticsSpec.cpp
+            src/app/WindowVisibilityDiagnostics.h
+            src/app/WindowVisibilityDiagnostics.cpp
+            ${_miacode_log_core}
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(idle_freeze_repro_script_spec TEST
+        SOURCES
+            src/tools/debug_index/IdleFreezeReproScriptSpec.cpp
+        LIBS Qt6::Core
+    )
+    target_compile_definitions(idle_freeze_repro_script_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 endif()
 
 if (WIN32)

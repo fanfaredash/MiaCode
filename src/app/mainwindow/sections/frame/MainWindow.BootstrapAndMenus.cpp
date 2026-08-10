@@ -641,6 +641,21 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     renderModeGroup->addAction(owner_.renderModeMaimuriDxAction_);
     previewMenu->addAction(owner_.renderModeMaimuriDxAction_);
 
+    owner_.renderModeEraseByAreaAction_ = new QAction(
+        UiText::text(QStringLiteral("menu.preview_mode_erase_by_area")),
+        &owner_
+    );
+    owner_.renderModeEraseByAreaAction_->setCheckable(true);
+    owner_.renderModeEraseByAreaAction_->setChecked(owner_.muriRenderOptions_.renderMode == RenderMode::EraseByArea);
+    owner_.renderModeEraseByAreaAction_->setIcon(
+        owner_.renderModeEraseByAreaAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
+    );
+    connect(owner_.renderModeEraseByAreaAction_, &QAction::triggered, &owner_, [this]() {
+        owner_.setMuriRenderMode(RenderMode::EraseByArea);
+    });
+    renderModeGroup->addAction(owner_.renderModeEraseByAreaAction_);
+    previewMenu->addAction(owner_.renderModeEraseByAreaAction_);
+
     owner_.editStaticTapOnSlideThresholdAction_ = new QAction(
         UiText::text(QStringLiteral("menu.tap_on_slide_threshold")),
         &owner_

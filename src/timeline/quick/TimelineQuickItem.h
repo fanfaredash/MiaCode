@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "common/LogEmissionPolicy.h"
 #include "timeline/TimelineSceneState.h"
 
 class QHoverEvent;
@@ -20,12 +21,6 @@ class TimelineQuickHeaderLayer;
 class TimelineQuickGridLinesLayer;
 class TimelineQuickNotesLayer;
 class TimelineQuickOverlayLayer;
-
-#ifdef Q_OS_WIN
-namespace miacode::preview::dcomp {
-class TimelineRenderView;
-}
-#endif
 
 class TimelineQuickItem : public QQuickItem
 {
@@ -183,11 +178,11 @@ private:
     mutable quint64 cachedSceneBuildNotesRevision_ = 0;
     mutable quint64 cachedSceneBuildOverlayRevision_ = 0;
     mutable quint64 sceneStateRebuildCount_ = 0;
+    mutable miacode::diagnostics::RebuildWindow sceneRebuildLogWindow_;
     // Per-second timing of updatePaintNode itself, so we can locate the
     // actual cost (currentSceneState walk, layer updateNode work, QSG
     // sync handoff). Logged once per second to avoid spamming the
-    // hot path. Tells us whether the GUI-thread block we see in
-    // PreviewDCompSurface::presented_gap_stats is coming from this
+    // hot path. Tells us whether a GUI-thread block is coming from this
     // updatePaintNode running long, or from the QSG infrastructure
     // surrounding it.
     mutable qint64 updatePaintNodeCount_ = 0;
@@ -213,16 +208,4 @@ private:
     std::unique_ptr<TimelineQuickNotesLayer> notesLayer_;
     std::unique_ptr<TimelineQuickOverlayLayer> overlayLayer_;
 
-    // Phase 3c — DComp render view for the timeline pane. Nullptr when
-    // previewTimelineUseDCompEnabled() returned false at construction.
-    // Lives next to the QSG paint code: the QSG path keeps drawing
-    // (so the editor stays functional if DComp fails), and the DComp
-    // top-level popup HWND overlays the QSG output. Phase 3e drops
-    // the QSG path entirely once timeline-DComp ships its remaining
-    // primitive types.
-    void pushSceneStateToDComp();
-#ifdef Q_OS_WIN
-    std::unique_ptr<miacode::preview::dcomp::TimelineRenderView> dcompView_;
-    QMetaObject::Connection dcompWindowConnection_;
-#endif
 };

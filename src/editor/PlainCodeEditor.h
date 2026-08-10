@@ -44,7 +44,6 @@ public:
     void setBookmarkedLines(const QSet<int>& lines);
     const QSet<int>& bookmarkedLines() const { return bookmarkedLines_; }
     int lineNumberAtGlobalPosition(const QPoint& globalPos) const;
-    void setBookmarkDropPreviewLine(int line);
     bool applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals = true);
     QPointF normalizedViewportHitPosition(const QPointF& position) const;
     void setHalfWidthInputEnabled(bool enabled);
@@ -86,9 +85,7 @@ signals:
     void raiseSubdivisionHalfStepShortcutRequested();
     void lowerSubdivisionHalfStepShortcutRequested();
     void editorOverwriteModeChanged(bool enabled);
-    void lineNumberBookmarkMoveRequested(int fromLine, int toLine);
     void lineNumberBookmarkActivated(int line);
-    void lineNumberBookmarkCreateRequested(int line);
     // Bookmark redesign — the editor only announces intent; MainWindow owns
     // the actual actions (sidebar inline rename, delete confirmation, and the
     // line-number-gutter context menu).
@@ -97,11 +94,6 @@ signals:
     void lineNumberBookmarkContextMenuRequested(int line, const QPoint& globalPos);
 
 protected:
-    void dragEnterEvent(QDragEnterEvent* event) override;
-    void dragMoveEvent(QDragMoveEvent* event) override;
-    void dragLeaveEvent(QDragLeaveEvent* event) override;
-    void dropEvent(QDropEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
     bool event(QEvent* event) override;
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
@@ -191,8 +183,5 @@ private:
     int previewFollowVisualCaretLine_ = 1;
     int previewFollowVisualCaretCol_ = 1;
     QSet<int> bookmarkedLines_;
-    int hoveredBookmarkDropLine_ = -1;
-    int pressedBookmarkLine_ = -1;
-    QPoint lineNumberPressPos_;
     LineNumberArea* lineNumberArea_;
 };

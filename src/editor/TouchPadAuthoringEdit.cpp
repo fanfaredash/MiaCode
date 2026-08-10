@@ -43,6 +43,16 @@ bool isTouchItemSeparator(QChar ch)
     return ch == QLatin1Char('/') || ch == QLatin1Char('`');
 }
 
+bool isSelectedOrdinaryTouch(const QString& item, const QString& normalizedPad)
+{
+    if (item.compare(normalizedPad, Qt::CaseInsensitive) == 0) {
+        return true;
+    }
+    return item.size() == normalizedPad.size() + 1
+        && item.endsWith(QLatin1Char('f'), Qt::CaseInsensitive)
+        && item.left(normalizedPad.size()).compare(normalizedPad, Qt::CaseInsensitive) == 0;
+}
+
 } // namespace
 
 TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
@@ -92,7 +102,7 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
         while (padEnd > padStart && text.at(padEnd - 1).isSpace()) {
             --padEnd;
         }
-        if (text.mid(padStart, padEnd - padStart).compare(normalizedPad, Qt::CaseInsensitive) == 0) {
+        if (isSelectedOrdinaryTouch(text.mid(padStart, padEnd - padStart), normalizedPad)) {
             plan.insertionText.clear();
             if (itemIndex > 0) {
                 plan.insertionPosition = itemStart - 1;

@@ -27,6 +27,26 @@ enum class PreviewJudgeEffectStyle {
     Starry = 1,
 };
 
+// Stable wire/diagnostic names for the background scale mode (背景缩放模式). These
+// are the exact tokens the export snapshot has always serialised, lifted here so the
+// export TU and the runtime stage-media diagnostics share one mapping instead of each
+// keeping its own copy. Callers that need a QString wrap with QString::fromLatin1,
+// matching the two token helpers below.
+inline const char* backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
+{
+    switch (mode) {
+    case PreviewBackgroundScaleMode::FitContain:
+        return "fit";
+    case PreviewBackgroundScaleMode::SquareFitContain:
+        return "square_fit";
+    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
+        return "inner_circle_fit_outer_fill";
+    case PreviewBackgroundScaleMode::FillCrop:
+    default:
+        return "fill";
+    }
+}
+
 inline const char* tapJudgeTextDistanceToken(PreviewTapJudgeTextDistance distance)
 {
     switch (distance) {

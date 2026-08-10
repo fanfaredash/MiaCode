@@ -30,6 +30,10 @@ public:
     bool executeCommand(const QString& command, QString* errorMessage = nullptr);
     int registeredEventCallbackCount(const QString& kind = {}) const;
     QJsonArray registeredEventCallbacksForDevtools() const;
+    // True when at least one live (non-suspended) subscription matches `kind`,
+    // wildcard patterns included. Lets a per-frame publisher skip building its
+    // payload when nothing would receive it.
+    bool hasEventSubscriber(const QString& kind) const;
     void dispatchEvent(const QString& kind, const QJsonObject& payload, bool coalescible = false);
 
 signals:

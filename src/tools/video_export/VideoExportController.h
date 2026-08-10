@@ -228,6 +228,7 @@ struct VideoExportTask {
     // round-trips back onto the task via buildVideoExportTaskFromSnapshot.
     IntroBannerSpec intro;
     QString introSoundFileName;
+    double introSoundVolume = 1.0;
     // Chart metadata for the optional top-left chart info HUD. Populated
     // from the active SimaiDocument at task-construction time; the worker
     // re-derives these from the snapshot's chart text + difficulty id

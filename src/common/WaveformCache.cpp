@@ -20,6 +20,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/MiniaudioFileAccess.h"
+#include "audio/PreviewBassDeviceLease.h"
 
 #include "../../third_party/miniaudio/miniaudio.h"
 
@@ -144,28 +145,18 @@ class ScopedBassWaveformDevice
 {
 public:
     ScopedBassWaveformDevice()
+        : lease_(miacode::preview_audio::PreviewBassDeviceLease::acquire({
+            [] { return static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(BASS_GetDevice()); },
+            [] { return BASS_Init(0, kWaveformDecodeSampleRate, BASS_DEVICE_NOSPEAKER, nullptr, nullptr) != FALSE; },
+            [] { BASS_Free(); },
+        }))
     {
-        const DWORD currentDevice = BASS_GetDevice();
-        if (currentDevice != static_cast<DWORD>(-1)) {
-            available_ = true;
-            return;
-        }
-        ownsDevice_ = BASS_Init(0, kWaveformDecodeSampleRate, BASS_DEVICE_NOSPEAKER, nullptr, nullptr);
-        available_ = ownsDevice_;
     }
 
-    ~ScopedBassWaveformDevice()
-    {
-        if (ownsDevice_) {
-            BASS_Free();
-        }
-    }
-
-    bool available() const { return available_; }
+    bool available() const { return lease_.acquired(); }
 
 private:
-    bool available_ = false;
-    bool ownsDevice_ = false;
+    miacode::preview_audio::PreviewBassDeviceLease lease_;
 };
 #endif
 

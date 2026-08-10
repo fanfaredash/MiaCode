@@ -107,21 +107,30 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     auto* sectioningCombo = createDialogComboBox();
     sectioningCombo->addItem(
         UiText::text(QStringLiteral("document.chart_section_every_4_measures")),
-        true);
+        4);
     sectioningCombo->addItem(
-        UiText::text(QStringLiteral("document.chart_section_none")),
-        false);
-    setComboToBool(sectioningCombo, initialOptions.splitEveryFourMeasures);
+        UiText::text(QStringLiteral("document.chart_section_every_2_measures")),
+        2);
+    sectioningCombo->addItem(UiText::text(QStringLiteral("document.chart_section_none")), 0);
+    sectioningCombo->setCurrentIndex(sectioningCombo->findData(initialOptions.sectionMeasureCount));
     optionsForm->addRow(UiText::text(QStringLiteral("document.chart_sectioning")), sectioningCombo);
 
-    const auto publishOptionsChanged = [reduceTo384Combo, sectioningCombo, comboBoolValue, optionsChanged]() {
+    auto* syntaxCombo = createDialogComboBox();
+    syntaxCombo->addItem(QStringLiteral("FPD"), static_cast<int>(miacode::chart_transform::ChartNormalizationSyntax::Fpd));
+    syntaxCombo->addItem(QStringLiteral("日向"), static_cast<int>(miacode::chart_transform::ChartNormalizationSyntax::Hinata));
+    syntaxCombo->setCurrentIndex(syntaxCombo->findData(static_cast<int>(initialOptions.syntax)));
+    optionsForm->addRow(QStringLiteral("整理语法"), syntaxCombo);
+
+    const auto publishOptionsChanged = [reduceTo384Combo, sectioningCombo, syntaxCombo, comboBoolValue, optionsChanged]() {
         if (!optionsChanged) {
             return;
         }
         optionsChanged(miacode::chart_transform::ChartNormalizationOptions{
             true,
             comboBoolValue(reduceTo384Combo, false),
-            comboBoolValue(sectioningCombo, true)});
+            sectioningCombo->currentData().toInt() == 4,
+            static_cast<miacode::chart_transform::ChartNormalizationSyntax>(syntaxCombo->currentData().toInt()),
+            sectioningCombo->currentData().toInt()});
     };
     QObject::connect(
         reduceTo384Combo,
@@ -130,6 +139,11 @@ NormalizeDialogResult showNormalizeSelectionDialog(
         [publishOptionsChanged](int) { publishOptionsChanged(); });
     QObject::connect(
         sectioningCombo,
+        qOverload<int>(&QComboBox::currentIndexChanged),
+        &dialog,
+        [publishOptionsChanged](int) { publishOptionsChanged(); });
+    QObject::connect(
+        syntaxCombo,
         qOverload<int>(&QComboBox::currentIndexChanged),
         &dialog,
         [publishOptionsChanged](int) { publishOptionsChanged(); });
@@ -148,7 +162,10 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     result.options.startAtNewMeasure = true;
     result.options.reduceTo384Grid = comboBoolValue(reduceTo384Combo, initialOptions.reduceTo384Grid);
     result.options.splitEveryFourMeasures =
-        comboBoolValue(sectioningCombo, initialOptions.splitEveryFourMeasures);
+        sectioningCombo->currentData().toInt() == 4;
+    result.options.sectionMeasureCount = sectioningCombo->currentData().toInt();
+    result.options.syntax = static_cast<miacode::chart_transform::ChartNormalizationSyntax>(
+        syntaxCombo->currentData().toInt());
     return result;
 }
 
@@ -364,6 +381,8 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     options.startAtNewMeasure = true;
     options.reduceTo384Grid = state_.chartNormalizeReduceTo384Grid_;
     options.splitEveryFourMeasures = state_.chartNormalizeSplitEveryFourMeasures_;
+    options.sectionMeasureCount = state_.chartNormalizeSectionMeasureCount_;
+    options.syntax = state_.chartNormalizeSyntax_;
     const NormalizeDialogResult dialogResult =
         showNormalizeSelectionDialog(
             owner_,
@@ -372,13 +391,17 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
             [this](const miacode::chart_transform::ChartNormalizationOptions& changedOptions) {
                 if (state_.chartNormalizeReduceTo384Grid_ == changedOptions.reduceTo384Grid
                     && state_.chartNormalizeSplitEveryFourMeasures_
-                        == changedOptions.splitEveryFourMeasures) {
+                        == changedOptions.splitEveryFourMeasures
+                    && state_.chartNormalizeSectionMeasureCount_ == changedOptions.sectionMeasureCount
+                    && state_.chartNormalizeSyntax_ == changedOptions.syntax) {
                     return;
                 }
                 state_.chartNormalizeStartAtNewMeasure_ = true;
                 state_.chartNormalizeReduceTo384Grid_ = changedOptions.reduceTo384Grid;
                 state_.chartNormalizeSplitEveryFourMeasures_ =
                     changedOptions.splitEveryFourMeasures;
+                state_.chartNormalizeSectionMeasureCount_ = changedOptions.sectionMeasureCount;
+                state_.chartNormalizeSyntax_ = changedOptions.syntax;
                 owner_.savePortableState();
             });
     if (!dialogResult.accepted) {
@@ -388,6 +411,8 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     state_.chartNormalizeStartAtNewMeasure_ = true;
     state_.chartNormalizeReduceTo384Grid_ = dialogResult.options.reduceTo384Grid;
     state_.chartNormalizeSplitEveryFourMeasures_ = dialogResult.options.splitEveryFourMeasures;
+    state_.chartNormalizeSectionMeasureCount_ = dialogResult.options.sectionMeasureCount;
+    state_.chartNormalizeSyntax_ = dialogResult.options.syntax;
 
     if (begin < 0 || finish < begin || finish > original.size()) {
         owner_.statusBar()->showMessage(QStringLiteral("Format Chart: invalid selection range."));

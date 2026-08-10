@@ -193,14 +193,13 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
             const int drawTop = blockRect.top() + yOffset;
             const int line = blockNumber + 1;
             const bool isBookmarkLine = bookmarkedLines_.contains(line);
-            const bool isDropLine = hoveredBookmarkDropLine_ == line;
-            if (isBookmarkLine || isDropLine) {
+            if (isBookmarkLine) {
                 QColor markerColor = c.accent;
-                markerColor.setAlpha(isDropLine ? 80 : 34);
+                markerColor.setAlpha(34);
                 const QRect rowRect(0, drawTop, lineNumberArea_->width(), lineHeight);
                 painter.fillRect(rowRect, markerColor);
             }
-            painter.setPen(isBookmarkLine || isDropLine ? c.accent : c.textSecondary);
+            painter.setPen(isBookmarkLine ? c.accent : c.textSecondary);
             painter.drawText(
                 kLineNumberLeftPadding,
                 drawTop,

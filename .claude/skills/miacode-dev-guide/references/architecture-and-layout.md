@@ -27,12 +27,6 @@ src/
     quick_scene/  ACTIVE QSG chart layer renderers (PreviewQuick*Layer, *SceneRoot)
     runtime/      PreviewRuntime, PreviewQuickExportSession, PreviewStageMediaHost,
                   PreviewSceneAsset*
-  render/         DComp/D3D11 rendering (DEFAULT OFF — being decoupled)
-    PreviewDCompRenderer.*
-    backend_d3d11/  PreviewDCompCore/Surface/SpritePipeline/TextureCache, TimelineRenderView
-  sources/        OBS-style IPreviewSource feed for the DComp compositor (DEFAULT OFF)
-    chart/          *Source (StageBackground, Track, Head, Slide, Judge, ...)
-    timeline/       Timeline*Source
   timeline/       Editor timeline strip: data + QSG surface
     quick/          TimelineQuick*Layer / TimelineQuickItem
   tools/          Standalone helpers + spec/probe targets
@@ -54,30 +48,29 @@ Path-translation table for stale docs/comments:
 ## 2. Dependency direction
 
 - `core/chart/` and `core/scene/` are the domain core: no dependency on `app/`, `preview/`,
-  `render/`, or Qt Widgets. `core/scene/` must stay GPU-free (no QSG / D3D11 includes).
+  or Qt Widgets. `core/scene/` must stay GPU-free (no QSG / D3D11 includes).
 - `app/` (UI) depends on core; core never depends on UI.
 - `audio/` is the only place allowed to link BASS / miniaudio.
-- `preview/quick_scene/` (QSG) and `render/` (DComp) are two parallel renderers that both
-  consume frame state. Keep them independent; do not let one include the other's headers.
 - `tools/*` are standalone (each spec/dump/probe builds against a minimal source subset).
 
-## 3. Render-architecture decision (2026-05-29)
+## 3. Render-architecture decision (2026-05-29, updated 2026-08-07)
 
 See `SKILL.md` for the canonical statement. Summary:
 
 - **KEEP (main):** in-process QSG — `PreviewRuntime` → `PreviewQuickSceneRoot`, `core/scene/*`,
   `preview/quick_scene/*`. Realtime preview + export share it.
-- **KEEP but OFF + decouple:** DComp/D3D11 (`render/*` + `sources/*`). `previewUseDCompEnabled()`
-  defaults `false` (`src/common/DebugOptions.h:194`). End state: zero coupling to the QSG build.
+- **DELETED (2026-08-07):** DComp/D3D11. `render/*` and `sources/*` are gone, along with all
+  six `MIACODE_*_DCOMP*` flags and the `dcomp` / `d3dcompiler` link libraries. It had been
+  default-off since beta34, so it cost ~11k lines and a parallel branch in every preview and
+  timeline paint path while shipping to nobody. Do not reintroduce a second render backend.
 - **DELETED (2026-06-02):** the out-of-process worker (`preview/ipc/*`,
   `PreviewWorkerSession`/`Supervisor`, `MIACODE_PREVIEW_OUT_OF_PROCESS`, `MIACODE_PREVIEW_WORKER_*`)
   is gone. Do not reintroduce.
-- `src/README.md` predates this and frames DComp/sources as the future — superseded.
+- `src/README.md` predates this and framed DComp/sources as the future — superseded.
 
-Why two scene stacks exist (so you don't "fix" the wrong one): the QSG path uses
-`core/scene/*LayerState` → `preview/quick_scene/PreviewQuick*Layer`. The DComp path uses
-`sources/*Source` → `render/compositor` → `render/backend_d3d11/*`. They do not share layer
-code. Mainline features go in the QSG path.
+There is now exactly one scene stack: `core/scene/*LayerState` →
+`preview/quick_scene/PreviewQuick*Layer`. Older docs and commit messages describe a second
+`sources/*Source` → `render/compositor` → `render/backend_d3d11/*` path; that is history.
 
 ## 4. Must-keep design contracts
 
@@ -163,7 +156,6 @@ Still standing / out of scope of the 2026-06-19 pass:
 |---|---|---|
 | `app/mainwindow/MainWindow.h` + remaining `sections/*` | 176 methods; ~11 sections still 1.0–1.7k | god class sliced by friend partials; further reduction = promote sections to state-owning cooperators (design change) |
 | `app/quick_shell/qml/QuickShellMain.qml` | 1582 | **SUGGEST-only**: extract a C++ surface-routing controller + layout engine first, then split QML — 38 root props + timers + layout call-chain are too coupled to move mechanically |
-| `render/backend_d3d11/PreviewDComp{Surface,SpritePipeline}.cpp` | ~1.8k each | DEFAULT-OFF, being decoupled — split deferred (low value, may be deleted) |
 | `core/chart/parser/SimaiNativeParser.cpp` | — | `#include "*.cpp"` unity split (`:1584`) → 真正 multi-TU, or rename includes to `.inc`/`.ipp` |
 | `core/chart/transform/ChartNormalization.cpp`, `preview/runtime/PreviewRuntime.cpp`, `timeline/TimelineSceneStateBuilder.cpp`, … | 1.0–1.7k (~30 files) | never deep-audited (the blind-spot tier — doc §6B); audit before splitting |
 

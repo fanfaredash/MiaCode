@@ -106,10 +106,16 @@ bool bindHighPerformanceQuickGraphicsDevice(
         return false;
     }
 
-    // Non-video surface (root window). fromAdapter binding is opt-in until it is
-    // validated on a dual-GPU machine — the root window also embeds decoded
-    // video via the same two-device bridge, so binding it to a non-default
-    // adapter carries the same risk for video-background charts (plan P4.4).
+    // Non-video surface (root window). fromAdapter binding is ON by default
+    // (MIACODE_GPU_BIND_HIGH_PERFORMANCE, see DebugOptions.h) — this comment
+    // used to say "opt-in until validated", which stopped being true when the
+    // flag flipped to default-true and left the risk note reading like a
+    // safeguard that no longer exists. The risk itself still stands: on a
+    // hybrid-GPU machine the root window also embeds decoded video through the
+    // same two-device bridge, so it ends up on the high-performance adapter
+    // while the preview composite stays on Qt's default one, and the two Quick
+    // windows then present from different adapters (plan P4.4). Set the env var
+    // to 0 to roll back to Qt's default adapter for the root window.
     if (!miacode::debug_options::gpuBindHighPerformanceEnabled()) {
         logProvider(surfaceLabel,
             QStringLiteral("action=skip source=qt_default "
