@@ -75,6 +75,8 @@ bool channelEnabled(Channel channel)
         // of whether --debug is set; the sparse cadence makes this
         // safe for log volume.
         return true;
+    case Channel::PvMemory:
+        return miacode::debug_options::runtimeDebugOutputEnabled();
     }
     return false;
 }
@@ -96,6 +98,8 @@ QString channelLabel(Channel channel)
         return QStringLiteral("preview_profile");
     case Channel::Operation:
         return QStringLiteral("op");
+    case Channel::PvMemory:
+        return QStringLiteral("pv_memory");
     }
     return QStringLiteral("unknown");
 }
@@ -117,6 +121,8 @@ QString channelFileName(Channel channel)
         return QStringLiteral("miacode_preview_profile_summary.txt");
     case Channel::Operation:
         return QStringLiteral("miacode_operation.log");
+    case Channel::PvMemory:
+        return QStringLiteral("miacode_pv_memory_debug.log");
     }
     return QStringLiteral("miacode_debug.log");
 }
@@ -138,6 +144,8 @@ QString channelPathOverride(Channel channel)
         return qEnvironmentVariable("MIACODE_PREVIEW_PROFILE_PATH").trimmed();
     case Channel::Operation:
         return qEnvironmentVariable("MIACODE_OPERATION_LOG_PATH").trimmed();
+    case Channel::PvMemory:
+        return qEnvironmentVariable("MIACODE_PV_MEMORY_LOG_PATH").trimmed();
     }
     return QString();
 }
@@ -431,7 +439,8 @@ void trimDebugLogsInCurrentDirectoryLocked()
              Channel::Export,
              Channel::StartupTiming,
              Channel::Fatal,
-             Channel::Operation}) {
+             Channel::Operation,
+             Channel::PvMemory}) {
         (void)rotateFileLocked(logPath(channel), maxBytes);
     }
 }
@@ -554,11 +563,11 @@ private:
     static constexpr int kMaxQueueSize = 4096;
     static constexpr int kTrimEveryWritesPerChannel = 200;
     // Must match the number of Channel enum values (index = static_cast<size_t>).
-    // Channel::Operation is the last value; a channel added after it must bump this
+    // Channel::PvMemory is the last value; a channel added after it must bump this
     // (and the four channel switch statements). The static_assert catches a stale
     // count so the per-channel arrays below can never be indexed out of bounds.
-    static constexpr size_t kChannelCount = 7;
-    static_assert(static_cast<size_t>(Channel::Operation) + 1 == kChannelCount,
+    static constexpr size_t kChannelCount = 8;
+    static_assert(static_cast<size_t>(Channel::PvMemory) + 1 == kChannelCount,
                   "kChannelCount out of sync with the Channel enum");
 
     struct Entry {
@@ -980,6 +989,11 @@ QString operationLogPath()
     return logPath(Channel::Operation);
 }
 
+QString pvMemoryLogPath()
+{
+    return logPath(Channel::PvMemory);
+}
+
 QString formatTitleLine(const QString& title)
 {
     return QStringLiteral("[%1] %2").arg(timestampString(), title);
@@ -1003,6 +1017,7 @@ void clearDebugSessionLogs()
     clearChannel(Channel::Audio);
     clearChannel(Channel::Export);
     clearChannel(Channel::PreviewProfile);
+    clearChannel(Channel::PvMemory);
 }
 
 void trimDebugSessionLogsForStartup()
@@ -1189,6 +1204,23 @@ bool initializeStartupTimingLogSession()
                 .arg(QCoreApplication::applicationPid())
                 .arg(startupTimingLogPath())
         }
+    );
+}
+
+bool initializePvMemoryLogSession()
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return false;
+    }
+    if (!resetChannel(Channel::PvMemory)) {
+        return false;
+    }
+    return appendLine(
+        Channel::PvMemory,
+        QStringLiteral("pv_memory"),
+        QStringLiteral("action=session_start pid=%1 log_path=%2")
+            .arg(QCoreApplication::applicationPid())
+            .arg(pvMemoryLogPath())
     );
 }
 

@@ -1,6 +1,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QMetaObject>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QTimer>
@@ -41,6 +42,15 @@ QString readRuntimeLog()
     return QString::fromUtf8(file.readAll());
 }
 
+QString readLogFile(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -54,6 +64,84 @@ int main(int argc, char* argv[])
     QTextStream err(stderr);
     QTextStream out(stdout);
     bool ok = true;
+
+    miacode::debug_options::setDebugModeEnabled(false);
+    QTemporaryDir pvMemoryDir;
+    if (!pvMemoryDir.isValid()) {
+        return 2;
+    }
+    const QString pvMemoryOverridePath = pvMemoryDir.filePath(QStringLiteral("pv-memory-override.log"));
+    qputenv("MIACODE_PV_MEMORY_LOG_PATH", pvMemoryOverridePath.toUtf8());
+
+    ok &= require(miacode::debug_log::pvMemoryLogPath() == pvMemoryOverridePath,
+                  QStringLiteral("PV-memory channel honors its dedicated path override"), err);
+    ok &= require(!miacode::debug_log::appendLine(
+                      miacode::debug_log::Channel::PvMemory,
+                      QStringLiteral("session_start"),
+                      QStringLiteral("unexpected=debug_off")),
+                  QStringLiteral("PV-memory channel is disabled outside debug mode"), err);
+    ok &= require(!miacode::debug_log::initializePvMemoryLogSession(),
+                  QStringLiteral("PV-memory session does not initialize outside debug mode"), err);
+    ok &= require(!QFile::exists(pvMemoryOverridePath),
+                  QStringLiteral("debug-off PV-memory initialization creates no file"), err);
+
+    miacode::debug_options::setDebugModeEnabled(true);
+    ok &= require(miacode::debug_log::initializePvMemoryLogSession(),
+                  QStringLiteral("PV-memory session initializes in debug mode"), err);
+    miacode::debug_log::shutdownAsyncLogWriter();
+    const QString pvMemoryLog = readLogFile(pvMemoryOverridePath);
+    const QRegularExpression pvMemorySessionRecord(
+        QStringLiteral(
+            R"(^\S+ (?:TRACE|DEBUG|INFO |WARN |ERROR|FATAL) pid=\d+ tid=\d+ \[pv_memory/pv_memory\] action=session_start pid=\d+ log_path=)"));
+    ok &= require(pvMemorySessionRecord.match(pvMemoryLog).hasMatch(),
+                  QStringLiteral("PV-memory session uses canonical level/pid/tid/scope/action grammar"), err);
+    ok &= require(pvMemoryLog.contains(pvMemoryOverridePath),
+                  QStringLiteral("PV-memory session records its effective path"), err);
+
+    qunsetenv("MIACODE_PV_MEMORY_LOG_PATH");
+    const QString defaultPvMemoryLogPath =
+        logDir.filePath(QStringLiteral("miacode_pv_memory_debug.log"));
+    ok &= require(miacode::debug_log::pvMemoryLogPath() == defaultPvMemoryLogPath,
+                  QStringLiteral("PV-memory channel uses its dedicated default filename"), err);
+    {
+        QFile staleSession(defaultPvMemoryLogPath);
+        ok &= require(staleSession.open(QIODevice::WriteOnly | QIODevice::Text),
+                      QStringLiteral("PV-memory default log can be seeded for reset"), err);
+        if (staleSession.isOpen()) {
+            staleSession.write("stale_session=1\n");
+            staleSession.close();
+        }
+    }
+    miacode::debug_log::trimDebugSessionLogsForStartup();
+    ok &= require(miacode::debug_log::initializePvMemoryLogSession(),
+                  QStringLiteral("PV-memory startup session resets the default log"), err);
+    const QString defaultPvMemoryLog = readLogFile(defaultPvMemoryLogPath);
+    ok &= require(pvMemorySessionRecord.match(defaultPvMemoryLog).hasMatch()
+                      && defaultPvMemoryLog.contains(defaultPvMemoryLogPath)
+                      && !defaultPvMemoryLog.contains(QStringLiteral("stale_session=1")),
+                  QStringLiteral("PV-memory startup reset replaces stale default session content"), err);
+    miacode::debug_log::clearDebugSessionLogs();
+    ok &= require(!QFile::exists(defaultPvMemoryLogPath),
+                  QStringLiteral("clearDebugSessionLogs removes the PV-memory default log"), err);
+
+    const miacode::diag::CurrentProcessMemorySample currentMemory =
+        miacode::diag::currentProcessMemorySample();
+    const bool currentMemoryUnavailable = currentMemory.residentBytes == -1
+        && currentMemory.physFootprintBytes == -1
+        && currentMemory.internalBytes == -1
+        && currentMemory.compressedBytes == -1;
+    const bool currentMemoryAvailable = currentMemory.residentBytes >= 0
+        && currentMemory.physFootprintBytes >= 0
+        && currentMemory.internalBytes >= 0
+        && currentMemory.compressedBytes >= 0;
+    ok &= require(currentMemoryUnavailable || currentMemoryAvailable,
+                  QStringLiteral("current-process memory returns complete stable keys or -1 when unavailable"), err);
+#ifdef Q_OS_MACOS
+    if (currentMemoryAvailable) {
+        ok &= require(currentMemory.residentBytes > 0 && currentMemory.physFootprintBytes > 0,
+                      QStringLiteral("macOS current-process memory has meaningful resident and footprint bytes"), err);
+    }
+#endif
 
     miacode::debug_options::setDebugModeEnabled(false);
     miacode::diag::installPeriodicProcessResourceGauge(&app);

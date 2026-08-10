@@ -13,6 +13,17 @@ class QObject;
 // diagnostics -> logging (the correct direction), not the reverse.
 namespace miacode::diag {
 
+// Current-process memory counters in bytes. Every field is -1 when the platform cannot
+// query the complete sample; callers can therefore keep a stable payload shape.
+struct CurrentProcessMemorySample {
+    qint64 residentBytes = -1;
+    qint64 physFootprintBytes = -1;
+    qint64 internalBytes = -1;
+    qint64 compressedBytes = -1;
+};
+
+CurrentProcessMemorySample currentProcessMemorySample();
+
 // Sample process-wide OS resource counters into a "key=val …" payload fragment for a
 // LOW-FREQUENCY leak gauge (call e.g. once per playback pause — never per frame). On Windows
 // reports GDI + USER handle counts and working-set / private commit (MB); other platforms

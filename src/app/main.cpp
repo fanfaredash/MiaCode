@@ -263,6 +263,7 @@ int main(int argc, char* argv[])
 #ifdef Q_OS_WIN
         miacode::oplog::appendStartupBeaconLine("phase=after_trim_debug_logs");
 #endif
+        miacode::debug_log::initializePvMemoryLogSession();
     }
     if (miacode::debug_options::startupTimingEnabled()) {
 #ifdef Q_OS_WIN

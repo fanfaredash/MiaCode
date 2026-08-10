@@ -28,6 +28,10 @@
 #endif
 #endif
 
+#ifdef Q_OS_MACOS
+#include <mach/mach.h>
+#endif
+
 namespace miacode::diag {
 
 namespace {
@@ -63,6 +67,26 @@ quint64 bytesToMb(quint64 bytes)
 #endif
 
 }  // namespace
+
+CurrentProcessMemorySample currentProcessMemorySample()
+{
+    CurrentProcessMemorySample sample;
+#ifdef Q_OS_MACOS
+    task_vm_info_data_t info = {};
+    mach_msg_type_number_t infoCount = TASK_VM_INFO_COUNT;
+    if (task_info(
+            mach_task_self(),
+            TASK_VM_INFO,
+            reinterpret_cast<task_info_t>(&info),
+            &infoCount) == KERN_SUCCESS) {
+        sample.residentBytes = static_cast<qint64>(info.resident_size);
+        sample.physFootprintBytes = static_cast<qint64>(info.phys_footprint);
+        sample.internalBytes = static_cast<qint64>(info.internal);
+        sample.compressedBytes = static_cast<qint64>(info.compressed);
+    }
+#endif
+    return sample;
+}
 
 QString processResourceGaugePayload()
 {
