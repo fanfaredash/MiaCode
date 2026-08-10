@@ -1713,6 +1713,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(pv_memory_diagnostics_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    miacode_add_dev_tool(pv_memory_host_contract_spec TEST
+        SOURCES
+            src/tools/preview/PvMemoryHostContractSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/preview src/preview/runtime
+    )
+    target_compile_definitions(pv_memory_host_contract_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     miacode_add_dev_tool(quickshell_preview_surface_policy_spec TEST
         SOURCES
             src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp

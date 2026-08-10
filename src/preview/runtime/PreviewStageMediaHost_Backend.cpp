@@ -274,6 +274,10 @@ void PreviewStageMediaHost::initializeBackendObjects()
             videoBackendLoaded_ = true;
             return;
         }
+        if (status == QAVPlayer::NoMedia) {
+            latePvMemoryNoMedia();
+            return;
+        }
         if (status == QAVPlayer::EndOfMedia) {
             // A PV/BG video is subordinate visual media, not the preview
             // transport's lifetime owner. Leave lastVideoFrame_ in both video
@@ -282,6 +286,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
+            recordPvMemoryBoundary(PvMemoryBoundary::EndOfMedia);
             updateClockDelta();
             updateVideoFrameStallState(true);
             emitHwDecodeDiagSummary("eom");
@@ -458,10 +463,14 @@ void PreviewStageMediaHost::initializeBackendObjects()
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
             ++videoPlaybackWatchdogSerial_;
+            recordPvMemoryBoundary(PvMemoryBoundary::EndOfMedia);
             updateClockDelta();
             updateVideoFrameStallState(true);
             emit diagnosticsChanged();
             return;
+        }
+        if (status == QMediaPlayer::NoMedia) {
+            latePvMemoryNoMedia();
         }
         if (status == QMediaPlayer::StalledMedia && mediaKind_ == MediaKind::Video && videoPlaybackActive_) {
             scheduleVideoPlaybackWatchdog(QStringLiteral("media_status_stalled"));
@@ -694,6 +703,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
             .arg(videoSink_ != nullptr ? 1 : 0)
     );
 
+    recordPvMemoryBoundary(PvMemoryBoundary::PlayerDestroyBefore);
     recoveringVideoBackend_ = true;
     if (videoSinkFrameConnection_) {
         QObject::disconnect(videoSinkFrameConnection_);
@@ -712,6 +722,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
         delete audioOutput_;
         audioOutput_ = nullptr;
     }
+    destroyPvMemorySource();
 
     initializeBackendObjects();
     if (player_ == nullptr) {
@@ -736,6 +747,8 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
     videoPlaybackPendingStart_ = false;
     videoPlaybackActiveElapsed_.invalidate();
     bindVideoOutput();
+    beginPvMemorySource();
+    recordPvMemoryBoundary(PvMemoryBoundary::PlayerDestroyAfter);
     player_->setSource(QUrl::fromLocalFile(path));
     player_->pause();
     player_->setPosition(targetMs);

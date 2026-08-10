@@ -256,6 +256,7 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
 
 void PreviewStageMediaHost::clearMedia()
 {
+    clearPvMemorySource();
 #ifdef MIACODE_USE_QTAVPLAYER
     if (videoFrameConnection_) {
         QObject::disconnect(videoFrameConnection_);
@@ -347,7 +348,9 @@ void PreviewStageMediaHost::releaseDecoderForFileReplace()
     // not enough on Windows because the QAVPlayer keeps its own
     // QSharedPointer<QAVFormatContext> ref alive until its async unload lands, so
     // the pv.mp4 avio handle can still be open right after this returns.
+    recordPvMemoryBoundary(PvMemoryBoundary::PlayerDestroyBefore);
     clearMedia();
+    destroyPvMemorySource();
 #ifdef MIACODE_USE_QTAVPLAYER
     // Destroy the player so ~QAVPlayer runs synchronously: it stops and JOINS the
     // demux/decode threads and releases the format context, so
@@ -468,6 +471,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     videoPlaybackPendingStart_ = false;
     resetVideoFrameDiagnostics();
     bindVideoOutput();
+    beginPvMemorySource();
 
     // (Re)connect the decoded-frame stream, capturing the current source
     // generation by value (clearMedia() bumped it just before this). Any
@@ -550,6 +554,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
         miacode::oplog::appendStartupBeaconLine(buf);
     }
     bindVideoOutput();
+    beginPvMemorySource();
     miacode::oplog::appendStartupBeaconLine("preview/load_video/after_bind");
     {
         char buf[260];

@@ -3,6 +3,7 @@
 #include "common/LogEmissionPolicy.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/video/PreviewRenderSettings.h"
+#include "preview/runtime/PvMemoryDiagnostics.h"
 
 #include <QElapsedTimer>
 #include <QImage>
@@ -157,6 +158,8 @@ signals:
     void diagnosticsChanged();
 
 private:
+    using PvMemoryBoundary = miacode::preview::pv_memory::BoundaryReason;
+
     void clearMedia();
     QString resolveMediaPath(const QString& chartPath) const;
     void loadImageMedia(const QString& path);
@@ -219,6 +222,17 @@ private:
     bool updateVideoFrameStallState(bool logTransition);
     qint64 currentVideoFrameAgeForDiagnosticsMs() const;
     qint64 videoFrameStallThresholdMs() const;
+    miacode::preview::pv_memory::Observation pvMemoryObservation(bool includeProcess) const;
+    void emitPvMemoryRecords(const QVector<miacode::preview::pv_memory::Record>& records);
+    void beginPvMemorySource();
+    void observePvMemoryFrame(const QVideoFrame& frame,
+                              const miacode::preview::pv_memory::ImageConversionFact& conversion);
+    void recordPvMemoryBoundary(PvMemoryBoundary reason);
+    void clearPvMemorySource();
+    void latePvMemoryNoMedia();
+    void postClearPvMemoryCheckpoint(quint64 clearEpoch, qint64 delayMs);
+    void schedulePvMemoryPeriodicSample();
+    void destroyPvMemorySource();
 
     MediaKind mediaKind_ = MediaKind::None;
     // 硬件/软件渲染 preference: false = hardware D3D11VA decode (default), true =
@@ -330,5 +344,9 @@ private:
     qint64 videoFrameCountTotal_ = 0;
     qint64 videoFrameStallCount_ = 0;
     bool videoFrameStalled_ = false;
+    miacode::preview::pv_memory::Diagnostics pvMemoryDiagnostics_;
+    QElapsedTimer pvMemoryElapsed_;
+    bool pvMemoryPeriodicTimerArmed_ = false;
+    quint64 pvMemoryPeriodicTimerEpoch_ = 0;
     bool shuttingDown_ = false;
 };

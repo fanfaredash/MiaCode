@@ -406,6 +406,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 void PreviewStageMediaHost::startPlayback(double seconds)
 {
     MC_OP("PreviewStageMediaHost::startPlayback");
+    recordPvMemoryBoundary(PvMemoryBoundary::Play);
 #ifdef MIACODE_USE_QTAVPLAYER
     initializeBackendObjects();
     observedPlayheadSecond_ = qMax(0.0, seconds);
@@ -831,6 +832,7 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 void PreviewStageMediaHost::pausePlayback()
 {
     observedPlayheadSecond_ = currentPlaybackSecond();
+    recordPvMemoryBoundary(PvMemoryBoundary::Pause);
 #ifndef HAVE_QT_MULTIMEDIA
     return;
 #else
@@ -879,4 +881,3 @@ bool PreviewStageMediaHost::videoPlaybackActive() const
 {
     return mediaKind_ == MediaKind::Video && videoPlaybackActive_;
 }
-

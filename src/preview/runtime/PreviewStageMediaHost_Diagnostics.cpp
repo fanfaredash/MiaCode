@@ -5,6 +5,7 @@
 #include "common/DebugOptions.h"
 #include "common/FileContentStamp.h"
 #include "common/OperationLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "preview/runtime/PreviewSharedD3D11Device.h"  // H2: single_device= log field
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
@@ -56,6 +57,7 @@ namespace {
 
 constexpr qint64 kVideoFrameStallMinMs = 120;
 constexpr double kVideoFrameStallMultiplier = 3.5;
+constexpr qint64 kPvMemoryPeriodicSampleMs = 5000;
 
 double averageOrZero(double total, qint64 count)
 {
@@ -68,6 +70,168 @@ double fpsFromAverageMs(double averageMs)
 }
 
 }  // namespace
+
+miacode::preview::pv_memory::Observation PreviewStageMediaHost::pvMemoryObservation(
+    bool includeProcess) const
+{
+    using namespace miacode::preview::pv_memory;
+    Observation observation;
+    observation.elapsedMs = pvMemoryElapsed_.isValid() ? pvMemoryElapsed_.elapsed() : 0;
+    observation.media.mediaVisible = mediaVisible_;
+    observation.media.playbackState = videoPlaybackActive_ ? QStringLiteral("playing")
+                                                           : QStringLiteral("paused");
+    observation.media.mediaStatus = mediaKind_ == MediaKind::Video
+        ? QStringLiteral("video") : QStringLiteral("none");
+    observation.media.positionMs = lastSeekMs_;
+    observation.media.videoOutputAttached = videoOutputObject_ != nullptr;
+    observation.media.videoSinkAttached = videoSink_ != nullptr;
+    if (!includeProcess) {
+        return observation;
+    }
+    const miacode::diag::CurrentProcessMemorySample sample =
+        miacode::diag::currentProcessMemorySample();
+    observation.process.residentBytes = sample.residentBytes;
+    observation.process.footprintBytes = sample.physFootprintBytes;
+    observation.process.internalBytes = sample.internalBytes;
+    observation.process.compressedBytes = sample.compressedBytes;
+    return observation;
+}
+
+void PreviewStageMediaHost::emitPvMemoryRecords(
+    const QVector<miacode::preview::pv_memory::Record>& records)
+{
+    for (const auto& record : records) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::PvMemory,
+            QStringLiteral("preview/pv_memory"),
+            miacode::preview::pv_memory::Diagnostics::formatPayload(record));
+    }
+}
+
+void PreviewStageMediaHost::beginPvMemorySource()
+{
+    if (!miacode::debug_options::debugModeEnabled() || mediaKind_ != MediaKind::Video) {
+        return;
+    }
+    ++pvMemoryPeriodicTimerEpoch_;
+    pvMemoryPeriodicTimerArmed_ = false;
+    emitPvMemoryRecords(pvMemoryDiagnostics_.beginSource(
+        miacode::preview::pv_memory::MediaKind::Video, pvMemoryObservation(true)));
+    schedulePvMemoryPeriodicSample();
+}
+
+void PreviewStageMediaHost::observePvMemoryFrame(
+    const QVideoFrame& frame,
+    const miacode::preview::pv_memory::ImageConversionFact& conversion)
+{
+    if (!miacode::debug_options::debugModeEnabled()
+        || !pvMemoryDiagnostics_.hasCurrentSource()) {
+        return;
+    }
+    miacode::preview::pv_memory::FrameMetadata metadata;
+    metadata.width = frame.size().width();
+    metadata.height = frame.size().height();
+    metadata.pixelFormat = QVideoFrameFormat::pixelFormatToString(
+        frame.surfaceFormat().pixelFormat());
+    emitPvMemoryRecords(pvMemoryDiagnostics_.observeFrame(
+        pvMemoryObservation(false), metadata, conversion));
+}
+
+void PreviewStageMediaHost::recordPvMemoryBoundary(PvMemoryBoundary reason)
+{
+    if (!miacode::debug_options::debugModeEnabled()) {
+        return;
+    }
+    const auto record = pvMemoryDiagnostics_.boundary(reason, pvMemoryObservation(true));
+    if (record) {
+        emitPvMemoryRecords({*record});
+    }
+}
+
+void PreviewStageMediaHost::clearPvMemorySource()
+{
+    if (!miacode::debug_options::debugModeEnabled()) {
+        return;
+    }
+    const QVector<miacode::preview::pv_memory::Record> records =
+        pvMemoryDiagnostics_.clear(pvMemoryObservation(true));
+    pvMemoryPeriodicTimerArmed_ = false;
+    ++pvMemoryPeriodicTimerEpoch_;
+    emitPvMemoryRecords(records);
+    for (const auto& record : records) {
+        if (record.reason != QStringLiteral("clear_after")) {
+            continue;
+        }
+        const quint64 clearEpoch = record.clearEpoch;
+        QTimer::singleShot(miacode::preview::pv_memory::kPostClear3SecondsMs, this,
+            [this, clearEpoch]() {
+                postClearPvMemoryCheckpoint(
+                    clearEpoch, miacode::preview::pv_memory::kPostClear3SecondsMs);
+            });
+        QTimer::singleShot(miacode::preview::pv_memory::kPostClear15SecondsMs, this,
+            [this, clearEpoch]() {
+                postClearPvMemoryCheckpoint(
+                    clearEpoch, miacode::preview::pv_memory::kPostClear15SecondsMs);
+            });
+        break;
+    }
+}
+
+void PreviewStageMediaHost::latePvMemoryNoMedia()
+{
+    if (!miacode::debug_options::debugModeEnabled()) {
+        return;
+    }
+    emitPvMemoryRecords(pvMemoryDiagnostics_.lateNoMedia(pvMemoryObservation(true).process));
+}
+
+void PreviewStageMediaHost::postClearPvMemoryCheckpoint(quint64 clearEpoch, qint64 delayMs)
+{
+    if (!miacode::debug_options::debugModeEnabled()) {
+        return;
+    }
+    emitPvMemoryRecords(pvMemoryDiagnostics_.postClearCheckpoint(
+        clearEpoch, delayMs, pvMemoryObservation(true).process));
+}
+
+void PreviewStageMediaHost::schedulePvMemoryPeriodicSample()
+{
+    if (!miacode::debug_options::debugModeEnabled()
+        || !pvMemoryDiagnostics_.hasCurrentSource()
+        || pvMemoryPeriodicTimerArmed_) {
+        return;
+    }
+    pvMemoryPeriodicTimerArmed_ = true;
+    const quint64 timerEpoch = pvMemoryPeriodicTimerEpoch_;
+    QTimer::singleShot(kPvMemoryPeriodicSampleMs, this, [this, timerEpoch]() {
+        if (timerEpoch != pvMemoryPeriodicTimerEpoch_) {
+            return;
+        }
+        pvMemoryPeriodicTimerArmed_ = false;
+        if (!miacode::debug_options::debugModeEnabled()
+            || !pvMemoryDiagnostics_.hasCurrentSource()) {
+            return;
+        }
+        const auto record = pvMemoryDiagnostics_.sample(pvMemoryObservation(true));
+        if (record) {
+            emitPvMemoryRecords({*record});
+        }
+        schedulePvMemoryPeriodicSample();
+    });
+}
+
+void PreviewStageMediaHost::destroyPvMemorySource()
+{
+    pvMemoryPeriodicTimerArmed_ = false;
+    ++pvMemoryPeriodicTimerEpoch_;
+    if (!miacode::debug_options::debugModeEnabled()) {
+        return;
+    }
+    const auto record = pvMemoryDiagnostics_.destroy(pvMemoryObservation(true));
+    if (record) {
+        emitPvMemoryRecords({*record});
+    }
+}
 
 bool PreviewStageMediaHost::hasVideoFrame() const
 {
@@ -225,6 +389,7 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     const bool throttledOut =
         videoFrameToImageThrottle_.isValid()
         && videoFrameToImageThrottle_.nsecsElapsed() < videoFrameToImageThrottleNs;
+    miacode::preview::pv_memory::ImageConversionFact conversion;
     if (mediaVisible_ && !throttledOut) {
         if (syncFrameBeacon) {
             char buf[220];
@@ -235,7 +400,13 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
                 static_cast<int>(frame.surfaceFormat().pixelFormat()));
             miacode::oplog::appendStartupBeaconLine(buf);
         }
+        QElapsedTimer toImageTimer;
+        toImageTimer.start();
         QImage decodedImage = frame.toImage();
+        conversion.attempted = true;
+        conversion.elapsedMs = toImageTimer.elapsed();
+        conversion.succeeded = !decodedImage.isNull();
+        conversion.resultBytes = conversion.succeeded ? decodedImage.sizeInBytes() : -1;
         if (syncFrameBeacon) {
             char buf[220];
             std::snprintf(buf, sizeof(buf),
@@ -259,6 +430,7 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
             throttledOut ? 1 : 0);
         miacode::oplog::appendStartupBeaconLine(buf);
     }
+    observePvMemoryFrame(frame, conversion);
     const bool firstFrameForSource = videoFrameCountTotal_ == 0;
     if (videoFrameElapsed_.isValid()) {
         const double intervalMs = static_cast<double>(videoFrameElapsed_.nsecsElapsed()) / 1000000.0;
@@ -442,6 +614,7 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
     // Visible path: push the decoded frame into the QML VideoOutput's sink.
     // A D3D11VA hardware frame stays a zero-copy RhiTexture handle here.
     lastVideoFrame_ = frame;
+    observePvMemoryFrame(frame, {});
     if (ptsSeconds >= 0.0) {
         lastFramePtsSeconds_ = ptsSeconds;
     }
