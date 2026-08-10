@@ -110,6 +110,20 @@ int main(int argc, char** argv)
     ok &= check(appendUniqueNetUploadJobs(&uploadQueue, uploadJobs) == 0, "upload queue ignores duplicate folders");
     ok &= check(uploadQueue.size() == 2, "upload queue remains deduplicated");
 
+    const QString naturalRoot = QDir(temp.path()).filePath(QStringLiteral("upload-natural-root"));
+    for (const QString& name : {QStringLiteral("chart-10"), QStringLiteral("chart-2"), QStringLiteral("chart-1")}) {
+        const QString folder = QDir(naturalRoot).filePath(name);
+        ok &= check(QDir().mkpath(folder), "natural sort folder created");
+        ok &= check(writeFixtureFile(QDir(folder).filePath(QStringLiteral("maidata.txt"))), "natural sort maidata created");
+        ok &= check(writeFixtureFile(QDir(folder).filePath(QStringLiteral("bg.jpg"))), "natural sort bg created");
+        ok &= check(writeFixtureFile(QDir(folder).filePath(QStringLiteral("track.mp3"))), "natural sort track created");
+    }
+    const QList<NetUploadJob> naturalJobs = scanNetUploadFolders(naturalRoot);
+    ok &= check(naturalJobs.size() == 3, "natural sort scanner keeps all numbered folders");
+    ok &= check(naturalJobs.at(0).displayName == QStringLiteral("chart-1"), "upload scanner sorts numbers naturally (1 before 2)");
+    ok &= check(naturalJobs.at(1).displayName == QStringLiteral("chart-2"), "upload scanner sorts numbers naturally (2 before 10)");
+    ok &= check(naturalJobs.at(2).displayName == QStringLiteral("chart-10"), "upload scanner sorts numbers naturally (10 after 2)");
+
     const QString pvRoot = QDir(temp.path()).filePath(QStringLiteral("pv-root"));
     const QString largePvChart = QDir(pvRoot).filePath(QStringLiteral("large-pv"));
     const QString smallPvChart = QDir(pvRoot).filePath(QStringLiteral("small-pv"));
