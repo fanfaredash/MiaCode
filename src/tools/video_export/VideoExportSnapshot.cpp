@@ -127,16 +127,12 @@ PreviewBackgroundScaleMode backgroundScaleModeFromToken(const QString& token)
 
 QString renderModeToken(RenderMode mode)
 {
-    return mode == RenderMode::MaimuriDxStyle
-        ? QStringLiteral("maimuri_dx_style")
-        : QStringLiteral("native");
+    return ::muriRenderModeToken(mode);
 }
 
 RenderMode renderModeFromToken(const QString& token)
 {
-    return token.trimmed().compare(QStringLiteral("maimuri_dx_style"), Qt::CaseInsensitive) == 0
-        ? RenderMode::MaimuriDxStyle
-        : RenderMode::Native;
+    return ::muriRenderModeFromToken(token);
 }
 
 QString jsonString(const QJsonObject& object, const char* key)
