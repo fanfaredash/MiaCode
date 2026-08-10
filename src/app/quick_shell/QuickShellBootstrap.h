@@ -19,6 +19,7 @@ class MainWindow;
 class QuickShellController;
 class QuickShellNativeSurfaceHost;
 class QuickShellStyleBridge;
+class ChartDropOverlay;
 
 #ifdef Q_OS_WIN
 namespace miacode::app::windows_idle_diagnostics {
@@ -56,6 +57,9 @@ private:
     void beginAcceptedRootWindowShutdown(const QString& source);
     void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
+    void syncChartDropOverlay();
+    bool dragInputStillActive() const;
+    bool cursorIsOverQuickShellRoot();
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
 
     QIcon appIcon_;
@@ -63,6 +67,8 @@ private:
     std::unique_ptr<QuickShellNativeSurfaceHost> surfaceHost_;
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
+    std::unique_ptr<ChartDropOverlay> chartDropOverlay_;
+    QTimer* chartDropOverlayMonitorTimer_ = nullptr;
     std::unique_ptr<QQmlApplicationEngine> engine_;
 #ifdef Q_OS_WIN
     std::unique_ptr<miacode::app::windows_idle_diagnostics::WindowsIdleEventMonitor> windowsIdleEventMonitor_;

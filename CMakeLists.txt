@@ -206,6 +206,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
+    src/app/ui/ChartDropOverlay.h
+    src/app/ui/ChartDropOverlay.cpp
     src/app/ui/AppBackgroundSettings.h
     src/app/ui/AppBackgroundSettings.cpp
     src/app/ui/AppBackgroundPainter.h
@@ -1705,6 +1707,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/app/quick_shell
     )
+    target_compile_definitions(quickshell_preview_surface_policy_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(video_export_runtime_policy_spec TEST
         SOURCES

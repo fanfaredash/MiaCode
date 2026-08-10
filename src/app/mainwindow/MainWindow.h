@@ -146,6 +146,8 @@ public:
     // Always non-null after construction.
     miacode::latency::LatencySandboxController* latencySandboxController() const;
 
+signals:
+    void chartDropOverlayVisibleChanged(bool visible);
 public:
     struct CliVideoExportRequest {
         QString chartPathOrDirectory;
@@ -185,6 +187,9 @@ public:
         QString* details = nullptr
     );
     bool openStartupTarget(const QString& path);
+    void setQuickShellRootWindow(QWindow* window);
+    void cancelChartAudioDrop();
+    void handleAudioDrop(const QStringList& audioPaths);
     // Shows the first-run welcome / initial-config dialog (preview side +
     // theme). Called from QuickShellBootstrap after the UI is ready.
     void showWelcomeDialog();

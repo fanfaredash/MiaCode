@@ -77,6 +77,7 @@ public:
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
+    bool createChartsFromAudioDrop(const QStringList& audioPaths);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
     void onMirrorLeftRight();
     void onMirrorUpDown();

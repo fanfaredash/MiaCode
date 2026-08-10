@@ -760,6 +760,10 @@ QWidget* QuickShellNativeSurfaceHost::createBridgeSurface(const QString& objectN
     bridgeRoot->setObjectName(objectName);
     bridgeRoot->setAttribute(Qt::WA_NativeWindow);
     bridgeRoot->setAttribute(Qt::WA_StyledBackground, true);
+    // Drag events are delivered only to widgets that explicitly opt in. These
+    // bridge surfaces are the actual native drop targets behind the QML shell;
+    // the QQuickWindow itself has no QWidget::setAcceptDrops() equivalent.
+    bridgeRoot->setAcceptDrops(true);
     bridgeRoot->setFocusPolicy(Qt::StrongFocus);
     bridgeRoot->setContentsMargins(0, 0, 0, 0);
     bridgeRoot->setMinimumSize(QSize(64, 64));

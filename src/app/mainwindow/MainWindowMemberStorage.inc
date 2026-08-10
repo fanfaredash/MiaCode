@@ -646,7 +646,10 @@
         bool previewFullscreenControlsVisible_ = false;
         bool previewFullscreenCursorTrackingInitialized_ = false;
         QPoint previewFullscreenLastCursorPos_;
+        QPointer<QWindow> quickShellRootWindow_;
         QRect quickShellRootWindowFrameGeometry_;
+        QTimer* chartDropHideTimer_ = nullptr;
+        bool chartDropOverlayActive_ = false;
         bool quickShellPreviewCompositeSurfaceActive_ = false;
         std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> previewProgressStatsCache_;
         QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
@@ -1166,7 +1169,10 @@
     bool& previewFullscreenControlsVisible_ = state_.previewFullscreenControlsVisible_;
     bool& previewFullscreenCursorTrackingInitialized_ = state_.previewFullscreenCursorTrackingInitialized_;
     QPoint& previewFullscreenLastCursorPos_ = state_.previewFullscreenLastCursorPos_;
+    QPointer<QWindow>& quickShellRootWindow_ = state_.quickShellRootWindow_;
     QRect& quickShellRootWindowFrameGeometry_ = state_.quickShellRootWindowFrameGeometry_;
+    QTimer*& chartDropHideTimer_ = state_.chartDropHideTimer_;
+    bool& chartDropOverlayActive_ = state_.chartDropOverlayActive_;
     bool& quickShellPreviewCompositeSurfaceActive_ = state_.quickShellPreviewCompositeSurfaceActive_;
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache>& previewProgressStatsCache_ = state_.previewProgressStatsCache_;
     BracketScopeHighlighter*& chartBracketHighlighter_ = ui_.chartBracketHighlighter_;

@@ -637,6 +637,13 @@ bool MainWindow::saveToPath(const QString& path)
     return documentSection_->saveToPath(path);
 }
 
+void MainWindow::handleAudioDrop(const QStringList& audioPaths)
+{
+    if (documentSection_ != nullptr) {
+        documentSection_->createChartsFromAudioDrop(audioPaths);
+    }
+}
+
 bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform& transform)
 {
     return documentSection_->applyBatchTransform(opName, transform);
