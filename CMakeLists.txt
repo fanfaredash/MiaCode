@@ -409,6 +409,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewStageMediaHost_Playback.cpp
     src/preview/runtime/PreviewStageMediaHost_Diagnostics.cpp
     src/preview/runtime/PreviewStageMediaHost_Timeout.cpp
+    src/preview/runtime/PvMemoryDiagnostics.h
+    src/preview/runtime/PvMemoryDiagnostics.cpp
     src/preview/runtime/PreviewSharedD3D11Device.h
     src/preview/runtime/PreviewSharedD3D11Device.cpp
     src/preview/runtime/PreviewRuntime.h
@@ -1699,6 +1701,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/common
     )
+
+    miacode_add_dev_tool(pv_memory_diagnostics_spec TEST
+        SOURCES
+            src/tools/preview/PvMemoryDiagnosticsSpec.cpp
+            src/preview/runtime/PvMemoryDiagnostics.h
+            src/preview/runtime/PvMemoryDiagnostics.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/preview src/preview/runtime
+    )
+    target_compile_definitions(pv_memory_diagnostics_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(quickshell_preview_surface_policy_spec TEST
         SOURCES
