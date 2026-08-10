@@ -2,9 +2,9 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-08-10: **86 live `MIACODE_*` environment flags across 26 files**, including the five the idle-freeze diagnostics added — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_UI_HANG_CRASH_AFTER_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`.
+> Reconciled against the code on 2026-08-10: **87 live `MIACODE_*` environment flags across 26 files**, including the five the idle-freeze diagnostics added — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_UI_HANG_CRASH_AFTER_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`.
 >
-> Recount rather than trusting that number: `grep -rhoE '"MIACODE_[A-Z0-9_]+"' src --include="*.cpp" --include="*.h" | sort -u` yields 101 quoted literals, of which 86 are live env flags — subtract `MIACODE_SOURCE_ROOT` (a CMake compile definition) and the fourteen retired flags that survive only inside `kRetiredFlags` in `src/tools/debug_index/DebugFlagIndexSpec.cpp`. The drift guard `ctest -R debug_flag_index_spec` is the real enforcement — it fails if a flag read in `src/` is missing from this doc or a flag named here is no longer read. Its own summary reports a **larger** total (96) because its regex also counts the build-time compile definitions and hang-watchdog macros listed under "Other `MIACODE_*` tokens" below; that number is not the env-flag count.
+> Recount rather than trusting that number: `grep -rhoE '"MIACODE_[A-Z0-9_]+"' src --include="*.cpp" --include="*.h" | sort -u` yields 102 quoted literals, of which 87 are live env flags — subtract `MIACODE_SOURCE_ROOT` (a CMake compile definition) and the fourteen retired flags that survive only inside `kRetiredFlags` in `src/tools/debug_index/DebugFlagIndexSpec.cpp`. The drift guard `ctest -R debug_flag_index_spec` is the real enforcement — it fails if a flag read in `src/` is missing from this doc or a flag named here is no longer read. Its own summary reports a **larger** total (97) because its regex also counts the build-time compile definitions and hang-watchdog macros listed under "Other `MIACODE_*` tokens" below; that number is not the env-flag count.
 >
 > When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
@@ -18,7 +18,7 @@ This document is the current user-facing index for MiaCode debug mode, log files
   - `Start_MiaCode_QtPluginDiag.bat`
   - `Start_MiaCode_IdleFreezeRepro.ps1` — launches the real `app\MiaCode.exe` in a timestamped evidence directory with an explicit `GpuBound` / `GpuOff` profile; see [Windows 空闲冻结复现与取证指南](WINDOWS_IDLE_FREEZE_REPRO_ZH.md)
 
-Inside debug mode, runtime, audio, export, startup-timing, and preview-profile outputs are enabled unless they are individually disabled.
+Inside debug mode, runtime, audio, export, startup-timing, preview-profile, and PV-memory outputs are enabled unless they are individually disabled.
 Outside debug mode, the export log still keeps a concise stage/failure summary so users can report export issues without reproducing under `--debug`.
 
 ## Default Log Files
@@ -45,6 +45,7 @@ Default filenames:
 - startup timing: `miacode_startup_timing.log`
 - fatal: `miacode_fatal.log`
 - preview profile: `miacode_preview_profile_summary.txt`
+- PV memory: `miacode_pv_memory_debug.log`
 
 Crash breadcrumb path note:
 
@@ -61,12 +62,48 @@ Path overrides:
 - `MIACODE_STARTUP_LOG_PATH`
 - `MIACODE_FATAL_LOG_PATH`
 - `MIACODE_PREVIEW_PROFILE_PATH`
+- `MIACODE_PV_MEMORY_LOG_PATH`
 - `MIACODE_OPERATION_LOG_PATH` (operation-breadcrumb log)
 - `MIACODE_OPLOG_SHADOW_PATH` (operation-log shadow copy)
 
 Other logging knobs:
 
 - `MIACODE_SKIP_ASYNCLOG_FLUSH` — skip the async-log flush on shutdown (diagnostics only).
+
+## PV Memory Diagnostic
+
+Launch the app with `--debug` and inspect the dedicated
+`miacode_pv_memory_debug.log` file. Set `MIACODE_PV_MEMORY_LOG_PATH` to place
+that file at an explicit path. The channel resets at debug-session startup and
+writes `action=session_start`, even when no chart has a PV.
+
+The channel records only current-process memory. `process_resident_bytes`,
+`process_footprint_bytes`, `process_internal_bytes`, and
+`process_compressed_bytes` are byte counts; `-1` means that the platform could
+not provide that value. While a video PV is active it emits one periodic
+`action=sample` at most every five seconds, alongside lifecycle boundaries
+such as source load, first frame, clear, and shutdown. `to_image_*` values
+describe the existing preview image conversion; in particular,
+`to_image_output_bytes_estimate` is an accumulated output-size estimate, not
+allocator ownership or proof that those bytes remain live.
+
+This is an internal diagnostic. It does not enumerate or sample
+`VTDecoderXPCService` or any other external process, log PV filenames or frame
+content, add a frame mapping/readback, or add PV-memory records to the runtime
+or audio logs.
+
+Use the records to rank a capture in this order:
+
+1. Investigate existing per-frame `toImage()` churn when successful conversions
+   and current-process footprint rise together.
+2. If conversion activity is low or absent, investigate `QMediaPlayer` or
+   output-sink lifetime when memory grows during playback or has not settled by
+   `post_clear_15s` after `no_media`.
+3. Compare output attach/detach boundaries for VideoOutput or scene-graph
+   last-frame retention when the remaining playback counters are stable.
+4. Consider persistent Quick graphics resources only when a preview surface is
+   hidden/shown or remains retained after stop; it is not the leading
+   explanation for steady-playback growth.
 
 C++ hang-watchdog instrumentation macros, not environment variables:
 

@@ -64,6 +64,10 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define. Note:
   `MIACODE_SOURCE_ROOT` itself is a compile def, not an env flag, so the spec filters it via
   `kCompileDefinitions` — any new spec that consumes the source-root define is fine),
+  `process_diagnostics_spec` (DebugLog PV-memory channel/session/path and current-process memory
+  sample contract), `pv_memory_diagnostics_spec` (pure PV source/clear-epoch accounting), and
+  `pv_memory_host_contract_spec` (source-level guard that host instrumentation stays debug-gated
+  and reuses the single existing `toImage()` conversion),
   `ui_text_locale_spec` (i18n drift guard — see the localization note in
   `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define),
   `ui_text_preferences_spec` (canonical preference normalization/migration and unknown-key

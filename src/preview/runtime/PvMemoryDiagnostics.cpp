@@ -178,8 +178,6 @@ QVector<Record> Diagnostics::lateNoMedia(const ProcessMemorySample& process)
         pendingClear_->clearEpoch,
         true,
         true));
-    records.append(finalizeClearSnapshot(*pendingClear_));
-    pendingClear_.reset();
     return records;
 }
 

@@ -13,7 +13,7 @@ canonical doc is `docs/ops/DEBUG_INDEX.md`; this file is the code-owner-oriented
 - Core: `miacode::debug_log` in `src/common/DebugLog.{h,cpp}` — an **async, channelized log
   writer** (background thread + queue + overflow/drop stats + flush/shutdown).
 - Channels (`debug_log::Channel`): `Runtime`, `Audio`, `Export`, `StartupTiming`, `Fatal`,
-  `PreviewProfile`, `Operation`.
+  `PreviewProfile`, `Operation`, `PvMemory`.
 - API: `debug_log::appendLine(channel, scope, payload, force=false, level=Level::Info)` /
   `appendTimingLine(...)` / `appendFatalMessage(...)`. ~183 call sites go through this; there is
   essentially no raw `qDebug`/`std::cout` in mainline code — **keep it that way.**
@@ -41,6 +41,8 @@ gated `appendLine`; don't reintroduce that pattern.)
 
 ### Gating
 - Runtime/Audio/StartupTiming/PreviewProfile detail is gated by process debug mode (`--debug`).
+- PvMemory is gated by the same runtime-debug output rule. It creates its dedicated session file
+  only in debug mode and never arms periodic PV-memory sampling while debug output is disabled.
 - `Fatal` is intentionally **not** gated.
 - `Export` keeps a concise stage/failure summary even without `--debug`; detail needs `--debug`.
 - The per-category `MIACODE_DISABLE_*` gates are **snapshot into atomics at `setDebugModeEnabled`** (not
@@ -68,10 +70,16 @@ only these repeat families:
   bound, else app-local `logs/` next to the executable.
 - Per-channel path overrides: `MIACODE_RUNTIME_LOG_PATH`, `MIACODE_AUDIO_LOG_PATH`,
   `MIACODE_EXPORT_LOG_PATH`, `MIACODE_STARTUP_LOG_PATH`, `MIACODE_FATAL_LOG_PATH`,
-  `MIACODE_OPERATION_LOG_PATH`, `MIACODE_PREVIEW_PROFILE_PATH`.
+  `MIACODE_OPERATION_LOG_PATH`, `MIACODE_PREVIEW_PROFILE_PATH`, `MIACODE_PV_MEMORY_LOG_PATH`.
 - Default channel files: `miacode_runtime_debug.log`, `miacode_audio_debug.log`,
   `miacode_video_export.log`, `miacode_startup_timing.log`, `miacode_fatal.log`,
-  `miacode_preview_profile_summary.txt`. Logs live per-chart under `<chart>/.miacode/logs/`.
+  `miacode_preview_profile_summary.txt`, `miacode_pv_memory_debug.log`. Logs live per-chart under `<chart>/.miacode/logs/`.
+- **PV-memory channel:** `PvMemory` is a private current-process-only investigation log. It writes
+  `session_start`, active-video lifecycle records, and samples no more often than every five seconds.
+  `process_*_bytes=-1` means unavailable. It must never inspect external processes, PV paths, or
+  frame contents, and must not introduce a conversion, mapping, or readback. Interpret a capture in
+  this order: existing `toImage()` churn, player/output-sink lifetime, output/scene last-frame
+  retention, then persistent Quick graphics resources.
 - **⚠ Preview-log channel split (easy time-sink):** `PreviewStageMediaHost::appendPreviewStageMediaLog`
   (`src/preview/runtime/PreviewStageMediaHost.cpp:127`) routes to **`Channel::Audio`** (scope
   `preview/stage_media`) → **`miacode_audio_debug.log`**, NOT the runtime log. So `media_backend`,

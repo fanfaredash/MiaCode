@@ -141,14 +141,25 @@ int main()
     const QVector<Record> lateNoMedia = diagnostics.lateNoMedia(ProcessMemorySample {90, 91, 92, 93});
     const Record* noMediaBoundary = findRecord(lateNoMedia, RecordAction::Boundary, QStringLiteral("no_media"));
     const Record* noMediaSummary = findRecord(lateNoMedia, RecordAction::Summary, QStringLiteral("clear"));
-    ok &= require(lateNoMedia.size() == 2 && noMediaBoundary && noMediaSummary
+    ok &= require(lateNoMedia.size() == 1 && noMediaBoundary && !noMediaSummary
                       && noMediaBoundary->snapshot && noMediaBoundary->sourceId == 2
                       && noMediaBoundary->noMediaAfterClear && noMediaBoundary->frameCount == 2
                       && noMediaBoundary->process.residentBytes == 90
-                      && noMediaBoundary->lastProcess.residentBytes == 40
-                      && noMediaSummary->noMediaAfterClear,
-                  QStringLiteral("late NoMedia binds the old snapshot and finalizes its summary with NoMedia"), err);
-    ok &= require(diagnostics.lateNoMedia(ProcessMemorySample {91, 92, 93, 94}).isEmpty(),
+                      && noMediaBoundary->lastProcess.residentBytes == 40,
+                  QStringLiteral("late NoMedia binds the old snapshot without finalizing it early"), err);
+    const QVector<Record> lateCheckpoint3 = diagnostics.postClearCheckpoint(
+        1, kPostClear3SecondsMs, ProcessMemorySample {91, 92, 93, 94});
+    const QVector<Record> lateCheckpoint15 = diagnostics.postClearCheckpoint(
+        1, kPostClear15SecondsMs, ProcessMemorySample {92, 93, 94, 95});
+    const Record* lateCheckpoint15Summary =
+        findRecord(lateCheckpoint15, RecordAction::Summary, QStringLiteral("clear"));
+    ok &= require(lateCheckpoint3.size() == 1
+                      && findRecord(lateCheckpoint3, RecordAction::Boundary, QStringLiteral("post_clear_3s"))
+                      && lateCheckpoint15.size() == 2
+                      && findRecord(lateCheckpoint15, RecordAction::Boundary, QStringLiteral("post_clear_15s"))
+                      && lateCheckpoint15Summary && lateCheckpoint15Summary->noMediaAfterClear,
+                  QStringLiteral("late NoMedia preserves the snapshot through both post-clear checkpoints"), err);
+    ok &= require(diagnostics.lateNoMedia(ProcessMemorySample {93, 94, 95, 96}).isEmpty(),
                   QStringLiteral("late NoMedia is recorded at most once per clear snapshot"), err);
 
     // A newer source resolves the old pending summary and cancels its delayed checkpoints.

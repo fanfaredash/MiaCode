@@ -17,7 +17,7 @@ The user-facing canonical doc lives at `docs/ops/DEBUG_INDEX.md`. This file stay
 - Default debug-mode fallback:
   - project-local `.miacode/logs/` once a chart file is bound, otherwise app-local `logs/` next to the running executable when `MIACODE_LOG_DIR` and per-channel overrides are unset
   - export worker launches now pre-bind `MIACODE_LOG_DIR` to the snapshot chart's `.miacode/logs/` directory when no explicit shared log-dir override is present, and the worker also restores the same path after snapshot parse for direct CLI-worker runs
-  - in debug mode, startup now trims retained runtime/audio/export/startup/fatal logs down to at most `100 KB` each by dropping the oldest lines first
+  - in debug mode, startup now trims retained runtime/audio/export/startup/fatal/PV-memory logs down to at most `100 KB` each by dropping the oldest lines first
   - editor startup beacon / op-chain shadow paths are captured before chart-local project logs are bound; when runtime debug output or `MIACODE_PREVIEW_HUD_PAINT_DIAG=1` is active, project-log binding writes a `runtime/logging/crash_breadcrumb_hint` signpost with PID, project log dir, and startup-beacon/op-chain path hints
 - Channel-specific path overrides:
   - `MIACODE_RUNTIME_LOG_PATH`
@@ -26,8 +26,9 @@ The user-facing canonical doc lives at `docs/ops/DEBUG_INDEX.md`. This file stay
   - `MIACODE_STARTUP_LOG_PATH`
   - `MIACODE_FATAL_LOG_PATH`
   - `MIACODE_PREVIEW_PROFILE_PATH`
+  - `MIACODE_PV_MEMORY_LOG_PATH`
 
-Runtime/audio/startup/profile detailed outputs are gated by the process debug mode entered through `--debug`. Fatal logs are intentionally not gated. The export log now keeps a concise stage/failure summary even without `--debug`, while detailed export diagnostics still require debug mode.
+Runtime/audio/startup/profile/PV-memory detailed outputs are gated by the process debug mode entered through `--debug`. Fatal logs are intentionally not gated. The export log now keeps a concise stage/failure summary even without `--debug`, while detailed export diagnostics still require debug mode.
 
 Debug subcategories now default to on inside debug mode and are disabled with:
 
@@ -72,6 +73,12 @@ Debug subcategories now default to on inside debug mode and are disabled with:
   - quickshell external-media sessions now also write `external_stage_media.*` summary rows for separate-surface state, media kind, aggregate video-frame counts, estimated video FPS, video-frame intervals, and stall counts without emitting per-frame runtime logs
   - current summary also includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-uniform updates, node-update time, and media/dim frame counters
   - layer summary rows now also include `candidate_count_*` and `active_count_*` so prepared-window efficiency can be compared against sprite/batch counts
+- PV-memory diagnostic:
+  - default file: `miacode_pv_memory_debug.log`; optional path override: `MIACODE_PV_MEMORY_LOG_PATH`
+  - producers: debug-session initialization in `src/app/main.cpp`, current-process sampling in `src/common/ProcessDiagnostics.*`, and PV lifecycle accounting in `src/preview/runtime/PvMemoryDiagnostics.*` / `PreviewStageMediaHost_*`
+  - active only with runtime debug output; writes `session_start`, active-video lifecycle records, and a periodic sample no more often than every five seconds
+  - process fields use `-1` when unavailable. The log never samples external processes, PV paths, or decoded frame content, and does not add a conversion, mapping, or readback.
+  - assess a capture in order: existing `toImage()` churn, player/output-sink lifetime, output/scene last-frame retention, then persistent Quick graphics resources
 
 The Windows release package also ships:
 
