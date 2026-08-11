@@ -42,6 +42,11 @@ QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build
 包内所有 Mach-O 均包含且只包含目标架构。可设置
 `MIACODE_THIN_MACOS_APP=OFF` 生成保留 Qt universal 二进制的对照包。
 
+macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK。`package-mac.sh` 优先使用
+`MIACODE_FFMPEG_DEV_DIR`，否则自动发现 Homebrew `ffmpeg@6`（再回退到 `ffmpeg`）。
+它会将 FFmpeg 的非系统 dylib 依赖闭包复制到 `MiaCode.app/Contents/Frameworks` 并
+改写为包内 `@rpath`，因此发布包不依赖构建机的 Homebrew 路径。
+
 ## 其他脚本
 
 - `debug/Start_MiaCode_Debug.bat`：发布包内唯一 Windows 调试启动入口。

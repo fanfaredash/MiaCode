@@ -103,10 +103,11 @@ Rules going forward:
 - macOS build/package: `scripts/build/build-macos.sh`, `scripts/build/package-mac.sh`.
 - ffmpeg provisioning: `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`, `scripts/ffmpeg/ensure-macos-ffmpeg.sh` (the standalone
   `ffmpeg.exe` used by **export**).
-- ffmpeg **dev SDK** provisioning (Windows): `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
+- ffmpeg **dev SDK** provisioning: Windows `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
   n7.1 LGPL *shared* build (headers + import libs + runtime DLLs) into
-  `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. Gitignored,
-  never committed. CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache var.
+  `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. On macOS,
+  `package-mac.sh` accepts `MIACODE_FFMPEG_DEV_DIR` or finds Homebrew `ffmpeg@6` (then `ffmpeg`).
+  Both are CMake inputs, not runtime flags; the SDK root must contain `include/` and `lib/`.
 - Public debug launchers: `scripts/debug/Start_MiaCode_Debug.bat`, `scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat`,
   and `scripts/debug/Start_MiaCode_QtPluginDiag.bat`. One-off A/B launchers stay as ignored maintainer-local
   tools unless they become part of a repeatable public support workflow.
@@ -147,11 +148,11 @@ Rules going forward:
   export depend on it.
 - ffmpeg: pinned-binary notes in `third_party/ffmpeg/README.md`; never commit the binary
   (`.gitignore` blocks it). Export resolves ffmpeg from app-local/repo-local fallback.
-- **QtAVPlayer preview backend (Windows):** vendored MIT source in `third_party/QtAVPlayer/`
+- **QtAVPlayer preview backend (Windows and macOS):** vendored MIT source in `third_party/QtAVPlayer/`
   (compiled straight into `MiaCode` with `QT_AVPLAYER_MULTIMEDIA` + `QT_BUILD_QTAVPLAYER_LIB`);
   needs the `Qt6::MultimediaQuickPrivate` component and the FFmpeg dev SDK (see §4). The CMake
-  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and is `if (WIN32)`
-  gated. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
+  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and is `if (WIN32 OR APPLE)`
+  gated. Windows uses D3D11VA; macOS compiles QtAVPlayer's VideoToolbox/Metal hwdevice. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
   `qavdemuxer.cpp`/`QtAVPlayer.cmake`) since it's capture-device-only — saves ~7 MB + one DLL.
   **Packaging:** `package-win.ps1` stages 6 `av*.dll` into `app/` next to `MiaCode.exe`
   (`avcodec-61`/`avformat-61`/`avutil-59`/`swresample-5`/`swscale-8` overlap windeployqt's set;
@@ -161,7 +162,9 @@ Rules going forward:
   allowlist (`trim-allowlist.psd1`) + `survey-chart-codecs.ps1` calibration, installs into
   `third_party/ffmpeg/windows/dev/` (backs up to `dev.full.bak`). Decode-only ⇒ stays LGPL (no
   `--enable-gpl`/x264 — that would make MiaCode GPL; export encoding stays in the separate
-  `ffmpeg.exe`). Needs MSYS2 + VS BuildTools (both present on the dev box).
+  `ffmpeg.exe`). `package-mac.sh` copies the complete non-system dylib closure from the selected
+  SDK into `MiaCode.app/Contents/Frameworks`, rewrites it to `@rpath`, and fails if an external
+  dylib reference remains. Needs MSYS2 + VS BuildTools (both present on the dev box).
 - **Qt6::Svg (toolbar gear icon):** in `find_package(Qt6 … COMPONENTS … Svg)` +
   `target_link_libraries(MiaCode PRIVATE Qt6::Svg)`, so `makeSettingsGearIcon`
   (`MainWindowShared.cpp`) renders the Google Material "settings" gear via `QSvgRenderer`.

@@ -112,9 +112,9 @@ endif()
 
 # MultimediaQuickPrivate exposes the private QtMultimedia headers
 # (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
-# QAVVideoFrame -> QVideoFrame bridge needs. Optional: only the Windows
-# QtAVPlayer preview backend uses it (see the QtAVPlayer block below).
-if (WIN32)
+# QAVVideoFrame -> QVideoFrame bridge needs. The Windows and macOS
+# QtAVPlayer preview backends use it (see the QtAVPlayer block below).
+if (WIN32 OR APPLE)
     find_package(Qt6 6.8 REQUIRED COMPONENTS MultimediaQuickPrivate)
 endif()
 
@@ -835,22 +835,29 @@ add_custom_command(TARGET MiaCode POST_BUILD
 # Replaces QMediaPlayer for PV/BG decoding inside PreviewStageMediaHost; see
 # docs/ops/DEBUG_INDEX.md. QtAVPlayer is the
 # MIT-licensed source vendored under third_party/QtAVPlayer, compiled straight
-# into MiaCode. It links the external FFmpeg shared libraries (n7.1 LGPL) whose
-# dev SDK (headers + import libs + runtime DLLs) is provisioned under
-# third_party/ffmpeg/windows/dev by scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1.
+# into MiaCode. It links external FFmpeg shared libraries whose dev SDK
+# (headers + libraries) is supplied through MIACODE_FFMPEG_DEV_DIR. Windows
+# uses the provisioned n7.1 LGPL SDK; macOS accepts a compatible shared SDK.
 #
-# Windows-only for now (D3D11VA hwdevice + provisioned FFmpeg dev SDK). Other
-# platforms keep the QMediaPlayer path — MIACODE_USE_QTAVPLAYER stays undefined
-# there, and PreviewStageMediaHost compiles its legacy backend.
+# Windows and macOS use QtAVPlayer. Windows selects D3D11VA where available;
+# macOS selects the vendored VideoToolbox/Metal hwdevice. Other platforms keep
+# the QMediaPlayer path — MIACODE_USE_QTAVPLAYER stays undefined there.
 # ---------------------------------------------------------------------------
-if (WIN32)
-    set(MIACODE_FFMPEG_DEV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/dev"
-        CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/ + bin/) for the QtAVPlayer preview backend")
+if (WIN32 OR APPLE)
+    if (WIN32)
+        set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/dev")
+    else()
+        set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/macos/dev")
+    endif()
+    set(MIACODE_FFMPEG_DEV_DIR "${MIACODE_FFMPEG_DEV_DIR_DEFAULT}"
+        CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/) for the QtAVPlayer preview backend")
     if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
         message(FATAL_ERROR
             "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
-            "Run scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1, or pass "
-            "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/ bin/>.")
+            "Provision the platform FFmpeg dev SDK, or pass "
+            "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/>.")
     endif()
 
     # find_library() in QtAVPlayer.cmake resolves the FFmpeg import libs from
@@ -860,9 +867,9 @@ if (WIN32)
     set(QTAVPLAYER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/third_party/QtAVPlayer/src")
     set(QT_AVPLAYER_DIR "${QTAVPLAYER_SRC}/QtAVPlayer")
     set(QT_AVPLAYER_MULTIMEDIA ON CACHE BOOL "" FORCE)
-    # Drop avdevice (capture-device I/O only, unused for file playback) to trim
-    # ~7 MB + one DLL: QtAVPlayer.cmake skips finding/linking it and qavdemuxer
-    # compiles out its lone avdevice_register_all() call.
+    # Drop avdevice (capture-device I/O only, unused for file playback):
+    # QtAVPlayer skips finding/linking it and qavdemuxer compiles out its lone
+    # avdevice_register_all() call.
     set(QT_AVPLAYER_NO_AVDEVICE ON)
     # Sets QtAVPlayer_SOURCES / QtAVPlayer_LIBS (absolute import-lib paths via
     # find_library) and globally defines QT_BUILD_QTAVPLAYER_LIB.
@@ -889,23 +896,27 @@ if (WIN32)
         ${QtAVPlayer_LIBS}
     )
 
-    # Runtime: the preview backend dlopen's these next to MiaCode.exe.
-    # avfilter-10 is NET-NEW vs the existing package (QtAVPlayer links it); the
-    # other five match the majors Qt already ships. avdevice is intentionally
-    # NOT shipped (dropped above). windeployqt in package-win.ps1 stages the
-    # packaged set — this POST_BUILD keeps the local build/ tree runnable
-    # without a full package step.
-    add_custom_command(TARGET MiaCode POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-61.dll"
-            "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-61.dll"
-            "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-59.dll"
-            "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-5.dll"
-            "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-8.dll"
-            "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-10.dll"
-            $<TARGET_FILE_DIR:MiaCode>
-        VERBATIM
-    )
+    if (WIN32)
+        # Runtime: the preview backend loads these next to MiaCode.exe. The
+        # Windows package script stages the same pinned majors.
+        add_custom_command(TARGET MiaCode POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-61.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-61.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-59.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-5.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-8.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-10.dll"
+                $<TARGET_FILE_DIR:MiaCode>
+            VERBATIM
+        )
+    else()
+        # Homebrew and other macOS FFmpeg SDKs commonly use absolute dylib
+        # install names. Keep the SDK library directory on the development
+        # RPATH; the release packager will bundle and rewrite these dylibs.
+        set_property(TARGET MiaCode APPEND PROPERTY BUILD_RPATH
+            "${MIACODE_FFMPEG_DEV_DIR}/lib")
+    endif()
 endif()
 
 if (MSVC)
@@ -1720,6 +1731,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/preview src/preview/runtime
     )
     target_compile_definitions(pv_memory_host_contract_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(qtavplayer_platform_spec TEST
+        SOURCES
+            src/tools/preview/QtAVPlayerPlatformSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/preview src/preview/runtime
+    )
+    target_compile_definitions(qtavplayer_platform_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(quickshell_preview_surface_policy_spec TEST

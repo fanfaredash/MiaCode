@@ -29,6 +29,10 @@
     #include <d3d11.h>
 #endif
 
+#if (defined(Q_OS_MACOS) || defined(Q_OS_IOS)) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    #include <CoreVideo/CoreVideo.h>
+#endif
+
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/pixdesc.h>
@@ -65,6 +69,28 @@ static QVideoFrameFormat::PixelFormat d3d11TexturePixelFormat(const AVFrame *fra
         return QVideoFrameFormat::Format_P016;
     default:
         qWarning() << "Unsupported D3D11 video texture format" << desc.Format;
+        return QVideoFrameFormat::Format_Invalid;
+    }
+}
+#endif
+
+#if defined(QT_AVPLAYER_MULTIMEDIA) && (defined(Q_OS_MACOS) || defined(Q_OS_IOS)) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+static QVideoFrameFormat::PixelFormat videoToolboxPixelFormat(const AVFrame *frame)
+{
+    if (!frame || frame->format != AV_PIX_FMT_VIDEOTOOLBOX || !frame->data[3])
+        return QVideoFrameFormat::Format_Invalid;
+
+    const CVPixelBufferRef pbuf = reinterpret_cast<CVPixelBufferRef>(frame->data[3]);
+    switch (CVPixelBufferGetPixelFormatType(pbuf)) {
+    case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
+    case kCVPixelFormatType_420YpCbCr8BiPlanarFullRange:
+        return QVideoFrameFormat::Format_NV12;
+    case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
+    case kCVPixelFormatType_420YpCbCr10BiPlanarFullRange:
+        return QVideoFrameFormat::Format_P010;
+    default:
+        qWarning() << "Unsupported VideoToolbox video format"
+                   << CVPixelBufferGetPixelFormatType(pbuf);
         return QVideoFrameFormat::Format_Invalid;
     }
 }
@@ -520,6 +546,13 @@ QAVVideoFrame::operator QVideoFrame() const
             break;
 #endif
         case AV_PIX_FMT_VIDEOTOOLBOX:
+#if defined(QT_AVPLAYER_MULTIMEDIA) && (defined(Q_OS_MACOS) || defined(Q_OS_IOS)) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            format = videoToolboxPixelFormat(frame());
+            break;
+#else
+            format = VideoFrame::Format_NV12;
+            break;
+#endif
         case AV_PIX_FMT_NV12:
             format = VideoFrame::Format_NV12;
             break;

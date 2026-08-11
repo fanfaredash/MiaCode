@@ -175,13 +175,13 @@ decode — launch with `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=0` (+ `MIACODE_PREV
 for H2). For the two-device path's RHI debug layer use the Qt env `QSG_RHI_DEBUG_LAYER=1` (Qt creates
 that device; `MIACODE_PREVIEW_D3D11_DEBUG_LAYER` only reaches the imported H2 device).
 
-**Preview video decode backend (Windows):** `MIACODE_USE_QTAVPLAYER` is a **build-time compile
-macro** (CMake-defined on Windows, NOT an environment flag — it can't be toggled at runtime). It
+**Preview video decode backend (Windows and macOS):** `MIACODE_USE_QTAVPLAYER` is a **build-time compile
+macro** (CMake-defined on `WIN32 OR APPLE`, NOT an environment flag — it can't be toggled at runtime). It
 switches `PreviewStageMediaHost` onto the FFmpeg/QtAVPlayer backend; other platforms keep the
-`QMediaPlayer` path. It still appears in `docs/ops/DEBUG_INDEX.md` because the `debug_flag_index_spec`
-drift guard greps every `MIACODE_*` literal in `src/`. The FFmpeg dev SDK path is a CMake cache
-variable (not in `src/`, so keep its literal out of `DEBUG_INDEX.md` or the guard flags it stale).
-On hardware-decode `InvalidMedia` the host retries once forcing software decode — log line
+`QMediaPlayer` path. Windows selects D3D11VA; macOS selects VideoToolbox with the QtAVPlayer Metal bridge.
+`MIACODE_FFMPEG_DEV_DIR` is the corresponding CMake/package SDK-root input, not a runtime switch. On either
+platform, `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=1` is an explicit software-decode fallback; the default is
+hardware decode. On hardware-decode `InvalidMedia` the host also retries once forcing software decode — log line
 `Channel::Audio` scope `preview/stage_media`, `action=video_software_fallback`. The QtAVPlayer path
 drops the QMediaPlayer-only `recoverVideoBackend` / playback watchdog / soft-recovery / deferred-rate
 scaffolding (no silent WMF fallback, no converter-rebuild crash to recover from).

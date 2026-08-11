@@ -187,29 +187,17 @@ void PreviewStageMediaHost::initializeBackendObjects()
     qRegisterMetaType<QAVVideoFrame>();
 
     player_ = new QAVPlayer(this);
-    // Wire the HW-decode diagnostics (log sink + bounded readback-dump budget) into the
-    // decode path before any media loads. Idempotent; covers both H2 and two-device paths.
+    // Windows installs its D3D11 diagnostics here; the macOS implementation is
+    // intentionally a no-op because VideoToolbox has no D3D11 bridge.
     miacode::preview::installPreviewDecodeDiagnostics();
     player_->setSpeed(static_cast<qreal>(playbackRate_));
-    // F1: decide hardware vs software preview decode.
-    //   - softwareDecodeFallbackTried_: a prior D3D11VA decode failed -> retry in software.
-    //   - MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO tri-state: Auto / ForceSoftware / ForceHardware.
-    //   - Auto defaults INTEGRATED GPUs to software (D3D11VA preview decode is unreliable on
-    //     Intel/Arc iGPUs: startup stutter, NV12 green padding, AV1 hardware corruption — all
-    //     clean in software), while discrete GPUs keep hardware. ForceHardware overrides the
-    //     iGPU auto-detect; ForceSoftware always software. See DebugOptions.h.
     // Decode mode: the persisted user preference (硬件渲染 / 软件渲染, default
     // HARDWARE) decides. MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO stays a dev override on
-    // top (ForceSoftware / ForceHardware win; Auto / unset honors the user pref).
-    // The legacy "Auto => integrated GPU silently defaults to software" behaviour is
-    // gone: the default is hardware for everyone, and a user on an affected iGPU flips
-    // the preference to software at runtime (hot-switch, no restart). The session-only
-    // softwareDecodeFallbackTried_ latch still forces software after a hardware
-    // InvalidMedia. adapterDesc/integratedGpu are kept for the diagnostic line only.
+    // top (ForceSoftware / ForceHardware win; Auto / unset honors the user
+    // preference). The session-only fallback latch forces FFmpeg CPU decode
+    // only after the selected platform hardware decoder reports InvalidMedia.
     using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
     const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
-    QString adapterDesc;
-    const bool integratedGpu = isIntegratedRenderAdapter(&adapterDesc);
     bool forceSoftware = videoDecodePreferSoftware_;
     switch (decodePref) {
     case DecodePref::ForceSoftware: forceSoftware = true; break;
@@ -223,19 +211,35 @@ void PreviewStageMediaHost::initializeBackendObjects()
     const char *prefName = decodePref == DecodePref::ForceSoftware ? "force_sw"
                          : decodePref == DecodePref::ForceHardware ? "force_hw"
                                                                    : "auto";
-    // NOTE (P0): `probe_adapter` is a HEURISTIC — the DXGI adapter-0 desc read
-    // by detectIntegratedRenderAdapter() to guess iGPU vs dGPU for the decode
-    // path. It is NOT the adapter Qt Quick's RHI actually bound; for that, see
-    // the `quick_shell/device` runtime log (QSGRendererInterface DeviceResource).
+#if defined(Q_OS_WIN)
+    QString adapterDesc;
+    const bool integratedGpu = isIntegratedRenderAdapter(&adapterDesc);
+    // `probe_adapter` is a DXGI heuristic only; the Quick RHI device is logged
+    // independently by quick_shell/device.
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),
-        QString("backend=qtavplayer ffmpeg=1 qt_runtime_version=%1 force_software=%2 pref=%3 igpu=%4 probe_adapter=\"%5\" probe_adapter_source=dxgi_enum0_heuristic single_device=%6")
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=d3d11va qt_runtime_version=%1 force_software=%2 pref=%3 igpu=%4 probe_adapter=\"%5\" probe_adapter_source=dxgi_enum0_heuristic single_device=%6")
             .arg(QString::fromLatin1(qVersion()))
             .arg(useSoftware ? 1 : 0)
             .arg(QString::fromLatin1(prefName))
             .arg(integratedGpu ? 1 : 0)
             .arg(adapterDesc)
             .arg(miacode::preview::sharedPreviewD3D11DeviceActive() ? 1 : 0));
+#elif defined(Q_OS_MACOS)
+    appendPreviewStageMediaLog(
+        QStringLiteral("media_backend"),
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=videotoolbox qt_runtime_version=%1 force_software=%2 pref=%3 renderer_bridge=metal")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(useSoftware ? 1 : 0)
+            .arg(QString::fromLatin1(prefName)));
+#else
+    appendPreviewStageMediaLog(
+        QStringLiteral("media_backend"),
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=platform_default qt_runtime_version=%1 force_software=%2 pref=%3")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(useSoftware ? 1 : 0)
+            .arg(QString::fromLatin1(prefName)));
+#endif
 
     // Seek landing (frame-accurate). Backs up the pts match in
     // handleDecodedVideoFrame for the paused-seek / prepared-start handshakes —
@@ -855,7 +859,8 @@ void PreviewStageMediaHost::reloadVideoDecodeInPlace()
     // reload in place (the empty setSource forces a reload since setSource(sameUrl)
     // is a no-op), then restore position + play state. Reuses the existing video
     // sink — no player recreation, no app restart. Bidirectional vs the one-way
-    // software fallback: empty codec => hardware D3D11VA, "software" => FFmpeg CPU.
+    // software fallback: empty codec restores the platform hardware decoder;
+    // "software" selects FFmpeg CPU decode.
     const double second = qMax(0.0, currentPlaybackSecond());
     const qint64 resumeMs = qMax<qint64>(0, qRound64((second + timelineOffsetSeconds_) * 1000.0));
     const bool resumePlaying = videoPlaybackActive_;

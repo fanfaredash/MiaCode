@@ -44,6 +44,13 @@ Mach-O contains only the target architecture before re-signing. Set
 `MIACODE_THIN_MACOS_APP=OFF` to produce a comparison package that keeps Qt's
 universal binaries.
 
+The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK.
+`package-mac.sh` uses `MIACODE_FFMPEG_DEV_DIR` when set, otherwise discovers
+Homebrew `ffmpeg@6` (falling back to `ffmpeg`). It copies the non-system FFmpeg
+dylib closure into `MiaCode.app/Contents/Frameworks` and rewrites it to the
+bundle's `@rpath`, so a release package does not depend on the build machine's
+Homebrew paths.
+
 ## Other Scripts
 
 - `debug/Start_MiaCode_Debug.bat`: the only Windows debug launcher shipped in release packages.

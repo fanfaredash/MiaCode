@@ -28,7 +28,7 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 - Export runtime resolves binaries from app-local `ffmpeg/` and `third_party/ffmpeg/<platform>/` paths.
 - When upgrading ffmpeg, update this file and the corresponding ensure scripts together.
 
-## FFmpeg dev SDK (QtAVPlayer preview decode backend, Windows)
+## FFmpeg dev SDK (QtAVPlayer preview decode backend)
 
 Separate from the standalone `ffmpeg.exe` above (used by **export**), the **preview** background-video
 decode backend links FFmpeg directly via the vendored QtAVPlayer (`third_party/QtAVPlayer/`). That
@@ -52,6 +52,13 @@ third_party/ffmpeg/windows/dev/
 - License: LGPL v2.1+ (decode-only, **no** `--enable-gpl` / `--enable-nonfree`) — same obligations as
   the FFmpeg already shipped; no new exposure. `avfilter` is a net-new DLL (`avdevice` is dropped,
   see below).
+
+On macOS the same QtAVPlayer source uses VideoToolbox/Metal hardware decode. CMake accepts
+`MIACODE_FFMPEG_DEV_DIR=<SDK root>` (the optional repo-local default is `macos/dev/`); the
+standard package script otherwise resolves Homebrew `ffmpeg@6`, then `ffmpeg`. The macOS package
+copies the SDK's complete non-system dylib closure into `MiaCode.app/Contents/Frameworks` and
+rewrites absolute install names to `@rpath`, so the resulting app must not retain `/opt/homebrew`
+or another build-machine dylib reference.
 
 ### Size trimming
 

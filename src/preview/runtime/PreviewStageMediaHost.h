@@ -136,8 +136,9 @@ public:
     void setObservedPlayheadSecond(double second);
     QString debugMediaTypeName() const;
 
-    // Video decode-mode preference (硬件渲染 / 软件渲染 toggle). false = hardware
-    // (D3D11VA, the default), true = software (FFmpeg CPU). Hot-switchable at
+    // Video decode-mode preference (硬件渲染 / 软件渲染 toggle). false = the
+    // platform hardware decoder (D3D11VA on Windows, VideoToolbox on macOS),
+    // true = FFmpeg CPU decode. Hot-switchable at
     // RUNTIME with no app restart: when a PV is loaded this reloads it in place on
     // the same QAVPlayer (reusing the sink, restoring position + play state);
     // otherwise it just takes effect on the next load. The persisted user
@@ -205,7 +206,7 @@ private:
     // reaches the pending seek target. Mirrors the QMediaPlayer path's
     // frame-covers-target / position-ack logic, keyed on pts instead of µs.
     void settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd);
-    // One-shot fallback: if hardware (D3D11VA) decode reports InvalidMedia,
+    // One-shot fallback: if platform hardware decode reports InvalidMedia,
     // re-open the source forcing FFmpeg software decode before giving up.
     void maybeRetryWithSoftwareDecode();
     // Hot-switch the currently-loaded PV's decode mode in place on the same
@@ -235,8 +236,8 @@ private:
     void destroyPvMemorySource();
 
     MediaKind mediaKind_ = MediaKind::None;
-    // 硬件/软件渲染 preference: false = hardware D3D11VA decode (default), true =
-    // software. Set by MainWindow from the persisted user preference; read in
+    // 硬件/软件渲染 preference: false = platform hardware decode (default), true =
+    // FFmpeg CPU decode. Set by MainWindow from the persisted user preference; read in
     // initializeBackendObjects (initial/rebuild decode choice) and applied live by
     // setVideoDecodePreference / reloadVideoDecodeInPlace.
     bool videoDecodePreferSoftware_ = false;

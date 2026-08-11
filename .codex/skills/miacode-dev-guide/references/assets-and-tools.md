@@ -210,6 +210,9 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - macOS build/package:
   - `scripts/build/build-macos.sh`
   - `scripts/build/package-mac.sh`
+  - the QtAVPlayer preview backend uses VideoToolbox/Metal and needs an FFmpeg dev SDK. The package
+    script accepts `MIACODE_FFMPEG_DEV_DIR` or resolves Homebrew `ffmpeg@6`/`ffmpeg`, then copies the
+    non-system dylib closure into `MiaCode.app/Contents/Frameworks` and rewrites it to `@rpath`.
   - `scripts/build/thin-macos-app.sh` removes the unused CPU slice from every bundled Mach-O for explicitly single-architecture `arm64` or `x86_64` packages; packaging runs it after `macdeployqt`, hard-fails when any Mach-O lacks the target architecture, and re-signs only after thinning
   - set `MIACODE_THIN_MACOS_APP=OFF` only when producing a same-build universal-Qt comparison package for size or A/B verification
   - `scripts/build/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, `qtshadertools`, and `qtsvg`
