@@ -5,7 +5,8 @@ param(
     [string]$BuildDir = "build",
     [string]$DistDir = "",
     [switch]$IncludeDevTools,
-    [int]$BuildJobs = 8
+    [ValidateRange(1, 4)]
+    [int]$BuildJobs = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -112,10 +113,6 @@ function Invoke-MiaCodeBuild {
         [string]$Config,
         [int]$BuildJobs
     )
-
-    if ($BuildJobs -lt 1) {
-        throw "BuildJobs must be >= 1."
-    }
 
     Write-Host "Precheck: building MiaCode ($Config) in $BuildDir with --parallel $BuildJobs ..."
     & cmake --build $BuildDir --target MiaCode --config $Config --parallel $BuildJobs | Out-Host

@@ -385,7 +385,9 @@ if [[ -n "$PACKAGE_ARCHITECTURES" ]]; then
   cmake_args+=("-DCMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES")
 fi
 cmake "${cmake_args[@]}"
-build_args=(--build "$BUILD_DIR" --config Release --parallel 2)
+# Keep the complete build graph at four jobs or fewer. This cap is deliberate:
+# release packaging must not saturate the local machine with compiler processes.
+build_args=(--build "$BUILD_DIR" --config Release --parallel 4)
 if [[ "$BUILD_DEV_TOOLS" == "ON" ]]; then
   build_args+=(--target MiaCode simai_native_dump soundtouch_probe)
 else
