@@ -9,7 +9,7 @@ This directory keeps only public, repeatable build, release, asset, and diagnost
 | Directory | Contents |
 |---|---|
 | `build/` | Windows/macOS build and packaging entry points |
-| `debug/` | Currently retained Windows debug/diagnostic launchers |
+| `debug/` | Windows/macOS debug and diagnostic launchers |
 | `ffmpeg/` | FFmpeg runtime/dev-SDK provisioning plus the decode-only trim toolchain |
 | `assets/` | Asset generation and font-subsetting helpers |
 
@@ -54,6 +54,7 @@ Homebrew paths.
 ## Other Scripts
 
 - `debug/Start_MiaCode_Debug.bat`: the only Windows debug launcher shipped in release packages.
+- `debug/Start_MiaCode_Debug.command`: the macOS debug launcher at the release package root; double-click it to launch `MiaCode.app` with `--debug` and write logs to the package-root `logs/` directory.
 - `debug/Start_MiaCode_SoftwareVideoDecode.bat`, `debug/Start_MiaCode_QtPluginDiag.bat`: public support diagnostics; not shipped in the Windows release package.
 - `ffmpeg/ensure-windows-ffmpeg.ps1`, `ffmpeg/ensure-macos-ffmpeg.sh`: provision the standalone export `ffmpeg`.
 - `ffmpeg/ensure-windows-ffmpeg-dev.ps1`: provisions the Windows QtAVPlayer preview-decode dev SDK.

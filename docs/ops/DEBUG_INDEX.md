@@ -13,6 +13,10 @@ This document is the current user-facing index for MiaCode debug mode, log files
 - Preferred CLI switch: `--debug`
 - Windows release helper:
   - `Start_MiaCode_Debug.bat`
+- macOS release helper:
+  - Double-click `Start_MiaCode_Debug.command` at the package root. It creates
+    `<package-root>/logs/`, sets `MIACODE_LOG_DIR` to that absolute path, and
+    launches `MiaCode.app` with `--debug`.
 - Windows focused diagnostic helpers retained in the public repo:
   - `Start_MiaCode_SoftwareVideoDecode.bat`
   - `Start_MiaCode_QtPluginDiag.bat`
@@ -30,6 +34,10 @@ Default directory order:
 3. project-local `.miacode/logs/` once a chart file is bound
 4. app-local `logs/` next to `MiaCode.exe` while `--debug` is active
 5. system temp directory
+
+The macOS package-root `Start_MiaCode_Debug.command` explicitly selects
+`<package-root>/logs/` through `MIACODE_LOG_DIR`, so its debug logs stay beside
+the release package rather than following the usual fallback order.
 
 Export worker note:
 

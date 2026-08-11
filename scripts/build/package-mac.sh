@@ -512,6 +512,7 @@ Run:
 
 Included:
   - MiaCode.app
+  - Start_MiaCode_Debug.command (runs MiaCode in debug mode; logs go to ./logs/)
   - Qt frameworks/plugins deployed by macdeployqt
   - BASS, BASSmix, BASS FX, and BASSOPUS arm64 runtime libraries
   - MiaCode.app/Contents/MacOS/ffmpeg/ffmpeg
@@ -531,6 +532,19 @@ else
   - simai_native_dump
   - soundtouch_probe
 EOF
+fi
+
+debug_launcher_source="$ROOT_DIR/scripts/debug/Start_MiaCode_Debug.command"
+debug_launcher_path="$DIST_DIR/Start_MiaCode_Debug.command"
+if [[ ! -f "$debug_launcher_source" ]]; then
+  echo "Missing macOS debug launcher source: $debug_launcher_source" >&2
+  exit 1
+fi
+cp "$debug_launcher_source" "$debug_launcher_path"
+chmod +x "$debug_launcher_path"
+if [[ ! -x "$debug_launcher_path" ]]; then
+  echo "Packaged macOS debug launcher is missing or not executable: $debug_launcher_path" >&2
+  exit 1
 fi
 
 macdeployqt "$DIST_DIR/MiaCode.app" -qmldir="$ROOT_DIR/src" -always-overwrite
@@ -602,6 +616,13 @@ rm -f "$ZIP_PATH"
   cd "$(dirname "$DIST_DIR")"
   ditto -c -k --sequesterRsrc --keepParent "$(basename "$DIST_DIR")" "$(basename "$ZIP_PATH")"
 )
+
+zip_launcher_path="$(basename "$DIST_DIR")/Start_MiaCode_Debug.command"
+zip_launcher_mode="$(zipinfo -l "$ZIP_PATH" "$zip_launcher_path" | awk '$1 ~ /^-[rwx-]+$/ { print $1; exit }')"
+if [[ ! "$zip_launcher_mode" =~ ^-..x ]]; then
+  echo "ZIP is missing an executable macOS debug launcher: $zip_launcher_path" >&2
+  exit 1
+fi
 
 echo "Packaged to $DIST_DIR"
 echo "Zip created: $ZIP_PATH"
