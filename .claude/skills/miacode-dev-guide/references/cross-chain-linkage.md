@@ -480,6 +480,29 @@ playhead is shifted forward by `previewVisualLookaheadVsyncs` (default 1.0, see
 `applyVisualClockSmoothing`). The timeline therefore trails the preview by ~1 vsync by design. Do
 not "fix" that asymmetry without deciding what the offset should be — it is a constant, not drift.
 
+## 15. `||` comment scanning is a three-place sync set
+
+A simai `||` comment runs from the marker to the end of **its line**. Three places encode that:
+
+1. `SimaiNativeParser.Driver.cpp:797` — per-line char loop, `break`s at the marker.
+2. `TimelineQuickModelParser.cpp:646` — same shape, same `break`.
+3. `src/core/chart/parser/SimaiCommentScan.*` — the flat-text form
+   (`previousChartComma` / `nextChartComma` / `chartContentSpans`) for callers that scan the whole
+   document as one string and so have no per-line loop to break out of. Used by
+   `planTouchPadAuthoringEdit`.
+
+Two consequences that any new flat-text scanner must respect, and that specifically broke touch
+click authoring before 2026-08-12:
+
+- **A `,` inside a comment is prose, not a beat separator.** The editor normalizes full-width `，`
+  to `,` (`PlainCodeEditor.Input.cpp:43`), so Chinese comments really do contain them. Splitting on
+  a raw `indexOf(',')` puts the token boundary inside the comment and authors chart text into it.
+- **A comment ends at its newline, not at the token end.** One comma token can hold chart content
+  on both sides of one (or several) comments, so `text.indexOf("||")` must not be treated as the
+  token's content end — doing so hides real notes and produces duplicates.
+
+If a fourth scanner appears, route it through `SimaiCommentScan` rather than re-deriving the rule.
+
 ## Update this file when
 
 - A behavior starts/stops being mirrored across two paths; a new serialized export field is added;

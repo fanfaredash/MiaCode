@@ -551,6 +551,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/core/chart/document/SimaiTimingMetadata.cpp
     src/core/chart/parser/SimaiNativeParser.h
     src/core/chart/parser/SimaiNativeParser.cpp
+    src/core/chart/parser/SimaiCommentScan.h
+    src/core/chart/parser/SimaiCommentScan.cpp
     src/timeline/TimelineData.h
     src/timeline/TimelineRenderData.h
     src/timeline/TimelineQuickModel.h
@@ -1373,6 +1375,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/BookmarkCommentSyntax.cpp
             src/editor/TouchPadAuthoringEdit.h
             src/editor/TouchPadAuthoringEdit.cpp
+            src/core/chart/parser/SimaiCommentScan.h
+            src/core/chart/parser/SimaiCommentScan.cpp
             src/editor/BracketCompletionPopup.h
             src/editor/BracketCompletionPopup.cpp
             src/editor/SimaiCompletionCatalog.h

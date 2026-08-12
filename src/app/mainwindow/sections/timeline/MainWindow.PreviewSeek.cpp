@@ -88,7 +88,7 @@ void MainWindow::TimelineSection::scheduleDeferredPreviewUiTail(
             if (refreshStageMediaDebugState) {
                 owner_.refreshPreviewStageMediaRouteDebugState(true);
             }
-            if (updatePausedPreviewFollowDecoration && state_.previewFollowEnabled_ && !state_.qtPreviewPlaying_) {
+            if (updatePausedPreviewFollowDecoration && !state_.qtPreviewPlaying_) {
                 updatePreviewFollowDecorationForTimelineBlueLine(objectStatsSecond, true);
             }
             if (updatePauseButton) {

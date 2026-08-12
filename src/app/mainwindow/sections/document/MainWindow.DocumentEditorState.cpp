@@ -171,13 +171,14 @@ void MainWindow::DocumentSection::recordChartSelectionTransformUndoEntry(
 }
 
 void MainWindow::DocumentSection::recordChartCursorUndoEntry(
-    const QTextCursor& originalCursor,
+    int originalAnchor,
+    int originalPosition,
     const QTextCursor& transformedCursor,
     double previewSecond)
 {
     recordChartSelectionTransformUndoEntry(
-        originalCursor.anchor(),
-        originalCursor.position(),
+        originalAnchor,
+        originalPosition,
         transformedCursor,
         previewSecond);
 }
@@ -450,6 +451,11 @@ void MainWindow::DocumentSection::setEditorText(const QString& text)
     editor->document()->setModified(false);
     state_.editorUndoSaveAnchor_ = editor->document()->availableUndoSteps();
     clearChartSelectionTransformUndoEntries();
+    // Loading a file / switching difficulty repoints every second at different
+    // text, so the last authoring click's playhead anchor no longer means
+    // anything here.
+    state_.touchPadAuthoringAnchorSeekSecond_ = -1.0;
+    state_.touchPadAuthoringAnchorTokenSecond_ = -1.0;
     // QSignalBlocker suppresses blockCountChanged, so force line-number gutter recompute.
     editor->refreshLineNumberAreaLayout();
     state_.suppressTextDirtyTracking_ = previousSuppress;

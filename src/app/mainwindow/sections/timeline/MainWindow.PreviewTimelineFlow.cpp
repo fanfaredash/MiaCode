@@ -870,15 +870,18 @@ void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
     }
     invalidatePreviewFollowBindingCache();
     owner_.savePortableState();
-    if (!enabled) {
+    if (!hasActiveDifficulty()) {
         owner_.clearPreviewFollowDecoration();
         return;
     }
-    if (!hasActiveDifficulty()) {
-        return;
-    }
+    // Turning the option off stops the caret/viewport follow, not the highlight:
+    // it stays as the on-screen cue for where the playhead is (and as the target
+    // touch-pad click authoring writes to). Refresh it either way.
     const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
-    syncEditorCursorToPreviewSecond(second, state_.qtPreviewPlaying_ && state_.previewViewportLockEnabled_, !state_.qtPreviewPlaying_);
+    syncEditorCursorToPreviewSecond(
+        second,
+        enabled && state_.qtPreviewPlaying_ && state_.previewViewportLockEnabled_,
+        !state_.qtPreviewPlaying_);
 }
 
 void MainWindow::TimelineSection::onTimelineViewportLockToggled(bool enabled)
@@ -1532,6 +1535,16 @@ void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& 
 double MainWindow::timelineSecondForCursor(int line, int col) const
 {
     return timelineSection_->timelineSecondForCursor(line, col);
+}
+
+bool MainWindow::previewFollowTokenPosition(int* position) const
+{
+    return timelineSection_->previewFollowTokenPosition(position);
+}
+
+void MainWindow::setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond)
+{
+    timelineSection_->setTouchPadAuthoringAnchor(seekSecond, tokenSecond);
 }
 
 bool MainWindow::resolveTimelineSecondForCursor(int line, int col, double* second) const

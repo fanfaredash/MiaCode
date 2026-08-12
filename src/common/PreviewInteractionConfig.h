@@ -2,6 +2,21 @@
 
 namespace miacode::preview_interaction {
 
+// Touch-pad click authoring parks the playhead this far BEFORE the token it
+// wrote to, so the authored touch is still on screen instead of already being
+// judged. It is a viewing convention, not a timing correction.
+//
+// Consequence to keep in mind: the preview-follow binding that owns
+// `tokenSecond - kTouchPadAuthoringPreviewLeadSeconds` is the PRECEDING token's,
+// for any lead greater than the timeline's 1e-6 resolution — shrinking this
+// value does not change which token the playhead resolves to, it only shrinks
+// the visual offset. `touchPadAuthoringAnchoredSecond()` is what maps the parked
+// playhead back to the token that was authored.
+inline constexpr double kTouchPadAuthoringPreviewLeadSeconds = 1.0 / 60.0;
+// How close the playhead has to be to a recorded authoring seek to still count
+// as "parked where that click left it".
+inline constexpr double kTouchPadAuthoringAnchorToleranceSeconds = 1e-6;
+
 inline constexpr double kSeekStepFrameRate = 120.0;
 inline constexpr double kSeekSingleStepSeconds = 1.0 / kSeekStepFrameRate;
 inline constexpr double kSeekHoldAccelerationPerSecond = 1.0;

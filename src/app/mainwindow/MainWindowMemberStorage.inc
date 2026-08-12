@@ -587,6 +587,16 @@
         bool previewForceLabeledJudgeLineWhenPaused_ = true;
         bool previewTouchPadAuthoringShortcutEnabled_ = true;
         bool touchPadAuthoringCtrlHoldActive_ = false;
+        // Transient (not persisted): what the last touch-pad authoring click
+        // meant by where it parked the playhead. The seek lands
+        // kTouchPadAuthoringPreviewLeadSeconds BEFORE the authored token so the
+        // touch stays visible, which by itself would put the follow highlight —
+        // and therefore the next click — on the PRECEDING token. While the
+        // playhead is still sitting at `...SeekSecond_`, both the highlight and
+        // the next click resolve `...TokenSecond_` instead. Any other seek moves
+        // the playhead off the anchor and the pair stops applying.
+        double touchPadAuthoringAnchorSeekSecond_ = -1.0;
+        double touchPadAuthoringAnchorTokenSecond_ = -1.0;
         // Transient (not persisted): true only while the export-preview dialog
         // drives the on-screen preview. When set, the pause-hide option
         // ("暂停时显示判定区") is ignored so PV/BG renders exactly as it will in the

@@ -93,6 +93,13 @@ public:
         double second,
         bool centerView = true,
         bool ensureVisibleWhenPaused = false);
+    // See MainWindowMemberStorage.inc `touchPadAuthoringAnchor*`: maps a playhead
+    // parked by a touch-authoring seek back to the token that click wrote to.
+    double touchPadAuthoringAnchoredSecond(double previewSecond) const;
+    void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
+    // Document offset inside the comma token the playhead is on — the same token
+    // the preview-follow highlight is drawn over.
+    bool previewFollowTokenPosition(int* position) const;
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void updatePreviewSliderRange();

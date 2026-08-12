@@ -316,6 +316,30 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Slow refresh workers: `src/timeline/TimelineSlowRefresh.{h,cpp}`.
 - Timing getters: same `PreviewTimelineFlow.cpp` (`currentTimingMetadata`, `parsedFirstSeconds`,
   `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`).
+- **Preview-follow while PAUSED updates the DECORATION ONLY** — `syncEditorCursorToPreviewSecond`
+  (`MainWindow.TimelinePreviewFollowSync.cpp:217`) returns after `setPreviewFollowDecoration`; the
+  real `QTextCursor` is moved (`applyPreviewFollowCursor`) only while playing. An earlier attempt to
+  move it while paused was reverted because it clobbered drag selections (see the note at
+  `MainWindow.WindowInteraction.cpp:1450`). So the text caret and the playhead legitimately diverge
+  after any paused seek — anything that needs "the token the playhead is on" must read
+  `MainWindow::previewFollowDecorationPosition()`, not `editor->textCursor()`.
+
+### 5b. Touch-pad click authoring (Ctrl/Cmd + click the preview)
+
+- Setting `preview.touch_pad_authoring_shortcut` (启用touch点击输入); Ctrl-hold gate in
+  `MainWindow.WindowInteraction.cpp:958` → `setTouchPadAuthoringCtrlHoldActive` →
+  `PreviewRuntime::setTouchPadAuthoringEnabled`.
+- Hit test + press/release gesture: `PreviewQuickSceneRoot::mousePressEvent/mouseReleaseEvent`
+  (`touchPadAtItemPoint` → `touchPadTokenAtLogicalPoint`), state machine in
+  `core/scene/TouchPadAuthoringState.h`, signal `PreviewRuntime::touchPadAuthoringClicked`.
+- Click handler: `MainWindow.FrameBootstrap.cpp:1326`. Target token = the preview-follow
+  decoration when the editor is unfocused, else the text caret; text edit planned by
+  `planTouchPadAuthoringEdit` (`src/editor/TouchPadAuthoringEdit.cpp`); undo entry recorded with
+  **pre-edit int offsets** (`recordChartCursorUndoEntry`); preview then seeks to
+  `tokenSecond - 1/60` (a deliberate convention, not a bug).
+- Token boundaries come from `src/core/chart/parser/SimaiCommentScan.*` so `||` comments are
+  skipped exactly as the two parsers skip them — see `cross-chain-linkage.md` §15.
+- Spec: `plain_code_editor_spec` (`src/tools/editor/PlainCodeEditorSpec.cpp`).
 
 ## 6. Preview video, media, render state
 

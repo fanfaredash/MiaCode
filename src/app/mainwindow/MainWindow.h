@@ -463,6 +463,8 @@ private:
     void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
     void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    bool previewFollowTokenPosition(int* position) const;
+    void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
     double timelineSecondForCursor(int line, int col) const;
     bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
     void jumpToLocation(int line, int col);

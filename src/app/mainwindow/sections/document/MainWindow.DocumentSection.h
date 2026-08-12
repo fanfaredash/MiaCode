@@ -68,8 +68,13 @@ public:
     bool undoDeletedDifficultyField();
     void clearChartSelectionTransformUndoEntries();
     void syncChartSelectionTransformUndoState();
+    // `originalAnchor`/`originalPosition` are PRE-EDIT offsets and must be read
+    // as ints before the document is touched: a live QTextCursor is adjusted by
+    // the very edit being recorded, so reading .position() off one afterwards
+    // hands undo an offset shifted by the inserted/removed length.
     void recordChartCursorUndoEntry(
-        const QTextCursor& originalCursor,
+        int originalAnchor,
+        int originalPosition,
         const QTextCursor& transformedCursor,
         double previewSecond);
     void recordChartSelectionUndoRestoreAfterNextEdit(int originalAnchor, int originalPosition);
