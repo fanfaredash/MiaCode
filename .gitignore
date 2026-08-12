@@ -115,6 +115,7 @@ scripts/build/*
 !scripts/build/build-win.ps1
 !scripts/build/package-mac.sh
 !scripts/build/package-win.ps1
+!scripts/build/test-package-mac-contract.sh
 !scripts/build/thin-macos-app.sh
 !scripts/debug/
 scripts/debug/*
@@ -126,6 +127,7 @@ scripts/debug/*
 !scripts/ffmpeg/
 scripts/ffmpeg/*
 !scripts/ffmpeg/ensure-macos-ffmpeg.sh
+!scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh
 !scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1
 !scripts/ffmpeg/ensure-windows-ffmpeg.ps1
 !scripts/ffmpeg/trim/

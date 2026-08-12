@@ -837,7 +837,8 @@ add_custom_command(TARGET MiaCode POST_BUILD
 # MIT-licensed source vendored under third_party/QtAVPlayer, compiled straight
 # into MiaCode. It links external FFmpeg shared libraries whose dev SDK
 # (headers + libraries) is supplied through MIACODE_FFMPEG_DEV_DIR. Windows
-# uses the provisioned n7.1 LGPL SDK; macOS accepts a compatible shared SDK.
+# uses the provisioned n7.1 LGPL SDK; macOS uses the project-provisioned 6.1.2
+# SDK (`scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`).
 #
 # Windows and macOS use QtAVPlayer. Windows selects D3D11VA where available;
 # macOS selects the vendored VideoToolbox/Metal hwdevice. Other platforms keep
@@ -854,10 +855,22 @@ if (WIN32 OR APPLE)
     set(MIACODE_FFMPEG_DEV_DIR "${MIACODE_FFMPEG_DEV_DIR_DEFAULT}"
         CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/) for the QtAVPlayer preview backend")
     if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
+        if (APPLE)
+            set(MIACODE_FFMPEG_PROVISION_COMMAND
+                "bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh")
+        else()
+            set(MIACODE_FFMPEG_PROVISION_COMMAND
+                "scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1")
+        endif()
         message(FATAL_ERROR
             "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
-            "Provision the platform FFmpeg dev SDK, or pass "
+            "Run '${MIACODE_FFMPEG_PROVISION_COMMAND}', or pass "
             "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/>.")
+    endif()
+    if (APPLE AND MIACODE_FFMPEG_DEV_DIR MATCHES "^/(opt/homebrew|usr/local)/")
+        message(FATAL_ERROR
+            "macOS release builds must use the project-provisioned FFmpeg SDK, not Homebrew: "
+            "${MIACODE_FFMPEG_DEV_DIR}. Run bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh.")
     endif()
 
     # find_library() in QtAVPlayer.cmake resolves the FFmpeg import libs from
@@ -871,6 +884,17 @@ if (WIN32 OR APPLE)
     # QtAVPlayer skips finding/linking it and qavdemuxer compiles out its lone
     # avdevice_register_all() call.
     set(QT_AVPLAYER_NO_AVDEVICE ON)
+    if (APPLE)
+        # QtAVPlayer.cmake uses find_library(). These cache entries otherwise
+        # survive an SDK change and can keep linking an old Homebrew path even
+        # though CMAKE_PREFIX_PATH now starts with the project-local SDK.
+        foreach(MIACODE_QTAVPLAYER_FFMPEG_LIBRARY
+                AVFILTER_LIBRARY AVCODEC_LIBRARY AVFORMAT_LIBRARY AVUTIL_LIBRARY
+                SWRESAMPLE_LIBRARY SWSCALE_LIBRARY)
+            unset(${MIACODE_QTAVPLAYER_FFMPEG_LIBRARY} CACHE)
+            unset(${MIACODE_QTAVPLAYER_FFMPEG_LIBRARY})
+        endforeach()
+    endif()
     # Sets QtAVPlayer_SOURCES / QtAVPlayer_LIBS (absolute import-lib paths via
     # find_library) and globally defines QT_BUILD_QTAVPLAYER_LIB.
     include("${QT_AVPLAYER_DIR}/QtAVPlayer.cmake")
@@ -911,11 +935,36 @@ if (WIN32 OR APPLE)
             VERBATIM
         )
     else()
-        # Homebrew and other macOS FFmpeg SDKs commonly use absolute dylib
-        # install names. Keep the SDK library directory on the development
-        # RPATH; the release packager will bundle and rewrite these dylibs.
+        # The project-local macOS SDK has @rpath install names. Make the local
+        # app bundle runnable too, then let the release packager stage the
+        # same six dylibs in its final Frameworks directory.
+        set(MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARIES
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavcodec.60.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavfilter.9.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavformat.60.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavutil.58.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libswresample.4.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libswscale.7.dylib"
+        )
+        foreach(MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARY IN LISTS MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARIES)
+            if (NOT EXISTS "${MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARY}")
+                message(FATAL_ERROR
+                    "macOS FFmpeg SDK is missing required runtime library: "
+                    "${MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARY}")
+            endif()
+        endforeach()
         set_property(TARGET MiaCode APPEND PROPERTY BUILD_RPATH
-            "${MIACODE_FFMPEG_DEV_DIR}/lib")
+            "@executable_path/../Frameworks")
+        set_property(TARGET MiaCode APPEND PROPERTY INSTALL_RPATH
+            "@executable_path/../Frameworks")
+        add_custom_command(TARGET MiaCode POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:MiaCode>/../Frameworks"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARIES}
+                "$<TARGET_FILE_DIR:MiaCode>/../Frameworks"
+            VERBATIM
+        )
     endif()
 endif()
 
