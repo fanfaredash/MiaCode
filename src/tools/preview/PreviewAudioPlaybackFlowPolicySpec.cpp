@@ -332,8 +332,9 @@ bool verifyManualPauseCompletionRequiresItsImmutableIdentity(QTextStream& err)
                      && pending.pendingManualPauseSequence == 1801,
                  "manual pause freezes the visual second before the worker completion", err);
     ok &= expect(!stale.matchesPending && stale.state.currentGeneration == 80
-                     && stale.state.visualSecond == 14.0,
-                 "stale manual pause completion is diagnostic-only without a generation change", err);
+                     && stale.state.visualSecond == 14.0
+                     && stale.rejectionReason == PauseCompletionRejection::GenerationMismatch,
+                 "stale manual pause completion names its generation mismatch", err);
     ok &= expect(accepted.matchesPending && accepted.commitsRetainedState
                      && accepted.state.pendingManualPauseSequence == 0
                      && accepted.state.visualSecond == 14.0
@@ -342,6 +343,23 @@ bool verifyManualPauseCompletionRequiresItsImmutableIdentity(QTextStream& err)
                      && accepted.state.retainedBgmState == 1,
                  "matching manual pause completion commits retained state without replacing its wall second", err);
     return ok;
+}
+
+bool verifySupersededManualPauseNamesMissingPendingRequest(QTextStream& err)
+{
+    PauseState pending = beginManualPause(
+        PauseState{},
+        PauseRequest{PauseKind::Manual, 82, 812, 1812, 0, 0, 16.0});
+    pending.pendingManualPauseGeneration = 0;
+    pending.pendingManualPauseTransactionId = 0;
+    pending.pendingManualPauseSequence = 0;
+    const PauseDecision late = decidePauseCompletion(
+        pending,
+        PauseCompletion{PauseKind::Manual, 82, 812, 1812, 0, 0, 16.25, 1, 1, true, false});
+
+    return expect(!late.matchesPending
+                      && late.rejectionReason == PauseCompletionRejection::NoPendingRequest,
+                  "a completion after UI supersession names the missing pending request", err);
 }
 
 bool verifyNewerGenerationSupersedesManualPauseCompletion(QTextStream& err)
@@ -423,6 +441,7 @@ int main()
     ok &= verifyFailedOrDegradedPrepareLeavesUiPaused(err);
     ok &= verifyPendingInitializersPreserveWorkerSecond(err);
     ok &= verifyManualPauseCompletionRequiresItsImmutableIdentity(err);
+    ok &= verifySupersededManualPauseNamesMissingPendingRequest(err);
     ok &= verifyNewerGenerationSupersedesManualPauseCompletion(err);
     ok &= verifyDevicePauseTokenCoalescesAndPlaySupersedesIt(err);
     if (ok) {

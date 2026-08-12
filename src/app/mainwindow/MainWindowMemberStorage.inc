@@ -435,6 +435,10 @@
         bool qtPreviewVisualClockInitialized_ = false;
         qint64 qtPreviewVisualClockDiagLastLogMs_ = -1;
         bool previewScrubDragging_ = false;
+        quint64 previewScrubInteractionId_ = 0;
+        int previewScrubMoveCount_ = 0;
+        int previewScrubStartSliderValue_ = 0;
+        int previewScrubLastSliderValue_ = 0;
         bool suppressTimelineCursorSync_ = false;
         bool suppressTextDirtyTracking_ = false;
         bool deferredEditorUiUpdatePending_ = false;
@@ -939,6 +943,10 @@
     bool& qtPreviewVisualClockInitialized_ = state_.qtPreviewVisualClockInitialized_;
     qint64& qtPreviewVisualClockDiagLastLogMs_ = state_.qtPreviewVisualClockDiagLastLogMs_;
     bool& previewScrubDragging_ = state_.previewScrubDragging_;
+    quint64& previewScrubInteractionId_ = state_.previewScrubInteractionId_;
+    int& previewScrubMoveCount_ = state_.previewScrubMoveCount_;
+    int& previewScrubStartSliderValue_ = state_.previewScrubStartSliderValue_;
+    int& previewScrubLastSliderValue_ = state_.previewScrubLastSliderValue_;
     bool& suppressTimelineCursorSync_ = state_.suppressTimelineCursorSync_;
     bool& suppressTextDirtyTracking_ = state_.suppressTextDirtyTracking_;
     bool& deferredEditorUiUpdatePending_ = state_.deferredEditorUiUpdatePending_;

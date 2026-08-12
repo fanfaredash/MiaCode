@@ -167,7 +167,7 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
         return;
     }
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        cancelPreviewStartupSync();
+        cancelPreviewStartupSync("seek_preview_to_second");
     }
     // G1 Commit 8 followup: bass_clock_seek per §7.2 — paused-anchor branch
     // (also covers the post-cancel startup-pending case).
@@ -209,7 +209,7 @@ void MainWindow::TimelineSection::seekPreviewDiscreteToSecond(double second, boo
                 .arg(state_.previewPlaybackRate_, 0, 'f', 3));
     }
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        cancelPreviewStartupSync();
+        cancelPreviewStartupSync("seek_preview_discrete_to_second");
     } else if (state_.qtPreviewPlaying_) {
         pauseQtPreviewPlaybackForReanchor();
     }
@@ -472,7 +472,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     // other. resetCursor does not touch the retained transaction, so this is safe
     // on resume.
     owner_.applyPreviewAudioSettingsToRuntime();
-    cancelPreviewStartupSync();
+    cancelPreviewStartupSync("start_qt_preview_playback");
     clearPreviewPlayingRetainedSeek();
     const double startupWorkerSecond = state_.previewSfxRuntime_ != nullptr
         ? state_.previewSfxRuntime_->authoritativePlaybackSecond()
@@ -622,7 +622,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
                 .arg(audioSubmission.identity.sequence)
                 .arg(retainedStartup ? 1 : 0)
                 .arg(static_cast<int>(audioSubmission.post.error)));
-        cancelPreviewStartupSync();
+        cancelPreviewStartupSync("audio_submission_rejected");
         return false;
     }
 
@@ -715,7 +715,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
             state_.qtPreviewPauseSecond_, owner_.currentPreviewAuthoritativeAudioClockSecond(), state_.qtPreviewPlaying_, "stop_qt_preview_playback");
         pauseSecondCaptured = true;
     }
-    cancelPreviewStartupSync();
+    cancelPreviewStartupSync("stop_qt_preview_playback");
     clearPreviewPlayingRetainedSeek();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();

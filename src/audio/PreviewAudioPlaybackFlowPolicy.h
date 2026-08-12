@@ -109,10 +109,42 @@ struct PauseState {
     int retainedBgmState = 0;
 };
 
+// A rejected completion must explain which immutable part of the GUI-side
+// request identity no longer matches. This is diagnostic state only: it never
+// changes the acceptance rules below.
+enum class PauseCompletionRejection {
+    None,
+    NoPendingRequest,
+    GenerationMismatch,
+    TransactionMismatch,
+    SequenceMismatch,
+    PauseTokenMismatch,
+};
+
+inline const char* pauseCompletionRejectionLabel(PauseCompletionRejection rejection)
+{
+    switch (rejection) {
+    case PauseCompletionRejection::None:
+        return "none";
+    case PauseCompletionRejection::NoPendingRequest:
+        return "no_pending_request";
+    case PauseCompletionRejection::GenerationMismatch:
+        return "generation_mismatch";
+    case PauseCompletionRejection::TransactionMismatch:
+        return "transaction_mismatch";
+    case PauseCompletionRejection::SequenceMismatch:
+        return "sequence_mismatch";
+    case PauseCompletionRejection::PauseTokenMismatch:
+        return "pause_token_mismatch";
+    }
+    return "unknown";
+}
+
 struct PauseDecision {
     PauseState state;
     bool matchesPending = false;
     bool commitsRetainedState = false;
+    PauseCompletionRejection rejectionReason = PauseCompletionRejection::None;
 };
 
 inline PauseState beginManualPause(PauseState state, const PauseRequest& request)
@@ -160,14 +192,24 @@ inline PauseDecision decidePauseCompletion(PauseState state, const PauseCompleti
     PauseDecision decision;
     decision.state = state;
     if (completion.kind == PauseKind::Manual) {
-        decision.matchesPending = state.pendingManualPauseSequence != 0
-            && completion.generation == state.currentGeneration
-            && completion.generation == state.pendingManualPauseGeneration
-            && completion.transactionId == state.pendingManualPauseTransactionId
-            && completion.sequence == state.pendingManualPauseSequence;
-        if (!decision.matchesPending) {
+        if (state.pendingManualPauseSequence == 0) {
+            decision.rejectionReason = PauseCompletionRejection::NoPendingRequest;
             return decision;
         }
+        if (completion.generation != state.currentGeneration
+            || completion.generation != state.pendingManualPauseGeneration) {
+            decision.rejectionReason = PauseCompletionRejection::GenerationMismatch;
+            return decision;
+        }
+        if (completion.transactionId != state.pendingManualPauseTransactionId) {
+            decision.rejectionReason = PauseCompletionRejection::TransactionMismatch;
+            return decision;
+        }
+        if (completion.sequence != state.pendingManualPauseSequence) {
+            decision.rejectionReason = PauseCompletionRejection::SequenceMismatch;
+            return decision;
+        }
+        decision.matchesPending = true;
         decision.state.pendingManualPauseGeneration = 0;
         decision.state.pendingManualPauseTransactionId = 0;
         decision.state.pendingManualPauseSequence = 0;
@@ -180,11 +222,27 @@ inline PauseDecision decidePauseCompletion(PauseState state, const PauseCompleti
         return decision;
     }
 
-    decision.matchesPending = state.pendingDevicePauseToken != 0
-        && completion.generation == state.pendingDevicePauseGeneration
-        && completion.transactionId == state.pendingDevicePauseTransactionId
-        && completion.sequence == state.pendingDevicePauseSequence
-        && completion.pauseToken == state.pendingDevicePauseToken;
+    if (state.pendingDevicePauseToken == 0) {
+        decision.rejectionReason = PauseCompletionRejection::NoPendingRequest;
+        return decision;
+    }
+    if (completion.generation != state.pendingDevicePauseGeneration) {
+        decision.rejectionReason = PauseCompletionRejection::GenerationMismatch;
+        return decision;
+    }
+    if (completion.transactionId != state.pendingDevicePauseTransactionId) {
+        decision.rejectionReason = PauseCompletionRejection::TransactionMismatch;
+        return decision;
+    }
+    if (completion.sequence != state.pendingDevicePauseSequence) {
+        decision.rejectionReason = PauseCompletionRejection::SequenceMismatch;
+        return decision;
+    }
+    if (completion.pauseToken != state.pendingDevicePauseToken) {
+        decision.rejectionReason = PauseCompletionRejection::PauseTokenMismatch;
+        return decision;
+    }
+    decision.matchesPending = true;
     if (decision.matchesPending) {
         decision.state.pendingDevicePauseGeneration = 0;
         decision.state.pendingDevicePauseTransactionId = 0;

@@ -246,7 +246,7 @@ private:
     void invalidatePreviewFollowBindingCache();
     bool cachedPreviewFollowBindingContainsSecond(double second) const;
     void cachePreviewFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding);
-    void cancelPreviewStartupSync();
+    void cancelPreviewStartupSync(const char* cause);
     void clearPreviewPlayingRetainedSeek();
     void tryCommitPreviewStartupSync();
     void handlePreviewAudioStartupCompletion(
