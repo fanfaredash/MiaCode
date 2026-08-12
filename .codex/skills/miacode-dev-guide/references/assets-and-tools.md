@@ -210,9 +210,18 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - macOS build/package:
   - `scripts/build/build-macos.sh`
   - `scripts/build/package-mac.sh`
-  - the QtAVPlayer preview backend uses VideoToolbox/Metal and needs an FFmpeg dev SDK. The package
-    script accepts `MIACODE_FFMPEG_DEV_DIR` or resolves Homebrew `ffmpeg@6`/`ffmpeg`, then copies the
-    non-system dylib closure into `MiaCode.app/Contents/Frameworks` and rewrites it to `@rpath`.
+  - the QtAVPlayer preview backend uses VideoToolbox/Metal and the project-provisioned FFmpeg 6.1.2
+    SDK at `third_party/ffmpeg/macos/dev/`. Create it with
+    `bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`; it is ignored rather than committed, contains
+    only arm64/macOS-13 `libavcodec.60`, `libavfilter.9`, `libavformat.60`, `libavutil.58`,
+    `libswresample.4`, and `libswscale.7`, and has `@rpath` install names. Packaging never discovers
+    or copies a system package-manager closure; it stages exactly those six dylibs and rejects an
+    external absolute dylib path or a loader path that escapes the app bundle.
+  - macOS release packages retain Qt Multimedia's native `libdarwinmediaplugin.dylib` for frame and
+    device APIs, but remove its unused Qt FFmpeg 7 backend and corresponding `libav*.61` runtime
+    libraries; Qt 6.10.2's plugin uses five such libraries (`avcodec`, `avformat`, `avutil`,
+    `swresample`, `swscale`) and not `avfilter`. Preview video decoding uses the QtAVPlayer FFmpeg 6
+    path.
   - `scripts/build/thin-macos-app.sh` removes the unused CPU slice from every bundled Mach-O for explicitly single-architecture `arm64` or `x86_64` packages; packaging runs it after `macdeployqt`, hard-fails when any Mach-O lacks the target architecture, and re-signs only after thinning
   - set `MIACODE_THIN_MACOS_APP=OFF` only when producing a same-build universal-Qt comparison package for size or A/B verification
   - `scripts/build/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, `qtshadertools`, and `qtsvg`

@@ -53,12 +53,12 @@ third_party/ffmpeg/windows/dev/
   the FFmpeg already shipped; no new exposure. `avfilter` is a net-new DLL (`avdevice` is dropped,
   see below).
 
-On macOS the same QtAVPlayer source uses VideoToolbox/Metal hardware decode. CMake accepts
-`MIACODE_FFMPEG_DEV_DIR=<SDK root>` (the optional repo-local default is `macos/dev/`); the
-standard package script otherwise resolves Homebrew `ffmpeg@6`, then `ffmpeg`. The macOS package
-copies the SDK's complete non-system dylib closure into `MiaCode.app/Contents/Frameworks` and
-rewrites absolute install names to `@rpath`, so the resulting app must not retain `/opt/homebrew`
-or another build-machine dylib reference.
+On macOS the same QtAVPlayer source uses VideoToolbox/Metal hardware decode. Run
+`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` to build the pinned FFmpeg 6.1.2 LGPL shared SDK
+under `macos/dev/` (ignored, never committed). It contains only the six QtAVPlayer runtime dylibs
+and has `@rpath` install names, arm64 architecture, and a macOS 13 deployment target. CMake and
+the package script use this repo-local SDK by default; macOS packaging never falls back to
+Homebrew and rejects build-machine dylib references.
 
 ### Size trimming
 

@@ -44,12 +44,11 @@ Mach-O contains only the target architecture before re-signing. Set
 `MIACODE_THIN_MACOS_APP=OFF` to produce a comparison package that keeps Qt's
 universal binaries.
 
-The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK.
-`package-mac.sh` uses `MIACODE_FFMPEG_DEV_DIR` when set, otherwise discovers
-Homebrew `ffmpeg@6` (falling back to `ffmpeg`). It copies the non-system FFmpeg
-dylib closure into `MiaCode.app/Contents/Frameworks` and rewrites it to the
-bundle's `@rpath`, so a release package does not depend on the build machine's
-Homebrew paths.
+The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK. Run
+`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` once to create the pinned,
+repo-local FFmpeg 6 SDK under `third_party/ffmpeg/macos/dev/`. `package-mac.sh`
+uses that SDK (or an explicit compatible `MIACODE_FFMPEG_DEV_DIR`) and stages
+only its six required dylibs; it does not discover or copy Homebrew.
 
 ## Other Scripts
 
@@ -57,6 +56,7 @@ Homebrew paths.
 - `debug/Start_MiaCode_Debug.command`: the macOS debug launcher at the release package root; double-click it to launch `MiaCode.app` with `--debug` and write logs to the package-root `logs/` directory.
 - `debug/Start_MiaCode_SoftwareVideoDecode.bat`, `debug/Start_MiaCode_QtPluginDiag.bat`: public support diagnostics; not shipped in the Windows release package.
 - `ffmpeg/ensure-windows-ffmpeg.ps1`, `ffmpeg/ensure-macos-ffmpeg.sh`: provision the standalone export `ffmpeg`.
+- `ffmpeg/ensure-macos-ffmpeg-dev.sh`: builds the pinned macOS FFmpeg 6 SDK for QtAVPlayer preview decode.
 - `ffmpeg/ensure-windows-ffmpeg-dev.ps1`: provisions the Windows QtAVPlayer preview-decode dev SDK.
 - `ffmpeg/trim/`: builds a trimmed Windows decode-only FFmpeg dev SDK.
 - `assets/subset_hud_font.py`: generates the HUD font subset; see `assets/README_font_subset.md`.

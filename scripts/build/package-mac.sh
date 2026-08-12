@@ -47,6 +47,10 @@ parse_version() {
   echo "$version"
 }
 
+package_step() {
+  printf '\n==> [package] %s\n' "$*"
+}
+
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
 MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-${MACOS_PACKAGE_SUFFIX}}"
@@ -111,53 +115,52 @@ validate_minos() {
 }
 
 resolve_macos_ffmpeg_dev_dir() {
-  local formula candidate
-  if [[ -n "$MIACODE_FFMPEG_DEV_DIR" ]]; then
-    if [[ -d "$MIACODE_FFMPEG_DEV_DIR/include/libavcodec" && -d "$MIACODE_FFMPEG_DEV_DIR/lib" ]]; then
-      return
-    fi
-    echo "MIACODE_FFMPEG_DEV_DIR is not an FFmpeg development SDK: $MIACODE_FFMPEG_DEV_DIR" >&2
+  local library
+  local -a required_libraries=(
+    "libavcodec.60.dylib"
+    "libavfilter.9.dylib"
+    "libavformat.60.dylib"
+    "libavutil.58.dylib"
+    "libswresample.4.dylib"
+    "libswscale.7.dylib"
+  )
+
+  if [[ -z "$MIACODE_FFMPEG_DEV_DIR" ]]; then
+    MIACODE_FFMPEG_DEV_DIR="$ROOT_DIR/third_party/ffmpeg/macos/dev"
+  fi
+  if [[ "$MIACODE_FFMPEG_DEV_DIR" == /opt/homebrew/* || "$MIACODE_FFMPEG_DEV_DIR" == /usr/local/* ]]; then
+    echo "macOS packaging requires the project-provisioned FFmpeg SDK, not a system package manager: $MIACODE_FFMPEG_DEV_DIR" >&2
     exit 1
   fi
-
-  if command -v brew >/dev/null 2>&1; then
-    # ffmpeg@6 is the validated development SDK; current ffmpeg is accepted
-    # when it is the only installed Homebrew formula.
-    for formula in ffmpeg@6 ffmpeg; do
-      candidate="$(brew --prefix "$formula" 2>/dev/null || true)"
-      if [[ -d "$candidate/include/libavcodec" && -d "$candidate/lib" ]]; then
-        MIACODE_FFMPEG_DEV_DIR="$candidate"
-        return
-      fi
-    done
+  if [[ ! -d "$MIACODE_FFMPEG_DEV_DIR/include/libavcodec" || ! -d "$MIACODE_FFMPEG_DEV_DIR/lib" ]]; then
+    echo "Missing macOS FFmpeg development SDK: $MIACODE_FFMPEG_DEV_DIR" >&2
+    echo "Run: bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh" >&2
+    exit 1
   fi
-
-  echo "Missing macOS FFmpeg development SDK for the QtAVPlayer preview backend." >&2
-  echo "Install Homebrew ffmpeg@6, or set MIACODE_FFMPEG_DEV_DIR to a root containing include/ and lib/." >&2
-  exit 1
-}
-
-array_contains() {
-  local needle="$1"
-  shift
-  local item
-  for item in "$@"; do
-    if [[ "$item" == "$needle" ]]; then
-      return 0
+  for library in "${required_libraries[@]}"; do
+    if [[ ! -f "$MIACODE_FFMPEG_DEV_DIR/lib/$library" ]]; then
+      echo "macOS FFmpeg SDK is missing required library: $MIACODE_FFMPEG_DEV_DIR/lib/$library" >&2
+      exit 1
     fi
   done
-  return 1
+}
+
+mach_o_install_name() {
+  local binary_path="$1"
+  otool -D "$binary_path" 2>/dev/null | awk 'NR == 2 { print; exit }'
 }
 
 mach_o_dependencies() {
   local binary_path="$1"
+  local install_name
+  install_name="$(mach_o_install_name "$binary_path")"
   otool -L "$binary_path" 2>/dev/null | awk '
     NR > 1 {
       sub(/^[[:space:]]*/, "")
       sub(/ \(compatibility version.*$/, "")
       print
     }
-  '
+  ' | awk -v install_name="$install_name" '$0 != install_name'
 }
 
 mach_o_rpaths() {
@@ -174,6 +177,16 @@ mach_o_rpaths() {
   '
 }
 
+mach_o_files() {
+  local app_path="$1"
+
+  # Scanning every packaged asset with otool makes Qt deployment look hung: a
+  # QML-heavy bundle contains thousands of non-Mach-O files. Every dylib and
+  # every executable bit is a possible dependency carrier, which covers the
+  # app executable, framework binaries, plugins, helpers, and extensions.
+  find "$app_path/Contents" -type f \( -name '*.dylib' -o -name '*.so' -o -perm -111 \) -print0
+}
+
 is_external_dylib() {
   local dependency="$1"
   case "$dependency" in
@@ -184,136 +197,136 @@ is_external_dylib() {
   [[ "$dependency" == *.dylib ]]
 }
 
-# A relocatable SDK can use @rpath install names instead of Homebrew's usual
-# absolute paths. Resolve only names provided by the selected FFmpeg SDK; Qt
-# and BASS @rpath dependencies are already handled by macdeployqt/the bundle.
-resolve_ffmpeg_dylib_source() {
-  local dependency="$1"
-  local sdk_candidate
-  case "$dependency" in
-    @rpath/*.dylib)
-      sdk_candidate="$MIACODE_FFMPEG_DEV_DIR/lib/$(basename "$dependency")"
-      if [[ -f "$sdk_candidate" ]]; then
-        printf '%s\n' "$sdk_candidate"
-        return 0
-      fi
-      return 1
-      ;;
-  esac
-  if is_external_dylib "$dependency" && [[ -f "$dependency" ]]; then
-    printf '%s\n' "$dependency"
-    return 0
-  fi
-  return 1
-}
-
-# Homebrew FFmpeg dylibs encode absolute install names. Copy their complete
-# non-system dependency closure into the app and change every reference to the
-# app's Frameworks rpath before signing the bundle.
-bundle_ffmpeg_dylib_closure() {
+stage_macos_ffmpeg_runtime() {
   local app_path="$1"
-  local app_binary="$app_path/Contents/MacOS/MiaCode"
   local frameworks_dir="$app_path/Contents/Frameworks"
-  local dependency source_path destination library_name macho_path
-  local -a pending_dependencies=()
-  local -a scanned_dependencies=()
-  local -a rewrite_sources=()
-  local -a bundled_library_names=()
+  local app_binary="$app_path/Contents/MacOS/MiaCode"
+  local library source_path destination_path macho_path dependency dependency_base
+  local -a required_libraries=(
+    "libavcodec.60.dylib"
+    "libavfilter.9.dylib"
+    "libavformat.60.dylib"
+    "libavutil.58.dylib"
+    "libswresample.4.dylib"
+    "libswscale.7.dylib"
+  )
 
+  if [[ ! -d "$frameworks_dir" ]]; then
+    echo "Missing Frameworks directory while staging FFmpeg: $frameworks_dir" >&2
+    return 1
+  fi
   if [[ ! -f "$app_binary" ]]; then
-    echo "Missing MiaCode executable while bundling FFmpeg dylibs: $app_binary" >&2
-    exit 1
-  fi
-  mkdir -p "$frameworks_dir"
-
-  while IFS= read -r dependency; do
-    source_path="$(resolve_ffmpeg_dylib_source "$dependency" || true)"
-    if [[ -n "$source_path" ]]; then
-      pending_dependencies+=("$source_path")
-      if is_external_dylib "$dependency"; then
-        rewrite_sources+=("$dependency")
-      fi
-    elif is_external_dylib "$dependency"; then
-      echo "Missing external dylib required by FFmpeg preview decode: $dependency" >&2
-      exit 1
-    fi
-  done < <(mach_o_dependencies "$app_binary")
-  if [[ ${#pending_dependencies[@]} -eq 0 ]]; then
-    echo "MiaCode does not expose an external FFmpeg dylib dependency to bundle." >&2
-    exit 1
+    echo "Missing MiaCode executable while staging FFmpeg: $app_binary" >&2
+    return 1
   fi
 
-  while [[ ${#pending_dependencies[@]} -gt 0 ]]; do
-    dependency="${pending_dependencies[0]}"
-    pending_dependencies=("${pending_dependencies[@]:1}")
-    if array_contains "$dependency" "${scanned_dependencies[@]}"; then
-      continue
-    fi
-    scanned_dependencies+=("$dependency")
-    if [[ ! -f "$dependency" ]]; then
-      echo "Missing external dylib required by FFmpeg preview decode: $dependency" >&2
-      exit 1
-    fi
-
-    library_name="$(basename "$dependency")"
-    destination="$frameworks_dir/$library_name"
-    if [[ -e "$destination" ]]; then
-      if ! cmp -s "$dependency" "$destination"; then
-        echo "Dylib basename collision while bundling FFmpeg: $dependency and $destination" >&2
-        exit 1
-      fi
-    else
-      cp -L "$dependency" "$destination"
-    fi
-    if ! array_contains "$library_name" "${bundled_library_names[@]}"; then
-      bundled_library_names+=("$library_name")
-    fi
-
-    while IFS= read -r dependency; do
-      source_path="$(resolve_ffmpeg_dylib_source "$dependency" || true)"
-      if [[ -z "$source_path" ]]; then
-        if is_external_dylib "$dependency"; then
-          echo "Missing external dylib required by FFmpeg preview decode: $dependency" >&2
-          exit 1
-        fi
-        continue
-      fi
-      if is_external_dylib "$dependency" \
-          && ! array_contains "$dependency" "${rewrite_sources[@]}"; then
-        rewrite_sources+=("$dependency")
-      fi
-      if ! array_contains "$source_path" "${scanned_dependencies[@]}"; then
-        pending_dependencies+=("$source_path")
-      fi
-    done < <(mach_o_dependencies "$destination")
-  done
-
-  for library_name in "${bundled_library_names[@]}"; do
-    install_name_tool -id "@rpath/$library_name" "$frameworks_dir/$library_name"
+  for library in "${required_libraries[@]}"; do
+    source_path="$MIACODE_FFMPEG_DEV_DIR/lib/$library"
+    destination_path="$frameworks_dir/$library"
+    cp -L "$source_path" "$destination_path"
+    install_name_tool -id "@rpath/$library" "$destination_path"
   done
 
   while IFS= read -r -d '' macho_path; do
-    if ! otool -L "$macho_path" >/dev/null 2>&1; then
-      continue
-    fi
-    for dependency in "${rewrite_sources[@]}"; do
-      if mach_o_dependencies "$macho_path" | grep -Fqx "$dependency"; then
-        install_name_tool -change "$dependency" "@rpath/$(basename "$dependency")" "$macho_path"
-      fi
-    done
-  done < <(find "$app_path/Contents" -type f -print0)
+    while IFS= read -r dependency; do
+      dependency_base="$(basename "$dependency")"
+      for library in "${required_libraries[@]}"; do
+        if [[ "$dependency_base" == "$library" && "$dependency" != "@rpath/$library" ]]; then
+          install_name_tool -change "$dependency" "@rpath/$library" "$macho_path"
+        fi
+      done
+    done < <(mach_o_dependencies "$macho_path")
+  done < <(mach_o_files "$app_path")
+
+  if ! mach_o_rpaths "$app_binary" | grep -Fxq '@executable_path/../Frameworks'; then
+    install_name_tool -add_rpath '@executable_path/../Frameworks' "$app_binary"
+  fi
 }
 
-strip_ffmpeg_build_rpath() {
-  local app_path="$1"
-  local app_binary="$app_path/Contents/MacOS/MiaCode"
+strip_absolute_build_rpaths() {
+  local binary_path="$1"
   local rpath
 
   while IFS= read -r rpath; do
-    if [[ "$rpath" == "$MIACODE_FFMPEG_DEV_DIR/lib" ]]; then
-      install_name_tool -delete_rpath "$rpath" "$app_binary"
+    if [[ "$rpath" == /* ]]; then
+      install_name_tool -delete_rpath "$rpath" "$binary_path"
     fi
-  done < <(mach_o_rpaths "$app_binary")
+  done < <(mach_o_rpaths "$binary_path")
+}
+
+verify_loader_path_dependencies_stay_in_bundle() {
+  local app_path="$1"
+  local macho_path dependency loader_relative resolved_directory resolved_path
+  local verification_failed=0
+
+  while IFS= read -r -d '' macho_path; do
+    while IFS= read -r dependency; do
+      case "$dependency" in
+        @loader_path/*)
+          loader_relative="${dependency#@loader_path/}"
+          resolved_directory="$(cd "$(dirname "$macho_path")" && cd "$(dirname "$loader_relative")" 2>/dev/null && pwd)"
+          if [[ -z "$resolved_directory" ]]; then
+            echo "Unresolvable @loader_path dependency remains in $macho_path: $dependency" >&2
+            verification_failed=1
+            continue
+          fi
+          resolved_path="$resolved_directory/$(basename "$loader_relative")"
+          if [[ "$resolved_path" != "$app_path"/* || ! -f "$resolved_path" ]]; then
+            echo "@loader_path dependency escapes the app bundle in $macho_path: $dependency" >&2
+            verification_failed=1
+          fi
+          ;;
+      esac
+    done < <(mach_o_dependencies "$macho_path")
+  done < <(mach_o_files "$app_path")
+
+  return "$verification_failed"
+}
+
+remove_qt_ffmpeg_backend() {
+  local app_path="$1"
+  local plugin_path="$app_path/Contents/PlugIns/multimedia/libffmpegmediaplugin.dylib"
+  local frameworks_dir="$app_path/Contents/Frameworks"
+  local library macho_path dependencies
+  local referenced=0
+  local -a qt_ffmpeg_libraries=(
+    "libavcodec.61.dylib"
+    "libavfilter.10.dylib"
+    "libavformat.61.dylib"
+    "libavutil.59.dylib"
+    "libswresample.5.dylib"
+    "libswscale.8.dylib"
+  )
+
+  # macOS preview uses QtAVPlayer and FFmpeg 6. QVideoFrame, VideoOutput, and
+  # QMediaDevices still require Qt Multimedia, but not Qt's parallel FFmpeg 7
+  # backend. Keep libdarwinmediaplugin.dylib for the native device backend.
+  rm -f "$plugin_path"
+
+  while IFS= read -r -d '' macho_path; do
+    case "$macho_path" in
+      "$frameworks_dir"/libavcodec.61.dylib|"$frameworks_dir"/libavfilter.10.dylib|"$frameworks_dir"/libavformat.61.dylib|"$frameworks_dir"/libavutil.59.dylib|"$frameworks_dir"/libswresample.5.dylib|"$frameworks_dir"/libswscale.8.dylib)
+        # The Qt FFmpeg runtime libraries may reference one another, but are
+        # removed as one unit. Qt 6.10.2 does not stage avfilter.10; include
+        # it defensively so a future Qt deployment cannot reintroduce it.
+        continue
+        ;;
+    esac
+    dependencies="$(mach_o_dependencies "$macho_path")"
+    for library in "${qt_ffmpeg_libraries[@]}"; do
+      if printf '%s\n' "$dependencies" | grep -Fq "$library"; then
+        echo "Qt FFmpeg runtime remains referenced by $macho_path: $library" >&2
+        referenced=1
+      fi
+    done
+  done < <(mach_o_files "$app_path")
+  if (( referenced )); then
+    return 1
+  fi
+
+  for library in "${qt_ffmpeg_libraries[@]}"; do
+    rm -f "$frameworks_dir/$library"
+  done
 }
 
 verify_no_external_ffmpeg_dylib_references() {
@@ -332,14 +345,20 @@ verify_no_external_ffmpeg_dylib_references() {
         verification_failed=1
       fi
     done < <(mach_o_dependencies "$macho_path")
-  done < <(find "$app_path/Contents" -type f -print0)
+  done < <(mach_o_files "$app_path")
+
+  verify_loader_path_dependencies_stay_in_bundle "$app_path" || verification_failed=1
 
   while IFS= read -r rpath; do
-    if [[ "$rpath" == "$MIACODE_FFMPEG_DEV_DIR/lib" ]]; then
-      echo "FFmpeg SDK build rpath remains in $app_binary: $rpath" >&2
+    if [[ "$rpath" == /* ]]; then
+      echo "Absolute build rpath remains in $app_binary: $rpath" >&2
       verification_failed=1
     fi
   done < <(mach_o_rpaths "$app_binary")
+  if ! mach_o_rpaths "$app_binary" | grep -Fxq '@executable_path/../Frameworks'; then
+    echo "MiaCode is missing the bundle Frameworks rpath: $app_binary" >&2
+    verification_failed=1
+  fi
 
   return "$verification_failed"
 }
@@ -347,11 +366,20 @@ verify_no_external_ffmpeg_dylib_references() {
 validate_bundled_ffmpeg_minos() {
   local app_path="$1"
   local expected_target="$2"
-  local dylib_path
+  local library_path library
+  local -a required_libraries=(
+    "libavcodec.60.dylib"
+    "libavfilter.9.dylib"
+    "libavformat.60.dylib"
+    "libavutil.58.dylib"
+    "libswresample.4.dylib"
+    "libswscale.7.dylib"
+  )
 
-  while IFS= read -r -d '' dylib_path; do
-    validate_minos "$dylib_path" "$expected_target"
-  done < <(find "$app_path/Contents/Frameworks" -type f -name '*.dylib' -print0)
+  for library in "${required_libraries[@]}"; do
+    library_path="$app_path/Contents/Frameworks/$library"
+    validate_minos "$library_path" "$expected_target"
+  done
 }
 
 if [[ -n "$QT_ROOT" ]]; then
@@ -369,6 +397,7 @@ if ! command -v macdeployqt >/dev/null 2>&1; then
   exit 1
 fi
 
+package_step "Resolving the FFmpeg development SDK"
 resolve_macos_ffmpeg_dev_dir
 
 cmake_args=(
@@ -384,6 +413,7 @@ fi
 if [[ -n "$PACKAGE_ARCHITECTURES" ]]; then
   cmake_args+=("-DCMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES")
 fi
+package_step "Configuring Release build in $BUILD_DIR"
 cmake "${cmake_args[@]}"
 # Keep the complete build graph at four jobs or fewer. This cap is deliberate:
 # release packaging must not saturate the local machine with compiler processes.
@@ -393,6 +423,7 @@ if [[ "$BUILD_DEV_TOOLS" == "ON" ]]; then
 else
   build_args+=(--target MiaCode)
 fi
+package_step "Building MiaCode (at most 4 concurrent jobs)"
 cmake "${build_args[@]}"
 
 APP_PATH="$BUILD_DIR/MiaCode.app"
@@ -404,6 +435,7 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+package_step "Staging app bundle, documentation, assets, and runtime tools"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/docs"
 cp -R "$APP_PATH" "$DIST_DIR/"
@@ -547,7 +579,14 @@ if [[ ! -x "$debug_launcher_path" ]]; then
   exit 1
 fi
 
+package_step "Deploying Qt frameworks, plugins, and QML imports (macdeployqt may be quiet for several minutes)"
 macdeployqt "$DIST_DIR/MiaCode.app" -qmldir="$ROOT_DIR/src" -always-overwrite
+package_step "Removing non-release Qt helper components"
+
+# Qt Multimedia can pull Homebrew's dynamically linked ffprobe into the bundle.
+# MiaCode does not invoke it; export uses the pinned static ffmpeg below. Leaving
+# it in place would ship build-machine dylib references and fail relocation.
+rm -f "$DIST_DIR/MiaCode.app/Contents/MacOS/ffprobe"
 
 # MiaCode does not use Qt SQL. macdeployqt still deploys the sqldrivers
 # plugins, and the odbc/psql/mimer ones reference third-party dylibs
@@ -555,8 +594,12 @@ macdeployqt "$DIST_DIR/MiaCode.app" -qmldir="$ROOT_DIR/src" -always-overwrite
 # machine — dead weight that also breaks strict signature/dependency scans.
 rm -rf "$DIST_DIR/MiaCode.app/Contents/PlugIns/sqldrivers"
 
-bundle_ffmpeg_dylib_closure "$DIST_DIR/MiaCode.app"
-strip_ffmpeg_build_rpath "$DIST_DIR/MiaCode.app"
+package_step "Removing the unused Qt FFmpeg 7 media backend"
+remove_qt_ffmpeg_backend "$DIST_DIR/MiaCode.app"
+
+package_step "Staging the self-contained FFmpeg 6 preview runtime"
+stage_macos_ffmpeg_runtime "$DIST_DIR/MiaCode.app"
+strip_absolute_build_rpaths "$DIST_DIR/MiaCode.app/Contents/MacOS/MiaCode"
 
 # macdeployqt copies universal Qt frameworks/plugins even when MiaCode itself is
 # a single-architecture executable. For a package explicitly configured as
@@ -564,10 +607,12 @@ strip_ffmpeg_build_rpath "$DIST_DIR/MiaCode.app"
 # Mach-O that lacks the target architecture, preventing an x86-only Rosetta
 # helper or another incompatible binary from being silently damaged.
 if [[ "$THIN_SINGLE_ARCH_PACKAGE" == "ON" ]]; then
+  package_step "Thinning all bundled Mach-O files to arm64"
   "$ROOT_DIR/scripts/build/thin-macos-app.sh" \
     "$DIST_DIR/MiaCode.app" "arm64"
 fi
 
+package_step "Verifying there are no build-machine dylib references"
 verify_no_external_ffmpeg_dylib_references "$DIST_DIR/MiaCode.app"
 
 bass_frameworks_dir="$DIST_DIR/MiaCode.app/Contents/Frameworks"
@@ -593,6 +638,7 @@ done
 # bundled signatures. Re-sign only after both operations finish, then verify the
 # completed bundle before it can be archived.
 if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
+  package_step "Signing the completed app bundle"
   if ! command -v codesign >/dev/null 2>&1; then
     echo "codesign not found in PATH" >&2
     exit 1
@@ -602,6 +648,7 @@ if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
 fi
 
 if [[ -n "$DEPLOYMENT_TARGET" ]]; then
+  package_step "Validating minimum macOS version $DEPLOYMENT_TARGET"
   validate_minos "$DIST_DIR/MiaCode.app/Contents/MacOS/MiaCode" "$DEPLOYMENT_TARGET"
   validate_minos "$DIST_DIR/MiaCode.app/Contents/Frameworks/QtCore.framework/Versions/A/QtCore" "$DEPLOYMENT_TARGET"
   validate_bundled_ffmpeg_minos "$DIST_DIR/MiaCode.app" "$DEPLOYMENT_TARGET"
@@ -610,6 +657,7 @@ if [[ -n "$DEPLOYMENT_TARGET" ]]; then
   done
 fi
 
+package_step "Creating ZIP archive"
 ZIP_PATH="${DIST_DIR}.zip"
 rm -f "$ZIP_PATH"
 (
@@ -624,5 +672,23 @@ if [[ ! "$zip_launcher_mode" =~ ^-..x ]]; then
   exit 1
 fi
 
+if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
+  package_step "Verifying the ZIP-extracted app signature"
+  zip_verify_dir="$(mktemp -d "${TMPDIR:-/tmp}/miacode-package-verify.XXXXXX")"
+  ditto -x -k "$ZIP_PATH" "$zip_verify_dir"
+  zip_extracted_app="$zip_verify_dir/$(basename "$DIST_DIR")/MiaCode.app"
+  if [[ ! -d "$zip_extracted_app" ]]; then
+    echo "ZIP-extracted app is missing: $zip_extracted_app" >&2
+    rm -rf "$zip_verify_dir"
+    exit 1
+  fi
+  if ! codesign --verify --deep --strict --verbose=2 "$zip_extracted_app"; then
+    rm -rf "$zip_verify_dir"
+    exit 1
+  fi
+  rm -rf "$zip_verify_dir"
+fi
+
+package_step "Packaging complete"
 echo "Packaged to $DIST_DIR"
 echo "Zip created: $ZIP_PATH"

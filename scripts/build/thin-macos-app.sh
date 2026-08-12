@@ -52,6 +52,10 @@ thinned_count=0
 already_thin_count=0
 bytes_before=0
 bytes_after=0
+preflight_file_count=0
+processed_mach_o_count=0
+verified_mach_o_count=0
+progress_interval=25
 current_temp_path=""
 manifest_path="$(mktemp "${TMPDIR:-/tmp}/miacode-thin-manifest.XXXXXX")"
 
@@ -69,11 +73,14 @@ trap cleanup_temp_files EXIT
 # `find` during rewriting could otherwise observe a newly created `.thin.*`
 # file on a sufficiently large bundle.
 find "$APP_PATH" -type f -print0 > "$manifest_path"
+manifest_file_count="$(tr -cd '\0' < "$manifest_path" | wc -c | tr -d '[:space:]')"
+echo "[thin] Preflight: scanning $manifest_file_count staged files for $TARGET_ARCH compatibility..."
 
 # Complete a read-only preflight before rewriting the first file. This keeps a
 # newly introduced x86_64-only helper from leaving a partially thinned staging
 # bundle when the package is supposed to be arm64-only (and vice versa).
 while IFS= read -r -d '' binary_path; do
+  preflight_file_count=$((preflight_file_count + 1))
   archs="$(lipo -archs "$binary_path" 2>/dev/null || true)"
   if [[ -z "$archs" ]]; then
     continue
@@ -87,6 +94,9 @@ while IFS= read -r -d '' binary_path; do
     echo "Mach-O is missing required architecture '$TARGET_ARCH': $binary_path (has: $archs)" >&2
     exit 1
   fi
+  if (( mach_o_count % progress_interval == 0 )); then
+    echo "[thin] Preflight: checked $mach_o_count Mach-O files ($preflight_file_count/$manifest_file_count staged files)."
+  fi
 done < "$manifest_path"
 
 if (( mach_o_count == 0 )); then
@@ -94,11 +104,14 @@ if (( mach_o_count == 0 )); then
   exit 1
 fi
 
+echo "[thin] Rewriting $mach_o_count Mach-O files to $TARGET_ARCH..."
+
 while IFS= read -r -d '' binary_path; do
   archs="$(lipo -archs "$binary_path" 2>/dev/null || true)"
   if [[ -z "$archs" ]]; then
     continue
   fi
+  processed_mach_o_count=$((processed_mach_o_count + 1))
   binary_size_before="$(stat -f '%z' "$binary_path")"
   if [[ "$archs" == "$TARGET_ARCH" ]]; then
     already_thin_count=$((already_thin_count + 1))
@@ -125,11 +138,16 @@ while IFS= read -r -d '' binary_path; do
   binary_size_after="$(stat -f '%z' "$binary_path")"
   bytes_after=$((bytes_after + binary_size_after))
   thinned_count=$((thinned_count + 1))
+
+  if (( processed_mach_o_count % progress_interval == 0 || processed_mach_o_count == mach_o_count )); then
+    echo "[thin] Rewrite: processed $processed_mach_o_count/$mach_o_count Mach-O files; thinned=$thinned_count."
+  fi
 done < "$manifest_path"
 
 # Re-scan the completed bundle as a final architecture-closure gate. This also
 # catches a file that appeared or changed while the first pass was running.
 verified_count=0
+echo "[thin] Final verification: checking $mach_o_count Mach-O files are $TARGET_ARCH-only..."
 while IFS= read -r -d '' binary_path; do
   archs="$(lipo -archs "$binary_path" 2>/dev/null || true)"
   if [[ -z "$archs" ]]; then
@@ -140,6 +158,10 @@ while IFS= read -r -d '' binary_path; do
     exit 1
   fi
   verified_count=$((verified_count + 1))
+  verified_mach_o_count=$((verified_mach_o_count + 1))
+  if (( verified_mach_o_count % progress_interval == 0 || verified_mach_o_count == mach_o_count )); then
+    echo "[thin] Verification: checked $verified_mach_o_count/$mach_o_count Mach-O files."
+  fi
 done < <(find "$APP_PATH" -type f -print0)
 
 if (( verified_count != mach_o_count )); then

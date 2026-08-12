@@ -42,10 +42,10 @@ QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build
 包内所有 Mach-O 均包含且只包含目标架构。可设置
 `MIACODE_THIN_MACOS_APP=OFF` 生成保留 Qt universal 二进制的对照包。
 
-macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK。`package-mac.sh` 优先使用
-`MIACODE_FFMPEG_DEV_DIR`，否则自动发现 Homebrew `ffmpeg@6`（再回退到 `ffmpeg`）。
-它会将 FFmpeg 的非系统 dylib 依赖闭包复制到 `MiaCode.app/Contents/Frameworks` 并
-改写为包内 `@rpath`，因此发布包不依赖构建机的 Homebrew 路径。
+macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK。先运行
+`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`，以生成仓库本地的
+`third_party/ffmpeg/macos/dev/` 固定 FFmpeg 6 SDK；打包仅复制其中必需的六个 dylib，
+不会查找或复制 Homebrew 依赖。也可用 `MIACODE_FFMPEG_DEV_DIR` 显式指定兼容 SDK。
 
 ## 其他脚本
 
@@ -53,6 +53,7 @@ macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK。`package-mac.sh` 优
 - `debug/Start_MiaCode_Debug.command`：发布包根目录内的 macOS 调试启动入口；双击后以 `--debug` 启动 `MiaCode.app`，并将日志写入发布包根目录的 `logs/`。
 - `debug/Start_MiaCode_SoftwareVideoDecode.bat`、`debug/Start_MiaCode_QtPluginDiag.bat`：公开保留的支持诊断入口，不随 Windows 发布包分发。
 - `ffmpeg/ensure-windows-ffmpeg.ps1`、`ffmpeg/ensure-macos-ffmpeg.sh`：获取导出用独立 `ffmpeg`。
+- `ffmpeg/ensure-macos-ffmpeg-dev.sh`：构建 macOS QtAVPlayer 预览解码用的固定 FFmpeg 6 SDK。
 - `ffmpeg/ensure-windows-ffmpeg-dev.ps1`：获取 Windows QtAVPlayer 预览解码开发 SDK。
 - `ffmpeg/trim/`：构建 Windows decode-only FFmpeg dev SDK 的裁剪工具链。
 - `assets/subset_hud_font.py`：HUD 字体子集生成，详见 `assets/README_font_subset.md`。
