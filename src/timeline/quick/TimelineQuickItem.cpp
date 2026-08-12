@@ -56,6 +56,19 @@ constexpr double kTimelineKeyHoldAccelerationPerSecond = 1.0;
 constexpr int kTimelineKeyHoldTickIntervalMs = 16;
 constexpr int kTimelineLayerSlotCount = 6;  // grid + header + gridLines + wave(translucent,on-top) + notes + overlay
 
+// Phase 7 scroll-bucket index. Sole definition on purpose: the bucket is computed in two
+// places (the revision offset in applyDynamicSceneState, the rebuild cache key in
+// currentSceneState) and they MUST agree, or layers rebuild on the wrong frames. Since the
+// scroll became sub-pixel a plain `/` would be float division there and integer division
+// here, so the floor is centralised.
+int scrollBucketIndex(double horizontalScrollValue, int bucketSize)
+{
+    if (bucketSize <= 0) {
+        return 0;
+    }
+    return static_cast<int>(std::floor(horizontalScrollValue / static_cast<double>(bucketSize)));
+}
+
 // beta7 leak gauge (probes 1.2 + ②③) — live QSG node count AND geometry vertex/index bytes
 // under a timeline scene subtree. Walks firstChild()/nextSibling() once per pause (only when the
 // render gauge is armed), never per frame. Flat counts while GPU/private memory climbs localises
@@ -285,8 +298,11 @@ void applyDynamicSceneState(
     // transform".
     if (state->viewportSize.width() > 0) {
         const int bucketSize = state->viewportSize.width();
+        // SYNC-PAIR with currentSceneState()'s currentScrollBucket: one drives the revision
+        // offset, the other the rebuild cache key. Both must floor the same way — the scroll
+        // is a double now, so a bare `/` would be float division and the two would disagree.
         const quint64 bucket =
-            static_cast<quint64>(state->horizontalScrollValue / bucketSize);
+            static_cast<quint64>(qMax(0, scrollBucketIndex(state->horizontalScrollValue, bucketSize)));
         state->waveformRevision += bucket;
         state->gridRevision += bucket;
         state->headerRevision += bucket;
@@ -364,7 +380,7 @@ double renderMapWorldXToSecond(
 {
     return miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(
         state,
-        worldX - static_cast<qreal>(state.horizontalScrollValue));
+        worldX - state.horizontalScrollValue);
 }
 
 QString renderMapPointPayload(
@@ -375,8 +391,8 @@ QString renderMapPointPayload(
     const int worldX =
         miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(state, second);
     const qreal worldXExact = renderMapSecondToSceneXExact(state, second);
-    const qreal viewX = static_cast<qreal>(worldX - state.horizontalScrollValue);
-    const qreal viewXExact = worldXExact - static_cast<qreal>(state.horizontalScrollValue);
+    const qreal viewX = worldX - state.horizontalScrollValue;
+    const qreal viewXExact = worldXExact - state.horizontalScrollValue;
     const double roundtrip =
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, viewX);
     const double roundtripExact =
@@ -404,7 +420,7 @@ QString renderMapRectPayload(
     const QRectF& rect)
 {
     const qreal worldX = rect.left();
-    const qreal viewX = worldX - static_cast<qreal>(state.horizontalScrollValue);
+    const qreal viewX = worldX - state.horizontalScrollValue;
     return QStringLiteral(
                "%1_sec=%2 %1_world_x=%3 %1_view_x=%4 %1_w=%5")
         .arg(prefix)
@@ -419,7 +435,7 @@ QString renderMapLinePayload(
     const miacode::timeline::TimelineSceneState& state,
     qreal worldX)
 {
-    const qreal viewX = worldX - static_cast<qreal>(state.horizontalScrollValue);
+    const qreal viewX = worldX - state.horizontalScrollValue;
     return QStringLiteral("%1_sec=%2 %1_world_x=%3 %1_view_x=%4")
         .arg(prefix)
         .arg(renderMapWorldXToSecond(state, worldX), 0, 'f', 6)
@@ -481,7 +497,7 @@ QString renderMapWaveformPayload(
         .arg(firstColumnSecond, 0, 'f', 6)
         .arg(firstColumnRenderedSecond, 0, 'f', 6)
         .arg(firstColumnWorldX, 0, 'f', 3)
-        .arg(firstColumnWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3);
+        .arg(firstColumnWorldX - state.horizontalScrollValue, 0, 'f', 3);
 
     const double playheadSecond = stateBridge->playheadSeconds();
     const bool playheadInDuration =
@@ -509,7 +525,7 @@ QString renderMapWaveformPayload(
         playheadColumnEndSecond - phaseCompensationSeconds;
     const qreal playheadViewX =
         renderMapSecondToSceneXExact(state, playheadSecond)
-        - static_cast<qreal>(state.horizontalScrollValue);
+        - state.horizontalScrollValue;
     const qreal playheadColumnStartWorldX =
         renderMapSecondToSceneXExact(state, playheadColumnStartRenderedSecond);
     const qreal playheadColumnCenterWorldX =
@@ -517,7 +533,7 @@ QString renderMapWaveformPayload(
     const qreal playheadColumnEndWorldX =
         renderMapSecondToSceneXExact(state, playheadColumnEndRenderedSecond);
     const qreal playheadColumnCenterViewX =
-        playheadColumnCenterWorldX - static_cast<qreal>(state.horizontalScrollValue);
+        playheadColumnCenterWorldX - state.horizontalScrollValue;
     const miacode::waveform::WaveformColumn& playheadWaveColumn =
         level->columns.at(playheadColumn);
     const double playheadColumnEnergy = renderMapWaveformColumnEnergy(playheadWaveColumn);
@@ -568,9 +584,9 @@ QString renderMapWaveformPayload(
         .arg(playheadColumnStartWorldX, 0, 'f', 3)
         .arg(playheadColumnCenterWorldX, 0, 'f', 3)
         .arg(playheadColumnEndWorldX, 0, 'f', 3)
-        .arg(playheadColumnStartWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+        .arg(playheadColumnStartWorldX - state.horizontalScrollValue, 0, 'f', 3)
         .arg(playheadColumnCenterViewX, 0, 'f', 3)
-        .arg(playheadColumnEndWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+        .arg(playheadColumnEndWorldX - state.horizontalScrollValue, 0, 'f', 3)
         .arg(playheadColumnCenterViewX - playheadViewX, 0, 'f', 3)
         .arg((playheadColumnCenterSecond - playheadSecond) * 1000.0, 0, 'f', 3)
         .arg(playheadColumnEnergy, 0, 'f', 6)
@@ -583,7 +599,7 @@ QString renderMapWaveformPayload(
         const double peakCenterRenderedSecond = peakCenterSecond - phaseCompensationSeconds;
         const qreal peakCenterWorldX = renderMapSecondToSceneXExact(state, peakCenterRenderedSecond);
         const qreal peakCenterViewX =
-            peakCenterWorldX - static_cast<qreal>(state.horizontalScrollValue);
+            peakCenterWorldX - state.horizontalScrollValue;
         payload += QStringLiteral(
                        " wave_near_peak_window_ms=%1 wave_near_peak_col=%2 "
                        "wave_near_peak_sec=%3 wave_near_peak_render_sec=%4 "
@@ -610,9 +626,9 @@ QString renderMapPrimitivePayload(
 {
     QStringList parts;
     const qreal worldLeft =
-        static_cast<qreal>(state.horizontalScrollValue + state.timelineLeft);
+        (state.horizontalScrollValue + state.timelineLeft);
     const qreal worldRight =
-        static_cast<qreal>(state.horizontalScrollValue + state.viewportSize.width());
+        (state.horizontalScrollValue + state.viewportSize.width());
 
     if (!state.waveformBars.isEmpty()) {
         parts.append(renderMapRectPayload(
@@ -670,7 +686,7 @@ QString renderMapDataAnchorPayload(
                          "measure_first_view_x=%3")
             .arg(second, 0, 'f', 6)
             .arg(worldX, 0, 'f', 3)
-            .arg(worldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3));
+            .arg(worldX - state.horizontalScrollValue, 0, 'f', 3));
     }
 
     double firstNoteSecond = std::numeric_limits<double>::infinity();
@@ -708,7 +724,7 @@ QString renderMapDataAnchorPayload(
                          "data_note_first_kind=%7")
             .arg(firstNoteSecond, 0, 'f', 6)
             .arg(worldX, 0, 'f', 3)
-            .arg(worldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+            .arg(worldX - state.horizontalScrollValue, 0, 'f', 3)
             .arg(firstNoteLine)
             .arg(firstNoteCol)
             .arg(firstNoteLane)
@@ -741,7 +757,7 @@ void appendTimelineRenderMapDiagnostics(
         .arg(scrollBucket)
         .arg(state.viewportSize.width())
         .arg(state.viewportSize.height())
-        .arg(state.horizontalScrollValue)
+        .arg(state.horizontalScrollValue, 0, 'f', 3)
         .arg(qMax(0, state.contentWidth - state.viewportSize.width()))
         .arg(state.timelineLeft)
         .arg(state.leadingCenteringPadding)
@@ -1230,9 +1246,9 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     // cached state; crossing into a new bucket triggers a rebuild
     // which emits primitives for the new window.
     const int bucketSize = viewportSize.width();
-    const int currentScroll = stateBridge_->horizontalScrollValue();
-    const int currentScrollBucket =
-        bucketSize > 0 ? (currentScroll / bucketSize) : 0;
+    const double currentScroll = stateBridge_->horizontalScrollValue();
+    // SYNC-PAIR with applyDynamicSceneState's `bucket` — see the note there.
+    const int currentScrollBucket = scrollBucketIndex(currentScroll, bucketSize);
     const bool rebuildNeeded =
         !cachedSceneStateValid_
         || cachedSceneBuildViewportSize_ != viewportSize
@@ -1381,10 +1397,10 @@ double TimelineQuickItem::clampSceneSecond(double second) const
     return qBound(0.0, second, state.maxNavigableSecond);
 }
 
-double TimelineQuickItem::viewportCenterSecondForScroll(int horizontalScrollValue) const
+double TimelineQuickItem::viewportCenterSecondForScroll(double horizontalScrollValue) const
 {
     miacode::timeline::TimelineSceneState state = currentSceneState();
-    state.horizontalScrollValue = qMax(0, horizontalScrollValue);
+    state.horizontalScrollValue = qMax(0.0, horizontalScrollValue);
     return clampSceneSecond(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
 }
@@ -1527,13 +1543,13 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         pendingThemeInvalidation_ = false;
     }
 
-    if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
+    if (!qFuzzyCompare(state.horizontalScrollValue + 1.0, lastPaintedHorizontalScrollValue_ + 1.0)
         && miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("timeline/quick_scene"),
             QStringLiteral("action=content_transform_update scroll=%1 max_scroll=%2")
-                .arg(state.horizontalScrollValue)
+                .arg(state.horizontalScrollValue, 0, 'f', 3)
                 .arg(qMax(0, state.contentWidth - state.viewportSize.width())));
     }
     lastPaintedHorizontalScrollValue_ = state.horizontalScrollValue;
@@ -1554,7 +1570,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // without hiding it. Still BELOW note sprites + the overlay (playhead/
     // cursor) which follow.
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
-        return waveformLayer_->updateNode(oldChild, state);
+        return waveformLayer_->updateNode(oldChild, state, currentDpr);
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return notesLayer_->updateNode(oldChild, state, window(), textures_.get());
@@ -1673,6 +1689,61 @@ void TimelineQuickItem::geometryChange(const QRectF& newGeometry, const QRectF& 
     }
 }
 
+void TimelineQuickItem::itemChange(ItemChange change, const ItemChangeData& value)
+{
+    if (change == ItemSceneChange) {
+        bindRenderCadence(value.window);
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+void TimelineQuickItem::bindRenderCadence(QQuickWindow* window)
+{
+    if (boundCadenceWindow_ == window && renderCadenceConnection_) {
+        return;
+    }
+    if (renderCadenceConnection_) {
+        QObject::disconnect(renderCadenceConnection_);
+        renderCadenceConnection_ = QMetaObject::Connection();
+    }
+    boundCadenceWindow_ = window;
+    if (window == nullptr) {
+        return;
+    }
+    // afterAnimating is emitted on the GUI thread once per frame, immediately before the
+    // render thread is asked to synchronise that frame's scene graph. Sampling the playback
+    // clock here means the value we write is picked up by the sync that follows in the same
+    // turn, so sample->present latency is a fixed one frame instead of a free-running timer's
+    // random 0..16.7ms. That variance was the timeline judder: the clock is exact and frames
+    // are delivered on time, but each frame was drawn for a moment that had drifted.
+    //
+    // Deliberately NOT frameSwapped: that fires on the render thread and would need a queued
+    // hop back to the GUI thread, reintroducing a variable delay and racing the next sync.
+    //
+    // No lookahead bias is applied here — the timeline keeps trailing the preview's scene
+    // playhead by the preview's own +1 vsync (previewVisualLookaheadVsyncs, default 1.0). That
+    // offset is intentional and now constant rather than jittering.
+    renderCadenceConnection_ = QObject::connect(
+        window, &QQuickWindow::afterAnimating, this,
+        [this]() {
+            if (stateBridge_ == nullptr) {
+                return;
+            }
+            stateBridge_->notifyRenderCadenceTick();
+            // Keep the loop spinning for as long as playback owns the cadence. The tick above
+            // normally dirties this item (renderStateChanged -> syncSourceState -> update),
+            // but whether an update() issued inside afterAnimating also queues the NEXT frame
+            // is a render-loop implementation detail. Asking the window directly makes the
+            // continuation explicit, and it costs nothing while paused because the flag is
+            // only set during playback.
+            if (stateBridge_->playbackCadenceActive()) {
+                if (QQuickWindow* const w = QQuickItem::window()) {
+                    w->update();
+                }
+            }
+        });
+}
+
 void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
 {
     if (event == nullptr || event->button() != Qt::LeftButton) {
@@ -1705,12 +1776,12 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     emit timelineUserInteractionStarted();
     if (followProgressEnabled() && !playheadNearViewportCenter()) {
         const double centerSecond = viewportCenterSecondForScroll(
-            stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
+            stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0);
         emit centerNavigateRequested(centerSecond);
     }
     dragActive_ = true;
     dragStartX_ = qRound(event->position().x());
-    dragStartScrollValue_ = stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0;
+    dragStartScrollValue_ = stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0;
     appendTimelineQuickInteractionLog(
         QStringLiteral("drag_begin"),
         QString("x=%1 scroll_start=%2")
@@ -1733,7 +1804,10 @@ void TimelineQuickItem::mouseMoveEvent(QMouseEvent* event)
         QQuickItem::mouseMoveEvent(event);
         return;
     }
-    const int newScroll = dragStartScrollValue_ - (qRound(event->position().x()) - dragStartX_);
+    // double, not int: dragStartScrollValue_ carries a fraction now, and narrowing here would
+    // truncate it — snapping the view by up to a pixel the instant a drag begins.
+    const double newScroll =
+        dragStartScrollValue_ - static_cast<double>(qRound(event->position().x()) - dragStartX_);
     stateBridge_->setHorizontalScrollValue(newScroll);
     const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
     if (followProgressEnabled()) {
@@ -1779,11 +1853,11 @@ void TimelineQuickItem::mouseReleaseEvent(QMouseEvent* event)
         if (stateBridge_ != nullptr && followProgressEnabled()) {
             stateBridge_->restorePlayheadIndicator(true);
         }
-        const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
+        const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0);
         appendTimelineQuickInteractionLog(
             QStringLiteral("drag_end"),
             QString("scroll=%1 center_second=%2")
-                .arg(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0)
+                .arg(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0, 0, 'f', 3)
                 .arg(centerSecond, 0, 'f', 6));
         emit timelineDragFinished(centerSecond);
         update();
@@ -1822,7 +1896,7 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
         QString("delta=%1 modifiers=%2 scroll_before=%3")
             .arg(delta)
             .arg(static_cast<int>(event->modifiers()))
-            .arg(stateBridge_->horizontalScrollValue()));
+            .arg(stateBridge_->horizontalScrollValue(), 0, 'f', 3));
     const bool zoomInWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(
         event,
         stateBridge_->zoomInWheelShortcuts());
@@ -1846,7 +1920,7 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
     appendTimelineQuickInteractionLog(
         QStringLiteral("wheel_scroll_applied"),
         QString("scroll_after=%1 center_second=%2")
-            .arg(stateBridge_->horizontalScrollValue())
+            .arg(stateBridge_->horizontalScrollValue(), 0, 'f', 3)
             .arg(centerSecond, 0, 'f', 6));
     if (followProgressEnabled()) {
         emit timelineWheelNavigateRequested(centerSecond);
@@ -1930,6 +2004,6 @@ void TimelineQuickItem::applyHeldHorizontalKeyScrollTick()
             QString("direction=%1 pixel_delta=%2 scroll=%3")
                 .arg(heldHorizontalKeyScrollDirection_)
                 .arg(pixelDelta)
-                .arg(stateBridge_->horizontalScrollValue()));
+                .arg(stateBridge_->horizontalScrollValue(), 0, 'f', 3));
     }
 }

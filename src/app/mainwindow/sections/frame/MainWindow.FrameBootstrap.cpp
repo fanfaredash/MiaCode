@@ -1644,6 +1644,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             QStringLiteral("timeline.zoom_out"),
             {QStringLiteral("Ctrl+WheelDown")}));
     timelineSection_->refreshTimelineWaveformPhaseCompensation();
+    // Phase-locked playback sampling for the timeline. Fires once per timeline frame from
+    // TimelineQuickItem::bindRenderCadence (QQuickWindow::afterAnimating, GUI thread), so the
+    // second we sample is the one that frame renders. qtPreviewTimelineTimer_ remains armed as
+    // a watchdog behind this; see MainWindow.FrameBootstrapFinalize.cpp.
+    connect(timelineQuickStateBridge_,
+            &TimelineQuickStateBridge::renderCadenceTick,
+            this,
+            &MainWindow::onTimelineRenderCadenceTick);
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
     });

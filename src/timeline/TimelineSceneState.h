@@ -113,7 +113,8 @@ struct TimelineSceneState {
     int timelineHeight = 0;
     int laneHeight = 0;
     int laneCount = 0;
-    int horizontalScrollValue = 0;
+    // Sub-pixel — see TimelineSceneBuildRequest::horizontalScrollValue.
+    double horizontalScrollValue = 0.0;
     int headerLeftLimit = 0;
     int headerRightLimit = 0;
     int headerMarkerLeftLimit = 0;

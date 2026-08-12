@@ -99,6 +99,7 @@ signals:
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
     void hoverMoveEvent(QHoverEvent* event) override;
     void hoverLeaveEvent(QHoverEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -114,14 +115,19 @@ private:
     bool canBecomeReady() const;
     miacode::timeline::TimelineSceneState currentSceneState() const;
     double clampSceneSecond(double second) const;
-    double viewportCenterSecondForScroll(int horizontalScrollValue) const;
+    double viewportCenterSecondForScroll(double horizontalScrollValue) const;
     bool playheadNearViewportCenter() const;
     void beginHeldHorizontalKeyScroll(int direction, int key);
     void stopHeldHorizontalKeyScroll(int key = 0);
     void applyHeldHorizontalKeyScrollTick();
+    void bindRenderCadence(QQuickWindow* window);
     QPointer<TimelineQuickStateBridge> stateBridge_;
     QMetaObject::Connection bridgeRenderStateConnection_;
     QMetaObject::Connection bridgePlayheadConnection_;
+    // afterAnimating hook on the item's current window — the phase-locked sampling point for
+    // playback. Rebound whenever the item moves between windows (ItemSceneChange).
+    QMetaObject::Connection renderCadenceConnection_;
+    QPointer<QQuickWindow> boundCadenceWindow_;
     int headerLeftLimit_ = 0;
     int headerRightLimit_ = 0;
     int headerMarkerLeftLimit_ = 0;
@@ -192,8 +198,8 @@ private:
     mutable qint64 renderMapLastLogMs_ = 0;
     bool dragActive_ = false;
     int dragStartX_ = 0;
-    int dragStartScrollValue_ = 0;
-    int lastPaintedHorizontalScrollValue_ = -1;
+    double dragStartScrollValue_ = 0.0;
+    double lastPaintedHorizontalScrollValue_ = -1.0;
     int heldHorizontalKeyScrollDirection_ = 0;
     int heldHorizontalKeyScrollKey_ = 0;
     int heldHorizontalKeyScrollLastElapsedMs_ = 0;

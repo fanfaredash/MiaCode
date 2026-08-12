@@ -967,6 +967,16 @@ void MainWindow::flushQtPreviewTimelinePosition()
     timelineSection_->flushQtPreviewTimelinePosition();
 }
 
+void MainWindow::onTimelineRenderCadenceTick()
+{
+    timelineSection_->onTimelineRenderCadenceTick();
+}
+
+void MainWindow::onTimelineCadenceWatchdogTick()
+{
+    timelineSection_->onTimelineCadenceWatchdogTick();
+}
+
 void MainWindow::onQtPreviewTick()
 {
     timelineSection_->onQtPreviewTick();

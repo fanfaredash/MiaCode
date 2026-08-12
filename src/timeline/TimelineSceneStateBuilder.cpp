@@ -266,7 +266,7 @@ qreal muriMarkerAnchorY(
     return startY + (endY - startY) * proportion;
 }
 
-double xToSecond(const TimelineSceneLayoutMetrics& metrics, int horizontalScrollValue, qreal x)
+double xToSecond(const TimelineSceneLayoutMetrics& metrics, double horizontalScrollValue, qreal x)
 {
     return qMax(
         0.0,
@@ -488,12 +488,18 @@ int TimelineSceneStateBuilder::secondToSceneX(const TimelineSceneLayoutMetrics& 
     return ::secondToX(metrics, second);
 }
 
+qreal TimelineSceneStateBuilder::secondToSceneXExact(
+    const TimelineSceneLayoutMetrics& metrics, double second)
+{
+    return ::secondToXExact(metrics, second);
+}
+
 TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequest& request)
 {
     TimelineSceneState state;
     const TimelineSceneLayoutMetrics metrics = buildLayoutMetrics(request);
     applyLayoutMetrics(&state, metrics);
-    state.horizontalScrollValue = qMax(0, request.horizontalScrollValue);
+    state.horizontalScrollValue = qMax(0.0, request.horizontalScrollValue);
     state.headerLeftLimit = qMax(0, request.headerLeftLimit);
     state.headerRightLimit = request.headerRightLimit > 0 ? request.headerRightLimit : request.viewportSize.width();
     state.headerMarkerLeftLimit = qMax(0, request.headerMarkerLeftLimit);
@@ -512,7 +518,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     const QString trimmedSkinDirectory = request.skinDirectory.trimmed();
     state.skinDirectory = trimmedSkinDirectory.isEmpty() ? QString() : QDir::cleanPath(trimmedSkinDirectory);
 
-    const qreal headerScrollX = static_cast<qreal>(state.horizontalScrollValue);
+    const qreal headerScrollX = state.horizontalScrollValue;
     const qreal headerSafeLeft = qMax<qreal>(state.timelineLeft, state.headerLeftLimit);
     const qreal headerSafeRight =
         qMin<qreal>(state.viewportSize.width(), qMax<qreal>(headerSafeLeft, state.headerRightLimit));
@@ -732,7 +738,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     qreal gridCullMinX = -std::numeric_limits<qreal>::infinity();
     qreal gridCullMaxX = std::numeric_limits<qreal>::infinity();
     if (request.horizontalCullPaddingPx > 0) {
-        const qreal scrollX = static_cast<qreal>(state.horizontalScrollValue);
+        const qreal scrollX = state.horizontalScrollValue;
         const qreal padding = static_cast<qreal>(request.horizontalCullPaddingPx);
         gridCullMinX = scrollX + state.timelineLeft - padding - 2.0;
         gridCullMaxX = scrollX + state.viewportSize.width() + padding + 2.0;
@@ -1372,7 +1378,12 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         scaledMetric(kTimelinePlaybackEntryMarkerHalfWidthPx, playbackHeaderScale);
     const qreal playbackMarkerBaseY = qMax<qreal>(0.0, playbackMarkerTipY - playbackMarkerHeight);
 
-    const int entryX = secondToSceneX(state, request.playbackEntrySeconds);
+    // Exact, like the scroll offset: these ride on top of a sub-pixel scroll now, and the
+    // playhead in particular must stay pinned. With follow on, scroll is
+    // exactPlayheadX - viewportWidth/2, so an exact playheadX puts the line at exactly the
+    // viewport centre every frame; a rounded one would shimmer +-0.5px against content that
+    // is now moving smoothly underneath it.
+    const qreal entryX = secondToXExact(state, request.playbackEntrySeconds);
     if (entryX > state.timelineLeft && headerMarkerSpanFits(entryX, playbackMarkerHalfWidth)) {
         state.hasEntryMarker = true;
         state.entryMarker = TimelineSceneTriangle{
@@ -1383,7 +1394,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         };
     }
 
-    const int cursorX = secondToSceneX(state, request.cursorSeconds);
+    const qreal cursorX = secondToXExact(state, request.cursorSeconds);
     if (cursorX > state.timelineLeft) {
         if (headerMarkerSpanFits(cursorX, playbackMarkerHalfWidth)) {
             state.hasCursorMarker = true;
@@ -1402,7 +1413,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             2.0,
         };
     }
-    const int playheadX = secondToSceneX(state, request.playheadSeconds);
+    const qreal playheadX = secondToXExact(state, request.playheadSeconds);
     if (!request.playheadIndicatorSuppressed && playheadX > state.timelineLeft) {
         state.hasPlayheadLine = true;
         state.playheadLine = TimelineSceneLine{

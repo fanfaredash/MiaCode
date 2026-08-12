@@ -219,6 +219,14 @@ public:
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
+    // Phase-locked sampling entry point: driven by TimelineQuickItem's afterAnimating hook
+    // (once per timeline frame, GUI thread, just before that frame's scene-graph sync).
+    void onTimelineRenderCadenceTick();
+    // Fallback entry point for qtPreviewTimelineTimer_, which is now a watchdog: it flushes
+    // only when the render cadence above has gone silent (window hidden, scene graph torn
+    // down, render loop stalled), so a dead cadence can never freeze the playhead.
+    void onTimelineCadenceWatchdogTick();
+    qint64 timelineCadenceWatchdogThresholdMs() const;
     void onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock);
     void onQtPreviewTick();
     double applyVisualClockSmoothing(double audioSecond, double fallbackSecond, bool hasAudioClock);

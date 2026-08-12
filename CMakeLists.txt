@@ -1598,6 +1598,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/audio src/timeline
     )
 
+    miacode_add_dev_tool(timeline_cadence_arbitration_policy_spec TEST
+        SOURCES
+            src/tools/timeline/TimelineCadenceArbitrationPolicySpec.cpp
+            src/timeline/TimelineCadenceArbitrationPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/timeline
+    )
+
     # Keep this copy of the production factory on the no-BASS route even when
     # the worker spec also compiles the platform BASS backend sources.
     add_library(preview_audio_worker_spec_miniaudio_factory OBJECT

@@ -249,6 +249,15 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         scheduleNextQtPreviewTick();
     });
 
+    // Watchdog, not the visual cadence. The timeline's playback sampling is driven by
+    // TimelineQuickItem's afterAnimating hook (bridge::renderCadenceTick, connected in
+    // MainWindow.FrameBootstrap.cpp), which is phase-locked to the frame being synced.
+    // Driving the sample from this free-running timer instead was the timeline judder: the
+    // timer's phase drifts against vsync (~2.3us/frame measured), so sample->present latency
+    // wandered across the whole frame interval and 16% of on-time frames were drawn for the
+    // wrong moment. The timer stays at the frame interval so that if the cadence dies the
+    // fallback runs at full rate exactly as before; onTimelineCadenceWatchdogTick() no-ops
+    // while the cadence is alive.
     qtPreviewTimelineTimer_ = new QChronoTimer(this);
     qtPreviewTimelineTimer_->setInterval(std::chrono::nanoseconds(
         qMax<qint64>(
@@ -257,7 +266,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
                 ? timelineSection_->timelineTargetFrameIntervalNs()
                 : previewCanvasTargetFrameIntervalNs())));
     qtPreviewTimelineTimer_->setTimerType(Qt::PreciseTimer);
-    connect(qtPreviewTimelineTimer_, &QChronoTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
+    connect(qtPreviewTimelineTimer_, &QChronoTimer::timeout, this, &MainWindow::onTimelineCadenceWatchdogTick);
 
     previewStatsUiTimer_ = new QTimer(this);
     previewStatsUiTimer_->setInterval(67);

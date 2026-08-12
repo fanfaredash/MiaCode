@@ -1,7 +1,7 @@
 build/
 build-mingw*/
 Build-Mingw*/
-build-macos/
+build-macos*/
 dist/
 font_candidates/
 .qt/
@@ -119,6 +119,7 @@ scripts/build/*
 !scripts/build/thin-macos-app.sh
 !scripts/debug/
 scripts/debug/*
+!scripts/debug/analyze_timeline_cadence.py
 !scripts/debug/Start_MiaCode_Debug.bat
 !scripts/debug/Start_MiaCode_Debug.command
 !scripts/debug/Start_MiaCode_IdleFreezeRepro.ps1

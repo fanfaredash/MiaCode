@@ -26,6 +26,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "timeline/TimelineCadenceArbitrationPolicy.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -94,6 +95,35 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
 void MainWindow::TimelineSection::syncPausedPreviewMediaTimestamps(double second)
 {
     owner_.seekPreviewStageMediaRouteWhilePaused(second);
+}
+
+qint64 MainWindow::TimelineSection::timelineCadenceWatchdogThresholdMs() const
+{
+    return miacode::timeline::cadence::watchdogThresholdMs(
+        timelineTargetFrameIntervalNs() / 1000000);
+}
+
+void MainWindow::TimelineSection::onTimelineRenderCadenceTick()
+{
+    if (!state_.qtPreviewPlaying_) {
+        return;
+    }
+    state_.qtPreviewLastTimelineCadenceMs_ = state_.qtPreviewWatchdogElapsed_.elapsed();
+    flushQtPreviewTimelinePosition();
+}
+
+void MainWindow::TimelineSection::onTimelineCadenceWatchdogTick()
+{
+    miacode::timeline::cadence::ArbitrationState arbitration;
+    arbitration.playing = state_.qtPreviewPlaying_;
+    arbitration.lastCadenceMs = state_.qtPreviewLastTimelineCadenceMs_;
+    arbitration.nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+    arbitration.thresholdMs = timelineCadenceWatchdogThresholdMs();
+    if (!miacode::timeline::cadence::watchdogShouldFlush(arbitration)) {
+        // Render cadence is alive and owns the sampling phase; stay out of its way.
+        return;
+    }
+    flushQtPreviewTimelinePosition();
 }
 
 void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()

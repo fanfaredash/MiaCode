@@ -2381,8 +2381,10 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("zoomScale"), timelineQuickStateBridge_ != nullptr
                      ? timelineQuickStateBridge_->zoomScale()
                      : (timelineView_ != nullptr ? timelineView_->zoomScale() : 0.0)},
+                // Rounded on purpose: the bridge scroll became sub-pixel, but this payload is
+                // an extension-facing contract that has always carried a whole-pixel integer.
                 {QStringLiteral("horizontalScrollValue"), timelineQuickStateBridge_ != nullptr
-                     ? timelineQuickStateBridge_->horizontalScrollValue()
+                     ? qRound(timelineQuickStateBridge_->horizontalScrollValue())
                      : (timelineView_ != nullptr ? timelineView_->horizontalScrollValue() : 0)},
                 {QStringLiteral("viewportCenterSecond"), timelineQuickStateBridge_ != nullptr
                      ? timelineQuickStateBridge_->viewportCenterSecond()
@@ -2432,8 +2434,10 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("endSecond"), centerSecond + halfSpan},
                 {QStringLiteral("centerSecond"), centerSecond},
                 {QStringLiteral("zoomScale"), zoomScale},
+                // Rounded on purpose: the bridge scroll became sub-pixel, but this payload is
+                // an extension-facing contract that has always carried a whole-pixel integer.
                 {QStringLiteral("horizontalScrollValue"), timelineQuickStateBridge_ != nullptr
-                     ? timelineQuickStateBridge_->horizontalScrollValue()
+                     ? qRound(timelineQuickStateBridge_->horizontalScrollValue())
                      : (timelineView_ != nullptr ? timelineView_->horizontalScrollValue() : 0)},
                 {QStringLiteral("viewportWidth"), viewportWidth},
             });

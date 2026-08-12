@@ -211,6 +211,8 @@
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
+    void onTimelineRenderCadenceTick();
+    void onTimelineCadenceWatchdogTick();
     void onQtPreviewTick();
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     bool previewCanvasUsesFrameSwappedPacing() const;

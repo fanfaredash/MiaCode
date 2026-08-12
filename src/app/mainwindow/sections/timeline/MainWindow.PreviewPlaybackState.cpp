@@ -532,6 +532,13 @@ void MainWindow::TimelineSection::stopQtPreviewTimers()
     if (ui_.previewStatsUiTimer_ != nullptr) {
         ui_.previewStatsUiTimer_->stop();
     }
+    // Forget the render-cadence liveness marker so the next playback starts on the watchdog
+    // and only hands the sampling phase over once a real afterAnimating tick has arrived.
+    // Dropping the cadence flag also lets the timeline window go idle again when paused.
+    state_.qtPreviewLastTimelineCadenceMs_ = -1;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlaybackCadenceActive(false);
+    }
     owner_.setPreviewFixedTimerHighResolutionActive(false);
 }
 
@@ -593,6 +600,11 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
         requestNextDisplayRefreshPreviewFrame();
     } else {
         requestNextFixedIntervalPreviewFrame();
+    }
+    // Start on the watchdog: the first afterAnimating tick claims the sampling phase.
+    state_.qtPreviewLastTimelineCadenceMs_ = -1;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlaybackCadenceActive(true);
     }
     if (ui_.qtPreviewTimelineTimer_ != nullptr && !ui_.qtPreviewTimelineTimer_->isActive()) {
         ui_.qtPreviewTimelineTimer_->start();
