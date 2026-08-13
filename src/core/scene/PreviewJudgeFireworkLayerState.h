@@ -14,6 +14,9 @@ struct PreviewJudgeFireworkLayerState {
     QPointF center;
     QPointF clipCenter;
     qreal clipRadius = 0.0;
+    qreal triggerSecond = 0.0;
+    qreal clipTimeSeconds = 0.0;
+    qreal life01 = 0.0;
     qreal fireworkScale = 0.0;
     qreal outerRadius = 0.0;
     qreal fireworkAlpha = 0.0;

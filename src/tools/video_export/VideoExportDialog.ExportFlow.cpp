@@ -465,6 +465,9 @@ bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* e
     // copyIntroStyling(). currentIntroSpec() would bake in the currently-open
     // chart's mode and force every batch item to it.
     updated.intro = currentIntroSpecForExportTask();
+    updated.introSoundVolume = introSoundVolumeSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(introSoundVolumeSlider_->value()) / 100.0, 2.0)
+        : updated.introSoundVolume;
     updated.intro.enabled = addIntroCheck_ != nullptr && addIntroCheck_->isChecked();
 
     if (updated.outputWidth <= 0 || updated.outputHeight <= 0) {
@@ -508,7 +511,8 @@ void VideoExportDialog::applyThemeStyles()
 
     // Dialog dropdowns (miacode::ui::createDialogComboBox).
     for (QComboBox* combo : {resolutionCombo_, fpsCombo_, audioBitrateCombo_,
-                             presetCombo_, sizePresetCombo_, backgroundScaleModeCombo_}) {
+                             presetCombo_, sizePresetCombo_, backgroundScaleModeCombo_,
+                             introSoundCombo_}) {
         miacode::ui::applyDialogComboBoxStyle(combo, 12);
     }
 
@@ -518,7 +522,8 @@ void VideoExportDialog::applyThemeStyles()
             miacode::ui::applyDialogPushButtonStyle(button);
         }
     }
-    for (QPushButton* button : {outputBrowseButton_, introBackgroundBrowse_, setStartButton_, setEndButton_}) {
+    for (QPushButton* button : {outputBrowseButton_, introSoundImportButton_, introBackgroundBrowse_,
+                                setStartButton_, setEndButton_}) {
         if (button != nullptr) {
             miacode::ui::applyDialogAuxiliaryButtonStyle(button);
         }
@@ -549,7 +554,8 @@ void VideoExportDialog::applyThemeStyles()
     if (previewSlider_ != nullptr) {
         previewSlider_->setStyleSheet(UiTheme::formSliderStyleSheet());
     }
-    for (QSlider* slider : {brightnessOuterSlider_, brightnessInnerSlider_, layoutSquareScaleSlider_}) {
+    for (QSlider* slider : {brightnessOuterSlider_, brightnessInnerSlider_, layoutSquareScaleSlider_,
+                            introSoundVolumeSlider_}) {
         if (slider != nullptr) {
             miacode::ui::applyDialogSliderStyle(slider);
         }
@@ -905,6 +911,9 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     // launch snapshot can detect from the live chart just before worker handoff.
     // `enabled` is recomputed below from the checkbox + range.
     updated.intro = currentIntroSpecForExportTask();
+    updated.introSoundVolume = introSoundVolumeSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(introSoundVolumeSlider_->value()) / 100.0, 2.0)
+        : updated.introSoundVolume;
     updated.intro.enabled =
         (addIntroCheck_ != nullptr && addIntroCheck_->isChecked())
         && updated.fullRangeExport;
@@ -1027,6 +1036,42 @@ void VideoExportDialog::done(int result)
 
 bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
 {
+    if (disableSelectionWheelChanges_ && event != nullptr && event->type() == QEvent::Wheel) {
+        auto* widget = qobject_cast<QWidget*>(watched);
+        if (widget != nullptr && (widget == this || isAncestorOf(widget))) {
+            auto* combo = qobject_cast<QComboBox*>(widget);
+            auto* spin = qobject_cast<QAbstractSpinBox*>(widget);
+            const bool closedCombo = combo != nullptr
+                && (combo->view() == nullptr || !combo->view()->isVisible());
+            const bool inactiveSpin = spin != nullptr && !spin->hasFocus();
+            if (closedCombo || inactiveSpin) {
+                auto* wheelEvent = static_cast<QWheelEvent*>(event);
+                for (QWidget* ancestor = widget->parentWidget(); ancestor != nullptr;
+                     ancestor = ancestor->parentWidget()) {
+                    auto* scrollArea = qobject_cast<QAbstractScrollArea*>(ancestor);
+                    if (scrollArea == nullptr || scrollArea->viewport() == nullptr) {
+                        continue;
+                    }
+                    const QPointF viewportPosition = scrollArea->viewport()->mapFromGlobal(
+                        wheelEvent->globalPosition().toPoint());
+                    QWheelEvent forwarded(
+                        viewportPosition,
+                        wheelEvent->globalPosition(),
+                        wheelEvent->pixelDelta(),
+                        wheelEvent->angleDelta(),
+                        wheelEvent->buttons(),
+                        wheelEvent->modifiers(),
+                        wheelEvent->phase(),
+                        wheelEvent->inverted(),
+                        wheelEvent->source());
+                    QCoreApplication::sendEvent(scrollArea->viewport(), &forwarded);
+                    break;
+                }
+                event->accept();
+                return true;
+            }
+        }
+    }
     if (event != nullptr && UiDialogs::dialogOwnsPreviewShortcutScope(this)) {
         if (event->type() == QEvent::ShortcutOverride) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);

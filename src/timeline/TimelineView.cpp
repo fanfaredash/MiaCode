@@ -384,8 +384,12 @@ void TimelineView::applyStateFromBridge()
     updateDisplayBounds();
     updateHorizontalRange();
     if (horizontalScrollBar() != nullptr) {
+        // QScrollBar is an int API; the bridge's scroll is sub-pixel. Round at this boundary
+        // rather than widening QAbstractScrollArea's contract.
         horizontalScrollBar()->setValue(
-            qBound(horizontalScrollBar()->minimum(), stateBridge_->horizontalScrollValue(), horizontalScrollBar()->maximum()));
+            qBound(horizontalScrollBar()->minimum(),
+                   qRound(stateBridge_->horizontalScrollValue()),
+                   horizontalScrollBar()->maximum()));
     }
     layoutHeaderButtons();
     refreshMinimumHeightForCurrentDevice();

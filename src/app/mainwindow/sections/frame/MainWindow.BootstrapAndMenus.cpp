@@ -139,7 +139,16 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         quitAction,
         QStringLiteral("file.quit"),
         QKeySequence(QStringLiteral("Ctrl+Esc")));
-    connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
+    connect(quitAction, &QAction::triggered, &owner_, [&owner = owner_]() {
+        // QuickShell's visible root window owns the close relay and unsaved
+        // confirmation. Closing its hidden QWidget backend leaves the shell
+        // alive, while QApplication::quit() cannot be vetoed by Cancel.
+        if (!owner.quickShellRootWindow_.isNull()) {
+            owner.quickShellRootWindow_->close();
+            return;
+        }
+        owner.close();
+    });
     fileMenu->addAction(quitAction);
 
     owner_.findReplaceAction_ = new QAction(
@@ -388,12 +397,6 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         &owner_
     );
     connect(owner_.netBatchDownloadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchDownload);
-    owner_.netBatchUploadAction_ = new QAction(
-        UiText::text(QStringLiteral("net.upload_action")),
-        &owner_
-    );
-    connect(owner_.netBatchUploadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchUpload);
-
     owner_.normalizeWholeChartAction_ = new QAction(
         UiText::text(QStringLiteral("menu.format_chart")),
         &owner_
@@ -640,6 +643,21 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     });
     renderModeGroup->addAction(owner_.renderModeMaimuriDxAction_);
     previewMenu->addAction(owner_.renderModeMaimuriDxAction_);
+
+    owner_.renderModeEraseByAreaAction_ = new QAction(
+        UiText::text(QStringLiteral("menu.preview_mode_erase_by_area")),
+        &owner_
+    );
+    owner_.renderModeEraseByAreaAction_->setCheckable(true);
+    owner_.renderModeEraseByAreaAction_->setChecked(owner_.muriRenderOptions_.renderMode == RenderMode::EraseByArea);
+    owner_.renderModeEraseByAreaAction_->setIcon(
+        owner_.renderModeEraseByAreaAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
+    );
+    connect(owner_.renderModeEraseByAreaAction_, &QAction::triggered, &owner_, [this]() {
+        owner_.setMuriRenderMode(RenderMode::EraseByArea);
+    });
+    renderModeGroup->addAction(owner_.renderModeEraseByAreaAction_);
+    previewMenu->addAction(owner_.renderModeEraseByAreaAction_);
 
     owner_.editStaticTapOnSlideThresholdAction_ = new QAction(
         UiText::text(QStringLiteral("menu.tap_on_slide_threshold")),

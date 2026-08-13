@@ -70,7 +70,13 @@ QString manifestPathForRoot(const QString& extensionRootPath)
 
 bool isSupportedMenuLocation(const QString& location)
 {
-    return location == QStringLiteral("tools/menu")
+    return location == QStringLiteral("file/menu")
+        || location == QStringLiteral("edit/menu")
+        || location == QStringLiteral("tools/menu")
+        || location == QStringLiteral("modify/menu")
+        || location == QStringLiteral("preview/menu")
+        || location == QStringLiteral("help/menu")
+        || location == QStringLiteral("toolbox/menu")
         || location == QStringLiteral("menubar/beforeHelp");
 }
 

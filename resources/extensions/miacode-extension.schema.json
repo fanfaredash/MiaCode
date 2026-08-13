@@ -155,7 +155,13 @@
           "type": "object",
           "propertyNames": {
             "enum": [
+              "file/menu",
+              "edit/menu",
               "tools/menu",
+              "modify/menu",
+              "preview/menu",
+              "help/menu",
+              "toolbox/menu",
               "menubar/beforeHelp"
             ]
           },

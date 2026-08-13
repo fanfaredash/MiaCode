@@ -141,8 +141,8 @@ private:
 void reclaimGeometriesFromTree(QSGNode* parent, TimelineQuickGeometryPool* pool);
 
 // ---------------------------------------------------------------------
-// Sprite batch builder (parity with PreviewDCompSpritePipeline's draw-run
-// coalescing). Stream textured quads in; each transition between
+// Sprite batch builder with draw-run coalescing. Stream textured quads
+// in; each transition between
 // textures starts a new batch. flush() emits one QSGGeometryNode per
 // batch as a child of `parent`, with one QSGTextureMaterial pointing at
 // the run's shared texture. For chart data with N sprites and K distinct

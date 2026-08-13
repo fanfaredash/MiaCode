@@ -2,6 +2,13 @@
 
 #include "../../MainWindow.h"
 
+#include "audio/PreviewAudioDeviceChangePolicy.h"
+#include "audio/PreviewAudioDeviceCutoff.h"
+
+namespace miacode::preview_audio {
+struct PreviewAudioCompletion;
+}
+
 class MainWindow::TimelineSection {
 public:
     TimelineSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
@@ -86,12 +93,20 @@ public:
         double second,
         bool centerView = true,
         bool ensureVisibleWhenPaused = false);
+    // See MainWindowMemberStorage.inc `touchPadAuthoringAnchor*`: maps a playhead
+    // parked by a touch-authoring seek back to the token that click wrote to.
+    double touchPadAuthoringAnchoredSecond(double previewSecond) const;
+    void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
+    // Document offset inside the comma token the playhead is on — the same token
+    // the preview-follow highlight is drawn over.
+    bool previewFollowTokenPosition(int* position) const;
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void updatePreviewSliderRange();
     void updatePreviewSliderPosition(double second);
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearPreviewObjectStats();
+    void emitChartSwitchResourceGauge();
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
@@ -191,14 +206,34 @@ public:
     void resetExportAuditionClockCursor(double startSecond);
     void maybeFireExportAuditionClockTicks(double second);
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
-    void pauseQtPreviewPlaybackExact();
+    // The wall clock names the pause second in both cases; this only selects whether the
+    // audio position is sampled alongside it and recorded. AudioPosition is the
+    // audio-device auto-pause, the one path where a process stall makes the two diverge
+    // measurably — the divergence is logged as pause_audio_stall_observed and acted on by
+    // nobody, because at a device switch the stalled audio is lost rather than deferred.
+    enum class PauseSecondSource { WallClock, AudioPosition, NativeDeviceCutoff };
+    void pauseQtPreviewPlaybackExact(PauseSecondSource pauseSecondSource = PauseSecondSource::WallClock);
+    void pausePreviewForAudioDeviceChange(miacode::preview_audio::device_change::Change change);
+    void applyPreviewAudioDeviceCutoff(
+        const miacode::preview_audio::PreviewAudioDeviceCutoff& cutoff);
     void handlePreviewStartupCanvasPresented();
     void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);
+    void handlePreviewAudioPrepared(const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void handlePreviewRetainedPlaybackCompleted(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
+    // Phase-locked sampling entry point: driven by TimelineQuickItem's afterAnimating hook
+    // (once per timeline frame, GUI thread, just before that frame's scene-graph sync).
+    void onTimelineRenderCadenceTick();
+    // Fallback entry point for qtPreviewTimelineTimer_, which is now a watchdog: it flushes
+    // only when the render cadence above has gone silent (window hidden, scene graph torn
+    // down, render loop stalled), so a dead cadence can never freeze the playhead.
+    void onTimelineCadenceWatchdogTick();
+    qint64 timelineCadenceWatchdogThresholdMs() const;
     void onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock);
     void onQtPreviewTick();
     double applyVisualClockSmoothing(double audioSecond, double fallbackSecond, bool hasAudioClock);
@@ -211,8 +246,13 @@ private:
     void invalidatePreviewFollowBindingCache();
     bool cachedPreviewFollowBindingContainsSecond(double second) const;
     void cachePreviewFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding);
-    void cancelPreviewStartupSync();
+    void cancelPreviewStartupSync(const char* cause);
+    void clearPreviewPlayingRetainedSeek();
     void tryCommitPreviewStartupSync();
+    void handlePreviewAudioStartupCompletion(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void handlePreviewPlayingRetainedSeekCompletion(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
     void scheduleDeferredPreviewUiTail(
         bool applyPreviewVisualSettings,
         bool applyDeferredAnalysis,

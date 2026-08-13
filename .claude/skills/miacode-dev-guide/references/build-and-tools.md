@@ -44,6 +44,9 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`, `preview_head_layer_spec`,
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
+  `timeline_cadence_arbitration_policy_spec` (decides whether the timeline's watchdog timer may
+  sample playback, or must yield to the `afterAnimating` render cadence — see
+  `cross-chain-linkage.md` §14),
   `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
   `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),

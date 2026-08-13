@@ -52,6 +52,7 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     logTrackFileMissingAfterLoadIfNeeded();
     const double pauseSecond = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = pauseSecond;
+    disarmSfxScheduler("suspend_transport");
     // G1 Commit 6 (corrected post-test): master mixer stays ACTIVE_PLAYING for the
     // engine's lifetime — what makes the BGM go silent is *this* call, setting
     // BASS_MIXER_CHAN_PAUSE on the BGM source. Pre-G1, BASS_ChannelPause on the
@@ -73,6 +74,7 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     }
     pauseTouchholdVoices();
     playbackSession_.masterRunning = false;
+    audioHealthPlaybackRunning_.store(false, std::memory_order_release);
     playbackSession_.backgroundTrackRunning = false;
     retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
     appendBassDebugLog(
@@ -89,6 +91,7 @@ void BassPreviewAudioBackend::anchorTransportToSecond(double targetSecond, const
     timer.start();
     const double anchoredSecond = clampTimelineSecond(targetSecond);
     preparedPlayback_ = PreparedPlaybackState();
+    disarmSfxScheduler("anchor_transport");
     stopAllSamples();
     resetMasterMixerClock(anchoredSecond);
     configureBackgroundTrackForSecond(
@@ -163,6 +166,7 @@ void BassPreviewAudioBackend::repositionMasterTransportClock(double targetSecond
     playbackSession_.lastTriggeredGroupIndex = -1;
     playbackSession_.triggeredGroupCount = 0;
     playbackSession_.masterRunning = false;
+    audioHealthPlaybackRunning_.store(false, std::memory_order_release);
 }
 
 void BassPreviewAudioBackend::repositionPausedTransportToSecond(double targetSecond, const QString& reason)
@@ -171,6 +175,7 @@ void BassPreviewAudioBackend::repositionPausedTransportToSecond(double targetSec
     timer.start();
     const double repositionedSecond = clampTimelineSecond(targetSecond);
     preparedPlayback_ = PreparedPlaybackState();
+    disarmSfxScheduler("reposition_paused_transport");
     clearResidualVoicesForPausedReposition();
     repositionMasterTransportClock(repositionedSecond);
     configureBackgroundTrackForSecond(
@@ -203,6 +208,7 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
     // Resume is now purely the act of unsetting BASS_MIXER_CHAN_PAUSE on each
     // sample (done below via backgroundTrackSample_->play() and similar).
     playbackSession_.masterRunning = true;
+    audioHealthPlaybackRunning_.store(true, std::memory_order_release);
     playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
     // G1 followup: bass_play also fires on the retained-resume path (the
     // common case for ▶ after ⏸). The cold-start path emits it from
@@ -215,7 +221,8 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
             .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
             .arg(retainedPlaybackModeLabel(retainedMode)));
     if (backgroundTrackSample_ != nullptr) {
-        if (!playbackSession_.backgroundTrackPendingStart) {
+        if (!playbackSession_.backgroundTrackPendingStart
+            && !playbackSession_.backgroundTrackPastEnd) {
             backgroundTrackSample_->play();
             playbackSession_.backgroundTrackRunning = true;
             // G1 Commit 8: bass_sample_play per §7.2 — resume-from-anchor path.
@@ -232,6 +239,7 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
     if (retainedMode == RetainedPlaybackMode::PausedAnchored) {
         restoreTouchholdVoices(playbackSession_.lastAuthoritativeSecond);
     }
+    anchorSfxScheduler(playbackSession_.lastAuthoritativeSecond);
 #endif
     preparedPlayback_ = PreparedPlaybackState();
     appendBassDebugLog(
@@ -300,6 +308,10 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
             backgroundTrackSample_ != nullptr ? 1 : 0);
         miacode::oplog::appendStartupBeaconLine(buf);
     }
+    const bool rearmScheduler = playbackSession_.masterRunning;
+    if (rearmScheduler) {
+        disarmSfxScheduler("live_rate_change");
+    }
     if (backgroundTrackSample_ == nullptr) {
         // No BGM loaded — just record the rate so the next sample creation
         // picks it up. invalidateRetainedPlaybackState is intentionally NOT
@@ -307,6 +319,9 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
         // change to the prepared transport.
         playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
         playbackSession_.sessionPlaybackRate = normalizedRate;
+        if (rearmScheduler) {
+            anchorSfxScheduler(sanitizedChart);
+        }
         miacode::oplog::appendStartupBeaconLine(
             "audio/rate/bass_exit reason=no_bgm");
         return;
@@ -336,13 +351,29 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
             miacode::oplog::appendStartupBeaconLine(buf);
         }
         backgroundTrackSample_->setCurrentSec(rawSecond);
+        playbackSession_.backgroundTrackPendingStart = false;
+        playbackSession_.backgroundTrackPendingStartSecond = sanitizedChart;
+    } else {
+        backgroundTrackSample_->setCurrentSec(0.0);
+        playbackSession_.backgroundTrackPendingStart = true;
+        playbackSession_.backgroundTrackPendingStartSecond = sanitizedChart - rawSecond;
     }
     playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
     playbackSession_.sessionPlaybackRate = normalizedRate;
     playbackSession_.sessionStartSecond = sanitizedChart;
     playbackSession_.lastAuthoritativeSecond = sanitizedChart;
     miacode::oplog::appendStartupBeaconLine("audio/rate/bass_about_to_resume");
-    backgroundTrackSample_->play();
+    if (!playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd) {
+        backgroundTrackSample_->play();
+        playbackSession_.backgroundTrackRunning = true;
+    } else {
+        backgroundTrackSample_->pause();
+        playbackSession_.backgroundTrackRunning = false;
+    }
+    if (rearmScheduler) {
+        anchorSfxScheduler(sanitizedChart);
+    }
     miacode::oplog::appendStartupBeaconLine("audio/rate/bass_exit reason=ok");
     appendAudioDebugLog(
         QString("bass_live_rate_change from=%1 to=%2 chart=%3 raw=%4")
@@ -355,10 +386,12 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
     // for every flag-flip event (cold play, retained resume, live rate
     // change). reason=live_rate_resume distinguishes this from the other
     // two paths.
-    appendAudioDebugLog(
-        QString("bass_sample_play kind=bgm rate_at_play=%1 offset_sec=%2 reason=live_rate_resume")
-            .arg(normalizedRate, 0, 'f', 3)
-            .arg(backgroundTrackSample_->currentSec(), 0, 'f', 6));
+    if (!playbackSession_.backgroundTrackPendingStart) {
+        appendAudioDebugLog(
+            QString("bass_sample_play kind=bgm rate_at_play=%1 offset_sec=%2 reason=live_rate_resume")
+                .arg(normalizedRate, 0, 'f', 3)
+                .arg(backgroundTrackSample_->currentSec(), 0, 'f', 6));
+    }
 #else
     Q_UNUSED(rate);
     Q_UNUSED(chartSecond);
@@ -385,6 +418,7 @@ void BassPreviewAudioBackend::resetMasterMixerClock(double startSecond)
     playbackSession_.lastTriggeredGroupIndex = -1;
     playbackSession_.triggeredGroupCount = 0;
     playbackSession_.masterRunning = false;
+    audioHealthPlaybackRunning_.store(false, std::memory_order_release);
 #else
     Q_UNUSED(startSecond);
 #endif
@@ -418,8 +452,32 @@ void BassPreviewAudioBackend::stopAllSamples()
 #endif
 }
 
+void BassPreviewAudioBackend::stopSfxVoices()
+{
+    MC_OP("BassPreviewAudioBackend::stopSfxVoices");
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // samplesByKind_ holds exactly the note-SFX voices: BGM lives in
+    // backgroundTrackSample_ and is never inserted, and touchhold is loaded with
+    // requiredForMap=false because the pause path already stops it via
+    // pauseTouchholdVoices(). A few kinds alias the same Sample (break_touch /
+    // judge_break, break_slide / break_slide_start); stopping one twice is a no-op.
+    int stoppedCount = 0;
+    for (Sample* sample : samplesByKind_) {
+        if (sample == nullptr || sample == backgroundTrackSample_) {
+            continue;
+        }
+        sample->stop();
+        ++stoppedCount;
+    }
+    appendAudioDebugLog(
+        QString("bass_sfx_voices op=stop reason=audio_device_change stopped=%1")
+            .arg(stoppedCount));
+#endif
+}
+
 void BassPreviewAudioBackend::stopPlaybackSession()
 {
+    disarmSfxScheduler("stop_playback_session");
     stopAllSamples();
     resetMasterMixerClock(playbackSession_.lastAuthoritativeSecond);
     playbackSession_.backgroundTrackRunning = false;
@@ -460,6 +518,7 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
     timer.start();
     if (backgroundTrackSample_ == nullptr) {
         playbackSession_.backgroundTrackPendingStart = false;
+        playbackSession_.backgroundTrackPastEnd = false;
         playbackSession_.backgroundTrackRunning = false;
         appendBassDebugLog(
             miacode::preview_audio::bass::BassDebugOperation::ConfigureBackgroundTrack,
@@ -485,6 +544,7 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
         backgroundTrackSample_->setCurrentSec(0.0);
         backgroundTrackSample_->pause();
         playbackSession_.backgroundTrackPendingStart = true;
+        playbackSession_.backgroundTrackPastEnd = false;
         playbackSession_.backgroundTrackPendingStartSecond = second - rawSecond;
         playbackSession_.backgroundTrackRunning = false;
         appendBassDebugLog(
@@ -499,9 +559,26 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
         return;
     }
 
+    if (backgroundTrackSample_->isAtOrPastEnd(rawSecond)) {
+        backgroundTrackSample_->pause();
+        playbackSession_.backgroundTrackPendingStart = false;
+        playbackSession_.backgroundTrackPastEnd = true;
+        playbackSession_.backgroundTrackRunning = false;
+        appendBassDebugLog(
+            miacode::preview_audio::bass::BassDebugOperation::ConfigureBackgroundTrack,
+            QString("reason=%1 second=%2 raw=%3 elapsed_ms=%4 past_end=1")
+                .arg(reason)
+                .arg(second, 0, 'f', 6)
+                .arg(rawSecond, 0, 'f', 6)
+                .arg(timer.elapsed()),
+            route == miacode::preview_audio::bass::BassDebugRoute::Init);
+        return;
+    }
+
     backgroundTrackSample_->setCurrentSec(rawSecond);
     backgroundTrackSample_->pause();
     playbackSession_.backgroundTrackPendingStart = false;
+    playbackSession_.backgroundTrackPastEnd = false;
     playbackSession_.backgroundTrackPendingStartSecond = second;
     playbackSession_.backgroundTrackRunning = false;
     appendBassDebugLog(
@@ -522,10 +599,17 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
 bool BassPreviewAudioBackend::maybeStartPendingBackgroundTrack(double second)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        if (sfxSchedulerActive_) {
+            return false;
+        }
+    }
     if (backgroundTrackSample_ == nullptr) {
         return false;
     }
     if (playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd
         && second + kBassPreviewEpsilonSeconds >= playbackSession_.backgroundTrackPendingStartSecond) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackPendingStart = false;
@@ -543,15 +627,8 @@ bool BassPreviewAudioBackend::maybeStartPendingBackgroundTrack(double second)
 void BassPreviewAudioBackend::syncBackgroundTrack(double timelineSecond)
 {
     maybeStartPendingBackgroundTrack(timelineSecond);
-    // G1 followup: restore the per-second bass_status row. Pre-G1 it was driven
-    // from syncPreviewPlaybackClockTransaction; that path is gone (Commit 5),
-    // and MainWindow now calls syncBackgroundTrack on every tick as the BGM-
-    // pending-start hook. Riding that schedule keeps bass_status emitting at
-    // the same ~16ms cadence the old call had, then rate-limited to once per
-    // second internally by logPlaybackStatus. authoritativeSecond returns the
-    // last-recorded snapshot now, so we pass MainWindow's wall-clock second
-    // directly into both arguments — `auth` will track wall-clock and the
-    // row's drift_ms collapses to ~0 as long as the chart is on rate.
+    // The pending BGM transition itself is handled by the mixer sync while a
+    // live transport is active. This tick remains status-only.
     logPlaybackStatus(timelineSecond, timelineSecond);
 }
 
@@ -562,6 +639,7 @@ bool BassPreviewAudioBackend::hasBackgroundTrack() const
 
 bool BassPreviewAudioBackend::isBackgroundTrackRunning() const
 {
+    QMutexLocker locker(&schedulerMutex_);
     return playbackSession_.backgroundTrackRunning;
 }
 
@@ -569,10 +647,14 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
 {
     MC_OP("BassPreviewAudioBackend::startBackgroundTrack");
 #ifdef MIACODE_HAS_BASS_AUDIO
+    if (playbackSession_.masterRunning) {
+        disarmSfxScheduler("start_background_track");
+    }
     if (masterMixer_ != 0 && !playbackSession_.masterRunning) {
         resetMasterMixerClock(second);
         // G1 Commit 6: master mixer was started at engine init and never stops.
         playbackSession_.masterRunning = true;
+        audioHealthPlaybackRunning_.store(true, std::memory_order_release);
         playbackSession_.lastAuthoritativeSecond = clampTimelineSecond(second);
     }
     configureBackgroundTrackForSecond(
@@ -582,9 +664,14 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::StartBackgroundTrack,
         QString("second=%1").arg(second, 0, 'f', 6));
-    if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
+    if (backgroundTrackSample_ != nullptr
+        && !playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackRunning = true;
+    }
+    if (playbackSession_.masterRunning) {
+        anchorSfxScheduler(clampTimelineSecond(second));
     }
     noteTransportReady(QStringLiteral("start_background_track"));
 #else
@@ -595,6 +682,7 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
 void BassPreviewAudioBackend::seekBackgroundTrack(double second)
 {
     MC_OP("BassPreviewAudioBackend::seekBackgroundTrack");
+    disarmSfxScheduler("seek_background_track");
     configureBackgroundTrackForSecond(
         second,
         QStringLiteral("seek_background_track"),
@@ -602,12 +690,16 @@ void BassPreviewAudioBackend::seekBackgroundTrack(double second)
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::SeekBackgroundTrack,
         QString("second=%1").arg(second, 0, 'f', 6));
+    if (playbackSession_.masterRunning) {
+        anchorSfxScheduler(clampTimelineSecond(second));
+    }
     noteTransportReady(QStringLiteral("seek_background_track"));
 }
 
 void BassPreviewAudioBackend::pauseBackgroundTrack()
 {
     MC_OP("BassPreviewAudioBackend::pauseBackgroundTrack");
+    disarmSfxScheduler("pause_background_track");
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (backgroundTrackSample_ != nullptr) {
         backgroundTrackSample_->pause();

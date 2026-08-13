@@ -6,6 +6,7 @@
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSceneMath.h"
 #include "core/scene/PreviewSkinSelectors.h"
+#include "core/scene/PreviewTrackShared.h"
 
 #include <cmath>
 
@@ -180,31 +181,21 @@ PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
                     imageOpacity = waitingStarOpacity(waitT, kObjectWaitStateStartOpacity, kObjectWaitStateOpacityDelta);
                 }
             } else {
+                // Shared with the track layer so a track erasure keyed to the
+                // star cannot drift away from where the star is drawn.
                 int segmentIndex = 0;
-                if (!marker.slideSegmentShootSeconds.isEmpty()
-                    && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()) {
-                    for (int i = marker.slideSegmentShootSeconds.size() - 1; i >= 0; --i) {
-                        if (state.playheadSeconds >= marker.slideSegmentShootSeconds[i]) {
-                            segmentIndex = i;
-                            break;
-                        }
-                    }
-                }
-                segmentIndex = qBound(0, segmentIndex, marker.slideSegmentPoints.size() - 1);
+                qreal proportion = 1.0;
+                previewSlideStarSegment(
+                    marker,
+                    state.playheadSeconds,
+                    marker.slideSegmentPoints.size(),
+                    &segmentIndex,
+                    &proportion
+                );
                 const QVector<QPointF>& points = marker.slideSegmentPoints[segmentIndex];
                 const QVector<double>& angles = marker.slideSegmentAngles.value(segmentIndex);
                 if (points.isEmpty()) {
                     continue;
-                }
-                qreal proportion = 1.0;
-                if (segmentIndex < marker.slideSegmentShootSeconds.size()
-                    && segmentIndex < marker.slideSegmentDurations.size()) {
-                    const qreal duration = qMax<qreal>(kRenderDurationEpsilon, marker.slideSegmentDurations[segmentIndex]);
-                    proportion = qBound<qreal>(
-                        0.0,
-                        static_cast<qreal>((state.playheadSeconds - marker.slideSegmentShootSeconds[segmentIndex]) / duration),
-                        1.0
-                    );
                 }
                 logicalPoint = interpolatePoint(points, proportion);
                 angle = interpolateAngle(angles, proportion);

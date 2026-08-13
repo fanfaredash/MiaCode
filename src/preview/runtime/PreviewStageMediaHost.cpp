@@ -63,6 +63,7 @@ PreviewStageMediaHost::PreviewStageMediaHost(QObject* parent)
 {
     videoFrameIntervalsMs_.resize(kVideoFrameIntervalWindowSize);
     videoFrameIntervalsMs_.fill(0.0);
+    pvMemoryElapsed_.start();
 }
 
 PreviewStageMediaHost::~PreviewStageMediaHost()
@@ -72,6 +73,7 @@ PreviewStageMediaHost::~PreviewStageMediaHost()
     const QString mediaType = debugMediaTypeName();
     const bool hadPlayer = player_ != nullptr;
     shutdownForAppExit();
+    destroyPvMemorySource();
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("app_shutdown/stage_media_host"),
@@ -87,6 +89,7 @@ void PreviewStageMediaHost::shutdownForAppExit()
 {
     shuttingDown_ = true;
     clearMedia();
+    destroyPvMemorySource();
 }
 
 void PreviewStageMediaHost::setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath)
@@ -111,6 +114,7 @@ void PreviewStageMediaHost::attachVideoOutputObjects(QObject* videoOutputObject,
     videoOutputObject_ = videoOutputObject;
     innerVideoOutputObject_ = innerVideoOutputObject;
     bindVideoOutput();
+    recordPvMemoryBoundary(PvMemoryBoundary::OutputAttach);
 }
 
 void PreviewStageMediaHost::detachVideoOutputObject(QObject* videoOutputObject)
@@ -132,6 +136,7 @@ void PreviewStageMediaHost::detachVideoOutputObjects(QObject* videoOutputObject,
     videoOutputObject_.clear();
     innerVideoOutputObject_.clear();
     bindVideoOutput();
+    recordPvMemoryBoundary(PvMemoryBoundary::OutputDetach);
 }
 
 bool PreviewStageMediaHost::mediaVisible() const

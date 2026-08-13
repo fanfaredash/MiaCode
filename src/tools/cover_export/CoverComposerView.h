@@ -124,7 +124,7 @@ public:
 
     // Called from QML (CoverComposer.qml's chart-frame Loader) when the live
     // PreviewQuickSceneRoot is created / destroyed. bind configures it (layer
-    // flags, DComp fallback, shared frame state); unbind clears our pointer.
+    // flags, shared frame state); unbind clears our pointer.
     Q_INVOKABLE void bindLiveChartScene(QObject* sceneRoot);
     Q_INVOKABLE void unbindLiveChartScene();
 

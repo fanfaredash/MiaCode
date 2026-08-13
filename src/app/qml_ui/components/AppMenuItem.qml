@@ -46,8 +46,8 @@ MenuItem {
         }
 
         Text {
-            visible: root.shortcut.length > 0
-            text: root.shortcut
+            visible: (root.shortcut || "").length > 0
+            text: root.shortcut || ""
             font: root.font
             color: Theme.colors.text.disabled
             opacity: root.enabled ? 1 : 0.55

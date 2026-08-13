@@ -422,7 +422,8 @@ void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool cent
             .arg(clampedSecond, 0, 'f', 6)
             .arg(centerView ? 1 : 0)
     );
-    owner_.qtPreviewPauseSecond_ = clampedSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        owner_.qtPreviewPauseSecond_, clampedSecond, owner_.qtPreviewPlaying_, "update_shell_preview_scrub");
     if (owner_.previewFullscreenActive_) {
         owner_.showPreviewFullscreenControls(false);
     }
@@ -465,7 +466,8 @@ void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerV
     owner_.stopPreviewHeldSeek();
     owner_.previewScrubDragging_ = false;
     owner_.previewScrubRenderElapsed_.invalidate();
-    owner_.qtPreviewPauseSecond_ = clampedSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        owner_.qtPreviewPauseSecond_, clampedSecond, owner_.qtPreviewPlaying_, "end_shell_preview_scrub");
     if (owner_.previewSeekDebounceTimer_ != nullptr) {
         owner_.previewSeekDebounceTimer_->stop();
     }
@@ -491,9 +493,19 @@ void MainWindow::WindowSection::setShellPreviewRate(double rate)
 
 void MainWindow::WindowSection::toggleShellMuriRenderMode()
 {
-    const RenderMode nextMode = owner_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
-        ? RenderMode::Native
-        : RenderMode::MaimuriDxStyle;
+    // Three exclusive preview modes, so the shell shortcut cycles rather than toggles.
+    RenderMode nextMode = RenderMode::MaimuriDxStyle;
+    switch (owner_.muriRenderOptions_.renderMode) {
+        case RenderMode::Native:
+            nextMode = RenderMode::EraseByArea;
+            break;
+        case RenderMode::EraseByArea:
+            nextMode = RenderMode::MaimuriDxStyle;
+            break;
+        case RenderMode::MaimuriDxStyle:
+            nextMode = RenderMode::Native;
+            break;
+    }
     owner_.setMuriRenderMode(nextMode);
 }
 

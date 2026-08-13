@@ -1,6 +1,8 @@
 #include "timeline/quick/TimelineQuickGridLinesLayer.h"
 
 #include <QMatrix4x4>
+
+#include <cmath>
 #include <QQuickWindow>
 #include <QSGClipNode>
 #include <QSGNode>
@@ -84,7 +86,6 @@ QSGNode* TimelineQuickGridLinesLayer::updateNode(
     const miacode::timeline::TimelineSceneState& state,
     QQuickWindow* window) const
 {
-    Q_UNUSED(window);
     auto* root = dynamic_cast<TimelineQuickGridLinesRootNode*>(oldNode);
     if (root == nullptr) {
         delete oldNode;
@@ -109,8 +110,26 @@ QSGNode* TimelineQuickGridLinesLayer::updateNode(
 
     // Apply the horizontal scroll translate so grid-line content
     // emitted in absolute world-X coords lands at the right viewport-X.
+    //
+    // Snapped to the DEVICE pixel grid, same treatment as the waveform band and for the same
+    // reason: tryAppendOrthogonalLine turns every grid line into a flat-colour rect 1.0-2.0px
+    // wide, and nothing in this app is multisampled. At a fractional translate that changes
+    // every frame, each line's rasterised coverage flips between N and N+1 device pixel
+    // columns, so the lines visibly shimmer in apparent thickness even though their motion is
+    // correct. Snapping freezes the coverage. Snap in device pixels, not logical ones —
+    // rasterisation happens in device pixels, and a logical snap would make the residual dpr
+    // times coarser (2x on Retina) for no benefit.
+    //
+    // Residual: the lines now step while the (linear-filtered, therefore genuinely smooth)
+    // note sprites glide, so a note sitting on a beat can sit up to half a device pixel off
+    // its line, oscillating. That is half the swing of the logical-pixel snap and well under
+    // the shimmer it replaces. See cross-chain-linkage.md §14b.
+    const qreal dpr = window != nullptr && window->effectiveDevicePixelRatio() > 0.0
+        ? window->effectiveDevicePixelRatio()
+        : 1.0;
+    const qreal snappedScroll = std::round(state.horizontalScrollValue * dpr) / dpr;
     QMatrix4x4 transform;
-    transform.translate(-static_cast<float>(state.horizontalScrollValue), 0.0f);
+    transform.translate(-static_cast<float>(snappedScroll), 0.0f);
     if (transformRoot != nullptr) {
         transformRoot->setMatrix(transform);
     }

@@ -43,6 +43,22 @@ inline QString selectedIntroSoundFileName()
     return selectedIntroSoundFileNameStorage();
 }
 
+inline double& selectedIntroSoundVolumeStorage()
+{
+    static double volume = 1.0;
+    return volume;
+}
+
+inline void setSelectedIntroSoundVolume(double volume)
+{
+    selectedIntroSoundVolumeStorage() = qBound(0.0, volume, 2.0);
+}
+
+inline double selectedIntroSoundVolume()
+{
+    return selectedIntroSoundVolumeStorage();
+}
+
 inline QStringList assetFileNamesForKind(const QString& kind)
 {
     const QString lowered = kind.trimmed().toLower();

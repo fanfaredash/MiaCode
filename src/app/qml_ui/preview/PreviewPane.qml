@@ -59,7 +59,6 @@ Rectangle {
             mediaHost: root.previewSession.mediaHost
             logger: root.shellController
             surfaceRole: "workspace"
-            dcompFallbackActive: true
         }
     }
 

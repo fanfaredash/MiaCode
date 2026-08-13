@@ -918,7 +918,8 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     state_.pendingPreviewPlaybackRevision_ = 0;
     state_.pendingPreviewPlaybackDifficultyId_ = 0;
     state_.pendingPreviewPlaybackSecond_ = 0.0;
-    state_.qtPreviewPauseSecond_ = restorePreviewSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, restorePreviewSecond, state_.qtPreviewPlaying_, "switch_to_latency_field");
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
     populateMetadataPage();  // keeps document fields in sync for sidebar use
@@ -1315,7 +1316,8 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->waveformData() : nullptr;
     clearTimelineAndPreview();
     if (restoreSwitchView) {
-        state_.qtPreviewPauseSecond_ = restorePreviewSecond;
+        miacode::mainwindow::shared::writePreviewPauseSecond(
+            state_.qtPreviewPauseSecond_, restorePreviewSecond, state_.qtPreviewPlaying_, "switch_to_difficulty_field");
         state_.pendingDifficultySwitchPreviewRestore_ = true;
         state_.pendingDifficultySwitchPreviewRestoreRevision_ = state_.timelineRevision_ + 1;
         state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = difficultyId;
@@ -1374,6 +1376,11 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         owner_.scheduleTimelineRefresh();
     });
     owner_.saveProjectRenderState();
+    // Chart-switch leak gauge. This is the single funnel for BOTH switch paths —
+    // loadDocument() reaches a chart only via activateInitialField() -> here — so
+    // one call covers difficulty switches and file opens alike. No-ops outside
+    // --debug. See emitChartSwitchResourceGauge() for what the sample means.
+    owner_.emitChartSwitchResourceGauge();
     owner_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     return true;
@@ -1425,7 +1432,8 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
     // switchToDifficultyField) can never resurrect a stale second from the file
     // that was open before this one. Same reason for the export audition's
     // last-installed difficulty (its position-preserve gate).
-    state_.qtPreviewPauseSecond_ = 0.0;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, 0.0, state_.qtPreviewPlaying_, "load_document");
     state_.lastExportAuditionDifficultyId_ = 0;
     state_.activeOutlineKey_ = state_.document_.difficultyIds().isEmpty() ? QStringLiteral("welcome") : QStringLiteral("chart");
     activateInitialField();

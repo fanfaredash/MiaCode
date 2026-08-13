@@ -7,6 +7,7 @@
 #include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "common/DebugLog.h"
+#include "common/ChartAssetPaths.h"
 #include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "core/scene/PreviewSceneConstants.h"
@@ -16,6 +17,7 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
@@ -31,6 +33,65 @@ constexpr int kEditorFindBarHorizontalMargin = 14;
 constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kBottomTabsResizeHotzonePx = 8;
+
+QStringList supportedAudioPathsFromDrop(const QMimeData* mimeData)
+{
+    QStringList paths;
+    if (mimeData == nullptr || !mimeData->hasUrls()) {
+        return paths;
+    }
+    const QStringList extensions = miacode::chart_assets::supportedTrackFileExtensions();
+    for (const QUrl& url : mimeData->urls()) {
+        if (!url.isLocalFile()) {
+            continue;
+        }
+        const QFileInfo info(url.toLocalFile());
+        if (!info.isFile() || !extensions.contains(info.suffix().toLower())) {
+            continue;
+        }
+        const QString path = info.absoluteFilePath();
+        if (!paths.contains(path, Qt::CaseInsensitive)) {
+            paths.append(path);
+        }
+    }
+    return paths;
+}
+
+bool dragTargetBelongsToApp(
+    QObject* watched,
+    QWindow* rootWindow,
+    const QWidget* backendWindow,
+    const QRect& rootFrame,
+    const QPoint& globalPos)
+{
+    if (const auto* item = qobject_cast<const QQuickItem*>(watched)) {
+        for (QWindow* window = item->window(); window != nullptr; window = window->parent()) {
+            if (window == rootWindow) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (const auto* window = qobject_cast<const QWindow*>(watched)) {
+        for (const QWindow* current = window; current != nullptr; current = current->parent()) {
+            if (current == rootWindow) {
+                return true;
+            }
+        }
+        return window->transientParent() == rootWindow;
+    }
+    if (const auto* widget = qobject_cast<const QWidget*>(watched)) {
+        if (widget->window() == backendWindow) {
+            return true;
+        }
+        // Bridge surfaces are native top-level widgets adopted into the QML
+        // root. Their QWidget ancestry is intentionally unrelated to the
+        // hidden backend, so the visible root frame is the stable ownership
+        // check for those surfaces.
+        return rootFrame.isValid() && rootFrame.contains(globalPos);
+    }
+    return rootFrame.isValid() && rootFrame.contains(globalPos);
+}
 
 bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
 {
@@ -528,8 +589,129 @@ void MainWindow::WindowSection::restoreFocusedTextEditStateAttempt(
     );
 }
 
+void MainWindow::WindowSection::setQuickShellRootWindow(QWindow* window)
+{
+    state_.quickShellRootWindow_ = window;
+}
+
+void MainWindow::WindowSection::cancelChartAudioDrop()
+{
+    cancelChartDropOverlayHide();
+    setChartDropOverlayVisible(false);
+}
+
+bool MainWindow::WindowSection::handleChartAudioDropEvent(QObject* watched, QEvent* event)
+{
+    if (event == nullptr) {
+        return false;
+    }
+    const QEvent::Type eventType = event->type();
+    if (eventType != QEvent::DragEnter && eventType != QEvent::DragMove
+        && eventType != QEvent::DragLeave && eventType != QEvent::Drop) {
+        return false;
+    }
+
+    if (eventType == QEvent::DragLeave) {
+        scheduleChartDropOverlayHide();
+        return false;
+    }
+
+    const auto* dropEvent = static_cast<const QDropEvent*>(event);
+    const bool belongsToApp = dragTargetBelongsToApp(
+        watched,
+        state_.quickShellRootWindow_.data(),
+        &owner_,
+        state_.quickShellRootWindowFrameGeometry_,
+        QCursor::pos());
+    if (!belongsToApp) {
+        scheduleChartDropOverlayHide();
+        return false;
+    }
+
+    const QStringList audioPaths = supportedAudioPathsFromDrop(dropEvent->mimeData());
+    if (audioPaths.isEmpty()) {
+        scheduleChartDropOverlayHide();
+        return false;
+    }
+
+    if (eventType == QEvent::DragMove && state_.chartDropOverlayActive_) {
+        static_cast<QDragMoveEvent*>(event)->acceptProposedAction();
+        return true;
+    }
+
+    cancelChartDropOverlayHide();
+    if (eventType == QEvent::DragEnter) {
+        static_cast<QDragEnterEvent*>(event)->acceptProposedAction();
+    } else if (eventType == QEvent::DragMove) {
+        static_cast<QDragMoveEvent*>(event)->acceptProposedAction();
+    }
+    setChartDropOverlayVisible(true);
+
+    if (eventType == QEvent::Drop) {
+        static_cast<QDropEvent*>(event)->acceptProposedAction();
+        setChartDropOverlayVisible(false);
+        const QStringList droppedPaths = audioPaths;
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("ui/chart_drop"),
+            QStringLiteral("drop_received file_count=%1").arg(droppedPaths.size()));
+        QTimer::singleShot(0, &owner_, [this, droppedPaths]() {
+            owner_.handleAudioDrop(droppedPaths);
+        });
+    }
+    return true;
+}
+
+void MainWindow::WindowSection::scheduleChartDropOverlayHide()
+{
+    if (state_.chartDropHideTimer_ == nullptr) {
+        state_.chartDropHideTimer_ = new QTimer(&owner_);
+        state_.chartDropHideTimer_->setSingleShot(true);
+        state_.chartDropHideTimer_->setInterval(160);
+        QObject::connect(state_.chartDropHideTimer_, &QTimer::timeout, &owner_, [this]() {
+            const QWindow* rootWindow = state_.quickShellRootWindow_.data();
+            const bool cursorStillInApp = rootWindow != nullptr
+                && rootWindow->isVisible()
+                && rootWindow->visibility() != QWindow::Minimized
+                && rootWindow->frameGeometry().contains(QCursor::pos());
+            // Child widgets such as the editor intentionally emit DragLeave
+            // while the cursor crosses into another MiaCode surface. Do not
+            // interpret that child-level transition as leaving the app.
+            if (cursorStillInApp) {
+                return;
+            }
+            setChartDropOverlayVisible(false);
+        });
+    }
+    state_.chartDropHideTimer_->start();
+}
+
+void MainWindow::WindowSection::cancelChartDropOverlayHide()
+{
+    if (state_.chartDropHideTimer_ != nullptr) {
+        state_.chartDropHideTimer_->stop();
+    }
+}
+
+void MainWindow::WindowSection::setChartDropOverlayVisible(bool visible)
+{
+    if (state_.chartDropOverlayActive_ == visible) {
+        return;
+    }
+    state_.chartDropOverlayActive_ = visible;
+    emit owner_.chartDropOverlayVisibleChanged(visible);
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/chart_drop"),
+        visible ? QStringLiteral("drop_hover_started")
+                : QStringLiteral("drop_hover_cancelled"));
+}
+
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
+    if (handleChartAudioDropEvent(watched, event)) {
+        return true;
+    }
     auto* watchedWidget = qobject_cast<QWidget*>(watched);
     const auto extensionGestureTargetForWatched = [this](QObject* watchedObject) {
         auto* editorScrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_);

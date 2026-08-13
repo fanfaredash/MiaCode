@@ -34,21 +34,6 @@ constexpr int kVideoExportWorkerStderrBufferMaxBytes = 24 * 1024;
 
 QString appendVideoExportDiagnostics(const QString& base, const QString& extra);
 
-QString videoExportBackgroundScaleModeToken(PreviewBackgroundScaleMode mode)
-{
-    switch (mode) {
-    case PreviewBackgroundScaleMode::FitContain:
-        return QStringLiteral("fit");
-    case PreviewBackgroundScaleMode::SquareFitContain:
-        return QStringLiteral("square_fit");
-    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
-        return QStringLiteral("inner_circle_fit_outer_fill");
-    case PreviewBackgroundScaleMode::FillCrop:
-    default:
-        return QStringLiteral("fill");
-    }
-}
-
 QByteArray buildVideoExportWorkerStartPayload(const VideoExportSnapshot& snapshot)
 {
     QJsonObject commandObject;

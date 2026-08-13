@@ -88,7 +88,7 @@ void MainWindow::TimelineSection::scheduleDeferredPreviewUiTail(
             if (refreshStageMediaDebugState) {
                 owner_.refreshPreviewStageMediaRouteDebugState(true);
             }
-            if (updatePausedPreviewFollowDecoration && state_.previewFollowEnabled_ && !state_.qtPreviewPlaying_) {
+            if (updatePausedPreviewFollowDecoration && !state_.qtPreviewPlaying_) {
                 updatePreviewFollowDecorationForTimelineBlueLine(objectStatsSecond, true);
             }
             if (updatePauseButton) {
@@ -188,7 +188,8 @@ void MainWindow::TimelineSection::applyPausedPreviewVisualSecond(double second, 
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     state_.qtPreviewStartSecond_ = clampedSecond;
-    state_.qtPreviewPauseSecond_ = clampedSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, clampedSecond, state_.qtPreviewPlaying_, "apply_paused_preview_visual_second");
     state_.qtPreviewTimelineStartSecond_ = clampedSecond;
     state_.qtPreviewTimelineElapsed_.restart();
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;

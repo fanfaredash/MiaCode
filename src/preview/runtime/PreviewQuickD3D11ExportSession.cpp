@@ -419,14 +419,9 @@ bool PreviewQuickD3D11ExportSession::initialize(QString* errorMessage)
 
     sceneRoot_ = new PreviewQuickSceneRoot(rootItem_);
     sceneRoot_->setZ(0.0);
-    // Same override as the OpenGL session: the offscreen export scene graph has
-    // no DComp popup, so force the QSG chart-render path regardless of the
-    // exclusive flag (see the long comment in PreviewQuickExportSession.cpp).
-    sceneRoot_->setDCompFallbackActive(true);
 
     hudLayer_ = new PreviewQuickHudLayer(rootItem_);
     hudLayer_->setZ(1.0);
-    hudLayer_->setDCompFallbackActive(true);
 
     applyFrameSize();
     applyFrameState();

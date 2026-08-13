@@ -206,7 +206,7 @@ void TimelineQuickStateBridge::clear()
     waveformData_.reset();
     muriMarkersByLocation_.clear();
     muriMarkerTooltips_.clear();
-    horizontalScrollValue_ = 0;
+    horizontalScrollValue_ = 0.0;
     playbackEntrySeconds_ = 0.0;
     playheadUpperLimitSeconds_ = -1.0;
     playheadSeconds_ = 0.0;
@@ -346,7 +346,8 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.playheadUpperLimitSeconds = playheadUpperLimitSeconds_;
     layoutMetrics_ = miacode::timeline::TimelineSceneStateBuilder::layoutMetrics(request);
     layoutMetricsValid_ = true;
-    horizontalScrollValue_ = qBound(0, horizontalScrollValue_, maxHorizontalScrollValue());
+    horizontalScrollValue_ =
+        qBound(0.0, horizontalScrollValue_, static_cast<double>(maxHorizontalScrollValue()));
 }
 
 int TimelineQuickStateBridge::maxHorizontalScrollValue() const
@@ -357,18 +358,18 @@ int TimelineQuickStateBridge::maxHorizontalScrollValue() const
     return miacode::timeline::TimelineSceneStateBuilder::maxHorizontalScrollValue(layoutMetrics_);
 }
 
-int TimelineQuickStateBridge::horizontalScrollValue() const
+double TimelineQuickStateBridge::horizontalScrollValue() const
 {
     return horizontalScrollValue_;
 }
 
-void TimelineQuickStateBridge::setHorizontalScrollValue(int value)
+void TimelineQuickStateBridge::setHorizontalScrollValue(double value)
 {
     if (!layoutMetricsValid_) {
         refreshLayoutMetrics();
     }
-    const int clamped = qBound(0, value, maxHorizontalScrollValue());
-    if (horizontalScrollValue_ == clamped) {
+    const double clamped = qBound(0.0, value, static_cast<double>(maxHorizontalScrollValue()));
+    if (qFuzzyCompare(horizontalScrollValue_ + 1.0, clamped + 1.0)) {
         return;
     }
     horizontalScrollValue_ = clamped;
@@ -377,7 +378,7 @@ void TimelineQuickStateBridge::setHorizontalScrollValue(int value)
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("timeline/bridge"),
             QStringLiteral("action=set_horizontal_scroll_value value=%1 max=%2 viewport_width=%3")
-                .arg(horizontalScrollValue_)
+                .arg(horizontalScrollValue_, 0, 'f', 3)
                 .arg(maxHorizontalScrollValue())
                 .arg(effectiveViewportSize().width())
         );
@@ -425,7 +426,7 @@ double TimelineQuickStateBridge::viewportCenterSecond()
         refreshLayoutMetrics();
     }
     const double pixelsPerSecond = qMax(1e-9, layoutMetrics_.pixelsPerSecond);
-    const double sceneX = static_cast<double>(horizontalScrollValue_)
+    const double sceneX = horizontalScrollValue_
         + (static_cast<double>(layoutMetrics_.viewportSize.width()) * 0.5);
     return qMax(
         0.0,
@@ -572,11 +573,16 @@ bool TimelineQuickStateBridge::centerOnSecond(double second)
     if (!layoutMetricsValid_) {
         refreshLayoutMetrics();
     }
-    const int targetX =
-        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(layoutMetrics_, second)
-        - (layoutMetrics_.viewportSize.width() / 2);
-    const int clamped = qBound(0, targetX, maxHorizontalScrollValue());
-    if (horizontalScrollValue_ == clamped) {
+    // Exact, not secondToSceneX: this is the follow-playback scroll target, and rounding it
+    // to whole pixels is what quantised the scroll velocity into the 3/4/5px stepping that
+    // reads as judder. The viewport half-width is halved in floating point for the same
+    // reason — integer division here reintroduced a half-pixel bias on odd widths.
+    const qreal targetX =
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneXExact(layoutMetrics_, second)
+        - (layoutMetrics_.viewportSize.width() / 2.0);
+    const double clamped = qBound(0.0, static_cast<double>(targetX),
+                                  static_cast<double>(maxHorizontalScrollValue()));
+    if (qFuzzyCompare(horizontalScrollValue_ + 1.0, clamped + 1.0)) {
         return false;
     }
     horizontalScrollValue_ = clamped;
@@ -700,6 +706,21 @@ void TimelineQuickStateBridge::setCursorSeconds(double second, bool centerView)
         );
     }
     emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::notifyRenderCadenceTick()
+{
+    emit renderCadenceTick();
+}
+
+void TimelineQuickStateBridge::setPlaybackCadenceActive(bool active)
+{
+    playbackCadenceActive_ = active;
+}
+
+bool TimelineQuickStateBridge::playbackCadenceActive() const
+{
+    return playbackCadenceActive_;
 }
 
 void TimelineQuickStateBridge::focusPlayhead(bool centerView)

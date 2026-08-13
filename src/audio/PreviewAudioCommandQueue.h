@@ -1,0 +1,65 @@
+#pragma once
+
+#include "PreviewAudioWorkerProtocol.h"
+
+#include <deque>
+#include <mutex>
+#include <optional>
+#include <vector>
+
+namespace miacode::preview_audio {
+
+struct EnqueueResult {
+    bool accepted = false;
+    bool replaced = false;
+    bool coalesced = false;
+    CommandError error = CommandError::None;
+    quint64 retiredSequence = 0;
+    std::vector<PreviewAudioCommand> invalidatedCommands;
+};
+
+class PreviewAudioCommandQueue
+{
+public:
+    static constexpr qsizetype kHighCapacity = 16;
+    static constexpr qsizetype kOrderedCapacity = 128;
+    static constexpr qsizetype kAuditionCapacity = 32;
+
+    EnqueueResult enqueue(PreviewAudioCommand command);
+    // The device pause must establish its generation watermark and reserve its command
+    // under one queue lock, so no old playback work can slip in between those actions.
+    EnqueueResult enqueueDeviceChangePauseBarrier(PreviewAudioCommand command);
+    EnqueueResult beginShutdown(
+        PreviewAudioCommand shutdown = makeHigh(CommandKind::Shutdown));
+    std::optional<PreviewAudioCommand> takeNext();
+
+    void invalidateBefore(quint64 generation);
+    bool containsInvalidatablePlaybackGeneration(quint64 generation) const;
+    bool empty() const;
+    qsizetype size() const;
+    bool isShuttingDown() const;
+
+private:
+    struct Entry {
+        PreviewAudioCommand command;
+        quint64 order = 0;
+    };
+
+    Entry makeEntry(PreviewAudioCommand command);
+    std::optional<PreviewAudioCommand> takeHigh();
+
+    mutable std::mutex mutex_;
+    std::deque<Entry> high_;
+    std::deque<Entry> ordered_;
+    std::deque<Entry> auditions_;
+    std::optional<Entry> shutdown_;
+    std::optional<Entry> devicePause_;
+    std::optional<Entry> manualPause_;
+    std::optional<Entry> syncBackgroundTrack_;
+    std::optional<Entry> drainEvents_;
+    quint64 nextOrder_ = 1;
+    quint64 minimumPlaybackGeneration_ = 0;
+    bool shuttingDown_ = false;
+};
+
+}  // namespace miacode::preview_audio

@@ -362,11 +362,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   stage-background setters (`setStageMediaAvailable`, `setStageMediaPresentationMode`,
   `setExternalStageMedia*`). Verify exact widget-shell vs quickshell routing in
   `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
-  - **Video decode backend:** on **Windows** the host decodes PV/BG via **QtAVPlayer (FFmpeg)**,
+  - **Video decode backend:** on **Windows and macOS** the host decodes PV/BG via **QtAVPlayer (FFmpeg)**,
     not `QMediaPlayer` — guarded by the `MIACODE_USE_QTAVPLAYER` build macro (CMake-defined on
-    Windows; other platforms keep the `QMediaPlayer` path under `#elif defined(HAVE_QT_MULTIMEDIA)`).
-    QtAVPlayer source is vendored in `third_party/QtAVPlayer/`; it links the FFmpeg dev SDK under
-    `third_party/ffmpeg/windows/dev/`. Decoded frames are *pushed* into the QML `VideoOutput`'s
+    `WIN32 OR APPLE`; other platforms keep the `QMediaPlayer` path under `#elif defined(HAVE_QT_MULTIMEDIA)`).
+    Windows hardware decode is D3D11VA; macOS uses VideoToolbox with QtAVPlayer's Metal bridge.
+    QtAVPlayer source is vendored in `third_party/QtAVPlayer/`; it links the FFmpeg dev SDK selected by
+    `MIACODE_FFMPEG_DEV_DIR` (Windows defaults to `third_party/ffmpeg/windows/dev/`; macOS package builds
+    resolve Homebrew `ffmpeg@6`/`ffmpeg` when no explicit SDK is supplied). Decoded frames are *pushed* into the QML `VideoOutput`'s
     `QVideoSink` (`handleDecodedVideoFrame`) rather than observed; `setSpeed` (not `setPlaybackRate`)
     + `seek` drive playback, and the paused-seek / prepared-start acks settle on frame `pts`.
     The public method/signal contract is unchanged, so `MainWindow.*` callers don't change.
@@ -387,16 +389,30 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     "掉帧→必须重启/闪退" root cause (`docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md` §8). Any
     new ad-hoc `createTextureFromImage` + texture-node site must declare ownership explicitly
     (repository-cached textures stay `setOwnsTexture(false)` — the repository deletes them).
-- DComp path (**OFF by default**): `src/sources/*Source` → `src/render/compositor` →
-  `src/render/backend_d3d11/PreviewDComp*` + `TimelineRenderView`.
 
 ## 7. Preview audio & SFX scheduling — `src/audio/`
 
-- Facade: `QtPreviewSfxRuntime.{h,cpp}` (+ include-split `.Assets/.Timeline/.Background/.Engine/.Voices.cpp`)
-  — backend selection, prepare/commit/pause/resume/seek surface.
-- Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}` (Windows,
-  real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
-  `MiniaudioPreviewAudioBackend.{h,cpp}` (non-Windows compatibility, SoundTouch stretch).
+- Facade: `QtPreviewSfxRuntime.{h,cpp}` — GUI-owned command/subscription surface. It posts value
+  commands to `PreviewAudioWorker`, reads published snapshots for synchronous fallbacks, and delivers
+  worker completions through queued Qt signals; it never owns a native backend.
+- Worker boundary: `PreviewAudioWorker.{h,cpp}`, `PreviewAudioWorkerProtocol.h`,
+  `PreviewAudioCommandQueue.*`, and `PreviewAudioWorkerFactory.*` — one non-`QObject`
+  `std::thread` owns backend construction/use/destruction and periodic health samples. The bounded
+  queue reserves capacity for shutdown/manual/device pause, keeps BGM sync/event drain latest-only,
+  and carries only owned value payloads.
+- Completion contract: `generation` + `transactionId` accepts playback results, `assetGeneration`
+  accepts reload/ready results, and device-pause completions additionally match the first immutable
+  `pauseToken`. `PreviewAudioNonGuiBarrierSpec` covers worker/probe waits; GUI MainWindow paths must
+  consume queued completions instead of blocking.
+- Device behavior: `PreviewAudioDeviceWatcher` reports a real device topology/default change to the
+  MainWindow, which captures and visibly freezes the pause second before enqueueing its reserved
+  device pause. The completion leaves playback paused until an explicit Play action.
+- Process-wide BASS device lifetime: `PreviewBassDeviceLease.{h,cpp}` — serializes only
+  `BASS_GetDevice` / `BASS_Init` / final `BASS_Free` for preview, waveform, and export owners;
+  existing devices are borrowed and never freed by the lease.
+- Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}`
+  (Windows/macOS, real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
+  `MiniaudioPreviewAudioBackend.{h,cpp}` (no-BASS compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
 - BreakSlide尾音欢呼关闭 is an immediate app-level preference at
@@ -699,7 +715,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     as `CoverComposerView` (bare `QQuickWindow` + `grabWindow()` on the process RHI = D3D11; **no
     `QQuickView`, no forced OpenGL** — it is NOT the export worker), but it hosts a
     **`PreviewQuickSceneRoot`** (the same C++ chart scene the live preview + video export use; no
-    QML/engine needed) with `setDCompFallbackActive(true)` + `kPreviewExportOverlayRenderLayers`
+    QML/engine needed) with `kPreviewExportOverlayRenderLayers`
     (everything except the song-background media) captured over **transparent**, so the playfield
     (outline ring + notes + judge) composites as a layer over the cover's own background.
     `bootstrap(task)` maps the `VideoExportTask` → base `PreviewFrameState` ONCE (mirrors
@@ -729,7 +745,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
       `import` must resolve in both the live engine AND the export engine (even though the export path
       never instantiates the type). C++ `bindLiveChartScene` (called from the QML `Loader.onItemChanged`
       via the `chartSceneBinder` root property, set on the LIVE path only) configures the scene exactly
-      like `SceneFrameRenderer`: `kPreviewExportOverlayRenderLayers` + `setDCompFallbackActive(true)` +
+      like `SceneFrameRenderer`: `kPreviewExportOverlayRenderLayers` +
       the SHARED `PreviewFrameState` borrowed from the dialog's `SceneFrameRenderer`
       (`frameState()`/`setPlayheadSeconds()`), plus `clip:true` on the scene root for square-box parity
       with the export framebuffer. The export render (`editable=false` → `chartSceneBinder` null → the

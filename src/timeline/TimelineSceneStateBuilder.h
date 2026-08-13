@@ -22,7 +22,11 @@ struct TimelineSceneBuildRequest {
     QSize viewportSize;
     QFont headerLineNumberFont;
     QString skinDirectory;
-    int horizontalScrollValue = 0;
+    // Sub-pixel. Follow-mode playback moves this by ~1-4 logical px per frame, so rounding it
+    // to whole pixels quantised the scroll velocity and produced visible judder (see
+    // cross-chain-linkage.md §14). Consumers that genuinely need an integer (QScrollBar, the
+    // cull-bucket index, the extension payload) round at their own boundary.
+    double horizontalScrollValue = 0.0;
     int headerLeftLimit = 0;
     int headerRightLimit = 0;
     int headerMarkerLeftLimit = 0;
@@ -52,10 +56,9 @@ struct TimelineSceneBuildRequest {
     bool showSlideTracks = true;
     bool playheadIndicatorSuppressed = false;
     bool dragActive = false;
-    // Phase 9d-native — header control state. The DComp path renders
-    // the zoom visual natively in the popup composition plane because
-    // DWM stacks the popup HWND above the QQuickWindow's surface and
-    // QML siblings can't paint above it.
+    // Phase 9d-native — header control state. Drives the zoom visual
+    // emitted into TimelineSceneState and drawn by
+    // TimelineQuickHeaderLayer; the QML ToolButton handles input only.
     int zoomControlPressedPart = 0;
     int zoomControlHoveredPart = 0;
     bool settingsControlHovered = false;
@@ -77,6 +80,9 @@ public:
     static TimelineSceneLayoutMetrics layoutMetrics(const TimelineSceneBuildRequest& request);
     static int maxHorizontalScrollValue(const TimelineSceneLayoutMetrics& metrics);
     static int secondToSceneX(const TimelineSceneLayoutMetrics& metrics, double second);
+    // Un-rounded counterpart of secondToSceneX. Scroll targets must use this: rounding the
+    // target is what quantises follow-playback motion.
+    static qreal secondToSceneXExact(const TimelineSceneLayoutMetrics& metrics, double second);
     static TimelineSceneState build(const TimelineSceneBuildRequest& request);
     static int secondToSceneX(const TimelineSceneState& state, double second);
     static double sceneXToSecond(const TimelineSceneState& state, qreal x);

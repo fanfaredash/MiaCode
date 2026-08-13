@@ -16,6 +16,7 @@
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
 #include "editor/TouchPadAuthoringEdit.h"
+#include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
@@ -212,9 +213,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (netBatchDownloadAction_ != nullptr) {
         toolsMenu->addSeparator();
         toolsMenu->addAction(netBatchDownloadAction_);
-        if (netBatchUploadAction_ != nullptr) {
-            toolsMenu->addAction(netBatchUploadAction_);
-        }
     }
     extensionManager_ = std::make_unique<miacode::extensions::ExtensionManager>(this);
     miacode::extensions::ExtensionHostCallbacks extensionCallbacks;
@@ -268,7 +266,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         }
     };
     extensionManager_->setCallbacks(std::move(extensionCallbacks));
-    extensionManager_->initialize(menuBar(), toolsMenu, helpMenu);
+    extensionManager_->initialize(
+        menuBar(), fileMenu, editMenu, toolsMenu, transformMenu, previewMenu, helpMenu);
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
         editMenu->removeAction(editActions.constLast());
@@ -354,13 +353,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         applyEditorOverwriteModeEnabled(enabled, true);
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::activateBookmarkAtLine);
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkCreateRequested, this, [this](int line) {
-        if (editorSection_ != nullptr) {
-            // Dialog-free creation: default name now, inline rename in the
-            // sidebar for the final name (see the bookmark redesign spec).
-            editorSection_->createBookmarkAtLine(line, true);
-        }
-    });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkRenameRequested, this, [this](int line) {
         if (documentSection_ != nullptr) {
             documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
@@ -369,11 +361,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(editor, &PlainCodeEditor::lineNumberBookmarkDeleteRequested, this, [this](int line) {
         if (editorSection_ != nullptr) {
             editorSection_->deleteBookmarkAtLineWithConfirmation(line);
-        }
-    });
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkMoveRequested, this, [this](int fromLine, int toLine) {
-        if (editorSection_ != nullptr) {
-            editorSection_->replaceBookmarkLine(fromLine, toLine);
         }
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkContextMenuRequested, this,
@@ -1294,9 +1281,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (netBatchDownloadAction_ != nullptr) {
         toolboxMenu_->addSeparator();
         toolboxMenu_->addAction(netBatchDownloadAction_);
-        if (netBatchUploadAction_ != nullptr) {
-            toolboxMenu_->addAction(netBatchUploadAction_);
-        }
     }
 
     // Copy Area is intentionally hidden from the toolbox per the toolbox
@@ -1316,11 +1300,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         connect(fullCopyAreaAction_, &QAction::toggled, this, &MainWindow::setFullCopyAreaVisible);
     }
 
-    toolboxMenu_->addSeparator();
+    QAction* toolboxNetGroupEndAction = toolboxMenu_->addSeparator();
 
     QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
         UiText::text(QStringLiteral("menu.official_chart_mirror"))
     );
+    if (extensionManager_ != nullptr) {
+        extensionManager_->setToolboxMenu(toolboxMenu_, toolboxNetGroupEndAction);
+    }
     connect(toolboxOfficialChartMirrorAction, &QAction::triggered, this, [openToolboxUrl]() {
         openToolboxUrl(QStringLiteral("https://www.maiviewer.net/"));
     });
@@ -1346,8 +1333,26 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         QTextCursor cursor = editor->textCursor();
+        // Read the pre-edit offsets NOW: QTextCursor is document-attached and is
+        // shifted by the very edit recorded below, so undo would otherwise be
+        // handed an offset moved by the inserted/removed length.
+        const int originalAnchor = cursor.anchor();
+        const int originalPosition = cursor.position();
+        // Which token the click targets: the one the preview-follow highlight is
+        // drawn over, i.e. what the user can actually see. An unfocused QTextEdit
+        // hides its caret, and paused seeks (arrow keys, slider, timeline) move
+        // the highlight while deliberately leaving the text cursor behind — so
+        // the caret is only the fallback for when no span resolves. The playhead
+        // parked by a previous authoring click resolves back to the token that
+        // click wrote to (see touchPadAuthoringAnchoredSecond), which is what
+        // keeps repeated clicks stacking into one token.
+        int targetPosition = originalPosition;
+        int followPosition = 0;
+        if (previewFollowTokenPosition(&followPosition)) {
+            targetPosition = followPosition;
+        }
         const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
-            editor->toPlainText(), cursor.position(), pad, backtickSeparator);
+            editor->toPlainText(), targetPosition, pad, backtickSeparator);
         if (!editPlan.valid) {
             return;
         }
@@ -1364,9 +1369,29 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         editor->setTextCursor(cursor);
+        const double seekSecond = hasTokenSecond
+            ? qMax(0.0, tokenSecond - miacode::preview_interaction::kTouchPadAuthoringPreviewLeadSeconds)
+            : -1.0;
+        if (documentSection_ != nullptr) {
+            // When the click authored where the highlight was rather than where
+            // the (invisible) caret was, undo has to put the caret on THAT token
+            // — otherwise Cmd+Z followed by another Cmd+click lands elsewhere.
+            // Restoring a caret-sourced click keeps any selection it had.
+            const bool followSourced = targetPosition != originalPosition;
+            documentSection_->recordChartCursorUndoEntry(
+                followSourced ? targetPosition : originalAnchor,
+                followSourced ? targetPosition : originalPosition,
+                cursor,
+                seekSecond);
+        }
         editor->setFocus(Qt::OtherFocusReason);
         if (hasTokenSecond) {
-            seekPreviewDiscreteToSecond(qMax(0.0, tokenSecond - (1.0 / 60.0)), true);
+            // The seek lands BEFORE the token so the touch stays visible, which
+            // would otherwise resolve the highlight (and the next click) onto the
+            // preceding token. Record what this parked playhead means first, so
+            // the seek's own deferred decoration refresh already sees it.
+            setTouchPadAuthoringAnchor(seekSecond, tokenSecond);
+            seekPreviewDiscreteToSecond(seekSecond, true);
         }
     });
     if (editorStack_ != nullptr) {
@@ -1450,7 +1475,71 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("preview_controls_and_stats_ready");
 
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::commandCompleted,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                using namespace miacode::preview_audio;
+                if (completion.kind != CommandKind::ReloadAssets
+                    || completion.identity.sequence != state_.previewSfxRuntimePreparationSequence_
+                    || !acceptsAssetCompletion(
+                        state_.previewSfxRuntimePreparationAssetGeneration_, completion)) {
+                    return;
+                }
+                state_.previewSfxRuntimePrepared_ = completion.success
+                    && previewSfxRuntime_ != nullptr
+                    && previewSfxRuntime_->audioEngineInitialized();
+                state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
+                state_.previewSfxRuntimePreparationSequence_ = 0;
+            });
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::previewPrepared,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->handlePreviewAudioPrepared(completion);
+                }
+            });
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::retainedPlaybackCompleted,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->handlePreviewRetainedPlaybackCompleted(completion);
+                }
+            });
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::previewPlaybackPaused,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->handlePreviewRetainedPlaybackCompleted(completion);
+                }
+            });
     logStartupStage("preview_sfx_runtime_created");
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // BASS-only on purpose. docs/audit/AUDIO_CLOCK_DESYNC_AUDIT_ZH.md fixes the
+    // device-change desync (问题 3) to the BASS transport's anchor model on Windows and
+    // macOS. Linux runs MiniaudioPreviewAudioBackend, a different seek/clock
+    // implementation with a separate, unproven report (问题 4), so auto-pausing there
+    // would interrupt playback on no evidence.
+    previewAudioDeviceWatcher_ = new PreviewAudioDeviceWatcher(this);
+    previewAudioDeviceWatcher_->setDirectCutoffHandler(
+        [runtime = previewSfxRuntime_](PreviewAudioDeviceWatcher::Change) {
+            return runtime != nullptr
+                ? runtime->requestDeviceChangeCutoff()
+                : miacode::preview_audio::PreviewAudioDeviceCutoff{};
+        });
+    connect(previewAudioDeviceWatcher_,
+            &PreviewAudioDeviceWatcher::deviceCutoffRequested,
+            this,
+            [this](const PreviewAudioDeviceWatcher::DeviceCutoff& cutoff) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->applyPreviewAudioDeviceCutoff(cutoff);
+                }
+            });
+    logStartupStage("preview_audio_device_watcher_created");
+#endif
     connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
         timelineSection_->handlePreviewStartupCanvasPresented();
         if (!qtPreviewPlaying_) {
@@ -1586,6 +1675,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             QStringLiteral("timeline.zoom_out"),
             {QStringLiteral("Ctrl+WheelDown")}));
     timelineSection_->refreshTimelineWaveformPhaseCompensation();
+    // Phase-locked playback sampling for the timeline. Fires once per timeline frame from
+    // TimelineQuickItem::bindRenderCadence (QQuickWindow::afterAnimating, GUI thread), so the
+    // second we sample is the one that frame renders. qtPreviewTimelineTimer_ remains armed as
+    // a watchdog behind this; see MainWindow.FrameBootstrapFinalize.cpp.
+    connect(timelineQuickStateBridge_,
+            &TimelineQuickStateBridge::renderCadenceTick,
+            this,
+            &MainWindow::onTimelineRenderCadenceTick);
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
     });

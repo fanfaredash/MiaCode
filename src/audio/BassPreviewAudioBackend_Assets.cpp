@@ -40,9 +40,12 @@ void BassPreviewAudioBackend::refreshPreparedAssets()
 void BassPreviewAudioBackend::resetAssets()
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
+    disarmSfxScheduler("reset_assets");
     int releasedSampleCount = 0;
     samplesByKind_.clear();
     backgroundTrackSample_ = nullptr;
+    // Keep the sampler's handle in step; it never dereferences the object itself.
+    publishAudioHealthHandles();
     touchholdSample_ = nullptr;
     retainedBgmState_ = RetainedBgmState::NoneLoaded;
     trackMissingAfterLoadLogged_ = false;
@@ -139,6 +142,8 @@ void BassPreviewAudioBackend::initializeAssets()
                 true,
                 bgmSpeedMode)) {
             backgroundTrackSample_ = backgroundTrackSampleOwner_.get();
+            // Keep the sampler's handle in step; it never dereferences the object itself.
+            publishAudioHealthHandles();
             backgroundTrackSample_->setLoop(false);
             backgroundTrackSample_->setSpeed(playbackSession_.backgroundTrackPlaybackRate);
             ++loadedSampleCount;
@@ -152,6 +157,8 @@ void BassPreviewAudioBackend::initializeAssets()
         } else {
             backgroundTrackSampleOwner_.reset();
             backgroundTrackSample_ = nullptr;
+            // Keep the sampler's handle in step; it never dereferences the object itself.
+            publishAudioHealthHandles();
         }
     }
 
@@ -226,6 +233,7 @@ BassPreviewAudioBackend::Sample* BassPreviewAudioBackend::sampleForKind(const QS
 void BassPreviewAudioBackend::reloadAssets(const PreviewAudioSettings& settings)
 {
     MC_OP("BassPreviewAudioBackend::reloadAssets");
+    lastNativeErrorCode_ = 0;
     settings_ = settings;
     settings_.normalize();
     invalidateRetainedPlaybackState(QStringLiteral("reload_assets"));
@@ -271,11 +279,15 @@ void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
 {
     MC_OP("BassPreviewAudioBackend::applyLevels");
     const bool rebuildMineSfx = settings_.mineSfxEnabled != settings.mineSfxEnabled;
-    const double anchorSecond =
-        (playbackSession_.eventGroupIndex > 0
-         && playbackSession_.eventGroupIndex - 1 < preparedGroups_.size())
-            ? preparedGroups_[playbackSession_.eventGroupIndex - 1].second
-            : -1.0;
+    const bool rearmScheduler = playbackSession_.masterRunning;
+    const double liveChartSecond = currentSfxSchedulerChartSecond(
+        playbackSession_.lastAuthoritativeSecond);
+    // The mixer callback can read a group concurrently with the GUI applying a
+    // setting. Remove its one outstanding sync before reading or rebuilding the
+    // event vector, then resume from the same fired/unfired boundary.
+    if (rearmScheduler) {
+        disarmSfxScheduler("apply_levels");
+    }
     settings_ = settings;
     settings_.normalize();
     if (rebuildMineSfx && !preparedTimeline_.sourceNoteMarkers.isEmpty()) {
@@ -288,20 +300,17 @@ void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
     applySampleLevels();
     // rebuildPreparedGroups() re-collapses the event groups (breakSlideTailCheer
     // muting changes grouping), which can shift indices, so the cursor must be
-    // re-anchored afterward. Anchor to the chart-second of the last group we
-    // ALREADY fired — NOT authoritativeSecond(). During active playback that
-    // clock is frozen at the last start/seek snapshot (MainWindow's wall-clock
-    // is the live master and is never written back here); re-seeking to it would
-    // rewind the cursor to the playback start, so the next drainEvents() would
-    // replay every tap from there in a single burst. That burst — heard when a
-    // volume slider is dragged mid-playback (both the audio-settings dialog and
-    // the latency page funnel through applyLevels) — is the long-suspected
-    // "stray play/audition event". Anchoring to the last-fired group preserves
-    // the fired/unfired boundary regardless of whether we're playing or paused.
+    // re-anchored afterward. The master decode position supplies the live chart
+    // second; `lastAuthoritativeSecond` is only a transport snapshot and may be
+    // far behind a running session. Using it here would replay old groups or
+    // schedule the next group tens of seconds late after a setting change.
     rebuildPreparedGroups();
-    resetCursor(anchorSecond, false);
+    resetCursor(liveChartSecond, false);
     if (rebuildMineSfx && playbackSession_.masterRunning) {
         restoreTouchholdVoices(authoritativeSecond());
+    }
+    if (rearmScheduler && playbackSession_.masterRunning) {
+        anchorSfxScheduler(liveChartSecond);
     }
 }
 
@@ -374,12 +383,23 @@ void BassPreviewAudioBackend::configureTimeline(
     const PreviewTimingSettings& timingSettings)
 {
     MC_OP("BassPreviewAudioBackend::configureTimeline");
+    const bool rearmScheduler = playbackSession_.masterRunning;
+    const double liveChartSecond = currentSfxSchedulerChartSecond(
+        playbackSession_.lastAuthoritativeSecond);
+    if (rearmScheduler) {
+        disarmSfxScheduler("configure_timeline");
+    }
     rebuildPreparedTimeline(noteMarkers, playbackRate, timingSettings);
+    if (rearmScheduler && playbackSession_.masterRunning) {
+        resetCursor(liveChartSecond, false);
+        anchorSfxScheduler(liveChartSecond);
+    }
 }
 
 void BassPreviewAudioBackend::clearTimeline()
 {
     MC_OP("BassPreviewAudioBackend::clearTimeline");
+    disarmSfxScheduler("clear_timeline");
     clearPreparedTimeline();
     stopAll();
 }

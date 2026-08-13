@@ -1,9 +1,19 @@
 #include <QCoreApplication>
+#include <QFile>
 #include <QTextStream>
 
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 
 namespace {
+
+QString readSource(const QString& relativePath)
+{
+    QFile file(QStringLiteral(MIACODE_SOURCE_ROOT) + QLatin1Char('/') + relativePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    return QString::fromUtf8(file.readAll());
+}
 
 bool require(bool condition, const QString& message, QTextStream& err)
 {
@@ -37,6 +47,32 @@ bool verifyPolicy(QTextStream& err)
     return true;
 }
 
+bool verifyChartDropUsesQsgOnly(QTextStream& err)
+{
+    const QString bootstrap = readSource(QStringLiteral("src/app/quick_shell/QuickShellBootstrap.cpp"));
+    const QString mainWindowHeader = readSource(QStringLiteral("src/app/mainwindow/MainWindow.h"));
+    return require(
+               bootstrap.contains(QStringLiteral("ui/ChartDropOverlay.h")),
+               QStringLiteral("audio drop must keep the QuickShell overlay"),
+               err)
+        && require(
+            bootstrap.contains(QStringLiteral("syncChartDropOverlay")),
+            QStringLiteral("audio drop must keep the QuickShell overlay lifecycle"),
+            err)
+        && require(
+            !bootstrap.contains(QStringLiteral("PreviewDCompSurface")),
+            QStringLiteral("QuickShell audio drop must not restore the removed DComp surface"),
+            err)
+        && require(
+            !bootstrap.contains(QStringLiteral("createInProcessPreviewSurface")),
+            QStringLiteral("QuickShell audio drop must stay on the QSG render path"),
+            err)
+        && require(
+            mainWindowHeader.contains(QStringLiteral("chartDropOverlayVisibleChanged")),
+            QStringLiteral("audio drop must retain the MainWindow overlay signal"),
+            err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -45,7 +81,7 @@ int main(int argc, char* argv[])
     QTextStream err(stderr);
     QTextStream out(stdout);
 
-    if (!verifyPolicy(err)) {
+    if (!verifyPolicy(err) || !verifyChartDropUsesQsgOnly(err)) {
         return 1;
     }
 

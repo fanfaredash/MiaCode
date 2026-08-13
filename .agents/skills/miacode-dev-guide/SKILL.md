@@ -1,6 +1,6 @@
 ---
 name: miacode-dev-guide
-description: Repository guide for MiaCode (a Qt6/C++/QML maimai chart editor + video exporter). Use when working anywhere in this repo to locate a feature's owning files/classes/functions; understand the module layout (core/app/preview/render/audio/timeline/tools) and dependency rules; follow cross-module sync pairs (parser ↔ timeline ↔ preview ↔ export ↔ Muri); find debug flags and the --debug logging system; follow build/target/CTest/packaging conventions; or check the committed render-architecture decision (in-process QSG is the main path, DComp is off-by-default and being decoupled, the out-of-process worker has been removed). Also update this skill in the same change whenever repo structure, cross-module contracts, debug flags, or build conventions change.
+description: Repository guide for MiaCode (a Qt6/C++/QML maimai chart editor + video exporter). Use when working anywhere in this repo to locate a feature's owning files/classes/functions; understand the module layout (core/app/preview/audio/timeline/tools) and dependency rules; follow cross-module sync pairs (parser ↔ timeline ↔ preview ↔ export ↔ Muri); find debug flags and the --debug logging system; follow build/target/CTest/packaging conventions; or check the committed render-architecture decision (in-process QSG is the only render path; the DComp/D3D11 backend and the out-of-process worker have both been removed). Also update this skill in the same change whenever repo structure, cross-module contracts, debug flags, or build conventions change.
 ---
 
 # MiaCode Dev Guide
@@ -46,31 +46,58 @@ same change.
 - Timeline data + QSG timeline surface: `src/timeline/` (+ `quick/`)
 - Tools: `src/tools/{latency,muri,video_export,chart_transform,...}`
 - Shared config headers + logging + oplog: `src/common/`
-- **DComp/D3D11 stack — DEFAULT OFF, being decoupled:** `src/render/` + `src/sources/`
+
+### Preview-audio device-cutoff contract (Windows, updated 2026-08-09)
+
+- `PreviewAudioDeviceWatcher` uses IMM endpoint callbacks as the sole Windows source when
+  native registration succeeds; it creates `QMediaDevices` only as the Windows-registration
+  fallback and on non-Windows. Its direct-cutoff handler may run on Core Audio's MTA, so it calls only
+  `QtPreviewSfxRuntime::requestDeviceChangeCutoff()`. That method closes the playback
+  generation and synchronously invokes `PreviewBassEmergencyPause` on the previously
+  bound concrete BASS output; GUI freezing is delivered later by `deviceCutoffRequested`
+  to `TimelineSection`.
+- `QtPreviewSfxRuntime` captures the cutoff chart-second from its monotonic playback
+  anchor and posts one `DeviceChangePause` worker barrier. The GUI must use that
+  captured second and identity, never sample a second clock or post a duplicate pause.
+- If the same notification arrives while the clock is not armed, the runtime still
+  posts a route-invalidation-only barrier. It must release the concrete endpoint and
+  retained stream without emitting a GUI pause or clock sample; the next explicit Play
+  must cold-Prepare. The paused PV/BG/outline policy is applied synchronously with the
+  GUI playing-state flip, never through a deferred UI-tail callback.
+- Windows BASS must set `BASS_CONFIG_DEV_DEFAULT=FALSE` exactly once before its first
+  enumeration/init, then bind `BASS_Init` to the resolved Core Audio endpoint ID. BASS
+  does not reopen that configuration window after `BASS_Free`, so rebuilds must reuse
+  the first configuration result rather than call `BASS_SetConfig` again. On a cutoff
+  the backend destroys its streams/device lease; only the next explicit Play may rebuild
+  assets on the current endpoint. Do not reintroduce `BASS_Init(-1)` on this path.
 
 > Note: `src/simai/`, `src/preview/scene/`, `src/preview/audio/`, `src/preview/video/` are
-> OLD paths from before the "first-unification" reorg. They no longer exist. If a doc or
-> comment points there, it is stale → use the paths above.
+> OLD paths from before the "first-unification" reorg. They no longer exist. `src/render/`
+> and `src/sources/` are also gone (DComp removal, 2026-08-07). If a doc or comment points
+> there, it is stale → use the paths above.
 
-## Render-architecture decision (2026-05-29) — read before touching preview/render
+## Render-architecture decision (2026-05-29, updated 2026-08-07) — read before touching preview/render
 
 This is a committed product decision; treat it as a contract.
 
 1. **In-process QSG is the MAIN path — keep it.** `PreviewRuntime` → `PreviewQuickSceneRoot`,
    fed by `core/scene/*LayerState`, rendered by `preview/quick_scene/*`. Both realtime preview
    and video export run through this stack (export via `PreviewQuickExportSession`).
-2. **DComp/D3D11 (`src/render/*` + `src/sources/*`) — keep, but DEFAULT-OFF and fully decoupled.**
-   Target end state: no class relationship or CMake coupling that pulls DComp into the QSG
-   build/runtime. `previewUseDCompEnabled()` defaults `false` (`src/common/DebugOptions.h`);
-   `--quick-shell-beta` auto-enables it for A/B diagnostics only.
+2. **DComp/D3D11 — DELETED (2026-08-07).** `src/render/*` and `src/sources/*` are gone, along
+   with all six `MIACODE_*_DCOMP*` flags and the `dcomp` link library.
+   Windows still links `d3d11` + `dxgi`. MinGW also links `d3dcompiler` because QtAVPlayer
+   calls `D3DCompile` (MSVC uses `#pragma comment`). Do not drop `d3dcompiler` on MinGW.
+   Rationale: the backend had been default-off since beta34, so it carried ~11k lines and a
+   parallel branch in every preview/timeline paint path while shipping to nobody; the
+   decoupling work in decision 2's old form was strictly more expensive than deletion.
+   `--quick-shell-beta` survives as an inert argument (it only ever set
+   `MIACODE_PREVIEW_USE_DCOMP=1`). Do not reintroduce a second render backend.
 3. **Out-of-process worker — DELETED (2026-06-02).** `src/preview/ipc/*`, `PreviewWorkerSession`
    (`src/preview/runtime/`), and the `MIACODE_PREVIEW_OUT_OF_PROCESS` / `MIACODE_PREVIEW_WORKER_*`
    flags are gone. Do not reintroduce this "v2" direction; in-process QSG is the keeper.
-4. **`src/README.md` is superseded on this point.** It frames `sources/`+`compositor`+`render`
-   as the v2 future and `preview/` (QSG) as legacy-to-be-deleted. That is no longer the plan —
-   QSG is the keeper. The exact retirement boundary between `sources/` (compositor abstraction)
-   and `render/backend_d3d11` (DComp renderer) is decided when the decoupling/deletion work is
-   scheduled.
+4. **`src/README.md` is superseded on this point.** It framed `sources/`+`compositor`+`render`
+   as the v2 future and `preview/` (QSG) as legacy-to-be-deleted. Those trees no longer exist;
+   QSG is the keeper.
 
 ## Work the repo in this order
 
@@ -97,8 +124,8 @@ This is a committed product decision; treat it as a contract.
 - **Don't add env flags casually.** ~80 `MIACODE_*` vars already exist. Prefer reusing/removing.
   If you must add one, give it an entry in `references/debug-and-logging.md` in the same change.
 - **New scene/render work uses the QSG path:** add a `core/scene/` state builder + a
-  `preview/quick_scene/` layer. Do NOT reintroduce a painter/OpenGL fallback or extend the
-  DComp path for mainline features.
+  `preview/quick_scene/` layer. Do NOT reintroduce a painter/OpenGL fallback or a second
+  native render backend.
 - **Never commit build artifacts/logs** (`*.obj`, `*.log`, `build/` output, `experimental/`
   binaries). `.gitignore` covers most — keep it that way.
 

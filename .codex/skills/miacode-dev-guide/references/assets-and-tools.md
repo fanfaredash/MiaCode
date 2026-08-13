@@ -85,7 +85,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
   - Consumers: `PreviewRuntime`, `PreviewQuickExportSession`, `VideoExportQuickRenderBackend`
   - Entry: `MainWindow::resolvePreviewSkinDir`, `MainWindow::applyPreviewSkinDirectoryToSurfaces`, `PreviewRuntime::setSkinDirectory`, `PreviewSceneAssetRepository::setSkinDirectory`, `PreviewSceneAssetLoader::load`
   - Skin selection enumerates child directories of `assets/skin`; a directory is shown only when core files such as `tap.png`, `hold.png`, and `star.png` exist
-  - Timeline note art follows the same selected skin directory through `TimelineQuickStateBridge::setSkinDirectory`; `TimelineNoteAssets` falls back to built-in `skinSD` only when no skin directory is supplied or the selected skin cannot provide usable timeline icons. Widget timeline, Quick/QSG timeline, and DComp timeline sprite caches must be invalidated together on skin changes.
+  - Timeline note art follows the same selected skin directory through `TimelineQuickStateBridge::setSkinDirectory`; `TimelineNoteAssets` falls back to built-in `skinSD` only when no skin directory is supplied or the selected skin cannot provide usable timeline icons. Widget timeline and Quick/QSG timeline sprite caches must be invalidated together on skin changes.
   - Touch break assets use the external-skin naming convention first:
     - `touch_break_border_2.png`
     - `touch_break_border_3.png`
@@ -194,7 +194,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows build/package:
   - `scripts/build/build-win.ps1`
   - `scripts/build/package-win.ps1`
-  - `scripts/build/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode` / `MiaCodeLauncher --config <Config> --parallel 8` when the packaged executables or generated version metadata need refreshing
+  - Windows build and package scripts cap `BuildJobs` at 4 (default 4) and pass it explicitly to every `cmake --build` call. `scripts/build/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode` / `MiaCodeLauncher --config <Config> --parallel 4` when the packaged executables or generated version metadata need refreshing
   - `scripts/build/build-win.ps1` and `scripts/build/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
   - `scripts/build/build-win.ps1` installs the add-on Qt modules `qtmultimedia` and `qtshadertools`; `qtdeclarative`/Qt Quick and `qtsvg` are provided by the base Qt desktop package for Qt 6.8.3
   - `scripts/build/build-win.ps1` provisions both FFmpeg inputs needed by a clean Windows clone: standalone export `third_party/ffmpeg/windows/ffmpeg.exe` and the QtAVPlayer preview-decode dev SDK under `third_party/ffmpeg/windows/dev/`
@@ -210,9 +210,22 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - macOS build/package:
   - `scripts/build/build-macos.sh`
   - `scripts/build/package-mac.sh`
+  - the QtAVPlayer preview backend uses VideoToolbox/Metal and the project-provisioned FFmpeg 6.1.2
+    SDK at `third_party/ffmpeg/macos/dev/`. Create it with
+    `bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`; it is ignored rather than committed, contains
+    only arm64/macOS-13 `libavcodec.60`, `libavfilter.9`, `libavformat.60`, `libavutil.58`,
+    `libswresample.4`, and `libswscale.7`, and has `@rpath` install names. Packaging never discovers
+    or copies a system package-manager closure; it stages exactly those six dylibs and rejects an
+    external absolute dylib path or a loader path that escapes the app bundle.
+  - macOS release packages retain Qt Multimedia's native `libdarwinmediaplugin.dylib` for frame and
+    device APIs, but remove its unused Qt FFmpeg 7 backend and corresponding `libav*.61` runtime
+    libraries; Qt 6.10.2's plugin uses five such libraries (`avcodec`, `avformat`, `avutil`,
+    `swresample`, `swscale`) and not `avfilter`. Preview video decoding uses the QtAVPlayer FFmpeg 6
+    path.
   - `scripts/build/thin-macos-app.sh` removes the unused CPU slice from every bundled Mach-O for explicitly single-architecture `arm64` or `x86_64` packages; packaging runs it after `macdeployqt`, hard-fails when any Mach-O lacks the target architecture, and re-signs only after thinning
   - set `MIACODE_THIN_MACOS_APP=OFF` only when producing a same-build universal-Qt comparison package for size or A/B verification
   - `scripts/build/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, `qtshadertools`, and `qtsvg`
+  - `scripts/build/package-mac.sh` passes `--parallel 4` to its release build; do not raise this cap.
 - ffmpeg provisioning:
   - `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`
   - `scripts/ffmpeg/ensure-macos-ffmpeg.sh`

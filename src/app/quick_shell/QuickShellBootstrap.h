@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/LogEmissionPolicy.h"
+
 #include <memory>
 
 #include <QObject>
@@ -17,10 +19,11 @@ class MainWindow;
 class QuickShellController;
 class QuickShellNativeSurfaceHost;
 class QuickShellStyleBridge;
+class ChartDropOverlay;
 
 #ifdef Q_OS_WIN
-namespace miacode::preview::dcomp {
-class PreviewDCompSurface;
+namespace miacode::app::windows_idle_diagnostics {
+class WindowsIdleEventMonitor;
 }
 #endif
 
@@ -54,28 +57,38 @@ private:
     void beginAcceptedRootWindowShutdown(const QString& source);
     void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
+    void syncChartDropOverlay();
+    bool dragInputStillActive() const;
+    bool cursorIsOverQuickShellRoot();
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
-    // Construct previewDCompSurface_ + wire it to the runtime, the
-    // stage-media-host signal, and the present sync interval. Idempotent
-    // — returns immediately if a surface already exists. `reason` is
-    // logged via `dcomp_surface_attached reason=<reason>` for diagnostics.
-    // Safe to call after the window has been around for a while; the
-    // in-process surface attaches to whatever HWND the window currently
-    // owns.
-    bool createInProcessPreviewSurface(QQuickWindow* window, const QString& reason);
 
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
     std::unique_ptr<QuickShellNativeSurfaceHost> surfaceHost_;
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
+    std::unique_ptr<ChartDropOverlay> chartDropOverlay_;
+    QTimer* chartDropOverlayMonitorTimer_ = nullptr;
     std::unique_ptr<QQmlApplicationEngine> engine_;
 #ifdef Q_OS_WIN
-    std::unique_ptr<miacode::preview::dcomp::PreviewDCompSurface> previewDCompSurface_;
+    std::unique_ptr<miacode::app::windows_idle_diagnostics::WindowsIdleEventMonitor> windowsIdleEventMonitor_;
     std::unique_ptr<QAbstractNativeEventFilter> nativeCloseEventFilter_;
     quintptr rootWindowNativeHwnd_ = 0;
 #endif
     QPointer<QQuickWindow> rootWindow_;
+    // Collapses runs of `action=event_filter` focus lines that carry no state
+    // change. In a 39-minute field capture `quick_shell/focus` was 27% of the
+    // whole runtime channel and 1616 of its 1748 lines were event_filter, most
+    // of them repeating the previous line's focus state verbatim. Mutable
+    // because logFocusEvent() is const.
+    mutable QString lastFocusFilterSignature_;
+    // Dedup drops are counted, not discarded: the next emitted focus line carries
+    // ` deduped=N`, mirroring how appendExtraSelectionsPerfLog preserves its
+    // throttled volume as `suppressed=…`. If focus thrash is itself a symptom, the
+    // rate has to survive the filtering. GUI-thread only, so a plain member is
+    // enough; mutable for the same reason as the signature above.
+    mutable int suppressedFocusFilterCount_ = 0;
+    miacode::diagnostics::MousePressLogGate mousePressLogGate_;
     bool previewSeekArmed_ = false;
     bool rootWindowCloseRelayScheduled_ = false;
     bool rootWindowCloseRelayActive_ = false;

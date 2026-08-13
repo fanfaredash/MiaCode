@@ -1,5 +1,8 @@
 #include "MainEntrypoints.h"
 
+#include "AppVersion.h"
+#include "ProcessIdentityFields.h"
+
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/GpuDevicePolicy.h"
@@ -134,10 +137,14 @@ void logProcessIdentity(const QStringList& rawArgs, const QString& processRole, 
     }
 #endif
 
+    const QString buildFields = formatProcessIdentityBuildFields(
+        QString::fromLatin1(MIACODE_DISPLAY_VERSION_STRING),
+        QString::fromLatin1(MIACODE_GIT_REVISION),
+        QString::fromLatin1(MIACODE_GIT_DIRTY));
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("startup/process_identity"),
-        QStringLiteral(
+        buildFields + QLatin1Char(' ') + QStringLiteral(
             "phase=%1 role=%2 pid=%3 ppid=%4 parent_process=%5 launched_by_launcher=%6 "
             "packaged_app_dir=%7 package_root=%8 exe_dir=%9 exe=%10 cwd=%11 argv=[%12]")
             .arg(phase)

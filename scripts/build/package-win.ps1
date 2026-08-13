@@ -5,7 +5,8 @@ param(
     [string]$BuildDir = "build",
     [string]$DistDir = "",
     [switch]$IncludeDevTools,
-    [int]$BuildJobs = 8
+    [ValidateRange(1, 4)]
+    [int]$BuildJobs = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -112,10 +113,6 @@ function Invoke-MiaCodeBuild {
         [string]$Config,
         [int]$BuildJobs
     )
-
-    if ($BuildJobs -lt 1) {
-        throw "BuildJobs must be >= 1."
-    }
 
     Write-Host "Precheck: building MiaCode ($Config) in $BuildDir with --parallel $BuildJobs ..."
     & cmake --build $BuildDir --target MiaCode --config $Config --parallel $BuildJobs | Out-Host
@@ -446,6 +443,7 @@ $vcRuntimeSrc = $null
 # roots and pick the highest-versioned Microsoft.VC14X.CRT folder under
 # x64. Tested against BuildTools, Community, Professional, Enterprise.
 $vsCandidateRoots = @(
+    'C:\BuildTools\VC\Redist\MSVC',
     'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC',
     'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC',
     'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC',

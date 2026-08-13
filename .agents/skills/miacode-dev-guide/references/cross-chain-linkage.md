@@ -47,6 +47,14 @@ Implications:
   comma is a beat line; measure lines run on an independent meter timeline from shared
   `SimaiTimingMetadata` (`&whole_time_signature=`); inline `|| x/y` restarts the meter; `{beats}`
   only changes comma spacing; `(BPM)` restarts the measure-line timeline.
+- Strict validation warns when a bracketless short lane hold has modifiers after `h` (for
+  example `1hx` or `1hb`). MiaCode still parses it as a zero-length hold, but some external
+  previewers require the short-hold token to end in `h`; canonical forms such as `1h` and
+  duration-bearing holds such as `1hx[4:1]` remain warning-free under this compatibility rule.
+- BASS preview seeks beyond the decoded BGM duration keep the BGM explicitly paused and mark it
+  `backgroundTrackPastEnd`; direct start/resume, pending-offset start, and mixer-sync start must
+  all respect that state. A chart may continue playing SFX/visuals beyond the music, but an
+  out-of-range seek must never reuse the BASS source's previous valid cursor position.
 - Same-second slide/head/track/motion stacking is shared by `src/core/scene/PreviewMarkerDrawOrder.*`
   + prepared `drawOrder` in `PreviewPreparedSceneCache`. Changing "who's on top" → update the helper
   and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`,
@@ -63,11 +71,36 @@ Implications:
   `SlideShapeOnly` slot between `slide_motion` and `judge_effect` (below notes/touch/tap-judge), and a
   `JudgeTextOnly` slot on top. So each judge enum bit drives 2 slots; keep
   `kPreviewQuickSceneLayerSlotCount` equal to the number of `layerSlotAt(root, slotIndex++)` calls when
-  adding/removing slots. The off-by-default DComp path (`src/sources/chart/ChartReviewSource.*`,
-  `MaimuriDxJudgeSource.*`, sorted by `zOrder()`) still draws both groups in one pass — a known divergence.
+  adding/removing slots.
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.
+  - The supplied 30 fps firework reference is the timing source: the shared lifetime is
+    `PreviewGameplayConfig::kJudgeEffectFireworkDurationSeconds` (also used by timeline culling),
+    and explicit clip time/life uniforms drive two batches of 12 fixed inner/outer-ring stars
+    (24 total, with six inner and six outer stars per batch plus deterministic size/ring
+    shuffling). Star
+    angles sample the full circle directly, intentionally permitting clusters and empty arcs. The
+    QSG firework node generates a fresh angle seed at each trigger/replay, holds it for that effect's
+    lifetime, and passes it through `timing.z`, avoiding per-frame jitter. Each batch reveals its inner
+    ring first and its outer ring about 0.010 s later; per-ring jitter is capped at 0.004 s so the
+    ordering cannot invert. Staggered sine pulses make the stars continuously fade in and out. Their
+    inner centres sit inside the colour-glow ring (0.40–0.47 of the judgment radius), while outer
+    centres sit around 0.83–0.90 and are inset by each star's tip radius so they cannot cross the
+    judgment ring. Star geometry scales with the same continuous pulse, producing the reference's
+    clearly visible shrink-to-zero disappearance rather than an alpha-only fade. The sparkle keeps
+    its original sector-derived tint; its shallow-concavity four-point silhouette is intentionally
+    filled rather than crossing lines. Its pulse keeps a 0.115 s fade-in followed by a 0.25 s
+    shrink/fade-out (0.365 s total), emitted in two spatially shuffled batches starting at 0.00 s
+    and 0.08 s. Its horizontal span remains broad;
+    its vertical extent is compressed to match that horizontal span, while the waist/edge concavity
+    remains fine. Each star travels radially outward throughout its
+    pulse: 0.02 of the judgment radius while appearing, then another 0.04 while shrinking/fading
+    (0.06 total). Appearance fades in at full geometry size; scaling applies only to disappearance.
+    Star visible half-extents vary deterministically from 0.040 to 0.050 of the judgment radius,
+    keeping repeated playback stable. Tips remain dynamically clamped inside the judgment boundary;
+    peak opacity is 0.95.
+    Keep the original 15-sector/24-degree spoke layout when tuning timing or particles.
   - **Firework PSO/texture warm-up is a 3-file contract — don't break the loop.** Qt RHI compiles
     the firework pipeline + uploads the colour-ball texture lazily on the FIRST firework draw
     (a render-thread stall, worst on weak iGPUs). `PreviewRuntime` warms it by injecting a synthetic
@@ -154,6 +187,32 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
 
 If one side changes, inspect the other in the same patch.
 
+### 4a. Preview-audio GUI to worker boundary
+
+Realtime preview is not an export worker: `QtPreviewSfxRuntime` stays in the GUI thread as the
+facade while `PreviewAudioWorker` owns its native backend on one `std::thread`. MainWindow startup,
+timeline ticks, settings audition, latency sandbox, and `soundtouch_probe` all submit typed value
+commands through the bounded queue; only probe/spec code may wait on the non-GUI completion barrier.
+
+- Playback completions must match current `generation` and `transactionId`; reload/ready completions
+  must match current `assetGeneration`; a device pause must also match the first captured
+  `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
+  facade and the specs.
+- A chart-path change followed by an asset reload is one asset transaction, not two independently
+  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. It carries the path on the
+  `ReloadAssets` command and `PreviewAudioWorker::executeReload` applies it before the backend reload
+  in that same `assetGeneration`; posting `setChartPath` immediately before a separate reload lets
+  stale-command pruning drop the required path update and leaves BGM unloaded. This is shared by
+  MainWindow startup/chart-reload paths and `soundtouch_probe`.
+- `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
+  GUI/video state before submitting the reserved high-priority device pause. On Windows, a successful
+  IMM registration is the sole hotplug source: do not construct or synchronously enumerate
+  `QMediaDevices` on that path, because its AudioSes RPC can block the GUI during a switch. Qt remains
+  the registration-failure and non-Windows fallback. The worker later stops audio/SFX; it does not
+  advance the playhead and it must not auto-resume after a device recovers.
+- `PreviewBassDeviceLease` is shared by preview, waveform, and export BASS lifecycle users. Keep
+  BASS global device init/free serialization there, but keep normal channel work within its owner.
+
 ## 5. Background-media resolution & host route ownership
 
 > Updated 2026-05-29: `PreviewMediaController` and `src/preview/video/` were removed. Background
@@ -230,6 +289,13 @@ preference tokens, timestamp parsing and zero-start range classification live in
 `VideoExportSettings`; batch preflight/execution lives in `ExportSection::runBatchExport`; snapshot
 serialization and rendering remain below both. A new setting or batch rule must be added once at the
 shared layer, then surfaced independently in each UI without copying backend logic.
+
+The selected intro sound and its independent `introSoundVolume` follow the same single/batch
+snapshot boundary. The dialog persists the 0..2 volume (0%..200%), applies it immediately through
+`QtPreviewSfxRuntime::applyLevels`, and export restores it from `intro.sound_volume` before the
+prepared FFmpeg intro-audio filter applies the multiplier. This is an independent multiplier: the
+preview `track_start` level must not inherit the normal global/answer SFX attenuation, matching the
+export filter. Keep preview and export volume behavior aligned when changing this setting.
 
 `fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
 `render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame

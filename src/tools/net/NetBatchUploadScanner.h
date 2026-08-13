@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QList>
+#include <QMetaType>
 #include <QString>
 
 namespace miacode::net {
@@ -19,3 +20,5 @@ QList<NetUploadJob> scanNetUploadFolders(const QString& rootDirectory);
 int appendUniqueNetUploadJobs(QList<NetUploadJob>* queue, const QList<NetUploadJob>& candidates);
 
 }  // namespace miacode::net
+
+Q_DECLARE_METATYPE(miacode::net::NetUploadJob)

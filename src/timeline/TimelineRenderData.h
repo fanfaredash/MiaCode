@@ -7,6 +7,8 @@
 #include <QtGlobal>
 #include <QVector>
 
+#include "common/PreviewGameplayConfig.h"
+
 enum class TimelineRenderNoteKind {
     Unknown,
     Tap,
@@ -110,7 +112,8 @@ struct TimelineRenderSnapshot {
     double maximumSecond = 1.0;
 };
 
-inline constexpr double kTimelineFireworkDurationSeconds = 1.3333334;
+inline constexpr double kTimelineFireworkDurationSeconds =
+    miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds;
 
 inline bool timelineRenderFlagSet(const TimelineRenderNote& note, TimelineRenderNoteFlag flag)
 {

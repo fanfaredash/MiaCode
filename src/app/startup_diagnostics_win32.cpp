@@ -256,8 +256,8 @@ void probeD3D11Device() noexcept
     // Probe D3D11CreateDevice on HARDWARE → WARP → reference, recording
     // which level worked and the adapter description. If hardware works
     // we know B (GPU driver missing) is NOT the cause. If only WARP
-    // works, B is likely the cause — Qt RHI / DComp on WARP is the
-    // confirmed weak spot.
+    // works, B is likely the cause — Qt's RHI on WARP is the confirmed
+    // weak spot.
 
     typedef HRESULT (WINAPI* D3D11CreateDeviceFn)(
         IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
@@ -478,25 +478,32 @@ void runStartupDiagnostic() noexcept
 #else
     probeVcRuntimeAndGfx();
 #endif
-    appendBeaconLineUtf8("phase=diag_modlist");
+    // Full process-module enumeration is supplementary crash evidence, not a
+    // prerequisite for the startup diagnosis. It traverses arbitrary
+    // third-party modules while the process is still in its fragile pre-Qt
+    // phase, so keep it opt-in: diagnostics must never block normal startup.
+    const DWORD enableModuleList =
+        ::GetEnvironmentVariableW(L"MIACODE_ENABLE_DIAG_MODULE_LIST", nullptr, 0);
+    if (enableModuleList > 0) {
+        appendBeaconLineUtf8("phase=diag_modlist");
 #if defined(_MSC_VER)
-    __try { probeLoadedModuleList(); }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        appendBeaconLineUtf8("diag/modlist seh_in_probe=1");
-    }
+        __try { probeLoadedModuleList(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {
+            appendBeaconLineUtf8("diag/modlist seh_in_probe=1");
+        }
 #else
-    probeLoadedModuleList();
+        probeLoadedModuleList();
 #endif
-    // D3D11 probe creates a full hardware device, which loads AMD/NVIDIA/Intel
-    // user-mode driver DLLs into the process. Once loaded these UMD DLLs hook
-    // Win32 APIs and never unload — on some AMD APU + Win10 22H2 combinations
-    // this hook-set interferes with subsequent std::mutex / SRWLock operations
-    // and triggers a fast-fail. Allow opting out via env var so support can
-    // run the rest of the diagnostic without provoking that path.
-    const DWORD skipD3D11 =
-        ::GetEnvironmentVariableW(L"MIACODE_SKIP_DIAG_D3D11", nullptr, 0);
-    if (skipD3D11 > 0) {
-        appendBeaconLineUtf8("phase=diag_d3d11_skipped_via_env");
+    } else {
+        appendBeaconLineUtf8("phase=diag_modlist_skipped_default_safe");
+    }
+    // Device creation loads vendor graphics drivers before Qt initializes, so
+    // this supplementary probe must not be a normal-startup prerequisite. The
+    // enable flag is the single control: unset (the normal case) skips the probe.
+    const DWORD enableD3D11 =
+        ::GetEnvironmentVariableW(L"MIACODE_ENABLE_DIAG_D3D11", nullptr, 0);
+    if (enableD3D11 == 0) {
+        appendBeaconLineUtf8("phase=diag_d3d11_skipped_default_safe");
     } else {
         appendBeaconLineUtf8("phase=diag_d3d11");
 #if defined(_MSC_VER)

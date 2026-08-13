@@ -1,7 +1,9 @@
 #pragma once
 
+#include "common/LogEmissionPolicy.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/video/PreviewRenderSettings.h"
+#include "preview/runtime/PvMemoryDiagnostics.h"
 
 #include <QElapsedTimer>
 #include <QImage>
@@ -134,8 +136,9 @@ public:
     void setObservedPlayheadSecond(double second);
     QString debugMediaTypeName() const;
 
-    // Video decode-mode preference (硬件渲染 / 软件渲染 toggle). false = hardware
-    // (D3D11VA, the default), true = software (FFmpeg CPU). Hot-switchable at
+    // Video decode-mode preference (硬件渲染 / 软件渲染 toggle). false = the
+    // platform hardware decoder (D3D11VA on Windows, VideoToolbox on macOS),
+    // true = FFmpeg CPU decode. Hot-switchable at
     // RUNTIME with no app restart: when a PV is loaded this reloads it in place on
     // the same QAVPlayer (reusing the sink, restoring position + play state);
     // otherwise it just takes effect on the next load. The persisted user
@@ -156,6 +159,8 @@ signals:
     void diagnosticsChanged();
 
 private:
+    using PvMemoryBoundary = miacode::preview::pv_memory::BoundaryReason;
+
     void clearMedia();
     QString resolveMediaPath(const QString& chartPath) const;
     void loadImageMedia(const QString& path);
@@ -171,18 +176,37 @@ private:
                                      qint64 ageMs);
     void updateClockDelta();
     void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
+    // The inner-circle VideoOutput is only rendered in InnerCircleFitOuterFill
+    // (background scale mode 3); in every other mode it is bound but invisible,
+    // so feeding it decoded frames buys nothing and retains a decode-pool
+    // surface. True only when a distinct inner sink exists AND that mode is on.
+    bool innerVideoSinkActive() const;
+    // What refreshInnerVideoSinkForScaleMode() actually did, so the scale-mode log
+    // line can state the outcome instead of the intent — "entered mode 3 but there
+    // was no retained frame to prime" and "primed with the current frame" are the
+    // two halves of the "wrong first frame after switching" report, and only the
+    // callee can tell them apart.
+    enum class InnerVideoSinkRefresh {
+        None,     // no distinct inner sink, or entering the mode with no retained frame
+        Primed,   // retained frame pushed, so the mode shows the current frame at once
+        Cleared,  // frame released, so the sink stops pinning a decode-pool surface
+    };
+    // Push the retained frame into the inner sink so a mid-playback switch into
+    // InnerCircleFitOuterFill shows the current frame without waiting for the
+    // next decode; clear it when leaving the mode so nothing stays pinned.
+    InnerVideoSinkRefresh refreshInnerVideoSinkForScaleMode();
 #ifdef MIACODE_USE_QTAVPLAYER
     // QtAVPlayer frame path: a decoded QAVVideoFrame (already converted to a
     // QVideoFrame and tagged with its presentation pts in seconds) is pushed
-    // to the QML sink here, mirrored into the toImage() DComp fallback, and
-    // used to settle the paused-seek / prepared-start handshakes by pts.
+    // to the QML sink here and used to settle the paused-seek /
+    // prepared-start handshakes by pts.
     void handleDecodedVideoFrame(const QVideoFrame& frame, double ptsSeconds, double durationSeconds, quint64 sourceGeneration);
     // Settle the paused-seek / prepared-start acks once the decoded media time
     // [start,end] (frame pts..pts+dur, or the seeked() position as a point)
     // reaches the pending seek target. Mirrors the QMediaPlayer path's
     // frame-covers-target / position-ack logic, keyed on pts instead of µs.
     void settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd);
-    // One-shot fallback: if hardware (D3D11VA) decode reports InvalidMedia,
+    // One-shot fallback: if platform hardware decode reports InvalidMedia,
     // re-open the source forcing FFmpeg software decode before giving up.
     void maybeRetryWithSoftwareDecode();
     // Hot-switch the currently-loaded PV's decode mode in place on the same
@@ -199,10 +223,21 @@ private:
     bool updateVideoFrameStallState(bool logTransition);
     qint64 currentVideoFrameAgeForDiagnosticsMs() const;
     qint64 videoFrameStallThresholdMs() const;
+    miacode::preview::pv_memory::Observation pvMemoryObservation(bool includeProcess) const;
+    void emitPvMemoryRecords(const QVector<miacode::preview::pv_memory::Record>& records);
+    void beginPvMemorySource();
+    void observePvMemoryFrame(const QVideoFrame& frame,
+                              const miacode::preview::pv_memory::ImageConversionFact& conversion);
+    void recordPvMemoryBoundary(PvMemoryBoundary reason);
+    void clearPvMemorySource();
+    void latePvMemoryNoMedia();
+    void postClearPvMemoryCheckpoint(quint64 clearEpoch, qint64 delayMs);
+    void schedulePvMemoryPeriodicSample();
+    void destroyPvMemorySource();
 
     MediaKind mediaKind_ = MediaKind::None;
-    // 硬件/软件渲染 preference: false = hardware D3D11VA decode (default), true =
-    // software. Set by MainWindow from the persisted user preference; read in
+    // 硬件/软件渲染 preference: false = platform hardware decode (default), true =
+    // FFmpeg CPU decode. Set by MainWindow from the persisted user preference; read in
     // initializeBackendObjects (initial/rebuild decode choice) and applied live by
     // setVideoDecodePreference / reloadVideoDecodeInPlace.
     bool videoDecodePreferSoftware_ = false;
@@ -234,7 +269,7 @@ private:
     double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
 #ifdef MIACODE_USE_QTAVPLAYER
     // FFmpeg decode backend. setSpeed() runs inside QtAVPlayer's own decode
-    // loop (no Qt converter rebuild) so rate changes never race the QSG/DComp
+    // loop (no Qt converter rebuild) so rate changes never race the QSG
     // texture sampler — the class of crash the QMediaPlayer scaffolding below
     // existed to paper over. No QAudioOutput: the video's own audio track is
     // intentionally never played (song audio is BASS-owned).
@@ -261,6 +296,7 @@ private:
     quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;
+    miacode::diagnostics::PlaybackRateLogGate playbackRateLogGate_;
     int syncVideoFrameBeaconBudget_ = 0;
     int syncMediaStatusBeaconBudget_ = 0;
     // G2 Commit 1: Qt 6.8 FFmpeg's QMediaPlayer::setPlaybackRate has a race
@@ -309,5 +345,9 @@ private:
     qint64 videoFrameCountTotal_ = 0;
     qint64 videoFrameStallCount_ = 0;
     bool videoFrameStalled_ = false;
+    miacode::preview::pv_memory::Diagnostics pvMemoryDiagnostics_;
+    QElapsedTimer pvMemoryElapsed_;
+    bool pvMemoryPeriodicTimerArmed_ = false;
+    quint64 pvMemoryPeriodicTimerEpoch_ = 0;
     bool shuttingDown_ = false;
 };

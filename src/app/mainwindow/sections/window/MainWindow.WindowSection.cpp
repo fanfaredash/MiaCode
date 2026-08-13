@@ -29,6 +29,16 @@ QRect MainWindow::quickShellRootWindowFrameGeometry() const
     return windowSection_->quickShellRootWindowFrameGeometry();
 }
 
+void MainWindow::setQuickShellRootWindow(QWindow* window)
+{
+    windowSection_->setQuickShellRootWindow(window);
+}
+
+void MainWindow::cancelChartAudioDrop()
+{
+    windowSection_->cancelChartAudioDrop();
+}
+
 bool MainWindow::confirmShellClose()
 {
     return windowSection_->confirmShellClose();

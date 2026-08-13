@@ -14,15 +14,7 @@
 #include "PlainCodeEditor.h"
 #include "common/AdoptedWidgetCoordinates.h"
 
-#include <QApplication>
-#include <QByteArray>
 #include <QContextMenuEvent>
-#include <QDrag>
-#include <QDragEnterEvent>
-#include <QDragLeaveEvent>
-#include <QDragMoveEvent>
-#include <QDropEvent>
-#include <QMimeData>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QSize>
@@ -42,9 +34,7 @@ class LineNumberArea : public QWidget
 public:
     explicit LineNumberArea(PlainCodeEditor* editor)
         : QWidget(editor), editor_(editor)
-    {
-        setAcceptDrops(true);
-    }
+    {}
 
     QSize sizeHint() const override
     {
@@ -52,37 +42,15 @@ public:
     }
 
 protected:
-    void dragEnterEvent(QDragEnterEvent* event) override
-    {
-        editor_->dragEnterEvent(event);
-    }
-
-    void dragMoveEvent(QDragMoveEvent* event) override
-    {
-        editor_->dragMoveEvent(event);
-    }
-
-    void dragLeaveEvent(QDragLeaveEvent* event) override
-    {
-        editor_->dragLeaveEvent(event);
-    }
-
-    void dropEvent(QDropEvent* event) override
-    {
-        editor_->dropEvent(event);
-    }
-
     void mouseDoubleClickEvent(QMouseEvent* event) override
     {
         const int line = editor_->lineNumberAtAreaPosition(event->pos());
         if (line > 0) {
             if (editor_->bookmarkedLines_.contains(line)) {
                 emit editor_->lineNumberBookmarkActivated(line);
-            } else {
-                emit editor_->lineNumberBookmarkCreateRequested(line);
+                event->accept();
+                return;
             }
-            event->accept();
-            return;
         }
         QWidget::mouseDoubleClickEvent(event);
     }
@@ -98,32 +66,6 @@ protected:
             return;
         }
         QWidget::contextMenuEvent(event);
-    }
-
-    void mousePressEvent(QMouseEvent* event) override
-    {
-        const int line = editor_->lineNumberAtAreaPosition(event->pos());
-        editor_->pressedBookmarkLine_ = editor_->bookmarkedLines_.contains(line) ? line : -1;
-        editor_->lineNumberPressPos_ = event->pos();
-        QWidget::mousePressEvent(event);
-    }
-
-    void mouseMoveEvent(QMouseEvent* event) override
-    {
-        if (event != nullptr
-            && (event->buttons() & Qt::LeftButton)
-            && editor_->pressedBookmarkLine_ > 0
-            && (event->pos() - editor_->lineNumberPressPos_).manhattanLength() >= QApplication::startDragDistance()) {
-            auto* drag = new QDrag(this);
-            auto* mime = new QMimeData;
-            mime->setData(QStringLiteral("application/x-miacode-bookmark-move"), QByteArray::number(editor_->pressedBookmarkLine_));
-            drag->setMimeData(mime);
-            drag->exec(Qt::MoveAction);
-            editor_->pressedBookmarkLine_ = -1;
-            event->accept();
-            return;
-        }
-        QWidget::mouseMoveEvent(event);
     }
 
     void paintEvent(QPaintEvent* event) override

@@ -144,10 +144,16 @@ void MainWindow::PreviewSection::ensurePreviewSfxRuntimePrepared()
         state_.previewSfxWarmupTrackPath_,
         state_.previewSfxWarmupSfxDir_
     );
-    state_.previewSfxRuntime_->reloadAssets(state_.previewAudioSettings_);
-    state_.previewSfxRuntime_->setChartPath(state_.currentFilePath_);
+    const QtPreviewSfxRuntime::AssetSubmission reload =
+        state_.previewSfxRuntime_->reloadAssetsForChart(state_.currentFilePath_, state_.previewAudioSettings_);
+    state_.previewSfxRuntimePrepared_ = false;
+    state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
+        ? reload.identity.assetGeneration
+        : 0;
+    state_.previewSfxRuntimePreparationSequence_ = reload.post.accepted
+        ? reload.identity.sequence
+        : 0;
     state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
-    state_.previewSfxRuntimePrepared_ = state_.previewSfxRuntime_->audioEngineInitialized();
     const qint64 elapsedMs = initTimer.elapsed();
     appendStartupTimingStage("mainwindow/preview_sfx_runtime_prepare_on_demand", elapsedMs, elapsedMs);
 }
@@ -318,6 +324,9 @@ void MainWindow::PreviewSection::applyPreviewSfxWarmupResult(
     appendStartupTimingStage("mainwindow/preview_sfx_data_warmup", workerElapsedMs, workerElapsedMs);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setWarmupResolvedPaths(chartPath, trackPath, sfxDir);
+        state_.previewSfxRuntimePrepared_ = false;
+        state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
+        state_.previewSfxRuntimePreparationSequence_ = 0;
     }
 }
 

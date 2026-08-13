@@ -216,7 +216,6 @@ Item {
             mediaHost: root.previewSession.mediaHost
             logger: root.shellController
             surfaceRole: "fullscreen"
-            dcompFallbackActive: true
         }
 
         IconButton {

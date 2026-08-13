@@ -675,6 +675,13 @@ void NetBatchDownloadDialog::downloadSelected()
             UiText::text(QStringLiteral("net.download_complete_1_succeeded_2"))
                 .arg(succeeded)
                 .arg(failed));
+        if (failed > 0) {
+            QMessageBox::warning(
+                this,
+                windowTitle(),
+                UiText::text(QStringLiteral("net.download_complete_with_errors_1"))
+                    .arg(failed));
+        }
     });
     connect(worker, &NetBatchDownloadWorker::finished, downloadThread_, &QThread::quit);
     connect(worker, &NetBatchDownloadWorker::finished, worker, &QObject::deleteLater);

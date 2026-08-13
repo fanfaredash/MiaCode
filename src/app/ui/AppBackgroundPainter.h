@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/ui/AppBackgroundSettings.h"
+#include "common/LogEmissionPolicy.h"
 
 #include <QFrame>
 #include <QImage>
@@ -50,6 +51,7 @@ private:
     QPixmap cachedPixmap_;
     QSize cachedWidgetSize_;
     AppBackgroundSettings cachedSettings_;
+    miacode::diagnostics::EdgeLogGate<QString> unchangedSettingsLogGate_;
 };
 
 void installAppBackgroundPainter(QWidget* window, AppBackgroundPainter* painter);

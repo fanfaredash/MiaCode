@@ -14,6 +14,7 @@ enum class Channel {
     Fatal,
     PreviewProfile,
     Operation,
+    PvMemory,
 };
 
 // Orthogonal severity, independent of Channel (which is destination/category).
@@ -64,6 +65,7 @@ QString startupTimingLogPath();
 QString fatalLogPath();
 QString previewProfileSummaryPath();
 QString operationLogPath();
+QString pvMemoryLogPath();
 
 QString formatTitleLine(const QString& title);
 
@@ -87,6 +89,7 @@ bool appendTimingLine(
     bool force = false,
     Level level = Level::Info);
 bool initializeStartupTimingLogSession();
+bool initializePvMemoryLogSession();
 bool appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs);
 bool appendFatalMessage(const QString& scope, const QString& payload);
 

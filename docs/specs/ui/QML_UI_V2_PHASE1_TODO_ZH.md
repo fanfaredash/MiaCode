@@ -2,7 +2,7 @@
 
 > 工作清单，不是最终规格。上下文压缩后以本文件为准继续改；完成或调整条目时同步更新本文件与 `feature-index.md` 中的入口句。
 >
-> 分支：`feature/qml-ui`（已含 `origin/dev` @ `677a9625` 及之后快进）  
+> 分支：`feature/qml-ui`（已合入 `origin/dev` @ `c68baa34`）  
 > 入口：默认 `QmlUiBootstrap`（v2）；`--ui=v1` / `MIACODE_UI_SKIN=v1` → QuickShell  
 
 > 构建：`build/`（已 ignore）  
@@ -16,6 +16,42 @@
 - 共享后端：隐藏 `MainWindow` + `QuickShellController(surfaceHost=nullptr)`。
 - 工作区模式（底栏显隐 / 预览画幅 / 导出全屏门闸）以 `MainWindow` 切换为权威，v2 **只读** `QuickShellController` 投影，不在 `ViewState` 另写平行标志。
 - 上游纯 v1 壳改动通常不伤 v2；共享 `MainWindow` / Controller / Preview / Timeline API 仍会一起吃到。
+- 已合入 `origin/dev`：DComp 整栈删除；预览音频为 Worker 异步 facade。MinGW 仍链接 `d3dcompiler`（QtAVPlayer `D3DCompile`；MSVC 走 pragma）。QML 已去掉 `dcompFallbackActive`。
+
+## 并入 origin/dev
+
+已 merge `origin/dev` @ `c68baa34`，Release 可启动，手工过了一遍日常路径。
+
+### 合入前策略 / 冲突 / 自动合入核对
+
+- [x] CMake：保留 qml_ui；采用上游删除 `src/render` / `src/sources`；加入 audio worker / 诊断源；FFmpeg 覆盖 `WIN32||APPLE`；不链接 `dcomp`；保留 `d3d11` + `dxgi`；MinGW 另链 `d3dcompiler`（QtAVPlayer）
+- [x] `main.cpp`：保留 `resolveUiSkin` + `QmlUiBootstrap`；并入 PV memory session 与资源 gauge；DComp env 注入保持删除
+- [x] `MainWindow.h` 信号并集：保留 `videoExportWorkerRunningChanged` / `setQmlExportCenterActive`；并入 `chartDropOverlayVisibleChanged`；删除 `previewStageMediaHostInitialized`、`previewCanvasPresentSyncIntervalChanged`
+- [x] 启动诊断：默认跳过模块列表 / D3D11 探针 + MinGW 无 SEH 分支
+- [x] 接受删除 `PreviewDCompRenderer.cpp`
+- [x] 解开 `CMakeLists.txt` / `main.cpp` / `MainWindow.h` / `startup_diagnostics_win32.cpp`；重写冲突的 `cross-chain-linkage.md`
+- [x] 自动合入核对：`FrameBootstrap` / `MemberStorage` / `ExportWorker` / Widgets 导出对话框 / `DocumentUi`
+- [x] Release 链接：不再编已删 DComp 源；qml_ui 仍进 `MiaCode`
+- [x] `QtPreviewSfxRuntime` 已是 Worker facade；`commandCompleted` / `previewPrepared` / DeviceWatcher 接到 MainWindow
+- [x] 启动修复：去掉 `PreviewPane.qml` / `MainSplitView.qml` 的 `dcompFallbackActive`；`AppMenuItem` 空 shortcut 不再抛错
+- [x] 手工：默认 v2 皮肤可打开、预览可画
+
+### 合入后 UIv2 接线（当前最高优先级）
+
+- [ ] `QmlUiBootstrap`：`setQuickShellRootWindow`、ChartDrop、Quit 走 `rootWindow->close()`
+- [ ] `QmlPreviewModel::muriMode`：从 bool 改为 Native / EraseByArea / MaimuriDxStyle 三态；QML 开关与 `PreviewPane` 标题一起改
+- [ ] `QmlExportSession` / `ExportVideoPage.qml`：片头音文件名与 `introSoundVolume` 与 snapshot 对齐（Widgets 对话框已接）
+- [ ] 批量上传：确认 v2 工具箱仍能打开扩展命令 `net.batchUpload.open`
+
+### 合入后仍建议点一次
+
+- 设备热插拔暂停 → 下一次 play 走 cold Prepare
+- play / pause / seek 以 completion 为准
+- EraseByArea、烟花时长、BGM 过轨静音
+- 音频拖放建谱（v2 需 ChartDrop 接线后才有）
+- QML 导出带片头音（需上面导出接线）
+- 脏文档关窗 / 播放中关窗
+- 提交 `d534b393`（bookmark / touch input）标注「未经 GUI 验证」
 
 ## 已完成
 
@@ -96,12 +132,11 @@ cmake --build build --target MiaCode -j 8
 .\build\MiaCode.exe --ui=v1
 ```
 
-## 建议下一刀（维护性优先）
+## 建议下一刀
 
-1. **P1 假开关 / 死控件**：工具栏音频/预览设置接对话框或隐藏。  
-2. **P1 `syntaxIssues`**：底栏「检查」从占位变成可用。  
-3. **P0 Document friend 收口**：降耦合，方便之后继续加 v2 能力不越界。  
-4. 产品拍板后再动 P2 传输条 / 全屏策略；Export QML 重写仍放长期。
+1. **合入后接线**：`QmlUiBootstrap`（root window / ChartDrop / Quit）→ Muri 三态 → QML 片头音 → 确认批量上传入口。  
+2. 再回到下面的 P0/P1 壳契约（friend 收口、`syntaxIssues`、死控件）。  
+3. 产品拍板后再动 P2 传输条 / 全屏策略。
 
 ## 更新规则
 

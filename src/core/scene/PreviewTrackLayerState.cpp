@@ -99,6 +99,13 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         );
     }
 
+    // Preview Mode: Erase by Area selects the arcade autoplay clear; otherwise the
+    // build's default trim mode applies.
+    const PreviewSlideTrackTrimMode trimMode =
+        state.muriRenderOptions.renderMode == RenderMode::EraseByArea
+        ? PreviewSlideTrackTrimMode::VanillaAutoplay
+        : kPreviewSlideTrackTrimMode;
+
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     // Per-marker slide-track timing: hsMultiplier scales tapFlowSpeed.
     const auto markerTrackTiming = [&state](double hsMultiplier) {
@@ -354,7 +361,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                 if (opacity < 0.0) {
                     continue;
                 }
-            } else if (kPreviewSlideTrackTrimMode == PreviewSlideTrackTrimMode::AreaImmediate
+            } else if (trimMode == PreviewSlideTrackTrimMode::AreaImmediate
                        && !marker.slideSegmentShootSeconds.isEmpty()
                        && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()
                        && marker.slideTrackAreaPoints.size() == marker.slideSegmentDurations.size()) {
@@ -387,6 +394,11 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                         startProportion
                     );
                 }
+            } else if (trimMode == PreviewSlideTrackTrimMode::VanillaAutoplay) {
+                removedArrowCount = previewSlideVanillaHiddenArrowCount(
+                    buildPreviewSlideAutoplayAreas(marker),
+                    previewSlideStarProgress(marker, state.playheadSeconds)
+                );
             } else {
                 const qreal totalDuration = qMax<qreal>(0.001, static_cast<qreal>(marker.endSecond - marker.slideTraceSecond));
                 const qreal totalProportion = qBound<qreal>(
@@ -398,7 +410,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                 removedArrowCount = qBound(0, qFloor(totalProportion * totalArrowCount), totalArrowCount);
             }
 
-            if (kPreviewSlideTrackTrimMode == PreviewSlideTrackTrimMode::AreaImmediate) {
+            if (trimMode == PreviewSlideTrackTrimMode::AreaImmediate) {
                 for (int segmentIndex = marker.slideTrackAreaPoints.size() - 1; segmentIndex > startSegment; --segmentIndex) {
                     const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
                     for (int areaIndex = areas.size() - 1; areaIndex >= 0; --areaIndex) {
@@ -549,11 +561,23 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                 static_cast<qreal>((state.playheadSeconds - marker.slideTraceSecond) / totalDuration),
                 1.0
             );
-            if (kPreviewSlideTrackTrimMode == PreviewSlideTrackTrimMode::AreaImmediate) {
+            if (trimMode == PreviewSlideTrackTrimMode::AreaImmediate) {
                 startAreaIndex = currentAreaIndexForProportion(
                     marker.wifiTrackAreaThresholds,
                     startProportion,
                     marker.wifiTrackAreaPoints.size()
+                );
+            } else if (trimMode == PreviewSlideTrackTrimMode::VanillaAutoplay) {
+                QVector<int> areaRowCounts;
+                areaRowCounts.reserve(marker.wifiTrackAreaPoints.size());
+                for (const QVector<QPointF>& areaPoints : marker.wifiTrackAreaPoints) {
+                    areaRowCounts.append(areaPoints.size());
+                }
+                // Whole areas only, so the draw walk below never needs a partial cut.
+                removedArrowCount = previewWifiEraseByAreaHiddenRowCount(
+                    areaRowCounts,
+                    marker.wifiCriticalProportion,
+                    startProportion
                 );
             } else {
                 const int totalArrowCount = totalWifiTrackArrowCount(marker.wifiTrackAreaPoints);
@@ -599,7 +623,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
 
         const int clampedStartArea = qBound(0, startAreaIndex, marker.wifiTrackAreaPoints.size());
         int partialTrimCount = 0;
-        if (kPreviewSlideTrackTrimMode == PreviewSlideTrackTrimMode::AreaImmediate
+        if (trimMode == PreviewSlideTrackTrimMode::AreaImmediate
             && clampedStartArea >= 0
             && clampedStartArea < marker.wifiTrackAreaPoints.size()) {
             const QVector<double>& areaCheckpoints = marker.wifiTrackAreaCheckpoints.value(clampedStartArea);
@@ -623,7 +647,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
             }
         }
 
-        if (kPreviewSlideTrackTrimMode == PreviewSlideTrackTrimMode::AreaImmediate) {
+        if (trimMode == PreviewSlideTrackTrimMode::AreaImmediate) {
             for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= clampedStartArea; --areaIndex) {
                 const int localCut = areaIndex == clampedStartArea ? partialTrimCount : 0;
                 appendWifiArea(marker, areaIndex, localCut, opacity);

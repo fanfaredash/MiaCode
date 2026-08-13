@@ -6,8 +6,32 @@
 #include <QStringList>
 
 #include "timeline/quick/TimelineQuickLayerUtils.h"
+#include "timeline/quick/TimelineQuickTextureCachePolicy.h"
 
 namespace {
+
+// Capacity caps. These are a SAFETY NET against unbounded growth, not a working-set
+// budget — the distinction decides the numbers, so it is worth stating.
+//
+// The first cut used 1024 on the assumption that a fat cache costs frame time. The
+// field capture disproved that: over a session where the cache grew from ~18 to ~360
+// entries (20x), mean updatePaintNode went DOWN, 0.334 ms -> 0.033 ms, because a
+// warm cache is all hits. 995 samples, 994 of them under 3.4 ms; the single 65 ms
+// outlier was the first-ever paint (cold start), not a large cache. At ~3.5 KB per
+// entry the whole 360-entry cache was ~1.3 MB.
+//
+// So growth costs residency and nothing else, while a flush costs a full node-tree
+// teardown plus a re-upload of the working set — a visible hitch. A cap tight enough
+// to fire in normal use would therefore trade ~1 MB for a periodic stutter, which is
+// a losing trade in an app whose open complaint is stuttering. These limits are set
+// so they never fire in normal use and only catch a genuine runaway: 8192 entries is
+// >20x the measured 10-switch working set, i.e. hundreds of chart switches away.
+//
+// The byte cap covers the shape the entry cap cannot see — few entries, each huge
+// (very high DPR, oversized hold bodies).
+constexpr qsizetype kTimelineCachedTextureEntryLimit = 8192;
+constexpr qint64 kTimelineCachedTextureByteLimit = 64LL * 1024 * 1024;
+constexpr qsizetype kTimelineTransformedPixmapEntryLimit = 8192;
 
 QString normalizedSkinDirectory(const QString& skinDirectory)
 {
@@ -36,6 +60,8 @@ void TimelineQuickTextureCache::clear()
 {
     qDeleteAll(textures_);
     textures_.clear();
+    textureBytesByKey_.clear();
+    textureBytes_ = 0;
     transformedPixmaps_.clear();
     holdPixmapParts_.clear();
 }
@@ -54,15 +80,38 @@ void TimelineQuickTextureCache::invalidateThemeDependent()
 
 void TimelineQuickTextureCache::invalidateDprDependent()
 {
-    qDeleteAll(textures_);
-    textures_.clear();
-    transformedPixmaps_.clear();
-    holdPixmapParts_.clear();
+    clear();
 }
 
 bool TimelineQuickTextureCache::requiresReset(QQuickWindow* window, const QString& skinDirectory) const
 {
     return window_ != window || skinDirectory_ != normalizedSkinDirectory(skinDirectory);
+}
+
+TimelineQuickTextureCacheCapacity TimelineQuickTextureCache::capacitySnapshot() const
+{
+    return TimelineQuickTextureCacheCapacity{
+        textures_.size(),
+        textureBytes_,
+        transformedPixmaps_.size(),
+        kTimelineCachedTextureEntryLimit,
+        kTimelineCachedTextureByteLimit,
+        kTimelineTransformedPixmapEntryLimit,
+    };
+}
+
+bool TimelineQuickTextureCache::capacityFlushRequired() const
+{
+    // Routed through the same snapshot the diagnostics read, so the logged limits
+    // are by construction the ones the predicate actually used.
+    const TimelineQuickTextureCacheCapacity capacity = capacitySnapshot();
+    return miacode::timeline::quick::timelineTextureCacheFlushRequired(
+        capacity.textureCount,
+        capacity.textureBytes,
+        capacity.pixmapCount,
+        capacity.textureCountLimit,
+        capacity.textureByteLimit,
+        capacity.pixmapCountLimit);
 }
 
 void TimelineQuickTextureCache::setSkinDirectory(const QString& skinDirectory)
@@ -88,6 +137,9 @@ QSGTexture* TimelineQuickTextureCache::textureForKey(const QString& key, const Q
     QSGTexture* texture = window_->createTextureFromImage(image);
     ++textureCreateCount_;
     textures_.insert(key, texture);
+    const qint64 uploadBytes = qMax<qint64>(1, image.sizeInBytes());
+    textureBytesByKey_.insert(key, uploadBytes);
+    textureBytes_ += uploadBytes;
     return texture;
 }
 
@@ -187,7 +239,13 @@ void TimelineQuickTextureCache::removeTextureKeysMatching(const std::function<bo
     }
     for (const QString& key : toRemove) {
         delete textures_.take(key);
+        textureBytes_ -= textureBytesByKey_.take(key);
     }
+    // Selective removal can only ever shrink the total; clamp so a missing bookkeeping
+    // entry (a texture inserted before this tracking existed, or a future partial-clear
+    // path that forgets to update the map) can never drive the counter negative and
+    // suppress the capacity flush.
+    textureBytes_ = qMax<qint64>(0, textureBytes_);
 }
 
 QPixmap TimelineQuickTextureCache::transformedNotePixmap(

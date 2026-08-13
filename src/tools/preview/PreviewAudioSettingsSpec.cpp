@@ -145,6 +145,12 @@ bool verifyDirectBucketGain(QTextStream& err)
     if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("firework")), 0.50, 1e-9, QStringLiteral("firework should use direct Firework bucket gain"), err)) {
         return false;
     }
+    miacode::preview_sfx::setSelectedIntroSoundVolume(1.75);
+    const double introVolume = previewSfxVolumeForKind(settings, QStringLiteral("track_start"));
+    miacode::preview_sfx::setSelectedIntroSoundVolume(1.0);
+    if (!requireNear(introVolume, 1.75, 1e-9, QStringLiteral("track_start should use its independent volume without global/answer attenuation"), err)) {
+        return false;
+    }
     return true;
 }
 

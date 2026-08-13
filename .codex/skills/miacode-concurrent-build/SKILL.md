@@ -35,10 +35,10 @@ Use those routes when the user explicitly asks for first-time dependency setup, 
 
 ## Default Build Rule
 
-Always use concurrent builds for routine local builds and verification. Build the full developer target graph with CMake/MSBuild parallelism:
+Always use concurrent builds for routine local builds and verification, but never exceed four build jobs. Build the full developer target graph with CMake/MSBuild parallelism capped at four:
 
 ```powershell
-cmake --build "D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools" --target ALL_BUILD --config Release --parallel
+cmake --build "D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools" --target ALL_BUILD --config Release --parallel 4
 ```
 
 Use this by default when the user asks to build the current project, rebuild the current files, refresh the desktop executable, or verify the app after changes.
@@ -59,6 +59,7 @@ Use this by default when the user asks to build the current project, rebuild the
 - Confirm `C:\Users\kanago\Desktop\MiaCode.exe.lnk` targets `D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools\Release\MiaCode.exe` and uses working directory `D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools\Release`; update the shortcut if it does not.
 - Confirm the executable reached through `C:\Users\kanago\Desktop\MiaCode.exe.lnk` is a fresh build for the current code. If the target exe's `LastWriteTime` is older than the latest commit time or relevant source file updates, rebuild before treating the desktop shortcut as current.
 - Treat `D:\STUDY\Project_Work\MiaCode_dev2\MiaCodeDev\build-devtools` as the local developer build tree. Do not switch to README's `build\Release` output unless the user explicitly asks for the preset route.
+- During a build expected to last more than a minute, inspect the attributable build process tree at least once per minute. If it shows more than four compiler/build worker processes, immediately stop the build-root process tree and its attributable compiler/linker children; report the safety stop rather than retrying at a higher job count.
 
 ## If The Build Hits Output Occupancy
 
@@ -84,8 +85,9 @@ Use this by default when the user asks to build the current project, rebuild the
 - Use `ALL_BUILD` concurrent builds for normal local verification.
 - Never run a clean/rebuild target or delete development build output without the explicit cleanup
   approval required above.
-- Do not switch to low-concurrency build commands as a fallback.
-- Do not add a fixed outer parallelism such as `--parallel 8` unless the user asks for a specific job count; plain `--parallel` lets CMake/MSBuild choose.
+- Never pass bare `--parallel` or a value above `4`; use exactly `--parallel 4` unless the task needs a single-job build.
+- Do not add `/MP` or another compiler-level parallelism option that can raise total active compilation above four.
+- Script entry points must validate externally supplied build-job parameters to the inclusive range `1..4`.
 - Keep `--config Release` for routine compile/test/verification work, matching `miacode-dev-guide`.
 - For a named helper/spec target, build that exact target with concurrent CMake/MSBuild parallelism.
 - For packaging scripts, expect them to run their own prechecks; if the user only needs a fresh desktop shortcut executable, build `MiaCode` or `ALL_BUILD` in `build-devtools` directly instead of packaging.

@@ -1,5 +1,6 @@
 #include "editor/PlainCodeEditor.h"
 #include "editor/BracketCompletionPopup.h"
+#include "editor/BookmarkCommentSyntax.h"
 #include "editor/TouchPadAuthoringEdit.h"
 #include "common/AdoptedWidgetCoordinates.h"
 
@@ -142,15 +143,20 @@ int main(int argc, char** argv)
     expectTouchPlan(QStringLiteral("1,2"), 3, false, 2, 3, QStringLiteral("/A1"),
                     QStringLiteral("document-end caret appends to the final token"));
 
-    const auto expectTouchEdit = [&out, &failed](const QString& text, int pos, bool backtick,
-                                                 const QString& expected, const QString& message) {
+    const auto expectTouchPadEdit = [&out, &failed](const QString& text, int pos, bool backtick,
+                                                    const QString& pad, const QString& expected,
+                                                    const QString& message) {
         QTextDocument document(text);
         QTextCursor cursor(&document);
         cursor.setPosition(pos);
         const auto plan = miacode::editor::planTouchPadAuthoringEdit(
-            document.toPlainText(), cursor.position(), QStringLiteral("A1"), backtick);
+            document.toPlainText(), cursor.position(), pad, backtick);
         const bool applied = miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan);
         expect(applied && document.toPlainText() == expected, message, out, &failed);
+    };
+    const auto expectTouchEdit = [&expectTouchPadEdit](const QString& text, int pos, bool backtick,
+                                                       const QString& expected, const QString& message) {
+        expectTouchPadEdit(text, pos, backtick, QStringLiteral("A1"), expected, message);
     };
     expectTouchEdit(QStringLiteral("(160){16}"), 0, false, QStringLiteral("(160){16} A1"),
                     QStringLiteral("timing-only token receives a pad without a touch separator"));
@@ -179,6 +185,10 @@ int main(int argc, char** argv)
                     QStringLiteral("prefix-like area number is not an exact pad match"));
     expectTouchEdit(QStringLiteral("A1h[4:1]"), 0, false, QStringLiteral("A1h[4:1]/A1"),
                     QStringLiteral("touch hold is not removed as an ordinary touch"));
+    expectTouchEdit(QStringLiteral("A1f"), 0, false, QString(),
+                    QStringLiteral("firework touch toggles as its base pad"));
+    expectTouchEdit(QStringLiteral("A1f/B2"), 0, false, QStringLiteral("B2"),
+                    QStringLiteral("firework first pad removal keeps the next item"));
     expectTouchEdit(QStringLiteral("1/A1  "), 2, false, QStringLiteral("1  "),
                     QStringLiteral("toggle deletion preserves trailing token whitespace"));
     expectTouchEdit(QStringLiteral(" A1/B2"), 0, false, QStringLiteral(" B2"),
@@ -189,6 +199,56 @@ int main(int argc, char** argv)
                     QStringLiteral("first pad match allows whitespace around timing controls"));
     expectTouchEdit(QStringLiteral("1/ A1 /B2"), 2, false, QStringLiteral("1/B2"),
                     QStringLiteral("non-first pad match ignores item whitespace"));
+
+    // A `||` comment runs to the end of ITS line: commas inside it are prose,
+    // and chart text after the terminating newline is still the same token.
+    expectTouchPlan(QStringLiteral("1,2, ||note,here\n3,5,"), 17, false, 4, 18, QStringLiteral("/A1"),
+                    QStringLiteral("a comma inside a comment is not a beat separator"));
+    expectTouchEdit(QStringLiteral("1,2, ||note,here\n,5,"), 17, false,
+                    QStringLiteral("1,2, ||note,here\nA1,5,"),
+                    QStringLiteral("a pad is never authored into a comment"));
+    expectTouchEdit(QStringLiteral("1,2,3, ||a,b"), 12, false, QStringLiteral("1,2,3,A1 ||a,b"),
+                    QStringLiteral("end-of-text caret after a comment stays in the chart token"));
+    expectTouchEdit(QStringLiteral("1,2,3, ||8,16\n4,5,6,"), 14, false,
+                    QStringLiteral("1,2,3, ||8,16\n4/A1,5,6,"),
+                    QStringLiteral("a numeric comment does not shift the token"));
+    expectTouchEdit(QStringLiteral("1, ||lead in\n2,"), 13, false, QStringLiteral("1, ||lead in\n2/A1,"),
+                    QStringLiteral("content after a comment belongs to the token"));
+    expectTouchPadEdit(QStringLiteral("1, ||x\nA1,"), 9, false, QStringLiteral("A1"),
+                       QStringLiteral("1, ||x\n,"),
+                       QStringLiteral("a pad living after a comment toggles off"));
+    expectTouchPadEdit(QStringLiteral("1, ||x\nA1/B2,"), 9, false, QStringLiteral("B2"),
+                       QStringLiteral("1, ||x\nA1,"),
+                       QStringLiteral("the second pad after a comment toggles off"));
+    expectTouchPadEdit(QStringLiteral("1,2, ||x\n3/A1,"), 12, false, QStringLiteral("A1"),
+                       QStringLiteral("1,2, ||x\n3,"),
+                       QStringLiteral("a pad after a mid-token comment toggles off instead of duplicating"));
+
+    // An empty token that reaches a line break belongs to the LAST line it
+    // covers, not to the trailing edge of the previous one.
+    expectTouchEdit(QStringLiteral("1,2,3,4,\n,6,7,8,"), 9, false, QStringLiteral("1,2,3,4,\nA1,6,7,8,"),
+                    QStringLiteral("empty first beat of a line keeps its pad on that line"));
+    expectTouchEdit(QStringLiteral("(120){8}\n,2,3,4,"), 9, false, QStringLiteral("(120){8}\nA1,2,3,4,"),
+                    QStringLiteral("empty first beat under a controls-only line stays on the note line"));
+    expectTouchEdit(QStringLiteral("1,2,3,4, ||measure 1\n,6,7,8,"), 21, false,
+                    QStringLiteral("1,2,3,4, ||measure 1\nA1,6,7,8,"),
+                    QStringLiteral("empty first beat after a commented line stays on the note line"));
+    expectTouchEdit(QStringLiteral("1,2,\n\n,5,"), 6, false, QStringLiteral("1,2,\n\nA1,5,"),
+                    QStringLiteral("a multi-line empty token uses its last line"));
+    expectTouchEdit(QStringLiteral("(120)\n{16},,,,"), 6, false, QStringLiteral("(120)\n{16} A1,,,,"),
+                    QStringLiteral("controls opening the token's last line still precede the pad"));
+    expectTouchEdit(QStringLiteral("(120)\n{16} ,,,,"), 6, false, QStringLiteral("(120)\n{16} A1 ,,,,"),
+                    QStringLiteral("controls on the last line precede the pad, trailing space kept"));
+    expectTouchEdit(QStringLiteral("1,2,\n(180){16},3,"), 5, false,
+                    QStringLiteral("1,2,\n(180){16} A1,3,"),
+                    QStringLiteral("bpm+meter opening the last line still precede the pad"));
+
+    // NOTE: `findWhitespaceSeparatedNote` lets `A1 B2` toggle each half on its
+    // own, because both of MiaCode's parsers flush the pending token on
+    // whitespace. That is deliberately NOT asserted here: plain simai does not
+    // define whitespace as an each separator, so the behaviour tracks our
+    // parsers rather than a guaranteed language rule and must not be frozen
+    // into the spec.
 
     {
         QTextDocument document(QStringLiteral("1,2,"));
@@ -218,6 +278,17 @@ int main(int argc, char** argv)
         expect(document.toPlainText() == QLatin1String("1/A1/B2"),
                QStringLiteral("touch authoring deletion is one undo step"), out, &failed);
     }
+
+    expect(
+        miacode::editor::isBookmarkCommentMarker(QStringLiteral("1 || note"), 2),
+        QStringLiteral("ordinary double-pipe comment starts a bookmark"),
+        out,
+        &failed);
+    expect(
+        !miacode::editor::isBookmarkCommentMarker(QStringLiteral("1 ||| annotation"), 2),
+        QStringLiteral("triple-pipe annotation does not start a bookmark"),
+        out,
+        &failed);
 
     expect(
         miacode::editor::normalizedHalfWidthText(QStringLiteral("、")) == QLatin1String("/"),
@@ -422,6 +493,32 @@ int main(int argc, char** argv)
         QStringLiteral("Ctrl+Shift+_ key press is forwarded as Ctrl+Shift+- by PlainCodeEditor"),
         out,
         &failed);
+    {
+        PlainCodeEditor gutterEditor;
+        gutterEditor.resize(480, 240);
+        gutterEditor.setPlainText(QStringLiteral("1,"));
+        gutterEditor.show();
+        QApplication::processEvents();
+
+        QWidget* gutter = gutterEditor.childAt(QPoint(2, 4));
+        QMouseEvent gutterDoubleClick(
+            QEvent::MouseButtonDblClick,
+            QPointF(2, 4),
+            QPointF(2, 4),
+            QPointF(gutter != nullptr ? gutter->mapToGlobal(QPoint(2, 4)) : QPoint()),
+            Qt::LeftButton,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        if (gutter != nullptr) {
+            QApplication::sendEvent(gutter, &gutterDoubleClick);
+        }
+        expect(
+            gutter != nullptr
+                && gutterEditor.metaObject()->indexOfSignal("lineNumberBookmarkCreateRequested(int)") < 0,
+            QStringLiteral("double-click bookmark creation is removed from the gutter API"),
+            out,
+            &failed);
+    }
     {
         PlainCodeEditor completionEditor;
         completionEditor.resize(480, 240);
