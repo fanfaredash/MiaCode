@@ -10,7 +10,7 @@ QmlApplicationContext::QmlApplicationContext(
     : QObject(parent)
     , preferences_(this)
     , document_(backend, this)
-    , preview_(shell, this)
+    , preview_(backend, shell, this)
     , commands_(backend, document_, this)
     , pages_(backend, this)
     , platform_(this)

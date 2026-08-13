@@ -724,8 +724,6 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/tools.svg
     src/app/qml_ui/resources/icons/audio-settings.svg
     src/app/qml_ui/resources/icons/preview-settings.svg
-    src/app/qml_ui/resources/icons/muri-mode.svg
-    src/app/qml_ui/resources/icons/preview-mode.svg
     src/app/qml_ui/resources/icons/close.svg
     src/app/qml_ui/resources/icons/more.svg
     src/app/qml_ui/resources/icons/metadata.svg

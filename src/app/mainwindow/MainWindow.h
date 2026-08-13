@@ -225,6 +225,7 @@ public:
     void endShellPreviewScrub(double second, bool centerView) override;
     void setShellPreviewRate(double rate) override;
     void toggleShellMuriRenderMode() override;
+    RenderMode muriRenderMode() const;
     void nudgeShellPreviewRate(int direction) override;
     bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView) override;
     void beginShellPreviewHeldSeek(int direction, int key) override;

@@ -38,8 +38,8 @@
 
 ### 合入后 UIv2 接线（当前最高优先级）
 
-- [ ] `QmlUiBootstrap`：`setQuickShellRootWindow`、ChartDrop、Quit 走 `rootWindow->close()`
-- [ ] `QmlPreviewModel::muriMode`：从 bool 改为 Native / EraseByArea / MaimuriDxStyle 三态；QML 开关与 `PreviewPane` 标题一起改
+- [ ] ChartDrop / `setQuickShellRootWindow`：上游 PR 未审，v2 不接
+- [x] `QmlPreviewModel::renderMode`：token 三态；工具栏文字按钮循环；预览栏标题同步；已删 `muri-mode.svg` / `preview-mode.svg`
 - [ ] `QmlExportSession` / `ExportVideoPage.qml`：片头音文件名与 `introSoundVolume` 与 snapshot 对齐（Widgets 对话框已接）
 - [ ] 批量上传：确认 v2 工具箱仍能打开扩展命令 `net.batchUpload.open`
 
@@ -48,7 +48,7 @@
 - 设备热插拔暂停 → 下一次 play 走 cold Prepare
 - play / pause / seek 以 completion 为准
 - EraseByArea、烟花时长、BGM 过轨静音
-- 音频拖放建谱（v2 需 ChartDrop 接线后才有）
+- 音频拖放建谱（ChartDrop 上游 PR 未审，v2 不接）
 - QML 导出带片头音（需上面导出接线）
 - 脏文档关窗 / 播放中关窗
 - 提交 `d534b393`（bookmark / touch input）标注「未经 GUI 验证」
@@ -134,7 +134,7 @@ cmake --build build --target MiaCode -j 8
 
 ## 建议下一刀
 
-1. **合入后接线**：`QmlUiBootstrap`（root window / ChartDrop / Quit）→ Muri 三态 → QML 片头音 → 确认批量上传入口。  
+1. **合入后接线**：QML 片头音 → 确认批量上传入口。ChartDrop 上游 PR 未审，v2 不接。  
 2. 再回到下面的 P0/P1 壳契约（friend 收口、`syntaxIssues`、死控件）。  
 3. 产品拍板后再动 P2 传输条 / 全屏策略。
 

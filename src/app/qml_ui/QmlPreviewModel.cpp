@@ -1,12 +1,19 @@
 #include "QmlPreviewModel.h"
 
 #include "app/quick_shell/QuickShellController.h"
+#include "common/MuriRenderOptions.h"
+#include "mainwindow/MainWindow.h"
 
 #include <QRegularExpression>
 #include <QVariantMap>
 
-QmlPreviewModel::QmlPreviewModel(QuickShellController& controller, QObject* parent)
-    : QObject(parent), controller_(&controller)
+QmlPreviewModel::QmlPreviewModel(
+    MainWindow& backend,
+    QuickShellController& controller,
+    QObject* parent)
+    : QObject(parent)
+    , backend_(&backend)
+    , controller_(&controller)
 {
     connect(controller_, &QuickShellController::shellStateChanged, this, &QmlPreviewModel::changed);
 }
@@ -22,7 +29,24 @@ double QmlPreviewModel::rate() const
     return ok ? value : 1.0;
 }
 bool QmlPreviewModel::playing() const { return controller_->previewPlaying(); }
-bool QmlPreviewModel::muriMode() const { return controller_->muriCheckRenderMode(); }
+
+QString QmlPreviewModel::renderMode() const
+{
+    return muriRenderModeToken(backend_->muriRenderMode());
+}
+
+QString QmlPreviewModel::renderModeLabel() const
+{
+    switch (backend_->muriRenderMode()) {
+    case RenderMode::EraseByArea:
+        return tr("按区消去");
+    case RenderMode::MaimuriDxStyle:
+        return tr("无理检测");
+    case RenderMode::Native:
+        break;
+    }
+    return tr("常规模式");
+}
 
 QVariantList QmlPreviewModel::statistics() const
 {
@@ -52,8 +76,11 @@ void QmlPreviewModel::setPlaying(bool value)
 {
     if (value != playing()) controller_->togglePreviewPlayback();
 }
-void QmlPreviewModel::setMuriMode(bool value)
+
+void QmlPreviewModel::toggleRenderMode()
 {
-    if (value != muriMode()) controller_->toggleMuriRenderMode();
+    controller_->toggleMuriRenderMode();
+    emit changed();
 }
+
 void QmlPreviewModel::stop() { controller_->stopPreview(); }

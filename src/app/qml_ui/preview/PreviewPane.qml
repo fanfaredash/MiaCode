@@ -17,7 +17,6 @@ Rectangle {
                       : 1.0
         return Math.max(1.0, ratio)
     }
-    readonly property bool exportPageActive: !!(root.shellController && root.shellController.exportPageActive)
 
     color: Theme.colors.background.surface
     clip: true
@@ -38,9 +37,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: root.previewSession.muriMode ? qsTr("MURI模式")
-             : root.exportPageActive ? qsTr("导出预览")
-             : qsTr("实时预览")
+        title: qsTr("预览")
     }
 
     Item {
