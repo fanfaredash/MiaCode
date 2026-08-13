@@ -433,7 +433,8 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
             const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
                 || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
             if (startBackground && backgroundTrackSample_ != nullptr
-                && playbackSession_.backgroundTrackPendingStart) {
+                && playbackSession_.backgroundTrackPendingStart
+                && !playbackSession_.backgroundTrackPastEnd) {
                 backgroundTrackSample_->play();
                 playbackSession_.backgroundTrackPendingStart = false;
                 playbackSession_.backgroundTrackRunning = true;

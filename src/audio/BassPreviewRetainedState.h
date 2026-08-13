@@ -8,6 +8,14 @@ namespace miacode::preview_audio::bass {
 
 constexpr double kRetainedSecondToleranceSeconds = 0.002;
 
+inline bool backgroundTrackTargetIsPastEnd(double rawSecond, double durationSeconds)
+{
+    return qIsFinite(rawSecond)
+        && qIsFinite(durationSeconds)
+        && durationSeconds > 0.0
+        && rawSecond >= durationSeconds;
+}
+
 enum class RetainedSeekAction {
     KeepPaused,
     ResumeExact,

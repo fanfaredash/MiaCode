@@ -47,6 +47,14 @@ Implications:
   comma is a beat line; measure lines run on an independent meter timeline from shared
   `SimaiTimingMetadata` (`&whole_time_signature=`); inline `|| x/y` restarts the meter; `{beats}`
   only changes comma spacing; `(BPM)` restarts the measure-line timeline.
+- Strict validation warns when a bracketless short lane hold has modifiers after `h` (for
+  example `1hx` or `1hb`). MiaCode still parses it as a zero-length hold, but some external
+  previewers require the short-hold token to end in `h`; canonical forms such as `1h` and
+  duration-bearing holds such as `1hx[4:1]` remain warning-free under this compatibility rule.
+- BASS preview seeks beyond the decoded BGM duration keep the BGM explicitly paused and mark it
+  `backgroundTrackPastEnd`; direct start/resume, pending-offset start, and mixer-sync start must
+  all respect that state. A chart may continue playing SFX/visuals beyond the music, but an
+  out-of-range seek must never reuse the BASS source's previous valid cursor position.
 - Same-second slide/head/track/motion stacking is shared by `src/core/scene/PreviewMarkerDrawOrder.*`
   + prepared `drawOrder` in `PreviewPreparedSceneCache`. Changing "who's on top" → update the helper
   and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`,
