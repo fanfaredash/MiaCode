@@ -1158,7 +1158,6 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 item(QStringLiteral("analysis.runMuriAnalysis"), QStringLiteral("Run Muri analysis"), QStringLiteral("analysis.run")),
                 item(QStringLiteral("export.video.start"), QStringLiteral("Start video export"), QStringLiteral("export.write"), QStringLiteral("high")),
                 item(QStringLiteral("export.cover.start"), QStringLiteral("Start cover export"), QStringLiteral("export.write"), QStringLiteral("high")),
-                item(QStringLiteral("net.batchUpload.open"), QStringLiteral("Open Net batch upload"), QStringLiteral("commands.execute"), QStringLiteral("high")),
                 item(QStringLiteral("extensions.all"), QStringLiteral("List extensions"), QStringLiteral("extensions.manage"), QStringLiteral("high")),
                 item(QStringLiteral("extensions.reload"), QStringLiteral("Reload extensions"), QStringLiteral("extensions.manage"), QStringLiteral("high")),
             };

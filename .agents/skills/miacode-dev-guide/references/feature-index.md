@@ -636,16 +636,6 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 8b. Export as ZIP — `src/tools/zip_export/`
 
-- Net batch upload access: the uploader remains built under `src/tools/net/`, but it has no
-  built-in Tools/toolbox action. `MainWindow.ExtensionHostRequests.cpp` exposes the high-risk
-  allowlisted command `net.batchUpload.open`; an enabled extension with `commands.execute` must
-  contribute the visible entry (normally via `toolbox/menu`, inserted after Net download and
-  before the official-chart mirror separator) and invoke it. Extension manifests
-  may target all stable host menus: `file/menu`, `edit/menu`, `tools/menu`, `modify/menu`,
-  `preview/menu`, `help/menu`, `toolbox/menu`, and `menubar/beforeHelp`. No access extension is
-  committed or bundled; distribute it separately. This is UI feature gating only; enforce real
-  upload authorization on the server.
-
 - Packs the current chart into a `.zip` (`maidata.txt` from `SimaiDocument::toText()` +
   canonical siblings `track.mp3` / `bg.{jpg,png,jpeg}` / sibling PV `pv.mp4`/`bg.mp4`).
 - Core (backend-neutral, no Qt-widget dep, unit-testable): `ChartZipPackager.{h,cpp}`
