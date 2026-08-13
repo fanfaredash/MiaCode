@@ -1532,6 +1532,12 @@ bool MainWindow::ExportSection::startQmlExportAudition(int difficultyId, const V
     }
 
     beginExportPreviewSession(visualTask);
+    const double aspectRatio =
+        (visualTask.outputWidth > 0 && visualTask.outputHeight > 0)
+            ? (static_cast<double>(visualTask.outputWidth)
+               / static_cast<double>(visualTask.outputHeight))
+            : 1.0;
+    owner_.setPreviewCanvasAspectRatio(aspectRatio, false);
     installExportPreviewAuditionScene(difficultyId);
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setBackgroundBrightnessOuter(visualTask.backgroundBrightnessOuter);
