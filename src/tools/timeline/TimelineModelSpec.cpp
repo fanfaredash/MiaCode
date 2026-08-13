@@ -813,14 +813,14 @@ int main(int argc, char** argv)
         const TimelineVisibleLineRange inTail = timelineRenderVisibleNoteLineRange(
             lines,
             buildNoteVisualEndPrefixMax(lines, false),
-            1.0,
-            1.1
+            0.6,
+            0.7
         );
         const TimelineVisibleLineRange afterTail = timelineRenderVisibleNoteLineRange(
             lines,
             buildNoteVisualEndPrefixMax(lines, false),
-            1.5,
-            1.6
+            0.8,
+            0.9
         );
         expect(inTail.begin == 0 && inTail.end == 1,
                QStringLiteral("visible note range keeps firework tail alive inside its rendered duration"));

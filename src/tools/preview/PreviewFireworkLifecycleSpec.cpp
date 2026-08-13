@@ -6,6 +6,7 @@
 #include "core/scene/PreviewActiveMarkerView.h"
 #include "core/scene/PreviewFrameState.h"
 #include "core/scene/PreviewJudgeFireworkLayerState.h"
+#include "common/PreviewGameplayConfig.h"
 
 namespace {
 
@@ -59,7 +60,7 @@ PreviewFrameState buildOffsetStateAt(qreal clipTimeSeconds)
     return state;
 }
 
-bool verifyLegacyAlignedSample(
+bool verifyVideoReferenceSample(
     qreal clipTimeSeconds,
     qreal expectedFireworkScale,
     qreal expectedFireworkAlpha,
@@ -67,8 +68,6 @@ bool verifyLegacyAlignedSample(
     qreal expectedSmallAlpha,
     qreal expectedBigScale,
     qreal expectedBigAlpha,
-    qreal expectedHoleRadius,
-    qreal expectedHoleMaskRadius,
     bool expectedDrawFirework,
     bool expectedDrawSmall,
     bool expectedDrawBig,
@@ -109,10 +108,7 @@ bool verifyLegacyAlignedSample(
     if (!requireNear(layerState.colorBallBigAlpha, expectedBigAlpha, prefix + QStringLiteral(" big alpha"), err)) {
         return false;
     }
-    if (!requireNear(layerState.holeRadius, expectedHoleRadius, prefix + QStringLiteral(" hole radius"), err)) {
-        return false;
-    }
-    if (!requireNear(layerState.holeMaskRadius, expectedHoleMaskRadius, prefix + QStringLiteral(" hole mask radius"), err)) {
+    if (!requireNear(layerState.clipTimeSeconds, clipTimeSeconds, prefix + QStringLiteral(" explicit clip time"), err)) {
         return false;
     }
     if (!require(layerState.drawFirework == expectedDrawFirework, prefix + QStringLiteral(" drawFirework mismatch"), err)) {
@@ -127,36 +123,37 @@ bool verifyLegacyAlignedSample(
     return true;
 }
 
-// Geometry (stripe scale, hole radii) still tracks v0.3.7-dev5; the alpha columns and the
-// small-ball scale ramp track MajdataPlay fire.anim (stripe alpha holds 0.589 until 0.5 s then
-// smoothsteps to 0; small ball 0.9-start alpha and 0.16667 s scale ramp; big ball 0.5 peak).
-bool verifyLegacyDev5Alignment(QTextStream& err)
+// Samples correspond to the supplied 30 fps reference: center flash first, spokes at frame 4,
+// full radial reach by frame 7, fade after frame 12, and no visible tail after frame 21.5.
+bool verifyVideoReferenceAlignment(QTextStream& err)
 {
-    if (!verifyLegacyAlignedSample(0.0, 0.0, 0.589, 0.2, 0.9, 1.0, 0.5, 12.906, 14.906, false, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.0, 0.0, 0.589, 0.2, 0.9, 1.0, 0.9, false, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.05, 0.0, 0.589, 0.29, 0.9, 1.025, 0.5, 13.8359881, 15.8359881, false, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.1, 0.0, 0.589, 0.38, 0.9, 1.05, 0.75, false, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.1, 0.0, 0.589, 0.38, 0.9, 1.05, 0.3666667, 16.5305691, 18.5305691, false, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.13333334, 0.6, 0.589, 0.44, 0.6333333, 1.0666667, 0.6, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.13333334, 0.6, 0.589, 0.44, 0.6333333, 1.0666667, 0.2333333, 19.2366320, 21.2564784, true, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.2, 3.5333332, 0.589, 0.5, 0.1, 1.1, 0.3, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.2, 1.0333333, 0.589, 0.5, 0.1, 1.1, 0.0953488, 26.6412092, 29.4385362, true, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.23333333, 5.0, 0.589, 0.5, 0.0666667, 1.1166667, 0.2666667, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.5, 2.1590909, 0.589, 0.5, 0.0, 1.15, 0.0534884, 84.4435487, 93.3101213, true, false, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.4, 5.0, 0.589, 0.5, 0.0, 1.15, 0.1, true, false, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.8, 3.1818182, 0.4149576, 0.5, 0.0, 1.15, 0.0116279, 159.4149022, 176.1534670, true, false, true, true, err)) {
-        return false;
-    }
-    if (!verifyLegacyAlignedSample(1.0, 3.8636364, 0.2073280, 0.5, 0.0, 1.15, 0.0, 203.6728030, 225.0584473, true, false, false, true, err)) {
-        return false;
-    }
-    if (!verifyLegacyAlignedSample(1.2, 4.5454545, 0.0404101, 0.5, 0.0, 1.15, 0.0, 232.6693625, 257.0996456, true, false, false, true, err)) {
+    const qreal duration = static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds);
+    const PreviewFrameState finalState = buildStateAt(duration);
+    const PreviewJudgeFireworkLayerState finalLayer =
+        miacode::preview::scene::buildPreviewJudgeFireworkLayerState(
+            finalState,
+            miacode::preview::scene::PreviewActiveMarkerView(finalState.noteMarkers),
+            QRectF(0.0, 0.0, 540.0, 540.0)
+        );
+    if (!require(!finalLayer.active, QStringLiteral("video-reference tail should be gone at clip end"), err)) {
         return false;
     }
 
@@ -195,7 +192,7 @@ int main(int argc, char* argv[])
     QTextStream err(stderr);
     QTextStream out(stdout);
 
-    if (!verifyLegacyDev5Alignment(err)) {
+    if (!verifyVideoReferenceAlignment(err)) {
         return 1;
     }
     if (!verifyClipCenterStaysOnPlayfield(err)) {

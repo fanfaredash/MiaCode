@@ -7,6 +7,7 @@
 
 #include <QMatrix4x4>
 #include <QQuickWindow>
+#include <QRandomGenerator>
 #include <QSGClipNode>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
@@ -20,7 +21,7 @@
 
 namespace {
 
-constexpr int kFireworkMaterialUniformBufferSize = 144;
+constexpr int kFireworkMaterialUniformBufferSize = 160;
 constexpr qreal kFireworkQuadRadiusMin = 1.0;
 constexpr int kFireworkClipSegments = 64;
 constexpr int kFireworkRenderFlagDrawStripe = 0x1;
@@ -28,6 +29,11 @@ constexpr int kFireworkRenderFlagDrawBigBall = 0x2;
 constexpr int kFireworkRenderFlagDrawSmallBall = 0x4;
 constexpr int kFireworkRenderFlagUseTexture = 0x8;
 constexpr int kFireworkRenderFlagDrawFallbackBall = 0x10;
+
+float nextFireworkStarAngleSeed()
+{
+    return static_cast<float>(QRandomGenerator::global()->generateDouble() * 4096.0);
+}
 
 class PreviewQuickJudgeFireworkMaterial;
 
@@ -171,6 +177,9 @@ public:
             && qFuzzyCompare(fallbackColorBallAlpha_ + 1.0f, otherMaterial->fallbackColorBallAlpha_ + 1.0f)
             && qFuzzyCompare(renderFlags_ + 1.0f, otherMaterial->renderFlags_ + 1.0f)
             && qFuzzyCompare(sourceAspect_ + 1.0f, otherMaterial->sourceAspect_ + 1.0f)
+            && qFuzzyCompare(clipTimeSeconds_ + 1.0f, otherMaterial->clipTimeSeconds_ + 1.0f)
+            && qFuzzyCompare(life01_ + 1.0f, otherMaterial->life01_ + 1.0f)
+            && qFuzzyCompare(starAngleSeed_ + 1.0f, otherMaterial->starAngleSeed_ + 1.0f)
             && sourceRectNormalized_ == otherMaterial->sourceRectNormalized_
             && useTexture_ == otherMaterial->useTexture_) {
             return 0;
@@ -196,6 +205,9 @@ public:
         float fallbackColorBallAlpha,
         float renderFlags,
         float sourceAspect,
+        float clipTimeSeconds,
+        float life01,
+        float starAngleSeed,
         const QRectF& sourceRectNormalized
     )
     {
@@ -216,6 +228,9 @@ public:
         fallbackColorBallAlpha_ = fallbackColorBallAlpha;
         renderFlags_ = renderFlags;
         sourceAspect_ = sourceAspect;
+        clipTimeSeconds_ = clipTimeSeconds;
+        life01_ = life01;
+        starAngleSeed_ = starAngleSeed;
         sourceRectNormalized_ = sourceRectNormalized;
     }
 
@@ -236,6 +251,9 @@ public:
     float fallbackColorBallAlpha() const { return fallbackColorBallAlpha_; }
     float renderFlags() const { return renderFlags_; }
     float sourceAspect() const { return sourceAspect_; }
+    float clipTimeSeconds() const { return clipTimeSeconds_; }
+    float life01() const { return life01_; }
+    float starAngleSeed() const { return starAngleSeed_; }
     QRectF sourceRectNormalized() const { return sourceRectNormalized_; }
 
 private:
@@ -256,6 +274,9 @@ private:
     float fallbackColorBallAlpha_ = 0.0f;
     float renderFlags_ = 0.0f;
     float sourceAspect_ = 1.0f;
+    float clipTimeSeconds_ = 0.0f;
+    float life01_ = 0.0f;
+    float starAngleSeed_ = 0.0f;
     QRectF sourceRectNormalized_;
 };
 
@@ -308,6 +329,12 @@ bool PreviewQuickJudgeFireworkMaterialShader::updateUniformData(
         static_cast<float>(material->sourceRectNormalized().width()),
         static_cast<float>(material->sourceRectNormalized().height())
     };
+    const float timing[4] = {
+        material->clipTimeSeconds(),
+        material->life01(),
+        material->starAngleSeed(),
+        0.0f
+    };
 
     std::memcpy(uniformData->data() + 64, &opacity, sizeof(float));
     std::memcpy(uniformData->data() + 68, geometryScalars, sizeof(geometryScalars));
@@ -315,6 +342,7 @@ bool PreviewQuickJudgeFireworkMaterialShader::updateUniformData(
     std::memcpy(uniformData->data() + 96, colorBallSmall, sizeof(colorBallSmall));
     std::memcpy(uniformData->data() + 112, colorBallBig, sizeof(colorBallBig));
     std::memcpy(uniformData->data() + 128, sourceRect, sizeof(sourceRect));
+    std::memcpy(uniformData->data() + 144, timing, sizeof(timing));
     return true;
 }
 
@@ -372,6 +400,7 @@ class PreviewQuickJudgeFireworkNode final : public QSGGeometryNode
 {
 public:
     PreviewQuickJudgeFireworkNode()
+        : starAngleSeed_(nextFireworkStarAngleSeed())
     {
         geometry_ = new QSGGeometry(previewQuickJudgeFireworkVertexAttributes(), 4);
         geometry_->setDrawingMode(QSGGeometry::DrawTriangleStrip);
@@ -392,10 +421,21 @@ public:
         float sourceAspect
     )
     {
+        const bool triggerChanged = hasPreviousFrame_
+            && !qFuzzyCompare(layerState.triggerSecond + 1.0, previousTriggerSecond_ + 1.0);
+        const bool clipRestarted = hasPreviousFrame_
+            && layerState.clipTimeSeconds + 0.0001 < previousClipTimeSeconds_;
+        if (triggerChanged || clipRestarted) {
+            starAngleSeed_ = nextFireworkStarAngleSeed();
+        }
+        previousTriggerSecond_ = layerState.triggerSecond;
+        previousClipTimeSeconds_ = layerState.clipTimeSeconds;
+        hasPreviousFrame_ = true;
+
         const qreal resolvedQuadRadius = qMax<qreal>(
             kFireworkQuadRadiusMin,
             qMax(
-                layerState.outerRadius,
+                qMax(layerState.outerRadius, layerState.clipRadius),
                 qMax(
                     layerState.holeMaskRadius,
                     qMax(
@@ -447,6 +487,9 @@ public:
             static_cast<float>(layerState.fallbackColorBallAlpha),
             static_cast<float>(renderFlags),
             sourceAspect,
+            static_cast<float>(layerState.clipTimeSeconds),
+            static_cast<float>(layerState.life01),
+            starAngleSeed_,
             normalizedSourceRect
         );
         markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
@@ -455,6 +498,10 @@ public:
 private:
     QSGGeometry* geometry_ = nullptr;
     PreviewQuickJudgeFireworkMaterial* material_ = nullptr;
+    float starAngleSeed_ = 0.0f;
+    qreal previousTriggerSecond_ = 0.0;
+    qreal previousClipTimeSeconds_ = 0.0;
+    bool hasPreviousFrame_ = false;
 };
 
 class PreviewQuickJudgeFireworkRootNode final : public QSGNode

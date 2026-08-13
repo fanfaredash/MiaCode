@@ -15,6 +15,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 colorBallSmall;
     vec4 colorBallBig;
     vec4 sourceRect;
+    vec4 timing;
 };
 
 const float kSectorAlphaScale = 0.9;
@@ -26,6 +27,8 @@ const int kRenderFlagDrawBigBall = 0x2;
 const int kRenderFlagDrawSmallBall = 0x4;
 const int kRenderFlagUseTexture = 0x8;
 const int kRenderFlagDrawFallbackBall = 0x10;
+
+vec4 compositeSourceOver(vec4 sourceColor, vec4 destColor);
 
 vec3 sectorBaseColor(int index)
 {
@@ -48,6 +51,130 @@ vec3 sectorBaseColor(int index)
         break;
     }
     return color;
+}
+
+float fourPointStar(vec2 point, float radius, float widthRatio, float concavity)
+{
+    // Preserve the established horizontal span and compress the height to the same extent.
+    float compressedRadius = max(radius * widthRatio, 0.001);
+    vec2 p = abs(point) / vec2(compressedRadius);
+    float shape = max(p.x, p.y) + concavity * min(p.x, p.y);
+    float feather = max(fwidth(shape), 0.025);
+    return 1.0 - smoothstep(1.0 - feather, 1.0 + feather, shape);
+}
+
+float hashStar(float value)
+{
+    return fract(sin(value * 127.1 + 311.7) * 43758.5453);
+}
+
+float starAngle(int index, int batch, float angleSeed)
+{
+    // Sample the full circle directly: clustering and empty arcs are intentionally allowed.
+    return hashStar(float(index + batch * 23) + 0.19 + angleSeed) * 6.28318530718;
+}
+
+float starRingRadius(int index, int batch)
+{
+    // Inner stars sit inside the colour-glow ring; outer stars sit just inside the judgment ring.
+    // Keep slight variation within each ring without drifting into the centre.
+    const float radii[12] = float[12](
+        0.86, 0.42, 0.88, 0.45,
+        0.84, 0.40, 0.89, 0.44,
+        0.85, 0.41, 0.87, 0.46
+    );
+    int shuffledIndex = (index * 7 + batch * 3) % 12;
+    return radii[shuffledIndex];
+}
+
+float starSize(int index, int batch)
+{
+    // Deterministic variation keeps playback stable while spanning the requested visible range.
+    return mix(0.040, 0.050, hashStar(float(index + batch * 29) + 0.37));
+}
+
+float starDelay(int index, int batch)
+{
+    const float batchStarts[2] = float[2](0.0, 0.08);
+    // Reveal the inner ring first, then the outer ring about 10 ms later.
+    // Keep only a small per-ring jitter so an early outer star cannot overtake a late inner star.
+    bool isOuterRing = starRingRadius(index, batch) >= 0.80;
+    float ringDelay = isOuterRing ? 0.010 : 0.0;
+    float withinRingJitter = hashStar(float(index + batch * 31) + 0.71) * 0.004;
+    return batchStarts[batch] + ringDelay + withinRingJitter;
+}
+
+vec4 rainbowStarLayer(vec2 localPos, float clipTime, float maxRadius, float angleSeed)
+{
+    const float kStarFadeInSeconds = 0.115;
+    const float kStarFadeOutSeconds = 0.25;
+    const float kStarPulseSeconds = kStarFadeInSeconds + kStarFadeOutSeconds;
+    vec4 layer = vec4(0.0);
+    for (int batch = 0; batch < 2; ++batch) {
+        for (int index = 0; index < 12; ++index) {
+            float localTime = clipTime - starDelay(index, batch);
+            if (localTime < 0.0 || localTime >= kStarPulseSeconds) {
+                continue;
+            }
+            // Preserve the fast appearance, then add 0.2 s to the shrink/fade phase only.
+            float pulse = localTime < kStarFadeInSeconds
+                ? sin(1.57079632679 * clamp(localTime / kStarFadeInSeconds, 0.0, 1.0))
+                : cos(1.57079632679 * clamp(
+                    (localTime - kStarFadeInSeconds) / kStarFadeOutSeconds,
+                    0.0,
+                    1.0
+                ));
+            float fadeOut01 = clamp(
+                (localTime - kStarFadeInSeconds) / kStarFadeOutSeconds,
+                0.0,
+                1.0
+            );
+            float fadeIn01 = clamp(localTime / kStarFadeInSeconds, 0.0, 1.0);
+            float angle = starAngle(index, batch, angleSeed);
+            vec2 direction = vec2(cos(angle), sin(angle));
+            float widthRatio = 0.66 + float((index + batch * 2) % 5) * 0.035;
+            float visualPeakRadius = maxRadius * starSize(index, batch);
+            float peakRadius = visualPeakRadius / widthRatio;
+            float judgmentInset = max(2.0, maxRadius * 0.015);
+            // Appearance is alpha-only at full size; geometry starts shrinking only during fade-out.
+            float sizePulse = localTime < kStarFadeInSeconds
+                ? 1.0
+                : pow(max(pulse, 0.0), 0.72);
+            float radius = peakRadius * sizePulse;
+            float visualRadius = radius * widthRatio;
+            float initialCenterRadius = min(
+                maxRadius * starRingRadius(index, batch),
+                maxRadius - visualPeakRadius - judgmentInset
+            );
+            float appearanceOffset = maxRadius * 0.02 * smoothstep(0.0, 1.0, fadeIn01);
+            float disappearanceOffset = maxRadius * 0.04 * smoothstep(0.0, 1.0, fadeOut01);
+            float outwardOffset = appearanceOffset + disappearanceOffset;
+            float centerRadius = min(
+                initialCenterRadius + outwardOffset,
+                maxRadius - visualRadius - judgmentInset
+            );
+            vec2 center = direction * centerRadius;
+            // Keep the full horizontal span while the deeper waist preserves a slightly finer edge.
+            float outer = fourPointStar(localPos - center, radius, widthRatio, 1.82);
+            float core = fourPointStar(localPos - center, radius * 0.50, widthRatio * 0.80, 2.1);
+            float alpha = outer * pulse * 0.95;
+            int tintIndex = (index * 2 + batch + 1) % 5;
+            vec3 tint = mix(vec3(1.0, 0.98, 0.78), sectorBaseColor(tintIndex), 0.24);
+            vec3 color = mix(tint, vec3(1.0), core);
+            vec4 star = vec4(color * alpha, alpha);
+            layer = compositeSourceOver(star, layer);
+        }
+    }
+    return layer;
+}
+
+float halftoneMask(vec2 localPos, float radius, float outerRadius, float angleDegrees)
+{
+    vec2 grid = mod(localPos + vec2(5.0), vec2(10.0)) - vec2(5.0);
+    float dotRadius = mix(1.0, 2.55, smoothstep(0.12, 0.88, radius / max(outerRadius, 1.0)));
+    float dot = 1.0 - smoothstep(dotRadius - 0.55, dotRadius + 0.55, length(grid));
+    float alternatingBeam = step(0.5, fract((angleDegrees - kSectorPhaseDegrees) / (kSectorStepDegrees * 2.0)));
+    return dot * alternatingBeam;
 }
 
 float wrapAngleDegrees(float angle)
@@ -192,10 +319,29 @@ void main()
                     sectorAlpha
                 );
                 layerColor = compositeSourceOver(fireworkLayer, layerColor);
+                float dots = halftoneMask(localPos, radius, outerRadius, angleDegrees);
+                float dotAlpha = fireworkContributionAlpha * sectorCoverage * dots * 0.34;
+                vec4 dotLayer = vec4(vec3(0.06) * dotAlpha, dotAlpha);
+                layerColor = compositeSourceOver(dotLayer, layerColor);
                 break;
             }
         }
     }
+
+    float clipTime = timing.x;
+    float rayLife = timing.y;
+    float coreRadius = max(7.0, clipRadius * mix(0.045, 0.105, smoothstep(0.0, 0.18, rayLife)));
+    float coreDistance = radius / coreRadius;
+    float rayStarted = drawFirework ? 1.0 : 0.0;
+    float bloom = exp(-coreDistance * coreDistance * 1.55)
+        * (1.0 - smoothstep(0.68, 1.0, rayLife)) * rayStarted;
+    float whiteCore = 1.0 - smoothstep(0.0, 0.32, coreDistance);
+    float glowAlpha = clamp(bloom * 0.92 + whiteCore * rayStarted, 0.0, 1.0);
+    vec3 glowColor = mix(vec3(1.0, 0.72, 0.08), vec3(1.0, 1.0, 0.86), whiteCore);
+    layerColor = compositeSourceOver(vec4(glowColor * glowAlpha, glowAlpha), layerColor);
+
+    vec4 stars = rainbowStarLayer(localPos, clipTime, clipRadius, timing.z);
+    layerColor = compositeSourceOver(stars, layerColor);
 
     if (drawColorBallBig) {
         layerColor = compositeSourceOver(
@@ -216,5 +362,7 @@ void main()
         );
     }
 
-    fragColor = layerColor * (holeMask * qt_Opacity);
+    float rayAndBallMask = holeMask;
+    float preserveCenterAndStars = max(glowAlpha, stars.a);
+    fragColor = layerColor * (max(rayAndBallMask, preserveCenterAndStars) * qt_Opacity);
 }

@@ -75,6 +75,32 @@ Implications:
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.
+  - The supplied 30 fps firework reference is the timing source: the shared lifetime is
+    `PreviewGameplayConfig::kJudgeEffectFireworkDurationSeconds` (also used by timeline culling),
+    and explicit clip time/life uniforms drive two batches of 12 fixed inner/outer-ring stars
+    (24 total, with six inner and six outer stars per batch plus deterministic size/ring
+    shuffling). Star
+    angles sample the full circle directly, intentionally permitting clusters and empty arcs. The
+    QSG firework node generates a fresh angle seed at each trigger/replay, holds it for that effect's
+    lifetime, and passes it through `timing.z`, avoiding per-frame jitter. Each batch reveals its inner
+    ring first and its outer ring about 0.010 s later; per-ring jitter is capped at 0.004 s so the
+    ordering cannot invert. Staggered sine pulses make the stars continuously fade in and out. Their
+    inner centres sit inside the colour-glow ring (0.40–0.47 of the judgment radius), while outer
+    centres sit around 0.83–0.90 and are inset by each star's tip radius so they cannot cross the
+    judgment ring. Star geometry scales with the same continuous pulse, producing the reference's
+    clearly visible shrink-to-zero disappearance rather than an alpha-only fade. The sparkle keeps
+    its original sector-derived tint; its shallow-concavity four-point silhouette is intentionally
+    filled rather than crossing lines. Its pulse keeps a 0.115 s fade-in followed by a 0.25 s
+    shrink/fade-out (0.365 s total), emitted in two spatially shuffled batches starting at 0.00 s
+    and 0.08 s. Its horizontal span remains broad;
+    its vertical extent is compressed to match that horizontal span, while the waist/edge concavity
+    remains fine. Each star travels radially outward throughout its
+    pulse: 0.02 of the judgment radius while appearing, then another 0.04 while shrinking/fading
+    (0.06 total). Appearance fades in at full geometry size; scaling applies only to disappearance.
+    Star visible half-extents vary deterministically from 0.040 to 0.050 of the judgment radius,
+    keeping repeated playback stable. Tips remain dynamically clamped inside the judgment boundary;
+    peak opacity is 0.95.
+    Keep the original 15-sector/24-degree spoke layout when tuning timing or particles.
   - **Firework PSO/texture warm-up is a 3-file contract — don't break the loop.** Qt RHI compiles
     the firework pipeline + uploads the colour-ball texture lazily on the FIRST firework draw
     (a render-thread stall, worst on weak iGPUs). `PreviewRuntime` warms it by injecting a synthetic

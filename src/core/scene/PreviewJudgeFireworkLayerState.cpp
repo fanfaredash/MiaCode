@@ -20,17 +20,10 @@ constexpr qreal kJudgeEffectFireworkDurationSeconds =
     static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds);
 constexpr qreal kJudgeEffectFireworkBaseWidthUnits = 10.8;
 constexpr qreal kJudgeEffectFireworkColorBallBaseWidthUnits = 5.12;
-// fire.anim Firework material._Alpha: hold 0.589 until 0.5 s, then a flat-tangent Hermite
-// (== smoothstep) down to 0 at the clip end. Replaces the steeper PreviewCanvas falloff; the
-// old +20% brightness gain is dropped so every alpha tracks the reference 1:1.
+// The supplied 30 fps reference holds the spokes through frame 11, then fades them over the
+// remaining visible frames. The old clip stretched this same motion to 1.333 s.
 constexpr qreal kJudgeEffectFireworkStripeAlphaPeak = 0.589;
-constexpr qreal kJudgeEffectFireworkStripeAlphaHoldSeconds = 0.5;
-constexpr qreal kJudgeEffectFireworkColorBallBigAlphaEndSeconds =
-    kJudgeEffectFireworkDurationSeconds * 0.75;
-constexpr qreal kJudgeEffectFireworkColorBallAlphaEndSeconds =
-    kJudgeEffectFireworkColorBallBigAlphaEndSeconds * 0.5;
-constexpr int kJudgeEffectFireworkStepRotationSegmentCount = 3;
-constexpr qreal kJudgeEffectFireworkStepRotationDegrees = 24.0;
+constexpr qreal kJudgeEffectFireworkStripeAlphaHoldSeconds = 0.4;
 constexpr qreal kFireworkInnerLB = 0.018;
 constexpr qreal kFireworkInnerUB = 0.054;
 constexpr qreal kFireworkOuterLB = 0.36;
@@ -49,14 +42,14 @@ const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkScaleKeys = {{
     {0.0, 0.0},
     {0.1, 0.0},
     {0.13333334, 0.6},
-    {0.23333333, 1.25},
-    {1.3333334, 5.0},
+    {0.23333333, 5.0},
+    {kJudgeEffectFireworkDurationSeconds, 5.0},
 }};
 
 const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkRotationKeys = {{
     {0.0, 0.0},
-    {1.2166667, -72.0},
-    {1.3333334, -78.85715},
+    {0.23333333, -8.0},
+    {kJudgeEffectFireworkDurationSeconds, -24.0},
 }};
 
 // fire.anim ColorBall (small) scale: 0.2 -> 0.5 by 0.16667 s, then hold. (Overrides the
@@ -64,30 +57,28 @@ const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkRotationKeys = {{
 const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkColorBallScaleKeys = {{
     {0.0, 0.2},
     {0.16666667, 0.5},
-    {1.3333334, 0.5},
+    {kJudgeEffectFireworkDurationSeconds, 0.5},
 }};
 
 const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkColorBallBigScaleKeys = {{
     {0.0, 1.0},
     {0.3, 1.15},
-    {1.3333334, 1.15},
+    {kJudgeEffectFireworkDurationSeconds, 1.15},
 }};
 
-// fire.anim ColorBall (small) m_Color.a, time-stretched to half of ColorBallBig's alpha lifetime:
-// keeps the source ratios (hold at 1/3, near-gone at 2/3, gone at end).
+// The compact center flash leads the spokes in the reference and is gone by 0.3 s.
 const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkColorBallAlphaKeys = {{
     {0.0, 0.9},
-    {kJudgeEffectFireworkColorBallAlphaEndSeconds / 3.0, 0.9},
-    {kJudgeEffectFireworkColorBallAlphaEndSeconds * 2.0 / 3.0, 0.1},
-    {kJudgeEffectFireworkColorBallAlphaEndSeconds, 0.0},
+    {0.1, 0.9},
+    {0.2, 0.1},
+    {0.3, 0.0},
     {kJudgeEffectFireworkDurationSeconds, 0.0},
 }};
 
-// ColorBallBig m_Color.a, time-stretched to 75% of the firework stripe lifetime:
-// keeps the source ratios (0.0667/0.8833 hold and 0.1667/0.8833 near-gone).
+// The larger rainbow ball lingers behind the initial flash but still clears before the tail.
 const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkColorBallBigAlphaKeys = {{
     {0.0, 0.9},
-    {kJudgeEffectFireworkColorBallBigAlphaEndSeconds * 0.1, 0.9},
+    {0.06666667, 0.9},
     {0.2, 0.3},
     {0.5, 0.0},
     {kJudgeEffectFireworkDurationSeconds, 0.0},
@@ -210,14 +201,6 @@ PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
         sampleScalarCurve(kJudgeEffectFireworkColorBallBigAlphaKeys, clipTime),
         1.0
     );
-    const int stepRotationIndex = qBound(
-        0,
-        static_cast<int>(qFloor(life01 * static_cast<qreal>(kJudgeEffectFireworkStepRotationSegmentCount) + 0.5)),
-        kJudgeEffectFireworkStepRotationSegmentCount
-    );
-    const qreal steppedRotationDegrees =
-        -static_cast<qreal>(stepRotationIndex) * kJudgeEffectFireworkStepRotationDegrees;
-
     const qreal holeRadius = clipRadius * (
         kJudgeEffectFireworkHoleStartRadiusRatio
         + (kJudgeEffectFireworkHoleEndRadiusRatio - kJudgeEffectFireworkHoleStartRadiusRatio) * smoothStep01(life01)
@@ -265,10 +248,13 @@ PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
     layerState.drawFallbackColorBall = drawFallbackColorBall;
     layerState.center = mapLogicalPointToRect(latestTriggerMarker->touchPoint, playfieldRect);
     layerState.clipRadius = clipRadius;
+    layerState.triggerSecond = latestTriggerSecond;
+    layerState.clipTimeSeconds = clipTime;
+    layerState.life01 = life01;
     layerState.fireworkScale = fireworkScale;
     layerState.outerRadius = outerRadius;
     layerState.fireworkAlpha = fireworkAlpha;
-    layerState.fireworkRotationDegrees = fireworkRotationDegrees + steppedRotationDegrees;
+    layerState.fireworkRotationDegrees = fireworkRotationDegrees;
     layerState.holeRadius = holeRadius;
     layerState.holeMaskRadius = holeMaskRadius;
     layerState.colorBallScale = colorBallScale;
