@@ -13,6 +13,18 @@
 namespace miacode::net {
 namespace {
 
+bool waitUnlessCanceled(const std::atomic_bool* cancelRequested, int milliseconds)
+{
+    constexpr int kPollIntervalMs = 25;
+    for (int waited = 0; waited < milliseconds; waited += kPollIntervalMs) {
+        if (cancelRequested != nullptr && cancelRequested->load()) {
+            return false;
+        }
+        QThread::msleep(qMin(kPollIntervalMs, milliseconds - waited));
+    }
+    return cancelRequested == nullptr || !cancelRequested->load();
+}
+
 QString formatSpeed(qint64 bytes, qint64 elapsedMs)
 {
     if (bytes <= 0 || elapsedMs <= 0) {
@@ -126,7 +138,7 @@ void NetBatchDownloadWorker::run()
         emitChartBottleneck(job.chart.title, resourceStats);
         ++completed;
         emit progress(completed);
-        QThread::msleep(250);
+        waitUnlessCanceled(cancelRequested_, 250);
     }
 
     if (paused) {
@@ -162,7 +174,11 @@ bool NetBatchDownloadWorker::downloadResourceToFile(
         emit log(UiText::text(QStringLiteral("net.download_resource_chart_1_resource"))
                      .arg(chartId, resource.path)
                      .arg(attempt + 1));
-        const NetDownloadResult result = client.downloadResourceToFile(chartId, resource.path, outputPath);
+        const NetDownloadResult result = client.downloadResourceToFile(
+            chartId, resource.path, outputPath, cancelRequested_);
+        if (result.canceled || isCanceled()) {
+            return false;
+        }
         const QString speed = formatSpeed(result.bytesWritten, result.elapsedMs);
         emit log(UiText::text(QStringLiteral("net.resource_result_1_http_2"))
                      .arg(resource.path)
@@ -189,7 +205,9 @@ bool NetBatchDownloadWorker::downloadResourceToFile(
             *errorMessage = result.errorMessage;
         }
         emit rowStatus(row, UiText::text(QStringLiteral("net.retrying_1")).arg(resource.label));
-        QThread::msleep(800);
+        if (!waitUnlessCanceled(cancelRequested_, 800)) {
+            return false;
+        }
     }
     return false;
 }

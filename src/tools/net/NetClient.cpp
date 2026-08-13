@@ -590,9 +590,14 @@ QByteArray NetClient::downloadResource(
 NetDownloadResult NetClient::downloadResourceToFile(
     const QString& chartId,
     const QString& resourcePath,
-    const QString& outputPath)
+    const QString& outputPath,
+    const std::atomic_bool* cancelRequested)
 {
     NetDownloadResult result;
+    if (cancelRequested != nullptr && cancelRequested->load()) {
+        result.canceled = true;
+        return result;
+    }
     QDir().mkpath(QFileInfo(outputPath).absolutePath());
 
     const QUrl url(QStringLiteral("https://majdata.net/api3/api/maichart/%1/%2").arg(chartId, resourcePath));
@@ -606,11 +611,20 @@ NetDownloadResult NetClient::downloadResourceToFile(
     QNetworkReply* reply = manager_.get(request);
     QEventLoop loop;
     QTimer timeout;
+    QTimer cancelPoll;
     timeout.setSingleShot(true);
+    cancelPoll.setInterval(25);
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     QObject::connect(&timeout, &QTimer::timeout, &loop, [&]() {
         reply->abort();
         loop.quit();
+    });
+    QObject::connect(&cancelPoll, &QTimer::timeout, &loop, [&]() {
+        if (cancelRequested != nullptr && cancelRequested->load()) {
+            result.canceled = true;
+            reply->abort();
+            loop.quit();
+        }
     });
 
     QSaveFile file(outputPath);
@@ -631,6 +645,7 @@ NetDownloadResult NetClient::downloadResourceToFile(
     };
     QObject::connect(reply, &QNetworkReply::readyRead, &loop, writeAvailable);
     timeout.start(kRequestTimeoutMs);
+    cancelPoll.start();
     loop.exec();
     if (reply->bytesAvailable() > 0) {
         writeAvailable();
@@ -640,6 +655,7 @@ NetDownloadResult NetClient::downloadResourceToFile(
     const QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
     const bool timedOut = !timeout.isActive();
     timeout.stop();
+    cancelPoll.stop();
 
     const QNetworkReply::NetworkError networkError = reply->error();
     const QString networkErrorText = reply->errorString();
@@ -652,6 +668,11 @@ NetDownloadResult NetClient::downloadResourceToFile(
         result.statusCode == 403
         || result.statusCode == 429
         || looksLikeChallengePage(probe, contentType);
+
+    if (result.canceled) {
+        file.cancelWriting();
+        return result;
+    }
 
     if (timedOut) {
         file.cancelWriting();

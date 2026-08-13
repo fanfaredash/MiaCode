@@ -8,6 +8,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <atomic>
+
 namespace miacode::net {
 
 struct NetChartSummary {
@@ -39,6 +41,7 @@ struct NetResourcePayload {
 
 struct NetDownloadResult {
     bool ok = false;
+    bool canceled = false;
     bool blockingResponse = false;
     int statusCode = 0;
     qint64 bytesWritten = 0;
@@ -94,7 +97,8 @@ public:
     NetDownloadResult downloadResourceToFile(
         const QString& chartId,
         const QString& resourcePath,
-        const QString& outputPath);
+        const QString& outputPath,
+        const std::atomic_bool* cancelRequested = nullptr);
 
 private:
     QList<NetChartSummary> querySearchText(
