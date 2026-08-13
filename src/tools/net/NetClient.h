@@ -51,6 +51,8 @@ struct NetQueryOptions {
     QString titleKeyword;
 };
 
+bool netDownloadLengthIsComplete(qint64 expectedBytes, qint64 bytesWritten);
+
 QList<NetChartSummary> parseChartListJson(const QByteArray& payload, QString* errorMessage);
 QList<NetChartSummary> filterChartsByLocalDateRange(
     const QList<NetChartSummary>& charts,

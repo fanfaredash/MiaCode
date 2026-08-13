@@ -159,14 +159,6 @@ bool NetBatchDownloadWorker::downloadResourceToFile(
     QList<NetBatchResourceStats>* resourceStats)
 {
     for (int attempt = 0; attempt < 3 && !isCanceled(); ++attempt) {
-        const QFileInfo existing(outputPath);
-        if (existing.exists() && existing.size() > 0) {
-            emit log(UiText::text(QStringLiteral("net.skip_existing_file_1_2"))
-                         .arg(outputPath)
-                         .arg(existing.size()));
-            return true;
-        }
-
         emit log(UiText::text(QStringLiteral("net.download_resource_chart_1_resource"))
                      .arg(chartId, resource.path)
                      .arg(attempt + 1));

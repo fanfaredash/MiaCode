@@ -15,6 +15,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSet>
+#include <QSaveFile>
 #include <QTimer>
 #include <QUrlQuery>
 
@@ -156,6 +157,11 @@ QString resourceFileName(const QString& resourcePath)
 }
 
 }  // namespace
+
+bool netDownloadLengthIsComplete(qint64 expectedBytes, qint64 bytesWritten)
+{
+    return bytesWritten > 0 && (expectedBytes < 0 || bytesWritten == expectedBytes);
+}
 
 QString netUserSpaceReferer(const QString& username)
 {
@@ -607,7 +613,7 @@ NetDownloadResult NetClient::downloadResourceToFile(
         loop.quit();
     });
 
-    QFile file(outputPath);
+    QSaveFile file(outputPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         reply->abort();
         reply->deleteLater();
@@ -615,18 +621,20 @@ NetDownloadResult NetClient::downloadResourceToFile(
         return result;
     }
 
-    QObject::connect(reply, &QNetworkReply::readyRead, &loop, [&]() {
+    QByteArray probe;
+    const auto writeAvailable = [&]() {
         const QByteArray chunk = reply->readAll();
+        if (probe.size() < 4096) {
+            probe.append(chunk.left(4096 - probe.size()));
+        }
         result.bytesWritten += file.write(chunk);
-    });
+    };
+    QObject::connect(reply, &QNetworkReply::readyRead, &loop, writeAvailable);
     timeout.start(kRequestTimeoutMs);
     loop.exec();
     if (reply->bytesAvailable() > 0) {
-        const QByteArray chunk = reply->readAll();
-        result.bytesWritten += file.write(chunk);
+        writeAvailable();
     }
-    file.close();
-
     const QVariant statusVariant = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     result.statusCode = statusVariant.isValid() ? statusVariant.toInt() : 0;
     const QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
@@ -635,41 +643,49 @@ NetDownloadResult NetClient::downloadResourceToFile(
 
     const QNetworkReply::NetworkError networkError = reply->error();
     const QString networkErrorText = reply->errorString();
+    const QVariant contentLength = reply->header(QNetworkRequest::ContentLengthHeader);
+    const qint64 expectedBytes = contentLength.isValid() ? contentLength.toLongLong() : -1;
     reply->deleteLater();
     result.elapsedMs = elapsed.elapsed();
 
-    QFile payloadProbe(outputPath);
-    QByteArray probe;
-    if (payloadProbe.open(QIODevice::ReadOnly)) {
-        probe = payloadProbe.read(4096);
-    }
     result.blockingResponse =
         result.statusCode == 403
         || result.statusCode == 429
         || looksLikeChallengePage(probe, contentType);
 
     if (timedOut) {
-        QFile::remove(outputPath);
+        file.cancelWriting();
         result.errorMessage = QStringLiteral("Request timed out.");
         return result;
     }
     if (result.blockingResponse) {
-        QFile::remove(outputPath);
+        file.cancelWriting();
         result.errorMessage = QStringLiteral("Request was blocked by Net/Cloudflare.");
         return result;
     }
     if (networkError != QNetworkReply::NoError || result.statusCode < 200 || result.statusCode >= 300) {
-        QFile::remove(outputPath);
+        file.cancelWriting();
         result.errorMessage = result.statusCode > 0
             ? QStringLiteral("HTTP %1: %2").arg(result.statusCode).arg(networkErrorText)
             : networkErrorText;
         return result;
     }
 
-    result.ok = result.bytesWritten > 0 || resourceFileName(resourcePath) == QStringLiteral("maidata.txt");
+    const bool emptyMaidata =
+        resourceFileName(resourcePath) == QStringLiteral("maidata.txt") && expectedBytes == 0;
+    result.ok = emptyMaidata || netDownloadLengthIsComplete(expectedBytes, result.bytesWritten);
     if (!result.ok) {
-        QFile::remove(outputPath);
-        result.errorMessage = QStringLiteral("Downloaded resource is empty.");
+        file.cancelWriting();
+        result.errorMessage = expectedBytes >= 0
+            ? QStringLiteral("Incomplete response: expected %1 bytes, received %2.")
+                  .arg(expectedBytes)
+                  .arg(result.bytesWritten)
+            : QStringLiteral("Downloaded resource is empty.");
+        return result;
+    }
+    if (!file.commit()) {
+        result.ok = false;
+        result.errorMessage = QStringLiteral("Could not commit %1: %2").arg(outputPath, file.errorString());
     }
     return result;
 }
