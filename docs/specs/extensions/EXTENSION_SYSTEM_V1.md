@@ -25,7 +25,13 @@ Required fields: `id`, `name`, `version`, `publisher`, and `engines.miacode`. `m
 Supported contribution points in v1:
 
 - `contributes.commands`
+- `contributes.menus["file/menu"]`
+- `contributes.menus["edit/menu"]`
 - `contributes.menus["tools/menu"]`
+- `contributes.menus["modify/menu"]`
+- `contributes.menus["preview/menu"]`
+- `contributes.menus["help/menu"]`
+- `contributes.menus["toolbox/menu"]`
 - `contributes.menus["menubar/beforeHelp"]`
 - `contributes.languages`
 

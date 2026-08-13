@@ -397,12 +397,6 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         &owner_
     );
     connect(owner_.netBatchDownloadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchDownload);
-    owner_.netBatchUploadAction_ = new QAction(
-        UiText::text(QStringLiteral("net.upload_action")),
-        &owner_
-    );
-    connect(owner_.netBatchUploadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchUpload);
-
     owner_.normalizeWholeChartAction_ = new QAction(
         UiText::text(QStringLiteral("menu.format_chart")),
         &owner_
