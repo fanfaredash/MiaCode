@@ -111,6 +111,27 @@ bool verifyThresholdScalesWithFrameInterval(QTextStream& err)
     return ok;
 }
 
+bool verifyRenderCadenceRateGate(QTextStream& err)
+{
+    constexpr qint64 interval = 16'666'667;
+    qint64 lastFlushNs = -1;
+    bool ok = expect(renderCadenceShouldFlush(1'000'000'000, interval, &lastFlushNs),
+                     "first render cadence tick must flush", err);
+    ok &= expect(!renderCadenceShouldFlush(1'008'333'333, interval, &lastFlushNs),
+                 "half-interval render cadence tick must be rate-limited", err);
+    ok &= expect(renderCadenceShouldFlush(1'016'100'000, interval, &lastFlushNs),
+                 "one-interval tick within slop must flush", err);
+    ok &= expect(lastFlushNs == 1'016'666'667,
+                 "accepted cadence tick must advance on the phase-locked schedule", err);
+    ok &= expect(renderCadenceShouldFlush(2'000'000'000, interval, &lastFlushNs),
+                 "large cadence gap must flush", err);
+    ok &= expect(lastFlushNs == 2'000'000'000,
+                 "large cadence gap must re-anchor the schedule", err);
+    ok &= expect(!renderCadenceShouldFlush(2'000'000'001, interval, nullptr),
+                 "missing gate state must not flush", err);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -124,6 +145,7 @@ int main()
     ok &= verifyDeadCadenceHandsBackToWatchdog(err);
     ok &= verifyClockRestartFlushes(err);
     ok &= verifyThresholdScalesWithFrameInterval(err);
+    ok &= verifyRenderCadenceRateGate(err);
     if (ok) {
         out << "timeline_cadence_arbitration_policy_spec ok" << Qt::endl;
     }

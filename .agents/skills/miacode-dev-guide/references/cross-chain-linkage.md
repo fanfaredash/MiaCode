@@ -1,5 +1,18 @@
 # Cross-Chain Linkage
 
+## Timeline playback cadence
+
+- `TimelineQuickItem::bindRenderCadence` emits an opportunity from every
+  `QQuickWindow::afterAnimating`, while `TimelineSection::onTimelineRenderCadenceTick` rate-gates
+  accepted samples with `timelineTargetFrameIntervalNs()`. Keep that gate phase-locked through
+  `TimelineCadenceArbitrationPolicy::renderCadenceShouldFlush`; otherwise high-refresh displays
+  bypass the Timeline Refresh Rate preference and repeat editor-follow/QSG work unnecessarily.
+- Every render-cadence opportunity still refreshes the liveness marker. The watchdog must yield
+  to a healthy render loop even when a lower timeline rate intentionally skips samples.
+- `TimelineQuickOverlayLayer` keeps fixed `QSGSimpleRectNode` slots for the playhead, cursor, and
+  drag-center lines. Playback updates their rectangles in place; do not restore per-frame
+  `clearChildren()` allocation on this dynamic path.
+
 Read before changing behavior that crosses parser / timeline / preview / audio / export / Muri
 boundaries. Ported from the prior guide with paths corrected (2026-05-29); contracts are believed
 current but **code is source of truth** — verify and fix drift in the same change.

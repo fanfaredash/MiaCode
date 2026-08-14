@@ -474,6 +474,7 @@
         // consults this to decide whether the render cadence has actually stopped.
         // -1 = no cadence tick observed yet this playback.
         qint64 qtPreviewLastTimelineCadenceMs_ = -1;
+        qint64 qtPreviewLastTimelineCadenceFlushNs_ = -1;
         bool previewFollowBindingCacheValid_ = false;
         TimelineQuickModel::PreviewFollowBinding previewFollowBindingCache_;
         double deferredEditorUiPreviewFollowSecond_ = 0.0;
@@ -977,6 +978,7 @@
     double& qtPreviewPendingTimelineSecond_ = state_.qtPreviewPendingTimelineSecond_;
     bool& qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_;
     qint64& qtPreviewLastTimelineCadenceMs_ = state_.qtPreviewLastTimelineCadenceMs_;
+    qint64& qtPreviewLastTimelineCadenceFlushNs_ = state_.qtPreviewLastTimelineCadenceFlushNs_;
     bool& previewFollowBindingCacheValid_ = state_.previewFollowBindingCacheValid_;
     TimelineQuickModel::PreviewFollowBinding& previewFollowBindingCache_ = state_.previewFollowBindingCache_;
     bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;
