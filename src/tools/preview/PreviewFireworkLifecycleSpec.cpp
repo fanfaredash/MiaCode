@@ -123,26 +123,38 @@ bool verifyVideoReferenceSample(
     return true;
 }
 
-// Samples correspond to the supplied 30 fps reference: center flash first, spokes at frame 4,
-// full radial reach by frame 7, fade after frame 12, and no visible tail after frame 21.5.
+// The colour ball and spokes share the first trigger frame. The radial spread is deliberately
+// eased to full radius at frame 9, then leaves a visible fade tail through frame 30.
 bool verifyVideoReferenceAlignment(QTextStream& err)
 {
-    if (!verifyVideoReferenceSample(0.0, 0.0, 0.589, 0.2, 0.9, 1.0, 0.9, false, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.0, 0.02, 0.8, 0.2, 0.9, 1.0, 0.9, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyVideoReferenceSample(0.1, 0.0, 0.589, 0.38, 0.9, 1.05, 0.75, false, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.1, 0.3425, 0.8, 0.38, 0.9, 1.05, 0.75, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyVideoReferenceSample(0.13333334, 0.6, 0.589, 0.44, 0.6333333, 1.0666667, 0.6, true, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.13333334, 0.45, 0.8, 0.44, 0.6333333, 1.0666667, 0.6, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyVideoReferenceSample(0.2, 3.5333332, 0.589, 0.5, 0.1, 1.1, 0.3, true, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.2, 1.7, 0.8, 0.5, 0.1, 1.1, 0.3, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyVideoReferenceSample(0.23333333, 5.0, 0.589, 0.5, 0.0666667, 1.1166667, 0.2666667, true, true, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.23333333, 2.8, 0.8, 0.5, 0.0666667, 1.1166667, 0.2666667, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyVideoReferenceSample(0.4, 5.0, 0.589, 0.5, 0.0, 1.15, 0.1, true, false, true, true, err)) {
+    if (!verifyVideoReferenceSample(0.3, 5.0, 0.8, 0.5, 0.0, 1.15, 0.2, true, false, true, true, err)) {
+        return false;
+    }
+    if (!verifyVideoReferenceSample(0.4, 5.0, 0.65, 0.5, 0.0, 1.15, 0.1, true, false, true, true, err)) {
+        return false;
+    }
+    if (!verifyVideoReferenceSample(0.5, 5.0, 0.5, 0.5, 0.0, 1.15, 0.0, true, false, false, true, err)) {
+        return false;
+    }
+    if (!verifyVideoReferenceSample(0.6, 5.0, 0.448, 0.5, 0.0, 1.15, 0.0, true, false, false, true, err)) {
+        return false;
+    }
+    if (!verifyVideoReferenceSample(0.8, 5.0, 0.176, 0.5, 0.0, 1.15, 0.0, true, false, false, true, err)) {
         return false;
     }
     const qreal duration = static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds);

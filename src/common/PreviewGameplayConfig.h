@@ -183,8 +183,8 @@ inline constexpr double kTouchDurationSeconds = 0.5;
 inline constexpr double kJudgeEffectDurationSeconds = 0.71666664;
 inline constexpr double kJudgeEffectTouchDurationSeconds = 0.25;
 inline constexpr double kJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
-// Video-reference firework clip: 21.5 frames at 30 fps from colour-ball onset
-// through the final visible spoke/star fade.
-inline constexpr double kJudgeEffectFireworkDurationSeconds = 0.71666664;
+// Tuned firework clip: 30 frames at 30 fps from colour-ball onset
+// through the final visible spoke fade.
+inline constexpr double kJudgeEffectFireworkDurationSeconds = 1.0;
 
 }  // namespace miacode::preview_gameplay

@@ -4,6 +4,7 @@ layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
 layout(binding = 1) uniform sampler2D source;
+layout(binding = 2) uniform sampler2D brightBlockMaskSource;
 
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
@@ -22,6 +23,7 @@ const float kSectorAlphaScale = 0.9;
 const float kSectorSpanDegrees = 12.0;
 const float kSectorStepDegrees = 24.0;
 const float kSectorPhaseDegrees = -102.0;
+const float kCoreBloomDurationSeconds = 1.0;
 const int kRenderFlagDrawStripe = 0x1;
 const int kRenderFlagDrawBigBall = 0x2;
 const int kRenderFlagDrawSmallBall = 0x4;
@@ -168,15 +170,6 @@ vec4 rainbowStarLayer(vec2 localPos, float clipTime, float maxRadius, float angl
     return layer;
 }
 
-float halftoneMask(vec2 localPos, float radius, float outerRadius, float angleDegrees)
-{
-    vec2 grid = mod(localPos + vec2(5.0), vec2(10.0)) - vec2(5.0);
-    float dotRadius = mix(1.0, 2.55, smoothstep(0.12, 0.88, radius / max(outerRadius, 1.0)));
-    float dot = 1.0 - smoothstep(dotRadius - 0.55, dotRadius + 0.55, length(grid));
-    float alternatingBeam = step(0.5, fract((angleDegrees - kSectorPhaseDegrees) / (kSectorStepDegrees * 2.0)));
-    return dot * alternatingBeam;
-}
-
 float wrapAngleDegrees(float angle)
 {
     float wrapped = mod(angle, 360.0);
@@ -193,6 +186,45 @@ float shortestAngleDistanceDegrees(float angleA, float angleB)
         delta = 360.0 - delta;
     }
     return abs(delta);
+}
+
+float movingBallFieldMask(
+    vec2 localPos,
+    float centerRadius,
+    float trailingLength,
+    float leadingLength,
+    float playfieldRadius
+)
+{
+    const float frameCount = 12.0;
+    vec2 gridSpacing = vec2(
+        max(6.0, playfieldRadius * 0.039),
+        max(6.0, playfieldRadius * 0.035)
+    );
+    vec2 gridCell = floor(localPos / gridSpacing + vec2(0.5));
+    vec2 ballCenter = gridCell * gridSpacing;
+    float ballCenterRadius = length(ballCenter);
+    float blockLength = trailingLength + leadingLength;
+    float body01 = clamp(
+        (ballCenterRadius - (centerRadius - trailingLength)) / max(blockLength, 1.0),
+        0.0,
+        0.9999
+    );
+    float radialInside = step(centerRadius - trailingLength, ballCenterRadius)
+        * step(ballCenterRadius, centerRadius + leadingLength);
+    float frameIndex = floor(body01 * frameCount);
+    vec2 cellUv = (localPos - ballCenter) / gridSpacing.x + vec2(0.5);
+    float cellInside = step(0.0, cellUv.x) * step(cellUv.x, 1.0)
+        * step(0.0, cellUv.y) * step(cellUv.y, 1.0);
+    vec2 atlasUv = vec2(cellUv.x, (frameIndex + cellUv.y) / frameCount);
+    return texture(brightBlockMaskSource, atlasUv).a * radialInside * cellInside;
+}
+
+float shotProgress(float clipTime, float launchTime, float travelDuration)
+{
+    float linearProgress = clamp((clipTime - launchTime) / max(travelDuration, 0.001), 0.0, 1.0);
+    float remaining = 1.0 - linearProgress;
+    return 1.0 - remaining * remaining;
 }
 
 float fireworkSectorCoverage(float angleDegrees, float sectorStartDegrees, float radius, float outerRadius)
@@ -305,7 +337,7 @@ void main()
         holeMask = clamp((radius - holeRadius) / max(0.0001, holeMaskRadius - holeRadius), 0.0, 1.0);
     }
 
-    vec4 layerColor = vec4(0.0);
+    vec4 rayLayer = vec4(0.0);
     if (drawFirework && radius <= outerRadius && fireworkAlpha > 0.0) {
         float angleDegrees = wrapAngleDegrees(degrees(atan(-localPos.y, localPos.x)));
         float fireworkContributionAlpha = fireworkAlpha * kSectorAlphaScale;
@@ -314,27 +346,66 @@ void main()
             float sectorCoverage = fireworkSectorCoverage(angleDegrees, sectorStart, radius, outerRadius);
             if (sectorCoverage > 0.0) {
                 float sectorAlpha = fireworkContributionAlpha * sectorCoverage;
+                float sectorCenter = sectorStart + kSectorSpanDegrees * 0.5;
+                float angularDistance = shortestAngleDistanceDegrees(angleDegrees, sectorCenter);
+                float axial01 = 1.0 - smoothstep(0.0, kSectorSpanDegrees * 0.5, angularDistance);
+                float radial01 = radius / max(outerRadius, 1.0);
+                float firstShot = shotProgress(timing.x, 0.0, 0.65);
+                float secondShot = shotProgress(timing.x, 0.425, 0.65);
+                float firstBlockCenter = clipRadius * mix(0.08, 1.02, firstShot);
+                float secondBlockCenter = clipRadius * mix(0.08, 1.02, secondShot);
+                float blockTrailingLength = clipRadius * 0.25;
+                float blockLeadingLength = clipRadius * 0.14;
+                float firstBlock = movingBallFieldMask(
+                    localPos,
+                    firstBlockCenter,
+                    blockTrailingLength,
+                    blockLeadingLength,
+                    clipRadius
+                );
+                float secondBlock = movingBallFieldMask(
+                    localPos,
+                    secondBlockCenter,
+                    blockTrailingLength,
+                    blockLeadingLength,
+                    clipRadius
+                ) * smoothstep(0.425, 0.475, timing.x);
+                float brightBlockLight = max(firstBlock, secondBlock);
+                float colorRise = smoothstep(0.16, 0.34, timing.x);
+                float colorFall = smoothstep(0.42, 0.70, timing.x);
+                float saturation = mix(0.92, 1.08, colorRise) * mix(1.0, 0.72, colorFall);
+                float brightness = mix(0.82, 1.05, colorRise) * mix(1.0, 0.72, colorFall);
+                brightness *= mix(1.07, 0.92, smoothstep(0.08, 1.0, radial01));
+                brightness *= mix(0.90, 1.04, axial01);
+                brightness *= mix(0.68, 1.02, brightBlockLight);
+                vec3 baseColor = sectorBaseColor(sectorIndex);
+                float baseLuma = dot(baseColor, vec3(0.2126, 0.7152, 0.0722));
+                vec3 beamColor = mix(vec3(baseLuma), baseColor, saturation);
+                beamColor = clamp(beamColor * brightness, vec3(0.0), vec3(1.0));
+                sectorAlpha *= mix(0.68, 0.94, brightBlockLight);
                 vec4 fireworkLayer = vec4(
-                    sectorBaseColor(sectorIndex) * sectorAlpha,
+                    beamColor * sectorAlpha,
                     sectorAlpha
                 );
-                layerColor = compositeSourceOver(fireworkLayer, layerColor);
-                float dots = halftoneMask(localPos, radius, outerRadius, angleDegrees);
-                float dotAlpha = fireworkContributionAlpha * sectorCoverage * dots * 0.34;
-                vec4 dotLayer = vec4(vec3(0.06) * dotAlpha, dotAlpha);
-                layerColor = compositeSourceOver(dotLayer, layerColor);
+                rayLayer = compositeSourceOver(fireworkLayer, rayLayer);
                 break;
             }
         }
     }
 
+    // The expanding centre opening belongs to the rays only. Applying it after the
+    // colour-ball composite made the ball appear to shrink and clipped its texture.
+    vec4 layerColor = rayLayer * holeMask;
+
     float clipTime = timing.x;
-    float rayLife = timing.y;
-    float coreRadius = max(7.0, clipRadius * mix(0.045, 0.105, smoothstep(0.0, 0.18, rayLife)));
+    // The one-second extension belongs to the coloured spokes. Keep the centre bloom on its
+    // established absolute clock so lengthening the rays does not alter the other effect layer.
+    float coreBloomLife = clamp(clipTime / kCoreBloomDurationSeconds, 0.0, 1.0);
+    float coreRadius = max(7.0, clipRadius * mix(0.045, 0.105, smoothstep(0.0, 0.18, coreBloomLife)));
     float coreDistance = radius / coreRadius;
     float rayStarted = drawFirework ? 1.0 : 0.0;
     float bloom = exp(-coreDistance * coreDistance * 1.55)
-        * (1.0 - smoothstep(0.68, 1.0, rayLife)) * rayStarted;
+        * (1.0 - smoothstep(0.68, 1.0, coreBloomLife)) * rayStarted;
     float whiteCore = 1.0 - smoothstep(0.0, 0.32, coreDistance);
     float glowAlpha = clamp(bloom * 0.92 + whiteCore * rayStarted, 0.0, 1.0);
     vec3 glowColor = mix(vec3(1.0, 0.72, 0.08), vec3(1.0, 1.0, 0.86), whiteCore);
@@ -362,7 +433,5 @@ void main()
         );
     }
 
-    float rayAndBallMask = holeMask;
-    float preserveCenterAndStars = max(glowAlpha, stars.a);
-    fragColor = layerColor * (max(rayAndBallMask, preserveCenterAndStars) * qt_Opacity);
+    fragColor = layerColor * qt_Opacity;
 }
