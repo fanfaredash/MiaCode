@@ -212,11 +212,15 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
   `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
   facade and the specs.
 - A chart-path change followed by an asset reload is one asset transaction, not two independently
-  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. It carries the path on the
-  `ReloadAssets` command and `PreviewAudioWorker::executeReload` applies it before the backend reload
-  in that same `assetGeneration`; posting `setChartPath` immediately before a separate reload lets
-  stale-command pruning drop the required path update and leaves BGM unloaded. This is shared by
-  MainWindow startup/chart-reload paths and `soundtouch_probe`.
+  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. Window/chart SFX warm-up
+  additionally uses `reloadAssetsForChartWithWarmupPaths`, which carries resolved SFX/track paths
+  and the chart path on ONE `ReloadAssets` command. `PreviewAudioWorker::executeReload` applies the
+  requested path state before the backend reload in that same `assetGeneration`; posting
+  `setChartPath` or `setWarmupResolvedPaths` immediately before a separate reload lets
+  stale-command pruning drop required state and can leave BGM unloaded. MainWindow schedules this
+  combined preload only after the initial document/chart path is established and never while a
+  device-cutoff barrier is active; the first explicit Play only falls back to it when no preload is
+  pending or ready. `soundtouch_probe` uses the chart-only form.
 - `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
   GUI/video state before submitting the reserved high-priority device pause. On Windows, a successful
   IMM registration is the sole hotplug source: do not construct or synchronously enumerate

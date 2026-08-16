@@ -56,6 +56,15 @@ public:
     // Posts one asset-generation command that first applies chartPath, then
     // reloads its dependent BGM/SFX assets on the worker thread.
     AssetSubmission reloadAssetsForChart(const QString& chartPath, const PreviewAudioSettings& settings);
+    // Posts one asset-generation command that atomically installs resolved
+    // warmup paths, applies chartPath, and reloads BGM/SFX assets. Use this
+    // for chart/window warm-up so a separate path command cannot stale-reject
+    // its following reload.
+    AssetSubmission reloadAssetsForChartWithWarmupPaths(
+        const QString& chartPath,
+        const QString& trackPath,
+        const QString& sfxDir,
+        const PreviewAudioSettings& settings);
     bool audioEngineInitialized() const;
     AssetSubmission setChartPath(const QString& chartPath);
     void setBackgroundTrackOffsetSeconds(double seconds);
@@ -105,6 +114,7 @@ public:
     // value forces that first request onto the cold Prepare path, never retained
     // resume, after a physical cutoff.
     bool beginManualPlaybackAfterDeviceCutoff();
+    bool isDeviceCutoffActive() const noexcept;
     std::optional<Completion> takeCompletedDeviceChangeCutoff(quint64 sequence);
     PlaybackSubmission resumeRetainedPreviewPlaybackTransaction();
     PlaybackSubmission seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying);

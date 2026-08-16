@@ -49,13 +49,15 @@ int main()
         "third_party/QtAVPlayer/src/QtAVPlayer/qavvideoframe.cpp");
     const QString backend = sourceFile(
         "src/preview/runtime/PreviewStageMediaHost_Backend.cpp");
+    const QString playback = sourceFile(
+        "src/preview/runtime/PreviewStageMediaHost_Playback.cpp");
     const QString diagnostics = sourceFile(
         "src/preview/runtime/PreviewStageMediaHost_Diagnostics.cpp");
     const QString sharedDevice = sourceFile(
         "src/preview/runtime/PreviewSharedD3D11Device.cpp");
     const QString packageMac = sourceFile("scripts/build/package-mac.sh");
 
-    ok &= require(!cmake.isEmpty() && !qtavCmake.isEmpty() && !videoToolbox.isEmpty() && !videoFrame.isEmpty() && !backend.isEmpty()
+    ok &= require(!cmake.isEmpty() && !qtavCmake.isEmpty() && !videoToolbox.isEmpty() && !videoFrame.isEmpty() && !backend.isEmpty() && !playback.isEmpty()
                       && !diagnostics.isEmpty() && !sharedDevice.isEmpty() && !packageMac.isEmpty(),
                   QStringLiteral("QtAVPlayer platform sources are readable"), err);
 
@@ -128,6 +130,18 @@ int main()
                   QStringLiteral("D3D11 diagnostics are platform guarded"), err);
     ok &= require(sharedDevice.contains(QStringLiteral("#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)")),
                   QStringLiteral("shared D3D11 device implementation is Windows-only"), err);
+    const qsizetype commitStart = playback.indexOf(
+        QStringLiteral("void PreviewStageMediaHost::commitPreparedPlaybackStart"));
+    const qsizetype commitEnd = playback.indexOf(
+        QStringLiteral("void PreviewStageMediaHost::cancelPreparedPlaybackStart"), commitStart);
+    const QString commit = commitStart >= 0 && commitEnd >= 0
+        ? playback.mid(commitStart, commitEnd - commitStart)
+        : QString();
+    ok &= require(containsAll(commit, {
+                      QStringLiteral("lastSeekMs_ = targetMs;\n    player_->seek(targetMs);"),
+                      QStringLiteral("lastSeekMs_ = targetMs;\n    player_->setPosition(targetMs);"),
+                  }),
+                  QStringLiteral("prepared playback commit always seeks before starting either backend"), err);
 
     if (ok) {
         out << "QtAVPlayer platform spec passed." << Qt::endl;

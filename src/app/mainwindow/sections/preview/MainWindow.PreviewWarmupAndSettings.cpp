@@ -134,10 +134,10 @@ bool hasCorePreviewSkinAssets(const QString& directory)
 
 void MainWindow::PreviewSection::ensurePreviewSfxRuntimePrepared()
 {
-    // A reload already in flight counts as prepared-in-progress. Opening a chart
-    // posts reloadAssetsForChart on the worker (see
-    // sections/timeline/MainWindow.PreviewTimelineFlow.cpp, pathChanged branch) and
-    // only the completion handler in sections/frame/MainWindow.FrameBootstrap.cpp
+    // A reload already in flight counts as prepared-in-progress. A chart change
+    // invalidates readiness, then its background data warm-up posts the atomic
+    // path+asset load on the worker (see applyPreviewSfxWarmupResult below).
+    // The completion handler in sections/frame/MainWindow.FrameBootstrap.cpp
     // flips previewSfxRuntimePrepared_. Without the sequence check below, pressing
     // play (or scrubbing) inside that window re-posted a SECOND full engine +
     // sample + BGM load, and its newer assetGeneration invalidated the first
@@ -151,13 +151,18 @@ void MainWindow::PreviewSection::ensurePreviewSfxRuntimePrepared()
     }
     QElapsedTimer initTimer;
     initTimer.start();
-    state_.previewSfxRuntime_->setWarmupResolvedPaths(
-        state_.previewSfxWarmupChartPath_,
-        state_.previewSfxWarmupTrackPath_,
-        state_.previewSfxWarmupSfxDir_
-    );
+    const bool hasCurrentWarmupPaths =
+        state_.previewSfxWarmupAppliedGeneration_ == state_.previewWarmupGeneration_
+        && state_.previewSfxWarmupChartPath_ == state_.currentFilePath_;
+    const QString trackPath = hasCurrentWarmupPaths
+        ? state_.previewSfxWarmupTrackPath_
+        : state_.lastTrackPath_;
+    const QString sfxDir = hasCurrentWarmupPaths
+        ? state_.previewSfxWarmupSfxDir_
+        : miacode::preview_sfx::resolveSfxDirectory();
     const QtPreviewSfxRuntime::AssetSubmission reload =
-        state_.previewSfxRuntime_->reloadAssetsForChart(state_.currentFilePath_, state_.previewAudioSettings_);
+        state_.previewSfxRuntime_->reloadAssetsForChartWithWarmupPaths(
+            state_.currentFilePath_, trackPath, sfxDir, state_.previewAudioSettings_);
     state_.previewSfxRuntimePrepared_ = false;
     state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
         ? reload.identity.assetGeneration
@@ -334,12 +339,31 @@ void MainWindow::PreviewSection::applyPreviewSfxWarmupResult(
     state_.previewSfxWarmupTrackPath_ = trackPath;
     state_.previewSfxWarmupSfxDir_ = sfxDir;
     appendStartupTimingStage("mainwindow/preview_sfx_data_warmup", workerElapsedMs, workerElapsedMs);
-    if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->setWarmupResolvedPaths(chartPath, trackPath, sfxDir);
-        state_.previewSfxRuntimePrepared_ = false;
-        state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
-        state_.previewSfxRuntimePreparationSequence_ = 0;
+    if (state_.previewSfxRuntime_ == nullptr
+        || state_.previewSfxRuntimePrepared_
+        || state_.previewSfxRuntimePreparationSequence_ != 0
+        || state_.previewSfxRuntime_->isDeviceCutoffActive()
+        || chartPath != state_.currentFilePath_) {
+        return;
     }
+    QElapsedTimer preloadTimer;
+    preloadTimer.start();
+    const QtPreviewSfxRuntime::AssetSubmission reload =
+        state_.previewSfxRuntime_->reloadAssetsForChartWithWarmupPaths(
+            chartPath, trackPath, sfxDir, state_.previewAudioSettings_);
+    state_.previewSfxRuntimePrepared_ = false;
+    state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
+        ? reload.identity.assetGeneration
+        : 0;
+    state_.previewSfxRuntimePreparationSequence_ = reload.post.accepted
+        ? reload.identity.sequence
+        : 0;
+    state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
+    const qint64 preloadElapsedMs = preloadTimer.elapsed();
+    appendStartupTimingStage(
+        "mainwindow/preview_sfx_runtime_preload_queued",
+        preloadElapsedMs,
+        preloadElapsedMs);
 }
 
 QString MainWindow::PreviewSection::resolveDefaultTrackPath() const

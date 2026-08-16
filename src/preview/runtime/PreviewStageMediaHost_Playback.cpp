@@ -227,18 +227,11 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
 
     const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
-    // preparePlaybackStart() already parked the decoder on this position (that IS
-    // the handshake it acks). When the commit lands on the same frame — the normal
-    // case, `weak_video_ready_before_commit` — re-seeking here made every playback
-    // start pay TWO decoder flushes back to back. Coalesce like the prepare and
-    // paused-seek paths do. A late commit (`late_video_start_after_commit`) really
-    // has moved on, so it falls through to the real seek below.
-    const bool alreadyParkedOnTarget =
-        lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs;
-    if (!alreadyParkedOnTarget) {
-        lastSeekMs_ = targetMs;
-        player_->seek(targetMs);
-    }
+    // This cache holds the last requested target, not a decoder-confirmed
+    // position. A fresh player may take prepare's queued fast path, so commit
+    // must establish this playback transaction with a physical seek.
+    lastSeekMs_ = targetMs;
+    player_->seek(targetMs);
     if (videoFrameElapsed_.isValid()) {
         videoFrameElapsed_.restart();
     }
@@ -253,7 +246,7 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
             .arg(clampedSecond, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6)
             .arg(targetMs)
-            .arg(alreadyParkedOnTarget ? 0 : 1));
+            .arg(1));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
     preparedPlaybackTargetMs_ = -1;
@@ -297,15 +290,10 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
 
     const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
-    // See the QtAVPlayer branch above: preparePlaybackStart() already parked the
-    // decoder here, so coalesce the redundant re-seek on the normal
-    // ready-before-commit path and keep it for a genuine late commit.
-    const bool alreadyParkedOnTarget =
-        lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs;
-    if (!alreadyParkedOnTarget) {
-        lastSeekMs_ = targetMs;
-        player_->setPosition(targetMs);
-    }
+    // This cache records a requested target only. It cannot prove a freshly
+    // created backend completed its prepare-side seek before commit.
+    lastSeekMs_ = targetMs;
+    player_->setPosition(targetMs);
     if (videoFrameElapsed_.isValid()) {
         videoFrameElapsed_.restart();
     }
@@ -329,7 +317,7 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
             .arg(rawSecond, 0, 'f', 6)
             .arg(targetMs)
             .arg(qAbs(clampedSecond - preparedPlaybackTargetSecond_) > 0.0005 ? 1 : 0)
-            .arg(alreadyParkedOnTarget ? 0 : 1));
+            .arg(1));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
     preparedPlaybackTargetMs_ = -1;

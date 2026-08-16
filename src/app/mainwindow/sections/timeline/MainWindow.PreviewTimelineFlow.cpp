@@ -653,16 +653,12 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
         state_.previewCanvas_->setPlayheadSeconds(state_.qtPreviewPauseSecond_, false);
     }
     if (state_.previewSfxRuntime_ != nullptr && pathChanged) {
-        const QtPreviewSfxRuntime::AssetSubmission reload =
-            state_.previewSfxRuntime_->reloadAssetsForChart(
-                state_.currentFilePath_, state_.previewAudioSettings_);
+        // The next warm-up result submits one atomic path+asset reload. Mark
+        // the old chart's completed (or pending) assets unusable immediately
+        // so an early Play cannot start them while that preload is queued.
         state_.previewSfxRuntimePrepared_ = false;
-        state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
-            ? reload.identity.assetGeneration
-            : 0;
-        state_.previewSfxRuntimePreparationSequence_ = reload.post.accepted
-            ? reload.identity.sequence
-            : 0;
+        state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
+        state_.previewSfxRuntimePreparationSequence_ = 0;
     }
     owner_.applyPreviewAudioSettingsToRuntime();
     if (!suppressImmediateRefresh) {

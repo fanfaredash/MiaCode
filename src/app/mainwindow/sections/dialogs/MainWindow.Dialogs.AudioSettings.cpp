@@ -853,9 +853,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
         const QString resolvedSfxDir = QDir::cleanPath(sfxDir);
         if (dialogAuditionSfxDir != resolvedSfxDir || !dialogAuditionRuntime->audioEngineInitialized()) {
-            dialogAuditionRuntime->setWarmupResolvedPaths(QString(), QString(), resolvedSfxDir);
             const QtPreviewSfxRuntime::AssetSubmission reload =
-                dialogAuditionRuntime->reloadAssets(owner_.previewAudioSettings_);
+                dialogAuditionRuntime->reloadAssetsForChartWithWarmupPaths(
+                    QString(), QString(), resolvedSfxDir, owner_.previewAudioSettings_);
             dialogAuditionSfxDir = resolvedSfxDir;
             dialogAuditionPendingKind = resolvedKind;
             dialogAuditionReloadAssetGeneration = reload.post.accepted
