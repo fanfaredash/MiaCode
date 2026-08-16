@@ -146,6 +146,29 @@ int main(int argc, char** argv)
         }
         expect(touchHoldCount == 3, QStringLiteral("Ch, A1h, Ch[] all emit touch_hold markers"));
         expect(holdCount == 1, QStringLiteral("1h still emits a single tap hold"));
+
+        const SimaiNativeParseResult shortHoldCompatibility =
+            SimaiNativeParser::validateSyntax(QStringLiteral("1hx/2hb/3h/4hx[4:1],\nE"));
+        expect(shortHoldCompatibility.ok, QStringLiteral("short hold modifier order remains valid syntax"));
+        expect(
+            shortHoldCompatibility.warnings.size() == 2,
+            QStringLiteral("only bracketless short holds not ending in h warn"));
+        if (shortHoldCompatibility.warnings.size() == 2) {
+            expect(
+                shortHoldCompatibility.warnings.at(0).message.startsWith(
+                    QStringLiteral("Short hold must end with 'h'"))
+                    && shortHoldCompatibility.warnings.at(1).message.startsWith(
+                        QStringLiteral("Short hold must end with 'h'")),
+                QStringLiteral("short hold compatibility warning explains the required h ending"));
+        }
+
+        const SimaiNativeValidationReport shortHoldZhReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1hx,\nE"), SimaiNativeValidationLocale::Chinese);
+        expect(
+            shortHoldZhReport.warningCount == 1
+                && shortHoldZhReport.issues.constFirst().displayMessage.contains(
+                    QStringLiteral("短 Hold 必须以 'h' 结尾")),
+            QStringLiteral("short hold compatibility warning is localized in Chinese"));
     }
 
     {

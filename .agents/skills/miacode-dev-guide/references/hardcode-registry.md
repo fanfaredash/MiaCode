@@ -53,8 +53,20 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   `&wholebpm`), not a constant. Keep local; the `SimaiCompletionCatalogSpec` pins these.
 - `src/core/scene/*.cpp` — large volume of render tuning (lane angle base/step, sprite scaling,
   touch/touchhold close curves, judge-effect timing/geometry, firework tuning, descriptor sizing).
-  Note: `PreviewJudgeFireworkLayerState.cpp` pins firework hole ratios + color-ball curves to legacy
-  `PreviewCanvas` material bounds on purpose.
+  Note: `PreviewJudgeFireworkLayerState.cpp` pins firework hole ratios to the legacy
+  `PreviewCanvas` material bounds while its
+  0.71666664 s spoke/color-ball curves and the shader's two 12-star fixed-position pulse/ring batches
+  follow the supplied 30 fps firework reference. Inner stars sit inside the colour-glow ring and outer
+  stars are size-inset from the judgment boundary; visible star half-extents vary deterministically
+  from 0.040 to 0.050 of the judgment radius and use 0.95 peak opacity. Star height is compressed to match the unchanged horizontal
+  span. Their 0.365 s pulse (0.115 s in + 0.25 s out) moves outward by
+  0.02 judgment-radius while appearing and another 0.04 while shrinking/fading, emitted in two
+  shuffled batches starting at 0.00/0.08 s. Angles directly sample the full circle, so clusters and empty arcs are allowed,
+  with a fresh per-trigger/replay QSG-node seed held stable for the effect lifetime. Within each batch,
+  inner stars precede outer stars by 0.010 s and per-ring
+  jitter is limited to 0.004 s. Fade-in uses full geometry size; shrink starts only on fade-out. Timeline culling
+  shares that duration through
+  `PreviewGameplayConfig.h`; keep both consumers synchronized through that single constant.
 - `src/core/scene/PreviewAnimatedSpriteHelpers.cpp` — animated-sprite wave timing
   (`kMaterialAnimationTimeScale/PhaseScale`), overlay cache quantization (`4096.0`) / cap (`128`).
 - `src/preview/quick_scene/PreviewQuickSpriteNodes.cpp` — shader-side `BreakAnimate`/`HoldShine`

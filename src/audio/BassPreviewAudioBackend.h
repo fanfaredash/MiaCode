@@ -122,6 +122,7 @@ private:
         bool masterRunning = false;
         bool backgroundTrackRunning = false;
         bool backgroundTrackPendingStart = false;
+        bool backgroundTrackPastEnd = false;
         double backgroundTrackPendingStartSecond = 0.0;
         double backgroundTrackOffsetSeconds = 0.0;
         double backgroundTrackPlaybackRate = 1.0;

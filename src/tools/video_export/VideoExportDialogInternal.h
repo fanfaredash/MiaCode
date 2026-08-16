@@ -12,6 +12,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "VideoExportController.h"
+#include "common/PreviewGameplayConfig.h"
 
 #include <QColor>
 #include <QDir>
@@ -61,6 +62,29 @@ inline QString exportDialogPresetLabel(VideoExportPreset preset)
     default:
         return UiText::text(QStringLiteral("dialog.video_export.preset.fast"));
     }
+}
+
+// Flow-speed field formatting/snapping. Shared by the dialog's field builder
+// (VideoExportDialog.cpp) and the Return-key commit path
+// (VideoExportDialog.ExportFlow.cpp), so both round identically.
+inline double snappedFlowSpeed(double flowSpeed)
+{
+    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
+    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
+    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
+    return qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((flowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
+}
+
+inline QString flowSpeedValueLabel(double flowSpeed)
+{
+    const double snapped = snappedFlowSpeed(flowSpeed);
+    const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
+    const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
+    return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
 }
 
 inline QString exportBaseDirectory(const VideoExportTask& task)

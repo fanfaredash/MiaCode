@@ -374,6 +374,11 @@ struct BassPreviewAudioBackend::Sample {
         noteBassErr("sample_set_current_sec");
     }
 
+    bool isAtOrPastEnd(double seconds) const
+    {
+        return miacode::preview_audio::bass::backgroundTrackTargetIsPastEnd(seconds, lengthSeconds);
+    }
+
     double currentSec() const
     {
         if (!valid()) {

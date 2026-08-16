@@ -82,7 +82,11 @@ inline constexpr double kLogicalDistanceEdge = kLogicalCanvasSize * 480.0 / 1080
 // and rollback if the new 7.5 -> 66 / 8.0 -> 62 lifecycle calibration regresses.
 inline constexpr double kPreviewTimingFramesPerSecond = 120.0;
 inline constexpr double kPreviewTimingDefaultFlowSpeed = 7.5;
-inline constexpr double kPreviewTimingFlowSpeedMin = 4.5;
+// Lowered 4.5 -> 1.0 so charts can be authored/exported at very slow
+// approach speeds (T = 1 + 240/1 = 241 frames @120fps ≈ 2.0 s of travel).
+// Every UI that offers a flow-speed field derives its validator/spin range
+// from this constant, so the whole app widens together.
+inline constexpr double kPreviewTimingFlowSpeedMin = 1.0;
 inline constexpr double kPreviewTimingFlowSpeedMax = 10.0;
 inline constexpr double kPreviewTimingFlowSpeedStep = 0.25;
 inline constexpr double kPreviewTimingBaseFrames = 1.0;
@@ -183,6 +187,8 @@ inline constexpr double kTouchDurationSeconds = 0.5;
 inline constexpr double kJudgeEffectDurationSeconds = 0.71666664;
 inline constexpr double kJudgeEffectTouchDurationSeconds = 0.25;
 inline constexpr double kJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
-inline constexpr double kJudgeEffectFireworkDurationSeconds = 1.3333334;
+// Tuned firework clip: 30 frames at 30 fps from colour-ball onset
+// through the final visible spoke fade.
+inline constexpr double kJudgeEffectFireworkDurationSeconds = 1.0;
 
 }  // namespace miacode::preview_gameplay

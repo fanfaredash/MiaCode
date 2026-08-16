@@ -521,7 +521,9 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     playbackSession_.masterRunning = true;
     audioHealthPlaybackRunning_.store(true, std::memory_order_release);
     playbackSession_.lastAuthoritativeSecond = preparedPlayback_.startSecond;
-    if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
+    if (backgroundTrackSample_ != nullptr
+        && !playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackRunning = true;
         // G1 Commit 8: bass_sample_play per §7.2 — confirms the BGM flag flipped

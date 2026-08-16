@@ -221,7 +221,8 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
             .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
             .arg(retainedPlaybackModeLabel(retainedMode)));
     if (backgroundTrackSample_ != nullptr) {
-        if (!playbackSession_.backgroundTrackPendingStart) {
+        if (!playbackSession_.backgroundTrackPendingStart
+            && !playbackSession_.backgroundTrackPastEnd) {
             backgroundTrackSample_->play();
             playbackSession_.backgroundTrackRunning = true;
             // G1 Commit 8: bass_sample_play per §7.2 — resume-from-anchor path.
@@ -362,7 +363,8 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
     playbackSession_.sessionStartSecond = sanitizedChart;
     playbackSession_.lastAuthoritativeSecond = sanitizedChart;
     miacode::oplog::appendStartupBeaconLine("audio/rate/bass_about_to_resume");
-    if (!playbackSession_.backgroundTrackPendingStart) {
+    if (!playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackRunning = true;
     } else {
@@ -516,6 +518,7 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
     timer.start();
     if (backgroundTrackSample_ == nullptr) {
         playbackSession_.backgroundTrackPendingStart = false;
+        playbackSession_.backgroundTrackPastEnd = false;
         playbackSession_.backgroundTrackRunning = false;
         appendBassDebugLog(
             miacode::preview_audio::bass::BassDebugOperation::ConfigureBackgroundTrack,
@@ -541,6 +544,7 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
         backgroundTrackSample_->setCurrentSec(0.0);
         backgroundTrackSample_->pause();
         playbackSession_.backgroundTrackPendingStart = true;
+        playbackSession_.backgroundTrackPastEnd = false;
         playbackSession_.backgroundTrackPendingStartSecond = second - rawSecond;
         playbackSession_.backgroundTrackRunning = false;
         appendBassDebugLog(
@@ -555,9 +559,26 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
         return;
     }
 
+    if (backgroundTrackSample_->isAtOrPastEnd(rawSecond)) {
+        backgroundTrackSample_->pause();
+        playbackSession_.backgroundTrackPendingStart = false;
+        playbackSession_.backgroundTrackPastEnd = true;
+        playbackSession_.backgroundTrackRunning = false;
+        appendBassDebugLog(
+            miacode::preview_audio::bass::BassDebugOperation::ConfigureBackgroundTrack,
+            QString("reason=%1 second=%2 raw=%3 elapsed_ms=%4 past_end=1")
+                .arg(reason)
+                .arg(second, 0, 'f', 6)
+                .arg(rawSecond, 0, 'f', 6)
+                .arg(timer.elapsed()),
+            route == miacode::preview_audio::bass::BassDebugRoute::Init);
+        return;
+    }
+
     backgroundTrackSample_->setCurrentSec(rawSecond);
     backgroundTrackSample_->pause();
     playbackSession_.backgroundTrackPendingStart = false;
+    playbackSession_.backgroundTrackPastEnd = false;
     playbackSession_.backgroundTrackPendingStartSecond = second;
     playbackSession_.backgroundTrackRunning = false;
     appendBassDebugLog(
@@ -588,6 +609,7 @@ bool BassPreviewAudioBackend::maybeStartPendingBackgroundTrack(double second)
         return false;
     }
     if (playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd
         && second + kBassPreviewEpsilonSeconds >= playbackSession_.backgroundTrackPendingStartSecond) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackPendingStart = false;
@@ -642,7 +664,9 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::StartBackgroundTrack,
         QString("second=%1").arg(second, 0, 'f', 6));
-    if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
+    if (backgroundTrackSample_ != nullptr
+        && !playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackRunning = true;
     }

@@ -1,5 +1,18 @@
 # Cross-Chain Linkage
 
+## Timeline playback cadence
+
+- `TimelineQuickItem::bindRenderCadence` emits an opportunity from every
+  `QQuickWindow::afterAnimating`, while `TimelineSection::onTimelineRenderCadenceTick` rate-gates
+  accepted samples with `timelineTargetFrameIntervalNs()`. Keep that gate phase-locked through
+  `TimelineCadenceArbitrationPolicy::renderCadenceShouldFlush`; otherwise high-refresh displays
+  bypass the Timeline Refresh Rate preference and repeat editor-follow/QSG work unnecessarily.
+- Every render-cadence opportunity still refreshes the liveness marker. The watchdog must yield
+  to a healthy render loop even when a lower timeline rate intentionally skips samples.
+- `TimelineQuickOverlayLayer` keeps fixed `QSGSimpleRectNode` slots for the playhead, cursor, and
+  drag-center lines. Playback updates their rectangles in place; do not restore per-frame
+  `clearChildren()` allocation on this dynamic path.
+
 Read before changing behavior that crosses parser / timeline / preview / audio / export / Muri
 boundaries. Ported from the prior guide with paths corrected (2026-05-29); contracts are believed
 current but **code is source of truth** — verify and fix drift in the same change.
@@ -47,6 +60,14 @@ Implications:
   comma is a beat line; measure lines run on an independent meter timeline from shared
   `SimaiTimingMetadata` (`&whole_time_signature=`); inline `|| x/y` restarts the meter; `{beats}`
   only changes comma spacing; `(BPM)` restarts the measure-line timeline.
+- Strict validation warns when a bracketless short lane hold has modifiers after `h` (for
+  example `1hx` or `1hb`). MiaCode still parses it as a zero-length hold, but some external
+  previewers require the short-hold token to end in `h`; canonical forms such as `1h` and
+  duration-bearing holds such as `1hx[4:1]` remain warning-free under this compatibility rule.
+- BASS preview seeks beyond the decoded BGM duration keep the BGM explicitly paused and mark it
+  `backgroundTrackPastEnd`; direct start/resume, pending-offset start, and mixer-sync start must
+  all respect that state. A chart may continue playing SFX/visuals beyond the music, but an
+  out-of-range seek must never reuse the BASS source's previous valid cursor position.
 - Same-second slide/head/track/motion stacking is shared by `src/core/scene/PreviewMarkerDrawOrder.*`
   + prepared `drawOrder` in `PreviewPreparedSceneCache`. Changing "who's on top" → update the helper
   and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`,
@@ -67,6 +88,32 @@ Implications:
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.
+  - The supplied 30 fps firework reference is the timing source: the shared lifetime is
+    `PreviewGameplayConfig::kJudgeEffectFireworkDurationSeconds` (also used by timeline culling),
+    and explicit clip time/life uniforms drive two batches of 12 fixed inner/outer-ring stars
+    (24 total, with six inner and six outer stars per batch plus deterministic size/ring
+    shuffling). Star
+    angles sample the full circle directly, intentionally permitting clusters and empty arcs. The
+    QSG firework node generates a fresh angle seed at each trigger/replay, holds it for that effect's
+    lifetime, and passes it through `timing.z`, avoiding per-frame jitter. Each batch reveals its inner
+    ring first and its outer ring about 0.010 s later; per-ring jitter is capped at 0.004 s so the
+    ordering cannot invert. Staggered sine pulses make the stars continuously fade in and out. Their
+    inner centres sit inside the colour-glow ring (0.40–0.47 of the judgment radius), while outer
+    centres sit around 0.83–0.90 and are inset by each star's tip radius so they cannot cross the
+    judgment ring. Star geometry scales with the same continuous pulse, producing the reference's
+    clearly visible shrink-to-zero disappearance rather than an alpha-only fade. The sparkle keeps
+    its original sector-derived tint; its shallow-concavity four-point silhouette is intentionally
+    filled rather than crossing lines. Its pulse keeps a 0.115 s fade-in followed by a 0.25 s
+    shrink/fade-out (0.365 s total), emitted in two spatially shuffled batches starting at 0.00 s
+    and 0.08 s. Its horizontal span remains broad;
+    its vertical extent is compressed to match that horizontal span, while the waist/edge concavity
+    remains fine. Each star travels radially outward throughout its
+    pulse: 0.02 of the judgment radius while appearing, then another 0.04 while shrinking/fading
+    (0.06 total). Appearance fades in at full geometry size; scaling applies only to disappearance.
+    Star visible half-extents vary deterministically from 0.040 to 0.050 of the judgment radius,
+    keeping repeated playback stable. Tips remain dynamically clamped inside the judgment boundary;
+    peak opacity is 0.95.
+    Keep the original 15-sector/24-degree spoke layout when tuning timing or particles.
   - **Firework PSO/texture warm-up is a 3-file contract — don't break the loop.** Qt RHI compiles
     the firework pipeline + uploads the colour-ball texture lazily on the FIRST firework draw
     (a render-thread stall, worst on weak iGPUs). `PreviewRuntime` warms it by injecting a synthetic
@@ -428,6 +475,21 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
 **UI-only** (in-app timeline panel); it has no video-export consumer.
 
 ## Update this file when
+
+### QuickShell modal-dialog native ownership
+
+- The visible QuickShell top level is a `QQuickWindow`; `MainWindow` remains a hidden native
+  QWidget backend marked `miacode.dialog_parentless`. Application-modal dialogs therefore
+  must not rely on their QWidget parent or a one-shot `raise()` for native Z-order ownership.
+- `MainWindow::setQuickShellRootWindow` registers the live root with
+  `UiDialogs::setApplicationDialogTransientParent`. The application-wide
+  `UiDialogs::DialogStackingGuard` binds shown top-level `QDialog`s that lack a visible native
+  owner (including direct legacy `QMessageBox::*` calls) to that root through
+  `QWindow::setTransientParent`, then restores a visible blocking modal when the application
+  or root window activates. Existing visible dialog owners are preserved for nested dialogs;
+  non-modal dialogs are never force-activated by the stacking guard.
+- Keep this behavior in the shared dialog layer. Do not add per-dialog
+  `Qt::WindowStaysOnTopHint`: that would place MiaCode dialogs above unrelated applications.
 
 - A behavior starts/stops being mirrored across two paths; a new serialized export field is added;
   a duplicated lookup is centralized/split; a timing rule starts affecting a new subsystem.

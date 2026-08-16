@@ -15,7 +15,6 @@
         QAction* saveAsAction_ = nullptr;
         QAction* packAsZipAction_ = nullptr;
         QAction* netBatchDownloadAction_ = nullptr;
-        QAction* netBatchUploadAction_ = nullptr;
         QAction* transformMirrorLeftRightAction_ = nullptr;
         QAction* transformMirrorUpDownAction_ = nullptr;
         QAction* transformRotate180Action_ = nullptr;
@@ -475,6 +474,7 @@
         // consults this to decide whether the render cadence has actually stopped.
         // -1 = no cadence tick observed yet this playback.
         qint64 qtPreviewLastTimelineCadenceMs_ = -1;
+        qint64 qtPreviewLastTimelineCadenceFlushNs_ = -1;
         bool previewFollowBindingCacheValid_ = false;
         TimelineQuickModel::PreviewFollowBinding previewFollowBindingCache_;
         double deferredEditorUiPreviewFollowSecond_ = 0.0;
@@ -751,7 +751,6 @@
     QAction*& saveAsAction_ = ui_.saveAsAction_;
     QAction*& packAsZipAction_ = ui_.packAsZipAction_;
     QAction*& netBatchDownloadAction_ = ui_.netBatchDownloadAction_;
-    QAction*& netBatchUploadAction_ = ui_.netBatchUploadAction_;
     QAction*& transformMirrorLeftRightAction_ = ui_.transformMirrorLeftRightAction_;
     QAction*& transformMirrorUpDownAction_ = ui_.transformMirrorUpDownAction_;
     QAction*& transformRotate180Action_ = ui_.transformRotate180Action_;
@@ -979,6 +978,7 @@
     double& qtPreviewPendingTimelineSecond_ = state_.qtPreviewPendingTimelineSecond_;
     bool& qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_;
     qint64& qtPreviewLastTimelineCadenceMs_ = state_.qtPreviewLastTimelineCadenceMs_;
+    qint64& qtPreviewLastTimelineCadenceFlushNs_ = state_.qtPreviewLastTimelineCadenceFlushNs_;
     bool& previewFollowBindingCacheValid_ = state_.previewFollowBindingCacheValid_;
     TimelineQuickModel::PreviewFollowBinding& previewFollowBindingCache_ = state_.previewFollowBindingCache_;
     bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;

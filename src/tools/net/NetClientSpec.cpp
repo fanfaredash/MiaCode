@@ -60,6 +60,10 @@ int main(int argc, char** argv)
     using namespace miacode::net;
 
     bool ok = true;
+    ok &= check(netDownloadLengthIsComplete(12, 12), "download length accepts a complete response");
+    ok &= check(!netDownloadLengthIsComplete(12, 7), "download length rejects a truncated response");
+    ok &= check(!netDownloadLengthIsComplete(12, 0), "download length rejects an empty response");
+    ok &= check(netDownloadLengthIsComplete(-1, 7), "download length accepts data when length is unknown");
     ok &= check(
         netUserSpaceReferer(QStringLiteral(" 乐园杯 "))
             == QStringLiteral("https://majdata.net/space?id=%E4%B9%90%E5%9B%AD%E6%9D%AF"),

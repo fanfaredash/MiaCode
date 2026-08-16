@@ -212,9 +212,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (netBatchDownloadAction_ != nullptr) {
         toolsMenu->addSeparator();
         toolsMenu->addAction(netBatchDownloadAction_);
-        if (netBatchUploadAction_ != nullptr) {
-            toolsMenu->addAction(netBatchUploadAction_);
-        }
     }
     extensionManager_ = std::make_unique<miacode::extensions::ExtensionManager>(this);
     miacode::extensions::ExtensionHostCallbacks extensionCallbacks;
@@ -268,7 +265,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         }
     };
     extensionManager_->setCallbacks(std::move(extensionCallbacks));
-    extensionManager_->initialize(menuBar(), toolsMenu, helpMenu);
+    extensionManager_->initialize(
+        menuBar(), fileMenu, editMenu, toolsMenu, transformMenu, previewMenu, helpMenu);
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
         editMenu->removeAction(editActions.constLast());
@@ -1281,9 +1279,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (netBatchDownloadAction_ != nullptr) {
         toolboxMenu_->addSeparator();
         toolboxMenu_->addAction(netBatchDownloadAction_);
-        if (netBatchUploadAction_ != nullptr) {
-            toolboxMenu_->addAction(netBatchUploadAction_);
-        }
     }
 
     // Copy Area is intentionally hidden from the toolbox per the toolbox
@@ -1303,11 +1298,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         connect(fullCopyAreaAction_, &QAction::toggled, this, &MainWindow::setFullCopyAreaVisible);
     }
 
-    toolboxMenu_->addSeparator();
+    QAction* toolboxNetGroupEndAction = toolboxMenu_->addSeparator();
 
     QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
         UiText::text(QStringLiteral("menu.official_chart_mirror"))
     );
+    if (extensionManager_ != nullptr) {
+        extensionManager_->setToolboxMenu(toolboxMenu_, toolboxNetGroupEndAction);
+    }
     connect(toolboxOfficialChartMirrorAction, &QAction::triggered, this, [openToolboxUrl]() {
         openToolboxUrl(QStringLiteral("https://www.maiviewer.net/"));
     });

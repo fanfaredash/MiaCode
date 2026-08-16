@@ -1377,6 +1377,8 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 exportSection_->onExportPreviewVideo(resolveToolsMenuExportDifficultyId());
             } else if (id == QStringLiteral("export.cover.start")) {
                 onExportCover();
+            } else if (id == QStringLiteral("net.batchUpload.open")) {
+                onNetBatchUpload();
             } else if (id == QStringLiteral("extensions.all")) {
                 if (extensionManager_ == nullptr) {
                     return errorObject(QStringLiteral("Extension manager is not available."));

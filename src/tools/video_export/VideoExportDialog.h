@@ -16,10 +16,12 @@ class QDialogButtonBox;
 class QDoubleSpinBox;
 class QFrame;
 class QJsonObject;
+class QKeyEvent;
 class QLabel;
 class QLineEdit;
 class QMenu;
 class QPushButton;
+class QShowEvent;
 class QSlider;
 class QTabWidget;
 class QTimer;
@@ -235,7 +237,23 @@ private:
 
     void closeEvent(QCloseEvent* event) override;
     void done(int result) override;
+    void showEvent(QShowEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+
+    // Return/Enter is a "commit the field I am typing in" key on this page, never
+    // "start the export" — see keyPressEvent(). These two keep that true:
+    // disableButtonReturnActivation() strips the default/auto-default flags that
+    // would otherwise let Return click a button (QDialogButtonBox re-assigns the
+    // default on every show, so it has to run from showEvent), and
+    // commitFocusedEditorOnReturn() writes the focused editor's value back.
+    void disableButtonReturnActivation();
+    bool commitFocusedEditorOnReturn();
+    // Clamp + snap + apply a flow-speed field. QLineEdit only emits
+    // editingFinished for validator-acceptable text, so out-of-range input
+    // (e.g. "0.5" under a 1.0 floor) reaches the dialog uncommitted and has to
+    // be finished off here.
+    void commitFlowSpeedEditor(QLineEdit* editor);
 
     VideoExportTask baseTask_;
     SeekPreviewCallback seekPreviewCallback_;
