@@ -389,6 +389,13 @@ void MainWindow::WindowSection::recoverPreviewBackendsAfterApplicationResume()
 
     state_.previewBackendRecoveryPending_ = false;
     state_.previewSfxRuntimePrepared_ = false;
+    // Recovery means "discard whatever was in flight and start over". Drop the
+    // pending reload identity explicitly: ensurePreviewSfxRuntimePrepared() now
+    // treats a non-zero preparation sequence as prepare-in-progress and would
+    // otherwise skip the recovery reload, waiting forever on a completion that
+    // this path has just invalidated by resetting the backend.
+    state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
+    state_.previewSfxRuntimePreparationSequence_ = 0;
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->stopAll();
     }

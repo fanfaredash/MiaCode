@@ -440,12 +440,39 @@ double MainWindow::currentPreviewAuthoritativeAudioClockSecond() const
     // a monotonic QElapsedTimer that doesn't suffer from buffer
     // underrun, tempo-stream stalls, or the 0.5x ramp-up race.
     // See docs/PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §5.1, §6.1.
-    if (previewStartupSyncPending_ || previewLateVideoStartPending_) {
-        return previewStartupPreparedSecond_;
-    }
+    //
+    // BRANCH ORDER IS LOAD-BEARING — the playing branch MUST stay above the
+    // startup-freeze branch. The two startup flags below mean opposite things:
+    //
+    //   previewStartupSyncPending_     pre-commit. Audio has not started; the
+    //                                  UI must not run ahead. Freezing is right.
+    //   previewLateVideoStartPending_  POST-commit. tryCommitPreviewStartupSync
+    //                                  already ran finalizeQtPreviewPlaybackStart,
+    //                                  so qtPreviewPlaying_ is true and
+    //                                  qtPreviewElapsed_ has been restarted — the
+    //                                  wall clock is authoritative. Only the weak
+    //                                  PV member is still catching up. Freezing
+    //                                  here is WRONG.
+    //
+    // d65de51e hoisted the freeze branch to the top of this function because the
+    // branch that then sat below it (previewSfxRuntime_->authoritativePlaybackSecond())
+    // was unconditional, which would have made the freeze unreachable. 90ec7c48
+    // deleted that BASS-cursor branch but left the hoist behind. With retained
+    // resume folded into the async strong group (0d013404) the leftover hoist
+    // became reachable on every mid-chart play of a PV chart: the timeline
+    // playhead froze at the start second for up to kMediaSeekPrepareTimeoutMs
+    // (800 ms) while the preview canvas and transport slider kept advancing on
+    // the wall clock, then jumped when the PV seek acked. Same defect also made
+    // a pause/stop/rate-change inside that window re-anchor to the frozen second.
+    //
+    // "lateVideoPending && !playing" cannot occur: the flag is only raised in
+    // tryCommitPreviewStartupSync, which sets qtPreviewPlaying_ in the same call.
     if (qtPreviewPlaying_) {
         const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
         return qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
+    }
+    if (previewStartupSyncPending_ || previewLateVideoStartPending_) {
+        return previewStartupPreparedSecond_;
     }
     return qtPreviewPauseSecond_;
 }

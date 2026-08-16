@@ -1437,6 +1437,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/core/scene src/core/video src/timeline
     )
 
+    miacode_add_dev_tool(preview_firework_warmup_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewFireworkWarmupPolicySpec.cpp
+            src/core/scene/PreviewFireworkWarmupPolicy.h
+            src/core/scene/PreviewFrameState.h
+            src/core/scene/PreviewJudgeFireworkLayerState.h
+            src/core/scene/PreviewJudgeFireworkLayerState.cpp
+            src/core/scene/PreviewSceneMath.h
+            src/core/scene/PreviewSceneMath.cpp
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/common src/preview src/core/scene src/core/video src/timeline
+    )
+
     miacode_add_dev_tool(preview_head_layer_spec TEST
         SOURCES
             src/tools/preview/PreviewHeadLayerSpec.cpp

@@ -90,7 +90,7 @@ void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transac
     preparedPlaybackTargetMs_ = targetMs;
     preparedPlaybackPending_ = true;
     player_->pause();
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         // Already parked at (or within a frame of) the target — the current
         // decoded frame already shows it, so ack on the next event-loop turn
         // instead of forcing a redundant seek.
@@ -153,7 +153,7 @@ void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transac
     preparedPlaybackTargetMs_ = targetMs;
     preparedPlaybackPending_ = true;
     player_->pause();
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         QMetaObject::invokeMethod(
             this,
             [this, transactionId, clampedSecond]() {
@@ -227,8 +227,18 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
 
     const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
-    lastSeekMs_ = targetMs;
-    player_->seek(targetMs);
+    // preparePlaybackStart() already parked the decoder on this position (that IS
+    // the handshake it acks). When the commit lands on the same frame — the normal
+    // case, `weak_video_ready_before_commit` — re-seeking here made every playback
+    // start pay TWO decoder flushes back to back. Coalesce like the prepare and
+    // paused-seek paths do. A late commit (`late_video_start_after_commit`) really
+    // has moved on, so it falls through to the real seek below.
+    const bool alreadyParkedOnTarget =
+        lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs;
+    if (!alreadyParkedOnTarget) {
+        lastSeekMs_ = targetMs;
+        player_->seek(targetMs);
+    }
     if (videoFrameElapsed_.isValid()) {
         videoFrameElapsed_.restart();
     }
@@ -238,11 +248,12 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     videoPlaybackActiveElapsed_.restart();
     appendPreviewStageMediaLog(
         QStringLiteral("commit_prepared_playback"),
-        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4")
+        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 reseek=%5")
             .arg(playbackTransactionId_)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6)
-            .arg(targetMs));
+            .arg(targetMs)
+            .arg(alreadyParkedOnTarget ? 0 : 1));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
     preparedPlaybackTargetMs_ = -1;
@@ -286,8 +297,15 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
 
     const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
-    lastSeekMs_ = targetMs;
-    player_->setPosition(targetMs);
+    // See the QtAVPlayer branch above: preparePlaybackStart() already parked the
+    // decoder here, so coalesce the redundant re-seek on the normal
+    // ready-before-commit path and keep it for a genuine late commit.
+    const bool alreadyParkedOnTarget =
+        lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs;
+    if (!alreadyParkedOnTarget) {
+        lastSeekMs_ = targetMs;
+        player_->setPosition(targetMs);
+    }
     if (videoFrameElapsed_.isValid()) {
         videoFrameElapsed_.restart();
     }
@@ -305,12 +323,13 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
     appendPreviewStageMediaLog(
         QStringLiteral("commit_prepared_playback"),
-        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 late=%5")
+        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 late=%5 reseek=%6")
             .arg(playbackTransactionId_)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6)
             .arg(targetMs)
-            .arg(qAbs(clampedSecond - preparedPlaybackTargetSecond_) > 0.0005 ? 1 : 0));
+            .arg(qAbs(clampedSecond - preparedPlaybackTargetSecond_) > 0.0005 ? 1 : 0)
+            .arg(alreadyParkedOnTarget ? 0 : 1));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
     preparedPlaybackTargetMs_ = -1;
@@ -375,7 +394,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 
     lastTimelineSecond_ = clampedSecond;
     const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         emit diagnosticsChanged();
         return;
     }
@@ -392,7 +411,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 
     lastTimelineSecond_ = clampedSecond;
     const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         emit diagnosticsChanged();
         return;
     }
@@ -613,7 +632,7 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
             .arg(generation)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(targetMs));
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         // Already showing this frame — ack on the next event-loop turn.
         QMetaObject::invokeMethod(this, [this, generation, clampedSecond]() {
             if (!pausedSeekCompletionPending_ || pausedSeekGeneration_ != generation) {
@@ -661,7 +680,7 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(targetMs)
     );
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         QMetaObject::invokeMethod(
             this,
             [this, generation, clampedSecond]() {

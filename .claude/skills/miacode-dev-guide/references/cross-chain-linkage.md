@@ -71,10 +71,25 @@ Implications:
     non-null node (render thread → atomic `fireworkLayerDrawSignal_`), and `handlePresentedFrame`
     flips `fireworkWarmupDone_` only once that signal advances past the arm snapshot (present-count cap
     = backstop). The synthetic is RE-CENTERED on the live playhead via `refreshFireworkWarmupForPlayheadChange`
-    in `setPlayheadSeconds` (+ `setNoteMarkers`) so a seek / negative pre-roll can't strand it outside
-    its lifecycle window. Dropping the notify call or the re-center silently regresses to the old
+    in `setPlayheadSeconds` (+ `setNoteMarkers` + `reset`) so a seek / negative pre-roll can't strand it
+    outside its lifecycle window. Dropping the notify call or the re-center silently regresses to the old
     probabilistic first-firework stutter. Logs: `preview/runtime action=firework_pso_warmup_arm|_done`
     (Runtime channel).
+    - **The re-center is SLACK-GATED, not per-frame.** The travel test lives in
+      `src/core/scene/PreviewFireworkWarmupPolicy.h` (`fireworkWarmupNeedsRecenter` /
+      `fireworkWarmupMarkerSecond`) and is calibrated against the layer's real lifecycle window by
+      `preview_firework_warmup_policy_spec`. It used to fire on EVERY playhead change — i.e. once per
+      preview frame for as long as the warm-up stayed armed, and it stays armed until a frame that
+      actually draws the synthetic is presented, which on an idle paused preview does not happen until
+      the user's first playback. Each re-center rewrites the whole marker vector and bumps
+      `sceneContentRevision`, which invalidates `PreviewPreparedSceneCache` and forces a full ten-layer
+      rebuild; that per-frame rebuild was the bulk of the "first playback after startup stutters"
+      report, and it recurred mid-session on every visible-window rebind (F11 re-arms via
+      `setVisibleHostWindow`). Do not restore an unconditional per-playhead re-center.
+    - **INVARIANT: while armed-but-not-done, exactly one synthetic lives in `frameState_.noteMarkers`
+      and `fireworkWarmupCenterSecond_` is its centre.** Any site that clears `noteMarkers` must
+      re-append it (`setNoteMarkers`, `reset`) — with the slack gate in place, a missing synthetic is
+      no longer healed by the next frame's re-center.
 - During playback: slow-refresh markers feed validation/Muri inputs, but preview audio/canvas/stats
   stay on the frozen play-start snapshot until stop; validation/Muri UI may defer to a paused edge.
 

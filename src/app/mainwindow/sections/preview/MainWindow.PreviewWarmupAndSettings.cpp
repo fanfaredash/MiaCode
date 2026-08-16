@@ -134,7 +134,19 @@ bool hasCorePreviewSkinAssets(const QString& directory)
 
 void MainWindow::PreviewSection::ensurePreviewSfxRuntimePrepared()
 {
-    if (state_.previewSfxRuntime_ == nullptr || state_.previewSfxRuntimePrepared_) {
+    // A reload already in flight counts as prepared-in-progress. Opening a chart
+    // posts reloadAssetsForChart on the worker (see
+    // sections/timeline/MainWindow.PreviewTimelineFlow.cpp, pathChanged branch) and
+    // only the completion handler in sections/frame/MainWindow.FrameBootstrap.cpp
+    // flips previewSfxRuntimePrepared_. Without the sequence check below, pressing
+    // play (or scrubbing) inside that window re-posted a SECOND full engine +
+    // sample + BGM load, and its newer assetGeneration invalidated the first
+    // reload's completion — so the redundant work also delayed the ready edge it
+    // was racing. The completion handler clears the sequence on failure too, so a
+    // failed reload still gets retried by the next call here.
+    if (state_.previewSfxRuntime_ == nullptr
+        || state_.previewSfxRuntimePrepared_
+        || state_.previewSfxRuntimePreparationSequence_ != 0) {
         return;
     }
     QElapsedTimer initTimer;
