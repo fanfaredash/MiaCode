@@ -338,6 +338,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportFrameRender.cpp
     src/tools/video_export/VideoExportPipeline.cpp
     src/tools/video_export/VideoExportPreparedTask.cpp
+    src/tools/video_export/VideoExportMediaTimeline.h
+    src/tools/video_export/VideoExportMediaTimeline.cpp
     src/tools/video_export/VideoExportRuntimePolicy.h
     src/tools/video_export/VideoExportRuntimePolicy.cpp
     src/tools/video_export/VideoExportQuickRenderBackend.h
@@ -1860,6 +1862,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/timeline/TimelineData.h
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
+    )
+
+    miacode_add_dev_tool(video_export_media_timeline_spec TEST
+        SOURCES
+            src/tools/video_export/VideoExportMediaTimelineSpec.cpp
+            src/tools/video_export/VideoExportMediaTimeline.h
+            src/tools/video_export/VideoExportMediaTimeline.cpp
+            src/common/PreviewSfxTimeline.h
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/common src/timeline src/tools src/tools/video_export
     )
 
     miacode_add_dev_tool(chart_zip_packager_spec TEST
