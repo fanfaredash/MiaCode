@@ -121,6 +121,12 @@ public:
     // Inserts the batch host's range/destination/source controls as the first
     // vertically scrollable embedded tab. Call after setBatchSettingsPanelMode.
     void insertBatchTaskTab(QWidget* controls);
+    // Batch panel only: re-seed the difficulty-derived chart payload (片头 banner
+    // fields, parsed markers, content duration, chart metadata) after the export
+    // page's difficulty badge switched. The panel and every user-tuned setting
+    // survive; call it instead of rebuilding the panel the way the single-export
+    // sub-page does.
+    void retargetChartPayload(const VideoExportTask& task);
     bool buildBatchTaskTemplate(VideoExportTask* task, QString* errorMessage = nullptr) const;
     bool isClockCountEnabledForPreview() const;
     bool embeddedPanelMode() const { return embeddedPanelMode_; }

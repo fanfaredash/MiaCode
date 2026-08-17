@@ -366,6 +366,18 @@ touches the transport — preview and a running export are independent. Review t
 `PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `MainWindow.ExportWorker.cpp` +
 `WindowSection.cpp` (progress decoupling). Supersedes the reverted "导出效果预览".
 
+- **批量导出 sub-page: a badge switch retargets in place, so it must re-seed by hand.** The
+  video sub-page gets its per-difficulty payload for free (the panel is destroyed + rebuilt from
+  a fresh `buildVideoExportSeedTask`). The batch panel deliberately SURVIVES the switch (queue +
+  settings are the user's work), so `ExportSection::updateEmbeddedBatchExportPreviewDifficulty`
+  owns the whole re-seed: audition scene (teardown + install), chart-info HUD
+  (`applyExportPreviewChartInfo`, shared with `beginExportPreviewSession`), and the shared
+  settings panel's chart payload (`BatchExportPanel::updatePreviewDifficulty` →
+  `VideoExportDialog::retargetChartPayload` — 片头 banner fields / markers / duration, while
+  intro on-off + 片头 sound stay user-owned). Adding a difficulty-derived field to
+  `buildVideoExportSeedTask` means adding it to `retargetChartPayload` too, or the batch page's
+  preview silently keeps the panel's opening difficulty.
+
 - **The visible transport is QML, not the QWidget `ui_.previewSlider_`** (which is null on the
   export page). Any preview-transport state that QML needs (range, position, lower bound, export
   progress…) flows owner → `QuickShellContracts` (`shellPreview*` virtuals) →

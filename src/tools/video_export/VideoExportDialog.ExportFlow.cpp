@@ -412,6 +412,42 @@ void VideoExportDialog::insertBatchTaskTab(QWidget* controls)
     settingsTabs_->updateGeometry();
 }
 
+void VideoExportDialog::retargetChartPayload(const VideoExportTask& task)
+{
+    // Batch page only: the difficulty badge switched while this panel stays
+    // alive, so refresh ONLY the difficulty-derived chart payload. Every styling
+    // choice in currentIntroSpecForExportTask() is re-read from the widgets, so
+    // overwriting baseTask_.intro cannot lose a user setting — but 添加片头's
+    // on/off flag and the 片头 sound (file + volume) live on baseTask_ and ARE
+    // user-owned, so they are carried across explicitly.
+    const bool introEnabled = baseTask_.intro.enabled;
+    const QString introSoundFileName = baseTask_.introSoundFileName;
+    const double introSoundVolume = baseTask_.introSoundVolume;
+
+    baseTask_.chartPath = task.chartPath;
+    baseTask_.trackPath = task.trackPath;
+    baseTask_.noteMarkers = task.noteMarkers;
+    baseTask_.muriAnalysisReport = task.muriAnalysisReport;
+    baseTask_.contentDurationSeconds = task.contentDurationSeconds;
+    baseTask_.chartTitle = task.chartTitle;
+    baseTask_.chartArtist = task.chartArtist;
+    baseTask_.chartDifficultyLabel = task.chartDifficultyLabel;
+    baseTask_.chartDesigner = task.chartDesigner;
+    baseTask_.outputPath = task.outputPath;
+    baseTask_.clockCount = task.clockCount;
+    baseTask_.intro = task.intro;
+
+    baseTask_.intro.enabled = introEnabled;
+    baseTask_.introSoundFileName = introSoundFileName;
+    baseTask_.introSoundVolume = introSoundVolume;
+
+    // "自动" resolves SD/DX from the payload, and the 片头 tab's card preview is
+    // baked from the spec — both are stale until re-derived. The export-page
+    // audition's own intro region is refreshed by the host.
+    refreshIntroCardModeAutoLabel();
+    refreshIntroPreview();
+}
+
 bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* errorMessage) const
 {
     if (task == nullptr) {

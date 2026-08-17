@@ -57,7 +57,12 @@ public:
     VideoExportTask requestedTaskTemplate() const { return requestedTaskTemplate_; }
     bool prepareRequestedTask(QString* errorMessage = nullptr);
 
-    void updatePreviewDifficulty(int difficultyId);
+    // Retargets the preview/audition at another difficulty of the SAME chart.
+    // `retargetedTask` is that difficulty's freshly-built seed task; it re-seeds
+    // the shared settings panel's chart payload (片头 banner fields, markers,
+    // duration) while every user-tuned setting — including the batch queue —
+    // stays put.
+    void updatePreviewDifficulty(int difficultyId, const VideoExportTask& retargetedTask);
     int previewDifficultyId() const;
     bool isClockCountEnabledForPreview() const;
     bool isAddIntroActiveForPreview() const;
