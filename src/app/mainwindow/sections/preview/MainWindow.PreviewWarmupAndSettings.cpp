@@ -15,6 +15,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewSfxAssets.h"
+#include "common/ProjectPreferences.h"
 #include "common/AssetPaths.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -34,6 +35,10 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
+
+// Project-preferences key holding the per-chart preview mixer
+// (<chartDir>/.miacode/preferences.json).
+constexpr auto kProjectAudioPreferencesKey = "preview_audio";
 
 struct PreviewMediaWarmupResult {
     quint64 generation = 0;
@@ -704,6 +709,69 @@ void MainWindow::PreviewSection::applyPreviewAudioSettingsToRuntime()
         ? makePreviewLatencyAuditionLevels(state_.previewAudioSettings_, sandbox->sfxVolumePercent())
         : state_.previewAudioSettings_;
     state_.previewSfxRuntime_->applyLevels(levels);
+}
+
+void MainWindow::PreviewSection::loadProjectAudioPreferences()
+{
+    // The mixer is PROJECT-scoped: every chart remembers the volumes and mutes
+    // it was last edited with, in <chartDir>/.miacode/preferences.json. A
+    // project that has never stored one — a brand-new chart, or one authored
+    // before the mixer became project-scoped — starts from the app-level
+    // 本地预设 (softwarePreviewAudioSettings_). Seeding is the preset's only
+    // role; it is never written back to from here.
+    const QJsonObject projectPreferences =
+        miacode::project_preferences::load(state_.currentFilePath_);
+    const QJsonValue storedAudio =
+        projectPreferences.value(QLatin1String(kProjectAudioPreferencesKey));
+    const bool projectHasStoredMixer = storedAudio.isObject();
+    // Edits made with no project open are carried into the first project that
+    // has no mixer of its own (typically: tweak the mix on a new chart, then
+    // save it), instead of being thrown away in favor of the preset.
+    const bool adoptSessionMixer =
+        !projectHasStoredMixer && state_.previewAudioSettingsEditedWithoutProject_;
+    PreviewAudioSettings loaded = projectHasStoredMixer
+        ? PreviewAudioSettings::fromJson(storedAudio.toObject())
+        : (adoptSessionMixer ? state_.previewAudioSettings_ : state_.softwarePreviewAudioSettings_);
+    loaded.normalize();
+    // break-slide tail cheer stays an APP-scoped preference (it is a sound-design
+    // choice, not a per-chart mix), so it wins over whatever the project blob
+    // happens to carry in that field.
+    state_.previewAudioSettings_ = previewAudioSettingsWithBreakSlideTailCheerPreference(
+        loaded, state_.breakSlideTailCheerMutedPreference_);
+    state_.previewAudioSettingsEditedWithoutProject_ = false;
+    if (adoptSessionMixer) {
+        saveProjectAudioPreferences();
+    }
+    applyPreviewAudioSettingsToRuntime();
+}
+
+void MainWindow::PreviewSection::saveProjectAudioPreferences() const
+{
+    if (state_.currentFilePath_.isEmpty()) {
+        // No chart open (or never saved) — there is no project file to write
+        // to. The mixer still applies for this session, and is deliberately
+        // NOT promoted to an app-level setting: only 保存为本地预设 does that.
+        // Flag it so the next project bind adopts these edits (see
+        // loadProjectAudioPreferences).
+        state_.previewAudioSettingsEditedWithoutProject_ = true;
+        return;
+    }
+    PreviewAudioSettings stored = previewAudioSettingsWithBreakSlideTailCheerPreference(
+        state_.previewAudioSettings_, state_.breakSlideTailCheerMutedPreference_);
+    stored.normalize();
+    QJsonObject projectPreferences = miacode::project_preferences::load(state_.currentFilePath_);
+    projectPreferences.insert(QLatin1String(kProjectAudioPreferencesKey), stored.toJson());
+    miacode::project_preferences::save(state_.currentFilePath_, projectPreferences);
+}
+
+void MainWindow::loadProjectAudioPreferences()
+{
+    previewSection_->loadProjectAudioPreferences();
+}
+
+void MainWindow::saveProjectAudioPreferences() const
+{
+    previewSection_->saveProjectAudioPreferences();
 }
 
 void MainWindow::ensurePreviewSfxRuntimePrepared()

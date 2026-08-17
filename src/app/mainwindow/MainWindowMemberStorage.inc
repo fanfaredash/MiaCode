@@ -632,6 +632,12 @@
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
+        // Set when the mixer is edited while no chart file is open (welcome
+        // page, or a new chart not yet saved). saveProjectAudioPreferences()
+        // has nowhere to write in that state, so the next bind to a project
+        // WITHOUT a stored mixer adopts these edits instead of re-seeding from
+        // the 本地预设 — otherwise saving a new chart would silently discard them.
+        bool previewAudioSettingsEditedWithoutProject_ = false;
         bool breakSlideTailCheerMutedPreference_ = false;
         PreviewTimingSettings softwarePreviewTimingSettings_;
         PreviewTimingSettings previewTimingSettings_;

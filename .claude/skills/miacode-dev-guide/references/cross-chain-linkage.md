@@ -237,6 +237,28 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
 
+**Preview audio spans TWO storage tiers — keep them straight (2026-08-18):**
+
+| Tier | Key | State | Written by |
+|---|---|---|---|
+| **Project** `<chartDir>/.miacode/preferences.json` | `preview_audio` | `state_.previewAudioSettings_` (the live mixer) | every slider / mute / 应用本地预设, via `MainWindow::saveProjectAudioPreferences` |
+| **App** `preferences.json` | `app.preview.audio` | `state_.softwarePreviewAudioSettings_` (本地预设) | only the 保存为本地预设 button, via `savePortableState` |
+
+The mixer is per-chart. `PreviewSection::loadProjectAudioPreferences` runs from
+`TimelineSection::setCurrentFilePath`'s `pathChanged` branch — **before** `reloadAssetsForChart` /
+`applyPreviewAudioSettingsToRuntime`, or the outgoing chart's levels leak into the incoming one.
+The preset's ONLY role is seeding a project that has no stored `preview_audio` (new chart, or one
+predating this split); it is never written back to from the project path.
+`state_.previewAudioSettingsEditedWithoutProject_` carries edits made with no chart open into the
+first project bind that has no stored mixer, so saving a new chart doesn't discard them.
+`break_slide_tail_cheer_muted` stays app-scoped and overrides whatever the project blob carries in
+that field.
+
+Regression this replaced: `savePortableState` persisted `softwarePreviewAudioSettings_` while the
+dialog sliders edited `previewAudioSettings_`, so every volume change was re-written as the
+unchanged default and lost on restart. Anything new that edits `previewAudioSettings_` must call
+`saveProjectAudioPreferences()`, not a second store.
+
 ## 10. Parser output feeds Muri on both paths
 
 Live: `requestTimelineSlowRefresh` → `parseForTimeline` → analysis refresh. Export:

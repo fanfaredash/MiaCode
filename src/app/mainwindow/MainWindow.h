@@ -503,6 +503,8 @@ private:
     void saveProjectRenderState() const;
     void removeProjectRenderState() const;
     void applyPreviewAudioSettingsToRuntime();
+    void loadProjectAudioPreferences();
+    void saveProjectAudioPreferences() const;
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();

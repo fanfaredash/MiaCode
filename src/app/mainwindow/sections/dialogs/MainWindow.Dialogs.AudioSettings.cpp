@@ -1070,6 +1070,10 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         owner_.previewAudioSettings_.normalize();
         syncAudioControlsFromCurrentSettings();
         owner_.applyPreviewAudioSettingsToRuntime();
+        // The mixer itself is project-scoped; savePortableState only carries the
+        // app-level companions edited from this same panel (the break-slide tail
+        // cheer flag) and the untouched 本地预设.
+        owner_.saveProjectAudioPreferences();
         owner_.savePortableState();
         queueAudioApply(audition);
     };
@@ -1209,6 +1213,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
                     owner_.softwarePreviewAudioSettings_, owner_.breakSlideTailCheerMutedPreference_);
                 syncAudioControlsFromCurrentSettings();
                 owner_.applyPreviewAudioSettingsToRuntime();
+                // Applying the preset is a mixer edit like any other — record it
+                // on the project so it survives the next open.
+                owner_.saveProjectAudioPreferences();
                 owner_.savePortableState();
                 if (audioApplyTimer->isActive()) {
                     audioApplyTimer->stop();

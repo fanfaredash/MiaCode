@@ -647,6 +647,11 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     updateCurrentFileLabel();
     if (pathChanged) {
         owner_.loadProjectRenderState();
+        // Rebind the project-scoped mixer BEFORE the SFX reload / level
+        // dispatch below, so the new chart's volumes are the ones handed to
+        // reloadAssetsForChart and applyPreviewAudioSettingsToRuntime rather
+        // than the outgoing chart's.
+        owner_.loadProjectAudioPreferences();
     }
     owner_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.qtPreviewPauseSecond_, state_.document_.videoPath);  // Phase 4c &video= override
     if (state_.previewCanvas_ != nullptr) {
