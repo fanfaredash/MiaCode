@@ -1,6 +1,7 @@
 #include "PlainCodeEditor.h"
 #include "BracketCompletionPopup.h"
 #include "SimaiCompletionCatalog.h"
+#include "common/AdoptedSurfaceDragAutoScroll.h"
 #include "common/DebugLog.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
@@ -118,6 +119,11 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     setCursorWidth(kEditorCursorVisibleWidth);
     updateCursorVisibility();
     lastCurrentLineHighlightRect_ = currentLineHighlightRect();
+    // The line-number gutter is a viewport margin, so a leftward drag-select
+    // leaves the viewport and would hand the gesture to Qt's QCursor-driven
+    // autoscroll — which mis-targets on the adopted macOS surface. No-op
+    // elsewhere; see common/AdoptedSurfaceDragAutoScroll.h.
+    miacode::ui::installAdoptedSurfaceDragAutoScroll(this);
 }
 
 void PlainCodeEditor::setBlockSpacingPixels(int px)

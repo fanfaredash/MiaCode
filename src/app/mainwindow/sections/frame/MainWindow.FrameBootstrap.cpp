@@ -29,6 +29,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
+#include "common/AdoptedSurfaceDragAutoScroll.h"
 #include "common/AdoptedWidgetCoordinates.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -820,6 +821,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     metadataExtraEdit_->setLineWrapMode(QTextEdit::WidgetWidth);
     metadataExtraEdit_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     metadataExtraEdit_->setPlaceholderText("&dummy=...");
+    // Plain QTextEdit, so it does not get PlainCodeEditor's ctor install: give
+    // it the same macOS drag-autoscroll takeover, or a drag-select that leaves
+    // the viewport strobes the selection here too.
+    miacode::ui::installAdoptedSurfaceDragAutoScroll(metadataExtraEdit_);
     installCtrlEnterLineBreakShortcut(metadataExtraEdit_);
     if (QScrollBar* vbar = metadataExtraEdit_->verticalScrollBar()) {
         vbar->setStyleSheet(modernScrollBarStyle());
