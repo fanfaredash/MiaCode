@@ -226,6 +226,8 @@ bool runCurrentChainEmptyOutsideAnyScopeTest()
 // chain via MC_OP, calls flushShadowToDisk() directly (the SEH filter
 // would do the same on a real crash), and asserts the chain is in the
 // resulting file in the exact leaf-first order the SEH path emits.
+// Off Windows the flush is a no-op by design, so the test asserts that
+// contract instead (see the #ifndef Q_OS_WIN branch below).
 bool runShadowFlushTest(const QString& shadowPath)
 {
     QFile::remove(shadowPath);
@@ -244,6 +246,14 @@ bool runShadowFlushTest(const QString& shadowPath)
         }
     }
 
+#ifndef Q_OS_WIN
+    // flushShadowToDisk() is a documented no-op off Windows (see OperationLog.h):
+    // the dump exists to serve the SEH filter, and no other platform has an
+    // equivalent to wire it into. Push/pop still maintain the shadow buffers, so
+    // assert the no-op contract here instead of a file that is never written.
+    return require(!QFile::exists(shadowPath),
+                   QStringLiteral("flushShadowToDisk should stay a no-op off Windows"));
+#else
     const QString contents = readLog(shadowPath);
     if (!require(!contents.isEmpty(),
                  QStringLiteral("shadow log empty after flushShadowToDisk"))) {
@@ -270,6 +280,7 @@ bool runShadowFlushTest(const QString& shadowPath)
         return false;
     }
     return true;
+#endif
 }
 
 // Phase 4 — micro-benchmark to confirm the shadow buffer adds
