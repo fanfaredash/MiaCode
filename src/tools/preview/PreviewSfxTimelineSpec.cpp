@@ -674,6 +674,90 @@ bool verifyTouchholdVoiceLatestWinsOwnership(QTextStream& err)
     return true;
 }
 
+bool verifyTouchholdOwnershipSegments(QTextStream& err)
+{
+    using miacode::preview_sfx_timeline::buildTouchholdOwnershipSegments;
+
+    const auto span = [](double start, double end) {
+        TouchholdSpan s;
+        s.startSecond = start;
+        s.endSecond = end;
+        return s;
+    };
+
+    // Same three shapes as the ownership test above, flattened into the stretches
+    // the shared voice actually plays. Export mixes one riser clip per stretch, so
+    // this is what makes a seamless join / overlap / nesting sound identical in the
+    // preview and in the exported file.
+    QVector<TouchholdSpan> spans{
+        span(1.0, 2.0),  // 0: seamless join with span 1
+        span(2.0, 3.0),  // 1
+        span(4.0, 6.0),  // 2: outer span of a nesting pair
+        span(5.0, 5.5),  // 3: nested inside span 2
+        span(7.0, 9.0),  // 4: overlapped by span 5
+        span(8.0, 10.0), // 5
+    };
+
+    struct Expected {
+        double startSecond;
+        double endSecond;
+        int spanIndex;
+        double sourceOffsetSecond;
+    };
+    const Expected expected[] = {
+        {1.0, 2.0, 0, 0.0},
+        {2.0, 3.0, 1, 0.0},   // the joined span restarts the riser, it does not continue
+        {4.0, 5.0, 2, 0.0},
+        {5.0, 5.5, 3, 0.0},
+        {5.5, 6.0, 2, 1.5},   // outer span resumes where it would have been
+        {7.0, 8.0, 4, 0.0},
+        {8.0, 10.0, 5, 0.0},  // takeover runs to the newer span's own end
+    };
+    const int expectedCount = static_cast<int>(sizeof(expected) / sizeof(expected[0]));
+
+    const auto segments = buildTouchholdOwnershipSegments(spans);
+    if (!require(
+            segments.size() == expectedCount,
+            QStringLiteral("ownership should flatten into one segment per owned stretch (got %1, want %2)")
+                .arg(segments.size())
+                .arg(expectedCount),
+            err)) {
+        return false;
+    }
+    for (int i = 0; i < expectedCount; ++i) {
+        const auto& segment = segments.at(i);
+        const bool matches = segment.spanIndex == expected[i].spanIndex
+            && qAbs(segment.startSecond - expected[i].startSecond) <= 1e-6
+            && qAbs(segment.endSecond - expected[i].endSecond) <= 1e-6
+            && qAbs(segment.sourceOffsetSecond - expected[i].sourceOffsetSecond) <= 1e-6;
+        if (!require(
+                matches,
+                QStringLiteral("segment %1 should be span %2 over [%3, %4] at source offset %5")
+                    .arg(i)
+                    .arg(expected[i].spanIndex)
+                    .arg(expected[i].startSecond)
+                    .arg(expected[i].endSecond)
+                    .arg(expected[i].sourceOffsetSecond),
+                err)) {
+            return false;
+        }
+    }
+
+    // A gap between spans must stay a gap: the voice is stopped there, so no
+    // segment may cover it.
+    QVector<TouchholdSpan> gapped{span(1.0, 2.0), span(3.0, 4.0)};
+    const auto gappedSegments = buildTouchholdOwnershipSegments(gapped);
+    if (!require(
+            gappedSegments.size() == 2
+                && qAbs(gappedSegments.at(0).endSecond - 2.0) <= 1e-6
+                && qAbs(gappedSegments.at(1).startSecond - 3.0) <= 1e-6,
+            QStringLiteral("a gap between spans should not be covered by a segment"),
+            err)) {
+        return false;
+    }
+    return true;
+}
+
 bool verifyMineNotesEmitTypeSfx(QTextStream& err)
 {
     // Mine judgement remains an autoplay dodge, but its chart timing stays
@@ -798,6 +882,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyTouchholdVoiceLatestWinsOwnership(err)) {
+        return 1;
+    }
+    if (!verifyTouchholdOwnershipSegments(err)) {
         return 1;
     }
     if (!verifyMineNotesEmitTypeSfx(err)) {

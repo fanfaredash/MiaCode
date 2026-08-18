@@ -350,7 +350,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(frameCount)
             .arg(audioRenderPlan.backgroundTrack.enabled ? 1 : 0)
             .arg(audioRenderPlan.scheduledSfxPlaybacks.size())
-            .arg(audioRenderPlan.mergedTouchholdSpans.size())
+            .arg(audioRenderPlan.touchholdSpanPlaybacks.size())
     );
 
     if (setProgressPercent(0, QStringLiteral("Preparing SFX track..."))) {

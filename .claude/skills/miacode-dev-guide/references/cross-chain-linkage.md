@@ -157,10 +157,24 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   driven by `touchhold_start`/`touchhold_stop` events. Ownership is **latest-wins**: the pure helper
   `preview_sfx_timeline::touchholdOwnerSpanIndexAt(spans, second)` returns the active span with the
   greatest `startSecond`, and both backends `reconcileTouchholdVoice(second)` to it on every
-  start/stop event (and on pause/restore/seek). This is order-independent, so a seamless join (prev
-  `endSecond` == next `startSecond`), overlap, or nesting lets the newer touch-hold take over the
-  voice instead of the older span's stop clobbering it. Don't go back to per-event naive start/stop
-  or a first-wins active-set. Export is unaffected (it renders each `TouchholdSpan` independently).
+  start/stop event (and on pause/restore/seek), seeking the riser to `second - span.startSecond`.
+  This is order-independent, so a seamless join (prev `endSecond` == next `startSecond`), overlap, or
+  nesting lets the newer touch-hold take over the voice — restarting the riser from its own start —
+  instead of the older span's stop clobbering it. Don't go back to per-event naive start/stop or a
+  first-wins active-set.
+  **Export is a sync pair with this, NOT independent.** It has no voice, so it emulates the same
+  ownership offline: `preview_sfx_timeline::buildTouchholdOwnershipSegments(spans)` flattens
+  latest-wins into `{startSecond, endSecond, spanIndex, sourceOffsetSecond}` stretches (owner
+  evaluated once per span boundary), and `buildTouchholdSpanPlaybacks`
+  (`VideoExportAudioRenderPlan.cpp`) mixes ONE riser clip per stretch at that source offset into
+  `VideoExportAudioRenderPlan::touchholdSpanPlaybacks`; both export backends honour
+  `sourceStartSecond`. Export used to *merge* adjacent/overlapping spans into one long clip, so the
+  second of two back-to-back touch-holds sounded like a continuation of the first while preview
+  restarted it — never reintroduce that merge. The partial-range pre-range clamp
+  (`suppressSfxBeforePreRangeEnd`) advances `sourceStartSecond` with `mixSecond` for the same reason:
+  preview seeking into a live touch-hold resumes mid-sample, so export must too. Coverage:
+  `verifyTouchholdOwnershipSegments` (`PreviewSfxTimelineSpec.cpp`) for the flattening,
+  `verifyTouchholdSpanLatestWinsPlaybacks` (`VideoExportAudioRenderPlanSpec.cpp`) for the mix plan.
 - `&clock_count=` is a defaulted (`4`) count-in metadata field (`src/common/ChartClockCount.h`), editable from the latency settings page + metadata "Other &xx Fields" and materialized by `SimaiDocument::ensureDefaultClockCount`; its export count-in uses full-range lead-in `2.0s`,
   partial preload `1.0s` (`src/common/VideoExportConfig.h`). Full-vs-partial classification: any range
   STARTING at chart 0 counts as full-range even if it ends early (count-down lead-in, no frozen
