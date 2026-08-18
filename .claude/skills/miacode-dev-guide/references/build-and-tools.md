@@ -67,6 +67,13 @@ Findings the convention is fixing:
   `target_include_directories` triple. The `TEST` keyword registers the `add_test()` + the Qt-bin
   `ENVIRONMENT_MODIFICATION` PATH fix. Shared source groups (`_miacode_chart_core`,
   `_miacode_log_core`, …) are set once and reused.
+- `TEST` also pins `WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"`, so every spec runs from the
+  source tree. Specs that touch runtime assets resolve them relative to the CWD (e.g.
+  `resolveSfxDirectory` behind `VideoExportAudioRenderPlan`); before this,
+  `video_export_audio_render_plan_spec` passed when launched by hand from the repo root but failed
+  under `ctest` with "preview SFX directory could not be resolved". A spec must therefore not
+  depend on the build dir being the CWD, and must write scratch files to a `QTemporaryDir`, not to
+  a relative path.
 
 Rules going forward:
 

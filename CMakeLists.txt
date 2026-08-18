@@ -1056,7 +1056,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
             target_include_directories(${NAME} PRIVATE ${DT_INCLUDES})
         endif()
         if (DT_TEST)
-            add_test(NAME ${NAME} COMMAND ${NAME})
+            # Run from the source tree: specs that touch runtime assets resolve
+            # them relative to the working directory (e.g. resolveSfxDirectory in
+            # VideoExportAudioRenderPlan), so launching from the build dir made
+            # them fail with "preview SFX directory could not be resolved".
+            add_test(NAME ${NAME} COMMAND ${NAME} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
             # Spec exes are not deployed with the Qt runtime, so prepend Qt's
             # bin directory to PATH for the test run. Without this, ctest
             # launches them and Windows raises "Qt6*.dll not found" loader
