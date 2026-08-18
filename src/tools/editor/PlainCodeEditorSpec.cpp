@@ -116,6 +116,52 @@ int main(int argc, char** argv)
                &failed);
     }
 
+    {
+        // Drag-selection autoscroll geometry (the macOS override's brain — the
+        // editor must never let Qt re-derive the held pointer from
+        // QCursor::pos() on an adopted surface).
+        const QRect viewportRect(0, 0, 400, 300);
+        const auto inside = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(120, 90));
+        expect(inside.intervalMs == 0
+                   && inside.horizontalStep == 0
+                   && inside.verticalStep == 0
+                   && inside.clampedPosition == QPoint(120, 90),
+               QStringLiteral("pointer inside the viewport plans no autoscroll"),
+               out,
+               &failed);
+
+        const auto gutter = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(-30, 90));
+        expect(gutter.clampedPosition == QPoint(0, 90)
+                   && gutter.horizontalStep == -1
+                   && gutter.verticalStep == 0
+                   && gutter.intervalMs >= 16 && gutter.intervalMs <= 100,
+               QStringLiteral("pointer over the line-number gutter clamps back and scrolls left"),
+               out,
+               &failed);
+
+        const auto belowRight =
+            miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(480, 360));
+        expect(belowRight.clampedPosition == QPoint(399, 299)
+                   && belowRight.horizontalStep == 1
+                   && belowRight.verticalStep == 1,
+               QStringLiteral("pointer past the bottom-right corner scrolls on both axes"),
+               out,
+               &failed);
+
+        const auto nudge = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(0, -2));
+        const auto lunge = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(0, -200));
+        expect(nudge.intervalMs == 100 && lunge.intervalMs == 16
+                   && nudge.verticalStep == -1 && lunge.verticalStep == -1,
+               QStringLiteral("autoscroll cadence accelerates with the overshoot, floored at a frame"),
+               out,
+               &failed);
+
+        expect(miacode::editor::planDragAutoScrollStep(QRect(), QPoint(-30, 90)).intervalMs == 0,
+               QStringLiteral("an invalid viewport rect plans no autoscroll"),
+               out,
+               &failed);
+    }
+
     const auto expectTouchPlan = [&out, &failed](const QString& text, int pos, bool backtick,
                                                  int expectedStart, int expectedInsert,
                                                  const QString& expectedText, const QString& message) {
