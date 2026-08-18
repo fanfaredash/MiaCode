@@ -1,13 +1,9 @@
 #pragma once
 
-#include <QBasicTimer>
 #include <QList>
 #include <QSet>
-#include <QPoint>
 #include <QPointF>
-#include <QRect>
 #include <QTextEdit>
-#include <QtGlobal>
 
 class BracketCompletionPopup;
 class LineNumberArea;
@@ -18,7 +14,6 @@ class QInputMethodEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QMimeData;
-class QTimerEvent;
 
 namespace miacode::editor {
 QChar normalizedHalfWidthChar(QChar ch);
@@ -29,26 +24,6 @@ QString clearCompleteElementsInSelection(
     int selectionStart,
     int selectionEnd,
     int* changedCount = nullptr);
-
-// One tick of the editor-owned drag-selection autoscroll (macOS only — see the
-// mouseMoveEvent override). Qt's own autoscroll re-derives the pointer from
-// QCursor::pos() through QWidget::mapFromGlobal(), which on the adopted
-// QuickShell surface still resolves through the neutralized orphan NSPanel: the
-// synthesized move lands on the wrong line, fights the real drag events, and the
-// selection strobes. Planning the step from the *event* position keeps the
-// gesture on coordinates the platform got right. Kept as a free function so the
-// geometry is unit-testable without a live widget (plain_code_editor_spec).
-struct DragAutoScrollStep {
-    // `position` pulled back inside the viewport, so the move forwarded to
-    // QTextEdit never re-arms Qt's own QCursor-driven timer.
-    QPoint clampedPosition;
-    int horizontalStep = 0;  // -1 left, 0 none, +1 right
-    int verticalStep = 0;    // -1 up, 0 none, +1 down
-    // 0 when the pointer is inside the viewport (no autoscroll); otherwise the
-    // tick interval, accelerating with the overshoot like Qt's own cadence.
-    int intervalMs = 0;
-};
-DragAutoScrollStep planDragAutoScrollStep(const QRect& viewportRect, const QPoint& position);
 }
 
 class PlainCodeEditor : public QTextEdit
@@ -128,14 +103,6 @@ protected:
     void insertFromMimeData(const QMimeData* source) override;
     void keyPressEvent(QKeyEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
-#ifdef Q_OS_MACOS
-    // macOS-only: take drag-selection autoscroll away from QTextEdit, which
-    // steers it from QCursor::pos() and therefore mis-targets on the adopted
-    // QuickShell surface (see miacode::editor::planDragAutoScrollStep).
-    void mouseMoveEvent(QMouseEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
-    void timerEvent(QTimerEvent* event) override;
-#endif
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
@@ -146,12 +113,6 @@ private slots:
 private:
     QRect currentLineHighlightRect() const;
     QRect previewFollowVisualCaretRect() const;
-#ifdef Q_OS_MACOS
-    // Re-sends the held drag at a viewport-clamped position. Clamping is what
-    // keeps QTextEdit::mouseMoveEvent from arming its own autoscroll timer.
-    void forwardClampedDragMove(const QPoint& clampedPosition, Qt::KeyboardModifiers modifiers);
-    void stopDragAutoScroll();
-#endif
     int lineNumberAtAreaPosition(const QPoint& pos) const;
     void syncCursorVisualState();
     void updateCursorVisibility();
@@ -223,15 +184,5 @@ private:
     int previewFollowVisualCaretLine_ = 1;
     int previewFollowVisualCaretCol_ = 1;
     QSet<int> bookmarkedLines_;
-#ifdef Q_OS_MACOS
-    // Live drag-autoscroll state: the last position the platform actually
-    // reported for the held pointer, in viewport coordinates, plus its global
-    // twin (forwarded verbatim so the base class's drag-and-drop bookkeeping
-    // still sees the real gesture).
-    QBasicTimer dragAutoScrollTimer_;
-    QPoint dragAutoScrollViewportPos_;
-    QPoint dragAutoScrollGlobalPos_;
-    Qt::KeyboardModifiers dragAutoScrollModifiers_ = Qt::NoModifier;
-#endif
     LineNumberArea* lineNumberArea_;
 };

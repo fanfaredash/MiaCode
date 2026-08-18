@@ -148,6 +148,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellStyleBridge.cpp
     src/common/AdoptedWidgetCoordinates.h
     src/common/AdoptedWidgetCoordinates.cpp
+    src/common/AdoptedSurfaceDragAutoScroll.h
+    src/common/AdoptedSurfaceDragAutoScroll.cpp
     src/app/mainwindow/MainWindow.h
     src/app/mainwindow/MainWindow.cpp
     src/app/mainwindow/MainWindowShared.h
@@ -1399,6 +1401,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/InputShortcutGesture.cpp
             src/common/AdoptedWidgetCoordinates.h
             src/common/AdoptedWidgetCoordinates.cpp
+            src/common/AdoptedSurfaceDragAutoScroll.h
+            src/common/AdoptedSurfaceDragAutoScroll.cpp
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/common src/extensions

@@ -2,6 +2,7 @@
 #include "editor/BracketCompletionPopup.h"
 #include "editor/BookmarkCommentSyntax.h"
 #include "editor/TouchPadAuthoringEdit.h"
+#include "common/AdoptedSurfaceDragAutoScroll.h"
 #include "common/AdoptedWidgetCoordinates.h"
 
 #include <QApplication>
@@ -117,11 +118,11 @@ int main(int argc, char** argv)
     }
 
     {
-        // Drag-selection autoscroll geometry (the macOS override's brain — the
-        // editor must never let Qt re-derive the held pointer from
-        // QCursor::pos() on an adopted surface).
+        // Drag-selection autoscroll geometry (the brain of the macOS takeover —
+        // no scroll area on an adopted surface may let Qt re-derive the held
+        // pointer from QCursor::pos()).
         const QRect viewportRect(0, 0, 400, 300);
-        const auto inside = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(120, 90));
+        const auto inside = miacode::ui::planDragAutoScrollStep(viewportRect, QPoint(120, 90));
         expect(inside.intervalMs == 0
                    && inside.horizontalStep == 0
                    && inside.verticalStep == 0
@@ -130,7 +131,7 @@ int main(int argc, char** argv)
                out,
                &failed);
 
-        const auto gutter = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(-30, 90));
+        const auto gutter = miacode::ui::planDragAutoScrollStep(viewportRect, QPoint(-30, 90));
         expect(gutter.clampedPosition == QPoint(0, 90)
                    && gutter.horizontalStep == -1
                    && gutter.verticalStep == 0
@@ -140,7 +141,7 @@ int main(int argc, char** argv)
                &failed);
 
         const auto belowRight =
-            miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(480, 360));
+            miacode::ui::planDragAutoScrollStep(viewportRect, QPoint(480, 360));
         expect(belowRight.clampedPosition == QPoint(399, 299)
                    && belowRight.horizontalStep == 1
                    && belowRight.verticalStep == 1,
@@ -148,15 +149,15 @@ int main(int argc, char** argv)
                out,
                &failed);
 
-        const auto nudge = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(0, -2));
-        const auto lunge = miacode::editor::planDragAutoScrollStep(viewportRect, QPoint(0, -200));
+        const auto nudge = miacode::ui::planDragAutoScrollStep(viewportRect, QPoint(0, -2));
+        const auto lunge = miacode::ui::planDragAutoScrollStep(viewportRect, QPoint(0, -200));
         expect(nudge.intervalMs == 100 && lunge.intervalMs == 16
                    && nudge.verticalStep == -1 && lunge.verticalStep == -1,
                QStringLiteral("autoscroll cadence accelerates with the overshoot, floored at a frame"),
                out,
                &failed);
 
-        expect(miacode::editor::planDragAutoScrollStep(QRect(), QPoint(-30, 90)).intervalMs == 0,
+        expect(miacode::ui::planDragAutoScrollStep(QRect(), QPoint(-30, 90)).intervalMs == 0,
                QStringLiteral("an invalid viewport rect plans no autoscroll"),
                out,
                &failed);
