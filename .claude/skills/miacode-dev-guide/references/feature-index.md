@@ -335,8 +335,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   real `QTextCursor` is moved (`applyPreviewFollowCursor`) only while playing. An earlier attempt to
   move it while paused was reverted because it clobbered drag selections (see the note at
   `MainWindow.WindowInteraction.cpp:1450`). So the text caret and the playhead legitimately diverge
-  after any paused seek — anything that needs "the token the playhead is on" must read
-  `MainWindow::previewFollowDecorationPosition()`, not `editor->textCursor()`.
+  after any paused seek, and that divergence is by design — the decoration is a read-only indicator
+  of where the playhead is. Nothing authors against it: touch-pad click input targets the caret
+  (§5b). The caret does drag the preview the other way, though — `cursorPositionChanged`
+  (`MainWindow.FrameBootstrap.cpp:1794`) syncs the timeline/preview to the caret while paused when
+  `timelineSyncEnabled_`, which is why the two normally agree.
 
 ### 5b. Touch-pad click authoring (Ctrl/Cmd + click the preview)
 
@@ -346,11 +349,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Hit test + press/release gesture: `PreviewQuickSceneRoot::mousePressEvent/mouseReleaseEvent`
   (`touchPadAtItemPoint` → `touchPadTokenAtLogicalPoint`), state machine in
   `core/scene/TouchPadAuthoringState.h`, signal `PreviewRuntime::touchPadAuthoringClicked`.
-- Click handler: `MainWindow.FrameBootstrap.cpp:1326`. Target token = the preview-follow
-  decoration when the editor is unfocused, else the text caret; text edit planned by
-  `planTouchPadAuthoringEdit` (`src/editor/TouchPadAuthoringEdit.cpp`); undo entry recorded with
-  **pre-edit int offsets** (`recordChartCursorUndoEntry`); preview then seeks to
-  `tokenSecond - 1/60` (a deliberate convention, not a bug).
+- Click handler: `MainWindow.FrameBootstrap.cpp:1326`. **Target token = the text caret, always** —
+  resolving a playhead second onto a token is not predictable for a user, so the insertion point is
+  the one they set by hand (decided 2026-08-18; an earlier revision targeted the preview-follow
+  highlight). Text edit planned by `planTouchPadAuthoringEdit`
+  (`src/editor/TouchPadAuthoringEdit.cpp`); undo entry recorded with **pre-edit int offsets**
+  (`recordChartCursorUndoEntry` — a live `QTextCursor` would be shifted by the edit itself);
+  preview then seeks to `tokenSecond - 1/60` (a deliberate convention, not a bug).
+- That seek parks the playhead one token EARLY, so `touchPadAuthoringAnchor*`
+  (`MainWindow.TimelinePreviewFollowSync.cpp:43`, cleared in `setEditorText`) maps it back for the
+  highlight. Purely cosmetic — it does not feed the insertion point.
 - Token boundaries come from `src/core/chart/parser/SimaiCommentScan.*` so `||` comments are
   skipped exactly as the two parsers skip them — see `cross-chain-linkage.md` §15.
 - Spec: `plain_code_editor_spec` (`src/tools/editor/PlainCodeEditorSpec.cpp`).

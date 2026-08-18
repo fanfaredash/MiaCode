@@ -1538,11 +1538,6 @@ double MainWindow::timelineSecondForCursor(int line, int col) const
     return timelineSection_->timelineSecondForCursor(line, col);
 }
 
-bool MainWindow::previewFollowTokenPosition(int* position) const
-{
-    return timelineSection_->previewFollowTokenPosition(position);
-}
-
 void MainWindow::setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond)
 {
     timelineSection_->setTouchPadAuthoringAnchor(seekSecond, tokenSecond);
