@@ -24,10 +24,24 @@ Rectangle {
     }
 
     function formatTime(totalSeconds) {
-        const minutes = Math.floor(totalSeconds / 60)
-        const seconds = Math.floor(totalSeconds % 60)
-        return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
+        const negative = totalSeconds < -0.0001
+        const safeSeconds = Math.floor(Math.abs(totalSeconds) + 0.0001)
+        const minutes = Math.floor(safeSeconds / 60)
+        const seconds = safeSeconds % 60
+        return (negative ? "-" : "") + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
     }
+
+    readonly property real lowerBoundSeconds: {
+        const bound = root.previewSession && root.previewSession.lowerBoundSeconds !== undefined
+                      ? root.previewSession.lowerBoundSeconds
+                      : 0
+        return Math.min(0, bound)
+    }
+    property bool scrubActive: false
+    property real activeScrubSecond: root.previewSession.positionSeconds
+    readonly property real displayedSeconds: root.scrubActive
+        ? root.activeScrubSecond
+        : root.previewSession.positionSeconds
 
     // Shorten "pos / dur" only when the control row would actually collide —
     // independent of NoteStatistics column switching.
@@ -45,7 +59,7 @@ Rectangle {
         id: fullTimeMetrics
         font.family: Theme.uiFont
         font.pixelSize: Theme.secondaryFontSize
-        text: root.formatTime(root.previewSession.positionSeconds)
+        text: root.formatTime(root.displayedSeconds)
               + " / " + root.formatTime(root.previewSession.durationSeconds)
     }
 
@@ -58,10 +72,33 @@ Rectangle {
         anchors.rightMargin: 8
         anchors.topMargin: 3
         height: 24
-        from: 0
+        from: root.lowerBoundSeconds
         to: root.previewSession.durationSeconds
+        live: true
+        onPressedChanged: {
+            if (pressed) {
+                root.scrubActive = true
+                root.activeScrubSecond = value
+                root.previewSession.beginScrub()
+                return
+            }
+            if (!root.scrubActive)
+                return
+            const releaseSecond = root.activeScrubSecond
+            root.scrubActive = false
+            root.previewSession.endScrub(releaseSecond)
+        }
+        onMoved: {
+            root.activeScrubSecond = value
+            root.previewSession.updateScrub(root.activeScrubSecond)
+        }
+    }
+
+    Binding {
+        target: progress
+        property: "value"
         value: root.previewSession.positionSeconds
-        onMoved: root.previewSession.positionSeconds = value
+        when: !progress.pressed
     }
 
     RowLayout {
@@ -94,7 +131,7 @@ Rectangle {
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
             text: {
-                const pos = root.formatTime(root.previewSession.positionSeconds)
+                const pos = root.formatTime(root.displayedSeconds)
                 if (root.timeFitsFull)
                     return pos + " / " + root.formatTime(root.previewSession.durationSeconds)
                 return pos

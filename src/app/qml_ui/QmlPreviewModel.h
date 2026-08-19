@@ -13,6 +13,7 @@ class QmlPreviewModel final : public QObject
     Q_OBJECT
     Q_PROPERTY(double positionSeconds READ positionSeconds WRITE setPositionSeconds NOTIFY changed)
     Q_PROPERTY(double durationSeconds READ durationSeconds NOTIFY changed)
+    Q_PROPERTY(double lowerBoundSeconds READ lowerBoundSeconds NOTIFY changed)
     Q_PROPERTY(double rate READ rate WRITE setRate NOTIFY changed)
     Q_PROPERTY(bool playing READ playing WRITE setPlaying NOTIFY changed)
     Q_PROPERTY(QString renderMode READ renderMode NOTIFY changed)
@@ -26,6 +27,7 @@ public:
 
     double positionSeconds() const;
     double durationSeconds() const;
+    double lowerBoundSeconds() const;
     double rate() const;
     bool playing() const;
     QString renderMode() const;
@@ -39,6 +41,9 @@ public:
     void setPlaying(bool value);
     Q_INVOKABLE void toggleRenderMode();
     Q_INVOKABLE void stop();
+    Q_INVOKABLE void beginScrub();
+    Q_INVOKABLE void updateScrub(double second);
+    Q_INVOKABLE void endScrub(double second);
 
 signals:
     void changed();

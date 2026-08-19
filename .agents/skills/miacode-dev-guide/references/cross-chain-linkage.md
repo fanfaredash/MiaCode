@@ -452,6 +452,10 @@ touches the transport — preview and a running export are independent. Review t
   `exportIntroLowerBoundSeconds()` → `shellPreviewLowerBoundSeconds()` →
   `previewLowerBoundSeconds` → the slider's `from`. Add a transport field? Touch all four layers,
   and **touch `resources/quick_shell_qml.qrc`** so AUTORCC re-bundles the QML.
+  UIv2 mirrors the controller state through `QmlPreviewModel` into
+  `src/app/qml_ui/preview/PreviewTransport.qml`. Keep its lower bound, negative-time formatting,
+  cached scrub-release target, and touch/mouse/wheel/key forwarding aligned with
+  `QuickShellPreviewTransport.qml`.
 
 ## 13. Bottom-tab content scale → timeline two-tier scale
 

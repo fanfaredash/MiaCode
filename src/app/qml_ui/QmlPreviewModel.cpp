@@ -20,6 +20,7 @@ QmlPreviewModel::QmlPreviewModel(
 
 double QmlPreviewModel::positionSeconds() const { return controller_->previewPositionSeconds(); }
 double QmlPreviewModel::durationSeconds() const { return controller_->previewDurationSeconds(); }
+double QmlPreviewModel::lowerBoundSeconds() const { return controller_->previewLowerBoundSeconds(); }
 double QmlPreviewModel::rate() const
 {
     QString label = controller_->previewSpeedLabel().trimmed();
@@ -84,3 +85,9 @@ void QmlPreviewModel::toggleRenderMode()
 }
 
 void QmlPreviewModel::stop() { controller_->stopPreview(); }
+
+void QmlPreviewModel::beginScrub() { controller_->beginPreviewScrub(); }
+
+void QmlPreviewModel::updateScrub(double second) { controller_->updatePreviewScrub(second, true); }
+
+void QmlPreviewModel::endScrub(double second) { controller_->endPreviewScrub(second, true); }
