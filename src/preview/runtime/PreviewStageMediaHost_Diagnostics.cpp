@@ -1052,6 +1052,21 @@ void PreviewStageMediaHost::emitFirstPlaybackRenderTrace()
             .arg(destinationAcquireSamples)
             .arg(averageMicroseconds(destinationAcquireTotalUs, destinationAcquireSamples))
             .arg(c.destAcquireWaitMaxUs));
+
+    // Audit §5.6: no field capture so far carries the VRAM budget at the moment of the
+    // stall, so "the driver evicted our resources / we are over budget" could never be
+    // ruled in or out. This runs on the GUI thread, once per first-play trace, so the
+    // DXGI factory round-trip is affordable here (it is not on the render thread).
+    const QList<miacode::diag::AdapterVideoMemorySample> adapters =
+        miacode::diag::sampleAdapterVideoMemory();
+    for (const miacode::diag::AdapterVideoMemorySample& sample : adapters) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("preview/first_playback_bridge_trace"),
+            QString("action=render_stall_vram txn=%1 %2")
+                .arg(transactionId)
+                .arg(miacode::diag::formatAdapterVideoMemoryPayload(sample)));
+    }
 #endif
 }
 

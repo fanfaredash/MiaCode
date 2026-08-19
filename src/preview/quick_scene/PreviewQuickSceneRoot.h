@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QQueue>
 #include <QQuickItem>
+#include <QSet>
 #include "common/PreviewGameplayConfig.h"
 #include <QSize>
 #include <QString>
@@ -76,15 +77,19 @@ private:
     PreviewTextureStats takePendingTextureStatsForPresentation() const;
     void syncVisibleHostWindowBinding(const char* reason = "unspecified");
     void recordRenderPhaseProfile();
+    void noteFirstLayerDraws();
 
     QPointer<PreviewRuntime> runtime_;
     Qt::MouseButton touchPadAuthoringPressedButton_ = Qt::NoButton;
     QMetaObject::Connection runtimeUpdateConnection_;
     QMetaObject::Connection frameSwapConnection_;
+    QMetaObject::Connection fireworkPresentConnection_;
     QMetaObject::Connection windowVisibilityConnection_;
     QMetaObject::Connection renderBeforeSyncConnection_;
     QMetaObject::Connection renderAfterSyncConnection_;
     QMetaObject::Connection renderBeforeRenderConnection_;
+    QMetaObject::Connection renderBeforePassConnection_;
+    QMetaObject::Connection renderAfterPassConnection_;
     QMetaObject::Connection renderAfterRenderConnection_;
     QMetaObject::Connection renderFrameSwapProfileConnection_;
     QMetaObject::Connection sceneGraphInvalidatedConnection_;
@@ -95,6 +100,13 @@ private:
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
         miacode::preview::scene::kPreviewAllRenderLayers;
     QVector<PreviewTextureLayerStats> layerProfileStats_;
+    // Layers already reported by noteFirstLayerDraws(). Render-thread only (written
+    // and read from updatePaintNode), never cleared: "first draw in this scene-graph
+    // lifetime" is exactly the event of interest.
+    QSet<QString> layersFirstDrawn_;
+    // Set in updatePaintNode when the firework layer emitted a node, consumed by the
+    // direct frameSwapped hook. Render-thread only in both directions, so no atomic.
+    bool fireworkNodeInPendingFrame_ = false;
     std::atomic<bool> textureResetRequested_{false};
     PreviewQuickStageBackgroundLayer stageBackgroundLayer_;
     PreviewQuickBackdropLayer backdropLayer_;
@@ -148,8 +160,22 @@ private:
     qint64 renderPhaseSyncStartNs_ = -1;
     qint64 renderPhaseSyncEndNs_ = -1;
     qint64 renderPhaseRenderStartNs_ = -1;
+    // beforeRenderPassRecording / afterRenderPassRecording split render_submit into
+    // the two halves that behave completely differently under a first-play stall:
+    // everything before the pass is QRhi resource work (texture/buffer uploads,
+    // resource creation, swapchain image acquire), everything inside the pass is
+    // draw-call recording, which is where a first-use graphics pipeline (PSO /
+    // shader variant) gets created by the driver. §5.1 of
+    // docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md could not tell
+    // those apart because render_submit_ms was one opaque bracket.
+    qint64 renderPhasePassStartNs_ = -1;
+    qint64 renderPhasePassEndNs_ = -1;
     qint64 renderPhaseRenderEndNs_ = -1;
     qint64 renderPhaseLastLogMs_ = -1;
+    // One-shot: the first frame whose render_submit crosses the stall threshold emits a
+    // GPU/driver context line (adapter, UMD version, VRAM budget) next to the profile so
+    // the field report carries the variables §5.6 asks for. Render-thread only.
+    bool renderStallContextEmitted_ = false;
     // Center display cache — avoid per-frame QImage+texture regeneration.
     miacode::preview_gameplay::CenterDisplayMode cachedCenterDisplayMode_ =
         miacode::preview_gameplay::CenterDisplayMode::Off;

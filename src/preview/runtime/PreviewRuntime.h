@@ -87,7 +87,7 @@ public:
     void notifyVisibleFramePresented();
     // Called from the QSG render thread when the firework layer emits a node;
     // drives the firework warm-up completion check (atomic — thread-safe).
-    void notifyFireworkLayerProducedNode();
+    void notifyFireworkLayerPresentedNode();
     QQuickWindow* visibleHostWindow() const;
     void requestActivate();
     void update();
@@ -289,11 +289,12 @@ private:
     // benign moment.
     //
     // `armed_` flips true when assets are ready. COMPLETION IS GATED ON A
-    // CONFIRMED DRAW, not a blind present count: the firework layer bumps
-    // `fireworkLayerDrawSignal_` (render thread) every time it actually emits a
+    // CONFIRMED PRESENT, not a blind present count and not a bare node emission:
+    // the scene root bumps `fireworkLayerDrawSignal_` (render thread) from a direct
+    // frameSwapped hook for each swapped frame that actually contained a firework
     // node, and `done_` only flips once that signal has advanced past the value
     // captured at arm (`fireworkWarmupArmDrawSignal_`) — i.e. once the synthetic
-    // has genuinely compiled the PSO + uploaded the texture. To guarantee the
+    // has genuinely compiled the PSO, uploaded the texture AND reached the screen. To guarantee the
     // synthetic is drawable wherever the playhead happens to be, it is
     // RE-CENTERED on the live playhead whenever the playhead has travelled far
     // enough to be about to leave the synthetic's lifecycle window, and on every
@@ -324,10 +325,19 @@ private:
     // core/scene/PreviewFireworkWarmupPolicy.h and
     // refreshFireworkWarmupForPlayheadChange().
     double fireworkWarmupCenterSecond_ = 0.0;
-    // Monotonic count of firework-layer node emissions, bumped on the QSG render
-    // thread (notifyFireworkLayerProducedNode) and read on the GUI thread
-    // (handlePresentedFrame / armFireworkPsoWarmupIfReady) — std::atomic crosses
-    // that boundary. `armDrawSignal_` snapshots it at arm time.
+    // Monotonic count of PRESENTED frames that contained a firework-layer node,
+    // bumped on the QSG render thread (notifyFireworkLayerPresentedNode, called from
+    // a direct frameSwapped hook) and read on the GUI thread (handlePresentedFrame /
+    // armFireworkPsoWarmupIfReady) — std::atomic crosses that boundary.
+    // `armDrawSignal_` snapshots it at arm time.
+    //
+    // Counting at NODE-EMISSION time was the earlier, weaker criterion: the node is
+    // emitted during updatePaintNode, one whole render+swap before the pixels exist,
+    // while the GUI-thread completion check runs off a QUEUED frameSwapped hop that
+    // can lag a frame. That combination could retire the warm-up on a frame whose
+    // pipeline build had not actually happened yet — the "warm-up done means the
+    // marker was drawn, not that a render/present completed" gap called out in
+    // docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md §6D-2.
     std::atomic<quint64> fireworkLayerDrawSignal_{0};
     quint64 fireworkWarmupArmDrawSignal_ = 0;
     bool requestedShowObjectStatsHud_ = false;

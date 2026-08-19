@@ -1892,12 +1892,13 @@ void PreviewRuntime::handlePresentedFrame()
     frameState_.presentedFrameCount = presentedFrameCountTotal_;
     updatePresentedFrameStats();
     pendingPresentedStatsRefresh_ = false;
-    // Firework warm-up completion. PRIMARY criterion: the firework layer has
-    // actually emitted a node since the warm-up was armed (its draw signal
+    // Firework warm-up completion. PRIMARY criterion: a PRESENTED frame has
+    // contained a firework node since the warm-up was armed (its draw signal
     // advanced past the arm-time snapshot). That draw is what binds the
     // material pipeline (PSO compiled on first use) and samples the colour-ball
-    // texture (uploaded on first use), so it is the only reliable proof the
-    // warm-up did its job — counting bare presents was the historical bug
+    // texture (uploaded on first use), and the swap is what proves the work
+    // completed rather than merely being recorded (audit §6D-2) — counting bare
+    // presents was the historical bug
     // (presents accrue even on frames where the synthetic was outside its
     // lifecycle window and never drawn). The present-count delta is a BACKSTOP
     // only: if the firework never renders (layer disabled / non-rendering
@@ -2016,14 +2017,14 @@ void PreviewRuntime::removeFireworkWarmupMarkers()
         markers.end());
 }
 
-void PreviewRuntime::notifyFireworkLayerProducedNode()
+void PreviewRuntime::notifyFireworkLayerPresentedNode()
 {
-    // Called on the QSG render thread (from PreviewQuickSceneRoot, after the
-    // firework layer returns a non-null node). A non-null node means the
-    // material pipeline was bound (PSO compiled on first use) and the
-    // colour-ball texture sampled (uploaded on first use) — exactly the work
-    // the warm-up exists to front-load. Bump the signal the GUI-thread
-    // completion check reads. Atomic-only: touch no other member from here.
+    // Called on the QSG render thread (from PreviewQuickSceneRoot's direct
+    // frameSwapped hook) once a SWAPPED frame contained a firework node. The node
+    // means the material pipeline was bound (PSO compiled on first use) and the
+    // colour-ball texture sampled (uploaded on first use); the swap means that work
+    // has actually completed rather than merely been recorded. Bump the signal the
+    // GUI-thread completion check reads. Atomic-only: touch no other member here.
     fireworkLayerDrawSignal_.fetch_add(1, std::memory_order_release);
 }
 
