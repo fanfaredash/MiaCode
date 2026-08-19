@@ -144,13 +144,13 @@ miacode_add_spec(preview_guide_layer_spec
         src/core/chart/document src/core/chart/parser src/timeline
 )
 
-miacode_add_spec(preview_slide_vanilla_trim_spec
+miacode_add_spec(preview_slide_erase_by_area_spec
     OWNER src/core/scene
-    CONTRACT preview.preview-slide-vanilla-trim
+    CONTRACT preview.preview-slide-erase-by-area
     DOMAIN preview KIND behavior RISK high
     EXECUTION ctest STATUS active PLATFORM all
     SOURCES
-        src/tools/preview/PreviewSlideVanillaTrimSpec.cpp
+        src/tools/preview/PreviewSlideEraseByAreaSpec.cpp
         ${_miacode_chart_core}
         ${_miacode_log_core}
         src/core/scene/PreviewTrackShared.h
