@@ -60,6 +60,8 @@
 - [x] 接入 `src/app/qml_ui/`（Mashiro 壳）+ `QmlUiBootstrap`
 - [x] CMake `MiaCode.UI` 模块与皮肤切换入口
 - [x] 预览接真 `QuickShellPreviewSurface`；时间轴接真 `TimelineQuickItem`
+- [x] 预览 PV/BG 启动门闩：`QmlUiBootstrap` 在 v2 根窗口显示后调用
+      `MainWindow::shellNoteQuickUiReady()`，释放 `PreviewStageMediaHost` 的首个谱面路径延迟加载
 - [x] 构建目录回到 `build/`（不要再建未 ignore 的 `build-qml-ui/`）
 - [x] 关窗对齐 v1：`confirmClose` → `notifyRootCloseAccepted` → `preparePreviewForShutdown`  
       （已删 v2 自管 `closeApproved` / `pendingClose`）
@@ -112,7 +114,7 @@ v2 相对 QuickShell v1 的专属面（完成度仍低，但不要回退）：
 | 角色 | 路径 |
 |------|------|
 | 皮肤切换 | `src/app/main.cpp` → `resolveUiSkin()` |
-| v2 bootstrap | `src/app/qml_ui/QmlUiBootstrap.*` |
+| v2 bootstrap | `src/app/qml_ui/QmlUiBootstrap.*`（根窗口显示后提交 Quick UI ready，释放 PV/BG 延迟加载） |
 | 契约根 | `src/app/qml_ui/QmlApplicationContext.*` |
 | 文档桥 | `src/app/qml_ui/QmlDocumentModel.*` |
 | 预览桥 | `src/app/qml_ui/QmlPreviewModel.*` |
