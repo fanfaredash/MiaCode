@@ -193,54 +193,45 @@ int totalWifiTrackArrowCount(const QVector<QVector<QPointF>>& areas)
     return totalArrowCount;
 }
 
-PreviewSlideAutoplayAreas buildPreviewSlideAutoplayAreas(const TimelineNoteMarker& marker)
+PreviewSlideEraseByAreaData buildPreviewSlideEraseByAreaData(const TimelineNoteMarker& marker)
 {
-    PreviewSlideAutoplayAreas autoplayAreas;
+    PreviewSlideEraseByAreaData eraseByAreaData;
     const int segmentCount = marker.slideTrackAreaPoints.size();
     if (segmentCount <= 0) {
-        return autoplayAreas;
+        return eraseByAreaData;
     }
 
     int globalArrowOffset = 0;
-    int lastSegmentArrowCount = 0;
     for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
+        PreviewSlideEraseByAreaSegment segment;
+        segment.arrowOffset = globalArrowOffset;
         const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
         const QVector<double>& thresholds = marker.slideTrackAreaThresholds.value(segmentIndex);
-        int segmentArrowCount = 0;
         for (int areaIndex = 0; areaIndex < areas.size(); ++areaIndex) {
             const int areaArrowCount = areas[areaIndex].size();
-            const int hiddenAt = globalArrowOffset
+            const int hiddenAt = segment.totalArrowCount
                 + hiddenCutWithinArea(marker, segmentIndex, areaIndex, thresholds, areaArrowCount);
-            if (segmentIndex > 0 && areaIndex == 0 && !autoplayAreas.hiddenArrowCountAfterArea.isEmpty()) {
-                // Connected-slide join: the arcade keeps one merged hit-area
-                // list and folds the incoming segment's first area into the
-                // previous slot as its sub hit area, so that slot's exit point
-                // becomes this area's rather than adding a step of its own.
-                autoplayAreas.hiddenArrowCountAfterArea.last() = hiddenAt;
-            } else {
-                autoplayAreas.hiddenArrowCountAfterArea.append(hiddenAt);
-            }
-            globalArrowOffset += areaArrowCount;
-            segmentArrowCount += areaArrowCount;
+            segment.hiddenArrowCountAfterArea.append(hiddenAt);
+            segment.totalArrowCount += areaArrowCount;
         }
-        lastSegmentArrowCount = segmentArrowCount;
-    }
-    autoplayAreas.totalArrowCount = globalArrowOffset;
 
-    // `critical_proportion` is authored per segment and is exactly the arcade's
-    // 1 - lastWaitTime / traceDuration. The arcade measures lastWaitTime once
-    // over the merged list, so scale the last segment's value by that segment's
-    // share of the track; a single-segment slide keeps its value unchanged.
-    const int criticalCount = marker.slideSegmentCriticalProportions.size();
-    const double lastCritical = criticalCount > 0
-        ? marker.slideSegmentCriticalProportions.at(qMin(segmentCount, criticalCount) - 1)
-        : 1.0;
-    const double lastShare = autoplayAreas.totalArrowCount > 0
-        ? static_cast<double>(lastSegmentArrowCount) / autoplayAreas.totalArrowCount
-        : 1.0;
-    autoplayAreas.criticalProportion =
-        qBound(kRenderDurationEpsilon, 1.0 - lastShare * (1.0 - lastCritical), 1.0);
-    return autoplayAreas;
+        // The last segment must have the same erasure curve as the same shape
+        // rendered independently. Earlier segments use the complete local
+        // duration, then their remaining tail disappears at the join.
+        if (segmentIndex == segmentCount - 1
+            && segmentIndex < marker.slideSegmentCriticalProportions.size()) {
+            segment.criticalProportion = qBound(
+                kRenderDurationEpsilon,
+                marker.slideSegmentCriticalProportions.at(segmentIndex),
+                1.0
+            );
+        }
+
+        globalArrowOffset += segment.totalArrowCount;
+        eraseByAreaData.segments.append(segment);
+    }
+    eraseByAreaData.totalArrowCount = globalArrowOffset;
+    return eraseByAreaData;
 }
 
 void previewSlideStarSegment(
@@ -285,62 +276,34 @@ void previewSlideStarSegment(
     }
 }
 
-qreal previewSlideStarProgress(const TimelineNoteMarker& marker, double playheadSeconds)
+int previewSlideEraseByAreaHiddenArrowCount(
+    const PreviewSlideEraseByAreaData& data,
+    int segmentIndex,
+    qreal segmentProportion
+)
 {
-    const int segmentCount = marker.slideTrackAreaPoints.size();
-    if (segmentCount <= 0) {
-        return 0.0;
-    }
-
-    // Weight segments the way the parser split the trace time between them, so
-    // the front cannot drift away from the star. A connected chain currently
-    // always resolves to a length-proportional split, but reading the parsed
-    // durations keeps this correct if per-segment timing is ever honoured.
-    QVector<double> segmentWeights(segmentCount, 0.0);
-    double totalWeight = 0.0;
-    const bool useDurations = marker.slideSegmentDurations.size() >= segmentCount;
-    for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
-        double weight = 0.0;
-        if (useDurations) {
-            weight = qMax(0.0, marker.slideSegmentDurations.at(segmentIndex));
-        } else {
-            for (const QVector<QPointF>& areaPoints : marker.slideTrackAreaPoints[segmentIndex]) {
-                weight += areaPoints.size();
-            }
-        }
-        segmentWeights[segmentIndex] = weight;
-        totalWeight += weight;
-    }
-    if (totalWeight <= 0.0) {
-        return 0.0;
-    }
-
-    int segmentIndex = 0;
-    qreal segmentProportion = 1.0;
-    previewSlideStarSegment(marker, playheadSeconds, segmentCount, &segmentIndex, &segmentProportion);
-
-    double weightBefore = 0.0;
-    for (int index = 0; index < segmentIndex; ++index) {
-        weightBefore += segmentWeights[index];
-    }
-    const double travelled = weightBefore + segmentProportion * segmentWeights[segmentIndex];
-    return qBound<qreal>(0.0, static_cast<qreal>(travelled / totalWeight), 1.0);
-}
-
-int previewSlideVanillaHiddenArrowCount(const PreviewSlideAutoplayAreas& areas, qreal starProgress)
-{
-    if (!areas.isValid()) {
+    if (!data.isValid()) {
         return 0;
     }
 
-    const int areaCount = areas.areaCount();
-    const qreal num6 = qMax<qreal>(0.0, starProgress) / areas.criticalProportion;
+    const int clampedSegmentIndex = qBound(0, segmentIndex, data.segments.size() - 1);
+    const PreviewSlideEraseByAreaSegment& segment = data.segments.at(clampedSegmentIndex);
+    if (!segment.isValid()) {
+        return qBound(0, segment.arrowOffset, data.totalArrowCount);
+    }
+
+    const int areaCount = segment.areaCount();
+    const qreal num6 = qMax<qreal>(0.0, segmentProportion) / segment.criticalProportion;
     const qreal scaled = areaCount * num6;
     const int hitIndex = scaled >= areaCount ? areaCount - 1 : static_cast<int>(qMax<qreal>(0.0, scaled));
     if (hitIndex <= 0) {
-        return 0;
+        return qBound(0, segment.arrowOffset, data.totalArrowCount);
     }
-    return qBound(0, areas.hiddenArrowCountAfterArea.at(hitIndex - 1), areas.totalArrowCount);
+    return qBound(
+        0,
+        segment.arrowOffset + segment.hiddenArrowCountAfterArea.at(hitIndex - 1),
+        data.totalArrowCount
+    );
 }
 
 int previewWifiEraseByAreaHiddenRowCount(
