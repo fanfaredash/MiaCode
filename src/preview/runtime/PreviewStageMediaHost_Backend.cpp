@@ -252,6 +252,29 @@ void PreviewStageMediaHost::initializeBackendObjects()
         const double mediaSecond = static_cast<double>(posMs) / 1000.0;
         lastTimelineSecond_ = qMax(0.0, mediaSecond - timelineOffsetSeconds_);
         settlePendingSeekAcks(mediaSecond, mediaSecond);
+        if (staleEndOfMediaResumePending_) {
+            // The stale-EndOfMedia recovery seek landed, so the player's end-of-file
+            // latch is cleared and play() will resume here instead of restarting the
+            // clip from zero. See tryRecoverFromStaleEndOfMedia.
+            staleEndOfMediaResumePending_ = false;
+            ++staleEndOfMediaResumeSerial_;
+            if (player_ != nullptr) {
+                player_->play();
+            }
+            videoPlaybackActive_ = true;
+            videoPlaybackPendingStart_ = false;
+            videoPlaybackActiveElapsed_.restart();
+            if (videoFrameElapsed_.isValid()) {
+                videoFrameElapsed_.restart();
+            }
+            appendPreviewStageMediaLog(
+                QStringLiteral("stale_end_of_media_resumed"),
+                QString("second=%1 position_ms=%2 recoveries=%3")
+                    .arg(mediaSecond, 0, 'f', 6)
+                    .arg(posMs)
+                    .arg(staleEndOfMediaRecoveries_));
+            emit diagnosticsChanged();
+        }
         updateClockDelta();
 #if defined(Q_OS_WIN)
         // HW-decode diag: the demuxer seek landed; the decoder now catches up to the
@@ -294,6 +317,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             // transport's lifetime owner. Leave lastVideoFrame_ in both video
             // sinks so the final decoded frame stays visible while the chart,
             // BGM and SFX continue to the unified content-duration endpoint.
+            const bool wasPlaybackActive = videoPlaybackActive_;
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
@@ -301,6 +325,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             updateClockDelta();
             updateVideoFrameStallState(true);
             emitHwDecodeDiagSummary("eom");
+            handleVideoEndOfMedia(wasPlaybackActive);
             emit diagnosticsChanged();
             return;
         }
@@ -471,6 +496,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             // and end only this subordinate video stream. The main preview
             // transport is completed exclusively by the timeline/content
             // duration policy.
+            const bool wasPlaybackActive = videoPlaybackActive_;
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
@@ -478,6 +504,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             recordPvMemoryBoundary(PvMemoryBoundary::EndOfMedia);
             updateClockDelta();
             updateVideoFrameStallState(true);
+            handleVideoEndOfMedia(wasPlaybackActive);
             emit diagnosticsChanged();
             return;
         }

@@ -1445,6 +1445,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/core/scene src/core/video src/timeline
     )
 
+    miacode_add_dev_tool(preview_end_of_media_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewEndOfMediaPolicySpec.cpp
+            src/core/video/PreviewEndOfMediaPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/core/video
+    )
+
     miacode_add_dev_tool(preview_firework_warmup_policy_spec TEST
         SOURCES
             src/tools/preview/PreviewFireworkWarmupPolicySpec.cpp

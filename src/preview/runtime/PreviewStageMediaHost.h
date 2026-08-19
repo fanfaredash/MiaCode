@@ -227,6 +227,13 @@ private:
     // drain the QtAVPlayer copy-path cumulative counters into one runtime-log line on a
     // low-frequency cadence (seek / end-of-media). No-op off the QtAVPlayer/Windows path.
     void emitHwDecodeDiagSummary(const char* reason);
+    // Audit §5.2 — decide what a backend EndOfMedia actually means and, when it is
+    // stale, put the PV back on screen instead of leaving it frozen on the frame
+    // that happened to be last. Never touches the main transport: a PV that really
+    // ended stays subordinate (docs/audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md).
+    void handleVideoEndOfMedia(bool wasPlaybackActive);
+    bool tryRecoverFromStaleEndOfMedia(double targetSecond);
+    void resetStaleEndOfMediaRecovery();
     void beginFirstPlaybackRenderTrace();
     void emitFirstPlaybackRenderTrace();
     void resetVideoFrameDiagnostics();
@@ -358,6 +365,17 @@ private:
     qint64 videoFrameCountTotal_ = 0;
     qint64 videoFrameStallCount_ = 0;
     bool videoFrameStalled_ = false;
+    // Stale-EndOfMedia recovery budget, reset per loaded media (audit §5.2). Bounded
+    // and escalating: a cheap seek+resume first, a full in-place reload after that,
+    // then give up and keep the last frame so a genuinely broken file cannot put the
+    // preview into a reload loop.
+    int staleEndOfMediaRecoveries_ = 0;
+    // Set between the recovery seek and its `seeked` acknowledgement. QAVPlayer::play()
+    // re-seeks to 0 while its end-of-file latch is still set, so the resume has to wait
+    // for the seek to land or it would restart the PV from the beginning.
+    bool staleEndOfMediaResumePending_ = false;
+    quint64 staleEndOfMediaResumeSerial_ = 0;
+    double staleEndOfMediaResumeSecond_ = 0.0;
     // Snapshot taken exactly as a newly loaded video's first prepared playback
     // commits.  QtAVPlayer's bridge counters are process-wide atomics, so this
     // lets a first-play watchdog report only the work caused after that commit.

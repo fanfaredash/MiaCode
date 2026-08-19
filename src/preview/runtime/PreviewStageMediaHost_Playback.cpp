@@ -54,6 +54,10 @@ using namespace miacode::preview::psmh_detail;
 
 void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transactionId)
 {
+    // A new playback transaction supersedes any in-flight stale-EndOfMedia recovery:
+    // its resume would otherwise fire on this transaction's seek acknowledgement.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
 #ifdef MIACODE_USE_QTAVPLAYER
     initializeBackendObjects();
     const double clampedSecond = qMax(0.0, seconds);
@@ -270,8 +274,12 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     videoPlaybackActiveElapsed_.restart();
     appendPreviewStageMediaLog(
         QStringLiteral("commit_prepared_playback"),
+        // `video_prewarmed` answers the question audit §5.4 could not: had the video
+        // pipeline (VideoOutput material + the first hardware-decoded texture) already
+        // been exercised when the user pressed play, or does this commit hand the
+        // renderer a brand-new material to build on the very frame being waited on?
         QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 prepared_ready=%5 prepared_landing_confirmed=%6 "
-                "prepared_txn=%7 prepared_target_ms=%8 reseek=%9")
+                "prepared_txn=%7 prepared_target_ms=%8 reseek=%9 frames_before_commit=%10 video_prewarmed=%11")
             .arg(playbackTransactionId_)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6)
@@ -280,7 +288,9 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
             .arg(preparedPlaybackLandingConfirmed_ ? 1 : 0)
             .arg(preparedPlaybackTransaction_)
             .arg(preparedPlaybackTargetMs_)
-            .arg(preparedLandingMatchesCommit ? 0 : 1));
+            .arg(preparedLandingMatchesCommit ? 0 : 1)
+            .arg(videoFrameCountTotal_)
+            .arg(videoFrameCountTotal_ > 0 ? 1 : 0));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
     preparedPlaybackLandingConfirmed_ = false;
@@ -452,6 +462,10 @@ void PreviewStageMediaHost::startPlayback(double seconds)
 {
     MC_OP("PreviewStageMediaHost::startPlayback");
     recordPvMemoryBoundary(PvMemoryBoundary::Play);
+    // This start owns the transport from here; a stale-EndOfMedia recovery seek still
+    // in flight must not resume on this start's own seek acknowledgement.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
 #ifdef MIACODE_USE_QTAVPLAYER
     initializeBackendObjects();
     observedPlayheadSecond_ = qMax(0.0, seconds);
@@ -634,6 +648,11 @@ void PreviewStageMediaHost::startPlayback(double seconds)
 
 void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
 {
+    // Same reason as preparePlaybackStart: this seek's acknowledgement must not be
+    // mistaken for a recovery landing and resume playback while the preview is paused.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
+
 #ifdef MIACODE_USE_QTAVPLAYER
     const double clampedSecond = qMax(0.0, seconds);
     observedPlayheadSecond_ = clampedSecond;
@@ -889,6 +908,10 @@ void PreviewStageMediaHost::pausePlayback()
     pausedSeekTargetSecond_ = 0.0;
     pausedSeekGeneration_ = 0;
     ++pausedSeekTimeoutSerial_;
+    // A stale-EndOfMedia recovery seek may still be in flight; its `seeked` handler
+    // would otherwise resume playback and undo this pause.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     videoPlaybackActiveElapsed_.invalidate();
