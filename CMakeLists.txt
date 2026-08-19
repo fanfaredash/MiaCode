@@ -1502,9 +1502,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document src/core/chart/parser src/timeline
     )
 
-    miacode_add_dev_tool(preview_slide_vanilla_trim_spec TEST
+    miacode_add_dev_tool(preview_slide_erase_by_area_spec TEST
         SOURCES
-            src/tools/preview/PreviewSlideVanillaTrimSpec.cpp
+            src/tools/preview/PreviewSlideEraseByAreaSpec.cpp
             ${_miacode_chart_core}
             ${_miacode_log_core}
             src/core/scene/PreviewTrackShared.h
