@@ -50,8 +50,8 @@ Rectangle {
 
         Shell.QuickShellPreviewSurface {
             anchors.centerIn: parent
-            width: root.fittedFrameWidth(parent.width * 0.97, parent.height * 0.97)
-            height: root.fittedFrameHeight(parent.width * 0.97, parent.height * 0.97)
+            width: root.fittedFrameWidth(parent.width, parent.height)
+            height: root.fittedFrameHeight(parent.width, parent.height)
             runtime: root.previewSession.runtime
             mediaHost: root.previewSession.mediaHost
             logger: root.shellController
