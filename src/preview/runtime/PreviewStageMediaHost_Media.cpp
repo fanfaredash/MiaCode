@@ -316,6 +316,7 @@ void PreviewStageMediaHost::clearMedia()
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -417,6 +418,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -461,6 +463,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -530,6 +533,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;

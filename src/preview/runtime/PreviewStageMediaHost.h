@@ -132,6 +132,14 @@ public:
     double videoFrameIntervalMaxMs() const;
     qint64 videoFrameStallCount() const;
     bool videoFrameStalled() const;
+    // Called by the preview-present watchdog when the first playback frame has
+    // not presented for an abnormally long time.  In a --debug Windows/QtAV
+    // run this emits one bounded breakdown of the two-device D3D11 bridge;
+    // elsewhere it is a no-op.
+    void noteFirstPlaybackRenderStall(quint64 transactionId,
+                                      qint64 presentWaitMs,
+                                      double visualSecond,
+                                      double audioSecond);
     void setVideoFrameToImageMaxFps(double fps);
     void setObservedPlayheadSecond(double second);
     QString debugMediaTypeName() const;
@@ -219,6 +227,8 @@ private:
     // drain the QtAVPlayer copy-path cumulative counters into one runtime-log line on a
     // low-frequency cadence (seek / end-of-media). No-op off the QtAVPlayer/Windows path.
     void emitHwDecodeDiagSummary(const char* reason);
+    void beginFirstPlaybackRenderTrace();
+    void emitFirstPlaybackRenderTrace();
     void resetVideoFrameDiagnostics();
     bool updateVideoFrameStallState(bool logTransition);
     qint64 currentVideoFrameAgeForDiagnosticsMs() const;
@@ -314,6 +324,9 @@ private:
     quint64 preparedPlaybackTransaction_ = 0;
     bool preparedPlaybackPending_ = false;
     bool preparedPlaybackReady_ = false;
+    // A ready notification can be a timeout/recovery fallback. Only this bit
+    // proves that the current decoder actually reached the prepared target.
+    bool preparedPlaybackLandingConfirmed_ = false;
     double lastTimelineSecond_ = 0.0;
     qint64 lastSeekMs_ = -1;
     // HW-decode diag: seek-landing latency clock + one-shot flag, read at the first
@@ -345,6 +358,40 @@ private:
     qint64 videoFrameCountTotal_ = 0;
     qint64 videoFrameStallCount_ = 0;
     bool videoFrameStalled_ = false;
+    // Snapshot taken exactly as a newly loaded video's first prepared playback
+    // commits.  QtAVPlayer's bridge counters are process-wide atomics, so this
+    // lets a first-play watchdog report only the work caused after that commit.
+    struct FirstPlaybackBridgeTrace {
+        bool armed = false;
+        bool reported = false;
+        bool reportPending = false;
+        quint64 transactionId = 0;
+        qint64 presentWaitMs = 0;
+        double visualSecond = 0.0;
+        double audioSecond = 0.0;
+        quint64 copiedTwoDevice = 0;
+        quint64 texturesCreated = 0;
+        quint64 acquireTimeouts = 0;
+        quint64 copyFailures = 0;
+        quint64 bridgeSamples = 0;
+        quint64 bridgeTotalUs = 0;
+        quint64 sourceSetupSamples = 0;
+        quint64 sourceSetupTotalUs = 0;
+        quint64 destinationSetupSamples = 0;
+        quint64 destinationSetupTotalUs = 0;
+        quint64 sourceTextureCreateSamples = 0;
+        quint64 sourceTextureCreateTotalUs = 0;
+        quint64 destinationTextureCreateSamples = 0;
+        quint64 destinationTextureCreateTotalUs = 0;
+        quint64 sharedResourceOpenSamples = 0;
+        quint64 sharedResourceOpenTotalUs = 0;
+        quint64 sourceAcquireSamples = 0;
+        quint64 sourceAcquireTotalUs = 0;
+        quint64 destinationAcquireSamples = 0;
+        quint64 destinationAcquireTotalUs = 0;
+    };
+    FirstPlaybackBridgeTrace firstPlaybackBridgeTrace_;
+    QElapsedTimer firstPlaybackBridgeTraceElapsed_;
     miacode::preview::pv_memory::Diagnostics pvMemoryDiagnostics_;
     QElapsedTimer pvMemoryElapsed_;
     bool pvMemoryPeriodicTimerArmed_ = false;

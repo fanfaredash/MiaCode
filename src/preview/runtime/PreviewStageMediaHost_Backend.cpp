@@ -269,11 +269,18 @@ void PreviewStageMediaHost::initializeBackendObjects()
     connect(player_, &QAVPlayer::mediaStatusChanged, this, [this](QAVPlayer::MediaStatus status) {
         appendPreviewStageMediaLog(
             QStringLiteral("media_status"),
-            QString("status=%1 state=%2 position_ms=%3 kind=%4")
+            QString("status=%1 state=%2 position_ms=%3 kind=%4 txn=%5 last_seek_ms=%6 "
+                    "active_elapsed_ms=%7 frames=%8 last_pts_ms=%9 prepared_pending=%10")
                 .arg(avMediaStatusName(status))
                 .arg(avStateName(player_ != nullptr ? player_->state() : QAVPlayer::StoppedState))
                 .arg(player_ != nullptr ? player_->position() : -1)
-                .arg(debugMediaTypeName()));
+                .arg(debugMediaTypeName())
+                .arg(playbackTransactionId_)
+                .arg(lastSeekMs_)
+                .arg(videoPlaybackActiveElapsed_.isValid() ? videoPlaybackActiveElapsed_.elapsed() : -1)
+                .arg(videoFrameCountTotal_)
+                .arg(lastFramePtsSeconds_ >= 0.0 ? qRound64(lastFramePtsSeconds_ * 1000.0) : -1)
+                .arg(preparedPlaybackPending_ ? 1 : 0));
         if (status == QAVPlayer::LoadedMedia) {
             videoBackendLoaded_ = true;
             return;
@@ -384,6 +391,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             );
             preparedPlaybackPending_ = false;
             preparedPlaybackReady_ = true;
+            preparedPlaybackLandingConfirmed_ = true;
             emit playbackStartPrepared(preparedPlaybackTargetSecond_, preparedPlaybackTransaction_);
         }
         emit playbackPositionChanged(lastTimelineSecond_);
@@ -688,6 +696,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
     ++videoPlaybackWatchdogSerial_;
     pausedSeekCompletionPending_ = false;
     preparedPlaybackPending_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     if (completePreparedPlayback) {
         preparedPlaybackReady_ = true;
     }

@@ -318,6 +318,7 @@ private:
     bool fireworkWarmupArmed_ = false;
     bool fireworkWarmupDone_ = false;
     qint64 fireworkWarmupArmPresentCount_ = -1;
+    QElapsedTimer fireworkWarmupElapsed_;
     // Playhead the synthetic is currently centred on. The re-centre test compares
     // against this instead of firing on every playhead change — see
     // core/scene/PreviewFireworkWarmupPolicy.h and

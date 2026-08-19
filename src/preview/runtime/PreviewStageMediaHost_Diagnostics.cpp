@@ -69,6 +69,19 @@ double fpsFromAverageMs(double averageMs)
     return averageMs > 1e-6 ? 1000.0 / averageMs : 0.0;
 }
 
+quint64 counterDelta(quint64 current, quint64 baseline)
+{
+    // The QtAV counters are process-wide and monotonically increasing.  Be
+    // defensive if a future backend changes that contract or a torn reset is
+    // observed: a negative delta must never be printed as a giant unsigned value.
+    return current >= baseline ? current - baseline : 0;
+}
+
+quint64 averageMicroseconds(quint64 totalUs, quint64 samples)
+{
+    return samples > 0 ? totalUs / samples : 0;
+}
+
 }  // namespace
 
 miacode::preview::pv_memory::Observation PreviewStageMediaHost::pvMemoryObservation(
@@ -565,6 +578,7 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
             );
             preparedPlaybackPending_ = false;
             preparedPlaybackReady_ = true;
+            preparedPlaybackLandingConfirmed_ = true;
             emit playbackStartPrepared(preparedPlaybackTargetSecond_, preparedPlaybackTransaction_);
         } else {
             appendPreviewStageMediaLog(
@@ -742,13 +756,54 @@ void PreviewStageMediaHost::emitHwDecodeDiagSummary(const char* reason)
         return;  // nothing decoded yet — skip stale-zero lines
     }
     miacode::preview::drainSharedPreviewD3D11DebugMessages();
+    if (!miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        // Keep the pre-existing seek/end summary compact unless the caller
+        // explicitly asked for frame-pacing diagnostics.  In particular, do
+        // not expose zeroed timing columns when their per-frame measurement is
+        // disabled.
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("preview/hwdecode_summary"),
+            QString("reason=%1 path=%2 copied_single=%3 copied_two=%4 tex_created=%5 "
+                    "acq_timeout=%6 copy_fail=%7 res_changes=%8 dumped=%9 "
+                    "completion_waits=%10 completion_wait_timeouts=%11 frames_decode_error=%12 "
+                    "corrupt_dropped=%13 codec=%14 coded=%15x%16 disp=%17x%18 fmt=0x%19")
+                .arg(QString::fromLatin1(reason))
+                .arg(c.lastPath == 1 ? QStringLiteral("single")
+                                     : c.lastPath == 0 ? QStringLiteral("two-device")
+                                                       : QStringLiteral("none"))
+                .arg(c.copiedFramesSingle)
+                .arg(c.copiedFramesTwoDevice)
+                .arg(c.texturesCreated)
+                .arg(c.acquireSyncTimeouts)
+                .arg(c.copyFailures)
+                .arg(c.resolutionChanges)
+                .arg(c.hwFramesDumped)
+                .arg(c.completionWaits)
+                .arg(c.completionWaitTimeouts)
+                .arg(c.framesDecodeError)
+                .arg(c.corruptFramesDropped)
+                .arg(c.codecName != nullptr ? QString::fromLatin1(c.codecName) : QStringLiteral("?"))
+                .arg(c.lastCodedWidth).arg(c.lastCodedHeight)
+                .arg(c.lastDisplayWidth).arg(c.lastDisplayHeight)
+                .arg(c.lastDxgiFormat, 0, 16));
+        return;
+    }
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("preview/hwdecode_summary"),
         QString("reason=%1 path=%2 copied_single=%3 copied_two=%4 tex_created=%5 "
-                "acq_timeout=%6 copy_fail=%7 res_changes=%8 dumped=%9 "
-                "completion_waits=%10 completion_wait_timeouts=%11 frames_decode_error=%12 "
-                "corrupt_dropped=%13 codec=%14 coded=%15x%16 disp=%17x%18 fmt=0x%19")
+                "acq_timeout=%6 src_acq_n=%7 src_acq_avg_us=%8 src_acq_max_us=%9 "
+                "dest_acq_n=%10 dest_acq_avg_us=%11 dest_acq_max_us=%12 "
+                "bridge_n=%13 bridge_avg_us=%14 bridge_max_us=%15 "
+                "src_setup_n=%16 src_setup_avg_us=%17 src_setup_max_us=%18 "
+                "dest_setup_n=%19 dest_setup_avg_us=%20 dest_setup_max_us=%21 "
+                "src_tex_create_n=%22 src_tex_create_avg_us=%23 src_tex_create_max_us=%24 "
+                "dest_tex_create_n=%25 dest_tex_create_avg_us=%26 dest_tex_create_max_us=%27 "
+                "shared_open_n=%28 shared_open_avg_us=%29 shared_open_max_us=%30 "
+                "copy_fail=%31 res_changes=%32 dumped=%33 completion_waits=%34 "
+                "completion_wait_timeouts=%35 frames_decode_error=%36 corrupt_dropped=%37 "
+                "codec=%38 coded=%39x%40 disp=%41x%42 fmt=0x%43")
             .arg(QString::fromLatin1(reason))
             .arg(c.lastPath == 1 ? QStringLiteral("single")
                                  : c.lastPath == 0 ? QStringLiteral("two-device")
@@ -757,6 +812,35 @@ void PreviewStageMediaHost::emitHwDecodeDiagSummary(const char* reason)
             .arg(c.copiedFramesTwoDevice)
             .arg(c.texturesCreated)
             .arg(c.acquireSyncTimeouts)
+            .arg(c.srcAcquireWaitSamples)
+            .arg(c.srcAcquireWaitSamples > 0 ? c.srcAcquireWaitTotalUs / c.srcAcquireWaitSamples : 0)
+            .arg(c.srcAcquireWaitMaxUs)
+            .arg(c.destAcquireWaitSamples)
+            .arg(c.destAcquireWaitSamples > 0 ? c.destAcquireWaitTotalUs / c.destAcquireWaitSamples : 0)
+            .arg(c.destAcquireWaitMaxUs)
+            .arg(c.twoDeviceBridgeSamples)
+            .arg(c.twoDeviceBridgeSamples > 0 ? c.twoDeviceBridgeTotalUs / c.twoDeviceBridgeSamples : 0)
+            .arg(c.twoDeviceBridgeMaxUs)
+            .arg(c.twoDeviceSourceSetupSamples)
+            .arg(c.twoDeviceSourceSetupSamples > 0
+                ? c.twoDeviceSourceSetupTotalUs / c.twoDeviceSourceSetupSamples : 0)
+            .arg(c.twoDeviceSourceSetupMaxUs)
+            .arg(c.twoDeviceDestinationSetupSamples)
+            .arg(c.twoDeviceDestinationSetupSamples > 0
+                ? c.twoDeviceDestinationSetupTotalUs / c.twoDeviceDestinationSetupSamples : 0)
+            .arg(c.twoDeviceDestinationSetupMaxUs)
+            .arg(c.sourceTextureCreateSamples)
+            .arg(c.sourceTextureCreateSamples > 0
+                ? c.sourceTextureCreateTotalUs / c.sourceTextureCreateSamples : 0)
+            .arg(c.sourceTextureCreateMaxUs)
+            .arg(c.destinationTextureCreateSamples)
+            .arg(c.destinationTextureCreateSamples > 0
+                ? c.destinationTextureCreateTotalUs / c.destinationTextureCreateSamples : 0)
+            .arg(c.destinationTextureCreateMaxUs)
+            .arg(c.sharedResourceOpenSamples)
+            .arg(c.sharedResourceOpenSamples > 0
+                ? c.sharedResourceOpenTotalUs / c.sharedResourceOpenSamples : 0)
+            .arg(c.sharedResourceOpenMaxUs)
             .arg(c.copyFailures)
             .arg(c.resolutionChanges)
             .arg(c.hwFramesDumped)
@@ -774,6 +858,203 @@ void PreviewStageMediaHost::emitHwDecodeDiagSummary(const char* reason)
 }
 #endif  // MIACODE_USE_QTAVPLAYER
 
+void PreviewStageMediaHost::beginFirstPlaybackRenderTrace()
+{
+    firstPlaybackBridgeTrace_ = {};
+    firstPlaybackBridgeTraceElapsed_.invalidate();
+#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()
+        || !miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        return;
+    }
+
+    QAVPreviewDiagCounters c{};
+    qavGetPreviewDiagCounters(&c);
+    firstPlaybackBridgeTrace_.armed = true;
+    firstPlaybackBridgeTrace_.transactionId = playbackTransactionId_;
+    firstPlaybackBridgeTrace_.copiedTwoDevice = c.copiedFramesTwoDevice;
+    firstPlaybackBridgeTrace_.texturesCreated = c.texturesCreated;
+    firstPlaybackBridgeTrace_.acquireTimeouts = c.acquireSyncTimeouts;
+    firstPlaybackBridgeTrace_.copyFailures = c.copyFailures;
+    firstPlaybackBridgeTrace_.bridgeSamples = c.twoDeviceBridgeSamples;
+    firstPlaybackBridgeTrace_.bridgeTotalUs = c.twoDeviceBridgeTotalUs;
+    firstPlaybackBridgeTrace_.sourceSetupSamples = c.twoDeviceSourceSetupSamples;
+    firstPlaybackBridgeTrace_.sourceSetupTotalUs = c.twoDeviceSourceSetupTotalUs;
+    firstPlaybackBridgeTrace_.destinationSetupSamples = c.twoDeviceDestinationSetupSamples;
+    firstPlaybackBridgeTrace_.destinationSetupTotalUs = c.twoDeviceDestinationSetupTotalUs;
+    firstPlaybackBridgeTrace_.sourceTextureCreateSamples = c.sourceTextureCreateSamples;
+    firstPlaybackBridgeTrace_.sourceTextureCreateTotalUs = c.sourceTextureCreateTotalUs;
+    firstPlaybackBridgeTrace_.destinationTextureCreateSamples = c.destinationTextureCreateSamples;
+    firstPlaybackBridgeTrace_.destinationTextureCreateTotalUs = c.destinationTextureCreateTotalUs;
+    firstPlaybackBridgeTrace_.sharedResourceOpenSamples = c.sharedResourceOpenSamples;
+    firstPlaybackBridgeTrace_.sharedResourceOpenTotalUs = c.sharedResourceOpenTotalUs;
+    firstPlaybackBridgeTrace_.sourceAcquireSamples = c.srcAcquireWaitSamples;
+    firstPlaybackBridgeTrace_.sourceAcquireTotalUs = c.srcAcquireWaitTotalUs;
+    firstPlaybackBridgeTrace_.destinationAcquireSamples = c.destAcquireWaitSamples;
+    firstPlaybackBridgeTrace_.destinationAcquireTotalUs = c.destAcquireWaitTotalUs;
+    firstPlaybackBridgeTraceElapsed_.start();
+
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/first_playback_bridge_trace"),
+        QString("action=arm txn=%1 path=%2 baseline_copied_two=%3 baseline_textures=%4")
+            .arg(playbackTransactionId_)
+            .arg(c.lastPath == 1 ? QStringLiteral("single")
+                                 : c.lastPath == 0 ? QStringLiteral("two-device")
+                                                   : QStringLiteral("none"))
+            .arg(c.copiedFramesTwoDevice)
+            .arg(c.texturesCreated));
+#endif
+}
+
+void PreviewStageMediaHost::noteFirstPlaybackRenderStall(quint64 transactionId,
+                                                          qint64 presentWaitMs,
+                                                          double visualSecond,
+                                                          double audioSecond)
+{
+#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)
+    constexpr qint64 kFirstPlaybackTraceWindowMs = 10000;
+    constexpr qint64 kMeaningfulRenderStallMs = 100;
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()
+        || !miacode::debug_options::previewFramePacingDiagnosticsEnabled()
+        || !firstPlaybackBridgeTrace_.armed
+        || firstPlaybackBridgeTrace_.reported
+        || firstPlaybackBridgeTrace_.reportPending
+        || transactionId != firstPlaybackBridgeTrace_.transactionId
+        || !firstPlaybackBridgeTraceElapsed_.isValid()
+        || firstPlaybackBridgeTraceElapsed_.elapsed() > kFirstPlaybackTraceWindowMs
+        || presentWaitMs < kMeaningfulRenderStallMs) {
+        return;
+    }
+
+    // Bridge timings are committed by scope guards on the QSG render thread.
+    // The GUI watchdog can run while that thread is still blocked, so capture
+    // shortly after the watchdog rather than producing an unhelpful all-zero
+    // snapshot from the middle of the stalled call.
+    firstPlaybackBridgeTrace_.reportPending = true;
+    firstPlaybackBridgeTrace_.presentWaitMs = presentWaitMs;
+    firstPlaybackBridgeTrace_.visualSecond = visualSecond;
+    firstPlaybackBridgeTrace_.audioSecond = audioSecond;
+    QTimer::singleShot(250, this, [this]() {
+        emitFirstPlaybackRenderTrace();
+    });
+#else
+    Q_UNUSED(transactionId);
+    Q_UNUSED(presentWaitMs);
+    Q_UNUSED(visualSecond);
+    Q_UNUSED(audioSecond);
+#endif
+}
+
+void PreviewStageMediaHost::emitFirstPlaybackRenderTrace()
+{
+#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)
+    constexpr qint64 kFirstPlaybackTraceWindowMs = 10000;
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()
+        || !miacode::debug_options::previewFramePacingDiagnosticsEnabled()
+        || !firstPlaybackBridgeTrace_.armed
+        || firstPlaybackBridgeTrace_.reported
+        || !firstPlaybackBridgeTrace_.reportPending
+        || !firstPlaybackBridgeTraceElapsed_.isValid()
+        || firstPlaybackBridgeTraceElapsed_.elapsed() > kFirstPlaybackTraceWindowMs) {
+        return;
+    }
+
+    firstPlaybackBridgeTrace_.reportPending = false;
+    firstPlaybackBridgeTrace_.reported = true;
+    const quint64 transactionId = firstPlaybackBridgeTrace_.transactionId;
+    const qint64 presentWaitMs = firstPlaybackBridgeTrace_.presentWaitMs;
+    const double visualSecond = firstPlaybackBridgeTrace_.visualSecond;
+    const double audioSecond = firstPlaybackBridgeTrace_.audioSecond;
+    QAVPreviewDiagCounters c{};
+    qavGetPreviewDiagCounters(&c);
+    miacode::preview::drainSharedPreviewD3D11DebugMessages();
+
+    const quint64 bridgeSamples = counterDelta(
+        c.twoDeviceBridgeSamples, firstPlaybackBridgeTrace_.bridgeSamples);
+    const quint64 bridgeTotalUs = counterDelta(
+        c.twoDeviceBridgeTotalUs, firstPlaybackBridgeTrace_.bridgeTotalUs);
+    const quint64 sourceSetupSamples = counterDelta(
+        c.twoDeviceSourceSetupSamples, firstPlaybackBridgeTrace_.sourceSetupSamples);
+    const quint64 sourceSetupTotalUs = counterDelta(
+        c.twoDeviceSourceSetupTotalUs, firstPlaybackBridgeTrace_.sourceSetupTotalUs);
+    const quint64 destinationSetupSamples = counterDelta(
+        c.twoDeviceDestinationSetupSamples, firstPlaybackBridgeTrace_.destinationSetupSamples);
+    const quint64 destinationSetupTotalUs = counterDelta(
+        c.twoDeviceDestinationSetupTotalUs, firstPlaybackBridgeTrace_.destinationSetupTotalUs);
+    const quint64 sourceTextureCreateSamples = counterDelta(
+        c.sourceTextureCreateSamples, firstPlaybackBridgeTrace_.sourceTextureCreateSamples);
+    const quint64 sourceTextureCreateTotalUs = counterDelta(
+        c.sourceTextureCreateTotalUs, firstPlaybackBridgeTrace_.sourceTextureCreateTotalUs);
+    const quint64 destinationTextureCreateSamples = counterDelta(
+        c.destinationTextureCreateSamples, firstPlaybackBridgeTrace_.destinationTextureCreateSamples);
+    const quint64 destinationTextureCreateTotalUs = counterDelta(
+        c.destinationTextureCreateTotalUs, firstPlaybackBridgeTrace_.destinationTextureCreateTotalUs);
+    const quint64 sharedResourceOpenSamples = counterDelta(
+        c.sharedResourceOpenSamples, firstPlaybackBridgeTrace_.sharedResourceOpenSamples);
+    const quint64 sharedResourceOpenTotalUs = counterDelta(
+        c.sharedResourceOpenTotalUs, firstPlaybackBridgeTrace_.sharedResourceOpenTotalUs);
+    const quint64 sourceAcquireSamples = counterDelta(
+        c.srcAcquireWaitSamples, firstPlaybackBridgeTrace_.sourceAcquireSamples);
+    const quint64 sourceAcquireTotalUs = counterDelta(
+        c.srcAcquireWaitTotalUs, firstPlaybackBridgeTrace_.sourceAcquireTotalUs);
+    const quint64 destinationAcquireSamples = counterDelta(
+        c.destAcquireWaitSamples, firstPlaybackBridgeTrace_.destinationAcquireSamples);
+    const quint64 destinationAcquireTotalUs = counterDelta(
+        c.destAcquireWaitTotalUs, firstPlaybackBridgeTrace_.destinationAcquireTotalUs);
+
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/first_playback_bridge_trace"),
+        QString("action=render_stall txn=%1 trace_age_ms=%2 present_wait_ms=%3 visual_second=%4 audio_second=%5 "
+                "path=%6 copied_two_delta=%7 textures_delta=%8 acq_timeout_delta=%9 copy_fail_delta=%10 "
+                "bridge_n=%11 bridge_avg_us=%12 bridge_max_process_us=%13 "
+                "src_setup_n=%14 src_setup_avg_us=%15 src_setup_max_process_us=%16 "
+                "dest_setup_n=%17 dest_setup_avg_us=%18 dest_setup_max_process_us=%19 "
+                "src_tex_create_n=%20 src_tex_create_avg_us=%21 src_tex_create_max_process_us=%22 "
+                "dest_tex_create_n=%23 dest_tex_create_avg_us=%24 dest_tex_create_max_process_us=%25 "
+                "shared_open_n=%26 shared_open_avg_us=%27 shared_open_max_process_us=%28 "
+                "src_acq_n=%29 src_acq_avg_us=%30 src_acq_max_process_us=%31 "
+                "dest_acq_n=%32 dest_acq_avg_us=%33 dest_acq_max_process_us=%34")
+            .arg(transactionId)
+            .arg(firstPlaybackBridgeTraceElapsed_.elapsed())
+            .arg(presentWaitMs)
+            .arg(visualSecond, 0, 'f', 6)
+            .arg(audioSecond, 0, 'f', 6)
+            .arg(c.lastPath == 1 ? QStringLiteral("single")
+                                 : c.lastPath == 0 ? QStringLiteral("two-device")
+                                                   : QStringLiteral("none"))
+            .arg(counterDelta(c.copiedFramesTwoDevice, firstPlaybackBridgeTrace_.copiedTwoDevice))
+            .arg(counterDelta(c.texturesCreated, firstPlaybackBridgeTrace_.texturesCreated))
+            .arg(counterDelta(c.acquireSyncTimeouts, firstPlaybackBridgeTrace_.acquireTimeouts))
+            .arg(counterDelta(c.copyFailures, firstPlaybackBridgeTrace_.copyFailures))
+            .arg(bridgeSamples)
+            .arg(averageMicroseconds(bridgeTotalUs, bridgeSamples))
+            .arg(c.twoDeviceBridgeMaxUs)
+            .arg(sourceSetupSamples)
+            .arg(averageMicroseconds(sourceSetupTotalUs, sourceSetupSamples))
+            .arg(c.twoDeviceSourceSetupMaxUs)
+            .arg(destinationSetupSamples)
+            .arg(averageMicroseconds(destinationSetupTotalUs, destinationSetupSamples))
+            .arg(c.twoDeviceDestinationSetupMaxUs)
+            .arg(sourceTextureCreateSamples)
+            .arg(averageMicroseconds(sourceTextureCreateTotalUs, sourceTextureCreateSamples))
+            .arg(c.sourceTextureCreateMaxUs)
+            .arg(destinationTextureCreateSamples)
+            .arg(averageMicroseconds(destinationTextureCreateTotalUs, destinationTextureCreateSamples))
+            .arg(c.destinationTextureCreateMaxUs)
+            .arg(sharedResourceOpenSamples)
+            .arg(averageMicroseconds(sharedResourceOpenTotalUs, sharedResourceOpenSamples))
+            .arg(c.sharedResourceOpenMaxUs)
+            .arg(sourceAcquireSamples)
+            .arg(averageMicroseconds(sourceAcquireTotalUs, sourceAcquireSamples))
+            .arg(c.srcAcquireWaitMaxUs)
+            .arg(destinationAcquireSamples)
+            .arg(averageMicroseconds(destinationAcquireTotalUs, destinationAcquireSamples))
+            .arg(c.destAcquireWaitMaxUs));
+#endif
+}
+
 void PreviewStageMediaHost::resetVideoFrameDiagnostics()
 {
     videoFrameElapsed_.invalidate();
@@ -787,6 +1068,8 @@ void PreviewStageMediaHost::resetVideoFrameDiagnostics()
     videoFrameCountTotal_ = 0;
     videoFrameStallCount_ = 0;
     videoFrameStalled_ = false;
+    firstPlaybackBridgeTrace_ = {};
+    firstPlaybackBridgeTraceElapsed_.invalidate();
     consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
 }
 

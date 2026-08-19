@@ -85,6 +85,7 @@ void PreviewStageMediaHost::schedulePreparedPlaybackTimeout(quint64 transactionI
         // backend rebuild (unlike the QMediaPlayer path).
         preparedPlaybackPending_ = false;
         preparedPlaybackReady_ = true;
+        preparedPlaybackLandingConfirmed_ = false;
         ++preparedPlaybackTimeoutSerial_;
         emit playbackStartPrepared(targetSecond, transactionId);
     });
@@ -114,6 +115,7 @@ void PreviewStageMediaHost::schedulePreparedPlaybackTimeout(quint64 transactionI
         );
         preparedPlaybackPending_ = false;
         preparedPlaybackReady_ = true;
+        preparedPlaybackLandingConfirmed_ = false;
         ++preparedPlaybackTimeoutSerial_;
         recoverVideoBackend(QStringLiteral("prepare_playback_timeout"), targetSecond, false);
         if (preparedPlaybackReady_ && preparedPlaybackTransaction_ == transactionId) {
@@ -411,6 +413,7 @@ void PreviewStageMediaHost::settlePendingSeekAcks(double mediaSecondStart, doubl
     if (preparedPlaybackPending_ && preparedPlaybackTargetMs_ >= 0 && reaches(preparedPlaybackTargetMs_)) {
         preparedPlaybackPending_ = false;
         preparedPlaybackReady_ = true;
+        preparedPlaybackLandingConfirmed_ = true;
         ++preparedPlaybackTimeoutSerial_;
         appendPreviewStageMediaLog(
             QStringLiteral("prepare_playback_ready"),

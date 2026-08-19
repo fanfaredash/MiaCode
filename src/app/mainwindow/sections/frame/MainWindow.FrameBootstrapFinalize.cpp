@@ -198,6 +198,13 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
             if (qtPreviewAwaitingFrameSwapSinceMs_ >= 0
                 && nowMs - qtPreviewAwaitingFrameSwapSinceMs_ >= stallTimeoutMs) {
                 const qint64 waitMs = nowMs - qtPreviewAwaitingFrameSwapSinceMs_;
+                if (state_.previewStageMediaHost_ != nullptr) {
+                    state_.previewStageMediaHost_->noteFirstPlaybackRenderStall(
+                        state_.activePreviewPlaybackTransactionId_,
+                        waitMs,
+                        qMax(0.0, qtPreviewPauseSecond_),
+                        qMax(0.0, currentPreviewAuthoritativeAudioClockSecond()));
+                }
                 qtPreviewDisplayRefreshConsecutiveWatchdogs_ += 1;
                 if (previewCanvas_ != nullptr) {
                     previewCanvas_->noteDisplayRefreshWatchdogTimeout();
@@ -233,6 +240,13 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         if (qtPreviewFixedAwaitingFrameSinceMs_ >= 0
             && nowMs - qtPreviewFixedAwaitingFrameSinceMs_ >= stallTimeoutMs) {
             const qint64 waitMs = nowMs - qtPreviewFixedAwaitingFrameSinceMs_;
+            if (state_.previewStageMediaHost_ != nullptr) {
+                state_.previewStageMediaHost_->noteFirstPlaybackRenderStall(
+                    state_.activePreviewPlaybackTransactionId_,
+                    waitMs,
+                    qMax(0.0, qtPreviewPauseSecond_),
+                    qMax(0.0, currentPreviewAuthoritativeAudioClockSecond()));
+            }
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->noteFixedGateWatchdogKick();
             }

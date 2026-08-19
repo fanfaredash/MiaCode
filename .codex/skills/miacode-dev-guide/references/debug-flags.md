@@ -115,6 +115,7 @@ Dev-tool-only parser repro hook:
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
   - enables low-noise runtime `preview/frame_pacing` request/tick/present/watchdog diagnostics without requiring `--debug`
   - normal request/tick/present samples are rate-limited; watchdog timeout, fixed-timer present-miss/hard-resync, orphan-present, and large-step events log immediately
+  - when combined with `--debug`, also enables the first-PV-play `preview/first_playback_bridge_trace` and the per-frame two-device D3D11 bridge timing counters used by its breakdown; the counters are otherwise disabled so ordinary debug sessions do not add video-bridge clock reads
   - owners: `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp`
 - `MIACODE_PREVIEW_HUD_PAINT_DIAG`
   - enables focused runtime `preview/hud_state` and `preview/hud_paint` breadcrumbs for export-preview / HUD paint crashes without requiring `--debug`
