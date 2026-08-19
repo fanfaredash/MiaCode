@@ -10,8 +10,10 @@ namespace miacode::preview_interaction {
 // `tokenSecond - kTouchPadAuthoringPreviewLeadSeconds` is the PRECEDING token's,
 // for any lead greater than the timeline's 1e-6 resolution — shrinking this
 // value does not change which token the playhead resolves to, it only shrinks
-// the visual offset. `touchPadAuthoringAnchoredSecond()` is what maps the parked
-// playhead back to the token that was authored.
+// the visual offset. So without a correction the highlight would jump one token
+// back the moment you author a touch; `touchPadAuthoringAnchoredSecond()` is
+// what maps the parked playhead back to the token that was authored. That
+// correction is cosmetic — the insertion point is the text caret, never this.
 inline constexpr double kTouchPadAuthoringPreviewLeadSeconds = 1.0 / 60.0;
 // How close the playhead has to be to a recorded authoring seek to still count
 // as "parked where that click left it".

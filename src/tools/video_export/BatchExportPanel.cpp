@@ -387,9 +387,15 @@ bool BatchExportPanel::prepareRequestedTask(QString* errorMessage)
     return true;
 }
 
-void BatchExportPanel::updatePreviewDifficulty(int difficultyId)
+void BatchExportPanel::updatePreviewDifficulty(int difficultyId, const VideoExportTask& retargetedTask)
 {
     selectionState_.updatePreviewDifficulty(difficultyId);
+    // Keep the panel's own copy in step: previewIntroSpec() falls back to it,
+    // and the folder browsers resolve their start directory from it.
+    baseTask_ = retargetedTask;
+    if (settingsPanel_ != nullptr) {
+        settingsPanel_->retargetChartPayload(retargetedTask);
+    }
 }
 
 int BatchExportPanel::previewDifficultyId() const

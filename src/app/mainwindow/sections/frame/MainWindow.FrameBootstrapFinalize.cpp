@@ -648,20 +648,6 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     }
     applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_, "frame_bootstrap_finalize");
     applyPreviewStageMediaRouteVisualSettings();
-    if (previewSfxRuntime_ != nullptr) {
-        const QtPreviewSfxRuntime::AssetSubmission reload =
-            previewSfxRuntime_->reloadAssetsForChart(currentFilePath_, previewAudioSettings_);
-        previewSfxRuntimePrepared_ = false;
-        previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
-            ? reload.identity.assetGeneration
-            : 0;
-        previewSfxRuntimePreparationSequence_ = reload.post.accepted
-            ? reload.identity.sequence
-            : 0;
-        logStartupStage("preview_sfx_set_chart_path_done");
-        previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-        logStartupStage("preview_sfx_set_playback_rate_done");
-    }
     if (previewCanvas_ != nullptr) {
         applyEffectivePreviewOutlineVariantToCanvas();
         applyPreviewSkinDirectoryToSurfaces();

@@ -295,11 +295,20 @@ private:
     // captured at arm (`fireworkWarmupArmDrawSignal_`) — i.e. once the synthetic
     // has genuinely compiled the PSO + uploaded the texture. To guarantee the
     // synthetic is drawable wherever the playhead happens to be, it is
-    // RE-CENTERED on the live playhead on every playhead change and every marker
-    // refresh while armed-but-not-done (its lifecycle window is fixed relative
-    // to its trigger second, so a seek / negative pre-roll / play-start would
-    // otherwise move the playhead out of the window and the layer would never
-    // draw it — the historical "probabilistic first-firework hitch").
+    // RE-CENTERED on the live playhead whenever the playhead has travelled far
+    // enough to be about to leave the synthetic's lifecycle window, and on every
+    // marker refresh / reset while armed-but-not-done (its lifecycle window is
+    // fixed relative to its trigger second, so a seek / negative pre-roll /
+    // play-start would otherwise move the playhead out of the window and the
+    // layer would never draw it — the historical "probabilistic first-firework
+    // hitch"). The travel test is core/scene/PreviewFireworkWarmupPolicy.h,
+    // calibrated against the layer's real window by
+    // preview_firework_warmup_policy_spec; it replaced an unconditional
+    // per-playhead-change re-centre that cost a full PreviewPreparedSceneCache
+    // rebuild on EVERY preview frame for as long as the warm-up stayed armed.
+    // INVARIANT: while armed-but-not-done, exactly one synthetic is present in
+    // frameState_.noteMarkers and fireworkWarmupCenterSecond_ is its centre —
+    // any site that clears noteMarkers must re-append (setNoteMarkers, reset).
     // `fireworkWarmupArmPresentCount_` + a present-count cap is only a backstop:
     // if the firework never renders at all (layer disabled, non-rendering
     // surface) the warm-up is abandoned so the synthetic and the per-playhead
@@ -309,6 +318,11 @@ private:
     bool fireworkWarmupArmed_ = false;
     bool fireworkWarmupDone_ = false;
     qint64 fireworkWarmupArmPresentCount_ = -1;
+    // Playhead the synthetic is currently centred on. The re-centre test compares
+    // against this instead of firing on every playhead change — see
+    // core/scene/PreviewFireworkWarmupPolicy.h and
+    // refreshFireworkWarmupForPlayheadChange().
+    double fireworkWarmupCenterSecond_ = 0.0;
     // Monotonic count of firework-layer node emissions, bumped on the QSG render
     // thread (notifyFireworkLayerProducedNode) and read on the GUI thread
     // (handlePresentedFrame / armFireworkPsoWarmupIfReady) — std::atomic crosses

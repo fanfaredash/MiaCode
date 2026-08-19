@@ -57,21 +57,6 @@ void MainWindow::TimelineSection::setTouchPadAuthoringAnchor(double seekSecond, 
     state_.touchPadAuthoringAnchorTokenSecond_ = tokenSecond;
 }
 
-bool MainWindow::TimelineSection::previewFollowTokenPosition(int* position) const
-{
-    if (position == nullptr || !hasActiveDifficulty()) {
-        return false;
-    }
-    const double second = touchPadAuthoringAnchoredSecond(
-        qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond()));
-    TimelineQuickModel::PreviewFollowBinding binding;
-    if (!state_.timelineQuickModel_.resolvePreviewFollowBinding(qMax(0.0, second), &binding)) {
-        return false;
-    }
-    *position = binding.span.startPosition;
-    return true;
-}
-
 void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLine(
     double second,
     bool ensureVisible,
@@ -91,8 +76,9 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
 
     // NOT gated on previewFollowEnabled_: that option governs whether the
     // preview MOVES the caret and viewport, not whether the playhead's token is
-    // visible. The highlight is a read-only decoration and touch-pad click
-    // authoring targets it, so it stays on with 代码跟随 off.
+    // visible. The highlight is a read-only indicator of where the playhead is,
+    // useful on its own, so it stays on with 代码跟随 off. Nothing authors
+    // against it — touch-pad click input targets the caret.
     if (!hasActiveDifficulty()) {
         QElapsedTimer overlayTimer;
         overlayTimer.start();

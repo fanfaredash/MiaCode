@@ -29,6 +29,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
+#include "common/AdoptedSurfaceDragAutoScroll.h"
 #include "common/AdoptedWidgetCoordinates.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -821,6 +822,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     metadataExtraEdit_->setLineWrapMode(QTextEdit::WidgetWidth);
     metadataExtraEdit_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     metadataExtraEdit_->setPlaceholderText("&dummy=...");
+    // Plain QTextEdit, so it does not get PlainCodeEditor's ctor install: give
+    // it the same macOS drag-autoscroll takeover, or a drag-select that leaves
+    // the viewport strobes the selection here too.
+    miacode::ui::installAdoptedSurfaceDragAutoScroll(metadataExtraEdit_);
     installCtrlEnterLineBreakShortcut(metadataExtraEdit_);
     if (QScrollBar* vbar = metadataExtraEdit_->verticalScrollBar()) {
         vbar->setStyleSheet(modernScrollBarStyle());
@@ -1338,21 +1343,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         // handed an offset moved by the inserted/removed length.
         const int originalAnchor = cursor.anchor();
         const int originalPosition = cursor.position();
-        // Which token the click targets: the one the preview-follow highlight is
-        // drawn over, i.e. what the user can actually see. An unfocused QTextEdit
-        // hides its caret, and paused seeks (arrow keys, slider, timeline) move
-        // the highlight while deliberately leaving the text cursor behind — so
-        // the caret is only the fallback for when no span resolves. The playhead
-        // parked by a previous authoring click resolves back to the token that
-        // click wrote to (see touchPadAuthoringAnchoredSecond), which is what
-        // keeps repeated clicks stacking into one token.
-        int targetPosition = originalPosition;
-        int followPosition = 0;
-        if (previewFollowTokenPosition(&followPosition)) {
-            targetPosition = followPosition;
-        }
+        // The click targets the TEXT CARET, always — never the preview-follow
+        // highlight. Resolving a playhead second onto a token is not something a
+        // user can predict, so the authoring point is the one they set by hand in
+        // the editor. Paused caret moves already drag the preview along (the
+        // cursorPositionChanged → timeline-sync path), so the two normally agree;
+        // when a manual preview seek pulls them apart the caret still wins.
         const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
-            editor->toPlainText(), targetPosition, pad, backtickSeparator);
+            editor->toPlainText(), originalPosition, pad, backtickSeparator);
         if (!editPlan.valid) {
             return;
         }
@@ -1373,23 +1371,19 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             ? qMax(0.0, tokenSecond - miacode::preview_interaction::kTouchPadAuthoringPreviewLeadSeconds)
             : -1.0;
         if (documentSection_ != nullptr) {
-            // When the click authored where the highlight was rather than where
-            // the (invisible) caret was, undo has to put the caret on THAT token
-            // — otherwise Cmd+Z followed by another Cmd+click lands elsewhere.
-            // Restoring a caret-sourced click keeps any selection it had.
-            const bool followSourced = targetPosition != originalPosition;
+            // Undo restores the caret the click was made from, selection and all.
             documentSection_->recordChartCursorUndoEntry(
-                followSourced ? targetPosition : originalAnchor,
-                followSourced ? targetPosition : originalPosition,
+                originalAnchor,
+                originalPosition,
                 cursor,
                 seekSecond);
         }
         editor->setFocus(Qt::OtherFocusReason);
         if (hasTokenSecond) {
             // The seek lands BEFORE the token so the touch stays visible, which
-            // would otherwise resolve the highlight (and the next click) onto the
-            // preceding token. Record what this parked playhead means first, so
-            // the seek's own deferred decoration refresh already sees it.
+            // would otherwise draw the highlight on the preceding token. Record
+            // what this parked playhead means first, so the seek's own deferred
+            // decoration refresh already sees it.
             setTouchPadAuthoringAnchor(seekSecond, tokenSecond);
             seekPreviewDiscreteToSecond(seekSecond, true);
         }

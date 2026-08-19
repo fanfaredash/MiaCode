@@ -412,6 +412,42 @@ void VideoExportDialog::insertBatchTaskTab(QWidget* controls)
     settingsTabs_->updateGeometry();
 }
 
+void VideoExportDialog::retargetChartPayload(const VideoExportTask& task)
+{
+    // Batch page only: the difficulty badge switched while this panel stays
+    // alive, so refresh ONLY the difficulty-derived chart payload. Every styling
+    // choice in currentIntroSpecForExportTask() is re-read from the widgets, so
+    // overwriting baseTask_.intro cannot lose a user setting — but 添加片头's
+    // on/off flag and the 片头 sound (file + volume) live on baseTask_ and ARE
+    // user-owned, so they are carried across explicitly.
+    const bool introEnabled = baseTask_.intro.enabled;
+    const QString introSoundFileName = baseTask_.introSoundFileName;
+    const double introSoundVolume = baseTask_.introSoundVolume;
+
+    baseTask_.chartPath = task.chartPath;
+    baseTask_.trackPath = task.trackPath;
+    baseTask_.noteMarkers = task.noteMarkers;
+    baseTask_.muriAnalysisReport = task.muriAnalysisReport;
+    baseTask_.contentDurationSeconds = task.contentDurationSeconds;
+    baseTask_.chartTitle = task.chartTitle;
+    baseTask_.chartArtist = task.chartArtist;
+    baseTask_.chartDifficultyLabel = task.chartDifficultyLabel;
+    baseTask_.chartDesigner = task.chartDesigner;
+    baseTask_.outputPath = task.outputPath;
+    baseTask_.clockCount = task.clockCount;
+    baseTask_.intro = task.intro;
+
+    baseTask_.intro.enabled = introEnabled;
+    baseTask_.introSoundFileName = introSoundFileName;
+    baseTask_.introSoundVolume = introSoundVolume;
+
+    // "自动" resolves SD/DX from the payload, and the 片头 tab's card preview is
+    // baked from the spec — both are stale until re-derived. The export-page
+    // audition's own intro region is refreshed by the host.
+    refreshIntroCardModeAutoLabel();
+    refreshIntroPreview();
+}
+
 bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* errorMessage) const
 {
     if (task == nullptr) {
@@ -1032,6 +1068,115 @@ void VideoExportDialog::done(int result)
     stopRangePreview(false);
     restoreLivePreviewState();
     QDialog::done(result);
+}
+
+void VideoExportDialog::showEvent(QShowEvent* event)
+{
+    QDialog::showEvent(event);
+    // QDialogButtonBox promotes its first AcceptRole button to the dialog
+    // default on every QEvent::Show, and children are shown before their
+    // parent — so this runs after that promotion and undoes it.
+    disableButtonReturnActivation();
+}
+
+void VideoExportDialog::disableButtonReturnActivation()
+{
+    // Clearing autoDefault as well as default matters: an autoDefault button
+    // makes itself the dialog default while focused AND becomes QDialog's
+    // remembered "main default" the first time it is focused, which would hand
+    // Return back to it from every field on the page.
+    const QList<QPushButton*> buttons = findChildren<QPushButton*>();
+    for (QPushButton* button : buttons) {
+        if (button == nullptr) {
+            continue;
+        }
+        button->setAutoDefault(false);
+        button->setDefault(false);
+    }
+}
+
+void VideoExportDialog::commitFlowSpeedEditor(QLineEdit* editor)
+{
+    double* selectedFlowSpeed = nullptr;
+    std::function<void(double)> applyFlowSpeed;
+    if (editor == tapFlowSpeedEdit_) {
+        selectedFlowSpeed = &selectedTapFlowSpeed_;
+        applyFlowSpeed = previewTapFlowSpeedCallback_;
+    } else if (editor == touchFlowSpeedEdit_) {
+        selectedFlowSpeed = &selectedTouchFlowSpeed_;
+        applyFlowSpeed = previewTouchFlowSpeedCallback_;
+    }
+    if (editor == nullptr || selectedFlowSpeed == nullptr) {
+        return;
+    }
+    bool ok = false;
+    const double typedSpeed = editor->text().trimmed().toDouble(&ok);
+    if (!ok) {
+        editor->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+        return;
+    }
+    *selectedFlowSpeed = snappedFlowSpeed(typedSpeed);
+    editor->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+    if (applyFlowSpeed) {
+        applyFlowSpeed(*selectedFlowSpeed);
+    }
+}
+
+bool VideoExportDialog::commitFocusedEditorOnReturn()
+{
+    QWidget* focus = QApplication::focusWidget();
+    if (focus == nullptr || !(focus == this || isAncestorOf(focus))) {
+        return false;
+    }
+    // Spin boxes and editable combos expose their internal QLineEdit as the
+    // focus widget; commit through the owning control instead.
+    if (QWidget* owner = focus->parentWidget(); owner != nullptr) {
+        if (qobject_cast<QAbstractSpinBox*>(owner) != nullptr
+            || qobject_cast<QComboBox*>(owner) != nullptr) {
+            focus = owner;
+        }
+    }
+    if (auto* spin = qobject_cast<QAbstractSpinBox*>(focus); spin != nullptr) {
+        // QAbstractSpinBox already interpreted the typed text before letting
+        // the key through; re-select so the committed value reads as applied.
+        spin->interpretText();
+        spin->selectAll();
+        return true;
+    }
+    if (auto* editor = qobject_cast<QLineEdit*>(focus); editor != nullptr) {
+        if (editor == tapFlowSpeedEdit_ || editor == touchFlowSpeedEdit_) {
+            commitFlowSpeedEditor(editor);
+        } else if (editor == outputPathEdit_) {
+            editor->setText(displayOutputPathForDialog(
+                resolveOutputPathForExport(editor->text().trimmed(), exportBaseDirectory(baseTask_)),
+                exportBaseDirectory(baseTask_)
+            ));
+        }
+        // Everything else on this page (path fields, injected owner-wired
+        // settings) commits through QLineEdit's own editingFinished, which it
+        // emits before handing the key up to us.
+        editor->selectAll();
+        return true;
+    }
+    return false;
+}
+
+void VideoExportDialog::keyPressEvent(QKeyEvent* event)
+{
+    // Return/Enter must never start an export from this page (a stray Enter
+    // after typing in a field used to fire the default button). It commits the
+    // focused field instead, and is swallowed here so QDialog's default-button
+    // handling is never reached. Ctrl/Alt/Meta chords fall through untouched.
+    if (event != nullptr
+        && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && !event->modifiers().testFlag(Qt::ControlModifier)
+        && !event->modifiers().testFlag(Qt::AltModifier)
+        && !event->modifiers().testFlag(Qt::MetaModifier)) {
+        commitFocusedEditorOnReturn();
+        event->accept();
+        return;
+    }
+    QDialog::keyPressEvent(event);
 }
 
 bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)

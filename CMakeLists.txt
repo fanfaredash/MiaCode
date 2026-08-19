@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.10")
+set(MIACODE_VERSION_PRERELEASE "beta.14")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -150,6 +150,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellStyleBridge.cpp
     src/common/AdoptedWidgetCoordinates.h
     src/common/AdoptedWidgetCoordinates.cpp
+    src/common/AdoptedSurfaceDragAutoScroll.h
+    src/common/AdoptedSurfaceDragAutoScroll.cpp
     src/app/mainwindow/MainWindow.h
     src/app/mainwindow/MainWindow.cpp
     src/app/mainwindow/MainWindowShared.h
@@ -342,6 +344,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportFrameRender.cpp
     src/tools/video_export/VideoExportPipeline.cpp
     src/tools/video_export/VideoExportPreparedTask.cpp
+    src/tools/video_export/VideoExportMediaTimeline.h
+    src/tools/video_export/VideoExportMediaTimeline.cpp
     src/tools/video_export/VideoExportRuntimePolicy.h
     src/tools/video_export/VideoExportRuntimePolicy.cpp
     src/tools/video_export/VideoExportQuickRenderBackend.h
@@ -1181,7 +1185,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
             target_include_directories(${NAME} PRIVATE ${DT_INCLUDES})
         endif()
         if (DT_TEST)
-            add_test(NAME ${NAME} COMMAND ${NAME})
+            # Run from the source tree: specs that touch runtime assets resolve
+            # them relative to the working directory (e.g. resolveSfxDirectory in
+            # VideoExportAudioRenderPlan), so launching from the build dir made
+            # them fail with "preview SFX directory could not be resolved".
+            add_test(NAME ${NAME} COMMAND ${NAME} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
             # Spec exes are not deployed with the Qt runtime, so prepend Qt's
             # bin directory to PATH for the test run. Without this, ctest
             # launches them and Windows raises "Qt6*.dll not found" loader
@@ -1526,6 +1534,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/InputShortcutGesture.cpp
             src/common/AdoptedWidgetCoordinates.h
             src/common/AdoptedWidgetCoordinates.cpp
+            src/common/AdoptedSurfaceDragAutoScroll.h
+            src/common/AdoptedSurfaceDragAutoScroll.cpp
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/common src/extensions
@@ -1555,6 +1565,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(preview_firework_lifecycle_spec TEST
         SOURCES
             src/tools/preview/PreviewFireworkLifecycleSpec.cpp
+            src/core/scene/PreviewFrameState.h
+            src/core/scene/PreviewJudgeFireworkLayerState.h
+            src/core/scene/PreviewJudgeFireworkLayerState.cpp
+            src/core/scene/PreviewSceneMath.h
+            src/core/scene/PreviewSceneMath.cpp
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/common src/preview src/core/scene src/core/video src/timeline
+    )
+
+    miacode_add_dev_tool(preview_firework_warmup_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewFireworkWarmupPolicySpec.cpp
+            src/core/scene/PreviewFireworkWarmupPolicy.h
             src/core/scene/PreviewFrameState.h
             src/core/scene/PreviewJudgeFireworkLayerState.h
             src/core/scene/PreviewJudgeFireworkLayerState.cpp
@@ -1989,6 +2012,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/timeline/TimelineData.h
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
+    )
+
+    miacode_add_dev_tool(video_export_media_timeline_spec TEST
+        SOURCES
+            src/tools/video_export/VideoExportMediaTimelineSpec.cpp
+            src/tools/video_export/VideoExportMediaTimeline.h
+            src/tools/video_export/VideoExportMediaTimeline.cpp
+            src/common/PreviewSfxTimeline.h
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/common src/timeline src/tools src/tools/video_export
     )
 
     miacode_add_dev_tool(chart_zip_packager_spec TEST

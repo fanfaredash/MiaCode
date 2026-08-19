@@ -109,6 +109,13 @@ void MainWindow::TimelineSection::onTimelineRenderCadenceTick()
         return;
     }
     state_.qtPreviewLastTimelineCadenceMs_ = state_.qtPreviewWatchdogElapsed_.elapsed();
+    const qint64 nowNs = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
+    if (!miacode::timeline::cadence::renderCadenceShouldFlush(
+            nowNs,
+            timelineTargetFrameIntervalNs(),
+            &state_.qtPreviewLastTimelineCadenceFlushNs_)) {
+        return;
+    }
     flushQtPreviewTimelinePosition();
 }
 

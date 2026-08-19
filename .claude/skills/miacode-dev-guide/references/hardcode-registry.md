@@ -61,6 +61,19 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   the Windows QtAVPlayer backend doesn't need it (no silent-fallback / converter-rebuild failure
   modes) and compiles these as no-op stubs. Paused-seek ack tolerance `kPausedSeekAckToleranceMs`
   (`80 ms`) is shared by both backends.
+- `src/preview/runtime/PreviewStageMediaHostInternal.h` — `kSeekCoalesceToleranceMs` (`40 ms`): a
+  decode-position request within this of `lastSeekMs_` is treated as already satisfied and skipped.
+  Owned here because ALL four programming sites must agree (`preparePlaybackStart`,
+  `commitPreparedPlaybackStart`, `setPlayheadSeconds`, `submitPausedSeek`) — commit used to lack it
+  and paid a second full decoder flush on every playback start. Keep it as one constant; a per-site
+  value would silently re-open that.
+- `src/core/scene/PreviewFireworkWarmupPolicy.h` — firework PSO warm-up synthetic placement
+  (`kFireworkWarmupLeadSeconds` `0.15`) and the slack-gated re-center thresholds derived from it
+  (`kFireworkWarmupForwardSlackSeconds` = firework duration − lead, `kFireworkWarmupBackwardSlackSeconds`
+  = lead, `kFireworkWarmupRecenterSafetyFactor` `0.5`). Derived from
+  `PreviewGameplayConfig.h`'s `kJudgeEffectFirework{Duration,TouchTriggerDelay}Seconds` — do NOT
+  hardcode the window; `preview_firework_warmup_policy_spec` asserts the derivation still matches the
+  layer builder's real lifecycle. See the warm-up contract in `cross-chain-linkage.md` §1.
 - `src/tools/latency/` — detection windows, hop sizes, BPM scan range, offset penalties, snap
   thresholds.
 - `src/core/chart/transform/ChartNormalization.cpp` — whole-chart format snap constants

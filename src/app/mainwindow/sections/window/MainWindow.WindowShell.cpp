@@ -453,6 +453,9 @@ void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool cent
 void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerView)
 {
     if (owner_.handleExportIntroSliderSeek(second)) {
+        owner_.stopPreviewHeldSeek();
+        owner_.previewScrubDragging_ = false;
+        owner_.previewScrubRenderElapsed_.invalidate();
         return;
     }
     const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());

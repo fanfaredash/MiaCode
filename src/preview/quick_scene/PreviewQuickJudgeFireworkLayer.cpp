@@ -68,6 +68,14 @@ QImage& fallbackFireworkTextureImage()
     return image;
 }
 
+QImage& fireworkBrightBlockMaskImage()
+{
+    static QImage image(QStringLiteral(
+        ":/preview/judge_effects/judge_effect_firework_bright_block.png"
+    ));
+    return image;
+}
+
 class PreviewQuickEllipseClipNode final : public QSGClipNode
 {
 public:
@@ -162,6 +170,7 @@ public:
     {
         const auto* otherMaterial = static_cast<const PreviewQuickJudgeFireworkMaterial*>(other);
         if (texture_ == otherMaterial->texture_
+            && brightBlockTexture_ == otherMaterial->brightBlockTexture_
             && qFuzzyCompare(quadRadius_ + 1.0f, otherMaterial->quadRadius_ + 1.0f)
             && qFuzzyCompare(clipRadius_ + 1.0f, otherMaterial->clipRadius_ + 1.0f)
             && qFuzzyCompare(outerRadius_ + 1.0f, otherMaterial->outerRadius_ + 1.0f)
@@ -189,6 +198,7 @@ public:
 
     void setState(
         QSGTexture* texture,
+        QSGTexture* brightBlockTexture,
         bool useTexture,
         float quadRadius,
         float clipRadius,
@@ -212,6 +222,7 @@ public:
     )
     {
         texture_ = texture;
+        brightBlockTexture_ = brightBlockTexture;
         useTexture_ = useTexture;
         quadRadius_ = quadRadius;
         clipRadius_ = clipRadius;
@@ -235,6 +246,7 @@ public:
     }
 
     QSGTexture* texture() const { return texture_; }
+    QSGTexture* brightBlockTexture() const { return brightBlockTexture_; }
     bool useTexture() const { return useTexture_; }
     float quadRadius() const { return quadRadius_; }
     float clipRadius() const { return clipRadius_; }
@@ -258,6 +270,7 @@ public:
 
 private:
     QSGTexture* texture_ = nullptr;
+    QSGTexture* brightBlockTexture_ = nullptr;
     bool useTexture_ = false;
     float quadRadius_ = 0.0f;
     float clipRadius_ = 0.0f;
@@ -356,12 +369,12 @@ void PreviewQuickJudgeFireworkMaterialShader::updateSampledImage(
 {
     Q_UNUSED(oldMaterial);
 
-    if (binding != 1 || texture == nullptr) {
+    if ((binding != 1 && binding != 2) || texture == nullptr) {
         return;
     }
 
     const auto* material = static_cast<const PreviewQuickJudgeFireworkMaterial*>(newMaterial);
-    *texture = material->texture();
+    *texture = binding == 1 ? material->texture() : material->brightBlockTexture();
     if (*texture != nullptr) {
         (*texture)->commitTextureOperations(state.rhi(), state.resourceUpdateBatch());
     }
@@ -416,6 +429,7 @@ public:
     void updateNode(
         const miacode::preview::scene::PreviewJudgeFireworkLayerState& layerState,
         QSGTexture* texture,
+        QSGTexture* brightBlockTexture,
         bool useTexture,
         const QRectF& normalizedSourceRect,
         float sourceAspect
@@ -471,6 +485,7 @@ public:
 
         material_->setState(
             texture,
+            brightBlockTexture,
             useTexture,
             quadRadius,
             static_cast<float>(layerState.clipRadius),
@@ -692,6 +707,15 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
     }
     texture->setFiltering(QSGTexture::Linear);
 
+    QSGTexture* brightBlockTexture = textures->textureForImage(
+        fireworkBrightBlockMaskImage(),
+        true
+    );
+    if (brightBlockTexture == nullptr) {
+        return nullptr;
+    }
+    brightBlockTexture->setFiltering(QSGTexture::Linear);
+
     auto* root = ensureJudgeFireworkRoot(oldNode);
     root->useClip(layerState.clipRadius > 0.0);
     if (root->clipNode() != nullptr) {
@@ -701,6 +725,7 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
     root->ensureFireworkNode()->updateNode(
         layerState,
         texture,
+        brightBlockTexture,
         useTexture,
         normalizedSourceRectFor(sourceImage, layerState.colorBallSourceRect),
         static_cast<float>(sourceAspectFor(sourceImage, layerState.colorBallSourceRect))

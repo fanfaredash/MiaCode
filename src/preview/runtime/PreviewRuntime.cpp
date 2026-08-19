@@ -1,4 +1,5 @@
 #include "preview/runtime/PreviewRuntime.h"
+#include "core/scene/PreviewFireworkWarmupPolicy.h"
 #include "core/scene/TouchPadAuthoringState.h"
 
 #include "common/DebugLog.h"
@@ -991,6 +992,16 @@ void PreviewRuntime::reset()
     frameState_.playheadSeconds = 0.0;
     frameState_.hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
     frameState_.sceneContentRevision = 0;
+    // Restore the invariant "armed-but-not-done ⇒ exactly one synthetic in
+    // noteMarkers, centred on fireworkWarmupCenterSecond_". The clear above drops
+    // it, and refreshFireworkWarmupForPlayheadChange() no longer re-adds it on
+    // every playhead change — it only fires once the playhead has consumed its
+    // slack, so without this the warm-up could sit un-drawable (and therefore
+    // never confirm) until the playhead happened to travel far enough. Mirrors
+    // the same guard in setNoteMarkers().
+    if (fireworkWarmupArmed_ && !fireworkWarmupDone_) {
+        appendFireworkWarmupMarker();
+    }
     clearIntroOverlay(false);
     frameState_.media = miacode::preview::scene::PreviewMediaFrameState();
     frameState_.media.presentationMode = presentationMode;
@@ -1971,13 +1982,13 @@ void PreviewRuntime::appendFireworkWarmupMarker()
     TimelineNoteMarker synth;
     synth.type = QStringLiteral("touch");
     synth.isFirework = true;
-    synth.second = frameState_.playheadSeconds
-        - miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds
-        - 0.15;
+    synth.second = miacode::preview::scene::fireworkWarmupMarkerSecond(frameState_.playheadSeconds);
     synth.endSecond = -1.0;
     synth.touchPoint = QPointF(-1.0e6, -1.0e6);  // off-screen, non-zero
     synth.lane = 1;
     frameState_.noteMarkers.append(synth);
+    // Anchor for refreshFireworkWarmupForPlayheadChange()'s slack test.
+    fireworkWarmupCenterSecond_ = frameState_.playheadSeconds;
 }
 
 void PreviewRuntime::removeFireworkWarmupMarkers()
@@ -2018,6 +2029,26 @@ void PreviewRuntime::refreshFireworkWarmupForPlayheadChange()
     // cache rebuilds the window. No-op once warm-up is done, so this is free on
     // the playback hot path.
     if (!fireworkWarmupArmed_ || fireworkWarmupDone_) {
+        return;
+    }
+    // ...but only once the playhead has actually consumed its slack. This used to
+    // re-centre on EVERY playhead change, i.e. once per preview frame (60-180 Hz)
+    // for as long as the warm-up stayed armed — and it stays armed until a frame
+    // that actually draws the synthetic is presented, which on an idle paused
+    // preview does not happen until the user's first playback. Each re-centre
+    // rewrites the whole marker vector and bumps sceneContentRevision, which
+    // invalidates PreviewPreparedSceneCache and forces a full ten-layer rebuild
+    // (two stable_sorts per layer plus a cursor reset). That per-frame rebuild was
+    // the bulk of the "first playback after startup stutters" report, and it came
+    // back mid-session on every visible-window rebind (F11) because that re-arms.
+    //
+    // The slack test lives in core/scene/PreviewFireworkWarmupPolicy.h and is
+    // calibrated against the layer's real lifecycle window by
+    // preview_firework_warmup_policy_spec. Seeks / pre-roll jumps are orders of
+    // magnitude larger than the slack, so they still force a re-centre and the
+    // cross-chain-linkage contract holds.
+    if (!miacode::preview::scene::fireworkWarmupNeedsRecenter(
+            frameState_.playheadSeconds, fireworkWarmupCenterSecond_)) {
         return;
     }
     removeFireworkWarmupMarkers();

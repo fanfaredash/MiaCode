@@ -49,13 +49,15 @@ int main()
         "third_party/QtAVPlayer/src/QtAVPlayer/qavvideoframe.cpp");
     const QString backend = sourceFile(
         "src/preview/runtime/PreviewStageMediaHost_Backend.cpp");
+    const QString playback = sourceFile(
+        "src/preview/runtime/PreviewStageMediaHost_Playback.cpp");
     const QString diagnostics = sourceFile(
         "src/preview/runtime/PreviewStageMediaHost_Diagnostics.cpp");
     const QString sharedDevice = sourceFile(
         "src/preview/runtime/PreviewSharedD3D11Device.cpp");
     const QString packageMac = sourceFile("scripts/build/package-mac.sh");
 
-    ok &= require(!cmake.isEmpty() && !qtavCmake.isEmpty() && !videoToolbox.isEmpty() && !videoFrame.isEmpty() && !backend.isEmpty()
+    ok &= require(!cmake.isEmpty() && !qtavCmake.isEmpty() && !videoToolbox.isEmpty() && !videoFrame.isEmpty() && !backend.isEmpty() && !playback.isEmpty()
                       && !diagnostics.isEmpty() && !sharedDevice.isEmpty() && !packageMac.isEmpty(),
                   QStringLiteral("QtAVPlayer platform sources are readable"), err);
 
@@ -97,21 +99,23 @@ int main()
                       QStringLiteral("QVideoFrameFormat::Format_P010"),
                   }),
                   QStringLiteral("VideoToolbox maps 8-bit and 10-bit bi-planar frames to matching Metal and Qt formats"), err);
+    // The runtime SDK is project-provisioned under third_party/ (no Homebrew) since
+    // the packaging rework; the staging helpers were renamed in the same change.
     ok &= require(containsAll(packageMac, {
                       QStringLiteral("MIACODE_FFMPEG_DEV_DIR"),
-                      QStringLiteral("ffmpeg@6"),
+                      QStringLiteral("resolve_macos_ffmpeg_dev_dir"),
+                      QStringLiteral("third_party/ffmpeg/macos/dev"),
                       QStringLiteral("-DMIACODE_FFMPEG_DEV_DIR="),
                   }),
                   QStringLiteral("macOS package build resolves and forwards the FFmpeg development SDK"), err);
     ok &= require(containsAll(packageMac, {
-                      QStringLiteral("bundle_ffmpeg_dylib_closure"),
-                      QStringLiteral("resolve_ffmpeg_dylib_source"),
-                      QStringLiteral("strip_ffmpeg_build_rpath"),
+                      QStringLiteral("stage_macos_ffmpeg_runtime"),
+                      QStringLiteral("strip_absolute_build_rpaths"),
                       QStringLiteral("verify_no_external_ffmpeg_dylib_references"),
                       QStringLiteral("validate_bundled_ffmpeg_minos"),
                       QStringLiteral("install_name_tool -delete_rpath"),
                       QStringLiteral("install_name_tool -change"),
-                      QStringLiteral("--parallel 2"),
+                      QStringLiteral("--parallel 4"),
                   }),
                   QStringLiteral("macOS package embeds the FFmpeg dylib closure with bounded build parallelism"), err);
 
@@ -128,6 +132,18 @@ int main()
                   QStringLiteral("D3D11 diagnostics are platform guarded"), err);
     ok &= require(sharedDevice.contains(QStringLiteral("#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)")),
                   QStringLiteral("shared D3D11 device implementation is Windows-only"), err);
+    const qsizetype commitStart = playback.indexOf(
+        QStringLiteral("void PreviewStageMediaHost::commitPreparedPlaybackStart"));
+    const qsizetype commitEnd = playback.indexOf(
+        QStringLiteral("void PreviewStageMediaHost::cancelPreparedPlaybackStart"), commitStart);
+    const QString commit = commitStart >= 0 && commitEnd >= 0
+        ? playback.mid(commitStart, commitEnd - commitStart)
+        : QString();
+    ok &= require(containsAll(commit, {
+                      QStringLiteral("lastSeekMs_ = targetMs;\n    player_->seek(targetMs);"),
+                      QStringLiteral("lastSeekMs_ = targetMs;\n    player_->setPosition(targetMs);"),
+                  }),
+                  QStringLiteral("prepared playback commit always seeks before starting either backend"), err);
 
     if (ok) {
         out << "QtAVPlayer platform spec passed." << Qt::endl;

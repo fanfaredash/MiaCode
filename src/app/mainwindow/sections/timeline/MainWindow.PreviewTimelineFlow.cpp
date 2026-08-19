@@ -647,22 +647,23 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     updateCurrentFileLabel();
     if (pathChanged) {
         owner_.loadProjectRenderState();
+        // Rebind the project-scoped mixer BEFORE the SFX reload / level
+        // dispatch below, so the new chart's volumes are the ones handed to
+        // reloadAssetsForChart and applyPreviewAudioSettingsToRuntime rather
+        // than the outgoing chart's.
+        owner_.loadProjectAudioPreferences();
     }
     owner_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.qtPreviewPauseSecond_, state_.document_.videoPath);  // Phase 4c &video= override
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setPlayheadSeconds(state_.qtPreviewPauseSecond_, false);
     }
     if (state_.previewSfxRuntime_ != nullptr && pathChanged) {
-        const QtPreviewSfxRuntime::AssetSubmission reload =
-            state_.previewSfxRuntime_->reloadAssetsForChart(
-                state_.currentFilePath_, state_.previewAudioSettings_);
+        // The next warm-up result submits one atomic path+asset reload. Mark
+        // the old chart's completed (or pending) assets unusable immediately
+        // so an early Play cannot start them while that preload is queued.
         state_.previewSfxRuntimePrepared_ = false;
-        state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
-            ? reload.identity.assetGeneration
-            : 0;
-        state_.previewSfxRuntimePreparationSequence_ = reload.post.accepted
-            ? reload.identity.sequence
-            : 0;
+        state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
+        state_.previewSfxRuntimePreparationSequence_ = 0;
     }
     owner_.applyPreviewAudioSettingsToRuntime();
     if (!suppressImmediateRefresh) {
@@ -1535,11 +1536,6 @@ void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& 
 double MainWindow::timelineSecondForCursor(int line, int col) const
 {
     return timelineSection_->timelineSecondForCursor(line, col);
-}
-
-bool MainWindow::previewFollowTokenPosition(int* position) const
-{
-    return timelineSection_->previewFollowTokenPosition(position);
 }
 
 void MainWindow::setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond)

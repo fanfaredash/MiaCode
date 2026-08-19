@@ -160,6 +160,7 @@ private:
 
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
+    QWidget* topOverlayArea_ = nullptr;
     bool halfWidthInputEnabled_ = true;
     bool imeInputDisabled_ = false;
     bool autoCompletionEnabled_ = true;
