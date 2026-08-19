@@ -263,6 +263,19 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
 - Export consumes the shared resolver via `VideoExportController`; Windows export audio = single
   mixed WAV via `BassExportAudioBackend`, non-Windows = `LegacyExportAudioBackend` fallback.
 - Filenames: `bg.mp4`, `pv.mp4`, `bg.{jpg,png,jpeg}`. Keep preview + export aligned.
+- **`EndOfMedia` is never a transport event.** A background video is subordinate visual media, so
+  its end may not stop BGM / SFX / chart / timeline — that coupling was the root cause in
+  `docs/audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md` (a 0.333 s `pv.mp4` paused the whole
+  preview 31 times). The only natural end of the main transport stays
+  `MainWindow.PreviewTick.cpp::onQtPreviewTickAtSecond()` against `previewPlaybackEndSeconds()`.
+  Every backend `EndOfMedia` is classified by `src/core/video/PreviewEndOfMediaPolicy.h` (spec:
+  `preview_end_of_media_policy_spec`), whose ONLY yardstick is the media's own duration versus the
+  decoder's own progress — never the chart length, and never a "shorter than N seconds is
+  suspicious" threshold. `natural` keeps the last frame; `stale` (audit
+  `PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md` §5.2 — a 121 s PV ending at 1.267 s) runs
+  the bounded seek-then-reload recovery in `PreviewStageMediaHost_Timeout.cpp`; `unknown` does
+  nothing. Change the classifier and the spec together, and keep both backends
+  (QtAVPlayer + `QMediaPlayer`) routed through `handleVideoEndOfMedia`.
 - Pause-hide option `previewForceLabeledJudgeLineWhenPaused_` (UI label key
   `dialog.render_settings.gameplay.force_labeled_judge_line_when_paused`, zh "暂停时显示判定区"):
   when ON + preview paused, the on-screen preview switches outline to `JudgeAreaLabeled` AND hides

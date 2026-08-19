@@ -39,6 +39,10 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `preview_asset_loader_spec`, `preview_firework_lifecycle_spec` (firework visual curve),
   `preview_firework_warmup_policy_spec` (warm-up synthetic placement + slack-gated re-center,
   cross-checked against the real layer lifecycle — see `cross-chain-linkage.md` §1),
+  `preview_end_of_media_policy_spec` (background-video `EndOfMedia` classification: a legitimately
+  short PV reaching its own duration is a NATURAL end, a 121 s PV ending at 1.267 s is STALE and
+  recoverable; the decision is measured against the media's own duration, never against the chart
+  or a "shorter than N seconds" threshold — see `cross-chain-linkage.md` §5),
   `preview_head_layer_spec`,
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,

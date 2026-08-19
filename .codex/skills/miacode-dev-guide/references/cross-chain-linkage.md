@@ -146,6 +146,11 @@ Current contract:
 - Quickshell-beta presentation split: `QuickShellPreviewSurface.qml` keeps inline presentation for images and no-media states, while `QuickShellPreviewCompositeSurface` hosts `QuickShellPreviewSurface.qml` inside a dedicated `QQuickView` whenever the active quickshell media is video
 - Export route: export stays separate from the preview host split and still consumes the shared resolver through `VideoExportController`; Windows export audio now renders a single mixed WAV through `BassExportAudioBackend`, while non-Windows keeps `LegacyExportAudioBackend` as a non-parity fallback
 
+Lifetime contract:
+
+- A background video's `EndOfMedia` is never a main-transport event. The only natural end of the preview transport stays `MainWindow.PreviewTick.cpp::onQtPreviewTickAtSecond()` against `previewPlaybackEndSeconds()`; a PV that ends early must leave BGM, SFX, chart and timeline running (`docs/audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md`).
+- Every backend `EndOfMedia` is classified by `src/core/video/PreviewEndOfMediaPolicy.h` (spec `preview_end_of_media_policy_spec`) against the media's OWN duration versus the decoder's own progress — never the chart length, never a "shorter than N seconds" threshold. `natural` keeps the last frame, `stale` runs the bounded seek-then-reload recovery in `PreviewStageMediaHost_Timeout.cpp` (`docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md` §5.2), `unknown` does nothing. Both backends route through `PreviewStageMediaHost::handleVideoEndOfMedia`; change the classifier and its spec together.
+
 Timing contract:
 
 - Preview UI follow, export-dialog current second, and weak video late-start alignment must read `MainWindow::currentPreviewAuthoritativeAudioClockSecond` instead of branching between audio and `PreviewStageMediaHost::currentPlaybackSecond()`

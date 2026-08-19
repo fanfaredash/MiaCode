@@ -4,6 +4,7 @@
 - 审计范围：本轮对话中用户报告的「冷启动或首次播放带 PV 谱面时，音频继续而 PV/谱面画面掉帧或短暂静止」问题。
 - 当前状态：**已定位到一次可量化的 QSG/D3D11 渲染提交阻塞；尚未定位到该阻塞内部的具体驱动或管线调用，未实施根治修复。**
 - 当前代码基线：`0e85b0b2`（`dev`）；现场 beta.14/beta.15 均记录为 `git_dirty=1`。beta.15 的诊断代码和版本号改动尚在工作区，交接前必须拆分、审阅并提交，不能把“包已验证”误当作“提交已落库”。
+- 后续复核与修复：`docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_FIX_PLAN_ZH.md`（§5.1 的 `render_submit` 相位拆分、§5.2 的假 EOM 定性/取证/有界恢复、§5.4 的预热语义修复与首绘可见性、§6C 对照实验矩阵；并纠正了本文把 `position_ms≈duration` 当作独立证据的读法）。
 - 相关旧审计：`docs/audit/PREVIEW_PLAYBACK_STUTTER_AUDIT_ZH.md`。该文解决的是此前已知的时间轴冻结、重复 commit seek、烟花预热每帧重建和音频资源竞态；本文记录其后仍存在的**首播 render-submit 长阻塞**。
 
 ---

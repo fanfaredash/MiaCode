@@ -44,7 +44,10 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
 - Specs (standalone `main()` style): `oplog_self_test`, `simai_parser_spec`,
   `simai_document_spec` (SimaiDocument designer model — standalone chart-less `&des_N` round-trip),
   `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
-  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`, `preview_head_layer_spec`,
+  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`,
+  `preview_end_of_media_policy_spec` (background-video `EndOfMedia` classification:
+  natural short PV vs stale mid-clip end, measured against the media's own duration),
+  `preview_head_layer_spec`,
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`,
   `preview_audio_command_queue_spec`, `preview_audio_worker_protocol_spec`,

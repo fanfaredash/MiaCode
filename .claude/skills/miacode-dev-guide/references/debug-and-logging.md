@@ -122,6 +122,21 @@ by default, `=1` restores strict reject of hs<=0 per Q7; read once at boot into 
 `MIACODE_PREVIEW_DUMP_HWFRAMES`, `MIACODE_PREVIEW_D3D11_DEBUG_LAYER`,
 `MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT` (default **off** — §10 fix attempt, did NOT fix Arc 130T; reserved), `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`.
 
+**First-play render-stall / EndOfMedia diagnostics (audit
+`docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md`):**
+`MIACODE_PREVIEW_FRAME_PACING_DIAG=1` splits `preview/quick_scene action=render_frame_profile`'s
+`render_submit_ms` into `resource_prep_ms` (QRhi uploads / resource creation / swap-chain acquire),
+`pass_record_ms` (render-pass recording — where the driver builds a first-use pipeline) and
+`submit_tail_ms`, adds a one-shot `action=render_stall_context … dominant=` verdict, and adds
+`action=layer_first_draw` naming the first frame each layer drew. `+ --debug` additionally emits
+`preview/first_playback_bridge_trace action=render_stall_vram` (per-adapter VRAM budget/usage at the
+stall). `quick_shell/device` carries `umd_driver_version=` unconditionally.
+`preview/stage_media action=end_of_media_classified` classifies every backend `EndOfMedia` as
+`natural` / `stale` / `unknown` via `src/core/video/PreviewEndOfMediaPolicy.h`
+(spec: `preview_end_of_media_policy_spec`) and carries the FFmpeg-side `demux_eof_*` provenance from
+`third_party/QtAVPlayer/.../qavpreviewdemuxdiag_p.h`; a stale end drives the bounded
+`action=stale_end_of_media_recover` ladder. Neither classification may stop the main transport.
+
 **HW-decode green/garble/seek diagnostics (Windows D3D11VA, `DebugOptions.h` accessors
 `previewDumpHwFrameBudget()` / `previewSharedD3D11DebugLayerEnabled()`, both `--debug`-gated):**
 The decode/copy path lives in `third_party/QtAVPlayer/.../qavhwdevice_d3d11.cpp` (render thread)
