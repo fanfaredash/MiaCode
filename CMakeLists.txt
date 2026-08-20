@@ -1502,6 +1502,43 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document src/core/chart/parser src/timeline
     )
 
+    miacode_add_dev_tool(preview_guide_layer_spec TEST
+        SOURCES
+            src/tools/preview/PreviewGuideLayerSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            src/core/scene/PreviewFrameState.h
+            src/core/scene/PreviewActiveMarkerView.h
+            src/core/scene/PreviewPreparedSceneCache.h
+            src/core/scene/PreviewPreparedSceneCache.cpp
+            src/core/scene/PreviewChartReviewLayerState.h
+            src/core/scene/PreviewChartReviewLayerState.cpp
+            src/core/scene/PreviewGuideLayerState.h
+            src/core/scene/PreviewGuideLayerState.cpp
+            src/core/scene/PreviewMarkerDrawOrder.h
+            src/core/scene/PreviewMarkerDrawOrder.cpp
+            src/core/scene/PreviewAnimatedSpriteHelpers.h
+            src/core/scene/PreviewAnimatedSpriteHelpers.cpp
+            src/core/scene/PreviewJudgeOverlayShared.h
+            src/core/scene/PreviewJudgeOverlayShared.cpp
+            src/core/scene/PreviewOpacityCurves.h
+            src/core/scene/PreviewOpacityCurves.cpp
+            src/core/scene/PreviewSceneConstants.h
+            src/core/scene/PreviewSceneMath.h
+            src/core/scene/PreviewSceneMath.cpp
+            src/core/scene/PreviewSkinSelectors.h
+            src/core/scene/PreviewSkinSelectors.cpp
+            src/common/MuriTypes.h
+            src/common/MuriTypes.cpp
+            src/timeline/TimelineData.h
+            resources/fonts.qrc
+            resources/slide_data.qrc
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES
+            src src/common src/preview src/core/scene src/core/chart
+            src/core/chart/document src/core/chart/parser src/timeline
+    )
+
     miacode_add_dev_tool(preview_slide_vanilla_trim_spec TEST
         SOURCES
             src/tools/preview/PreviewSlideVanillaTrimSpec.cpp

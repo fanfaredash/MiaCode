@@ -44,6 +44,9 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   recoverable; the decision is measured against the media's own duration, never against the chart
   or a "shorter than N seconds" threshold — see `cross-chain-linkage.md` §5),
   `preview_head_layer_spec`,
+  `preview_guide_layer_spec` (note-guide each-connector art selection: a `*` same-head slide
+  expands to one marker per branch, so the each group must be counted in logical head stars
+  — `slideHeadEventKey` — or a two-note each renders as the 3+ full ring),
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
   `timeline_cadence_arbitration_policy_spec` (decides whether the timeline's watchdog timer may
