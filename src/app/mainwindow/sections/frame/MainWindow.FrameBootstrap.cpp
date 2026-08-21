@@ -1326,7 +1326,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     previewCanvas_ = new PreviewRuntime(this);
-    connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, bool backtickSeparator) {
+    connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, QChar separator) {
         auto* editor = qobject_cast<QTextEdit*>(editorWidget_);
         if (editor == nullptr || editor->document() == nullptr || editor->isReadOnly()
             || !hasActiveDifficulty() || editorStack_ == nullptr
@@ -1348,7 +1348,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         // cursorPositionChanged → timeline-sync path), so the two normally agree;
         // when a manual preview seek pulls them apart the caret still wins.
         const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
-            editor->toPlainText(), originalPosition, pad, backtickSeparator);
+            editor->toPlainText(), originalPosition, pad, separator);
         if (!editPlan.valid) {
             return;
         }

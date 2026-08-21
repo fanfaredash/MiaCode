@@ -551,7 +551,9 @@ void PreviewQuickSceneRoot::mouseReleaseEvent(QMouseEvent* event)
         const QString pad = touchPadAtItemPoint(event->position());
         touchPadAuthoringPressedButton_ = Qt::NoButton;
         runtime_->finishTouchPadAuthoringPress(
-            pad, miacode::preview::scene::touchPadAuthoringUsesBacktickSeparator(event->button()));
+            pad,
+            miacode::preview::scene::touchPadAuthoringSeparator(
+                event->button(), event->modifiers()));
         event->accept();
         return;
     }

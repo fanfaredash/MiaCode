@@ -1267,29 +1267,29 @@ bool measureRequiresExactRendering(const RenderMeasure& measure)
 
 QString renderMeasureLine(const RenderMeasure& measure, const ChartNormalizationOptions& options)
 {
-    if (options.syntax == ChartNormalizationSyntax::Hinata) {
-        // Hinata syntax keeps one subdivision header per line whenever the
+    if (options.syntax == ChartNormalizationSyntax::CompactSingleLine) {
+        // Compact-single-line syntax keeps one subdivision header per line whenever the
         // complete measure can be represented by one exact grid.  This is
         // the compact form of the same timing model; it does not change any
         // note positions.
         const int beats = chooseExactBeatsForRange(measure, Rational(), measure.lengthWhole);
         if (beats > 0) {
-            const int hinataBeats = beats == 2 ? 4 : beats;
-            const QString compact = renderExactChunk(measure, Rational(), measure.lengthWhole, hinataBeats);
+            const int compactBeats = beats == 2 ? 4 : beats;
+            const QString compact = renderExactChunk(measure, Rational(), measure.lengthWhole, compactBeats);
             if (!compact.isEmpty()) {
                 return compact;
             }
         }
 
         // Mixed explicit subdivisions still use the existing safe renderer,
-        // but Hinata output removes visual beat separators and spaces.
+        // but compact-single-line output removes visual beat separators and spaces.
         QString compact = options.reduceTo384Grid
             ? renderMeasureLineApproximate(measure)
             : renderMeasureLine(measure, ChartNormalizationOptions{
                 options.startAtNewMeasure,
                 options.reduceTo384Grid,
                 options.splitEveryFourMeasures,
-                ChartNormalizationSyntax::Fpd,
+                ChartNormalizationSyntax::SegmentPreserving,
                 options.sectionMeasureCount});
         compact.remove(QLatin1Char(' '));
         return compact;
@@ -1777,10 +1777,10 @@ ChartNormalizationResult normalizeChartFragment(
             sectionMeasureIndex = 0;
         }
         appendBoundaryItems(&outputLines, measure.leadingItems);
-        bool renderedHinataUnitMeasure = false;
+        bool renderedCompactUnitMeasure = false;
         if (!measure.lengthWhole.isZero() || !measure.moments.isEmpty()) {
             const QString renderedLine = renderMeasureLine(measure, options);
-            renderedHinataUnitMeasure = options.syntax == ChartNormalizationSyntax::Hinata
+            renderedCompactUnitMeasure = options.syntax == ChartNormalizationSyntax::CompactSingleLine
                 && renderedLine.trimmed() == QStringLiteral("{1},");
             outputLines.append(renderedLine);
             ++emittedMeasureLines;
@@ -1797,9 +1797,9 @@ ChartNormalizationResult normalizeChartFragment(
             && (sectionMeasureIndex % sectionLength) == 0) {
             outputLines.append(QString());
         }
-        if (renderedHinataUnitMeasure && sectionMeasureIndex == 1) {
+        if (renderedCompactUnitMeasure && sectionMeasureIndex == 1) {
             outputLines.append(QString());
-            // A leading {1}, is only a Hinata syntax anchor. It must not
+            // A leading {1}, is only a compact-single-line syntax anchor. It must not
             // consume the first measure of the following section.
             sectionMeasureIndex = 0;
         }
@@ -1858,10 +1858,10 @@ ChartNormalizationOptions chartNormalizationOptionsFromPreferences(
             preview.value(kChartNormalizeSplitEveryFourMeasuresPreferenceKey).toBool(options.splitEveryFourMeasures);
     }
     const QString syntax = preview.value(kChartNormalizeSyntaxPreferenceKey).toString().trimmed().toLower();
-    if (syntax == QStringLiteral("hinata")) {
-        options.syntax = ChartNormalizationSyntax::Hinata;
-    } else if (syntax == QStringLiteral("fpd")) {
-        options.syntax = ChartNormalizationSyntax::Fpd;
+    if (syntax == QStringLiteral("compact_single_line")) {
+        options.syntax = ChartNormalizationSyntax::CompactSingleLine;
+    } else if (syntax == QStringLiteral("segment_preserving")) {
+        options.syntax = ChartNormalizationSyntax::SegmentPreserving;
     }
     options.sectionMeasureCount = options.splitEveryFourMeasures ? 4 : 0;
     if (preview.value(kChartNormalizeSectionMeasureCountPreferenceKey).isDouble()) {
@@ -1882,7 +1882,9 @@ void saveChartNormalizationOptionsToPreferences(
     preview->insert(kChartNormalizeSplitEveryFourMeasuresPreferenceKey, options.splitEveryFourMeasures);
     preview->insert(
         kChartNormalizeSyntaxPreferenceKey,
-        options.syntax == ChartNormalizationSyntax::Hinata ? QStringLiteral("hinata") : QStringLiteral("fpd"));
+        options.syntax == ChartNormalizationSyntax::CompactSingleLine
+            ? QStringLiteral("compact_single_line")
+            : QStringLiteral("segment_preserving"));
     preview->insert(kChartNormalizeSectionMeasureCountPreferenceKey, options.sectionMeasureCount);
 }
 

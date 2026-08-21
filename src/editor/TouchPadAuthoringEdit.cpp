@@ -121,7 +121,7 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
     const QString& text,
     int cursorPosition,
     const QString& pad,
-    bool useBacktickSeparator)
+    QChar separator)
 {
     TouchPadAuthoringEditPlan plan;
     const QString normalizedPad = pad.trimmed().toUpper();
@@ -202,9 +202,16 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
         }
     }
 
+    if (separator == QLatin1Char(',')) {
+        plan.insertionPosition = lastContentEnd;
+        plan.insertionText = QString(separator) + normalizedPad;
+        plan.valid = true;
+        return plan;
+    }
+
     if (!empty) {
         plan.insertionPosition = lastContentEnd;
-        plan.insertionText = QString(useBacktickSeparator ? QLatin1Char('`') : QLatin1Char('/')) + normalizedPad;
+        plan.insertionText = QString(separator == QLatin1Char('`') ? separator : QLatin1Char('/')) + normalizedPad;
         plan.valid = true;
         return plan;
     }

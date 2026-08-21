@@ -337,9 +337,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   caret token through `TimelineQuickModel::resolveTimelineSecondForCursor`, and seeks discretely to
   `max(0, tokenSecond - 1/60)`. The comma-delimited token is selected by the editor caret (caret
   immediately before a comma belongs to the left token); tokens containing only whitespace,
-  leading BPM/subdivision/`<HS*>` controls, and/or `||` comments are empty and receive the pad directly
-  after their controls (before the comment),
-  nonempty tokens receive `/pad` on left click or `` `pad`` on right click. Clicking an ordinary
+  leading BPM/subdivision/`<HS*>` controls, and/or `||` comments are empty. Left click receives the
+  pad directly after those controls (before the comment) for an empty token and appends `/pad` for a
+  nonempty token; right click always appends `,pad` and advances to a new comma-delimited token;
+  Ctrl+Shift+left click appends `` `pad`` as a pseudo-double entry. Clicking an ordinary
   exact pad already present in the token removes only its first occurrence together with the
   adjacent separator (while preserving leading timing controls and trailing whitespace). Press
   must finish on the same pad; moving away, ungrab, focus/app deactivation, page/context

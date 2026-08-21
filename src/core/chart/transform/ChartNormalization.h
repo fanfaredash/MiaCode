@@ -8,15 +8,15 @@
 namespace miacode::chart_transform {
 
 enum class ChartNormalizationSyntax {
-    Fpd,
-    Hinata,
+    SegmentPreserving,
+    CompactSingleLine,
 };
 
 struct ChartNormalizationOptions {
     bool startAtNewMeasure = true;
     bool reduceTo384Grid = true;
     bool splitEveryFourMeasures = true;
-    ChartNormalizationSyntax syntax = ChartNormalizationSyntax::Fpd;
+    ChartNormalizationSyntax syntax = ChartNormalizationSyntax::SegmentPreserving;
     int sectionMeasureCount = 4;
 };
 

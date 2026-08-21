@@ -166,7 +166,11 @@ int main(int argc, char** argv)
     const auto expectTouchPlan = [&out, &failed](const QString& text, int pos, bool backtick,
                                                  int expectedStart, int expectedInsert,
                                                  const QString& expectedText, const QString& message) {
-        const auto plan = miacode::editor::planTouchPadAuthoringEdit(text, pos, QStringLiteral("A1"), backtick);
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(
+            text,
+            pos,
+            QStringLiteral("A1"),
+            backtick ? QLatin1Char('`') : QLatin1Char('/'));
         expect(plan.valid && plan.tokenStart == expectedStart && plan.insertionPosition == expectedInsert
                    && plan.insertionText == expectedText,
                message, out, &failed);
@@ -178,7 +182,19 @@ int main(int argc, char** argv)
     expectTouchPlan(QStringLiteral("1,2  ,3"), 3, false, 2, 3, QStringLiteral("/A1"),
                     QStringLiteral("non-empty token appends slash before trailing whitespace"));
     expectTouchPlan(QStringLiteral("1,2,"), 3, true, 2, 3, QStringLiteral("`A1"),
-                    QStringLiteral("right-click authoring appends backtick"));
+                    QStringLiteral("pseudo-double authoring appends backtick"));
+    {
+        const auto commaPlan = miacode::editor::planTouchPadAuthoringEdit(
+            QStringLiteral("1,2,"), 3, QStringLiteral("A1"), QLatin1Char(','));
+        expect(commaPlan.valid && commaPlan.insertionPosition == 3
+                   && commaPlan.insertionText == QLatin1String(",A1"),
+               QStringLiteral("right-click authoring appends a comma beat"), out, &failed);
+        const auto emptyCommaPlan = miacode::editor::planTouchPadAuthoringEdit(
+            QStringLiteral(",,"), 1, QStringLiteral("A1"), QLatin1Char(','));
+        expect(emptyCommaPlan.valid && emptyCommaPlan.insertionPosition == 1
+                   && emptyCommaPlan.insertionText == QLatin1String(",A1"),
+               QStringLiteral("right-click on an empty beat still advances by comma"), out, &failed);
+    }
     expectTouchPlan(QStringLiteral("1,2,"), 1, false, 0, 1, QStringLiteral("/A1"),
                     QStringLiteral("caret immediately before comma belongs to left token"));
     expectTouchPlan(QStringLiteral("1,2,"), 2, false, 2, 3, QStringLiteral("/A1"),
@@ -197,7 +213,10 @@ int main(int argc, char** argv)
         QTextCursor cursor(&document);
         cursor.setPosition(pos);
         const auto plan = miacode::editor::planTouchPadAuthoringEdit(
-            document.toPlainText(), cursor.position(), pad, backtick);
+            document.toPlainText(),
+            cursor.position(),
+            pad,
+            backtick ? QLatin1Char('`') : QLatin1Char('/'));
         const bool applied = miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan);
         expect(applied && document.toPlainText() == expected, message, out, &failed);
     };
@@ -303,7 +322,7 @@ int main(int argc, char** argv)
         cursor.setPosition(0);
         cursor.setPosition(3, QTextCursor::KeepAnchor);
         const auto plan = miacode::editor::planTouchPadAuthoringEdit(
-            document.toPlainText(), cursor.position(), QStringLiteral("B2"), false);
+            document.toPlainText(), cursor.position(), QStringLiteral("B2"), QLatin1Char('/'));
         expect(miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan)
                    && document.toPlainText() == QLatin1String("1,2/B2,"),
                QStringLiteral("active selection uses position and does not delete selected text"), out, &failed);
@@ -317,7 +336,7 @@ int main(int argc, char** argv)
         QTextCursor cursor(&document);
         cursor.setPosition(2);
         const auto plan = miacode::editor::planTouchPadAuthoringEdit(
-            document.toPlainText(), cursor.position(), QStringLiteral("A1"), false);
+            document.toPlainText(), cursor.position(), QStringLiteral("A1"), QLatin1Char('/'));
         expect(miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan)
                    && document.toPlainText() == QLatin1String("1/B2"),
                QStringLiteral("touch authoring deletion applies successfully"), out, &failed);

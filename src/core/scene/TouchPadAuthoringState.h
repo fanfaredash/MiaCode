@@ -10,9 +10,16 @@ inline bool touchPadAuthoringMouseButtonSupported(Qt::MouseButton button)
     return button == Qt::LeftButton || button == Qt::RightButton;
 }
 
-inline bool touchPadAuthoringUsesBacktickSeparator(Qt::MouseButton button)
+inline QChar touchPadAuthoringSeparator(
+    Qt::MouseButton button,
+    Qt::KeyboardModifiers modifiers)
 {
-    return button == Qt::RightButton;
+    if (button == Qt::RightButton) {
+        return QLatin1Char(',');
+    }
+    return modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::ShiftModifier)
+        ? QLatin1Char('`')
+        : QLatin1Char('/');
 }
 
 inline QString normalizedTouchPadAuthoringToken(const QString& pad)

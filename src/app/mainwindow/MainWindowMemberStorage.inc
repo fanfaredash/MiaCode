@@ -628,7 +628,7 @@
         bool chartNormalizeSplitEveryFourMeasures_ = true;
         int chartNormalizeSectionMeasureCount_ = 4;
         miacode::chart_transform::ChartNormalizationSyntax chartNormalizeSyntax_ =
-            miacode::chart_transform::ChartNormalizationSyntax::Fpd;
+            miacode::chart_transform::ChartNormalizationSyntax::SegmentPreserving;
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;

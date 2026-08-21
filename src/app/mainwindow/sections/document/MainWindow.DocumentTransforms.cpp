@@ -116,8 +116,8 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     optionsForm->addRow(UiText::text(QStringLiteral("document.chart_sectioning")), sectioningCombo);
 
     auto* syntaxCombo = createDialogComboBox();
-    syntaxCombo->addItem(QStringLiteral("FPD"), static_cast<int>(miacode::chart_transform::ChartNormalizationSyntax::Fpd));
-    syntaxCombo->addItem(QStringLiteral("日向"), static_cast<int>(miacode::chart_transform::ChartNormalizationSyntax::Hinata));
+    syntaxCombo->addItem(QStringLiteral("分段保留"), static_cast<int>(miacode::chart_transform::ChartNormalizationSyntax::SegmentPreserving));
+    syntaxCombo->addItem(QStringLiteral("单行紧凑"), static_cast<int>(miacode::chart_transform::ChartNormalizationSyntax::CompactSingleLine));
     syntaxCombo->setCurrentIndex(syntaxCombo->findData(static_cast<int>(initialOptions.syntax)));
     optionsForm->addRow(QStringLiteral("整理语法"), syntaxCombo);
 
