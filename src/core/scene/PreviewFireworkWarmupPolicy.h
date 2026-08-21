@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/PreviewGameplayConfig.h"
+#include "timeline/TimelineData.h"
 
 #include <QtGlobal>
 
@@ -17,6 +18,20 @@
 // question that matters testable: how far may the playhead travel before the
 // synthetic falls out of its window and the warm-up can no longer confirm?
 namespace miacode::preview::scene {
+
+// Identity shared by the runtime injector/remover and the layer builder. The
+// marker is intentionally distinguishable from chart-authored touches so the
+// builder can allow its negative trigger at chart second zero without changing
+// the existing rule for real notes with negative timestamps.
+inline constexpr qreal kFireworkWarmupOffscreenCoordinate = -1.0e6;
+
+inline bool isFireworkWarmupMarker(const TimelineNoteMarker& marker)
+{
+    return marker.isFirework
+        && marker.type == QLatin1String("touch")
+        && qFuzzyCompare(marker.touchPoint.x(), kFireworkWarmupOffscreenCoordinate)
+        && qFuzzyCompare(marker.touchPoint.y(), kFireworkWarmupOffscreenCoordinate);
+}
 
 // The synthetic's firework is made to trigger this far BEHIND the live playhead,
 // so the effect is already inside its lifecycle window on the very next frame

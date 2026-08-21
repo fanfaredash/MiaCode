@@ -12,6 +12,7 @@ namespace {
 
 using miacode::preview::scene::fireworkWarmupMarkerSecond;
 using miacode::preview::scene::fireworkWarmupNeedsRecenter;
+using miacode::preview::scene::kFireworkWarmupOffscreenCoordinate;
 using miacode::preview::scene::kFireworkWarmupBackwardSlackSeconds;
 using miacode::preview::scene::kFireworkWarmupForwardSlackSeconds;
 using miacode::preview::scene::PreviewFrameState;
@@ -30,7 +31,7 @@ bool expect(bool condition, const QString& message, QTextStream& err)
 // `centeredAt`, then ask the real layer builder whether it draws at `playhead`.
 // This is the property the warm-up depends on: a synthetic the layer refuses to
 // draw can never confirm the PSO compile.
-bool syntheticDrawsAt(double centeredAt, double playhead)
+bool syntheticDrawsAt(double centeredAt, double playhead, bool useWarmupIdentity = true)
 {
     PreviewFrameState state;
 
@@ -39,7 +40,9 @@ bool syntheticDrawsAt(double centeredAt, double playhead)
     synth.isFirework = true;
     synth.second = fireworkWarmupMarkerSecond(centeredAt);
     synth.endSecond = -1.0;
-    synth.touchPoint = QPointF(-1.0e6, -1.0e6);
+    synth.touchPoint = useWarmupIdentity
+        ? QPointF(kFireworkWarmupOffscreenCoordinate, kFireworkWarmupOffscreenCoordinate)
+        : QPointF(100.0, 100.0);
     synth.lane = 1;
     state.noteMarkers.append(synth);
 
@@ -76,6 +79,21 @@ bool verifySlackMatchesLayerLifecycle(QTextStream& err)
                  "synthetic still draws just inside the backward slack", err);
     ok &= expect(!syntheticDrawsAt(kCenter, kCenter - kFireworkWarmupBackwardSlackSeconds - kInsideMargin),
                  "synthetic stops drawing past the backward slack", err);
+    return ok;
+}
+
+// Regression for the first-play field log: startup arms at playhead 0, but the
+// warm-up marker's 0.15 s lead gives it a negative trigger. The synthetic must
+// be drawable during the paused startup frames; otherwise PSO/texture creation
+// is deferred into the user's first playback. Real negative-time notes retain
+// the pre-existing rejection rule.
+bool verifyChartStartWarmupDrawsWhilePaused(QTextStream& err)
+{
+    bool ok = true;
+    ok &= expect(syntheticDrawsAt(0.0, 0.0),
+                 "warm-up synthetic draws while paused at chart second zero", err);
+    ok &= expect(!syntheticDrawsAt(0.0, 0.0, false),
+                 "ordinary negative-trigger firework remains rejected at chart second zero", err);
     return ok;
 }
 
@@ -172,6 +190,7 @@ int main(int argc, char* argv[])
     QTextStream out(stdout);
 
     bool ok = true;
+    ok &= verifyChartStartWarmupDrawsWhilePaused(err);
     ok &= verifySlackMatchesLayerLifecycle(err);
     ok &= verifyRecenterHappensBeforeTheEdge(err);
     ok &= verifySeeksForceRecenter(err);

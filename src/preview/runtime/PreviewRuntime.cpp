@@ -1994,7 +1994,9 @@ void PreviewRuntime::appendFireworkWarmupMarker()
     synth.isFirework = true;
     synth.second = miacode::preview::scene::fireworkWarmupMarkerSecond(frameState_.playheadSeconds);
     synth.endSecond = -1.0;
-    synth.touchPoint = QPointF(-1.0e6, -1.0e6);  // off-screen, non-zero
+    synth.touchPoint = QPointF(
+        miacode::preview::scene::kFireworkWarmupOffscreenCoordinate,
+        miacode::preview::scene::kFireworkWarmupOffscreenCoordinate);  // off-screen, non-zero
     synth.lane = 1;
     frameState_.noteMarkers.append(synth);
     // Anchor for refreshFireworkWarmupForPlayheadChange()'s slack test.
@@ -2009,10 +2011,7 @@ void PreviewRuntime::removeFireworkWarmupMarkers()
             markers.begin(),
             markers.end(),
             [](const TimelineNoteMarker& marker) {
-                return marker.isFirework
-                    && marker.type == QLatin1String("touch")
-                    && qFuzzyCompare(marker.touchPoint.x(), -1.0e6)
-                    && qFuzzyCompare(marker.touchPoint.y(), -1.0e6);
+                return miacode::preview::scene::isFireworkWarmupMarker(marker);
             }),
         markers.end());
 }
