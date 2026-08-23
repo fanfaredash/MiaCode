@@ -2,6 +2,7 @@
 #include "BracketCompletionPopup.h"
 #include "common/AdoptedWidgetCoordinates.h"
 #include "SimaiCompletionCatalog.h"
+#include "SimaiTextEditPolicy.h"
 #include "common/DebugLog.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
@@ -31,6 +32,56 @@
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextFrame>
+
+bool PlainCodeEditor::applySimaiTextEditPolicy(
+    const miacode::editor::SimaiTextEditRequest& request)
+{
+    if (isReadOnly()) {
+        return false;
+    }
+    const auto result = miacode::editor::applySimaiTextEditPolicy(request);
+    if (!result.consumed) {
+        return false;
+    }
+    const bool completionWasActive = bracketCompletionActive();
+
+    if (result.transaction.hasEdit) {
+        const QTextBlockFormat blockFormat = textCursor().blockFormat();
+        const QTextCharFormat charFormat = textCursor().charFormat();
+        QTextCursor cursor(document());
+        cursor.setPosition(result.transaction.replacementStart);
+        cursor.setPosition(result.transaction.replacementEnd, QTextCursor::KeepAnchor);
+        suppressCompletionFilter_ = true;
+        cursor.beginEditBlock();
+        if (result.transaction.insertsBlock) {
+            cursor.insertBlock(blockFormat, charFormat);
+        } else {
+            cursor.insertText(result.transaction.replacementText);
+        }
+        cursor.endEditBlock();
+        cursor.setPosition(result.transaction.anchor);
+        cursor.setPosition(result.transaction.position, QTextCursor::KeepAnchor);
+        setTextCursor(cursor);
+        suppressCompletionFilter_ = false;
+    } else {
+        QTextCursor cursor = textCursor();
+        cursor.setPosition(result.transaction.anchor);
+        cursor.setPosition(result.transaction.position, QTextCursor::KeepAnchor);
+        setTextCursor(cursor);
+    }
+
+    if (result.completion.active) {
+        openCompletionPopup(result.completion.candidates, result.completion.opening,
+                            result.completion.closingPresent);
+    } else if (request.key == Qt::Key_Backspace
+               || (request.input.size() == 1
+                   && miacode::editor::isBracketClosing(request.input.at(0)))) {
+        closeBracketCompletion();
+    } else if (completionWasActive) {
+        updateBracketCompletionFilter();
+    }
+    return true;
+}
 
 
 // Auto-close brackets — when the user types {, [, or (, insert the matching

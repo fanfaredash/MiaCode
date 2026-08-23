@@ -13,6 +13,15 @@
 
 namespace {
 
+class PointerSeamEditor final : public PlainCodeEditor
+{
+public:
+    QPoint pointerPosition;
+
+protected:
+    QPoint completionPopupPointerPosition() const override { return pointerPosition; }
+};
+
 bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
 {
     if (condition) {
@@ -579,7 +588,7 @@ int main(int argc, char** argv)
             &failed);
     }
     {
-        PlainCodeEditor completionEditor;
+        PointerSeamEditor completionEditor;
         completionEditor.resize(480, 240);
         completionEditor.show();
         completionEditor.setFocus();
@@ -599,11 +608,11 @@ int main(int argc, char** argv)
             const QRect firstItemRect = popup->visualItemRect(popup->item(0));
             const QPoint clickPos = firstItemRect.center();
             const QPoint globalClickPos = popup->viewport()->mapToGlobal(clickPos);
-            // This spec deliberately tests the popup's supported press/release
-            // activation path. Synthetic FocusOut plus QCursor::setPos is not
-            // reliable on Cocoa (the observed cursor remains elsewhere), so
-            // native focus-transfer/cursor-geometry behavior is GUI/manual
-            // coverage rather than a deterministic unit-spec contract.
+            completionEditor.pointerPosition = globalClickPos;
+
+            QFocusEvent focusOut(QEvent::FocusOut, Qt::MouseFocusReason);
+            QApplication::sendEvent(&completionEditor, &focusOut);
+            QApplication::processEvents();
 
             QMouseEvent press(
                 QEvent::MouseButtonPress,
@@ -631,6 +640,93 @@ int main(int argc, char** argv)
                 out,
                 &failed);
         }
+    }
+    {
+        PlainCodeEditor filteringEditor;
+        filteringEditor.resize(480, 240);
+        filteringEditor.show();
+        filteringEditor.setFocus();
+        QApplication::processEvents();
+        QKeyEvent openKey(QEvent::KeyPress, Qt::Key_BracketLeft, Qt::NoModifier, QStringLiteral("["));
+        QApplication::sendEvent(&filteringEditor, &openKey);
+        QKeyEvent eightKey(QEvent::KeyPress, Qt::Key_8, Qt::NoModifier, QStringLiteral("8"));
+        QApplication::sendEvent(&filteringEditor, &eightKey);
+        QApplication::processEvents();
+        auto* popup = filteringEditor.findChild<BracketCompletionPopup*>();
+        expect(popup != nullptr && popup->isVisible() && popup->count() == 1
+                   && popup->currentCandidate() == QStringLiteral("8:1]"),
+               QStringLiteral("completion filters after a policy text transaction"), out, &failed);
+        QKeyEvent noMatchKey(QEvent::KeyPress, Qt::Key_Z, Qt::NoModifier, QStringLiteral("z"));
+        QApplication::sendEvent(&filteringEditor, &noMatchKey);
+        QApplication::processEvents();
+        expect(popup != nullptr && !popup->isVisible(),
+               QStringLiteral("completion dismisses after a policy filter has no match"), out, &failed);
+    }
+    {
+        PlainCodeEditor activeCompletionEditor;
+        activeCompletionEditor.resize(480, 240);
+        activeCompletionEditor.show();
+        activeCompletionEditor.setFocus();
+        QApplication::processEvents();
+        QKeyEvent openKey(QEvent::KeyPress, Qt::Key_BracketLeft, Qt::NoModifier, QStringLiteral("["));
+        QApplication::sendEvent(&activeCompletionEditor, &openKey);
+        QKeyEvent holdKey(QEvent::KeyPress, Qt::Key_H, Qt::NoModifier, QStringLiteral("h"));
+        QApplication::sendEvent(&activeCompletionEditor, &holdKey);
+        QApplication::processEvents();
+        auto* popup = activeCompletionEditor.findChild<BracketCompletionPopup*>();
+        expect(activeCompletionEditor.toPlainText() == QStringLiteral("[h]")
+                   && popup != nullptr && !popup->isVisible(),
+               QStringLiteral("active bracket completion treats h as a filter instead of opening hold completion"),
+               out,
+               &failed);
+    }
+    {
+        PlainCodeEditor enterEditor;
+        enterEditor.setPlainText(QStringLiteral("x"));
+        QTextCursor cursor = enterEditor.textCursor();
+        QTextCharFormat italic;
+        italic.setFontItalic(true);
+        cursor.setPosition(0);
+        cursor.setPosition(1, QTextCursor::KeepAnchor);
+        cursor.mergeCharFormat(italic);
+        cursor.clearSelection();
+        cursor.setPosition(1);
+        enterEditor.setTextCursor(cursor);
+        QKeyEvent enterKey(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+        QApplication::sendEvent(&enterEditor, &enterKey);
+        const bool formattingPreserved = enterEditor.textCursor().charFormat().fontItalic();
+        enterEditor.undo();
+        expect(enterEditor.toPlainText() == QStringLiteral("x") && formattingPreserved,
+               QStringLiteral("Enter policy transaction preserves block character formatting and one undo group"),
+               out,
+               &failed);
+    }
+    {
+        PlainCodeEditor readOnlyEditor;
+        readOnlyEditor.setPlainText(QStringLiteral("[]"));
+        QTextCursor cursor = readOnlyEditor.textCursor();
+        cursor.setPosition(1);
+        readOnlyEditor.setTextCursor(cursor);
+        readOnlyEditor.setReadOnly(true);
+
+        QKeyEvent closeKey(QEvent::KeyPress, Qt::Key_BracketRight, Qt::NoModifier, QStringLiteral("]"));
+        QApplication::sendEvent(&readOnlyEditor, &closeKey);
+        expect(readOnlyEditor.toPlainText() == QStringLiteral("[]")
+                   && readOnlyEditor.textCursor().anchor() == 1
+                   && readOnlyEditor.textCursor().position() == 1,
+               QStringLiteral("read-only key input never applies a policy transaction or moves the caret"),
+               out,
+               &failed);
+
+        QInputMethodEvent ime;
+        ime.setCommitString(QStringLiteral("【"));
+        QApplication::sendEvent(&readOnlyEditor, &ime);
+        expect(readOnlyEditor.toPlainText() == QStringLiteral("[]")
+                   && readOnlyEditor.textCursor().anchor() == 1
+                   && readOnlyEditor.textCursor().position() == 1,
+               QStringLiteral("read-only IME input never applies a policy transaction or moves the caret"),
+               out,
+               &failed);
     }
     {
         const auto expectBracketSelectionReplace = [&](Qt::Key key, const QString& text, const QString& expected, const QString& message) {

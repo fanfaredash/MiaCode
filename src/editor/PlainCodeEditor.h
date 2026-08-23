@@ -5,6 +5,8 @@
 #include <QPointF>
 #include <QTextEdit>
 
+namespace miacode::editor { struct SimaiTextEditRequest; }
+
 class BracketCompletionPopup;
 class LineNumberArea;
 class QAction;
@@ -95,6 +97,9 @@ signals:
     void lineNumberBookmarkContextMenuRequested(int line, const QPoint& globalPos);
 
 protected:
+    // Kept virtual so the focus-out policy can be tested with the actual event
+    // path without depending on an OS cursor warp.
+    virtual QPoint completionPopupPointerPosition() const;
     bool event(QEvent* event) override;
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
@@ -142,6 +147,9 @@ private:
     // counterpart to auto-close (you type the `]` you "see") — gated by the same
     // preference. Shared by the keyPressEvent and IME commit paths.
     bool tryOverwriteClosingBracket(const QString& text);
+    // Applies the pure smart-input policy to this QTextDocument. Popup rendering
+    // and key routing stay here; the policy itself has no widget dependency.
+    bool applySimaiTextEditPolicy(const miacode::editor::SimaiTextEditRequest& request);
     void ensureCompletionPopup();
     // Shared popup-opening core: anchors the suggestion list under the caret and
     // records the slot state. opening is the glyph whose matching close governs

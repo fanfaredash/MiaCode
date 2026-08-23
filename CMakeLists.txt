@@ -284,6 +284,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/editor/BracketCompletionPopup.cpp
     src/editor/SimaiCompletionCatalog.h
     src/editor/SimaiCompletionCatalog.cpp
+    src/editor/SimaiTextEditPolicy.h
+    src/editor/SimaiTextEditPolicy.cpp
     src/editor/BracketScopeHighlighter.h
     src/editor/BracketScopeHighlighter.cpp
     src/tools/latency/LatencyAnalysis.h
@@ -1563,6 +1565,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/BracketCompletionPopup.cpp
             src/editor/SimaiCompletionCatalog.h
             src/editor/SimaiCompletionCatalog.cpp
+            src/editor/SimaiTextEditPolicy.h
+            src/editor/SimaiTextEditPolicy.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
             src/extensions/ExtensionManifest.h
@@ -1589,6 +1593,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(simai_completion_catalog_spec TEST
         SOURCES
             src/tools/editor/SimaiCompletionCatalogSpec.cpp
+            src/editor/SimaiCompletionCatalog.h
+            src/editor/SimaiCompletionCatalog.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/editor
+    )
+
+    miacode_add_dev_tool(simai_text_edit_policy_spec TEST
+        SOURCES
+            src/tools/editor/SimaiTextEditPolicySpec.cpp
+            src/editor/SimaiTextEditPolicy.h
+            src/editor/SimaiTextEditPolicy.cpp
             src/editor/SimaiCompletionCatalog.h
             src/editor/SimaiCompletionCatalog.cpp
         LIBS Qt6::Core

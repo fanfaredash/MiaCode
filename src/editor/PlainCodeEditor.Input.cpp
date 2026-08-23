@@ -1,6 +1,7 @@
 #include "PlainCodeEditor.h"
 #include "BracketCompletionPopup.h"
 #include "SimaiCompletionCatalog.h"
+#include "SimaiTextEditPolicy.h"
 #include "common/DebugLog.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
@@ -492,8 +493,14 @@ void PlainCodeEditor::focusOutEvent(QFocusEvent* event)
         completionPopup_ != nullptr
         && completionPopup_->isVisible()
         && miacode::editor::completionPopupContainsPointer(
-            completionPopup_->geometry(), QCursor::pos());
-    if (!pointerInsideCompletionPopup) {
+            completionPopup_->geometry(), completionPopupPointerPosition());
+    // A non-pointer focus change is emitted by some platforms while the Tool
+    // popup is first mapped. Do not mistake that native transition for the user
+    // clicking away; mouse and tab focus changes remain dismissals.
+    const bool userMovedFocus = event != nullptr
+        && (event->reason() == Qt::MouseFocusReason || event->reason() == Qt::TabFocusReason
+            || event->reason() == Qt::BacktabFocusReason);
+    if (!pointerInsideCompletionPopup && userMovedFocus) {
         closeBracketCompletion();
     }
     const QRect previousRect = previewFollowVisualCaretRect();
@@ -512,6 +519,11 @@ void PlainCodeEditor::focusOutEvent(QFocusEvent* event)
     if (dirtyRect.isValid()) {
         viewport()->update(dirtyRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
     }
+}
+
+QPoint PlainCodeEditor::completionPopupPointerPosition() const
+{
+    return QCursor::pos();
 }
 
 void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
@@ -634,61 +646,39 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
 
 void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
 {
-    if (event == nullptr || !halfWidthInputEnabled_) {
+    if (event == nullptr) {
+        QTextEdit::inputMethodEvent(event);
+        return;
+    }
+    if (isReadOnly()) {
+        event->ignore();
+        return;
+    }
+    if (!halfWidthInputEnabled_) {
         QTextEdit::inputMethodEvent(event);
         return;
     }
 
-    const QString commitString = event->commitString();
-    const QString normalizedCommitString = miacode::editor::normalizedHalfWidthText(commitString);
-
-    // Route a finalized single-bracket commit through the same auto-close
-    // pairing as keyPressEvent. Without this, a bracket delivered via the IME
-    // commit string — e.g. a full-width 「【」 normalized to a half-width "["
-    // just above — is inserted unclosed, leaving a dangling scope that the
-    // bracket-scope highlighter then carries onto the following line. Guard to a
-    // finalized composition (empty preedit) with no replacement span so the
-    // helper's caret math stays valid.
-    if (event->preeditString().isEmpty()
-        && event->replacementLength() == 0
-        && normalizedCommitString.size() == 1
-        && miacode::editor::isBracketOpening(normalizedCommitString.at(0))) {
-        if (tryOverwriteOpeningSquareBracket(normalizedCommitString)) {
-            event->accept();
-            return;
-        }
-        const QChar opening = normalizedCommitString.at(0);
-        if (tryAutoCloseBracket(normalizedCommitString)) {
-            maybeOpenBracketCompletion(opening, /*closingPresent=*/true);
+    if (event->preeditString().isEmpty() && event->replacementLength() == 0
+        && !event->commitString().isEmpty()) {
+        const QTextCursor cursor = textCursor();
+        miacode::editor::SimaiTextEditRequest request;
+        request.text = toPlainText();
+        request.anchor = cursor.anchor();
+        request.position = cursor.position();
+        request.input = event->commitString();
+        request.isImeCommit = true;
+        request.halfWidthInputEnabled = halfWidthInputEnabled_;
+        request.overwriteMode = overwriteMode();
+        request.autoCompletionEnabled = autoCompletionEnabled_;
+        request.wholeBpm = wholeBpmCandidate_;
+        request.completionActive = bracketCompletionActive();
+        if (applySimaiTextEditPolicy(request)) {
             event->accept();
             return;
         }
     }
-
-    // A finalized closing-bracket commit (e.g. a full-width 「）」 normalized to a
-    // half-width ")") gets the same type-over treatment as the keyPress path.
-    if (event->preeditString().isEmpty()
-        && event->replacementLength() == 0
-        && normalizedCommitString.size() == 1
-        && miacode::editor::isBracketClosing(normalizedCommitString.at(0))) {
-        if (tryOverwriteClosingBracket(normalizedCommitString)) {
-            event->accept();
-            return;
-        }
-    }
-
-    if (commitString == normalizedCommitString) {
-        QTextEdit::inputMethodEvent(event);
-        return;
-    }
-
-    QInputMethodEvent normalizedEvent(event->preeditString(), event->attributes());
-    normalizedEvent.setCommitString(
-        normalizedCommitString,
-        event->replacementStart(),
-        event->replacementLength()
-    );
-    QTextEdit::inputMethodEvent(&normalizedEvent);
+    QTextEdit::inputMethodEvent(event);
 }
 
 void PlainCodeEditor::insertFromMimeData(const QMimeData* source)
@@ -727,6 +717,10 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         QTextEdit::keyPressEvent(event);
         return;
     }
+    if (isReadOnly()) {
+        QTextEdit::keyPressEvent(event);
+        return;
+    }
 
     // While the completion popup is open it owns the navigation / accept /
     // dismiss keys (↑ ↓ Tab Enter Esc). Printable characters and Backspace
@@ -746,11 +740,6 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         }
     };
     emitSelectionReplacementIfNeeded();
-
-    // Backspace between an empty matching pair removes both glyphs at once.
-    if (tryDeleteBracketPair(event)) {
-        return;
-    }
 
     // The default plain Insert binding deliberately avoids Shift+Insert
     // paste and Ctrl+Insert copy. Custom bindings are matched through
@@ -827,62 +816,24 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    const bool plainEnterKey =
-        (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
-        && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
-    const bool ctrlEnterKey =
-        (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
-        && (event->modifiers() & Qt::ControlModifier)
-        && !(event->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
-    if (plainEnterKey || ctrlEnterKey) {
-        insertLineBreakAtCursor(this);
-        return;
-    }
-
-    // Bracket auto-pairing is handled by tryAutoCloseBracket() / tryBracketInput()
-    // (members, so the IME commit path in inputMethodEvent can reuse them); the
-    // 'h' hold shortcut by tryHoldExpand(). The call sites below pass the half-
-    // width-normalized text so a full-width 「（」/「【」/「｛」 pairs the same way a
-    // raw "(" / "[" / "{" does.
-    if (!halfWidthInputEnabled_
-        || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
-        if (tryOverwriteClosingBracket(event->text())
-            || tryOverwriteOpeningSquareBracket(event->text())
-            || tryBracketInput(event->text()) || tryHoldExpand(event->text())) {
-            event->accept();
-            return;
-        }
-        QTextEdit::keyPressEvent(event);
-        return;
-    }
-
-    const QString inputText = event->text();
-    if (inputText.isEmpty()) {
-        QTextEdit::keyPressEvent(event);
-        return;
-    }
-
-    const QString normalizedText = miacode::editor::normalizedHalfWidthKeyText(event, inputText);
-    if (tryOverwriteClosingBracket(normalizedText)
-        || tryOverwriteOpeningSquareBracket(normalizedText)
-        || tryBracketInput(normalizedText) || tryHoldExpand(normalizedText)) {
+    const QTextCursor cursor = textCursor();
+    miacode::editor::SimaiTextEditRequest request;
+    request.text = toPlainText();
+    request.anchor = cursor.anchor();
+    request.position = cursor.position();
+    request.input = event->text();
+    request.key = event->key();
+    request.modifiers = event->modifiers();
+    request.halfWidthInputEnabled = halfWidthInputEnabled_;
+    request.overwriteMode = overwriteMode();
+    request.autoCompletionEnabled = autoCompletionEnabled_;
+    request.wholeBpm = wholeBpmCandidate_;
+    request.completionActive = bracketCompletionActive();
+    if (applySimaiTextEditPolicy(request)) {
         event->accept();
         return;
     }
-    if (normalizedText == inputText) {
-        QTextEdit::keyPressEvent(event);
-        return;
-    }
-
-    QKeyEvent normalizedEvent(
-        event->type(),
-        event->key(),
-        event->modifiers(),
-        normalizedText,
-        event->isAutoRepeat(),
-        event->count()
-    );
-    QTextEdit::keyPressEvent(&normalizedEvent);
+    QTextEdit::keyPressEvent(event);
 }
 
 void PlainCodeEditor::mousePressEvent(QMouseEvent* event)

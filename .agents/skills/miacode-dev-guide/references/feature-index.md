@@ -169,6 +169,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Editor header/page-mode UI: `sections/document/MainWindow.DocumentUi.cpp`.
 - Chart text editor: `src/editor/PlainCodeEditor.{h,cpp}` (line numbers, transform context menu,
   half-width normalization, `normalizedViewportHitPosition`, bracket auto-close
+  `SimaiTextEditPolicy.{h,cpp}` is the pure text/selection/key-or-IME transaction policy used by
+  the widget adapter; popup display and keyboard navigation remain in `PlainCodeEditor`.
+  The policy spec is `src/tools/editor/SimaiTextEditPolicySpec.cpp`. Legacy helper paths include
   `tryAutoCloseBracket`, closing-bracket type-over `tryOverwriteClosingBracket` (typing `)]}` when
   the same glyph already sits to the caret's right steps over it instead of inserting a duplicate),
   empty-pair backspace `tryDeleteBracketPair` (deletes both glyphs of

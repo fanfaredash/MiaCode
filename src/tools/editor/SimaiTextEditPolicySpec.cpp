@@ -1,0 +1,169 @@
+#include "editor/SimaiTextEditPolicy.h"
+
+#include <QCoreApplication>
+#include <QTextStream>
+
+namespace {
+
+using miacode::editor::SimaiCompletionSession;
+using miacode::editor::SimaiTextEditRequest;
+using miacode::editor::SimaiTextEditResult;
+using miacode::editor::SimaiTextEditTransaction;
+
+struct ExpectedTransaction {
+    QString text;
+    int anchor = 0;
+    int position = 0;
+    bool hasEdit = false;
+    bool undoGroup = false;
+    int replacementStart = 0;
+    int replacementEnd = 0;
+    QString replacementText;
+    bool insertsBlock = false;
+};
+
+struct ExpectedResult {
+    bool consumed = false;
+    ExpectedTransaction transaction;
+    SimaiCompletionSession completion;
+};
+
+struct PolicyCase {
+    QString label;
+    SimaiTextEditRequest request;
+    ExpectedResult expected;
+};
+
+bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
+{
+    if (condition) {
+        out << "[PASS] " << message << '\n';
+        return true;
+    }
+    out << "[FAIL] " << message << '\n';
+    ++(*failed);
+    return false;
+}
+
+void expectResult(const SimaiTextEditResult& actual, const ExpectedResult& expected,
+                  const QString& label, QTextStream& out, int* failed)
+{
+    expect(actual.consumed == expected.consumed, label + QStringLiteral(" consumed"), out, failed);
+    expect(actual.transaction.hasEdit == expected.transaction.hasEdit,
+           label + QStringLiteral(" transaction hasEdit"), out, failed);
+    expect(actual.transaction.undoGroup == expected.transaction.undoGroup,
+           label + QStringLiteral(" transaction undoGroup"), out, failed);
+    expect(actual.transaction.text == expected.transaction.text,
+           label + QStringLiteral(" transaction text"), out, failed);
+    expect(actual.transaction.anchor == expected.transaction.anchor
+               && actual.transaction.position == expected.transaction.position,
+           label + QStringLiteral(" transaction selection/caret"), out, failed);
+    expect(actual.transaction.replacementStart == expected.transaction.replacementStart
+               && actual.transaction.replacementEnd == expected.transaction.replacementEnd
+               && actual.transaction.replacementText == expected.transaction.replacementText
+               && actual.transaction.insertsBlock == expected.transaction.insertsBlock,
+           label + QStringLiteral(" transaction local replacement span"), out, failed);
+    expect(actual.completion.active == expected.completion.active
+               && actual.completion.opening == expected.completion.opening
+               && actual.completion.closingPresent == expected.completion.closingPresent
+               && actual.completion.startPosition == expected.completion.startPosition
+               && actual.completion.candidates == expected.completion.candidates,
+           label + QStringLiteral(" completion session"), out, failed);
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    QCoreApplication app(argc, argv);
+    Q_UNUSED(app);
+    QTextStream out(stdout);
+    int failed = 0;
+
+    // Each independent v1 event supplies every input and every expected output
+    // field. A new result field cannot silently escape the shared runner.
+    const QList<PolicyCase> cases = {
+        {QStringLiteral("IME half-width bracket conversion"),
+         {QString(), 0, 0, QStringLiteral("【"), Qt::Key_BracketLeft, Qt::NoModifier,
+          true, true, false, true, QString()},
+         {true, {QStringLiteral("[]"), 1, 1, true, true, 0, 0, QStringLiteral("[]"), false},
+          {true, QLatin1Char('['), true, 1,
+           {QStringLiteral("8:1]"), QStringLiteral("4:1]"), QStringLiteral("16:3]"),
+            QStringLiteral("384:1]")}}}},
+        {QStringLiteral("selection replacement"),
+         {QStringLiteral("abc"), 1, 2, QStringLiteral("["), Qt::Key_BracketLeft,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("a[]c"), 2, 2, true, true, 1, 2, QStringLiteral("[]"), false},
+          {true, QLatin1Char('['), true, 2,
+           {QStringLiteral("8:1]"), QStringLiteral("4:1]"), QStringLiteral("16:3]"),
+            QStringLiteral("384:1]")}}}},
+        {QStringLiteral("repeated text replacement stays local"),
+         {QStringLiteral("xx"), 1, 2, QStringLiteral("["), Qt::Key_BracketLeft,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("x[]"), 2, 2, true, true, 1, 2, QStringLiteral("[]"), false},
+          {true, QLatin1Char('['), true, 2,
+           {QStringLiteral("8:1]"), QStringLiteral("4:1]"), QStringLiteral("16:3]"),
+            QStringLiteral("384:1]")}}}},
+        {QStringLiteral("bracket pair insert"),
+         {QStringLiteral("x"), 1, 1, QStringLiteral("{"), Qt::Key_BraceLeft,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("x{}"), 2, 2, true, true, 1, 1, QStringLiteral("{}"), false},
+          {true, QLatin1Char('{'), true, 2,
+           {QStringLiteral("16}"), QStringLiteral("24}"), QStringLiteral("32}")}}}},
+        {QStringLiteral("whole BPM completion entry"),
+         {QString(), 0, 0, QStringLiteral("("), 0, Qt::NoModifier,
+          false, true, false, true, QStringLiteral("180")},
+         {true, {QStringLiteral("()"), 1, 1, true, true, 0, 0, QStringLiteral("()"), false},
+          {true, QLatin1Char('('), true, 1, {QStringLiteral("180)")}}}},
+        {QStringLiteral("existing left bracket advances"),
+         {QStringLiteral("[8:1]"), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("[8:1]"), 1, 1, false, false, 0, 0, QString(), false},
+          {true, QLatin1Char('['), false, 1,
+           {QStringLiteral("8:1]"), QStringLiteral("4:1]"), QStringLiteral("16:3]"),
+            QStringLiteral("384:1]")}}}},
+        {QStringLiteral("right bracket skips"),
+         {QStringLiteral("[]"), 1, 1, QStringLiteral("]"), Qt::Key_BracketRight,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("[]"), 2, 2, false, false, 0, 0, QString(), false}, {}}},
+        {QStringLiteral("empty pair single delete"),
+         {QStringLiteral("[]"), 1, 1, QString(), Qt::Key_Backspace,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QString(), 0, 0, true, true, 0, 2, QString(), false}, {}}},
+        {QStringLiteral("h hold completion entry"),
+         {QString(), 0, 0, QStringLiteral("h"), Qt::Key_H,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("h"), 1, 1, true, true, 0, 0, QStringLiteral("h"), false},
+          {true, QLatin1Char('['), false, 1,
+           {QStringLiteral("[8:1]"), QStringLiteral("[4:1]"), QStringLiteral("[16:3]"),
+            QStringLiteral("[384:1]")}}}},
+        {QStringLiteral("active bracket completion treats h as a filter character"),
+         {QStringLiteral("[]"), 1, 1, QStringLiteral("h"), Qt::Key_H,
+          Qt::NoModifier, false, true, false, true, QString(), true},
+         {true, {QStringLiteral("[h]"), 2, 2, true, true, 1, 1, QStringLiteral("h"), false}, {}}},
+        {QStringLiteral("Enter line break"),
+         {QStringLiteral("x"), 1, 1, QString(), Qt::Key_Return,
+          Qt::NoModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("x\n"), 2, 2, true, true, 1, 1, QStringLiteral("\n"), true}, {}}},
+        {QStringLiteral("Ctrl+Enter line break"),
+         {QStringLiteral("x"), 1, 1, QString(), Qt::Key_Return,
+          Qt::ControlModifier, false, true, false, true, QString()},
+         {true, {QStringLiteral("x\n"), 2, 2, true, true, 1, 1, QStringLiteral("\n"), true}, {}}},
+        {QStringLiteral("overwrite mode falls through"),
+         {QStringLiteral("x"), 1, 1, QStringLiteral("["), Qt::Key_BracketLeft,
+          Qt::NoModifier, false, true, true, true, QString()},
+         {false, {QStringLiteral("x"), 1, 1, false, false, 0, 0, QString(), false}, {}}},
+    };
+
+    for (const PolicyCase& policyCase : cases) {
+        expectResult(miacode::editor::applySimaiTextEditPolicy(policyCase.request),
+                     policyCase.expected, policyCase.label, out, &failed);
+    }
+
+    if (failed != 0) {
+        out << "SimaiTextEditPolicy spec failed: " << failed << '\n';
+        return 1;
+    }
+    out << "SimaiTextEditPolicy spec passed.\n";
+    return 0;
+}
