@@ -183,16 +183,16 @@ QVariantList QmlDocumentModel::syntaxIssues() const
     const MainWindow::DocumentValidationSnapshot snapshot = backend_->documentValidationSnapshot();
     QVariantList result;
     result.reserve(snapshot.issues.size());
-    for (const SimaiNativeValidationIssue& issue : snapshot.issues) {
+    for (const miacode::qml_ui::DocumentValidationProjectionIssue& issue : snapshot.issues) {
         result.append(QVariantMap{
             {QStringLiteral("line"), issue.line},
-            {QStringLiteral("column"), issue.col},
-            {QStringLiteral("endColumn"), issue.endCol},
+            {QStringLiteral("column"), issue.column},
+            {QStringLiteral("endColumn"), issue.endColumn},
             {QStringLiteral("severity"),
-             issue.severity == SimaiNativeValidationSeverity::Warning
+             issue.severity == miacode::qml_ui::DocumentValidationIssueSeverity::Warning
                  ? QStringLiteral("warning")
                  : QStringLiteral("error")},
-            {QStringLiteral("message"), issue.displayMessage},
+            {QStringLiteral("message"), issue.message},
         });
     }
     return result;

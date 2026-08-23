@@ -107,6 +107,7 @@ bool MainWindow::DocumentSection::updateDocumentField(
     owner_.updateWindowTitle();
     rebuildFieldSidebar();
     if (timingChanged) {
+        owner_.invalidateDocumentValidationRevision();
         owner_.refreshWaveformCache();
         owner_.refreshTimelineMetadata();
         owner_.scheduleTimelineRefresh();
@@ -170,6 +171,7 @@ bool MainWindow::DocumentSection::updateActiveChartText(const QString& value)
     markCurrentFieldDirty();
     updateDirtyState();
     owner_.scheduleTimelineRefresh();
+    emit owner_.documentValidationChanged();
     return true;
 }
 
@@ -179,6 +181,7 @@ bool MainWindow::DocumentSection::replaceDocumentSourceText(const QString& value
         return false;
     }
     const SimaiDocument parsed = SimaiDocument::fromText(value);
+    owner_.invalidateDocumentValidationRevision();
     loadDocument(parsed);
     state_.documentDirty_ = true;
     markCurrentFieldDirty();
@@ -282,7 +285,11 @@ bool MainWindow::discardDocumentChanges()
 
 bool MainWindow::selectDocumentDifficulty(int difficultyId)
 {
-    return documentSection_->switchToDifficultyField(difficultyId);
+    const bool selected = documentSection_->switchToDifficultyField(difficultyId);
+    if (selected) {
+        invalidateDocumentValidationRevision();
+    }
+    return selected;
 }
 
 bool MainWindow::addDocumentDifficulty(int difficultyId)

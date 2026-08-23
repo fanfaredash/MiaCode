@@ -1012,9 +1012,11 @@ void MainWindow::TimelineSection::dispatchTimelineSlowRefresh()
 
                 guard->state_.timelineSlowWorkerRunning_ = false;
                 if (request.revision != guard->state_.timelineSlowRequestedRevision_
+                    || request.revision != guard->state_.timelineRevision_
                     || !guard->hasActiveDifficulty()
                     || request.difficultyId != guard->activeDifficultyId()
-                    || request.chartText != guard->activeChartText()) {
+                    || request.chartText != guard->activeChartText()
+                    || request.timingMetadata != guard->currentTimingMetadata()) {
                     guard->dispatchTimelineSlowRefresh();
                     return;
                 }

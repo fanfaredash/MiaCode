@@ -35,6 +35,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
 #include "app/ui/AppBackgroundSettings.h"
+#include "app/qml_ui/QmlDocumentProjection.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
@@ -174,14 +175,7 @@ public:
         Designer,
     };
 
-    struct DocumentValidationSnapshot {
-        bool available = false;
-        bool ok = true;
-        int errorCount = 0;
-        int warningCount = 0;
-        int parsedNoteCount = 0;
-        QVector<SimaiNativeValidationIssue> issues;
-    };
+    using DocumentValidationSnapshot = miacode::qml_ui::DocumentValidationProjection;
 
     struct CliVideoExportRequest {
         QString chartPathOrDirectory;
@@ -242,6 +236,7 @@ public:
     void enableUnifiedDocumentDesigner(const QString& canonicalName);
     void disableUnifiedDocumentDesigner();
     DocumentValidationSnapshot documentValidationSnapshot() const;
+    void invalidateDocumentValidationRevision();
     bool validateActiveDocument();
     void setQuickShellRootWindow(QWindow* window);
     void cancelChartAudioDrop();
@@ -648,6 +643,7 @@ private:
         QString chartText;
         SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
         miacode::simai::SimaiTimingMetadata timingMetadata;
+        quint64 validationRevision = 0;
         bool ok = true;
         int errorCount = 0;
         int warningCount = 0;

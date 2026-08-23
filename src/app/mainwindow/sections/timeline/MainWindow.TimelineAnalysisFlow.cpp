@@ -47,6 +47,12 @@ constexpr int kTimelineAnalysisIdleDelayMs = 180;
 
 }  // namespace
 
+void MainWindow::invalidateDocumentValidationRevision()
+{
+    ++state_.timelineRevision_;
+    emit documentValidationChanged();
+}
+
 void MainWindow::TimelineSection::scheduleTimelineAnalysisRefresh(
     const TimelineSlowRefreshRequest& request,
     const SimaiNativeParseResult& parseResult,
@@ -159,9 +165,11 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
 
                 guard->state_.timelineAnalysisWorkerRunning_ = false;
                 if (result.revision != guard->state_.timelineAnalysisRequestedRevision_
+                    || result.revision != guard->state_.timelineRevision_
                     || !guard->hasActiveDifficulty()
                     || result.difficultyId != guard->activeDifficultyId()
                     || result.chartText != guard->activeChartText()
+                    || result.timingMetadata != guard->currentTimingMetadata()
                     || result.noteMarkerSignature != guard->state_.latestTimelineNoteMarkerSignature_) {
                     guard->requestTimelineAnalysisDispatch();
                     return;
@@ -171,6 +179,7 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                 entry.chartText = result.chartText;
                 entry.validationLocale = result.validationReport.issues.isEmpty() ? uiValidationLocale() : result.validationLocale;
                 entry.timingMetadata = result.timingMetadata;
+                entry.validationRevision = result.revision;
                 entry.ok = result.validationReport.ok;
                 entry.errorCount = result.validationReport.errorCount;
                 entry.warningCount = result.validationReport.warningCount;

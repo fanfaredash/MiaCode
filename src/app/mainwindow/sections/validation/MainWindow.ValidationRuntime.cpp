@@ -715,41 +715,48 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
 MainWindow::DocumentValidationSnapshot
 MainWindow::ValidationSection::documentValidationSnapshot() const
 {
-    DocumentValidationSnapshot snapshot;
-    if (!owner_.hasActiveDifficulty()) {
-        return snapshot;
-    }
+    const miacode::simai::SimaiTimingMetadata timingMetadata = owner_.currentTimingMetadata();
+    miacode::qml_ui::DocumentValidationProjectionInput input;
+    input.difficultyId = owner_.hasActiveDifficulty() ? owner_.activeDifficultyId() : 0;
+    input.chartTextSignature = owner_.activeChartText();
+    input.timingSignature = QStringLiteral("%1|%2|%3|%4")
+        .arg(timingMetadata.wholeTimeSignatureText)
+        .arg(timingMetadata.wholeTimeSignatureNumerator)
+        .arg(timingMetadata.wholeTimeSignatureDenominator)
+        .arg(timingMetadata.wholeTimeSignatureValid ? 1 : 0);
+    input.timelineRevision = state_.timelineRevision_;
 
-    const int difficultyId = owner_.activeDifficultyId();
-    const auto it = state_.validationCacheByDifficulty_.constFind(difficultyId);
-    if (it == state_.validationCacheByDifficulty_.constEnd()) {
-        return snapshot;
+    miacode::qml_ui::DocumentValidationProjectionCache cache;
+    const auto it = state_.validationCacheByDifficulty_.constFind(input.difficultyId);
+    if (it != state_.validationCacheByDifficulty_.constEnd()
+        && it->validationLocale == uiValidationLocale()) {
+        const ValidationCacheEntry& entry = it.value();
+        cache.difficultyId = input.difficultyId;
+        cache.chartTextSignature = entry.chartText;
+        cache.timingSignature = QStringLiteral("%1|%2|%3|%4")
+            .arg(entry.timingMetadata.wholeTimeSignatureText)
+            .arg(entry.timingMetadata.wholeTimeSignatureNumerator)
+            .arg(entry.timingMetadata.wholeTimeSignatureDenominator)
+            .arg(entry.timingMetadata.wholeTimeSignatureValid ? 1 : 0);
+        cache.validationRevision = entry.validationRevision;
+        cache.ok = entry.ok;
+        cache.errorCount = entry.errorCount;
+        cache.warningCount = entry.warningCount;
+        cache.parsedNoteCount = entry.strictNoteCount;
+        cache.issues.reserve(entry.issues.size());
+        for (const ValidationCachedIssue& cachedIssue : entry.issues) {
+            cache.issues.append({
+                cachedIssue.line,
+                cachedIssue.col,
+                cachedIssue.endCol,
+                cachedIssue.severity == SimaiNativeValidationSeverity::Warning
+                    ? miacode::qml_ui::DocumentValidationIssueSeverity::Warning
+                    : miacode::qml_ui::DocumentValidationIssueSeverity::Error,
+                cachedIssue.displayMessage,
+            });
+        }
     }
-
-    const ValidationCacheEntry& entry = it.value();
-    if (entry.chartText != owner_.activeChartText()
-        || entry.validationLocale != uiValidationLocale()
-        || entry.timingMetadata != owner_.currentTimingMetadata()) {
-        return snapshot;
-    }
-
-    snapshot.available = true;
-    snapshot.ok = entry.ok;
-    snapshot.errorCount = entry.errorCount;
-    snapshot.warningCount = entry.warningCount;
-    snapshot.parsedNoteCount = entry.strictNoteCount;
-    snapshot.issues.reserve(entry.issues.size());
-    for (const ValidationCachedIssue& cachedIssue : entry.issues) {
-        SimaiNativeValidationIssue issue;
-        issue.line = cachedIssue.line;
-        issue.col = cachedIssue.col;
-        issue.endCol = cachedIssue.endCol;
-        issue.severity = cachedIssue.severity;
-        issue.rawMessage = cachedIssue.rawMessage;
-        issue.displayMessage = cachedIssue.displayMessage;
-        snapshot.issues.append(std::move(issue));
-    }
-    return snapshot;
+    return miacode::qml_ui::projectDocumentValidation(input, cache);
 }
 
 bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssue)
@@ -776,7 +783,8 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     if (cacheIt != state_.validationCacheByDifficulty_.constEnd()
         && cacheIt->chartText == chartText
         && cacheIt->validationLocale == validationLocale
-        && cacheIt->timingMetadata == timingMetadata) {
+        && cacheIt->timingMetadata == timingMetadata
+        && cacheIt->validationRevision == state_.timelineRevision_) {
         entry = cacheIt.value();
     } else {
         QElapsedTimer reportTimer;
@@ -786,6 +794,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
         entry.chartText = chartText;
         entry.validationLocale = validationLocale;
         entry.timingMetadata = timingMetadata;
+        entry.validationRevision = state_.timelineRevision_;
         entry.ok = report.ok;
         entry.errorCount = report.errorCount;
         entry.warningCount = report.warningCount;

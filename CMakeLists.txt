@@ -753,6 +753,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlCommandService.h
         src/app/qml_ui/QmlDocumentModel.cpp
         src/app/qml_ui/QmlDocumentModel.h
+        src/app/qml_ui/QmlDocumentProjection.cpp
+        src/app/qml_ui/QmlDocumentProjection.h
         src/app/qml_ui/QmlPreviewModel.cpp
         src/app/qml_ui/QmlPreviewModel.h
         src/app/qml_ui/QmlNoteImageProvider.cpp
@@ -1499,6 +1501,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/timeline/TimelineData.h
         LIBS Qt6::Core
         INCLUDES src src/common src/timeline
+    )
+
+    miacode_add_dev_tool(qml_document_projection_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlDocumentProjectionSpec.cpp
+            src/app/qml_ui/QmlDocumentProjection.cpp
+            src/app/qml_ui/QmlDocumentProjection.h
+        LIBS Qt6::Core
+        INCLUDES src
     )
 
     miacode_add_dev_tool(plain_code_editor_spec TEST
