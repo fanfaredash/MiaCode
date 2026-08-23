@@ -2,6 +2,7 @@
 
 #include "QmlCommandService.h"
 #include "QmlDocumentModel.h"
+#include "QmlAnalysisModel.h"
 #include "QmlEditorPageHost.h"
 #include "QmlPreviewModel.h"
 #include "QmlUiPlatformChrome.h"
@@ -18,6 +19,7 @@ class QmlApplicationContext final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QObject* document READ document CONSTANT)
+    Q_PROPERTY(QObject* analysis READ analysis CONSTANT)
     Q_PROPERTY(QObject* preferences READ preferences CONSTANT)
     Q_PROPERTY(QObject* preview READ preview CONSTANT)
     Q_PROPERTY(QObject* commands READ commands CONSTANT)
@@ -30,6 +32,7 @@ public:
     QmlApplicationContext(MainWindow& backend, QuickShellController& shell, QObject* parent = nullptr);
 
     QObject* document();
+    QObject* analysis();
     QObject* preferences();
     QObject* preview();
     QObject* commands();
@@ -42,6 +45,7 @@ public:
 private:
     QmlUiSettings preferences_;
     QmlDocumentModel document_;
+    QmlAnalysisModel analysis_;
     QmlPreviewModel preview_;
     QmlCommandService commands_;
     QmlEditorPageHost pages_;

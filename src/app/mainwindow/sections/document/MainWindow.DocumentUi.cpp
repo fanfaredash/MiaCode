@@ -1484,6 +1484,13 @@ void MainWindow::DocumentSection::clearTimelineAndPreview()
     state_.muriAnalysisReport_ = MuriAnalysisReport();
     state_.muriAnalysisReport_.revision = ++state_.muriAnalysisReportRevisionCounter_;
     state_.muriAnalysisReportNoteMarkerSignature_.clear();
+    state_.muriAnalysisReportDifficultyId_ = 0;
+    state_.muriAnalysisReportTimelineRevision_ = 0;
+    state_.muriAnalysisResultAvailable_ = false;
+    state_.muriStaticReferencesNoteMarkerSignature_.clear();
+    state_.muriStaticReferencesDifficultyId_ = 0;
+    state_.muriStaticReferencesTimelineRevision_ = 0;
+    state_.muriStaticReferencesAvailable_ = false;
     state_.pendingDeferredValidationUiRefresh_ = false;
     state_.pendingDeferredMuriUiRefresh_ = false;
     if (ui_.timelineAnalysisIdleTimer_ != nullptr) {

@@ -7,6 +7,7 @@ Rectangle {
     id: root
 
     required property var documentSession
+    required property var analysisSession
     required property var shellController
 
     implicitHeight: 28
@@ -29,9 +30,17 @@ Rectangle {
             panelTab: true
             visible: root.shellController.validationTabVisible
             text: root.shellController.validationTabLabel
-            count: root.documentSession.syntaxIssueCount
+            count: root.analysisSession.validationRows.length
             active: root.shellController.bottomTabsCurrentTabId === "validation"
             onClicked: root.shellController.setBottomTabsCurrentTabId("validation")
+        }
+        AppTab {
+            Layout.fillHeight: true
+            panelTab: true
+            text: qsTr("Muri")
+            count: root.analysisSession.muriRows.length
+            active: root.shellController.bottomTabsCurrentTabId === "muri"
+            onClicked: root.shellController.setBottomTabsCurrentTabId("muri")
         }
 
         Item { Layout.fillWidth: true }

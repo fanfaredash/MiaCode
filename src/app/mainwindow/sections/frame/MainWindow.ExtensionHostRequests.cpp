@@ -1358,8 +1358,11 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             } else if (id == QStringLiteral("validation.run")) {
                 return QJsonObject{{QStringLiteral("ok"), runValidateSimaiSilently(false)}};
             } else if (id == QStringLiteral("analysis.runMuriAnalysis")) {
-                if (state_.latestTimelineNoteMarkers_.isEmpty()) {
-                    return errorObject(QStringLiteral("No parsed timeline markers are available for Muri analysis."));
+                if (state_.latestTimelineNoteMarkers_.isEmpty()
+                    || !state_.latestTimelinePreviewSnapshotReady_
+                    || state_.latestTimelinePreviewRevision_ != state_.timelineRevision_
+                    || state_.lastTimelineParseDifficultyId_ != activeDifficultyId_) {
+                    return errorObject(QStringLiteral("Current timeline markers are pending; Muri analysis was not published."));
                 }
                 state_.muriAnalysisReport_ = MuriAnalyzer::analyze(
                     state_.latestTimelineNoteMarkers_,
@@ -1367,6 +1370,17 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0);
                 state_.muriAnalysisReport_.revision = ++state_.muriAnalysisReportRevisionCounter_;
                 state_.muriAnalysisReportNoteMarkerSignature_ = state_.latestTimelineNoteMarkerSignature_;
+                state_.muriAnalysisReportDifficultyId_ = activeDifficultyId_;
+                state_.muriAnalysisReportTimelineRevision_ = state_.timelineRevision_;
+                state_.muriAnalysisResultAvailable_ = true;
+                state_.muriStaticReferences_ = miacode::muri::buildStaticMuriReferences(
+                    state_.latestTimelineNoteMarkers_,
+                    static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0);
+                state_.muriStaticReferencesNoteMarkerSignature_ = state_.latestTimelineNoteMarkerSignature_;
+                state_.muriStaticReferencesDifficultyId_ = activeDifficultyId_;
+                state_.muriStaticReferencesTimelineRevision_ = state_.timelineRevision_;
+                state_.muriStaticReferencesAvailable_ = true;
+                emit documentValidationChanged();
                 applyAlignedMuriAnalysisReportToViews();
                 refreshMuriDiagnosticsPanel();
                 return okValue(muriReportToJson(state_.muriAnalysisReport_));
@@ -2341,8 +2355,11 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("analysis/runMuriAnalysis")) {
-            if (state_.latestTimelineNoteMarkers_.isEmpty()) {
-                return errorObject(QStringLiteral("No parsed timeline markers are available for Muri analysis."));
+            if (state_.latestTimelineNoteMarkers_.isEmpty()
+                || !state_.latestTimelinePreviewSnapshotReady_
+                || state_.latestTimelinePreviewRevision_ != state_.timelineRevision_
+                || state_.lastTimelineParseDifficultyId_ != activeDifficultyId_) {
+                return errorObject(QStringLiteral("Current timeline markers are pending; Muri analysis was not published."));
             }
             state_.muriAnalysisReport_ = MuriAnalyzer::analyze(
                 state_.latestTimelineNoteMarkers_,
@@ -2350,9 +2367,17 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0);
             state_.muriAnalysisReport_.revision = ++state_.muriAnalysisReportRevisionCounter_;
             state_.muriAnalysisReportNoteMarkerSignature_ = state_.latestTimelineNoteMarkerSignature_;
+            state_.muriAnalysisReportDifficultyId_ = activeDifficultyId_;
+            state_.muriAnalysisReportTimelineRevision_ = state_.timelineRevision_;
+            state_.muriAnalysisResultAvailable_ = true;
             state_.muriStaticReferences_ = miacode::muri::buildStaticMuriReferences(
                 state_.latestTimelineNoteMarkers_,
                 static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0);
+            state_.muriStaticReferencesNoteMarkerSignature_ = state_.latestTimelineNoteMarkerSignature_;
+            state_.muriStaticReferencesDifficultyId_ = activeDifficultyId_;
+            state_.muriStaticReferencesTimelineRevision_ = state_.timelineRevision_;
+            state_.muriStaticReferencesAvailable_ = true;
+            emit documentValidationChanged();
             applyAlignedMuriAnalysisReportToViews();
             refreshMuriDiagnosticsPanel();
             return okValue(muriReportToJson(state_.muriAnalysisReport_));

@@ -207,7 +207,14 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                 guard->state_.muriAnalysisReport_ = std::move(result.analysisReport);
                 guard->state_.muriAnalysisReport_.revision = ++guard->state_.muriAnalysisReportRevisionCounter_;
                 guard->state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
+                guard->state_.muriAnalysisReportDifficultyId_ = result.difficultyId;
+                guard->state_.muriAnalysisReportTimelineRevision_ = result.revision;
+                guard->state_.muriAnalysisResultAvailable_ = true;
                 guard->state_.muriStaticReferences_ = std::move(result.staticReferences);
+                guard->state_.muriStaticReferencesNoteMarkerSignature_ = result.noteMarkerSignature;
+                guard->state_.muriStaticReferencesDifficultyId_ = result.difficultyId;
+                guard->state_.muriStaticReferencesTimelineRevision_ = result.revision;
+                guard->state_.muriStaticReferencesAvailable_ = true;
                 guard->state_.pendingDeferredMuriUiRefresh_ = true;
                 if (!guard->state_.qtPreviewPlaying_) {
                     guard->applyDeferredAnalysisUiUpdates();

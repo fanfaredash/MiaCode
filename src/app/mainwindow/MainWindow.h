@@ -36,6 +36,7 @@
 #include "extensions/ExtensionManager.h"
 #include "app/ui/AppBackgroundSettings.h"
 #include "app/qml_ui/QmlDocumentProjection.h"
+#include "app/qml_ui/QmlAnalysisProjection.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
@@ -176,6 +177,7 @@ public:
     };
 
     using DocumentValidationSnapshot = miacode::qml_ui::DocumentValidationProjection;
+    using QmlAnalysisSnapshot = miacode::qml_ui::AnalysisProjection;
 
     // Result of the all-or-nothing QML metadata-source replacement.  The
     // candidate is parsed and strictly validated before the live document is
@@ -245,6 +247,7 @@ public:
     void enableUnifiedDocumentDesigner(const QString& canonicalName);
     void disableUnifiedDocumentDesigner();
     DocumentValidationSnapshot documentValidationSnapshot() const;
+    QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
     void invalidateDocumentValidationRevision();
     bool validateActiveDocument();
     void setQuickShellRootWindow(QWindow* window);

@@ -301,6 +301,13 @@
         bool latencySandboxAuditionActive_ = false;
         QByteArray lastPreviewNoteMarkerSignature_;
         QByteArray muriAnalysisReportNoteMarkerSignature_;
+        int muriAnalysisReportDifficultyId_ = 0;
+        quint64 muriAnalysisReportTimelineRevision_ = 0;
+        bool muriAnalysisResultAvailable_ = false;
+        QByteArray muriStaticReferencesNoteMarkerSignature_;
+        int muriStaticReferencesDifficultyId_ = 0;
+        quint64 muriStaticReferencesTimelineRevision_ = 0;
+        bool muriStaticReferencesAvailable_ = false;
         bool outlineDockCollapsed_ = false;
         int outlineDockExpandedWidth_ = 190;
         TextEncoding currentEncoding_ = TextEncoding::Utf8;
@@ -877,6 +884,13 @@
     bool& timelineAnalysisWorkerRunning_ = state_.timelineAnalysisWorkerRunning_;
     QByteArray& lastPreviewNoteMarkerSignature_ = state_.lastPreviewNoteMarkerSignature_;
     QByteArray& muriAnalysisReportNoteMarkerSignature_ = state_.muriAnalysisReportNoteMarkerSignature_;
+    int& muriAnalysisReportDifficultyId_ = state_.muriAnalysisReportDifficultyId_;
+    quint64& muriAnalysisReportTimelineRevision_ = state_.muriAnalysisReportTimelineRevision_;
+    bool& muriAnalysisResultAvailable_ = state_.muriAnalysisResultAvailable_;
+    QByteArray& muriStaticReferencesNoteMarkerSignature_ = state_.muriStaticReferencesNoteMarkerSignature_;
+    int& muriStaticReferencesDifficultyId_ = state_.muriStaticReferencesDifficultyId_;
+    quint64& muriStaticReferencesTimelineRevision_ = state_.muriStaticReferencesTimelineRevision_;
+    bool& muriStaticReferencesAvailable_ = state_.muriStaticReferencesAvailable_;
     bool& outlineDockCollapsed_ = state_.outlineDockCollapsed_;
     int& outlineDockExpandedWidth_ = state_.outlineDockExpandedWidth_;
     TextEncoding& currentEncoding_ = state_.currentEncoding_;

@@ -1066,6 +1066,10 @@ void MainWindow::TimelineSection::rebuildStaticMuriReferences(const QVector<Time
     state_.muriStaticReferences_ = miacode::muri::buildStaticMuriReferences(
         noteMarkers,
         static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0);
+    state_.muriStaticReferencesNoteMarkerSignature_ = state_.latestTimelineNoteMarkerSignature_;
+    state_.muriStaticReferencesDifficultyId_ = hasActiveDifficulty() ? activeDifficultyId() : 0;
+    state_.muriStaticReferencesTimelineRevision_ = state_.timelineRevision_;
+    state_.muriStaticReferencesAvailable_ = !state_.muriStaticReferencesNoteMarkerSignature_.isEmpty();
 }
 
 double MainWindow::TimelineSection::timelineSecondForCursor(int line, int col) const

@@ -41,6 +41,20 @@ Rectangle {
         sourceEditor.revealSyntaxIssue(difficultyId, revision, line, column, endColumn)
     }
 
+    function revealAnalysisRow(difficultyId, revision, line, column, endColumn, second, analysisSession) {
+        const cancel = () => analysisSession.cancelRowActivation(
+            difficultyId, revision, line, column, endColumn, second)
+        if (revision !== root.documentSession.validationRevision
+                || revision !== root.documentSession.documentRevision
+                || root.documentSession.validationPending) {
+            cancel()
+            return
+        }
+        viewState.openDifficultyEditor(difficultyId)
+        sourceEditor.revealSyntaxIssue(difficultyId, revision, line, column, endColumn, () =>
+            analysisSession.completeRowActivation(difficultyId, revision, line, column, endColumn, second), cancel)
+    }
+
     color: Theme.colors.background.editor
 
     EditorTabBar {

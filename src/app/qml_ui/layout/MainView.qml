@@ -8,6 +8,7 @@ Item {
     required property var hostWindow
     required property var applicationContext
     readonly property var documentSession: applicationContext.document
+    readonly property var analysisSession: applicationContext.analysis
     readonly property var preferences: applicationContext.preferences
     readonly property var previewSession: applicationContext.preview
     readonly property var commands: applicationContext.commands
@@ -198,7 +199,8 @@ Item {
                 id: splitView
                 anchors.fill: parent
                 viewState: state
-                documentSession: root.documentSession
+        documentSession: root.documentSession
+        analysisSession: root.analysisSession
                 preferences: root.preferences
                 previewSession: root.previewSession
                 commands: root.commands

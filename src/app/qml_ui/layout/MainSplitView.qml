@@ -11,6 +11,7 @@ Item {
 
     required property var viewState
     required property var documentSession
+    required property var analysisSession
     required property var preferences
     required property var previewSession
     required property var commands
@@ -165,6 +166,7 @@ Item {
                 id: bottomPanel
                 visible: root.bottomPanelEffectivelyVisible
                 documentSession: root.documentSession
+                analysisSession: root.analysisSession
                 preferences: root.preferences
                 commands: root.commands
                 shellController: root.shellController
@@ -173,8 +175,9 @@ Item {
                                            : 0
                 SplitView.minimumHeight: root.bottomPanelEffectivelyVisible ? 120 : 0
                 SplitView.maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0
-                onSyntaxIssueActivated: (difficultyId, revision, line, column, endColumn) =>
-                    editorPane.revealSyntaxIssue(difficultyId, revision, line, column, endColumn)
+                onAnalysisRowActivated: (difficultyId, revision, line, column, endColumn, second) =>
+                    editorPane.revealAnalysisRow(
+                        difficultyId, revision, line, column, endColumn, second, root.analysisSession)
             }
         }
 

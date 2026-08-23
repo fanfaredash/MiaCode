@@ -755,6 +755,10 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlDocumentModel.h
         src/app/qml_ui/QmlDocumentProjection.cpp
         src/app/qml_ui/QmlDocumentProjection.h
+        src/app/qml_ui/QmlAnalysisProjection.cpp
+        src/app/qml_ui/QmlAnalysisProjection.h
+        src/app/qml_ui/QmlAnalysisModel.cpp
+        src/app/qml_ui/QmlAnalysisModel.h
         src/app/qml_ui/QmlPreviewModel.cpp
         src/app/qml_ui/QmlPreviewModel.h
         src/app/qml_ui/QmlNoteImageProvider.cpp
@@ -1514,6 +1518,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_chart_core}
             ${_miacode_log_core}
             src/app/qml_ui/QmlDocumentProjection.cpp
+            src/app/qml_ui/QmlDocumentProjection.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(qml_analysis_model_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlAnalysisModelSpec.cpp
+            src/app/qml_ui/QmlAnalysisProjection.cpp
+            src/app/qml_ui/QmlAnalysisProjection.h
             src/app/qml_ui/QmlDocumentProjection.h
         LIBS Qt6::Core
         INCLUDES src

@@ -66,6 +66,7 @@ public:
     void onEditStaticTapOnSlideThreshold();
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     MainWindow::DocumentValidationSnapshot documentValidationSnapshot() const;
+    MainWindow::QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
 
 private:
     bool isMuriDiagnosticsTabActive() const;

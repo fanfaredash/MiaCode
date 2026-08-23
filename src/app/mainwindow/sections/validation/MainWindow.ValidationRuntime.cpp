@@ -759,6 +759,49 @@ MainWindow::ValidationSection::documentValidationSnapshot() const
     return miacode::qml_ui::projectDocumentValidation(input, cache);
 }
 
+MainWindow::QmlAnalysisSnapshot MainWindow::ValidationSection::qmlAnalysisSnapshot() const
+{
+    miacode::qml_ui::AnalysisProjectionInput input;
+    input.validation = documentValidationSnapshot();
+    input.activeDifficultyId = owner_.hasActiveDifficulty() ? owner_.activeDifficultyId() : 0;
+    input.muriDifficultyId = state_.muriAnalysisReportDifficultyId_;
+    input.muriRevision = state_.muriAnalysisReportTimelineRevision_;
+    input.muriSignatureAligned = state_.muriAnalysisResultAvailable_
+        && !state_.muriAnalysisReportNoteMarkerSignature_.isEmpty()
+        && state_.latestTimelineNoteMarkerSignature_ == state_.muriAnalysisReportNoteMarkerSignature_;
+    input.muriStaticReferencesAligned = state_.muriStaticReferencesAvailable_
+        && state_.muriStaticReferencesDifficultyId_ == input.muriDifficultyId
+        && state_.muriStaticReferencesTimelineRevision_ == input.muriRevision
+        && state_.muriStaticReferencesNoteMarkerSignature_ == state_.muriAnalysisReportNoteMarkerSignature_;
+    if (input.muriSignatureAligned) {
+        const auto entries = miacode::muri::buildVisibleMuriPanelEntries(
+            state_.muriAnalysisReport_, state_.muriStaticReferences_);
+        input.muriRows.reserve(entries.size());
+        for (const MuriPanelEntry& entry : entries) {
+            miacode::qml_ui::AnalysisRow row;
+            row.line = qMax(1, entry.line);
+            row.column = qMax(1, entry.col);
+            row.endColumn = row.column;
+            row.second = entry.second;
+            row.severity = entry.alertLevel == MuriAlertLevel::Warning
+                ? QStringLiteral("warning") : QStringLiteral("error");
+            row.alert = entry.alertLevel == MuriAlertLevel::Warning
+                ? QStringLiteral("warning") : QStringLiteral("muri");
+            switch (entry.kind) {
+            case MuriKind::SlideTooFast: row.title = QStringLiteral("Slide too fast"); break;
+            case MuriKind::SlideHeadTap: row.title = QStringLiteral("Slide head tap"); break;
+            case MuriKind::TapOnSlide: row.title = QStringLiteral("Tap on slide"); break;
+            case MuriKind::Overlap: row.title = QStringLiteral("Overlap"); break;
+            case MuriKind::MultiTouch: row.title = QStringLiteral("Multi-touch"); break;
+            }
+            row.detail = renderMuriDetail(entry.detailKind, entry.detailArgs, uiValidationLocale()).trimmed();
+            if (row.detail.isEmpty()) row.detail = entry.rawDetail;
+            input.muriRows.append(row);
+        }
+    }
+    return miacode::qml_ui::projectAnalysis(input);
+}
+
 bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssue)
 {
     if (!owner_.hasActiveDifficulty()) {
@@ -915,6 +958,11 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
 MainWindow::DocumentValidationSnapshot MainWindow::documentValidationSnapshot() const
 {
     return validationSection_->documentValidationSnapshot();
+}
+
+MainWindow::QmlAnalysisSnapshot MainWindow::qmlAnalysisSnapshot() const
+{
+    return validationSection_->qmlAnalysisSnapshot();
 }
 
 bool MainWindow::validateActiveDocument()

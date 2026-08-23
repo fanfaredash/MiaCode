@@ -33,7 +33,11 @@ Validation presentation shares that analysis result. Both explicit validation an
 analysis populate `ValidationCacheEntry`, including the parser's explicit severity. The aligned
 active-difficulty cache is exposed as `DocumentValidationSnapshot`; `documentValidationChanged`
 updates UIv2's bottom list, navigation target and editor wave underline through one
-`QmlDocumentModel::syntaxIssues` projection. QML reads the cached projection's
+`QmlDocumentModel::syntaxIssues` projection. `QmlAnalysisModel` reads the narrower
+`MainWindow::qmlAnalysisSnapshot()` to render the Validation and Muri tabs; it receives only
+row values, never a `QListWidget` or mutable `MuriAnalyzer` state. Muri rows are visible only
+when their note-marker signature, active difficulty, and revision align with validation; otherwise
+the entire analysis projection is pending and empty. QML reads the cached projection's
 `documentRevision` / `validationRevision` / `validationPending` as one state: diagnostics
 and navigation must be hidden while the revisions differ. Full metadata-source replacement is
 a two-phase transaction: preflight every candidate difficulty with strict validation, retain the

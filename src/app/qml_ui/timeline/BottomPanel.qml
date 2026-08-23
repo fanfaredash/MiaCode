@@ -9,10 +9,11 @@ Rectangle {
     id: root
 
     required property var documentSession
+    required property var analysisSession
     required property var preferences
     required property var commands
     required property var shellController
-    signal syntaxIssueActivated(int difficultyId, var revision, int line, int column, int endColumn)
+    signal analysisRowActivated(int difficultyId, var revision, int line, int column, int endColumn, double second)
 
     color: Theme.colors.background.surface
     clip: true
@@ -23,6 +24,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         documentSession: root.documentSession
+        analysisSession: root.analysisSession
         shellController: root.shellController
     }
 
@@ -132,7 +134,7 @@ Rectangle {
 
             Label {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.documentSession.validationPending
+                text: root.analysisSession.pending
                     ? qsTr("正在分析…")
                     : qsTr("%1 个错误，%2 个警告，已解析 %3 个物件")
                         .arg(root.documentSession.syntaxErrorCount)
@@ -156,7 +158,7 @@ Rectangle {
             anchors.bottom: parent.bottom
             anchors.topMargin: 8
             clip: true
-            model: root.documentSession.syntaxIssues
+            model: root.analysisSession.validationRows
 
             delegate: ItemDelegate {
                 id: issueDelegate
@@ -166,18 +168,15 @@ Rectangle {
                 hoverEnabled: true
                 leftPadding: 10
                 rightPadding: 10
-                onClicked: root.syntaxIssueActivated(
-                    modelData.difficultyId,
-                    modelData.revision,
-                    modelData.line,
-                    modelData.column,
-                    modelData.endColumn)
+                onClicked: root.analysisSession.activateRow(modelData)
 
                 contentItem: Row {
                     spacing: 10
                     Label {
                         width: 72
-                        text: "L%1:C%2".arg(issueDelegate.modelData.line).arg(issueDelegate.modelData.column)
+                        text: "%1 · L%2:C%3".arg(issueDelegate.modelData.severity === "error"
+                            ? qsTr("错误") : qsTr("警告"))
+                            .arg(issueDelegate.modelData.line).arg(issueDelegate.modelData.column)
                         color: issueDelegate.modelData.severity === "error"
                                ? Theme.colors.syntax.error
                                : Theme.colors.syntax.warning
@@ -185,7 +184,7 @@ Rectangle {
                     }
                     Label {
                         width: Math.max(0, issueDelegate.width - 120)
-                        text: issueDelegate.modelData.message
+                        text: issueDelegate.modelData.detail
                         color: Theme.colors.text.primary
                         elide: Text.ElideRight
                         font.family: Theme.uiFont
@@ -204,11 +203,73 @@ Rectangle {
 
         Label {
             anchors.centerIn: parent
-            visible: root.documentSession.syntaxIssueCount === 0
-            text: root.documentSession.validationPending ? qsTr("正在分析…") : qsTr("未发现语法问题")
+            visible: root.analysisSession.validationRows.length === 0
+            text: root.analysisSession.pending ? qsTr("正在分析…") : qsTr("未发现验证问题")
             color: Theme.colors.text.secondary
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
+        }
+    }
+
+    Item {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: tabs.bottom
+        anchors.bottom: parent.bottom
+        visible: root.shellController.bottomTabsCurrentTabId === "muri"
+
+        ListView {
+            id: muriList
+            anchors.fill: parent
+            anchors.margins: 8
+            clip: true
+            model: root.analysisSession.muriRows
+            delegate: ItemDelegate {
+                id: muriDelegate
+                required property var modelData
+                width: ListView.view.width
+                height: 42
+                hoverEnabled: true
+                onClicked: root.analysisSession.activateRow(modelData)
+                contentItem: Column {
+                    spacing: 2
+                    Label {
+                        text: "[%1] %2 · L%3:C%4".arg(muriDelegate.modelData.alert === "warning"
+                            ? qsTr("警告") : qsTr("警报"))
+                            .arg(muriDelegate.modelData.title)
+                            .arg(muriDelegate.modelData.line).arg(muriDelegate.modelData.column)
+                        color: muriDelegate.modelData.severity === "warning"
+                               ? Theme.colors.syntax.warning : Theme.colors.syntax.error
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.uiFontSize
+                    }
+                    Label {
+                        width: muriDelegate.width - 20
+                        text: muriDelegate.modelData.detail
+                        elide: Text.ElideRight
+                        color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
+                    }
+                }
+                background: HoverChrome { hovered: muriDelegate.highlighted || muriDelegate.hovered; tone: "hover" }
+            }
+            ScrollBar.vertical: ScrollBar {}
+        }
+        Label {
+            anchors.centerIn: parent
+            visible: root.analysisSession.muriRows.length === 0
+            text: root.analysisSession.pending ? qsTr("正在分析…") : qsTr("未发现 Muri 问题")
+            color: Theme.colors.text.secondary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.uiFontSize
+        }
+    }
+
+    Connections {
+        target: root.analysisSession
+        function onRowActivated(difficultyId, revision, line, column, endColumn, second) {
+            root.analysisRowActivated(difficultyId, revision, line, column, endColumn, second)
         }
     }
 }

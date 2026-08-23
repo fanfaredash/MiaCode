@@ -64,9 +64,12 @@ Rectangle {
         sourceArea.selectAll()
     }
 
-    function revealSyntaxIssue(difficultyId, revision, line, column, endColumn) {
-        if (root.metadataMode)
+    function revealSyntaxIssue(difficultyId, revision, line, column, endColumn, completion, cancellation) {
+        if (root.metadataMode) {
+            if (cancellation)
+                cancellation()
             return
+        }
         if (difficultyId > 0 && difficultyId !== root.documentSession.currentDifficultyId)
             root.documentSession.selectDifficulty(difficultyId)
         Qt.callLater(() => {
@@ -75,12 +78,17 @@ Rectangle {
             if (root.documentSession.validationPending
                     || revision !== root.documentSession.validationRevision
                     || root.documentSession.validationRevision
-                       !== root.documentSession.documentRevision)
+                       !== root.documentSession.documentRevision) {
+                if (cancellation)
+                    cancellation()
                 return
+            }
             const start = root.documentSession.chartPosition(line, column)
             const end = root.documentSession.chartPosition(line, Math.max(column, endColumn + 1))
             sourceArea.forceActiveFocus()
             sourceArea.select(start, Math.max(start + 1, end))
+            if (completion)
+                completion()
         })
     }
 
