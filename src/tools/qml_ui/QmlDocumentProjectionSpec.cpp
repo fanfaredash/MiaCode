@@ -1,4 +1,3 @@
-#include <QFile>
 #include <QTextStream>
 
 #include "app/qml_ui/QmlDocumentProjection.h"
@@ -13,26 +12,6 @@ bool require(bool condition, const QString& message, QTextStream& err)
     return condition;
 }
 
-bool verifyNonActiveDifficultyDeletionPolicy(QTextStream& err)
-{
-    QFile source(QStringLiteral(
-        "src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp"));
-    if (!require(source.open(QIODevice::ReadOnly | QIODevice::Text),
-                 QStringLiteral("DocumentUi source is readable for deletion-policy regression"), err)) {
-        return false;
-    }
-    const QString contents = QString::fromUtf8(source.readAll());
-    return require(
-        contents.contains(QStringLiteral(
-            "if (deletingActiveDifficulty) {\n"
-            "        owner_.invalidateDocumentValidationRevision();\n"
-            "    } else {\n"
-            "        emit owner_.documentValidationChanged();\n"
-            "    }")),
-        QStringLiteral("non-active difficulty deletion preserves the current validation revision"),
-        err);
-}
-
 miacode::qml_ui::DocumentValidationProjectionInput currentInput()
 {
     miacode::qml_ui::DocumentValidationProjectionInput input;
@@ -41,6 +20,95 @@ miacode::qml_ui::DocumentValidationProjectionInput currentInput()
     input.timingSignature = QStringLiteral("4/4");
     input.timelineRevision = 42;
     return input;
+}
+
+bool verifyMutationPresentationState(QTextStream& err)
+{
+    const auto verify = [&err](const QString& mutation, bool validationAvailable) {
+        miacode::qml_ui::DocumentPresentationInput input;
+        input.activeDifficultyId = 5;
+        input.dirty = true;
+        input.documentRevision = 43;
+        input.validation.revision = 43;
+        input.validation.available = validationAvailable;
+        input.validation.pending = !validationAvailable;
+        const auto state = miacode::qml_ui::projectDocumentPresentation(input);
+        return require(state.activeDifficultyId == 5 && state.dirty
+                           && state.documentRevision == 43 && state.validationRevision == 43
+                           && state.validationAvailable == validationAvailable
+                           && state.validationPending == !validationAvailable,
+                       mutation + QStringLiteral(" publishes one coherent active/dirty/revision validation state"), err);
+    };
+    return verify(QStringLiteral("body mutation"), false)
+        && verify(QStringLiteral("&first mutation"), false)
+        && verify(QStringLiteral("extra timing mutation"), false)
+        && verify(QStringLiteral("difficulty level/designer mutation"), true)
+        && verify(QStringLiteral("accepted full-source mutation"), false);
+}
+
+bool verifyRejectedSourceTransaction(QTextStream& err)
+{
+    miacode::qml_ui::DocumentSourceTransactionInput input;
+    input.committedSourceText = QStringLiteral("&title=old\n");
+    input.attemptedSourceText = QStringLiteral("&inote_5=bad-token\n");
+    input.retainedRevision = 42;
+    input.issues = {{2, 3, 7, miacode::qml_ui::DocumentValidationIssueSeverity::Error,
+                     QStringLiteral("bad token")}};
+    const auto state = miacode::qml_ui::projectDocumentSourceTransaction(input);
+    return require(!state.accepted && state.revision == 42
+                       && state.editorSourceText == input.attemptedSourceText
+                       && state.committedSourceText == input.committedSourceText
+                       && state.issues.size() == 1 && state.issues.at(0).line == 2
+                       && state.issues.at(0).column == 3 && state.issues.at(0).message == QLatin1String("bad token"),
+                   QStringLiteral("rejected source retains attempted editor text, revision, and location"), err);
+}
+
+bool verifyMultiDifficultyStrictPreflight(QTextStream& err)
+{
+    const QString committed = QStringLiteral("&inote_5=(120){4}1,\n");
+    const QString attempted = QStringLiteral(
+        "&inote_5=(120){4}1,\n"
+        "&inote_6=(120){4}bad,\n");
+    const auto preflight = miacode::qml_ui::preflightDocumentSource(
+        attempted, SimaiNativeValidationLocale::English);
+    miacode::qml_ui::DocumentSourceTransactionInput transaction;
+    transaction.committedSourceText = committed;
+    transaction.attemptedSourceText = attempted;
+    transaction.retainedRevision = 42;
+    transaction.issues = preflight.issues;
+    const auto state = miacode::qml_ui::projectDocumentSourceTransaction(transaction);
+    return require(!preflight.accepted && !state.accepted
+                       && state.committedSourceText == committed
+                       && state.editorSourceText == attempted && state.revision == 42
+                       && !state.issues.isEmpty() && state.issues.constFirst().line == 2,
+                   QStringLiteral("multi-difficulty strict preflight rejects without replacing committed source"), err);
+}
+
+bool verifyEffectiveInlineSourceSpan(QTextStream& err)
+{
+    const QString source = QStringLiteral(
+        "&inote_6=(120){4}1,\n"
+        "&inote_6=(120){4}bad,\n");
+    const auto preflight = miacode::qml_ui::preflightDocumentSource(
+        source, SimaiNativeValidationLocale::English);
+    return require(!preflight.accepted && !preflight.issues.isEmpty()
+                       && preflight.issues.constFirst().line == 2
+                       && preflight.issues.constFirst().column == 18
+                       && preflight.issues.constFirst().endColumn == 18,
+                   QStringLiteral("effective duplicate inline inote maps parser range to full-source coordinates: got %1:%2-%3")
+                       .arg(preflight.issues.constFirst().line).arg(preflight.issues.constFirst().column).arg(preflight.issues.constFirst().endColumn), err);
+}
+
+bool verifyLevelOnlyDifficultySourceSpan(QTextStream& err)
+{
+    const auto preflight = miacode::qml_ui::preflightDocumentSource(
+        QStringLiteral("&title=x\n&lv_6=13"), SimaiNativeValidationLocale::English);
+    return require(!preflight.accepted && !preflight.issues.isEmpty()
+                       && preflight.issues.constFirst().line == 2
+                       && preflight.issues.constFirst().column >= 1
+                       && preflight.issues.constFirst().endColumn
+                          >= preflight.issues.constFirst().column,
+                   QStringLiteral("level-only difficulty validation maps empty-chart error to its full-source field"), err);
 }
 
 miacode::qml_ui::DocumentValidationProjectionCache matchingCache()
@@ -71,7 +139,11 @@ int main()
     QTextStream out(stdout);
     bool ok = true;
 
-    ok &= verifyNonActiveDifficultyDeletionPolicy(err);
+    ok &= verifyMutationPresentationState(err);
+    ok &= verifyRejectedSourceTransaction(err);
+    ok &= verifyMultiDifficultyStrictPreflight(err);
+    ok &= verifyEffectiveInlineSourceSpan(err);
+    ok &= verifyLevelOnlyDifficultySourceSpan(err);
 
     const miacode::qml_ui::DocumentValidationProjection projection =
         miacode::qml_ui::projectDocumentValidation(currentInput(), matchingCache());

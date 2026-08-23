@@ -1506,6 +1506,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(qml_document_projection_spec TEST
         SOURCES
             src/tools/qml_ui/QmlDocumentProjectionSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
             src/app/qml_ui/QmlDocumentProjection.cpp
             src/app/qml_ui/QmlDocumentProjection.h
         LIBS Qt6::Core

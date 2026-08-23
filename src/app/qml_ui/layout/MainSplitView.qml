@@ -175,8 +175,8 @@ Item {
                                            : 0
                 SplitView.minimumHeight: root.bottomPanelEffectivelyVisible ? 120 : 0
                 SplitView.maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0
-                onSyntaxIssueActivated: (line, column, endColumn) =>
-                    editorPane.revealSyntaxIssue(line, column, endColumn)
+                onSyntaxIssueActivated: (difficultyId, revision, line, column, endColumn) =>
+                    editorPane.revealSyntaxIssue(difficultyId, revision, line, column, endColumn)
             }
         }
 

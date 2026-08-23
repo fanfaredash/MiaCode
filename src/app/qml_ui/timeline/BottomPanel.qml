@@ -12,7 +12,7 @@ Rectangle {
     required property var preferences
     required property var commands
     required property var shellController
-    signal syntaxIssueActivated(int line, int column, int endColumn)
+    signal syntaxIssueActivated(int difficultyId, var revision, int line, int column, int endColumn)
 
     color: Theme.colors.background.surface
     clip: true
@@ -63,10 +63,12 @@ Rectangle {
 
             Label {
                 anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("%1 个错误，%2 个警告，已解析 %3 个物件")
-                    .arg(root.documentSession.syntaxErrorCount)
-                    .arg(root.documentSession.syntaxWarningCount)
-                    .arg(root.documentSession.parsedNoteCount)
+                text: root.documentSession.validationPending
+                    ? qsTr("正在分析…")
+                    : qsTr("%1 个错误，%2 个警告，已解析 %3 个物件")
+                        .arg(root.documentSession.syntaxErrorCount)
+                        .arg(root.documentSession.syntaxWarningCount)
+                        .arg(root.documentSession.parsedNoteCount)
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize
@@ -96,6 +98,8 @@ Rectangle {
                 leftPadding: 10
                 rightPadding: 10
                 onClicked: root.syntaxIssueActivated(
+                    modelData.difficultyId,
+                    modelData.revision,
                     modelData.line,
                     modelData.column,
                     modelData.endColumn)
@@ -132,7 +136,7 @@ Rectangle {
         Label {
             anchors.centerIn: parent
             visible: root.documentSession.syntaxIssueCount === 0
-            text: qsTr("未发现语法问题")
+            text: root.documentSession.validationPending ? qsTr("正在分析…") : qsTr("未发现语法问题")
             color: Theme.colors.text.secondary
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize

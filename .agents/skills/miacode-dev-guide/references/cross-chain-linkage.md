@@ -33,7 +33,12 @@ Validation presentation shares that analysis result. Both explicit validation an
 analysis populate `ValidationCacheEntry`, including the parser's explicit severity. The aligned
 active-difficulty cache is exposed as `DocumentValidationSnapshot`; `documentValidationChanged`
 updates UIv2's bottom list, navigation target and editor wave underline through one
-`QmlDocumentModel::syntaxIssues` projection. Cache clearing publishes the same signal.
+`QmlDocumentModel::syntaxIssues` projection. QML reads the cached projection's
+`documentRevision` / `validationRevision` / `validationPending` as one state: diagnostics
+and navigation must be hidden while the revisions differ. Full metadata-source replacement is
+a two-phase transaction: preflight every candidate difficulty with strict validation, retain the
+old document/editor text on any error, then load and refresh the timeline only after acceptance.
+Cache clearing publishes the same signal.
 
 Implications:
 

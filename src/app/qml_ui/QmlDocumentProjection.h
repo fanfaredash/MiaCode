@@ -3,6 +3,9 @@
 #include <QString>
 #include <QVector>
 
+#include "core/chart/document/SimaiDocument.h"
+#include "core/chart/parser/SimaiNativeParser.h"
+
 namespace miacode::qml_ui {
 
 enum class DocumentValidationIssueSeverity {
@@ -48,8 +51,54 @@ struct DocumentValidationProjection {
     QVector<DocumentValidationProjectionIssue> issues;
 };
 
+// The one state QML publishes for a document mutation.  Keep the validation
+// availability tied to the same revision that made the document dirty.
+struct DocumentPresentationInput {
+    int activeDifficultyId = 0;
+    bool dirty = false;
+    quint64 documentRevision = 0;
+    DocumentValidationProjection validation;
+};
+
+struct DocumentPresentationState {
+    int activeDifficultyId = 0;
+    bool dirty = false;
+    quint64 documentRevision = 0;
+    quint64 validationRevision = 0;
+    bool validationPending = false;
+    bool validationAvailable = false;
+    QStringList dirtyEditorKeys;
+    DocumentValidationProjection validation;
+};
+
+struct DocumentSourceTransactionInput {
+    QString committedSourceText;
+    QString attemptedSourceText;
+    quint64 retainedRevision = 0;
+    QVector<DocumentValidationProjectionIssue> issues;
+};
+
+struct DocumentSourceTransactionState {
+    bool accepted = false;
+    quint64 revision = 0;
+    QString editorSourceText;
+    QString committedSourceText;
+    QVector<DocumentValidationProjectionIssue> issues;
+};
+
+struct DocumentSourcePreflightResult {
+    SimaiDocument candidate;
+    QVector<DocumentValidationProjectionIssue> issues;
+    bool accepted = false;
+};
+
 DocumentValidationProjection projectDocumentValidation(
     const DocumentValidationProjectionInput& input,
     const DocumentValidationProjectionCache& cache);
+DocumentPresentationState projectDocumentPresentation(const DocumentPresentationInput& input);
+DocumentSourceTransactionState projectDocumentSourceTransaction(
+    const DocumentSourceTransactionInput& input);
+DocumentSourcePreflightResult preflightDocumentSource(
+    const QString& source, SimaiNativeValidationLocale locale);
 
 }  // namespace miacode::qml_ui

@@ -64,13 +64,24 @@ Rectangle {
         sourceArea.selectAll()
     }
 
-    function revealSyntaxIssue(line, column, endColumn) {
+    function revealSyntaxIssue(difficultyId, revision, line, column, endColumn) {
         if (root.metadataMode)
             return
-        const start = root.documentSession.chartPosition(line, column)
-        const end = root.documentSession.chartPosition(line, Math.max(column, endColumn + 1))
-        sourceArea.forceActiveFocus()
-        sourceArea.select(start, Math.max(start + 1, end))
+        if (difficultyId > 0 && difficultyId !== root.documentSession.currentDifficultyId)
+            root.documentSession.selectDifficulty(difficultyId)
+        Qt.callLater(() => {
+            // Diagnostics are 1-based and are valid only for the revision
+            // that produced them; select after a requested difficulty switch.
+            if (root.documentSession.validationPending
+                    || revision !== root.documentSession.validationRevision
+                    || root.documentSession.validationRevision
+                       !== root.documentSession.documentRevision)
+                return
+            const start = root.documentSession.chartPosition(line, column)
+            const end = root.documentSession.chartPosition(line, Math.max(column, endColumn + 1))
+            sourceArea.forceActiveFocus()
+            sourceArea.select(start, Math.max(start + 1, end))
+        })
     }
 
     function updateCursorPosition() {
@@ -180,7 +191,9 @@ Rectangle {
                 modifierColor: Theme.colors.syntax.modifier
                 errorColor: Theme.colors.syntax.error
                 warningColor: Theme.colors.syntax.warning
-                diagnostics: root.metadataMode ? [] : root.documentSession.syntaxIssues
+                diagnostics: root.metadataMode || root.documentSession.validationPending
+                    || root.documentSession.validationRevision !== root.documentSession.documentRevision
+                    ? [] : root.documentSession.syntaxIssues
             }
             // 视口尺寸变化时由 editorScroll.refreshHighlight() 触发重高亮。
             function rehighlight() {
@@ -212,4 +225,3 @@ Rectangle {
         value: Flickable.StopAtBounds
     }
 }
-

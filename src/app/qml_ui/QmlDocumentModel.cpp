@@ -9,8 +9,19 @@
 QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
     : QObject(parent), backend_(&backend)
 {
+    refreshDocumentState();
     connect(backend_, &MainWindow::documentValidationChanged,
-            this, &QmlDocumentModel::syntaxIssuesChanged);
+            this, [this] {
+                // Timeline refreshes may emit while a source transaction is
+                // still installing its document.  Deferring the projection
+                // makes QML observe the completed transaction, never its
+                // previous chart paired with a new pending revision.
+                QMetaObject::invokeMethod(this, [this] {
+                    refreshDocumentState();
+                    emit syntaxIssuesChanged();
+                    emit documentStateChanged();
+                }, Qt::QueuedConnection);
+            });
 }
 
 QString QmlDocumentModel::chartText() const
@@ -31,8 +42,14 @@ QString QmlDocumentModel::metadataFirst() const { return backend_->documentField
 QString QmlDocumentModel::metadataDesigner() const { return backend_->documentField(MainWindow::DocumentField::Designer); }
 QString QmlDocumentModel::metadataVideoPath() const { return backend_->documentField(MainWindow::DocumentField::VideoPath); }
 QString QmlDocumentModel::metadataExtraText() const { return backend_->documentField(MainWindow::DocumentField::ExtraText); }
-QString QmlDocumentModel::metadataSourceText() const { return backend_->documentSourceText(); }
+QString QmlDocumentModel::metadataSourceText() const
+{
+    return metadataSourceError_.isEmpty()
+        ? backend_->documentSourceText()
+        : metadataSourceAttemptText_;
+}
 QString QmlDocumentModel::metadataSourceError() const { return metadataSourceError_; }
+QVariantList QmlDocumentModel::metadataSourceIssues() const { return sourceIssuesToVariantList(); }
 bool QmlDocumentModel::metadataSourceValid() const { return metadataSourceError_.isEmpty(); }
 bool QmlDocumentModel::unifiedDesignerEnabled() const { return backend_->documentUnifiedDesignerEnabled(); }
 
@@ -88,8 +105,22 @@ void QmlDocumentModel::setMetadataExtraText(const QString& value)
 }
 void QmlDocumentModel::setMetadataSourceText(const QString& value)
 {
+    const MainWindow::DocumentSourceReplaceResult result = backend_->replaceDocumentSourceText(value);
+    metadataSourceIssues_ = result.issues;
+    if (!result.accepted) {
+        metadataSourceAttemptText_ = value;
+        QStringList messages;
+        for (const auto& issue : metadataSourceIssues_) {
+            messages.append(QStringLiteral("%1:%2 %3")
+                .arg(issue.line).arg(issue.column).arg(issue.message));
+        }
+        metadataSourceError_ = messages.join(QLatin1Char('\n'));
+        emit metadataSourceChanged();
+        return;
+    }
     metadataSourceError_.clear();
-    if (!backend_->replaceDocumentSourceText(value)) return;
+    metadataSourceAttemptText_.clear();
+    refreshDocumentState();
     markDocumentChanged();
     emit metadataSourceChanged();
     emitDocumentStateChanged();
@@ -116,7 +147,7 @@ QString QmlDocumentModel::currentDifficultyLabel() const
     const QString level = currentDifficultyLevel().trimmed();
     return level.isEmpty() ? name : QStringLiteral("%1 %2").arg(name, level);
 }
-int QmlDocumentModel::currentDifficultyId() const { return backend_->documentActiveDifficultyId(); }
+int QmlDocumentModel::currentDifficultyId() const { return presentationState_.activeDifficultyId; }
 
 QVariantList QmlDocumentModel::difficulties() const
 {
@@ -180,7 +211,7 @@ void QmlDocumentModel::setCurrentDifficultyDesigner(const QString& value)
 
 QVariantList QmlDocumentModel::syntaxIssues() const
 {
-    const MainWindow::DocumentValidationSnapshot snapshot = backend_->documentValidationSnapshot();
+    const miacode::qml_ui::DocumentValidationProjection& snapshot = validationSnapshot_;
     QVariantList result;
     result.reserve(snapshot.issues.size());
     for (const miacode::qml_ui::DocumentValidationProjectionIssue& issue : snapshot.issues) {
@@ -193,33 +224,36 @@ QVariantList QmlDocumentModel::syntaxIssues() const
                  ? QStringLiteral("warning")
                  : QStringLiteral("error")},
             {QStringLiteral("message"), issue.message},
+            {QStringLiteral("difficultyId"), presentationState_.activeDifficultyId},
+            {QStringLiteral("revision"), QVariant::fromValue<qulonglong>(presentationState_.validationRevision)},
         });
     }
     return result;
 }
 int QmlDocumentModel::syntaxIssueCount() const
 {
-    return backend_->documentValidationSnapshot().issues.size();
+    return validationSnapshot_.issues.size();
 }
 int QmlDocumentModel::syntaxErrorCount() const
 {
-    return backend_->documentValidationSnapshot().errorCount;
+    return validationSnapshot_.errorCount;
 }
 int QmlDocumentModel::syntaxWarningCount() const
 {
-    return backend_->documentValidationSnapshot().warningCount;
+    return validationSnapshot_.warningCount;
 }
 int QmlDocumentModel::parsedNoteCount() const
 {
-    return backend_->documentValidationSnapshot().parsedNoteCount;
+    return validationSnapshot_.parsedNoteCount;
 }
-bool QmlDocumentModel::dirty() const { return backend_->isWindowModified(); }
+qulonglong QmlDocumentModel::documentRevision() const { return presentationState_.documentRevision; }
+qulonglong QmlDocumentModel::validationRevision() const { return presentationState_.validationRevision; }
+bool QmlDocumentModel::validationPending() const { return presentationState_.validationPending; }
+bool QmlDocumentModel::validationAvailable() const { return presentationState_.validationAvailable; }
+bool QmlDocumentModel::dirty() const { return presentationState_.dirty; }
 QStringList QmlDocumentModel::dirtyEditorKeys() const
 {
-    if (!dirty()) return {};
-    return currentDifficultyId() > 0
-        ? QStringList{QStringLiteral("difficulty:%1").arg(currentDifficultyId())}
-        : QStringList{QStringLiteral("metadata")};
+    return presentationState_.dirtyEditorKeys;
 }
 
 bool QmlDocumentModel::openFile(const QUrl& fileUrl)
@@ -229,6 +263,7 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
         emit operationFailed(tr("打开失败"), tr("无法打开谱面文件。"));
         return false;
     }
+    clearMetadataSourceRejection();
     emitDocumentStateChanged();
     emit documentReplaced();
     return true;
@@ -249,6 +284,7 @@ bool QmlDocumentModel::saveAs(const QUrl& fileUrl)
 void QmlDocumentModel::discardChanges()
 {
     if (!backend_->discardDocumentChanges()) return;
+    clearMetadataSourceRejection();
     emitDocumentStateChanged();
     emit documentReplaced();
 }
@@ -304,15 +340,18 @@ void QmlDocumentModel::disableUnifiedDesigner()
 
 void QmlDocumentModel::markDocumentChanged()
 {
+    refreshDocumentState();
     emit dirtyChanged();
     emit dirtyEditorKeysChanged();
     emit metadataSourceChanged();
     emit documentTitleChanged();
     emit syntaxIssuesChanged();
+    emit documentStateChanged();
 }
 
 void QmlDocumentModel::emitDocumentStateChanged()
 {
+    refreshDocumentState();
     emit chartTextChanged();
     emit metadataChanged();
     emit metadataSourceChanged();
@@ -324,4 +363,42 @@ void QmlDocumentModel::emitDocumentStateChanged()
     emit dirtyChanged();
     emit dirtyEditorKeysChanged();
     emit syntaxIssuesChanged();
+    emit documentStateChanged();
+}
+
+void QmlDocumentModel::refreshDocumentState()
+{
+    validationSnapshot_ = backend_->documentValidationSnapshot();
+    documentRevision_ = validationSnapshot_.revision;
+    miacode::qml_ui::DocumentPresentationInput input;
+    input.activeDifficultyId = backend_->documentActiveDifficultyId();
+    input.dirty = backend_->isWindowModified();
+    input.documentRevision = documentRevision_;
+    input.validation = validationSnapshot_;
+    presentationState_ = miacode::qml_ui::projectDocumentPresentation(input);
+}
+
+void QmlDocumentModel::clearMetadataSourceRejection()
+{
+    metadataSourceError_.clear();
+    metadataSourceAttemptText_.clear();
+    metadataSourceIssues_.clear();
+}
+
+QVariantList QmlDocumentModel::sourceIssuesToVariantList() const
+{
+    QVariantList result;
+    result.reserve(metadataSourceIssues_.size());
+    for (const auto& issue : metadataSourceIssues_) {
+        result.append(QVariantMap{
+            {QStringLiteral("line"), issue.line},
+            {QStringLiteral("column"), issue.column},
+            {QStringLiteral("endColumn"), issue.endColumn},
+            {QStringLiteral("severity"), issue.severity
+                == miacode::qml_ui::DocumentValidationIssueSeverity::Warning
+                ? QStringLiteral("warning") : QStringLiteral("error")},
+            {QStringLiteral("message"), issue.message},
+        });
+    }
+    return result;
 }

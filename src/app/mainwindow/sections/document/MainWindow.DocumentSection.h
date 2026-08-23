@@ -16,7 +16,7 @@ public:
     bool updateDocumentField(MainWindow::DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, MainWindow::DifficultyField field, const QString& value);
     bool updateActiveChartText(const QString& value);
-    bool replaceDocumentSourceText(const QString& value);
+    MainWindow::DocumentSourceReplaceResult replaceDocumentSourceText(const QString& value);
     bool addDocumentDifficulty(int difficultyId);
     void enableUnifiedDocumentDesigner(const QString& canonicalName);
     void disableUnifiedDocumentDesigner();

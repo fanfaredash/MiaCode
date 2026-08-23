@@ -32,9 +32,13 @@ Rectangle {
             sourceEditor.selectAll()
     }
 
-    function revealSyntaxIssue(line, column, endColumn) {
-        viewState.openDifficultyEditor(root.documentSession.currentDifficultyId)
-        sourceEditor.revealSyntaxIssue(line, column, endColumn)
+    function revealSyntaxIssue(difficultyId, revision, line, column, endColumn) {
+        if (revision !== root.documentSession.validationRevision
+                || revision !== root.documentSession.documentRevision
+                || root.documentSession.validationPending)
+            return
+        viewState.openDifficultyEditor(difficultyId)
+        sourceEditor.revealSyntaxIssue(difficultyId, revision, line, column, endColumn)
     }
 
     color: Theme.colors.background.editor
@@ -340,4 +344,3 @@ Rectangle {
         }
     }
 }
-

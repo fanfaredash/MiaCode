@@ -5,6 +5,8 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include "QmlDocumentProjection.h"
+
 class MainWindow;
 
 // QML-facing owner for the active MiaCode chart document. This class is the
@@ -22,6 +24,7 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QString metadataExtraText READ metadataExtraText WRITE setMetadataExtraText NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataSourceText READ metadataSourceText WRITE setMetadataSourceText NOTIFY metadataSourceChanged)
     Q_PROPERTY(QString metadataSourceError READ metadataSourceError NOTIFY metadataSourceChanged)
+    Q_PROPERTY(QVariantList metadataSourceIssues READ metadataSourceIssues NOTIFY metadataSourceChanged)
     Q_PROPERTY(bool metadataSourceValid READ metadataSourceValid NOTIFY metadataSourceChanged)
     Q_PROPERTY(bool unifiedDesignerEnabled READ unifiedDesignerEnabled NOTIFY unifiedDesignerEnabledChanged)
     Q_PROPERTY(QStringList designerCandidates READ designerCandidates NOTIFY metadataChanged)
@@ -40,6 +43,10 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(int syntaxErrorCount READ syntaxErrorCount NOTIFY syntaxIssuesChanged)
     Q_PROPERTY(int syntaxWarningCount READ syntaxWarningCount NOTIFY syntaxIssuesChanged)
     Q_PROPERTY(int parsedNoteCount READ parsedNoteCount NOTIFY syntaxIssuesChanged)
+    Q_PROPERTY(qulonglong documentRevision READ documentRevision NOTIFY documentStateChanged)
+    Q_PROPERTY(qulonglong validationRevision READ validationRevision NOTIFY documentStateChanged)
+    Q_PROPERTY(bool validationPending READ validationPending NOTIFY documentStateChanged)
+    Q_PROPERTY(bool validationAvailable READ validationAvailable NOTIFY documentStateChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
     Q_PROPERTY(QStringList dirtyEditorKeys READ dirtyEditorKeys NOTIFY dirtyEditorKeysChanged)
 
@@ -56,6 +63,7 @@ public:
     QString metadataExtraText() const;
     QString metadataSourceText() const;
     QString metadataSourceError() const;
+    QVariantList metadataSourceIssues() const;
     bool metadataSourceValid() const;
     bool unifiedDesignerEnabled() const;
     QStringList designerCandidates() const;
@@ -84,6 +92,10 @@ public:
     int syntaxErrorCount() const;
     int syntaxWarningCount() const;
     int parsedNoteCount() const;
+    qulonglong documentRevision() const;
+    qulonglong validationRevision() const;
+    bool validationPending() const;
+    bool validationAvailable() const;
     bool dirty() const;
     QStringList dirtyEditorKeys() const;
 
@@ -112,12 +124,21 @@ signals:
     void syntaxIssuesChanged();
     void dirtyChanged();
     void dirtyEditorKeysChanged();
+    void documentStateChanged();
     void documentReplaced();
     void operationFailed(const QString& title, const QString& message);
 
 private:
     void markDocumentChanged();
     void emitDocumentStateChanged();
+    void refreshDocumentState();
+    void clearMetadataSourceRejection();
+    QVariantList sourceIssuesToVariantList() const;
     MainWindow* backend_ = nullptr;
     QString metadataSourceError_;
+    QString metadataSourceAttemptText_;
+    QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataSourceIssues_;
+    miacode::qml_ui::DocumentValidationProjection validationSnapshot_;
+    miacode::qml_ui::DocumentPresentationState presentationState_;
+    quint64 documentRevision_ = 0;
 };

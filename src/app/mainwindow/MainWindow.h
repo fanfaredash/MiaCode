@@ -177,6 +177,15 @@ public:
 
     using DocumentValidationSnapshot = miacode::qml_ui::DocumentValidationProjection;
 
+    // Result of the all-or-nothing QML metadata-source replacement.  The
+    // candidate is parsed and strictly validated before the live document is
+    // touched, so callers can keep their editor text and navigate a rejection.
+    struct DocumentSourceReplaceResult {
+        bool accepted = false;
+        quint64 revision = 0;
+        QVector<miacode::qml_ui::DocumentValidationProjectionIssue> issues;
+    };
+
     struct CliVideoExportRequest {
         QString chartPathOrDirectory;
         QString difficulty = QStringLiteral("MAS");
@@ -226,7 +235,7 @@ public:
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
     bool updateActiveChartText(const QString& value);
-    bool replaceDocumentSourceText(const QString& value);
+    DocumentSourceReplaceResult replaceDocumentSourceText(const QString& value);
     bool saveDocument();
     bool saveDocumentAs(const QString& path);
     bool discardDocumentChanges();

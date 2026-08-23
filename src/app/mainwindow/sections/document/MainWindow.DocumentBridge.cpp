@@ -1,4 +1,6 @@
 #include "MainWindow.DocumentSection.h"
+#include "app/mainwindow/MainWindowShared.h"
+
 
 #include <QtCore>
 #include <QtWidgets>
@@ -107,7 +109,6 @@ bool MainWindow::DocumentSection::updateDocumentField(
     owner_.updateWindowTitle();
     rebuildFieldSidebar();
     if (timingChanged) {
-        owner_.invalidateDocumentValidationRevision();
         owner_.refreshWaveformCache();
         owner_.refreshTimelineMetadata();
         owner_.scheduleTimelineRefresh();
@@ -175,18 +176,45 @@ bool MainWindow::DocumentSection::updateActiveChartText(const QString& value)
     return true;
 }
 
-bool MainWindow::DocumentSection::replaceDocumentSourceText(const QString& value)
+MainWindow::DocumentSourceReplaceResult MainWindow::DocumentSection::replaceDocumentSourceText(
+    const QString& value)
 {
+    MainWindow::DocumentSourceReplaceResult result;
     if (state_.document_.toText() == value) {
-        return false;
+        result.accepted = true;
+        result.revision = owner_.documentValidationSnapshot().revision;
+        return result;
     }
-    const SimaiDocument parsed = SimaiDocument::fromText(value);
-    owner_.invalidateDocumentValidationRevision();
-    loadDocument(parsed);
+
+    // Phase 1: construct and strictly preflight the complete candidate.  Do
+    // not invalidate validation, load widgets, or mutate state until every
+    // candidate difficulty is known to be presentable.
+    const miacode::qml_ui::DocumentSourcePreflightResult preflight =
+        miacode::qml_ui::preflightDocumentSource(value, miacode::mainwindow::shared::uiValidationLocale());
+    result.issues = preflight.issues;
+    miacode::qml_ui::DocumentSourceTransactionInput transactionInput;
+    transactionInput.committedSourceText = state_.document_.toText();
+    transactionInput.attemptedSourceText = value;
+    transactionInput.retainedRevision = owner_.documentValidationSnapshot().revision;
+    transactionInput.issues = result.issues;
+    const miacode::qml_ui::DocumentSourceTransactionState transaction =
+        miacode::qml_ui::projectDocumentSourceTransaction(transactionInput);
+    result.accepted = transaction.accepted;
+    result.revision = transaction.revision;
+    result.issues = transaction.issues;
+    if (!result.accepted) {
+        return result;
+    }
+
+    // Phase 2: publish the fully preflighted document as one transaction and
+    // immediately request a fresh timeline/validation revision.
+    loadDocument(preflight.candidate);
     state_.documentDirty_ = true;
     markCurrentFieldDirty();
     updateDirtyState();
-    return true;
+    owner_.scheduleTimelineRefresh();
+    result.revision = owner_.documentValidationSnapshot().revision;
+    return result;
 }
 
 bool MainWindow::DocumentSection::addDocumentDifficulty(int difficultyId)
@@ -262,7 +290,7 @@ bool MainWindow::updateActiveChartText(const QString& value)
     return documentSection_->updateActiveChartText(value);
 }
 
-bool MainWindow::replaceDocumentSourceText(const QString& value)
+MainWindow::DocumentSourceReplaceResult MainWindow::replaceDocumentSourceText(const QString& value)
 {
     return documentSection_->replaceDocumentSourceText(value);
 }
