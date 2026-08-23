@@ -16,6 +16,7 @@ class QMouseEvent;
 class QMimeData;
 
 namespace miacode::editor {
+bool completionPopupContainsPointer(const QRect& popupBounds, const QPoint& globalPointerPosition);
 QChar normalizedHalfWidthChar(QChar ch);
 QString normalizedHalfWidthText(QString text);
 QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text);

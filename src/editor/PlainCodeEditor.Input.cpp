@@ -329,6 +329,11 @@ QString clearCompleteElementsInSelection(
     }
     return output;
 }
+
+bool completionPopupContainsPointer(const QRect& popupBounds, const QPoint& globalPointerPosition)
+{
+    return popupBounds.contains(globalPointerPosition);
+}
 }
 
 namespace {
@@ -486,7 +491,8 @@ void PlainCodeEditor::focusOutEvent(QFocusEvent* event)
     const bool pointerInsideCompletionPopup =
         completionPopup_ != nullptr
         && completionPopup_->isVisible()
-        && completionPopup_->geometry().contains(QCursor::pos());
+        && miacode::editor::completionPopupContainsPointer(
+            completionPopup_->geometry(), QCursor::pos());
     if (!pointerInsideCompletionPopup) {
         closeBracketCompletion();
     }

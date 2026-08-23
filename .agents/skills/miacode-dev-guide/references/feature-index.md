@@ -313,7 +313,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `addValidationError`, `addValidationDecoration`).
 - Shared validation presentation: `ValidationCachedIssue` retains explicit parser severity;
   `ValidationSection::documentValidationSnapshot` publishes the aligned active-difficulty cache.
-  Explicit validation, background timeline analysis and cache clearing emit
+  Its UIv2 projection carries document and validation revisions plus available/pending state: a
+  cache from a different revision, difficulty, chart-text signature, or timing signature must
+  expose no diagnostics. Explicit validation, background timeline analysis and cache clearing emit
   `MainWindow::documentValidationChanged`; UIv2 list, navigation and wave underlines consume the
   same `QmlDocumentModel::syntaxIssues` projection.
 - Note-modifier sync set (one patch touches all): native parser (`.cpp`/`.TouchTap`/`.Slide`) →

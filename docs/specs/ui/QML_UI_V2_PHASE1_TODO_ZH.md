@@ -61,6 +61,33 @@
 - [x] `DocumentValidationSnapshot` 将现有验证缓存投影为 QML 数据，包含问题位置、显式严重度、错误数、警告数和 strict 解析物件数。
 - [x] 同步检查、后台分析和缓存清理统一发布 `documentValidationChanged`；底栏列表、问题跳转和编辑器波浪线共用 `syntaxIssues`。
 
+### 一阶段 P0 文档事务与验证收尾（自动验证，2026-08-24）
+
+- [x] 文档状态发布已收口为同一份 `activeDifficultyId`、dirty、`documentRevision`、
+      `validationRevision`、available/pending 投影。`qml_document_projection_spec` 验证的是该
+      投影/预检状态契约：输入 revision 一致时的状态、缓存 revision/难度/谱面/timing 不匹配时隐藏
+      旧诊断并标为 pending，以及完整源码预检失败时保留 committed source/revision 与全局行列诊断。
+      它不直接调用正文、`&first`、额外 timing、等级/谱师或完整源码替换的真实 QML/MainWindow 变更路径。
+- [x] 完整源码替换的生产路径先对全部难度作严格预检；失败时保留已提交文档和 revision，仅将尝试源码与
+      带全局行列位置的诊断投影给编辑器。通过后才加载文档并请求时间轴刷新（本次为源码路由审阅，非 GUI
+      端到端执行）。`simai_document_spec` 同时覆盖 `&first` 可保存序列化、独立/难度谱师及
+      `&clock_count` 的 load/save round-trip。
+- [x] Release 证据：`cmake --build build-devtools --config Release --parallel 2` 成功；
+      `ctest -C Release -R 'qml_document_projection_spec|simai_document_spec|timeline_model_spec|muri_spec|plain_code_editor_spec'`
+      5/5 通过。该组覆盖文档投影/诊断、序列化、时间轴模型、Muri 和编辑器回归。
+- [x] `batch_export_panel_spec` 的开发工具目标显式链接其 `VideoExportSettings` 与
+      `VideoExportRuntimePolicy` 依赖；编辑器规格以确定性的 popup press/release 路径覆盖候选项提交。
+      Cocoa 原生焦点转移与光标几何不属于该合成事件规格，保留为 GUI 手工验证。
+
+### 一阶段 P0 手工验证矩阵（仍待执行）
+
+| 场景 | 自动证据 | 本机手工状态 |
+|------|----------|--------------|
+| 正文、`&first`、额外 timing、等级/谱师、完整源码变更 | `qml_document_projection_spec` 断言投影/预检 revision 和诊断状态；源码审阅确认 accepted full-source transaction 才请求时间轴刷新 | 未执行真实变更路径或 GUI 观察；预览未启动 |
+| 打开、编辑、切换难度、保存/另存为、放弃 | 静态路由审阅：QML `openFile/save/saveAs/discardChanges` → 窄 MainWindow API；`simai_document_spec` 覆盖序列化 round-trip | 未执行真实文件或对话框流程，不能当作端到端通过 |
+| QML 诊断列表、时间轴与预览刷新 | 文档投影与 `timeline_model_spec` 通过；源码审阅确认 timing 变更刷新 waveform/metadata 并 schedule timeline | 未执行 GUI/预览观察，未验证实际画面或播放 |
+| Windows/macOS 视觉、音频、拖放 | 不适用 | 未执行；不得由本次 macOS 自动构建推断通过 |
+
 ### 上游同步
 
 - [x] 合入 `origin/dev` @ `0e85b0b2`。
