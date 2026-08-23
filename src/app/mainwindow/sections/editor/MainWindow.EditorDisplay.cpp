@@ -379,12 +379,33 @@ void MainWindow::EditorSection::loadPortableState()
         ui.value("editor_header_top_display").toString() == QLatin1String("designer")
             ? EditorHeaderTopDisplay::Designer
             : EditorHeaderTopDisplay::Offset;
+    bool importedLegacyBottomPanelHeight = false;
+    int legacyBottomPanelHeight = 0;
+    QSettings legacySettings;
+    const bool hasLegacyBottomPanelHeight =
+        legacySettings.contains(QStringLiteral("ui/bottomPanelHeight"));
     if (ui.value("bottom_tabs_content_scale").isDouble()) {
         // Stored as a content-scale ratio (not pixels). The raw value is clamped
         // to its valid [min,max] range by applyBottomTabsContentScale() when the
         // height is re-applied below.
         state_.bottomTabsContentScale_ =
             ui.value("bottom_tabs_content_scale").toDouble(state_.bottomTabsContentScale_);
+    } else {
+        // QML v2 previously kept a competing pixel height in QSettings. Import
+        // it once only when the canonical shell scale has not been saved, then
+        // remove the legacy value so subsequent launches have one owner.
+        if (hasLegacyBottomPanelHeight) {
+            legacyBottomPanelHeight = qBound(
+                120,
+                legacySettings.value(QStringLiteral("ui/bottomPanelHeight")).toInt(),
+                340);
+            importedLegacyBottomPanelHeight = true;
+        }
+    }
+    // The shell's scale is canonical even when it already existed before this
+    // launch, so always retire the obsolete v2 pixel-height key.
+    if (hasLegacyBottomPanelHeight) {
+        legacySettings.remove(QStringLiteral("ui/bottomPanelHeight"));
     }
     if (ui.value("preview_pane_width_ratio").isDouble()) {
         state_.previewPaneWidthRatio_ =
@@ -468,6 +489,9 @@ void MainWindow::EditorSection::loadPortableState()
     // ran updateBottomTabsDeviceHeight() once with the default scale before this
     // load; push the persisted scale into the layout now (it also clamps it).
     if (owner_.windowSection_ != nullptr) {
+        if (importedLegacyBottomPanelHeight) {
+            owner_.windowSection_->setShellBottomTabsHeight(legacyBottomPanelHeight);
+        }
         owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
     owner_.refreshPreviewFrameRateTimers();

@@ -9,7 +9,6 @@ namespace {
 constexpr auto kSidebarVisible = "ui/sidebarVisible";
 constexpr auto kSidebarWidth = "ui/sidebarWidth";
 constexpr auto kBottomPanelVisible = "ui/bottomPanelVisible";
-constexpr auto kBottomPanelHeight = "ui/bottomPanelHeight";
 constexpr auto kPreviewVisible = "ui/previewVisible";
 constexpr auto kPreviewWidthRatio = "ui/previewWidthRatio";
 constexpr auto kFontSize = "appearance/fontSize";
@@ -28,7 +27,6 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
     sidebarVisible_ = settings_.value(kSidebarVisible, true).toBool();
     sidebarWidth_ = qBound(120, settings_.value(kSidebarWidth, 190).toInt(), 320);
     bottomPanelVisible_ = settings_.value(kBottomPanelVisible, true).toBool();
-    bottomPanelHeight_ = qBound(120, settings_.value(kBottomPanelHeight, 215).toInt(), 340);
     previewVisible_ = settings_.value(kPreviewVisible, true).toBool();
     previewWidthRatio_ = qBound(0.2, settings_.value(kPreviewWidthRatio, 0.5).toDouble(), 0.5);
     fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
@@ -37,7 +35,6 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
 bool QmlUiSettings::sidebarVisible() const { return sidebarVisible_; }
 int QmlUiSettings::sidebarWidth() const { return sidebarWidth_; }
 bool QmlUiSettings::bottomPanelVisible() const { return bottomPanelVisible_; }
-int QmlUiSettings::bottomPanelHeight() const { return bottomPanelHeight_; }
 bool QmlUiSettings::previewVisible() const { return previewVisible_; }
 double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
 QString QmlUiSettings::uiFontFamily() const { return uiFontFamily_; }
@@ -67,15 +64,6 @@ void QmlUiSettings::setBottomPanelVisible(bool value)
     bottomPanelVisible_ = value;
     settings_.setValue(kBottomPanelVisible, value);
     emit bottomPanelVisibleChanged();
-}
-
-void QmlUiSettings::setBottomPanelHeight(int value)
-{
-    value = qBound(120, value, 340);
-    if (bottomPanelHeight_ == value) return;
-    bottomPanelHeight_ = value;
-    settings_.setValue(kBottomPanelHeight, value);
-    emit bottomPanelHeightChanged();
 }
 
 void QmlUiSettings::setPreviewVisible(bool value)

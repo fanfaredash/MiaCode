@@ -63,11 +63,6 @@ Item {
         }
     }
 
-    function persistVerticalLayout() {
-        if (root.bottomPanelEffectivelyVisible)
-            root.preferences.bottomPanelHeight = Math.round(bottomPanel.height)
-    }
-
     function fittedFullscreenWidth(hostWidth, hostHeight) {
         const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
         const safeWidth = Math.max(1, hostWidth)
@@ -122,7 +117,10 @@ Item {
             SplitView.minimumWidth: 280
 
             handle: SplitHandle {
-                onReleased: root.persistVerticalLayout()
+                onReleased: {
+                    if (root.bottomPanelEffectivelyVisible)
+                        root.shellController.setBottomTabsHostHeight(Math.round(bottomPanel.height))
+                }
             }
 
             Item {
@@ -171,7 +169,7 @@ Item {
                 commands: root.commands
                 shellController: root.shellController
                 SplitView.preferredHeight: root.bottomPanelEffectivelyVisible
-                                           ? root.preferences.bottomPanelHeight
+                                           ? Math.max(120, root.shellController.bottomTabsHostHeight)
                                            : 0
                 SplitView.minimumHeight: root.bottomPanelEffectivelyVisible ? 120 : 0
                 SplitView.maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0

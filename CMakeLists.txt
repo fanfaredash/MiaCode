@@ -1494,6 +1494,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/core/chart src/core/chart/parser src/timeline src/tools
     )
+    # Source-contract assertions in TimelineModelSpec must work from both the
+    # standard `build/` CTest directory and the developer build tree.
+    target_compile_definitions(timeline_model_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(timeline_marker_offset_spec TEST
         SOURCES

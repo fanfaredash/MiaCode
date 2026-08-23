@@ -1,4 +1,5 @@
 #include "QuickShellController.h"
+#include "QuickShellKeyboardActivation.h"
 
 #include "QuickShellNativeSurfaceHost.h"
 #include "UiText.h"
@@ -20,6 +21,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -87,11 +89,23 @@ public:
         , onToggled_(std::move(onToggled))
     {
         setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::StrongFocus);
+        setAccessibleName(text_);
+        setAccessibleDescription(text_);
         setMouseTracking(true);
         setAttribute(Qt::WA_Hover, true);
     }
 
     bool isChecked() const { return checked_; }
+
+    void toggle()
+    {
+        checked_ = !checked_;
+        update();
+        if (onToggled_) {
+            onToggled_(checked_);
+        }
+    }
 
     QSize sizeHint() const override
     {
@@ -114,14 +128,21 @@ protected:
             QWidget::mouseReleaseEvent(event);
             return;
         }
-        checked_ = !checked_;
-        update();
-        if (onToggled_) {
-            onToggled_(checked_);
-        }
+        toggle();
         // Consume so QMenu's release handler never fires — menu stays
         // open. The user dismisses via Esc or click-outside.
         event->accept();
+    }
+
+    void keyPressEvent(QKeyEvent* event) override
+    {
+        if (miacode::quick_shell::isMenuToggleActivationKey(event->key())) {
+            toggle();
+            event->accept();
+            return;
+        }
+        // Keep Escape unhandled so QMenu retains its normal dismiss path.
+        QWidget::keyPressEvent(event);
     }
 
     void paintEvent(QPaintEvent*) override
@@ -885,6 +906,12 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
             });
         auto* widgetAction = new QWidgetAction(menu);
         widgetAction->setDefaultWidget(item);
+        // Arrow-key navigation activates the QWidgetAction, while mouse and
+        // focused Space/Enter invoke FollowSettingsCheckItem::toggle() directly.
+        // Both paths deliberately share the row's one toggle routine.
+        connect(widgetAction, &QWidgetAction::triggered, item, [item]() {
+            item->toggle();
+        });
         menu->addAction(widgetAction);
     };
 

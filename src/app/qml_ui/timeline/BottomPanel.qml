@@ -27,6 +27,8 @@ Rectangle {
     }
 
     TimelineQuickItem {
+        id: timelineItem
+
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
@@ -44,6 +46,73 @@ Rectangle {
         onFollowPreviewToggled: enabled => root.shellController.timelineFollowPreviewToggled(enabled)
         onFollowProgressToggled: enabled => root.shellController.timelineFollowProgressToggled(enabled)
         onPreviewPlayPauseRequested: root.shellController.togglePreviewPlayback()
+    }
+
+    // The timeline header remains a single QSG-rendered visual. These transparent
+    // controls are only its v2 input/accessibility layer, so visual and hit geometry
+    // share the header scale provided by the shell without duplicating its drawing.
+    AbstractButton {
+        id: zoomHitControl
+
+        x: Math.round(4 * root.shellController.bottomTabsHeaderScale)
+        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        width: Math.max(56, Math.round(72 * root.shellController.bottomTabsHeaderScale))
+        height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
+        visible: timelineItem.visible
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        Accessible.name: qsTr("时间轴缩放")
+        Accessible.description: qsTr("打开时间轴缩放预设")
+        onClicked: {
+            const point = mapToGlobal(0, 0)
+            root.shellController.openTimelineZoomMenu(
+                Math.round(point.x), Math.round(point.y), Math.round(width))
+        }
+        onHoveredChanged: timelineItem.setZoomControlHoveredPart(hovered ? 1 : 0)
+        onPressedChanged: timelineItem.setZoomControlPressedPart(pressed ? 1 : 0)
+        contentItem: Item {}
+        background: Item {
+            Rectangle {
+                anchors.fill: parent
+                visible: zoomHitControl.activeFocus
+                color: "transparent"
+                border.width: 1
+                border.color: Theme.colors.accent.primary
+                radius: 3
+            }
+        }
+    }
+
+    AbstractButton {
+        id: brightnessHitControl
+
+        width: Math.max(28, Math.round(28 * root.shellController.bottomTabsHeaderScale))
+        height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
+        x: Math.max(zoomHitControl.x + zoomHitControl.width + 8, parent.width - width - 8)
+        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        visible: timelineItem.visible
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        Accessible.name: qsTr("时间轴亮度")
+        Accessible.description: qsTr("打开波形和小节线亮度设置")
+        onClicked: {
+            const point = mapToGlobal(width, 0)
+            root.shellController.openTimelineBrightnessMenu(
+                Math.round(point.x), Math.round(point.y))
+        }
+        onHoveredChanged: timelineItem.setSettingsControlHovered(hovered)
+        onPressedChanged: timelineItem.setSettingsControlPressed(pressed)
+        contentItem: Item {}
+        background: Item {
+            Rectangle {
+                anchors.fill: parent
+                visible: brightnessHitControl.activeFocus
+                color: "transparent"
+                border.width: 1
+                border.color: Theme.colors.accent.primary
+                radius: 3
+            }
+        }
     }
 
     Item {

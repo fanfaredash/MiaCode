@@ -14,7 +14,6 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(bool sidebarVisible READ sidebarVisible WRITE setSidebarVisible NOTIFY sidebarVisibleChanged)
     Q_PROPERTY(int sidebarWidth READ sidebarWidth WRITE setSidebarWidth NOTIFY sidebarWidthChanged)
     Q_PROPERTY(bool bottomPanelVisible READ bottomPanelVisible WRITE setBottomPanelVisible NOTIFY bottomPanelVisibleChanged)
-    Q_PROPERTY(int bottomPanelHeight READ bottomPanelHeight WRITE setBottomPanelHeight NOTIFY bottomPanelHeightChanged)
     Q_PROPERTY(bool previewVisible READ previewVisible WRITE setPreviewVisible NOTIFY previewVisibleChanged)
     Q_PROPERTY(double previewWidthRatio READ previewWidthRatio WRITE setPreviewWidthRatio NOTIFY previewWidthRatioChanged)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily CONSTANT)
@@ -27,7 +26,6 @@ public:
     bool sidebarVisible() const;
     int sidebarWidth() const;
     bool bottomPanelVisible() const;
-    int bottomPanelHeight() const;
     bool previewVisible() const;
     double previewWidthRatio() const;
     QString uiFontFamily() const;
@@ -37,7 +35,6 @@ public:
     void setSidebarVisible(bool value);
     void setSidebarWidth(int value);
     void setBottomPanelVisible(bool value);
-    void setBottomPanelHeight(int value);
     void setPreviewVisible(bool value);
     void setPreviewWidthRatio(double value);
     void setFontSize(int value);
@@ -46,7 +43,6 @@ signals:
     void sidebarVisibleChanged();
     void sidebarWidthChanged();
     void bottomPanelVisibleChanged();
-    void bottomPanelHeightChanged();
     void previewVisibleChanged();
     void previewWidthRatioChanged();
     void fontSizeChanged();
@@ -56,7 +52,6 @@ private:
     bool sidebarVisible_ = true;
     int sidebarWidth_ = 190;
     bool bottomPanelVisible_ = true;
-    int bottomPanelHeight_ = 215;
     bool previewVisible_ = true;
     double previewWidthRatio_ = 0.5;
     QString uiFontFamily_;

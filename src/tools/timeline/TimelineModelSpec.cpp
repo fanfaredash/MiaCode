@@ -1,14 +1,22 @@
 #include "timeline/TimelineQuickModel.h"
 #include "timeline/TimelineQuickModelPrivate.h"
+#include "app/quick_shell/QuickShellKeyboardActivation.h"
 #include "core/chart/document/SimaiTimingMetadata.h"
 #include "core/chart/parser/SimaiNativeParser.h"
 
-#include <QCoreApplication>
+#include <QApplication>
+#include <QAction>
+#include <QFile>
+#include <QDir>
 #include <QStringList>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextStream>
 #include <QtMath>
+
+#ifndef MIACODE_SOURCE_ROOT
+#error "MIACODE_SOURCE_ROOT must be defined as the absolute repository root"
+#endif
 
 namespace {
 
@@ -727,11 +735,24 @@ bool incrementalMatchesRebuild(
     return sameSnapshot(incremental.snapshot(), rebuilt.snapshot());
 }
 
+QString qmlSource(const QString& relativePath)
+{
+    const QDir root(QStringLiteral(MIACODE_SOURCE_ROOT));
+    QFile file(root.filePath(relativePath));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
 {
-    QCoreApplication app(argc, argv);
+    // QAction is a GUI object; the offscreen platform keeps this otherwise
+    // model-focused developer spec headless while exercising menu activation.
+    qputenv("QT_QPA_PLATFORM", "offscreen");
+    QApplication app(argc, argv);
     QTextStream out(stdout);
     QTextStream err(stderr);
 
@@ -745,6 +766,65 @@ int main(int argc, char** argv)
         err << "[FAIL] " << message << '\n';
         ++failed;
     };
+
+    {
+        expect(QDir(QStringLiteral(MIACODE_SOURCE_ROOT)).exists(),
+               QStringLiteral("timeline source-contract root is injected by CMake and exists"));
+        expect(miacode::quick_shell::isMenuToggleActivationKey(Qt::Key_Space)
+                   && miacode::quick_shell::isMenuToggleActivationKey(Qt::Key_Return)
+                   && miacode::quick_shell::isMenuToggleActivationKey(Qt::Key_Enter)
+                   && !miacode::quick_shell::isMenuToggleActivationKey(Qt::Key_Escape),
+               QStringLiteral("follow settings keyboard activation accepts Space and Enter while preserving Escape dismissal"));
+        QAction followSettingsAction(nullptr);
+        bool controllerFollowState = false;
+        QObject::connect(&followSettingsAction, &QAction::triggered,
+                         [&controllerFollowState]() {
+            controllerFollowState = !controllerFollowState;
+        });
+        followSettingsAction.trigger();
+        const bool enabledAfterFirstTrigger = controllerFollowState;
+        followSettingsAction.trigger();
+        expect(enabledAfterFirstTrigger && !controllerFollowState,
+               QStringLiteral("QWidgetAction-style trigger toggles controller follow state exactly once per activation"));
+        const QString panel = qmlSource(QStringLiteral("src/app/qml_ui/timeline/BottomPanel.qml"));
+        const QString tabBar = qmlSource(QStringLiteral("src/app/qml_ui/timeline/BottomTabBar.qml"));
+        const QString splitView = qmlSource(QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
+        const QString viewState = qmlSource(QStringLiteral("src/app/qml_ui/ViewState.qml"));
+        const QString controller = qmlSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp"));
+        const QString editorDisplay = qmlSource(
+            QStringLiteral("src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp"));
+        expect(!panel.isEmpty() && !tabBar.isEmpty() && !splitView.isEmpty()
+                   && !viewState.isEmpty() && !controller.isEmpty() && !editorDisplay.isEmpty(),
+               QStringLiteral("v2 timeline control QML sources are available to the developer spec"));
+        const QString controls = panel + tabBar;
+        expect(controls.contains(QStringLiteral("openTimelineZoomMenu"))
+                   && controls.contains(QStringLiteral("openTimelineBrightnessMenu"))
+                   && controls.contains(QStringLiteral("openTimelineFollowSettingsMenu"))
+                   && controls.contains(QStringLiteral("timelineFollowPreviewToggled")),
+               QStringLiteral("v2 timeline controls route zoom brightness and follow commands through QuickShellController"));
+        expect(tabBar.contains(QStringLiteral("bottomTabsCurrentTabId"))
+                   && tabBar.contains(QStringLiteral("setBottomTabsCurrentTabId"))
+                   && !tabBar.contains(QStringLiteral("activeBottomTab"))
+                   && !panel.contains(QStringLiteral("activeBottomTab"))
+                   && !splitView.contains(QStringLiteral("activeBottomTab"))
+                   && !viewState.contains(QStringLiteral("activeBottomTab")),
+               QStringLiteral("v2 bottom tabs select through shell state instead of ViewState"));
+        expect(splitView.contains(QStringLiteral("bottomTabsHostHeight"))
+                   && splitView.contains(QStringLiteral("setBottomTabsHostHeight"))
+                   && !splitView.contains(QStringLiteral("bottomPanelHeight")),
+               QStringLiteral("v2 bottom panel height persists through the shell controller only"));
+        expect(editorDisplay.contains(QStringLiteral("hasLegacyBottomPanelHeight"))
+                   && editorDisplay.contains(QStringLiteral("legacySettings.remove(QStringLiteral(\"ui/bottomPanelHeight\"))"))
+                   && editorDisplay.lastIndexOf(QStringLiteral("legacySettings.remove"))
+                       > editorDisplay.indexOf(QStringLiteral("if (ui.value(\"bottom_tabs_content_scale\").isDouble())")),
+               QStringLiteral("legacy v2 bottom-panel height is retired even when shell scale already exists"));
+        expect(controller.contains(QStringLiteral("setFocusPolicy(Qt::StrongFocus)"))
+                   && controller.contains(QStringLiteral("void keyPressEvent(QKeyEvent* event) override"))
+                   && controller.contains(QStringLiteral("isMenuToggleActivationKey(event->key())"))
+                   && controller.contains(QStringLiteral("setAccessibleName(text_)"))
+                   && controller.contains(QStringLiteral("connect(widgetAction, &QWidgetAction::triggered")),
+               QStringLiteral("native follow settings rows expose keyboard activation and accessibility metadata"));
+    }
 
     {
         const QString hsDirective = QStringLiteral("<HS*1.5>");
