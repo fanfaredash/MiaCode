@@ -1,10 +1,12 @@
 #include "QmlEditorController.h"
 
 #include "editor/SimaiCompletionCatalog.h"
+#include "editor/BookmarkCommentSyntax.h"
 
 #include <QtGlobal>
 #include <QGuiApplication>
 #include <QClipboard>
+#include <QRegularExpression>
 
 namespace miacode::qml_ui {
 namespace {
@@ -21,6 +23,15 @@ miacode::editor::SimaiTextEditResult untouched(const QString& text, int anchor, 
 bool commandModifier(Qt::KeyboardModifiers modifiers)
 {
     return modifiers & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+}
+
+QRegularExpression findExpression(const QString& needle, bool caseSensitive, bool wholeWord)
+{
+    const QString escaped = QRegularExpression::escape(needle);
+    const QString pattern = wholeWord ? QStringLiteral("\\b%1\\b").arg(escaped) : escaped;
+    return QRegularExpression(pattern, caseSensitive
+        ? QRegularExpression::NoPatternOption
+        : QRegularExpression::CaseInsensitiveOption);
 }
 
 } // namespace
@@ -156,6 +167,96 @@ miacode::editor::SimaiTextEditResult QmlEditorController::acceptCompletion(const
     return result;
 }
 
+QmlEditorController::FindResult QmlEditorController::find(
+    const QString& text, int anchor, int position, const QString& needle, bool caseSensitive,
+    bool wholeWord, bool backwards) const
+{
+    FindResult result;
+    if (needle.isEmpty()) return result;
+    const auto expression = findExpression(needle, caseSensitive, wholeWord);
+    const int cursor = qBound(0, backwards ? qMin(anchor, position) : qMax(anchor, position), text.size());
+    QRegularExpressionMatch match;
+    if (backwards) {
+        auto iterator = expression.globalMatch(text.left(cursor));
+        while (iterator.hasNext()) match = iterator.next();
+        if (!match.hasMatch()) {
+            iterator = expression.globalMatch(text);
+            while (iterator.hasNext()) match = iterator.next();
+        }
+    } else {
+        match = expression.match(text, cursor);
+        if (!match.hasMatch()) match = expression.match(text, 0);
+    }
+    if (!match.hasMatch()) return result;
+    result.found = true;
+    result.start = match.capturedStart();
+    result.end = match.capturedEnd();
+    return result;
+}
+
+miacode::editor::SimaiTextEditResult QmlEditorController::replaceSelection(
+    const QString& text, int anchor, int position, const QString& needle, const QString& replacement,
+    bool caseSensitive, bool wholeWord) const
+{
+    auto result = untouched(text, anchor, position);
+    const int start = qBound(0, qMin(anchor, position), text.size());
+    const int end = qBound(start, qMax(anchor, position), text.size());
+    const auto expression = findExpression(needle, caseSensitive, wholeWord);
+    const auto match = expression.match(text.mid(start, end - start));
+    if (needle.isEmpty() || !match.hasMatch() || match.capturedStart() != 0 || match.capturedEnd() != end - start)
+        return result;
+    result.consumed = true;
+    result.transaction.hasEdit = result.transaction.undoGroup = true;
+    result.transaction.replacementStart = start;
+    result.transaction.replacementEnd = end;
+    result.transaction.replacementText = replacement;
+    result.transaction.text.replace(start, end - start, replacement);
+    result.transaction.anchor = result.transaction.position = start + replacement.size();
+    return result;
+}
+
+miacode::editor::SimaiTextEditResult QmlEditorController::replaceAll(
+    const QString& text, const QString& needle, const QString& replacement, bool caseSensitive,
+    bool wholeWord) const
+{
+    auto result = untouched(text, 0, 0);
+    if (needle.isEmpty()) return result;
+    int count = 0;
+    auto matches = findExpression(needle, caseSensitive, wholeWord).globalMatch(text);
+    while (matches.hasNext()) {
+        matches.next();
+        ++count;
+    }
+    if (count == 0) return result;
+    QString replaced = text;
+    replaced.replace(findExpression(needle, caseSensitive, wholeWord), replacement);
+    result.consumed = true;
+    result.transaction.hasEdit = result.transaction.undoGroup = true;
+    result.transaction.replacementStart = 0;
+    result.transaction.replacementEnd = text.size();
+    result.transaction.replacementText = replaced;
+    result.transaction.text = replaced;
+    result.transaction.anchor = result.transaction.position = 0;
+    return result;
+}
+
+void QmlEditorController::setDocumentContext(int difficultyId, quint64 revision)
+{
+    activeDifficultyId_ = difficultyId;
+    documentRevision_ = revision;
+}
+
+bool QmlEditorController::acceptsCaret(int difficultyId, quint64 revision, bool imeComposing) const
+{
+    return !imeComposing && difficultyId == activeDifficultyId_ && revision == documentRevision_;
+}
+
+bool QmlEditorController::acceptsTouchAuthoring(
+    int difficultyId, quint64 revision, bool imeComposing, bool editorHasFocus) const
+{
+    return editorHasFocus && acceptsCaret(difficultyId, revision, imeComposing);
+}
+
 void QmlEditorController::setCompletion(const miacode::editor::SimaiCompletionSession& completion)
 {
     completion_ = completion;
@@ -234,5 +335,116 @@ QVariantMap QmlEditorController::processKeyForQml(const QString& text, int ancho
 QVariantMap QmlEditorController::processImeCommitForQml(const QString& text, int anchor, int position, const QString& textInput) { return toQmlTransaction(processImeCommit(text, anchor, position, textInput)); }
 QVariantMap QmlEditorController::processPasteForQml(const QString& text, int anchor, int position, const QString& pastedText) { return toQmlTransaction(processPaste(text, anchor, position, pastedText)); }
 QVariantMap QmlEditorController::acceptCompletionForQml(const QString& text, int anchor, int position) { return toQmlTransaction(acceptCompletion(text, anchor, position)); }
+QVariantMap QmlEditorController::findForQml(const QString& text, int anchor, int position, const QString& needle, bool caseSensitive, bool wholeWord, bool backwards) const
+{
+    const FindResult result = find(text, anchor, position, needle, caseSensitive, wholeWord, backwards);
+    return {{QStringLiteral("found"), result.found}, {QStringLiteral("start"), result.start}, {QStringLiteral("end"), result.end}};
+}
+QVariantMap QmlEditorController::replaceSelectionForQml(const QString& text, int anchor, int position, const QString& needle, const QString& replacement, bool caseSensitive, bool wholeWord) const { return toQmlTransaction(replaceSelection(text, anchor, position, needle, replacement, caseSensitive, wholeWord)); }
+QVariantMap QmlEditorController::replaceAllForQml(const QString& text, const QString& needle, const QString& replacement, bool caseSensitive, bool wholeWord) const { return toQmlTransaction(replaceAll(text, needle, replacement, caseSensitive, wholeWord)); }
+void QmlEditorController::setDocumentContextForQml(int difficultyId, qulonglong revision) { setDocumentContext(difficultyId, revision); }
+bool QmlEditorController::publishCaretForQml(int difficultyId, qulonglong revision, int anchor, int position, bool imeComposing)
+{
+    Q_UNUSED(anchor);
+    Q_UNUSED(position);
+    return acceptsCaret(difficultyId, revision, imeComposing);
+}
+bool QmlEditorController::acceptsTouchAuthoringForQml(int difficultyId, qulonglong revision, bool imeComposing, bool editorHasFocus) const { return acceptsTouchAuthoring(difficultyId, revision, imeComposing, editorHasFocus); }
+QVariantList QmlEditorController::bookmarksForQml(const QString& text) const
+{
+    QVariantList result;
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    for (int i = 0; i < lines.size(); ++i) {
+        const auto bookmark = miacode::editor::parseBookmarkComment(lines.at(i));
+        if (!bookmark.has_value()) continue;
+        result.append(QVariantMap{{QStringLiteral("line"), i + 1}, {QStringLiteral("title"), bookmark->title}});
+    }
+    return result;
+}
+QVariantMap QmlEditorController::createBookmarkForQml(const QString& text, int line, const QString& title) const
+{
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    const int index = qBound(0, line - 1, qMax(0, lines.size() - 1));
+    int offset = 0;
+    for (int i = 0; i < index; ++i) offset += lines.at(i).size() + 1;
+    const QString replacement = miacode::editor::appendBookmarkComment(lines.at(index), title);
+    if (replacement == lines.at(index)) return toQmlTransaction(untouched(text, offset, offset));
+    auto result = untouched(text, offset, offset);
+    result.consumed = true;
+    result.transaction.hasEdit = result.transaction.undoGroup = true;
+    result.transaction.replacementStart = offset;
+    result.transaction.replacementEnd = offset + lines.at(index).size();
+    result.transaction.replacementText = replacement;
+    result.transaction.text.replace(offset, lines.at(index).size(), replacement);
+    result.transaction.anchor = result.transaction.position = offset + replacement.size();
+    return toQmlTransaction(result);
+}
+QVariantMap QmlEditorController::renameBookmarkForQml(const QString& text, int line, const QString& title) const
+{
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    const int index = line - 1;
+    if (index < 0 || index >= lines.size()) return toQmlTransaction(untouched(text, 0, 0));
+    if (!miacode::editor::parseBookmarkComment(lines.at(index)).has_value()) return toQmlTransaction(untouched(text, 0, 0));
+    int offset = 0; for (int i = 0; i < index; ++i) offset += lines.at(i).size() + 1;
+    auto result = untouched(text, offset, offset);
+    result.consumed = true; result.transaction.hasEdit = result.transaction.undoGroup = true;
+    result.transaction.replacementStart = offset;
+    result.transaction.replacementEnd = offset + lines.at(index).size();
+    result.transaction.replacementText = miacode::editor::renameBookmarkComment(lines.at(index), title);
+    result.transaction.text.replace(result.transaction.replacementStart, result.transaction.replacementEnd - result.transaction.replacementStart, result.transaction.replacementText);
+    result.transaction.anchor = result.transaction.position = result.transaction.replacementStart + result.transaction.replacementText.size();
+    return toQmlTransaction(result);
+}
+QVariantMap QmlEditorController::deleteBookmarkForQml(const QString& text, int line) const
+{
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    const int index = line - 1;
+    if (index < 0 || index >= lines.size()) return toQmlTransaction(untouched(text, 0, 0));
+    if (!miacode::editor::parseBookmarkComment(lines.at(index)).has_value()) return toQmlTransaction(untouched(text, 0, 0));
+    int offset = 0; for (int i = 0; i < index; ++i) offset += lines.at(i).size() + 1;
+    auto result = untouched(text, offset, offset);
+    result.consumed = true; result.transaction.hasEdit = result.transaction.undoGroup = true;
+    result.transaction.replacementStart = offset;
+    result.transaction.replacementEnd = offset + lines.at(index).size();
+    result.transaction.replacementText = miacode::editor::removeBookmarkComment(lines.at(index));
+    result.transaction.text.replace(result.transaction.replacementStart,
+                                    result.transaction.replacementEnd - result.transaction.replacementStart,
+                                    result.transaction.replacementText);
+    result.transaction.anchor = result.transaction.position = result.transaction.replacementStart;
+    return toQmlTransaction(result);
+}
+void QmlEditorController::resetQmlHistory(const QString& text, int anchor, int position)
+{
+    Q_UNUSED(text);
+    Q_UNUSED(anchor);
+    Q_UNUSED(position);
+    qmlUndo_.clear();
+    qmlRedo_.clear();
+    setUndoAvailability(false, false);
+}
+
+void QmlEditorController::recordQmlTransaction(const QString& before, const QString& after,
+                                               int beforeAnchor, int beforePosition,
+                                               int afterAnchor, int afterPosition)
+{
+    if (before == after) return;
+    qmlUndo_.append({before, after, beforeAnchor, beforePosition, afterAnchor, afterPosition});
+    qmlRedo_.clear();
+    setUndoAvailability(true, false);
+}
+QVariantMap QmlEditorController::undoQmlTransaction()
+{
+    if (qmlUndo_.isEmpty()) return {};
+    const auto entry = qmlUndo_.takeLast(); qmlRedo_.append(entry);
+    setUndoAvailability(!qmlUndo_.isEmpty(), true);
+    return {{QStringLiteral("hasEdit"), true}, {QStringLiteral("replacementStart"), 0}, {QStringLiteral("replacementEnd"), entry.after.size()}, {QStringLiteral("replacementText"), entry.before}, {QStringLiteral("anchor"), entry.beforeAnchor}, {QStringLiteral("position"), entry.beforePosition}, {QStringLiteral("consumed"), true}};
+}
+QVariantMap QmlEditorController::redoQmlTransaction()
+{
+    if (qmlRedo_.isEmpty()) return {};
+    const auto entry = qmlRedo_.takeLast(); qmlUndo_.append(entry);
+    setUndoAvailability(true, !qmlRedo_.isEmpty());
+    return {{QStringLiteral("hasEdit"), true}, {QStringLiteral("replacementStart"), 0}, {QStringLiteral("replacementEnd"), entry.before.size()}, {QStringLiteral("replacementText"), entry.after}, {QStringLiteral("anchor"), entry.afterAnchor}, {QStringLiteral("position"), entry.afterPosition}, {QStringLiteral("consumed"), true}};
+}
 
 } // namespace miacode::qml_ui

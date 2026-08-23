@@ -483,16 +483,26 @@ void MainWindow::PreviewSection::setTouchPadAuthoringCtrlHoldActive(bool active)
     applyEffectivePreviewOutlineVariantToCanvas();
 }
 
+void MainWindow::refreshQmlTouchPadAuthoringContext()
+{
+    if (previewSection_ != nullptr) {
+        previewSection_->applyEffectivePreviewOutlineVariantToCanvas();
+    }
+}
+
 void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
 {
     if (state_.previewCanvas_ != nullptr) {
         auto* editor = qobject_cast<QTextEdit*>(ui_.editorWidget_);
-        const bool editableAuthoringContext =
+        const bool legacyEditorContext = !owner_.hasQmlTouchPadAuthoringHandler()
+            &&
             owner_.hasActiveDifficulty()
             && ui_.editorStack_ != nullptr
             && ui_.editorStack_->currentWidget() == ui_.chartPage_
             && editor != nullptr
-            && !editor->isReadOnly()
+            && !editor->isReadOnly();
+        const bool editableAuthoringContext = (legacyEditorContext
+            || owner_.qmlTouchPadAuthoringContextActive())
             && !state_.exportPreviewActive_
             && QApplication::activeModalWidget() == nullptr
             && QApplication::activePopupWidget() == nullptr;

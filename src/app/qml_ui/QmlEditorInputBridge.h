@@ -23,12 +23,14 @@ public:
 signals:
     void targetChanged();
     void imeCommitted(const QString& text);
+    void imeComposingChanged(bool composing);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     QPointer<QObject> target_;
+    bool imeComposing_ = false;
 };
 
 } // namespace miacode::qml_ui

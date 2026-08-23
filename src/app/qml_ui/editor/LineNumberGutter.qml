@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls
 import MiaCode.UI
 
 Rectangle {
@@ -12,8 +13,21 @@ Rectangle {
     // 每个逻辑行顶部在文档坐标系中的 y，与 lineCount 等长。
     // 自动换行后行高不固定，行号按真实行顶绘制。
     required property var lineTops
+    property var bookmarkedLines: []
     property real rowHeight: 23.1
     property real topPadding: 12
+    signal jumpRequested(int line)
+    signal createRequested(int line)
+    signal deleteRequested(int line)
+    signal renameRequested(int line)
+
+    Accessible.role: Accessible.List
+    Accessible.name: bookmarked(activeLine)
+        ? qsTr("书签与行号：第 %1 行有书签").arg(activeLine)
+        : qsTr("书签与行号：第 %1 行无书签").arg(activeLine)
+    Accessible.description: qsTr("Enter 跳转；Ctrl+Shift+B 创建；Delete 删除；F2 重命名；右键打开书签菜单")
+    activeFocusOnTab: true
+    focus: false
 
     width: 46
     color: Theme.colors.background.editor
@@ -55,6 +69,11 @@ Rectangle {
                         String(line + 1),
                         width - 6,
                         root.topPadding + line * root.rowHeight - root.contentY + root.rowHeight / 2)
+                    if (root.bookmarkedLines.some(item => item.line === line + 1)) {
+                        ctx.fillStyle = Theme.colors.accent.primary
+                        ctx.fillRect(3, root.topPadding + line * root.rowHeight - root.contentY + 5,
+                                     3, root.rowHeight - 10)
+                    }
                 }
                 return
             }
@@ -100,6 +119,11 @@ Rectangle {
                     String(line + 1),
                     width - 6,
                     root.topPadding + lineTop - root.contentY + root.rowHeight / 2)
+                if (root.bookmarkedLines.some(item => item.line === line + 1)) {
+                    ctx.fillStyle = Theme.colors.accent.primary
+                    ctx.fillRect(3, root.topPadding + lineTop - root.contentY + 5,
+                                 3, root.rowHeight - 10)
+                }
             }
         }
     }
@@ -110,5 +134,74 @@ Rectangle {
     onContentYChanged: gutterCanvas.refresh()
     onRowHeightChanged: gutterCanvas.refresh()
     onTopPaddingChanged: gutterCanvas.refresh()
-}
+    onBookmarkedLinesChanged: gutterCanvas.refresh()
 
+    function lineAt(y) {
+        const documentY = y + contentY - topPadding
+        const tops = lineTops
+        if (tops.length === 0)
+            return Math.max(1, Math.min(lineCount, Math.floor(documentY / rowHeight) + 1))
+        let line = 0
+        for (let i = 0; i < tops.length; ++i) {
+            if (tops[i] > documentY)
+                break
+            line = i
+        }
+        return Math.max(1, Math.min(lineCount, line + 1))
+    }
+
+    function bookmarked(line) {
+        return bookmarkedLines.some(item => item.line === line)
+    }
+
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            jumpRequested(activeLine)
+            event.accepted = true
+        } else if (event.key === Qt.Key_Delete && bookmarked(activeLine)) {
+            deleteRequested(activeLine)
+            event.accepted = true
+        } else if (event.key === Qt.Key_F2 && bookmarked(activeLine)) {
+            renameRequested(activeLine)
+            event.accepted = true
+        } else if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)
+                   && event.key === Qt.Key_B) {
+            createRequested(activeLine)
+            event.accepted = true
+        }
+    }
+
+    Menu {
+        id: bookmarkMenu
+        property int line: 1
+        MenuItem {
+            text: qsTr("跳转到此行")
+            onTriggered: root.jumpRequested(bookmarkMenu.line)
+        }
+        MenuItem {
+            text: root.bookmarked(bookmarkMenu.line) ? qsTr("删除书签") : qsTr("创建书签")
+            onTriggered: root.bookmarked(bookmarkMenu.line)
+                         ? root.deleteRequested(bookmarkMenu.line)
+                         : root.createRequested(bookmarkMenu.line)
+        }
+        MenuItem {
+            text: qsTr("重命名书签")
+            enabled: root.bookmarked(bookmarkMenu.line)
+            onTriggered: root.renameRequested(bookmarkMenu.line)
+        }
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: mouse => {
+            const line = root.lineAt(mouse.y)
+            if (mouse.button === Qt.RightButton) {
+                bookmarkMenu.line = line
+                bookmarkMenu.popup()
+            } else {
+                root.jumpRequested(line)
+            }
+        }
+    }
+}

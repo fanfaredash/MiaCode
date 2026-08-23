@@ -257,7 +257,12 @@ Item {
                 enabled: root.commandsEnabled && root.commands.canRedo
                 onTriggered: root.commands.redoRequested()
             }
-            Action { text: qsTr("查找"); enabled: false }
+            Action {
+                text: qsTr("查找")
+                shortcut: StandardKey.Find
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.findRequested()
+            }
             AppMenuSeparator {}
             Action {
                 text: qsTr("全选")
@@ -265,7 +270,11 @@ Item {
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.selectAllRequested()
             }
-            Action { text: qsTr("选择当前行"); enabled: false }
+            Action {
+                text: qsTr("选择当前行")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.selectCurrentLineRequested()
+            }
         }
 
         AppMenu {

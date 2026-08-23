@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QMainWindow>
+#include <functional>
 #include <QPointer>
 #include <QPoint>
 #include <QRect>
@@ -233,6 +234,14 @@ public:
     QString activeDocumentChartText() const;
     QString documentFilePath() const;
     int documentActiveDifficultyId() const;
+    // Narrow v2 bridge: QML may request a timeline caret sync only for the
+    // already-active difficulty. Revision ownership stays with QmlDocumentModel.
+    void publishQmlEditorCaret(int difficultyId, int line, int column);
+    void setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler);
+    bool hasQmlTouchPadAuthoringHandler() const { return static_cast<bool>(qmlTouchPadAuthoringHandler_); }
+    void setQmlTouchPadAuthoringContextHandler(std::function<bool()> handler);
+    bool qmlTouchPadAuthoringContextActive() const;
+    void refreshQmlTouchPadAuthoringContext();
     bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
@@ -417,6 +426,8 @@ public:
         DisplayRefresh,
     };
 private:
+    std::function<bool(const QString&, bool)> qmlTouchPadAuthoringHandler_;
+    std::function<bool()> qmlTouchPadAuthoringContextHandler_;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {

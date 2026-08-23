@@ -39,6 +39,8 @@ Item {
         onUndoRequested: root.undo()
         onRedoRequested: root.redo()
         onSelectAllRequested: root.selectAll()
+        onFindRequested: splitView.showFindReplace()
+        onSelectCurrentLineRequested: splitView.selectCurrentLine()
         onValidateRequested: root.validateChart()
         onMetadataRequested: state.openMetadataEditor()
         onOpenRequested: openFileDialog.open()

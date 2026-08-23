@@ -21,6 +21,11 @@ bool QmlEditorInputBridge::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched != target_ || event->type() != QEvent::InputMethod) return QObject::eventFilter(watched, event);
     auto* input = static_cast<QInputMethodEvent*>(event);
+    const bool composing = !input->preeditString().isEmpty();
+    if (imeComposing_ != composing) {
+        imeComposing_ = composing;
+        emit imeComposingChanged(imeComposing_);
+    }
     if (input->commitString().isEmpty()) return false;
     emit imeCommitted(input->commitString());
     // Preserve the new composition state carried alongside this commit. The

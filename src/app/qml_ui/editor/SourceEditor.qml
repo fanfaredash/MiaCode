@@ -9,6 +9,9 @@ Rectangle {
     required property var documentSession
     required property var editorController
     property bool metadataMode: false
+    property bool imeComposing: false
+    property var bookmarks: []
+    property int pendingBookmarkLine: -1
     onMetadataModeChanged: syncTextFromController()
 
     function syncTextFromController() {
@@ -20,6 +23,11 @@ Rectangle {
         sourceArea.syncingFromController = true
         sourceArea.text = controllerText
         sourceArea.syncingFromController = false
+        sourceArea.historyText = controllerText
+        sourceArea.historyAnchor = sourceArea.selectionStart
+        sourceArea.historyPosition = sourceArea.selectionEnd
+        root.editorController.resetQmlHistory(controllerText, sourceArea.historyAnchor,
+                                              sourceArea.historyPosition)
         updateCursorPosition()
     }
     readonly property real codeLineHeight: sourceArea.cursorRectangle.height > 0
@@ -54,15 +62,60 @@ Rectangle {
     readonly property bool canRedo: editorController.canRedo
 
     function undo() {
-        sourceArea.undo()
+        applyEditorTransaction(editorController.undoQmlTransaction())
     }
 
     function redo() {
-        sourceArea.redo()
+        applyEditorTransaction(editorController.redoQmlTransaction())
     }
 
     function selectAll() {
         sourceArea.selectAll()
+    }
+
+    function openFindReplace() {
+        findReplaceBar.show()
+    }
+
+    function selectCurrentLine() {
+        const start = sourceArea.text.lastIndexOf("\n", Math.max(0, sourceArea.cursorPosition - 1)) + 1
+        const endAt = sourceArea.text.indexOf("\n", sourceArea.cursorPosition)
+        sourceArea.select(start, endAt < 0 ? sourceArea.text.length : endAt)
+    }
+
+    function jumpToLine(line) {
+        const position = root.documentSession.chartPosition(Math.max(1, line), 1)
+        sourceArea.forceActiveFocus()
+        sourceArea.cursorPosition = position
+    }
+
+    function createBookmarkAtLine(line) {
+        return applyEditorTransaction(editorController.createBookmarkForQml(
+            sourceArea.text, line, qsTr("书签")))
+    }
+    function createBookmarkAtCurrentLine() {
+        return createBookmarkAtLine(activeLine)
+    }
+    function deleteBookmarkAtCurrentLine() {
+        return applyEditorTransaction(editorController.deleteBookmarkForQml(sourceArea.text, activeLine))
+    }
+    function deleteBookmarkAtLine(line) {
+        return applyEditorTransaction(editorController.deleteBookmarkForQml(sourceArea.text, line))
+    }
+    function renameBookmarkAtLine(line, title) {
+        return applyEditorTransaction(editorController.renameBookmarkForQml(sourceArea.text, line, title))
+    }
+    function promptRenameBookmark(line) {
+        const bookmark = root.bookmarks.find(item => item.line === line)
+        if (!bookmark)
+            return
+        root.pendingBookmarkLine = line
+        bookmarkTitleField.text = bookmark.title
+        bookmarkTitleDialog.open()
+    }
+
+    function collectBookmarks() {
+        return root.editorController.bookmarksForQml(sourceArea.text)
     }
 
     function revealSyntaxIssue(difficultyId, revision, line, column, endColumn, completion, cancellation) {
@@ -106,12 +159,24 @@ Rectangle {
         if (!transaction.consumed)
             return false
         if (transaction.hasEdit) {
+            const before = sourceArea.text
+            const beforeAnchor = sourceArea.selectionStart
+            const beforePosition = sourceArea.selectionEnd
             sourceArea.syncingFromController = true
-            sourceArea.text = sourceArea.text.slice(0, transaction.replacementStart)
-                    + transaction.replacementText
-                    + sourceArea.text.slice(transaction.replacementEnd)
+            // TextEdit's mutation API keeps its native undo stack. A complete
+            // replacement remains one logical controller transaction rather
+            // than resetting the document by assigning `text`.
+            sourceArea.remove(transaction.replacementStart, transaction.replacementEnd)
+            sourceArea.insert(transaction.replacementStart, transaction.replacementText)
             sourceArea.select(transaction.anchor, transaction.position)
             sourceArea.syncingFromController = false
+            if (transaction.undoGroup)
+                root.editorController.recordQmlTransaction(before, sourceArea.text,
+                                                           beforeAnchor, beforePosition,
+                                                           transaction.anchor, transaction.position)
+            sourceArea.historyText = sourceArea.text
+            sourceArea.historyAnchor = sourceArea.selectionStart
+            sourceArea.historyPosition = sourceArea.selectionEnd
             if (root.metadataMode)
                 root.documentSession.metadataSourceText = sourceArea.text
             else
@@ -139,6 +204,37 @@ Rectangle {
         contentY: editorScroll.contentItem.contentY
         lineTops: root.lineTops
         rowHeight: root.codeLineHeight
+        bookmarkedLines: root.bookmarks
+        onJumpRequested: root.jumpToLine(line)
+        onCreateRequested: line => root.createBookmarkAtLine(line)
+        onDeleteRequested: line => root.deleteBookmarkAtLine(line)
+        onRenameRequested: line => root.promptRenameBookmark(line)
+    }
+
+    Dialog {
+        id: bookmarkTitleDialog
+        parent: Overlay.overlay
+        modal: true
+        title: qsTr("重命名书签")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: root.renameBookmarkAtLine(root.pendingBookmarkLine, bookmarkTitleField.text)
+        AppTextField {
+            id: bookmarkTitleField
+            width: 260
+            Accessible.name: qsTr("书签名称")
+        }
+    }
+
+    FindReplaceBar {
+        id: findReplaceBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        z: 4
+        // The bar must operate the concrete TextArea, not its surrounding
+        // layout item; proxy methods below retain the one transaction owner.
+        editor: sourceArea
+        controller: root.editorController
     }
 
     ScrollView {
@@ -175,6 +271,9 @@ Rectangle {
             id: sourceArea
             property bool syncingFromController: false
             property bool readyForUserEdits: false
+            property string historyText: ""
+            property int historyAnchor: 0
+            property int historyPosition: 0
 
             // 自动换行后内容宽度受视口宽度约束，若再用 contentWidth 参与
             // 宽度绑定会形成 width -> contentWidth -> width 的循环。
@@ -203,6 +302,9 @@ Rectangle {
             }
             onTextChanged: {
                 if (readyForUserEdits && !syncingFromController) {
+                    root.editorController.recordQmlTransaction(historyText, text,
+                                                               historyAnchor, historyPosition,
+                                                               selectionStart, selectionEnd)
                     if (root.metadataMode)
                         root.documentSession.metadataSourceText = text
                     else
@@ -210,11 +312,66 @@ Rectangle {
                 }
                 root.updateCursorPosition()
                 editorScroll.refreshLineTops()
+                root.bookmarks = root.collectBookmarks()
+                historyText = text
+                historyAnchor = selectionStart
+                historyPosition = selectionEnd
             }
-            onCursorPositionChanged: root.updateCursorPosition()
-            onCanUndoChanged: root.editorController.setUndoAvailability(canUndo, canRedo)
-            onCanRedoChanged: root.editorController.setUndoAvailability(canUndo, canRedo)
+            onCursorPositionChanged: {
+                root.updateCursorPosition()
+                if (root.editorController.publishCaretForQml(
+                        root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+                        selectionStart, selectionEnd, root.imeComposing)) {
+                    root.documentSession.publishEditorCaret(
+                        root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+                        root.viewState.editorCursorLine, root.viewState.editorCursorColumn)
+                }
+                root.documentSession.setQmlEditorInteraction(
+                    root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+                    selectionStart, selectionEnd, activeFocus, root.imeComposing)
+            }
+            onActiveFocusChanged: root.documentSession.setQmlEditorInteraction(
+                root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+                selectionStart, selectionEnd, activeFocus, root.imeComposing)
+            function applyEditorTransaction(transaction) {
+                return root.applyEditorTransaction(transaction)
+            }
+            function jumpToLine(line) {
+                root.jumpToLine(line)
+            }
             Keys.onPressed: function(event) {
+                if (event.matches(StandardKey.Find)) {
+                    root.openFindReplace()
+                    event.accepted = true
+                    return
+                }
+                if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)
+                        && event.key === Qt.Key_B) {
+                    root.createBookmarkAtCurrentLine()
+                    event.accepted = true
+                    return
+                }
+                if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)
+                        && event.key === Qt.Key_Delete) {
+                    root.deleteBookmarkAtCurrentLine()
+                    event.accepted = true
+                    return
+                }
+                if (event.matches(StandardKey.SelectAll)) {
+                    root.selectAll()
+                    event.accepted = true
+                    return
+                }
+                if (event.matches(StandardKey.Undo)) {
+                    root.undo()
+                    event.accepted = true
+                    return
+                }
+                if (event.matches(StandardKey.Redo)) {
+                    root.redo()
+                    event.accepted = true
+                    return
+                }
                 if (event.matches(StandardKey.Paste)) {
                     if (root.applyPastePayload(root.editorController.clipboardText()))
                         event.accepted = true
@@ -229,7 +386,10 @@ Rectangle {
             Component.onCompleted: {
                 root.syncTextFromController()
                 readyForUserEdits = true
-                root.editorController.setUndoAvailability(canUndo, canRedo)
+                historyText = text
+                historyAnchor = selectionStart
+                historyPosition = selectionEnd
+                root.editorController.resetQmlHistory(text, historyAnchor, historyPosition)
                 root.updateCursorPosition()
                 editorScroll.refreshLineTops()
             }
@@ -264,6 +424,7 @@ Rectangle {
 
             QmlEditorInputBridge {
                 target: sourceArea
+                onImeComposingChanged: root.imeComposing = composing
                 onImeCommitted: function(text) {
                     root.applyImeCommittedText(text)
                 }
@@ -285,6 +446,14 @@ Rectangle {
         function onMetadataSourceChanged() {
             if (root.metadataMode)
                 root.syncTextFromController()
+        }
+        function onDocumentStateChanged() {
+            root.editorController.setDocumentContextForQml(
+                root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
+            root.documentSession.setQmlEditorInteraction(
+                root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+                sourceArea.selectionStart, sourceArea.selectionEnd, sourceArea.activeFocus,
+                root.imeComposing)
         }
     }
 

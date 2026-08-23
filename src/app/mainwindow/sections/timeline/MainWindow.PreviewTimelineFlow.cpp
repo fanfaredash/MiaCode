@@ -1554,6 +1554,30 @@ bool MainWindow::resolveTimelineSecondForCursor(int line, int col, double* secon
     return timelineSection_->resolveTimelineSecondForCursor(line, col, second);
 }
 
+void MainWindow::publishQmlEditorCaret(int difficultyId, int line, int column)
+{
+    if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_) {
+        return;
+    }
+    timelineSection_->seekTimelineToCursor(qMax(1, line), qMax(1, column));
+}
+
+void MainWindow::setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler)
+{
+    qmlTouchPadAuthoringHandler_ = std::move(handler);
+}
+
+void MainWindow::setQmlTouchPadAuthoringContextHandler(std::function<bool()> handler)
+{
+    qmlTouchPadAuthoringContextHandler_ = std::move(handler);
+    refreshQmlTouchPadAuthoringContext();
+}
+
+bool MainWindow::qmlTouchPadAuthoringContextActive() const
+{
+    return qmlTouchPadAuthoringContextHandler_ && qmlTouchPadAuthoringContextHandler_();
+}
+
 void MainWindow::seekTimelineToCursor(int line, int col)
 {
     timelineSection_->seekTimelineToCursor(line, col);

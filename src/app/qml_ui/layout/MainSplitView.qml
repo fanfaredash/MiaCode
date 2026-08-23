@@ -41,6 +41,14 @@ Item {
         editorPane.selectAll()
     }
 
+    function showFindReplace() {
+        editorPane.openFindReplace()
+    }
+
+    function selectCurrentLine() {
+        editorPane.selectCurrentLine()
+    }
+
     function validateChart() {
         root.commands.validateDocument()
         root.viewState.bottomPanelVisible = true

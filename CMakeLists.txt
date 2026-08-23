@@ -698,6 +698,8 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
     src/app/qml_ui/editor/CompletionPopup.qml
+    src/app/qml_ui/editor/FindReplaceBar.qml
+    src/app/qml_ui/editor/BookmarkList.qml
     src/app/qml_ui/editor/LineNumberGutter.qml
     src/app/qml_ui/timeline/BottomPanel.qml
     src/app/qml_ui/timeline/BottomTabBar.qml
@@ -1570,6 +1572,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/BracketCompletionPopup.cpp
             src/editor/SimaiCompletionCatalog.h
             src/editor/SimaiCompletionCatalog.cpp
+            src/editor/BookmarkCommentSyntax.h
+            src/editor/BookmarkCommentSyntax.cpp
             src/editor/SimaiTextEditPolicy.h
             src/editor/SimaiTextEditPolicy.cpp
             src/app/ui/UiText.h
@@ -1622,10 +1626,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/qml_ui/QmlEditorController.cpp
             src/app/qml_ui/QmlEditorInputBridge.cpp
             src/app/qml_ui/QmlEditorInputBridge.h
+            src/app/qml_ui/QmlTouchPadAuthoringBridge.h
+            src/editor/TouchPadAuthoringEdit.h
+            src/editor/TouchPadAuthoringEdit.cpp
+            src/core/chart/parser/SimaiCommentScan.h
+            src/core/chart/parser/SimaiCommentScan.cpp
             src/editor/SimaiTextEditPolicy.h
             src/editor/SimaiTextEditPolicy.cpp
             src/editor/SimaiCompletionCatalog.h
             src/editor/SimaiCompletionCatalog.cpp
+            src/editor/BookmarkCommentSyntax.h
+            src/editor/BookmarkCommentSyntax.cpp
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/editor src/app/qml_ui
     )

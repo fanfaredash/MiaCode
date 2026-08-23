@@ -293,12 +293,14 @@ void MainWindow::WindowSection::focusPreviewInteractionTarget(QObject* watched, 
 bool MainWindow::WindowSection::touchPadAuthoringEditableContext() const
 {
     auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_);
-    return state_.previewTouchPadAuthoringShortcutEnabled_
-        && owner_.hasActiveDifficulty()
+    const bool legacyEditorContext = !owner_.hasQmlTouchPadAuthoringHandler()
         && owner_.editorStack_ != nullptr
         && owner_.editorStack_->currentWidget() == owner_.chartPage_
-        && editor != nullptr
-        && !editor->isReadOnly()
+        && editor != nullptr && !editor->isReadOnly();
+    const bool qmlEditorContext = owner_.qmlTouchPadAuthoringContextActive();
+    return state_.previewTouchPadAuthoringShortcutEnabled_
+        && owner_.hasActiveDifficulty()
+        && (legacyEditorContext || qmlEditorContext)
         && !state_.exportPreviewActive_
         && QApplication::activeModalWidget() == nullptr
         && QApplication::activePopupWidget() == nullptr;

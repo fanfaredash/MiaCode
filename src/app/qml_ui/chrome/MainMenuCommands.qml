@@ -21,6 +21,8 @@ QtObject {
     signal undoRequested()
     signal redoRequested()
     signal selectAllRequested()
+    signal findRequested()
+    signal selectCurrentLineRequested()
     signal validateRequested()
     signal metadataRequested()
 }

@@ -16,6 +16,7 @@
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
 #include "editor/TouchPadAuthoringEdit.h"
+#include "app/qml_ui/QmlTouchPadAuthoringBridge.h"
 #include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -1329,6 +1330,15 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     previewCanvas_ = new PreviewRuntime(this);
     connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, bool backtickSeparator) {
+        const bool qmlHandlerInstalled = static_cast<bool>(qmlTouchPadAuthoringHandler_);
+        const bool qmlHandled = qmlHandlerInstalled
+            && qmlTouchPadAuthoringHandler_(pad, backtickSeparator);
+        const auto route = miacode::qml_ui::resolveTouchPadAuthoringRoute(
+            qmlHandlerInstalled, qmlHandled);
+        if (route == miacode::qml_ui::TouchPadAuthoringRoute::Qml
+            || route == miacode::qml_ui::TouchPadAuthoringRoute::Reject) {
+            return;
+        }
         auto* editor = qobject_cast<QTextEdit*>(editorWidget_);
         if (editor == nullptr || editor->document() == nullptr || editor->isReadOnly()
             || !hasActiveDifficulty() || editorStack_ == nullptr

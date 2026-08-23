@@ -1,4 +1,5 @@
 #include "QmlDocumentModel.h"
+#include "QmlTouchPadAuthoringBridge.h"
 
 #include "app/mainwindow/MainWindow.h"
 #include "core/chart/document/SimaiDocument.h"
@@ -9,6 +10,24 @@
 QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
     : QObject(parent), backend_(&backend)
 {
+    backend_->setQmlTouchPadAuthoringHandler([this](const QString& pad, bool backtick) {
+        const miacode::qml_ui::QmlTouchPadAuthoringContext context{
+            currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
+            qmlEditorFocused_, qmlImeComposing_};
+        if (!context.accepts()) return false;
+        QString updatedText = chartText();
+        int updatedPosition = qmlCaretPosition_;
+        if (!miacode::qml_ui::applyQmlTouchPadAuthoringEdit(
+                &updatedText, &updatedPosition, pad, backtick)) return false;
+        setChartText(updatedText);
+        qmlCaretAnchor_ = qmlCaretPosition_ = updatedPosition;
+        return true;
+    });
+    backend_->setQmlTouchPadAuthoringContextHandler([this] {
+        return miacode::qml_ui::QmlTouchPadAuthoringContext{
+            currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
+            qmlEditorFocused_, qmlImeComposing_}.accepts();
+    });
     refreshDocumentState();
     connect(backend_, &MainWindow::documentValidationChanged,
             this, [this] {
@@ -22,6 +41,14 @@ QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
                     emit documentStateChanged();
                 }, Qt::QueuedConnection);
             });
+}
+
+QmlDocumentModel::~QmlDocumentModel()
+{
+    if (backend_ != nullptr) {
+        backend_->setQmlTouchPadAuthoringHandler({});
+        backend_->setQmlTouchPadAuthoringContextHandler({});
+    }
 }
 
 QString QmlDocumentModel::chartText() const
@@ -336,6 +363,28 @@ void QmlDocumentModel::disableUnifiedDesigner()
     if (!backend_->documentUnifiedDesignerEnabled()) return;
     backend_->disableUnifiedDocumentDesigner();
     emit unifiedDesignerEnabledChanged();
+}
+
+bool QmlDocumentModel::publishEditorCaret(int difficultyId, qulonglong revision, int line, int column)
+{
+    if (backend_ == nullptr || revision != documentRevision_
+        || difficultyId != currentDifficultyId() || difficultyId <= 0) {
+        return false;
+    }
+    backend_->publishQmlEditorCaret(difficultyId, line, column);
+    return true;
+}
+
+void QmlDocumentModel::setQmlEditorInteraction(int difficultyId, qulonglong revision, int anchor,
+                                               int position, bool focused, bool imeComposing)
+{
+    qmlCaretDifficultyId_ = difficultyId;
+    qmlCaretRevision_ = revision;
+    qmlCaretAnchor_ = anchor;
+    qmlCaretPosition_ = position;
+    qmlEditorFocused_ = focused;
+    qmlImeComposing_ = imeComposing;
+    if (backend_ != nullptr) backend_->refreshQmlTouchPadAuthoringContext();
 }
 
 void QmlDocumentModel::markDocumentChanged()

@@ -52,6 +52,7 @@ class QmlDocumentModel final : public QObject
 
 public:
     explicit QmlDocumentModel(MainWindow& backend, QObject* parent = nullptr);
+    ~QmlDocumentModel() override;
 
     QString chartText() const;
     void setChartText(const QString& value);
@@ -108,6 +109,8 @@ public:
     Q_INVOKABLE bool removeDifficulty(int id);
     Q_INVOKABLE void validateChart();
     Q_INVOKABLE int chartPosition(int line, int column) const;
+    Q_INVOKABLE bool publishEditorCaret(int difficultyId, qulonglong revision, int line, int column);
+    Q_INVOKABLE void setQmlEditorInteraction(int difficultyId, qulonglong revision, int anchor, int position, bool focused, bool imeComposing);
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
     Q_INVOKABLE void disableUnifiedDesigner();
 
@@ -141,4 +144,10 @@ private:
     miacode::qml_ui::DocumentValidationProjection validationSnapshot_;
     miacode::qml_ui::DocumentPresentationState presentationState_;
     quint64 documentRevision_ = 0;
+    int qmlCaretDifficultyId_ = -1;
+    quint64 qmlCaretRevision_ = 0;
+    int qmlCaretAnchor_ = 0;
+    int qmlCaretPosition_ = 0;
+    bool qmlEditorFocused_ = false;
+    bool qmlImeComposing_ = false;
 };
