@@ -19,6 +19,7 @@
 - `QmlEditorPageHost` 负责全页导航，并通过局部 `WindowContainer` 宿主 v1 `LatencyDetectionPage`。
 - v2 共享隐藏的 `MainWindow` 与 `QuickShellController(surfaceHost=nullptr)`。
 - 工作区模式由 `MainWindow` 切换，v2 从 `QuickShellController` 读取底栏显隐、预览画幅和导出页状态。
+- v2 时间轴保留 `TimelineQuickModel` → `TimelineQuickStateBridge` → `TimelineQuickItem` 的 QSG 渲染链，重点补齐 QML 主壳的交互与编辑器接入。
 - 实时预览和视频导出共用进程内 QSG 渲染路径。
 - 上游 v1 壳层改动与 v2 主壳分离；共享的 `MainWindow`、Controller、Preview、Timeline API 仍需同步。
 
@@ -35,7 +36,7 @@
 
 ### 预览与时间轴
 
-- [x] 预览接入 `QuickShellPreviewSurface`，时间轴接入 `TimelineQuickItem`。
+- [x] 预览接入 `QuickShellPreviewSurface`，时间轴完成 `TimelineQuickItem` 基础渲染接入。
 - [x] v2 根窗口显示后提交 Quick UI ready，释放 PV/BG 首次加载门闩。
 - [x] 普通预览和全屏预览移除人工画面缩进。
 - [x] `QmlPreviewModel::renderMode` 接入三态切换、工具栏文字和预览标题。
@@ -69,14 +70,24 @@
 
 ## 一阶段待办
 
-### P0 — 文档模型与诊断契约
+### P0 — 时间轴接入
+
+- [x] Step 1：底栏已接入的时间轴与语法标签统一使用 `QuickShellController` 当前标签、显隐和文案状态，移除 `ViewState.activeBottomTab` 局部副本。
+- [ ] Step 2：接入时间轴顶部的缩放、亮度、视图锁定、进度同步与 Follow Code 交互。
+- [ ] Step 3：将 v2 可见编辑器的光标行列接入时间轴光标与 Follow Code。
+- [ ] Step 4：将时间轴导航结果回写到 v2 可见编辑器，补齐跳转、选区和跟随视觉状态。
+- [ ] Step 5：将 QML 正文编辑接入 `TimelineQuickModel` 增量更新路径，取消每次输入对整份正文的全量刷新。
+- [ ] Step 6：接入 Muri 标签、列表与问题跳转，与 v1 共用诊断状态。
+- [ ] Step 7：补齐底栏前台生命周期、面板高度同步、缩放与主题刷新。
+
+### P1 — 文档模型与诊断契约（已完成）
 
 - [x] 收紧 `QmlDocumentModel` 边界，将对 `MainWindow` 私有字段的直接读写迁移到窄公开 API。
 - [x] 将 v2 启动目标迁移到公开 `openStartupTarget()`，清理 `friend class QmlUiBootstrap`。
 - [x] 将 `runValidateSimaiSilently` 的结果接入 `syntaxIssues`、错误数、警告数和音符数。
 - [x] 让底栏检查列表、诊断跳转和编辑器错误波浪线消费同一份诊断数据。
 
-### P1 — 文本编辑器逻辑移植
+### P2 — 文本编辑器逻辑移植
 
 - [ ] 文本编辑器主要逻辑从 v1 移植到 v2。
   - [ ] 共享编辑规则：保留 v2 QML `TextArea` 与 `QTextDocument`，从
@@ -96,7 +107,7 @@
   - [ ] 高亮规则：共享 v1 `BracketScopeHighlighter` 与 v2 `SimaiSyntaxHighlighter` 的词法规则，
         同步相关 CMake 源文件和仓库指南。
 
-### P2 — 页面接线与产品决策
+### P3 — 页面接线与产品决策
 
 - [ ] `QmlExportSession` / `ExportVideoPage.qml` 接入片头音文件名和 `introSoundVolume`，并写入导出 snapshot。
 - [ ] 将 v2 根窗口接入 ChartDrop；上游 `setQuickShellRootWindow` 和拖放覆盖层代码已经存在。
@@ -104,7 +115,7 @@
 - [ ] 梳理禁用菜单和按钮：已有后端的接入现有操作，暂缺能力的从界面移除。
 - [ ] 确定全屏预览采用工作区覆盖层或 v1 OS 全屏，并记录最终行为。
 
-### P3 — 长期页面迁移
+### P4 — 长期页面迁移
 
 - [ ] 将 Latency 页面迁移为 QML 页面和窄业务 API，移除 v2 编辑区剩余的局部 `WindowContainer`。
 
@@ -139,10 +150,10 @@
 
 ## 推进顺序
 
-1. P0 文档模型边界与诊断契约。
-2. P1 文本编辑器逻辑移植。
-3. P2 页面接线与产品决策。
-4. P3 Latency 页面迁移。
+1. P0 时间轴接入，按 Step 1 至 Step 7 分批提交。
+2. P2 文本编辑器逻辑移植。
+3. P3 页面接线与产品决策。
+4. P4 Latency 页面迁移。
 
 ## 更新规则
 

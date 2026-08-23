@@ -16,7 +16,6 @@ QtObject {
     property int metadataEditorMode: 0
     property int editorCursorLine: 1
     property int editorCursorColumn: 1
-    property int activeBottomTab: 0
     property bool sidebarVisible: true
     // Activity Bar 的选择属于当前工作台会话；Primary Sidebar 的展开状态
     // 继续由宿主偏好服务持久化。

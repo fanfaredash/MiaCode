@@ -8,7 +8,6 @@ import MiaCode.Timeline
 Rectangle {
     id: root
 
-    required property var viewState
     required property var documentSession
     required property var preferences
     required property var commands
@@ -23,8 +22,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        viewState: root.viewState
         documentSession: root.documentSession
+        shellController: root.shellController
     }
 
     TimelineQuickItem {
@@ -32,7 +31,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: tabs.bottom
         anchors.bottom: parent.bottom
-        visible: root.viewState.activeBottomTab === 0
+        visible: root.shellController.bottomTabsCurrentTabId === "timeline"
         enabled: visible
         stateBridge: root.shellController.timelineStateBridge
         onHeaderNavigateRequested: second => root.shellController.timelineHeaderNavigate(second)
@@ -52,7 +51,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: tabs.bottom
         anchors.bottom: parent.bottom
-        visible: root.viewState.activeBottomTab === 1
+        visible: root.shellController.bottomTabsCurrentTabId === "validation"
 
         Row {
             id: summaryRow

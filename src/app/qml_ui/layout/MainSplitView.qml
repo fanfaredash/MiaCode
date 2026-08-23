@@ -42,7 +42,7 @@ Item {
     function validateChart() {
         root.commands.validateDocument()
         root.viewState.bottomPanelVisible = true
-        root.viewState.activeBottomTab = 1
+        root.shellController.setBottomTabsCurrentTabId("validation")
     }
 
     function showFullscreenPreview() {
@@ -166,7 +166,6 @@ Item {
             BottomPanel {
                 id: bottomPanel
                 visible: root.bottomPanelEffectivelyVisible
-                viewState: root.viewState
                 documentSession: root.documentSession
                 preferences: root.preferences
                 commands: root.commands

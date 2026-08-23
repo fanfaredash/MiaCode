@@ -4,8 +4,8 @@ import MiaCode.UI
 Rectangle {
     id: root
 
-    required property var viewState
     required property var documentSession
+    required property var shellController
 
     implicitHeight: 28
     color: Theme.colors.background.surface
@@ -17,17 +17,19 @@ Rectangle {
         AppTab {
             height: parent.height
             panelTab: true
-            text: qsTr("时间轴")
-            active: root.viewState.activeBottomTab === 0
-            onClicked: root.viewState.activeBottomTab = 0
+            visible: root.shellController.timelineTabVisible
+            text: root.shellController.timelineTabLabel
+            active: root.shellController.bottomTabsCurrentTabId === "timeline"
+            onClicked: root.shellController.setBottomTabsCurrentTabId("timeline")
         }
         AppTab {
             height: parent.height
             panelTab: true
-            text: qsTr("语法")
+            visible: root.shellController.validationTabVisible
+            text: root.shellController.validationTabLabel
             count: root.documentSession.syntaxIssueCount
-            active: root.viewState.activeBottomTab === 1
-            onClicked: root.viewState.activeBottomTab = 1
+            active: root.shellController.bottomTabsCurrentTabId === "validation"
+            onClicked: root.shellController.setBottomTabsCurrentTabId("validation")
         }
     }
 }
