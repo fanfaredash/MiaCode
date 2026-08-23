@@ -278,6 +278,11 @@ void MainWindow::applyMuriRenderOptions()
     validationSection_->applyMuriRenderOptions();
 }
 
+RenderMode MainWindow::muriRenderMode() const
+{
+    return muriRenderOptions_.renderMode;
+}
+
 void MainWindow::setMuriRenderMode(RenderMode mode, bool persistState)
 {
     validationSection_->setMuriRenderMode(mode, persistState);

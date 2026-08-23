@@ -59,8 +59,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   same deferred lambda once the build returns.
 - Default UI (v2): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
   `MiaCode.UI`). Shares hidden `MainWindow` + `QuickShellController` (no shell-wide
-  NativeSurfaceHost). Export/Latency: `QmlEditorPageHost`. Windows caption:
-  `QmlUiWindowChrome`. Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
+  NativeSurfaceHost). Export uses `QmlExportSession` + `ExportVideoPage.qml`;
+  `QmlEditorPageHost` embeds Latency only. `QmlDocumentModel` reaches document state through
+  the public operations in `sections/document/MainWindow.DocumentBridge.cpp`; validation reads
+  `DocumentValidationSnapshot` from the shared cache. Windows caption: `QmlUiWindowChrome`.
+  Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QuickShell (v1, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
   (`QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`,
   `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`, `qml/QuickShellMain.qml`).
@@ -137,6 +140,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
+- v2 document presentation boundary: `sections/document/MainWindow.DocumentBridge.cpp`
+  (`documentField`, `difficultyField`, document/difficulty update operations, save/discard and
+  unified-designer forwarding). `QmlDocumentModel` performs QML type conversion and signal
+  projection; it has no friend access to `MainWindow` internals.
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
   (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
   `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`
@@ -302,6 +309,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `.StrictChecks.cpp` (see `SimaiNativeParser.cpp:1584`).
 - Validation UI: `sections/validation/MainWindow.ValidationFlow.cpp` (`runValidateSimai*`,
   `addValidationError`, `addValidationDecoration`).
+- Shared validation presentation: `ValidationCachedIssue` retains explicit parser severity;
+  `ValidationSection::documentValidationSnapshot` publishes the aligned active-difficulty cache.
+  Explicit validation, background timeline analysis and cache clearing emit
+  `MainWindow::documentValidationChanged`; UIv2 list, navigation and wave underlines consume the
+  same `QmlDocumentModel::syntaxIssues` projection.
 - Note-modifier sync set (one patch touches all): native parser (`.cpp`/`.TouchTap`/`.Slide`) →
   marker flags (`src/timeline/TimelineData.h`) → mirror (`TimelineQuickModel.cpp` +
   `TimelineRenderData.h` flags) → transform (`ChartBatchTransform.cpp`, must NOT `return false` on

@@ -210,8 +210,8 @@ Item {
 
         Shell.QuickShellPreviewSurface {
             anchors.centerIn: parent
-            width: root.fittedFullscreenWidth(parent.width * 0.94, parent.height * 0.94)
-            height: root.fittedFullscreenHeight(parent.width * 0.94, parent.height * 0.94)
+            width: root.fittedFullscreenWidth(parent.width, parent.height)
+            height: root.fittedFullscreenHeight(parent.width, parent.height)
             runtime: root.previewSession.runtime
             mediaHost: root.previewSession.mediaHost
             logger: root.shellController

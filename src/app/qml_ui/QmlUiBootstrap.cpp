@@ -178,10 +178,16 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             appendQmlUiRuntimeLog(QStringLiteral("window_chrome_attached"));
         }
 #endif
+
+        // The stage-media route defers its first chart-path load until the
+        // frontend window is ready. UIv2 has no native surface host to forward
+        // that readiness notification, so release the shared backend gate here
+        // after the QML root window has been created and shown.
+        backend_->shellNoteQuickUiReady();
     }
 
     if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {
-        backend_->openFileAtPath(startupOpenTarget.trimmed(), true, true);
+        backend_->openStartupTarget(startupOpenTarget.trimmed());
     }
 
     if (showWelcomeDialogOnStartup_ && backend_ != nullptr) {

@@ -11,6 +11,15 @@ public:
     bool maybeSaveBeforeContinue();
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
+    QString documentField(MainWindow::DocumentField field) const;
+    QString difficultyField(int difficultyId, MainWindow::DifficultyField field) const;
+    bool updateDocumentField(MainWindow::DocumentField field, const QString& value);
+    bool updateDifficultyField(int difficultyId, MainWindow::DifficultyField field, const QString& value);
+    bool updateActiveChartText(const QString& value);
+    bool replaceDocumentSourceText(const QString& value);
+    bool addDocumentDifficulty(int difficultyId);
+    void enableUnifiedDocumentDesigner(const QString& canonicalName);
+    void disableUnifiedDocumentDesigner();
     // Opens the modal "manage per-difficulty designers" dialog: seven rows for
     // &des_1..7 plus the "all difficulties share one designer" toggle. Commits
     // on OK (chart-less names become standalone &des_N — no phantom

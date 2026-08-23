@@ -157,6 +157,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/MainWindowShared.h
     src/app/mainwindow/MainWindowShared.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentBridge.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentDesignerFlow.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp
@@ -728,8 +729,6 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/tools.svg
     src/app/qml_ui/resources/icons/audio-settings.svg
     src/app/qml_ui/resources/icons/preview-settings.svg
-    src/app/qml_ui/resources/icons/muri-mode.svg
-    src/app/qml_ui/resources/icons/preview-mode.svg
     src/app/qml_ui/resources/icons/close.svg
     src/app/qml_ui/resources/icons/more.svg
     src/app/qml_ui/resources/icons/metadata.svg

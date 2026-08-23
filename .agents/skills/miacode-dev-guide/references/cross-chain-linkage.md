@@ -29,6 +29,12 @@ current but **code is source of truth** — verify and fix drift in the same cha
 8. `MainWindow::scheduleTimelineAnalysisRefresh` → analysis result build → deferred UI apply
 9. `PreviewRuntime::setNoteMarkers`
 
+Validation presentation shares that analysis result. Both explicit validation and background
+analysis populate `ValidationCacheEntry`, including the parser's explicit severity. The aligned
+active-difficulty cache is exposed as `DocumentValidationSnapshot`; `documentValidationChanged`
+updates UIv2's bottom list, navigation target and editor wave underline through one
+`QmlDocumentModel::syntaxIssues` projection. Cache clearing publishes the same signal.
+
 Implications:
 
 - A parser change is rarely parser-only; a new note property/timing rule usually touches timeline,
@@ -465,6 +471,10 @@ touches the transport — preview and a running export are independent. Review t
   `exportIntroLowerBoundSeconds()` → `shellPreviewLowerBoundSeconds()` →
   `previewLowerBoundSeconds` → the slider's `from`. Add a transport field? Touch all four layers,
   and **touch `resources/quick_shell_qml.qrc`** so AUTORCC re-bundles the QML.
+  UIv2 mirrors the controller state through `QmlPreviewModel` into
+  `src/app/qml_ui/preview/PreviewTransport.qml`. Keep its lower bound, negative-time formatting,
+  cached scrub-release target, and touch/mouse/wheel/key forwarding aligned with
+  `QuickShellPreviewTransport.qml`.
 
 ## 13. Bottom-tab content scale → timeline two-tier scale
 
