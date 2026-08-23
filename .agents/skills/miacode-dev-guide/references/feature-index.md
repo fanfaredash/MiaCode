@@ -62,7 +62,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   NativeSurfaceHost). Export uses `QmlExportSession` + `ExportVideoPage.qml`;
   `QmlEditorPageHost` embeds Latency only. `QmlDocumentModel` reaches document state through
   the public operations in `sections/document/MainWindow.DocumentBridge.cpp`; validation reads
-  `DocumentValidationSnapshot` from the shared cache. Windows caption: `QmlUiWindowChrome`.
+  `DocumentValidationSnapshot` from the shared cache. Preview statistics use structured entries
+  from `QmlPreviewModel` and skin-aware note images from `QmlNoteImageProvider`, backed by
+  `TimelineNoteAssets`. Windows caption: `QmlUiWindowChrome`.
   Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QuickShell (v1, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
   (`QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`,

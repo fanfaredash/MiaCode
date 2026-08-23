@@ -139,6 +139,7 @@ class MainWindow : public QMainWindow,
     friend class QmlCommandService;
     friend class QmlEditorPageHost;
     friend class QmlExportSession;
+    friend class QmlPreviewModel;
 
 public:
     // Phase 4c — non-owning accessor for the preview stage-media host
@@ -156,6 +157,7 @@ signals:
     void videoExportWorkerRunningChanged(bool running);
     void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
+    void previewSkinDirectoryChanged();
 
 public:
     enum class DocumentField {

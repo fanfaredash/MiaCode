@@ -755,6 +755,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlDocumentModel.h
         src/app/qml_ui/QmlPreviewModel.cpp
         src/app/qml_ui/QmlPreviewModel.h
+        src/app/qml_ui/QmlNoteImageProvider.cpp
+        src/app/qml_ui/QmlNoteImageProvider.h
         src/app/qml_ui/QmlUiSettings.cpp
         src/app/qml_ui/QmlUiSettings.h
         src/app/qml_ui/QmlUiPlatformChrome.h

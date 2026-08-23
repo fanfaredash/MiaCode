@@ -1,6 +1,7 @@
 #include "QmlUiBootstrap.h"
 
 #include "QmlApplicationContext.h"
+#include "QmlNoteImageProvider.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
@@ -97,6 +98,8 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         *backend_, *controller_, this);
     engine_ = std::make_unique<QQmlApplicationEngine>(this);
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+    registerQmlNoteImageProvider(
+        engine_.get(), static_cast<QmlPreviewModel*>(applicationContext_->preview()));
     ensurePreviewQuickTypesRegisteredForQmlUi();
 
     windowChrome_ = std::make_unique<QmlUiWindowChrome>(this);

@@ -33,6 +33,7 @@ public:
     QString renderMode() const;
     QString renderModeLabel() const;
     QVariantList statistics() const;
+    QString currentSkinDirectory() const;
     QObject* runtime() const;
     QObject* mediaHost() const;
 

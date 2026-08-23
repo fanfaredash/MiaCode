@@ -4,8 +4,27 @@
 #include "common/MuriRenderOptions.h"
 #include "mainwindow/MainWindow.h"
 
+#include <array>
 #include <QRegularExpression>
 #include <QVariantMap>
+
+namespace {
+
+struct StatisticDescriptor {
+    const char* kind;
+    const char* fallbackName;
+};
+
+constexpr std::array<StatisticDescriptor, 6> kStatisticDescriptors{{
+    {"tap", "Tap"},
+    {"hold", "Hold"},
+    {"slide", "Slide"},
+    {"touch", "Touch"},
+    {"break", "Break"},
+    {"total", "Total"},
+}};
+
+} // namespace
 
 QmlPreviewModel::QmlPreviewModel(
     MainWindow& backend,
@@ -16,6 +35,7 @@ QmlPreviewModel::QmlPreviewModel(
     , controller_(&controller)
 {
     connect(controller_, &QuickShellController::shellStateChanged, this, &QmlPreviewModel::changed);
+    connect(backend_, &MainWindow::previewSkinDirectoryChanged, this, &QmlPreviewModel::changed);
 }
 
 double QmlPreviewModel::positionSeconds() const { return controller_->previewPositionSeconds(); }
@@ -53,21 +73,38 @@ QVariantList QmlPreviewModel::statistics() const
 {
     QVariantList result;
     const QStringList texts = controller_->previewStatsTexts();
-    for (const QString& text : texts.mid(0, 6)) {
+    const QString skinRevision = QString::number(qHash(currentSkinDirectory()));
+    for (qsizetype index = 0; index < static_cast<qsizetype>(kStatisticDescriptors.size()); ++index) {
+        const StatisticDescriptor& descriptor = kStatisticDescriptors.at(static_cast<std::size_t>(index));
+        const QString text = texts.value(index);
         const int separator = text.indexOf(QRegularExpression(QStringLiteral("\\s")));
+        const QString name = separator > 0
+            ? text.left(separator)
+            : QString::fromLatin1(descriptor.fallbackName);
+        const QString value = separator > 0 ? text.mid(separator + 1).trimmed() : QStringLiteral("0/0");
+        const int valueSeparator = value.indexOf(QLatin1Char('/'));
+        const int played = valueSeparator > 0 ? value.left(valueSeparator).toInt() : 0;
+        const int total = valueSeparator > 0 ? value.mid(valueSeparator + 1).toInt() : 0;
+        const QString kind = QString::fromLatin1(descriptor.kind);
         result.append(QVariantMap{
-            {QStringLiteral("name"), separator > 0 ? text.left(separator) : text},
-            {QStringLiteral("value"), separator > 0 ? text.mid(separator + 1).trimmed() : QString()},
-        });
-    }
-    while (result.size() < 6) {
-        result.append(QVariantMap{
-            {QStringLiteral("name"), QStringLiteral("—")},
-            {QStringLiteral("value"), QStringLiteral("0/0")},
+            {QStringLiteral("kind"), kind},
+            {QStringLiteral("name"), name},
+            {QStringLiteral("played"), played},
+            {QStringLiteral("total"), total},
+            {QStringLiteral("value"), value},
+            {QStringLiteral("iconSource"), kind == QStringLiteral("total")
+                ? QString()
+                : QStringLiteral("image://noteicon/%1?skin=%2").arg(kind, skinRevision)},
         });
     }
     return result;
 }
+
+QString QmlPreviewModel::currentSkinDirectory() const
+{
+    return backend_->resolvePreviewSkinDir();
+}
+
 QObject* QmlPreviewModel::runtime() const { return controller_->previewRuntime(); }
 QObject* QmlPreviewModel::mediaHost() const { return controller_->previewStageMediaHost(); }
 

@@ -942,6 +942,7 @@ void MainWindow::applyPreviewSkinDirectoryToSurfaces()
     if (timelineQuickStateBridge_ != nullptr) {
         timelineQuickStateBridge_->setSkinDirectory(skinDir);
     }
+    emit previewSkinDirectoryChanged();
 }
 
 void MainWindow::applyPreviewAudioSettingsToRuntime()
