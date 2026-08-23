@@ -184,6 +184,7 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                     cachedIssue.line = issue.line;
                     cachedIssue.col = issue.col;
                     cachedIssue.endCol = issue.endCol;
+                    cachedIssue.severity = issue.severity;
                     cachedIssue.rawMessage = issue.rawMessage;
                     cachedIssue.displayMessage = issue.displayMessage;
                     entry.issues.append(cachedIssue);
@@ -192,6 +193,7 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                 const int muriDiagnosticCount = result.analysisReport.diagnostics.size();
                 const int muriStaticReferenceCount = result.staticReferences.size();
                 guard->state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
+                emit guard->documentValidationChanged();
                 guard->state_.pendingDeferredValidationUiRefresh_ = true;
                 guard->state_.muriAnalysisReport_ = std::move(result.analysisReport);
                 guard->state_.muriAnalysisReport_.revision = ++guard->state_.muriAnalysisReportRevisionCounter_;

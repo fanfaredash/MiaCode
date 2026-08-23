@@ -1,147 +1,152 @@
 # QML UI v2 一阶段 Todo
 
-> 工作清单，不是最终规格。上下文压缩后以本文件为准继续改；完成或调整条目时同步更新本文件与 `feature-index.md` 中的入口句。
->
-> 分支：`feature/qml-ui`（已合入 `origin/dev` @ `c68baa34`）  
-> 入口：默认 `QmlUiBootstrap`（v2）；`--ui=v1` / `MIACODE_UI_SKIN=v1` → QuickShell  
+> 当前工作清单。完成或调整条目时，同步更新本文件；架构与入口发生变化时，同步更新仓库指南。
 
-> 构建：`build/`（已 ignore）  
-> 原型参考：`../MashiroEditor/src/ui`（壳层来源）
+## 当前基线
 
-## 目标与约束
+- 分支：`feature/qml-ui`
+- 上游：已合入 `origin/dev` @ `0e85b0b2`
+- 默认界面：`QmlUiBootstrap`（v2）
+- v1 入口：`--ui=v1` / `MIACODE_UI_SKIN=v1` → QuickShell
+- 构建目录：`build/`
+- 原型参考：`../MashiroEditor/src/ui`
 
-- v1 / v2 **共存**：禁止再删 QuickShell 再宿主路径（`NativeSurfaceHost` / `StyleBridge` / `QuickShellMain.qml`）。
-- v2 终态方向：**纯 QML 壳** + C++ 域服务 + 已有 `QQuickItem`（时间轴/预览）；**主壳**零 `WindowContainer`。
-- **例外（一阶段已落地）**：编辑区可对单个 v1 全页做局部 `WindowContainer`（`QmlEditorPageHost`），仅用于 Export / Latency；禁止把整窗 `MainWindow` 再宿主进 v2。
-- 共享后端：隐藏 `MainWindow` + `QuickShellController(surfaceHost=nullptr)`。
-- 工作区模式（底栏显隐 / 预览画幅 / 导出全屏门闸）以 `MainWindow` 切换为权威，v2 **只读** `QuickShellController` 投影，不在 `ViewState` 另写平行标志。
-- 上游纯 v1 壳改动通常不伤 v2；共享 `MainWindow` / Controller / Preview / Timeline API 仍会一起吃到。
-- 已合入 `origin/dev`：DComp 整栈删除；预览音频为 Worker 异步 facade。MinGW 仍链接 `d3dcompiler`（QtAVPlayer `D3DCompile`；MSVC 走 pragma）。QML 已去掉 `dcompFallbackActive`。
+## 范围与契约
 
-## 并入 origin/dev
-
-已 merge `origin/dev` @ `c68baa34`，Release 可启动，手工过了一遍日常路径。
-
-### 合入前策略 / 冲突 / 自动合入核对
-
-- [x] CMake：保留 qml_ui；采用上游删除 `src/render` / `src/sources`；加入 audio worker / 诊断源；FFmpeg 覆盖 `WIN32||APPLE`；不链接 `dcomp`；保留 `d3d11` + `dxgi`；MinGW 另链 `d3dcompiler`（QtAVPlayer）
-- [x] `main.cpp`：保留 `resolveUiSkin` + `QmlUiBootstrap`；并入 PV memory session 与资源 gauge；DComp env 注入保持删除
-- [x] `MainWindow.h` 信号并集：保留 `videoExportWorkerRunningChanged` / `setQmlExportCenterActive`；并入 `chartDropOverlayVisibleChanged`；删除 `previewStageMediaHostInitialized`、`previewCanvasPresentSyncIntervalChanged`
-- [x] 启动诊断：默认跳过模块列表 / D3D11 探针 + MinGW 无 SEH 分支
-- [x] 接受删除 `PreviewDCompRenderer.cpp`
-- [x] 解开 `CMakeLists.txt` / `main.cpp` / `MainWindow.h` / `startup_diagnostics_win32.cpp`；重写冲突的 `cross-chain-linkage.md`
-- [x] 自动合入核对：`FrameBootstrap` / `MemberStorage` / `ExportWorker` / Widgets 导出对话框 / `DocumentUi`
-- [x] Release 链接：不再编已删 DComp 源；qml_ui 仍进 `MiaCode`
-- [x] `QtPreviewSfxRuntime` 已是 Worker facade；`commandCompleted` / `previewPrepared` / DeviceWatcher 接到 MainWindow
-- [x] 启动修复：去掉 `PreviewPane.qml` / `MainSplitView.qml` 的 `dcompFallbackActive`；`AppMenuItem` 空 shortcut 不再抛错
-- [x] 手工：默认 v2 皮肤可打开、预览可画
-
-### 合入后 UIv2 接线（当前最高优先级）
-
-- [ ] ChartDrop / `setQuickShellRootWindow`：上游 PR 未审，v2 不接
-- [x] `QmlPreviewModel::renderMode`：token 三态；工具栏文字按钮循环；预览栏标题同步；已删 `muri-mode.svg` / `preview-mode.svg`
-- [ ] `QmlExportSession` / `ExportVideoPage.qml`：片头音文件名与 `introSoundVolume` 与 snapshot 对齐（Widgets 对话框已接）
-- [ ] 批量上传：确认 v2 工具箱仍能打开扩展命令 `net.batchUpload.open`
-
-### 合入后仍建议点一次
-
-- 设备热插拔暂停 → 下一次 play 走 cold Prepare
-- play / pause / seek 以 completion 为准
-- EraseByArea、烟花时长、BGM 过轨静音
-- 音频拖放建谱（ChartDrop 上游 PR 未审，v2 不接）
-- QML 导出带片头音（需上面导出接线）
-- 脏文档关窗 / 播放中关窗
-- 提交 `d534b393`（bookmark / touch input）标注「未经 GUI 验证」
+- v1 / v2 共存，保留 QuickShell 再宿主路径：`NativeSurfaceHost`、`StyleBridge`、`QuickShellMain.qml`。
+- v2 方向为纯 QML 主壳、C++ 域服务和已有 `QQuickItem` 时间轴/预览。
+- 视频导出页已经使用纯 QML `ExportVideoPage.qml`，由 `QmlExportSession` 提供业务状态和操作。
+- `QmlEditorPageHost` 负责全页导航，并通过局部 `WindowContainer` 宿主 v1 `LatencyDetectionPage`。
+- v2 共享隐藏的 `MainWindow` 与 `QuickShellController(surfaceHost=nullptr)`。
+- 工作区模式由 `MainWindow` 切换，v2 从 `QuickShellController` 读取底栏显隐、预览画幅和导出页状态。
+- 实时预览和视频导出共用进程内 QSG 渲染路径。
+- 上游 v1 壳层改动与 v2 主壳分离；共享的 `MainWindow`、Controller、Preview、Timeline API 仍需同步。
 
 ## 已完成
 
-- [x] 从 HEAD 恢复被误删的 v1 QuickShell 文件
-- [x] fast-forward 对齐 `origin/dev`（含 latency 自定义背景屏蔽等）
-- [x] 接入 `src/app/qml_ui/`（Mashiro 壳）+ `QmlUiBootstrap`
-- [x] CMake `MiaCode.UI` 模块与皮肤切换入口
-- [x] 预览接真 `QuickShellPreviewSurface`；时间轴接真 `TimelineQuickItem`
-- [x] 预览 PV/BG 启动门闩：`QmlUiBootstrap` 在 v2 根窗口显示后调用
-      `MainWindow::shellNoteQuickUiReady()`，释放 `PreviewStageMediaHost` 的首个谱面路径延迟加载
-- [x] 构建目录回到 `build/`（不要再建未 ignore 的 `build-qml-ui/`）
-- [x] 关窗对齐 v1：`confirmClose` → `notifyRootCloseAccepted` → `preparePreviewForShutdown`  
-      （已删 v2 自管 `closeApproved` / `pendingClose`）
-- [x] 导出 / 工具侧栏（v2 风格）+ 编辑区嵌入 v1 `ExportLauncherPage` / `LatencyDetectionPage`
-- [x] 对话框类工具走既有弹窗（音视频 / 规范化 / Net）；不嵌主壳
-- [x] 内嵌页 Windows 白屏修复（bridge `show()` 顺序对齐 NativeSurfaceHost）
-- [x] 导出工作区态接线：`bottomTabsVisible` / `previewCanvasAspectRatio` / `exportPageActive`  
-      （手工确认：进导出中心底栏收起、预览进入导出画幅/模式）
-- [x] Windows 客户区标题栏：`QmlUiWindowChrome`（仅 v2 bootstrap attach；v1 不动）  
-      + 标题栏品牌图复用仓库权威 `resources/icons/app.png`（别名 `icons/app.png`）
+### 启动与壳层
 
-## 一阶段待办（按优先级）
+- [x] 恢复并保留 v1 QuickShell 文件和入口。
+- [x] 接入 `src/app/qml_ui/`、`QmlUiBootstrap`、`MiaCode.UI` 模块与皮肤切换入口。
+- [x] v2 默认使用隐藏 `MainWindow` 和无主壳宿主的 `QuickShellController`。
+- [x] 关窗流程接入 `confirmClose` → `notifyRootCloseAccepted` → `preparePreviewForShutdown`。
+- [x] Windows 客户区标题栏接入 `QmlUiWindowChrome`，品牌图使用 `resources/icons/app.png`。
+- [x] 设置入口调用现有 `MainWindow::onPreferences()`。
 
-### P0 — 正确性 / 契约
+### 预览与时间轴
 
-- [ ] Document 边界收口：减少 `QmlDocumentModel` 对 `MainWindow` 私有字段的 friend 直写，改为窄公开 API
-- [ ] 去掉未使用的 `friend class QmlUiBootstrap`（若仍无用）
-- [ ] 确认关窗路径在「脏文档 / 播放中 / 有导出对话框」场景下与 v1 行为一致（手工回归）
+- [x] 预览接入 `QuickShellPreviewSurface`，时间轴接入 `TimelineQuickItem`。
+- [x] v2 根窗口显示后提交 Quick UI ready，释放 PV/BG 首次加载门闩。
+- [x] 普通预览和全屏预览移除人工画面缩进。
+- [x] `QmlPreviewModel::renderMode` 接入三态切换、工具栏文字和预览标题。
+- [x] 预览传输条接入负时间下界和完整 scrub 生命周期。
+- [x] 清理 v2 QML 中已删除渲染后端的状态与资源。
 
-### P1 — 让现有 UI 不再说假话
+### 页面与控件
 
-- [ ] 打通 `syntaxIssues`：`runValidateSimaiSilently` 结果灌进 model，驱动底栏「检查」与高亮 diagnostics
-- [x] 设置齿轮：去掉演示用 `ViewSettingsPopup`，改为调用 v1 `MainWindow::onPreferences()`
-- [x] QQC 共享皮肤：`AppTextField` / `AppTextArea` / `AppButton` / `AppComboBox` / `AppSlider` / `AppMenu*`（几何对齐 v1 dialog*，色用 `Theme`）
-- [x] 悬停/选中高亮收口：`HoverChrome` + `NavRow`（仅 v2 `qml_ui`，不碰 v1）；`nav`/`hover` 默认 inset；`AppSwitch`；IconButton `glyph`
-- [x] 标题栏菜单溢出：窄窗时从右往左收入 `…` 二级菜单；文档标题保持整窗居中
-- [ ] 禁用菜单/按钮：能接则接（音频/预览设置 → 现有对话框）；短期接不上的改为隐藏，少留灰色死控件
+- [x] 视频导出中心迁移为 `ExportVideoPage.qml` + `QmlExportSession`。
+- [x] Latency 页面通过编辑区局部 `WindowContainer` 接入。
+- [x] 导出工作区状态接入底栏显隐、预览画幅和导出模式。
+- [x] 工具侧栏接入音视频处理、规范化、Net、批量导出、封面导出和打包入口。
+- [x] 完成 `AppTextField`、`AppTextArea`、`AppButton`、`AppComboBox`、`AppSlider`、`AppMenu*` 共享皮肤。
+- [x] 完成 `HoverChrome`、`NavRow`、`AppSwitch`、IconButton glyph 的悬停和选中样式。
+- [x] 标题栏菜单在窄窗口中折叠到溢出菜单，文档标题保持居中。
+- [x] Activity Bar、小窗口紧凑覆盖层、QML 多标签编辑器、元数据双视图、谱面字段侧栏和底栏 Tab 已接入。
 
-### P2 — 专属壳能力巩固（相对 v1 已有差异，需保持可用）
+### 文档模型与诊断
 
-v2 相对 QuickShell v1 的专属面（完成度仍低，但不要回退）：
+- [x] `QmlDocumentModel` 通过 `MainWindow.DocumentBridge.cpp` 的公开查询与操作访问文档，已移除对 `MainWindow` 私有字段的 friend 访问。
+- [x] v2 启动目标改用公开 `openStartupTarget()`，已移除 `friend class QmlUiBootstrap`。
+- [x] `DocumentValidationSnapshot` 将现有验证缓存投影为 QML 数据，包含问题位置、显式严重度、错误数、警告数和 strict 解析物件数。
+- [x] 同步检查、后台分析和缓存清理统一发布 `documentValidationChanged`；底栏列表、问题跳转和编辑器波浪线共用 `syntaxIssues`。
 
-- 纯 QML 深色 Theme、自绘标题栏 / Caption、内嵌菜单 + 共享表单控件皮肤（`App*`）
-- Activity Bar、`<720` 紧凑覆盖层（设置齿轮复用 v1 首选项）
-- QML 多标签编辑器 + 元数据表单/源码双视图
-- QML 谱面字段侧栏 / 难度列表、底栏时间轴/检查 Tab
+### 上游同步
 
-待办：
+- [x] 合入 `origin/dev` @ `0e85b0b2`。
+- [x] 接受 DComp、`src/render`、`src/sources` 删除，保留进程内 QSG 路径。
+- [x] 保留 `d3d11`、`dxgi`，MinGW 链接 `d3dcompiler`。
+- [x] 合入预览音频 Worker facade、设备监听和启动诊断改动。
 
-- [ ] 编辑器能力对齐声明或补齐：IME / 半角 / 书签 / 查找（至少文档写清「暂不支持」）
-- [ ] 预览传输条是否升级到 v1 `QuickShellPreviewTransport` 能力（负时域、精密 scrub）——单独产品取舍后再做
-- [ ] 全屏预览策略：保持工作区覆盖层，或对齐 v1 OS 全屏（一阶段可维持现状并写明）
+## 一阶段待办
 
-### P3 — 业务页（长期）
+### P0 — 文档模型与诊断契约
 
-- [ ] 长期：Export 面板拆「任务 API」与「QML UI」，去掉编辑区局部 `WindowContainer` 宿主税
+- [x] 收紧 `QmlDocumentModel` 边界，将对 `MainWindow` 私有字段的直接读写迁移到窄公开 API。
+- [x] 将 v2 启动目标迁移到公开 `openStartupTarget()`，清理 `friend class QmlUiBootstrap`。
+- [x] 将 `runValidateSimaiSilently` 的结果接入 `syntaxIssues`、错误数、警告数和音符数。
+- [x] 让底栏检查列表、诊断跳转和编辑器错误波浪线消费同一份诊断数据。
 
-## 关键路径速查
+### P1 — 文本编辑器逻辑移植
+
+- [ ] 文本编辑器主要逻辑从 v1 移植到 v2。
+  - [ ] 共享编辑规则：保留 v2 QML `TextArea` 与 `QTextDocument`，从
+        `PlainCodeEditor.Input.cpp` / `PlainCodeEditor.BracketCompletion.cpp` 抽取控件无关的
+        文本编辑事务、半角转换、括号处理与补全状态，供 v1 / v2 共用。
+  - [ ] v2 编辑控制器：连接 `TextArea` / `QQuickTextDocument`，统一管理光标、选择区、
+        编辑事务、覆盖模式、补全状态和现有编辑偏好，通过 `QmlApplicationContext`
+        向 `SourceEditor.qml` 提供窄接口。
+  - [ ] 基础输入：移植半角字符、IME commit、粘贴、Enter / Ctrl+Enter、Insert 覆盖模式、
+        成对括号、右括号越过、空括号成对删除、已有 `[` 进入和 `h` hold 补全入口。
+  - [ ] 智能补全：复用 `SimaiCompletionCatalog`，用 QML 候选列表承接 BPM、细分与时值候选，
+        支持实时过滤、光标锚定、上下选择、Tab / Enter 接受、Esc 关闭和鼠标选择。
+  - [ ] 编辑命令：接入选择区替换记录、撤销 / 重做路由、谱面变换快捷键、上下文菜单、
+        选择区和光标行列同步，通过 `QmlCommandService` 与窄公开 API 连接现有后端。
+  - [ ] 编辑辅助：`LineNumberGutter.qml` 接入书签显示、跳转和右键操作；补齐查找界面、
+        预览跟随视觉光标、诊断跳转、错误波浪线和底栏统计。
+  - [ ] 高亮规则：共享 v1 `BracketScopeHighlighter` 与 v2 `SimaiSyntaxHighlighter` 的词法规则，
+        同步相关 CMake 源文件和仓库指南。
+
+### P2 — 页面接线与产品决策
+
+- [ ] `QmlExportSession` / `ExportVideoPage.qml` 接入片头音文件名和 `introSoundVolume`，并写入导出 snapshot。
+- [ ] 将 v2 根窗口接入 ChartDrop；上游 `setQuickShellRootWindow` 和拖放覆盖层代码已经存在。
+- [ ] 手工确认 v2 工具箱的批量上传入口能够打开 `net.batchUpload.open`。
+- [ ] 梳理禁用菜单和按钮：已有后端的接入现有操作，暂缺能力的从界面移除。
+- [ ] 确定全屏预览采用工作区覆盖层或 v1 OS 全屏，并记录最终行为。
+
+### P3 — 长期页面迁移
+
+- [ ] 将 Latency 页面迁移为 QML 页面和窄业务 API，移除 v2 编辑区剩余的局部 `WindowContainer`。
+
+## 手工回归清单
+
+- [ ] 脏文档、播放中、导出任务运行时的关窗流程与 v1 一致。
+- [ ] 设备热插拔暂停后，下一次播放走 cold Prepare。
+- [ ] play、pause、seek 按 completion 更新界面状态。
+- [ ] EraseByArea、烟花时长和 BGM 过轨静音行为正确。
+- [ ] 音频拖放建谱和 ChartDrop 覆盖层行为正确。
+- [ ] QML 导出片头音文件和音量进入最终任务。
+- [ ] `d534b393` 的 bookmark / touch input 改动完成 GUI 回归。
+
+## 关键路径
 
 | 角色 | 路径 |
 |------|------|
 | 皮肤切换 | `src/app/main.cpp` → `resolveUiSkin()` |
-| v2 bootstrap | `src/app/qml_ui/QmlUiBootstrap.*`（根窗口显示后提交 Quick UI ready，释放 PV/BG 延迟加载） |
+| v2 启动 | `src/app/qml_ui/QmlUiBootstrap.*` |
 | 契约根 | `src/app/qml_ui/QmlApplicationContext.*` |
 | 文档桥 | `src/app/qml_ui/QmlDocumentModel.*` |
 | 预览桥 | `src/app/qml_ui/QmlPreviewModel.*` |
-| 壳 QML | `src/app/qml_ui/Main.qml`, `layout/MainView.qml` |
-| 编辑区 v1 页宿主 | `src/app/qml_ui/QmlEditorPageHost.*`（Export/Latency） |
-| v2 Windows 客户区标题栏 | `src/app/qml_ui/QmlUiWindowChrome.*`（仅 `QmlUiBootstrap` attach） |
-| 导出/工具侧栏 | `sidebar/ExportSidebarPage.qml`, `ToolsSidebarPage.qml` |
-| 工作区态消费 | `MainSplitView.qml` / `PreviewPane.qml` ← `shellController.*` |
-| v1 壳（勿删） | `src/app/quick_shell/` |
-| 开发索引入口 | `.agents/skills/miacode-dev-guide/references/feature-index.md` |
+| 编辑器 | `src/app/qml_ui/editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
+| 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`ExportVideoPage.qml` |
+| Latency 页宿主 | `src/app/qml_ui/QmlEditorPageHost.*` |
+| 主壳 | `src/app/qml_ui/Main.qml`、`layout/MainView.qml` |
+| 标题栏 | `src/app/qml_ui/QmlUiWindowChrome.*` |
+| 工具侧栏 | `src/app/qml_ui/sidebar/ToolsSidebarPage.qml` |
+| 工作区状态 | `layout/MainSplitView.qml` / `preview/PreviewPane.qml` ← `shellController.*` |
+| v1 壳 | `src/app/quick_shell/` |
+| 开发索引 | `.agents/skills/miacode-dev-guide/references/feature-index.md` |
 
-## 本地命令
+## 推进顺序
 
-```powershell
-cmake --build build --target MiaCode -j 8
-.\build\MiaCode.exe
-.\build\MiaCode.exe --ui=v1
-```
-
-## 建议下一刀
-
-1. **合入后接线**：QML 片头音 → 确认批量上传入口。ChartDrop 上游 PR 未审，v2 不接。  
-2. 再回到下面的 P0/P1 壳契约（friend 收口、`syntaxIssues`、死控件）。  
-3. 产品拍板后再动 P2 传输条 / 全屏策略。
+1. P0 文档模型边界与诊断契约。
+2. P1 文本编辑器逻辑移植。
+3. P2 页面接线与产品决策。
+4. P3 Latency 页面迁移。
 
 ## 更新规则
 
-1. 每完成一项：勾选本文件对应 checkbox。  
-2. 架构/入口变化：同步 `feature-index.md` / `SKILL.md` 中 v2 相关句。  
-3. 不要把本清单当成「可以删 v1」的许可证；退役 v1 只能在 v2 功能面明显齐备且另开决策后进行。
+1. 完成任务后勾选对应条目，并将稳定结果归入“已完成”。
+2. 架构、入口或跨模块契约变化时，同步更新仓库指南。
+3. 手工回归结果记录在对应条目中。
+4. v1 退役需要单独决策。

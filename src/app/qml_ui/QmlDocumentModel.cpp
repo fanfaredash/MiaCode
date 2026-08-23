@@ -9,38 +9,32 @@
 QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
     : QObject(parent), backend_(&backend)
 {
+    connect(backend_, &MainWindow::documentValidationChanged,
+            this, &QmlDocumentModel::syntaxIssuesChanged);
 }
 
 QString QmlDocumentModel::chartText() const
 {
-    return backend_->activeChartText();
+    return backend_->activeDocumentChartText();
 }
 
 void QmlDocumentModel::setChartText(const QString& value)
 {
-    if (!backend_->hasActiveDifficulty() || chartText() == value) return;
-    if (SimaiDifficultyData* difficulty = backend_->document_.difficulty(backend_->activeDifficultyId_)) {
-        difficulty->chart = value;
-    }
-    backend_->setEditorText(value);
-    backend_->scheduleTimelineRefresh();
+    if (!backend_->updateActiveChartText(value)) return;
     markDocumentChanged();
     emit chartTextChanged();
 }
 
-QString QmlDocumentModel::metadataTitle() const { return backend_->document_.title; }
-QString QmlDocumentModel::metadataArtist() const { return backend_->document_.artist; }
-QString QmlDocumentModel::metadataFirst() const { return backend_->document_.first; }
-QString QmlDocumentModel::metadataDesigner() const { return backend_->document_.designer; }
-QString QmlDocumentModel::metadataVideoPath() const { return backend_->document_.videoPath; }
-QString QmlDocumentModel::metadataExtraText() const
-{
-    return SimaiDocument::serializeRawFields(backend_->document_.extraFields);
-}
-QString QmlDocumentModel::metadataSourceText() const { return backend_->document_.toText(); }
+QString QmlDocumentModel::metadataTitle() const { return backend_->documentField(MainWindow::DocumentField::Title); }
+QString QmlDocumentModel::metadataArtist() const { return backend_->documentField(MainWindow::DocumentField::Artist); }
+QString QmlDocumentModel::metadataFirst() const { return backend_->documentField(MainWindow::DocumentField::First); }
+QString QmlDocumentModel::metadataDesigner() const { return backend_->documentField(MainWindow::DocumentField::Designer); }
+QString QmlDocumentModel::metadataVideoPath() const { return backend_->documentField(MainWindow::DocumentField::VideoPath); }
+QString QmlDocumentModel::metadataExtraText() const { return backend_->documentField(MainWindow::DocumentField::ExtraText); }
+QString QmlDocumentModel::metadataSourceText() const { return backend_->documentSourceText(); }
 QString QmlDocumentModel::metadataSourceError() const { return metadataSourceError_; }
 bool QmlDocumentModel::metadataSourceValid() const { return metadataSourceError_.isEmpty(); }
-bool QmlDocumentModel::unifiedDesignerEnabled() const { return backend_->unifiedDesignerEnabled_; }
+bool QmlDocumentModel::unifiedDesignerEnabled() const { return backend_->documentUnifiedDesignerEnabled(); }
 
 QStringList QmlDocumentModel::designerCandidates() const
 {
@@ -49,78 +43,68 @@ QStringList QmlDocumentModel::designerCandidates() const
         const QString normalized = value.trimmed();
         if (!normalized.isEmpty() && !values.contains(normalized)) values.append(normalized);
     };
-    append(backend_->document_.designer);
-    for (int id : backend_->document_.difficultyIds()) {
-        if (const SimaiDifficultyData* difficulty = backend_->document_.difficulty(id)) append(difficulty->designer);
+    append(metadataDesigner());
+    for (int id : backend_->documentDifficultyIds()) {
+        append(backend_->difficultyField(id, MainWindow::DifficultyField::Designer));
     }
     return values;
 }
 
 void QmlDocumentModel::setMetadataTitle(const QString& value)
 {
-    if (backend_->document_.title == value) return;
-    backend_->document_.title = value;
+    if (!backend_->updateDocumentField(MainWindow::DocumentField::Title, value)) return;
     markDocumentChanged();
     emit metadataChanged();
 }
 void QmlDocumentModel::setMetadataArtist(const QString& value)
 {
-    if (backend_->document_.artist == value) return;
-    backend_->document_.artist = value;
+    if (!backend_->updateDocumentField(MainWindow::DocumentField::Artist, value)) return;
     markDocumentChanged();
     emit metadataChanged();
 }
 void QmlDocumentModel::setMetadataFirst(const QString& value)
 {
-    if (backend_->document_.first == value) return;
-    backend_->document_.first = value;
-    backend_->scheduleTimelineRefresh();
+    if (!backend_->updateDocumentField(MainWindow::DocumentField::First, value)) return;
     markDocumentChanged();
     emit metadataChanged();
 }
 void QmlDocumentModel::setMetadataDesigner(const QString& value)
 {
-    if (backend_->document_.designer == value) return;
-    backend_->document_.designer = value;
+    if (!backend_->updateDocumentField(MainWindow::DocumentField::Designer, value)) return;
     markDocumentChanged();
     emit metadataChanged();
 }
 void QmlDocumentModel::setMetadataVideoPath(const QString& value)
 {
-    if (backend_->document_.videoPath == value) return;
-    backend_->document_.videoPath = value;
+    if (!backend_->updateDocumentField(MainWindow::DocumentField::VideoPath, value)) return;
     markDocumentChanged();
     emit metadataChanged();
 }
 void QmlDocumentModel::setMetadataExtraText(const QString& value)
 {
-    const QVector<SimaiRawField> fields = SimaiDocument::parseUnmanagedFields(value, true);
-    if (backend_->document_.extraFields == fields) return;
-    backend_->document_.extraFields = fields;
-    backend_->setMetadataExtraText(value);
-    backend_->scheduleTimelineRefresh();
+    if (!backend_->updateDocumentField(MainWindow::DocumentField::ExtraText, value)) return;
     markDocumentChanged();
     emit metadataChanged();
 }
 void QmlDocumentModel::setMetadataSourceText(const QString& value)
 {
-    const SimaiDocument parsed = SimaiDocument::fromText(value);
     metadataSourceError_.clear();
-    backend_->loadDocument(parsed);
+    if (!backend_->replaceDocumentSourceText(value)) return;
+    markDocumentChanged();
     emit metadataSourceChanged();
     emitDocumentStateChanged();
 }
 
 QString QmlDocumentModel::documentTitle() const
 {
-    return backend_->document_.title.trimmed().isEmpty() ? currentFileName() : backend_->document_.title;
+    return metadataTitle().trimmed().isEmpty() ? currentFileName() : metadataTitle();
 }
-QString QmlDocumentModel::currentFilePath() const { return backend_->currentFilePath_; }
+QString QmlDocumentModel::currentFilePath() const { return backend_->documentFilePath(); }
 QString QmlDocumentModel::currentFileName() const
 {
-    return backend_->currentFilePath_.isEmpty()
+    return currentFilePath().isEmpty()
         ? QStringLiteral("未命名")
-        : QFileInfo(backend_->currentFilePath_).fileName();
+        : QFileInfo(currentFilePath()).fileName();
 }
 QString QmlDocumentModel::currentDifficultyName() const
 {
@@ -132,22 +116,22 @@ QString QmlDocumentModel::currentDifficultyLabel() const
     const QString level = currentDifficultyLevel().trimmed();
     return level.isEmpty() ? name : QStringLiteral("%1 %2").arg(name, level);
 }
-int QmlDocumentModel::currentDifficultyId() const { return backend_->activeDifficultyId_; }
+int QmlDocumentModel::currentDifficultyId() const { return backend_->documentActiveDifficultyId(); }
 
 QVariantList QmlDocumentModel::difficulties() const
 {
     QVariantList result;
-    for (int id : backend_->document_.difficultyIds()) {
-        const SimaiDifficultyData* difficulty = backend_->document_.difficulty(id);
-        if (difficulty == nullptr) continue;
+    for (int id : backend_->documentDifficultyIds()) {
         const QString name = SimaiDocument::difficultyName(id);
+        const QString level = backend_->difficultyField(id, MainWindow::DifficultyField::Level);
+        const QString designer = backend_->difficultyField(id, MainWindow::DifficultyField::Designer);
         result.append(QVariantMap{
             {QStringLiteral("id"), id},
             {QStringLiteral("name"), name},
-            {QStringLiteral("level"), difficulty->level},
-            {QStringLiteral("designer"), difficulty->designer},
-            {QStringLiteral("label"), difficulty->level.trimmed().isEmpty()
-                ? name : QStringLiteral("%1 %2").arg(name, difficulty->level)},
+            {QStringLiteral("level"), level},
+            {QStringLiteral("designer"), designer},
+            {QStringLiteral("label"), level.trimmed().isEmpty()
+                ? name : QStringLiteral("%1 %2").arg(name, level)},
         });
     }
     return result;
@@ -156,8 +140,9 @@ QVariantList QmlDocumentModel::difficulties() const
 QVariantList QmlDocumentModel::availableDifficulties() const
 {
     QVariantList result;
+    const QVector<int> existingIds = backend_->documentDifficultyIds();
     for (int id = 1; id <= 7; ++id) {
-        if (backend_->document_.difficulty(id) == nullptr) {
+        if (!existingIds.contains(id)) {
             result.append(QVariantMap{
                 {QStringLiteral("id"), id},
                 {QStringLiteral("label"), SimaiDocument::difficultyName(id)},
@@ -169,19 +154,16 @@ QVariantList QmlDocumentModel::availableDifficulties() const
 
 QString QmlDocumentModel::currentDifficultyLevel() const
 {
-    const SimaiDifficultyData* difficulty = backend_->document_.difficulty(currentDifficultyId());
-    return difficulty != nullptr ? difficulty->level : QString();
+    return backend_->difficultyField(currentDifficultyId(), MainWindow::DifficultyField::Level);
 }
 QString QmlDocumentModel::currentDifficultyDesigner() const
 {
-    const SimaiDifficultyData* difficulty = backend_->document_.difficulty(currentDifficultyId());
-    return difficulty != nullptr ? difficulty->designer : QString();
+    return backend_->difficultyField(currentDifficultyId(), MainWindow::DifficultyField::Designer);
 }
 void QmlDocumentModel::setCurrentDifficultyLevel(const QString& value)
 {
-    SimaiDifficultyData* difficulty = backend_->document_.difficulty(currentDifficultyId());
-    if (difficulty == nullptr || difficulty->level == value) return;
-    difficulty->level = value;
+    if (!backend_->updateDifficultyField(
+            currentDifficultyId(), MainWindow::DifficultyField::Level, value)) return;
     markDocumentChanged();
     emit currentDifficultyFieldsChanged();
     emit currentDifficultyChanged();
@@ -189,19 +171,48 @@ void QmlDocumentModel::setCurrentDifficultyLevel(const QString& value)
 }
 void QmlDocumentModel::setCurrentDifficultyDesigner(const QString& value)
 {
-    SimaiDifficultyData* difficulty = backend_->document_.difficulty(currentDifficultyId());
-    if (difficulty == nullptr || difficulty->designer == value) return;
-    difficulty->designer = value;
+    if (!backend_->updateDifficultyField(
+            currentDifficultyId(), MainWindow::DifficultyField::Designer, value)) return;
     markDocumentChanged();
     emit currentDifficultyFieldsChanged();
     emit difficultiesChanged();
 }
 
-QVariantList QmlDocumentModel::syntaxIssues() const { return {}; }
-int QmlDocumentModel::syntaxIssueCount() const { return 0; }
-int QmlDocumentModel::syntaxErrorCount() const { return 0; }
-int QmlDocumentModel::syntaxWarningCount() const { return 0; }
-int QmlDocumentModel::parsedNoteCount() const { return 0; }
+QVariantList QmlDocumentModel::syntaxIssues() const
+{
+    const MainWindow::DocumentValidationSnapshot snapshot = backend_->documentValidationSnapshot();
+    QVariantList result;
+    result.reserve(snapshot.issues.size());
+    for (const SimaiNativeValidationIssue& issue : snapshot.issues) {
+        result.append(QVariantMap{
+            {QStringLiteral("line"), issue.line},
+            {QStringLiteral("column"), issue.col},
+            {QStringLiteral("endColumn"), issue.endCol},
+            {QStringLiteral("severity"),
+             issue.severity == SimaiNativeValidationSeverity::Warning
+                 ? QStringLiteral("warning")
+                 : QStringLiteral("error")},
+            {QStringLiteral("message"), issue.displayMessage},
+        });
+    }
+    return result;
+}
+int QmlDocumentModel::syntaxIssueCount() const
+{
+    return backend_->documentValidationSnapshot().issues.size();
+}
+int QmlDocumentModel::syntaxErrorCount() const
+{
+    return backend_->documentValidationSnapshot().errorCount;
+}
+int QmlDocumentModel::syntaxWarningCount() const
+{
+    return backend_->documentValidationSnapshot().warningCount;
+}
+int QmlDocumentModel::parsedNoteCount() const
+{
+    return backend_->documentValidationSnapshot().parsedNoteCount;
+}
 bool QmlDocumentModel::dirty() const { return backend_->isWindowModified(); }
 QStringList QmlDocumentModel::dirtyEditorKeys() const
 {
@@ -214,7 +225,7 @@ QStringList QmlDocumentModel::dirtyEditorKeys() const
 bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 {
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
-    if (!backend_->openFileAtPath(path, true, true)) {
+    if (!backend_->openStartupTarget(path)) {
         emit operationFailed(tr("打开失败"), tr("无法打开谱面文件。"));
         return false;
     }
@@ -224,49 +235,44 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 }
 bool QmlDocumentModel::save()
 {
-    if (backend_->currentFilePath_.isEmpty()) return false;
-    const bool saved = backend_->saveToPath(backend_->currentFilePath_);
+    const bool saved = backend_->saveDocument();
     if (saved) emitDocumentStateChanged();
     return saved;
 }
 bool QmlDocumentModel::saveAs(const QUrl& fileUrl)
 {
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
-    const bool saved = backend_->saveToPath(path);
+    const bool saved = backend_->saveDocumentAs(path);
     if (saved) emitDocumentStateChanged();
     return saved;
 }
 void QmlDocumentModel::discardChanges()
 {
-    if (!backend_->currentFilePath_.isEmpty()) openFile(QUrl::fromLocalFile(backend_->currentFilePath_));
+    if (!backend_->discardDocumentChanges()) return;
+    emitDocumentStateChanged();
+    emit documentReplaced();
 }
 void QmlDocumentModel::selectDifficulty(int id)
 {
-    if (!backend_->switchToDifficultyField(id)) return;
+    if (!backend_->selectDocumentDifficulty(id)) return;
     emitDocumentStateChanged();
 }
 bool QmlDocumentModel::addDifficulty(int id)
 {
-    if (!SimaiDocument::isDifficultyId(id) || backend_->document_.difficulty(id) != nullptr) return false;
-    backend_->document_.ensureDifficulty(id);
-    backend_->documentDirty_ = true;
-    backend_->rebuildFieldSidebar();
-    const bool selected = backend_->switchToDifficultyField(id);
+    const bool selected = backend_->addDocumentDifficulty(id);
+    if (!selected) return false;
     emitDocumentStateChanged();
     return selected;
 }
 bool QmlDocumentModel::removeDifficulty(int id)
 {
-    if (!backend_->deleteDifficultyField(id)) return false;
+    if (!backend_->removeDocumentDifficulty(id)) return false;
     emitDocumentStateChanged();
     return true;
 }
 void QmlDocumentModel::validateChart()
 {
-    // Reuse the existing silent validation path. Issue list bridging into
-    // syntaxIssues() is still incomplete on the v2 shell.
-    backend_->runValidateSimaiSilently(false);
-    emit syntaxIssuesChanged();
+    backend_->validateActiveDocument();
 }
 int QmlDocumentModel::chartPosition(int line, int column) const
 {
@@ -283,11 +289,7 @@ int QmlDocumentModel::chartPosition(int line, int column) const
 }
 void QmlDocumentModel::enableUnifiedDesigner(const QString& canonicalName)
 {
-    backend_->document_.designer = canonicalName;
-    for (int id : backend_->document_.difficultyIds()) {
-        if (SimaiDifficultyData* difficulty = backend_->document_.difficulty(id)) difficulty->designer = canonicalName;
-    }
-    backend_->unifiedDesignerEnabled_ = true;
+    backend_->enableUnifiedDocumentDesigner(canonicalName);
     markDocumentChanged();
     emit unifiedDesignerEnabledChanged();
     emit metadataChanged();
@@ -295,20 +297,18 @@ void QmlDocumentModel::enableUnifiedDesigner(const QString& canonicalName)
 }
 void QmlDocumentModel::disableUnifiedDesigner()
 {
-    if (!backend_->unifiedDesignerEnabled_) return;
-    backend_->unifiedDesignerEnabled_ = false;
-    markDocumentChanged();
+    if (!backend_->documentUnifiedDesignerEnabled()) return;
+    backend_->disableUnifiedDocumentDesigner();
     emit unifiedDesignerEnabledChanged();
 }
 
 void QmlDocumentModel::markDocumentChanged()
 {
-    backend_->documentDirty_ = true;
-    backend_->updateDirtyState();
     emit dirtyChanged();
     emit dirtyEditorKeysChanged();
     emit metadataSourceChanged();
     emit documentTitleChanged();
+    emit syntaxIssuesChanged();
 }
 
 void QmlDocumentModel::emitDocumentStateChanged()
@@ -323,4 +323,5 @@ void QmlDocumentModel::emitDocumentStateChanged()
     emit currentDifficultyFieldsChanged();
     emit dirtyChanged();
     emit dirtyEditorKeysChanged();
+    emit syntaxIssuesChanged();
 }

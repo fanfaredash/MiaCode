@@ -129,6 +129,22 @@ void MainWindow::DocumentSection::refreshUnifiedDesignerStateForLoadedDocument()
     applyUnifiedDesignerName(canonical);
 }
 
+void MainWindow::DocumentSection::enableUnifiedDocumentDesigner(const QString& canonicalName)
+{
+    state_.unifiedDesignerEnabled_ = true;
+    writeUnifiedDesignerPreference(state_.currentFilePath_, true);
+    applyUnifiedDesignerName(canonicalName);
+}
+
+void MainWindow::DocumentSection::disableUnifiedDocumentDesigner()
+{
+    if (!state_.unifiedDesignerEnabled_) {
+        return;
+    }
+    state_.unifiedDesignerEnabled_ = false;
+    writeUnifiedDesignerPreference(state_.currentFilePath_, false);
+}
+
 void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
 {
     MC_OP("MainWindow::DocumentSection::openPerDifficultyDesignerDialog");

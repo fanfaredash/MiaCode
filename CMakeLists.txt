@@ -157,6 +157,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/MainWindowShared.h
     src/app/mainwindow/MainWindowShared.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentBridge.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentDesignerFlow.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp

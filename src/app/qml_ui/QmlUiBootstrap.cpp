@@ -187,7 +187,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     }
 
     if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {
-        backend_->openFileAtPath(startupOpenTarget.trimmed(), true, true);
+        backend_->openStartupTarget(startupOpenTarget.trimmed());
     }
 
     if (showWelcomeDialogOnStartup_ && backend_ != nullptr) {

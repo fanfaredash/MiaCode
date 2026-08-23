@@ -441,6 +441,7 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
     owner_.stopQtPreviewPlayback(true);
     state_.document_.removeDifficulty(difficultyId);
     state_.validationCacheByDifficulty_.remove(difficultyId);
+    emit owner_.documentValidationChanged();
     state_.documentDirty_ = true;
 
     if (deletingActiveDifficulty) {

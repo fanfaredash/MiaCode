@@ -618,6 +618,7 @@ void MainWindow::ValidationSection::clearValidationCache()
 {
     state_.validationCacheByDifficulty_.clear();
     updateEditorValidationSummary();
+    emit owner_.documentValidationChanged();
 }
 
 void MainWindow::ValidationSection::applyDeferredAnalysisUiUpdates()
@@ -711,10 +712,51 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
     updateEditorValidationSummary();
 }
 
+MainWindow::DocumentValidationSnapshot
+MainWindow::ValidationSection::documentValidationSnapshot() const
+{
+    DocumentValidationSnapshot snapshot;
+    if (!owner_.hasActiveDifficulty()) {
+        return snapshot;
+    }
+
+    const int difficultyId = owner_.activeDifficultyId();
+    const auto it = state_.validationCacheByDifficulty_.constFind(difficultyId);
+    if (it == state_.validationCacheByDifficulty_.constEnd()) {
+        return snapshot;
+    }
+
+    const ValidationCacheEntry& entry = it.value();
+    if (entry.chartText != owner_.activeChartText()
+        || entry.validationLocale != uiValidationLocale()
+        || entry.timingMetadata != owner_.currentTimingMetadata()) {
+        return snapshot;
+    }
+
+    snapshot.available = true;
+    snapshot.ok = entry.ok;
+    snapshot.errorCount = entry.errorCount;
+    snapshot.warningCount = entry.warningCount;
+    snapshot.parsedNoteCount = entry.strictNoteCount;
+    snapshot.issues.reserve(entry.issues.size());
+    for (const ValidationCachedIssue& cachedIssue : entry.issues) {
+        SimaiNativeValidationIssue issue;
+        issue.line = cachedIssue.line;
+        issue.col = cachedIssue.col;
+        issue.endCol = cachedIssue.endCol;
+        issue.severity = cachedIssue.severity;
+        issue.rawMessage = cachedIssue.rawMessage;
+        issue.displayMessage = cachedIssue.displayMessage;
+        snapshot.issues.append(std::move(issue));
+    }
+    return snapshot;
+}
+
 bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssue)
 {
     if (!owner_.hasActiveDifficulty()) {
         refreshValidationPanelForActiveField();
+        emit owner_.documentValidationChanged();
         return false;
     }
 
@@ -758,6 +800,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
             cachedIssue.line = issue.line;
             cachedIssue.col = issue.col;
             cachedIssue.endCol = issue.endCol;
+            cachedIssue.severity = issue.severity;
             cachedIssue.rawMessage = issue.rawMessage;
             cachedIssue.displayMessage = issue.displayMessage;
             cachedIssue.issueTypeKey = validationIssueTypeKeyFromRawMessage(issue.rawMessage);
@@ -821,6 +864,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
                 .arg(entry.issues.size())
         );
     }
+    emit owner_.documentValidationChanged();
     return entry.ok;
 }
 
@@ -857,4 +901,14 @@ void MainWindow::refreshValidationPanelForActiveField()
 bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
 {
     return validationSection_->runValidateSimaiSilently(focusFirstIssue);
+}
+
+MainWindow::DocumentValidationSnapshot MainWindow::documentValidationSnapshot() const
+{
+    return validationSection_->documentValidationSnapshot();
+}
+
+bool MainWindow::validateActiveDocument()
+{
+    return validationSection_->runValidateSimaiSilently(false);
 }

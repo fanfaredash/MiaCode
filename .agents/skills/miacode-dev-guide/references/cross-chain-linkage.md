@@ -29,6 +29,12 @@ current but **code is source of truth** — verify and fix drift in the same cha
 8. `MainWindow::scheduleTimelineAnalysisRefresh` → analysis result build → deferred UI apply
 9. `PreviewRuntime::setNoteMarkers`
 
+Validation presentation shares that analysis result. Both explicit validation and background
+analysis populate `ValidationCacheEntry`, including the parser's explicit severity. The aligned
+active-difficulty cache is exposed as `DocumentValidationSnapshot`; `documentValidationChanged`
+updates UIv2's bottom list, navigation target and editor wave underline through one
+`QmlDocumentModel::syntaxIssues` projection. Cache clearing publishes the same signal.
+
 Implications:
 
 - A parser change is rarely parser-only; a new note property/timing rule usually touches timeline,

@@ -45,7 +45,6 @@ class QDialog;
 class QDockWidget;
 class QEvent;
 class PreviewStageMediaHost;
-class QmlDocumentModel;
 class QmlEditorPageHost;
 class QmlExportSession;
 class QmlUiBootstrap;
@@ -137,13 +136,9 @@ class MainWindow : public QMainWindow,
     // state for its badge row — same narrow-feature rationale as the
     // latency page above.
     friend class miacode::export_page::ExportLauncherPage;
-    // Pure-QML (v2) document boundary reaches private document/editor state
-    // while the visual chrome stays outside MainWindow.
-    friend class QmlDocumentModel;
     friend class QmlCommandService;
     friend class QmlEditorPageHost;
     friend class QmlExportSession;
-    friend class QmlUiBootstrap;
 
 public:
     // Phase 4c — non-owning accessor for the preview stage-media host
@@ -160,8 +155,32 @@ public:
 signals:
     void videoExportWorkerRunningChanged(bool running);
     void chartDropOverlayVisibleChanged(bool visible);
+    void documentValidationChanged();
 
 public:
+    enum class DocumentField {
+        Title,
+        Artist,
+        First,
+        Designer,
+        VideoPath,
+        ExtraText,
+    };
+
+    enum class DifficultyField {
+        Level,
+        Designer,
+    };
+
+    struct DocumentValidationSnapshot {
+        bool available = false;
+        bool ok = true;
+        int errorCount = 0;
+        int warningCount = 0;
+        int parsedNoteCount = 0;
+        QVector<SimaiNativeValidationIssue> issues;
+    };
+
     struct CliVideoExportRequest {
         QString chartPathOrDirectory;
         QString difficulty = QStringLiteral("MAS");
@@ -200,6 +219,28 @@ public:
         QString* details = nullptr
     );
     bool openStartupTarget(const QString& path);
+    QString documentField(DocumentField field) const;
+    QString difficultyField(int difficultyId, DifficultyField field) const;
+    QVector<int> documentDifficultyIds() const;
+    QString documentSourceText() const;
+    QString activeDocumentChartText() const;
+    QString documentFilePath() const;
+    int documentActiveDifficultyId() const;
+    bool documentUnifiedDesignerEnabled() const;
+    bool updateDocumentField(DocumentField field, const QString& value);
+    bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
+    bool updateActiveChartText(const QString& value);
+    bool replaceDocumentSourceText(const QString& value);
+    bool saveDocument();
+    bool saveDocumentAs(const QString& path);
+    bool discardDocumentChanges();
+    bool selectDocumentDifficulty(int difficultyId);
+    bool addDocumentDifficulty(int difficultyId);
+    bool removeDocumentDifficulty(int difficultyId);
+    void enableUnifiedDocumentDesigner(const QString& canonicalName);
+    void disableUnifiedDocumentDesigner();
+    DocumentValidationSnapshot documentValidationSnapshot() const;
+    bool validateActiveDocument();
     void setQuickShellRootWindow(QWindow* window);
     void cancelChartAudioDrop();
     void handleAudioDrop(const QStringList& audioPaths);
@@ -586,6 +627,7 @@ private:
         int line = 1;
         int col = 1;
         int endCol = 1;
+        SimaiNativeValidationSeverity severity = SimaiNativeValidationSeverity::Error;
         QString rawMessage;
         QString displayMessage;
         QString issueTypeKey;
