@@ -8,6 +8,7 @@
 #include "mainwindow/MainWindow.h"
 #include "QuickShellController.h"
 #include "UiNativeWindowTheme.h"
+#include "ui/ChartDropOverlay.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
@@ -18,6 +19,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QTextStream>
 #include <QTimer>
@@ -59,7 +61,7 @@ QmlUiBootstrap::QmlUiBootstrap(const QIcon& appIcon, QObject* parent)
 
 QmlUiBootstrap::~QmlUiBootstrap()
 {
-    rootWindow_ = nullptr;
+    releaseRootWindowResources();
     engine_.reset();
     windowChrome_.reset();
     applicationContext_.reset();
@@ -147,6 +149,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         appendQmlUiRuntimeLog(QStringLiteral("load_failed"));
         QTextStream(stderr) << "[QmlUi QML] no root object created for MiaCode.UI/Main\n";
         QTextStream(stderr).flush();
+        releaseRootWindowResources();
         engine_.reset();
         applicationContext_.reset();
         controller_.reset();
@@ -157,6 +160,64 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst());
         window != nullptr) {
         rootWindow_ = window;
+        // Keep UIv2 on the same drag/drop ownership chain as QuickShell: the
+        // hidden MainWindow owns filtering, supported-audio selection, and the
+        // deferred handleAudioDrop() call. Register before creating the native
+        // overlay so dialog transient-parent selection has a live root.
+        if (!rootLifecycle_.registerRoot()) {
+            releaseRootWindowResources();
+            return false;
+        }
+        backend_->setQuickShellRootWindow(window);
+        if (QQuickItem* rootItem = window->contentItem(); rootItem != nullptr) {
+            rootItem->setFlag(QQuickItem::ItemAcceptsDrops, true);
+        }
+        window->installEventFilter(backend_.get());
+        if (!rootLifecycle_.installRootEventFilter()) {
+            releaseRootWindowResources();
+            return false;
+        }
+        chartDropOverlay_ = std::make_unique<ChartDropOverlay>();
+        chartDropOverlay_->installEventFilter(backend_.get());
+        if (!rootLifecycle_.createChartDropOverlay()) {
+            releaseRootWindowResources();
+            return false;
+        }
+        chartDropOverlayMonitorTimer_ = std::make_unique<QTimer>();
+        chartDropOverlayMonitorTimer_->setInterval(16);
+        chartDropOverlayMonitorTimer_->setTimerType(Qt::PreciseTimer);
+        QObject::connect(chartDropOverlayMonitorTimer_.get(), &QTimer::timeout, this, [this]() {
+            syncChartDropOverlay();
+        });
+        QObject::connect(
+            backend_.get(),
+            &MainWindow::chartDropOverlayVisibleChanged,
+            this,
+            [this](bool visible) {
+                rootLifecycle_.setChartDropOverlayVisible(visible);
+                if (chartDropOverlay_ == nullptr) {
+                    if (chartDropOverlayMonitorTimer_ != nullptr) {
+                        chartDropOverlayMonitorTimer_->stop();
+                    }
+                    return;
+                }
+                if (!rootLifecycle_.shouldMonitorChartDropOverlay()) {
+                    chartDropOverlay_->hideOverlay();
+                    if (chartDropOverlayMonitorTimer_ != nullptr) {
+                        chartDropOverlayMonitorTimer_->stop();
+                    }
+                    return;
+                }
+                syncChartDropOverlay();
+                chartDropOverlayMonitorTimer_->start();
+            });
+        QObject::connect(window, &QObject::destroyed, this, [this]() {
+            // QObject destruction can arrive outside the accepted-close path;
+            // never touch the dying QQuickWindow while releasing its overlay.
+            rootWindow_ = nullptr;
+            releaseRootWindowResources();
+        });
+        backend_->shellSetRootWindowFrameGeometry(window->frameGeometry());
         if (!appIcon_.isNull()) {
             window->setIcon(appIcon_);
         }
@@ -174,6 +235,10 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         }
 #endif
         UiNativeWindowTheme::applyToWindow(window);
+        if (!rootLifecycle_.canShowRoot()) {
+            releaseRootWindowResources();
+            return false;
+        }
         window->show();
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         if (platform != nullptr && platform->attachChromeAfterShow()) {
@@ -221,6 +286,7 @@ void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
         rootWindow_->hide();
     }
     if (backend_ != nullptr) {
+        backend_->cancelChartAudioDrop();
         backend_->preparePreviewForShutdown();
     }
 
@@ -237,7 +303,7 @@ void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& so
     acceptedRootWindowDestroyStarted_ = true;
     appendQmlUiRuntimeLog(QStringLiteral("shutdown_destroy"), source);
 
-    rootWindow_ = nullptr;
+    releaseRootWindowResources();
     engine_.reset();
     windowChrome_.reset();
     applicationContext_.reset();
@@ -247,4 +313,46 @@ void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& so
     if (qApp != nullptr) {
         qApp->quit();
     }
+}
+
+void QmlUiBootstrap::releaseRootWindowResources()
+{
+    if (!rootLifecycle_.beginRelease()) {
+        return;
+    }
+    if (chartDropOverlayMonitorTimer_ != nullptr) {
+        chartDropOverlayMonitorTimer_->stop();
+    }
+    if (backend_ != nullptr) {
+        backend_->cancelChartAudioDrop();
+    }
+    if (!rootWindow_.isNull() && backend_ != nullptr) {
+        rootWindow_->removeEventFilter(backend_.get());
+    }
+    if (chartDropOverlay_ != nullptr) {
+        if (backend_ != nullptr) {
+            chartDropOverlay_->removeEventFilter(backend_.get());
+        }
+        chartDropOverlay_->clearTransientParent();
+    }
+    if (backend_ != nullptr) {
+        backend_->setQuickShellRootWindow(nullptr);
+    }
+    chartDropOverlayMonitorTimer_.reset();
+    chartDropOverlay_.reset();
+    rootWindow_ = nullptr;
+}
+
+void QmlUiBootstrap::syncChartDropOverlay()
+{
+    if (chartDropOverlay_ == nullptr || rootWindow_.isNull()) {
+        return;
+    }
+    if (backend_ != nullptr) {
+        backend_->shellSetRootWindowFrameGeometry(rootWindow_->frameGeometry());
+    }
+    if (!rootLifecycle_.shouldMonitorChartDropOverlay()) {
+        return;
+    }
+    chartDropOverlay_->showForWindow(rootWindow_);
 }

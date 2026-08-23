@@ -770,6 +770,7 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlUiWindowChrome.h
         src/app/qml_ui/QmlUiBootstrap.cpp
         src/app/qml_ui/QmlUiBootstrap.h
+        src/app/qml_ui/QmlUiRootLifecycle.h
     QML_FILES
         ${MIACODE_UI_QML_FILES}
     RESOURCES
@@ -1513,6 +1514,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src
     )
+
+    miacode_add_dev_tool(qml_ui_bootstrap_lifecycle_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlUiBootstrapLifecycleSpec.cpp
+            src/app/qml_ui/QmlUiRootLifecycle.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(qml_ui_bootstrap_lifecycle_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(plain_code_editor_spec TEST
         SOURCES

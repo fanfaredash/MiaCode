@@ -9,6 +9,7 @@ public:
     ChartDropOverlay();
     void showForWindow(QWindow* target);
     void hideOverlay();
+    void clearTransientParent();
 
 protected:
     void paintEvent(QPaintEvent* event) override;

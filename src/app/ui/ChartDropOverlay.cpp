@@ -83,6 +83,14 @@ void ChartDropOverlay::hideOverlay()
     hide();
 }
 
+void ChartDropOverlay::clearTransientParent()
+{
+    hideOverlay();
+    if (QWindow* overlayWindow = windowHandle(); overlayWindow != nullptr) {
+        overlayWindow->setTransientParent(nullptr);
+    }
+}
+
 void ChartDropOverlay::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);

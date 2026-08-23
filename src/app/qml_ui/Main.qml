@@ -13,10 +13,9 @@ ApplicationWindow {
     height: 720
     minimumWidth: 620
     minimumHeight: 480
-    // Initial visibility / flags come from applicationContext.platform.
-    // Windows: bootstrap hides, attaches chrome, then show().
-    // macOS: expand client area so WindowTitleBar draws under traffic lights.
-    visible: !window.platform.hideBeforeChromeAttach
+    // C++ explicitly shows this only after MainWindow has registered the root
+    // and installed the shared chart-audio drop route.
+    visible: false
     flags: {
         let value = Qt.Window
         if (window.platform.captionButtons) {
