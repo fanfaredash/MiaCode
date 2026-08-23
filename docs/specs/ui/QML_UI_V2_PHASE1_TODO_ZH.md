@@ -88,6 +88,37 @@
 | QML 诊断列表、时间轴与预览刷新 | 文档投影与 `timeline_model_spec` 通过；源码审阅确认 timing 变更刷新 waveform/metadata 并 schedule timeline | 未执行 GUI/预览观察，未验证实际画面或播放 |
 | Windows/macOS 视觉、音频、拖放 | 不适用 | 未执行；不得由本次 macOS 自动构建推断通过 |
 
+### 二阶段编辑器与联动收口（自动验证，2026-08-24）
+
+- [x] 编辑输入的纯策略、QML controller 与 widget adapter 共用同一套半角、括号、hold 和补全事务；
+      QML 路径将 IME commit、粘贴、选择区替换、Replace All、书签操作和 undo/redo 记入 controller
+      事务历史。`simai_text_edit_policy_spec`、`plain_code_editor_spec`、
+      `simai_completion_catalog_spec` 与 `qml_editor_controller_spec` 覆盖该边界。
+- [x] `SourceEditor.qml` 的 completion popup 保持无焦点，键盘仍由编辑器路由；查找替换、书签的
+      创建/删除/重命名、诊断跳转和 caret→timeline 发布均经过窄 controller/document 接口。
+- [x] `QmlTouchPadAuthoringBridge` 仅在 editor 有焦点、非 IME composition、难度一致且 caret revision
+      与文档 revision 一致时接受 Ctrl+touch 创作；`touch_pad_authoring_state_spec` 覆盖有效与拒绝路径。
+- [x] 静态可访问性检查：窗口按钮、书签行号 gutter 与书签重命名输入都提供 `Accessible` 元数据；
+      gutter 可经 Tab 聚焦，Enter/Ctrl+Shift+B/Delete/F2 和右键菜单均有对应操作。completion popup
+      不获取焦点，Escape 关闭其会话，避免诊断或候选项抢占编辑器焦点。
+- [x] Release 针对性 CTest（Qt 6.10.2，2026-08-24）：
+      `ctest --test-dir build -C Release -R 'qml_.*_spec|simai_text_edit_policy_spec|plain_code_editor_spec|simai_completion_catalog_spec|timeline_model_spec|timeline_marker_offset_spec|muri_spec|touch_pad_authoring_state_spec' --output-on-failure`
+      为 11/11 通过。
+
+### 二阶段桌面手工回归矩阵（待具备原生 GUI 会话后执行）
+
+本机以 `QT_QPA_PLATFORM=offscreen` 启动 QML 桌面壳会触发既有 macOS 原生主题/平台插件崩溃，不能把
+offscreen 自动化结果当成桌面视觉或输入验证。以下项目因此保持未执行，且不由构建或 CTest 推断为通过：
+
+| 流程 | 自动/静态证据 | 原生 GUI 状态 |
+|---|---|---|
+| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入 | 未执行 |
+| 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | 未执行实际 timeline/preview 观察 |
+| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec` | 未执行 |
+| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；静态焦点/Accessible 审阅 | 未执行真实 IME 与键盘焦点顺序 |
+| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | 未执行 |
+| root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 未执行 |
+
 ### 上游同步
 
 - [x] 合入 `origin/dev` @ `0e85b0b2`。
@@ -116,28 +147,29 @@
 
 ### P2 — 文本编辑器逻辑移植
 
-- [ ] 文本编辑器主要逻辑从 v1 移植到 v2。
-  - [ ] 共享编辑规则：保留 v2 QML `TextArea` 与 `QTextDocument`，从
+- [x] 文本编辑器主要逻辑从 v1 移植到 v2。
+  - [x] 共享编辑规则：保留 v2 QML `TextArea` 与 `QTextDocument`，从
         `PlainCodeEditor.Input.cpp` / `PlainCodeEditor.BracketCompletion.cpp` 抽取控件无关的
         文本编辑事务、半角转换、括号处理与补全状态，供 v1 / v2 共用。
-  - [ ] v2 编辑控制器：连接 `TextArea` / `QQuickTextDocument`，统一管理光标、选择区、
+  - [x] v2 编辑控制器：连接 `TextArea` / `QQuickTextDocument`，统一管理光标、选择区、
         编辑事务、覆盖模式、补全状态和现有编辑偏好，通过 `QmlApplicationContext`
         向 `SourceEditor.qml` 提供窄接口。
-  - [ ] 基础输入：移植半角字符、IME commit、粘贴、Enter / Ctrl+Enter、Insert 覆盖模式、
+  - [x] 基础输入：移植半角字符、IME commit、粘贴、Enter / Ctrl+Enter、Insert 覆盖模式、
         成对括号、右括号越过、空括号成对删除、已有 `[` 进入和 `h` hold 补全入口。
-  - [ ] 智能补全：复用 `SimaiCompletionCatalog`，用 QML 候选列表承接 BPM、细分与时值候选，
+  - [x] 智能补全：复用 `SimaiCompletionCatalog`，用 QML 候选列表承接 BPM、细分与时值候选，
         支持实时过滤、光标锚定、上下选择、Tab / Enter 接受、Esc 关闭和鼠标选择。
-  - [ ] 编辑命令：接入选择区替换记录、撤销 / 重做路由、谱面变换快捷键、上下文菜单、
+  - [x] 编辑命令：接入选择区替换记录、撤销 / 重做路由、谱面变换快捷键、上下文菜单、
         选择区和光标行列同步，通过 `QmlCommandService` 与窄公开 API 连接现有后端。
-  - [ ] 编辑辅助：`LineNumberGutter.qml` 接入书签显示、跳转和右键操作；补齐查找界面、
+  - [x] 编辑辅助：`LineNumberGutter.qml` 接入书签显示、跳转和右键操作；补齐查找界面、
         预览跟随视觉光标、诊断跳转、错误波浪线和底栏统计。
-  - [ ] 高亮规则：共享 v1 `BracketScopeHighlighter` 与 v2 `SimaiSyntaxHighlighter` 的词法规则，
+  - [x] 高亮规则：共享 v1 `BracketScopeHighlighter` 与 v2 `SimaiSyntaxHighlighter` 的词法规则，
         同步相关 CMake 源文件和仓库指南。
 
 ### P3 — 页面接线与产品决策
 
 - [ ] `QmlExportSession` / `ExportVideoPage.qml` 接入片头音文件名和 `introSoundVolume`，并写入导出 snapshot。
-- [ ] 将 v2 根窗口接入 ChartDrop；上游 `setQuickShellRootWindow` 和拖放覆盖层代码已经存在。
+- [x] 将 v2 根窗口接入 ChartDrop；`QmlUiBootstrap` 注册 root window、安装拖放事件过滤器并创建/同步
+      `ChartDropOverlay`，释放或取消时清理 overlay 与 root 绑定。
 - [ ] 手工确认 v2 工具箱的批量上传入口能够打开 `net.batchUpload.open`。
 - [ ] 梳理禁用菜单和按钮：已有后端的接入现有操作，暂缺能力的从界面移除。
 - [ ] 确定全屏预览采用工作区覆盖层或 v1 OS 全屏，并记录最终行为。
@@ -165,7 +197,7 @@
 | 契约根 | `src/app/qml_ui/QmlApplicationContext.*` |
 | 文档桥 | `src/app/qml_ui/QmlDocumentModel.*` |
 | 预览桥 | `src/app/qml_ui/QmlPreviewModel.*` |
-| 编辑器 | `src/app/qml_ui/editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
+| 编辑器 | `src/app/qml_ui/QmlEditorController.*`、`QmlEditorInputBridge.*`、`editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
 | 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`ExportVideoPage.qml` |
 | Latency 页宿主 | `src/app/qml_ui/QmlEditorPageHost.*` |
 | 主壳 | `src/app/qml_ui/Main.qml`、`layout/MainView.qml` |

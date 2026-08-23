@@ -62,9 +62,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   NativeSurfaceHost). Export uses `QmlExportSession` + `ExportVideoPage.qml`;
   `QmlEditorPageHost` embeds Latency only. `QmlDocumentModel` reaches document state through
   the public operations in `sections/document/MainWindow.DocumentBridge.cpp`; validation reads
-  `DocumentValidationSnapshot` from the shared cache. Preview statistics use structured entries
-  from `QmlPreviewModel` and skin-aware note images from `QmlNoteImageProvider`, backed by
-  `TimelineNoteAssets`. Windows caption: `QmlUiWindowChrome`.
+  `DocumentValidationSnapshot` from the shared cache. `QmlEditorController` is the narrow QML
+  text-transaction/completion/undo owner exposed by `QmlApplicationContext`; `SourceEditor.qml`
+  forwards separate key, IME-commit and paste paths through `QmlEditorInputBridge`, while
+  `CompletionPopup.qml` remains unfocused so editor keyboard routing is retained. Preview
+  statistics use structured entries from `QmlPreviewModel` and skin-aware note images from
+  `QmlNoteImageProvider`, backed by `TimelineNoteAssets`. Windows caption: `QmlUiWindowChrome`.
   Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QuickShell (v1, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
   (`QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`,
@@ -352,7 +355,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Slow refresh workers: `src/timeline/TimelineSlowRefresh.{h,cpp}`.
 - Timing getters: same `PreviewTimelineFlow.cpp` (`currentTimingMetadata`, `parsedFirstSeconds`,
   `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`).
-- **Ctrl touch-area authoring (2026-07-20):** `WindowSection` owns the Ctrl-hold/editor-context
+- **Ctrl touch-area authoring (2026-07-20, QML gate tightened 2026-08-24):** `WindowSection` owns the Ctrl-hold/editor-context
   gate → `PreviewSection::applyEffectivePreviewOutlineVariantToCanvas` enables the runtime →
   `PreviewQuickSceneRoot` exclusively owns pointer press/move/release/cancel → `PreviewRuntime`
   applies `TouchPadAuthoringState` hover/pressed styles and emits the committed pad → the central
@@ -366,7 +369,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   exact pad already present in the token removes only its first occurrence together with the
   adjacent separator (while preserving leading timing controls and trailing whitespace). Press
   must finish on the same pad; moving away, ungrab, focus/app deactivation, page/context
-  invalidation, or Ctrl release cancels. Gesture/style and bookmark-marker source contracts are in
+  invalidation, or Ctrl release cancels. In UIv2, `QmlDocumentModel` snapshots active difficulty,
+  caret difficulty/revision/selection, focus and IME composition through
+  `setQmlEditorInteraction`; `QmlTouchPadAuthoringBridge` accepts only focused, non-composing,
+  same-difficulty and same-revision snapshots. Once a QML handler is registered,
+  `WindowSection::touchPadAuthoringEditableContext` must not fall back to the hidden legacy
+  `QTextEdit`. Gesture/style and bookmark-marker source contracts are in
+  `TouchPadAuthoringStateSpec`; QML gate coverage is in `QmlEditorControllerSpec` and
   `TouchPadAuthoringStateSpec`; token/undo coverage is in `PlainCodeEditorSpec`.
 
 ## 6. Preview video, media, render state

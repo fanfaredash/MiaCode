@@ -44,6 +44,16 @@ a two-phase transaction: preflight every candidate difficulty with strict valida
 old document/editor text on any error, then load and refresh the timeline only after acceptance.
 Cache clearing publishes the same signal.
 
+UIv2 text input is an explicit side chain, not a direct `TextArea.text` contract:
+`SourceEditor.qml` sends physical keys, committed IME text and paste payloads separately through
+`QmlEditorInputBridge` to `QmlEditorController`; the controller returns one edit transaction,
+completion state and controller-owned undo/redo history. The editor applies that transaction,
+then publishes its current difficulty, document revision, anchor/position, focus and IME-composing
+state through `QmlDocumentModel::setQmlEditorInteraction`. Ctrl+touch authoring must consume only
+that snapshot: `QmlTouchPadAuthoringBridge` rejects stale revisions, a different difficulty,
+unfocused editor and active composition. `MainWindow` uses the QML handler exclusively while it is
+registered; it must not silently fall back to the legacy hidden editor.
+
 Implications:
 
 - A parser change is rarely parser-only; a new note property/timing rule usually touches timeline,
