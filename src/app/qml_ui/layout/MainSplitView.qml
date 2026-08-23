@@ -17,6 +17,7 @@ Item {
     required property var commands
     required property var shellController
     required property var pages
+    required property var editorController
     property bool compact: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
@@ -133,6 +134,7 @@ Item {
                     id: editorPane
                     anchors.fill: parent
                     visible: !root.pages.overlayActive && !root.exportVideoActive
+                    editorController: root.editorController
                     viewState: root.viewState
                     documentSession: root.documentSession
                     commands: root.commands

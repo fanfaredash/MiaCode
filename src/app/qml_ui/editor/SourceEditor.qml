@@ -7,6 +7,7 @@ Rectangle {
 
     required property var viewState
     required property var documentSession
+    required property var editorController
     property bool metadataMode: false
     onMetadataModeChanged: syncTextFromController()
 
@@ -49,8 +50,8 @@ Rectangle {
     color: Theme.colors.background.editor
     clip: true
 
-    readonly property bool canUndo: sourceArea.canUndo
-    readonly property bool canRedo: sourceArea.canRedo
+    readonly property bool canUndo: editorController.canUndo
+    readonly property bool canRedo: editorController.canRedo
 
     function undo() {
         sourceArea.undo()
@@ -99,6 +100,34 @@ Rectangle {
         const lines = before.split("\n")
         root.viewState.editorCursorLine = lines.length
         root.viewState.editorCursorColumn = lines[lines.length - 1].length + 1
+    }
+
+    function applyEditorTransaction(transaction) {
+        if (!transaction.consumed)
+            return false
+        if (transaction.hasEdit) {
+            sourceArea.syncingFromController = true
+            sourceArea.text = sourceArea.text.slice(0, transaction.replacementStart)
+                    + transaction.replacementText
+                    + sourceArea.text.slice(transaction.replacementEnd)
+            sourceArea.select(transaction.anchor, transaction.position)
+            sourceArea.syncingFromController = false
+            if (root.metadataMode)
+                root.documentSession.metadataSourceText = sourceArea.text
+            else
+                root.documentSession.chartText = sourceArea.text
+        }
+        return true
+    }
+
+    function applyImeCommittedText(committedText) {
+        return applyEditorTransaction(editorController.processImeCommitForQml(
+            sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd, committedText))
+    }
+
+    function applyPastePayload(pastedText) {
+        return applyEditorTransaction(editorController.processPasteForQml(
+            sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd, pastedText))
     }
 
     LineNumberGutter {
@@ -183,9 +212,24 @@ Rectangle {
                 editorScroll.refreshLineTops()
             }
             onCursorPositionChanged: root.updateCursorPosition()
+            onCanUndoChanged: root.editorController.setUndoAvailability(canUndo, canRedo)
+            onCanRedoChanged: root.editorController.setUndoAvailability(canUndo, canRedo)
+            Keys.onPressed: function(event) {
+                if (event.matches(StandardKey.Paste)) {
+                    if (root.applyPastePayload(root.editorController.clipboardText()))
+                        event.accepted = true
+                    return
+                }
+                const transaction = root.editorController.processKeyForQml(
+                    sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd,
+                    event.text, event.key, event.modifiers)
+                if (root.applyEditorTransaction(transaction))
+                    event.accepted = true
+            }
             Component.onCompleted: {
                 root.syncTextFromController()
                 readyForUserEdits = true
+                root.editorController.setUndoAvailability(canUndo, canRedo)
                 root.updateCursorPosition()
                 editorScroll.refreshLineTops()
             }
@@ -211,6 +255,23 @@ Rectangle {
             cursorDelegate: Rectangle {
                 width: 1
                 color: Theme.colors.text.editor
+            }
+
+            CompletionPopup {
+                editor: sourceArea
+                controller: root.editorController
+            }
+
+            QmlEditorInputBridge {
+                target: sourceArea
+                onImeCommitted: function(text) {
+                    root.applyImeCommittedText(text)
+                }
+            }
+
+            function acceptCompletionFromPopup() {
+                root.applyEditorTransaction(root.editorController.acceptCompletionForQml(
+                    sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd))
             }
         }
     }

@@ -1,6 +1,7 @@
 #include "QmlUiSettings.h"
 
 #include "mainwindow/MainWindowShared.h"
+#include "ui/UiText.h"
 
 #include <QGuiApplication>
 #include <QtGlobal>
@@ -30,6 +31,11 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
     previewVisible_ = settings_.value(kPreviewVisible, true).toBool();
     previewWidthRatio_ = qBound(0.2, settings_.value(kPreviewWidthRatio, 0.5).toDouble(), 0.5);
     fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
+    const QJsonObject editorUi = UiText::loadPreferencesObject().value(QStringLiteral("ui")).toObject();
+    editorHalfWidthInputEnabled_ = editorUi.value(QStringLiteral("editor_half_width_input")).toBool(true);
+    editorOverwriteModeEnabled_ = editorUi.value(QStringLiteral("editor_overwrite_mode")).toBool(false);
+    editorAutoCompletionEnabled_ = editorUi.value(QStringLiteral("editor_auto_completion")).toBool(
+        editorUi.value(QStringLiteral("editor_auto_close_brackets")).toBool(true));
 }
 
 bool QmlUiSettings::sidebarVisible() const { return sidebarVisible_; }
@@ -40,6 +46,9 @@ double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
 QString QmlUiSettings::uiFontFamily() const { return uiFontFamily_; }
 QFont QmlUiSettings::codeFont() const { return codeFont_; }
 int QmlUiSettings::fontSize() const { return fontSize_; }
+bool QmlUiSettings::editorHalfWidthInputEnabled() const { return editorHalfWidthInputEnabled_; }
+bool QmlUiSettings::editorOverwriteModeEnabled() const { return editorOverwriteModeEnabled_; }
+bool QmlUiSettings::editorAutoCompletionEnabled() const { return editorAutoCompletionEnabled_; }
 
 void QmlUiSettings::setSidebarVisible(bool value)
 {

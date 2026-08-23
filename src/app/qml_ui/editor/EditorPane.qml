@@ -9,6 +9,7 @@ Rectangle {
     required property var viewState
     required property var documentSession
     required property var commands
+    required property var editorController
 
     readonly property bool metadataSourceActive: viewState.metadataEditorActive
         && viewState.metadataEditorMode === 1
@@ -205,6 +206,7 @@ Rectangle {
         metadataMode: root.metadataSourceActive
         viewState: root.viewState
         documentSession: root.documentSession
+        editorController: root.editorController
     }
 
     Flickable {

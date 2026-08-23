@@ -19,6 +19,9 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily CONSTANT)
     Q_PROPERTY(QFont codeFont READ codeFont CONSTANT)
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY fontSizeChanged)
+    Q_PROPERTY(bool editorHalfWidthInputEnabled READ editorHalfWidthInputEnabled CONSTANT)
+    Q_PROPERTY(bool editorOverwriteModeEnabled READ editorOverwriteModeEnabled CONSTANT)
+    Q_PROPERTY(bool editorAutoCompletionEnabled READ editorAutoCompletionEnabled CONSTANT)
 
 public:
     explicit QmlUiSettings(QObject* parent = nullptr);
@@ -31,6 +34,9 @@ public:
     QString uiFontFamily() const;
     QFont codeFont() const;
     int fontSize() const;
+    bool editorHalfWidthInputEnabled() const;
+    bool editorOverwriteModeEnabled() const;
+    bool editorAutoCompletionEnabled() const;
 
     void setSidebarVisible(bool value);
     void setSidebarWidth(int value);
@@ -57,4 +63,7 @@ private:
     QString uiFontFamily_;
     QFont codeFont_;
     int fontSize_ = 13;
+    bool editorHalfWidthInputEnabled_ = true;
+    bool editorOverwriteModeEnabled_ = false;
+    bool editorAutoCompletionEnabled_ = true;
 };
