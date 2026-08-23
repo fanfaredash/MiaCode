@@ -125,9 +125,8 @@ void MainWindow::TimelineSection::enterExportIntroRegion(double positionSeconds)
     if (state_.qtPreviewPlaying_) {
         stopQtPreviewPlayback(true);  // freeze the chart behind the overlay
     }
-    miacode::mainwindow::shared::writePreviewPauseSecond(
-        state_.qtPreviewPauseSecond_, 0.0, state_.qtPreviewPlaying_, "enter_export_intro_region");
     if (!state_.exportIntroRegionActive_) {
+        requestPausedPreviewSeek(0.0, false, true);
         setupExportIntroOverlayData();
     }
     state_.exportIntroRegionActive_ = true;

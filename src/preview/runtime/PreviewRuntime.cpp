@@ -1,4 +1,5 @@
 #include "preview/runtime/PreviewRuntime.h"
+#include "core/scene/PreviewFireworkWarmupPolicy.h"
 #include "core/scene/TouchPadAuthoringState.h"
 
 #include "common/DebugLog.h"
@@ -264,6 +265,7 @@ void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)
         fireworkWarmupArmed_ = false;
         fireworkWarmupDone_ = false;
         fireworkWarmupArmPresentCount_ = -1;
+        fireworkWarmupElapsed_.invalidate();
         armFireworkPsoWarmupIfReady();
         update();
     }
@@ -991,6 +993,16 @@ void PreviewRuntime::reset()
     frameState_.playheadSeconds = 0.0;
     frameState_.hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
     frameState_.sceneContentRevision = 0;
+    // Restore the invariant "armed-but-not-done ⇒ exactly one synthetic in
+    // noteMarkers, centred on fireworkWarmupCenterSecond_". The clear above drops
+    // it, and refreshFireworkWarmupForPlayheadChange() no longer re-adds it on
+    // every playhead change — it only fires once the playhead has consumed its
+    // slack, so without this the warm-up could sit un-drawable (and therefore
+    // never confirm) until the playhead happened to travel far enough. Mirrors
+    // the same guard in setNoteMarkers().
+    if (fireworkWarmupArmed_ && !fireworkWarmupDone_) {
+        appendFireworkWarmupMarker();
+    }
     clearIntroOverlay(false);
     frameState_.media = miacode::preview::scene::PreviewMediaFrameState();
     frameState_.media.presentationMode = presentationMode;
@@ -1880,12 +1892,13 @@ void PreviewRuntime::handlePresentedFrame()
     frameState_.presentedFrameCount = presentedFrameCountTotal_;
     updatePresentedFrameStats();
     pendingPresentedStatsRefresh_ = false;
-    // Firework warm-up completion. PRIMARY criterion: the firework layer has
-    // actually emitted a node since the warm-up was armed (its draw signal
+    // Firework warm-up completion. PRIMARY criterion: a PRESENTED frame has
+    // contained a firework node since the warm-up was armed (its draw signal
     // advanced past the arm-time snapshot). That draw is what binds the
     // material pipeline (PSO compiled on first use) and samples the colour-ball
-    // texture (uploaded on first use), so it is the only reliable proof the
-    // warm-up did its job — counting bare presents was the historical bug
+    // texture (uploaded on first use), and the swap is what proves the work
+    // completed rather than merely being recorded (audit §6D-2) — counting bare
+    // presents was the historical bug
     // (presents accrue even on frames where the synthetic was outside its
     // lifecycle window and never drawn). The present-count delta is a BACKSTOP
     // only: if the firework never renders (layer disabled / non-rendering
@@ -1899,6 +1912,10 @@ void PreviewRuntime::handlePresentedFrame()
         const bool warmupTimedOut =
             (presentedFrameCountTotal_ - fireworkWarmupArmPresentCount_) >= kFireworkWarmupMaxPresents;
         if (fireworkDrawn || warmupTimedOut) {
+            const qint64 warmupElapsedMs = fireworkWarmupElapsed_.isValid()
+                ? fireworkWarmupElapsed_.elapsed() : -1;
+            const qint64 warmupPresents =
+                presentedFrameCountTotal_ - fireworkWarmupArmPresentCount_;
             fireworkWarmupDone_ = true;
             removeFireworkWarmupMarkers();
             frameState_.sceneContentRevision += 1;
@@ -1906,9 +1923,12 @@ void PreviewRuntime::handlePresentedFrame()
             miacode::debug_log::appendLine(
                 miacode::debug_log::Channel::Runtime,
                 QStringLiteral("preview/runtime"),
-                QStringLiteral("action=firework_pso_warmup_done reason=%1 present_count=%2")
+                QStringLiteral("action=firework_pso_warmup_done reason=%1 present_count=%2 "
+                               "elapsed_ms=%3 presents_since_arm=%4")
                     .arg(fireworkDrawn ? QStringLiteral("drawn") : QStringLiteral("timeout"))
-                    .arg(presentedFrameCountTotal_));
+                    .arg(presentedFrameCountTotal_)
+                    .arg(warmupElapsedMs)
+                    .arg(warmupPresents));
         }
     }
     publishFrameStateSnapshot();
@@ -1943,6 +1963,7 @@ void PreviewRuntime::armFireworkPsoWarmupIfReady()
     }
     fireworkWarmupArmed_ = true;
     fireworkWarmupArmPresentCount_ = presentedFrameCountTotal_;
+    fireworkWarmupElapsed_.restart();
     // Snapshot the layer draw signal: completion needs it to advance past this,
     // i.e. a firework node emitted AFTER this arm (see handlePresentedFrame).
     fireworkWarmupArmDrawSignal_ = fireworkLayerDrawSignal_.load(std::memory_order_acquire);
@@ -1971,13 +1992,13 @@ void PreviewRuntime::appendFireworkWarmupMarker()
     TimelineNoteMarker synth;
     synth.type = QStringLiteral("touch");
     synth.isFirework = true;
-    synth.second = frameState_.playheadSeconds
-        - miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds
-        - 0.15;
+    synth.second = miacode::preview::scene::fireworkWarmupMarkerSecond(frameState_.playheadSeconds);
     synth.endSecond = -1.0;
     synth.touchPoint = QPointF(-1.0e6, -1.0e6);  // off-screen, non-zero
     synth.lane = 1;
     frameState_.noteMarkers.append(synth);
+    // Anchor for refreshFireworkWarmupForPlayheadChange()'s slack test.
+    fireworkWarmupCenterSecond_ = frameState_.playheadSeconds;
 }
 
 void PreviewRuntime::removeFireworkWarmupMarkers()
@@ -1996,14 +2017,14 @@ void PreviewRuntime::removeFireworkWarmupMarkers()
         markers.end());
 }
 
-void PreviewRuntime::notifyFireworkLayerProducedNode()
+void PreviewRuntime::notifyFireworkLayerPresentedNode()
 {
-    // Called on the QSG render thread (from PreviewQuickSceneRoot, after the
-    // firework layer returns a non-null node). A non-null node means the
-    // material pipeline was bound (PSO compiled on first use) and the
-    // colour-ball texture sampled (uploaded on first use) — exactly the work
-    // the warm-up exists to front-load. Bump the signal the GUI-thread
-    // completion check reads. Atomic-only: touch no other member from here.
+    // Called on the QSG render thread (from PreviewQuickSceneRoot's direct
+    // frameSwapped hook) once a SWAPPED frame contained a firework node. The node
+    // means the material pipeline was bound (PSO compiled on first use) and the
+    // colour-ball texture sampled (uploaded on first use); the swap means that work
+    // has actually completed rather than merely been recorded. Bump the signal the
+    // GUI-thread completion check reads. Atomic-only: touch no other member here.
     fireworkLayerDrawSignal_.fetch_add(1, std::memory_order_release);
 }
 
@@ -2018,6 +2039,26 @@ void PreviewRuntime::refreshFireworkWarmupForPlayheadChange()
     // cache rebuilds the window. No-op once warm-up is done, so this is free on
     // the playback hot path.
     if (!fireworkWarmupArmed_ || fireworkWarmupDone_) {
+        return;
+    }
+    // ...but only once the playhead has actually consumed its slack. This used to
+    // re-centre on EVERY playhead change, i.e. once per preview frame (60-180 Hz)
+    // for as long as the warm-up stayed armed — and it stays armed until a frame
+    // that actually draws the synthetic is presented, which on an idle paused
+    // preview does not happen until the user's first playback. Each re-centre
+    // rewrites the whole marker vector and bumps sceneContentRevision, which
+    // invalidates PreviewPreparedSceneCache and forces a full ten-layer rebuild
+    // (two stable_sorts per layer plus a cursor reset). That per-frame rebuild was
+    // the bulk of the "first playback after startup stutters" report, and it came
+    // back mid-session on every visible-window rebind (F11) because that re-arms.
+    //
+    // The slack test lives in core/scene/PreviewFireworkWarmupPolicy.h and is
+    // calibrated against the layer's real lifecycle window by
+    // preview_firework_warmup_policy_spec. Seeks / pre-roll jumps are orders of
+    // magnitude larger than the slack, so they still force a re-centre and the
+    // cross-chain-linkage contract holds.
+    if (!miacode::preview::scene::fireworkWarmupNeedsRecenter(
+            frameState_.playheadSeconds, fireworkWarmupCenterSecond_)) {
         return;
     }
     removeFireworkWarmupMarkers();

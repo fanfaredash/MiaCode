@@ -10,6 +10,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Promote new shared path rules here before duplicating them elsewhere
 - `src/common/PreviewGameplayConfig.h`
   - Owns: logical canvas size, lane-distance geometry, preview flow-speed normalization shared by Tap/Touch settings, tap lifecycle timing, slide pretrace timing, judge-effect durations, and the default value for the shared preview/export slide stacking toggle (`kPreviewSlideEarlierSecondAndTextOnTop`)
+  - Current tuning note: the firework judge-effect lifetime is `1.0 s`, including its visible spoke fade tail
   - Scope: preview and export timing assumptions
 - `src/common/PreviewSkinConfig.h`
   - Owns: shared tap-head scale plus hold-width, hold-cap-slice, and slide-track sizing ratios used to keep preview and timeline skin geometry aligned

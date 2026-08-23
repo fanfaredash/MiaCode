@@ -94,25 +94,9 @@ inline constexpr auto& kResolutionPresets = miacode::video_export::kVideoExportR
 // tools/video_export/HudFontSettings.cpp on 2026-06-10, shared with the main
 // window's 视频设置 dialog.)
 
-double snappedFlowSpeed(double flowSpeed)
-{
-    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
-    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
-    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    return qBound(
-        flowSpeedMin,
-        flowSpeedMin + qRound((flowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
-        flowSpeedMax
-    );
-}
-
-QString flowSpeedValueLabel(double flowSpeed)
-{
-    const double snapped = snappedFlowSpeed(flowSpeed);
-    const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
-    const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
-    return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
-}
+// snappedFlowSpeed() / flowSpeedValueLabel() moved to
+// VideoExportDialogInternal.h — the Return-key commit path in
+// VideoExportDialog.ExportFlow.cpp needs the same formatting.
 
 int secondToSliderValue(double second)
 {

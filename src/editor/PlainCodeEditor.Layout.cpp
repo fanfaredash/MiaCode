@@ -1,6 +1,7 @@
 #include "PlainCodeEditor.h"
 #include "BracketCompletionPopup.h"
 #include "SimaiCompletionCatalog.h"
+#include "common/AdoptedSurfaceDragAutoScroll.h"
 #include "common/DebugLog.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
@@ -44,11 +45,42 @@ constexpr int kLineNumberRightPadding = 10;
 constexpr int kLineNumberMinWidth = 40;
 
 constexpr qreal kEditorDocumentLeftInset = 14.0;
+
+class TopOverlayArea final : public QWidget {
+public:
+    explicit TopOverlayArea(QWidget* parent)
+        : QWidget(parent)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        setAutoFillBackground(false);
+        setAttribute(Qt::WA_TranslucentBackground, true);
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QPainter painter(this);
+        const QRect dirtyRect = event != nullptr ? event->rect() : rect();
+        painter.setClipRect(dirtyRect);
+        if (miacode::ui::paintAppBackgroundForWidget(this, painter)) {
+            const UiTheme::Colors& c = UiTheme::colors();
+            QColor editorSurface = c.inputBg;
+            editorSurface.setAlpha(
+                UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
+            painter.fillRect(dirtyRect, editorSurface);
+        } else {
+            painter.fillRect(dirtyRect, UiTheme::colors().inputBg);
+        }
+    }
+};
 }  // namespace
 
 PlainCodeEditor::PlainCodeEditor(QWidget* parent)
-    : QTextEdit(parent), lineNumberArea_(new LineNumberArea(this))
+    : QTextEdit(parent)
+    , lineNumberArea_(new LineNumberArea(this))
+    , topOverlayArea_(new TopOverlayArea(this))
 {
+    topOverlayArea_->hide();
     lineNumberArea_->setFont(font());
     connect(document(), &QTextDocument::blockCountChanged, this, &PlainCodeEditor::updateLineNumberAreaWidth);
     connect(this, &QTextEdit::textChanged, this, [this]() {
@@ -87,6 +119,11 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     setCursorWidth(kEditorCursorVisibleWidth);
     updateCursorVisibility();
     lastCurrentLineHighlightRect_ = currentLineHighlightRect();
+    // The line-number gutter is a viewport margin, so a leftward drag-select
+    // leaves the viewport and would hand the gesture to Qt's QCursor-driven
+    // autoscroll — which mis-targets on the adopted macOS surface. No-op
+    // elsewhere; see common/AdoptedSurfaceDragAutoScroll.h.
+    miacode::ui::installAdoptedSurfaceDragAutoScroll(this);
 }
 
 void PlainCodeEditor::setBlockSpacingPixels(int px)
@@ -110,6 +147,7 @@ void PlainCodeEditor::setTopOverlayInsetPixels(int px)
     topOverlayInsetPixels_ = normalized;
     updateLineNumberAreaWidth(0);
     updateLineNumberArea();
+    refreshLineNumberAreaLayout();
 }
 
 void PlainCodeEditor::refreshLineNumberAreaLayout()
@@ -153,6 +191,16 @@ void PlainCodeEditor::resizeEvent(QResizeEvent* event)
 
     const QRect cr = contentsRect();
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+    if (topOverlayArea_ != nullptr) {
+        const QRect viewportGeometry = viewport()->geometry();
+        topOverlayArea_->setGeometry(
+            viewportGeometry.left(),
+            cr.top(),
+            viewportGeometry.width(),
+            qMax(0, topOverlayInsetPixels_));
+        topOverlayArea_->setVisible(topOverlayInsetPixels_ > 0);
+        topOverlayArea_->update();
+    }
 }
 
 void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)

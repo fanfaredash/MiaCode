@@ -102,8 +102,11 @@ void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloa
         }
         if (owner_.previewSfxRuntime_ != nullptr) {
             const QtPreviewSfxRuntime::AssetSubmission reload =
-                owner_.previewSfxRuntime_->reloadAssetsForChart(
-                    owner_.currentFilePath_, owner_.previewAudioSettings_);
+                owner_.previewSfxRuntime_->reloadAssetsForChartWithWarmupPaths(
+                    owner_.currentFilePath_,
+                    owner_.lastTrackPath_,
+                    miacode::preview_sfx::resolveSfxDirectory(),
+                    owner_.previewAudioSettings_);
             owner_.previewSfxRuntimePrepared_ = false;
             owner_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
                 ? reload.identity.assetGeneration

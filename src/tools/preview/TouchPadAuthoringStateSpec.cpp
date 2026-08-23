@@ -82,7 +82,7 @@ int main(int argc, char** argv)
     const QString editorLayoutSource = readSource(QStringLiteral("src/editor/PlainCodeEditor.Layout.cpp"));
     const QString editorHeaderSource = readSource(QStringLiteral("src/editor/PlainCodeEditor.h"));
     if (!editorLayoutSource.contains(QStringLiteral("painter.fillRect(rowRect, markerColor)"))
-        || !editorLayoutSource.contains(QStringLiteral("isBookmarkLine || isDropLine ? c.accent"))
+        || !editorLayoutSource.contains(QStringLiteral("isBookmarkLine ? c.accent"))
         || editorLayoutSource.contains(QStringLiteral("lineNumberUnderlineHorizontalBounds"))
         || editorLayoutSource.contains(QStringLiteral("painter.drawLine"))
         || editorHeaderSource.contains(QStringLiteral("lineNumberUnderlineHorizontalBounds"))) {

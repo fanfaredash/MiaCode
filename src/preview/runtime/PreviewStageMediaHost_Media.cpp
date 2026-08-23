@@ -316,6 +316,7 @@ void PreviewStageMediaHost::clearMedia()
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -331,6 +332,7 @@ void PreviewStageMediaHost::clearMedia()
     observedPlayheadSecond_ = 0.0;
     clockDeltaSeconds_ = 0.0;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     if (shuttingDown_) {
         return;
     }
@@ -417,6 +419,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -428,6 +431,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     ++videoPlaybackWatchdogSerial_;
     consecutiveVideoBackendRecoveryCount_ = 0;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     updateClockDelta();
     emit imageSourceChanged();
     emit mediaStateChanged();
@@ -461,6 +465,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -470,6 +475,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     bindVideoOutput();
     beginPvMemorySource();
 
@@ -530,6 +536,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -541,6 +548,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++videoPlaybackWatchdogSerial_;
     consecutiveVideoBackendRecoveryCount_ = 0;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     syncMediaStatusBeaconBudget_ = qMax(syncMediaStatusBeaconBudget_, 12);
     syncVideoFrameBeaconBudget_ = qMax(syncVideoFrameBeaconBudget_, 8);
     {

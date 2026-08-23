@@ -103,9 +103,10 @@ struct PreviewAudioCommand {
     PreviewAudioSettings settings;
     PreviewTimingSettings timingSettings;
 
-    // When set on ReloadAssets, apply chartPath within the same asset
-    // generation before rebuilding backend assets. This keeps a chart change
-    // and its dependent reload from being separated by stale-command pruning.
+    // When set on ReloadAssets, apply resolved warmup paths and/or chartPath
+    // within the same asset generation before rebuilding backend assets. This
+    // keeps BGM/SFX path state and its dependent reload together.
+    bool applyWarmupPathsBeforeReload = false;
     bool applyChartPathBeforeReload = false;
     double value = 0.0;
     double second = 0.0;

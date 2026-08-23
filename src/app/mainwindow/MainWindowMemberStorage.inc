@@ -476,6 +476,7 @@
         // consults this to decide whether the render cadence has actually stopped.
         // -1 = no cadence tick observed yet this playback.
         qint64 qtPreviewLastTimelineCadenceMs_ = -1;
+        qint64 qtPreviewLastTimelineCadenceFlushNs_ = -1;
         bool previewFollowBindingCacheValid_ = false;
         TimelineQuickModel::PreviewFollowBinding previewFollowBindingCache_;
         double deferredEditorUiPreviewFollowSecond_ = 0.0;
@@ -633,6 +634,12 @@
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
+        // Set when the mixer is edited while no chart file is open (welcome
+        // page, or a new chart not yet saved). saveProjectAudioPreferences()
+        // has nowhere to write in that state, so the next bind to a project
+        // WITHOUT a stored mixer adopts these edits instead of re-seeding from
+        // the 本地预设 — otherwise saving a new chart would silently discard them.
+        bool previewAudioSettingsEditedWithoutProject_ = false;
         bool breakSlideTailCheerMutedPreference_ = false;
         PreviewTimingSettings softwarePreviewTimingSettings_;
         PreviewTimingSettings previewTimingSettings_;
@@ -980,6 +987,7 @@
     double& qtPreviewPendingTimelineSecond_ = state_.qtPreviewPendingTimelineSecond_;
     bool& qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_;
     qint64& qtPreviewLastTimelineCadenceMs_ = state_.qtPreviewLastTimelineCadenceMs_;
+    qint64& qtPreviewLastTimelineCadenceFlushNs_ = state_.qtPreviewLastTimelineCadenceFlushNs_;
     bool& previewFollowBindingCacheValid_ = state_.previewFollowBindingCacheValid_;
     TimelineQuickModel::PreviewFollowBinding& previewFollowBindingCache_ = state_.previewFollowBindingCache_;
     bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;

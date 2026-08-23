@@ -20,10 +20,11 @@ constexpr qreal kJudgeEffectFireworkDurationSeconds =
     static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds);
 constexpr qreal kJudgeEffectFireworkBaseWidthUnits = 10.8;
 constexpr qreal kJudgeEffectFireworkColorBallBaseWidthUnits = 5.12;
-// The supplied 30 fps reference holds the spokes through frame 11, then fades them over the
-// remaining visible frames. The old clip stretched this same motion to 1.333 s.
-constexpr qreal kJudgeEffectFireworkStripeAlphaPeak = 0.589;
-constexpr qreal kJudgeEffectFireworkStripeAlphaHoldSeconds = 0.4;
+// Hold through the frame-9 full spread, then fade over the remaining visible frames.
+constexpr qreal kJudgeEffectFireworkStripeAlphaPeak = 0.8;
+constexpr qreal kJudgeEffectFireworkStripeAlphaHoldSeconds = 0.3;
+constexpr qreal kJudgeEffectFireworkStripeFadePivotSeconds = 0.5;
+constexpr qreal kJudgeEffectFireworkStripeFadePivotAlpha = 0.5;
 constexpr qreal kFireworkInnerLB = 0.018;
 constexpr qreal kFireworkInnerUB = 0.054;
 constexpr qreal kFireworkOuterLB = 0.36;
@@ -39,16 +40,16 @@ struct ScalarCurveKey {
 };
 
 const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkScaleKeys = {{
-    {0.0, 0.0},
-    {0.1, 0.0},
-    {0.13333334, 0.6},
-    {0.23333333, 5.0},
+    {0.0, 0.02},
+    {0.13333334, 0.45},
+    {0.16666667, 0.6},
+    {0.3, 5.0},
     {kJudgeEffectFireworkDurationSeconds, 5.0},
 }};
 
 const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkRotationKeys = {{
     {0.0, 0.0},
-    {0.23333333, -8.0},
+    {0.3, -8.0},
     {kJudgeEffectFireworkDurationSeconds, -24.0},
 }};
 
@@ -180,12 +181,19 @@ PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
     const qreal clipTime = qBound<qreal>(0.0, elapsedSeconds, kJudgeEffectFireworkDurationSeconds);
     const qreal life01 = qBound<qreal>(0.0, clipTime / kJudgeEffectFireworkDurationSeconds, 1.0);
     const qreal fireworkScale = qMax<qreal>(0.0, sampleScalarCurve(kJudgeEffectFireworkScaleKeys, clipTime));
-    // fire.anim material._Alpha: 0.589 held to the hold point, then smoothstep to 0 (no gain).
+    // Keep the requested 0.5 s opacity while extending only the visible fade tail to 1.0 s.
     qreal fireworkAlpha = kJudgeEffectFireworkStripeAlphaPeak;
-    if (clipTime > kJudgeEffectFireworkStripeAlphaHoldSeconds) {
-        const qreal fadeSpan = kJudgeEffectFireworkDurationSeconds - kJudgeEffectFireworkStripeAlphaHoldSeconds;
+    if (clipTime > kJudgeEffectFireworkStripeFadePivotSeconds) {
+        const qreal fadeSpan = kJudgeEffectFireworkDurationSeconds - kJudgeEffectFireworkStripeFadePivotSeconds;
+        const qreal fadeU = (clipTime - kJudgeEffectFireworkStripeFadePivotSeconds) / fadeSpan;
+        fireworkAlpha = kJudgeEffectFireworkStripeFadePivotAlpha * (1.0 - smoothStep01(fadeU));
+    } else if (clipTime > kJudgeEffectFireworkStripeAlphaHoldSeconds) {
+        const qreal fadeSpan = kJudgeEffectFireworkStripeFadePivotSeconds
+            - kJudgeEffectFireworkStripeAlphaHoldSeconds;
         const qreal fadeU = (clipTime - kJudgeEffectFireworkStripeAlphaHoldSeconds) / fadeSpan;
-        fireworkAlpha = kJudgeEffectFireworkStripeAlphaPeak * (1.0 - smoothStep01(fadeU));
+        fireworkAlpha = kJudgeEffectFireworkStripeAlphaPeak
+            + (kJudgeEffectFireworkStripeFadePivotAlpha - kJudgeEffectFireworkStripeAlphaPeak)
+                * smoothStep01(fadeU);
     }
     const qreal fireworkRotationDegrees = sampleScalarCurve(kJudgeEffectFireworkRotationKeys, clipTime);
     const qreal colorBallScale = qMax<qreal>(0.0, sampleScalarCurve(kJudgeEffectFireworkColorBallScaleKeys, clipTime));

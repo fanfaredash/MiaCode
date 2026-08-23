@@ -1,5 +1,18 @@
 # Cross-Chain Linkage
 
+## Timeline playback cadence
+
+- `TimelineQuickItem::bindRenderCadence` emits an opportunity from every
+  `QQuickWindow::afterAnimating`, while `TimelineSection::onTimelineRenderCadenceTick` rate-gates
+  accepted samples with `timelineTargetFrameIntervalNs()`. Keep that gate phase-locked through
+  `TimelineCadenceArbitrationPolicy::renderCadenceShouldFlush`; otherwise high-refresh displays
+  bypass the Timeline Refresh Rate preference and repeat editor-follow/QSG work unnecessarily.
+- Every render-cadence opportunity still refreshes the liveness marker. The watchdog must yield
+  to a healthy render loop even when a lower timeline rate intentionally skips samples.
+- `TimelineQuickOverlayLayer` keeps fixed `QSGSimpleRectNode` slots for the playhead, cursor, and
+  drag-center lines. Playback updates their rectangles in place; do not restore per-frame
+  `clearChildren()` allocation on this dynamic path.
+
 Read before changing behavior that crosses parser / timeline / preview / audio / export / Muri
 boundaries. Ported from the prior guide with paths corrected (2026-05-29); contracts are believed
 current but **code is source of truth** — verify and fix drift in the same change.
@@ -199,11 +212,15 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
   `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
   facade and the specs.
 - A chart-path change followed by an asset reload is one asset transaction, not two independently
-  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. It carries the path on the
-  `ReloadAssets` command and `PreviewAudioWorker::executeReload` applies it before the backend reload
-  in that same `assetGeneration`; posting `setChartPath` immediately before a separate reload lets
-  stale-command pruning drop the required path update and leaves BGM unloaded. This is shared by
-  MainWindow startup/chart-reload paths and `soundtouch_probe`.
+  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. Window/chart SFX warm-up
+  additionally uses `reloadAssetsForChartWithWarmupPaths`, which carries resolved SFX/track paths
+  and the chart path on ONE `ReloadAssets` command. `PreviewAudioWorker::executeReload` applies the
+  requested path state before the backend reload in that same `assetGeneration`; posting
+  `setChartPath` or `setWarmupResolvedPaths` immediately before a separate reload lets
+  stale-command pruning drop required state and can leave BGM unloaded. MainWindow schedules this
+  combined preload only after the initial document/chart path is established and never while a
+  device-cutoff barrier is active; the first explicit Play only falls back to it when no preload is
+  pending or ready. `soundtouch_probe` uses the chart-only form.
 - `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
   GUI/video state before submitting the reserved high-priority device pause. On Windows, a successful
   IMM registration is the sole hotplug source: do not construct or synchronously enumerate
@@ -246,6 +263,19 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
 - Export consumes the shared resolver via `VideoExportController`; Windows export audio = single
   mixed WAV via `BassExportAudioBackend`, non-Windows = `LegacyExportAudioBackend` fallback.
 - Filenames: `bg.mp4`, `pv.mp4`, `bg.{jpg,png,jpeg}`. Keep preview + export aligned.
+- **`EndOfMedia` is never a transport event.** A background video is subordinate visual media, so
+  its end may not stop BGM / SFX / chart / timeline — that coupling was the root cause in
+  `docs/audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md` (a 0.333 s `pv.mp4` paused the whole
+  preview 31 times). The only natural end of the main transport stays
+  `MainWindow.PreviewTick.cpp::onQtPreviewTickAtSecond()` against `previewPlaybackEndSeconds()`.
+  Every backend `EndOfMedia` is classified by `src/core/video/PreviewEndOfMediaPolicy.h` (spec:
+  `preview_end_of_media_policy_spec`), whose ONLY yardstick is the media's own duration versus the
+  decoder's own progress — never the chart length, and never a "shorter than N seconds is
+  suspicious" threshold. `natural` keeps the last frame; `stale` (audit
+  `PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md` §5.2 — a 121 s PV ending at 1.267 s) runs
+  the bounded seek-then-reload recovery in `PreviewStageMediaHost_Timeout.cpp`; `unknown` does
+  nothing. Change the classifier and the spec together, and keep both backends
+  (QtAVPlayer + `QMediaPlayer`) routed through `handleVideoEndOfMedia`.
 - Pause-hide option `previewForceLabeledJudgeLineWhenPaused_` (UI label key
   `dialog.render_settings.gameplay.force_labeled_judge_line_when_paused`, zh "暂停时显示判定区"):
   when ON + preview paused, the on-screen preview switches outline to `JudgeAreaLabeled` AND hides
@@ -468,6 +498,21 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
 **UI-only** (in-app timeline panel); it has no video-export consumer.
 
 ## Update this file when
+
+### QuickShell modal-dialog native ownership
+
+- The visible QuickShell top level is a `QQuickWindow`; `MainWindow` remains a hidden native
+  QWidget backend marked `miacode.dialog_parentless`. Application-modal dialogs therefore
+  must not rely on their QWidget parent or a one-shot `raise()` for native Z-order ownership.
+- `MainWindow::setQuickShellRootWindow` registers the live root with
+  `UiDialogs::setApplicationDialogTransientParent`. The application-wide
+  `UiDialogs::DialogStackingGuard` binds shown top-level `QDialog`s that lack a visible native
+  owner (including direct legacy `QMessageBox::*` calls) to that root through
+  `QWindow::setTransientParent`, then restores a visible blocking modal when the application
+  or root window activates. Existing visible dialog owners are preserved for nested dialogs;
+  non-modal dialogs are never force-activated by the stacking guard.
+- Keep this behavior in the shared dialog layer. Do not add per-dialog
+  `Qt::WindowStaysOnTopHint`: that would place MiaCode dialogs above unrelated applications.
 
 - A behavior starts/stops being mirrored across two paths; a new serialized export field is added;
   a duplicated lookup is centralized/split; a timing rule starts affecting a new subsystem.

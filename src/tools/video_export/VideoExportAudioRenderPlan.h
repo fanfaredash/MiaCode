@@ -26,10 +26,16 @@ struct ScheduledSfxPlaybackRenderPlan {
     double maxDurationSeconds = -1.0;
 };
 
+// One stretch of the export where a single touch-hold span owns the riser, in
+// mix time. Mirrors what the preview voice plays across that stretch, so
+// `sourceStartSecond` (where to enter the riser sample) is non-zero whenever the
+// preview voice would have been mid-sample there — see
+// preview_sfx_timeline::buildTouchholdOwnershipSegments.
 struct TouchholdSpanRenderPlan {
     QString kind;
     QString assetKind;
     double mixSecond = 0.0;
+    double sourceStartSecond = 0.0;
     double gain = 0.0;
     double durationSeconds = 0.0;
 };
@@ -53,7 +59,7 @@ struct VideoExportAudioRenderPlan {
     QVector<TimelineNoteMarker> exportMarkers;
     BackgroundTrackRenderPlan backgroundTrack;
     QVector<ScheduledSfxPlaybackRenderPlan> scheduledSfxPlaybacks;
-    QVector<TouchholdSpanRenderPlan> mergedTouchholdSpans;
+    QVector<TouchholdSpanRenderPlan> touchholdSpanPlaybacks;
 };
 
 bool buildVideoExportAudioRenderPlan(

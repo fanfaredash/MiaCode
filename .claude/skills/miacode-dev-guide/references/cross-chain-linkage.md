@@ -71,10 +71,25 @@ Implications:
     non-null node (render thread → atomic `fireworkLayerDrawSignal_`), and `handlePresentedFrame`
     flips `fireworkWarmupDone_` only once that signal advances past the arm snapshot (present-count cap
     = backstop). The synthetic is RE-CENTERED on the live playhead via `refreshFireworkWarmupForPlayheadChange`
-    in `setPlayheadSeconds` (+ `setNoteMarkers`) so a seek / negative pre-roll can't strand it outside
-    its lifecycle window. Dropping the notify call or the re-center silently regresses to the old
+    in `setPlayheadSeconds` (+ `setNoteMarkers` + `reset`) so a seek / negative pre-roll can't strand it
+    outside its lifecycle window. Dropping the notify call or the re-center silently regresses to the old
     probabilistic first-firework stutter. Logs: `preview/runtime action=firework_pso_warmup_arm|_done`
     (Runtime channel).
+    - **The re-center is SLACK-GATED, not per-frame.** The travel test lives in
+      `src/core/scene/PreviewFireworkWarmupPolicy.h` (`fireworkWarmupNeedsRecenter` /
+      `fireworkWarmupMarkerSecond`) and is calibrated against the layer's real lifecycle window by
+      `preview_firework_warmup_policy_spec`. It used to fire on EVERY playhead change — i.e. once per
+      preview frame for as long as the warm-up stayed armed, and it stays armed until a frame that
+      actually draws the synthetic is presented, which on an idle paused preview does not happen until
+      the user's first playback. Each re-center rewrites the whole marker vector and bumps
+      `sceneContentRevision`, which invalidates `PreviewPreparedSceneCache` and forces a full ten-layer
+      rebuild; that per-frame rebuild was the bulk of the "first playback after startup stutters"
+      report, and it recurred mid-session on every visible-window rebind (F11 re-arms via
+      `setVisibleHostWindow`). Do not restore an unconditional per-playhead re-center.
+    - **INVARIANT: while armed-but-not-done, exactly one synthetic lives in `frameState_.noteMarkers`
+      and `fireworkWarmupCenterSecond_` is its centre.** Any site that clears `noteMarkers` must
+      re-append it (`setNoteMarkers`, `reset`) — with the slack gate in place, a missing synthetic is
+      no longer healed by the next frame's re-center.
 - During playback: slow-refresh markers feed validation/Muri inputs, but preview audio/canvas/stats
   stay on the frozen play-start snapshot until stop; validation/Muri UI may defer to a paused edge.
 
@@ -142,10 +157,24 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   driven by `touchhold_start`/`touchhold_stop` events. Ownership is **latest-wins**: the pure helper
   `preview_sfx_timeline::touchholdOwnerSpanIndexAt(spans, second)` returns the active span with the
   greatest `startSecond`, and both backends `reconcileTouchholdVoice(second)` to it on every
-  start/stop event (and on pause/restore/seek). This is order-independent, so a seamless join (prev
-  `endSecond` == next `startSecond`), overlap, or nesting lets the newer touch-hold take over the
-  voice instead of the older span's stop clobbering it. Don't go back to per-event naive start/stop
-  or a first-wins active-set. Export is unaffected (it renders each `TouchholdSpan` independently).
+  start/stop event (and on pause/restore/seek), seeking the riser to `second - span.startSecond`.
+  This is order-independent, so a seamless join (prev `endSecond` == next `startSecond`), overlap, or
+  nesting lets the newer touch-hold take over the voice — restarting the riser from its own start —
+  instead of the older span's stop clobbering it. Don't go back to per-event naive start/stop or a
+  first-wins active-set.
+  **Export is a sync pair with this, NOT independent.** It has no voice, so it emulates the same
+  ownership offline: `preview_sfx_timeline::buildTouchholdOwnershipSegments(spans)` flattens
+  latest-wins into `{startSecond, endSecond, spanIndex, sourceOffsetSecond}` stretches (owner
+  evaluated once per span boundary), and `buildTouchholdSpanPlaybacks`
+  (`VideoExportAudioRenderPlan.cpp`) mixes ONE riser clip per stretch at that source offset into
+  `VideoExportAudioRenderPlan::touchholdSpanPlaybacks`; both export backends honour
+  `sourceStartSecond`. Export used to *merge* adjacent/overlapping spans into one long clip, so the
+  second of two back-to-back touch-holds sounded like a continuation of the first while preview
+  restarted it — never reintroduce that merge. The partial-range pre-range clamp
+  (`suppressSfxBeforePreRangeEnd`) advances `sourceStartSecond` with `mixSecond` for the same reason:
+  preview seeking into a live touch-hold resumes mid-sample, so export must too. Coverage:
+  `verifyTouchholdOwnershipSegments` (`PreviewSfxTimelineSpec.cpp`) for the flattening,
+  `verifyTouchholdSpanLatestWinsPlaybacks` (`VideoExportAudioRenderPlanSpec.cpp`) for the mix plan.
 - `&clock_count=` is a defaulted (`4`) count-in metadata field (`src/common/ChartClockCount.h`), editable from the latency settings page + metadata "Other &xx Fields" and materialized by `SimaiDocument::ensureDefaultClockCount`; its export count-in uses full-range lead-in `2.0s`,
   partial preload `1.0s` (`src/common/VideoExportConfig.h`). Full-vs-partial classification: any range
   STARTING at chart 0 counts as full-range even if it ends early (count-down lead-in, no frozen
@@ -179,6 +208,19 @@ If one side changes, inspect the other in the same patch.
 - Export consumes the shared resolver via `VideoExportController`; Windows export audio = single
   mixed WAV via `BassExportAudioBackend`, non-Windows = `LegacyExportAudioBackend` fallback.
 - Filenames: `bg.mp4`, `pv.mp4`, `bg.{jpg,png,jpeg}`. Keep preview + export aligned.
+- **`EndOfMedia` is never a transport event.** A background video is subordinate visual media, so
+  its end may not stop BGM / SFX / chart / timeline — that coupling was the root cause in
+  `docs/audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md` (a 0.333 s `pv.mp4` paused the whole
+  preview 31 times). The only natural end of the main transport stays
+  `MainWindow.PreviewTick.cpp::onQtPreviewTickAtSecond()` against `previewPlaybackEndSeconds()`.
+  Every backend `EndOfMedia` is classified by `src/core/video/PreviewEndOfMediaPolicy.h` (spec:
+  `preview_end_of_media_policy_spec`), whose ONLY yardstick is the media's own duration versus the
+  decoder's own progress — never the chart length, and never a "shorter than N seconds is
+  suspicious" threshold. `natural` keeps the last frame; `stale` (audit
+  `PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md` §5.2 — a 121 s PV ending at 1.267 s) runs
+  the bounded seek-then-reload recovery in `PreviewStageMediaHost_Timeout.cpp`; `unknown` does
+  nothing. Change the classifier and the spec together, and keep both backends
+  (QtAVPlayer + `QMediaPlayer`) routed through `handleVideoEndOfMedia`.
 - Pause-hide option `previewForceLabeledJudgeLineWhenPaused_` (UI label key
   `dialog.render_settings.gameplay.force_labeled_judge_line_when_paused`, zh "暂停时显示判定区"):
   when ON + preview paused, the on-screen preview switches outline to `JudgeAreaLabeled` AND hides
@@ -221,6 +263,28 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 `MainWindow::load/savePortableState` (app-scoped shared), `load/saveProjectRenderState` (chart-local
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
+
+**Preview audio spans TWO storage tiers — keep them straight (2026-08-18):**
+
+| Tier | Key | State | Written by |
+|---|---|---|---|
+| **Project** `<chartDir>/.miacode/preferences.json` | `preview_audio` | `state_.previewAudioSettings_` (the live mixer) | every slider / mute / 应用本地预设, via `MainWindow::saveProjectAudioPreferences` |
+| **App** `preferences.json` | `app.preview.audio` | `state_.softwarePreviewAudioSettings_` (本地预设) | only the 保存为本地预设 button, via `savePortableState` |
+
+The mixer is per-chart. `PreviewSection::loadProjectAudioPreferences` runs from
+`TimelineSection::setCurrentFilePath`'s `pathChanged` branch — **before** `reloadAssetsForChart` /
+`applyPreviewAudioSettingsToRuntime`, or the outgoing chart's levels leak into the incoming one.
+The preset's ONLY role is seeding a project that has no stored `preview_audio` (new chart, or one
+predating this split); it is never written back to from the project path.
+`state_.previewAudioSettingsEditedWithoutProject_` carries edits made with no chart open into the
+first project bind that has no stored mixer, so saving a new chart doesn't discard them.
+`break_slide_tail_cheer_muted` stays app-scoped and overrides whatever the project blob carries in
+that field.
+
+Regression this replaced: `savePortableState` persisted `softwarePreviewAudioSettings_` while the
+dialog sliders edited `previewAudioSettings_`, so every volume change was re-written as the
+unchanged default and lost on restart. Anything new that edits `previewAudioSettings_` must call
+`saveProjectAudioPreferences()`, not a second store.
 
 ## 10. Parser output feeds Muri on both paths
 
@@ -328,6 +392,18 @@ touches the transport — preview and a running export are independent. Review t
 `MainWindow.ExportSnapshot.cpp`, `MainWindow.ExportFlow.cpp` (lifecycle),
 `PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `MainWindow.ExportWorker.cpp` +
 `WindowSection.cpp` (progress decoupling). Supersedes the reverted "导出效果预览".
+
+- **批量导出 sub-page: a badge switch retargets in place, so it must re-seed by hand.** The
+  video sub-page gets its per-difficulty payload for free (the panel is destroyed + rebuilt from
+  a fresh `buildVideoExportSeedTask`). The batch panel deliberately SURVIVES the switch (queue +
+  settings are the user's work), so `ExportSection::updateEmbeddedBatchExportPreviewDifficulty`
+  owns the whole re-seed: audition scene (teardown + install), chart-info HUD
+  (`applyExportPreviewChartInfo`, shared with `beginExportPreviewSession`), and the shared
+  settings panel's chart payload (`BatchExportPanel::updatePreviewDifficulty` →
+  `VideoExportDialog::retargetChartPayload` — 片头 banner fields / markers / duration, while
+  intro on-off + 片头 sound stay user-owned). Adding a difficulty-derived field to
+  `buildVideoExportSeedTask` means adding it to `retargetChartPayload` too, or the batch page's
+  preview silently keeps the panel's opening difficulty.
 
 - **The visible transport is QML, not the QWidget `ui_.previewSlider_`** (which is null on the
   export page). Any preview-transport state that QML needs (range, position, lower bound, export

@@ -740,6 +740,13 @@ void PreviewAudioWorker::executeReload(
     RuntimeState& state,
     PreviewAudioCompletion& completion)
 {
+    if (command.applyWarmupPathsBeforeReload) {
+        state.chartPath = command.chartPath;
+        state.trackPath = command.trackPath;
+        state.sfxDirectory = command.sfxDirectory;
+        state.warmupAssetGeneration = command.identity.assetGeneration;
+        state.hasWarmupPaths = true;
+    }
     if (command.applyChartPathBeforeReload) {
         state.activeChartPath = command.chartPath;
         state.hasActiveChartPath = true;
@@ -761,11 +768,12 @@ void PreviewAudioWorker::executeReload(
                 return;
             }
             backend->clearNativeErrorCode();
-            if (state.hasWarmupPaths) {
-                backend->setWarmupResolvedPaths(state.chartPath, state.trackPath, state.sfxDirectory);
-            }
         } else {
             backend->clearNativeErrorCode();
+        }
+        if (state.hasWarmupPaths
+            && (createdBackend || command.applyWarmupPathsBeforeReload)) {
+            backend->setWarmupResolvedPaths(state.chartPath, state.trackPath, state.sfxDirectory);
         }
         if (command.applyChartPathBeforeReload
             || (createdBackend && state.hasActiveChartPath)) {

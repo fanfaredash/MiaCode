@@ -1763,8 +1763,9 @@ ChartNormalizationResult normalizeChartFragment(
         // 变拍/变BPM 另起一段：段相位（4 小节一组的计数）在该边界归零，让分块的
         // 空行从新拍子/新速度重新计起，而不是沿用全局计数。边界处的 (bpm)/|| x/y
         // 指令行本身就是视觉分隔，所以这里只重置计数、不额外插空行。leadingItems 的
-        // TimeSignature/Bpm 项正是真实重启点（同拍号/同BPM 以 StandaloneText 出现，
-        // 不会误触发）。
+        // TimeSignature/Bpm 项正是真实重启点：任何 (bpm)/|| x/y 都会
+        // restartMeasureAtCurrentPosition，同值也不例外（变BPM 一律重启小节相位），
+        // 所以同值 BPM 同样归零段计数。
         const bool startsNewSection = std::any_of(
             measure.leadingItems.cbegin(),
             measure.leadingItems.cend(),
