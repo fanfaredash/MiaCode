@@ -383,6 +383,10 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                 signal qmlTouchPadAuthoringRequested(string pad, bool useBacktickSeparator,
                                                      int difficultyId, real revision,
                                                      int anchor, int position)
+                signal qmlEditorFollowDecorationChanged(bool active, int difficultyId, real revision,
+                                                        int startLine, int startColumn, int endLine,
+                                                        int endColumn, int cursorLine, int cursorColumn,
+                                                        bool ensureVisible)
                 function chartPosition(line, column) {
                     const lines = session.chartText.split("\n")
                     let offset = 0
@@ -492,13 +496,46 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
     const int caretColumn = editorItem->property("viewState").value<QObject*>() != nullptr
         ? editorItem->property("viewState").value<QObject*>()->property("editorCursorColumn").toInt()
         : -1;
-    return expect(session->property("seekRequests").toInt() == 1
-                      && session->property("seekDifficultyId").toInt() == 3
-                      && session->property("seekRevision").toInt() == 42
-                      && session->property("seekLine").toInt() == caretLine
-                      && session->property("seekColumn").toInt() == caretColumn,
-                  QStringLiteral("a Ctrl/Command click seeks the preview to the caret it just placed"),
-                  out, failed);
+    expect(session->property("seekRequests").toInt() == 1
+               && session->property("seekDifficultyId").toInt() == 3
+               && session->property("seekRevision").toInt() == 42
+               && session->property("seekLine").toInt() == caretLine
+               && session->property("seekColumn").toInt() == caretColumn,
+           QStringLiteral("a Ctrl/Command click seeks the preview to the caret it just placed"),
+           out, failed);
+
+    // Paused preview follow: a decoration, not a caret move. Before this
+    // channel existed the paused branch only painted the hidden widget, so a
+    // seek while paused produced nothing at all in the visible QML editor.
+    const auto sendDecoration = [session](bool active, int difficultyId, double revision,
+                                          int startLine, int startColumn, int endLine,
+                                          int endColumn, int cursorLine, int cursorColumn,
+                                          bool ensureVisible) {
+        QMetaObject::invokeMethod(
+            session, "qmlEditorFollowDecorationChanged", Q_ARG(bool, active),
+            Q_ARG(int, difficultyId), Q_ARG(double, revision), Q_ARG(int, startLine),
+            Q_ARG(int, startColumn), Q_ARG(int, endLine), Q_ARG(int, endColumn),
+            Q_ARG(int, cursorLine), Q_ARG(int, cursorColumn), Q_ARG(bool, ensureVisible));
+        QCoreApplication::processEvents();
+    };
+    sendDecoration(true, 3, 42, 2, 3, 2, 5, 2, 3, false);
+    const bool decorated = editorItem->property("followDecorationActive").toBool();
+    // Line 2 starts at offset 9 ("1,2,3,4,\n"), so column 3 is offset 11 and the
+    // inclusive end column 5 is the exclusive offset 14.
+    expect(decorated
+               && editorItem->property("followDecorationStart").toInt() == 11
+               && editorItem->property("followDecorationEnd").toInt() == 14
+               && editorItem->property("followDecorationCursor").toInt() == 11,
+           QStringLiteral("a paused follow decoration reaches the visible QML editor"), out, failed);
+
+    sendDecoration(true, 3, 41, 1, 1, 1, 2, 1, 1, false);
+    expect(!editorItem->property("followDecorationActive").toBool(),
+           QStringLiteral("a stale-revision follow decoration is dropped, not painted"), out, failed);
+
+    sendDecoration(true, 3, 42, 2, 3, 2, 5, 2, 3, false);
+    sendDecoration(false, -1, 0, 1, 1, 1, 1, 1, 1, false);
+    return expect(!editorItem->property("followDecorationActive").toBool(),
+                  QStringLiteral("clearing preview follow removes the decoration"), out, failed);
 }
 } // namespace
 
@@ -601,6 +638,31 @@ int main(int argc, char** argv)
                       == QStringLiteral("A1")
                && touchTransaction.value(QStringLiteral("touchTokenStart")).toInt() == 2,
            QStringLiteral("Ctrl touch authoring is returned as one editor transaction with its token anchor"), out, &failed);
+    const miacode::qml_ui::QmlEditorNavigationReadiness decorationReadiness{3, 42, true, false};
+    const miacode::qml_ui::QmlEditorFollowDecoration liveDecoration{
+        true, 3, 42, 2, 3, 2, 5, 2, 3, true};
+    int deliveredDecorations = 0;
+    bool lastDecorationActive = false;
+    const auto routeDecoration = [&deliveredDecorations, &lastDecorationActive](
+                                     const miacode::qml_ui::QmlEditorFollowDecoration& decoration,
+                                     const miacode::qml_ui::QmlEditorNavigationReadiness& readiness) {
+        return miacode::qml_ui::routeQmlEditorFollowDecoration(
+            decoration, readiness, 3, 42,
+            [&deliveredDecorations, &lastDecorationActive](
+                const miacode::qml_ui::QmlEditorFollowDecoration& routed) {
+                ++deliveredDecorations;
+                lastDecorationActive = routed.active;
+            });
+    };
+    expect(routeDecoration(liveDecoration, decorationReadiness) && lastDecorationActive
+               && !routeDecoration(liveDecoration, {3, 42, false, false}) && !lastDecorationActive
+               && !routeDecoration(liveDecoration, {3, 42, true, true}) && !lastDecorationActive
+               && !routeDecoration({true, 3, 41, 2, 3, 2, 5, 2, 3, true}, decorationReadiness)
+               && !routeDecoration({true, 4, 42, 2, 3, 2, 5, 2, 3, true}, decorationReadiness)
+               && deliveredDecorations == 5,
+           QStringLiteral("a follow decoration always reaches QML but only paints on a visible, current chart source"),
+           out, &failed);
+
     const miacode::qml_ui::QmlEditorNavigationRequest navigationRequest{
         3, 42, 7, 4, 8, 9, true, false, true};
     expect(navigationRequest.accepts(3, 42)

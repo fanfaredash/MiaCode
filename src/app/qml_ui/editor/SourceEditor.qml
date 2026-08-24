@@ -18,9 +18,16 @@ Rectangle {
     property bool suppressBackendCaretPublish: false
     property var bookmarks: []
     property int pendingBookmarkLine: -1
+    // Read-only projection of preview follow while paused or with 代码跟随 off.
+    // It paints where the playhead is; it must never move the real caret.
+    property bool followDecorationActive: false
+    property int followDecorationStart: 0
+    property int followDecorationEnd: 0
+    property int followDecorationCursor: 0
     onMetadataModeChanged: {
         syncTextFromController()
         publishNavigationReadiness()
+        root.followDecorationActive = false
     }
     onNavigationVisibleChanged: publishNavigationReadiness()
 
@@ -169,6 +176,44 @@ Rectangle {
         root.pendingBookmarkLine = line
         bookmarkTitleField.text = bookmark.title
         bookmarkTitleDialog.open()
+    }
+
+    function applyFollowDecoration(active, difficultyId, revision, startLine, startColumn,
+                                   endLine, endColumn, cursorLine, cursorColumn, ensureVisible) {
+        if (!active || root.metadataMode
+                || difficultyId !== root.documentSession.currentDifficultyId
+                || revision !== root.documentSession.documentRevision) {
+            root.followDecorationActive = false
+            return false
+        }
+        root.followDecorationStart = root.documentSession.chartPosition(startLine, startColumn)
+        // Timeline spans use an inclusive end column; a text offset is exclusive.
+        root.followDecorationEnd = Math.max(
+            root.followDecorationStart,
+            root.documentSession.chartPosition(endLine, endColumn + 1))
+        root.followDecorationCursor = root.documentSession.chartPosition(cursorLine, cursorColumn)
+        root.followDecorationActive = true
+        if (ensureVisible)
+            root.ensureFollowDecorationVisible()
+        return true
+    }
+
+    // Scrolls the decoration into view without touching the caret or selection,
+    // which is what separates paused follow from the playing caret-move path.
+    function ensureFollowDecorationVisible() {
+        Qt.callLater(() => {
+            if (!root.followDecorationActive)
+                return
+            const flickable = editorScroll.contentItem
+            const rect = sourceArea.positionToRectangle(root.followDecorationCursor)
+            const top = sourceArea.y + rect.y
+            const bottom = top + rect.height
+            if (top >= flickable.contentY && bottom <= flickable.contentY + flickable.height)
+                return
+            flickable.contentY = Math.max(0, Math.min(
+                Math.max(0, flickable.contentHeight - flickable.height),
+                top + rect.height / 2 - flickable.height / 2))
+        })
     }
 
     function collectBookmarks() {
@@ -418,6 +463,38 @@ Rectangle {
                 color: Theme.colors.state.lineHighlight
                 z: -1
             }
+
+            // Preview follow decoration: the playhead's token span. Drawn under
+            // the text like the current-line highlight so it never competes
+            // with the real selection.
+            Rectangle {
+                readonly property rect startRect: sourceArea.positionToRectangle(root.followDecorationStart)
+                readonly property rect endRect: sourceArea.positionToRectangle(root.followDecorationEnd)
+                visible: root.followDecorationActive && root.followDecorationEnd > root.followDecorationStart
+                x: startRect.x
+                y: startRect.y
+                // A span that wraps or crosses lines falls back to the rest of
+                // the first line rather than painting a misleading rectangle.
+                width: endRect.y > startRect.y
+                    ? Math.max(0, sourceArea.width - sourceArea.rightPadding - startRect.x)
+                    : Math.max(0, endRect.x - startRect.x)
+                height: Math.max(startRect.height, root.codeLineHeight)
+                color: Theme.colors.state.textSelection
+                opacity: 0.45
+                z: -1
+            }
+
+            // Preview follow caret — the v1 blue line. Distinct from the real
+            // caret so a paused seek is visible without stealing the cursor.
+            Rectangle {
+                readonly property rect caretRect: sourceArea.positionToRectangle(root.followDecorationCursor)
+                visible: root.followDecorationActive
+                x: caretRect.x
+                y: caretRect.y
+                width: 2
+                height: Math.max(caretRect.height, root.codeLineHeight)
+                color: Theme.colors.accent.primary
+            }
             onTextChanged: {
                 if (readyForUserEdits && !syncingFromController) {
                     root.editorController.recordQmlTransaction(historyText, text,
@@ -644,6 +721,12 @@ Rectangle {
                 return
             root.selectBackendNavigation(
                 line, column, endLine, endColumn, selectToken, focusEditor, centerView)
+        }
+        function onQmlEditorFollowDecorationChanged(active, difficultyId, revision, startLine,
+                                                    startColumn, endLine, endColumn, cursorLine,
+                                                    cursorColumn, ensureVisible) {
+            root.applyFollowDecoration(active, difficultyId, revision, startLine, startColumn,
+                                       endLine, endColumn, cursorLine, cursorColumn, ensureVisible)
         }
         function onQmlTouchPadAuthoringRequested(pad, useBacktickSeparator, difficultyId,
                                                   revision, anchor, position) {

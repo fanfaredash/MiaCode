@@ -251,6 +251,16 @@ public:
     bool hasQmlEditorNavigationHandler() const { return static_cast<bool>(qmlEditorNavigationHandler_); }
     bool requestQmlEditorNavigation(int line, int column, int endLine, int endColumn,
                                     bool selectToken, bool focusEditor, bool centerView);
+    // Preview follow paints a decoration instead of moving the caret while
+    // paused or with 代码跟随 off. v1 renders it on the hidden PlainCodeEditor,
+    // so without this channel the visible QML editor showed no follow at all
+    // once playback stopped.
+    void setQmlEditorFollowDecorationHandler(
+        std::function<void(const miacode::qml_ui::QmlEditorFollowDecoration&)> handler);
+    bool hasQmlEditorFollowDecorationHandler() const
+    {
+        return static_cast<bool>(qmlEditorFollowDecorationHandler_);
+    }
     void setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler);
     bool hasQmlTouchPadAuthoringHandler() const { return static_cast<bool>(qmlTouchPadAuthoringHandler_); }
     void setQmlTouchPadAuthoringContextHandler(std::function<bool()> handler);
@@ -453,6 +463,8 @@ private:
     std::function<bool()> qmlTouchPadAuthoringContextHandler_;
     std::function<bool(const miacode::qml_ui::QmlEditorNavigationRequest&)>
         qmlEditorNavigationHandler_;
+    std::function<void(const miacode::qml_ui::QmlEditorFollowDecoration&)>
+        qmlEditorFollowDecorationHandler_;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {

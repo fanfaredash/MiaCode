@@ -1128,6 +1128,12 @@ void MainWindow::updateEditorValidationSummary()
     validationSection_->updateEditorValidationSummary();
 }
 
+void MainWindow::setQmlEditorFollowDecorationHandler(
+    std::function<void(const miacode::qml_ui::QmlEditorFollowDecoration&)> handler)
+{
+    qmlEditorFollowDecorationHandler_ = std::move(handler);
+}
+
 void MainWindow::setPreviewFollowDecoration(
     int startLine,
     int startCol,
@@ -1145,11 +1151,31 @@ void MainWindow::setPreviewFollowDecoration(
         cursorLine,
         cursorCol,
         ensureVisible);
+    // Every follow decoration — playing, paused and 代码跟随-off alike — passes
+    // through this one pair, so the visible QML editor is fed from here rather
+    // than from each branch of the follow sync.
+    if (qmlEditorFollowDecorationHandler_ && hasActiveDifficulty()) {
+        miacode::qml_ui::QmlEditorFollowDecoration decoration;
+        decoration.active = true;
+        decoration.difficultyId = activeDifficultyId_;
+        decoration.revision = documentValidationSnapshot().revision;
+        decoration.startLine = qMax(1, startLine);
+        decoration.startColumn = qMax(1, startCol);
+        decoration.endLine = qMax(decoration.startLine, endLine >= 0 ? endLine : startLine);
+        decoration.endColumn = qMax(1, endCol >= 0 ? endCol : startCol);
+        decoration.cursorLine = qMax(1, cursorLine >= 0 ? cursorLine : decoration.endLine);
+        decoration.cursorColumn = qMax(1, cursorCol >= 0 ? cursorCol : decoration.endColumn);
+        decoration.ensureVisible = ensureVisible;
+        qmlEditorFollowDecorationHandler_(decoration);
+    }
 }
 
 void MainWindow::clearPreviewFollowDecoration()
 {
     validationSection_->clearPreviewFollowDecoration();
+    if (qmlEditorFollowDecorationHandler_) {
+        qmlEditorFollowDecorationHandler_(miacode::qml_ui::QmlEditorFollowDecoration());
+    }
 }
 
 void MainWindow::clearValidationErrors()

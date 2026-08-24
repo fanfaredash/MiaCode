@@ -43,6 +43,17 @@ QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
                     accepted.focusEditor, accepted.centerView);
             });
     });
+    backend_->setQmlEditorFollowDecorationHandler([this](
+        const miacode::qml_ui::QmlEditorFollowDecoration& decoration) {
+        miacode::qml_ui::routeQmlEditorFollowDecoration(
+            decoration, qmlEditorNavigationReadiness_, currentDifficultyId(), documentRevision_,
+            [this](const miacode::qml_ui::QmlEditorFollowDecoration& routed) {
+                emit qmlEditorFollowDecorationChanged(
+                    routed.active, routed.difficultyId, routed.revision, routed.startLine,
+                    routed.startColumn, routed.endLine, routed.endColumn, routed.cursorLine,
+                    routed.cursorColumn, routed.ensureVisible);
+            });
+    });
     refreshDocumentState();
     connect(backend_, &MainWindow::documentValidationChanged,
             this, [this] {
@@ -78,6 +89,7 @@ QmlDocumentModel::~QmlDocumentModel()
         backend_->setQmlTouchPadAuthoringHandler({});
         backend_->setQmlTouchPadAuthoringContextHandler({});
         backend_->setQmlEditorNavigationHandler({});
+        backend_->setQmlEditorFollowDecorationHandler({});
     }
 }
 

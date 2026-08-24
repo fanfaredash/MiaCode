@@ -146,6 +146,12 @@ signals:
     void qmlEditorNavigationRequested(int difficultyId, qulonglong revision, int line,
                                       int column, int endLine, int endColumn, bool selectToken,
                                       bool focusEditor, bool centerView);
+    // Paused / 代码跟随-off preview follow: a read-only decoration, never a
+    // caret move. The editor paints the playhead's span and follow caret.
+    void qmlEditorFollowDecorationChanged(bool active, int difficultyId, qulonglong revision,
+                                          int startLine, int startColumn, int endLine,
+                                          int endColumn, int cursorLine, int cursorColumn,
+                                          bool ensureVisible);
     void qmlTouchPadAuthoringRequested(const QString& pad, bool useBacktickSeparator,
                                        int difficultyId, qulonglong revision,
                                        int anchor, int position);
