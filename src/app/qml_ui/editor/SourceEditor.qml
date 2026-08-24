@@ -9,10 +9,28 @@ Rectangle {
     required property var documentSession
     required property var editorController
     property bool metadataMode: false
+    // EditorPane must provide effective visibility (including its own host),
+    // so an editor retained behind an overlay cannot acknowledge navigation.
+    property bool navigationVisible: false
     property bool imeComposing: false
+    // Backend-originated selections must not loop back into the legacy
+    // cursor→timeline bridge.  QML remains the visual owner of the caret.
+    property bool suppressBackendCaretPublish: false
     property var bookmarks: []
     property int pendingBookmarkLine: -1
-    onMetadataModeChanged: syncTextFromController()
+    onMetadataModeChanged: {
+        syncTextFromController()
+        publishNavigationReadiness()
+    }
+    onNavigationVisibleChanged: publishNavigationReadiness()
+
+    function publishNavigationReadiness() {
+        if (!root.documentSession)
+            return
+        root.documentSession.setQmlEditorNavigationReadiness(
+            root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+            root.navigationVisible, root.metadataMode)
+    }
 
     function syncTextFromController() {
         const controllerText = root.metadataMode
@@ -62,11 +80,11 @@ Rectangle {
     readonly property bool canRedo: editorController.canRedo
 
     function undo() {
-        applyEditorTransaction(editorController.undoQmlTransaction())
+        applyEditorTransaction(editorController.undoQmlTransaction(), true)
     }
 
     function redo() {
-        applyEditorTransaction(editorController.redoQmlTransaction())
+        applyEditorTransaction(editorController.redoQmlTransaction(), true)
     }
 
     function selectAll() {
@@ -87,6 +105,45 @@ Rectangle {
         const position = root.documentSession.chartPosition(Math.max(1, line), 1)
         sourceArea.forceActiveFocus()
         sourceArea.cursorPosition = position
+        centerCursorInView()
+    }
+
+    function centerCursorInView() {
+        Qt.callLater(() => {
+            const flickable = editorScroll.contentItem
+            const target = sourceArea.y + sourceArea.cursorRectangle.y
+                + sourceArea.cursorRectangle.height / 2 - flickable.height / 2
+            flickable.contentY = Math.max(0, Math.min(
+                Math.max(0, flickable.contentHeight - flickable.height), target))
+        })
+    }
+
+    function selectBackendNavigation(line, column, endLine, endColumn, selectToken, focusEditor, centerView) {
+        const position = root.documentSession.chartPosition(Math.max(1, line), Math.max(1, column))
+        let start = position
+        let end = position
+        const hasExactSelection = selectToken && (endLine > line || endColumn > column)
+        if (hasExactSelection) {
+            // Timeline spans use an inclusive end column, whereas TextArea
+            // selection uses an exclusive offset.
+            end = Math.max(position, root.documentSession.chartPosition(
+                Math.max(1, endLine), Math.max(1, endColumn + 1)))
+        } else if (selectToken) {
+            const delimiters = " /,`\n\r\t"
+            while (start > 0 && delimiters.indexOf(sourceArea.text.charAt(start - 1)) < 0)
+                --start
+            while (end < sourceArea.text.length && delimiters.indexOf(sourceArea.text.charAt(end)) < 0)
+                ++end
+            if (end <= start)
+                end = Math.min(sourceArea.text.length, start + 1)
+        }
+        root.suppressBackendCaretPublish = true
+        sourceArea.select(start, end)
+        if (focusEditor)
+            sourceArea.forceActiveFocus()
+        root.suppressBackendCaretPublish = false
+        if (centerView)
+            centerCursorInView()
     }
 
     function createBookmarkAtLine(line) {
@@ -139,8 +196,11 @@ Rectangle {
             }
             const start = root.documentSession.chartPosition(line, column)
             const end = root.documentSession.chartPosition(line, Math.max(column, endColumn + 1))
+            root.suppressBackendCaretPublish = true
             sourceArea.forceActiveFocus()
             sourceArea.select(start, Math.max(start + 1, end))
+            root.suppressBackendCaretPublish = false
+            root.centerCursorInView()
             if (completion)
                 completion()
         })
@@ -155,7 +215,7 @@ Rectangle {
         root.viewState.editorCursorColumn = lines[lines.length - 1].length + 1
     }
 
-    function applyEditorTransaction(transaction) {
+    function applyEditorTransaction(transaction, centerCursor) {
         if (!transaction.consumed)
             return false
         if (transaction.hasEdit) {
@@ -182,6 +242,8 @@ Rectangle {
             else
                 root.documentSession.chartText = sourceArea.text
         }
+        if (centerCursor)
+            root.centerCursorInView()
         return true
     }
 
@@ -222,6 +284,35 @@ Rectangle {
             id: bookmarkTitleField
             width: 260
             Accessible.name: qsTr("书签名称")
+        }
+    }
+
+    Menu {
+        id: editorContextMenu
+        parent: Overlay.overlay
+
+        MenuItem {
+            text: qsTr("剪切")
+            enabled: sourceArea.selectedText.length > 0
+            onTriggered: sourceArea.cut()
+        }
+        MenuItem {
+            text: qsTr("复制")
+            enabled: sourceArea.selectedText.length > 0
+            onTriggered: sourceArea.copy()
+        }
+        MenuItem {
+            text: qsTr("粘贴")
+            onTriggered: root.applyPastePayload(root.editorController.clipboardText())
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("全选")
+            onTriggered: root.selectAll()
+        }
+        MenuItem {
+            text: qsTr("查找与替换")
+            onTriggered: root.openFindReplace()
         }
     }
 
@@ -319,7 +410,8 @@ Rectangle {
             }
             onCursorPositionChanged: {
                 root.updateCursorPosition()
-                if (root.editorController.publishCaretForQml(
+                if (!root.suppressBackendCaretPublish
+                        && root.editorController.publishCaretForQml(
                         root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
                         selectionStart, selectionEnd, root.imeComposing)) {
                     root.documentSession.publishEditorCaret(
@@ -339,7 +431,17 @@ Rectangle {
             function jumpToLine(line) {
                 root.jumpToLine(line)
             }
+            function centerCursorInView() {
+                root.centerCursorInView()
+            }
+            // TextArea otherwise consumes completion keys before the QML
+            // controller can apply its transaction.
+            Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Control) {
+                    root.documentSession.setQmlTouchPadAuthoringCtrlHold(true)
+                    return
+                }
                 if (event.matches(StandardKey.Find)) {
                     root.openFindReplace()
                     event.accepted = true
@@ -383,6 +485,10 @@ Rectangle {
                 if (root.applyEditorTransaction(transaction))
                     event.accepted = true
             }
+            Keys.onReleased: function(event) {
+                if (event.key === Qt.Key_Control)
+                    root.documentSession.setQmlTouchPadAuthoringCtrlHold(false)
+            }
             Component.onCompleted: {
                 root.syncTextFromController()
                 readyForUserEdits = true
@@ -390,6 +496,8 @@ Rectangle {
                 historyAnchor = selectionStart
                 historyPosition = selectionEnd
                 root.editorController.resetQmlHistory(text, historyAnchor, historyPosition)
+                root.editorController.setDocumentContextForQml(
+                    root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
                 root.updateCursorPosition()
                 editorScroll.refreshLineTops()
             }
@@ -433,6 +541,18 @@ Rectangle {
             function acceptCompletionFromPopup() {
                 root.applyEditorTransaction(root.editorController.acceptCompletionForQml(
                     sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd))
+                sourceArea.forceActiveFocus()
+            }
+
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                onTapped: function(eventPoint) {
+                    sourceArea.forceActiveFocus()
+                    const point = sourceArea.mapToItem(editorContextMenu.parent,
+                                                       eventPoint.position.x, eventPoint.position.y)
+                    editorContextMenu.popup(point.x, point.y)
+                }
             }
         }
     }
@@ -454,6 +574,31 @@ Rectangle {
                 root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
                 sourceArea.selectionStart, sourceArea.selectionEnd, sourceArea.activeFocus,
                 root.imeComposing)
+            root.publishNavigationReadiness()
+        }
+        function onQmlEditorNavigationRequested(difficultyId, revision, line, column, endLine,
+                                                endColumn, selectToken, focusEditor, centerView) {
+            if (!root.navigationVisible || root.metadataMode
+                    || difficultyId !== root.documentSession.currentDifficultyId
+                    || revision !== root.documentSession.documentRevision)
+                return
+            root.selectBackendNavigation(
+                line, column, endLine, endColumn, selectToken, focusEditor, centerView)
+        }
+        function onQmlTouchPadAuthoringRequested(pad, useBacktickSeparator, difficultyId,
+                                                  revision, anchor, position) {
+            if (root.metadataMode || !sourceArea.activeFocus || root.imeComposing
+                    || difficultyId !== root.documentSession.currentDifficultyId
+                    || revision !== root.documentSession.documentRevision)
+                return
+            sourceArea.select(anchor, position)
+            const tx = root.editorController.touchPadAuthoringForQml(
+                sourceArea.text, anchor, position, pad, useBacktickSeparator)
+            if (root.applyEditorTransaction(tx)) {
+                root.documentSession.setTouchPadAuthoringPreviewAnchor(
+                    difficultyId, root.documentSession.documentRevision,
+                    sourceArea.text, tx.touchTokenStart)
+            }
         }
     }
 
@@ -461,5 +606,19 @@ Rectangle {
         target: editorScroll.contentItem
         property: "boundsBehavior"
         value: Flickable.StopAtBounds
+    }
+
+    Component.onCompleted: publishNavigationReadiness()
+    Component.onDestruction: {
+        if (root.documentSession)
+            root.documentSession.setQmlEditorNavigationReadiness(-1, 0, false, true)
+    }
+
+    onImeComposingChanged: {
+        root.documentSession.setQmlEditorInteraction(
+            root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+            sourceArea.selectionStart, sourceArea.selectionEnd, sourceArea.activeFocus, root.imeComposing)
+        if (root.imeComposing)
+            root.documentSession.setQmlTouchPadAuthoringCtrlHold(false)
     }
 }

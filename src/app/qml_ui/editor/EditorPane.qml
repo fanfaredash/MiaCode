@@ -213,23 +213,11 @@ Rectangle {
             : difficultyHeader.bottom
         anchors.bottom: parent.bottom
         visible: root.sourceVisible
+        navigationVisible: root.visible && root.viewState.difficultyEditorActive
         metadataMode: root.metadataSourceActive
         viewState: root.viewState
         documentSession: root.documentSession
         editorController: root.editorController
-    }
-
-    BookmarkList {
-        id: bookmarkList
-        anchors.right: parent.right
-        anchors.top: difficultyHeader.bottom
-        anchors.rightMargin: 8
-        width: 190
-        height: Math.min(160, parent.height / 3)
-        visible: root.viewState.difficultyEditorActive && sourceEditor.bookmarks.length > 0
-        editor: sourceEditor
-        bookmarks: sourceEditor.bookmarks
-        z: 3
     }
 
     Flickable {

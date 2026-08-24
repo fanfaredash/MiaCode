@@ -490,6 +490,13 @@ void MainWindow::refreshQmlTouchPadAuthoringContext()
     }
 }
 
+void MainWindow::setQmlTouchPadAuthoringCtrlHold(bool active)
+{
+    // This is deliberately a QML-only bridge. The actual preview state
+    // mutator remains private to MainWindow's preview section.
+    setTouchPadAuthoringCtrlHoldActive(active && qmlTouchPadAuthoringContextActive());
+}
+
 void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
 {
     if (state_.previewCanvas_ != nullptr) {

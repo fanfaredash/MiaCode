@@ -38,6 +38,7 @@
 #include "app/ui/AppBackgroundSettings.h"
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
+#include "app/qml_ui/QmlEditorNavigationBridge.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
@@ -236,16 +237,29 @@ public:
     QVector<int> documentDifficultyIds() const;
     QString documentSourceText() const;
     QString activeDocumentChartText() const;
+    QString documentDifficultyChartText(int difficultyId) const;
     QString documentFilePath() const;
     int documentActiveDifficultyId() const;
     // Narrow v2 bridge: QML may request a timeline caret sync only for the
     // already-active difficulty. Revision ownership stays with QmlDocumentModel.
     void publishQmlEditorCaret(int difficultyId, int line, int column);
+    // The QML editor is a presentation surface, so timeline/preview reverse
+    // navigation reaches it through this narrow value request rather than the
+    // hidden legacy PlainCodeEditor.
+    void setQmlEditorNavigationHandler(
+        std::function<bool(const miacode::qml_ui::QmlEditorNavigationRequest&)> handler);
+    bool hasQmlEditorNavigationHandler() const { return static_cast<bool>(qmlEditorNavigationHandler_); }
+    bool requestQmlEditorNavigation(int line, int column, int endLine, int endColumn,
+                                    bool selectToken, bool focusEditor, bool centerView);
     void setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler);
     bool hasQmlTouchPadAuthoringHandler() const { return static_cast<bool>(qmlTouchPadAuthoringHandler_); }
     void setQmlTouchPadAuthoringContextHandler(std::function<bool()> handler);
     bool qmlTouchPadAuthoringContextActive() const;
     void refreshQmlTouchPadAuthoringContext();
+    // QML has already validated its difficulty/revision/focus snapshot. Keep
+    // its transient Ctrl gesture outside the private preview implementation.
+    void setQmlTouchPadAuthoringCtrlHold(bool active);
+    bool applyQmlTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column);
     bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
@@ -432,6 +446,8 @@ public:
 private:
     std::function<bool(const QString&, bool)> qmlTouchPadAuthoringHandler_;
     std::function<bool()> qmlTouchPadAuthoringContextHandler_;
+    std::function<bool(const miacode::qml_ui::QmlEditorNavigationRequest&)>
+        qmlEditorNavigationHandler_;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {

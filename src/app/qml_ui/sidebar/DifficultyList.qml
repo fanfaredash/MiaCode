@@ -77,8 +77,8 @@ Column {
     Repeater {
         model: root.documentSession.difficulties
 
-        delegate: NavRow {
-            id: difficultyButton
+        delegate: Column {
+            id: difficultyGroup
             required property var modelData
             // 侧边栏只反映编辑器会话中的活动标签。文档模型的
             // currentDifficultyId 负责正文数据源，不参与导航选中状态。
@@ -86,11 +86,40 @@ Column {
                 === root.viewState.difficultyEditorKey(modelData.id)
 
             width: root.width
-            height: root.viewState.difficultySectionExpanded ? 30 : 0
             visible: root.viewState.difficultySectionExpanded
-            text: modelData.label
-            selected: activeEditor
-            onClicked: root.viewState.openDifficultyEditor(modelData.id)
+
+            NavRow {
+                id: difficultyButton
+                width: parent.width
+                height: root.viewState.difficultySectionExpanded ? 30 : 0
+                text: difficultyGroup.modelData.label
+                selected: difficultyGroup.activeEditor
+                onClicked: root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+            }
+
+            Repeater {
+                // `bookmarkGeneration` is an explicit QML binding dependency;
+                // invokable return values alone cannot observe document edits.
+                model: {
+                    const generation = root.documentSession.bookmarkGeneration
+                    return root.documentSession.bookmarksForDifficulty(
+                        difficultyGroup.modelData.id)
+                }
+
+                delegate: NavRow {
+                    required property var modelData
+                    width: parent.width
+                    height: root.viewState.difficultySectionExpanded ? 26 : 0
+                    textLeftPadding: 24
+                    text: qsTr("书签 %1：%2").arg(modelData.line).arg(modelData.title)
+                    Accessible.name: qsTr("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
+                    onClicked: {
+                        root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+                        root.documentSession.navigateToBookmark(
+                            difficultyGroup.modelData.id, modelData.line)
+                    }
+                }
+            }
         }
     }
 

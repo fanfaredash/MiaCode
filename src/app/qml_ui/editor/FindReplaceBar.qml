@@ -21,8 +21,10 @@ Rectangle {
     border.color: Theme.colors.border.normal
 
     function selectResult(result) {
-        if (result.found)
+        if (result.found) {
             editor.select(result.start, result.end)
+            editor.centerCursorInView()
+        }
     }
     function find(backwards) {
         selectResult(controller.findForQml(editor.text, editor.selectionStart, editor.selectionEnd,
@@ -39,8 +41,10 @@ Rectangle {
     function replaceEverything() {
         const tx = controller.replaceAllForQml(editor.text, query, replacement,
                                                caseSensitive, wholeWord)
-        if (tx.consumed)
+        if (tx.consumed) {
             editor.applyEditorTransaction(tx)
+            editor.centerCursorInView()
+        }
     }
     function show() {
         open = true

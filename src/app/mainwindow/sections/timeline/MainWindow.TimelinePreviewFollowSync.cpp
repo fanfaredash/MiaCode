@@ -255,14 +255,75 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         return;
     }
 
-    if (cachedPreviewFollowBindingContainsSecond(second)) {
-        span = state_.previewFollowBindingCache_.span;
-        logPerf(
-            QStringLiteral("binding_unchanged"),
-            true,
+    TimelineQuickModel::PreviewFollowBinding binding;
+    const bool cachedBinding = cachedPreviewFollowBindingContainsSecond(second);
+    bool resolved = false;
+    if (cachedBinding) {
+        binding = state_.previewFollowBindingCache_;
+        resolved = true;
+        span = binding.span;
+    } else {
+        QElapsedTimer resolveTimer;
+        resolveTimer.start();
+        resolved = state_.timelineQuickModel_.resolvePreviewFollowBinding(second, &binding);
+        resolveElapsedNs = resolveTimer.nsecsElapsed();
+        if (resolved) {
+            cachePreviewFollowBinding(binding);
+            span = binding.span;
+        } else {
+            invalidatePreviewFollowBindingCache();
+        }
+    }
+    const int targetLine = resolved ? binding.span.cursorLine : 1;
+    const int targetCol = resolved ? binding.span.cursorCol : 1;
+
+    // A cached binding is only a parsed-timeline optimization. It must never
+    // become an instruction to skip the visible QML editor: the cache can be
+    // populated while code follow is paused or before the QML surface accepts
+    // navigation. The value bridge is idempotent on the QML side and retains
+    // the view-lock choice as a centering policy, not a caret-follow gate.
+    if (owner_.requestQmlEditorNavigation(
+            resolved ? binding.span.startLine : targetLine,
+            resolved ? binding.span.startCol : targetCol,
+            resolved ? binding.span.endLine : targetLine,
+            resolved ? binding.span.endCol : targetCol,
+            resolved && binding.span.hasVisibleBody,
             false,
-            &span,
+            centerView)) {
+        QElapsedTimer overlayTimer;
+        overlayTimer.start();
+        owner_.setPreviewFollowDecoration(
+            resolved ? binding.span.startLine : targetLine,
+            resolved ? binding.span.startCol : targetCol,
+            resolved ? binding.span.endLine : targetLine,
+            resolved ? binding.span.endCol : targetCol,
+            targetLine,
+            targetCol);
+        followOverlayElapsedNs = overlayTimer.nsecsElapsed();
+        logPerf(
+            cachedBinding ? QStringLiteral("cached_qml_navigation")
+                          : QStringLiteral("qml_navigation"),
+            resolved,
+            true,
+            resolved ? &span : nullptr,
+            resolveElapsedNs,
             0,
+            followOverlayElapsedNs,
+            0);
+        return;
+    }
+
+    // The v2 bridge is installed even while its source editor is hidden or
+    // showing metadata.  Its false acknowledgement is intentional: do not
+    // mutate the invisible QWidget fallback in that state.
+    if (owner_.hasQmlEditorNavigationHandler()) {
+        logPerf(
+            cachedBinding ? QStringLiteral("cached_qml_navigation_not_ready")
+                          : QStringLiteral("qml_navigation_not_ready"),
+            resolved,
+            false,
+            resolved ? &span : nullptr,
+            resolveElapsedNs,
             0,
             0,
             0);
@@ -272,19 +333,6 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     const QTextCursor currentEditorCursor =
         (editor != nullptr && editor->document() != nullptr) ? editor->textCursor() : QTextCursor();
-    TimelineQuickModel::PreviewFollowBinding binding;
-    QElapsedTimer resolveTimer;
-    resolveTimer.start();
-    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowBinding(second, &binding);
-    resolveElapsedNs = resolveTimer.nsecsElapsed();
-    if (resolved) {
-        cachePreviewFollowBinding(binding);
-        span = binding.span;
-    } else {
-        invalidatePreviewFollowBindingCache();
-    }
-    const int targetLine = resolved ? binding.span.cursorLine : 1;
-    const int targetCol = resolved ? binding.span.cursorCol : 1;
     bool alreadyAtSelectionEnd = false;
     if (editor != nullptr && editor->document() != nullptr) {
         if (resolved) {
@@ -318,20 +366,6 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         }
         return overlayTimer.nsecsElapsed();
     };
-
-    if (state_.qtPreviewPlaying_ && !centerView) {
-        followOverlayElapsedNs = applyFollowOverlay(resolved);
-        logPerf(
-            QStringLiteral("visual_follow_updated"),
-            resolved,
-            false,
-            resolved ? &span : nullptr,
-            resolveElapsedNs,
-            0,
-            followOverlayElapsedNs,
-            0);
-        return;
-    }
 
     if (alreadyAtSelectionEnd) {
         followOverlayElapsedNs = applyFollowOverlay(resolved);

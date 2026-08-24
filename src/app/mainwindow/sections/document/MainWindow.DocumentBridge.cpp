@@ -257,6 +257,12 @@ QString MainWindow::activeDocumentChartText() const
     return activeChartText();
 }
 
+QString MainWindow::documentDifficultyChartText(int difficultyId) const
+{
+    const SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    return difficulty != nullptr ? difficulty->chart : QString();
+}
+
 QString MainWindow::documentFilePath() const
 {
     return currentFilePath_;

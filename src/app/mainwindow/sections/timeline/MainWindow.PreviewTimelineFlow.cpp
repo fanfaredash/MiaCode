@@ -1207,6 +1207,18 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
         *followOverlayElapsedNs = 0;
     }
 
+    // QML owns the visible source editor in v2.  Give its revision-aware
+    // bridge the first opportunity to realize a timeline/preview location.
+    // When that v2 bridge is installed but its visible source is not ready,
+    // never move the hidden legacy editor behind its back.
+    if (owner_.requestQmlEditorNavigation(
+            line, col, line, col, selectToken, focusEditor, centerView)) {
+        return true;
+    }
+    if (owner_.hasQmlEditorNavigationHandler()) {
+        return false;
+    }
+
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     if (editor == nullptr || editor->document() == nullptr) {
         return false;
@@ -1560,6 +1572,42 @@ void MainWindow::publishQmlEditorCaret(int difficultyId, int line, int column)
         return;
     }
     timelineSection_->seekTimelineToCursor(qMax(1, line), qMax(1, column));
+}
+
+void MainWindow::setQmlEditorNavigationHandler(
+    std::function<bool(const miacode::qml_ui::QmlEditorNavigationRequest&)> handler)
+{
+    qmlEditorNavigationHandler_ = std::move(handler);
+}
+
+bool MainWindow::requestQmlEditorNavigation(
+    int line, int column, int endLine, int endColumn, bool selectToken, bool focusEditor, bool centerView)
+{
+    if (!qmlEditorNavigationHandler_ || !hasActiveDifficulty()) {
+        return false;
+    }
+    const DocumentValidationSnapshot snapshot = documentValidationSnapshot();
+    const miacode::qml_ui::QmlEditorNavigationRequest request{
+        activeDifficultyId_, snapshot.revision, qMax(1, line), qMax(1, column),
+        qMax(qMax(1, line), endLine), qMax(1, endColumn), selectToken, focusEditor, centerView};
+    return request.accepts(activeDifficultyId_, snapshot.revision)
+        && qmlEditorNavigationHandler_(request);
+}
+
+bool MainWindow::applyQmlTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column)
+{
+    if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_) {
+        return false;
+    }
+    double tokenSecond = 0.0;
+    if (!resolveTimelineSecondForCursor(qMax(1, line), qMax(1, column), &tokenSecond)) {
+        return false;
+    }
+    const double seekSecond = qMax(0.0,
+        tokenSecond - miacode::preview_interaction::kTouchPadAuthoringPreviewLeadSeconds);
+    setTouchPadAuthoringAnchor(seekSecond, tokenSecond);
+    seekPreviewDiscreteToSecond(seekSecond, true);
+    return true;
 }
 
 void MainWindow::setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler)

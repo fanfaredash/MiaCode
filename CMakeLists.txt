@@ -1655,7 +1655,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/SimaiCompletionCatalog.cpp
             src/editor/BookmarkCommentSyntax.h
             src/editor/BookmarkCommentSyntax.cpp
-        LIBS Qt6::Core Qt6::Gui
+        LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
         INCLUDES src src/editor src/app/qml_ui
     )
 

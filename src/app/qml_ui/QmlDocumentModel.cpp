@@ -1,5 +1,8 @@
 #include "QmlDocumentModel.h"
+#include "QmlEditorNavigationBridge.h"
 #include "QmlTouchPadAuthoringBridge.h"
+
+#include "editor/BookmarkCommentSyntax.h"
 
 #include "app/mainwindow/MainWindow.h"
 #include "core/chart/document/SimaiDocument.h"
@@ -15,18 +18,30 @@ QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
             currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
             qmlEditorFocused_, qmlImeComposing_};
         if (!context.accepts()) return false;
-        QString updatedText = chartText();
-        int updatedPosition = qmlCaretPosition_;
-        if (!miacode::qml_ui::applyQmlTouchPadAuthoringEdit(
-                &updatedText, &updatedPosition, pad, backtick)) return false;
-        setChartText(updatedText);
-        qmlCaretAnchor_ = qmlCaretPosition_ = updatedPosition;
+        // SourceEditor performs the returned value transaction.  That keeps
+        // touch authoring in the same one-step QML undo stack as keyboard,
+        // IME, paste and Replace All instead of resetting it through a full
+        // document assignment here.
+        emit qmlTouchPadAuthoringRequested(
+            pad, backtick, currentDifficultyId(), documentRevision_,
+            qmlCaretAnchor_, qmlCaretPosition_);
         return true;
     });
     backend_->setQmlTouchPadAuthoringContextHandler([this] {
         return miacode::qml_ui::QmlTouchPadAuthoringContext{
             currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
             qmlEditorFocused_, qmlImeComposing_}.accepts();
+    });
+    backend_->setQmlEditorNavigationHandler([this](
+        const miacode::qml_ui::QmlEditorNavigationRequest& request) {
+        return miacode::qml_ui::routeQmlEditorNavigation(
+            request, qmlEditorNavigationReadiness_, currentDifficultyId(), documentRevision_,
+            [this](const miacode::qml_ui::QmlEditorNavigationRequest& accepted) {
+                emit qmlEditorNavigationRequested(
+                    accepted.difficultyId, accepted.revision, accepted.line, accepted.column,
+                    accepted.endLine, accepted.endColumn, accepted.selectToken,
+                    accepted.focusEditor, accepted.centerView);
+            });
     });
     refreshDocumentState();
     connect(backend_, &MainWindow::documentValidationChanged,
@@ -62,6 +77,7 @@ QmlDocumentModel::~QmlDocumentModel()
     if (backend_ != nullptr) {
         backend_->setQmlTouchPadAuthoringHandler({});
         backend_->setQmlTouchPadAuthoringContextHandler({});
+        backend_->setQmlEditorNavigationHandler({});
     }
 }
 
@@ -166,7 +182,11 @@ void QmlDocumentModel::setMetadataSourceText(const QString& value)
 
 QString QmlDocumentModel::documentTitle() const
 {
-    return metadataTitle().trimmed().isEmpty() ? currentFileName() : metadataTitle();
+    const QString chartTitle = metadataTitle().trimmed().isEmpty()
+        ? currentFileName() : metadataTitle();
+    const QString difficulty = currentDifficultyId() > 0 ? currentDifficultyLabel() : QString();
+    return difficulty.isEmpty() ? chartTitle
+        : QStringLiteral("%1 — %2").arg(chartTitle, difficulty);
 }
 QString QmlDocumentModel::currentFilePath() const { return backend_->documentFilePath(); }
 QString QmlDocumentModel::currentFileName() const
@@ -293,6 +313,7 @@ QStringList QmlDocumentModel::dirtyEditorKeys() const
 {
     return presentationState_.dirtyEditorKeys;
 }
+qulonglong QmlDocumentModel::bookmarkGeneration() const { return bookmarkGeneration_; }
 
 bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 {
@@ -392,6 +413,72 @@ void QmlDocumentModel::setQmlEditorInteraction(int difficultyId, qulonglong revi
     if (backend_ != nullptr) backend_->refreshQmlTouchPadAuthoringContext();
 }
 
+void QmlDocumentModel::setQmlEditorNavigationReadiness(
+    int difficultyId, qulonglong revision, bool sourceVisible, bool metadataMode)
+{
+    qmlEditorNavigationReadiness_ = miacode::qml_ui::QmlEditorNavigationReadiness{
+        difficultyId, static_cast<quint64>(revision), sourceVisible, metadataMode};
+}
+
+void QmlDocumentModel::setQmlTouchPadAuthoringCtrlHold(bool active)
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    // Never arm the runtime on the strength of a stale QML focus snapshot.
+    const miacode::qml_ui::QmlTouchPadAuthoringContext context{
+        currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
+        qmlEditorFocused_, qmlImeComposing_};
+    backend_->setQmlTouchPadAuthoringCtrlHold(active && context.accepts());
+}
+
+bool QmlDocumentModel::setTouchPadAuthoringPreviewAnchor(
+    int difficultyId, qulonglong revision, const QString& text, int tokenStart)
+{
+    if (backend_ == nullptr || difficultyId != currentDifficultyId()
+        || revision != documentRevision_ || text != chartText()) {
+        return false;
+    }
+    const int position = qBound(0, tokenStart, text.size());
+    const int newline = text.lastIndexOf(QLatin1Char('\n'), qMax(0, position - 1));
+    const int line = text.left(position).count(QLatin1Char('\n')) + 1;
+    const int column = position - newline;
+    return backend_->applyQmlTouchPadAuthoringPreviewAnchor(difficultyId, line, column);
+}
+
+QVariantList QmlDocumentModel::bookmarksForDifficulty(int difficultyId) const
+{
+    QVariantList bookmarks;
+    const QStringList lines = backend_->documentDifficultyChartText(difficultyId)
+                                  .split(QLatin1Char('\n'));
+    for (int index = 0; index < lines.size(); ++index) {
+        const auto bookmark = miacode::editor::parseBookmarkComment(lines.at(index));
+        if (!bookmark.has_value()) {
+            continue;
+        }
+        bookmarks.append(QVariantMap{
+            {QStringLiteral("line"), index + 1},
+            {QStringLiteral("title"), bookmark->title},
+        });
+    }
+    return bookmarks;
+}
+
+void QmlDocumentModel::navigateToBookmark(int difficultyId, int line)
+{
+    if (difficultyId <= 0 || line <= 0) {
+        return;
+    }
+    if (difficultyId != currentDifficultyId()) {
+        selectDifficulty(difficultyId);
+    }
+    if (difficultyId != currentDifficultyId()) {
+        return;
+    }
+    emit qmlEditorNavigationRequested(difficultyId, documentRevision_, line, 1, line, 1,
+                                      false, true, true);
+}
+
 void QmlDocumentModel::markDocumentChanged()
 {
     refreshDocumentState();
@@ -400,6 +487,8 @@ void QmlDocumentModel::markDocumentChanged()
     emit metadataSourceChanged();
     emit documentTitleChanged();
     emit syntaxIssuesChanged();
+    ++bookmarkGeneration_;
+    emit bookmarksChanged();
     emit documentStateChanged();
 }
 
@@ -417,6 +506,8 @@ void QmlDocumentModel::emitDocumentStateChanged()
     emit dirtyChanged();
     emit dirtyEditorKeysChanged();
     emit syntaxIssuesChanged();
+    ++bookmarkGeneration_;
+    emit bookmarksChanged();
     emit documentStateChanged();
 }
 

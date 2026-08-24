@@ -64,10 +64,16 @@ UIv2 text input is an explicit side chain, not a direct `TextArea.text` contract
 `QmlEditorInputBridge` to `QmlEditorController`; the controller returns one edit transaction,
 completion state and controller-owned undo/redo history. The editor applies that transaction,
 then publishes its current difficulty, document revision, anchor/position, focus and IME-composing
-state through `QmlDocumentModel::setQmlEditorInteraction`. Ctrl+touch authoring must consume only
-that snapshot: `QmlTouchPadAuthoringBridge` rejects stale revisions, a different difficulty,
-unfocused editor and active composition. `MainWindow` uses the QML handler exclusively while it is
-registered; it must not silently fall back to the legacy hidden editor.
+state through `QmlDocumentModel::setQmlEditorInteraction`. Its `TextArea` key route is
+`Keys.BeforeItem`, so Tab/Enter/arrows/Escape reach the completion controller before native text
+handling. Ctrl+touch authoring must consume only that snapshot: `QmlTouchPadAuthoringBridge`
+rejects stale revisions, a different difficulty, unfocused editor and active composition.
+`MainWindow` uses the QML handler exclusively while it is registered; it must not silently fall
+back to the legacy hidden editor. Reverse timeline/preview navigation additionally passes through
+`QmlEditorNavigationReadiness`: `SourceEditor` reports its visible, non-metadata source together
+with active difficulty/revision; only a matching ready state emits
+`qmlEditorNavigationRequested` and acknowledges the request. A hidden or metadata source returns
+false without moving the legacy editor.
 
 Implications:
 

@@ -5,6 +5,7 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include "QmlEditorNavigationBridge.h"
 #include "QmlDocumentProjection.h"
 
 class MainWindow;
@@ -49,6 +50,7 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(bool validationAvailable READ validationAvailable NOTIFY documentStateChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
     Q_PROPERTY(QStringList dirtyEditorKeys READ dirtyEditorKeys NOTIFY dirtyEditorKeysChanged)
+    Q_PROPERTY(qulonglong bookmarkGeneration READ bookmarkGeneration NOTIFY bookmarksChanged)
 
 public:
     explicit QmlDocumentModel(MainWindow& backend, QObject* parent = nullptr);
@@ -99,6 +101,7 @@ public:
     bool validationAvailable() const;
     bool dirty() const;
     QStringList dirtyEditorKeys() const;
+    qulonglong bookmarkGeneration() const;
 
     Q_INVOKABLE bool openFile(const QUrl& fileUrl);
     Q_INVOKABLE bool save();
@@ -111,6 +114,13 @@ public:
     Q_INVOKABLE int chartPosition(int line, int column) const;
     Q_INVOKABLE bool publishEditorCaret(int difficultyId, qulonglong revision, int line, int column);
     Q_INVOKABLE void setQmlEditorInteraction(int difficultyId, qulonglong revision, int anchor, int position, bool focused, bool imeComposing);
+    Q_INVOKABLE void setQmlEditorNavigationReadiness(int difficultyId, qulonglong revision,
+                                                     bool sourceVisible, bool metadataMode);
+    Q_INVOKABLE void setQmlTouchPadAuthoringCtrlHold(bool active);
+    Q_INVOKABLE bool setTouchPadAuthoringPreviewAnchor(int difficultyId, qulonglong revision,
+                                                       const QString& text, int tokenStart);
+    Q_INVOKABLE QVariantList bookmarksForDifficulty(int difficultyId) const;
+    Q_INVOKABLE void navigateToBookmark(int difficultyId, int line);
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
     Q_INVOKABLE void disableUnifiedDesigner();
 
@@ -129,6 +139,13 @@ signals:
     void dirtyEditorKeysChanged();
     void documentStateChanged();
     void documentReplaced();
+    void qmlEditorNavigationRequested(int difficultyId, qulonglong revision, int line,
+                                      int column, int endLine, int endColumn, bool selectToken,
+                                      bool focusEditor, bool centerView);
+    void qmlTouchPadAuthoringRequested(const QString& pad, bool useBacktickSeparator,
+                                       int difficultyId, qulonglong revision,
+                                       int anchor, int position);
+    void bookmarksChanged();
     void operationFailed(const QString& title, const QString& message);
 
 private:
@@ -150,4 +167,6 @@ private:
     int qmlCaretPosition_ = 0;
     bool qmlEditorFocused_ = false;
     bool qmlImeComposing_ = false;
+    miacode::qml_ui::QmlEditorNavigationReadiness qmlEditorNavigationReadiness_;
+    qulonglong bookmarkGeneration_ = 0;
 };

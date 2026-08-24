@@ -64,8 +64,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the public operations in `sections/document/MainWindow.DocumentBridge.cpp`; validation reads
   `DocumentValidationSnapshot` from the shared cache. `QmlEditorController` is the narrow QML
   text-transaction/completion/undo owner exposed by `QmlApplicationContext`; `SourceEditor.qml`
-  forwards separate key, IME-commit and paste paths through `QmlEditorInputBridge`, while
-  `CompletionPopup.qml` remains unfocused so editor keyboard routing is retained. Preview
+  forwards separate key, IME-commit and paste paths through `QmlEditorInputBridge` with
+  `Keys.BeforeItem`, while `CompletionPopup.qml` remains unfocused so editor keyboard routing is retained.
+  Timeline/preview reverse navigation is acknowledged only after `SourceEditor` reports a visible,
+  non-metadata `QmlEditorNavigationReadiness` snapshot for the same difficulty/revision. Preview
   statistics use structured entries from `QmlPreviewModel` and skin-aware note images from
   `QmlNoteImageProvider`, backed by `TimelineNoteAssets`. Windows caption: `QmlUiWindowChrome`.
   Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.

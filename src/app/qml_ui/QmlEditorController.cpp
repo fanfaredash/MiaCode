@@ -2,6 +2,7 @@
 
 #include "editor/SimaiCompletionCatalog.h"
 #include "editor/BookmarkCommentSyntax.h"
+#include "editor/TouchPadAuthoringEdit.h"
 
 #include <QtGlobal>
 #include <QGuiApplication>
@@ -96,7 +97,8 @@ miacode::editor::SimaiTextEditResult QmlEditorController::processKey(
             result.consumed = true;
             return result;
         }
-        if ((key == Qt::Key_Return || key == Qt::Key_Enter) && !commandModifier(keyboardModifiers))
+        if ((key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Tab)
+            && !commandModifier(keyboardModifiers))
             return acceptCompletion(text, anchor, position);
     }
     miacode::editor::SimaiTextEditRequest request;
@@ -412,6 +414,30 @@ QVariantMap QmlEditorController::deleteBookmarkForQml(const QString& text, int l
                                     result.transaction.replacementText);
     result.transaction.anchor = result.transaction.position = result.transaction.replacementStart;
     return toQmlTransaction(result);
+}
+
+QVariantMap QmlEditorController::touchPadAuthoringForQml(
+    const QString& text, int anchor, int position, const QString& pad,
+    bool useBacktickSeparator) const
+{
+    const miacode::editor::TouchPadAuthoringEditPlan plan =
+        miacode::editor::planTouchPadAuthoringEdit(text, position, pad, useBacktickSeparator);
+    auto result = untouched(text, anchor, position);
+    if (!plan.valid) {
+        return toQmlTransaction(result);
+    }
+    const int start = qBound(0, plan.insertionPosition, text.size());
+    const int end = qBound(start, start + plan.removalLength, text.size());
+    result.consumed = true;
+    result.transaction.hasEdit = result.transaction.undoGroup = true;
+    result.transaction.replacementStart = start;
+    result.transaction.replacementEnd = end;
+    result.transaction.replacementText = plan.insertionText;
+    result.transaction.text.replace(start, end - start, plan.insertionText);
+    result.transaction.anchor = result.transaction.position = start + plan.insertionText.size();
+    QVariantMap transaction = toQmlTransaction(result);
+    transaction.insert(QStringLiteral("touchTokenStart"), plan.tokenStart);
+    return transaction;
 }
 void QmlEditorController::resetQmlHistory(const QString& text, int anchor, int position)
 {

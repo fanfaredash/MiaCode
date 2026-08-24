@@ -1,12 +1,20 @@
 #include "app/qml_ui/QmlEditorController.h"
 #include "app/qml_ui/QmlEditorInputBridge.h"
+#include "app/qml_ui/QmlEditorNavigationBridge.h"
 #include "app/qml_ui/QmlTouchPadAuthoringBridge.h"
 #include "editor/BookmarkCommentSyntax.h"
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QGuiApplication>
 #include <QInputMethodEvent>
+#include <QKeyEvent>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQuickItem>
 #include <QTextStream>
+
+#include <memory>
 
 namespace {
 
@@ -37,14 +45,72 @@ bool expect(bool condition, const QString& message, QTextStream& out, int* faile
     if (!condition) ++*failed;
     return condition;
 }
+
+bool verifyQmlTextAreaKeyRouting(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+        import QtQuick
+        import QtQuick.Controls
+
+        TextArea {
+            id: editor
+            objectName: "editor"
+            text: "stable"
+            focus: true
+            Keys.priority: Keys.BeforeItem
+            property int controllerEventCount: 0
+            property var controllerKeys: []
+            Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Tab || event.key === Qt.Key_Return
+                        || event.key === Qt.Key_Down || event.key === Qt.Key_Escape) {
+                    controllerEventCount += 1
+                    controllerKeys = controllerKeys.concat([event.key])
+                    event.accepted = true
+                }
+            }
+        }
+    )QML", QUrl(QStringLiteral("qrc:/QmlEditorControllerSpec.qml")));
+    if (!expect(component.isReady(), QStringLiteral("QML TextArea key-routing harness compiles"), out, failed)) {
+        for (const QQmlError& error : component.errors()) {
+            out << error.toString() << '\n';
+        }
+        return false;
+    }
+
+    std::unique_ptr<QObject> root(component.create());
+    auto* editor = qobject_cast<QQuickItem*>(root.get());
+    if (!expect(editor != nullptr, QStringLiteral("QML TextArea key-routing harness creates an item"), out, failed)) {
+        return false;
+    }
+    editor->setFocus(true);
+    const QList<int> keys{Qt::Key_Tab, Qt::Key_Return, Qt::Key_Down, Qt::Key_Escape};
+    for (const int key : keys) {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(editor, &event);
+    }
+    const QVariantList deliveredKeys = root->property("controllerKeys").toList();
+    bool deliveredInOrder = deliveredKeys.size() == keys.size();
+    for (qsizetype index = 0; deliveredInOrder && index < keys.size(); ++index) {
+        deliveredInOrder = deliveredKeys.at(index).toInt() == keys.at(index);
+    }
+    return expect(root->property("controllerEventCount").toInt() == keys.size()
+                      && deliveredInOrder
+                      && root->property("text").toString() == QStringLiteral("stable"),
+                  QStringLiteral("QML editor key controller receives completion keys before TextArea defaults"),
+                  out, failed);
+}
 } // namespace
 
 int main(int argc, char** argv)
 {
-    QCoreApplication app(argc, argv);
+    qputenv("QT_QPA_PLATFORM", "offscreen");
+    QGuiApplication app(argc, argv);
     Q_UNUSED(app);
     QTextStream out(stdout);
     int failed = 0;
+    verifyQmlTextAreaKeyRouting(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
     expect(opening.consumed && opening.transaction.replacementText == QStringLiteral("[]") && opening.transaction.position == 1, QStringLiteral("policy key input produces one QML edit transaction"), out, &failed);
@@ -54,7 +120,7 @@ int main(int argc, char** argv)
     controller.selectCompletionIndex(0);
     const auto filter = controller.processKey(opening.transaction.text, 1, 1, QStringLiteral("8"), Qt::Key_8, Qt::NoModifier);
     expect(filter.transaction.text == QStringLiteral("[8]") && controller.completionCandidates() == QStringList{QStringLiteral("8:1]")} && controller.completionIndex() == 0, QStringLiteral("post-edit completion filter keeps a valid selection index"), out, &failed);
-    const auto accepted = controller.acceptCompletion(filter.transaction.text, 2, 2);
+    const auto accepted = controller.processKey(filter.transaction.text, 2, 2, QString(), Qt::Key_Tab, Qt::NoModifier);
     expect(accepted.consumed && accepted.transaction.replacementStart == 1 && accepted.transaction.replacementEnd == 3 && accepted.transaction.replacementText == QStringLiteral("8:1]") && accepted.transaction.text == QStringLiteral("[8:1]"), QStringLiteral("accept replaces filter and existing closing glyph without newline"), out, &failed);
     expect(!controller.completionActive(), QStringLiteral("accept closes the completion session"), out, &failed);
     const auto paste = controller.processPaste(QString(), 0, 0, QStringLiteral("【"));
@@ -118,6 +184,40 @@ int main(int argc, char** argv)
                && !miacode::qml_ui::QmlTouchPadAuthoringContext{3, 3, 42, 41, true, false}.accepts()
                && !miacode::qml_ui::QmlTouchPadAuthoringContext{3, 3, 42, 42, true, true}.accepts(),
            QStringLiteral("QML preview context gates and applies the shared touch-pad edit"), out, &failed);
+    const auto touchTransaction = controller.touchPadAuthoringForQml(
+        QStringLiteral("1,,"), 2, 2, QStringLiteral("A1"), false);
+    expect(touchTransaction.value(QStringLiteral("consumed")).toBool()
+               && touchTransaction.value(QStringLiteral("hasEdit")).toBool()
+               && touchTransaction.value(QStringLiteral("undoGroup")).toBool()
+               && touchTransaction.value(QStringLiteral("replacementText")).toString()
+                      == QStringLiteral("A1")
+               && touchTransaction.value(QStringLiteral("touchTokenStart")).toInt() == 2,
+           QStringLiteral("Ctrl touch authoring is returned as one editor transaction with its token anchor"), out, &failed);
+    const miacode::qml_ui::QmlEditorNavigationRequest navigationRequest{
+        3, 42, 7, 4, 8, 9, true, false, true};
+    expect(navigationRequest.accepts(3, 42)
+               && !navigationRequest.accepts(4, 42)
+               && !navigationRequest.accepts(3, 41)
+               && !miacode::qml_ui::QmlEditorNavigationRequest{
+                   3, 42, 8, 4, 7, 9, true, false, true}.accepts(3, 42),
+           QStringLiteral("reverse editor navigation rejects a different difficulty, stale revision, or backwards range"), out, &failed);
+    int deliveredNavigationRequests = 0;
+    const auto routeNavigation = [&navigationRequest, &deliveredNavigationRequests](
+                                     const miacode::qml_ui::QmlEditorNavigationReadiness& readiness) {
+        return miacode::qml_ui::routeQmlEditorNavigation(
+            navigationRequest, readiness, 3, 42,
+            [&deliveredNavigationRequests](const miacode::qml_ui::QmlEditorNavigationRequest&) {
+                ++deliveredNavigationRequests;
+            });
+    };
+    expect(!routeNavigation({3, 42, false, false})
+               && deliveredNavigationRequests == 0
+               && !routeNavigation({3, 42, true, true})
+               && deliveredNavigationRequests == 0
+               && routeNavigation({3, 42, true, false})
+               && deliveredNavigationRequests == 1,
+           QStringLiteral("reverse navigation acknowledges only a visible chart source, never hidden or metadata editors"),
+           out, &failed);
     const auto rejectedRoute = [](const miacode::qml_ui::QmlTouchPadAuthoringContext& context) {
         return miacode::qml_ui::resolveTouchPadAuthoringRoute(true, context.accepts());
     };
@@ -182,7 +282,41 @@ int main(int argc, char** argv)
                && source.contains(QStringLiteral("publishCaretForQml"))
                && source.contains(QStringLiteral("publishEditorCaret"))
                && source.contains(QStringLiteral("setQmlEditorInteraction"))
-               && source.contains(QStringLiteral("recordQmlTransaction")),
-           QStringLiteral("SourceEditor routes editor workflow and revision-safe caret through controller"), out, &failed);
+               && source.contains(QStringLiteral("recordQmlTransaction"))
+               && source.contains(QStringLiteral("editorContextMenu"))
+               && source.contains(QStringLiteral("centerCursorInView"))
+               && source.contains(QStringLiteral("Keys.priority: Keys.BeforeItem"))
+               && source.contains(QStringLiteral("setQmlTouchPadAuthoringCtrlHold"))
+               && source.contains(QStringLiteral("setQmlEditorNavigationReadiness"))
+               && source.contains(QStringLiteral("onQmlEditorNavigationRequested"))
+               && source.contains(QStringLiteral("onQmlTouchPadAuthoringRequested"))
+               && source.contains(QStringLiteral("touchPadAuthoringForQml"))
+               && source.count(QStringLiteral("onJumpRequested: root.jumpToLine(line)")) == 1,
+           QStringLiteral("SourceEditor routes keyboard completion, context actions, reverse navigation, and revision-safe touch editing"), out, &failed);
+    QFile difficultyList(QStringLiteral("src/app/qml_ui/sidebar/DifficultyList.qml"));
+    expect(difficultyList.open(QIODevice::ReadOnly), QStringLiteral("DifficultyList QML is available to bookmark sidebar wiring test"), out, &failed);
+    const QString sidebarSource = QString::fromUtf8(difficultyList.readAll());
+    expect(sidebarSource.contains(QStringLiteral("bookmarkGeneration"))
+               && sidebarSource.contains(QStringLiteral("bookmarksForDifficulty"))
+               && sidebarSource.contains(QStringLiteral("navigateToBookmark")),
+           QStringLiteral("bookmarks are grouped under their difficulty in the sidebar instead of overlaying the editor"), out, &failed);
+    QFile documentModelSource(QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
+    QFile mainWindowHeader(QStringLiteral("src/app/mainwindow/MainWindow.h"));
+    expect(documentModelSource.open(QIODevice::ReadOnly) && mainWindowHeader.open(QIODevice::ReadOnly),
+           QStringLiteral("QML touch-pad ownership boundaries are available to wiring test"), out, &failed);
+    const QString documentSource = QString::fromUtf8(documentModelSource.readAll());
+    const QString mainWindowSource = QString::fromUtf8(mainWindowHeader.readAll());
+    expect(documentSource.contains(QStringLiteral("setQmlTouchPadAuthoringCtrlHold(active && context.accepts())"))
+               && mainWindowSource.contains(
+                   QStringLiteral("void setQmlTouchPadAuthoringCtrlHold(bool active);")),
+           QStringLiteral("QML Ctrl authoring arms preview through a public narrow MainWindow bridge"), out, &failed);
+    QFile followSyncSource(
+        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
+    expect(followSyncSource.open(QIODevice::ReadOnly),
+           QStringLiteral("preview follow synchronization is available to bridge wiring test"), out, &failed);
+    const QString followSource = QString::fromUtf8(followSyncSource.readAll());
+    expect(followSource.contains(QStringLiteral("requestQmlEditorNavigation("))
+               && followSource.contains(QStringLiteral("cached_qml_navigation")),
+           QStringLiteral("preview follow replays cached bindings through the revision-safe QML editor sink"), out, &failed);
     return failed == 0 ? 0 : 1;
 }

@@ -93,6 +93,12 @@ public:
     Q_INVOKABLE QVariantMap createBookmarkForQml(const QString& text, int line, const QString& title) const;
     Q_INVOKABLE QVariantMap renameBookmarkForQml(const QString& text, int line, const QString& title) const;
     Q_INVOKABLE QVariantMap deleteBookmarkForQml(const QString& text, int line) const;
+    // A preview touch-pad click is still a text transaction.  Returning the
+    // exact replacement lets SourceEditor own document mutation and one-step
+    // undo, while the token start is used to park preview follow safely.
+    Q_INVOKABLE QVariantMap touchPadAuthoringForQml(const QString& text, int anchor,
+                                                    int position, const QString& pad,
+                                                    bool useBacktickSeparator) const;
     Q_INVOKABLE void resetQmlHistory(const QString& text, int anchor, int position);
     Q_INVOKABLE void recordQmlTransaction(const QString& before, const QString& after,
                                           int beforeAnchor, int beforePosition,
