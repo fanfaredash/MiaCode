@@ -145,7 +145,13 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
    flush 清除），没有按文档重新置位，所以后续切换走的是立即分支而非被延迟吞掉。
 3. v2 的开档入口 `QmlDocumentModel::openFile()` → `MainWindow::openStartupTarget()`，对文件路径
    直接转 `openFileAtPath(path, true, true)` —— 与 v1 `onOpenFile()` 落到同一个函数。
-   （唯一差异是 v2 未走 `maybeSaveBeforeContinue()` 的脏文档确认，属于另一条待办，与 PV 无关。）
+
+   > **更正：** 早前记录过“v2 未走脏文档确认、会静默丢弃未保存修改”，这是错的。v2 的确认在 QML 层
+   > （`MainView.requestOpenFile()` → `unsavedChangesDialog`，含 Save / Discard / Cancel 三个分支），
+   > 只是不经由 C++ 的 `maybeSaveBeforeContinue()`。当时只查了 `openFileAtPath` 的调用链就下了结论。
+   > 两条分支值得在复现时留意：`Save` 分支在 `saveDocument()` 返回 false 时静默丢弃待打开的文件
+   > （`clearPendingAction()`，无任何提示）；`Discard` 分支会先把当前文件重新打开一次再打开目标文件。
+   > 两者都尚未被证明与本问题相关，仅作为复现时的观察点。
 4. `TimelineSceneStateBuilder` 等下游对越界/倒置输入已有收敛，不会因切换产生脏几何。
 5. QML 侧预览投影由 `QuickShellController` 的轮询 `refresh()` 驱动并发 `shellStateChanged`，
    不依赖 `documentReplaced`，因此不会长期停留在旧文档的投影上。
