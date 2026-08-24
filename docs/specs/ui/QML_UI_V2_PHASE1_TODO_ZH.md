@@ -105,22 +105,23 @@
       `ctest --test-dir build -C Release -R 'qml_.*_spec|simai_text_edit_policy_spec|plain_code_editor_spec|simai_completion_catalog_spec|timeline_model_spec|timeline_marker_offset_spec|muri_spec|touch_pad_authoring_state_spec' --output-on-failure`
       为 11/11 通过。
 
-### 二阶段桌面手工回归矩阵（已开始，尚未通过）
+### 二阶段桌面手工回归矩阵（五项验收门槛已通过，其余仍待执行）
 
 本机以 `QT_QPA_PLATFORM=offscreen` 启动 QML 桌面壳会触发既有 macOS 原生主题/平台插件崩溃，不能把
-offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 2026-08-24 的原生桌面验收；未列为通过的项目不得由构建或 CTest 推断为通过：
+offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 2026-08-24 的原生桌面验收与修复后复验；
+未列为通过的项目不得由构建或 CTest 推断为通过。**通过仅代表 macOS 本次观察，Windows 侧尚未验证。**
 
 | 流程 | 自动/静态证据 | 原生 GUI 状态（2026-08-24 修复轮后） |
 |---|---|---|
-| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入；`qml_editor_controller_spec` 载入真实 `CompletionPopup.qml` 断言高亮、宽度与锚点翻转 | 仍未观察。completion popup 三项成因已修（`5ee23d38`），窄窗口 Timeline 缩放仍待复测。 |
+| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入；`qml_editor_controller_spec` 载入真实 `CompletionPopup.qml` 断言高亮、宽度与锚点翻转 | completion popup 与窄窗口 Timeline 缩放已复验通过（`5ee23d38`）。字号/浅深色/多语言的完整矩阵仍未逐项走过。 |
 | 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | Validation 上一轮通过；Muri 未重新观察，不能从自动测试推断桌面通过。 |
-| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec`；暂停跟随装饰的路由与 QML 渲染回归在 `qml_editor_controller_spec` | 暂停跟随成因已修（`ca943a82`，装饰通道接入可见 QML 编辑器）。缩放/命中/四个 follow 状态仍待桌面观察。 |
-| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；真实 `TextArea` + 真实 `QKeyEvent` 的命令修饰键回归；真实 `QInputMethodEvent` 的再入提交回归 | 书签上一轮通过。正文右键菜单（`2a27630d`）、命令修饰键写入字面字符（`75c89635`）、IME 提交递归复制（`f4251ca0`，由用户复现的 `--debug` 日志确证 depth 630 / 631 次插入）均已修，待桌面复验。**撤销栈另有问题**，见下方“待处理功能缺口”。 |
-| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | `Command`+点击 seek 预览已接入（`f451ae09`），回归投递真实 `Ctrl+左键`；桌面复验仍未执行。 |
+| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec`；暂停跟随装饰的路由与 QML 渲染回归在 `qml_editor_controller_spec` | 通过：暂停跟随（`ca943a82`）、缩放/命中/四个 follow 状态均已复验。 |
+| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；真实 `TextArea` + 真实 `QKeyEvent` 的命令修饰键回归；真实 `QInputMethodEvent` 的再入提交回归 | 通过：书签、正文右键菜单（`2a27630d`）、命令修饰键写入字面字符（`75c89635`）、IME 提交递归复制（`f4251ca0`，由 `--debug` 日志确证 depth 630 / 631 次插入）。**撤销栈另有问题**，见下方“待处理功能缺口”。 |
+| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | 通过：`Command`+点击 seek 预览（`f451ae09`）已复验。 |
 | root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 未执行。 |
 
-> 本轮所有修复都只有自动证据：本机没有显示器/截屏权限，原生 GUI 复验一次都没有执行。
-> 详细的根因、回归与未完成项见
+> 修复轮本身只有自动证据（会话无显示器/截屏权限）；原生桌面复验由用户另行执行，五项验收门槛已通过。
+> 详细的根因、回归、复验结果与未完成项见
 > [QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。
 
 ### 上游同步
@@ -231,8 +232,8 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 原则：**先保证功能完整性，优化类条目一律靠后。**
 
-1. 五项验收门槛的原生桌面复验（未通过前不得宣称阶段 2 验收完成）。
-2. GUI 验证新发现的功能缺口：切换文档后 PV、撤销栈、快捷键体系。
+1. ~~五项验收门槛的原生桌面复验~~ — 2026-08-24 macOS 复验通过；Windows 侧仍未验证。
+2. GUI 验证新发现的功能缺口：切换文档后 PV、撤销栈、快捷键体系。**当前入口。**
 3. P0 时间轴接入剩余的 Step 2 / Step 3 / Step 6 / Step 7。
 4. P3 页面接线与产品决策。
 5. P4 Latency 页面迁移。

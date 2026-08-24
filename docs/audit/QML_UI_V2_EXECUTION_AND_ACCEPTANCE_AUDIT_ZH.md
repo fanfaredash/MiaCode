@@ -1,7 +1,9 @@
 # QML UI v2 执行、修复与人工验收审计
 
-> 状态：**未验收通过**。本文件记录原计划的实施提交、首次阶段完成后的缺陷修复、2026-08-24 的原生桌面验收结果，
-> 以及针对该次失败项的根因修复轮。它不替代原始计划；原计划见 [QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md](QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md)。
+> 状态：**五项验收门槛已于 2026-08-24 复验通过**（macOS 单平台观察，不替代跨平台回归；见文末“复验结果”）。
+> 本文件记录原计划的实施提交、首次阶段完成后的缺陷修复、2026-08-24 的原生桌面验收结果、
+> 针对该次失败项的根因修复轮，以及修复后的复验结论。
+> 它不替代原始计划；原计划见 [QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md](QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md)。
 
 ## 原始计划与实施提交
 
@@ -93,28 +95,35 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 
 ### 本轮未能执行的验证
 
-- **原生桌面观察未执行。** 本次会话没有显示器/截屏权限（`screencapture` 返回
-  `could not create image from display`），因此上述修复**都没有**经过原生 GUI 复验。自动证据不能
-  替代它，下节的验收门槛因此仍然全部开启。
-- **IME 重复插入未修复**，只落了诊断。需要在装有真实输入法的机器上以 `--debug` 复现一次，
-  查看 `miacode_runtime_debug.log` 的 `[runtime/editor/ime_event]` 与 `[runtime/editor/ime_commit]`：
-  若同一次提交出现多条 `ime_event`，问题在平台投递；若 `reentrant=1`，则是 QML 事务重入了输入法上下文。
-- **窄窗口 Timeline 缩放与 header 命中未观察。** 静态复查显示该链路已有防护：
+- **原生桌面观察不是在本会话内完成的。** 会话没有显示器/截屏权限（`screencapture` 返回
+  `could not create image from display`），修复轮本身只有自动证据；复验由用户在本机另行执行，
+  结果记在下面的“复验结果”一节。
+- **IME 重复插入随后已由该诊断确证并修复**（`f4251ca0`）：用户以 `--debug` 复现后，日志显示同一次
+  提交递归到 `depth=630`、`reentrant=1`，即 QML 事务重入了输入法上下文。证据与结论见上文。
+- **窄窗口 Timeline 缩放与 header 命中在本会话内未观察**（已由用户复验通过）。静态复查显示该链路已有防护：
   `TimelineSceneStateBuilder` 用 `max(headerSafeLeft, headerRightLimit)` 且对视口宽度取
   `min`，因此即使 `BottomPanel.qml` 在极窄面板下把 limit 传成倒置或越界，也会收敛而不是画错。
   但这只是读码结论，不能当作桌面观察通过。
 
-## 未关闭的验收门槛
+## 验收门槛的复验结果（2026-08-24，修复轮之后）
 
-在以下项目均通过原生桌面复验前，QML UI v2 **不得**宣称阶段 2 已完全验收：
+以下五项在修复轮之后由用户在 macOS 上做了原生桌面复验，结果为**通过**。与本文其它“通过”
+一样，它表示本次观察没有发现问题，**不替代 Windows 侧与跨平台回归**。
 
-1. 暂停状态的 preview-follow 与 `Command`+点击文本后的 preview seek。
-2. completion popup 的光标锚定、主题样式、当前候选高亮以及 Up/Down/Tab/Enter/Escape 的视觉反馈。
-3. 编辑器正文右键菜单的鼠标与键盘 context-menu 路径。
-4. `Command+Z` 绝不降级为文本输入；IME commit 后直接 Enter 不重复插入（成因已确证并修复，仍需桌面复验）。
-5. 窄窗口 Timeline 缩放、header hit target 与四个 follow 状态的桌面观察。
+| # | 门槛 | 结果 | 对应修复 |
+| --- | --- | --- | --- |
+| 1 | 暂停状态的 preview-follow 与 `Command`+点击文本后的 preview seek | 通过 | `ca943a82`、`f451ae09` |
+| 2 | completion popup 的光标锚定、主题样式、当前候选高亮以及 Up/Down/Tab/Enter/Escape 的视觉反馈 | 通过 | `5ee23d38` |
+| 3 | 编辑器正文右键菜单的鼠标与键盘 context-menu 路径 | 通过 | `2a27630d` |
+| 4 | `Command+Z` 绝不降级为文本输入；IME commit 后直接 Enter 不重复插入 | 通过 | `75c89635`、`f4251ca0` |
+| 5 | 窄窗口 Timeline 缩放、header hit target 与四个 follow 状态 | 通过 | `a6f57953`（几何链），本轮仅复验 |
 
-后续修复必须先添加可执行的失败回归（优先真实 QML、`QInputMethodEvent` 和快捷键事件，不以源码字符串扫描替代），再实现最小修复；每个独立修复提交后重新运行 Release 构建、相关 CTest 和对应的原生桌面用例。
+因此阶段 2 的这五项门槛不再阻塞后续工作。**但阶段 2 整体仍未完全验收**：同一次桌面验证
+另外发现了三项功能缺口（切换文档后 PV、撤销栈、快捷键体系），见下节；Windows 侧尚未验证。
+
+后续修复继续遵守同一流程：先添加可执行的失败回归（优先真实 QML、`QInputMethodEvent` 和快捷键事件，
+不以源码字符串扫描替代），再实现最小修复；每个独立修复提交后重新运行 Release 构建、相关 CTest
+和对应的原生桌面用例。
 
 ## 2026-08-24 GUI 验证新发现（本轮不处理，仅登记）
 
@@ -132,5 +141,6 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 
 - 原计划的 Task 1–10 实施提交保持不重写，以便追溯每项边界和规格的引入时间。
 - `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md` 是当前手工验收摘要；本文件提供提交级历史和失败项。
-- 当前分支在三个后续修复提交之后，又加入了本文“根因修复轮”一节的五个修复提交与一个诊断提交。
-  五项验收门槛的代码侧成因已定位并修复（IME 重复插入除外，仅落诊断），但门槛本身仍需原生桌面复验才能关闭。
+- 当前分支在三个后续修复提交之后，又加入了本文“根因修复轮”一节的六个修复提交与一个诊断提交。
+  五项验收门槛的成因均已定位、修复，并于 2026-08-24 通过 macOS 原生桌面复验。
+  阶段 2 仍未整体验收：另有三项功能缺口待处理，Windows 侧未验证。
