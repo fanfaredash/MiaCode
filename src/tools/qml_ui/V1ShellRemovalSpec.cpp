@@ -4,10 +4,11 @@
 // completes — see docs/specs/ui/plans/2026-08-25-v2-stage0a-remove-v1-shell.md.
 // A red result here is the deliberate starting state, not a regression.
 //
-// Assertion group 5 pins QuickShellController as a survivor (v2 still uses
-// it) and only checks that it no longer branches on a native surface host.
-// When a later stage retires QuickShellController itself, this spec must be
-// updated to match rather than having its failure read as a regression.
+// The "QuickShellController is still present for v2" assertion pins it as a
+// survivor (v2 still uses it) — this spec only checks that it no longer
+// branches on a native surface host. When a later stage retires
+// QuickShellController itself, this spec must be updated to match rather
+// than having its failure read as a regression.
 
 #include <QCoreApplication>
 #include <QDir>

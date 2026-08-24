@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QHash>
 #include <QRegularExpression>
 #include <QRegularExpressionMatchIterator>
 #include <QSet>
@@ -54,8 +55,13 @@ const QSet<QString> kRetiredFlags = {
 // code scan. This spec's own file is here for the retired allowlist above;
 // V1ShellRemovalSpec.cpp is here because it pins MIACODE_UI_SKIN as a token
 // that must NOT survive v1 shell removal — that literal would otherwise look
-// like a live flag read to this scan (see docs/specs/ui/plans/2026-08-25-v2-
-// stage0a-remove-v1-shell.md).
+// like a live flag read to this scan. See:
+// docs/specs/ui/plans/2026-08-25-v2-stage0a-remove-v1-shell.md
+//
+// The exclusion is only valid for files that embed literals for contract
+// checking, not files that actually read env flags — see the exclusionAbuse
+// check below, which fails loudly if an excluded file ever adds a real
+// qgetenv/qEnvironmentVariable call.
 const QSet<QString> kSelfExcludedFileNames = {
     QStringLiteral("DebugFlagIndexSpec.cpp"),
     QStringLiteral("V1ShellRemovalSpec.cpp"),
@@ -111,8 +117,12 @@ int main(int argc, char* argv[])
 
     // 1. Every MIACODE_* literal read across the source tree (the spec files
     //    in kSelfExcludedFileNames excluded — they embed flag-name literals
-    //    for contract checking, not real env reads).
+    //    for contract checking, not real env reads). Matched by bare
+    //    filename (QDirIterator::fileName()), not a path-tail endsWith,
+    //    so a file merely sharing a name suffix (e.g. a hypothetical
+    //    LegacyV1ShellRemovalSpec.cpp) is not silently excluded too.
     QSet<QString> codeFlags;
+    QHash<QString, QString> excludedFilePaths;
     int scanned = 0;
     QDirIterator it(
         srcDir,
@@ -121,14 +131,8 @@ int main(int argc, char* argv[])
         QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QString path = it.next();
-        bool excluded = false;
-        for (const QString& name : kSelfExcludedFileNames) {
-            if (path.endsWith(name)) {
-                excluded = true;
-                break;
-            }
-        }
-        if (excluded) {
+        if (kSelfExcludedFileNames.contains(it.fileName())) {
+            excludedFilePaths.insert(it.fileName(), path);
             continue;
         }
         codeFlags.unite(collectFlags(readFile(path)));
@@ -139,6 +143,29 @@ int main(int argc, char* argv[])
             << " — is MIACODE_SOURCE_ROOT correct?" << Qt::endl;
         return 1;
     }
+
+    // 1b. The exclusion above is only valid for files that embed flag-name
+    //     literals for contract checking, not files that actually read env
+    //     flags. A genuine call to qgetenv or qEnvironmentVariable slipped
+    //     into an excluded file would go undocumented and unnoticed, so
+    //     check for it. Matched as call syntax (name followed by an opening
+    //     paren), not a bare substring, so prose that merely mentions the
+    //     function name in a comment — as this file's own comments do, to
+    //     explain the exclusion — does not self-trip it.
+    static const QRegularExpression envReadCall(
+        QStringLiteral("\\b(qgetenv|qEnvironmentVariable)\\s*\\("));
+    QStringList exclusionAbuse;
+    for (const QString& name : kSelfExcludedFileNames) {
+        const QString excludedPath = excludedFilePaths.value(name);
+        if (excludedPath.isEmpty()) {
+            continue;
+        }
+        const QString excludedText = readFile(excludedPath);
+        if (envReadCall.match(excludedText).hasMatch()) {
+            exclusionAbuse.append(name);
+        }
+    }
+    exclusionAbuse.sort();
 
     // 2. Every flag mentioned in DEBUG_INDEX.md.
     const QString doc = readFile(docPath);
@@ -185,6 +212,18 @@ int main(int argc, char* argv[])
         }
         err << "Fix: delete from DEBUG_INDEX.md, or move it to the doc's retired list "
                "and add it to kRetiredFlags in this spec." << Qt::endl;
+    }
+    if (!exclusionAbuse.isEmpty()) {
+        ok = false;
+        err << exclusionAbuse.size()
+            << " file(s) in kSelfExcludedFileNames actually read an env flag:" << Qt::endl;
+        for (const QString& name : exclusionAbuse) {
+            err << "  - " << name << Qt::endl;
+        }
+        err << "Fix: the exclusion in kSelfExcludedFileNames is only valid for files that "
+               "embed MIACODE_* literals for contract checking, not files that call "
+               "qgetenv/qEnvironmentVariable to read a real flag. Remove the file from "
+               "kSelfExcludedFileNames and document the flag instead." << Qt::endl;
     }
 
     if (!ok) {
