@@ -115,7 +115,7 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 | 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入；`qml_editor_controller_spec` 载入真实 `CompletionPopup.qml` 断言高亮、宽度与锚点翻转 | 仍未观察。completion popup 三项成因已修（`5ee23d38`），窄窗口 Timeline 缩放仍待复测。 |
 | 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | Validation 上一轮通过；Muri 未重新观察，不能从自动测试推断桌面通过。 |
 | timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec`；暂停跟随装饰的路由与 QML 渲染回归在 `qml_editor_controller_spec` | 暂停跟随成因已修（`ca943a82`，装饰通道接入可见 QML 编辑器）。缩放/命中/四个 follow 状态仍待桌面观察。 |
-| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；真实 `TextArea` + 真实 `QKeyEvent` 的命令修饰键回归 | 书签上一轮通过。正文右键菜单（`2a27630d`）、命令修饰键写入字面字符（`75c89635`）已修。**IME commit+Enter 重复插入未修复**：本机无法复现，改为落地诊断（`bbd5e3b8`），需带真实输入法的机器以 `--debug` 复现一次。 |
+| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；真实 `TextArea` + 真实 `QKeyEvent` 的命令修饰键回归；真实 `QInputMethodEvent` 的再入提交回归 | 书签上一轮通过。正文右键菜单（`2a27630d`）、命令修饰键写入字面字符（`75c89635`）、IME 提交递归复制（`f4251ca0`，由用户复现的 `--debug` 日志确证 depth 630 / 631 次插入）均已修，待桌面复验。**撤销栈另有问题**，见下方“待处理功能缺口”。 |
 | caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | `Command`+点击 seek 预览已接入（`f451ae09`），回归投递真实 `Ctrl+左键`；桌面复验仍未执行。 |
 | root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 未执行。 |
 
@@ -142,9 +142,21 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 - [x] Step 4：将时间轴导航结果回写到 v2 可见编辑器，补齐跳转、选区和跟随视觉状态。
       播放时走 QML navigation 请求移动光标；暂停或关闭代码跟随时改为只读跟随装饰
       （span 高亮 + 跟随光标 + 不动 caret 的滚动），见 `ca943a82`。
-- [ ] Step 5：将 QML 正文编辑接入 `TimelineQuickModel` 增量更新路径，取消每次输入对整份正文的全量刷新。
 - [ ] Step 6：接入 Muri 标签、列表与问题跳转，与 v1 共用诊断状态。
 - [ ] Step 7：补齐底栏前台生命周期、面板高度同步、缩放与主题刷新。
+- [ ] Step 5（**已降级、暂缓**）：将 QML 正文编辑接入 `TimelineQuickModel` 增量更新路径，取消每次
+      输入对整份正文的全量刷新。这是优化项而非功能项；在功能完整性补齐之前不做。
+
+### 待处理功能缺口（2026-08-24 GUI 验证新发现，优先于 Step 5）
+
+- [ ] 切换文档后 PV 异常：document replacement 后预览运行时/媒体绑定未随新文档重建。
+- [ ] 撤销栈异常：`resetQmlHistory()` 在切换难度 / 文档重载 / 元数据模式切换时整体清空 QML undo 栈；
+      `undoQmlTransaction()` 的全文替换回放又与 `onTextChanged` 记录的增量条目混用。
+- [ ] 快捷键体系缺失：v2 主壳没有统一的快捷键注册层（v1 走 `ShortcutRegistry` + `QAction`），
+      菜单项也不显示快捷键。需要先定产品决策再实现。
+
+详细登记见
+[QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。
 
 ### P1 — 文档模型与诊断契约（已完成）
 
@@ -217,10 +229,14 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 ## 推进顺序
 
-1. P0 时间轴接入，按 Step 1 至 Step 7 分批提交。
-2. P2 文本编辑器逻辑移植。
-3. P3 页面接线与产品决策。
-4. P4 Latency 页面迁移。
+原则：**先保证功能完整性，优化类条目一律靠后。**
+
+1. 五项验收门槛的原生桌面复验（未通过前不得宣称阶段 2 验收完成）。
+2. GUI 验证新发现的功能缺口：切换文档后 PV、撤销栈、快捷键体系。
+3. P0 时间轴接入剩余的 Step 2 / Step 3 / Step 6 / Step 7。
+4. P3 页面接线与产品决策。
+5. P4 Latency 页面迁移。
+6. Step 5（正文编辑增量刷新）等优化项。
 
 ## 更新规则
 

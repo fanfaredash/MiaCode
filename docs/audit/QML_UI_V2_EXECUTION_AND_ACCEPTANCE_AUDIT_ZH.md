@@ -69,7 +69,21 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 | `2a27630d` | 编辑器正文右键菜单 | 正文用 `TapHandler` 承接右键，但 `TextArea` 在 press 时取走鼠标 grab，`ReleaseWithinBounds` 手势在其内部永不完成。隔离实验：纯 `Rectangle` 上 `TapHandler` 命中 1 次、`TextArea` 内 0 次，而 `MouseArea` 两处都是 1 次（行号 gutter 菜单一直用的就是 `MouseArea`） | 载入真实 `SourceEditor.qml`，用 `QTest` 投递真实右键；另断言 Menu 键 / `Shift+F10` 键盘路径 |
 | `f451ae09` | `Command`+点击文本未同步预览 | v1 的 ctrl-click 跳转装在**隐藏** widget viewport 的事件过滤器上，v2 可见的 QML 编辑器没有对应路径，点击只经 caret 桥移动了时间轴光标 | 真实 `SourceEditor.qml` 上投递真实 `Ctrl+左键`，断言普通点击不 seek、Ctrl 点击 seek 到刚落下的 caret 行列 |
 | `ca943a82` | 暂停状态的 preview-follow | 跟随有两种模式：播放且开启代码跟随时移动光标（走 QML navigation 请求），暂停或关闭时只画装饰——而该装饰此前只渲染在隐藏的 v1 `PlainCodeEditor` 上，所以 v2 暂停后完全没有可见跟随 | 路由值断言身份、可见性与 metadata 模式的门控；真实 `SourceEditor.qml` 上驱动装饰信号，断言解析出的偏移、过期 revision 丢弃与清除 |
-| `bbd5e3b8` | IME commit 后 Enter 重复插入 | **未确证。** 用真实 `TextArea` + 真实 `QmlEditorInputBridge` 走 preedit→commit 序列只得到 1 次事务、1 个字符，说明触发点在平台输入法序列而不是桥自身逻辑 | 不修改行为，改为落地诊断：记录每个事件的 commit/preedit 长度、replacement 区间、attribute 种类、composing 状态，以及在 QML 事务两侧采集的 commit 深度 |
+| `bbd5e3b8` | IME commit 后 Enter 重复插入 | 当轮未确证：合成 preedit→commit 序列只得到 1 次事务、1 个字符，说明触发点在平台输入法序列。先落诊断，不猜修复 | 记录每个事件的 commit/preedit 长度、replacement 区间、attribute 种类、composing 状态，以及在 QML 事务两侧采集的 commit 深度 |
+| `f4251ca0` | 同上，**由诊断日志确证并修复** | 递归是自己造成的：桥在事件过滤器内同步改文档时，`QQuickTextEdit` 仍持有本次事件的 preedit；在活动 preedit 下移动光标使 `QQuickTextControl` 通过平台输入法上下文提交该 preedit，平台随即把**同一段 commit** 再投递回过滤器，桥又应用一次 | 用真实 `QInputMethodEvent` 驱动真实桥接，并在 applied 回调里按平台方式重投递（上限 40 次，使未加护栏的桥以 `applied=41` 失败而不是爆栈） |
+
+### IME 重复插入的日志证据（2026-08-24 用户复现）
+
+一次按键（输入 `a` 后回车）在 `Chart/Axeria/.miacode/logs/miacode_runtime_debug.log` 中留下：
+
+- `editor/ime_event` 632 条、`editor/ime_commit` 631 条；
+- `seq=1` 是 preedit，`seq=2` 是唯一真实提交（`reentrant=0`）；
+- `seq=3` 起 `depth` 依次为 1、2、3 … 一路到 **630**，全部 `reentrant=1`、`commit_len=1`；
+- 提交行按 `632→2` 的**逆序**回落，是典型的递归展开；
+- 全过程约 1.2 秒，一次击键写入 631 个字符。
+
+修复后的不变量：**一次平台提交 = 一次文档事务**。再入的提交由下层帧负责，本层剥离 commit 后丢弃；
+`depth` 仍然记录，因此后续采集依然能看出平台是否再入，只是再入不会再复制文本。
 
 ### 本轮证据
 
@@ -97,10 +111,22 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 1. 暂停状态的 preview-follow 与 `Command`+点击文本后的 preview seek。
 2. completion popup 的光标锚定、主题样式、当前候选高亮以及 Up/Down/Tab/Enter/Escape 的视觉反馈。
 3. 编辑器正文右键菜单的鼠标与键盘 context-menu 路径。
-4. `Command+Z` 绝不降级为文本输入；IME commit 后直接 Enter 不重复插入。
+4. `Command+Z` 绝不降级为文本输入；IME commit 后直接 Enter 不重复插入（成因已确证并修复，仍需桌面复验）。
 5. 窄窗口 Timeline 缩放、header hit target 与四个 follow 状态的桌面观察。
 
 后续修复必须先添加可执行的失败回归（优先真实 QML、`QInputMethodEvent` 和快捷键事件，不以源码字符串扫描替代），再实现最小修复；每个独立修复提交后重新运行 Release 构建、相关 CTest 和对应的原生桌面用例。
+
+## 2026-08-24 GUI 验证新发现（本轮不处理，仅登记）
+
+以下三项来自同一次桌面验证，不属于原五项验收门槛，**本轮明确不做**，登记以免遗失：
+
+| 现象 | 初步判断 | 处理时机 |
+| --- | --- | --- |
+| 切换文档后 PV 存在问题 | 疑似 document replacement 后预览运行时/媒体绑定的状态未随新文档重建。与既有 `documentReplaced` 延迟投影链相关，需要单独定位 | 五项门槛复验通过后，优先级最高的一项 |
+| 撤销栈存在问题 | `QmlEditorController` 的 QML undo 栈在 `syncTextFromController()` 触发 `resetQmlHistory()` 时被整体清空（切换难度、文档重载、元数据模式切换都会触发）；且 `undoQmlTransaction()` 以全文替换的形式回放，与 `onTextChanged` 记录的增量条目混用 | 与 PV 一并作为下一批功能修复 |
+| 快捷键体系缺失 | v2 主壳没有统一的快捷键注册层；v1 走 `ShortcutRegistry` + `QAction`，v2 目前只有 `SourceEditor.qml` 内的零散 `Keys.onPressed` 分支。菜单项也普遍不显示快捷键 | 需要先定产品决策（v2 的快捷键归属与可配置性），再实现 |
+
+这三项都指向“功能完整性”而不是性能，与下节调整后的推进顺序一致。
 
 ## 与原计划的关系
 
