@@ -136,11 +136,6 @@ void MainWindow::TimelineSection::onTimelineCadenceWatchdogTick()
 void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
 {
     if (state_.qtPreviewPlaying_) {
-        if (state_.timelineQuickStateBridge_ == nullptr
-            || !quickTimelineBridgeReady()
-            || !timelineTabIsForeground()) {
-            return;
-        }
         miacode::preview_audio::playback_flow::State playbackFlowState;
         playbackFlowState.pendingPlayingSeekSequence = state_.previewPlayingSeekPendingSequence_;
         playbackFlowState.visualSecond = state_.previewPlayingSeekVisualSecond_;
@@ -149,8 +144,17 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
                 playbackFlowState,
                 qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond()));
         const double second = tickDecision.visualSecond;
-        state_.timelineQuickStateBridge_->setPlayheadSeconds(second, state_.previewProgressFollowEnabled_);
-        state_.timelineQuickStateBridge_->focusPlayhead(false);
+        // The timeline item can be hidden while validation or Muri is the
+        // foreground bottom tab. Its render state may pause in that state,
+        // but code-follow is an editor/playback concern and must continue on
+        // this cadence. Update QSG state whenever the bridge is usable; run
+        // the editor follow independently so tab visibility never suppresses
+        // it.
+        if (state_.timelineQuickStateBridge_ != nullptr && quickTimelineBridgeReady()) {
+            state_.timelineQuickStateBridge_->setPlayheadSeconds(
+                second, state_.previewProgressFollowEnabled_);
+            state_.timelineQuickStateBridge_->focusPlayhead(false);
+        }
         state_.qtPreviewLastTimelineSecond_ = second;
         // Follow-preview cursor sync runs on the timeline tick (throttled to timeline target
         // FPS, typically 30-60Hz) rather than on the per-frame preview tick. This keeps the

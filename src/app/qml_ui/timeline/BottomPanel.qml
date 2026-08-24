@@ -38,6 +38,13 @@ Rectangle {
         visible: root.shellController.bottomTabsCurrentTabId === "timeline"
         enabled: visible
         stateBridge: root.shellController.timelineStateBridge
+        // Keep the QSG header's label and marker clip limits in the same
+        // coordinate space as the transparent input controls below. This is
+        // the v2 equivalent of TimelineTabSurface.qml's native header bounds.
+        headerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2
+        headerRightLimit: Math.max(0, brightnessHitControl.x - 2)
+        headerMarkerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2
+        headerMarkerRightLimit: Math.max(0, brightnessHitControl.x - 2)
         onHeaderNavigateRequested: second => root.shellController.timelineHeaderNavigate(second)
         onTimelineWheelNavigateRequested: second => root.shellController.timelineWheelNavigate(second)
         onCenterNavigateRequested: second => root.shellController.timelineCenterNavigate(second)
@@ -57,7 +64,7 @@ Rectangle {
         id: zoomHitControl
 
         x: Math.round(4 * root.shellController.bottomTabsHeaderScale)
-        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         width: Math.max(56, Math.round(72 * root.shellController.bottomTabsHeaderScale))
         height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
         visible: timelineItem.visible
@@ -91,7 +98,7 @@ Rectangle {
         width: Math.max(28, Math.round(28 * root.shellController.bottomTabsHeaderScale))
         height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
         x: Math.max(zoomHitControl.x + zoomHitControl.width + 8, parent.width - width - 8)
-        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         visible: timelineItem.visible
         hoverEnabled: true
         focusPolicy: Qt.TabFocus

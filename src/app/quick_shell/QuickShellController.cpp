@@ -930,8 +930,12 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
         UiText::text(QStringLiteral("shell.follow_code")),
         bridge->followPreviewEnabled(),
         &QuickShellController::timelineFollowPreviewToggled);
+    addToggleWidget(
+        UiText::text(QStringLiteral("timeline.progress_follow")),
+        bridge->followProgressEnabled(),
+        &QuickShellController::timelineFollowProgressToggled);
 
-    // Layout once so sizeHint reflects all three rows + the rounded
+    // Layout once so sizeHint reflects all four rows + the rounded
     // stylesheet padding; only after that can we anchor the bottom-
     // right corner. menu->popup() handles the rest of the show path.
     menu->adjustSize();

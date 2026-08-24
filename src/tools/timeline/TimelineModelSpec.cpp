@@ -791,17 +791,25 @@ int main(int argc, char** argv)
         const QString splitView = qmlSource(QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
         const QString viewState = qmlSource(QStringLiteral("src/app/qml_ui/ViewState.qml"));
         const QString controller = qmlSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp"));
+        const QString timelineTick = qmlSource(
+            QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTick.cpp"));
         const QString editorDisplay = qmlSource(
             QStringLiteral("src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp"));
         expect(!panel.isEmpty() && !tabBar.isEmpty() && !splitView.isEmpty()
-                   && !viewState.isEmpty() && !controller.isEmpty() && !editorDisplay.isEmpty(),
+                   && !viewState.isEmpty() && !controller.isEmpty() && !timelineTick.isEmpty()
+                   && !editorDisplay.isEmpty(),
                QStringLiteral("v2 timeline control QML sources are available to the developer spec"));
         const QString controls = panel + tabBar;
         expect(controls.contains(QStringLiteral("openTimelineZoomMenu"))
                    && controls.contains(QStringLiteral("openTimelineBrightnessMenu"))
                    && controls.contains(QStringLiteral("openTimelineFollowSettingsMenu"))
                    && controls.contains(QStringLiteral("timelineFollowPreviewToggled")),
-               QStringLiteral("v2 timeline controls route zoom brightness and follow commands through QuickShellController"));
+               QStringLiteral("v2 timeline exposes its inline follow-code control through QuickShellController"));
+        expect(controller.contains(QStringLiteral("&QuickShellController::timelineViewportLockToggled"))
+                   && controller.contains(QStringLiteral("&QuickShellController::timelineSyncToggled"))
+                   && controller.contains(QStringLiteral("&QuickShellController::timelineFollowPreviewToggled"))
+                   && controller.contains(QStringLiteral("&QuickShellController::timelineFollowProgressToggled")),
+               QStringLiteral("native follow menu preserves view lock sync code follow and progress follow"));
         expect(tabBar.contains(QStringLiteral("bottomTabsCurrentTabId"))
                    && tabBar.contains(QStringLiteral("setBottomTabsCurrentTabId"))
                    && !tabBar.contains(QStringLiteral("activeBottomTab"))
@@ -811,13 +819,39 @@ int main(int argc, char** argv)
                QStringLiteral("v2 bottom tabs select through shell state instead of ViewState"));
         expect(splitView.contains(QStringLiteral("bottomTabsHostHeight"))
                    && splitView.contains(QStringLiteral("setBottomTabsHostHeight"))
-                   && !splitView.contains(QStringLiteral("bottomPanelHeight")),
-               QStringLiteral("v2 bottom panel height persists through the shell controller only"));
+                   && splitView.contains(QStringLiteral("queueBottomTabsHostHeight"))
+                   && splitView.contains(QStringLiteral("bottomTabsHeightFeedback"))
+                   && !splitView.contains(QStringLiteral("bottomPanelHeight"))
+                   && !splitView.contains(QStringLiteral("maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0")),
+               QStringLiteral("v2 bottom height returns to the shell through debounced one-way feedback without a fixed 340px cap"));
+        expect(panel.contains(QStringLiteral("headerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2"))
+                   && panel.contains(QStringLiteral("headerRightLimit: Math.max(0, brightnessHitControl.x - 2)"))
+                   && panel.contains(QStringLiteral("headerMarkerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2"))
+                   && panel.contains(QStringLiteral("headerMarkerRightLimit: Math.max(0, brightnessHitControl.x - 2)"))
+                   && panel.contains(QStringLiteral("timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)")),
+               QStringLiteral("v2 timeline header shares v1 safe limits and maps hit controls through timelineItem.y"));
+        const int playingFlushStart = timelineTick.indexOf(
+            QStringLiteral("void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()"));
+        const QString playingFlush = playingFlushStart >= 0
+            ? timelineTick.mid(playingFlushStart, 1800)
+            : QString();
+        expect(!playingFlush.contains(QStringLiteral("|| !timelineTabIsForeground()"))
+                   && playingFlush.contains(QStringLiteral("syncEditorCursorToPreviewSecond")),
+               QStringLiteral("editor follow tick continues while validation or Muri owns the visible bottom tab"));
         expect(editorDisplay.contains(QStringLiteral("hasLegacyBottomPanelHeight"))
                    && editorDisplay.contains(QStringLiteral("legacySettings.remove(QStringLiteral(\"ui/bottomPanelHeight\"))"))
                    && editorDisplay.lastIndexOf(QStringLiteral("legacySettings.remove"))
                        > editorDisplay.indexOf(QStringLiteral("if (ui.value(\"bottom_tabs_content_scale\").isDouble())")),
                QStringLiteral("legacy v2 bottom-panel height is retired even when shell scale already exists"));
+        expect(editorDisplay.contains(
+                   QStringLiteral("preview.value(\"viewport_lock\").toBool(state_.previewViewportLockEnabled_)"))
+                   && editorDisplay.contains(
+                       QStringLiteral("preview.value(\"follow_progress\").toBool(state_.previewProgressFollowEnabled_)"))
+                   && editorDisplay.contains(
+                       QStringLiteral("preview.insert(\"viewport_lock\", state_.previewViewportLockEnabled_)"))
+                   && editorDisplay.contains(
+                       QStringLiteral("preview.insert(\"follow_progress\", state_.previewProgressFollowEnabled_)")),
+               QStringLiteral("view-lock and follow-progress serialize their actual controller values instead of resetting on restart"));
         expect(controller.contains(QStringLiteral("setFocusPolicy(Qt::StrongFocus)"))
                    && controller.contains(QStringLiteral("void keyPressEvent(QKeyEvent* event) override"))
                    && controller.contains(QStringLiteral("isMenuToggleActivationKey(event->key())"))

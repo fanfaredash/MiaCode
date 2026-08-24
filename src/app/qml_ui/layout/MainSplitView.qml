@@ -27,7 +27,31 @@ Item {
         root.viewState.bottomPanelVisible && root.shellController.bottomTabsVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
+    property int queuedBottomTabsHostHeight: 0
     signal settingsRequested()
+
+    // The shell owns the persisted scale/height. QML receives that value as
+    // SplitView.preferredHeight, and only a completed divider gesture travels
+    // back after a short debounce. In particular, panel layout changes must
+    // never feed their measured height straight back into the controller.
+    function queueBottomTabsHostHeight(height) {
+        if (!root.bottomPanelEffectivelyVisible || height <= 0)
+            return
+        root.queuedBottomTabsHostHeight = Math.round(height)
+        bottomTabsHeightFeedback.restart()
+    }
+
+    Timer {
+        id: bottomTabsHeightFeedback
+        interval: 120
+        repeat: false
+        onTriggered: {
+            const height = root.queuedBottomTabsHostHeight
+            root.queuedBottomTabsHostHeight = 0
+            if (root.bottomPanelEffectivelyVisible && height > 0)
+                root.shellController.setBottomTabsHostHeight(height)
+        }
+    }
 
     function undo() {
         editorPane.undo()
@@ -129,7 +153,7 @@ Item {
             handle: SplitHandle {
                 onReleased: {
                     if (root.bottomPanelEffectivelyVisible)
-                        root.shellController.setBottomTabsHostHeight(Math.round(bottomPanel.height))
+                        root.queueBottomTabsHostHeight(bottomPanel.height)
                 }
             }
 
@@ -184,7 +208,6 @@ Item {
                                            ? Math.max(120, root.shellController.bottomTabsHostHeight)
                                            : 0
                 SplitView.minimumHeight: root.bottomPanelEffectivelyVisible ? 120 : 0
-                SplitView.maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0
                 onAnalysisRowActivated: (difficultyId, revision, line, column, endColumn, second) =>
                     editorPane.revealAnalysisRow(
                         difficultyId, revision, line, column, endColumn, second, root.analysisSession)

@@ -523,14 +523,20 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
    `timelineView_->setContentScale`. Device height via `scaledBottomTabsTimelineContentHeight` /
    `bottomTabsContentScaleForTimelineContentHeight` (piecewise inverse — header caps at 100%,
    lanes grow). `bottomTabsHeaderScaleForContentScale` = `0.5 + min(scale,1)*0.5` (caps at 1.0).
-2. QSG scene: `TimelineSceneStateBuilder::buildLayoutMetrics` — **two-tier split**:
+2. QML v2: `MainSplitView.qml` reads `QuickShellController::bottomTabsHostHeight` as its
+   one-way `SplitView.preferredHeight`; only a completed divider gesture sends the measured height
+   back through a short debounce. It must not create a pixel preference, install a fixed 340px cap,
+   or feed every layout `heightChanged` back to the controller — `WindowShell` is the sole clamp
+   authority. `BottomPanel.qml` maps header input controls through `timelineItem.y` and supplies all
+   four QSG header limits from its zoom/brightness hit geometry.
+3. QSG scene: `TimelineSceneStateBuilder::buildLayoutMetrics` — **two-tier split**:
    `gridContentScale` (raw, up to 4.0) drives ONLY `laneHeight`/`timelineHeight`;
    `normalizedContentScale` (capped at 1.0) is stored as `state.contentScale` and drives note
    素材/markers, lane-label fonts, header (`headerContentScale`), margins. Notes position off
    `laneHeight` (grows), size off `contentScale` (capped) → taller grid, 100% markers.
-3. Legacy `TimelineView` parity: `TimelineView.Core.cpp` `laneHeight()` uses the raw scale;
+4. Legacy `TimelineView` parity: `TimelineView.Core.cpp` `laneHeight()` uses the raw scale;
    `scaledTimelineMetric` / `headerContentScale` stay capped.
-4. 语法/无理 list fonts are a fixed 90% of base (`kBottomTabsIssueListFontScale`), uniform /
+5. 语法/无理 list fonts are a fixed 90% of base (`kBottomTabsIssueListFontScale`), uniform /
    height-independent (NOT `headerScale`-driven); their scrollbars use
    `UiTheme::scrollBarStyleSheet()` like the editor. `QuickShellController::bottomTabsHeaderScale`
    (QML tab strip) still inherits the capped header scale.
@@ -540,6 +546,17 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
 `4.0` in the `setContentScale` clamps of `TimelineView.cpp` / `TimelineView.Core.cpp` /
 `TimelineQuickStateBridge.cpp` — change all together (also `hardcode-registry.md`). This scale is
 **UI-only** (in-app timeline panel); it has no video-export consumer.
+
+### v2 follow-control and cadence contract
+
+- The four independent controls are View Lock, Timeline Sync, Follow Code, and Progress Follow.
+  `QuickShellController::openTimelineFollowSettingsMenu()` owns their accessible native-menu rows;
+  `TimelineQuickStateBridge` mirrors their values; `MainWindow.EditorDisplay.cpp` persists the
+  corresponding `viewport_lock`, `timeline_sync`, `follow_preview`, and `follow_progress` values.
+  Do not replace a saved boolean with a fixed default during either load or save.
+- `TimelineSection::flushQtPreviewTimelinePosition()` may skip QSG state writes until the bridge is
+  ready, but it must continue to call the code-follow tick while the validation or Muri tab is
+  foreground. Bottom-tab visibility is a render-routing condition, not an editor-follow gate.
 
 ## Update this file when
 
