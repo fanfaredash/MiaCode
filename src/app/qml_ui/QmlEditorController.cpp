@@ -26,6 +26,33 @@ bool commandModifier(Qt::KeyboardModifiers modifiers)
     return modifiers & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
 }
 
+// The differing region between two whole-document snapshots, found by trimming
+// the shared prefix and suffix. Undo/redo replay a snapshot pair, but replaying
+// the whole document leaves the caret parked at a stale offset with nothing
+// selected — the user cannot see what the step did.
+struct TextDelta {
+    int start = 0;
+    int fromEnd = 0;
+    int toEnd = 0;
+};
+
+TextDelta computeTextDelta(const QString& from, const QString& to)
+{
+    TextDelta delta;
+    const int shorter = qMin(from.size(), to.size());
+    int prefix = 0;
+    while (prefix < shorter && from.at(prefix) == to.at(prefix)) ++prefix;
+    int suffix = 0;
+    while (suffix < shorter - prefix
+           && from.at(from.size() - 1 - suffix) == to.at(to.size() - 1 - suffix)) {
+        ++suffix;
+    }
+    delta.start = prefix;
+    delta.fromEnd = from.size() - suffix;
+    delta.toEnd = to.size() - suffix;
+    return delta;
+}
+
 QRegularExpression findExpression(const QString& needle, bool caseSensitive, bool wholeWord)
 {
     const QString escaped = QRegularExpression::escape(needle);
@@ -460,19 +487,34 @@ void QmlEditorController::recordQmlTransaction(const QString& before, const QStr
     qmlRedo_.clear();
     setUndoAvailability(true, false);
 }
+QVariantMap QmlEditorController::restoreTransaction(const QString& current, const QString& restored) const
+{
+    const TextDelta delta = computeTextDelta(current, restored);
+    const QString replacement = restored.mid(delta.start, delta.toEnd - delta.start);
+    // The caret lands on the restored text and selects it, so the step is
+    // visible. Undoing an insertion restores nothing, which collapses the
+    // selection at the point the inserted text used to begin.
+    return {{QStringLiteral("consumed"), true},
+            {QStringLiteral("hasEdit"), true},
+            {QStringLiteral("replacementStart"), delta.start},
+            {QStringLiteral("replacementEnd"), delta.fromEnd},
+            {QStringLiteral("replacementText"), replacement},
+            {QStringLiteral("anchor"), delta.start},
+            {QStringLiteral("position"), delta.start + replacement.size()}};
+}
 QVariantMap QmlEditorController::undoQmlTransaction()
 {
     if (qmlUndo_.isEmpty()) return {};
     const auto entry = qmlUndo_.takeLast(); qmlRedo_.append(entry);
     setUndoAvailability(!qmlUndo_.isEmpty(), true);
-    return {{QStringLiteral("hasEdit"), true}, {QStringLiteral("replacementStart"), 0}, {QStringLiteral("replacementEnd"), entry.after.size()}, {QStringLiteral("replacementText"), entry.before}, {QStringLiteral("anchor"), entry.beforeAnchor}, {QStringLiteral("position"), entry.beforePosition}, {QStringLiteral("consumed"), true}};
+    return restoreTransaction(entry.after, entry.before);
 }
 QVariantMap QmlEditorController::redoQmlTransaction()
 {
     if (qmlRedo_.isEmpty()) return {};
     const auto entry = qmlRedo_.takeLast(); qmlUndo_.append(entry);
     setUndoAvailability(true, !qmlRedo_.isEmpty());
-    return {{QStringLiteral("hasEdit"), true}, {QStringLiteral("replacementStart"), 0}, {QStringLiteral("replacementEnd"), entry.before.size()}, {QStringLiteral("replacementText"), entry.after}, {QStringLiteral("anchor"), entry.afterAnchor}, {QStringLiteral("position"), entry.afterPosition}, {QStringLiteral("consumed"), true}};
+    return restoreTransaction(entry.before, entry.after);
 }
 
 } // namespace miacode::qml_ui

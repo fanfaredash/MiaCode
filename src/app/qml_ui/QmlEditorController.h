@@ -121,6 +121,9 @@ private:
     void setCompletion(const miacode::editor::SimaiCompletionSession& completion);
     void filterCompletion(const QString& text, int position);
     QVariantMap toQmlTransaction(const miacode::editor::SimaiTextEditResult& result) const;
+    // One undo/redo step, expressed as the minimal replacement that turns the
+    // document the editor currently holds into the one the step restores.
+    QVariantMap restoreTransaction(const QString& current, const QString& restored) const;
 
     bool halfWidthInputEnabled_ = true;
     bool overwriteMode_ = false;

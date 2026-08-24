@@ -39,21 +39,37 @@ Rectangle {
             root.navigationVisible, root.metadataMode)
     }
 
+    // The QML undo stack belongs to one difficulty's source. It is reset when
+    // the editor actually changes documents — not on every controller-sourced
+    // text sync, which is what silently emptied the user's history whenever the
+    // backend pushed normalized text back.
+    property int historyDifficultyId: -1
+    property bool historyMetadataMode: false
+    property bool historyIdentityValid: false
+
     function syncTextFromController() {
         const controllerText = root.metadataMode
             ? root.documentSession.metadataSourceText
             : root.documentSession.chartText
-        if (sourceArea.text === controllerText)
+        const identityChanged = !root.historyIdentityValid
+            || root.historyDifficultyId !== root.documentSession.currentDifficultyId
+            || root.historyMetadataMode !== root.metadataMode
+        if (sourceArea.text !== controllerText) {
+            sourceArea.syncingFromController = true
+            sourceArea.text = controllerText
+            sourceArea.syncingFromController = false
+            sourceArea.historyText = controllerText
+            sourceArea.historyAnchor = sourceArea.selectionStart
+            sourceArea.historyPosition = sourceArea.selectionEnd
+            updateCursorPosition()
+        }
+        if (!identityChanged)
             return
-        sourceArea.syncingFromController = true
-        sourceArea.text = controllerText
-        sourceArea.syncingFromController = false
-        sourceArea.historyText = controllerText
-        sourceArea.historyAnchor = sourceArea.selectionStart
-        sourceArea.historyPosition = sourceArea.selectionEnd
+        root.historyDifficultyId = root.documentSession.currentDifficultyId
+        root.historyMetadataMode = root.metadataMode
+        root.historyIdentityValid = true
         root.editorController.resetQmlHistory(controllerText, sourceArea.historyAnchor,
                                               sourceArea.historyPosition)
-        updateCursorPosition()
     }
     readonly property real codeLineHeight: sourceArea.cursorRectangle.height > 0
                                                ? sourceArea.cursorRectangle.height
@@ -703,6 +719,12 @@ Rectangle {
         function onMetadataSourceChanged() {
             if (root.metadataMode)
                 root.syncTextFromController()
+        }
+        function onDocumentReplaced() {
+            // A different chart is a different history, even when it happens to
+            // reuse the outgoing document's active difficulty id.
+            root.historyIdentityValid = false
+            root.syncTextFromController()
         }
         function onDocumentStateChanged() {
             root.editorController.setDocumentContextForQml(

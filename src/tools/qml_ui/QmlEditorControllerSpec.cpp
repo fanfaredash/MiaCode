@@ -504,6 +504,34 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
            QStringLiteral("a Ctrl/Command click seeks the preview to the caret it just placed"),
            out, failed);
 
+    // The undo stack must survive a controller-sourced text sync and be reset
+    // only when the editor changes documents. resetQmlHistory used to run on
+    // every sync, so any backend push emptied the user's history.
+    editorItem->setProperty("historyIdentityValid", true);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 30));
+    QCoreApplication::processEvents();
+    QKeyEvent typed(QEvent::KeyPress, Qt::Key_9, Qt::NoModifier, QStringLiteral("9"));
+    auto* typedTarget = window->activeFocusItem();
+    QCoreApplication::sendEvent(typedTarget != nullptr ? static_cast<QObject*>(typedTarget)
+                                                       : static_cast<QObject*>(editorItem),
+                                &typed);
+    QCoreApplication::processEvents();
+    if (!expect(controller.canUndo(),
+                QStringLiteral("typing into the QML editor records an undo step"), out, failed)) {
+        return false;
+    }
+    session->setProperty("chartText", QStringLiteral("1,2,3,4,\n5,6,7,8,\n9,"));
+    QCoreApplication::processEvents();
+    expect(controller.canUndo(),
+           QStringLiteral("a controller-sourced text sync keeps the undo history"), out, failed);
+    session->setProperty("currentDifficultyId", 4);
+    session->setProperty("chartText", QStringLiteral("1,1,1,1,"));
+    QCoreApplication::processEvents();
+    expect(!controller.canUndo(),
+           QStringLiteral("switching to another difficulty resets the undo history"), out, failed);
+    session->setProperty("currentDifficultyId", 3);
+    QCoreApplication::processEvents();
+
     // Paused preview follow: a decoration, not a caret move. Before this
     // channel existed the paused branch only painted the hidden widget, so a
     // seek while paused produced nothing at all in the visible QML editor.
@@ -668,6 +696,39 @@ int main(int argc, char** argv)
                && repeated.value(QStringLiteral("replacementText")).toString() == QStringLiteral("bar bar")
                && repeated.value(QStringLiteral("position")).toInt() == 7,
            QStringLiteral("controller restores a complete Replace All snapshot in one undo/redo step"), out, &failed);
+
+    // An undo step must land on the text it restored: replace only the region
+    // that actually differs, and select that region so the user sees what
+    // changed. Replaying the whole document left the caret parked at a stale
+    // offset with nothing selected.
+    controller.resetQmlHistory(QStringLiteral("1,2,3,4,"), 0, 0);
+    controller.recordQmlTransaction(QStringLiteral("1,2,3,4,"), QStringLiteral("1,2,9,4,"), 4, 4, 5, 5);
+    const auto narrowUndo = controller.undoQmlTransaction();
+    expect(narrowUndo.value(QStringLiteral("replacementStart")).toInt() == 4
+               && narrowUndo.value(QStringLiteral("replacementEnd")).toInt() == 5
+               && narrowUndo.value(QStringLiteral("replacementText")).toString() == QStringLiteral("3")
+               && narrowUndo.value(QStringLiteral("anchor")).toInt() == 4
+               && narrowUndo.value(QStringLiteral("position")).toInt() == 5,
+           QStringLiteral("undo replaces and selects only the region the edit changed"), out, &failed);
+    const auto narrowRedo = controller.redoQmlTransaction();
+    expect(narrowRedo.value(QStringLiteral("replacementStart")).toInt() == 4
+               && narrowRedo.value(QStringLiteral("replacementEnd")).toInt() == 5
+               && narrowRedo.value(QStringLiteral("replacementText")).toString() == QStringLiteral("9")
+               && narrowRedo.value(QStringLiteral("anchor")).toInt() == 4
+               && narrowRedo.value(QStringLiteral("position")).toInt() == 5,
+           QStringLiteral("redo replaces and selects only the region it reapplied"), out, &failed);
+
+    // Undoing an insertion restores nothing, so the caret collapses at the
+    // point the inserted text used to start rather than selecting a neighbour.
+    controller.resetQmlHistory(QStringLiteral("1,,"), 0, 0);
+    controller.recordQmlTransaction(QStringLiteral("1,,"), QStringLiteral("1,A1,"), 2, 2, 4, 4);
+    const auto insertionUndo = controller.undoQmlTransaction();
+    expect(insertionUndo.value(QStringLiteral("replacementStart")).toInt() == 2
+               && insertionUndo.value(QStringLiteral("replacementEnd")).toInt() == 4
+               && insertionUndo.value(QStringLiteral("replacementText")).toString().isEmpty()
+               && insertionUndo.value(QStringLiteral("anchor")).toInt() == 2
+               && insertionUndo.value(QStringLiteral("position")).toInt() == 2,
+           QStringLiteral("undoing an insertion collapses the caret where it began"), out, &failed);
 
     controller.setDocumentContext(3, 42);
     expect(controller.acceptsCaret(3, 42, false) && !controller.acceptsCaret(3, 41, false)
