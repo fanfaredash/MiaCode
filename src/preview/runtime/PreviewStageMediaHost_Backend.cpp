@@ -194,8 +194,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
     // Decode mode: the persisted user preference (硬件渲染 / 软件渲染, default
     // HARDWARE) decides. MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO stays a dev override on
     // top (ForceSoftware / ForceHardware win; Auto / unset honors the user
-    // preference). The session-only fallback latch forces FFmpeg CPU decode
-    // only after the selected platform hardware decoder reports InvalidMedia.
+    // preference).
     using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
     const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
     bool forceSoftware = videoDecodePreferSoftware_;
@@ -204,7 +203,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
     case DecodePref::ForceHardware: forceSoftware = false; break;
     case DecodePref::Auto:          break;  // env unset -> honor the user preference
     }
-    const bool useSoftware = softwareDecodeFallbackTried_ || forceSoftware;
+    const bool useSoftware = forceSoftware;
     if (useSoftware) {
         player_->setInputVideoCodec(QStringLiteral("software"));
     }
@@ -235,7 +234,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
 #else
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),
-        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=platform_default qt_runtime_version=%1 force_software=%2 pref=%3")
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=vaapi qt_runtime_version=%1 force_software=%2 pref=%3 renderer_bridge=drm_egl")
             .arg(QString::fromLatin1(qVersion()))
             .arg(useSoftware ? 1 : 0)
             .arg(QString::fromLatin1(prefName)));
@@ -328,9 +327,6 @@ void PreviewStageMediaHost::initializeBackendObjects()
             handleVideoEndOfMedia(wasPlaybackActive);
             emit diagnosticsChanged();
             return;
-        }
-        if (status == QAVPlayer::InvalidMedia && mediaKind_ == MediaKind::Video) {
-            maybeRetryWithSoftwareDecode();
         }
     });
 
@@ -844,48 +840,6 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
 
 
 #ifdef MIACODE_USE_QTAVPLAYER
-void PreviewStageMediaHost::maybeRetryWithSoftwareDecode()
-{
-    if (softwareDecodeFallbackTried_
-        || player_ == nullptr
-        || mediaKind_ != MediaKind::Video
-        || mediaPath_.isEmpty()) {
-        appendPreviewStageMediaLog(
-            QStringLiteral("video_software_fallback_skip"),
-            QString("tried=%1 has_player=%2 kind=%3 has_path=%4")
-                .arg(softwareDecodeFallbackTried_ ? 1 : 0)
-                .arg(player_ != nullptr ? 1 : 0)
-                .arg(debugMediaTypeName())
-                .arg(mediaPath_.isEmpty() ? 0 : 1));
-        return;
-    }
-    softwareDecodeFallbackTried_ = true;
-    appendPreviewStageMediaLog(
-        QStringLiteral("video_software_fallback"),
-        QString("path=%1 reason=invalid_media resume_ms=%2 resume_playing=%3")
-            .arg(mediaPath_)
-            .arg(lastSeekMs_ >= 0 ? lastSeekMs_ : 0)
-            .arg(videoPlaybackActive_ ? 1 : 0));
-    const qint64 resumeMs = lastSeekMs_ >= 0 ? lastSeekMs_ : 0;
-    const bool resumePlaying = videoPlaybackActive_;
-    // Re-open forcing FFmpeg software decode (same as QT_AVPLAYER_NO_HWDEVICE).
-    // setInputVideoCodec must precede setSource to apply on (re)load; the empty
-    // setSource forces a reload since setSource(sameUrl) is a no-op.
-    player_->stop();
-    player_->setInputVideoCodec(QStringLiteral("software"));
-    player_->setSource(QString());
-    player_->setSource(mediaPath_);
-    player_->setSpeed(static_cast<qreal>(playbackRate_));
-    player_->seek(resumeMs);
-    if (resumePlaying) {
-        player_->play();
-    } else {
-        player_->pause();
-    }
-}
-#endif  // MIACODE_USE_QTAVPLAYER
-
-#ifdef MIACODE_USE_QTAVPLAYER
 void PreviewStageMediaHost::reloadVideoDecodeInPlace()
 {
     if (player_ == nullptr || mediaKind_ != MediaKind::Video || mediaPath_.isEmpty()) {
@@ -895,7 +849,7 @@ void PreviewStageMediaHost::reloadVideoDecodeInPlace()
     // reload in place (the empty setSource forces a reload since setSource(sameUrl)
     // is a no-op), then restore position + play state. Reuses the existing video
     // sink — no player recreation, no app restart. Bidirectional vs the one-way
-    // software fallback: empty codec restores the platform hardware decoder;
+    // user selection: empty codec restores the platform hardware decoder;
     // "software" selects FFmpeg CPU decode.
     const double second = qMax(0.0, currentPlaybackSecond());
     const qint64 resumeMs = qMax<qint64>(0, qRound64((second + timelineOffsetSeconds_) * 1000.0));
@@ -935,10 +889,6 @@ void PreviewStageMediaHost::setVideoDecodePreference(bool preferSoftware)
             .arg(player_ != nullptr ? 1 : 0)
             .arg(debugMediaTypeName()));
 #ifdef MIACODE_USE_QTAVPLAYER
-    // An explicit user choice clears the session-only auto-fallback latch so a
-    // future backend rebuild honors the chosen mode (and so switching back to
-    // hardware isn't immediately re-forced to software by a stale fallback flag).
-    softwareDecodeFallbackTried_ = false;
     if (player_ != nullptr) {
         if (mediaKind_ == MediaKind::Video && !mediaPath_.isEmpty()) {
             reloadVideoDecodeInPlace();  // hot-switch the currently-loaded PV

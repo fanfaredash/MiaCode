@@ -340,9 +340,8 @@ int main(int argc, char* argv[])
     }
 
     // (libmpv probe removed in beta20 — the "Phase 4 video source built on
-    // top of this" never landed; chart-preview video backgrounds use Qt's
-    // QMediaPlayer + QVideoSink stack via PreviewStageMediaHost. Shipping
-    // libmpv-2.dll cost ~113 MB to log a single startup version line.)
+    // top of this" never landed; chart-preview video backgrounds use the
+    // QtAVPlayer + QVideoSink stack via PreviewStageMediaHost.)
 
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=before_env_var_parse");

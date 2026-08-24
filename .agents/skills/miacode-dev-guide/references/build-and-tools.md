@@ -119,6 +119,8 @@ Rules going forward:
   `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. On macOS,
   `package-mac.sh` accepts `MIACODE_FFMPEG_DEV_DIR` or finds Homebrew `ffmpeg@6` (then `ffmpeg`).
   Both are CMake inputs, not runtime flags; the SDK root must contain `include/` and `lib/`.
+  Linux developer builds use pkg-config from the host toolchain for FFmpeg, libva, libva-drm,
+  and libdrm; `PKG_CONFIG_PATH` selects a non-system installation.
 - Public debug launchers: `scripts/debug/Start_MiaCode_Debug.bat`, `scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat`,
   and `scripts/debug/Start_MiaCode_QtPluginDiag.bat`. One-off A/B launchers stay as ignored maintainer-local
   tools unless they become part of a repeatable public support workflow.
@@ -163,11 +165,12 @@ Rules going forward:
   resolved runtime linkage without system FFmpeg libraries, version, and the
   encoder/filter/protocol/format surface used by MiaCode before packaging it as
   `app/ffmpeg/ffmpeg`.
-- **QtAVPlayer preview backend (Windows and macOS):** vendored MIT source in `third_party/QtAVPlayer/`
+- **QtAVPlayer preview backend (desktop):** vendored MIT source in `third_party/QtAVPlayer/`
   (compiled straight into `MiaCode` with `QT_AVPLAYER_MULTIMEDIA` + `QT_BUILD_QTAVPLAYER_LIB`);
   needs the `Qt6::MultimediaQuickPrivate` component and the FFmpeg dev SDK (see §4). The CMake
-  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and is `if (WIN32 OR APPLE)`
-  gated. Windows uses D3D11VA; macOS compiles QtAVPlayer's VideoToolbox/Metal hwdevice. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
+  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and covers Windows,
+  macOS, and Linux. Windows uses D3D11VA; macOS compiles VideoToolbox/Metal; Linux obtains FFmpeg,
+  libva, libva-drm, and libdrm from pkg-config and compiles the VA-API DRM/EGL hwdevice. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
   `qavdemuxer.cpp`/`QtAVPlayer.cmake`) since it's capture-device-only — saves ~7 MB + one DLL.
   **Packaging:** `package-win.ps1` stages 6 `av*.dll` into `app/` next to `MiaCode.exe`
   (`avcodec-61`/`avformat-61`/`avutil-59`/`swresample-5`/`swscale-8` overlap windeployqt's set;

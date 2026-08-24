@@ -377,13 +377,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   stage-background setters (`setStageMediaAvailable`, `setStageMediaPresentationMode`,
   `setExternalStageMedia*`). Verify exact widget-shell vs quickshell routing in
   `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
-  - **Video decode backend:** on **Windows and macOS** the host decodes PV/BG via **QtAVPlayer (FFmpeg)**,
-    not `QMediaPlayer` — guarded by the `MIACODE_USE_QTAVPLAYER` build macro (CMake-defined on
-    `WIN32 OR APPLE`; other platforms keep the `QMediaPlayer` path under `#elif defined(HAVE_QT_MULTIMEDIA)`).
-    Windows hardware decode is D3D11VA; macOS uses VideoToolbox with QtAVPlayer's Metal bridge.
+  - **Video decode backend:** every desktop platform decodes PV/BG via **QtAVPlayer (FFmpeg)**,
+    guarded by the `MIACODE_USE_QTAVPLAYER` build macro. Windows hardware decode is D3D11VA,
+    macOS uses VideoToolbox with the Metal bridge, and Linux uses VA-API through DRM/EGL.
     QtAVPlayer source is vendored in `third_party/QtAVPlayer/`; it links the FFmpeg dev SDK selected by
-    `MIACODE_FFMPEG_DEV_DIR` (Windows defaults to `third_party/ffmpeg/windows/dev/`; macOS package builds
-    resolve Homebrew `ffmpeg@6`/`ffmpeg` when no explicit SDK is supplied). Decoded frames are *pushed* into the QML `VideoOutput`'s
+    `MIACODE_FFMPEG_DEV_DIR` on Windows and macOS; Linux resolves its development libraries through
+    pkg-config. Decoded frames are *pushed* into the QML `VideoOutput`'s
     `QVideoSink` (`handleDecodedVideoFrame`) rather than observed; `setSpeed` (not `setPlaybackRate`)
     + `seek` drive playback, and the paused-seek / prepared-start acks settle on frame `pts`.
     The public method/signal contract is unchanged, so `MainWindow.*` callers don't change.
