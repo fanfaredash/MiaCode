@@ -41,7 +41,9 @@ bool PlainCodeEditor::applySimaiTextEditPolicy(
     }
     const auto result = miacode::editor::applySimaiTextEditPolicy(request);
     if (!result.consumed) {
-        return false;
+        // A refused command-modified key still has to be swallowed, or
+        // QWidgetTextControl types its literal character into the chart.
+        return result.suppressFallbackInsert;
     }
     const bool completionWasActive = bracketCompletionActive();
 

@@ -50,6 +50,13 @@ struct SimaiCompletionSession {
 
 struct SimaiTextEditResult {
     bool consumed = false;
+    // Set when the policy refuses the key but a Qt text control would still
+    // insert its literal character. Qt suppresses Ctrl-modified characters in
+    // QWidgetTextControl / QQuickTextControl, but not Meta-modified ones, so a
+    // macOS physical Control+Z (Qt::MetaModifier) or a Windows Super+Z reaches
+    // the raw insertion fallback and types "z" into the chart. Adapters must
+    // accept such an event instead of letting it fall through.
+    bool suppressFallbackInsert = false;
     SimaiTextEditTransaction transaction;
     SimaiCompletionSession completion;
 };

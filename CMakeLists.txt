@@ -1185,6 +1185,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common/DebugLog.cpp
     )
 
+    # Qt Test is a dev-tools-only dependency: QML input regressions need a
+    # supported way to deliver real mouse/key events into a QQuickWindow.
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+
     # Declare a dev-only helper / spec executable. Collapses the repeated
     # add_executable + target_link_libraries + target_include_directories
     # triple into a single call. Pass TEST to also register it with CTest
@@ -1655,7 +1659,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/SimaiCompletionCatalog.cpp
             src/editor/BookmarkCommentSyntax.h
             src/editor/BookmarkCommentSyntax.cpp
-        LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+        LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Test
         INCLUDES src src/editor src/app/qml_ui
     )
 

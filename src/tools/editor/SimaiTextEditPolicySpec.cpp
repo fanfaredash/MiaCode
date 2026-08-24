@@ -160,6 +160,46 @@ int main(int argc, char** argv)
                      policyCase.expected, policyCase.label, out, &failed);
     }
 
+    // A refused command-modified key must tell its adapter whether Qt's text
+    // control would still type the literal character. Qt drops Ctrl-modified
+    // characters itself, and Alt/Option is a real composition modifier, but a
+    // Meta/Super modifier (macOS 物理 Control) reaches the raw insert path.
+    struct FallbackCase {
+        QString label;
+        QString input;
+        int key;
+        Qt::KeyboardModifiers modifiers;
+        bool suppress;
+    };
+    const FallbackCase fallbackCases[] = {
+        {QStringLiteral("Meta+Z is suppressed instead of typing z"), QStringLiteral("z"),
+         Qt::Key_Z, Qt::MetaModifier, true},
+        {QStringLiteral("Meta+C is suppressed instead of typing c"), QStringLiteral("c"),
+         Qt::Key_C, Qt::MetaModifier, true},
+        {QStringLiteral("Ctrl+Z stays a native shortcut"), QStringLiteral("z"),
+         Qt::Key_Z, Qt::ControlModifier, false},
+        {QStringLiteral("Ctrl+Meta+Z stays a native shortcut"), QStringLiteral("z"),
+         Qt::Key_Z, Qt::ControlModifier | Qt::MetaModifier, false},
+        {QStringLiteral("Alt composition still types its character"), QStringLiteral("\u00f8"),
+         Qt::Key_O, Qt::AltModifier, false},
+        {QStringLiteral("Meta with no text is not suppressed"), QString(),
+         Qt::Key_Left, Qt::MetaModifier, false},
+    };
+    for (const FallbackCase& fallbackCase : fallbackCases) {
+        miacode::editor::SimaiTextEditRequest request;
+        request.text = QStringLiteral("abc");
+        request.anchor = request.position = 3;
+        request.input = fallbackCase.input;
+        request.key = fallbackCase.key;
+        request.modifiers = fallbackCase.modifiers;
+        const auto result = miacode::editor::applySimaiTextEditPolicy(request);
+        const bool ok = !result.consumed
+            && result.suppressFallbackInsert == fallbackCase.suppress
+            && result.transaction.text == QStringLiteral("abc");
+        out << (ok ? "[PASS] " : "[FAIL] ") << fallbackCase.label << '\n';
+        if (!ok) ++failed;
+    }
+
     if (failed != 0) {
         out << "SimaiTextEditPolicy spec failed: " << failed << '\n';
         return 1;

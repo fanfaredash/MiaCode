@@ -43,6 +43,18 @@ bool hasCommandModifier(Qt::KeyboardModifiers modifiers)
     return modifiers & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
 }
 
+// Alt/Option is a legitimate composition modifier (Option+o types "ø" on
+// macOS), and Ctrl-modified characters are already dropped by Qt's text
+// controls. Only a Meta/Super modifier reaches their raw insertion fallback.
+bool wouldInsertLiteralCommandText(const SimaiTextEditRequest& request)
+{
+    if (!(request.modifiers & Qt::MetaModifier)) return false;
+    if (request.modifiers & Qt::ControlModifier) return false;
+    if (request.input.isEmpty()) return false;
+    const QChar first = request.input.at(0);
+    return first.isPrint() || first == QLatin1Char('\t');
+}
+
 SimaiTextEditResult untouched(const SimaiTextEditRequest& request)
 {
     SimaiTextEditResult result;
@@ -83,6 +95,9 @@ void openCompletion(SimaiTextEditResult* result, QChar opening, bool closingPres
 SimaiTextEditResult applySimaiTextEditPolicy(const SimaiTextEditRequest& request)
 {
     SimaiTextEditResult result = untouched(request);
+    // Computed before every early return: whichever branch declines the key,
+    // the adapter still has to stop Qt from typing its literal character.
+    result.suppressFallbackInsert = wouldInsertLiteralCommandText(request);
     const QString input = normalizedInput(request);
     const bool selected = result.transaction.anchor != result.transaction.position;
     const bool smartEnabled = request.autoCompletionEnabled && !request.overwriteMode;

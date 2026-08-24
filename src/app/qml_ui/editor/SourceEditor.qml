@@ -482,7 +482,14 @@ Rectangle {
                 const transaction = root.editorController.processKeyForQml(
                     sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd,
                     event.text, event.key, event.modifiers)
-                if (root.applyEditorTransaction(transaction))
+                if (root.applyEditorTransaction(transaction)) {
+                    event.accepted = true
+                    return
+                }
+                // The policy refused this key, but TextArea would still insert
+                // its literal character (Qt guards Ctrl, not Meta/Super), so a
+                // macOS 物理 Control+Z types "z" into the chart. Swallow it.
+                if (transaction.suppressFallbackInsert)
                     event.accepted = true
             }
             Keys.onReleased: function(event) {

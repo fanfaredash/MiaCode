@@ -10,8 +10,10 @@
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QVariant>
 #include <QTextStream>
 
 #include <memory>
@@ -101,6 +103,106 @@ bool verifyQmlTextAreaKeyRouting(QTextStream& out, int* failed)
                   QStringLiteral("QML editor key controller receives completion keys before TextArea defaults"),
                   out, failed);
 }
+// A key the policy refuses must not reach TextArea's raw insertion fallback.
+// Qt guards Ctrl-modified characters in QQuickTextControl but not Meta-modified
+// ones, so before the suppressFallbackInsert contract a macOS 物理 Control+Z
+// (Qt::MetaModifier) typed a literal "z" into the chart.
+bool verifyCommandModifiedKeysNeverTypeText(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    miacode::qml_ui::QmlEditorController controller;
+    engine.rootContext()->setContextProperty(QStringLiteral("editorController"), &controller);
+    QQmlComponent component(&engine);
+    // Mirrors SourceEditor.qml's key chain: transaction first, then the
+    // suppress-fallback guard, exactly as the visible editor routes it.
+    component.setData(R"QML(
+        import QtQuick
+        import QtQuick.Controls
+
+        TextArea {
+            id: editor
+            objectName: "editor"
+            text: "abc"
+            focus: true
+            property int undoRequests: 0
+            function applyEditorTransaction(transaction) {
+                if (!transaction.consumed)
+                    return false
+                if (transaction.hasEdit) {
+                    editor.remove(transaction.replacementStart, transaction.replacementEnd)
+                    editor.insert(transaction.replacementStart, transaction.replacementText)
+                    editor.select(transaction.anchor, transaction.position)
+                }
+                return true
+            }
+            Keys.priority: Keys.BeforeItem
+            Keys.onPressed: function(event) {
+                if (event.matches(StandardKey.Undo)) {
+                    editor.undoRequests += 1
+                    event.accepted = true
+                    return
+                }
+                const transaction = editorController.processKeyForQml(
+                    editor.text, editor.selectionStart, editor.selectionEnd,
+                    event.text, event.key, event.modifiers)
+                if (editor.applyEditorTransaction(transaction)) {
+                    event.accepted = true
+                    return
+                }
+                if (transaction.suppressFallbackInsert)
+                    event.accepted = true
+            }
+        }
+    )QML", QUrl(QStringLiteral("qrc:/QmlEditorFallbackSpec.qml")));
+    if (!expect(component.isReady(),
+                QStringLiteral("QML command-modifier harness compiles"), out, failed)) {
+        for (const QQmlError& error : component.errors()) out << error.toString() << '\n';
+        return false;
+    }
+    std::unique_ptr<QObject> root(component.create());
+    auto* editor = qobject_cast<QQuickItem*>(root.get());
+    if (!expect(editor != nullptr,
+                QStringLiteral("QML command-modifier harness creates an item"), out, failed)) {
+        return false;
+    }
+    editor->setFocus(true);
+
+    struct KeyCase {
+        QString label;
+        int key;
+        Qt::KeyboardModifiers modifiers;
+        QString text;
+    };
+    const KeyCase keyCases[] = {
+        {QStringLiteral("Meta+Z"), Qt::Key_Z, Qt::MetaModifier, QStringLiteral("z")},
+        {QStringLiteral("Meta+C"), Qt::Key_C, Qt::MetaModifier, QStringLiteral("c")},
+        {QStringLiteral("Meta+A"), Qt::Key_A, Qt::MetaModifier, QStringLiteral("a")},
+        {QStringLiteral("Ctrl+B"), Qt::Key_B, Qt::ControlModifier, QStringLiteral("b")},
+    };
+    bool unchanged = true;
+    QStringList typed;
+    for (const KeyCase& keyCase : keyCases) {
+        editor->setProperty("text", QStringLiteral("abc"));
+        QKeyEvent event(QEvent::KeyPress, keyCase.key, keyCase.modifiers, keyCase.text);
+        QCoreApplication::sendEvent(editor, &event);
+        const QString after = editor->property("text").toString();
+        if (after != QStringLiteral("abc")) {
+            unchanged = false;
+            typed.append(QStringLiteral("%1->%2").arg(keyCase.label, after));
+        }
+    }
+    if (!typed.isEmpty()) out << "  typed literal text: " << typed.join(QStringLiteral(", ")) << '\n';
+    expect(unchanged,
+           QStringLiteral("command-modified keys never type a literal character into the chart"),
+           out, failed);
+
+    editor->setProperty("text", QStringLiteral("abc"));
+    QKeyEvent undoEvent(QEvent::KeyPress, Qt::Key_Z, Qt::ControlModifier, QStringLiteral("z"));
+    QCoreApplication::sendEvent(editor, &undoEvent);
+    return expect(root->property("undoRequests").toInt() == 1
+                      && editor->property("text").toString() == QStringLiteral("abc"),
+                  QStringLiteral("the undo shortcut still reaches the QML undo route"), out, failed);
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -111,6 +213,7 @@ int main(int argc, char** argv)
     QTextStream out(stdout);
     int failed = 0;
     verifyQmlTextAreaKeyRouting(out, &failed);
+    verifyCommandModifiedKeysNeverTypeText(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
     expect(opening.consumed && opening.transaction.replacementText == QStringLiteral("[]") && opening.transaction.position == 1, QStringLiteral("policy key input produces one QML edit transaction"), out, &failed);
@@ -286,6 +389,7 @@ int main(int argc, char** argv)
                && source.contains(QStringLiteral("editorContextMenu"))
                && source.contains(QStringLiteral("centerCursorInView"))
                && source.contains(QStringLiteral("Keys.priority: Keys.BeforeItem"))
+               && source.contains(QStringLiteral("transaction.suppressFallbackInsert"))
                && source.contains(QStringLiteral("setQmlTouchPadAuthoringCtrlHold"))
                && source.contains(QStringLiteral("setQmlEditorNavigationReadiness"))
                && source.contains(QStringLiteral("onQmlEditorNavigationRequested"))

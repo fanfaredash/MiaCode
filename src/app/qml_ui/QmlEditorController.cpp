@@ -328,7 +328,9 @@ QString QmlEditorController::clipboardText() const
 QVariantMap QmlEditorController::toQmlTransaction(const miacode::editor::SimaiTextEditResult& result) const
 {
     const auto& tx = result.transaction;
-    return {{QStringLiteral("consumed"), result.consumed}, {QStringLiteral("hasEdit"), tx.hasEdit},
+    return {{QStringLiteral("consumed"), result.consumed},
+            {QStringLiteral("suppressFallbackInsert"), result.suppressFallbackInsert},
+            {QStringLiteral("hasEdit"), tx.hasEdit},
             {QStringLiteral("undoGroup"), tx.undoGroup}, {QStringLiteral("replacementStart"), tx.replacementStart},
             {QStringLiteral("replacementEnd"), tx.replacementEnd}, {QStringLiteral("replacementText"), tx.replacementText},
             {QStringLiteral("anchor"), tx.anchor}, {QStringLiteral("position"), tx.position}};
