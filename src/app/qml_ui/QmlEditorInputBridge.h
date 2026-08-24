@@ -31,6 +31,14 @@ protected:
 private:
     QPointer<QObject> target_;
     bool imeComposing_ = false;
+    // The desktop acceptance run reported a committed IME character being
+    // inserted many times over, which no synthetic QInputMethodEvent sequence
+    // reproduces. These record the exact platform sequence — how many commits
+    // arrive, what each carries, and whether one arrives while the previous
+    // QML transaction is still running — so the next reproduction identifies
+    // the source instead of guessing at it.
+    quint64 imeEventSequence_ = 0;
+    int commitDepth_ = 0;
 };
 
 } // namespace miacode::qml_ui

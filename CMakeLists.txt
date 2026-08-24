@@ -1671,6 +1671,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/qml_ui/QmlEditorInputBridge.cpp
             src/app/qml_ui/QmlEditorInputBridge.h
             src/app/qml_ui/QmlTouchPadAuthoringBridge.h
+            ${_miacode_log_core}
             src/editor/TouchPadAuthoringEdit.h
             src/editor/TouchPadAuthoringEdit.cpp
             src/core/chart/parser/SimaiCommentScan.h
