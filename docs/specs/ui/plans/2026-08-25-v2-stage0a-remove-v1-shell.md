@@ -17,6 +17,10 @@
 - v1 专属文件外部引用**只有注释**，无代码依赖。真实代码引用仅在 `src/app/main.cpp` 的皮肤分支。
 - `QuickShellController` 构造点只有两处：`QuickShellBootstrap.cpp:275`（v1，传真 surfaceHost）与 `QmlUiBootstrap.cpp:89`（v2，传 `nullptr`）。
 - `MIACODE_UI_SKIN` 已登记在 `docs/ops/DEBUG_INDEX.md`；`debug_flag_index_spec` 会在代码不再读取该变量而文档仍列出时**失败**。这是本计划的自动闸门。
+- **闸门的前提条件（Task 1 已处理）：** `debug_flag_index_spec` 扫描 `src/**` 里所有 `MIACODE_*`
+  字面量。`V1ShellRemovalSpec.cpp` 因契约检查也嵌了 `MIACODE_UI_SKIN`，若不排除，Task 2 之后它会
+  成为该 flag 在 `src/` 下的唯一出现处，使闸门在 Task 2 静默通过、在 Task 5 反向误报。因此该 spec
+  已加入 `DebugFlagIndexSpec.cpp` 的"嵌有 flag 字面量的 spec"排除集合。新增同类 spec 时必须同样处理。
 
 ## 文件结构
 
@@ -181,7 +185,10 @@ int main(int argc, char** argv)
 cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target v1_shell_removal_spec --parallel 4 && ./build-macos-spec/v1_shell_removal_spec
 ```
 
-预期：退出码 1，5 条断言中至少 4 条 `[FAIL]`，并打印 `still present: ...` 与 `main.cpp still carries: UiSkin, resolveUiSkin, MIACODE_UI_SKIN, --ui=`。
+预期：退出码 1。7 条断言中 5 条 `[FAIL]`、2 条 `[PASS]`（"main.cpp is readable" 与
+"QuickShellController is still present for v2" 是有意的正向锚点，用来防止 `MIACODE_SOURCE_ROOT`
+指错时所有"是否已删除"的检查空过）。输出应包含 `still present: ...` 与
+`main.cpp still carries: UiSkin, resolveUiSkin, MIACODE_UI_SKIN, --ui=`。
 
 - [ ] **Step 3: 提交这个红测试**
 
