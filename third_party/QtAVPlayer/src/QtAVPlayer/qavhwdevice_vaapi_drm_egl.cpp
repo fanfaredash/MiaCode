@@ -121,15 +121,24 @@ public:
             if (prime.layers[i].drm_format != formats[i])
                 qWarning() << "Wrong DRM format:" << prime.layers[i].drm_format << formats[i];
 
-            EGLint img_attr[] = {
+            const auto objectIndex = prime.layers[i].object_index[0];
+            const auto modifier = prime.objects[objectIndex].drm_format_modifier;
+            EGLint img_attr[19] = {
                 EGL_LINUX_DRM_FOURCC_EXT,      EGLint(formats[i]),
                 EGL_WIDTH,                     va_frame->width / (i + 1),
                 EGL_HEIGHT,                    va_frame->height / (i + 1),
-                EGL_DMA_BUF_PLANE0_FD_EXT,     prime.objects[prime.layers[i].object_index[0]].fd,
+                EGL_DMA_BUF_PLANE0_FD_EXT,     prime.objects[objectIndex].fd,
                 EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGLint(prime.layers[i].offset[0]),
                 EGL_DMA_BUF_PLANE0_PITCH_EXT,  EGLint(prime.layers[i].pitch[0]),
-                EGL_NONE
             };
+            int attrCount = 12;
+            if (modifier != DRM_FORMAT_MOD_INVALID) {
+                img_attr[attrCount++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
+                img_attr[attrCount++] = EGLint(modifier & 0xffffffffULL);
+                img_attr[attrCount++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
+                img_attr[attrCount++] = EGLint(modifier >> 32);
+            }
+            img_attr[attrCount] = EGL_NONE;
 
             EGLImage img = s_eglCreateImageKHR(eglGetCurrentDisplay(),
                                                EGL_NO_CONTEXT,

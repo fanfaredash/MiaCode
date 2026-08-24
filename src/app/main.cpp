@@ -274,8 +274,12 @@ int main(int argc, char* argv[])
         || (requestedQpaPlatform.isEmpty()
             && qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
             && !qEnvironmentVariableIsEmpty("DISPLAY"));
-    if (forceOpenGlGraphicsApi
-        && exportUsesXcb
+    const bool guiUsesXcbCompatibility =
+        !forceOpenGlGraphicsApi
+        && requestedQpaPlatform.isEmpty()
+        && !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+        && !qEnvironmentVariableIsEmpty("DISPLAY");
+    if ((exportUsesXcb || guiUsesXcbCompatibility)
         && qEnvironmentVariableIsEmpty("QT_XCB_GL_INTEGRATION")) {
         qputenv("QT_XCB_GL_INTEGRATION", QByteArrayLiteral("xcb_egl"));
     }
