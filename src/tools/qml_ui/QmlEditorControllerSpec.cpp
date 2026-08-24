@@ -537,6 +537,60 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
     return expect(!editorItem->property("followDecorationActive").toBool(),
                   QStringLiteral("clearing preview follow removes the decoration"), out, failed);
 }
+// Reproduces the desktop IME corruption. Applying the commit from inside the
+// event filter mutates the document while QQuickTextEdit still holds a preedit,
+// which makes QQuickTextControl commit that preedit through the platform input
+// context, which re-delivers the SAME commit into the filter. The 2026-08-24
+// capture recorded 632 events and 631 applied commits at depth 630 for a single
+// keystroke. The bridge must apply one platform commit exactly once.
+bool verifyReentrantImeCommitIsAppliedOnce(QTextStream& out, int* failed)
+{
+    InputMethodReceiver target;
+    miacode::qml_ui::QmlEditorInputBridge bridge;
+    bridge.setTarget(&target);
+
+    int applied = 0;
+    int redeliveries = 0;
+    // Stands in for commitPreedit() -> QInputMethod::commit() -> the platform
+    // re-issuing its marked text while the transaction is still running. Capped
+    // so an unguarded bridge fails the assertion instead of exhausting the stack.
+    constexpr int kMaxRedeliveries = 40;
+    QObject::connect(&bridge, &miacode::qml_ui::QmlEditorInputBridge::imeCommitted,
+                     [&applied, &redeliveries, &target](const QString& value) {
+                         ++applied;
+                         if (redeliveries >= kMaxRedeliveries) return;
+                         ++redeliveries;
+                         QInputMethodEvent redelivered;
+                         redelivered.setCommitString(value);
+                         QCoreApplication::sendEvent(&target, &redelivered);
+                     });
+
+    QInputMethodEvent preedit(QStringLiteral("a"), {});
+    QCoreApplication::sendEvent(&target, &preedit);
+    QInputMethodEvent commit;
+    commit.setCommitString(QStringLiteral("a"));
+    QCoreApplication::sendEvent(&target, &commit);
+
+    if (applied != 1) {
+        out << "  applied=" << applied << " redeliveries=" << redeliveries << '\n';
+    }
+    expect(applied == 1,
+           QStringLiteral("a re-entrant platform re-delivery applies the IME commit exactly once"),
+           out, failed);
+
+    // The re-delivered events must still reach the target with their commit
+    // stripped, so nothing inserts the character behind the transaction's back.
+    expect(target.commit.isEmpty(),
+           QStringLiteral("a dropped re-entrant commit is stripped before the editor sees it"),
+           out, failed);
+
+    // A later, non-re-entrant commit is a real one and must still be applied.
+    QInputMethodEvent secondCommit;
+    secondCommit.setCommitString(QStringLiteral("b"));
+    QCoreApplication::sendEvent(&target, &secondCommit);
+    return expect(applied == 2,
+                  QStringLiteral("a subsequent standalone commit is still applied"), out, failed);
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -554,6 +608,7 @@ int main(int argc, char** argv)
         "MiaCode.UI", 1, 0, "QmlEditorInputBridge");
     verifyQmlTextAreaKeyRouting(out, &failed);
     verifyCommandModifiedKeysNeverTypeText(out, &failed);
+    verifyReentrantImeCommitIsAppliedOnce(out, &failed);
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
     verifyEditorPointerRoutes(out, &failed);
     miacode::qml_ui::QmlEditorController controller;

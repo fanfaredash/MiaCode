@@ -70,9 +70,26 @@ bool QmlEditorInputBridge::eventFilter(QObject* watched, QEvent* event)
         emit imeComposingChanged(imeComposing_);
     }
     if (input->commitString().isEmpty()) return false;
-    // A commit arriving while the previous one is still being applied would
-    // mean the QML transaction re-enters the platform input context; the depth
-    // is recorded on both sides of the emit so a reproduction shows it.
+    // One platform commit is one document transaction. Applying a commit runs
+    // the QML transaction, which mutates the document while the editor still
+    // holds this event's preedit; QQuickTextControl then commits that preedit
+    // through the platform input context, which re-delivers the SAME commit
+    // into this filter. Applying it again recurses without bound — the desktop
+    // capture reached depth 630 and inserted 631 copies of one character. A
+    // re-entrant commit has already been applied by the frame below, so strip
+    // it and drop it rather than replaying it.
+    if (commitDepth_ > 0) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("editor/ime_commit"),
+            QStringLiteral("seq=%1 applied_len=0 reentrant=1 action=dropped depth=%2")
+                .arg(sequence)
+                .arg(commitDepth_));
+        input->setCommitString(QString());
+        return false;
+    }
+    // The depth is recorded on both sides of the emit so a capture still shows
+    // whether the platform re-entered, even though it can no longer duplicate.
     ++commitDepth_;
     emit imeCommitted(input->commitString());
     --commitDepth_;
