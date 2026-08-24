@@ -69,7 +69,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   same deferred lambda once the build returns.
 - QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
   `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
-  `qml/QuickShellMain.qml`).
+  `qml/QuickShellMain.qml`). The single application `QMenuBar` is owned explicitly by
+  `MainWindow` and exposed through `QuickShellNativeContentProvider::shellMenuBarWidget()`;
+  the hidden `QMainWindow` layout must not own a menu bar that QuickShell reparents into its
+  top-chrome surface.
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`

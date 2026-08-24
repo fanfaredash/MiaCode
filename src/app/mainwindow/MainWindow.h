@@ -70,6 +70,7 @@ class QListWidgetItem;
 class QJsonObject;
 class QLineEdit;
 class QMenu;
+class QMenuBar;
 class QMoveEvent;
 class QTabWidget;
 class QToolBar;
@@ -255,6 +256,7 @@ public:
     bool shellMuriTabVisible() const override;
     bool shellExportPageActive() const override;
     QWidget* shellWindowWidget() const override;
+    QMenuBar* shellMenuBarWidget() const override;
     QDockWidget* shellOutlineDockWidget() const override;
     bool shellOutlineDockCollapsed() const override;
     int shellOutlineDockExpandedWidth() const override;

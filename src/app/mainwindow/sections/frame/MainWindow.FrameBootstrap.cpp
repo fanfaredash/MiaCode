@@ -147,9 +147,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             });
         }
     }
-    auto* topMenuBar = new miacode::ui::AppBackgroundSurfaceMenuBar(this);
-    topMenuBar->setNativeMenuBar(false);
-    setMenuBar(topMenuBar);
+    mainMenuBar_ = new miacode::ui::AppBackgroundSurfaceMenuBar(this);
+    mainMenuBar_->setNativeMenuBar(false);
     setStatusBar(new miacode::ui::AppBackgroundSurfaceStatusBar(this));
 
     // Beta20-fix — unified all top menus to the `Name(&L)` mnemonic
@@ -158,17 +157,17 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // `Name(&L)` suffix form, producing visually inconsistent menu
     // labels). The trailing `(L)` parens render in both locales which
     // matches the existing Chinese convention.
-    auto* fileMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.file")));
-    auto* editMenu = menuBar()->addMenu(UiText::text(QStringLiteral("metadata.edit_e")));
-    auto* toolsMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.tools")));
+    auto* fileMenu = mainMenuBar_->addMenu(UiText::text(QStringLiteral("menu.file")));
+    auto* editMenu = mainMenuBar_->addMenu(UiText::text(QStringLiteral("metadata.edit_e")));
+    auto* toolsMenu = mainMenuBar_->addMenu(UiText::text(QStringLiteral("menu.tools")));
     // Beta20-fix — Transform menu renamed to "Modify" / "调整" in both
     // languages so the Alt-T mnemonic is unambiguous for the Tools
     // menu. Picked "Modify" (Alt+M) over "Transform(&R)" because the
     // user requested a synonym, not just a different mnemonic letter.
     // The Chinese key in UiText.cpp likewise uses 调整(&M).
-    auto* transformMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.transform")));
-    auto* previewMenu = menuBar()->addMenu(UiText::text(QStringLiteral("metadata.preview_p")));
-    auto* helpMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.help")));
+    auto* transformMenu = mainMenuBar_->addMenu(UiText::text(QStringLiteral("menu.transform")));
+    auto* previewMenu = mainMenuBar_->addMenu(UiText::text(QStringLiteral("metadata.preview_p")));
+    auto* helpMenu = mainMenuBar_->addMenu(UiText::text(QStringLiteral("menu.help")));
     styleRoundedMenu(*fileMenu);
     styleRoundedMenu(*editMenu);
     styleRoundedMenu(*toolsMenu);
@@ -267,7 +266,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     };
     extensionManager_->setCallbacks(std::move(extensionCallbacks));
     extensionManager_->initialize(
-        menuBar(), fileMenu, editMenu, toolsMenu, transformMenu, previewMenu, helpMenu);
+        mainMenuBar_, fileMenu, editMenu, toolsMenu, transformMenu, previewMenu, helpMenu);
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
         editMenu->removeAction(editActions.constLast());
