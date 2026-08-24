@@ -11,6 +11,21 @@
 
 namespace miacode::extensions {
 
+namespace {
+
+// Subscription patterns are either an exact kind or a `prefix*` wildcard.
+// Shared by dispatchEvent() and hasEventSubscriber() so the "is anyone
+// listening" pre-check can never disagree with the delivery loop.
+bool eventPatternMatchesKind(const QString& pattern, const QString& kind)
+{
+    if (pattern == kind) {
+        return true;
+    }
+    return pattern.endsWith(QLatin1Char('*')) && kind.startsWith(pattern.left(pattern.size() - 1));
+}
+
+}  // namespace
+
 class EmbeddedExtensionRuntime::BridgeObject final : public QObject {
     Q_OBJECT
 
@@ -1576,9 +1591,31 @@ QJsonArray EmbeddedExtensionRuntime::registeredEventCallbacksForDevtools() const
     return callbacks;
 }
 
+bool EmbeddedExtensionRuntime::hasEventSubscriber(const QString& kind) const
+{
+    if (!running_ || kind.trimmed().isEmpty()) {
+        return false;
+    }
+    for (const EventCallback& callback : eventCallbacks_) {
+        if (!callback.suspended && eventPatternMatchesKind(callback.pattern, kind)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void EmbeddedExtensionRuntime::dispatchEvent(const QString& kind, const QJsonObject& payload, bool coalescible)
 {
     if (!running_ || kind.trimmed().isEmpty()) {
+        return;
+    }
+    // Bail out before enrichment when nothing can receive this kind. Everything
+    // below — the payload copy, six inserts (one of which formats a UTC ISO
+    // timestamp), and two QHash builds that scan the callback and pending lists
+    // — used to run for every publishEvent() call regardless of subscribers.
+    // preview.position.changed is published on every playback tick, so with the
+    // runtime up and nobody listening that was pure per-frame GUI-thread waste.
+    if (!hasEventSubscriber(kind)) {
         return;
     }
     QJsonObject event = payload;
@@ -1592,10 +1629,7 @@ void EmbeddedExtensionRuntime::dispatchEvent(const QString& kind, const QJsonObj
     }
 
     const auto matchesPattern = [&kind](const QString& pattern) {
-        if (pattern == kind) {
-            return true;
-        }
-        return pattern.endsWith(QLatin1Char('*')) && kind.startsWith(pattern.left(pattern.size() - 1));
+        return eventPatternMatchesKind(pattern, kind);
     };
     QHash<quint64, QString> ownerBySubscription;
     for (const EventCallback& callback : std::as_const(eventCallbacks_)) {

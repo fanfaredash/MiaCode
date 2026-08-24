@@ -41,6 +41,7 @@ Project-owned MiaCode source code is MIT-licensed; the repository as a whole, bu
 - C++20 compiler
 - Qt 6.8+ with `Core`, `Gui`, `Widgets`, `Network`, `OpenGL`, `Qml`, `Quick`, `QuickControls2`, `ShaderTools`, `Multimedia`, `Svg`
 - Windows: Visual Studio 2022 / MSVC; the FFmpeg export binary and QtAVPlayer FFmpeg dev SDK are provisioned by scripts
+- macOS: provision the QtAVPlayer FFmpeg dev SDK with `bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`
 
 See [scripts/README_EN.md](scripts/README_EN.md) for packaging details.
 

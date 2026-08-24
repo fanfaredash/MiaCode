@@ -125,8 +125,8 @@ void MainWindow::TimelineSection::enterExportIntroRegion(double positionSeconds)
     if (state_.qtPreviewPlaying_) {
         stopQtPreviewPlayback(true);  // freeze the chart behind the overlay
     }
-    state_.qtPreviewPauseSecond_ = 0.0;
     if (!state_.exportIntroRegionActive_) {
+        requestPausedPreviewSeek(0.0, false, true);
         setupExportIntroOverlayData();
     }
     state_.exportIntroRegionActive_ = true;
@@ -257,7 +257,8 @@ void MainWindow::TimelineSection::refreshExportIntroState()
         // 添加片头 off (or left the page): leave the intro region, back to chart 0.
         if (state_.exportIntroRegionActive_ || state_.exportIntroLeadInActive_) {
             exitExportIntroRegion();
-            state_.qtPreviewPauseSecond_ = 0.0;
+            miacode::mainwindow::shared::writePreviewPauseSecond(
+                state_.qtPreviewPauseSecond_, 0.0, state_.qtPreviewPlaying_, "refresh_export_intro_state");
             seekPreviewDiscreteToSecond(0.0, true);
         }
         updatePreviewSliderRange();

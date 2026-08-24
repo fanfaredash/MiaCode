@@ -38,9 +38,6 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "timeline/quick/TimelineQuickTextureCache.h"
 #include "timeline/quick/TimelineQuickWaveformLayer.h"
-#ifdef Q_OS_WIN
-#include "render/backend_d3d11/TimelineRenderView.h"
-#endif
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -58,6 +55,19 @@ namespace {
 constexpr double kTimelineKeyHoldAccelerationPerSecond = 1.0;
 constexpr int kTimelineKeyHoldTickIntervalMs = 16;
 constexpr int kTimelineLayerSlotCount = 6;  // grid + header + gridLines + wave(translucent,on-top) + notes + overlay
+
+// Phase 7 scroll-bucket index. Sole definition on purpose: the bucket is computed in two
+// places (the revision offset in applyDynamicSceneState, the rebuild cache key in
+// currentSceneState) and they MUST agree, or layers rebuild on the wrong frames. Since the
+// scroll became sub-pixel a plain `/` would be float division there and integer division
+// here, so the floor is centralised.
+int scrollBucketIndex(double horizontalScrollValue, int bucketSize)
+{
+    if (bucketSize <= 0) {
+        return 0;
+    }
+    return static_cast<int>(std::floor(horizontalScrollValue / static_cast<double>(bucketSize)));
+}
 
 // beta7 leak gauge (probes 1.2 + ②③) — live QSG node count AND geometry vertex/index bytes
 // under a timeline scene subtree. Walks firstChild()/nextSibling() once per pause (only when the
@@ -92,6 +102,11 @@ void accumulateSceneGraphStats(const QSGNode* node, SceneGraphStats* out)
 // QueryVideoMemoryInfo isolates the GPU portion: if gpu_kb climbs monotonically while our
 // node/geometry/texture counts stay flat, the leak is Qt-internal RHI deferred release. Reads the
 // RHI's ID3D11Device via QSGRendererInterface on the render thread (where it is valid). KB, or -1.
+//
+// The QueryVideoMemoryInfo call itself now lives in miacode::diag (common/ProcessDiagnostics)
+// so the 30 s per-adapter VRAM gauge and this per-pause leak gauge share one implementation.
+// What stays here is the render-thread-only part: getting from the QQuickWindow to an
+// IDXGIAdapter. The returned value is unchanged (LOCAL + NON_LOCAL CurrentUsage, KB).
 qint64 timelineGpuProcessMemoryKb(QQuickWindow* window)
 {
 #ifdef Q_OS_WIN
@@ -117,24 +132,7 @@ qint64 timelineGpuProcessMemoryKb(QQuickWindow* window)
     qint64 usageKb = -1;
     IDXGIAdapter* adapter = nullptr;
     if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) && adapter != nullptr) {
-        IDXGIAdapter3* adapter3 = nullptr;
-        if (SUCCEEDED(adapter->QueryInterface(
-                __uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
-            && adapter3 != nullptr) {
-            quint64 totalBytes = 0;
-            DXGI_QUERY_VIDEO_MEMORY_INFO info;
-            ZeroMemory(&info, sizeof(info));
-            if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
-                totalBytes += info.CurrentUsage;
-            }
-            ZeroMemory(&info, sizeof(info));
-            if (SUCCEEDED(
-                    adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
-                totalBytes += info.CurrentUsage;
-            }
-            usageKb = static_cast<qint64>(totalBytes / 1024ull);
-            adapter3->Release();
-        }
+        usageKb = miacode::diag::adapterProcessVideoMemoryUsageKb(adapter);
         adapter->Release();
     }
     dxgiDevice->Release();
@@ -300,8 +298,11 @@ void applyDynamicSceneState(
     // transform".
     if (state->viewportSize.width() > 0) {
         const int bucketSize = state->viewportSize.width();
+        // SYNC-PAIR with currentSceneState()'s currentScrollBucket: one drives the revision
+        // offset, the other the rebuild cache key. Both must floor the same way — the scroll
+        // is a double now, so a bare `/` would be float division and the two would disagree.
         const quint64 bucket =
-            static_cast<quint64>(state->horizontalScrollValue / bucketSize);
+            static_cast<quint64>(qMax(0, scrollBucketIndex(state->horizontalScrollValue, bucketSize)));
         state->waveformRevision += bucket;
         state->gridRevision += bucket;
         state->headerRevision += bucket;
@@ -379,7 +380,7 @@ double renderMapWorldXToSecond(
 {
     return miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(
         state,
-        worldX - static_cast<qreal>(state.horizontalScrollValue));
+        worldX - state.horizontalScrollValue);
 }
 
 QString renderMapPointPayload(
@@ -390,8 +391,8 @@ QString renderMapPointPayload(
     const int worldX =
         miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(state, second);
     const qreal worldXExact = renderMapSecondToSceneXExact(state, second);
-    const qreal viewX = static_cast<qreal>(worldX - state.horizontalScrollValue);
-    const qreal viewXExact = worldXExact - static_cast<qreal>(state.horizontalScrollValue);
+    const qreal viewX = worldX - state.horizontalScrollValue;
+    const qreal viewXExact = worldXExact - state.horizontalScrollValue;
     const double roundtrip =
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, viewX);
     const double roundtripExact =
@@ -419,7 +420,7 @@ QString renderMapRectPayload(
     const QRectF& rect)
 {
     const qreal worldX = rect.left();
-    const qreal viewX = worldX - static_cast<qreal>(state.horizontalScrollValue);
+    const qreal viewX = worldX - state.horizontalScrollValue;
     return QStringLiteral(
                "%1_sec=%2 %1_world_x=%3 %1_view_x=%4 %1_w=%5")
         .arg(prefix)
@@ -434,7 +435,7 @@ QString renderMapLinePayload(
     const miacode::timeline::TimelineSceneState& state,
     qreal worldX)
 {
-    const qreal viewX = worldX - static_cast<qreal>(state.horizontalScrollValue);
+    const qreal viewX = worldX - state.horizontalScrollValue;
     return QStringLiteral("%1_sec=%2 %1_world_x=%3 %1_view_x=%4")
         .arg(prefix)
         .arg(renderMapWorldXToSecond(state, worldX), 0, 'f', 6)
@@ -496,7 +497,7 @@ QString renderMapWaveformPayload(
         .arg(firstColumnSecond, 0, 'f', 6)
         .arg(firstColumnRenderedSecond, 0, 'f', 6)
         .arg(firstColumnWorldX, 0, 'f', 3)
-        .arg(firstColumnWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3);
+        .arg(firstColumnWorldX - state.horizontalScrollValue, 0, 'f', 3);
 
     const double playheadSecond = stateBridge->playheadSeconds();
     const bool playheadInDuration =
@@ -524,7 +525,7 @@ QString renderMapWaveformPayload(
         playheadColumnEndSecond - phaseCompensationSeconds;
     const qreal playheadViewX =
         renderMapSecondToSceneXExact(state, playheadSecond)
-        - static_cast<qreal>(state.horizontalScrollValue);
+        - state.horizontalScrollValue;
     const qreal playheadColumnStartWorldX =
         renderMapSecondToSceneXExact(state, playheadColumnStartRenderedSecond);
     const qreal playheadColumnCenterWorldX =
@@ -532,7 +533,7 @@ QString renderMapWaveformPayload(
     const qreal playheadColumnEndWorldX =
         renderMapSecondToSceneXExact(state, playheadColumnEndRenderedSecond);
     const qreal playheadColumnCenterViewX =
-        playheadColumnCenterWorldX - static_cast<qreal>(state.horizontalScrollValue);
+        playheadColumnCenterWorldX - state.horizontalScrollValue;
     const miacode::waveform::WaveformColumn& playheadWaveColumn =
         level->columns.at(playheadColumn);
     const double playheadColumnEnergy = renderMapWaveformColumnEnergy(playheadWaveColumn);
@@ -583,9 +584,9 @@ QString renderMapWaveformPayload(
         .arg(playheadColumnStartWorldX, 0, 'f', 3)
         .arg(playheadColumnCenterWorldX, 0, 'f', 3)
         .arg(playheadColumnEndWorldX, 0, 'f', 3)
-        .arg(playheadColumnStartWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+        .arg(playheadColumnStartWorldX - state.horizontalScrollValue, 0, 'f', 3)
         .arg(playheadColumnCenterViewX, 0, 'f', 3)
-        .arg(playheadColumnEndWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+        .arg(playheadColumnEndWorldX - state.horizontalScrollValue, 0, 'f', 3)
         .arg(playheadColumnCenterViewX - playheadViewX, 0, 'f', 3)
         .arg((playheadColumnCenterSecond - playheadSecond) * 1000.0, 0, 'f', 3)
         .arg(playheadColumnEnergy, 0, 'f', 6)
@@ -598,7 +599,7 @@ QString renderMapWaveformPayload(
         const double peakCenterRenderedSecond = peakCenterSecond - phaseCompensationSeconds;
         const qreal peakCenterWorldX = renderMapSecondToSceneXExact(state, peakCenterRenderedSecond);
         const qreal peakCenterViewX =
-            peakCenterWorldX - static_cast<qreal>(state.horizontalScrollValue);
+            peakCenterWorldX - state.horizontalScrollValue;
         payload += QStringLiteral(
                        " wave_near_peak_window_ms=%1 wave_near_peak_col=%2 "
                        "wave_near_peak_sec=%3 wave_near_peak_render_sec=%4 "
@@ -625,9 +626,9 @@ QString renderMapPrimitivePayload(
 {
     QStringList parts;
     const qreal worldLeft =
-        static_cast<qreal>(state.horizontalScrollValue + state.timelineLeft);
+        (state.horizontalScrollValue + state.timelineLeft);
     const qreal worldRight =
-        static_cast<qreal>(state.horizontalScrollValue + state.viewportSize.width());
+        (state.horizontalScrollValue + state.viewportSize.width());
 
     if (!state.waveformBars.isEmpty()) {
         parts.append(renderMapRectPayload(
@@ -685,7 +686,7 @@ QString renderMapDataAnchorPayload(
                          "measure_first_view_x=%3")
             .arg(second, 0, 'f', 6)
             .arg(worldX, 0, 'f', 3)
-            .arg(worldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3));
+            .arg(worldX - state.horizontalScrollValue, 0, 'f', 3));
     }
 
     double firstNoteSecond = std::numeric_limits<double>::infinity();
@@ -723,7 +724,7 @@ QString renderMapDataAnchorPayload(
                          "data_note_first_kind=%7")
             .arg(firstNoteSecond, 0, 'f', 6)
             .arg(worldX, 0, 'f', 3)
-            .arg(worldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+            .arg(worldX - state.horizontalScrollValue, 0, 'f', 3)
             .arg(firstNoteLine)
             .arg(firstNoteCol)
             .arg(firstNoteLane)
@@ -756,7 +757,7 @@ void appendTimelineRenderMapDiagnostics(
         .arg(scrollBucket)
         .arg(state.viewportSize.width())
         .arg(state.viewportSize.height())
-        .arg(state.horizontalScrollValue)
+        .arg(state.horizontalScrollValue, 0, 'f', 3)
         .arg(qMax(0, state.contentWidth - state.viewportSize.width()))
         .arg(state.timelineLeft)
         .arg(state.leadingCenteringPadding)
@@ -813,6 +814,20 @@ void appendTimelineRenderMapDiagnostics(
         renderMapPointPayload(QStringLiteral("entry"), state, stateBridge->playbackEntrySeconds()));
 }
 
+void appendSceneRebuildSummary(const miacode::diagnostics::RebuildSummary& summary)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/quick_scene"),
+        QStringLiteral("action=scene_state_rebuild_summary window_start_ms=%1 rebuild_count=%2 "
+                       "total_elapsed_ms=%3 max_elapsed_ms=%4 last_lines=%5")
+            .arg(summary.windowStartMs)
+            .arg(summary.rebuildCount)
+            .arg(summary.totalElapsedMs)
+            .arg(summary.maxElapsedMs)
+            .arg(summary.lastLines));
+}
+
 }  // namespace
 
 TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
@@ -833,13 +848,6 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
     heldHorizontalKeyScrollTimer_.setInterval(kTimelineKeyHoldTickIntervalMs);
     connect(&heldHorizontalKeyScrollTimer_, &QTimer::timeout, this, &TimelineQuickItem::applyHeldHorizontalKeyScrollTick);
 
-    // Phase 3c — DComp tracker placeholder. The TimelineRenderView's
-    // tryDiscoverTrackedItem looks up by this objectName via
-    // QObject::findChild on the QQuickWindow.  Even when the env flag
-    // is off (no view created) we still set the name so a later
-    // toggle-on Just Works. Same pattern as PreviewQuickSceneRoot's
-    // preview_dcomp_track_target.
-    setObjectName(QStringLiteral("timeline_dcomp_track_target"));
     // Phase 3e-diag — force-log every TimelineQuickItem construction so
     // we can identify if QML is creating multiple instances (which
     // would explain the two-popup symptom in the user's log).
@@ -854,50 +862,19 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
                 .arg(reinterpret_cast<quintptr>(this), 0, 16),
             /*force=*/true);
     }
-    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
-#ifdef Q_OS_WIN
-        dcompView_ = std::make_unique<miacode::preview::dcomp::TimelineRenderView>(this);
-        // Attach to the host window once we're parented into a scene,
-        // and tell the view we ARE its tracked item — bypassing the
-        // findChild-by-objectName dance, which fails in the
-        // sceneGraphInitialized → onWindowGeometryChanged path because
-        // the QQuickItem is constructed lazily by QML and isn't in
-        // the window's child tree at the right moment. The popup
-        // would otherwise stay sized to the full QQuickWindow client
-        // area, drawing timeline rects/lines at the window's top-left
-        // instead of inside the timeline pane.
-        dcompWindowConnection_ = connect(
-            this, &QQuickItem::windowChanged, this,
-            [this](QQuickWindow* w) {
-                if (dcompView_ != nullptr) {
-                    dcompView_->attachToWindow(w);
-                    dcompView_->setTrackedQuickItem(this);
-                }
-            });
-        if (window() != nullptr) {
-            dcompView_->attachToWindow(window());
-            dcompView_->setTrackedQuickItem(this);
-        }
-#endif
-    }
 }
 
 TimelineQuickItem::~TimelineQuickItem()
 {
+    if (const auto summary = sceneRebuildLogWindow_.flushForDestruction(); summary.has_value()) {
+        appendSceneRebuildSummary(*summary);
+    }
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("timeline/quick_item"),
         QStringLiteral("action=destruct ptr=0x%1")
             .arg(reinterpret_cast<quintptr>(this), 0, 16),
         /*force=*/true);
-#ifdef Q_OS_WIN
-    if (dcompWindowConnection_) {
-        QObject::disconnect(dcompWindowConnection_);
-        dcompWindowConnection_ = QMetaObject::Connection();
-    }
-#endif
-    // dcompView_'s unique_ptr destructor handles renderer.stop() +
-    // core.shutdown() ordering through TimelineRenderView::~TimelineRenderView.
 }
 
 TimelineQuickStateBridge* TimelineQuickItem::stateBridge() const
@@ -1228,21 +1205,6 @@ void TimelineQuickItem::syncSourceState()
         updateReadyState(false);
     }
     update();
-    // Phase 3c — also push the latest state to the DComp render view.
-    // syncSourceState fires on every renderStateChanged from the bridge,
-    // so this is the natural hook for keeping the render view in sync.
-    // No-op when the env flag is off (dcompView_ stays nullptr).
-    pushSceneStateToDComp();
-}
-
-void TimelineQuickItem::pushSceneStateToDComp()
-{
-#ifdef Q_OS_WIN
-    if (dcompView_ == nullptr) {
-        return;
-    }
-    dcompView_->setSceneState(currentSceneState());
-#endif
 }
 
 void TimelineQuickItem::updateReadyState(bool ready)
@@ -1284,9 +1246,9 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     // cached state; crossing into a new bucket triggers a rebuild
     // which emits primitives for the new window.
     const int bucketSize = viewportSize.width();
-    const int currentScroll = stateBridge_->horizontalScrollValue();
-    const int currentScrollBucket =
-        bucketSize > 0 ? (currentScroll / bucketSize) : 0;
+    const double currentScroll = stateBridge_->horizontalScrollValue();
+    // SYNC-PAIR with applyDynamicSceneState's `bucket` — see the note there.
+    const int currentScrollBucket = scrollBucketIndex(currentScroll, bucketSize);
     const bool rebuildNeeded =
         !cachedSceneStateValid_
         || cachedSceneBuildViewportSize_ != viewportSize
@@ -1311,13 +1273,6 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
                           stateBridge_->zoomScale() + 1.0)
         || !qFuzzyCompare(cachedSceneBuildContentScale_ + 1.0,
                           stateBridge_->contentScale() + 1.0);
-    if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/quick_scene"),
-            QStringLiteral("action=scene_state_rebuild_begin reason=current_scene_state count=%1")
-                .arg(sceneStateRebuildCount_ + 1));
-    }
     QElapsedTimer timer;
     if (rebuildNeeded) {
         timer.start();
@@ -1354,8 +1309,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.showSlideTracks = stateBridge_->showSlideTracks();
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
-    // Phase 9d-native — header-control state for native rendering of
-    // the zoom button in the DComp pipeline.
+    // Phase 9d-native — header-control state for the zoom button,
+    // emitted by the builder and drawn by TimelineQuickHeaderLayer.
     request.zoomControlPressedPart = zoomControlPressedPart_;
     request.zoomControlHoveredPart = zoomControlHoveredPart_;
     request.settingsControlHovered = settingsControlHovered_;
@@ -1392,13 +1347,28 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildContentScale_ = stateBridge_->contentScale();
     }
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/quick_scene"),
-            QStringLiteral("action=scene_state_rebuild_end reason=current_scene_state count=%1 elapsed_ms=%2 lines=%3")
-                .arg(sceneStateRebuildCount_ + 1)
-                .arg(timer.elapsed())
-                .arg(stateBridge_->renderSnapshot().lines.size()));
+        const qint64 elapsedMs = timer.elapsed();
+        const auto decision = sceneRebuildLogWindow_.observe(
+            QDateTime::currentMSecsSinceEpoch(),
+            elapsedMs,
+            QString::number(stateBridge_->renderSnapshot().lines.size()));
+        if (decision.summary.has_value()) {
+            appendSceneRebuildSummary(*decision.summary);
+        }
+        if (decision.emitIndividual) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/quick_scene"),
+                QStringLiteral("action=scene_state_rebuild_begin reason=current_scene_state count=%1")
+                    .arg(sceneStateRebuildCount_ + 1));
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/quick_scene"),
+                QStringLiteral("action=scene_state_rebuild_end reason=current_scene_state count=%1 elapsed_ms=%2 lines=%3")
+                    .arg(sceneStateRebuildCount_ + 1)
+                    .arg(decision.individualElapsedMs)
+                    .arg(decision.individualLastLines));
+        }
     }
     if (rebuildNeeded) {
         ++sceneStateRebuildCount_;
@@ -1427,10 +1397,10 @@ double TimelineQuickItem::clampSceneSecond(double second) const
     return qBound(0.0, second, state.maxNavigableSecond);
 }
 
-double TimelineQuickItem::viewportCenterSecondForScroll(int horizontalScrollValue) const
+double TimelineQuickItem::viewportCenterSecondForScroll(double horizontalScrollValue) const
 {
     miacode::timeline::TimelineSceneState state = currentSceneState();
-    state.horizontalScrollValue = qMax(0, horizontalScrollValue);
+    state.horizontalScrollValue = qMax(0.0, horizontalScrollValue);
     return clampSceneSecond(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
 }
@@ -1473,34 +1443,6 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 {
     Q_UNUSED(data);
 
-    // Phase 3e — when DComp-exclusive mode is on for the timeline, the
-    // TimelineRenderView is the authoritative timeline renderer. This
-    // QSG path produces nothing: discard any existing scene-graph
-    // subtree and return null so Qt skips this layer entirely. The
-    // QQuickItem itself stays alive (so DComp's tracked-item geometry
-    // tracking still works), but its bounding rect contributes no
-    // pixels to the QSG scene.
-    //
-    // Mirrors PreviewQuickSceneRoot::updatePaintNode's gate at line
-    // 526 (`previewDCompExclusiveEnabled`) — same pattern, same
-    // behaviour. Without this gate, both the QSG layers and the DComp
-    // pipeline would render the same timeline content into different
-    // surfaces, producing the "two timelines" symptom the user
-    // observed (one rendered by QML+QSG, one by DComp; whichever DWM
-    // composites on top wins visually, with the other showing through
-    // transparent regions).
-    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
-#ifdef Q_OS_WIN
-        if (oldNode != nullptr) {
-            delete oldNode;
-        }
-        updateReadyState(true);
-        // Still push state to DComp side as before.
-        pushSceneStateToDComp();
-        return nullptr;
-#endif
-    }
-
     QElapsedTimer paintNodeTimer;
     paintNodeTimer.start();
     if (!canBecomeReady()) {
@@ -1525,6 +1467,23 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         resetNodeTreeBeforeTextureInvalidation = true;
     }
 
+    // Capacity flush — a runaway guard, expected never to fire in normal use. The
+    // cache had no other bound: window / skin / DPR only fire on configuration
+    // changes, and the theme invalidation deliberately spares the `note|` and `hold_`
+    // prefixes, which are exactly the keys that grow (slide-arrow rotation is derived
+    // from on-screen geometry and quantised to 0.1 degrees, so every chart contributes
+    // a fresh batch that never retires — measured at ~30 per chart switch). But the
+    // same capture showed paint time does not scale with cache size, so this is here
+    // to bound residency in a pathological session, NOT to keep the cache small; see
+    // the limits in TimelineQuickTextureCache.cpp for why firing it routinely would be
+    // a net loss. Routed through the same reset flag as every other invalidation so it
+    // inherits the ordering contract below: node tree first, textures second.
+    const bool textureCapacityFlushRequired =
+        textures_ != nullptr && textures_->capacityFlushRequired();
+    if (textureCapacityFlushRequired) {
+        resetNodeTreeBeforeTextureInvalidation = true;
+    }
+
     miacode::timeline::TimelineSceneState state = currentSceneState();
     const quint64 themeSignature = timelineThemeSignatureHash(state);
     if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
@@ -1544,7 +1503,38 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 
     textures_->setWindow(window());
     textures_->setSkinDirectory(targetSkinDirectory);
-    if (pendingDprInvalidation_) {
+    // The capacity flush is a superset of both partial invalidations, so it wins and
+    // consumes their pending flags. Checked first (rather than as a third `else if`)
+    // because a theme invalidation landing in the same frame would otherwise remove
+    // only the text keys, leave the cache still over its cap, and defer the real flush
+    // by a frame.
+    if (textureCapacityFlushRequired) {
+        // The guard is expected never to fire, which is exactly why it is worth one
+        // line when it does: the flush costs a node-tree teardown plus a re-upload of
+        // the working set, and this line is the only thing that could later attribute
+        // that hitch. Snapshot BEFORE invalidateAll() — it zeroes every count, so a
+        // read afterwards would report an empty cache instead of the one that tripped
+        // the cap. Render thread (appendLine is mutex-guarded + async, and the debug
+        // predicate is a relaxed atomic load), same as the leak-gauge emission below.
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            const TimelineQuickTextureCacheCapacity capacity = textures_->capacitySnapshot();
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/texture_cache"),
+                QStringLiteral(
+                    "action=capacity_flush tex=%1 tex_bytes=%2 pixmaps=%3 tex_limit=%4 "
+                    "tex_byte_limit=%5 pixmap_limit=%6")
+                    .arg(capacity.textureCount)
+                    .arg(capacity.textureBytes)
+                    .arg(capacity.pixmapCount)
+                    .arg(capacity.textureCountLimit)
+                    .arg(capacity.textureByteLimit)
+                    .arg(capacity.pixmapCountLimit));
+        }
+        textures_->invalidateAll();
+        pendingDprInvalidation_ = false;
+        pendingThemeInvalidation_ = false;
+    } else if (pendingDprInvalidation_) {
         textures_->invalidateDprDependent();
         pendingDprInvalidation_ = false;
         pendingThemeInvalidation_ = false;
@@ -1553,13 +1543,13 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         pendingThemeInvalidation_ = false;
     }
 
-    if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
+    if (!qFuzzyCompare(state.horizontalScrollValue + 1.0, lastPaintedHorizontalScrollValue_ + 1.0)
         && miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("timeline/quick_scene"),
             QStringLiteral("action=content_transform_update scroll=%1 max_scroll=%2")
-                .arg(state.horizontalScrollValue)
+                .arg(state.horizontalScrollValue, 0, 'f', 3)
                 .arg(qMax(0, state.contentWidth - state.viewportSize.width())));
     }
     lastPaintedHorizontalScrollValue_ = state.horizontalScrollValue;
@@ -1580,7 +1570,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // without hiding it. Still BELOW note sprites + the overlay (playhead/
     // cursor) which follow.
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
-        return waveformLayer_->updateNode(oldChild, state);
+        return waveformLayer_->updateNode(oldChild, state, currentDpr);
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return notesLayer_->updateNode(oldChild, state, window(), textures_.get());
@@ -1699,6 +1689,61 @@ void TimelineQuickItem::geometryChange(const QRectF& newGeometry, const QRectF& 
     }
 }
 
+void TimelineQuickItem::itemChange(ItemChange change, const ItemChangeData& value)
+{
+    if (change == ItemSceneChange) {
+        bindRenderCadence(value.window);
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+void TimelineQuickItem::bindRenderCadence(QQuickWindow* window)
+{
+    if (boundCadenceWindow_ == window && renderCadenceConnection_) {
+        return;
+    }
+    if (renderCadenceConnection_) {
+        QObject::disconnect(renderCadenceConnection_);
+        renderCadenceConnection_ = QMetaObject::Connection();
+    }
+    boundCadenceWindow_ = window;
+    if (window == nullptr) {
+        return;
+    }
+    // afterAnimating is emitted on the GUI thread once per frame, immediately before the
+    // render thread is asked to synchronise that frame's scene graph. Sampling the playback
+    // clock here means the value we write is picked up by the sync that follows in the same
+    // turn, so sample->present latency is a fixed one frame instead of a free-running timer's
+    // random 0..16.7ms. That variance was the timeline judder: the clock is exact and frames
+    // are delivered on time, but each frame was drawn for a moment that had drifted.
+    //
+    // Deliberately NOT frameSwapped: that fires on the render thread and would need a queued
+    // hop back to the GUI thread, reintroducing a variable delay and racing the next sync.
+    //
+    // No lookahead bias is applied here — the timeline keeps trailing the preview's scene
+    // playhead by the preview's own +1 vsync (previewVisualLookaheadVsyncs, default 1.0). That
+    // offset is intentional and now constant rather than jittering.
+    renderCadenceConnection_ = QObject::connect(
+        window, &QQuickWindow::afterAnimating, this,
+        [this]() {
+            if (stateBridge_ == nullptr) {
+                return;
+            }
+            stateBridge_->notifyRenderCadenceTick();
+            // Keep the loop spinning for as long as playback owns the cadence. The tick above
+            // normally dirties this item (renderStateChanged -> syncSourceState -> update),
+            // but whether an update() issued inside afterAnimating also queues the NEXT frame
+            // is a render-loop implementation detail. Asking the window directly makes the
+            // continuation explicit, and it costs nothing while paused because the flag is
+            // only set during playback.
+            if (stateBridge_->playbackCadenceActive()) {
+                if (QQuickWindow* const w = QQuickItem::window()) {
+                    w->update();
+                }
+            }
+        });
+}
+
 void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
 {
     if (event == nullptr || event->button() != Qt::LeftButton) {
@@ -1731,12 +1776,12 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     emit timelineUserInteractionStarted();
     if (followProgressEnabled() && !playheadNearViewportCenter()) {
         const double centerSecond = viewportCenterSecondForScroll(
-            stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
+            stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0);
         emit centerNavigateRequested(centerSecond);
     }
     dragActive_ = true;
     dragStartX_ = qRound(event->position().x());
-    dragStartScrollValue_ = stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0;
+    dragStartScrollValue_ = stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0;
     appendTimelineQuickInteractionLog(
         QStringLiteral("drag_begin"),
         QString("x=%1 scroll_start=%2")
@@ -1759,7 +1804,10 @@ void TimelineQuickItem::mouseMoveEvent(QMouseEvent* event)
         QQuickItem::mouseMoveEvent(event);
         return;
     }
-    const int newScroll = dragStartScrollValue_ - (qRound(event->position().x()) - dragStartX_);
+    // double, not int: dragStartScrollValue_ carries a fraction now, and narrowing here would
+    // truncate it — snapping the view by up to a pixel the instant a drag begins.
+    const double newScroll =
+        dragStartScrollValue_ - static_cast<double>(qRound(event->position().x()) - dragStartX_);
     stateBridge_->setHorizontalScrollValue(newScroll);
     const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
     if (followProgressEnabled()) {
@@ -1805,11 +1853,11 @@ void TimelineQuickItem::mouseReleaseEvent(QMouseEvent* event)
         if (stateBridge_ != nullptr && followProgressEnabled()) {
             stateBridge_->restorePlayheadIndicator(true);
         }
-        const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
+        const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0);
         appendTimelineQuickInteractionLog(
             QStringLiteral("drag_end"),
             QString("scroll=%1 center_second=%2")
-                .arg(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0)
+                .arg(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0.0, 0, 'f', 3)
                 .arg(centerSecond, 0, 'f', 6));
         emit timelineDragFinished(centerSecond);
         update();
@@ -1848,7 +1896,7 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
         QString("delta=%1 modifiers=%2 scroll_before=%3")
             .arg(delta)
             .arg(static_cast<int>(event->modifiers()))
-            .arg(stateBridge_->horizontalScrollValue()));
+            .arg(stateBridge_->horizontalScrollValue(), 0, 'f', 3));
     const bool zoomInWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(
         event,
         stateBridge_->zoomInWheelShortcuts());
@@ -1872,7 +1920,7 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
     appendTimelineQuickInteractionLog(
         QStringLiteral("wheel_scroll_applied"),
         QString("scroll_after=%1 center_second=%2")
-            .arg(stateBridge_->horizontalScrollValue())
+            .arg(stateBridge_->horizontalScrollValue(), 0, 'f', 3)
             .arg(centerSecond, 0, 'f', 6));
     if (followProgressEnabled()) {
         emit timelineWheelNavigateRequested(centerSecond);
@@ -1956,6 +2004,6 @@ void TimelineQuickItem::applyHeldHorizontalKeyScrollTick()
             QString("direction=%1 pixel_delta=%2 scroll=%3")
                 .arg(heldHorizontalKeyScrollDirection_)
                 .arg(pixelDelta)
-                .arg(stateBridge_->horizontalScrollValue()));
+                .arg(stateBridge_->horizontalScrollValue(), 0, 'f', 3));
     }
 }

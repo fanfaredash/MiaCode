@@ -16,6 +16,7 @@ public:
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
+    void applyEditorScrollBeyondLastLineEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
     // Jump to the bookmark's line without leaving a persistent sidebar marker.
@@ -29,7 +30,6 @@ public:
     // editor text. An empty name removes an existing explicit label and falls
     // back to automatic naming.
     bool renameBookmark(int difficultyId, int line, const QString& name);
-    void replaceBookmarkLine(int fromLine, int toLine);
     void refreshEditorBookmarkLines();
     void syncBookmarksFromEditorText(int changePosition = -1, int charsRemoved = 0, int charsAdded = 0);
     // Rebuilds the derived sidebar index after a document is assigned.

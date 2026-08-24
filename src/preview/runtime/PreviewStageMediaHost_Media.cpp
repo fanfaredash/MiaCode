@@ -76,21 +76,10 @@ bool PreviewStageMediaHost::hasVideoMedia() const
 
 QImage PreviewStageMediaHost::currentBackgroundImage() const
 {
-    // Phase 4d — when per-pixel alpha is enabled the DComp HWND is
-    // transparent at the OS level, so QML's PreviewStageMediaItem
-    // (Image/VideoOutput) below shows through natively. The CPU
-    // detour (StageBackgroundSource painting the bg) is no longer
-    // needed and should be skipped to avoid duplicate paint cost.
-    if (miacode::debug_options::previewDCompPerPixelAlphaEnabled()) {
-        return QImage();
-    }
     // Phase 4c-8 (image) + 4c-9 (video) — return the cached bg image
     // for both kinds. For Image: loadImageMedia() seeds it once at
     // chart-load. For Video: noteVideoFrameArrived() converts each
     // QVideoFrame to a QImage and updates it as new frames flow in.
-    // The DComp surface reads this every snapshot tick; image-mode
-    // returns the same content frame-to-frame (cheap), video-mode
-    // returns the latest decoded frame.
     if (mediaKind_ != MediaKind::Image && mediaKind_ != MediaKind::Video) {
         return QImage();
     }
@@ -136,8 +125,52 @@ void PreviewStageMediaHost::setBackgroundScaleMode(PreviewBackgroundScaleMode mo
     if (backgroundScaleMode_ == mode) {
         return;
     }
+    const PreviewBackgroundScaleMode previousMode = backgroundScaleMode_;
     backgroundScaleMode_ = mode;
+    // Report what refreshInnerVideoSinkForScaleMode() DID, not what the switch was
+    // supposed to trigger. This is the only record tying a user-visible render-setting
+    // change to the inner-sink side effect, which is what "switching into mode 3
+    // mid-playback shows the wrong first frame" (primed=0) and "VRAM does not drop
+    // after leaving mode 3" (cleared=0) each hinge on. The no-op case returns above
+    // and stays unlogged.
+    const InnerVideoSinkRefresh refresh = refreshInnerVideoSinkForScaleMode();
+    appendPreviewStageMediaLog(
+        QStringLiteral("scale_mode"),
+        QStringLiteral("from=%1 to=%2 inner_sink_active=%3 primed=%4 cleared=%5")
+            .arg(QString::fromLatin1(backgroundScaleModeToken(previousMode)))
+            .arg(QString::fromLatin1(backgroundScaleModeToken(backgroundScaleMode_)))
+            .arg(innerVideoSinkActive() ? 1 : 0)
+            .arg(refresh == InnerVideoSinkRefresh::Primed ? 1 : 0)
+            .arg(refresh == InnerVideoSinkRefresh::Cleared ? 1 : 0));
     emit backgroundScaleModeChanged();
+}
+
+bool PreviewStageMediaHost::innerVideoSinkActive() const
+{
+    return innerVideoSink_ != nullptr
+        && backgroundScaleMode_ == PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
+}
+
+PreviewStageMediaHost::InnerVideoSinkRefresh PreviewStageMediaHost::refreshInnerVideoSinkForScaleMode()
+{
+    if (innerVideoSink_ == nullptr || innerVideoSink_ == videoSink_) {
+        return InnerVideoSinkRefresh::None;
+    }
+    if (innerVideoSinkActive()) {
+#ifdef MIACODE_USE_QTAVPLAYER
+        if (lastVideoFrame_.isValid()) {
+            innerVideoSink_->setVideoFrame(lastVideoFrame_);
+            return InnerVideoSinkRefresh::Primed;
+        }
+#endif
+        // Entered the mode with nothing retained — the inner circle stays blank
+        // until the next decoded frame lands.
+        return InnerVideoSinkRefresh::None;
+    }
+    // Leaving the mode: drop the retained frame so the inner sink stops pinning
+    // a decode-pool surface (same reason releaseVideoBackend() clears it).
+    innerVideoSink_->setVideoFrame(QVideoFrame());
+    return InnerVideoSinkRefresh::Cleared;
 }
 
 double PreviewStageMediaHost::layoutSquareScale() const
@@ -185,6 +218,7 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
     chartPath_ = normalizedChartPath;
     chartVideoOverridePath_ = chartVideoOverridePath;
     mediaStamp_ = mediaStamp;
+    playbackRateLogGate_.reset();
     clearMedia();
     if (chartPath_.isEmpty()) {
         appendPreviewStageMediaLog(QStringLiteral("set_chart_path"), QStringLiteral("chart=(empty) kind=none"));
@@ -222,6 +256,7 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
 
 void PreviewStageMediaHost::clearMedia()
 {
+    clearPvMemorySource();
 #ifdef MIACODE_USE_QTAVPLAYER
     if (videoFrameConnection_) {
         QObject::disconnect(videoFrameConnection_);
@@ -281,6 +316,7 @@ void PreviewStageMediaHost::clearMedia()
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -296,6 +332,7 @@ void PreviewStageMediaHost::clearMedia()
     observedPlayheadSecond_ = 0.0;
     clockDeltaSeconds_ = 0.0;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     if (shuttingDown_) {
         return;
     }
@@ -313,7 +350,9 @@ void PreviewStageMediaHost::releaseDecoderForFileReplace()
     // not enough on Windows because the QAVPlayer keeps its own
     // QSharedPointer<QAVFormatContext> ref alive until its async unload lands, so
     // the pv.mp4 avio handle can still be open right after this returns.
+    recordPvMemoryBoundary(PvMemoryBoundary::PlayerDestroyBefore);
     clearMedia();
+    destroyPvMemorySource();
 #ifdef MIACODE_USE_QTAVPLAYER
     // Destroy the player so ~QAVPlayer runs synchronously: it stops and JOINS the
     // demux/decode threads and releases the format context, so
@@ -362,11 +401,9 @@ QString PreviewStageMediaHost::resolveMediaPath(const QString& chartPath) const
 void PreviewStageMediaHost::loadImageMedia(const QString& path)
 {
     imageSource_ = QUrl::fromLocalFile(path);
-    // Phase 4c-8 — also load the QImage so DComp's StageBackgroundSource
-    // can render it. The QML PreviewStageMediaItem still binds to
-    // imageSource_ but is occluded by the DComp HWND on top; the DComp
-    // surface needs its own copy to actually paint the bg in the
-    // chart-preview area.
+    // Also keep a decoded QImage copy alongside the QML
+    // PreviewStageMediaItem's imageSource_ binding, exposed via
+    // currentBackgroundImage().
     loadedBackgroundImage_ = QImage(path);
     if (loadedBackgroundImage_.isNull()) {
         appendPreviewStageMediaLog(
@@ -382,6 +419,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -393,6 +431,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     ++videoPlaybackWatchdogSerial_;
     consecutiveVideoBackendRecoveryCount_ = 0;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     updateClockDelta();
     emit imageSourceChanged();
     emit mediaStateChanged();
@@ -411,7 +450,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
 
     imageSource_ = QUrl();
     // Clear stale bg + arm the toImage() throttle so the first decoded frame
-    // after this chart switch is captured immediately for the DComp fallback.
+    // after this chart switch is captured immediately.
     loadedBackgroundImage_ = QImage();
     videoFrameToImageThrottle_.invalidate();
     mediaKind_ = MediaKind::Video;
@@ -426,6 +465,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -435,7 +475,9 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     bindVideoOutput();
+    beginPvMemorySource();
 
     // (Re)connect the decoded-frame stream, capturing the current source
     // generation by value (clearMedia() bumped it just before this). Any
@@ -477,9 +519,9 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     }
 
     imageSource_ = QUrl();
-    // Phase 4c-9 — clear stale image bg from a prior chart so the
-    // DComp surface paints nothing until the first decoded video
-    // frame arrives via noteVideoFrameArrived(). Also invalidate
+    // Phase 4c-9 — clear stale image bg from a prior chart so
+    // currentBackgroundImage() reports nothing until the first decoded
+    // video frame arrives via noteVideoFrameArrived(). Also invalidate
     // the toImage() throttle so the very first frame after this
     // chart switch is captured immediately (otherwise a recently-
     // armed throttle from the previous chart could delay it up to
@@ -494,6 +536,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++pausedSeekTimeoutSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -505,6 +548,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++videoPlaybackWatchdogSerial_;
     consecutiveVideoBackendRecoveryCount_ = 0;
     resetVideoFrameDiagnostics();
+    resetStaleEndOfMediaRecovery();
     syncMediaStatusBeaconBudget_ = qMax(syncMediaStatusBeaconBudget_, 12);
     syncVideoFrameBeaconBudget_ = qMax(syncVideoFrameBeaconBudget_, 8);
     {
@@ -518,6 +562,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
         miacode::oplog::appendStartupBeaconLine(buf);
     }
     bindVideoOutput();
+    beginPvMemorySource();
     miacode::oplog::appendStartupBeaconLine("preview/load_video/after_bind");
     {
         char buf[260];
@@ -576,7 +621,7 @@ void PreviewStageMediaHost::bindVideoOutput()
         if (videoSink_ != nullptr) {
             videoSink_->setVideoFrame(lastVideoFrame_);
         }
-        if (innerVideoSink_ != nullptr && innerVideoSink_ != videoSink_) {
+        if (innerVideoSinkActive() && innerVideoSink_ != videoSink_) {
             innerVideoSink_->setVideoFrame(lastVideoFrame_);
         }
     }
@@ -643,4 +688,3 @@ void PreviewStageMediaHost::bindVideoOutput()
     appendPreviewStageMediaLog(QStringLiteral("bind_video_output"), QStringLiteral("attached=1 sink=0"));
 #endif
 }
-

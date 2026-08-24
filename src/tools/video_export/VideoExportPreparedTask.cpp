@@ -4,6 +4,7 @@
 #include "LegacyExportAudioBackend.h"
 #include "RawVideoPipeTransport.h"
 #include "VideoExportAudioRenderPlan.h"
+#include "VideoExportMediaTimeline.h"
 #include "VideoExportQuickRenderBackend.h"
 #include "VideoExportRuntimePolicy.h"
 #include "common/AssetPaths.h"
@@ -349,7 +350,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(frameCount)
             .arg(audioRenderPlan.backgroundTrack.enabled ? 1 : 0)
             .arg(audioRenderPlan.scheduledSfxPlaybacks.size())
-            .arg(audioRenderPlan.mergedTouchholdSpans.size())
+            .arg(audioRenderPlan.touchholdSpanPlaybacks.size())
     );
 
     if (setProgressPercent(0, QStringLiteral("Preparing SFX track..."))) {
@@ -630,7 +631,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
     }
 
     const QString totalSecondsText = QString::number(alignedTotalSeconds, 'f', 6);
-    const QString timelineOriginText = QString::number(timelineOriginSecond, 'f', 6);
     const QString baseFillColor = hasMedia ? QStringLiteral("#000000") : QStringLiteral("#1F2833");
     QStringList filterParts;
     filterParts << QStringLiteral("color=c=%1:s=%2x%3:r=%4:d=%5[base_fill]")
@@ -643,21 +643,29 @@ VideoExportResult VideoExportController::exportPreparedTask(
         const int squareSide = qMax(1, qMin(frameWidth, frameHeight));
         const int squareOffsetX = (frameWidth - squareSide) / 2;
         const int squareOffsetY = (frameHeight - squareSide) / 2;
+        // Media placement on the output timeline, including the partial-range
+        // pre-roll freeze (PV held on the segment-start frame under the pause
+        // glyph). Shared by the outer/inner/plain chains below.
+        miacode::video_export::MediaTimelinePlan mediaTimelinePlan;
+        mediaTimelinePlan.mediaIsImage = mediaIsImage;
+        mediaTimelinePlan.partialRangeExport = partialRangeExport;
+        mediaTimelinePlan.timelineOriginSecond = timelineOriginSecond;
+        mediaTimelinePlan.leadInSeconds = audioRenderPlan.leadInSeconds;
+        mediaTimelinePlan.alignedTotalSeconds = alignedTotalSeconds;
+        const QStringList mediaTimingFilters =
+            miacode::video_export::buildMediaTimelineFilters(mediaTimelinePlan);
+        appendVideoExportLog(
+            QStringLiteral("media_timeline"),
+            QStringLiteral("image=%1 partialRange=%2 origin=%3 leadIn=%4 total=%5 filters=%6")
+                .arg(mediaIsImage ? 1 : 0)
+                .arg(partialRangeExport ? 1 : 0)
+                .arg(timelineOriginSecond, 0, 'f', 6)
+                .arg(audioRenderPlan.leadInSeconds, 0, 'f', 6)
+                .arg(alignedTotalSeconds, 0, 'f', 6)
+                .arg(mediaTimingFilters.join(QLatin1Char(',')))
+        );
         const auto appendMediaTimingFilters = [&](QStringList& mediaFilters) {
-            if (!mediaIsImage) {
-                if (timelineOriginSecond > kTimelineEpsilonSeconds) {
-                    mediaFilters << QStringLiteral("trim=start=%1:end=%2")
-                                        .arg(timelineOriginText)
-                                        .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
-                                 << QStringLiteral("setpts=PTS-STARTPTS");
-                } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
-                    mediaFilters << QStringLiteral("trim=start=0:end=%1")
-                                        .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
-                                 << QStringLiteral("setpts=PTS-STARTPTS+%1/TB")
-                                        .arg(QString::number(-timelineOriginSecond, 'f', 6));
-                }
-                mediaFilters << QStringLiteral("tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
-            }
+            mediaFilters += mediaTimingFilters;
         };
 
         if (innerCircleFitOuterFill) {
@@ -795,9 +803,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
                            .arg(audioInputIndex)
                            .arg(totalSecondsText)
                            .arg(kMixSampleRate);
-        filterParts << QStringLiteral("[%1:a]aresample=%2,aformat=channel_layouts=stereo[introaud]")
+        filterParts << QStringLiteral("[%1:a]aresample=%2,aformat=channel_layouts=stereo,volume=%3[introaud]")
                            .arg(introAudioInputIndex)
-                           .arg(kMixSampleRate);
+                           .arg(kMixSampleRate)
+                           .arg(QString::number(qBound(0.0, task.introSoundVolume, 2.0), 'f', 6));
         filterParts << QStringLiteral("[mainaud][introaud]amix=inputs=2:normalize=0:duration=first[aout]");
     } else {
         filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[aout]")

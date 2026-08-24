@@ -412,6 +412,42 @@ void VideoExportDialog::insertBatchTaskTab(QWidget* controls)
     settingsTabs_->updateGeometry();
 }
 
+void VideoExportDialog::retargetChartPayload(const VideoExportTask& task)
+{
+    // Batch page only: the difficulty badge switched while this panel stays
+    // alive, so refresh ONLY the difficulty-derived chart payload. Every styling
+    // choice in currentIntroSpecForExportTask() is re-read from the widgets, so
+    // overwriting baseTask_.intro cannot lose a user setting — but 添加片头's
+    // on/off flag and the 片头 sound (file + volume) live on baseTask_ and ARE
+    // user-owned, so they are carried across explicitly.
+    const bool introEnabled = baseTask_.intro.enabled;
+    const QString introSoundFileName = baseTask_.introSoundFileName;
+    const double introSoundVolume = baseTask_.introSoundVolume;
+
+    baseTask_.chartPath = task.chartPath;
+    baseTask_.trackPath = task.trackPath;
+    baseTask_.noteMarkers = task.noteMarkers;
+    baseTask_.muriAnalysisReport = task.muriAnalysisReport;
+    baseTask_.contentDurationSeconds = task.contentDurationSeconds;
+    baseTask_.chartTitle = task.chartTitle;
+    baseTask_.chartArtist = task.chartArtist;
+    baseTask_.chartDifficultyLabel = task.chartDifficultyLabel;
+    baseTask_.chartDesigner = task.chartDesigner;
+    baseTask_.outputPath = task.outputPath;
+    baseTask_.clockCount = task.clockCount;
+    baseTask_.intro = task.intro;
+
+    baseTask_.intro.enabled = introEnabled;
+    baseTask_.introSoundFileName = introSoundFileName;
+    baseTask_.introSoundVolume = introSoundVolume;
+
+    // "自动" resolves SD/DX from the payload, and the 片头 tab's card preview is
+    // baked from the spec — both are stale until re-derived. The export-page
+    // audition's own intro region is refreshed by the host.
+    refreshIntroCardModeAutoLabel();
+    refreshIntroPreview();
+}
+
 bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* errorMessage) const
 {
     if (task == nullptr) {
@@ -465,6 +501,9 @@ bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* e
     // copyIntroStyling(). currentIntroSpec() would bake in the currently-open
     // chart's mode and force every batch item to it.
     updated.intro = currentIntroSpecForExportTask();
+    updated.introSoundVolume = introSoundVolumeSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(introSoundVolumeSlider_->value()) / 100.0, 2.0)
+        : updated.introSoundVolume;
     updated.intro.enabled = addIntroCheck_ != nullptr && addIntroCheck_->isChecked();
 
     if (updated.outputWidth <= 0 || updated.outputHeight <= 0) {
@@ -508,7 +547,8 @@ void VideoExportDialog::applyThemeStyles()
 
     // Dialog dropdowns (miacode::ui::createDialogComboBox).
     for (QComboBox* combo : {resolutionCombo_, fpsCombo_, audioBitrateCombo_,
-                             presetCombo_, sizePresetCombo_, backgroundScaleModeCombo_}) {
+                             presetCombo_, sizePresetCombo_, backgroundScaleModeCombo_,
+                             introSoundCombo_}) {
         miacode::ui::applyDialogComboBoxStyle(combo, 12);
     }
 
@@ -518,7 +558,8 @@ void VideoExportDialog::applyThemeStyles()
             miacode::ui::applyDialogPushButtonStyle(button);
         }
     }
-    for (QPushButton* button : {outputBrowseButton_, introBackgroundBrowse_, setStartButton_, setEndButton_}) {
+    for (QPushButton* button : {outputBrowseButton_, introSoundImportButton_, introBackgroundBrowse_,
+                                setStartButton_, setEndButton_}) {
         if (button != nullptr) {
             miacode::ui::applyDialogAuxiliaryButtonStyle(button);
         }
@@ -549,7 +590,8 @@ void VideoExportDialog::applyThemeStyles()
     if (previewSlider_ != nullptr) {
         previewSlider_->setStyleSheet(UiTheme::formSliderStyleSheet());
     }
-    for (QSlider* slider : {brightnessOuterSlider_, brightnessInnerSlider_, layoutSquareScaleSlider_}) {
+    for (QSlider* slider : {brightnessOuterSlider_, brightnessInnerSlider_, layoutSquareScaleSlider_,
+                            introSoundVolumeSlider_}) {
         if (slider != nullptr) {
             miacode::ui::applyDialogSliderStyle(slider);
         }
@@ -906,6 +948,9 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     // launch snapshot can detect from the live chart just before worker handoff.
     // `enabled` is recomputed below from the checkbox + range.
     updated.intro = currentIntroSpecForExportTask();
+    updated.introSoundVolume = introSoundVolumeSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(introSoundVolumeSlider_->value()) / 100.0, 2.0)
+        : updated.introSoundVolume;
     updated.intro.enabled =
         (addIntroCheck_ != nullptr && addIntroCheck_->isChecked())
         && updated.fullRangeExport;
@@ -1026,8 +1071,153 @@ void VideoExportDialog::done(int result)
     QDialog::done(result);
 }
 
+void VideoExportDialog::showEvent(QShowEvent* event)
+{
+    QDialog::showEvent(event);
+    // QDialogButtonBox promotes its first AcceptRole button to the dialog
+    // default on every QEvent::Show, and children are shown before their
+    // parent — so this runs after that promotion and undoes it.
+    disableButtonReturnActivation();
+}
+
+void VideoExportDialog::disableButtonReturnActivation()
+{
+    // Clearing autoDefault as well as default matters: an autoDefault button
+    // makes itself the dialog default while focused AND becomes QDialog's
+    // remembered "main default" the first time it is focused, which would hand
+    // Return back to it from every field on the page.
+    const QList<QPushButton*> buttons = findChildren<QPushButton*>();
+    for (QPushButton* button : buttons) {
+        if (button == nullptr) {
+            continue;
+        }
+        button->setAutoDefault(false);
+        button->setDefault(false);
+    }
+}
+
+void VideoExportDialog::commitFlowSpeedEditor(QLineEdit* editor)
+{
+    double* selectedFlowSpeed = nullptr;
+    std::function<void(double)> applyFlowSpeed;
+    if (editor == tapFlowSpeedEdit_) {
+        selectedFlowSpeed = &selectedTapFlowSpeed_;
+        applyFlowSpeed = previewTapFlowSpeedCallback_;
+    } else if (editor == touchFlowSpeedEdit_) {
+        selectedFlowSpeed = &selectedTouchFlowSpeed_;
+        applyFlowSpeed = previewTouchFlowSpeedCallback_;
+    }
+    if (editor == nullptr || selectedFlowSpeed == nullptr) {
+        return;
+    }
+    bool ok = false;
+    const double typedSpeed = editor->text().trimmed().toDouble(&ok);
+    if (!ok) {
+        editor->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+        return;
+    }
+    *selectedFlowSpeed = snappedFlowSpeed(typedSpeed);
+    editor->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+    if (applyFlowSpeed) {
+        applyFlowSpeed(*selectedFlowSpeed);
+    }
+}
+
+bool VideoExportDialog::commitFocusedEditorOnReturn()
+{
+    QWidget* focus = QApplication::focusWidget();
+    if (focus == nullptr || !(focus == this || isAncestorOf(focus))) {
+        return false;
+    }
+    // Spin boxes and editable combos expose their internal QLineEdit as the
+    // focus widget; commit through the owning control instead.
+    if (QWidget* owner = focus->parentWidget(); owner != nullptr) {
+        if (qobject_cast<QAbstractSpinBox*>(owner) != nullptr
+            || qobject_cast<QComboBox*>(owner) != nullptr) {
+            focus = owner;
+        }
+    }
+    if (auto* spin = qobject_cast<QAbstractSpinBox*>(focus); spin != nullptr) {
+        // QAbstractSpinBox already interpreted the typed text before letting
+        // the key through; re-select so the committed value reads as applied.
+        spin->interpretText();
+        spin->selectAll();
+        return true;
+    }
+    if (auto* editor = qobject_cast<QLineEdit*>(focus); editor != nullptr) {
+        if (editor == tapFlowSpeedEdit_ || editor == touchFlowSpeedEdit_) {
+            commitFlowSpeedEditor(editor);
+        } else if (editor == outputPathEdit_) {
+            editor->setText(displayOutputPathForDialog(
+                resolveOutputPathForExport(editor->text().trimmed(), exportBaseDirectory(baseTask_)),
+                exportBaseDirectory(baseTask_)
+            ));
+        }
+        // Everything else on this page (path fields, injected owner-wired
+        // settings) commits through QLineEdit's own editingFinished, which it
+        // emits before handing the key up to us.
+        editor->selectAll();
+        return true;
+    }
+    return false;
+}
+
+void VideoExportDialog::keyPressEvent(QKeyEvent* event)
+{
+    // Return/Enter must never start an export from this page (a stray Enter
+    // after typing in a field used to fire the default button). It commits the
+    // focused field instead, and is swallowed here so QDialog's default-button
+    // handling is never reached. Ctrl/Alt/Meta chords fall through untouched.
+    if (event != nullptr
+        && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && !event->modifiers().testFlag(Qt::ControlModifier)
+        && !event->modifiers().testFlag(Qt::AltModifier)
+        && !event->modifiers().testFlag(Qt::MetaModifier)) {
+        commitFocusedEditorOnReturn();
+        event->accept();
+        return;
+    }
+    QDialog::keyPressEvent(event);
+}
+
 bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
 {
+    if (disableSelectionWheelChanges_ && event != nullptr && event->type() == QEvent::Wheel) {
+        auto* widget = qobject_cast<QWidget*>(watched);
+        if (widget != nullptr && (widget == this || isAncestorOf(widget))) {
+            auto* combo = qobject_cast<QComboBox*>(widget);
+            auto* spin = qobject_cast<QAbstractSpinBox*>(widget);
+            const bool closedCombo = combo != nullptr
+                && (combo->view() == nullptr || !combo->view()->isVisible());
+            const bool inactiveSpin = spin != nullptr && !spin->hasFocus();
+            if (closedCombo || inactiveSpin) {
+                auto* wheelEvent = static_cast<QWheelEvent*>(event);
+                for (QWidget* ancestor = widget->parentWidget(); ancestor != nullptr;
+                     ancestor = ancestor->parentWidget()) {
+                    auto* scrollArea = qobject_cast<QAbstractScrollArea*>(ancestor);
+                    if (scrollArea == nullptr || scrollArea->viewport() == nullptr) {
+                        continue;
+                    }
+                    const QPointF viewportPosition = scrollArea->viewport()->mapFromGlobal(
+                        wheelEvent->globalPosition().toPoint());
+                    QWheelEvent forwarded(
+                        viewportPosition,
+                        wheelEvent->globalPosition(),
+                        wheelEvent->pixelDelta(),
+                        wheelEvent->angleDelta(),
+                        wheelEvent->buttons(),
+                        wheelEvent->modifiers(),
+                        wheelEvent->phase(),
+                        wheelEvent->inverted(),
+                        wheelEvent->source());
+                    QCoreApplication::sendEvent(scrollArea->viewport(), &forwarded);
+                    break;
+                }
+                event->accept();
+                return true;
+            }
+        }
+    }
     if (event != nullptr && UiDialogs::dialogOwnsPreviewShortcutScope(this)) {
         if (event->type() == QEvent::ShortcutOverride) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);

@@ -297,10 +297,10 @@ PreviewTextureStats mergedTextureStats(
 }
 
 template <typename UpdateFn>
-void updateLayerSlot(QSGNode* slot, bool enabled, UpdateFn&& updateFn)
+bool updateLayerSlot(QSGNode* slot, bool enabled, UpdateFn&& updateFn)
 {
     if (slot == nullptr) {
-        return;
+        return false;
     }
 
     QSGNode* oldChild = slot->firstChild();
@@ -319,6 +319,7 @@ void updateLayerSlot(QSGNode* slot, bool enabled, UpdateFn&& updateFn)
     if (newChild != nullptr && newChild->parent() != slot) {
         slot->appendChildNode(newChild);
     }
+    return newChild != nullptr;
 }
 
 template <typename UpdateFn>
@@ -336,8 +337,10 @@ void updateLayerSlotProfiled(
     }
     QElapsedTimer timer;
     timer.start();
-    updateLayerSlot(slot, enabled, std::forward<UpdateFn>(updateFn));
-    ensureLayerProfileStat(layerStats, layerName).buildMs = static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+    const bool produced = updateLayerSlot(slot, enabled, std::forward<UpdateFn>(updateFn));
+    PreviewTextureLayerStats& stat = ensureLayerProfileStat(layerStats, layerName);
+    stat.buildMs = static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+    stat.nodeProduced = produced;
 }
 
 }  // namespace
@@ -349,11 +352,6 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     setFlag(ItemHasContents, true);
     setAcceptHoverEvents(true);
     setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
-    // Phase 4a — let PreviewDCompSurface auto-discover this item via
-    // QObject::findChild on the QQuickWindow. Decoupled from the
-    // dcomp/ side: surface looks up by objectName instead of taking a
-    // direct dependency on PreviewQuickSceneRoot's type.
-    setObjectName(QStringLiteral("preview_dcomp_track_target"));
     appendQuickSceneLog(
         QStringLiteral("scene_root_construct"),
         QString("%1 item_visible=%2")
@@ -440,11 +438,9 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
-        if (!miacode::debug_options::previewDCompQuiesceQsgEnabled()) {
-            runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
-                update();
-            });
-        }
+        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+            update();
+        });
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
     syncVisibleHostWindowBinding("set_runtime");
@@ -555,7 +551,9 @@ void PreviewQuickSceneRoot::mouseReleaseEvent(QMouseEvent* event)
         const QString pad = touchPadAtItemPoint(event->position());
         touchPadAuthoringPressedButton_ = Qt::NoButton;
         runtime_->finishTouchPadAuthoringPress(
-            pad, miacode::preview::scene::touchPadAuthoringUsesBacktickSeparator(event->button()));
+            pad,
+            miacode::preview::scene::touchPadAuthoringSeparator(
+                event->button(), event->modifiers()));
         event->accept();
         return;
     }
@@ -574,21 +572,6 @@ void PreviewQuickSceneRoot::mouseUngrabEvent()
 void PreviewQuickSceneRoot::setRuntimeObject(QObject* runtimeObject)
 {
     setRuntime(qobject_cast<PreviewRuntime*>(runtimeObject));
-}
-
-void PreviewQuickSceneRoot::setDCompFallbackActive(bool active)
-{
-    if (dcompFallbackActive_ == active) {
-        return;
-    }
-    dcompFallbackActive_ = active;
-    // Force a re-paint so the next updatePaintNode honours the new
-    // setting immediately. With fallback on, the legacy QSG path
-    // resumes producing pixels; with it off, the DComp short-circuit
-    // returns nullptr again. Either way the user-visible state needs
-    // to switch within one frame of the QML toggle.
-    update();
-    emit dcompFallbackActiveChanged();
 }
 
 void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
@@ -681,6 +664,24 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
         QObject::disconnect(windowVisibilityConnection_);
         windowVisibilityConnection_ = QMetaObject::Connection();
     }
+    // Render-thread phase hooks are re-established below for the new window. Drop the
+    // old ones here: they are Qt::DirectConnection lambdas and re-binding the same
+    // window (F11 / re-parent) would otherwise stack a duplicate set on every rebind.
+    for (QMetaObject::Connection* connection : {
+             &fireworkPresentConnection_,
+             &renderBeforeSyncConnection_,
+             &renderAfterSyncConnection_,
+             &renderBeforeRenderConnection_,
+             &renderBeforePassConnection_,
+             &renderAfterPassConnection_,
+             &renderAfterRenderConnection_,
+             &renderFrameSwapProfileConnection_,
+         }) {
+        if (*connection) {
+            QObject::disconnect(*connection);
+            *connection = QMetaObject::Connection();
+        }
+    }
     if (runtime_ != nullptr) {
         runtime_->setHoveredTouchPad(QString());
     }
@@ -762,6 +763,22 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
         syncVisibleHostWindowBinding("window_visibility_changed");
         update();
     });
+    // Direct (render-thread) hook: promotes "the firework layer emitted a node during
+    // this frame's updatePaintNode" into "a frame containing that node has been
+    // presented", which is the warm-up's completion criterion. Kept separate from the
+    // queued frameSwapped handler below precisely because that one can lag a frame.
+    fireworkPresentConnection_ = QObject::connect(
+        boundWindow_, &QQuickWindow::frameSwapped, this,
+        [this]() {
+            if (!fireworkNodeInPendingFrame_) {
+                return;
+            }
+            fireworkNodeInPendingFrame_ = false;
+            if (runtime_ != nullptr) {
+                runtime_->notifyFireworkLayerPresentedNode();
+            }
+        },
+        Qt::DirectConnection);
     frameSwapConnection_ = QObject::connect(boundWindow_, &QQuickWindow::frameSwapped, this, [this]() {
         if (runtime_ == nullptr || boundWindow_ == nullptr || window() != boundWindow_) {
             return;
@@ -834,7 +851,23 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
             Qt::DirectConnection);
         renderBeforeRenderConnection_ = QObject::connect(
             boundWindow_, &QQuickWindow::beforeRendering, this,
-            [this]() { renderPhaseRenderStartNs_ = renderPhaseTimer_.nsecsElapsed(); },
+            [this]() {
+                renderPhaseRenderStartNs_ = renderPhaseTimer_.nsecsElapsed();
+                renderPhasePassStartNs_ = -1;
+                renderPhasePassEndNs_ = -1;
+            },
+            Qt::DirectConnection);
+        // Splits render_submit into resource-prep vs pass-record. Qt emits these
+        // around the scene graph's actual render-pass recording, so a first-use
+        // pipeline (PSO) build lands inside pass_record_ms while texture/buffer
+        // uploads and the swapchain acquire land in resource_prep_ms.
+        renderBeforePassConnection_ = QObject::connect(
+            boundWindow_, &QQuickWindow::beforeRenderPassRecording, this,
+            [this]() { renderPhasePassStartNs_ = renderPhaseTimer_.nsecsElapsed(); },
+            Qt::DirectConnection);
+        renderAfterPassConnection_ = QObject::connect(
+            boundWindow_, &QQuickWindow::afterRenderPassRecording, this,
+            [this]() { renderPhasePassEndNs_ = renderPhaseTimer_.nsecsElapsed(); },
             Qt::DirectConnection);
         renderAfterRenderConnection_ = QObject::connect(
             boundWindow_, &QQuickWindow::afterRendering, this,
@@ -850,41 +883,6 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
 QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData)
 {
     Q_UNUSED(updatePaintNodeData);
-
-    // Phase 4b — when DComp-exclusive mode is on, the DComp surface is
-    // the authoritative chart renderer; this QSG path produces nothing.
-    // Discard any existing scene-graph subtree and return null so Qt
-    // skips this layer entirely. The QQuickItem itself stays visible
-    // (so the DComp surface's findChild + mapToScene tracking still
-    // works), but its bounding rect contributes no pixels to the QSG
-    // scene. PreviewQuickHudLayer + PreviewStageMediaItem are sibling
-    // items and continue to render normally.
-    //
-    // Phase 4d-fix — exception: when per-pixel alpha is on (the default
-    // case where exclusive auto-enables), we still want the QSG
-    // stage_background dim shader to run so the user's "Background
-    // brightness" sliders affect QML's PreviewStageMediaItem (which
-    // shows through DComp's transparent areas). The chart-sprite QSG
-    // layers stay skipped — only the dim slot is processed. See the
-    // `keepDimOnly` short-circuit below the dim slot for the second
-    // half of this conditional.
-    // Issue #4 fix — `dcompFallbackActive_` overrides the DComp-exclusive
-    // short-circuit. QML sets this on the fullscreen QuickShellPreviewSurface
-    // instance because the DComp popup HWND can't follow the secondary
-    // fullscreen window (it's owned by the editor and would be z-ordered
-    // behind the fullscreen window). With fallback active, the legacy
-    // QSG path renders chart content into the fullscreen window directly,
-    // matching the embedded preview's appearance.
-    const bool exclusive = !dcompFallbackActive_
-        && miacode::debug_options::previewDCompExclusiveEnabled();
-    const bool keepDimOnly = exclusive
-        && miacode::debug_options::previewDCompPerPixelAlphaEnabled();
-    if (exclusive && !keepDimOnly) {
-        if (oldNode != nullptr) {
-            delete oldNode;
-        }
-        return nullptr;
-    }
 
     const bool renderDiagEnabled = miacode::debug_options::previewFramePacingDiagnosticsEnabled();
     if (renderDiagEnabled) {
@@ -1016,20 +1014,6 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         [&](QSGNode* oldChild) {
             return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
-    // Phase 4d-fix — when per-pixel alpha is on (exclusive auto-on),
-    // stop here. The dim-layer slot above is the only QSG output the
-    // chart preview needs; chart-sprite layers below are owned by
-    // DComp. This preserves the user's Background brightness controls
-    // while keeping DComp the exclusive chart renderer.
-    if (keepDimOnly) {
-        // Clear stale chart-sprite contents from a prior frame without changing the fixed
-        // slot topology. Keeping the slot nodes stable avoids rebuilding the root generation.
-        root->clearLayerContentsFrom(slotIndex);
-        if (miacode::debug_options::previewProfileOutputEnabled()) {
-            enqueueTextureStatsForPresentation(mergedTextureStats(*textures, layerProfileStats_));
-        }
-        return root;
-    }
     updateCenterDisplaySlot(
         layerSlotAt(root, slotIndex++),
         *state,
@@ -1087,11 +1071,12 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
             judgeFireworkNodeProduced = (node != nullptr);
             return node;
         });
-    if (judgeFireworkNodeProduced && runtime_ != nullptr) {
-        // Confirms to the runtime that the firework material PSO was bound +
-        // colour-ball texture uploaded this frame — drives warm-up completion
-        // (PreviewRuntime::handlePresentedFrame). Render-thread safe (atomic).
-        runtime_->notifyFireworkLayerProducedNode();
+    if (judgeFireworkNodeProduced) {
+        // Latch it for the direct frameSwapped hook below, which is what confirms the
+        // warm-up: binding the material here only records the work, while the swap is
+        // what proves the pipeline build and texture upload actually completed
+        // (audit §6D-2). Render-thread only, same thread as the hook.
+        fireworkNodeInPendingFrame_ = true;
     }
     applyWindowCounts(
         "judge_firework",
@@ -1342,8 +1327,36 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     }
     if (renderDiagEnabled) {
         renderPhaseUpdatePaintEndNs_ = renderPhaseTimer_.nsecsElapsed();
+        noteFirstLayerDraws();
     }
     return root;
+}
+
+void PreviewQuickSceneRoot::noteFirstLayerDraws()
+{
+    // Audit §5.4. The existing warm-up only proves the judge-firework material was
+    // built; every other layer still compiles its pipeline and uploads its textures
+    // on the first frame that actually draws it — and on a cold first play that frame
+    // is the one the user is waiting for. There is no log today that says WHICH layer
+    // debuted on the slow frame, so "the warm-up does not cover the real first-use
+    // state" could be argued but not shown. One line per layer, once per scene-graph
+    // lifetime, emitted from updatePaintNode so it lands immediately before that same
+    // frame's render_frame_profile in the log.
+    for (const PreviewTextureLayerStats& stat : layerProfileStats_) {
+        if (!stat.nodeProduced || layersFirstDrawn_.contains(stat.name)) {
+            continue;
+        }
+        layersFirstDrawn_.insert(stat.name);
+        appendQuickSceneLog(
+            QStringLiteral("layer_first_draw"),
+            QString("layer=%1 update_paint_count=%2 build_ms=%3 candidates=%4 active=%5")
+                .arg(stat.name)
+                .arg(updatePaintNodeCount_)
+                .arg(QString::number(stat.buildMs, 'f', 3))
+                .arg(stat.candidateCount)
+                .arg(stat.activeCount)
+        );
+    }
 }
 
 void PreviewQuickSceneRoot::recordRenderPhaseProfile()
@@ -1373,11 +1386,26 @@ void PreviewQuickSceneRoot::recordRenderPhaseProfile()
         return static_cast<double>(endNs - startNs) / 1000000.0;
     };
 
+    const qint64 passStart = renderPhasePassStartNs_;
+    const qint64 passEnd = renderPhasePassEndNs_;
+
     const double paintMs = deltaMs(paintEnd, paintStart);
     const double syncMs = deltaMs(syncEnd, syncStart);
     const double renderSubmitMs = deltaMs(renderEnd, renderStart);
     const double swapGpuMs = deltaMs(swapNs, renderEnd);
     const double totalMs = deltaMs(swapNs, paintStart);
+    // render_submit_ms decomposition (audit §5.1). Without this the one-second
+    // first-play block is a single opaque number; with it the log says whether the
+    // wait is QRhi resource work, first-use pipeline creation inside the render
+    // pass, or the endFrame tail.
+    //   resource_prep_ms : beforeRendering -> beforeRenderPassRecording
+    //                      (texture/buffer uploads, RHI resource creation, swapchain acquire)
+    //   pass_record_ms   : beforeRenderPassRecording -> afterRenderPassRecording
+    //                      (draw-call recording; a first-use PSO/shader variant is built here)
+    //   submit_tail_ms   : afterRenderPassRecording -> afterRendering
+    const double resourcePrepMs = deltaMs(passStart, renderStart);
+    const double passRecordMs = deltaMs(passEnd, passStart);
+    const double submitTailMs = deltaMs(renderEnd, passEnd);
     // pre_render_wait_ms = gap between afterSynchronizing and beforeRendering. In Qt's
     // threaded RHI render loop the swap-chain image acquire happens here, so a fat value
     // is the smoking gun for vsync / DXGI flip-queue back-pressure (we'll see this spike
@@ -1410,22 +1438,63 @@ void PreviewQuickSceneRoot::recordRenderPhaseProfile()
     }
     renderPhaseLastLogMs_ = nowMs;
 
+    const auto msOrNa = [](double value) {
+        return value < 0 ? QStringLiteral("na") : QString::number(value, 'f', 3);
+    };
     appendQuickSceneLog(
         QStringLiteral("render_frame_profile"),
         QString("total_ms=%1 paint_ms=%2 sync_ms=%3 pre_render_wait_ms=%4 render_submit_ms=%5 "
-                "swap_gpu_ms=%6 layer_sum_ms=%7 top_layer=%8 top_layer_ms=%9 layer_count=%10 slow=%11")
-            .arg(totalMs < 0 ? QStringLiteral("na") : QString::number(totalMs, 'f', 3))
-            .arg(paintMs < 0 ? QStringLiteral("na") : QString::number(paintMs, 'f', 3))
-            .arg(syncMs < 0 ? QStringLiteral("na") : QString::number(syncMs, 'f', 3))
-            .arg(preRenderWaitMs < 0 ? QStringLiteral("na") : QString::number(preRenderWaitMs, 'f', 3))
-            .arg(renderSubmitMs < 0 ? QStringLiteral("na") : QString::number(renderSubmitMs, 'f', 3))
-            .arg(swapGpuMs < 0 ? QStringLiteral("na") : QString::number(swapGpuMs, 'f', 3))
+                "resource_prep_ms=%6 pass_record_ms=%7 submit_tail_ms=%8 "
+                "swap_gpu_ms=%9 layer_sum_ms=%10 top_layer=%11 top_layer_ms=%12 layer_count=%13 slow=%14")
+            .arg(msOrNa(totalMs))
+            .arg(msOrNa(paintMs))
+            .arg(msOrNa(syncMs))
+            .arg(msOrNa(preRenderWaitMs))
+            .arg(msOrNa(renderSubmitMs))
+            .arg(msOrNa(resourcePrepMs))
+            .arg(msOrNa(passRecordMs))
+            .arg(msOrNa(submitTailMs))
+            .arg(msOrNa(swapGpuMs))
             .arg(QString::number(totalLayerBuildMs, 'f', 3))
             .arg(topLayerName.isEmpty() ? QStringLiteral("none") : topLayerName)
             .arg(QString::number(topLayerBuildMs, 'f', 3))
             .arg(layerProfileStats_.size())
             .arg(slowFrame ? 1 : 0)
     );
+
+    // First frame in the process whose submit crosses the "this is the reported stall,
+    // not ordinary jitter" bar gets one extra line naming the phase that owned it, so a
+    // capture that lost its sampled profile lines still carries the verdict. No DXGI /
+    // COM work here: this runs on the QSG render thread. The adapter + VRAM context for
+    // the same moment is emitted from the GUI-thread first-play trace instead
+    // (PreviewStageMediaHost::emitFirstPlaybackRenderTrace).
+    constexpr double kRenderStallContextMs = 250.0;
+    if (!renderStallContextEmitted_ && renderSubmitMs >= kRenderStallContextMs) {
+        renderStallContextEmitted_ = true;
+        QString dominant = QStringLiteral("unknown");
+        if (resourcePrepMs >= 0 && passRecordMs >= 0 && submitTailMs >= 0) {
+            if (resourcePrepMs >= passRecordMs && resourcePrepMs >= submitTailMs) {
+                dominant = QStringLiteral("resource_prep");
+            } else if (passRecordMs >= submitTailMs) {
+                dominant = QStringLiteral("pass_record");
+            } else {
+                dominant = QStringLiteral("submit_tail");
+            }
+        }
+        appendQuickSceneLog(
+            QStringLiteral("render_stall_context"),
+            QString("render_submit_ms=%1 resource_prep_ms=%2 pass_record_ms=%3 submit_tail_ms=%4 "
+                    "pre_render_wait_ms=%5 swap_gpu_ms=%6 dominant=%7 layer_count=%8")
+                .arg(msOrNa(renderSubmitMs))
+                .arg(msOrNa(resourcePrepMs))
+                .arg(msOrNa(passRecordMs))
+                .arg(msOrNa(submitTailMs))
+                .arg(msOrNa(preRenderWaitMs))
+                .arg(msOrNa(swapGpuMs))
+                .arg(dominant)
+                .arg(layerProfileStats_.size())
+        );
+    }
 }
 
 void PreviewQuickSceneRoot::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry)

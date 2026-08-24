@@ -16,10 +16,12 @@ class QDialogButtonBox;
 class QDoubleSpinBox;
 class QFrame;
 class QJsonObject;
+class QKeyEvent;
 class QLabel;
 class QLineEdit;
 class QMenu;
 class QPushButton;
+class QShowEvent;
 class QSlider;
 class QTabWidget;
 class QTimer;
@@ -119,6 +121,12 @@ public:
     // Inserts the batch host's range/destination/source controls as the first
     // vertically scrollable embedded tab. Call after setBatchSettingsPanelMode.
     void insertBatchTaskTab(QWidget* controls);
+    // Batch panel only: re-seed the difficulty-derived chart payload (片头 banner
+    // fields, parsed markers, content duration, chart metadata) after the export
+    // page's difficulty badge switched. The panel and every user-tuned setting
+    // survive; call it instead of rebuilding the panel the way the single-export
+    // sub-page does.
+    void retargetChartPayload(const VideoExportTask& task);
     bool buildBatchTaskTemplate(VideoExportTask* task, QString* errorMessage = nullptr) const;
     bool isClockCountEnabledForPreview() const;
     bool embeddedPanelMode() const { return embeddedPanelMode_; }
@@ -150,6 +158,8 @@ signals:
     // Embedded mode only: 添加片头 toggled or a 片头 setting changed — the host
     // refreshes the negative-time intro region (slider range + overlay).
     void introPreviewSettingsChanged();
+    void introSoundFileNameChanged(const QString& fileName);
+    void introSoundVolumeChanged(double volume);
     // Embedded mode only: the "Enable clock_count" checkbox toggled — the host
     // re-seeds the export-page audition's count-in so the preview matches what
     // will be exported (WYSIWYG).
@@ -206,6 +216,7 @@ private:
     // Sub-control gating: background path row follows the combo, card
     // sub-options follow the card toggle, everything follows 添加片头.
     void syncIntroControlsEnabled();
+    void importIntroSound();
     void browseIntroBackground();
     // Current intro spec = baseTask_.intro (chart payload) + the tab's styling
     // controls. The preview receives a resolved DX/Standard mode; the export
@@ -232,7 +243,23 @@ private:
 
     void closeEvent(QCloseEvent* event) override;
     void done(int result) override;
+    void showEvent(QShowEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+
+    // Return/Enter is a "commit the field I am typing in" key on this page, never
+    // "start the export" — see keyPressEvent(). These two keep that true:
+    // disableButtonReturnActivation() strips the default/auto-default flags that
+    // would otherwise let Return click a button (QDialogButtonBox re-assigns the
+    // default on every show, so it has to run from showEvent), and
+    // commitFocusedEditorOnReturn() writes the focused editor's value back.
+    void disableButtonReturnActivation();
+    bool commitFocusedEditorOnReturn();
+    // Clamp + snap + apply a flow-speed field. QLineEdit only emits
+    // editingFinished for validator-acceptable text, so out-of-range input
+    // (e.g. "0.5" under a 1.0 floor) reaches the dialog uncommitted and has to
+    // be finished off here.
+    void commitFlowSpeedEditor(QLineEdit* editor);
 
     VideoExportTask baseTask_;
     SeekPreviewCallback seekPreviewCallback_;
@@ -269,6 +296,8 @@ private:
     bool rangePreviewPlaying_ = false;
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
+    // Shared gate for all combo/spin controls on this export surface.
+    bool disableSelectionWheelChanges_ = true;
     bool initialShowTimestamp_ = true;
     bool initialShowObjectStats_ = false;
     bool initialShowChartInfo_ = false;
@@ -296,6 +325,10 @@ private:
     QCheckBox* fixHudTextLayoutCheck_ = nullptr;
     QCheckBox* clockCountCheck_ = nullptr;
     QCheckBox* addIntroCheck_ = nullptr;
+    QComboBox* introSoundCombo_ = nullptr;
+    QPushButton* introSoundImportButton_ = nullptr;
+    QSlider* introSoundVolumeSlider_ = nullptr;
+    miacode::ui::EditableValueLabel* introSoundVolumeValueLabel_ = nullptr;
     // ---- "片头" tab controls ----
     QComboBox* introBackgroundCombo_ = nullptr;
     QLineEdit* introBackgroundPathEdit_ = nullptr;

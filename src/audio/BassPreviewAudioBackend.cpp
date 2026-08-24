@@ -1,5 +1,7 @@
 #include "BassPreviewAudioBackend.h"
 
+#include "PreviewBassEmergencyPause.h"
+
 #include "BassPreviewDebugLogRouting.h"
 #include "BassPreviewRetainedState.h"
 #include "common/ChartAssetPaths.h"
@@ -42,6 +44,8 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
     appendAudioDebugLog("BassPreviewAudioBackend destroying");
     shuttingDown_.store(true, std::memory_order_release);
 #ifdef MIACODE_HAS_BASS_AUDIO
+    miacode::preview_audio::PreviewBassEmergencyPause::disarm();
+    // PreviewAudioWorker serializes health sampling with shutdown on this backend thread.
     stopPlaybackSession();
     resetAssets();
     unloadOptionalPlugins();
@@ -51,25 +55,24 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
         masterMixer_ = 0;
     }
     unloadBassFx();
-    if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
-        --gBassDeviceRefCount;
-        registeredBassDeviceRef_ = false;
-    }
-    if (engineInitialized_ && gBassDeviceRefCount == 0) {
-        BASS_Stop();
-        noteBassErr("dtor/bass_stop");
-        BASS_Free();
-        noteBassErr("dtor/bass_free");
-        engineInitialized_ = false;
-    } else if (engineInitialized_) {
-        engineInitialized_ = false;
-    }
+    bassDeviceLease_.release();
+    engineInitialized_ = false;
 #endif
 }
 
 QString BassPreviewAudioBackend::backendId() const
 {
     return QStringLiteral("bass");
+}
+
+int BassPreviewAudioBackend::nativeErrorCode() const noexcept
+{
+    return lastNativeErrorCode_;
+}
+
+void BassPreviewAudioBackend::clearNativeErrorCode() noexcept
+{
+    lastNativeErrorCode_ = 0;
 }
 
 QString BassPreviewAudioBackend::resolveTrackPath(const QString& chartPath) const

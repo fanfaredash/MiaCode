@@ -60,8 +60,10 @@ public:
     QFont headerLineNumberFont() const;
     QString skinDirectory() const;
     void setSkinDirectory(const QString& skinDirectory);
-    int horizontalScrollValue() const;
-    void setHorizontalScrollValue(int value);
+    // Sub-pixel. `maxHorizontalScrollValue()` stays an int because it is a content extent,
+    // not a position.
+    double horizontalScrollValue() const;
+    void setHorizontalScrollValue(double value);
     double zoomScale() const;
     void setZoomScale(double scale);
     QVector<double> zoomPresets() const;
@@ -91,6 +93,16 @@ public:
     void setCursorSeconds(double second, bool centerView);
     void focusPlayhead(bool centerView);
     void focusCursor(bool centerView);
+    // Relay for TimelineQuickItem's per-frame afterAnimating hook. The item owns the window
+    // binding; the bridge is what MainWindow already holds, so the tick is republished here
+    // rather than making MainWindow reach for a QML-instantiated item pointer.
+    void notifyRenderCadenceTick();
+    // True while preview playback is driving the timeline. The item uses this to keep the
+    // render loop spinning (QQuickWindow::update) so afterAnimating keeps arriving; without
+    // it the cadence would depend on whether an update() issued during afterAnimating also
+    // schedules a follow-up frame, which is a Qt render-loop internal we should not bet on.
+    void setPlaybackCadenceActive(bool active);
+    bool playbackCadenceActive() const;
     bool showSlideTracks() const;
     void setShowSlideTracks(bool show);
     bool followPreviewEnabled() const;
@@ -116,6 +128,11 @@ signals:
     void renderStateChanged();
     void playheadChanged(double second);
     void zoomScaleChanged(double scale);
+    // Emitted once per timeline frame from TimelineQuickItem's afterAnimating hook, on the
+    // GUI thread, immediately before the render thread syncs that frame. Playback samples
+    // its clock here instead of on a free-running timer so the sampled second and the frame
+    // it lands in are phase-locked; see notifyRenderCadenceTick().
+    void renderCadenceTick();
     // Dedicated NOTIFY signals for the Q_PROPERTYs above — keeping
     // these separate from renderStateChanged means the QML
     // checkbox bindings only re-evaluate when the toggle they
@@ -151,7 +168,8 @@ private:
     QStringList zoomInWheelShortcuts_{QStringLiteral("Ctrl+WheelUp")};
     QStringList zoomOutWheelShortcuts_{QStringLiteral("Ctrl+WheelDown")};
     int zoomPresetIndex_ = 1;
-    int horizontalScrollValue_ = 0;
+    double horizontalScrollValue_ = 0.0;
+    bool playbackCadenceActive_ = false;
     double contentScale_ = 1.0;
     double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
     double measureLineBrightness_ = miacode::timeline::kTimelineMeasureLineBrightnessDefault;

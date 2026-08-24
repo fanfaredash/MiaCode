@@ -810,17 +810,20 @@ int main(int argc, char** argv)
         firework.flags = TimelineRenderFlagIsFirework;
         fireworkLine.notes.append(firework);
         const QVector<TimelineRenderLine> lines{fireworkLine};
+        // Probe windows are fractions of the rendered firework duration so they
+        // follow kTimelineFireworkDurationSeconds instead of going stale every
+        // time the effect is retuned.
         const TimelineVisibleLineRange inTail = timelineRenderVisibleNoteLineRange(
             lines,
             buildNoteVisualEndPrefixMax(lines, false),
-            1.0,
-            1.1
+            kTimelineFireworkDurationSeconds * 0.6,
+            kTimelineFireworkDurationSeconds * 0.7
         );
         const TimelineVisibleLineRange afterTail = timelineRenderVisibleNoteLineRange(
             lines,
             buildNoteVisualEndPrefixMax(lines, false),
-            1.5,
-            1.6
+            kTimelineFireworkDurationSeconds * 1.1,
+            kTimelineFireworkDurationSeconds * 1.2
         );
         expect(inTail.begin == 0 && inTail.end == 1,
                QStringLiteral("visible note range keeps firework tail alive inside its rendered duration"));

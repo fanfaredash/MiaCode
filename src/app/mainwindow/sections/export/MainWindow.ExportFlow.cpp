@@ -16,6 +16,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
+#include "common/PreviewSfxAssets.h"
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
@@ -773,6 +774,27 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
                 }
             });
     }
+    connect(dialog, &VideoExportDialog::introSoundFileNameChanged, &owner_, [this](const QString& fileName) {
+        owner_.previewIntroSoundFileName_ =
+            miacode::preview_sfx::normalizeIntroSoundFileName(fileName);
+        miacode::preview_sfx::setSelectedIntroSoundFileName(owner_.previewIntroSoundFileName_);
+        if (owner_.previewSfxRuntime_ != nullptr
+            && owner_.previewSfxRuntime_->audioEngineInitialized()) {
+            owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
+        }
+        owner_.savePortableState();
+    });
+    connect(dialog, &VideoExportDialog::introSoundVolumeChanged, &owner_, [this](double volume) {
+        miacode::preview_sfx::setSelectedIntroSoundVolume(volume);
+        if (owner_.previewSfxRuntime_ != nullptr
+            && owner_.previewSfxRuntime_->audioEngineInitialized()) {
+            owner_.previewSfxRuntime_->applyLevels(owner_.previewAudioSettings_);
+        }
+    });
+    if (owner_.previewSfxRuntime_ != nullptr
+        && owner_.previewSfxRuntime_->audioEngineInitialized()) {
+        owner_.previewSfxRuntime_->applyLevels(owner_.previewAudioSettings_);
+    }
     return dialog;
 }
 
@@ -794,12 +816,20 @@ void MainWindow::ExportSection::beginExportPreviewSession(const VideoExportTask&
     // showDebugInfo preference so it returns intact afterwards.
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setSuppressDebugInfo(true);
-        // The seed task already carries the resolved chart metadata (built in
-        // buildVideoExportSeedTask).
-        owner_.previewCanvas_->setChartInfo(
-            task.chartTitle, task.chartArtist, task.chartDifficultyLabel, task.chartDesigner);
-        owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
+        applyExportPreviewChartInfo(task);
     }
+}
+
+void MainWindow::ExportSection::applyExportPreviewChartInfo(const VideoExportTask& task)
+{
+    if (owner_.previewCanvas_ == nullptr) {
+        return;
+    }
+    // The seed task already carries the resolved chart metadata (built in
+    // buildVideoExportSeedTask).
+    owner_.previewCanvas_->setChartInfo(
+        task.chartTitle, task.chartArtist, task.chartDifficultyLabel, task.chartDesigner);
+    owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
 }
 
 void MainWindow::ExportSection::endExportPreviewSession()
@@ -1050,8 +1080,18 @@ void MainWindow::ExportSection::updateEmbeddedBatchExportPreviewDifficulty(int d
         || owner_.document_.difficulty(difficultyId) == nullptr) {
         return;
     }
-    panel->updatePreviewDifficulty(difficultyId);
+    // The batch panel survives a badge switch (its queue/settings are the user's
+    // work), so nothing rebuilds the difficulty-derived chart payload the way
+    // createEmbeddedVideoExportPanel does on the 视频导出 sub-page. Re-seed it
+    // here from the newly-selected difficulty, otherwise the preview keeps the
+    // panel's opening difficulty in the chart-info HUD and — visibly — in the
+    // 片头 banner (难度 / LV / 谱师 / 曲绘) while the note field switches.
+    const VideoExportTask retargetedTask = buildVideoExportSeedTask(difficultyId);
+    panel->updatePreviewDifficulty(difficultyId, retargetedTask);
+    applyExportPreviewChartInfo(retargetedTask);
     teardownExportPreviewAuditionScene();
+    // Re-runs refreshExportIntroState() at its tail, which now reads the
+    // retargeted 片头 spec.
     installExportPreviewAuditionScene(difficultyId);
     if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
         difficulty != nullptr) {

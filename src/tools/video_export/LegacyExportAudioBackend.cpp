@@ -259,7 +259,7 @@ bool LegacyExportAudioBackend::renderMixedTrackToWav(
         addClipToMix(*clip, playback.gain, startFrame, maxFrames, 0, &mix);
     }
 
-    for (const auto& span : plan.mergedTouchholdSpans) {
+    for (const auto& span : plan.touchholdSpanPlaybacks) {
         const QString path = miacode::preview_sfx::assetFilePathForKind(plan.sfxDirectory, span.assetKind);
         const DecodedClip* clip = loadClip(span.assetKind, path);
         if (clip == nullptr) {
@@ -267,7 +267,8 @@ bool LegacyExportAudioBackend::renderMixedTrackToWav(
         }
         const qint64 startFrame = qRound64(span.mixSecond * kMixSampleRate);
         const qint64 maxFrames = qMax<qint64>(0, qRound64(span.durationSeconds * kMixSampleRate));
-        addClipToMix(*clip, span.gain, startFrame, maxFrames, 0, &mix);
+        const qint64 clipStartFrame = qMax<qint64>(0, qRound64(span.sourceStartSecond * kMixSampleRate));
+        addClipToMix(*clip, span.gain, startFrame, maxFrames, clipStartFrame, &mix);
     }
 
     if (!writeWav16(outputPath, mix, kMixSampleRate, kMixChannels)) {
@@ -284,7 +285,7 @@ bool LegacyExportAudioBackend::renderMixedTrackToWav(
             .arg(outputPath)
             .arg(plan.backgroundTrack.enabled ? 1 : 0)
             .arg(plan.scheduledSfxPlaybacks.size())
-            .arg(plan.mergedTouchholdSpans.size())
+            .arg(plan.touchholdSpanPlaybacks.size())
             .arg(plan.alignedTotalSeconds, 0, 'f', 6));
     return true;
 }

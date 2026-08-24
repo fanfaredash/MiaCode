@@ -432,11 +432,6 @@ bool QuickShellController::previewUsesSeparateSurface() const
     return previewUsesSeparateSurface_;
 }
 
-bool QuickShellController::previewDCompExclusive() const
-{
-    return miacode::debug_options::previewDCompExclusiveEnabled();
-}
-
 QObject* QuickShellController::timelineStateBridge() const
 {
     return stateSource_ != nullptr ? stateSource_->shellTimelineStateBridgeObject() : nullptr;
@@ -1123,13 +1118,17 @@ void QuickShellController::syncSidebarSurfaceSize(int width, int height)
     }
     surfaceHost_->syncSidebarSurfaceSize(width, height);
     if (QWidget* surface = surfaceHost_->sidebarSurfaceWidget(); surface != nullptr) {
-        appendQuickShellControllerLog(
-            QStringLiteral("sync_sidebar"),
-            QString("size=%1x%2 handle=0x%3")
-                .arg(surface->width())
-                .arg(surface->height())
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
-        );
+        const miacode::diagnostics::SurfaceSizeKey surfaceKey{
+            static_cast<quintptr>(surface->winId()), surface->width(), surface->height()};
+        if (sidebarSurfaceLogGate_.shouldEmit(surfaceKey, false)) {
+            appendQuickShellControllerLog(
+                QStringLiteral("sync_sidebar"),
+                QString("size=%1x%2 handle=0x%3")
+                    .arg(surface->width())
+                    .arg(surface->height())
+                    .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+            );
+        }
     }
 }
 
@@ -1147,19 +1146,22 @@ void QuickShellController::syncWorkspaceSurfaceSize(int width, int height)
     surfaceHost_->syncWorkspaceSurfaceSize(width, height);
     if (QWidget* surface = surfaceHost_->workspaceSurfaceWidget(); surface != nullptr) {
         const qint64 elapsedMs = elapsed.elapsed();
-        appendQuickShellControllerLog(
-            QStringLiteral("sync_workspace"),
-            QString("size=%1x%2 requested=%3x%4 elapsed_ms=%5 handle=0x%6")
-                .arg(surface->width())
-                .arg(surface->height())
-                .arg(width)
-                .arg(height)
-                .arg(elapsedMs)
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16),
-            elapsedMs >= 50
-                ? miacode::debug_log::Level::Warn
-                : miacode::debug_log::Level::Info
-        );
+        const bool slow = elapsedMs >= 50;
+        const miacode::diagnostics::SurfaceSizeKey surfaceKey{
+            static_cast<quintptr>(surface->winId()), surface->width(), surface->height()};
+        if (workspaceSurfaceLogGate_.shouldEmit(surfaceKey, slow)) {
+            appendQuickShellControllerLog(
+                QStringLiteral("sync_workspace"),
+                QString("size=%1x%2 requested=%3x%4 elapsed_ms=%5 handle=0x%6")
+                    .arg(surface->width())
+                    .arg(surface->height())
+                    .arg(width)
+                    .arg(height)
+                    .arg(elapsedMs)
+                    .arg(static_cast<quintptr>(surface->winId()), 0, 16),
+                slow ? miacode::debug_log::Level::Warn : miacode::debug_log::Level::Info
+            );
+        }
     }
 }
 

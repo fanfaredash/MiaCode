@@ -7,6 +7,7 @@
 #include "UiTheme.h"
 #include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "core/scene/PreviewHudState.h"
 #include "tools/video_export/HudFontSettings.h"
 #include "tools/video_export/IntroPreviewWidget.h"
@@ -193,6 +194,16 @@ void VideoExportDialog::loadPersistedSettings()
         addIntroCheck_->setChecked(
             settings.value(QStringLiteral("add_intro")).toBool(addIntroCheck_->isChecked()));
     }
+    if (introSoundVolumeSlider_ != nullptr) {
+        const QSignalBlocker blocker(introSoundVolumeSlider_);
+        const double volume = qBound(
+            0.0,
+            settings.value(QStringLiteral("intro_sound_volume")).toDouble(baseTask_.introSoundVolume),
+            2.0);
+        introSoundVolumeSlider_->setValue(qRound(volume * 100.0));
+        baseTask_.introSoundVolume = volume;
+        miacode::preview_sfx::setSelectedIntroSoundVolume(volume);
+    }
 
     // "片头" tab styling (app-level preferences, like add_intro).
     if (introBackgroundCombo_ != nullptr) {
@@ -290,6 +301,11 @@ void VideoExportDialog::appendIntroPersistedSettings(QJsonObject* settings) cons
     }
     settings->insert(QStringLiteral("add_intro"),
                      addIntroCheck_ != nullptr && addIntroCheck_->isChecked());
+    if (introSoundVolumeSlider_ != nullptr) {
+        settings->insert(
+            QStringLiteral("intro_sound_volume"),
+            qBound(0.0, static_cast<double>(introSoundVolumeSlider_->value()) / 100.0, 2.0));
+    }
     if (introBackgroundCombo_ != nullptr) {
         settings->insert(QStringLiteral("intro_background_mode"),
                          introBackgroundCombo_->currentData().toString());

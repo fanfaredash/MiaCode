@@ -74,6 +74,11 @@ Use `miacode-extension.json` for MiaCode-only extensions. `extension.js` is requ
 
 Required fields are `id`, `name`, `version`, `publisher`, and `engines.miacode`. Add `main` only when JavaScript should run. Add every permission your code calls.
 
+Menu contribution locations are `file/menu`, `edit/menu`, `tools/menu`, `modify/menu`,
+`preview/menu`, `help/menu`, `toolbox/menu`, and `menubar/beforeHelp`. `tools/menu` keeps
+extension commands grouped under Tools > Extensions; `toolbox/menu` places the command directly
+in the chart toolbox Net group, after Net download and before the official-chart mirror entry.
+
 必填字段是 `id`、`name`、`version`、`publisher` 和 `engines.miacode`。只有需要运行 JavaScript 时才添加 `main`。代码调用什么能力，就声明对应权限。
 
 **Summary / 总结:** The manifest is the contract for identity, entry file, commands, menus, and permissions. / manifest 是身份、入口文件、命令、菜单和权限的契约。

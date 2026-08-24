@@ -54,6 +54,21 @@ bool verifyPausedTransportReuse(QTextStream& err)
     return true;
 }
 
+bool verifyBackgroundTrackEndBoundary(QTextStream& err)
+{
+    using miacode::preview_audio::bass::backgroundTrackTargetIsPastEnd;
+    return require(!backgroundTrackTargetIsPastEnd(30.0, 60.0),
+               QStringLiteral("in-range BGM seek should remain playable"), err)
+        && require(backgroundTrackTargetIsPastEnd(60.0, 60.0),
+               QStringLiteral("BGM seek at EOF should stay silent"), err)
+        && require(backgroundTrackTargetIsPastEnd(90.0, 60.0),
+               QStringLiteral("BGM seek beyond EOF should stay silent"), err)
+        && require(!backgroundTrackTargetIsPastEnd(-1.0, 60.0),
+               QStringLiteral("negative-offset seek is pending-start, not past-end"), err)
+        && require(!backgroundTrackTargetIsPastEnd(90.0, 0.0),
+               QStringLiteral("unknown BGM duration should not be classified as past-end"), err);
+}
+
 bool verifyRetainedSeekActionMatrix(QTextStream& err)
 {
     using miacode::preview_audio::bass::retainedSeekAction;
@@ -133,6 +148,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyRetainedSeekActionMatrix(err)) {
+        return 1;
+    }
+    if (!verifyBackgroundTrackEndBoundary(err)) {
         return 1;
     }
 

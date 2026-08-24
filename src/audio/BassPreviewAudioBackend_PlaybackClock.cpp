@@ -6,6 +6,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/FileContentStamp.h"
+#include "common/Mmcss.h"
 #include "common/OperationLog.h"
 #include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewSfxAssets.h"
@@ -126,6 +127,163 @@ void BassPreviewAudioBackend::setPlaybackTransactionId(quint64 transactionId)
 }
 
 
+namespace {
+
+#ifdef MIACODE_HAS_BASS_AUDIO
+
+namespace audio_health = miacode::preview_audio::health;
+
+// BASS_ACTIVE_* -> the backend-neutral vocabulary in PreviewAudioHealth.h. Kept in this
+// TU because it is the one that owns bass.h.
+audio_health::ChannelActivity activityFromBass(DWORD active)
+{
+    switch (active) {
+    case BASS_ACTIVE_STOPPED:
+        return audio_health::ChannelActivity::Stopped;
+    case BASS_ACTIVE_PLAYING:
+        return audio_health::ChannelActivity::Playing;
+    case BASS_ACTIVE_STALLED:
+        return audio_health::ChannelActivity::Stalled;
+    case BASS_ACTIVE_PAUSED:
+        return audio_health::ChannelActivity::Paused;
+    case BASS_ACTIVE_PAUSED_DEVICE:
+        return audio_health::ChannelActivity::PausedDevice;
+    default:
+        return audio_health::ChannelActivity::Unknown;
+    }
+}
+
+// The master mixer is the real playback channel (BASS_ChannelPlay in engine init), so it
+// is the one whose STALLED state means "the device buffer ran dry" — i.e. BASS's update
+// thread lost its CPU race. That is the underrun this probe is hunting.
+audio_health::ChannelActivity playbackActivityFor(DWORD handle)
+{
+    if (handle == 0) {
+        return audio_health::ChannelActivity::Unknown;
+    }
+    return activityFromBass(BASS_ChannelIsActive(handle));
+}
+
+// Sources live inside the mixer graph (source -> per-sample resampler -> master mixer),
+// so their state must be read with BASS_Mixer_ChannelIsActive, matching Sample::isPlaying.
+// A STALLED source means the decode side ran dry (slow disk / starved decode), which is a
+// different failure from a device-buffer underrun and worth distinguishing.
+audio_health::ChannelActivity mixerSourceActivityFor(DWORD handle)
+{
+    if (handle == 0) {
+        return audio_health::ChannelActivity::Unknown;
+    }
+    return activityFromBass(BASS_Mixer_ChannelIsActive(handle));
+}
+
+audio_health::BufferSnapshot bufferSnapshotFor(DWORD mixerHandle)
+{
+    audio_health::BufferSnapshot snapshot;
+    BASS_INFO info = {};
+    if (BASS_GetInfo(&info)) {
+        snapshot.minBufferMs = static_cast<qint64>(info.minbuf);
+        // BASS_INFO::latency is only populated when BASS_Init was given
+        // BASS_DEVICE_LATENCY. MiaCode does not request it (it costs a test-buffer
+        // playback at init), so this reads 0 — recorded anyway so the field's meaning is
+        // unambiguous rather than silently absent.
+        snapshot.initLatencyMs = static_cast<qint64>(info.latency);
+        snapshot.deviceFreq = static_cast<qint64>(info.freq);
+    }
+    const DWORD configBuffer = BASS_GetConfig(BASS_CONFIG_BUFFER);
+    if (configBuffer != static_cast<DWORD>(-1)) {
+        snapshot.configBufferMs = static_cast<qint64>(configBuffer);
+    }
+    const DWORD updatePeriod = BASS_GetConfig(BASS_CONFIG_UPDATEPERIOD);
+    if (updatePeriod != static_cast<DWORD>(-1)) {
+        snapshot.updatePeriodMs = static_cast<qint64>(updatePeriod);
+    }
+    const DWORD updateThreads = BASS_GetConfig(BASS_CONFIG_UPDATETHREADS);
+    if (updateThreads != static_cast<DWORD>(-1)) {
+        snapshot.updateThreads = static_cast<qint64>(updateThreads);
+    }
+    if (mixerHandle != 0) {
+        // Playback buffer fill level. This is the number that collapses first when the
+        // update thread is starved of CPU — it drops toward zero right before BASS
+        // reports STALLED.
+        const DWORD available = BASS_ChannelGetData(mixerHandle, nullptr, BASS_DATA_AVAILABLE);
+        if (available != static_cast<DWORD>(-1)) {
+            snapshot.bufferedBytes = static_cast<qint64>(available);
+            const double seconds =
+                BASS_ChannelBytes2Seconds(mixerHandle, static_cast<QWORD>(available));
+            if (seconds >= 0.0) {
+                snapshot.bufferedMs = static_cast<qint64>(seconds * 1000.0);
+            }
+        }
+    }
+    return snapshot;
+}
+
+#endif  // MIACODE_HAS_BASS_AUDIO
+
+}  // namespace
+
+// Retained as a no-op compatibility hook; health sampling now runs on the backend worker.
+void BassPreviewAudioBackend::publishAudioHealthHandles()
+{
+    // Sampling is serialized with every other backend operation by PreviewAudioWorker.
+    // There is no cross-thread handle publication in the worker-owned design.
+}
+
+void BassPreviewAudioBackend::startAudioHealthSampler()
+{
+    // PreviewAudioWorker owns the only scheduler and its health deadline.
+}
+
+void BassPreviewAudioBackend::stopAudioHealthSampler()
+{
+    // No independent producer remains to stop or join.
+}
+
+miacode::preview_audio::PreviewAudioHealthSample BassPreviewAudioBackend::sampleHealth()
+{
+    miacode::preview_audio::PreviewAudioHealthSample sample;
+#ifdef MIACODE_HAS_BASS_AUDIO
+    if (!engineInitialized_ || !audioHealthPlaybackRunning_.load(std::memory_order_acquire)) {
+        return sample;
+    }
+    const DWORD mixer = static_cast<DWORD>(masterMixer_);
+    const DWORD source = backgroundTrackSample_ != nullptr && backgroundTrackSample_->valid()
+        ? static_cast<DWORD>(backgroundTrackSample_->source)
+        : 0;
+    sample.mixerActivity = playbackActivityFor(mixer);
+    sample.backgroundActivity = source != 0
+        ? mixerSourceActivityFor(source)
+        : audio_health::ChannelActivity::Unknown;
+    sample.buffer = bufferSnapshotFor(mixer);
+    if (source != 0) {
+        sample.bgmRawSecond = BASS_ChannelBytes2Seconds(
+            source,
+            BASS_Mixer_ChannelGetPosition(source, BASS_POS_BYTE));
+    }
+    sample.sampledAtMs = QDateTime::currentMSecsSinceEpoch();
+    // PreviewAudioWorker owns stall transitions and buffer-health log emission. Keeping
+    // this backend method to sampling makes every native query and diagnostic state update
+    // run in the one worker scheduler rather than in an independent producer.
+#endif
+    latestHealthSample_ = sample;
+    return sample;
+}
+
+QString BassPreviewAudioBackend::scheduledMixerActionLabel(ScheduledMixerAction action)
+{
+    switch (action) {
+    case ScheduledMixerAction::SfxGroup:
+        return QStringLiteral("sfx_group");
+    case ScheduledMixerAction::StartPendingBackgroundTrack:
+        return QStringLiteral("start_pending_bgm");
+    case ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack:
+        return QStringLiteral("sfx_group_and_start_pending_bgm");
+    case ScheduledMixerAction::None:
+    default:
+        return QStringLiteral("none");
+    }
+}
+
 void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, double fallbackSecond)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
@@ -144,31 +302,86 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     }
     playbackSession_.lastStatusLogSecond = authoritativeSecond;
 
-    const double mixerSecond = (authoritativeSecond - playbackSession_.sessionStartSecond)
-        / qMax(kBassPreviewMinRate, playbackSession_.sessionPlaybackRate);
-    const double bgmRawSecond = backgroundTrackSample_ != nullptr ? backgroundTrackSample_->currentSec() : -1.0;
-    const double bgmChartSecond = backgroundTrackSample_ != nullptr
-        ? (bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds)
-        : -1.0;
-    const double bgmExpectedRawSecond = backgroundTrackSample_ != nullptr
-        ? authoritativeSecond + playbackSession_.backgroundTrackOffsetSeconds
-        : -1.0;
-    const double bgmDeltaMs = backgroundTrackSample_ != nullptr
-        ? (authoritativeSecond - bgmChartSecond) * 1000.0
-        : 0.0;
-    const double bgmRawDeltaMs = backgroundTrackSample_ != nullptr
-        ? (bgmRawSecond - bgmExpectedRawSecond) * 1000.0
-        : 0.0;
-    const double bgmLengthSecond =
-        backgroundTrackSample_ != nullptr ? backgroundTrackSample_->lengthSeconds : -1.0;
+    // The mixer callback advances the SFX cursor and can unpause a pending BGM, so the
+    // fields below have to be read as one consistent set under the scheduler lock.
+    //
+    // What must NOT happen under that lock is the formatting and the file write. This log
+    // line has 26 substitutions and ends in appendAudioDebugLog; schedulerMutex_ is also
+    // taken by handleMixerGroupSync on the BASS mixer thread, so every millisecond spent
+    // holding it here directly delays the next group of note sounds. One slow disk write
+    // on the GUI thread becomes a late note or an underrun -- the exact stall the
+    // buffer-health probe was added to catch, manufactured by the probe's sibling.
+    // handleMixerGroupSync already follows this rule (its own comment says so) and
+    // disarmSfxScheduler was fixed to follow it; this was the last holdout.
+    //
+    // So: copy into locals, release, then format and write. The snapshot stays atomic;
+    // the lock is held for a few reads instead of for a formatted I/O.
+    double mixerSecond = 0.0;
+    double bgmRawSecond = -1.0;
+    double bgmChartSecond = -1.0;
+    double bgmExpectedRawSecond = -1.0;
+    double bgmDeltaMs = 0.0;
+    double bgmRawDeltaMs = 0.0;
+    double bgmLengthSecond = -1.0;
+    int nextGroupIndex = -1;
+    double nextGroupSecond = -1.0;
+    QString bgmSpeedModeLabel = QStringLiteral("none");
+    double backgroundTrackPlaybackRate = 0.0;
+    double backgroundTrackOffsetSeconds = 0.0;
+    int lastTriggeredGroupIndex = -1;
+    double lastTriggeredGroupSecond = 0.0;
+    quint64 triggeredGroupCount = 0;
+    bool backgroundTrackRunning = false;
+    bool backgroundTrackPendingStart = false;
+    bool masterRunning = false;
+    int armedGroupIndex = -1;
+    QString armedActionLabel;
+    // The latest sample was produced by PreviewAudioWorker before this status row. Nothing
+    // here calls BASS under schedulerMutex_.
+    const miacode::preview_audio::PreviewAudioHealthSample healthSample = latestHealthSample_;
+    {
+        QMutexLocker schedulerLocker(&schedulerMutex_);
+        mixerSecond = (authoritativeSecond - playbackSession_.sessionStartSecond)
+            / qMax(kBassPreviewMinRate, playbackSession_.sessionPlaybackRate);
+        if (backgroundTrackSample_ != nullptr) {
+            // From the sampler's snapshot, NOT backgroundTrackSample_->currentSec(). That
+            // call is BASS_Mixer_ChannelGetPosition + BASS_ChannelBytes2Seconds on the
+            // GUI thread, and it ran here while holding schedulerMutex_ -- so an endpoint
+            // switch blocked the GUI thread and the mixer callback behind it at once. The
+            // value is at most one sampler interval stale, which for a diagnostic row is
+            // immaterial next to what it cost.
+            bgmRawSecond = healthSample.bgmRawSecond;
+            bgmChartSecond = bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds;
+            bgmExpectedRawSecond =
+                authoritativeSecond + playbackSession_.backgroundTrackOffsetSeconds;
+            bgmDeltaMs = (authoritativeSecond - bgmChartSecond) * 1000.0;
+            bgmRawDeltaMs = (bgmRawSecond - bgmExpectedRawSecond) * 1000.0;
+            bgmLengthSecond = backgroundTrackSample_->lengthSeconds;
+            bgmSpeedModeLabel = sampleSpeedModeLabel(backgroundTrackSample_->speedMode);
+        }
+        // `next_group_idx` is the event-group cursor: what the timeline will trigger next.
+        // It is NOT what the mixer sync is armed for -- scheduledGroupIndex_ is -1 while
+        // the armed sync exists only to start a pending BGM, and the two also diverge
+        // between a group firing and the next arm. `armed_group_idx` / `armed_action`
+        // report the scheduler's own view so that difference is readable, not inferred.
+        nextGroupIndex = playbackSession_.eventGroupIndex;
+        nextGroupSecond = (nextGroupIndex >= 0 && nextGroupIndex < preparedGroups_.size())
+            ? preparedGroups_[nextGroupIndex].second
+            : -1.0;
+        backgroundTrackPlaybackRate = playbackSession_.backgroundTrackPlaybackRate;
+        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
+        lastTriggeredGroupIndex = playbackSession_.lastTriggeredGroupIndex;
+        lastTriggeredGroupSecond = playbackSession_.lastTriggeredGroupSecond;
+        triggeredGroupCount = playbackSession_.triggeredGroupCount;
+        backgroundTrackRunning = playbackSession_.backgroundTrackRunning;
+        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
+        masterRunning = playbackSession_.masterRunning;
+        armedGroupIndex = scheduledGroupIndex_;
+        armedActionLabel = scheduledMixerActionLabel(scheduledMixerAction_);
+    }
     const double driftMs = (authoritativeSecond - fallbackSecond) * 1000.0;
-    // G1 Commit 7: scheduledGroupIndex_ deleted with the BASS_SYNC_POS scheduler.
-    // The next group to trigger is simply the current event-group cursor.
-    const int nextGroupIndex = playbackSession_.eventGroupIndex;
-    const double nextGroupSecond =
-        (nextGroupIndex >= 0 && nextGroupIndex < preparedGroups_.size()) ? preparedGroups_[nextGroupIndex].second : -1.0;
     appendAudioDebugLog(
-        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24")
+        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24 armed_group_idx=%25 armed_action=%26")
             .arg(playbackTransactionId_)
             .arg(authoritativeSecond, 0, 'f', 6)
             .arg(mixerSecond, 0, 'f', 6)
@@ -178,23 +391,23 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
             .arg(driftMs, 0, 'f', 3)
             .arg(nextGroupIndex)
             .arg(nextGroupSecond, 0, 'f', 6)
-            .arg(playbackSession_.lastTriggeredGroupIndex)
-            .arg(playbackSession_.lastTriggeredGroupSecond, 0, 'f', 6)
-            .arg(playbackSession_.triggeredGroupCount)
-            .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
-            .arg(backgroundTrackSample_ != nullptr
-                ? sampleSpeedModeLabel(backgroundTrackSample_->speedMode)
-                : QStringLiteral("none"))
+            .arg(lastTriggeredGroupIndex)
+            .arg(lastTriggeredGroupSecond, 0, 'f', 6)
+            .arg(triggeredGroupCount)
+            .arg(backgroundTrackPlaybackRate, 0, 'f', 3)
+            .arg(bgmSpeedModeLabel)
             .arg(bgmDeltaMs, 0, 'f', 3)
             .arg(bgmExpectedRawSecond, 0, 'f', 6)
             .arg(bgmRawDeltaMs, 0, 'f', 3)
-            .arg(playbackSession_.backgroundTrackOffsetSeconds, 0, 'f', 6)
+            .arg(backgroundTrackOffsetSeconds, 0, 'f', 6)
             .arg(bgmLengthSecond, 0, 'f', 6)
-            .arg(playbackSession_.backgroundTrackRunning ? 1 : 0)
-            .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0)
-            .arg(playbackSession_.masterRunning ? 1 : 0)
+            .arg(backgroundTrackRunning ? 1 : 0)
+            .arg(backgroundTrackPendingStart ? 1 : 0)
+            .arg(masterRunning ? 1 : 0)
             .arg(retainedPlaybackModeLabel(retainedPlaybackMode_))
-            .arg(statusLogIntervalSeconds * 1000.0, 0, 'f', 3));
+            .arg(statusLogIntervalSeconds * 1000.0, 0, 'f', 3)
+            .arg(armedGroupIndex)
+            .arg(armedActionLabel));
 #else
     Q_UNUSED(authoritativeSecond);
     Q_UNUSED(fallbackSecond);
@@ -233,11 +446,6 @@ void BassPreviewAudioBackend::logPreparedEventWindow(double startSecond) const
     }
 }
 
-// G1 Commit 7: onMixerGroupSync / handleMixerGroupSync deleted. The BASS_SYNC_POS
-// callback chain was the BASS-cursor-driven SFX trigger path; it's been fully
-// replaced by wall-clock drainEvents in MainWindow's per-tick handler.
-
-
 double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     double startSecond,
     bool resumeFromPause,
@@ -249,6 +457,14 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     noteInitWindowOpened(QStringLiteral("prepare_preview_playback"));
     if (!initializeAudioEngine()) {
         return startSecond;
+    }
+    if (outputDeviceRebuildRequired_) {
+        // A device cutoff destroys the old BASS streams.  Recreate assets only on
+        // this explicit play path, never as part of the route-change callback.
+        initializeAssets();
+        outputDeviceRebuildRequired_ = false;
+        appendAudioDebugLog(QString("bass_output_rebuild_on_explicit_play txn=%1")
+                                .arg(playbackTransactionId_));
     }
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
     setBackgroundTrackPlaybackRate(playbackRate);
@@ -303,8 +519,11 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     // G1 Commit 6: master mixer was started at engine init. The commit step is now
     // purely about unsetting BASS_MIXER_CHAN_PAUSE on the BGM sample below.
     playbackSession_.masterRunning = true;
+    audioHealthPlaybackRunning_.store(true, std::memory_order_release);
     playbackSession_.lastAuthoritativeSecond = preparedPlayback_.startSecond;
-    if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
+    if (backgroundTrackSample_ != nullptr
+        && !playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackRunning = true;
         // G1 Commit 8: bass_sample_play per §7.2 — confirms the BGM flag flipped
@@ -319,6 +538,7 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
         drainEvents(preparedPlayback_.startSecond);
     }
     restoreTouchholdVoices(preparedPlayback_.startSecond);
+    anchorSfxScheduler(preparedPlayback_.startSecond);
     logTrackFileMissingAfterLoadIfNeeded();
     // G1 Commit 8: rename `bass_commit` → `bass_play` per §7.2 of
     // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md, and add the rate field so
@@ -377,10 +597,17 @@ void BassPreviewAudioBackend::applyPausedPreviewState(
     // at its old position; trusting it then "reuses" the transport and resumes the
     // BGM from the wrong second. When a BGM is the live clock, use its real
     // chart-second so a mismatch falls through to repositionPausedTransportToSecond.
+    bool backgroundTrackPendingStart = false;
+    double backgroundTrackOffsetSeconds = 0.0;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
+        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
+    }
     const double reuseCompareSecond =
         (hasBackgroundTrack() && backgroundTrackSample_ != nullptr
-         && !playbackSession_.backgroundTrackPendingStart)
-            ? backgroundTrackSample_->currentSec() - playbackSession_.backgroundTrackOffsetSeconds
+         && !backgroundTrackPendingStart)
+            ? backgroundTrackSample_->currentSec() - backgroundTrackOffsetSeconds
             : retainedTransportSecond();
     if (miacode::preview_audio::bass::canReusePausedTransport(
             retainedPlaybackMode_,
@@ -433,12 +660,19 @@ miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::pausePreview
     // of where the audio actually is) as the pause second so transport and BGM
     // resume in lockstep. No-op in the editor preview, where the BGM already tracks
     // the playhead, so authoritativeSecond() and the BGM position agree.
+    bool backgroundTrackPendingStart = false;
+    double backgroundTrackOffsetSeconds = 0.0;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
+        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
+    }
     if (playbackSession_.masterRunning
         && result.usedBackgroundTrack
         && backgroundTrackSample_ != nullptr
-        && !playbackSession_.backgroundTrackPendingStart) {
+        && !backgroundTrackPendingStart) {
         const double bgmChartSecond =
-            backgroundTrackSample_->currentSec() - playbackSession_.backgroundTrackOffsetSeconds;
+            backgroundTrackSample_->currentSec() - backgroundTrackOffsetSeconds;
         if (qIsFinite(bgmChartSecond) && bgmChartSecond >= 0.0) {
             result.pauseSecond = bgmChartSecond;
         }

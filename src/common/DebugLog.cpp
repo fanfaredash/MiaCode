@@ -75,6 +75,8 @@ bool channelEnabled(Channel channel)
         // of whether --debug is set; the sparse cadence makes this
         // safe for log volume.
         return true;
+    case Channel::PvMemory:
+        return miacode::debug_options::runtimeDebugOutputEnabled();
     }
     return false;
 }
@@ -96,6 +98,8 @@ QString channelLabel(Channel channel)
         return QStringLiteral("preview_profile");
     case Channel::Operation:
         return QStringLiteral("op");
+    case Channel::PvMemory:
+        return QStringLiteral("pv_memory");
     }
     return QStringLiteral("unknown");
 }
@@ -117,6 +121,8 @@ QString channelFileName(Channel channel)
         return QStringLiteral("miacode_preview_profile_summary.txt");
     case Channel::Operation:
         return QStringLiteral("miacode_operation.log");
+    case Channel::PvMemory:
+        return QStringLiteral("miacode_pv_memory_debug.log");
     }
     return QStringLiteral("miacode_debug.log");
 }
@@ -138,6 +144,8 @@ QString channelPathOverride(Channel channel)
         return qEnvironmentVariable("MIACODE_PREVIEW_PROFILE_PATH").trimmed();
     case Channel::Operation:
         return qEnvironmentVariable("MIACODE_OPERATION_LOG_PATH").trimmed();
+    case Channel::PvMemory:
+        return qEnvironmentVariable("MIACODE_PV_MEMORY_LOG_PATH").trimmed();
     }
     return QString();
 }
@@ -431,7 +439,8 @@ void trimDebugLogsInCurrentDirectoryLocked()
              Channel::Export,
              Channel::StartupTiming,
              Channel::Fatal,
-             Channel::Operation}) {
+             Channel::Operation,
+             Channel::PvMemory}) {
         (void)rotateFileLocked(logPath(channel), maxBytes);
     }
 }
@@ -554,11 +563,11 @@ private:
     static constexpr int kMaxQueueSize = 4096;
     static constexpr int kTrimEveryWritesPerChannel = 200;
     // Must match the number of Channel enum values (index = static_cast<size_t>).
-    // Channel::Operation is the last value; a channel added after it must bump this
+    // Channel::PvMemory is the last value; a channel added after it must bump this
     // (and the four channel switch statements). The static_assert catches a stale
     // count so the per-channel arrays below can never be indexed out of bounds.
-    static constexpr size_t kChannelCount = 7;
-    static_assert(static_cast<size_t>(Channel::Operation) + 1 == kChannelCount,
+    static constexpr size_t kChannelCount = 8;
+    static_assert(static_cast<size_t>(Channel::PvMemory) + 1 == kChannelCount,
                   "kChannelCount out of sync with the Channel enum");
 
     struct Entry {
@@ -908,6 +917,48 @@ QString runtimeLogPath()
     return logPath(Channel::Runtime);
 }
 
+namespace {
+
+// Last resort for a fatal-grade line whose durable write could not get logMutex() in time.
+// Deliberately its OWN file and NOT the contended one: serialising appends is the whole
+// job of that mutex, so a writer that just failed to acquire it must not append to the
+// file it guards. Per-process so two processes sharing a log directory cannot interleave
+// either.
+//
+// The file existing at all is the signal. It means some thread held the log mutex for
+// longer than the timeout -- in practice a stalled disk or a disconnected network share --
+// and that the corresponding lines are missing from the normal log. Read it alongside the
+// runtime log, not instead of it.
+bool writeDurableFallbackLine(const QByteArray& bytes)
+{
+    // Its own mutex, never the contended one, so it cannot be held by the writer whose
+    // stall sent us here. Still bounded: if the underlying storage is what stalled then
+    // this write can stall too, and the point of this path is that no caller waits
+    // indefinitely. Losing a line beats wedging the watchdog that was reporting the freeze.
+    static QMutex fallbackMutex;
+    if (!fallbackMutex.tryLock(500)) {
+        return false;
+    }
+    bool written = false;
+    {
+        const QString path = QDir(logDirectory())
+                                 .filePath(QStringLiteral("miacode_durable_fallback_%1.log")
+                                               .arg(cachedProcessId()));
+        ensureParentDirectory(path);
+        QFile file(path);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            file.write(bytes);
+            file.flush();
+            file.close();
+            written = true;
+        }
+    }
+    fallbackMutex.unlock();
+    return written;
+}
+
+}  // namespace
+
 QString audioLogPath()
 {
     return logPath(Channel::Audio);
@@ -938,6 +989,11 @@ QString operationLogPath()
     return logPath(Channel::Operation);
 }
 
+QString pvMemoryLogPath()
+{
+    return logPath(Channel::PvMemory);
+}
+
 QString formatTitleLine(const QString& title)
 {
     return QStringLiteral("[%1] %2").arg(timestampString(), title);
@@ -961,6 +1017,7 @@ void clearDebugSessionLogs()
     clearChannel(Channel::Audio);
     clearChannel(Channel::Export);
     clearChannel(Channel::PreviewProfile);
+    clearChannel(Channel::PvMemory);
 }
 
 void trimDebugSessionLogsForStartup()
@@ -1027,17 +1084,68 @@ bool appendText(Channel channel, const QString& text, bool force, Level level)
         if (!skipAsyncLog) {
             AsyncLogWriter::instance().flush(1000);
         }
-        QMutexLocker locker(&logMutex());
-        const QString path = logPath(channel);
-        ensureParentDirectory(path);
-        QFile file(path);
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-            return false;
+        // Bounded, not QMutexLocker. This lock is held across an open/write/flush/close,
+        // so a thread stuck in a slow write -- a stalled disk, a disconnected network share
+        // -- holds it for as long as that write takes. An unbounded wait here means the one
+        // writer that most needs to get its bytes out, the hang watchdog reporting a frozen
+        // GUI thread, blocks on its FIRST line and the freeze report never lands. That is
+        // the diagnostic being defeated by the exact condition it exists to record.
+        //
+        // On timeout, write the line anyway to a per-process fallback file. Two writers
+        // appending to one file without the mutex is what the lock prevents, so the
+        // fallback deliberately does not touch the contended path; it is a separate file,
+        // and the line carries `durable_lock=timeout` so a reader can tell a fallback row
+        // from a normal one and knows the main log is missing it.
+        constexpr int kDurableLockTimeoutMs = 2000;
+        QMutex& mutex = logMutex();
+        if (!mutex.tryLock(kDurableLockTimeoutMs)) {
+            return writeDurableFallbackLine(bytes);
         }
-        file.write(bytes);
-        file.flush();
-        file.close();
-        return true;
+        bool written = false;
+        int openError = 0;
+        QString openErrorText;
+        QString attemptedPath;
+        {
+            const QString path = logPath(channel);
+            attemptedPath = path;
+            ensureParentDirectory(path);
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+                file.write(bytes);
+                file.flush();
+                file.close();
+                written = true;
+            } else {
+                openError = static_cast<int>(file.error());
+                openErrorText = file.errorString();
+            }
+        }
+        mutex.unlock();
+        if (written) {
+            return true;
+        }
+        // The durable path used to end here, returning false into a caller that does not
+        // check it -- so a fatal-grade line whose open() failed vanished without a trace.
+        // That is not theoretical: across five captures the hang watchdog generated its
+        // report (proven by action=report_gate will_report=1, and by reportedAtMs advancing
+        // past appendWatchdogReport) and not one gui_thread_stale row ever reached disk,
+        // with the lock never timing out, no rotation, and the same path working for other
+        // writers. A silently failed open is the only branch left that behaves like that.
+        //
+        // Two changes, both about never losing these bytes again: the line goes to the
+        // per-process fallback file, and the reason goes to the startup beacon -- which is
+        // the established escape hatch in this file for a failure the log system itself
+        // cannot report (see resetLogFiles), and which cannot recurse back into here.
+        {
+            const QByteArray reason = openErrorText.toUtf8();
+            const QByteArray pathUtf8 = attemptedPath.toUtf8();
+            char buf[1024];
+            std::snprintf(buf, sizeof(buf),
+                          "durable/open_failed err=%d path=%.320s msg=%.320s",
+                          openError, pathUtf8.constData(), reason.constData());
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
+        return writeDurableFallbackLine(bytes);
     }
     AsyncLogWriter::instance().enqueue(channel, std::move(bytes));
     return true;
@@ -1096,6 +1204,23 @@ bool initializeStartupTimingLogSession()
                 .arg(QCoreApplication::applicationPid())
                 .arg(startupTimingLogPath())
         }
+    );
+}
+
+bool initializePvMemoryLogSession()
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return false;
+    }
+    if (!resetChannel(Channel::PvMemory)) {
+        return false;
+    }
+    return appendLine(
+        Channel::PvMemory,
+        QStringLiteral("pv_memory"),
+        QStringLiteral("action=session_start pid=%1 log_path=%2")
+            .arg(QCoreApplication::applicationPid())
+            .arg(pvMemoryLogPath())
     );
 }
 

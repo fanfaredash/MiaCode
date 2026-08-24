@@ -30,13 +30,13 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   each-group keeps its own pad-sized footprint; `1` = collapse the group into one smallest-enclosing
   circle (oversized → two-hand press). Read in `MuriAnalyzer.cpp` `buildRuntimeHandActions`, so it
   feeds BOTH the slide/wifi judge and the multi-touch diagnostics.
-- `TimelineThemeConfig.h` — timeline-scene theme colors shared by Quick (and DComp) paths
+- `TimelineThemeConfig.h` — timeline-scene theme colors for the Quick timeline path
   (e.g. editor-cursor header marker `QColor(239,68,68,230)`); also the **tiered grid-line-height
   feature**: toggle `kTimelineTieredGridLineHeightsEnabled` (default `1`; `0` = legacy full-height)
   + per-tier fractions `kTimelineGridHeightFraction{Measure 9/9, Subdivision 8/9, Comma 7/9}` +
   resolver `timelineGridLineHeightFraction()`. Lines anchor at the top of the content area and
   extend down by `fraction * timelineHeight`. Consumed by `TimelineSceneStateBuilder.cpp`
-  `addGridLine` (QSG + DComp via pre-baked `state.gridLines`) AND `TimelineView.Paint.cpp` (widget
+  `addGridLine` (QSG via pre-baked `state.gridLines`) AND `TimelineView.Paint.cpp` (widget
   path — bar + comma tiers only; that path has no separate quarter-note subdivision lines).
 - `VideoExportRuntimePolicy.h` (`src/tools/video_export/`) — export PBO env precedence + worker
   crash-retry policy (`kVideoExportWorkerMaxCrashRetries = 1`).
@@ -61,6 +61,19 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   the Windows QtAVPlayer backend doesn't need it (no silent-fallback / converter-rebuild failure
   modes) and compiles these as no-op stubs. Paused-seek ack tolerance `kPausedSeekAckToleranceMs`
   (`80 ms`) is shared by both backends.
+- `src/preview/runtime/PreviewStageMediaHostInternal.h` — `kSeekCoalesceToleranceMs` (`40 ms`): a
+  decode-position request within this of `lastSeekMs_` is treated as already satisfied and skipped.
+  Owned here because ALL four programming sites must agree (`preparePlaybackStart`,
+  `commitPreparedPlaybackStart`, `setPlayheadSeconds`, `submitPausedSeek`) — commit used to lack it
+  and paid a second full decoder flush on every playback start. Keep it as one constant; a per-site
+  value would silently re-open that.
+- `src/core/scene/PreviewFireworkWarmupPolicy.h` — firework PSO warm-up synthetic placement
+  (`kFireworkWarmupLeadSeconds` `0.15`) and the slack-gated re-center thresholds derived from it
+  (`kFireworkWarmupForwardSlackSeconds` = firework duration − lead, `kFireworkWarmupBackwardSlackSeconds`
+  = lead, `kFireworkWarmupRecenterSafetyFactor` `0.5`). Derived from
+  `PreviewGameplayConfig.h`'s `kJudgeEffectFirework{Duration,TouchTriggerDelay}Seconds` — do NOT
+  hardcode the window; `preview_firework_warmup_policy_spec` asserts the derivation still matches the
+  layer builder's real lifecycle. See the warm-up contract in `cross-chain-linkage.md` §1.
 - `src/tools/latency/` — detection windows, hop sizes, BPM scan range, offset penalties, snap
   thresholds.
 - `src/core/chart/transform/ChartNormalization.cpp` — whole-chart format snap constants

@@ -187,29 +187,17 @@ void PreviewStageMediaHost::initializeBackendObjects()
     qRegisterMetaType<QAVVideoFrame>();
 
     player_ = new QAVPlayer(this);
-    // Wire the HW-decode diagnostics (log sink + bounded readback-dump budget) into the
-    // decode path before any media loads. Idempotent; covers both H2 and two-device paths.
+    // Windows installs its D3D11 diagnostics here; the macOS implementation is
+    // intentionally a no-op because VideoToolbox has no D3D11 bridge.
     miacode::preview::installPreviewDecodeDiagnostics();
     player_->setSpeed(static_cast<qreal>(playbackRate_));
-    // F1: decide hardware vs software preview decode.
-    //   - softwareDecodeFallbackTried_: a prior D3D11VA decode failed -> retry in software.
-    //   - MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO tri-state: Auto / ForceSoftware / ForceHardware.
-    //   - Auto defaults INTEGRATED GPUs to software (D3D11VA preview decode is unreliable on
-    //     Intel/Arc iGPUs: startup stutter, NV12 green padding, AV1 hardware corruption — all
-    //     clean in software), while discrete GPUs keep hardware. ForceHardware overrides the
-    //     iGPU auto-detect; ForceSoftware always software. See DebugOptions.h.
     // Decode mode: the persisted user preference (硬件渲染 / 软件渲染, default
     // HARDWARE) decides. MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO stays a dev override on
-    // top (ForceSoftware / ForceHardware win; Auto / unset honors the user pref).
-    // The legacy "Auto => integrated GPU silently defaults to software" behaviour is
-    // gone: the default is hardware for everyone, and a user on an affected iGPU flips
-    // the preference to software at runtime (hot-switch, no restart). The session-only
-    // softwareDecodeFallbackTried_ latch still forces software after a hardware
-    // InvalidMedia. adapterDesc/integratedGpu are kept for the diagnostic line only.
+    // top (ForceSoftware / ForceHardware win; Auto / unset honors the user
+    // preference). The session-only fallback latch forces FFmpeg CPU decode
+    // only after the selected platform hardware decoder reports InvalidMedia.
     using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
     const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
-    QString adapterDesc;
-    const bool integratedGpu = isIntegratedRenderAdapter(&adapterDesc);
     bool forceSoftware = videoDecodePreferSoftware_;
     switch (decodePref) {
     case DecodePref::ForceSoftware: forceSoftware = true; break;
@@ -223,19 +211,35 @@ void PreviewStageMediaHost::initializeBackendObjects()
     const char *prefName = decodePref == DecodePref::ForceSoftware ? "force_sw"
                          : decodePref == DecodePref::ForceHardware ? "force_hw"
                                                                    : "auto";
-    // NOTE (P0): `probe_adapter` is a HEURISTIC — the DXGI adapter-0 desc read
-    // by detectIntegratedRenderAdapter() to guess iGPU vs dGPU for the decode
-    // path. It is NOT the adapter Qt Quick's RHI actually bound; for that, see
-    // the `quick_shell/device` runtime log (QSGRendererInterface DeviceResource).
+#if defined(Q_OS_WIN)
+    QString adapterDesc;
+    const bool integratedGpu = isIntegratedRenderAdapter(&adapterDesc);
+    // `probe_adapter` is a DXGI heuristic only; the Quick RHI device is logged
+    // independently by quick_shell/device.
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),
-        QString("backend=qtavplayer ffmpeg=1 qt_runtime_version=%1 force_software=%2 pref=%3 igpu=%4 probe_adapter=\"%5\" probe_adapter_source=dxgi_enum0_heuristic single_device=%6")
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=d3d11va qt_runtime_version=%1 force_software=%2 pref=%3 igpu=%4 probe_adapter=\"%5\" probe_adapter_source=dxgi_enum0_heuristic single_device=%6")
             .arg(QString::fromLatin1(qVersion()))
             .arg(useSoftware ? 1 : 0)
             .arg(QString::fromLatin1(prefName))
             .arg(integratedGpu ? 1 : 0)
             .arg(adapterDesc)
             .arg(miacode::preview::sharedPreviewD3D11DeviceActive() ? 1 : 0));
+#elif defined(Q_OS_MACOS)
+    appendPreviewStageMediaLog(
+        QStringLiteral("media_backend"),
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=videotoolbox qt_runtime_version=%1 force_software=%2 pref=%3 renderer_bridge=metal")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(useSoftware ? 1 : 0)
+            .arg(QString::fromLatin1(prefName)));
+#else
+    appendPreviewStageMediaLog(
+        QStringLiteral("media_backend"),
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=platform_default qt_runtime_version=%1 force_software=%2 pref=%3")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(useSoftware ? 1 : 0)
+            .arg(QString::fromLatin1(prefName)));
+#endif
 
     // Seek landing (frame-accurate). Backs up the pts match in
     // handleDecodedVideoFrame for the paused-seek / prepared-start handshakes —
@@ -248,6 +252,29 @@ void PreviewStageMediaHost::initializeBackendObjects()
         const double mediaSecond = static_cast<double>(posMs) / 1000.0;
         lastTimelineSecond_ = qMax(0.0, mediaSecond - timelineOffsetSeconds_);
         settlePendingSeekAcks(mediaSecond, mediaSecond);
+        if (staleEndOfMediaResumePending_) {
+            // The stale-EndOfMedia recovery seek landed, so the player's end-of-file
+            // latch is cleared and play() will resume here instead of restarting the
+            // clip from zero. See tryRecoverFromStaleEndOfMedia.
+            staleEndOfMediaResumePending_ = false;
+            ++staleEndOfMediaResumeSerial_;
+            if (player_ != nullptr) {
+                player_->play();
+            }
+            videoPlaybackActive_ = true;
+            videoPlaybackPendingStart_ = false;
+            videoPlaybackActiveElapsed_.restart();
+            if (videoFrameElapsed_.isValid()) {
+                videoFrameElapsed_.restart();
+            }
+            appendPreviewStageMediaLog(
+                QStringLiteral("stale_end_of_media_resumed"),
+                QString("second=%1 position_ms=%2 recoveries=%3")
+                    .arg(mediaSecond, 0, 'f', 6)
+                    .arg(posMs)
+                    .arg(staleEndOfMediaRecoveries_));
+            emit diagnosticsChanged();
+        }
         updateClockDelta();
 #if defined(Q_OS_WIN)
         // HW-decode diag: the demuxer seek landed; the decoder now catches up to the
@@ -265,13 +292,24 @@ void PreviewStageMediaHost::initializeBackendObjects()
     connect(player_, &QAVPlayer::mediaStatusChanged, this, [this](QAVPlayer::MediaStatus status) {
         appendPreviewStageMediaLog(
             QStringLiteral("media_status"),
-            QString("status=%1 state=%2 position_ms=%3 kind=%4")
+            QString("status=%1 state=%2 position_ms=%3 kind=%4 txn=%5 last_seek_ms=%6 "
+                    "active_elapsed_ms=%7 frames=%8 last_pts_ms=%9 prepared_pending=%10")
                 .arg(avMediaStatusName(status))
                 .arg(avStateName(player_ != nullptr ? player_->state() : QAVPlayer::StoppedState))
                 .arg(player_ != nullptr ? player_->position() : -1)
-                .arg(debugMediaTypeName()));
+                .arg(debugMediaTypeName())
+                .arg(playbackTransactionId_)
+                .arg(lastSeekMs_)
+                .arg(videoPlaybackActiveElapsed_.isValid() ? videoPlaybackActiveElapsed_.elapsed() : -1)
+                .arg(videoFrameCountTotal_)
+                .arg(lastFramePtsSeconds_ >= 0.0 ? qRound64(lastFramePtsSeconds_ * 1000.0) : -1)
+                .arg(preparedPlaybackPending_ ? 1 : 0));
         if (status == QAVPlayer::LoadedMedia) {
             videoBackendLoaded_ = true;
+            return;
+        }
+        if (status == QAVPlayer::NoMedia) {
+            latePvMemoryNoMedia();
             return;
         }
         if (status == QAVPlayer::EndOfMedia) {
@@ -279,12 +317,15 @@ void PreviewStageMediaHost::initializeBackendObjects()
             // transport's lifetime owner. Leave lastVideoFrame_ in both video
             // sinks so the final decoded frame stays visible while the chart,
             // BGM and SFX continue to the unified content-duration endpoint.
+            const bool wasPlaybackActive = videoPlaybackActive_;
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
+            recordPvMemoryBoundary(PvMemoryBoundary::EndOfMedia);
             updateClockDelta();
             updateVideoFrameStallState(true);
             emitHwDecodeDiagSummary("eom");
+            handleVideoEndOfMedia(wasPlaybackActive);
             emit diagnosticsChanged();
             return;
         }
@@ -375,6 +416,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             );
             preparedPlaybackPending_ = false;
             preparedPlaybackReady_ = true;
+            preparedPlaybackLandingConfirmed_ = true;
             emit playbackStartPrepared(preparedPlaybackTargetSecond_, preparedPlaybackTransaction_);
         }
         emit playbackPositionChanged(lastTimelineSecond_);
@@ -454,14 +496,20 @@ void PreviewStageMediaHost::initializeBackendObjects()
             // and end only this subordinate video stream. The main preview
             // transport is completed exclusively by the timeline/content
             // duration policy.
+            const bool wasPlaybackActive = videoPlaybackActive_;
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
             ++videoPlaybackWatchdogSerial_;
+            recordPvMemoryBoundary(PvMemoryBoundary::EndOfMedia);
             updateClockDelta();
             updateVideoFrameStallState(true);
+            handleVideoEndOfMedia(wasPlaybackActive);
             emit diagnosticsChanged();
             return;
+        }
+        if (status == QMediaPlayer::NoMedia) {
+            latePvMemoryNoMedia();
         }
         if (status == QMediaPlayer::StalledMedia && mediaKind_ == MediaKind::Video && videoPlaybackActive_) {
             scheduleVideoPlaybackWatchdog(QStringLiteral("media_status_stalled"));
@@ -520,17 +568,22 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
     Q_UNUSED(oldRate);
     // The whole reason for the migration: QAVPlayer::setSpeed applies the rate
     // inside QtAVPlayer's own decode loop. It does NOT rebuild a Qt converter
-    // pipeline mid-flight, so it cannot race the QSG/DComp D3D11 texture
+    // pipeline mid-flight, so it cannot race the QSG D3D11 texture
     // sampler — i.e. the "倍速闪退" crash class is structurally gone, and all
     // the deferred-apply / recover-rebuild scaffolding below is unnecessary.
     if (player_ != nullptr) {
         player_->setSpeed(static_cast<qreal>(playbackRate_));
     }
-    appendPreviewStageMediaLog(
-        QStringLiteral("playback_rate"),
-        QString("rate=%1 kind=%2")
-            .arg(playbackRate_, 0, 'f', 3)
-            .arg(debugMediaTypeName()));
+    const miacode::diagnostics::StageRateKey rateKey{
+        playbackRate_, static_cast<int>(mediaKind_)};
+    if (playbackRateLogGate_.shouldEmit(
+            miacode::diagnostics::PlaybackRateLogKind::Ordinary, rateKey)) {
+        appendPreviewStageMediaLog(
+            QStringLiteral("playback_rate"),
+            QString("rate=%1 kind=%2")
+                .arg(playbackRate_, 0, 'f', 3)
+                .arg(debugMediaTypeName()));
+    }
 #elif defined(HAVE_QT_MULTIMEDIA)
     if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
         syncVideoFrameBeaconBudget_ = 24;
@@ -670,6 +723,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
     ++videoPlaybackWatchdogSerial_;
     pausedSeekCompletionPending_ = false;
     preparedPlaybackPending_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     if (completePreparedPlayback) {
         preparedPlaybackReady_ = true;
     }
@@ -689,6 +743,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
             .arg(videoSink_ != nullptr ? 1 : 0)
     );
 
+    recordPvMemoryBoundary(PvMemoryBoundary::PlayerDestroyBefore);
     recoveringVideoBackend_ = true;
     if (videoSinkFrameConnection_) {
         QObject::disconnect(videoSinkFrameConnection_);
@@ -707,6 +762,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
         delete audioOutput_;
         audioOutput_ = nullptr;
     }
+    destroyPvMemorySource();
 
     initializeBackendObjects();
     if (player_ == nullptr) {
@@ -731,6 +787,8 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
     videoPlaybackPendingStart_ = false;
     videoPlaybackActiveElapsed_.invalidate();
     bindVideoOutput();
+    beginPvMemorySource();
+    recordPvMemoryBoundary(PvMemoryBoundary::PlayerDestroyAfter);
     player_->setSource(QUrl::fromLocalFile(path));
     player_->pause();
     player_->setPosition(targetMs);
@@ -837,7 +895,8 @@ void PreviewStageMediaHost::reloadVideoDecodeInPlace()
     // reload in place (the empty setSource forces a reload since setSource(sameUrl)
     // is a no-op), then restore position + play state. Reuses the existing video
     // sink — no player recreation, no app restart. Bidirectional vs the one-way
-    // software fallback: empty codec => hardware D3D11VA, "software" => FFmpeg CPU.
+    // software fallback: empty codec restores the platform hardware decoder;
+    // "software" selects FFmpeg CPU decode.
     const double second = qMax(0.0, currentPlaybackSecond());
     const qint64 resumeMs = qMax<qint64>(0, qRound64((second + timelineOffsetSeconds_) * 1000.0));
     const bool resumePlaying = videoPlaybackActive_;
@@ -891,4 +950,3 @@ void PreviewStageMediaHost::setVideoDecodePreference(bool preferSoftware)
     }
 #endif
 }
-

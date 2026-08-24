@@ -36,9 +36,22 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
 - Specs (standalone `main()` style): `oplog_self_test`, `simai_parser_spec`,
   `simai_document_spec` (SimaiDocument designer model — standalone chart-less `&des_N` round-trip),
   `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
-  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`, `preview_head_layer_spec`,
+  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec` (firework visual curve),
+  `preview_firework_warmup_policy_spec` (warm-up synthetic placement + slack-gated re-center,
+  cross-checked against the real layer lifecycle — see `cross-chain-linkage.md` §1),
+  `preview_end_of_media_policy_spec` (background-video `EndOfMedia` classification: a legitimately
+  short PV reaching its own duration is a NATURAL end, a 121 s PV ending at 1.267 s is STALE and
+  recoverable; the decision is measured against the media's own duration, never against the chart
+  or a "shorter than N seconds" threshold — see `cross-chain-linkage.md` §5),
+  `preview_head_layer_spec`,
+  `preview_guide_layer_spec` (note-guide each-connector art selection: a `*` same-head slide
+  expands to one marker per branch, so the each group must be counted in logical head stars
+  — `slideHeadEventKey` — or a two-note each renders as the 3+ full ring),
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
+  `timeline_cadence_arbitration_policy_spec` (decides whether the timeline's watchdog timer may
+  sample playback, or must yield to the `afterAnimating` render cadence — see
+  `cross-chain-linkage.md` §14),
   `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
   `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
@@ -61,6 +74,13 @@ Findings the convention is fixing:
   `target_include_directories` triple. The `TEST` keyword registers the `add_test()` + the Qt-bin
   `ENVIRONMENT_MODIFICATION` PATH fix. Shared source groups (`_miacode_chart_core`,
   `_miacode_log_core`, …) are set once and reused.
+- `TEST` also pins `WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"`, so every spec runs from the
+  source tree. Specs that touch runtime assets resolve them relative to the CWD (e.g.
+  `resolveSfxDirectory` behind `VideoExportAudioRenderPlan`); before this,
+  `video_export_audio_render_plan_spec` passed when launched by hand from the repo root but failed
+  under `ctest` with "preview SFX directory could not be resolved". A spec must therefore not
+  depend on the build dir being the CWD, and must write scratch files to a `QTemporaryDir`, not to
+  a relative path.
 
 Rules going forward:
 

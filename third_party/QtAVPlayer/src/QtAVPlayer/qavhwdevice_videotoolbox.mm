@@ -37,7 +37,8 @@ QAVHWDevice_VideoToolbox::QAVHWDevice_VideoToolbox()
 QAVHWDevice_VideoToolbox::~QAVHWDevice_VideoToolbox()
 {
     Q_D(QAVHWDevice_VideoToolbox);
-    CVPixelBufferRelease(d->pbuf);
+    if (d->pbuf)
+        CVPixelBufferRelease(d->pbuf);
     [d->device release];
 }
 
@@ -60,6 +61,11 @@ public:
     {
     }
 
+    ~VideoBuffer_MTL() override
+    {
+        releaseTextureObjects();
+    }
+
     QAVVideoFrame::HandleType handleType() const override
     {
         return QAVVideoFrame::MTLTextureHandle;
@@ -67,20 +73,39 @@ public:
 
     QVariant handle(QRhi */*rhi*/) const override
     {
-        CVPixelBufferRelease(m_hw->pbuf);
-        m_hw->pbuf = (CVPixelBufferRef)frame().frame()->data[3];
-        CVPixelBufferRetain(m_hw->pbuf);
         QList<QVariant> textures = { 0, 0 };
-
-        if (!m_hw->pbuf)
+        if (m_texturesReady) {
+            textures[0] = quint64(m_textureObjects[0]);
+            textures[1] = quint64(m_textureObjects[1]);
             return textures;
+        }
+        releaseTextureObjects();
+
+        CVPixelBufferRef pbuf = (CVPixelBufferRef)frame().frame()->data[3];
+
+        if (!pbuf)
+            return textures;
+
+        CVPixelBufferRetain(pbuf);
+        if (m_hw->pbuf)
+            CVPixelBufferRelease(m_hw->pbuf);
+        m_hw->pbuf = pbuf;
 
         if (CVPixelBufferGetDataSize(m_hw->pbuf) <= 0)
             return textures;
 
-        auto format = CVPixelBufferGetPixelFormatType(m_hw->pbuf);
-        if (format != '420v') {
-            qWarning() << "420v is supported only";
+        const OSType format = CVPixelBufferGetPixelFormatType(m_hw->pbuf);
+        bool tenBit = false;
+        switch (format) {
+        case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
+        case kCVPixelFormatType_420YpCbCr8BiPlanarFullRange:
+            break;
+        case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
+        case kCVPixelFormatType_420YpCbCr10BiPlanarFullRange:
+            tenBit = true;
+            break;
+        default:
+            qWarning() << "Unsupported VideoToolbox pixel format" << format;
             return textures;
         }
 
@@ -88,20 +113,44 @@ public:
             m_hw->device = MTLCreateSystemDefaultDevice();
 
         IOSurfaceRef surface = CVPixelBufferGetIOSurface(m_hw->pbuf);
-        int planes = CVPixelBufferGetPlaneCount(m_hw->pbuf);
+        const int planes = CVPixelBufferGetPlaneCount(m_hw->pbuf);
+        if (!surface || planes != 2) {
+            qWarning() << "Invalid VideoToolbox IOSurface planes" << planes;
+            return textures;
+        }
         for (int i = 0; i < planes; ++i) {
             int w = IOSurfaceGetWidthOfPlane(surface, i);
             int h = IOSurfaceGetHeightOfPlane(surface, i) ;
-            MTLPixelFormat f = i ?  MTLPixelFormatRG8Unorm : MTLPixelFormatR8Unorm;
+            MTLPixelFormat f = tenBit
+                ? (i ? MTLPixelFormatRG16Unorm : MTLPixelFormatR16Unorm)
+                : (i ? MTLPixelFormatRG8Unorm : MTLPixelFormatR8Unorm);
             MTLTextureDescriptor *desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:f width:w height:h mipmapped:NO];
 
-            textures[i] = quint64([m_hw->device newTextureWithDescriptor:desc iosurface:surface plane:i]);
+            m_textureObjects[i] = [m_hw->device newTextureWithDescriptor:desc iosurface:surface plane:i];
+            textures[i] = quint64(m_textureObjects[i]);
         }
+
+        m_texturesReady = m_textureObjects[0] && m_textureObjects[1];
+        if (!m_texturesReady)
+            releaseTextureObjects();
 
         return textures;
     }
 
+private:
+    void releaseTextureObjects() const
+    {
+        for (id<MTLTexture> texture : m_textureObjects) {
+            [texture release];
+        }
+        m_textureObjects[0] = nil;
+        m_textureObjects[1] = nil;
+        m_texturesReady = false;
+    }
+
     QAVHWDevice_VideoToolboxPrivate *m_hw = nullptr;
+    mutable id<MTLTexture> m_textureObjects[2] = { nullptr, nullptr };
+    mutable bool m_texturesReady = false;
 };
 
 QAVVideoBuffer *QAVHWDevice_VideoToolbox::videoBuffer(const QAVVideoFrame &frame) const

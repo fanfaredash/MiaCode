@@ -64,18 +64,6 @@ src/
     quick_scene/             # QSG-based chart layer renderers
     runtime/                 # PreviewRuntime and stage-media integration
 
-  render/                    # Retained D3D11 / DirectComposition renderer
-    PreviewDCompRenderer.*   # Render thread for opt-in DComp paths
-    backend_d3d11/
-      PreviewDCompCore.*
-      PreviewDCompSpritePipeline.*
-      PreviewDCompTextureCache.*
-      PreviewDCompFrameStateSnapshot.h
-      PreviewDCompSurface.*
-      TimelineRenderView.*
-
-  sources/                   # Source descriptors consumed by the DComp path
-
   timeline/                  # Editor timeline strip
     TimelineView.*
     TimelineView.*.cpp
@@ -99,7 +87,7 @@ src/
 
 When a component has several implementations, document the default startup path
 and the retained path together. Do not assume a directory name such as `legacy`,
-`quick`, `dcomp`, or `widget` is enough to communicate what runs by default.
+`quick`, or `widget` is enough to communicate what runs by default.
 
 Current defaults:
 
@@ -107,16 +95,14 @@ Current defaults:
   `src/app/main.cpp`. The older widget shell is retained as native surfaces
   hosted inside QuickShell and should not receive new top-level feature work
   unless that is the explicit target.
-- Preview chart rendering: the default is Qt Quick/QSG through
-  `preview/runtime/PreviewRuntime` and `preview/quick_scene/*`.
-  `render/backend_d3d11/PreviewDCompSurface` plus `sources/*` are retained
-  diagnostic implementations, enabled by `MIACODE_PREVIEW_USE_DCOMP=1` or
-  `--quick-shell-beta`.
+- Preview chart rendering: Qt Quick/QSG through `preview/runtime/PreviewRuntime`
+  and `preview/quick_scene/*`. This is the only preview renderer. The D3D11 /
+  DirectComposition backend that used to live in `render/` and `sources/` was
+  deleted on 2026-08-07, together with its six `MIACODE_*_DCOMP*` flags;
+  `--quick-shell-beta` is now an inert argument.
 - Timeline rendering: the default QuickShell timeline is
   `timeline/quick/TimelineQuickItem` and its QSG layers. `TimelineView` remains
-  the widget reference/helper surface, and
-  `render/backend_d3d11/TimelineRenderView` is retained for DComp diagnostics
-  behind `MIACODE_TIMELINE_USE_DCOMP=1` after DComp preview is enabled.
+  the widget reference/helper surface.
 - Preview audio: `audio/QtPreviewSfxRuntime` selects
   `BassPreviewAudioBackend` on Windows and `MiniaudioPreviewAudioBackend` on
   non-Windows. On Windows, `MIACODE_BASS_BGM_RATE_MODE=rate_transpose` is an
@@ -215,10 +201,7 @@ Extensions, UI Contributions, Diagnostics, and Raw JSON tabs.
   playback lives in `preview/runtime/PreviewStageMediaHost`.
 - `audio/` owns audio backends; nothing else may link BASS or miniaudio
   directly.
-- `preview/` owns the current QSG preview/runtime path. New preview-rendering
-  work should prefer shared `core/scene` state plus dedicated
-  `preview/quick_scene` layers unless the task explicitly targets DComp.
-- `render/` and `sources/` own the retained D3D11 / DirectComposition path.
-  Keep them in sync only when the feature explicitly affects that diagnostic
-  path or when a shared state contract changes.
+- `preview/` owns the QSG preview/runtime path. New preview-rendering work
+  uses shared `core/scene` state plus dedicated `preview/quick_scene` layers.
+  Do not introduce a second native render backend.
 - Prefer existing second-level folders instead of creating parallel aliases.

@@ -211,6 +211,8 @@
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
+    void onTimelineRenderCadenceTick();
+    void onTimelineCadenceWatchdogTick();
     void onQtPreviewTick();
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     bool previewCanvasUsesFrameSwappedPacing() const;
@@ -245,6 +247,7 @@
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();
+    void emitChartSwitchResourceGauge();
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     void updatePreviewWorkspaceLayout();

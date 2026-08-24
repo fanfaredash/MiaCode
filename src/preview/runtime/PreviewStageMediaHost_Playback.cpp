@@ -54,6 +54,10 @@ using namespace miacode::preview::psmh_detail;
 
 void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transactionId)
 {
+    // A new playback transaction supersedes any in-flight stale-EndOfMedia recovery:
+    // its resume would otherwise fire on this transaction's seek acknowledgement.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
 #ifdef MIACODE_USE_QTAVPLAYER
     initializeBackendObjects();
     const double clampedSecond = qMax(0.0, seconds);
@@ -64,6 +68,7 @@ void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transac
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     pausedSeekCompletionPending_ = false;
     pausedSeekTargetMs_ = -1;
     pausedSeekTargetSecond_ = 0.0;
@@ -90,19 +95,31 @@ void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transac
     preparedPlaybackTargetMs_ = targetMs;
     preparedPlaybackPending_ = true;
     player_->pause();
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
-        // Already parked at (or within a frame of) the target — the current
-        // decoded frame already shows it, so ack on the next event-loop turn
-        // instead of forcing a redundant seek.
+    const bool decodedFrameCoversTarget =
+        lastVideoFrame_.isValid()
+        && lastFramePtsSeconds_ >= 0.0
+        && qAbs(qRound64(lastFramePtsSeconds_ * 1000.0) - targetMs) <= kPausedSeekAckToleranceMs;
+    if (lastSeekMs_ >= 0
+        && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs
+        && decodedFrameCoversTarget) {
+        // `lastSeekMs_` alone is only a requested position.  The decoded-frame
+        // proof makes this a real prepared landing, so the commit side can play
+        // it without flushing QtAV's just-settled queue a second time.
         QMetaObject::invokeMethod(this, [this, transactionId, clampedSecond]() {
             if (!preparedPlaybackPending_ || preparedPlaybackTransaction_ != transactionId) {
                 return;
             }
             preparedPlaybackPending_ = false;
             preparedPlaybackReady_ = true;
+            preparedPlaybackLandingConfirmed_ = true;
             appendPreviewStageMediaLog(
                 QStringLiteral("prepare_playback_ready"),
-                QString("txn=%1 second=%2 source=queued").arg(transactionId).arg(clampedSecond, 0, 'f', 6));
+                QString("txn=%1 second=%2 position_ms=%3 target_ms=%4 frame_pts_ms=%5 source=queued_frame")
+                    .arg(transactionId)
+                    .arg(clampedSecond, 0, 'f', 6)
+                    .arg(lastSeekMs_)
+                    .arg(preparedPlaybackTargetMs_)
+                    .arg(lastFramePtsSeconds_ >= 0.0 ? qRound64(lastFramePtsSeconds_ * 1000.0) : -1));
             emit playbackStartPrepared(clampedSecond, transactionId);
         }, Qt::QueuedConnection);
         emit diagnosticsChanged();
@@ -126,6 +143,7 @@ void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transac
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     pausedSeekCompletionPending_ = false;
     pausedSeekTargetMs_ = -1;
     pausedSeekTargetSecond_ = 0.0;
@@ -153,7 +171,7 @@ void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transac
     preparedPlaybackTargetMs_ = targetMs;
     preparedPlaybackPending_ = true;
     player_->pause();
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         QMetaObject::invokeMethod(
             this,
             [this, transactionId, clampedSecond]() {
@@ -218,6 +236,7 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
                 .arg(rawSecond, 0, 'f', 6));
         preparedPlaybackPending_ = false;
         preparedPlaybackReady_ = false;
+        preparedPlaybackLandingConfirmed_ = false;
         preparedPlaybackTargetMs_ = -1;
         preparedPlaybackTargetSecond_ = 0.0;
         preparedPlaybackTransaction_ = 0;
@@ -227,24 +246,54 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
 
     const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
-    lastSeekMs_ = targetMs;
-    player_->seek(targetMs);
+    // Do not use `lastSeekMs_` as the proof of readiness: it records only a
+    // request.  A matching prepared-ready token, however, is produced only
+    // after a same-target decoded frame or seek acknowledgement.  Re-seeking
+    // that exact QtAV fast path flushes its newly-settled queue and can turn
+    // into a false EndOfMedia notification on first play.
+    const bool preparedLandingMatchesCommit =
+        preparedPlaybackReady_
+        && preparedPlaybackLandingConfirmed_
+        && preparedPlaybackTransaction_ == playbackTransactionId_
+        && preparedPlaybackTargetMs_ >= 0
+        && qAbs(targetMs - preparedPlaybackTargetMs_) <= kSeekCoalesceToleranceMs;
+    if (!preparedLandingMatchesCommit) {
+        lastSeekMs_ = targetMs;
+        player_->seek(targetMs);
+    }
     if (videoFrameElapsed_.isValid()) {
         videoFrameElapsed_.restart();
     }
+    // Snapshot before play() can release the first queued hardware frame to
+    // the render thread, so even an immediately scheduled QSG frame belongs
+    // to this first-play trace.
+    beginFirstPlaybackRenderTrace();
     player_->play();
     videoPlaybackPendingStart_ = false;
     videoPlaybackActive_ = true;
     videoPlaybackActiveElapsed_.restart();
     appendPreviewStageMediaLog(
         QStringLiteral("commit_prepared_playback"),
-        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4")
+        // `video_prewarmed` answers the question audit §5.4 could not: had the video
+        // pipeline (VideoOutput material + the first hardware-decoded texture) already
+        // been exercised when the user pressed play, or does this commit hand the
+        // renderer a brand-new material to build on the very frame being waited on?
+        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 prepared_ready=%5 prepared_landing_confirmed=%6 "
+                "prepared_txn=%7 prepared_target_ms=%8 reseek=%9 frames_before_commit=%10 video_prewarmed=%11")
             .arg(playbackTransactionId_)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6)
-            .arg(targetMs));
+            .arg(targetMs)
+            .arg(preparedPlaybackReady_ ? 1 : 0)
+            .arg(preparedPlaybackLandingConfirmed_ ? 1 : 0)
+            .arg(preparedPlaybackTransaction_)
+            .arg(preparedPlaybackTargetMs_)
+            .arg(preparedLandingMatchesCommit ? 0 : 1)
+            .arg(videoFrameCountTotal_)
+            .arg(videoFrameCountTotal_ > 0 ? 1 : 0));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -277,6 +326,7 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
                 .arg(rawSecond, 0, 'f', 6));
         preparedPlaybackPending_ = false;
         preparedPlaybackReady_ = false;
+        preparedPlaybackLandingConfirmed_ = false;
         preparedPlaybackTargetMs_ = -1;
         preparedPlaybackTargetSecond_ = 0.0;
         preparedPlaybackTransaction_ = 0;
@@ -286,6 +336,8 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
 
     const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
+    // This cache records a requested target only. It cannot prove a freshly
+    // created backend completed its prepare-side seek before commit.
     lastSeekMs_ = targetMs;
     player_->setPosition(targetMs);
     if (videoFrameElapsed_.isValid()) {
@@ -305,14 +357,16 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     }
     appendPreviewStageMediaLog(
         QStringLiteral("commit_prepared_playback"),
-        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 late=%5")
+        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 late=%5 reseek=%6")
             .arg(playbackTransactionId_)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6)
             .arg(targetMs)
-            .arg(qAbs(clampedSecond - preparedPlaybackTargetSecond_) > 0.0005 ? 1 : 0));
+            .arg(qAbs(clampedSecond - preparedPlaybackTargetSecond_) > 0.0005 ? 1 : 0)
+            .arg(1));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -340,6 +394,7 @@ void PreviewStageMediaHost::cancelPreparedPlaybackStart(quint64 transactionId)
             .arg(preparedPlaybackReady_ ? 1 : 0));
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -375,7 +430,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 
     lastTimelineSecond_ = clampedSecond;
     const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         emit diagnosticsChanged();
         return;
     }
@@ -392,7 +447,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 
     lastTimelineSecond_ = clampedSecond;
     const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         emit diagnosticsChanged();
         return;
     }
@@ -406,6 +461,11 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 void PreviewStageMediaHost::startPlayback(double seconds)
 {
     MC_OP("PreviewStageMediaHost::startPlayback");
+    recordPvMemoryBoundary(PvMemoryBoundary::Play);
+    // This start owns the transport from here; a stale-EndOfMedia recovery seek still
+    // in flight must not resume on this start's own seek acknowledgement.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
 #ifdef MIACODE_USE_QTAVPLAYER
     initializeBackendObjects();
     observedPlayheadSecond_ = qMax(0.0, seconds);
@@ -588,6 +648,11 @@ void PreviewStageMediaHost::startPlayback(double seconds)
 
 void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
 {
+    // Same reason as preparePlaybackStart: this seek's acknowledgement must not be
+    // mistaken for a recovery landing and resume playback while the preview is paused.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
+
 #ifdef MIACODE_USE_QTAVPLAYER
     const double clampedSecond = qMax(0.0, seconds);
     observedPlayheadSecond_ = clampedSecond;
@@ -612,7 +677,7 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
             .arg(generation)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(targetMs));
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         // Already showing this frame — ack on the next event-loop turn.
         QMetaObject::invokeMethod(this, [this, generation, clampedSecond]() {
             if (!pausedSeekCompletionPending_ || pausedSeekGeneration_ != generation) {
@@ -660,7 +725,7 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(targetMs)
     );
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
         QMetaObject::invokeMethod(
             this,
             [this, generation, clampedSecond]() {
@@ -831,6 +896,7 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 void PreviewStageMediaHost::pausePlayback()
 {
     observedPlayheadSecond_ = currentPlaybackSecond();
+    recordPvMemoryBoundary(PvMemoryBoundary::Pause);
 #ifndef HAVE_QT_MULTIMEDIA
     return;
 #else
@@ -842,12 +908,17 @@ void PreviewStageMediaHost::pausePlayback()
     pausedSeekTargetSecond_ = 0.0;
     pausedSeekGeneration_ = 0;
     ++pausedSeekTimeoutSerial_;
+    // A stale-EndOfMedia recovery seek may still be in flight; its `seeked` handler
+    // would otherwise resume playback and undo this pause.
+    staleEndOfMediaResumePending_ = false;
+    ++staleEndOfMediaResumeSerial_;
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     videoPlaybackActiveElapsed_.invalidate();
     ++videoPlaybackWatchdogSerial_;
     preparedPlaybackPending_ = false;
     preparedPlaybackReady_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     preparedPlaybackTargetMs_ = -1;
     preparedPlaybackTargetSecond_ = 0.0;
     preparedPlaybackTransaction_ = 0;
@@ -879,4 +950,3 @@ bool PreviewStageMediaHost::videoPlaybackActive() const
 {
     return mediaKind_ == MediaKind::Video && videoPlaybackActive_;
 }
-

@@ -96,6 +96,13 @@ const QString& kNonCanonicalHoldModifierPlacementPrefix()
     return value;
 }
 
+const QString& kShortHoldMustEndWithHPrefix()
+{
+    static const QString value = QStringLiteral(
+        "Short hold must end with 'h' for previewer compatibility: ");
+    return value;
+}
+
 const QString& kInvalidTouchHoldDurationPrefix()
 {
     static const QString value = QStringLiteral("Invalid touch-hold duration: ");
@@ -298,6 +305,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidHoldDurationPrefix(), QStringLiteral("Hold 时值无效：")},
         {kInvalidHoldModifierSequencePrefix(), QStringLiteral("Hold 修饰符顺序无效：")},
         {kNonCanonicalHoldModifierPlacementPrefix(), QStringLiteral("Hold 修饰符位置可能导致上机转换错误：")},
+        {kShortHoldMustEndWithHPrefix(), QStringLiteral("为兼容部分预览器，短 Hold 必须以 'h' 结尾：")},
         {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold 时值无效：")},
         {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch 时值需要 'h' 修饰符：")},
         {kInvalidTouchTokenPrefix(), QStringLiteral("Touch 音符无效：")},
@@ -352,6 +360,7 @@ const QHash<QString, QString>& jaPrefixMap()
         {kInvalidHoldDurationPrefix(), QStringLiteral("Hold の音価が無効です：")},
         {kInvalidHoldModifierSequencePrefix(), QStringLiteral("Hold の修飾子の順序が無効です：")},
         {kNonCanonicalHoldModifierPlacementPrefix(), QStringLiteral("Hold の修飾子の位置により実機変換でエラーになる可能性があります：")},
+        {kShortHoldMustEndWithHPrefix(), QStringLiteral("一部のプレビューアーとの互換性のため、短い Hold は 'h' で終える必要があります：")},
         {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold の音価が無効です：")},
         {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch の音価には 'h' 修飾子が必要です：")},
         {kInvalidTouchTokenPrefix(), QStringLiteral("Touch ノーツが無効です：")},
@@ -391,6 +400,7 @@ const QVector<QString>& zhPrefixOrder()
         kInvalidHoldDurationPrefix(),
         kInvalidHoldModifierSequencePrefix(),
         kNonCanonicalHoldModifierPlacementPrefix(),
+        kShortHoldMustEndWithHPrefix(),
         kInvalidTouchHoldDurationPrefix(),
         kTouchDurationRequiresHPrefix(),
         kInvalidTouchTokenPrefix(),
@@ -415,6 +425,25 @@ const QVector<QString>& zhPrefixOrder()
         kUnclosedBracketPrefix(),
     };
     return order;
+}
+
+QString detectShortHoldCompatibilityWarning(const QString& token)
+{
+    if (token.size() < 3
+        || !isDigitLane(token.at(0))
+        || token.contains(QChar('['))
+        || token.endsWith(QChar('h'), Qt::CaseInsensitive)) {
+        return {};
+    }
+    const QString modifiers = token.mid(1);
+    if (!modifiers.contains(QChar('h'), Qt::CaseInsensitive)) {
+        return {};
+    }
+    TapModifierState modifierState;
+    if (!parseTapModifierSequence(modifiers, QString(), &modifierState) || !modifierState.hasHold) {
+        return {};
+    }
+    return ValidationMessage::kShortHoldMustEndWithHPrefix() + token;
 }
 
 }  // namespace ValidationMessage
@@ -517,6 +546,9 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
         }
         if (const QString msg = detectMisplacedTapStarModifierMessage(token); !msg.isEmpty()) {
             appendTokenError(state, lineNumber, column, msg, column + token.size() - 1);
+        }
+        if (const QString msg = ValidationMessage::detectShortHoldCompatibilityWarning(token); !msg.isEmpty()) {
+            appendTokenWarning(state, lineNumber, column, msg, column + token.size() - 1);
         }
     }
 

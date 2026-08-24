@@ -38,12 +38,10 @@ Item {
 
     // Phase 9d reverted — separating the band visually didn't match
     // user expectation (buttons + line markers should occupy the
-    // SAME header band, not stack vertically). The proper fix is
-    // either (a) render zoom/follow buttons natively in the DComp
-    // pipeline so they paint on the popup's composition plane, or
-    // (b) host the QML buttons in a separate Window with its own
-    // HWND so DWM can put them above the popup. Both are larger
-    // changes; deferring to a follow-up Phase 9d-native.
+    // SAME header band, not stack vertically). Resolved by Phase
+    // 9d-native: TimelineQuickHeaderLayer draws the control visuals
+    // into the QSG scene and the QML controls below stay invisible,
+    // handling input only.
     TimelineQuickItem {
         id: timelineItem
 
@@ -113,10 +111,10 @@ Item {
         rightPadding: Math.round(8 * root.headerScale)
         spacing: Math.round(6 * root.headerScale)
         text: Math.round(timelineItem.zoomScale * 100) + "%"
-        // Phase 9d-native — invisible to the eye (DComp pipeline
-        // renders the button visually in the popup composition plane)
-        // but still active for input. The DComp popup HWND is
-        // WS_EX_TRANSPARENT so clicks pass through to this QQuickItem.
+        // Phase 9d-native — invisible to the eye
+        // (TimelineQuickHeaderLayer draws the button visual into the
+        // QSG scene) but still active for input. Keep opacity 0 rather
+        // than visible:false so the item stays hit-testable.
         opacity: 0
 
         contentItem: Item {
@@ -284,9 +282,9 @@ Item {
         spacing: 4
         text: "Cursor Follow"
         checked: timelineItem.followPreviewEnabled
-        // Phase 9d-native — invisible (DComp renders natively in the
-        // popup composition plane) but still receives input. DComp
-        // popup is WS_EX_TRANSPARENT so clicks pass through.
+        // Phase 9d-native — invisible (TimelineQuickHeaderLayer draws
+        // the visual into the QSG scene) but still receives input.
+        // Keep opacity 0, not visible:false, to stay hit-testable.
         opacity: 0
 
         // indicator: Rectangle {

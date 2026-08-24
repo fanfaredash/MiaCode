@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "common/DebugLog.h"
 
@@ -815,6 +816,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     QString pendingAudition;
     auto* dialogAuditionRuntime = new QtPreviewSfxRuntime(&dialog);
     QString dialogAuditionSfxDir;
+    QString dialogAuditionPendingKind;
+    quint64 dialogAuditionReloadAssetGeneration = 0;
+    quint64 dialogAuditionReloadSequence = 0;
 
     auto queueAudioApply = [audioApplyTimer, &pendingAudition](const QString& audition) {
         pendingAudition = audition;
@@ -824,7 +828,10 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const auto playDialogLocalSfxAudition = [
         this,
         dialogAuditionRuntime,
-        &dialogAuditionSfxDir
+        &dialogAuditionSfxDir,
+        &dialogAuditionPendingKind,
+        &dialogAuditionReloadAssetGeneration,
+        &dialogAuditionReloadSequence
     ](const QString& audition) {
         if (audition.isEmpty()) {
             return false;
@@ -846,18 +853,49 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
         const QString resolvedSfxDir = QDir::cleanPath(sfxDir);
         if (dialogAuditionSfxDir != resolvedSfxDir || !dialogAuditionRuntime->audioEngineInitialized()) {
-            dialogAuditionRuntime->setWarmupResolvedPaths(QString(), QString(), resolvedSfxDir);
-            dialogAuditionRuntime->reloadAssets(owner_.previewAudioSettings_);
+            const QtPreviewSfxRuntime::AssetSubmission reload =
+                dialogAuditionRuntime->reloadAssetsForChartWithWarmupPaths(
+                    QString(), QString(), resolvedSfxDir, owner_.previewAudioSettings_);
             dialogAuditionSfxDir = resolvedSfxDir;
+            dialogAuditionPendingKind = resolvedKind;
+            dialogAuditionReloadAssetGeneration = reload.post.accepted
+                ? reload.identity.assetGeneration
+                : 0;
+            dialogAuditionReloadSequence = reload.post.accepted
+                ? reload.identity.sequence
+                : 0;
+            return false;
         } else {
             dialogAuditionRuntime->applyLevels(owner_.previewAudioSettings_);
-        }
-        if (!dialogAuditionRuntime->audioEngineInitialized()) {
-            return false;
         }
         dialogAuditionRuntime->stopAll();
         return dialogAuditionRuntime->audition(resolvedKind);
     };
+
+    connect(dialogAuditionRuntime,
+            &QtPreviewSfxRuntime::commandCompleted,
+            &dialog,
+            [this,
+             dialogAuditionRuntime,
+             &dialogAuditionPendingKind,
+             &dialogAuditionReloadAssetGeneration,
+             &dialogAuditionReloadSequence](const QtPreviewSfxRuntime::Completion& completion) {
+                using namespace miacode::preview_audio;
+                if (completion.kind != CommandKind::ReloadAssets
+                    || completion.identity.sequence != dialogAuditionReloadSequence
+                    || !acceptsAssetCompletion(dialogAuditionReloadAssetGeneration, completion)) {
+                    return;
+                }
+                dialogAuditionReloadAssetGeneration = 0;
+                dialogAuditionReloadSequence = 0;
+                const QString auditionKind = std::exchange(dialogAuditionPendingKind, QString());
+                if (!completion.success || auditionKind.isEmpty() || state_.qtPreviewPlaying_) {
+                    return;
+                }
+                dialogAuditionRuntime->applyLevels(owner_.previewAudioSettings_);
+                dialogAuditionRuntime->stopAll();
+                dialogAuditionRuntime->audition(auditionKind);
+            });
 
     const QString muteAudioButtonTooltip = UiText::text(QStringLiteral("dialog.render_settings.audio.button.mute"));
     const QString unmuteAudioButtonTooltip = UiText::text(QStringLiteral("dialog.render_settings.audio.button.unmute"));
@@ -1032,6 +1070,10 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         owner_.previewAudioSettings_.normalize();
         syncAudioControlsFromCurrentSettings();
         owner_.applyPreviewAudioSettingsToRuntime();
+        // The mixer itself is project-scoped; savePortableState only carries the
+        // app-level companions edited from this same panel (the break-slide tail
+        // cheer flag) and the untouched 本地预设.
+        owner_.saveProjectAudioPreferences();
         owner_.savePortableState();
         queueAudioApply(audition);
     };
@@ -1171,6 +1213,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
                     owner_.softwarePreviewAudioSettings_, owner_.breakSlideTailCheerMutedPreference_);
                 syncAudioControlsFromCurrentSettings();
                 owner_.applyPreviewAudioSettingsToRuntime();
+                // Applying the preset is a mixer edit like any other — record it
+                // on the project so it survives the next open.
+                owner_.saveProjectAudioPreferences();
                 owner_.savePortableState();
                 if (audioApplyTimer->isActive()) {
                     audioApplyTimer->stop();

@@ -44,7 +44,6 @@ public:
     void setBookmarkedLines(const QSet<int>& lines);
     const QSet<int>& bookmarkedLines() const { return bookmarkedLines_; }
     int lineNumberAtGlobalPosition(const QPoint& globalPos) const;
-    void setBookmarkDropPreviewLine(int line);
     bool applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals = true);
     QPointF normalizedViewportHitPosition(const QPointF& position) const;
     void setHalfWidthInputEnabled(bool enabled);
@@ -73,6 +72,11 @@ public:
     // Previously these were three separate toggles; they are unified here.
     void setAutoCompletionEnabled(bool enabled);
     bool autoCompletionEnabled() const { return autoCompletionEnabled_; }
+    // Allows the document's final line to scroll to the top portion of the
+    // viewport by extending the vertical scrollbar range. The extra space is
+    // visual only and never mutates the QTextDocument or its undo history.
+    void setScrollBeyondLastLineEnabled(bool enabled);
+    bool scrollBeyondLastLineEnabled() const { return scrollBeyondLastLineEnabled_; }
     // Feeds the '(' suggestion list. The chart body editor never holds the
     // &wholebpm metadata line, so the owning window pushes it in on load /
     // difficulty switch (see MainWindow::DocumentSection::setEditorText).
@@ -86,9 +90,7 @@ signals:
     void raiseSubdivisionHalfStepShortcutRequested();
     void lowerSubdivisionHalfStepShortcutRequested();
     void editorOverwriteModeChanged(bool enabled);
-    void lineNumberBookmarkMoveRequested(int fromLine, int toLine);
     void lineNumberBookmarkActivated(int line);
-    void lineNumberBookmarkCreateRequested(int line);
     // Bookmark redesign — the editor only announces intent; MainWindow owns
     // the actual actions (sidebar inline rename, delete confirmation, and the
     // line-number-gutter context menu).
@@ -97,11 +99,6 @@ signals:
     void lineNumberBookmarkContextMenuRequested(int line, const QPoint& globalPos);
 
 protected:
-    void dragEnterEvent(QDragEnterEvent* event) override;
-    void dragMoveEvent(QDragMoveEvent* event) override;
-    void dragLeaveEvent(QDragLeaveEvent* event) override;
-    void dropEvent(QDropEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
     bool event(QEvent* event) override;
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
@@ -123,6 +120,7 @@ private:
     QRect previewFollowVisualCaretRect() const;
     int lineNumberAtAreaPosition(const QPoint& pos) const;
     void syncCursorVisualState();
+    void updateScrollBeyondLastLineRange();
     void updateCursorVisibility();
     void updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect);
     // Bracket auto-pairing helpers. Each returns true when it consumed the input
@@ -168,9 +166,13 @@ private:
 
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
+    QWidget* topOverlayArea_ = nullptr;
     bool halfWidthInputEnabled_ = true;
     bool imeInputDisabled_ = false;
     bool autoCompletionEnabled_ = true;
+    bool scrollBeyondLastLineEnabled_ = true;
+    int verticalScrollBaseMaximum_ = 0;
+    bool updatingScrollBeyondLastLineRange_ = false;
     // Live state for the bracket-completion popup. completionOpening_ is null
     // when no popup is active; completionStartPos_ marks the document position
     // right after the opening bracket (where the user's filter text begins);
@@ -191,8 +193,5 @@ private:
     int previewFollowVisualCaretLine_ = 1;
     int previewFollowVisualCaretCol_ = 1;
     QSet<int> bookmarkedLines_;
-    int hoveredBookmarkDropLine_ = -1;
-    int pressedBookmarkLine_ = -1;
-    QPoint lineNumberPressPos_;
     LineNumberArea* lineNumberArea_;
 };

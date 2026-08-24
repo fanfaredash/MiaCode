@@ -14,8 +14,10 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
   windeployqt `$<CONFIG:Debug>` at `:1179`/`:1190`). Leave it unless it gets in the way; it is
   not a second supported product config.
 - Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
-- **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export/audio and DComp
-  sources inside `if(WIN32)`; guard their owning members/includes/call sites with `Q_OS_WIN`.
+- **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export and D3D11 sources
+  inside `if(WIN32)`; guard their owning members/includes/call sites with `Q_OS_WIN`. Realtime
+  preview BASS is enabled on Windows, macOS, and Linux when `MIACODE_HAS_BASS_AUDIO` is defined;
+  miniaudio is the compatibility backend for builds without that definition.
   Published preview snapshots use `std::shared_ptr<const PreviewFrameState>` plus the free
   `std::atomic_load_explicit` / `std::atomic_store_explicit` overloads — do not replace this with
   `std::atomic<std::shared_ptr<...>>`, which is rejected by the supported macOS libc++ toolchain.
@@ -42,10 +44,20 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
 - Specs (standalone `main()` style): `oplog_self_test`, `simai_parser_spec`,
   `simai_document_spec` (SimaiDocument designer model — standalone chart-less `&des_N` round-trip),
   `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
-  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`, `preview_head_layer_spec`,
+  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`,
+  `preview_end_of_media_policy_spec` (background-video `EndOfMedia` classification:
+  natural short PV vs stale mid-clip end, measured against the media's own duration),
+  `preview_head_layer_spec`,
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
-  `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
-  `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
+  `preview_sfx_timeline_spec`, `preview_audio_settings_spec`,
+  `preview_audio_command_queue_spec`, `preview_audio_worker_protocol_spec`,
+  `preview_audio_worker_spec` (also compile-checks the production miniaudio backend and, on
+  Windows/macOS, the production BASS backend), `preview_audio_non_gui_barrier_spec`,
+  `preview_bass_device_lease_spec`, `preview_audio_playback_flow_policy_spec`,
+  `preview_audio_device_change_policy_spec`, `preview_audio_health_spec`,
+  `bass_preview_retained_state_spec`, `bass_preview_debug_log_routing_spec`,
+  `bass_preview_sfx_scheduler_policy_spec`, `ui_hang_watchdog_policy_spec`,
+  `log_pruning_policy_spec`, `quickshell_preview_surface_policy_spec`,
   `video_export_runtime_policy_spec`, `video_export_intro_mode_spec`,
   `video_export_audio_render_plan_spec`,
   `touch_pad_authoring_state_spec`,
@@ -55,6 +67,10 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define. Note:
   `MIACODE_SOURCE_ROOT` itself is a compile def, not an env flag, so the spec filters it via
   `kCompileDefinitions` — any new spec that consumes the source-root define is fine),
+  `process_diagnostics_spec` (DebugLog PV-memory channel/session/path and current-process memory
+  sample contract), `pv_memory_diagnostics_spec` (pure PV source/clear-epoch accounting), and
+  `pv_memory_host_contract_spec` (source-level guard that host instrumentation stays debug-gated
+  and reuses the single existing `toImage()` conversion),
   `ui_text_locale_spec` (i18n drift guard — see the localization note in
   `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define),
   `ui_text_preferences_spec` (canonical preference normalization/migration and unknown-key
@@ -100,8 +116,9 @@ Rules going forward:
   `ffmpeg` executable used by **export**).
 - ffmpeg **dev SDK** provisioning (Windows): `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
   n7.1 LGPL *shared* build (headers + import libs + runtime DLLs) into
-  `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. Gitignored,
-  never committed. CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache var.
+  `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. On macOS,
+  `package-mac.sh` accepts `MIACODE_FFMPEG_DEV_DIR` or finds Homebrew `ffmpeg@6` (then `ffmpeg`).
+  Both are CMake inputs, not runtime flags; the SDK root must contain `include/` and `lib/`.
 - Public debug launchers: `scripts/debug/Start_MiaCode_Debug.bat`, `scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat`,
   and `scripts/debug/Start_MiaCode_QtPluginDiag.bat`. One-off A/B launchers stay as ignored maintainer-local
   tools unless they become part of a repeatable public support workflow.
@@ -146,11 +163,11 @@ Rules going forward:
   resolved runtime linkage without system FFmpeg libraries, version, and the
   encoder/filter/protocol/format surface used by MiaCode before packaging it as
   `app/ffmpeg/ffmpeg`.
-- **QtAVPlayer preview backend (Windows):** vendored MIT source in `third_party/QtAVPlayer/`
+- **QtAVPlayer preview backend (Windows and macOS):** vendored MIT source in `third_party/QtAVPlayer/`
   (compiled straight into `MiaCode` with `QT_AVPLAYER_MULTIMEDIA` + `QT_BUILD_QTAVPLAYER_LIB`);
   needs the `Qt6::MultimediaQuickPrivate` component and the FFmpeg dev SDK (see §4). The CMake
-  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and is `if (WIN32)`
-  gated. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
+  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and is `if (WIN32 OR APPLE)`
+  gated. Windows uses D3D11VA; macOS compiles QtAVPlayer's VideoToolbox/Metal hwdevice. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
   `qavdemuxer.cpp`/`QtAVPlayer.cmake`) since it's capture-device-only — saves ~7 MB + one DLL.
   **Packaging:** `package-win.ps1` stages 6 `av*.dll` into `app/` next to `MiaCode.exe`
   (`avcodec-61`/`avformat-61`/`avutil-59`/`swresample-5`/`swscale-8` overlap windeployqt's set;
@@ -160,7 +177,9 @@ Rules going forward:
   allowlist (`trim-allowlist.psd1`) + `survey-chart-codecs.ps1` calibration, installs into
   `third_party/ffmpeg/windows/dev/` (backs up to `dev.full.bak`). Decode-only ⇒ stays LGPL (no
   `--enable-gpl`/x264 — that would make MiaCode GPL; export encoding stays in the separate
-  `ffmpeg.exe`). Needs MSYS2 + VS BuildTools (both present on the dev box).
+  `ffmpeg.exe`). `package-mac.sh` copies the complete non-system dylib closure from the selected
+  SDK into `MiaCode.app/Contents/Frameworks`, rewrites it to `@rpath`, and fails if an external
+  dylib reference remains. Needs MSYS2 + VS BuildTools (both present on the dev box).
 - **Qt6::Svg (toolbar gear icon):** in `find_package(Qt6 … COMPONENTS … Svg)` +
   `target_link_libraries(MiaCode PRIVATE Qt6::Svg)`, so `makeSettingsGearIcon`
   (`MainWindowShared.cpp`) renders the Google Material "settings" gear via `QSvgRenderer`.

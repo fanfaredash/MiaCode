@@ -154,6 +154,20 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `[|]` in one undo step). All gated by the single auto-completion pref; hold shortcut
   `tryHoldExpand` (typing `h` inserts a bare `h` and pops the `[8:1]`-style suggestions — it
   inserts NO bracket itself, so a following `[` yields `h[]`, never the old `h[[]]`).
+- Drag-selection autoscroll on adopted surfaces: `src/common/AdoptedSurfaceDragAutoScroll.{h,cpp}`
+  (`miacode::ui::installAdoptedSurfaceDragAutoScroll(QAbstractScrollArea*)`, **macOS-only body**,
+  no-op elsewhere; geometry helper `planDragAutoScrollStep` compiled everywhere and specced in
+  `plain_code_editor_spec`). Reason: Qt's own autoscroll re-derives the held pointer from
+  `QCursor::pos()` through `QWidget::mapFromGlobal()`, which on the adopted QuickShell surface
+  still resolves through the neutralized orphan NSPanel (see `common/AdoptedWidgetCoordinates.h`),
+  so its synthesized move lands on the wrong line and fights the real drag — the selection strobes
+  whenever the pointer leaves the viewport (the gutter and top overlay inset are viewport margins,
+  so dragging left/up is enough). The installed viewport event filter swallows out-of-viewport
+  moves, re-sends them clamped (which is also what keeps Qt's timer from arming), and steps the
+  scrollbars from a timer fed by real event coordinates. **Install it on every scroll area that
+  supports drag-selection on the workspace/sidebar surfaces** — today `PlainCodeEditor`'s ctor
+  (covers the chart editor + copy area) and `metadataExtraEdit_` (plain `QTextEdit`,
+  `MainWindow.FrameBootstrap.cpp`).
 - Bracket-completion dropdown ("tab 补全"): typing `( [ {` pops a simai-aware suggestion list under
   the caret; typing `h` pops the full-bracket hold durations (`[8:1]` …). Candidate
   data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure — `candidatesForOpening` for the
@@ -316,6 +330,38 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Slow refresh workers: `src/timeline/TimelineSlowRefresh.{h,cpp}`.
 - Timing getters: same `PreviewTimelineFlow.cpp` (`currentTimingMetadata`, `parsedFirstSeconds`,
   `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`).
+- **Preview-follow while PAUSED updates the DECORATION ONLY** — `syncEditorCursorToPreviewSecond`
+  (`MainWindow.TimelinePreviewFollowSync.cpp:217`) returns after `setPreviewFollowDecoration`; the
+  real `QTextCursor` is moved (`applyPreviewFollowCursor`) only while playing. An earlier attempt to
+  move it while paused was reverted because it clobbered drag selections (see the note at
+  `MainWindow.WindowInteraction.cpp:1450`). So the text caret and the playhead legitimately diverge
+  after any paused seek, and that divergence is by design — the decoration is a read-only indicator
+  of where the playhead is. Nothing authors against it: touch-pad click input targets the caret
+  (§5b). The caret does drag the preview the other way, though — `cursorPositionChanged`
+  (`MainWindow.FrameBootstrap.cpp:1794`) syncs the timeline/preview to the caret while paused when
+  `timelineSyncEnabled_`, which is why the two normally agree.
+
+### 5b. Touch-pad click authoring (Ctrl/Cmd + click the preview)
+
+- Setting `preview.touch_pad_authoring_shortcut` (启用touch点击输入); Ctrl-hold gate in
+  `MainWindow.WindowInteraction.cpp:958` → `setTouchPadAuthoringCtrlHoldActive` →
+  `PreviewRuntime::setTouchPadAuthoringEnabled`.
+- Hit test + press/release gesture: `PreviewQuickSceneRoot::mousePressEvent/mouseReleaseEvent`
+  (`touchPadAtItemPoint` → `touchPadTokenAtLogicalPoint`), state machine in
+  `core/scene/TouchPadAuthoringState.h`, signal `PreviewRuntime::touchPadAuthoringClicked`.
+- Click handler: `MainWindow.FrameBootstrap.cpp:1326`. **Target token = the text caret, always** —
+  resolving a playhead second onto a token is not predictable for a user, so the insertion point is
+  the one they set by hand (decided 2026-08-18; an earlier revision targeted the preview-follow
+  highlight). Text edit planned by `planTouchPadAuthoringEdit`
+  (`src/editor/TouchPadAuthoringEdit.cpp`); undo entry recorded with **pre-edit int offsets**
+  (`recordChartCursorUndoEntry` — a live `QTextCursor` would be shifted by the edit itself);
+  preview then seeks to `tokenSecond - 1/60` (a deliberate convention, not a bug).
+- That seek parks the playhead one token EARLY, so `touchPadAuthoringAnchor*`
+  (`MainWindow.TimelinePreviewFollowSync.cpp:43`, cleared in `setEditorText`) maps it back for the
+  highlight. Purely cosmetic — it does not feed the insertion point.
+- Token boundaries come from `src/core/chart/parser/SimaiCommentScan.*` so `||` comments are
+  skipped exactly as the two parsers skip them — see `cross-chain-linkage.md` §15.
+- Spec: `plain_code_editor_spec` (`src/tools/editor/PlainCodeEditorSpec.cpp`).
 
 ## 6. Preview video, media, render state
 
@@ -354,18 +400,23 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     "掉帧→必须重启/闪退" root cause (`docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md` §8). Any
     new ad-hoc `createTextureFromImage` + texture-node site must declare ownership explicitly
     (repository-cached textures stay `setOwnsTexture(false)` — the repository deletes them).
-- DComp path (**OFF by default**): `src/sources/*Source` → `src/render/compositor` →
-  `src/render/backend_d3d11/PreviewDComp*` + `TimelineRenderView`.
 
 ## 7. Preview audio & SFX scheduling — `src/audio/`
 
 - Facade: `QtPreviewSfxRuntime.{h,cpp}` (+ include-split `.Assets/.Timeline/.Background/.Engine/.Voices.cpp`)
   — backend selection, prepare/commit/pause/resume/seek surface.
-- Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}` (Windows,
+- Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}` (Windows/macOS/Linux,
   real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
-  `MiniaudioPreviewAudioBackend.{h,cpp}` (non-Windows compatibility, SoundTouch stretch).
+  `MiniaudioPreviewAudioBackend.{h,cpp}` (no-BASS compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
+- **Output-device change → auto-pause** (BASS platforms only): `PreviewAudioDeviceWatcher.{h,cpp}`
+  (owns the `QMediaDevices` observer + snapshot) + `PreviewAudioDeviceChangePolicy.h` (pure decision,
+  CTest `preview_audio_device_change_policy_spec`) → `TimelineSection::pausePreviewForAudioDeviceChange`
+  in `sections/timeline/MainWindow.PreviewPlaybackState.cpp`, wired in `sections/frame/MainWindow.FrameBootstrap.cpp`.
+  A hotplug or default-output switch pauses a playing preview; the user's resume is what re-anchors
+  the transport. See `docs/superpowers/specs/2026-08-06-preview-audio-device-autopause-design.md` —
+  in-place re-anchoring was tried three times and removed.
 - MainWindow hooks: `MainWindow.cpp` (`ensurePreviewSfxRuntimePrepared`,
   `applyPreviewAudioSettingsToRuntime`); playback clock authority:
   `sections/timeline/MainWindow.TimelinePlayback.cpp` (`currentPreviewAuthoritativeAudioClockSecond`).
@@ -507,8 +558,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the SFX prepared timeline (the resume hand-off `resetCursor(0,false)` would skip the downbeat).
   Seeded from `installExportPreviewAuditionScene` (`clockCountFromDocument`+`clockBpmForChart`),
   cleared in `teardownExportPreviewAuditionScene`. ⚠ **Both backends must load a `"clock"` sample
-  for `audition("clock")` to make sound** — added to `BassPreviewAudioBackend` (Windows:
-  `clockSample_`, load+reset+`applySampleLevels`); the miniaudio (non-Windows) backend gracefully
+  for `audition("clock")` to make sound** — added to `BassPreviewAudioBackend` (Windows/macOS/Linux:
+  `clockSample_`, load+reset+`applySampleLevels`); the miniaudio compatibility backend gracefully
   no-ops (`sampleForKind` miss → silent count-in there). `clock.wav` ships in `assets/SFX/`.
   ⚠⚠ **The on-screen preview transport (default shell too) is the QML
   `QuickShellPreviewTransport.qml`** — its slider was hardcoded `from: 0` (the real clamp) — NOT the
@@ -624,7 +675,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     as `CoverComposerView` (bare `QQuickWindow` + `grabWindow()` on the process RHI = D3D11; **no
     `QQuickView`, no forced OpenGL** — it is NOT the export worker), but it hosts a
     **`PreviewQuickSceneRoot`** (the same C++ chart scene the live preview + video export use; no
-    QML/engine needed) with `setDCompFallbackActive(true)` + `kPreviewExportOverlayRenderLayers`
+    QML/engine needed) with `kPreviewExportOverlayRenderLayers`
     (everything except the song-background media) captured over **transparent**, so the playfield
     (outline ring + notes + judge) composites as a layer over the cover's own background.
     `bootstrap(task)` maps the `VideoExportTask` → base `PreviewFrameState` ONCE (mirrors
@@ -654,7 +705,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
       `import` must resolve in both the live engine AND the export engine (even though the export path
       never instantiates the type). C++ `bindLiveChartScene` (called from the QML `Loader.onItemChanged`
       via the `chartSceneBinder` root property, set on the LIVE path only) configures the scene exactly
-      like `SceneFrameRenderer`: `kPreviewExportOverlayRenderLayers` + `setDCompFallbackActive(true)` +
+      like `SceneFrameRenderer`: `kPreviewExportOverlayRenderLayers` +
       the SHARED `PreviewFrameState` borrowed from the dialog's `SceneFrameRenderer`
       (`frameState()`/`setPlayheadSeconds()`), plus `clip:true` on the scene root for square-box parity
       with the export framebuffer. The export render (`editable=false` → `chartSceneBinder` null → the

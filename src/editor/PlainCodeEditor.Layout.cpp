@@ -1,6 +1,7 @@
 #include "PlainCodeEditor.h"
 #include "BracketCompletionPopup.h"
 #include "SimaiCompletionCatalog.h"
+#include "common/AdoptedSurfaceDragAutoScroll.h"
 #include "common/DebugLog.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
@@ -26,6 +27,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScrollBar>
+#include <QScopedValueRollback>
 #include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCursor>
@@ -44,11 +46,42 @@ constexpr int kLineNumberRightPadding = 10;
 constexpr int kLineNumberMinWidth = 40;
 
 constexpr qreal kEditorDocumentLeftInset = 14.0;
+
+class TopOverlayArea final : public QWidget {
+public:
+    explicit TopOverlayArea(QWidget* parent)
+        : QWidget(parent)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        setAutoFillBackground(false);
+        setAttribute(Qt::WA_TranslucentBackground, true);
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QPainter painter(this);
+        const QRect dirtyRect = event != nullptr ? event->rect() : rect();
+        painter.setClipRect(dirtyRect);
+        if (miacode::ui::paintAppBackgroundForWidget(this, painter)) {
+            const UiTheme::Colors& c = UiTheme::colors();
+            QColor editorSurface = c.inputBg;
+            editorSurface.setAlpha(
+                UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
+            painter.fillRect(dirtyRect, editorSurface);
+        } else {
+            painter.fillRect(dirtyRect, UiTheme::colors().inputBg);
+        }
+    }
+};
 }  // namespace
 
 PlainCodeEditor::PlainCodeEditor(QWidget* parent)
-    : QTextEdit(parent), lineNumberArea_(new LineNumberArea(this))
+    : QTextEdit(parent)
+    , lineNumberArea_(new LineNumberArea(this))
+    , topOverlayArea_(new TopOverlayArea(this))
 {
+    topOverlayArea_->hide();
     lineNumberArea_->setFont(font());
     connect(document(), &QTextDocument::blockCountChanged, this, &PlainCodeEditor::updateLineNumberAreaWidth);
     connect(this, &QTextEdit::textChanged, this, [this]() {
@@ -61,6 +94,15 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     });
     if (QScrollBar* vbar = verticalScrollBar(); vbar != nullptr) {
         vbar->setContextMenuPolicy(Qt::NoContextMenu);
+        verticalScrollBaseMaximum_ = vbar->maximum();
+        connect(vbar, &QScrollBar::rangeChanged, this, [this](int minimum, int maximum) {
+            Q_UNUSED(minimum);
+            if (updatingScrollBeyondLastLineRange_) {
+                return;
+            }
+            verticalScrollBaseMaximum_ = maximum;
+            updateScrollBeyondLastLineRange();
+        });
     }
     if (QScrollBar* hbar = horizontalScrollBar(); hbar != nullptr) {
         hbar->setContextMenuPolicy(Qt::NoContextMenu);
@@ -84,9 +126,15 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         format.setLeftMargin(kEditorDocumentLeftInset);
         frame->setFrameFormat(format);
     }
+    updateScrollBeyondLastLineRange();
     setCursorWidth(kEditorCursorVisibleWidth);
     updateCursorVisibility();
     lastCurrentLineHighlightRect_ = currentLineHighlightRect();
+    // The line-number gutter is a viewport margin, so a leftward drag-select
+    // leaves the viewport and would hand the gesture to Qt's QCursor-driven
+    // autoscroll — which mis-targets on the adopted macOS surface. No-op
+    // elsewhere; see common/AdoptedSurfaceDragAutoScroll.h.
+    miacode::ui::installAdoptedSurfaceDragAutoScroll(this);
 }
 
 void PlainCodeEditor::setBlockSpacingPixels(int px)
@@ -99,6 +147,7 @@ void PlainCodeEditor::setBlockSpacingPixels(int px)
     fmt.setBottomMargin(static_cast<qreal>(blockSpacingPixels_));
     cursor.mergeBlockFormat(fmt);
     cursor.endEditBlock();
+    updateScrollBeyondLastLineRange();
 }
 
 void PlainCodeEditor::setTopOverlayInsetPixels(int px)
@@ -110,6 +159,7 @@ void PlainCodeEditor::setTopOverlayInsetPixels(int px)
     topOverlayInsetPixels_ = normalized;
     updateLineNumberAreaWidth(0);
     updateLineNumberArea();
+    refreshLineNumberAreaLayout();
 }
 
 void PlainCodeEditor::refreshLineNumberAreaLayout()
@@ -120,6 +170,25 @@ void PlainCodeEditor::refreshLineNumberAreaLayout()
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
     lineNumberArea_->update();
     viewport()->update();
+    updateScrollBeyondLastLineRange();
+}
+
+void PlainCodeEditor::updateScrollBeyondLastLineRange()
+{
+    QScrollBar* vbar = verticalScrollBar();
+    if (vbar == nullptr || viewport() == nullptr) {
+        return;
+    }
+    const int lastLineHeight = qMax(1, fontMetrics().height() + blockSpacingPixels_);
+    const int virtualSpace = scrollBeyondLastLineEnabled_
+        ? qMax(0, viewport()->height() - lastLineHeight)
+        : 0;
+    const int desiredMaximum = verticalScrollBaseMaximum_ + virtualSpace;
+    if (vbar->maximum() == desiredMaximum) {
+        return;
+    }
+    const QScopedValueRollback<bool> guard(updatingScrollBeyondLastLineRange_, true);
+    vbar->setMaximum(desiredMaximum);
 }
 
 int PlainCodeEditor::lineNumberAreaWidth() const
@@ -150,9 +219,20 @@ void PlainCodeEditor::updateLineNumberArea()
 void PlainCodeEditor::resizeEvent(QResizeEvent* event)
 {
     QTextEdit::resizeEvent(event);
+    updateScrollBeyondLastLineRange();
 
     const QRect cr = contentsRect();
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+    if (topOverlayArea_ != nullptr) {
+        const QRect viewportGeometry = viewport()->geometry();
+        topOverlayArea_->setGeometry(
+            viewportGeometry.left(),
+            cr.top(),
+            viewportGeometry.width(),
+            qMax(0, topOverlayInsetPixels_));
+        topOverlayArea_->setVisible(topOverlayInsetPixels_ > 0);
+        topOverlayArea_->update();
+    }
 }
 
 void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
@@ -193,14 +273,13 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
             const int drawTop = blockRect.top() + yOffset;
             const int line = blockNumber + 1;
             const bool isBookmarkLine = bookmarkedLines_.contains(line);
-            const bool isDropLine = hoveredBookmarkDropLine_ == line;
-            if (isBookmarkLine || isDropLine) {
+            if (isBookmarkLine) {
                 QColor markerColor = c.accent;
-                markerColor.setAlpha(isDropLine ? 80 : 34);
+                markerColor.setAlpha(34);
                 const QRect rowRect(0, drawTop, lineNumberArea_->width(), lineHeight);
                 painter.fillRect(rowRect, markerColor);
             }
-            painter.setPen(isBookmarkLine || isDropLine ? c.accent : c.textSecondary);
+            painter.setPen(isBookmarkLine ? c.accent : c.textSecondary);
             painter.drawText(
                 kLineNumberLeftPadding,
                 drawTop,

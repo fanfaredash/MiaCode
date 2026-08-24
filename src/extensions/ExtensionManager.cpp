@@ -362,10 +362,21 @@ void ExtensionManager::setCallbacks(ExtensionHostCallbacks callbacks)
     callbacks_ = std::move(callbacks);
 }
 
-void ExtensionManager::initialize(QMenuBar* menuBar, QMenu* toolsMenu, QMenu* helpMenu)
+void ExtensionManager::initialize(
+    QMenuBar* menuBar,
+    QMenu* fileMenu,
+    QMenu* editMenu,
+    QMenu* toolsMenu,
+    QMenu* modifyMenu,
+    QMenu* previewMenu,
+    QMenu* helpMenu)
 {
     menuBar_ = menuBar;
+    fileMenu_ = fileMenu;
+    editMenu_ = editMenu;
     toolsMenu_ = toolsMenu;
+    modifyMenu_ = modifyMenu;
+    previewMenu_ = previewMenu;
     helpMenu_ = helpMenu;
     watcher_ = new QFileSystemWatcher(this);
     connect(watcher_, &QFileSystemWatcher::directoryChanged, this, [this]() {
@@ -375,6 +386,12 @@ void ExtensionManager::initialize(QMenuBar* menuBar, QMenu* toolsMenu, QMenu* he
         scheduleRefresh();
     });
     QDir().mkpath(userExtensionsDirectory());
+}
+
+void ExtensionManager::setToolboxMenu(QMenu* toolboxMenu, QAction* insertBeforeAction)
+{
+    toolboxMenu_ = toolboxMenu;
+    toolboxInsertBeforeAction_ = insertBeforeAction;
 }
 
 void ExtensionManager::restartRuntime()
@@ -903,6 +920,11 @@ void ExtensionManager::publishEvent(const QString& name, const QJsonObject& payl
     }
 }
 
+bool ExtensionManager::hasEventSubscribers(const QString& name) const
+{
+    return runtime_ != nullptr && runtime_->isRunning() && runtime_->hasEventSubscriber(name);
+}
+
 void ExtensionManager::refreshExtensions()
 {
     discoverExtensions();
@@ -1072,6 +1094,12 @@ void ExtensionManager::rebuildMenuContributions()
         action->deleteLater();
     }
     topLevelMenuActions_.clear();
+    for (const QPointer<QAction>& action : std::as_const(menuContributionActions_)) {
+        if (action != nullptr) {
+            action->deleteLater();
+        }
+    }
+    menuContributionActions_.clear();
 
     commandActions_.clear();
     bool addedToolsCommand = false;
@@ -1092,6 +1120,25 @@ void ExtensionManager::rebuildMenuContributions()
                 }
                 action = extensionsMenu_->addAction(displayLabelForCommand(command));
                 addedToolsCommand = true;
+            } else if (menu.location == QStringLiteral("file/menu")) {
+                action = fileMenu_ != nullptr ? fileMenu_->addAction(displayLabelForCommand(command)) : nullptr;
+            } else if (menu.location == QStringLiteral("edit/menu")) {
+                action = editMenu_ != nullptr ? editMenu_->addAction(displayLabelForCommand(command)) : nullptr;
+            } else if (menu.location == QStringLiteral("modify/menu")) {
+                action = modifyMenu_ != nullptr ? modifyMenu_->addAction(displayLabelForCommand(command)) : nullptr;
+            } else if (menu.location == QStringLiteral("preview/menu")) {
+                action = previewMenu_ != nullptr ? previewMenu_->addAction(displayLabelForCommand(command)) : nullptr;
+            } else if (menu.location == QStringLiteral("help/menu")) {
+                action = helpMenu_ != nullptr ? helpMenu_->addAction(displayLabelForCommand(command)) : nullptr;
+            } else if (menu.location == QStringLiteral("toolbox/menu")) {
+                if (toolboxMenu_ != nullptr) {
+                    action = new QAction(displayLabelForCommand(command), this);
+                    if (toolboxInsertBeforeAction_ != nullptr) {
+                        toolboxMenu_->insertAction(toolboxInsertBeforeAction_, action);
+                    } else {
+                        toolboxMenu_->addAction(action);
+                    }
+                }
             } else if (menu.location == QStringLiteral("menubar/beforeHelp")) {
                 if (menuBar_ == nullptr) {
                     continue;
@@ -1115,6 +1162,10 @@ void ExtensionManager::rebuildMenuContributions()
             connect(action, &QAction::triggered, this, [this, command]() {
                 invokeCommand(command.id);
             });
+            if (menu.location != QStringLiteral("tools/menu")
+                && menu.location != QStringLiteral("menubar/beforeHelp")) {
+                menuContributionActions_.append(action);
+            }
             commandActions_.insert(command.id, action);
         }
     }

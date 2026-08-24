@@ -18,6 +18,7 @@
 #include "common/OperationLog.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewInteractionConfig.h"
+#include "audio/PreviewAudioPlaybackFlowPolicy.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "common/IntroConfig.h"
@@ -41,38 +42,77 @@
 using namespace miacode::mainwindow::shared;
 using namespace miacode::mainwindow::timeline_playback_detail;
 
-void MainWindow::TimelineSection::cancelPreviewStartupSync()
+void MainWindow::TimelineSection::clearPreviewPlayingRetainedSeek()
 {
-    if (!state_.previewStartupSyncPending_
-        && !state_.previewLateVideoStartPending_
-        && !state_.previewStartupStrongGroupCommitted_) {
+    state_.previewPlayingSeekAudioGeneration_ = 0;
+    state_.previewPlayingSeekPendingSequence_ = 0;
+    state_.previewPlayingSeekCenterView_ = false;
+    state_.previewPlayingSeekVisualSecond_ = 0.0;
+    state_.previewPlayingSeekWorkerSecond_ = 0.0;
+}
+
+void MainWindow::TimelineSection::cancelPreviewStartupSync(const char* cause)
+{
+    const bool hadStartup = state_.previewStartupSyncPending_
+        || state_.previewLateVideoStartPending_
+        || state_.previewStartupStrongGroupCommitted_;
+    const bool hadPendingPause = state_.previewPendingManualPauseSequence_ != 0
+        || (state_.previewPendingDevicePauseToken_ != 0
+            && !state_.previewDevicePauseSubmissionInProgress_);
+    if (!hadStartup && !hadPendingPause) {
         return;
     }
-    const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
-    appendPreviewPlaybackLog(
-        QStringLiteral("cancel"),
-        QString("txn=%1 pending=%2 late_video_pending=%3 committed=%4")
-            .arg(playbackTxn)
-            .arg(state_.previewStartupSyncPending_ ? 1 : 0)
-            .arg(state_.previewLateVideoStartPending_ ? 1 : 0)
-            .arg(state_.previewStartupStrongGroupCommitted_ ? 1 : 0));
-    if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->cancelPreparedPreviewPlayback();
+    if (hadStartup) {
+        const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
+        appendPreviewPlaybackLog(
+            QStringLiteral("cancel"),
+            QString("txn=%1 pending=%2 late_video_pending=%3 committed=%4")
+                .arg(playbackTxn)
+                .arg(state_.previewStartupSyncPending_ ? 1 : 0)
+                .arg(state_.previewLateVideoStartPending_ ? 1 : 0)
+                .arg(state_.previewStartupStrongGroupCommitted_ ? 1 : 0));
+        if (state_.previewSfxRuntime_ != nullptr) {
+            state_.previewSfxRuntime_->cancelPreparedPreviewPlayback();
+        }
+        if (state_.previewStageMediaHost_ != nullptr) {
+            state_.previewStageMediaHost_->cancelPreparedPlaybackStart(playbackTxn);
+        }
+        state_.previewStartupSyncPending_ = false;
+        state_.previewLateVideoStartPending_ = false;
+        state_.previewStartupAudioPrepared_ = false;
+        state_.previewStartupCanvasPresented_ = false;
+        state_.previewStartupStrongGroupCommitted_ = false;
+        state_.previewStartupResumeFromPause_ = false;
+        state_.previewStartupVideoPrepareStarted_ = false;
+        state_.previewStartupVideoPrepared_ = false;
+        state_.previewStartupVideoStarted_ = false;
+        state_.previewStartupAudioGeneration_ = 0;
+        state_.previewStartupPendingPrepareSequence_ = 0;
+        state_.previewStartupPendingRetainedSequence_ = 0;
+        state_.previewStartupRequestedSecond_ = 0.0;
+        state_.previewStartupVisualSecond_ = 0.0;
+        state_.previewStartupPreparedSecond_ = 0.0;
     }
-    if (state_.previewStageMediaHost_ != nullptr) {
-        state_.previewStageMediaHost_->cancelPreparedPlaybackStart(playbackTxn);
+    if (hadPendingPause) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("pause_completion_superseded"),
+            QString("cause=%1 manual_generation=%2 manual_txn=%3 manual_sequence=%4 manual_visual=%5 "
+                    "device_token=%6 next_txn=%7")
+                .arg(QString::fromLatin1(cause != nullptr ? cause : "unknown"))
+                .arg(state_.previewPendingManualPauseGeneration_)
+                .arg(state_.previewPendingManualPauseTransactionId_)
+                .arg(state_.previewPendingManualPauseSequence_)
+                .arg(state_.previewPendingManualPauseWallSecond_, 0, 'f', 6)
+                .arg(state_.previewPendingDevicePauseToken_)
+                .arg(state_.activePreviewPlaybackTransactionId_));
+        state_.previewPendingManualPauseGeneration_ = 0;
+        state_.previewPendingManualPauseTransactionId_ = 0;
+        state_.previewPendingManualPauseSequence_ = 0;
+        state_.previewPendingDevicePauseGeneration_ = 0;
+        state_.previewPendingDevicePauseTransactionId_ = 0;
+        state_.previewPendingDevicePauseSequence_ = 0;
+        state_.previewPendingDevicePauseToken_ = 0;
     }
-    state_.previewStartupSyncPending_ = false;
-    state_.previewLateVideoStartPending_ = false;
-    state_.previewStartupAudioPrepared_ = false;
-    state_.previewStartupCanvasPresented_ = false;
-    state_.previewStartupStrongGroupCommitted_ = false;
-    state_.previewStartupResumeFromPause_ = false;
-    state_.previewStartupVideoPrepareStarted_ = false;
-    state_.previewStartupVideoPrepared_ = false;
-    state_.previewStartupVideoStarted_ = false;
-    state_.previewStartupRequestedSecond_ = 0.0;
-    state_.previewStartupPreparedSecond_ = 0.0;
 }
 
 void MainWindow::TimelineSection::handlePreviewStartupCanvasPresented()
@@ -88,7 +128,7 @@ void MainWindow::TimelineSection::handlePreviewStartupCanvasPresented()
         QStringLiteral("canvas_presented"),
         QString("txn=%1 second=%2")
             .arg(state_.activePreviewPlaybackTransactionId_)
-            .arg(state_.previewStartupPreparedSecond_, 0, 'f', 6));
+            .arg(state_.previewStartupVisualSecond_, 0, 'f', 6));
     tryCommitPreviewStartupSync();
 }
 
@@ -132,6 +172,316 @@ void MainWindow::TimelineSection::handlePreviewStartupVideoPrepared(double secon
                 .arg(transactionId)
                 .arg(currentSecond, 0, 'f', 6));
     }
+}
+
+void MainWindow::TimelineSection::handlePreviewAudioPrepared(
+    const miacode::preview_audio::PreviewAudioCompletion& completion)
+{
+    handlePreviewAudioStartupCompletion(completion);
+}
+
+void MainWindow::TimelineSection::handlePreviewRetainedPlaybackCompleted(
+    const miacode::preview_audio::PreviewAudioCompletion& completion)
+{
+    using namespace miacode::preview_audio;
+    using namespace miacode::preview_audio::playback_flow;
+
+    if (completion.kind == CommandKind::ManualPause
+        || completion.kind == CommandKind::DeviceChangePause) {
+        const PauseKind pauseKind = completion.kind == CommandKind::ManualPause
+            ? PauseKind::Manual
+            : PauseKind::DeviceChange;
+        PauseState pending;
+        pending.currentGeneration = state_.previewSfxRuntime_ != nullptr
+            ? state_.previewSfxRuntime_->playbackGeneration()
+            : (pauseKind == PauseKind::Manual
+                   ? state_.previewPendingManualPauseGeneration_
+                   : state_.previewPendingDevicePauseGeneration_);
+        pending.deviceSequence = state_.previewAudioDeviceChangeSequence_;
+        pending.pendingManualPauseGeneration = state_.previewPendingManualPauseGeneration_;
+        pending.pendingManualPauseTransactionId = state_.previewPendingManualPauseTransactionId_;
+        pending.pendingManualPauseSequence = state_.previewPendingManualPauseSequence_;
+        pending.manualPauseVisualSecond = state_.previewPendingManualPauseWallSecond_;
+        pending.pendingDevicePauseGeneration = state_.previewPendingDevicePauseGeneration_;
+        pending.pendingDevicePauseTransactionId = state_.previewPendingDevicePauseTransactionId_;
+        pending.pendingDevicePauseSequence = state_.previewPendingDevicePauseSequence_;
+        pending.pendingDevicePauseToken = state_.previewPendingDevicePauseToken_;
+        pending.devicePauseVisualSecond = state_.previewPendingDevicePauseWallSecond_;
+        pending.visualSecond = state_.qtPreviewPauseSecond_;
+        pending.authoritativeRetainedSecond = state_.previewRetainedAuthoritativeSecond_;
+        pending.retainedMode = state_.previewRetainedPlaybackMode_;
+        pending.retainedBgmState = state_.previewRetainedBgmState_;
+
+        const bool degraded = !completion.success
+            || state_.previewSfxRuntime_ == nullptr
+            || !state_.previewSfxRuntime_->audioEngineInitialized();
+        const PauseDecision decision = decidePauseCompletion(
+            pending,
+            PauseCompletion{
+                pauseKind,
+                completion.identity.generation,
+                completion.identity.transactionId,
+                completion.identity.sequence,
+                completion.identity.deviceSequence,
+                completion.identity.pauseToken,
+                completion.pauseResult.pauseSecond,
+                static_cast<int>(completion.pauseResult.retainedMode),
+                static_cast<int>(completion.pauseResult.retainedBgmState),
+                completion.success,
+                degraded,
+            });
+        if (!decision.matchesPending) {
+            appendPreviewPlaybackLog(
+                QStringLiteral("pause_completion_drop"),
+                QString("kind=%1 txn=%2 generation=%3 sequence=%4 token=%5 reason=%6 "
+                        "manual_pending=%7 device_pending=%8")
+                    .arg(static_cast<int>(completion.kind))
+                    .arg(completion.identity.transactionId)
+                    .arg(completion.identity.generation)
+                    .arg(completion.identity.sequence)
+                    .arg(completion.identity.pauseToken)
+                    .arg(QString::fromLatin1(pauseCompletionRejectionLabel(decision.rejectionReason)))
+                    .arg(state_.previewPendingManualPauseSequence_)
+                    .arg(state_.previewPendingDevicePauseToken_));
+            return;
+        }
+
+        state_.previewPendingManualPauseGeneration_ = decision.state.pendingManualPauseGeneration;
+        state_.previewPendingManualPauseTransactionId_ = decision.state.pendingManualPauseTransactionId;
+        state_.previewPendingManualPauseSequence_ = decision.state.pendingManualPauseSequence;
+        state_.previewPendingDevicePauseGeneration_ = decision.state.pendingDevicePauseGeneration;
+        state_.previewPendingDevicePauseTransactionId_ = decision.state.pendingDevicePauseTransactionId;
+        state_.previewPendingDevicePauseSequence_ = decision.state.pendingDevicePauseSequence;
+        state_.previewPendingDevicePauseToken_ = decision.state.pendingDevicePauseToken;
+        if (pauseKind == PauseKind::Manual) {
+            if (!decision.commitsRetainedState) {
+                appendPreviewPlaybackLog(
+                    QStringLiteral("manual_pause_completion_failed"),
+                    QString("txn=%1 generation=%2 sequence=%3 success=%4 error=%5 detail=%6")
+                        .arg(completion.identity.transactionId)
+                        .arg(completion.identity.generation)
+                        .arg(completion.identity.sequence)
+                        .arg(completion.success ? 1 : 0)
+                        .arg(static_cast<int>(completion.error))
+                        .arg(completion.detail));
+                return;
+            }
+            const double wallSecond = state_.previewPendingManualPauseWallSecond_;
+            state_.previewRetainedAuthoritativeSecond_ = decision.state.authoritativeRetainedSecond;
+            state_.previewRetainedPlaybackMode_ = decision.state.retainedMode;
+            state_.previewRetainedBgmState_ = decision.state.retainedBgmState;
+            appendPreviewPlaybackLog(
+                QStringLiteral("manual_pause_completion_accepted"),
+                QString("txn=%1 generation=%2 sequence=%3 visual_second=%4 backend_second=%5 delta_ms=%6 retained_mode=%7 retained_bgm=%8")
+                    .arg(completion.identity.transactionId)
+                    .arg(completion.identity.generation)
+                    .arg(completion.identity.sequence)
+                    .arg(wallSecond, 0, 'f', 6)
+                    .arg(completion.pauseResult.pauseSecond, 0, 'f', 6)
+                    .arg((completion.pauseResult.pauseSecond - wallSecond) * 1000.0, 0, 'f', 3)
+                    .arg(state_.previewRetainedPlaybackMode_)
+                    .arg(state_.previewRetainedBgmState_));
+            return;
+        }
+
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_pause_completion_accepted"),
+            QString("txn=%1 generation=%2 sequence=%3 token=%4 visual_second=%5 backend_second=%6 delta_ms=%7 success=%8")
+                .arg(completion.identity.transactionId)
+                .arg(completion.identity.generation)
+                .arg(completion.identity.sequence)
+                .arg(completion.identity.pauseToken)
+                .arg(state_.previewPendingDevicePauseWallSecond_, 0, 'f', 6)
+                .arg(completion.pauseResult.pauseSecond, 0, 'f', 6)
+                .arg((completion.pauseResult.pauseSecond - state_.previewPendingDevicePauseWallSecond_) * 1000.0, 0, 'f', 3)
+                .arg(completion.success ? 1 : 0));
+        return;
+    }
+
+    if (completion.kind == miacode::preview_audio::CommandKind::SeekRetained
+        && state_.previewPlayingSeekPendingSequence_ != 0) {
+        handlePreviewPlayingRetainedSeekCompletion(completion);
+        return;
+    }
+    handlePreviewAudioStartupCompletion(completion);
+}
+
+void MainWindow::TimelineSection::handlePreviewAudioStartupCompletion(
+    const miacode::preview_audio::PreviewAudioCompletion& completion)
+{
+    using namespace miacode::preview_audio;
+    using namespace miacode::preview_audio::playback_flow;
+
+    CompletionKind kind;
+    switch (completion.kind) {
+    case CommandKind::Prepare:
+        kind = CompletionKind::Prepare;
+        break;
+    case CommandKind::ResumeRetained:
+        kind = CompletionKind::RetainedResume;
+        break;
+    case CommandKind::SeekRetained:
+        kind = CompletionKind::RetainedSeek;
+        break;
+    default:
+        return;
+    }
+
+    State pending;
+    pending.currentGeneration = state_.previewStartupAudioGeneration_;
+    pending.activeTransactionId = state_.activePreviewPlaybackTransactionId_;
+    pending.pendingPrepareSequence = state_.previewStartupPendingPrepareSequence_;
+    pending.pendingRetainedSequence = state_.previewStartupPendingRetainedSequence_;
+    pending.visualSecond = state_.previewStartupVisualSecond_;
+    pending.requestedVisualSecond = state_.previewStartupRequestedSecond_;
+    pending.effectiveWorkerSecond = state_.previewStartupPreparedSecond_;
+    pending.audioPrepared = state_.previewStartupAudioPrepared_;
+    pending.uiPlaying = state_.qtPreviewPlaying_;
+
+    Completion flowCompletion;
+    flowCompletion.kind = kind;
+    flowCompletion.generation = completion.identity.generation;
+    flowCompletion.transactionId = completion.identity.transactionId;
+    flowCompletion.sequence = completion.identity.sequence;
+    flowCompletion.effectiveSecond = completion.value;
+    flowCompletion.success = completion.success;
+    flowCompletion.degraded = !completion.success
+        || state_.previewSfxRuntime_ == nullptr
+        || !state_.previewSfxRuntime_->audioEngineInitialized();
+    const Decision decision = decideCompletion(pending, flowCompletion);
+    if (!decision.matchesPending) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("audio_startup_completion_drop"),
+            QString("kind=%1 txn=%2 active_txn=%3 generation=%4 current_generation=%5 sequence=%6 "
+                    "pending_prepare=%7 pending_retained=%8 success=%9 error=%10")
+                .arg(static_cast<int>(completion.kind))
+                .arg(completion.identity.transactionId)
+                .arg(state_.activePreviewPlaybackTransactionId_)
+                .arg(completion.identity.generation)
+                .arg(state_.previewStartupAudioGeneration_)
+                .arg(completion.identity.sequence)
+                .arg(state_.previewStartupPendingPrepareSequence_)
+                .arg(state_.previewStartupPendingRetainedSequence_)
+                .arg(completion.success ? 1 : 0)
+                .arg(static_cast<int>(completion.error)));
+        return;
+    }
+    if (!decision.commitsAudioPreparation) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("audio_startup_completion_failed"),
+            QString("kind=%1 txn=%2 generation=%3 sequence=%4 success=%5 degraded=%6 error=%7 "
+                    "detail=%8 native_error=%9")
+                .arg(static_cast<int>(completion.kind))
+                .arg(completion.identity.transactionId)
+                .arg(completion.identity.generation)
+                .arg(completion.identity.sequence)
+                .arg(completion.success ? 1 : 0)
+                .arg(flowCompletion.degraded ? 1 : 0)
+                .arg(static_cast<int>(completion.error))
+                .arg(completion.detail)
+                .arg(completion.nativeErrorCode));
+        cancelPreviewStartupSync("audio_startup_completion_failed");
+        return;
+    }
+
+    state_.previewStartupAudioPrepared_ = decision.state.audioPrepared;
+    state_.previewStartupPreparedSecond_ = decision.state.effectiveWorkerSecond;
+    state_.previewStartupPendingPrepareSequence_ = decision.state.pendingPrepareSequence;
+    state_.previewStartupPendingRetainedSequence_ = decision.state.pendingRetainedSequence;
+    appendPreviewPlaybackLog(
+        QStringLiteral("audio_startup_completion_accepted"),
+        QString("kind=%1 txn=%2 generation=%3 sequence=%4 requested=%5 effective=%6")
+            .arg(static_cast<int>(completion.kind))
+            .arg(completion.identity.transactionId)
+            .arg(completion.identity.generation)
+            .arg(completion.identity.sequence)
+            .arg(state_.previewStartupRequestedSecond_, 0, 'f', 6)
+            .arg(state_.previewStartupPreparedSecond_, 0, 'f', 6));
+    tryCommitPreviewStartupSync();
+}
+
+void MainWindow::TimelineSection::handlePreviewPlayingRetainedSeekCompletion(
+    const miacode::preview_audio::PreviewAudioCompletion& completion)
+{
+    using namespace miacode::preview_audio;
+    using namespace miacode::preview_audio::playback_flow;
+
+    State pending;
+    pending.currentGeneration = state_.previewPlayingSeekAudioGeneration_;
+    pending.activeTransactionId = state_.activePreviewPlaybackTransactionId_;
+    pending.pendingPlayingSeekSequence = state_.previewPlayingSeekPendingSequence_;
+    pending.pendingPlayingSeekCenterView = state_.previewPlayingSeekCenterView_;
+    pending.visualSecond = state_.previewPlayingSeekVisualSecond_;
+    pending.requestedVisualSecond = state_.previewPlayingSeekVisualSecond_;
+    pending.effectiveWorkerSecond = state_.previewPlayingSeekWorkerSecond_;
+    pending.transportAnchorSecond = state_.previewPlayingSeekWorkerSecond_;
+    pending.audioPrepared = true;
+    pending.uiPlaying = state_.qtPreviewPlaying_;
+
+    Completion flowCompletion;
+    flowCompletion.kind = CompletionKind::RetainedSeek;
+    flowCompletion.generation = completion.identity.generation;
+    flowCompletion.transactionId = completion.identity.transactionId;
+    flowCompletion.sequence = completion.identity.sequence;
+    flowCompletion.effectiveSecond = completion.value;
+    flowCompletion.success = completion.success;
+    flowCompletion.degraded = !completion.success
+        || state_.previewSfxRuntime_ == nullptr
+        || !state_.previewSfxRuntime_->audioEngineInitialized();
+    const Decision decision = decideCompletion(pending, flowCompletion);
+    if (!decision.matchesPending) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("playing_seek_completion_drop"),
+            QString("txn=%1 active_txn=%2 generation=%3 current_generation=%4 sequence=%5 pending=%6")
+                .arg(completion.identity.transactionId)
+                .arg(state_.activePreviewPlaybackTransactionId_)
+                .arg(completion.identity.generation)
+                .arg(state_.previewPlayingSeekAudioGeneration_)
+                .arg(completion.identity.sequence)
+                .arg(state_.previewPlayingSeekPendingSequence_));
+        return;
+    }
+    if (!decision.commitsWorkerSecond) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("playing_seek_completion_failed"),
+            QString("txn=%1 generation=%2 sequence=%3 success=%4 degraded=%5 error=%6 detail=%7 native_error=%8")
+                .arg(completion.identity.transactionId)
+                .arg(completion.identity.generation)
+                .arg(completion.identity.sequence)
+                .arg(completion.success ? 1 : 0)
+                .arg(flowCompletion.degraded ? 1 : 0)
+                .arg(static_cast<int>(completion.error))
+                .arg(completion.detail)
+                .arg(completion.nativeErrorCode));
+        clearPreviewPlayingRetainedSeek();
+        return;
+    }
+
+    const double effectiveSecond = decision.state.transportAnchorSecond;
+    const bool centerView = decision.state.pendingPlayingSeekCenterView;
+    clearPreviewPlayingRetainedSeek();
+    state_.qtPreviewStartSecond_ = effectiveSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, effectiveSecond, state_.qtPreviewPlaying_, "playing_seek_completion");
+    state_.qtPreviewElapsed_.restart();
+    state_.qtPreviewTimelineElapsed_.restart();
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
+            effectiveSecond,
+            state_.previewPlaybackRate_,
+            state_.activePreviewPlaybackTransactionId_);
+    }
+    resetVisualClockSmoothing();
+    owner_.syncPreviewStageMediaRoutePlayback(effectiveSecond);
+    applyQtPreviewPosition(effectiveSecond, centerView);
+    appendPreviewPlaybackLog(
+        QStringLiteral("playing_seek_completion_accepted"),
+        QString("txn=%1 generation=%2 sequence=%3 visual=%4 effective=%5")
+            .arg(completion.identity.transactionId)
+            .arg(completion.identity.generation)
+            .arg(completion.identity.sequence)
+            .arg(pending.visualSecond, 0, 'f', 6)
+            .arg(effectiveSecond, 0, 'f', 6));
 }
 
 void MainWindow::TimelineSection::tryCommitPreviewStartupSync()
@@ -189,6 +539,14 @@ void MainWindow::TimelineSection::stopQtPreviewTimers()
     if (ui_.previewStatsUiTimer_ != nullptr) {
         ui_.previewStatsUiTimer_->stop();
     }
+    // Forget the render-cadence liveness marker so the next playback starts on the watchdog
+    // and only hands the sampling phase over once a real afterAnimating tick has arrived.
+    // Dropping the cadence flag also lets the timeline window go idle again when paused.
+    state_.qtPreviewLastTimelineCadenceMs_ = -1;
+    state_.qtPreviewLastTimelineCadenceFlushNs_ = -1;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlaybackCadenceActive(false);
+    }
     owner_.setPreviewFixedTimerHighResolutionActive(false);
 }
 
@@ -200,10 +558,17 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     // tick after the 片头 hand-off).
     resetExportAuditionClockCursor(effectiveStartSecond);
     state_.qtPreviewStartSecond_ = effectiveStartSecond;
-    state_.qtPreviewPauseSecond_ = effectiveStartSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, effectiveStartSecond, state_.qtPreviewPlaying_, "finalize_qt_preview_playback_start");
     state_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
     state_.qtPreviewPlaying_ = true;
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
+            effectiveStartSecond,
+            state_.previewPlaybackRate_,
+            state_.activePreviewPlaybackTransactionId_);
+    }
     if (owner_.extensionManager_ != nullptr) {
         owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{
             {QStringLiteral("source"), QStringLiteral("preview")},
@@ -244,6 +609,12 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     } else {
         requestNextFixedIntervalPreviewFrame();
     }
+    // Start on the watchdog: the first afterAnimating tick claims the sampling phase.
+    state_.qtPreviewLastTimelineCadenceMs_ = -1;
+    state_.qtPreviewLastTimelineCadenceFlushNs_ = -1;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlaybackCadenceActive(true);
+    }
     if (ui_.qtPreviewTimelineTimer_ != nullptr && !ui_.qtPreviewTimelineTimer_->isActive()) {
         ui_.qtPreviewTimelineTimer_->start();
     }
@@ -276,35 +647,67 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     }
 }
 
-void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
+void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource pauseSecondSource)
 {
     const bool wasPlaying = state_.qtPreviewPlaying_;
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
+    const bool deviceChangePause = pauseSecondSource == PauseSecondSource::AudioPosition
+        || pauseSecondSource == PauseSecondSource::NativeDeviceCutoff;
+    const bool nativeDeviceCutoff = pauseSecondSource == PauseSecondSource::NativeDeviceCutoff;
     if (!wasPlaying || state_.previewSfxRuntime_ == nullptr) {
         stopQtPreviewPlayback(true);
         return;
     }
 
     // G1 Commit 6: capture the canonical pause-second from the wall-clock master
-    // BEFORE handing pause control to the runtime. With BASS_ChannelGetPosition no
+    // BEFORE handing pause control to the runtime. With a channel-position query no
     // longer consulted in BassPreviewAudioBackend::authoritativeSecond
     // (PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §5.3 / §6.1 step 6), the runtime's
     // returned pauseSecond would be stale; the wall-clock value is the truth, so we
     // overwrite the runtime's PausePreviewResult.pauseSecond with it below.
-    const double wallClockPauseSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
-    const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
-        state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
-    state_.qtPreviewPauseSecond_ = wallClockPauseSecond;
-    cancelPreviewStartupSync();
+    const double wallClockPauseSecond = deviceChangePause
+        ? state_.previewPendingDevicePauseWallSecond_
+        : owner_.currentPreviewAuthoritativeAudioClockSecond();
+    // Disarming happens before the GUI freezes. A later Qt/IMM duplicate observes
+    // the same physical cutoff as already handled and cannot create a second clock
+    // sample or a second worker pause.
+    state_.previewSfxRuntime_->disarmDeviceChangeCutoffClock();
+    // Freeze the UI-side playback state before entering the audio backend. A device
+    // switch can make pausePreviewPlaybackTransaction() block long enough for the
+    // preview timers/frame callbacks to advance the timeline after the pause was
+    // requested. The captured wall-clock second remains the pause anchor; the
+    // backend pause is allowed to complete after the UI has become inert.
+    cancelPreviewStartupSync("pause_qt_preview_playback_exact");
+    clearPreviewPlayingRetainedSeek();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
+    state_.qtPreviewPlaying_ = false;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, wallClockPauseSecond, state_.qtPreviewPlaying_, "pause_qt_preview_playback_exact");
     state_.pausedPreviewMediaSeekPending_ = false;
+    // This is deliberately inline with changing qtPreviewPlaying_.  Deferring the
+    // visibility policy through the UI-tail QTimer made the pause-hide PV/BG setting
+    // expose a stale playing frame after a device cutoff had already frozen the chart.
+    QElapsedTimer visualStateTimer;
+    visualStateTimer.start();
+    owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.applyPreviewStageMediaRouteVisualSettings();
+    appendPreviewPlaybackLog(
+        QStringLiteral("pause_visual_state_applied"),
+        QString("txn=%1 source=%2 inline=1 elapsed_ms=%3")
+            .arg(playbackTxn)
+            .arg(nativeDeviceCutoff
+                     ? QStringLiteral("native_device_cutoff")
+                     : (deviceChangePause ? QStringLiteral("device") : QStringLiteral("manual")))
+            .arg(visualStateTimer.elapsed()));
     appendPreviewPlaybackLog(
         QStringLiteral("pause_exact"),
-        QString("txn=%1 pause_second=%2 retained_mode=%3")
+        QString("txn=%1 pause_second=%2 source=%3")
             .arg(playbackTxn)
             .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
-            .arg(static_cast<int>(pauseResult.retainedMode)));
+            .arg(nativeDeviceCutoff
+                     ? QStringLiteral("native_device_cutoff")
+                     : (deviceChangePause ? QStringLiteral("device") : QStringLiteral("manual"))));
     state_.qtPreviewPendingTimelineSecond_ = state_.qtPreviewPauseSecond_;
     // Per docs/specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md §5: 播放中 → 点击暂停 → 暂停-R,
     // Timeline 聚焦 R. The next paused-flush must call
@@ -316,7 +719,6 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
     // chart start with playhead off-screen to the right.
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
-    state_.qtPreviewPlaying_ = false;
     if (owner_.extensionManager_ != nullptr) {
         owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{
             {QStringLiteral("source"), QStringLiteral("preview")},
@@ -383,7 +785,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
         miacode::diag::leak_gauge::armRenderSample(pausePrivBytes, playbackTxn);
     }
     scheduleDeferredPreviewUiTail(
-        true,
+        false,
         true,
         true,
         false,
@@ -392,6 +794,291 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
         state_.qtPreviewPauseSecond_,
         true,
         state_.previewFollowEnabled_);
+
+    if (deviceChangePause) {
+        if (nativeDeviceCutoff) {
+            state_.previewDevicePauseSubmissionInProgress_ = false;
+            appendPreviewPlaybackLog(
+                QStringLiteral("device_change_pause_already_submitted"),
+                QString("txn=%1 generation=%2 sequence=%3 token=%4 visual_second=%5")
+                    .arg(state_.previewPendingDevicePauseTransactionId_)
+                    .arg(state_.previewPendingDevicePauseGeneration_)
+                    .arg(state_.previewPendingDevicePauseSequence_)
+                    .arg(state_.previewPendingDevicePauseToken_)
+                    .arg(state_.previewPendingDevicePauseWallSecond_, 0, 'f', 6));
+            return;
+        }
+        const QtPreviewSfxRuntime::DevicePauseRequest request =
+            state_.previewSfxRuntime_->requestDeviceChangePause(
+                state_.previewPendingDevicePauseTransactionId_,
+                state_.previewAudioDeviceChangeSequence_,
+                state_.previewPendingDevicePauseToken_,
+                state_.previewPendingDevicePauseWallSecond_);
+        state_.previewDevicePauseSubmissionInProgress_ = false;
+        if (request.post.accepted) {
+            state_.previewPendingDevicePauseGeneration_ = request.identity.generation;
+            state_.previewPendingDevicePauseSequence_ = request.identity.sequence;
+            appendPreviewPlaybackLog(
+                QStringLiteral("device_change_pause_submitted"),
+                QString("txn=%1 generation=%2 sequence=%3 token=%4 visual_second=%5")
+                    .arg(request.identity.transactionId)
+                    .arg(request.identity.generation)
+                    .arg(request.identity.sequence)
+                    .arg(request.identity.pauseToken)
+                    .arg(state_.previewPendingDevicePauseWallSecond_, 0, 'f', 6));
+        } else {
+            appendPreviewPlaybackLog(
+                QStringLiteral("device_change_pause_submission_rejected"),
+                QString("txn=%1 token=%2 error=%3")
+                    .arg(state_.previewPendingDevicePauseTransactionId_)
+                    .arg(state_.previewPendingDevicePauseToken_)
+                    .arg(static_cast<int>(request.post.error)));
+            state_.previewPendingDevicePauseGeneration_ = 0;
+            state_.previewPendingDevicePauseTransactionId_ = 0;
+            state_.previewPendingDevicePauseSequence_ = 0;
+            state_.previewPendingDevicePauseToken_ = 0;
+        }
+        return;
+    }
+
+    const QtPreviewSfxRuntime::PauseSubmission request =
+        state_.previewSfxRuntime_->requestManualPause(playbackTxn, wallClockPauseSecond);
+    if (request.post.accepted) {
+        state_.previewPendingManualPauseGeneration_ = request.identity.generation;
+        state_.previewPendingManualPauseTransactionId_ = request.identity.transactionId;
+        state_.previewPendingManualPauseSequence_ = request.identity.sequence;
+        state_.previewPendingManualPauseWallSecond_ = request.visualFallbackSecond;
+        appendPreviewPlaybackLog(
+            QStringLiteral("manual_pause_submitted"),
+            QString("txn=%1 generation=%2 sequence=%3 visual_second=%4")
+                .arg(request.identity.transactionId)
+                .arg(request.identity.generation)
+                .arg(request.identity.sequence)
+                .arg(request.visualFallbackSecond, 0, 'f', 6));
+    } else {
+        appendPreviewPlaybackLog(
+            QStringLiteral("manual_pause_submission_rejected"),
+            QString("txn=%1 error=%2")
+                .arg(playbackTxn)
+                .arg(static_cast<int>(request.post.error)));
+    }
+}
+
+void MainWindow::TimelineSection::applyPreviewAudioDeviceCutoff(
+    const miacode::preview_audio::PreviewAudioDeviceCutoff& cutoff)
+{
+    using miacode::preview_audio::device_change::Change;
+
+    if (!cutoff.armedPlaybackWasCut || cutoff.change == Change::None) {
+        return;
+    }
+    state_.previewAudioDeviceChangeSequence_ = qMax(
+        state_.previewAudioDeviceChangeSequence_, cutoff.identity.deviceSequence);
+    if (state_.previewPendingDevicePauseToken_ != 0) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_pause_coalesced"),
+            QString("device_change_seq=%1 pending_txn=%2 token=%3 wall_second=%4 source=native")
+                .arg(cutoff.identity.deviceSequence)
+                .arg(state_.previewPendingDevicePauseTransactionId_)
+                .arg(state_.previewPendingDevicePauseToken_)
+                .arg(state_.previewPendingDevicePauseWallSecond_, 0, 'f', 6));
+        return;
+    }
+    if (!miacode::preview_audio::device_change::shouldPausePreview(
+            cutoff.change, state_.qtPreviewPlaying_)) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_ignored"),
+            QString("device_change_seq=%1 change=%2 playing=%3 cutoff_second=%4 source=native")
+                .arg(cutoff.identity.deviceSequence)
+                .arg(QLatin1String(miacode::preview_audio::device_change::changeName(cutoff.change)))
+                .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+                .arg(cutoff.cutoffSecond, 0, 'f', 6));
+        return;
+    }
+
+    // Preserve the identity created on the native callback thread. This GUI path
+    // only freezes visuals at that captured time; it never posts a second pause.
+    state_.previewPendingDevicePauseGeneration_ = cutoff.identity.generation;
+    state_.previewPendingDevicePauseTransactionId_ = cutoff.identity.transactionId;
+    state_.previewPendingDevicePauseSequence_ = cutoff.identity.sequence;
+    state_.previewPendingDevicePauseToken_ = cutoff.identity.pauseToken;
+    state_.previewPendingDevicePauseWallSecond_ = cutoff.cutoffSecond;
+    state_.previewDevicePauseSubmissionInProgress_ = false;
+    appendPreviewPlaybackLog(
+        QStringLiteral("device_change_pause_begin"),
+        QString("device_change_seq=%1 txn=%2 change=%3 cutoff_second=%4 event_ns=%5 "
+                "gui_delivery_ns=%6 gui_delay_ms=%7 emergency_attempted=%8 emergency_ok=%9 "
+                "emergency_device=%10 emergency_error=%11 emergency_begin_ns=%12 emergency_end_ns=%13 "
+                "generation=%14 sequence=%15 token=%16 posted=%17 source=native")
+            .arg(cutoff.identity.deviceSequence)
+            .arg(cutoff.identity.transactionId)
+            .arg(QLatin1String(miacode::preview_audio::device_change::changeName(cutoff.change)))
+            .arg(cutoff.cutoffSecond, 0, 'f', 6)
+            .arg(cutoff.eventMonotonicNs)
+            .arg(cutoff.guiDeliveryMonotonicNs)
+            .arg(cutoff.eventMonotonicNs > 0 && cutoff.guiDeliveryMonotonicNs > 0
+                     ? static_cast<double>(cutoff.guiDeliveryMonotonicNs - cutoff.eventMonotonicNs) / 1'000'000.0
+                     : -1.0,
+                 0,
+                 'f',
+                 3)
+            .arg(cutoff.emergencyPauseAttempted ? 1 : 0)
+            .arg(cutoff.emergencyPauseSucceeded ? 1 : 0)
+            .arg(cutoff.emergencyPauseDeviceIndex)
+            .arg(cutoff.emergencyPauseError)
+            .arg(cutoff.emergencyPauseStartedNs)
+            .arg(cutoff.emergencyPauseFinishedNs)
+            .arg(cutoff.identity.generation)
+            .arg(cutoff.identity.sequence)
+            .arg(cutoff.identity.pauseToken)
+            .arg(cutoff.post.accepted ? 1 : 0));
+    pauseQtPreviewPlaybackExact(PauseSecondSource::NativeDeviceCutoff);
+    // The worker can finish a tiny pause transaction before its queued GUI event is
+    // delivered. Replay the retained completion from the runtime in that race so the
+    // pending identity is not left behind; the later queued duplicate is harmlessly
+    // rejected by the normal identity check.
+    if (state_.previewSfxRuntime_ != nullptr) {
+        if (const auto completed = state_.previewSfxRuntime_->takeCompletedDeviceChangeCutoff(
+                cutoff.identity.sequence)) {
+            handlePreviewRetainedPlaybackCompleted(*completed);
+        }
+    }
+    appendPreviewPlaybackLog(
+        QStringLiteral("device_change_pause_complete"),
+        QString("device_change_seq=%1 txn=%2 generation=%3 sequence=%4 token=%5 playing=%6 "
+                "pause_second=%7 source=native")
+            .arg(cutoff.identity.deviceSequence)
+            .arg(state_.previewPendingDevicePauseTransactionId_)
+            .arg(state_.previewPendingDevicePauseGeneration_)
+            .arg(state_.previewPendingDevicePauseSequence_)
+            .arg(state_.previewPendingDevicePauseToken_)
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
+    owner_.updatePauseButtonAppearance();
+}
+
+void MainWindow::TimelineSection::pausePreviewForAudioDeviceChange(
+    miacode::preview_audio::device_change::Change change)
+{
+    const quint64 deviceChangeSequence = ++state_.previewAudioDeviceChangeSequence_;
+    if (change == miacode::preview_audio::device_change::Change::None) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_ignored"),
+            QString("device_change_seq=%1 change=none playing=%2")
+                .arg(deviceChangeSequence)
+                .arg(state_.qtPreviewPlaying_ ? 1 : 0));
+        return;
+    }
+    if (state_.previewPendingDevicePauseToken_ != 0) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_pause_coalesced"),
+            QString("device_change_seq=%1 pending_txn=%2 token=%3 wall_second=%4")
+                .arg(deviceChangeSequence)
+                .arg(state_.previewPendingDevicePauseTransactionId_)
+                .arg(state_.previewPendingDevicePauseToken_)
+                .arg(state_.previewPendingDevicePauseWallSecond_, 0, 'f', 6));
+        return;
+    }
+    if (!miacode::preview_audio::device_change::shouldPausePreview(change, state_.qtPreviewPlaying_)) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_ignored"),
+            QString("device_change_seq=%1 change=%2 playing=%3 startup_pending=%4 pause_second=%5")
+                .arg(deviceChangeSequence)
+                .arg(QLatin1String(miacode::preview_audio::device_change::changeName(change)))
+                .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+                .arg(state_.previewStartupSyncPending_ ? 1 : 0)
+                .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
+        return;
+    }
+
+    state_.previewPendingDevicePauseTransactionId_ = state_.activePreviewPlaybackTransactionId_;
+    state_.previewPendingDevicePauseToken_ = deviceChangeSequence;
+    state_.previewPendingDevicePauseWallSecond_ =
+        owner_.currentPreviewAuthoritativeAudioClockSecond();
+    state_.previewDevicePauseSubmissionInProgress_ = true;
+    appendPreviewPlaybackLog(
+        QStringLiteral("device_change_pause_begin"),
+        QString("device_change_seq=%1 txn=%2 change=%3 playing=%4 startup_pending=%5 "
+                "pause_second=%6 authoritative_second=%7 pending_play_op=%8")
+            .arg(deviceChangeSequence)
+            .arg(state_.previewPendingDevicePauseTransactionId_)
+            .arg(QLatin1String(miacode::preview_audio::device_change::changeName(change)))
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.previewStartupSyncPending_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(state_.previewPendingDevicePauseWallSecond_, 0, 'f', 6)
+            .arg(state_.previewPendingPlayInteractionId_));
+    pauseQtPreviewPlaybackExact(PauseSecondSource::AudioPosition);
+    if (state_.previewDevicePauseSubmissionInProgress_) {
+        state_.previewDevicePauseSubmissionInProgress_ = false;
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_pause_submission_skipped"),
+            QString("device_change_seq=%1 txn=%2 reason=no_runtime")
+                .arg(deviceChangeSequence)
+                .arg(state_.previewPendingDevicePauseTransactionId_));
+        state_.previewPendingDevicePauseGeneration_ = 0;
+        state_.previewPendingDevicePauseTransactionId_ = 0;
+        state_.previewPendingDevicePauseSequence_ = 0;
+        state_.previewPendingDevicePauseToken_ = 0;
+    }
+    appendPreviewPlaybackLog(
+        QStringLiteral("device_change_pause_complete"),
+        QString("device_change_seq=%1 txn=%2 generation=%3 sequence=%4 token=%5 playing=%6 pause_second=%7")
+            .arg(deviceChangeSequence)
+            .arg(state_.previewPendingDevicePauseTransactionId_)
+            .arg(state_.previewPendingDevicePauseGeneration_)
+            .arg(state_.previewPendingDevicePauseSequence_)
+            .arg(state_.previewPendingDevicePauseToken_)
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
+    owner_.updatePauseButtonAppearance();
+}
+
+void MainWindow::TimelineSection::emitChartSwitchResourceGauge()
+{
+    // Chart-switch leak gauge. The pause handler above is the ONLY other site that
+    // arms a render sample, which left a chart switch (the scenario in
+    // docs/audit/CHART_SWITCH_RESOURCE_RELEASE_AUDIT_ZH.md) as a zero-log event:
+    // measuring it required an artificial "play a few seconds, then pause" step
+    // after every switch, and any round where the timeline tab happened to be
+    // hidden silently dropped its sample. Arming here makes the switch itself the
+    // sampling point, which also covers the common "only ever switches, never
+    // plays" usage.
+    //
+    // Semantics: the counters this arms are read on the NEXT timeline present, so
+    // a line reports the state the process is ENTERING this chart with — i.e. it
+    // carries the accumulation of every previous switch, not this switch's own
+    // texture builds. That is exactly what detecting accumulation needs: across an
+    // A→B→A→B… loop, `tex` / `tex_pix` at "entering A" must be flat. A monotonic
+    // climb is the leak signature (F-1); a flat count with climbing private bytes
+    // is Qt RHI deferred release, not our accumulation.
+    //
+    // Same gate as every other leak-gauge site, so it costs nothing outside --debug.
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    // Disjoint from the playback transaction sequence (a small counter starting at
+    // 1), so the render-thread `timeline/leak_gauge txn=` value pairs with exactly
+    // one `preview/resource_gauge` line and never straddles the two sources.
+    constexpr quint64 kChartSwitchGaugeTxnBase = 1ULL << 32;
+    const quint64 gaugeTxn = kChartSwitchGaugeTxnBase + (++state_.chartSwitchGaugeTxnCounter_);
+    const qint64 switchPrivBytes = miacode::diag::processPrivateBytes();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/resource_gauge"),
+        QStringLiteral("reason=chart_switch txn=%1 switch_seq=%2 difficulty=%3 "
+                       "qobject_descendants=%4 inflight=%5 inflight_peak=%6 %7 %8")
+            .arg(gaugeTxn)
+            .arg(state_.chartSwitchGaugeTxnCounter_)
+            .arg(state_.activeDifficultyId_)
+            .arg(static_cast<qint64>(owner_.findChildren<QObject*>().size()))
+            .arg(miacode::diag::leak_gauge::inflightDepth())
+            .arg(miacode::diag::leak_gauge::inflightPeak())
+            .arg(miacode::diag::processResourceGaugePayload())
+            .arg(state_.previewCanvas_ != nullptr
+                     ? state_.previewCanvas_->resourceGaugePayload()
+                     : QStringLiteral("scene_revision=-")));
+    miacode::diag::leak_gauge::armRenderSample(switchPrivBytes, gaugeTxn);
 }
 
 void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
@@ -408,10 +1095,10 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
     // G1 Commit 6: pause-second from wall-clock master; see pauseQtPreviewPlaybackExact
     // for rationale.
     const double wallClockPauseSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
-    const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
-        state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
-    state_.qtPreviewPauseSecond_ = wallClockPauseSecond;
-    cancelPreviewStartupSync();
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, wallClockPauseSecond, state_.qtPreviewPlaying_, "pause_qt_preview_playback_for_reanchor");
+    cancelPreviewStartupSync("pause_qt_preview_playback_for_reanchor");
+    clearPreviewPlayingRetainedSeek();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     state_.pausedPreviewMediaSeekPending_ = false;
@@ -442,11 +1129,18 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
     }
     appendPreviewPlaybackLog(
         QStringLiteral("pause_for_reanchor"),
-        QString("txn=%1 pause_second=%2 retained_mode=%3 elapsed_ms=%4")
+        QString("txn=%1 pause_second=%2 elapsed_ms=%3")
             .arg(playbackTxn)
             .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
-            .arg(static_cast<int>(pauseResult.retainedMode))
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3));
+    const QtPreviewSfxRuntime::PauseSubmission request =
+        state_.previewSfxRuntime_->requestManualPause(playbackTxn, wallClockPauseSecond);
+    if (request.post.accepted) {
+        state_.previewPendingManualPauseGeneration_ = request.identity.generation;
+        state_.previewPendingManualPauseTransactionId_ = request.identity.transactionId;
+        state_.previewPendingManualPauseSequence_ = request.identity.sequence;
+        state_.previewPendingManualPauseWallSecond_ = request.visualFallbackSecond;
+    }
 }
 
 void MainWindow::TimelineSection::softStopQtPreviewPlaybackToSecond(double second, bool centerView)
@@ -464,10 +1158,12 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     owner_.ensurePreviewStageMediaRouteInitialized();
-    cancelPreviewStartupSync();
+    cancelPreviewStartupSync("anchor_qt_preview_playback_to_second");
+    clearPreviewPlayingRetainedSeek();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
-    state_.qtPreviewPauseSecond_ = clampedSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, clampedSecond, state_.qtPreviewPlaying_, "anchor_qt_preview_playback_to_second");
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
@@ -492,6 +1188,15 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
     state_.qtPreviewFixedTickOriginNs_ = -1;
     requestPausedPreviewSeek(clampedSecond, centerView, true);
     if (state_.previewSfxRuntime_ != nullptr) {
+        appendPreviewPlaybackLog(
+            QStringLiteral("retained_reset_submitted"),
+            QString("cause=anchor_qt_preview_playback_to_second target=%1 generation_before=%2 "
+                    "manual_pause_generation=%3 manual_pause_txn=%4 manual_pause_sequence=%5")
+                .arg(clampedSecond, 0, 'f', 6)
+                .arg(state_.previewSfxRuntime_->playbackGeneration())
+                .arg(state_.previewPendingManualPauseGeneration_)
+                .arg(state_.previewPendingManualPauseTransactionId_)
+                .arg(state_.previewPendingManualPauseSequence_));
         state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(clampedSecond);
     }
     scheduleDeferredPreviewUiTail(

@@ -6,6 +6,7 @@
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
+#include "editor/BookmarkCommentSyntax.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
@@ -162,7 +163,7 @@ QVector<BookmarkCommentCandidate> collectBookmarkCommentCandidates(const QString
     for (int i = 0; i < lines.size(); ++i) {
         const QString& lineText = lines.at(i);
         const int marker = lineText.indexOf(QStringLiteral("||"));
-        if (marker >= 0) {
+        if (miacode::editor::isBookmarkCommentMarker(lineText, marker)) {
             const QString rawComment = lineText.mid(marker + 2);
             const BookmarkLabelParts labelParts = parseBookmarkLabelParts(rawComment);
             const QString commentText = labelParts.normalizedComment;
@@ -294,7 +295,7 @@ LineBookmarkCommentInfo inspectLineBookmarkComment(const QString& lineText)
 {
     LineBookmarkCommentInfo info;
     info.marker = lineText.indexOf(QStringLiteral("||"));
-    info.hasMarker = info.marker >= 0;
+    info.hasMarker = miacode::editor::isBookmarkCommentMarker(lineText, info.marker);
     if (!info.hasMarker) {
         return info;
     }
@@ -310,15 +311,6 @@ LineBookmarkCommentInfo inspectLineBookmarkComment(const QString& lineText)
         info.afterLabel = info.rawCommentStart + labelParts.afterLabelInRawComment;
     }
     return info;
-}
-
-QString bookmarkCommentSegmentForLine(const QString& lineText)
-{
-    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
-    if (!info.isBookmark) {
-        return QString();
-    }
-    return lineText.mid(info.marker);
 }
 
 bool lineIsStandaloneComment(const QString& lineText, const LineBookmarkCommentInfo& info)
@@ -347,6 +339,7 @@ void MainWindow::EditorSection::loadPortableState()
     state_.editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     state_.editorOverwriteModeEnabled_ = false;
     state_.editorAutoCompletionEnabled_ = true;
+    state_.editorScrollBeyondLastLineEnabled_ = true;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -381,6 +374,8 @@ void MainWindow::EditorSection::loadPortableState()
     // key (the primary of the three) so existing users keep their setting.
     state_.editorAutoCompletionEnabled_ = ui.value("editor_auto_completion").toBool(
         ui.value("editor_auto_close_brackets").toBool(true));
+    state_.editorScrollBeyondLastLineEnabled_ =
+        ui.value("editor_scroll_beyond_last_line").toBool(true);
     // 顶部显示 — which field pair the difficulty header shows ("offset" default,
     // "designer" for the per-difficulty &des_N edit).
     state_.editorHeaderTopDisplay_ =
@@ -413,6 +408,7 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
     applyEditorAutoCompletionEnabled(state_.editorAutoCompletionEnabled_, false);
+    applyEditorScrollBeyondLastLineEnabled(state_.editorScrollBeyondLastLineEnabled_, false);
     applyEditorHeaderTopDisplay(state_.editorHeaderTopDisplay_, false);
     applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
@@ -560,10 +556,7 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         );
     }
     const QString muriRenderMode = preview.value("muri_render_mode").toString().trimmed().toLower();
-    state_.muriRenderOptions_.renderMode =
-        muriRenderMode == QLatin1String("maimuri_dx_style")
-        ? RenderMode::MaimuriDxStyle
-        : RenderMode::Native;
+    state_.muriRenderOptions_.renderMode = muriRenderModeFromToken(muriRenderMode);
     if (preview.value("show_chart_review_slide_judge_overlay").isBool()) {
         state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay =
             preview.value("show_chart_review_slide_judge_overlay")
@@ -811,6 +804,7 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
+    ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -851,12 +845,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_judge_markers", state_.showJudgeMarkers_);
     preview.insert("show_touch_trail", state_.showTouchTrail_);
     preview.insert("static_tap_on_slide_threshold_ms", state_.staticTapOnSlideThresholdMs_);
-    preview.insert(
-        "muri_render_mode",
-        state_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
-            ? QStringLiteral("maimuri_dx_style")
-            : QStringLiteral("native")
-    );
+    preview.insert("muri_render_mode", muriRenderModeToken(state_.muriRenderOptions_.renderMode));
     preview.insert("show_chart_review_slide_judge_overlay", state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     preview.insert("show_chart_review_tap_judge_overlay", state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
     preview.insert("show_chart_review_break_judge_overlay", state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay);
@@ -979,6 +968,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
+    ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -1083,6 +1073,22 @@ void MainWindow::EditorSection::applyEditorAutoCompletionEnabled(bool enabled, b
     }
 }
 
+void MainWindow::EditorSection::applyEditorScrollBeyondLastLineEnabled(
+    bool enabled,
+    bool persistPreference)
+{
+    state_.editorScrollBeyondLastLineEnabled_ = enabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setScrollBeyondLastLineEnabled(enabled);
+    }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setScrollBeyondLastLineEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
 void MainWindow::EditorSection::applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference)
 {
     state_.editorHeaderTopDisplay_ = mode;
@@ -1157,87 +1163,6 @@ void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, 
     refreshEditorBookmarkLines();
     if (mutated && owner_.documentSection_ != nullptr) {
         owner_.documentSection_->rebuildFieldSidebar();
-    }
-}
-
-void MainWindow::EditorSection::replaceBookmarkLine(int fromLine, int toLine)
-{
-    const int normalizedFrom = qMax(1, fromLine);
-    const int normalizedTo = qMax(1, toLine);
-    if (normalizedFrom == normalizedTo) {
-        return;
-    }
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
-        return;
-    }
-    const QTextBlock sourceBlock = blockForOneBasedLine(editor->document(), normalizedFrom);
-    const QTextBlock targetBlock = blockForOneBasedLine(editor->document(), normalizedTo);
-    if (!sourceBlock.isValid() || !targetBlock.isValid()) {
-        return;
-    }
-    const QString sourceLine = sourceBlock.text();
-    const LineBookmarkCommentInfo sourceInfo = inspectLineBookmarkComment(sourceLine);
-    if (!sourceInfo.isBookmark) {
-        return;
-    }
-    const QString targetLine = targetBlock.text();
-    const LineBookmarkCommentInfo targetInfo = inspectLineBookmarkComment(targetLine);
-    if (targetInfo.hasMarker) {
-        owner_.statusBar()->showMessage(
-            UiText::text(QStringLiteral("editor.target_line_already_has_a")),
-            5000);
-        return;
-    }
-
-    const QString commentSegment = bookmarkCommentSegmentForLine(sourceLine);
-    if (commentSegment.isEmpty()) {
-        return;
-    }
-    const bool sourceStandalone = lineIsStandaloneComment(sourceLine, sourceInfo);
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    if (sourceStandalone) {
-        if (sourceBlock.next().isValid()) {
-            cursor.setPosition(sourceBlock.position());
-            cursor.setPosition(sourceBlock.next().position(), QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-        } else if (sourceBlock.previous().isValid()) {
-            const QTextBlock previousBlock = sourceBlock.previous();
-            cursor.setPosition(previousBlock.position() + previousBlock.length() - 1);
-            cursor.setPosition(sourceBlock.position() + sourceBlock.length() - 1, QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-        } else {
-            cursor.setPosition(sourceBlock.position());
-            cursor.setPosition(sourceBlock.position() + sourceLine.size(), QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-        }
-    } else {
-        const int removeStartInLine =
-            sourceInfo.marker > 0 && sourceLine.at(sourceInfo.marker - 1).isSpace()
-            ? sourceInfo.marker - 1
-            : sourceInfo.marker;
-        cursor.setPosition(sourceBlock.position() + removeStartInLine);
-        cursor.setPosition(sourceBlock.position() + sourceLine.size(), QTextCursor::KeepAnchor);
-        cursor.removeSelectedText();
-    }
-
-    const int adjustedTargetLine = sourceStandalone && normalizedFrom < normalizedTo
-        ? normalizedTo - 1
-        : normalizedTo;
-    const QTextBlock adjustedTargetBlock = blockForOneBasedLine(editor->document(), adjustedTargetLine);
-    if (adjustedTargetBlock.isValid()) {
-        const QString adjustedTargetText = adjustedTargetBlock.text();
-        cursor.setPosition(adjustedTargetBlock.position() + adjustedTargetText.size());
-        cursor.insertText(adjustedTargetText.trimmed().isEmpty()
-            ? commentSegment
-            : QStringLiteral(" ") + commentSegment);
-    }
-    cursor.endEditBlock();
-
-    syncBookmarksFromEditorText();
-    if (owner_.documentSection_ != nullptr) {
-        owner_.documentSection_->revealBookmarkInSidebar(state_.activeDifficultyId_, adjustedTargetLine, false);
     }
 }
 
@@ -1458,6 +1383,7 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     ui_.copyAreaEditor_->setAutoCompletionEnabled(state_.editorAutoCompletionEnabled_);
+    ui_.copyAreaEditor_->setScrollBeyondLastLineEnabled(state_.editorScrollBeyondLastLineEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
 
@@ -1532,6 +1458,11 @@ void MainWindow::applyEditorOverwriteModeEnabled(bool enabled, bool persistPrefe
 void MainWindow::applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorAutoCompletionEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorScrollBeyondLastLineEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorScrollBeyondLastLineEnabled(enabled, persistPreference);
 }
 
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)

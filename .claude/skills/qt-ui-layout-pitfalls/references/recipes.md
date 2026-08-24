@@ -268,8 +268,8 @@ WITH tools vs. blind guessing. Commits: d3392de, 9466496.
 - Text outline+shadow = two passes: filled soft shadow path first, then the rim stroke
   (982feee).
 - **Dual-path caveat:** the QSG layer and the widget painter are separate implementations
-  (e.g. c2d68de split judge rings only in QSG; DComp diverges by design). State intended
-  divergences explicitly, otherwise fix both.
+  (e.g. c2d68de split judge rings only in QSG). State intended divergences
+  explicitly, otherwise fix both.
 
 ### Z2. Hit area ≠ visual (点击错位)
 

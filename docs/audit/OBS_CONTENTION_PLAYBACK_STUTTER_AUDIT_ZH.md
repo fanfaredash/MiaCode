@@ -67,7 +67,66 @@
 
 ---
 
+## 2.5 实测数据回写（2026-08-04，用户提供的两份日志快照）
+
+用户提供的 `logs/` 与 `logs 2/` **不是两次独立测试**：前者是后者的逐字节前缀（`cmp` 校验），是同一日志目录的两次快照。内含两个进程会话：
+
+| | 会话 A（pid 2972） | 会话 B（pid 11572） |
+|---|---|---|
+| 时长 | 09:45:07 → 10:01:07（16 min） | 10:19:55 → 10:24:14（4.3 min） |
+| 最小化 | 09:59:38 → 10:01:03，**仅 84.7 s** | **全程 Maximized，从未最小化** |
+| 结束 | `exit_code=0` 正常退出 | 正常退出 |
+
+**机型**：NVIDIA GeForce MX450（`dedicated_mb=1928`）+ Intel Iris Xe，双显卡，符合预判画像。
+
+**两次会话均无任何故障复现。** 新埋点全部在场并工作：
+
+- 挂起看门狗 `installed … idle_heartbeat_timeout_ms=5000 stack_capture=1` → **零卡死报告、零取栈**
+- 30 s 采样心跳 **41 个样本序号完全连续，无缺号** → GUI 线程从未停顿 >30 s
+- 内存 private 788→838 MB / 14 min，handles ~2160 恒定，GDI 317 恒定 → 无泄漏
+- 音频 `underrun=0` ×87、`stall_count=0`、`bgm_delta_ms ∈ [−10.4, +7.7] ms` → 无欠载无错位
+
+### C-3 已排除（该机型）
+
+VRAM 实测峰值 **73 MB / 预算 1639 MB，`local_over_budget=0` 全程**，两个会话皆然。连预算 5% 都没到，**不存在 VRAM 压力**。C-3 对这位用户不成立。
+
+同时须更正 C-3 原文的一处错误前提：它写「MiaCode 根窗口（因 O-1 绑定）」——**实际没有发生绑定**。`startup/gpu_provider` 显示 `action=skip reason=high_perf_equals_default_adapter`：该机上 MX450 本身就是 DXGI 默认适配器，`fromAdapter` 走了 no-op 短路。根窗口与预览合成面**都在 MX450 上**，不存在跨适配器分裂。**O-1 对该机型一并排除。**
+
+### C-1 前提已确认（但未被验证）
+
+`bass_audio_health` 实测 `bass_mmcss_registered_by_app=0`、`app_mmcss_task_class=(already registered)`，证实 **BASS 音频线程确无 MMCSS 保护**，只有 QSG 渲染线程有。C-1 的前提成立，但本次未出现卡顿，**其影响未被验证**。
+
+### 扩展相关（O-4 / O-5 不在场）
+
+`extensions.log` 显示两次会话都只加载 **1 个扩展 `miacode-mine-skin-toggle`，没有 pet-overlay**。该扩展源码只注册命令、**不注册任何事件订阅**，因此事件总线没有订阅者，`flushPendingEvents` 不会被触发。
+
+**O-4（事件总线悬垂迭代器 + 0 ms 自喂）与 O-5（pet-overlay 常驻 PowerShell）在该配置下均不在场。**
+
+### 附带发现：扩展 `deactivate()` 缺少扩展上下文（**与问题 1/2 无关**）
+
+两次会话在退出时都确定性地出现：
+
+```
+[WARNING] permission missing extension context
+  {"error":"Privileged API 'preview/setMineSkinEnabled' requires an extension context.",
+   "method":"preview/setMineSkinEnabled","extensionId":"","permission":"preview.control"}
+```
+
+`miacode-mine-skin-toggle` 的 `deactivate()` 会调用 `applyPreference(true)` / `applySfxPreference(true)` 做状态还原，但此时 `extensionId` 为空——**卸载钩子运行在没有扩展上下文的状态下**，于是所有特权 API 调用被拒，还会连带尝试弹出 `window/showMessage` 错误框（同样失败）。
+
+影响面：**所有扩展的 `deactivate()` 清理逻辑实际上都是静默失效的。**
+
+**明确说明：这与问题 1（冻死）和问题 2（推流卡顿）没有因果关系。** 它只发生在正常退出路径上，不消耗资源，也不阻塞关闭；两次会话的 `exit_code` 均为 0。记录在此仅因为它是在同一批日志里发现的，应作为独立缺陷单独排期，不要混进争用问题的排查。
+
+### 测试未覆盖报告条件
+
+用户描述的是**最小化/被浏览器遮挡 + 浏览器持续播放视频 + 持续 5～10 分钟**。实测最小化仅 **84.7 秒**，日志中亦无第三方负载痕迹；会话 B 根本没最小化。**这是条件不足的阴性结果，不能用来推翻争用假设。**
+
+---
+
 ## 3. 候选机制
+
+> **状态更新（2026-08-04）**：C-3 与 O-1 已被实测排除（见 §2.5）。C-1 前提确认但未验证。C-2 / C-4 未触及。
 
 ### C-1 MMCSS 保底在多进程争用下失效（高）
 

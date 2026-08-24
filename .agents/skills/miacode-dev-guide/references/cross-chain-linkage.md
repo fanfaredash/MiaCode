@@ -1,5 +1,18 @@
 # Cross-Chain Linkage
 
+## Timeline playback cadence
+
+- `TimelineQuickItem::bindRenderCadence` emits an opportunity from every
+  `QQuickWindow::afterAnimating`, while `TimelineSection::onTimelineRenderCadenceTick` rate-gates
+  accepted samples with `timelineTargetFrameIntervalNs()`. Keep that gate phase-locked through
+  `TimelineCadenceArbitrationPolicy::renderCadenceShouldFlush`; otherwise high-refresh displays
+  bypass the Timeline Refresh Rate preference and repeat editor-follow/QSG work unnecessarily.
+- Every render-cadence opportunity still refreshes the liveness marker. The watchdog must yield
+  to a healthy render loop even when a lower timeline rate intentionally skips samples.
+- `TimelineQuickOverlayLayer` keeps fixed `QSGSimpleRectNode` slots for the playhead, cursor, and
+  drag-center lines. Playback updates their rectangles in place; do not restore per-frame
+  `clearChildren()` allocation on this dynamic path.
+
 Read before changing behavior that crosses parser / timeline / preview / audio / export / Muri
 boundaries. Ported from the prior guide with paths corrected (2026-05-29); contracts are believed
 current but **code is source of truth** — verify and fix drift in the same change.
@@ -47,6 +60,14 @@ Implications:
   comma is a beat line; measure lines run on an independent meter timeline from shared
   `SimaiTimingMetadata` (`&whole_time_signature=`); inline `|| x/y` restarts the meter; `{beats}`
   only changes comma spacing; `(BPM)` restarts the measure-line timeline.
+- Strict validation warns when a bracketless short lane hold has modifiers after `h` (for
+  example `1hx` or `1hb`). MiaCode still parses it as a zero-length hold, but some external
+  previewers require the short-hold token to end in `h`; canonical forms such as `1h` and
+  duration-bearing holds such as `1hx[4:1]` remain warning-free under this compatibility rule.
+- BASS preview seeks beyond the decoded BGM duration keep the BGM explicitly paused and mark it
+  `backgroundTrackPastEnd`; direct start/resume, pending-offset start, and mixer-sync start must
+  all respect that state. A chart may continue playing SFX/visuals beyond the music, but an
+  out-of-range seek must never reuse the BASS source's previous valid cursor position.
 - Same-second slide/head/track/motion stacking is shared by `src/core/scene/PreviewMarkerDrawOrder.*`
   + prepared `drawOrder` in `PreviewPreparedSceneCache`. Changing "who's on top" → update the helper
   and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`,
@@ -63,24 +84,55 @@ Implications:
   `SlideShapeOnly` slot between `slide_motion` and `judge_effect` (below notes/touch/tap-judge), and a
   `JudgeTextOnly` slot on top. So each judge enum bit drives 2 slots; keep
   `kPreviewQuickSceneLayerSlotCount` equal to the number of `layerSlotAt(root, slotIndex++)` calls when
-  adding/removing slots. The off-by-default DComp path (`src/sources/chart/ChartReviewSource.*`,
-  `MaimuriDxJudgeSource.*`, sorted by `zOrder()`) still draws both groups in one pass — a known divergence.
+  adding/removing slots.
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.
-  - **Firework PSO/texture warm-up is a 3-file contract — don't break the loop.** Qt RHI compiles
+  - The supplied 30 fps firework reference is the timing source: the shared lifetime is
+    `PreviewGameplayConfig::kJudgeEffectFireworkDurationSeconds` (also used by timeline culling),
+    and explicit clip time/life uniforms drive two batches of 12 fixed inner/outer-ring stars
+    (24 total, with six inner and six outer stars per batch plus deterministic size/ring
+    shuffling). Star
+    angles sample the full circle directly, intentionally permitting clusters and empty arcs. The
+    QSG firework node generates a fresh angle seed at each trigger/replay, holds it for that effect's
+    lifetime, and passes it through `timing.z`, avoiding per-frame jitter. Each batch reveals its inner
+    ring first and its outer ring about 0.010 s later; per-ring jitter is capped at 0.004 s so the
+    ordering cannot invert. Staggered sine pulses make the stars continuously fade in and out. Their
+    inner centres sit inside the colour-glow ring (0.40–0.47 of the judgment radius), while outer
+    centres sit around 0.83–0.90 and are inset by each star's tip radius so they cannot cross the
+    judgment ring. Star geometry scales with the same continuous pulse, producing the reference's
+    clearly visible shrink-to-zero disappearance rather than an alpha-only fade. The sparkle keeps
+    its original sector-derived tint; its shallow-concavity four-point silhouette is intentionally
+    filled rather than crossing lines. Its pulse keeps a 0.115 s fade-in followed by a 0.25 s
+    shrink/fade-out (0.365 s total), emitted in two spatially shuffled batches starting at 0.00 s
+    and 0.08 s. Its horizontal span remains broad;
+    its vertical extent is compressed to match that horizontal span, while the waist/edge concavity
+    remains fine. Each star travels radially outward throughout its
+    pulse: 0.02 of the judgment radius while appearing, then another 0.04 while shrinking/fading
+    (0.06 total). Appearance fades in at full geometry size; scaling applies only to disappearance.
+    Star visible half-extents vary deterministically from 0.040 to 0.050 of the judgment radius,
+    keeping repeated playback stable. Tips remain dynamically clamped inside the judgment boundary;
+    peak opacity is 0.95.
+    Keep the original 15-sector/24-degree spoke layout when tuning timing or particles.
+  - **Firework PSO/texture warm-up is a cross-file contract — don't break the loop.** Qt RHI compiles
     the firework pipeline + uploads the colour-ball texture lazily on the FIRST firework draw
     (a render-thread stall, worst on weak iGPUs). `PreviewRuntime` warms it by injecting a synthetic
     off-screen firework marker (`armFireworkPsoWarmupIfReady` / `appendFireworkWarmupMarker`).
-    Completion is gated on a CONFIRMED draw, not a present count: `PreviewQuickSceneRoot::updatePaintNode`
-    MUST call `runtime_->notifyFireworkLayerProducedNode()` whenever the firework layer returns a
-    non-null node (render thread → atomic `fireworkLayerDrawSignal_`), and `handlePresentedFrame`
-    flips `fireworkWarmupDone_` only once that signal advances past the arm snapshot (present-count cap
-    = backstop). The synthetic is RE-CENTERED on the live playhead via `refreshFireworkWarmupForPlayheadChange`
+    Completion is gated on a CONFIRMED presented draw, not a present count: when
+    `PreviewQuickSceneRoot::updatePaintNode` sees a non-null firework node it latches that frame, and
+    the direct `frameSwapped` hook MUST call `runtime_->notifyFireworkLayerPresentedNode()` (render
+    thread → atomic `fireworkLayerDrawSignal_`). `handlePresentedFrame` flips
+    `fireworkWarmupDone_` only once that signal advances past the arm snapshot (present-count cap =
+    backstop). The synthetic is RE-CENTERED on the live playhead via `refreshFireworkWarmupForPlayheadChange`
     in `setPlayheadSeconds` (+ `setNoteMarkers`) so a seek / negative pre-roll can't strand it outside
     its lifecycle window. Dropping the notify call or the re-center silently regresses to the old
-    probabilistic first-firework stutter. Logs: `preview/runtime action=firework_pso_warmup_arm|_done`
-    (Runtime channel).
+    probabilistic first-firework stutter. At chart second zero its deliberate lead places the trigger
+    at `-0.15 s`; `PreviewJudgeFireworkLayerState` must exempt only the uniquely identified internal
+    marker (`isFireworkWarmupMarker` in `PreviewFireworkWarmupPolicy.h`) from the normal negative-trigger
+    rejection, or the warm-up cannot draw while paused and first-use GPU work moves back into the first
+    playback. Keep that identity shared by runtime injection/removal and the builder, and preserve the
+    zero-second regression in `PreviewFireworkWarmupPolicySpec.cpp`. Logs: `preview/runtime
+    action=firework_pso_warmup_arm|_done` (Runtime channel).
 - During playback: slow-refresh markers feed validation/Muri inputs, but preview audio/canvas/stats
   stay on the frozen play-start snapshot until stop; validation/Muri UI may defer to a paused edge.
 
@@ -154,6 +206,36 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
 
 If one side changes, inspect the other in the same patch.
 
+### 4a. Preview-audio GUI to worker boundary
+
+Realtime preview is not an export worker: `QtPreviewSfxRuntime` stays in the GUI thread as the
+facade while `PreviewAudioWorker` owns its native backend on one `std::thread`. MainWindow startup,
+timeline ticks, settings audition, latency sandbox, and `soundtouch_probe` all submit typed value
+commands through the bounded queue; only probe/spec code may wait on the non-GUI completion barrier.
+
+- Playback completions must match current `generation` and `transactionId`; reload/ready completions
+  must match current `assetGeneration`; a device pause must also match the first captured
+  `pauseToken`. These predicates live in `PreviewAudioWorkerProtocol.h` and are shared by the
+  facade and the specs.
+- A chart-path change followed by an asset reload is one asset transaction, not two independently
+  replaceable commands: use `QtPreviewSfxRuntime::reloadAssetsForChart`. Window/chart SFX warm-up
+  additionally uses `reloadAssetsForChartWithWarmupPaths`, which carries resolved SFX/track paths
+  and the chart path on ONE `ReloadAssets` command. `PreviewAudioWorker::executeReload` applies the
+  requested path state before the backend reload in that same `assetGeneration`; posting
+  `setChartPath` or `setWarmupResolvedPaths` immediately before a separate reload lets
+  stale-command pruning drop required state and can leave BGM unloaded. MainWindow schedules this
+  combined preload only after the initial document/chart path is established and never while a
+  device-cutoff barrier is active; the first explicit Play only falls back to it when no preload is
+  pending or ready. `soundtouch_probe` uses the chart-only form.
+- `PreviewAudioDeviceWatcher` -> MainWindow captures the wall-clock pause second and freezes the
+  GUI/video state before submitting the reserved high-priority device pause. On Windows, a successful
+  IMM registration is the sole hotplug source: do not construct or synchronously enumerate
+  `QMediaDevices` on that path, because its AudioSes RPC can block the GUI during a switch. Qt remains
+  the registration-failure and non-Windows fallback. The worker later stops audio/SFX; it does not
+  advance the playhead and it must not auto-resume after a device recovers.
+- `PreviewBassDeviceLease` is shared by preview, waveform, and export BASS lifecycle users. Keep
+  BASS global device init/free serialization there, but keep normal channel work within its owner.
+
 ## 5. Background-media resolution & host route ownership
 
 > Updated 2026-05-29: `PreviewMediaController` and `src/preview/video/` were removed. Background
@@ -187,6 +269,19 @@ If one side changes, inspect the other in the same patch.
 - Export consumes the shared resolver via `VideoExportController`; Windows export audio = single
   mixed WAV via `BassExportAudioBackend`, non-Windows = `LegacyExportAudioBackend` fallback.
 - Filenames: `bg.mp4`, `pv.mp4`, `bg.{jpg,png,jpeg}`. Keep preview + export aligned.
+- **`EndOfMedia` is never a transport event.** A background video is subordinate visual media, so
+  its end may not stop BGM / SFX / chart / timeline — that coupling was the root cause in
+  `docs/audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md` (a 0.333 s `pv.mp4` paused the whole
+  preview 31 times). The only natural end of the main transport stays
+  `MainWindow.PreviewTick.cpp::onQtPreviewTickAtSecond()` against `previewPlaybackEndSeconds()`.
+  Every backend `EndOfMedia` is classified by `src/core/video/PreviewEndOfMediaPolicy.h` (spec:
+  `preview_end_of_media_policy_spec`), whose ONLY yardstick is the media's own duration versus the
+  decoder's own progress — never the chart length, and never a "shorter than N seconds is
+  suspicious" threshold. `natural` keeps the last frame; `stale` (audit
+  `PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md` §5.2 — a 121 s PV ending at 1.267 s) runs
+  the bounded seek-then-reload recovery in `PreviewStageMediaHost_Timeout.cpp`; `unknown` does
+  nothing. Change the classifier and the spec together, and keep both backends
+  (QtAVPlayer + `QMediaPlayer`) routed through `handleVideoEndOfMedia`.
 - Pause-hide option `previewForceLabeledJudgeLineWhenPaused_` (UI label key
   `dialog.render_settings.gameplay.force_labeled_judge_line_when_paused`, zh "暂停时显示判定区"):
   when ON + preview paused, the on-screen preview switches outline to `JudgeAreaLabeled` AND hides
@@ -224,6 +319,13 @@ must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize t
 `buildVideoExportTaskFromSnapshot` must restore them before `exportPreparedTask`. The
 `UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
 PV in the prepared export task, never in the live/export-page preview.
+
+The selected intro sound and its independent `introSoundVolume` follow the same single/batch
+snapshot boundary. The dialog persists the 0..2 volume (0%..200%), applies it immediately through
+`QtPreviewSfxRuntime::applyLevels`, and export restores it from `intro.sound_volume` before the
+prepared FFmpeg intro-audio filter applies the multiplier. This is an independent multiplier: the
+preview `track_start` level must not inherit the normal global/answer SFX attenuation, matching the
+export filter. Keep preview and export volume behavior aligned when changing this setting.
 
 `fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
 `render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame
@@ -396,6 +498,21 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
 **UI-only** (in-app timeline panel); it has no video-export consumer.
 
 ## Update this file when
+
+### QuickShell modal-dialog native ownership
+
+- The visible QuickShell top level is a `QQuickWindow`; `MainWindow` remains a hidden native
+  QWidget backend marked `miacode.dialog_parentless`. Application-modal dialogs therefore
+  must not rely on their QWidget parent or a one-shot `raise()` for native Z-order ownership.
+- `MainWindow::setQuickShellRootWindow` registers the live root with
+  `UiDialogs::setApplicationDialogTransientParent`. The application-wide
+  `UiDialogs::DialogStackingGuard` binds shown top-level `QDialog`s that lack a visible native
+  owner (including direct legacy `QMessageBox::*` calls) to that root through
+  `QWindow::setTransientParent`, then restores a visible blocking modal when the application
+  or root window activates. Existing visible dialog owners are preserved for nested dialogs;
+  non-modal dialogs are never force-activated by the stacking guard.
+- Keep this behavior in the shared dialog layer. Do not add per-dialog
+  `Qt::WindowStaysOnTopHint`: that would place MiaCode dialogs above unrelated applications.
 
 - A behavior starts/stops being mirrored across two paths; a new serialized export field is added;
   a duplicated lookup is centralized/split; a timing rule starts affecting a new subsystem.

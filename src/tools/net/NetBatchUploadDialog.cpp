@@ -9,6 +9,8 @@
 #include <QCloseEvent>
 #include <QCheckBox>
 #include <QDir>
+#include <QDrag>
+#include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGridLayout>
@@ -17,18 +19,122 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QThread>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QVariant>
 
 #include <utility>
 #include <algorithm>
+#include <functional>
 
 namespace miacode::net {
 namespace {
+
+class UploadQueueTable : public QTableWidget {
+public:
+    explicit UploadQueueTable(QWidget* parent = nullptr)
+        : QTableWidget(parent)
+    {
+    }
+
+    void setReorderHandler(std::function<void()> handler)
+    {
+        reorderHandler_ = std::move(handler);
+    }
+
+protected:
+    void startDrag(Qt::DropActions supportedActions) override
+    {
+        draggedRows_.clear();
+        const QModelIndexList rows = selectionModel()->selectedRows();
+        if (rows.isEmpty()) {
+            return;
+        }
+        QMimeData* mimeData = model()->mimeData(rows);
+        if (mimeData == nullptr) {
+            return;
+        }
+        for (const QModelIndex& index : rows) {
+            draggedRows_.append(index.row());
+        }
+        std::sort(draggedRows_.begin(), draggedRows_.end());
+        QRect rect;
+        for (const QModelIndex& index : rows) {
+            rect |= visualRect(index);
+        }
+        QDrag* drag = new QDrag(this);
+        drag->setMimeData(mimeData);
+        drag->setPixmap(viewport()->grab(rect));
+        drag->exec(supportedActions, Qt::MoveAction);
+        draggedRows_.clear();
+    }
+
+    void dropEvent(QDropEvent* event) override
+    {
+        if (event->source() != this || draggedRows_.isEmpty()) {
+            QTableWidget::dropEvent(event);
+            return;
+        }
+        const QList<int> selected = draggedRows_;
+
+        int dropRow = rowCount();
+        const QModelIndex targetIndex = indexAt(event->position().toPoint());
+        if (targetIndex.isValid()) {
+            dropRow = targetIndex.row();
+            const QRect cellRect = visualRect(targetIndex);
+            if (event->position().y() > cellRect.center().y()) {
+                ++dropRow;
+            }
+        }
+
+        QList<QTableWidgetItem*> taken;
+        taken.reserve(selected.size() * columnCount());
+        for (int r : selected) {
+            for (int c = 0; c < columnCount(); ++c) {
+                taken.append(takeItem(r, c));
+            }
+        }
+        for (int i = selected.size() - 1; i >= 0; --i) {
+            removeRow(selected.at(i));
+        }
+        int target = dropRow;
+        for (int r : selected) {
+            if (r < dropRow) {
+                --target;
+            }
+        }
+        target = qBound(0, target, rowCount());
+        int itemIndex = 0;
+        for (int i = 0; i < selected.size(); ++i) {
+            insertRow(target);
+            for (int c = 0; c < columnCount(); ++c) {
+                setItem(target, c, taken.at(itemIndex++));
+            }
+            ++target;
+        }
+        --target;
+        clearSelection();
+        for (int c = 0; c < columnCount(); ++c) {
+            if (QTableWidgetItem* item = this->item(target, c)) {
+                item->setSelected(true);
+            }
+        }
+        setCurrentCell(target, 0);
+        event->accept();
+        if (reorderHandler_) {
+            reorderHandler_();
+        }
+    }
+
+private:
+    std::function<void()> reorderHandler_;
+    QList<int> draggedRows_;
+};
 
 constexpr char kPreferencesAppSection[] = "app";
 constexpr char kRememberCredentialsKey[] = "net_upload_remember_credentials";
@@ -159,7 +265,9 @@ void NetBatchUploadDialog::buildUi()
     form->addWidget(scanButton_, 1, 5);
     root->addLayout(form);
 
-    table_ = new QTableWidget(this);
+    auto* table = new UploadQueueTable(this);
+    table->setReorderHandler([this]() { rebuildJobsFromTable(); });
+    table_ = table;
     table_->setColumnCount(4);
     table_->setHorizontalHeaderLabels({
         UiText::text(QStringLiteral("net.upload_chart_folder")),
@@ -178,6 +286,13 @@ void NetBatchUploadDialog::buildUi()
     table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setAlternatingRowColors(true);
+    table_->setDragEnabled(true);
+    table_->setAcceptDrops(true);
+    table_->setDropIndicatorShown(true);
+    table_->setDragDropMode(QAbstractItemView::InternalMove);
+    table_->setDragDropOverwriteMode(false);
+    table_->setDefaultDropAction(Qt::MoveAction);
+    table_->viewport()->setAcceptDrops(true);
     root->addWidget(table_, 1);
 
     auto* bottom = new QGridLayout;
@@ -283,7 +398,9 @@ void NetBatchUploadDialog::populateTable()
     table_->setRowCount(jobs_.size());
     for (int row = 0; row < jobs_.size(); ++row) {
         const NetUploadJob& job = jobs_.at(row);
-        table_->setItem(row, 0, new QTableWidgetItem(job.displayName));
+        auto* nameItem = new QTableWidgetItem(job.displayName);
+        nameItem->setData(Qt::UserRole, QVariant::fromValue(job));
+        table_->setItem(row, 0, nameItem);
         table_->setItem(row, 1, new QTableWidgetItem(assetSummary(job)));
         table_->setItem(row, 2, new QTableWidgetItem(QDir::toNativeSeparators(job.directoryPath)));
         table_->setItem(row, 3, new QTableWidgetItem(UiText::text(QStringLiteral("net.upload_pending"))));
@@ -292,6 +409,24 @@ void NetBatchUploadDialog::populateTable()
     uploadButton_->setEnabled(hasJobs);
     removeSelectedButton_->setEnabled(hasJobs);
     clearQueueButton_->setEnabled(hasJobs);
+}
+
+void NetBatchUploadDialog::rebuildJobsFromTable()
+{
+    QList<NetUploadJob> rebuilt;
+    rebuilt.reserve(table_->rowCount());
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        const QTableWidgetItem* item = table_->item(row, 0);
+        if (item == nullptr) {
+            continue;
+        }
+        const NetUploadJob job = item->data(Qt::UserRole).value<NetUploadJob>();
+        if (job.directoryPath.isEmpty()) {
+            continue;
+        }
+        rebuilt.append(job);
+    }
+    jobs_ = rebuilt;
 }
 
 void NetBatchUploadDialog::removeSelectedRows()
@@ -359,6 +494,7 @@ void NetBatchUploadDialog::setBusy(bool busy)
     scanButton_->setEnabled(!busy);
     removeSelectedButton_->setEnabled(!busy && !jobs_.isEmpty());
     clearQueueButton_->setEnabled(!busy && !jobs_.isEmpty());
+    table_->setDragEnabled(!busy);
     uploadButton_->setText(
         busy ? UiText::text(QStringLiteral("net.upload_cancel"))
              : UiText::text(QStringLiteral("net.upload_queue")));

@@ -113,7 +113,8 @@ struct TimelineSceneState {
     int timelineHeight = 0;
     int laneHeight = 0;
     int laneCount = 0;
-    int horizontalScrollValue = 0;
+    // Sub-pixel — see TimelineSceneBuildRequest::horizontalScrollValue.
+    double horizontalScrollValue = 0.0;
     int headerLeftLimit = 0;
     int headerRightLimit = 0;
     int headerMarkerLeftLimit = 0;
@@ -143,12 +144,6 @@ struct TimelineSceneState {
     QVector<TimelineSceneLine> gridLines;
     QVector<TimelineSceneRect> frameRects;
     QVector<TimelineSceneLine> frameLines;
-    // Phase 4d-fix — opaque sidebar mask drawn AFTER notes/sprites so
-    // chart-content (slide arrows, etc.) that scrolls into the lane-
-    // label column doesn't bleed through. Same coverage as the
-    // sidebar entry in `frameRects` but emitted at z=3 (header) rather
-    // than z=0 (grid). Fills only when laneLabels are populated.
-    TimelineSceneRect sidebarMaskRect;
     QVector<TimelineSceneTextLabel> laneLabels;
     QVector<TimelineSceneTextLabel> headerLabels;
     QVector<TimelineSceneTriangle> headerMarkers;
@@ -171,13 +166,10 @@ struct TimelineSceneState {
     TimelineSceneLine dragCenterLine;
 
     // Phase 9d-native — header zoom-control visual. Emitted by the
-    // builder and rendered natively in the DComp pipeline so the
-    // control paints on the popup's composition plane (QML siblings of
-    // TimelineQuickItem can't, since DWM stacks the popup HWND above
-    // the QQuickWindow surface). The invisible QML ToolButton in
-    // TimelineTabSurface.qml stays alive for input handling — DComp
-    // popup is WS_EX_TRANSPARENT so clicks pass through to the
-    // QQuickItem layer.
+    // builder and drawn by TimelineQuickHeaderLayer into the QSG scene.
+    // The matching QML ToolButton in TimelineTabSurface.qml is kept
+    // invisible and handles input only, so the visual and the hit area
+    // stay in one place each.
     bool hasHeaderControls = false;
     TimelineSceneRect zoomButtonBg;
     QVector<TimelineSceneRect> zoomButtonOverlayRects;

@@ -107,6 +107,11 @@ private:
     // HUD on begin; full restore + aspect reset on end.
     void beginExportPreviewSession(const VideoExportTask& task);
     void endExportPreviewSession();
+    // Pushes the seed task's per-difficulty metadata into the preview canvas'
+    // chart-info HUD. Shared by beginExportPreviewSession and the batch page's
+    // in-place difficulty retarget (which keeps the session open), so the two
+    // can never disagree about what the HUD shows.
+    void applyExportPreviewChartInfo(const VideoExportTask& task);
     // Export-page preview audition: install the badge-selected difficulty as a
     // real, playable preview source (markers + bottom-timeline + slider + SFX),
     // so the normal transport plays/seeks it even though activeDifficultyId_==0.

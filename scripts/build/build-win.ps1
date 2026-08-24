@@ -6,7 +6,9 @@ param(
     [string]$QtOutputDir = "",
     [string]$BuildDir = "build",
     [ValidateSet("Release", "Debug")]
-    [string]$Config = "Release"
+    [string]$Config = "Release",
+    [ValidateRange(1, 4)]
+    [int]$BuildJobs = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -118,12 +120,12 @@ $buildTargets = @("MiaCode", "MiaCodeLauncher")
 if ($buildDevTools -eq "ON") {
     $buildTargets += @("simai_native_dump", "soundtouch_probe")
 }
-cmake --build $BuildDir --config $Config --target @buildTargets
+cmake --build $BuildDir --config $Config --target @buildTargets --parallel $BuildJobs
 if ($LASTEXITCODE -ne 0) {
     throw "CMake build failed."
 }
 
-& (Join-Path $repoRoot "scripts\build\package-win.ps1") -BuildDir $BuildDir -Config $Config -QtRoot $qtRoot -IncludeDevTools:($buildDevTools -eq "ON")
+& (Join-Path $repoRoot "scripts\build\package-win.ps1") -BuildDir $BuildDir -Config $Config -QtRoot $qtRoot -BuildJobs $BuildJobs -IncludeDevTools:($buildDevTools -eq "ON")
 if ($LASTEXITCODE -ne 0) {
     throw "Windows packaging failed."
 }

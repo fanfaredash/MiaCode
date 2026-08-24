@@ -1,6 +1,8 @@
 #include "timeline/quick/TimelineQuickWaveformLayer.h"
 
 #include <QMatrix4x4>
+
+#include <cmath>
 #include <QSGClipNode>
 #include <QSGNode>
 #include <QSGTransformNode>
@@ -80,7 +82,8 @@ void clearChildren(QSGNode* node)
 
 QSGNode* TimelineQuickWaveformLayer::updateNode(
     QSGNode* oldNode,
-    const miacode::timeline::TimelineSceneState& state) const
+    const miacode::timeline::TimelineSceneState& state,
+    qreal devicePixelRatio) const
 {
     auto* root = dynamic_cast<TimelineQuickWaveformRootNode*>(oldNode);
     if (root == nullptr) {
@@ -99,7 +102,26 @@ QSGNode* TimelineQuickWaveformLayer::updateNode(
     }
     if (transformRoot != nullptr) {
         QMatrix4x4 matrix;
-        matrix.translate(-static_cast<float>(state.horizontalScrollValue), 0.0f);
+        // Snapped translate, unlike every other layer — deliberate, and snapped to the
+        // PHYSICAL pixel grid rather than the logical one.
+        //
+        // The waveform is a column dataset (top level 128 columns/s) drawn as abutting
+        // hard-edged translucent bars, and nothing in this app is multisampled. Translating
+        // that by a different fraction every frame resamples it with no filtering: each bar's
+        // rasterised width flips between floor and ceil and the band visibly crawls. Snapping
+        // keeps every frame's rasterisation identical, which removes the crawl.
+        //
+        // The cost is that the band steps while the notes/grid glide, so it appears to sway
+        // against them by the snap quantum. Rasterisation happens in device pixels, so that
+        // quantum only needs to be one PHYSICAL pixel — snapping to logical pixels instead
+        // would make it dpr times larger (2x on Retina) for no benefit.
+        //
+        // Do NOT copy this to the grid/notes/overlay layers: those DO share positions with
+        // each other, and snapping one would make notes visibly detach from their grid line.
+        // See cross-chain-linkage.md §14b.
+        const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+        const qreal snappedScroll = std::round(state.horizontalScrollValue * dpr) / dpr;
+        matrix.translate(-static_cast<float>(snappedScroll), 0.0f);
         transformRoot->setMatrix(matrix);
     }
     if (root->revision == state.waveformRevision && root->appearanceRevision == state.appearanceRevision) {

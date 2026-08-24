@@ -418,11 +418,6 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
     connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::diagnosticsChanged, &owner_, [this]() {
         refreshPreviewStageMediaRouteDebugState(!state_.qtPreviewPlaying_);
     });
-    // Phase 4c — let the bootstrap wire this host into the
-    // PreviewDCompSurface so StageBackgroundSource can pull the
-    // current QVideoFrame each snapshot build (the host owns the
-    // QMediaPlayer + QVideoSink that produced it).
-    emit owner_.previewStageMediaHostInitialized(state_.previewStageMediaHost_);
     ensureQuickShellPreviewCompositeSurfaceInitialized();
     state_.previewStageMediaHost_->setWarmupResolvedMediaPath(state_.previewMediaWarmupChartPath_, state_.previewMediaWarmupResolvedPath_);
     state_.deferredQuickShellStartupStageMediaChartPath_ = state_.currentFilePath_;

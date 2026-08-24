@@ -268,8 +268,8 @@ WITH tools vs. blind guessing. Commits: d3392de, 9466496.
 - Text outline+shadow = two passes: filled soft shadow path first, then the rim stroke
   (982feee).
 - **Dual-path caveat:** the QSG layer and the widget painter are separate implementations
-  (e.g. c2d68de split judge rings only in QSG; DComp diverges by design). State intended
-  divergences explicitly, otherwise fix both.
+  (e.g. c2d68de split judge rings only in QSG). State intended divergences
+  explicitly, otherwise fix both.
 
 ### Z2. Hit area ≠ visual (点击错位)
 
@@ -355,6 +355,26 @@ screen, scale factor, or workspace geometry changes.
 **Regression:** `PlainCodeEditorSpec` verifies that a nested widget resolves through its
 bound bridge surface. The macOS build additionally proves that `QuickShellNativeSurfaceHost`
 binds the workspace surface and the completion popup uses the shared mapper.
+
+### Z8. Application-modal dialog falls behind the visible QuickShell window
+
+**Symptom:** the dialog is no longer visible, but every click on the application only plays
+the platform task-dialog warning sound. The application is not frozen: Qt's modal gate is
+still correctly rejecting input while the blocking window sits behind the main window.
+
+**Root cause:** QuickShell's visible top level is a `QQuickWindow`, while `MainWindow` is a
+hidden native QWidget backend marked `miacode.dialog_parentless`. Detached dialogs therefore
+have application modality but no native owner relationship to the visible root. A one-shot
+`raise()` at show time does not survive activation changes or Windows Z-order repair.
+
+**Recipe:** install the shared `UiDialogs::DialogStackingGuard`, register the live QuickShell
+root through `setApplicationDialogTransientParent()`, and bind shown top-level dialogs whose
+native owner is absent or hidden to that root with `QWindow::setTransientParent()`. Preserve an
+existing visible owner so nested dialogs remain above their parent dialog. On application or
+root-window activation, re-raise and activate only the visible blocking modal; showing a
+non-modal dialog must not steal focus. Keep the root in
+a `QPointer`, because QuickShell teardown destroys it before the application object. Do not
+use `Qt::WindowStaysOnTopHint`: the dialog should stay above MiaCode, not above other apps.
 
 ---
 

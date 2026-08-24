@@ -56,7 +56,15 @@ public:
     ~ExtensionManager() override;
 
     void setCallbacks(ExtensionHostCallbacks callbacks);
-    void initialize(QMenuBar* menuBar, QMenu* toolsMenu, QMenu* helpMenu);
+    void initialize(
+        QMenuBar* menuBar,
+        QMenu* fileMenu,
+        QMenu* editMenu,
+        QMenu* toolsMenu,
+        QMenu* modifyMenu,
+        QMenu* previewMenu,
+        QMenu* helpMenu);
+    void setToolboxMenu(QMenu* toolboxMenu, QAction* insertBeforeAction = nullptr);
     void shutdown();
     const QVector<ExtensionManifest>& manifests() const;
     const QVector<ExtensionRecord>& records() const;
@@ -65,6 +73,9 @@ public:
     QString extensionLogDirectory() const;
     QJsonObject devtoolsSnapshotForUi() const;
     void publishEvent(const QString& name, const QJsonObject& payload = {}, bool coalescible = false);
+    // Cheap pre-check for publishers on a hot path: skip building the payload
+    // at all when no running extension subscribes to `name`.
+    bool hasEventSubscribers(const QString& name) const;
     void refreshExtensions();
     void refreshMenuSelectionIcons();
     void setExtensionEnabled(const QString& qualifiedId, bool enabled);
@@ -98,9 +109,16 @@ private:
     QHash<QString, QString> commandOwnerById_;
     QHash<QString, QString> languageOwnerById_;
     QPointer<QMenuBar> menuBar_;
+    QPointer<QMenu> fileMenu_;
+    QPointer<QMenu> editMenu_;
     QPointer<QMenu> toolsMenu_;
+    QPointer<QMenu> modifyMenu_;
+    QPointer<QMenu> previewMenu_;
     QPointer<QMenu> helpMenu_;
+    QPointer<QMenu> toolboxMenu_;
+    QPointer<QAction> toolboxInsertBeforeAction_;
     QPointer<QMenu> extensionsMenu_;
+    QList<QPointer<QAction>> menuContributionActions_;
     QList<QPointer<QAction>> topLevelMenuActions_;
     QJsonArray recentHostCalls_;
     QFileSystemWatcher* watcher_ = nullptr;

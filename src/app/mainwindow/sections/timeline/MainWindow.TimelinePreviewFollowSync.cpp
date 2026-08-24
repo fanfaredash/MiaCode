@@ -40,6 +40,23 @@
 using namespace miacode::mainwindow::shared;
 using namespace miacode::mainwindow::preview_timeline_flow_detail;
 
+double MainWindow::TimelineSection::touchPadAuthoringAnchoredSecond(double previewSecond) const
+{
+    if (state_.touchPadAuthoringAnchorSeekSecond_ < 0.0) {
+        return previewSecond;
+    }
+    return qAbs(previewSecond - state_.touchPadAuthoringAnchorSeekSecond_)
+            <= miacode::preview_interaction::kTouchPadAuthoringAnchorToleranceSeconds
+        ? state_.touchPadAuthoringAnchorTokenSecond_
+        : previewSecond;
+}
+
+void MainWindow::TimelineSection::setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond)
+{
+    state_.touchPadAuthoringAnchorSeekSecond_ = seekSecond;
+    state_.touchPadAuthoringAnchorTokenSecond_ = tokenSecond;
+}
+
 void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLine(
     double second,
     bool ensureVisible,
@@ -57,7 +74,12 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
         *spanOut = TimelineQuickModel::PreviewFollowSpan();
     }
 
-    if (!hasActiveDifficulty() || !state_.previewFollowEnabled_) {
+    // NOT gated on previewFollowEnabled_: that option governs whether the
+    // preview MOVES the caret and viewport, not whether the playhead's token is
+    // visible. The highlight is a read-only indicator of where the playhead is,
+    // useful on its own, so it stays on with 代码跟随 off. Nothing authors
+    // against it — touch-pad click input targets the caret.
+    if (!hasActiveDifficulty()) {
         QElapsedTimer overlayTimer;
         overlayTimer.start();
         owner_.clearPreviewFollowDecoration();
@@ -67,6 +89,7 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
         }
         return;
     }
+    second = touchPadAuthoringAnchoredSecond(second);
 
     TimelineQuickModel::PreviewFollowBinding binding;
     bool resolved = false;
@@ -208,21 +231,20 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         logPerf(QStringLiteral("suppressed"), false, false, nullptr, 0, 0, 0, 0);
         return;
     }
-    if (!state_.previewFollowEnabled_) {
-        owner_.clearPreviewFollowDecoration();
-        invalidatePreviewFollowBindingCache();
-        logPerf(QStringLiteral("disabled"), false, false, nullptr, 0, 0, 0, 0);
-        return;
-    }
-    if (!state_.qtPreviewPlaying_) {
+    // 代码跟随 off still draws the highlight — it just never moves the caret or
+    // scrolls, which is what the option is about. Same decoration-only path the
+    // paused branch uses, minus the ensure-visible scroll.
+    if (!state_.previewFollowEnabled_ || !state_.qtPreviewPlaying_) {
         updatePreviewFollowDecorationForTimelineBlueLine(
             second,
-            ensureVisibleWhenPaused,
+            state_.previewFollowEnabled_ && ensureVisibleWhenPaused,
             &resolveElapsedNs,
             &followOverlayElapsedNs,
             &span);
         logPerf(
-            QStringLiteral("paused_decoration"),
+            state_.previewFollowEnabled_
+                ? QStringLiteral("paused_decoration")
+                : QStringLiteral("disabled_decoration"),
             state_.previewFollowDecorationActive_,
             false,
             state_.previewFollowDecorationActive_ ? &span : nullptr,

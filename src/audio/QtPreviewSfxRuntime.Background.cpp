@@ -312,7 +312,8 @@ double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
 
 bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)
 {
-    return playKindInternal(kind, gain);
+    lastNativeErrorCode_ = 0;
+    return playKindInternal(kind, gain, &lastNativeErrorCode_);
 }
 
 void QtPreviewSfxRuntime::stopAll()

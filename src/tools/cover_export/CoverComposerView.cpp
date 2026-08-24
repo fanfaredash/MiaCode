@@ -350,10 +350,7 @@ void CoverComposerView::bindLiveChartScene(QObject* sceneRoot)
     liveChartScene_ = root;
     // Same configuration the offscreen SceneFrameRenderer uses, so the live edit
     // scene is pixel-equivalent to the exported grab: overlay layers only (no song
-    // background) over transparent, and force the QSG path even when DComp is on
-    // globally (--quick-shell-beta) — otherwise updatePaintNode short-circuits to
-    // nullptr and the layer renders blank.
-    root->setDCompFallbackActive(true);
+    // background) over transparent.
     root->setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);
     root->setFrameState(chartFrameState_);
     // Force an initial paint so a freshly-bound active frame shows immediately even

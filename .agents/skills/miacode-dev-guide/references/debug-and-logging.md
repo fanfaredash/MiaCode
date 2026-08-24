@@ -13,7 +13,7 @@ canonical doc is `docs/ops/DEBUG_INDEX.md`; this file is the code-owner-oriented
 - Core: `miacode::debug_log` in `src/common/DebugLog.{h,cpp}` — an **async, channelized log
   writer** (background thread + queue + overflow/drop stats + flush/shutdown).
 - Channels (`debug_log::Channel`): `Runtime`, `Audio`, `Export`, `StartupTiming`, `Fatal`,
-  `PreviewProfile`, `Operation`.
+  `PreviewProfile`, `Operation`, `PvMemory`.
 - API: `debug_log::appendLine(channel, scope, payload, force=false, level=Level::Info)` /
   `appendTimingLine(...)` / `appendFatalMessage(...)`. ~183 call sites go through this; there is
   essentially no raw `qDebug`/`std::cout` in mainline code — **keep it that way.**
@@ -41,21 +41,45 @@ gated `appendLine`; don't reintroduce that pattern.)
 
 ### Gating
 - Runtime/Audio/StartupTiming/PreviewProfile detail is gated by process debug mode (`--debug`).
+- PvMemory is gated by the same runtime-debug output rule. It creates its dedicated session file
+  only in debug mode and never arms periodic PV-memory sampling while debug output is disabled.
 - `Fatal` is intentionally **not** gated.
 - `Export` keeps a concise stage/failure summary even without `--debug`; detail needs `--debug`.
 - The per-category `MIACODE_DISABLE_*` gates are **snapshot into atomics at `setDebugModeEnabled`** (not
   re-read per log line). If code/tests mutate one of those env vars at runtime, call
   `debug_options::refreshDebugCategoryCache()` to re-snapshot. `MIACODE_SKIP_ASYNCLOG_FLUSH` is read once.
 
+### Proven no-op pruning
+
+`src/common/LogEmissionPolicy.h` contains pure state machines only: no `DebugLog.h`, callbacks, or
+I/O. Owners retain their own gate for their lifecycle. The logging policy intentionally suppresses
+only these repeat families:
+
+- BASS scheduler `action=disarm` only when `was_active=0 had_sync=0 group_idx=-1`.
+- Ordinary `preview/stage_media action=playback_rate` repeats for the same `(rate, media kind)`;
+  deferred, flushed, and error paths still emit, and a chart/media change resets the gate.
+- `ui/hang_watchdog action=report_gate will_report=0` repeats. The next stale report, or a
+  trigger-clear/rearm/shutdown episode-end line, carries `suppressed_count`, `episode_id`, and trigger.
+- `<2 ms` timeline scene rebuilds become one-second summaries; slow/error rebuilds and
+  `action=update_paint_node_stats` remain individual evidence.
+- QuickShell repeated mouse/background/surface signatures. A changed watched object, background
+  settings, surface handle/size, or any workspace sync taking `>=50 ms` still emits.
+
 ### Log file locations
 - Shared dir env: `MIACODE_LOG_DIR`. Default: project-local `.miacode/logs/` once a chart is
   bound, else app-local `logs/` next to the executable.
 - Per-channel path overrides: `MIACODE_RUNTIME_LOG_PATH`, `MIACODE_AUDIO_LOG_PATH`,
   `MIACODE_EXPORT_LOG_PATH`, `MIACODE_STARTUP_LOG_PATH`, `MIACODE_FATAL_LOG_PATH`,
-  `MIACODE_OPERATION_LOG_PATH`, `MIACODE_PREVIEW_PROFILE_PATH`.
+  `MIACODE_OPERATION_LOG_PATH`, `MIACODE_PREVIEW_PROFILE_PATH`, `MIACODE_PV_MEMORY_LOG_PATH`.
 - Default channel files: `miacode_runtime_debug.log`, `miacode_audio_debug.log`,
   `miacode_video_export.log`, `miacode_startup_timing.log`, `miacode_fatal.log`,
-  `miacode_preview_profile_summary.txt`. Logs live per-chart under `<chart>/.miacode/logs/`.
+  `miacode_preview_profile_summary.txt`, `miacode_pv_memory_debug.log`. Logs live per-chart under `<chart>/.miacode/logs/`.
+- **PV-memory channel:** `PvMemory` is a private current-process-only investigation log. It writes
+  `session_start`, active-video lifecycle records, and samples no more often than every five seconds.
+  `process_*_bytes=-1` means unavailable. It must never inspect external processes, PV paths, or
+  frame contents, and must not introduce a conversion, mapping, or readback. Interpret a capture in
+  this order: existing `toImage()` churn, player/output-sink lifetime, output/scene last-frame
+  retention, then persistent Quick graphics resources.
 - **⚠ Preview-log channel split (easy time-sink):** `PreviewStageMediaHost::appendPreviewStageMediaLog`
   (`src/preview/runtime/PreviewStageMediaHost.cpp:127`) routes to **`Channel::Audio`** (scope
   `preview/stage_media`) → **`miacode_audio_debug.log`**, NOT the runtime log. So `media_backend`,
@@ -82,10 +106,12 @@ the agent-facing quick index. Guidance:
 - **Intended direction (still pending):** a single table-driven registry in `DebugOptions.h`
   ({name, default, category, purpose}) that can *generate* `docs/ops/DEBUG_INDEX.md` (today it is
   hand-written + `debug_flag_index_spec`-guarded), plus a clean split between user-facing `--debug`
-  and developer-only diagnostic flags. Reduce the count further as DComp retires.
+  and developer-only diagnostic flags.
 - **Already-dead flags** (removed from code; do not reintroduce): `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`,
   `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`, `MIACODE_PREVIEW_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`,
-  `MIACODE_PREVIEW_SESSION_SCRIPT`, `MIACODE_DISABLE_GL_DEBUG_MESSAGES`.
+  `MIACODE_PREVIEW_SESSION_SCRIPT`, `MIACODE_DISABLE_GL_DEBUG_MESSAGES`, and the six
+  DComp render-backend flags retired on 2026-08-07 — `MIACODE_PREVIEW_USE_DCOMP`,
+  `MIACODE_TIMELINE_USE_DCOMP`, `MIACODE_PREVIEW_DCOMP_{EXCLUSIVE,PER_PIXEL_ALPHA,TOPLEVEL_HWND,QUIESCE_QSG}`.
   `MIACODE_BUILD_DCOMP_SMOKE` is tied to the deleted `PreviewDCompPhase0Smoke.cpp`.
 - **Hang-watchdog instrumentation macros, not env vars:** `MIACODE_HANG_PHASE`,
   `MIACODE_HANG_JOIN`, and `MIACODE_HANG_JOIN_IMPL` live in `src/common/UiHangWatchdog.h`;
@@ -99,7 +125,7 @@ the agent-facing quick index. Guidance:
 `MIACODE_DISABLE_EXPORT_DEBUG_OUTPUT`, `MIACODE_DISABLE_PREVIEW_PROFILE_OUTPUT`,
 `MIACODE_DISABLE_STARTUP_TIMING`, `MIACODE_SKIP_ASYNCLOG_FLUSH`, `MIACODE_OPERATION_LOG_PATH`.
 
-**Preview (active QSG path) tuning/diag:** `MIACODE_PREVIEW_VISUAL_SMOOTHING`,
+**Preview (active QSG path) tuning/diag:**
 `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS`, `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`,
 `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` (default off; opt-OUT — negative-HS `<HS*-N>` reverse-flow is ON
 by default, `=1` restores strict reject of hs<=0 per Q7; read once at boot into `SimaiNativeParser::setAllowNegativeHsEnabled` as `!reject`),
@@ -109,6 +135,21 @@ by default, `=1` restores strict reject of hs<=0 per Q7; read once at boot into 
 `MIACODE_PREVIEW_SFX_DIR`, `MIACODE_TRACK_PATH`, `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_{FRAMES,DIR,MAX_SAMPLES}`,
 `MIACODE_PREVIEW_DUMP_HWFRAMES`, `MIACODE_PREVIEW_D3D11_DEBUG_LAYER`,
 `MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT` (default **off** — §10 fix attempt, did NOT fix Arc 130T; reserved), `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`.
+
+**First-play render-stall / EndOfMedia diagnostics (audit
+`docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md`):**
+`MIACODE_PREVIEW_FRAME_PACING_DIAG=1` splits `preview/quick_scene action=render_frame_profile`'s
+`render_submit_ms` into `resource_prep_ms` (QRhi uploads / resource creation / swap-chain acquire),
+`pass_record_ms` (render-pass recording — where the driver builds a first-use pipeline) and
+`submit_tail_ms`, adds a one-shot `action=render_stall_context … dominant=` verdict, and adds
+`action=layer_first_draw` naming the first frame each layer drew. `+ --debug` additionally emits
+`preview/first_playback_bridge_trace action=render_stall_vram` (per-adapter VRAM budget/usage at the
+stall). `quick_shell/device` carries `umd_driver_version=` unconditionally.
+`preview/stage_media action=end_of_media_classified` classifies every backend `EndOfMedia` as
+`natural` / `stale` / `unknown` via `src/core/video/PreviewEndOfMediaPolicy.h`
+(spec: `preview_end_of_media_policy_spec`) and carries the FFmpeg-side `demux_eof_*` provenance from
+`third_party/QtAVPlayer/.../qavpreviewdemuxdiag_p.h`; a stale end drives the bounded
+`action=stale_end_of_media_recover` ladder. Neither classification may stop the main transport.
 
 **HW-decode green/garble/seek diagnostics (Windows D3D11VA, `DebugOptions.h` accessors
 `previewDumpHwFrameBudget()` / `previewSharedD3D11DebugLayerEnabled()`, both `--debug`-gated):**
@@ -149,13 +190,13 @@ decode — launch with `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=0` (+ `MIACODE_PREV
 for H2). For the two-device path's RHI debug layer use the Qt env `QSG_RHI_DEBUG_LAYER=1` (Qt creates
 that device; `MIACODE_PREVIEW_D3D11_DEBUG_LAYER` only reaches the imported H2 device).
 
-**Preview video decode backend (Windows):** `MIACODE_USE_QTAVPLAYER` is a **build-time compile
-macro** (CMake-defined on Windows, NOT an environment flag — it can't be toggled at runtime). It
+**Preview video decode backend (Windows and macOS):** `MIACODE_USE_QTAVPLAYER` is a **build-time compile
+macro** (CMake-defined on `WIN32 OR APPLE`, NOT an environment flag — it can't be toggled at runtime). It
 switches `PreviewStageMediaHost` onto the FFmpeg/QtAVPlayer backend; other platforms keep the
-`QMediaPlayer` path. It still appears in `docs/ops/DEBUG_INDEX.md` because the `debug_flag_index_spec`
-drift guard greps every `MIACODE_*` literal in `src/`. The FFmpeg dev SDK path is a CMake cache
-variable (not in `src/`, so keep its literal out of `DEBUG_INDEX.md` or the guard flags it stale).
-On hardware-decode `InvalidMedia` the host retries once forcing software decode — log line
+`QMediaPlayer` path. Windows selects D3D11VA; macOS selects VideoToolbox with the QtAVPlayer Metal bridge.
+`MIACODE_FFMPEG_DEV_DIR` is the corresponding CMake/package SDK-root input, not a runtime switch. On either
+platform, `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=1` is an explicit software-decode fallback; the default is
+hardware decode. On hardware-decode `InvalidMedia` the host also retries once forcing software decode — log line
 `Channel::Audio` scope `preview/stage_media`, `action=video_software_fallback`. The QtAVPlayer path
 drops the QMediaPlayer-only `recoverVideoBackend` / playback watchdog / soft-recovery / deferred-rate
 scaffolding (no silent WMF fallback, no converter-rebuild crash to recover from).
@@ -169,11 +210,9 @@ single-device decode**: `PreviewSharedD3D11Device` creates one video-capable, mu
 legacy two-device path on failure. Confirm via `media_backend … single_device=1`. See
 the H2 single-device summary in `docs/ops/DEBUG_INDEX.md`.
 
-**DComp/D3D11 (DEFAULT OFF — being decoupled):** `MIACODE_PREVIEW_USE_DCOMP` (default off,
-`DebugOptions.h:194`), `MIACODE_TIMELINE_USE_DCOMP`, `MIACODE_PREVIEW_DCOMP_EXCLUSIVE`,
-`MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA`, `MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND`,
-`MIACODE_PREVIEW_DCOMP_QUIESCE_QSG`, `MIACODE_PREVIEW_QSG_FULL_DISABLE`,
-`MIACODE_SKIP_DIAG_D3D11`.
+**Render path:** `MIACODE_PREVIEW_QSG_FULL_DISABLE` is the only remaining render-topology
+toggle. The DComp/D3D11 backend and its six flags were deleted on 2026-08-07; QSG is the only
+render path.
 
 **Export diagnostics/tuning** (owner: `src/tools/video_export/VideoExportController.cpp` +
 `VideoExportRuntimePolicy.h`): `MIACODE_EXPORT_DIAG_*` (REPEAT, CROP_BOTTOM, MAX_LINES,
@@ -199,8 +238,8 @@ export log `render_backend_fallback` `fallback_from=d3d11_qrhi fallback_to=openg
 currently == `d3d11_qrhi`; set `MIACODE_EXPORT_RENDER_BACKEND=opengl` for rollback. Session backend dispatch lives
 in `VideoExportQuickRenderBackend` (`setRenderSessionBackend`); selected backend/adapter
 LUID/rt_format/readback_mode appear in the `render_backend` export-log summary line. Sync pair: the
-D3D11 session mirrors the OpenGL session's scene mounting (scene root + HUD + intro overlay +
-DCompFallbackActive override) — change both together.
+D3D11 session mirrors the OpenGL session's scene mounting (scene root + HUD + intro
+overlay) — change both together.
 
 The current FFmpeg subprocess path is intentionally CPU-frame based: bundled `h264_mf` accepts only
 `nv12`/`yuv420p`, bundled FFmpeg has no D3D11 overlay filter, and the export filter graph still owns
@@ -284,5 +323,4 @@ healthy `d_play_kb` is < ~10 MB per play, beta7's leak showed 30-44 MB/s of play
 ## Update this file when
 
 - A debug flag or log channel is added, removed, or re-gated (and update `DebugOptions.h`).
-- A flag moves between the active / DComp-off categories.
 - The logging mechanism or default log directory changes.

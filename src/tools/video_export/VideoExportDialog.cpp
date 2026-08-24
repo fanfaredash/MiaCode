@@ -8,6 +8,7 @@
 #include "UiTheme.h"
 #include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "core/scene/PreviewHudState.h"
 #include "tools/video_export/HudFontSettings.h"
 #include "tools/video_export/IntroPreviewWidget.h"
@@ -110,25 +111,9 @@ constexpr ResolutionPreset kResolutionPresets[] = {
 // tools/video_export/HudFontSettings.cpp on 2026-06-10, shared with the main
 // window's 视频设置 dialog.)
 
-double snappedFlowSpeed(double flowSpeed)
-{
-    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
-    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
-    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    return qBound(
-        flowSpeedMin,
-        flowSpeedMin + qRound((flowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
-        flowSpeedMax
-    );
-}
-
-QString flowSpeedValueLabel(double flowSpeed)
-{
-    const double snapped = snappedFlowSpeed(flowSpeed);
-    const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
-    const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
-    return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
-}
+// snappedFlowSpeed() / flowSpeedValueLabel() moved to
+// VideoExportDialogInternal.h — the Return-key commit path in
+// VideoExportDialog.ExportFlow.cpp needs the same formatting.
 
 int secondToSliderValue(double second)
 {
@@ -1390,6 +1375,57 @@ VideoExportDialog::VideoExportDialog(
     // the full controls-column width.
     introControlsLayout->addWidget(addIntroCapsule, 0, Qt::AlignLeft);
 
+    auto* introMusicGroup = new QGroupBox(
+        UiText::text(QStringLiteral("dialog.render_settings.music_group")), introControls);
+    auto* introMusicForm = new QFormLayout(introMusicGroup);
+    introMusicForm->setSpacing(8);
+    introMusicForm->setLabelAlignment(Qt::AlignLeft);
+    introMusicForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    introSoundCombo_ =
+        miacode::ui::createDialogComboBox(introMusicGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    introSoundCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.render_settings.music.default_intro_sound")), QString());
+    const QString musicDirectory = miacode::preview_sfx::assetMusicDirectory();
+    if (!musicDirectory.isEmpty()) {
+        const QFileInfoList entries = QDir(musicDirectory).entryInfoList(
+            miacode::preview_sfx::supportedIntroSoundFileExtensions(),
+            QDir::Files,
+            QDir::Name | QDir::IgnoreCase);
+        for (const QFileInfo& entry : entries) {
+            introSoundCombo_->addItem(entry.fileName(), entry.fileName());
+        }
+    }
+    const QString selectedIntroSound =
+        miacode::preview_sfx::normalizeIntroSoundFileName(baseTask_.introSoundFileName);
+    introSoundCombo_->setCurrentIndex(qMax(0, introSoundCombo_->findData(selectedIntroSound)));
+    miacode::ui::applyDialogComboBoxStyle(introSoundCombo_, 12);
+    auto* introSoundRow = new QWidget(introMusicGroup);
+    auto* introSoundRowLayout = new QHBoxLayout(introSoundRow);
+    introSoundRowLayout->setContentsMargins(0, 0, 0, 0);
+    introSoundRowLayout->setSpacing(8);
+    introSoundImportButton_ = miacode::ui::createDialogAuxiliaryButton(
+        introSoundRow, UiText::text(QStringLiteral("dialog.render_settings.video.skin.import")));
+    introSoundRowLayout->addWidget(introSoundCombo_, 1);
+    introSoundRowLayout->addWidget(introSoundImportButton_, 0);
+    introMusicForm->addRow(
+        UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound")), introSoundRow);
+    introSoundVolumeSlider_ = new QSlider(Qt::Horizontal, introMusicGroup);
+    introSoundVolumeSlider_->setRange(0, 200);
+    introSoundVolumeSlider_->setSingleStep(1);
+    introSoundVolumeSlider_->setPageStep(5);
+    introSoundVolumeSlider_->setValue(qRound(qBound(0.0, baseTask_.introSoundVolume, 2.0) * 100.0));
+    introSoundVolumeSlider_->setFixedHeight(20);
+    introSoundVolumeSlider_->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+    QWidget* introSoundVolumeOption = miacode::ui::createDialogSliderOption(
+        UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound_volume")),
+        introSoundVolumeSlider_,
+        &introSoundVolumeValueLabel_,
+        QStringLiteral("%"),
+        introMusicGroup,
+        miacode::ui::DialogSliderOptionLayout::Stacked);
+    introMusicForm->addRow(introSoundVolumeOption);
+    introControlsLayout->addWidget(introMusicGroup, 0);
+
     // 背景 group — backdrop source + blur (size follows the export resolution).
     auto* introBgGroup = new QGroupBox(
         UiText::text(QStringLiteral("cover.background")), introControls);
@@ -1500,6 +1536,20 @@ VideoExportDialog::VideoExportDialog(
         emit introPreviewSettingsChanged();
     };
     connect(addIntroCheck_, &QCheckBox::toggled, this, introUiChanged);
+    connect(introSoundCombo_, &QComboBox::currentIndexChanged, this, [this]() {
+        const QString fileName = introSoundCombo_->currentData().toString();
+        baseTask_.introSoundFileName = fileName;
+        miacode::preview_sfx::setSelectedIntroSoundFileName(fileName);
+        emit introSoundFileNameChanged(fileName);
+    });
+    connect(introSoundImportButton_, &QPushButton::clicked, this, &VideoExportDialog::importIntroSound);
+    connect(introSoundVolumeSlider_, &QSlider::valueChanged, this, [this](int value) {
+        const double volume = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
+        baseTask_.introSoundVolume = volume;
+        miacode::preview_sfx::setSelectedIntroSoundVolume(volume);
+        persistExportOnlySettings();
+        emit introSoundVolumeChanged(volume);
+    });
     connect(introBackgroundCombo_, &QComboBox::currentIndexChanged, this, introUiChanged);
     connect(introBlurCheck_, &QCheckBox::toggled, this, introUiChanged);
     connect(introCardModeCombo_, &QComboBox::currentIndexChanged, this, introUiChanged);

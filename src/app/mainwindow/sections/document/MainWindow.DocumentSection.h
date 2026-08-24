@@ -68,11 +68,21 @@ public:
     bool undoDeletedDifficultyField();
     void clearChartSelectionTransformUndoEntries();
     void syncChartSelectionTransformUndoState();
+    // `originalAnchor`/`originalPosition` are PRE-EDIT offsets and must be read
+    // as ints before the document is touched: a live QTextCursor is adjusted by
+    // the very edit being recorded, so reading .position() off one afterwards
+    // hands undo an offset shifted by the inserted/removed length.
+    void recordChartCursorUndoEntry(
+        int originalAnchor,
+        int originalPosition,
+        const QTextCursor& transformedCursor,
+        double previewSecond);
     void recordChartSelectionUndoRestoreAfterNextEdit(int originalAnchor, int originalPosition);
     bool undoChartEditorWithSelectionRestore();
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
+    bool createChartsFromAudioDrop(const QStringList& audioPaths);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
     void onMirrorLeftRight();
     void onMirrorUpDown();
@@ -150,7 +160,11 @@ private:
     void setChartBottomTabsMode(bool enabled);
     void pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold);
     void updateLastObservedChartEditorUndoRedoSteps();
-    void recordChartSelectionTransformUndoEntry(int originalAnchor, int originalPosition, const QTextCursor& transformedCursor);
+    void recordChartSelectionTransformUndoEntry(
+        int originalAnchor,
+        int originalPosition,
+        const QTextCursor& transformedCursor,
+        double previewSecond = -1.0);
     const SelectionTransformUndoEntry* findChartSelectionTransformUndoEntry(int undoStepAfterApply) const;
     bool restoreChartSelectionTransformCursor(const SelectionTransformUndoEntry& entry, bool transformedSelection);
 

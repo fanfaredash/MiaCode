@@ -87,6 +87,11 @@ public:
     QString resolvePreviewSkinDir() const;
     QString resolvePreviewSkinRootDir() const;
     void applyPreviewAudioSettingsToRuntime();
+    // Per-project mixer persistence (<chartDir>/.miacode/preferences.json,
+    // key "preview_audio"). The app-level local preset only seeds a project
+    // that has never stored a mixer of its own.
+    void loadProjectAudioPreferences();
+    void saveProjectAudioPreferences() const;
 
 private:
     MainWindow& owner_;

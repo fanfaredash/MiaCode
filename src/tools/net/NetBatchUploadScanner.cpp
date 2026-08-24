@@ -1,5 +1,6 @@
 #include "NetBatchUploadScanner.h"
 
+#include <QCollator>
 #include <QDir>
 #include <QFileInfo>
 
@@ -54,8 +55,15 @@ QList<NetUploadJob> scanNetUploadFolders(const QString& rootDirectory)
     appendUploadJob(root.absolutePath(), &jobs);
     const QFileInfoList children = root.entryInfoList(
         QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot,
-        QDir::Name | QDir::IgnoreCase);
-    for (const QFileInfo& child : children) {
+        QDir::NoSort);
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    QFileInfoList sortedChildren = children;
+    std::sort(sortedChildren.begin(), sortedChildren.end(), [&collator](const QFileInfo& lhs, const QFileInfo& rhs) {
+        return collator.compare(lhs.fileName(), rhs.fileName()) < 0;
+    });
+    for (const QFileInfo& child : sortedChildren) {
         appendUploadJob(child.absoluteFilePath(), &jobs);
     }
     return jobs;

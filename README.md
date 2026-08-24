@@ -41,6 +41,8 @@ MiaCode 自有源代码使用 MIT License；仓库整体、随仓库分发的资
 - C++20 编译器
 - Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`Network`、`OpenGL`、`Qml`、`Quick`、`QuickControls2`、`ShaderTools`、`Multimedia`、`Svg`
 - Windows：Visual Studio 2022 / MSVC；导出用 FFmpeg 和 QtAVPlayer 预览解码用 FFmpeg dev SDK 由脚本准备
+- macOS：QtAVPlayer 预览解码需要 FFmpeg dev SDK；先运行
+  `bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` 创建仓库本地的固定 SDK
 
 更详细的打包说明见 [scripts/README.md](scripts/README.md)。
 
@@ -62,7 +64,7 @@ cmake --build --preset release
 .\build\Release\MiaCode.exe
 ```
 
-CMake preset 路径要求 Qt 能被 CMake 找到，或通过 `CMAKE_PREFIX_PATH` 指向 Qt 根目录。Windows 下还要求 `third_party/ffmpeg/windows/ffmpeg.exe` 与 `third_party/ffmpeg/windows/dev/` 已存在；上面两个脚本会下载固定版本并校验必需文件。
+CMake preset 路径要求 Qt 能被 CMake 找到，或通过 `CMAKE_PREFIX_PATH` 指向 Qt 根目录。Windows 下还要求 `third_party/ffmpeg/windows/ffmpeg.exe` 与 `third_party/ffmpeg/windows/dev/` 已存在；上面两个脚本会下载固定版本并校验必需文件。macOS 下先运行 `bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`，然后使用其生成的 `third_party/ffmpeg/macos/dev/`；也可传入 `-DMIACODE_FFMPEG_DEV_DIR=<包含 include/ 和 lib/ 的兼容 SDK 根目录>`。
 
 已有构建产物时，可以单独打包：
 

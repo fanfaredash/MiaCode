@@ -6,6 +6,7 @@
 #include "common/PreviewSfxTimeline.h"
 #include "common/PreviewTimingSettings.h"
 #include "PreviewAudioSettings.h"
+#include "PreviewAudioHealth.h"
 
 namespace miacode::preview_audio {
 
@@ -29,6 +30,17 @@ struct PausePreviewResult {
     RetainedBgmState retainedBgmState = RetainedBgmState::NoneLoaded;
 };
 
+// Collected only by PreviewAudioWorker on the backend-owning thread. Backends that
+// have no native health source return this empty payload without allocating a sampler.
+struct PreviewAudioHealthSample {
+    health::ChannelActivity mixerActivity = health::ChannelActivity::Unknown;
+    health::ChannelActivity backgroundActivity = health::ChannelActivity::Unknown;
+    health::BufferSnapshot buffer;
+    double bgmRawSecond = -1.0;
+    qint64 sampledAtMs = 0;
+    quint64 sequence = 0;
+};
+
 class PreviewAudioBackend
 {
 public:
@@ -36,6 +48,8 @@ public:
 
     virtual QString backendId() const = 0;
     virtual bool canBePrimary(QString* reason = nullptr) const = 0;
+    virtual int nativeErrorCode() const noexcept { return 0; }
+    virtual void clearNativeErrorCode() noexcept {}
 
     virtual void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir) = 0;
     virtual void reloadAssets(const PreviewAudioSettings& settings) = 0;
@@ -83,6 +97,16 @@ public:
     virtual RetainedPlaybackMode retainedPlaybackMode() const = 0;
     virtual RetainedBgmState retainedBgmState() const = 0;
     virtual double authoritativePlaybackSecond() const = 0;
+    // Hard-stops the note-SFX one-shot voices, leaving BGM and the touch-hold voice
+    // alone. Only the audio-device auto-pause calls this. A manual pause deliberately
+    // lets one-shots ring out (see suspendPlaybackTransport), but on a device change
+    // that tail outlives the route switch and is heard as a stray note AFTER the
+    // preview has visibly stopped. Default no-op, so the miniaudio backend is unchanged.
+    virtual void stopSfxVoices() {}
+    // A physical output-route change invalidates the old transport. Backends that own
+    // a concrete endpoint release it here; the next explicit play rebuilds on the
+    // current endpoint instead of resuming cut-off buffers on a replacement device.
+    virtual void invalidateOutputDevice() {}
     virtual double syncPreviewPlaybackClockTransaction(double fallbackSecond) = 0;
     virtual void resetCursor(double second, bool includeCurrentSecond) = 0;
     virtual void drainEvents(double second) = 0;
@@ -101,6 +125,7 @@ public:
     {
         stopAll();
     }
+    virtual PreviewAudioHealthSample sampleHealth() { return {}; }
 };
 
 }  // namespace miacode::preview_audio

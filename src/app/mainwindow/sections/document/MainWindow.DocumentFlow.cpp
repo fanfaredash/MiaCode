@@ -82,22 +82,21 @@ bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
             .arg(unsavedChangesChoiceName(choice), fieldName)
     );
     if (choice == UnsavedChangesChoice::Save) {
-        QElapsedTimer applyTimer;
-        applyTimer.start();
-        const bool wasDocumentDirty = state_.documentDirty_;
-        const bool applied = applyCurrentFieldToDocument();
-        if (applied) {
-            state_.documentDirty_ = wasDocumentDirty;
-            updateDirtyState();
-            owner_.updateWindowTitle();
-        }
+        QElapsedTimer saveTimer;
+        saveTimer.start();
+        // "Save" must have the same durable meaning everywhere. Merely
+        // applying the active editor field to SimaiDocument and restoring the
+        // previous documentDirty flag made the UI look clean without writing
+        // the file, so a later close silently lost the edit. onSaveFile()
+        // commits the current field first and then atomically writes it.
+        const bool saved = onSaveFile();
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
-            QStringLiteral("apply_current_field_to_document"),
-            applyTimer.elapsed(),
+            QStringLiteral("on_save_file"),
+            saveTimer.elapsed(),
             QStringLiteral("trigger=unsaved_field_changes result=%1 field=%2")
-                .arg(applied ? QStringLiteral("applied") : QStringLiteral("failed"), fieldName)
+                .arg(saved ? QStringLiteral("saved") : QStringLiteral("failed"), fieldName)
         );
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
@@ -105,9 +104,9 @@ bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
             QStringLiteral("maybe_save_current_field_changes"),
             totalTimer.elapsed(),
             QStringLiteral("result=%1 field=%2")
-                .arg(applied ? QStringLiteral("saved") : QStringLiteral("save_failed"), fieldName)
+                .arg(saved ? QStringLiteral("saved") : QStringLiteral("save_failed"), fieldName)
         );
-        return applied;
+        return saved;
     }
     if (choice == UnsavedChangesChoice::Discard) {
         if (owner_.hasActiveDifficulty()) {
@@ -635,6 +634,13 @@ bool MainWindow::onSaveFileAs()
 bool MainWindow::saveToPath(const QString& path)
 {
     return documentSection_->saveToPath(path);
+}
+
+void MainWindow::handleAudioDrop(const QStringList& audioPaths)
+{
+    if (documentSection_ != nullptr) {
+        documentSection_->createChartsFromAudioDrop(audioPaths);
+    }
 }
 
 bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform& transform)
