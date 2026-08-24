@@ -456,7 +456,13 @@ cmake --build build-macos-spec --target MiaCode --parallel 4
 ctest --test-dir build-macos-spec -C Release --output-on-failure
 ```
 
-预期：全部通过。若有目标未构建（`Not Run`），先 `cmake --build build-macos-spec --parallel 4` 再重跑。
+预期：除下列**既有失败**外全部通过。若有目标未构建（`Not Run`），先
+`cmake --build build-macos-spec --parallel 4` 再重跑。
+
+- `qtavplayer_platform_spec` — `FAIL: prepared playback commit always seeks before starting
+  either backend`。**与本阶段无关**：在 stage 0a 起点 `31922400`（本计划任何改动之前）复现同样的
+  失败，已实测确认。不要因它阻塞本阶段验收，也不要在本阶段顺手修它——它属于预览播放域，另行处理。
+- `v1_shell_removal_spec` — 到 Task 5 结束前一直为红，这是本计划的设计。Task 6 时它应已转绿。
 
 - [ ] **Step 3: 启动一次，确认 v2 正常**
 
@@ -483,7 +489,7 @@ git commit -m "docs(v2): record stage 0a completion"
 
 1. `v1_shell_removal_spec` 通过。
 2. `debug_flag_index_spec` 通过（`MIACODE_UI_SKIN` 已从代码与文档双双消失）。
-3. Release `MiaCode` 构建通过，全量 CTest 通过。
+3. Release `MiaCode` 构建通过；全量 CTest 除既有的 `qtavplayer_platform_spec` 外全部通过。
 4. v2 桌面启动正常。
 5. `QuickShellController` 仍在，且不再有任何 `surfaceHost_` 分支。
 
