@@ -13,9 +13,13 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QQuickWindow>
+#include <QRectF>
+#include <QTest>
 #include <QVariant>
 #include <QTextStream>
 
+#include <cmath>
 #include <memory>
 
 namespace {
@@ -203,6 +207,138 @@ bool verifyCommandModifiedKeysNeverTypeText(QTextStream& out, int* failed)
                       && editor->property("text").toString() == QStringLiteral("abc"),
                   QStringLiteral("the undo shortcut still reaches the QML undo route"), out, failed);
 }
+// Loads the real CompletionPopup.qml. Before this contract the delegate asked
+// for a bare `index` next to a required modelData, which QQmlDelegateModel
+// answers with "index is not defined", so no candidate ever highlighted and
+// ↑ ↓ Tab produced no visible feedback; and a vertical ListView reports
+// contentWidth -1, which pinned the popup at its minimum width.
+bool verifyCompletionPopupPresentsTheSelectedCandidate(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    miacode::qml_ui::QmlEditorController controller;
+    engine.rootContext()->setContextProperty(QStringLiteral("editorController"), &controller);
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+        import QtQuick
+        import QtQuick.Controls
+        import MiaCode.UI
+
+        Window {
+            id: win
+            width: 640; height: 480; visible: true
+            property alias popup: pop
+            property int acceptedFromPopup: 0
+            Item {
+                id: fakeEditor
+                objectName: "fakeEditor"
+                x: 40; y: 300; width: 400; height: 120
+                property rect cursorRectangle: Qt.rect(10, 20, 1, 18)
+                function acceptCompletionFromPopup() { win.acceptedFromPopup += 1 }
+            }
+            CompletionPopup {
+                id: pop
+                editor: fakeEditor
+                controller: editorController
+            }
+        }
+    )QML", QUrl(QStringLiteral("qrc:/CompletionPopupSpec.qml")));
+    if (!expect(component.isReady(),
+                QStringLiteral("real CompletionPopup.qml loads in the spec harness"), out, failed)) {
+        for (const QQmlError& error : component.errors()) out << error.toString() << '\n';
+        return false;
+    }
+    std::unique_ptr<QObject> root(component.create());
+    auto* window = qobject_cast<QQuickWindow*>(root.get());
+    if (!expect(window != nullptr, QStringLiteral("CompletionPopup harness creates a window"), out, failed)) {
+        return false;
+    }
+    window->show();
+    QTest::qWaitForWindowExposed(window);
+
+    auto* popup = root->property("popup").value<QObject*>();
+    if (!expect(popup != nullptr, QStringLiteral("CompletionPopup instance is reachable"), out, failed)) {
+        return false;
+    }
+
+    controller.setWholeBpm(QStringLiteral("180"));
+    controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    expect(popup->property("visible").toBool() && controller.completionCandidates().size() > 1,
+           QStringLiteral("an open completion session shows the popup"), out, failed);
+
+    const auto highlightedRow = [popup]() {
+        auto* content = popup->property("contentItem").value<QQuickItem*>();
+        if (content == nullptr) return -1;
+        int highlighted = -1;
+        int found = 0;
+        for (QQuickItem* child : content->childItems()) {
+            for (QQuickItem* row : child->childItems()) {
+                const QVariant flag = row->property("highlighted");
+                if (!flag.isValid()) continue;
+                ++found;
+                if (flag.toBool()) highlighted = row->property("index").toInt();
+            }
+        }
+        return found == 0 ? -2 : highlighted;
+    };
+    const int firstHighlight = highlightedRow();
+    expect(firstHighlight == controller.completionIndex(),
+           QStringLiteral("the popup highlights the controller's current candidate"), out, failed);
+
+    controller.moveCompletionSelection(1);
+    QCoreApplication::processEvents();
+    expect(highlightedRow() == controller.completionIndex()
+               && controller.completionIndex() == 1,
+           QStringLiteral("keyboard navigation moves the visible highlight"), out, failed);
+
+    // The candidate list must drive the popup width. A vertical ListView
+    // reports contentWidth -1, so the old `implicitWidth: contentWidth` binding
+    // collapsed every session onto the same minimum-width popup.
+    const qreal squareWidth = popup->property("candidatesWidth").toReal();
+    const qreal popupWidth = popup->property("width").toReal();
+    const qreal leftPadding = popup->property("leftPadding").toReal();
+    const qreal rightPadding = popup->property("rightPadding").toReal();
+    expect(squareWidth > 0.0
+               && qFuzzyCompare(popupWidth + 1.0,
+                                qMax(120.0, std::ceil(squareWidth) + leftPadding + rightPadding + 24.0) + 1.0),
+           QStringLiteral("popup width is measured from its candidates, not a -1 content width"),
+           out, failed);
+    controller.closeCompletion();
+    // Hold candidates carry the whole "[8:1]" token, one glyph wider than the
+    // "8:1]" duration tokens, so a wider session must widen the measurement.
+    controller.processKey(QString(), 0, 0, QStringLiteral("h"), Qt::Key_H, Qt::NoModifier);
+    QCoreApplication::processEvents();
+    const qreal holdWidth = popup->property("candidatesWidth").toReal();
+    expect(holdWidth > squareWidth,
+           QStringLiteral("a wider candidate session widens the measured popup width"), out, failed);
+    controller.closeCompletion();
+    controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
+    QCoreApplication::processEvents();
+
+    // Anchoring: below the caret normally, flipped above when the list would
+    // otherwise hang off the bottom of the overlay.
+    auto* fakeEditor = window->findChild<QQuickItem*>(QStringLiteral("fakeEditor"));
+    if (!expect(fakeEditor != nullptr, QStringLiteral("popup anchor harness exposes its editor"), out, failed)) {
+        return false;
+    }
+    fakeEditor->setY(40);
+    fakeEditor->setProperty("cursorRectangle", QVariant::fromValue(QRectF(10, 20, 1, 18)));
+    QCoreApplication::processEvents();
+    const qreal anchoredBelow = popup->property("y").toReal();
+    expect(qFuzzyCompare(anchoredBelow + 1.0, 40.0 + 20.0 + 18.0 + 1.0),
+           QStringLiteral("the popup anchors under the caret it belongs to"), out, failed);
+
+    fakeEditor->setY(window->height() - 30);
+    QCoreApplication::processEvents();
+    const qreal anchoredFlipped = popup->property("y").toReal();
+    const qreal flippedHeight = popup->property("height").toReal();
+    expect(anchoredFlipped >= 0.0 && anchoredFlipped + flippedHeight <= window->height(),
+           QStringLiteral("a caret near the bottom flips the popup above it instead of off-screen"),
+           out, failed);
+    controller.closeCompletion();
+    return true;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -214,6 +350,7 @@ int main(int argc, char** argv)
     int failed = 0;
     verifyQmlTextAreaKeyRouting(out, &failed);
     verifyCommandModifiedKeysNeverTypeText(out, &failed);
+    verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
     expect(opening.consumed && opening.transaction.replacementText == QStringLiteral("[]") && opening.transaction.position == 1, QStringLiteral("policy key input produces one QML edit transaction"), out, &failed);

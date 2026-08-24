@@ -535,6 +535,9 @@ Rectangle {
             CompletionPopup {
                 editor: sourceArea
                 controller: root.editorController
+                // The popup lives in the window overlay, so it cannot observe
+                // the editor scrolling underneath it on its own.
+                editorScrollY: editorScroll.contentItem.contentY
             }
 
             QmlEditorInputBridge {

@@ -1189,6 +1189,26 @@ if (MIACODE_BUILD_DEV_TOOLS)
     # supported way to deliver real mouse/key events into a QQuickWindow.
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
 
+    # MiaCode.UI is compiled into the app target, so a spec executable cannot
+    # import it. Mirror the module into a plain file-system import directory so
+    # QML regressions can instantiate the real .qml files instead of retyping a
+    # copy of them. configure_file() re-runs CMake when a source .qml changes,
+    # which keeps the mirror in step with the module.
+    set(MIACODE_QML_SPEC_IMPORT_ROOT "${CMAKE_CURRENT_BINARY_DIR}/qml_spec_imports")
+    set(_miacode_qml_spec_module_dir "${MIACODE_QML_SPEC_IMPORT_ROOT}/MiaCode/UI")
+    set(_miacode_qml_spec_qmldir "module MiaCode.UI\n")
+    foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
+        get_filename_component(_qml_name "${qml_file}" NAME)
+        get_filename_component(_qml_type "${qml_file}" NAME_WE)
+        if (_qml_name STREQUAL "Theme.qml")
+            string(APPEND _miacode_qml_spec_qmldir "singleton ${_qml_type} 1.0 ${_qml_name}\n")
+        else()
+            string(APPEND _miacode_qml_spec_qmldir "${_qml_type} 1.0 ${_qml_name}\n")
+        endif()
+        configure_file("${qml_file}" "${_miacode_qml_spec_module_dir}/${_qml_name}" COPYONLY)
+    endforeach()
+    file(WRITE "${_miacode_qml_spec_module_dir}/qmldir" "${_miacode_qml_spec_qmldir}")
+
     # Declare a dev-only helper / spec executable. Collapses the repeated
     # add_executable + target_link_libraries + target_include_directories
     # triple into a single call. Pass TEST to also register it with CTest
@@ -1662,6 +1682,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Test
         INCLUDES src src/editor src/app/qml_ui
     )
+    target_compile_definitions(qml_editor_controller_spec PRIVATE
+        "MIACODE_QML_SPEC_IMPORT_ROOT=\"${MIACODE_QML_SPEC_IMPORT_ROOT}\"")
 
     miacode_add_dev_tool(preview_asset_loader_spec TEST
         SOURCES
