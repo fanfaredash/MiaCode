@@ -579,6 +579,39 @@ click authoring before 2026-08-12:
 
 If a fourth scanner appears, route it through `SimaiCommentScan` rather than re-deriving the rule.
 
+## 16. Preview follow reaches the v1 widget and the v2 QML editor on two different channels
+
+`MainWindow::TimelineSection::syncEditorCursorToPreviewSecond` has two modes, and they do NOT use
+the same route to the editor:
+
+- **Playing, 代码跟随 on** → it MOVES the caret. Route: `requestQmlEditorNavigation` →
+  `QmlEditorNavigationRequest` → `QmlDocumentModel::qmlEditorNavigationRequested` →
+  `SourceEditor.selectBackendNavigation`. The hidden `PlainCodeEditor` is only touched when no QML
+  handler is installed (v1).
+- **Paused, or 代码跟随 off** → it must NOT move the caret; it paints a decoration instead (the
+  playhead's token span plus a visual follow caret, optionally scrolled into view). Route:
+  `MainWindow::setPreviewFollowDecoration` / `clearPreviewFollowDecoration` → both the v1
+  `ValidationSection` extra-selections/visual caret AND `QmlEditorFollowDecoration` →
+  `QmlDocumentModel::qmlEditorFollowDecorationChanged` → `SourceEditor.applyFollowDecoration`.
+
+That second channel was missing until 2026-08-24, which is why v2 followed while playing and did
+nothing at all once paused. **Every decoration passes through that one MainWindow pair**, so feed
+new decoration sources from there rather than adding a branch inside the follow sync.
+
+Two related rules:
+
+- The v2 decoration is read-only. It must never move the caret or selection, and its
+  ensure-visible scroll must not either — that is the whole difference between it and the playing
+  caret-move path.
+- Both routes are gated on the same difficulty + `documentRevision` identity as the document
+  projection, and both are refused on a hidden or metadata-mode editor.
+
+An editor Ctrl/Command click is the mirror image: v1 resolves it in an event filter on the widget
+viewport (`MainWindow.WindowInteraction.cpp`), v2 in `SourceEditor.qml`'s `PointHandler` →
+`QmlDocumentModel::seekPreviewToEditorLocation` → `MainWindow::seekPreviewToQmlEditorLocation`.
+Both perform the same sequence — resolve second, park playback, suppress timeline cursor sync
+across the discrete seek, then hand the timeline its cursor. Change one, change the other.
+
 ## Update this file when
 
 - A behavior starts/stops being mirrored across two paths; a new serialized export field is added;

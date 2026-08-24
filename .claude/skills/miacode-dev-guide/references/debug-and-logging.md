@@ -286,6 +286,16 @@ readback_mode=…`. The old `media_backend adapter="…"` field was renamed `pro
 `probe_adapter_source=dxgi_enum0_heuristic`) to stop it being read as the Qt RHI device. High-frequency tags (`timeline/bridge` scroll pushes, `timeline/quick_scene`
 scroll-only paints) require `MIACODE_TIMELINE_HOTPATH_DIAG=1` even in debug mode.
 
+**QML editor IME boundary (2026-08-24, `--debug`-gated):** `editor/ime_event` fires for every
+`QEvent::InputMethod` the QML `TextArea` receives — `seq`, `commit_len`, `preedit_len`,
+`replace_start`, `replace_len`, `attributes` (selection/cursor/format spans), `composing`, `depth`.
+`editor/ime_commit` follows each consumed commit with `applied_len` and `reentrant`. Both come from
+`QmlEditorInputBridge::eventFilter`. They exist to identify a desktop-only report of a committed IME
+character being inserted many times over, which no synthetic `QInputMethodEvent` sequence
+reproduces. Read them together: several `ime_event` rows per single user commit means the platform
+is delivering the repeats; `reentrant=1` (or `depth` > 0 on an incoming event) means the QML
+transaction is re-entering the platform input context while the previous commit is still applying.
+
 Leak/resource gauges (beta4→beta7, both **once per user pause**, never per-frame, `--debug`-gated; the gauge
 APIs `MemoryStageScope` / `leak_gauge::*` / `processPrivateBytes` / `processResourceGaugePayload` now live in
 `src/common/ProcessDiagnostics.h`, namespace `miacode::diag`):

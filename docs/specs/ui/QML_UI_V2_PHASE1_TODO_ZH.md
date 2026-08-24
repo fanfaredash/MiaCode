@@ -110,14 +110,18 @@
 本机以 `QT_QPA_PLATFORM=offscreen` 启动 QML 桌面壳会触发既有 macOS 原生主题/平台插件崩溃，不能把
 offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 2026-08-24 的原生桌面验收；未列为通过的项目不得由构建或 CTest 推断为通过：
 
-| 流程 | 自动/静态证据 | 原生 GUI 状态（2026-08-24） |
+| 流程 | 自动/静态证据 | 原生 GUI 状态（2026-08-24 修复轮后） |
 |---|---|---|
-| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入 | 未完成；completion popup 的位置/样式/候选高亮失败，窄窗口 Timeline 缩放待复测。 |
-| 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | Validation 本次通过；Muri 未在本轮重新观察，不能从自动测试推断桌面通过。 |
-| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec` | 播放时代码跟随正确；暂停时不正确。`Command`+点击文本仅移动 Timeline、预览未同步。缩放/命中待复测。 |
-| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；静态焦点/Accessible 审阅 | 书签本次通过；completion 键盘视觉反馈、正文右键菜单、`Command+Z` 与 IME commit+Enter 均失败，需修复后复验。 |
-| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | `Command`+点击文本后的 preview seek 失败；不得标记通过。 |
-| root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 本轮未执行。 |
+| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入；`qml_editor_controller_spec` 载入真实 `CompletionPopup.qml` 断言高亮、宽度与锚点翻转 | 仍未观察。completion popup 三项成因已修（`5ee23d38`），窄窗口 Timeline 缩放仍待复测。 |
+| 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | Validation 上一轮通过；Muri 未重新观察，不能从自动测试推断桌面通过。 |
+| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec`；暂停跟随装饰的路由与 QML 渲染回归在 `qml_editor_controller_spec` | 暂停跟随成因已修（`ca943a82`，装饰通道接入可见 QML 编辑器）。缩放/命中/四个 follow 状态仍待桌面观察。 |
+| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；真实 `TextArea` + 真实 `QKeyEvent` 的命令修饰键回归 | 书签上一轮通过。正文右键菜单（`2a27630d`）、命令修饰键写入字面字符（`75c89635`）已修。**IME commit+Enter 重复插入未修复**：本机无法复现，改为落地诊断（`bbd5e3b8`），需带真实输入法的机器以 `--debug` 复现一次。 |
+| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | `Command`+点击 seek 预览已接入（`f451ae09`），回归投递真实 `Ctrl+左键`；桌面复验仍未执行。 |
+| root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 未执行。 |
+
+> 本轮所有修复都只有自动证据：本机没有显示器/截屏权限，原生 GUI 复验一次都没有执行。
+> 详细的根因、回归与未完成项见
+> [QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。
 
 ### 上游同步
 
@@ -132,8 +136,12 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 - [x] Step 1：底栏已接入的时间轴与语法标签统一使用 `QuickShellController` 当前标签、显隐和文案状态，移除 `ViewState.activeBottomTab` 局部副本。
 - [ ] Step 2：接入时间轴顶部的缩放、亮度、视图锁定、进度同步与 Follow Code 交互。
+      控件与 header 限位已接入；窄窗口下的视觉与命中仍待桌面观察。
 - [ ] Step 3：将 v2 可见编辑器的光标行列接入时间轴光标与 Follow Code。
-- [ ] Step 4：将时间轴导航结果回写到 v2 可见编辑器，补齐跳转、选区和跟随视觉状态。
+      `Command`/`Ctrl`+点击已可 seek 预览（`f451ae09`）。
+- [x] Step 4：将时间轴导航结果回写到 v2 可见编辑器，补齐跳转、选区和跟随视觉状态。
+      播放时走 QML navigation 请求移动光标；暂停或关闭代码跟随时改为只读跟随装饰
+      （span 高亮 + 跟随光标 + 不动 caret 的滚动），见 `ca943a82`。
 - [ ] Step 5：将 QML 正文编辑接入 `TimelineQuickModel` 增量更新路径，取消每次输入对整份正文的全量刷新。
 - [ ] Step 6：接入 Muri 标签、列表与问题跳转，与 v1 共用诊断状态。
 - [ ] Step 7：补齐底栏前台生命周期、面板高度同步、缩放与主题刷新。

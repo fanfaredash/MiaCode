@@ -1,6 +1,7 @@
 # QML UI v2 执行、修复与人工验收审计
 
-> 状态：**未验收通过**。本文件记录原计划的实施提交、首次阶段完成后的缺陷修复，以及 2026-08-24 的原生桌面验收结果。它不替代原始计划；原计划见 [QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md](QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md)。
+> 状态：**未验收通过**。本文件记录原计划的实施提交、首次阶段完成后的缺陷修复、2026-08-24 的原生桌面验收结果，
+> 以及针对该次失败项的根因修复轮。它不替代原始计划；原计划见 [QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md](QML_UI_V2_PHASE1_PHASE2_EXECUTION_PLAN_ZH.md)。
 
 ## 原始计划与实施提交
 
@@ -48,6 +49,47 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 | `Command+Z` | 失败 | 某些情形失效并输入字母 `z`。 |
 | IME：输入 `a` 后直接 Enter | 失败 | 会插入大量重复 `a`，属于 P0 文本损坏问题。 |
 
+## 2026-08-24 验收失败项的根因修复轮
+
+本轮针对上表的失败项定位根因并修复。按分支既定要求，每项都先补可执行的失败回归（真实 QML
+组件、真实 `QKeyEvent` / `QInputMethodEvent` / `QTest` 鼠标事件，不用源码字符串扫描代替），
+确认回归在修复前为红、修复后为绿，再单独提交。
+
+为此新增了两项测试基础设施，二者都只在 `MIACODE_BUILD_DEV_TOOLS` 下构建：
+
+- `MiaCode.UI` 模块被镜像到 `build/qml_spec_imports/MiaCode/UI/`（qmldir + `configure_file` 复制），
+  spec 因此可以 `import MiaCode.UI` 并实例化**真实的** `SourceEditor.qml` / `CompletionPopup.qml`，
+  而不是在测试里重抄一份副本。模块的 C++ 元素由 spec 自行 `qmlRegisterType`。
+- dev-tools 引入 `Qt6::Test`，用于把真实鼠标/键盘事件投递进 `QQuickWindow`。
+
+| 提交 | 门槛 | 确证的根因 | 回归 |
+| --- | --- | --- | --- |
+| `75c89635` | `Command+Z` 输入字母 `z` | 策略拒绝带命令修饰键的按键后，QML 未接受事件，`QQuickTextEdit` 落到原始插入分支。Qt 的文本控件只挡 Ctrl，不挡 Meta/Super，因此 macOS 物理 `Control+Z`（`Qt::MetaModifier`）与 Windows `Super+Z` 会把字面字符写进谱面。实测：`Meta+Z→zabc`、`Meta+C→cabc`、`Meta+A→aabc` | `SimaiTextEditPolicySpec` 固定抑制矩阵；`QmlEditorControllerSpec` 用真实 `TextArea` + 真实 `QKeyEvent` 断言文档未被改动 |
+| `5ee23d38` | completion popup 位置、样式、候选高亮与键盘反馈 | delegate 声明了 `required property string modelData`，整个 delegate 切换到 required 属性模式并关闭上下文属性注入，同级的裸 `index` 因此报 `ReferenceError: index is not defined`：`highlighted` 永远为假、`selectCompletionIndex(index)` 抛错。另外竖向 `ListView` 的 `contentWidth` 恒为 -1，`implicitWidth: contentWidth` 把每次会话都压到最小宽度；锚点只绑定 caret 矩形且经过非响应式的 `mapToItem`，滚动/缩放后失效并在末行溢出遮罩底部 | 载入真实 `CompletionPopup.qml`，断言高亮跟随 `completionIndex`、宽度由候选文本测得、锚点在 caret 下方并在底部翻转。旧文件上复现同样的 `index is not defined` |
+| `2a27630d` | 编辑器正文右键菜单 | 正文用 `TapHandler` 承接右键，但 `TextArea` 在 press 时取走鼠标 grab，`ReleaseWithinBounds` 手势在其内部永不完成。隔离实验：纯 `Rectangle` 上 `TapHandler` 命中 1 次、`TextArea` 内 0 次，而 `MouseArea` 两处都是 1 次（行号 gutter 菜单一直用的就是 `MouseArea`） | 载入真实 `SourceEditor.qml`，用 `QTest` 投递真实右键；另断言 Menu 键 / `Shift+F10` 键盘路径 |
+| `f451ae09` | `Command`+点击文本未同步预览 | v1 的 ctrl-click 跳转装在**隐藏** widget viewport 的事件过滤器上，v2 可见的 QML 编辑器没有对应路径，点击只经 caret 桥移动了时间轴光标 | 真实 `SourceEditor.qml` 上投递真实 `Ctrl+左键`，断言普通点击不 seek、Ctrl 点击 seek 到刚落下的 caret 行列 |
+| `ca943a82` | 暂停状态的 preview-follow | 跟随有两种模式：播放且开启代码跟随时移动光标（走 QML navigation 请求），暂停或关闭时只画装饰——而该装饰此前只渲染在隐藏的 v1 `PlainCodeEditor` 上，所以 v2 暂停后完全没有可见跟随 | 路由值断言身份、可见性与 metadata 模式的门控；真实 `SourceEditor.qml` 上驱动装饰信号，断言解析出的偏移、过期 revision 丢弃与清除 |
+| `bbd5e3b8` | IME commit 后 Enter 重复插入 | **未确证。** 用真实 `TextArea` + 真实 `QmlEditorInputBridge` 走 preedit→commit 序列只得到 1 次事务、1 个字符，说明触发点在平台输入法序列而不是桥自身逻辑 | 不修改行为，改为落地诊断：记录每个事件的 commit/preedit 长度、replacement 区间、attribute 种类、composing 状态，以及在 QML 事务两侧采集的 commit 深度 |
+
+### 本轮证据
+
+- Release `MiaCode` 构建成功（Qt 6.10.2，macOS）。
+- `ctest -C Release -R 'qml_.*_spec|simai_text_edit_policy_spec|plain_code_editor_spec|simai_completion_catalog_spec|timeline_model_spec|timeline_marker_offset_spec|muri_spec|touch_pad_authoring_state_spec|simai_document_spec'`：14/14 通过。
+- 每个修复都单独验证过“修复前回归为红、修复后为绿”。
+
+### 本轮未能执行的验证
+
+- **原生桌面观察未执行。** 本次会话没有显示器/截屏权限（`screencapture` 返回
+  `could not create image from display`），因此上述修复**都没有**经过原生 GUI 复验。自动证据不能
+  替代它，下节的验收门槛因此仍然全部开启。
+- **IME 重复插入未修复**，只落了诊断。需要在装有真实输入法的机器上以 `--debug` 复现一次，
+  查看 `miacode_runtime_debug.log` 的 `[runtime/editor/ime_event]` 与 `[runtime/editor/ime_commit]`：
+  若同一次提交出现多条 `ime_event`，问题在平台投递；若 `reentrant=1`，则是 QML 事务重入了输入法上下文。
+- **窄窗口 Timeline 缩放与 header 命中未观察。** 静态复查显示该链路已有防护：
+  `TimelineSceneStateBuilder` 用 `max(headerSafeLeft, headerRightLimit)` 且对视口宽度取
+  `min`，因此即使 `BottomPanel.qml` 在极窄面板下把 limit 传成倒置或越界，也会收敛而不是画错。
+  但这只是读码结论，不能当作桌面观察通过。
+
 ## 未关闭的验收门槛
 
 在以下项目均通过原生桌面复验前，QML UI v2 **不得**宣称阶段 2 已完全验收：
@@ -64,4 +106,5 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 
 - 原计划的 Task 1–10 实施提交保持不重写，以便追溯每项边界和规格的引入时间。
 - `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md` 是当前手工验收摘要；本文件提供提交级历史和失败项。
-- 当前分支包含三个后续修复提交，但本次验收暴露的失败项尚未修复；本次仅记录，不修改生产或测试代码。
+- 当前分支在三个后续修复提交之后，又加入了本文“根因修复轮”一节的五个修复提交与一个诊断提交。
+  五项验收门槛的代码侧成因已定位并修复（IME 重复插入除外，仅落诊断），但门槛本身仍需原生桌面复验才能关闭。

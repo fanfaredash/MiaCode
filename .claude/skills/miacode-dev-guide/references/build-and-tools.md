@@ -68,6 +68,30 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `ui_text_locale_spec` (i18n drift guard — see the localization note in
   `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define)
 
+### QML UI regressions run against the real .qml files
+
+`MiaCode.UI` is added with `qt_add_qml_module(MiaCode …)` on the **app executable**, so a spec
+binary cannot import it. The dev-tools block therefore mirrors the module into a plain
+file-system import directory — `<build>/qml_spec_imports/MiaCode/UI/` — with a generated `qmldir`
+plus a `configure_file(… COPYONLY)` copy of every entry in `MIACODE_UI_QML_FILES` (which already
+alias flat, so the mirror is flat too). `configure_file` re-runs CMake when a source `.qml`
+changes, so the mirror stays in step. The root is handed to the spec as the
+`MIACODE_QML_SPEC_IMPORT_ROOT` compile define; the spec calls `engine.addImportPath(…)` and
+`qmlRegisterType<…>("MiaCode.UI", 1, 0, …)` for the module's C++ elements (`SimaiSyntaxHighlighter`,
+`QmlEditorInputBridge`), which the app's generated registration would otherwise provide.
+`qml_editor_controller_spec` uses this to instantiate the **real** `SourceEditor.qml` and
+`CompletionPopup.qml` against the real `QmlEditorController` — the branch's acceptance rule is that
+UI regressions drive real components and real events, never a source-string scan or a retyped copy.
+
+Dev tools also link **`Qt6::Test`** (found only inside the `MIACODE_BUILD_DEV_TOOLS` block) for
+`QTest::mouseClick` / `QTest::qWaitForWindowExposed`, the supported way to deliver real pointer
+input into a `QQuickWindow`. Sending a `QMouseEvent` straight to the window with
+`QCoreApplication::sendEvent` does **not** reach Quick items — an early attempt at this silently
+reported zero hits for both a `TapHandler` and a `MouseArea`, which looks like a handler bug and is
+not one. Specs run with `QQuickStyle::setStyle("Basic")`; under the native macOS style the shared
+`App*` components log "current style does not support customization" and their contentItem /
+background overrides are dropped.
+
 ## 3. Spec / dev-tool convention (audit 2026-05-29 — being standardized)
 
 Findings the convention is fixing:
