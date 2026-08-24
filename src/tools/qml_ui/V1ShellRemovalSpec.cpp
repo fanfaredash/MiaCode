@@ -74,8 +74,17 @@ int main(int argc, char** argv)
     const QString controllerHeader = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.h"));
     expect(!controller.isEmpty() && !controllerHeader.isEmpty(),
            QStringLiteral("QuickShellController is still present for v2"), out, &failed);
-    expect(!controller.contains(QStringLiteral("surfaceHost_"))
-               && !controllerHeader.contains(QStringLiteral("QuickShellNativeSurfaceHost")),
+    QStringList surfaceHostLeftovers;
+    for (const QString& token : {QStringLiteral("surfaceHost_"), QStringLiteral("QuickShellNativeSurfaceHost")}) {
+        if (controller.contains(token))
+            surfaceHostLeftovers.append(QStringLiteral("QuickShellController.cpp: ") + token);
+        if (controllerHeader.contains(token))
+            surfaceHostLeftovers.append(QStringLiteral("QuickShellController.h: ") + token);
+    }
+    if (!surfaceHostLeftovers.isEmpty()) {
+        out << "  still branches on: " << surfaceHostLeftovers.join(QStringLiteral(", ")) << '\n';
+    }
+    expect(surfaceHostLeftovers.isEmpty(),
            QStringLiteral("QuickShellController no longer branches on a native surface host"),
            out, &failed);
 
