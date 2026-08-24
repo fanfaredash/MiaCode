@@ -105,19 +105,19 @@
       `ctest --test-dir build -C Release -R 'qml_.*_spec|simai_text_edit_policy_spec|plain_code_editor_spec|simai_completion_catalog_spec|timeline_model_spec|timeline_marker_offset_spec|muri_spec|touch_pad_authoring_state_spec' --output-on-failure`
       为 11/11 通过。
 
-### 二阶段桌面手工回归矩阵（待具备原生 GUI 会话后执行）
+### 二阶段桌面手工回归矩阵（已开始，尚未通过）
 
 本机以 `QT_QPA_PLATFORM=offscreen` 启动 QML 桌面壳会触发既有 macOS 原生主题/平台插件崩溃，不能把
-offscreen 自动化结果当成桌面视觉或输入验证。以下项目因此保持未执行，且不由构建或 CTest 推断为通过：
+offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 2026-08-24 的原生桌面验收；未列为通过的项目不得由构建或 CTest 推断为通过：
 
-| 流程 | 自动/静态证据 | 原生 GUI 状态 |
+| 流程 | 自动/静态证据 | 原生 GUI 状态（2026-08-24） |
 |---|---|---|
-| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入 | 未执行 |
-| 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | 未执行实际 timeline/preview 观察 |
-| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec` | 未执行 |
-| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；静态焦点/Accessible 审阅 | 未执行真实 IME 与键盘焦点顺序 |
-| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | 未执行 |
-| root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 未执行 |
+| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入 | 未完成；completion popup 的位置/样式/候选高亮失败，窄窗口 Timeline 缩放待复测。 |
+| 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | Validation 本次通过；Muri 未在本轮重新观察，不能从自动测试推断桌面通过。 |
+| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec` | 播放时代码跟随正确；暂停时不正确。`Command`+点击文本仅移动 Timeline、预览未同步。缩放/命中待复测。 |
+| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；静态焦点/Accessible 审阅 | 书签本次通过；completion 键盘视觉反馈、正文右键菜单、`Command+Z` 与 IME commit+Enter 均失败，需修复后复验。 |
+| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | `Command`+点击文本后的 preview seek 失败；不得标记通过。 |
+| root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 本轮未执行。 |
 
 ### 上游同步
 
