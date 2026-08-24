@@ -119,6 +119,10 @@ public:
     Q_INVOKABLE void setQmlTouchPadAuthoringCtrlHold(bool active);
     Q_INVOKABLE bool setTouchPadAuthoringPreviewAnchor(int difficultyId, qulonglong revision,
                                                        const QString& text, int tokenStart);
+    // Ctrl/Command click in the visible QML editor: seek the preview to the
+    // clicked token instead of only moving the timeline cursor.
+    Q_INVOKABLE bool seekPreviewToEditorLocation(int difficultyId, qulonglong revision,
+                                                 int line, int column);
     Q_INVOKABLE QVariantList bookmarksForDifficulty(int difficultyId) const;
     Q_INVOKABLE void navigateToBookmark(int difficultyId, int line);
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);

@@ -345,7 +345,7 @@ bool verifyCompletionPopupPresentsTheSelectedCandidate(QTextStream& out, int* fa
 // Loads the real SourceEditor.qml against the real controller. TextArea takes
 // the mouse grab on press, so the TapHandler the editor used to carry never
 // completed a tap inside it and the body context menu was dead on the desktop.
-bool verifyEditorContextMenuOpensFromMouseAndKeyboard(QTextStream& out, int* failed)
+bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
 {
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
@@ -396,6 +396,19 @@ bool verifyEditorContextMenuOpensFromMouseAndKeyboard(QTextStream& out, int* fai
                 function setTouchPadAuthoringPreviewAnchor(a, b, c, d) { return true }
                 function publishEditorCaret(a, b, c, d) { return true }
                 function selectDifficulty(a) {}
+                property int seekRequests: 0
+                property int seekLine: -1
+                property int seekColumn: -1
+                property int seekDifficultyId: -1
+                property real seekRevision: -1
+                function seekPreviewToEditorLocation(difficultyId, revision, line, column) {
+                    session.seekRequests += 1
+                    session.seekDifficultyId = difficultyId
+                    session.seekRevision = revision
+                    session.seekLine = line
+                    session.seekColumn = column
+                    return true
+                }
             }
 
             QtObject {
@@ -405,6 +418,7 @@ bool verifyEditorContextMenuOpensFromMouseAndKeyboard(QTextStream& out, int* fai
             }
 
             property alias editor: sourceEditor
+            property alias documentStub: session
             SourceEditor {
                 id: sourceEditor
                 objectName: "sourceEditor"
@@ -451,8 +465,39 @@ bool verifyEditorContextMenuOpensFromMouseAndKeyboard(QTextStream& out, int* fai
     }
     QMetaObject::invokeMethod(editorItem, "openContextMenuAtCaret");
     QCoreApplication::processEvents();
-    return expect(menu->property("visible").toBool(),
-                  QStringLiteral("the keyboard context-menu route opens the same menu at the caret"),
+    expect(menu->property("visible").toBool(),
+           QStringLiteral("the keyboard context-menu route opens the same menu at the caret"),
+           out, failed);
+    QMetaObject::invokeMethod(menu, "close");
+    QCoreApplication::processEvents();
+
+    // A Ctrl/Command click must seek the preview to the clicked token, not
+    // merely move the timeline cursor. v1 does this from an event filter on the
+    // hidden widget viewport, which the visible QML editor never reached.
+    auto* session = root->property("documentStub").value<QObject*>();
+    if (!expect(session != nullptr, QStringLiteral("preview seek harness exposes its document stub"),
+                out, failed)) {
+        return false;
+    }
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 30));
+    QCoreApplication::processEvents();
+    expect(session->property("seekRequests").toInt() == 0,
+           QStringLiteral("a plain click in the editor does not seek the preview"), out, failed);
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::ControlModifier, QPoint(120, 30));
+    QCoreApplication::processEvents();
+    const int caretLine = editorItem->property("viewState").value<QObject*>() != nullptr
+        ? editorItem->property("viewState").value<QObject*>()->property("editorCursorLine").toInt()
+        : -1;
+    const int caretColumn = editorItem->property("viewState").value<QObject*>() != nullptr
+        ? editorItem->property("viewState").value<QObject*>()->property("editorCursorColumn").toInt()
+        : -1;
+    return expect(session->property("seekRequests").toInt() == 1
+                      && session->property("seekDifficultyId").toInt() == 3
+                      && session->property("seekRevision").toInt() == 42
+                      && session->property("seekLine").toInt() == caretLine
+                      && session->property("seekColumn").toInt() == caretColumn,
+                  QStringLiteral("a Ctrl/Command click seeks the preview to the caret it just placed"),
                   out, failed);
 }
 } // namespace
@@ -473,7 +518,7 @@ int main(int argc, char** argv)
     verifyQmlTextAreaKeyRouting(out, &failed);
     verifyCommandModifiedKeysNeverTypeText(out, &failed);
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
-    verifyEditorContextMenuOpensFromMouseAndKeyboard(out, &failed);
+    verifyEditorPointerRoutes(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
     expect(opening.consumed && opening.transaction.replacementText == QStringLiteral("[]") && opening.transaction.position == 1, QStringLiteral("policy key input produces one QML edit transaction"), out, &failed);

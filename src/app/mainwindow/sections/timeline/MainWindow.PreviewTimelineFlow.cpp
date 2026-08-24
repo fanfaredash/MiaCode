@@ -1610,6 +1610,31 @@ bool MainWindow::applyQmlTouchPadAuthoringPreviewAnchor(int difficultyId, int li
     return true;
 }
 
+bool MainWindow::seekPreviewToQmlEditorLocation(int difficultyId, int line, int column)
+{
+    if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_) {
+        return false;
+    }
+    double second = 0.0;
+    if (!resolveTimelineSecondForCursor(qMax(1, line), qMax(1, column), &second)) {
+        return false;
+    }
+    // Same order as the v1 editor-viewport ctrl-click dispatch: park playback
+    // first so the seek lands on a stable clock, suppress the timeline cursor
+    // feedback while seeking, then hand the timeline its new cursor.
+    if (qtPreviewPlaying_) {
+        pauseQtPreviewPlaybackExact();
+    }
+    const bool previousSuppressTimelineCursorSync = suppressTimelineCursorSync_;
+    suppressTimelineCursorSync_ = true;
+    seekPreviewDiscreteToSecond(second, true);
+    if (timelineQuickStateBridge_ != nullptr) {
+        deferTimelineCursorBridgeUpdate(second, false);
+    }
+    suppressTimelineCursorSync_ = previousSuppressTimelineCursorSync;
+    return true;
+}
+
 void MainWindow::setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler)
 {
     qmlTouchPadAuthoringHandler_ = std::move(handler);

@@ -446,6 +446,16 @@ bool QmlDocumentModel::setTouchPadAuthoringPreviewAnchor(
     return backend_->applyQmlTouchPadAuthoringPreviewAnchor(difficultyId, line, column);
 }
 
+bool QmlDocumentModel::seekPreviewToEditorLocation(
+    int difficultyId, qulonglong revision, int line, int column)
+{
+    if (backend_ == nullptr || revision != documentRevision_
+        || difficultyId != currentDifficultyId() || difficultyId <= 0) {
+        return false;
+    }
+    return backend_->seekPreviewToQmlEditorLocation(difficultyId, line, column);
+}
+
 QVariantList QmlDocumentModel::bookmarksForDifficulty(int difficultyId) const
 {
     QVariantList bookmarks;

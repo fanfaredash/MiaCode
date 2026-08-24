@@ -175,6 +175,19 @@ Rectangle {
         return root.editorController.bookmarksForQml(sourceArea.text)
     }
 
+    // v1 resolves a Ctrl/Command click through an event filter on the hidden
+    // widget viewport, so in v2 the click only ever moved the timeline cursor
+    // and the preview stayed where it was. TextArea has already placed the
+    // caret by the time the click completes, so the caret is the location —
+    // no separate hit-test, and it matches what the user sees.
+    function seekPreviewToCaret() {
+        if (root.metadataMode || sourceArea.selectedText.length > 0)
+            return false
+        return root.documentSession.seekPreviewToEditorLocation(
+            root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+            root.viewState.editorCursorLine, root.viewState.editorCursorColumn)
+    }
+
     function revealSyntaxIssue(difficultyId, revision, line, column, endColumn, completion, cancellation) {
         if (root.metadataMode) {
             if (cancellation)
@@ -572,6 +585,23 @@ Rectangle {
                 root.applyEditorTransaction(root.editorController.acceptCompletionForQml(
                     sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd))
                 sourceArea.forceActiveFocus()
+            }
+
+            // PointHandler only ever takes a passive grab, so TextArea still
+            // receives the press and places the caret; a TapHandler would have
+            // to take the exclusive grab TextArea already owns and never fires
+            // inside one. A Ctrl+drag is a selection, not a jump.
+            PointHandler {
+                acceptedButtons: Qt.LeftButton
+                acceptedModifiers: Qt.ControlModifier
+                target: null
+                onActiveChanged: {
+                    // Deferred like v1's release dispatch: TextArea finishes
+                    // placing the caret for this click first, so the seek uses
+                    // the final location rather than the previous one.
+                    if (!active)
+                        Qt.callLater(() => root.seekPreviewToCaret())
+                }
             }
 
             // TextArea takes the mouse grab on press, so a TapHandler's

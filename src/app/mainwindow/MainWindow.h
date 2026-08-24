@@ -260,6 +260,11 @@ public:
     // its transient Ctrl gesture outside the private preview implementation.
     void setQmlTouchPadAuthoringCtrlHold(bool active);
     bool applyQmlTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column);
+    // A Ctrl/Command click in the QML editor is the v2 equivalent of the v1
+    // editor-viewport ctrl-click jump: park playback and seek the preview to
+    // the clicked token. QML owns the difficulty/revision gate; the same
+    // suppress-and-restore sequence keeps the timeline cursor authoritative.
+    bool seekPreviewToQmlEditorLocation(int difficultyId, int line, int column);
     bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
