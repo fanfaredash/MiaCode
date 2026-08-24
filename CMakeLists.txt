@@ -1588,6 +1588,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(qml_shortcut_binding_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    miacode_add_dev_tool(v1_shell_removal_spec TEST
+        SOURCES
+            src/tools/qml_ui/V1ShellRemovalSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(v1_shell_removal_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     miacode_add_dev_tool(qml_ui_bootstrap_lifecycle_spec TEST
         SOURCES
             src/tools/qml_ui/QmlUiBootstrapLifecycleSpec.cpp
