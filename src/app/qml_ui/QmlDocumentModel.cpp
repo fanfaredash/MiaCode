@@ -41,6 +41,20 @@ QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
                     emit documentStateChanged();
                 }, Qt::QueuedConnection);
             });
+    connect(backend_, &MainWindow::documentReplaced, this, [this] {
+        // A chart may be replaced by the backend directly (startup, root
+        // ChartDrop, native File/Open, recovery), not only through this QML
+        // facade.  Some replacement routes finalize their dirty/revision
+        // state after loadDocument() returns, so defer the projection until
+        // that transaction has fully committed.  QML then receives one
+        // coherent snapshot for the title, source editor, difficulty tabs,
+        // and derived bookmark list rather than a new chart with old state.
+        QMetaObject::invokeMethod(this, [this] {
+            clearMetadataSourceRejection();
+            emitDocumentStateChanged();
+            emit documentReplaced();
+        }, Qt::QueuedConnection);
+    });
 }
 
 QmlDocumentModel::~QmlDocumentModel()
@@ -145,12 +159,9 @@ void QmlDocumentModel::setMetadataSourceText(const QString& value)
         emit metadataSourceChanged();
         return;
     }
-    metadataSourceError_.clear();
-    metadataSourceAttemptText_.clear();
-    refreshDocumentState();
-    markDocumentChanged();
-    emit metadataSourceChanged();
-    emitDocumentStateChanged();
+    // loadDocument() emits MainWindow::documentReplaced synchronously.  Its
+    // connection above clears any rejected-source draft and publishes the
+    // complete replacement snapshot exactly once.
 }
 
 QString QmlDocumentModel::documentTitle() const
@@ -290,9 +301,6 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
         emit operationFailed(tr("打开失败"), tr("无法打开谱面文件。"));
         return false;
     }
-    clearMetadataSourceRejection();
-    emitDocumentStateChanged();
-    emit documentReplaced();
     return true;
 }
 bool QmlDocumentModel::save()
@@ -311,9 +319,6 @@ bool QmlDocumentModel::saveAs(const QUrl& fileUrl)
 void QmlDocumentModel::discardChanges()
 {
     if (!backend_->discardDocumentChanges()) return;
-    clearMetadataSourceRejection();
-    emitDocumentStateChanged();
-    emit documentReplaced();
 }
 void QmlDocumentModel::selectDifficulty(int id)
 {

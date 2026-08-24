@@ -44,6 +44,21 @@ a two-phase transaction: preflight every candidate difficulty with strict valida
 old document/editor text on any error, then load and refresh the timeline only after acceptance.
 Cache clearing publishes the same signal.
 
+Backend-owned document replacement is a separate atomic boundary: startup targets, root
+ChartDrop, native open/new/discard/recovery and accepted full-source replacement all funnel
+through `DocumentSection::loadDocument()`, which publishes `MainWindow::documentReplaced()` only
+after file identity, active difficulty, title and document-owned bookmarks are current.
+`QmlDocumentModel` republishes its complete state and its own `documentReplaced` signal from that
+backend event; consumers must rederive text, difficulty tabs and bookmarks rather than retaining a
+previous-document cache. UIv2 explicit validation first schedules the ordinary timeline slow
+refresh, then publishes its immediate validation result; the scheduled generation is responsible
+for publishing the matching validation/Muri/static-reference revision. `ViewState` replacement
+tab reset is presentation-only: it must not issue another difficulty-selection request after
+`loadDocument()` has already activated the target field, or it creates a second timeline refresh
+and validation revision. The slow-analysis completion writes validation, Muri, and static-reference
+provenance before `documentValidationChanged`; synchronous observers may read the snapshot during
+that signal and must never see a validation-only intermediate state.
+
 UIv2 text input is an explicit side chain, not a direct `TextArea.text` contract:
 `SourceEditor.qml` sends physical keys, committed IME text and paste payloads separately through
 `QmlEditorInputBridge` to `QmlEditorController`; the controller returns one edit transaction,

@@ -1461,6 +1461,12 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
             }},
         });
     }
+    // All replacement routes (startup target, chart drop, New, discard,
+    // backup restore, and accepted full-source transactions) funnel through
+    // this method.  Publish only after loadDocument has established the
+    // active difficulty, title and document-owned bookmark cache so QML never
+    // observes a mixture of the outgoing and incoming documents.
+    emit owner_.documentReplaced();
 }
 
 void MainWindow::DocumentSection::clearTimelineAndPreview()

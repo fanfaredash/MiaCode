@@ -161,6 +161,10 @@ signals:
     void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
+    // Emitted after the authoritative document replacement has installed its
+    // final file identity and active difficulty.  UIv2 uses this to reset
+    // every derived editor presentation (text, bookmarks and tabs) together.
+    void documentReplaced();
 
 public:
     enum class DocumentField {

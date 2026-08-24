@@ -43,11 +43,11 @@ QtObject {
 
     // 难度标签激活必须先请求文档 owner 切换正文数据源，再发布活动标签。
     // 这样标题、字段、源码和解析结果在同一轮状态变化中读取同一个难度。
-    function setActiveEditor(key) {
+    function setActiveEditor(key, requestDifficultyActivation) {
         const difficultyId = key.startsWith("difficulty:")
             ? Number(key.substring("difficulty:".length))
             : 0
-        if (difficultyId > 0)
+        if (difficultyId > 0 && requestDifficultyActivation !== false)
             difficultyEditorActivationRequested(difficultyId)
         activeEditorKey = key
     }
@@ -116,7 +116,7 @@ QtObject {
         editorHistory = tabs.slice()
         setActiveEditor(currentDifficultyId > 0
             ? difficultyEditorKey(currentDifficultyId)
-            : "")
+            : "", false)
     }
 
     function syncDifficultyEditors(difficulties) {

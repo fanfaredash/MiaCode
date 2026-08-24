@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.ValidationSection.h"
 #include "../../MainWindowShared.h"
+#include "../timeline/MainWindow.TimelineSection.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
@@ -967,5 +968,11 @@ MainWindow::QmlAnalysisSnapshot MainWindow::qmlAnalysisSnapshot() const
 
 bool MainWindow::validateActiveDocument()
 {
+    // UIv2's explicit recheck must not publish a validation-only generation:
+    // advance the shared slow-refresh revision first, then let its analysis
+    // worker publish matching validation, Muri report and static references.
+    // The synchronous validation below remains useful for immediate feedback
+    // while that aligned Muri result is pending.
+    timelineSection_->scheduleTimelineRefresh();
     return validationSection_->runValidateSimaiSilently(false);
 }

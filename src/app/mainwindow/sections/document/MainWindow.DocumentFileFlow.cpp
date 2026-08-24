@@ -262,10 +262,13 @@ void MainWindow::DocumentSection::onNewFile()
     }
 
     cancelPendingStartupRestore();
+    // loadDocument publishes the authoritative replacement notification.
+    // Install the new path first so its file/title consumers receive one
+    // coherent snapshot rather than the outgoing chart path.
+    owner_.setCurrentFilePath(targetPath);
     loadDocument(newDocument);
     owner_.clearValidationCache();
     state_.currentEncoding_ = TextEncoding::Utf8;
-    owner_.setCurrentFilePath(targetPath);
     owner_.statusBar()->showMessage(QString("Created: %1").arg(targetPath));
 }
 

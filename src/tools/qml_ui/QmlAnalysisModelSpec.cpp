@@ -1,6 +1,8 @@
+#include <QByteArray>
 #include <QTextStream>
 
 #include "app/qml_ui/QmlAnalysisProjection.h"
+#include "timeline/TimelineAnalysisPublication.h"
 
 namespace {
 bool require(bool condition, const QString& message, QTextStream& err)
@@ -26,6 +28,53 @@ miacode::qml_ui::AnalysisProjectionInput alignedInput()
                        QStringLiteral("Overlap"), QStringLiteral("two notes overlap")}};
     return input;
 }
+
+struct ObservedAnalysisPublicationState {
+    quint64 validationRevision = 0;
+    int muriDifficultyId = 0;
+    quint64 muriRevision = 0;
+    QByteArray muriSignature;
+    int staticReferencesDifficultyId = 0;
+    quint64 staticReferencesRevision = 0;
+    QByteArray staticReferencesSignature;
+};
+
+bool verifyAnalysisObserversSeeCompleteProvenance(QTextStream& err)
+{
+    constexpr quint64 kRevision = 72;
+    constexpr int kDifficultyId = 5;
+    const QByteArray signature("marker-signature");
+    ObservedAnalysisPublicationState published;
+    ObservedAnalysisPublicationState observed;
+    int notificationCount = 0;
+
+    miacode::timeline::publishTimelineAnalysisState(
+        [&] { published.validationRevision = kRevision; },
+        [&] {
+            published.muriDifficultyId = kDifficultyId;
+            published.muriRevision = kRevision;
+            published.muriSignature = signature;
+        },
+        [&] {
+            published.staticReferencesDifficultyId = kDifficultyId;
+            published.staticReferencesRevision = kRevision;
+            published.staticReferencesSignature = signature;
+        },
+        [&] {
+            ++notificationCount;
+            observed = published;
+        });
+
+    return require(notificationCount == 1
+                       && observed.validationRevision == kRevision
+                       && observed.muriDifficultyId == kDifficultyId
+                       && observed.muriRevision == kRevision
+                       && observed.muriSignature == signature
+                       && observed.staticReferencesDifficultyId == kDifficultyId
+                       && observed.staticReferencesRevision == kRevision
+                       && observed.staticReferencesSignature == signature,
+                   QStringLiteral("a validation observer sees validation, Muri, and static-reference provenance from one completed revision"), err);
+}
 }
 
 int main()
@@ -33,6 +82,7 @@ int main()
     QTextStream err(stderr);
     QTextStream out(stdout);
     bool ok = true;
+    ok &= verifyAnalysisObserversSeeCompleteProvenance(err);
     const auto aligned = miacode::qml_ui::projectAnalysis(alignedInput());
     ok &= require(aligned.available && !aligned.pending && aligned.validationRows.size() == 1
                       && aligned.muriRows.size() == 1 && aligned.validationRows.constFirst().revision == 72

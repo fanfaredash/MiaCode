@@ -1552,6 +1552,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(qml_ui_bootstrap_lifecycle_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    miacode_add_dev_tool(qml_document_lifecycle_contract_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlDocumentLifecycleContractSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(qml_document_lifecycle_contract_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(qml_document_replacement_sequence_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlDocumentReplacementSequenceSpec.cpp
+        LIBS Qt6::Core Qt6::Qml Qt6::Quick
+        INCLUDES src
+    )
+    target_compile_definitions(qml_document_replacement_sequence_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     miacode_add_dev_tool(plain_code_editor_spec TEST
         SOURCES
             src/tools/editor/PlainCodeEditorSpec.cpp

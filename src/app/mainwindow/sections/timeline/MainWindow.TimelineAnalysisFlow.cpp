@@ -26,6 +26,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "timeline/TimelineAnalysisPublication.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -201,21 +202,28 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                 const int validationIssueCount = entry.issues.size();
                 const int muriDiagnosticCount = result.analysisReport.diagnostics.size();
                 const int muriStaticReferenceCount = result.staticReferences.size();
-                guard->state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
-                emit guard->documentValidationChanged();
-                guard->state_.pendingDeferredValidationUiRefresh_ = true;
-                guard->state_.muriAnalysisReport_ = std::move(result.analysisReport);
-                guard->state_.muriAnalysisReport_.revision = ++guard->state_.muriAnalysisReportRevisionCounter_;
-                guard->state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
-                guard->state_.muriAnalysisReportDifficultyId_ = result.difficultyId;
-                guard->state_.muriAnalysisReportTimelineRevision_ = result.revision;
-                guard->state_.muriAnalysisResultAvailable_ = true;
-                guard->state_.muriStaticReferences_ = std::move(result.staticReferences);
-                guard->state_.muriStaticReferencesNoteMarkerSignature_ = result.noteMarkerSignature;
-                guard->state_.muriStaticReferencesDifficultyId_ = result.difficultyId;
-                guard->state_.muriStaticReferencesTimelineRevision_ = result.revision;
-                guard->state_.muriStaticReferencesAvailable_ = true;
-                guard->state_.pendingDeferredMuriUiRefresh_ = true;
+                miacode::timeline::publishTimelineAnalysisState(
+                    [&] {
+                        guard->state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
+                        guard->state_.pendingDeferredValidationUiRefresh_ = true;
+                    },
+                    [&] {
+                        guard->state_.muriAnalysisReport_ = std::move(result.analysisReport);
+                        guard->state_.muriAnalysisReport_.revision = ++guard->state_.muriAnalysisReportRevisionCounter_;
+                        guard->state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
+                        guard->state_.muriAnalysisReportDifficultyId_ = result.difficultyId;
+                        guard->state_.muriAnalysisReportTimelineRevision_ = result.revision;
+                        guard->state_.muriAnalysisResultAvailable_ = true;
+                    },
+                    [&] {
+                        guard->state_.muriStaticReferences_ = std::move(result.staticReferences);
+                        guard->state_.muriStaticReferencesNoteMarkerSignature_ = result.noteMarkerSignature;
+                        guard->state_.muriStaticReferencesDifficultyId_ = result.difficultyId;
+                        guard->state_.muriStaticReferencesTimelineRevision_ = result.revision;
+                        guard->state_.muriStaticReferencesAvailable_ = true;
+                        guard->state_.pendingDeferredMuriUiRefresh_ = true;
+                    },
+                    [&] { emit guard->documentValidationChanged(); });
                 if (!guard->state_.qtPreviewPlaying_) {
                     guard->applyDeferredAnalysisUiUpdates();
                 }
