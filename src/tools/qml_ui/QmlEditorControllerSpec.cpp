@@ -672,6 +672,56 @@ bool verifyReentrantImeCommitIsAppliedOnce(QTextStream& out, int* failed)
     return expect(applied == 2,
                   QStringLiteral("a subsequent standalone commit is still applied"), out, failed);
 }
+// The visible editor tab set must always contain the active difficulty.
+// resetEditorTabs(0) empties it, and syncDifficultyEditors only ever filters —
+// it can never put a tab back — so any path that observes a momentarily
+// unset difficulty leaves the editor with nothing to show and no route to
+// recover. The document projection is delivered on a queued connection, and
+// the desktop capture shows two documentReplaced 6 ms apart for one open, so
+// that observation window is real.
+bool verifyEditorTabsRecoverTheActiveDifficulty(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+        import QtQuick
+        import MiaCode.UI
+        ViewState { }
+    )QML", QUrl(QStringLiteral("qrc:/ViewStateSpec.qml")));
+    if (!expect(component.isReady(), QStringLiteral("real ViewState.qml loads in the spec harness"),
+                out, failed)) {
+        for (const QQmlError& error : component.errors()) out << error.toString() << '\n';
+        return false;
+    }
+    std::unique_ptr<QObject> state(component.create());
+    if (!expect(state != nullptr, QStringLiteral("ViewState harness instantiates"), out, failed)) {
+        return false;
+    }
+
+    QMetaObject::invokeMethod(state.get(), "resetEditorTabs", Q_ARG(QVariant, 5));
+    expect(state->property("openEditorTabs").toStringList() == QStringList{QStringLiteral("difficulty:5")}
+               && state->property("activeEditorKey").toString() == QStringLiteral("difficulty:5"),
+           QStringLiteral("resetting tabs for a difficulty opens its editor"), out, failed);
+
+    // The race window: a replacement observed while the active difficulty is
+    // momentarily unset.
+    QMetaObject::invokeMethod(state.get(), "resetEditorTabs", Q_ARG(QVariant, 0));
+    expect(state->property("openEditorTabs").toStringList().isEmpty(),
+           QStringLiteral("an unset difficulty leaves no editor tab"), out, failed);
+
+    const QVariantList difficulties{QVariantMap{{QStringLiteral("id"), 5}}};
+    QMetaObject::invokeMethod(state.get(), "syncDifficultyEditors",
+                              Q_ARG(QVariant, QVariant::fromValue(difficulties)),
+                              Q_ARG(QVariant, 5));
+    const QStringList recovered = state->property("openEditorTabs").toStringList();
+    if (recovered.isEmpty()) out << "  editor tabs stayed empty; the editor has nothing to show\n";
+    return expect(recovered.contains(QStringLiteral("difficulty:5"))
+                      && state->property("activeEditorKey").toString()
+                             == QStringLiteral("difficulty:5"),
+                  QStringLiteral("syncing difficulties restores the active difficulty's editor"),
+                  out, failed);
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -693,6 +743,7 @@ int main(int argc, char** argv)
     verifyReentrantImeCommitIsAppliedOnce(out, &failed);
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
     verifyEditorPointerRoutes(out, &failed);
+    verifyEditorTabsRecoverTheActiveDifficulty(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
     expect(opening.consumed && opening.transaction.replacementText == QStringLiteral("[]") && opening.transaction.position == 1, QStringLiteral("policy key input produces one QML edit transaction"), out, &failed);

@@ -119,13 +119,38 @@ QtObject {
             : "", false)
     }
 
-    function syncDifficultyEditors(difficulties) {
+    // Filtering alone is not enough: this must also be able to put a tab back.
+    // The document projection arrives on a queued connection, so a replacement
+    // can be observed while the active difficulty is momentarily unset, and
+    // resetEditorTabs(0) then empties the tab set. Without a way to recover,
+    // the editor is left with nothing to show and no route back — which is the
+    // shape of the intermittent "editor still shows the old chart" report.
+    function syncDifficultyEditors(difficulties, activeDifficultyId) {
         const validKeys = {}
-        for (let index = 0; index < difficulties.length; ++index)
-            validKeys[difficultyEditorKey(difficulties[index].id)] = true
+        const difficultyKeys = []
+        for (let index = 0; index < difficulties.length; ++index) {
+            const key = difficultyEditorKey(difficulties[index].id)
+            validKeys[key] = true
+            difficultyKeys.push(key)
+        }
 
-        const tabs = openEditorTabs.filter(key => key === metadataEditorKey || validKeys[key])
-        if (tabs.length === openEditorTabs.length)
+        const activeKey = activeDifficultyId > 0
+            ? difficultyEditorKey(activeDifficultyId)
+            : ""
+        const preferredKey = validKeys[activeKey]
+            ? activeKey
+            : (difficultyKeys.length > 0 ? difficultyKeys[0] : "")
+
+        let tabs = openEditorTabs.filter(key => key === metadataEditorKey || validKeys[key])
+        if (tabs.length === 0 && preferredKey.length > 0)
+            tabs = [preferredKey]
+        else if (preferredKey.length > 0 && tabs.indexOf(preferredKey) < 0
+                 && activeKey.length > 0 && preferredKey === activeKey)
+            tabs = tabs.concat([preferredKey])
+
+        const unchanged = tabs.length === openEditorTabs.length
+            && tabs.every((key, index) => key === openEditorTabs[index])
+        if (unchanged && (activeEditorKey.length > 0 || tabs.length === 0))
             return
 
         const previousActive = activeEditorKey
@@ -134,8 +159,10 @@ QtObject {
         if (tabs.indexOf(previousActive) >= 0)
             return
 
-        setActiveEditor(editorHistory.length > 0
-            ? editorHistory[editorHistory.length - 1]
-            : (tabs.length > 0 ? tabs[0] : ""))
+        setActiveEditor(tabs.indexOf(preferredKey) >= 0
+            ? preferredKey
+            : (editorHistory.length > 0
+                ? editorHistory[editorHistory.length - 1]
+                : (tabs.length > 0 ? tabs[0] : "")))
     }
 }

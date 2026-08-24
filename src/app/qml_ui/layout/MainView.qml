@@ -324,10 +324,21 @@ Item {
 
         function onDocumentReplaced() {
             state.resetEditorTabs(root.documentSession.currentDifficultyId)
+            // The projection is queued, so this can run while the incoming
+            // document's active difficulty is not set yet. Healing here means a
+            // replacement never leaves the editor with no tab at all.
+            state.syncDifficultyEditors(root.documentSession.difficulties,
+                                        root.documentSession.currentDifficultyId)
         }
 
         function onDifficultiesChanged() {
-            state.syncDifficultyEditors(root.documentSession.difficulties)
+            state.syncDifficultyEditors(root.documentSession.difficulties,
+                                        root.documentSession.currentDifficultyId)
+        }
+
+        function onCurrentDifficultyChanged() {
+            state.syncDifficultyEditors(root.documentSession.difficulties,
+                                        root.documentSession.currentDifficultyId)
         }
 
         function onOperationFailed(title, message) {
