@@ -5,6 +5,7 @@
 #include "editor/BookmarkCommentSyntax.h"
 
 #include "app/mainwindow/MainWindow.h"
+#include "common/DebugLog.h"
 #include "core/chart/document/SimaiDocument.h"
 
 #include <QFileInfo>
@@ -78,6 +79,20 @@ QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
         QMetaObject::invokeMethod(this, [this] {
             clearMetadataSourceRejection();
             emitDocumentStateChanged();
+            // A desktop report says the editor keeps showing the outgoing
+            // chart after a switch while the timeline and preview media follow
+            // the incoming one. Nothing in the log records document identity,
+            // so this pins what the QML projection publishes at the moment of
+            // replacement; SourceEditor logs what it ends up showing.
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("editor/document_replaced"),
+                QStringLiteral("path=%1 difficulty=%2 revision=%3 chart_chars=%4 difficulties=%5")
+                    .arg(backend_ != nullptr ? backend_->documentFilePath() : QString())
+                    .arg(currentDifficultyId())
+                    .arg(documentRevision_)
+                    .arg(chartText().size())
+                    .arg(backend_ != nullptr ? backend_->documentDifficultyIds().size() : -1));
             emit documentReplaced();
         }, Qt::QueuedConnection);
     });
@@ -466,6 +481,25 @@ bool QmlDocumentModel::seekPreviewToEditorLocation(
         return false;
     }
     return backend_->seekPreviewToQmlEditorLocation(difficultyId, line, column);
+}
+
+void QmlDocumentModel::logEditorDocumentState(const QString& reason, int difficultyId,
+                                              qulonglong revision, int shownChars,
+                                              bool metadataMode)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("editor/document_shown"),
+        QStringLiteral("reason=%1 difficulty=%2 revision=%3 shown_chars=%4 metadata=%5 "
+                       "projected_difficulty=%6 projected_revision=%7 projected_chars=%8")
+            .arg(reason)
+            .arg(difficultyId)
+            .arg(revision)
+            .arg(shownChars)
+            .arg(metadataMode ? 1 : 0)
+            .arg(currentDifficultyId())
+            .arg(documentRevision_)
+            .arg(metadataMode ? metadataSourceText().size() : chartText().size()));
 }
 
 QVariantList QmlDocumentModel::bookmarksForDifficulty(int difficultyId) const

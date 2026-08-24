@@ -18,6 +18,8 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRectF>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QTest>
 #include <QVariant>
 #include <QTextStream>
@@ -48,6 +50,19 @@ protected:
         return QObject::event(event);
     }
 };
+// QML warnings are the only place a binding loop is reported, so the spec has
+// to observe the message stream rather than a return value.
+QStringList* qmlWarnings()
+{
+    static QStringList messages;
+    return &messages;
+}
+
+void captureQmlMessage(QtMsgType type, const QMessageLogContext&, const QString& message)
+{
+    if (type == QtWarningMsg) qmlWarnings()->append(message);
+}
+
 bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
 {
     out << (condition ? "[PASS] " : "[FAIL] ") << message << '\n';
@@ -400,6 +415,7 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                 function setTouchPadAuthoringPreviewAnchor(a, b, c, d) { return true }
                 function publishEditorCaret(a, b, c, d) { return true }
                 function selectDifficulty(a) {}
+                function logEditorDocumentState(a, b, c, d, e) {}
                 property int seekRequests: 0
                 property int seekLine: -1
                 property int seekColumn: -1
@@ -532,6 +548,43 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
     session->setProperty("currentDifficultyId", 3);
     QCoreApplication::processEvents();
 
+    // Rehighlighting is a formatting pass, not an edit. setDiagnostics used to
+    // rehighlight synchronously from inside a binding evaluation, and TextEdit
+    // reports that as textChanged, which the editor wrote straight back to the
+    // document the binding depends on — Qt reported it as a binding loop on
+    // SimaiSyntaxHighlighter.diagnostics in the desktop capture.
+    qmlWarnings()->clear();
+    session->setProperty("syntaxIssues", QVariantList{
+        QVariantMap{{QStringLiteral("line"), 1}, {QStringLiteral("column"), 1},
+                    {QStringLiteral("endColumn"), 2}, {QStringLiteral("severity"), QStringLiteral("error")}}});
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+    const QStringList loops = qmlWarnings()->filter(QStringLiteral("Binding loop"));
+    if (!loops.isEmpty()) out << "  " << loops.join(QStringLiteral(" | ")) << '\n';
+    expect(loops.isEmpty(),
+           QStringLiteral("publishing diagnostics does not loop through the document"), out, failed);
+
+    // Replacing the document must reach the visible editor. The desktop report
+    // was that after switching charts the editor still showed the outgoing
+    // document's text while the timeline and the preview media had already
+    // moved to the incoming one.
+    session->setProperty("currentDifficultyId", 5);
+    session->setProperty("chartText", QStringLiteral("9,9,9,9,\n"));
+    QMetaObject::invokeMethod(session, "documentReplaced");
+    QCoreApplication::processEvents();
+    auto* replacedArea = editorItem->findChild<QQuickItem*>(QStringLiteral("sourceArea"));
+    const QString shownAfterReplace = replacedArea != nullptr
+        ? replacedArea->property("text").toString()
+        : QStringLiteral("<no editor>");
+    if (shownAfterReplace != QStringLiteral("9,9,9,9,\n")) {
+        out << "  editor still shows: [" << shownAfterReplace << "]\n";
+    }
+    expect(shownAfterReplace == QStringLiteral("9,9,9,9,\n"),
+           QStringLiteral("replacing the document refreshes the visible editor text"), out, failed);
+    session->setProperty("currentDifficultyId", 3);
+    session->setProperty("chartText", QStringLiteral("1,2,3,4,\n5,6,7,8,\n"));
+    QCoreApplication::processEvents();
+
     // Paused preview follow: a decoration, not a caret move. Before this
     // channel existed the paused branch only painted the hidden widget, so a
     // seek while paused produced nothing at all in the visible QML editor.
@@ -625,6 +678,7 @@ int main(int argc, char** argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen");
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+    qInstallMessageHandler(captureQmlMessage);
     QGuiApplication app(argc, argv);
     Q_UNUSED(app);
     QTextStream out(stdout);

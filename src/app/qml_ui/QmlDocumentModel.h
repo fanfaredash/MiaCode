@@ -123,6 +123,12 @@ public:
     // clicked token instead of only moving the timeline cursor.
     Q_INVOKABLE bool seekPreviewToEditorLocation(int difficultyId, qulonglong revision,
                                                  int line, int column);
+    // Paired with the editor/document_replaced projection line: what the
+    // visible editor actually ended up showing. The two together identify
+    // whether a stale editor is a projection problem or a QML one.
+    Q_INVOKABLE void logEditorDocumentState(const QString& reason, int difficultyId,
+                                            qulonglong revision, int shownChars,
+                                            bool metadataMode);
     Q_INVOKABLE QVariantList bookmarksForDifficulty(int difficultyId) const;
     Q_INVOKABLE void navigateToBookmark(int difficultyId, int line);
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);

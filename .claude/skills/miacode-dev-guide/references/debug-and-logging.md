@@ -296,6 +296,17 @@ readback_mode=…`. The old `media_backend adapter="…"` field was renamed `pro
 `probe_adapter_source=dxgi_enum0_heuristic`) to stop it being read as the Qt RHI device. High-frequency tags (`timeline/bridge` scroll pushes, `timeline/quick_scene`
 scroll-only paints) require `MIACODE_TIMELINE_HOTPATH_DIAG=1` even in debug mode.
 
+**QML document identity across a chart switch (2026-08-24, `--debug`-gated):** the pair
+`editor/document_replaced` (what `QmlDocumentModel` publishes when a replacement commits — path,
+difficulty, revision, chart character count, difficulty count) and `editor/document_shown` (what
+the visible `SourceEditor` ended up with, plus the projection's values re-read at the same
+instant, `reason=document_replaced|chart_text_changed`). Read them as a pair: matching
+`shown_chars` and `projected_chars` means the editor is current; a mismatch localizes a stale
+editor to the QML side, while a `path=` that already names the incoming chart with an unchanged
+`projected_chars` puts it in the backend projection. Note that `quick_timeline_perf lines=` and
+`muri_perf validation_issues=` are **not** usable as identity signals — two different charts
+routinely report the same values, which is what made an earlier reading of this bug wrong.
+
 **QML editor IME boundary (2026-08-24, `--debug`-gated):** `editor/ime_event` fires for every
 `QEvent::InputMethod` the QML `TextArea` receives — `seq`, `commit_len`, `preedit_len`,
 `replace_start`, `replace_len`, `attributes` (selection/cursor/format spans), `composing`, `depth`.

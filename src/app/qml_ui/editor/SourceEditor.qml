@@ -448,6 +448,7 @@ Rectangle {
 
         TextArea {
             id: sourceArea
+            objectName: "sourceArea"
             property bool syncingFromController: false
             property bool readyForUserEdits: false
             property string historyText: ""
@@ -512,7 +513,11 @@ Rectangle {
                 color: Theme.colors.accent.primary
             }
             onTextChanged: {
-                if (readyForUserEdits && !syncingFromController) {
+                // Rehighlighting is a formatting pass over the same characters,
+                // but TextEdit still reports it as textChanged. Writing that
+                // back would push an identical document through the backend on
+                // every highlight, so only a real change is published.
+                if (readyForUserEdits && !syncingFromController && text !== historyText) {
                     root.editorController.recordQmlTransaction(historyText, text,
                                                                historyAnchor, historyPosition,
                                                                selectionStart, selectionEnd)
@@ -715,6 +720,9 @@ Rectangle {
         function onChartTextChanged() {
             if (!root.metadataMode)
                 root.syncTextFromController()
+            root.documentSession.logEditorDocumentState(
+                "chart_text_changed", root.documentSession.currentDifficultyId,
+                root.documentSession.documentRevision, sourceArea.text.length, root.metadataMode)
         }
         function onMetadataSourceChanged() {
             if (root.metadataMode)
@@ -725,6 +733,9 @@ Rectangle {
             // reuse the outgoing document's active difficulty id.
             root.historyIdentityValid = false
             root.syncTextFromController()
+            root.documentSession.logEditorDocumentState(
+                "document_replaced", root.documentSession.currentDifficultyId,
+                root.documentSession.documentRevision, sourceArea.text.length, root.metadataMode)
         }
         function onDocumentStateChanged() {
             root.editorController.setDocumentContextForQml(

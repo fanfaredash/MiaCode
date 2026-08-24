@@ -131,11 +131,11 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 
 | 现象 | 初步判断 | 处理时机 |
 | --- | --- | --- |
-| 切换文档后 PV 存在问题 | **未定位。** 见下方“PV 排查记录” | 待一次切换文档的 `--debug` 复现 |
+| 切换文档后 PV 存在问题 | PV 侧**无缺陷**（日志确证媒体路由与文档同刻切换）；实际问题是**编辑器仍显示旧谱面**，未定位 | 已落埋点，待一次复现 |
 | 撤销栈存在问题 | 已确证并修复（`581b782b`）：`resetQmlHistory()` 在每次 controller 来源的文本同步时清空历史，而应用一次编辑正是会把新文本写回文档并同步回来——所以每一步刚记录就被抹掉；另外 undo/redo 以全文替换回放并恢复旧光标偏移，用户看不到这一步改了什么 | 已完成 |
 | 快捷键体系缺失 | 已确证并修复（`676150e0`）：成因不是缺注册层，而是**绑定上下文**——v1 的变换/预览 QAction 用 `Qt::WindowShortcut` 挂在隐藏且永不激活的 MainWindow 上，因此在 v2 从不触发。`ShortcutRegistry` 本身零 QtWidgets 依赖（Qt 6 中 `QAction`/`QShortcut` 已属 QtGui），故复用而非另建 | 已完成 |
 
-### PV 排查记录（未定位，勿在此基础上猜测修复）
+### 切换文档排查记录（PV 已排除；编辑器停留在旧谱面仍未定位）
 
 本轮按链路逐点核对，**以下五处均正常**，因此不做推测性改动：
 
@@ -150,11 +150,39 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 5. QML 侧预览投影由 `QuickShellController` 的轮询 `refresh()` 驱动并发 `shellStateChanged`，
    不依赖 `documentReplaced`，因此不会长期停留在旧文档的投影上。
 
-**下一步需要的证据：** 带 `--debug` 启动，打开谱面 A → 切换到谱面 B，复现 PV 异常后提供 B 的
-`.miacode/logs/miacode_audio_debug.log`（`set_chart_path` / `media_status` / `video_frame_first` /
-`bind_video_output` 都在这个文件，不在 runtime 日志）与同会话的 `miacode_runtime_debug.log`。
-现有日志已覆盖该链路，无需新增埋点；2026-08-24 那次会话只是全程没有切换文档，所以没有留下证据。
-另请具体描述“有问题”的表现：停在上一份谱面的 PV、不播放、还是音画不同步——三者指向链路上不同的点。
+**2026-08-24 复现（Axeria → Eve Avenir，pid=78454，build `581b782b`）的日志结论：**
+
+| 时刻 | 事实 |
+| --- | --- |
+| 15:20:59.380 | 日志目录绑定 Axeria；15:21:00 `set_chart_path` = Axeria |
+| 15:21:19.702 | 日志目录重绑 **Eve Avenir**；`crash_recovery` 的 autosave 目录同时切到 Eve |
+| 15:21:19.717 | `set_chart_path` = **Eve Avenir**，`bind_video_output attached=1` |
+
+因此 **PV / 媒体路由在文档加载的同一毫秒就正确切换了**，之前“PV 落后 25 秒”的读法是错的：
+那是只看了日志末尾几条造成的误读，15:21:44 的那批 `set_chart_path` 是用户随后手动切难度触发的。
+用户观察到的“PV 变成新 PV”与日志一致，**PV 侧无缺陷**。
+
+问题因此收敛为：**编辑器仍显示旧谱面**。但这一点日志答不了 ——
+
+- `quick_timeline_perf lines=107` 在切换前后完全相同（Axeria 难度 5 是 109 行、Eve 是 110 行，
+  解析后都落在 107），
+- `muri_perf validation_issues=12` 前后也相同。
+
+**这两个量都不能当作文档身份信号**，早前据此判断“后端已经换文档”是错的。日志里没有任何直接记录
+文档身份的字段，所以本轮没有修复，改为落地一对可判定的埋点（`f...` 见下）。
+
+**下一步需要的证据：** 带 `--debug` 复现同一路径，然后 grep 新增的两行：
+
+```
+grep -E "editor/document_replaced|editor/document_shown" <chart>/.miacode/logs/miacode_runtime_debug.log
+```
+
+- `document_replaced` 是 `QmlDocumentModel` 在替换落定时发布的（path / difficulty / revision /
+  chart 字符数 / 难度数）；
+- `document_shown` 是可见 `SourceEditor` 实际持有的字符数，并同时回读投影值。
+
+`shown_chars` 与 `projected_chars` 一致即编辑器是最新的；不一致则问题在 QML 侧；若 `path=` 已经是新
+谱面而 `projected_chars` 没变，则在后端投影侧。一次复现即可定位。
 
 这三项都指向“功能完整性”而不是性能，与下节调整后的推进顺序一致。
 
