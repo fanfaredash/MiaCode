@@ -150,11 +150,13 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 ### 待处理功能缺口（2026-08-24 GUI 验证新发现，优先于 Step 5）
 
-- [ ] 切换文档后 PV 异常：document replacement 后预览运行时/媒体绑定未随新文档重建。
-- [ ] 撤销栈异常：`resetQmlHistory()` 在切换难度 / 文档重载 / 元数据模式切换时整体清空 QML undo 栈；
-      `undoQmlTransaction()` 的全文替换回放又与 `onTextChanged` 记录的增量条目混用。
-- [ ] 快捷键体系缺失：v2 主壳没有统一的快捷键注册层（v1 走 `ShortcutRegistry` + `QAction`），
-      菜单项也不显示快捷键。需要先定产品决策再实现。
+- [ ] 切换文档后 PV 异常：**未定位**，链路五处核对均正常，等一次切换文档的 `--debug` 复现。
+      排查记录与所需证据见审计文档的“PV 排查记录”。
+- [x] 撤销栈异常（`581b782b`）：历史不再被 controller 来源的同步清空，只在真正换文档时重置；
+      undo/redo 改为最小差异替换并选中所恢复的文本，光标居中。
+- [x] 快捷键体系（`676150e0`）：成因是绑定上下文而非缺注册层。v2 经 `QmlShortcutModel` 复用
+      `ShortcutRegistry`，变换命令按 id 走 `MainWindow::triggerShortcutCommand`，预览命令直接绑
+      `QuickShellController`；菜单行通过 `AppMenuAction.shortcutText` 显示快捷键。
 
 详细登记见
 [QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。

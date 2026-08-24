@@ -131,9 +131,30 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 
 | 现象 | 初步判断 | 处理时机 |
 | --- | --- | --- |
-| 切换文档后 PV 存在问题 | 疑似 document replacement 后预览运行时/媒体绑定的状态未随新文档重建。与既有 `documentReplaced` 延迟投影链相关，需要单独定位 | 五项门槛复验通过后，优先级最高的一项 |
-| 撤销栈存在问题 | `QmlEditorController` 的 QML undo 栈在 `syncTextFromController()` 触发 `resetQmlHistory()` 时被整体清空（切换难度、文档重载、元数据模式切换都会触发）；且 `undoQmlTransaction()` 以全文替换的形式回放，与 `onTextChanged` 记录的增量条目混用 | 与 PV 一并作为下一批功能修复 |
-| 快捷键体系缺失 | v2 主壳没有统一的快捷键注册层；v1 走 `ShortcutRegistry` + `QAction`，v2 目前只有 `SourceEditor.qml` 内的零散 `Keys.onPressed` 分支。菜单项也普遍不显示快捷键 | 需要先定产品决策（v2 的快捷键归属与可配置性），再实现 |
+| 切换文档后 PV 存在问题 | **未定位。** 见下方“PV 排查记录” | 待一次切换文档的 `--debug` 复现 |
+| 撤销栈存在问题 | 已确证并修复（`581b782b`）：`resetQmlHistory()` 在每次 controller 来源的文本同步时清空历史，而应用一次编辑正是会把新文本写回文档并同步回来——所以每一步刚记录就被抹掉；另外 undo/redo 以全文替换回放并恢复旧光标偏移，用户看不到这一步改了什么 | 已完成 |
+| 快捷键体系缺失 | 已确证并修复（`676150e0`）：成因不是缺注册层，而是**绑定上下文**——v1 的变换/预览 QAction 用 `Qt::WindowShortcut` 挂在隐藏且永不激活的 MainWindow 上，因此在 v2 从不触发。`ShortcutRegistry` 本身零 QtWidgets 依赖（Qt 6 中 `QAction`/`QShortcut` 已属 QtGui），故复用而非另建 | 已完成 |
+
+### PV 排查记录（未定位，勿在此基础上猜测修复）
+
+本轮按链路逐点核对，**以下五处均正常**，因此不做推测性改动：
+
+1. `syncPreviewStageMediaRouteChartPath()` 在文档加载时经 `activateInitialField()` 调用，会把新
+   chart path 与 `&video=` override 推给 `PreviewStageMediaHost`。
+2. `quickShellStartupStageMediaLoadDeferred_` 是**一次性启动闩**（`FrameBootstrap.cpp` 置位，首次
+   flush 清除），没有按文档重新置位，所以后续切换走的是立即分支而非被延迟吞掉。
+3. v2 的开档入口 `QmlDocumentModel::openFile()` → `MainWindow::openStartupTarget()`，对文件路径
+   直接转 `openFileAtPath(path, true, true)` —— 与 v1 `onOpenFile()` 落到同一个函数。
+   （唯一差异是 v2 未走 `maybeSaveBeforeContinue()` 的脏文档确认，属于另一条待办，与 PV 无关。）
+4. `TimelineSceneStateBuilder` 等下游对越界/倒置输入已有收敛，不会因切换产生脏几何。
+5. QML 侧预览投影由 `QuickShellController` 的轮询 `refresh()` 驱动并发 `shellStateChanged`，
+   不依赖 `documentReplaced`，因此不会长期停留在旧文档的投影上。
+
+**下一步需要的证据：** 带 `--debug` 启动，打开谱面 A → 切换到谱面 B，复现 PV 异常后提供 B 的
+`.miacode/logs/miacode_audio_debug.log`（`set_chart_path` / `media_status` / `video_frame_first` /
+`bind_video_output` 都在这个文件，不在 runtime 日志）与同会话的 `miacode_runtime_debug.log`。
+现有日志已覆盖该链路，无需新增埋点；2026-08-24 那次会话只是全程没有切换文档，所以没有留下证据。
+另请具体描述“有问题”的表现：停在上一份谱面的 PV、不播放、还是音画不同步——三者指向链路上不同的点。
 
 这三项都指向“功能完整性”而不是性能，与下节调整后的推进顺序一致。
 
