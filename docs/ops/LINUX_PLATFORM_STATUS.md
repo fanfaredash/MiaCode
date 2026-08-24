@@ -1,6 +1,6 @@
 # Linux 平台交接
 
-更新时间：2026-08-24
+更新时间：2026-08-25
 
 ## 当前状态
 
@@ -10,7 +10,7 @@
 - 本次提交包含 QtAVPlayer 多平台统一、Linux VAAPI 接入及资源生命周期修正。
 - 用户已验证 GNOME 菜单和 VMware 软件解码播放正常。
 - AMD Radeon 680M、Mesa 26.2.1、xcb/EGL 环境已验证 VAAPI 硬件解码：PV 为单画面、颜色正常，播放期间无 `eglCreateImageKHR` 错误。
-- 当前动作：提交 VAAPI/EGL 修正；后续处理导出混音期间文件描述符随 SFX 事件数量增长的问题。
+- VAAPI/EGL 修正已提交；导出混音已改为共享音效字节创建内存流，用户验证导出成功且行为几乎无差异。
 
 ## 实现约定
 
@@ -35,26 +35,28 @@
 - 上述修正已完成 Release 增量编译，产物为 `build/MiaCode`。
 - 修正 Qt 6.4 以上版本中 `PlanarVideoBuffer::m_rhi` 缺少声明的问题；Qt 6.11.2 Release 增量编译通过。
 
-## 待实现：导出音频资源管理
+## 已实现：导出音频资源管理
 
 ### 已确认原因
 
-- `BassExportAudioBackend::renderMixedTrackToWav()` 当前为每个 SFX 和 touch-hold 事件调用一次 `BASS_StreamCreateFile(FALSE, path, ...)`。
-- 所有 `ScheduledSource` 保留到整轨混音结束，文件描述符占用随事件总数线性增长。
+- 修正前，`BassExportAudioBackend::renderMixedTrackToWav()` 为每个 SFX 和 touch-hold 事件调用一次 `BASS_StreamCreateFile(FALSE, path, ...)`。
+- 修正前，所有 `ScheduledSource` 保留到整轨混音结束，文件描述符占用随事件总数线性增长。
 - Linux 进程软限制为 1024 时，数百个事件流会耗尽文件描述符；随后 `Pcm16WavWriter` 打开 `export_audio.wav` 失败，界面显示 `failed to open export wav for writing`。
 - 临时提高 `ulimit -n` 已由用户验证可恢复导出，但资源增长模式仍然存在。
-- 音源流创建失败当前会记录 `audio_backend_source_skip` 后继续，最终错误位置晚于真实失败点。
+- 修正前，音源流创建失败会记录 `audio_backend_source_skip` 后继续，最终错误位置晚于真实失败点。
 
-### 推荐方案
+### 实现方案
 
 1. 在单次导出范围内按资源路径缓存 SFX 压缩文件字节，每种资源只读取一次。
-2. 每个事件继续创建独立 BASS 解码流，但改用 `BASS_FILE_MEM` 引用共享字节；缓存保持到所有事件流释放。
+2. 每个事件继续创建独立 BASS 解码流，改用 `BASS_FILE_MEM` 引用共享字节；每个 `ScheduledSource` 持有共享 `QByteArray`，直至对应事件流释放。
 3. BGM 保持单个文件流，防止长音轨整体进入内存。
 4. 保留现有 `BASS_Mixer_StreamAddChannelEx` 绝对时间调度、音量、最大时长和 touch-hold `sourceStartSecond` 行为。
 5. 不使用 `BASS_FILE_MEMCOPY`，防止每个事件复制一份压缩数据。
-6. 已存在的音源创建失败时立即终止混音，并报告 tag、路径和 `BASS_ErrorGetCode()`；不再延迟到 WAV 打开阶段。
+6. 已存在的音源读取或创建失败时立即终止混音，并报告 tag、路径和 `BASS_ErrorGetCode()`；错误不再延迟到 WAV 打开阶段。
 
-预计代码范围仅为 `src/tools/video_export/BassExportAudioBackend.cpp`。音频渲染计划、FFmpeg、导出页面和预览音频链路不需要改动。
+代码范围为 `src/tools/video_export/BassExportAudioBackend.cpp`。音频渲染计划、FFmpeg、导出页面和预览音频链路保持原状。
+
+实现后已完成 Release 增量编译。用户已在 Linux 环境验证高密度谱面导出成功，音效、时间调度和整体行为几乎无差异。
 
 ### 备选方案
 
@@ -140,3 +142,5 @@ cmake --build build --target MiaCode --config Release --parallel 4
 | 2026-08-24 | 修正 Qt 6.4 以上版本的 `PlanarVideoBuffer::m_rhi` 声明条件，Qt 6.11.2 Release 增量编译通过。 |
 | 2026-08-24 | AMD Radeon 680M 下完成 xcb/EGL、DRM modifier 和 NV12 格式修正；VAAPI PV 单画面、颜色正常且无 EGL 导入错误。 |
 | 2026-08-24 | 记录导出混音文件描述符耗尽原因、内存流推荐方案、备选方案与验收条件；代码尚未修改。 |
+| 2026-08-24 | 导出 SFX 和 touch-hold 改用共享字节内存流，音源失败改为立即报告；Release 增量编译通过，等待用户验证。 |
+| 2026-08-25 | 用户验证共享音效字节内存流方案可正常完成视频导出，行为几乎无差异；代码审查通过。 |
