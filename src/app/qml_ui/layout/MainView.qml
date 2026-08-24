@@ -145,6 +145,7 @@ Item {
             hostWindow: root.hostWindow
             platform: root.platform
             menuCommands: menuCommands
+            shortcuts: root.applicationContext.shortcuts
             leadingInset: root.applicationContext.windowChrome
                 ? root.applicationContext.windowChrome.titleBarLeadingInset
                 : 0
@@ -161,6 +162,7 @@ Item {
                 height: 30
                 availableWidth: width
                 commands: menuCommands
+                shortcuts: root.applicationContext.shortcuts
                 commandsEnabled: true
             }
         }

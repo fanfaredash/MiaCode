@@ -12,6 +12,7 @@ Item {
     id: root
 
     required property var commands
+    required property var shortcuts
     property bool commandsEnabled: true
     property real availableWidth: Number.POSITIVE_INFINITY
 
@@ -215,28 +216,32 @@ Item {
         AppMenu {
             id: fileMenu
             title: qsTr("文件(&F)")
-            Action {
+            AppMenuAction {
                 text: qsTr("打开")
                 shortcut: StandardKey.Open
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Open)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.openRequested()
             }
-            Action {
+            AppMenuAction {
                 text: qsTr("保存")
                 shortcut: StandardKey.Save
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Save)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.saveRequested()
             }
-            Action {
+            AppMenuAction {
                 text: qsTr("另存为")
                 shortcut: StandardKey.SaveAs
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.SaveAs)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.saveAsRequested()
             }
             AppMenuSeparator {}
-            Action {
+            AppMenuAction {
                 text: qsTr("退出")
                 shortcut: StandardKey.Quit
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Quit)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.exitRequested()
             }
@@ -245,32 +250,36 @@ Item {
         AppMenu {
             id: editMenu
             title: qsTr("编辑(&E)")
-            Action {
+            AppMenuAction {
                 text: qsTr("撤销")
                 shortcut: StandardKey.Undo
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Undo)
                 enabled: root.commandsEnabled && root.commands.canUndo
                 onTriggered: root.commands.undoRequested()
             }
-            Action {
+            AppMenuAction {
                 text: qsTr("重做")
                 shortcut: StandardKey.Redo
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Redo)
                 enabled: root.commandsEnabled && root.commands.canRedo
                 onTriggered: root.commands.redoRequested()
             }
-            Action {
+            AppMenuAction {
                 text: qsTr("查找")
                 shortcut: StandardKey.Find
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Find)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.findRequested()
             }
             AppMenuSeparator {}
-            Action {
+            AppMenuAction {
                 text: qsTr("全选")
                 shortcut: StandardKey.SelectAll
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.SelectAll)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.selectAllRequested()
             }
-            Action {
+            AppMenuAction {
                 text: qsTr("选择当前行")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.selectCurrentLineRequested()
@@ -280,12 +289,12 @@ Item {
         AppMenu {
             id: toolsMenu
             title: qsTr("工具(&T)")
-            Action {
+            AppMenuAction {
                 text: qsTr("元数据")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.metadataRequested()
             }
-            Action {
+            AppMenuAction {
                 text: qsTr("检查谱面")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.validateRequested()
@@ -295,13 +304,14 @@ Item {
         AppMenu {
             id: adjustMenu
             title: qsTr("调整(&M)")
-            Action {
+            AppMenuAction {
                 text: qsTr("切换侧栏")
-                shortcut: "Ctrl+B"
+                shortcut: root.shortcuts.sequence("view.toggle_sidebar", "Ctrl+B")
+                shortcutText: root.shortcuts.displayText("view.toggle_sidebar", "Ctrl+B")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.toggleSidebarRequested()
             }
-            Action {
+            AppMenuAction {
                 text: qsTr("切换时间轴")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.toggleBottomPanelRequested()
@@ -311,7 +321,7 @@ Item {
         AppMenu {
             id: previewMenu
             title: qsTr("预览(&P)")
-            Action {
+            AppMenuAction {
                 text: qsTr("切换实时预览")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.togglePreviewRequested()
@@ -321,7 +331,7 @@ Item {
         AppMenu {
             id: helpMenu
             title: qsTr("帮助(&H)")
-            Action { text: qsTr("关于 MiaCode"); enabled: false }
+            AppMenuAction { text: qsTr("关于 MiaCode"); enabled: false }
         }
     }
 

@@ -676,11 +676,13 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppComboBox.qml
     src/app/qml_ui/components/AppSlider.qml
     src/app/qml_ui/components/AppMenu.qml
+    src/app/qml_ui/components/AppMenuAction.qml
     src/app/qml_ui/components/AppMenuItem.qml
     src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml
+    src/app/qml_ui/chrome/ShortcutBindings.qml
     src/app/qml_ui/chrome/MainMenuCommands.qml
     src/app/qml_ui/chrome/MainToolBar.qml
     src/app/qml_ui/chrome/StatusBar.qml
@@ -756,6 +758,7 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlApplicationContext.h
         src/app/qml_ui/QmlCommandService.cpp
         src/app/qml_ui/QmlCommandService.h
+        src/app/qml_ui/QmlShortcutCommands.h
         src/app/qml_ui/QmlDocumentModel.cpp
         src/app/qml_ui/QmlDocumentModel.h
         src/app/qml_ui/QmlDocumentProjection.cpp
@@ -775,6 +778,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlEditorPageHost.h
         src/app/qml_ui/QmlEditorController.cpp
         src/app/qml_ui/QmlEditorController.h
+        src/app/qml_ui/QmlShortcutModel.cpp
+        src/app/qml_ui/QmlShortcutModel.h
         src/app/qml_ui/QmlEditorInputBridge.cpp
         src/app/qml_ui/QmlEditorInputBridge.h
         src/app/qml_ui/export/QmlExportSession.cpp
@@ -1565,6 +1570,23 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src
     )
+
+    miacode_add_dev_tool(qml_shortcut_binding_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlShortcutBindingSpec.cpp
+            src/app/qml_ui/QmlShortcutModel.cpp
+            src/app/qml_ui/QmlShortcutModel.h
+            src/app/qml_ui/QmlShortcutCommands.h
+            src/app/ui/ShortcutRegistry.cpp
+            src/app/ui/ShortcutRegistry.h
+            src/common/InputShortcutGesture.h
+            src/common/InputShortcutGesture.cpp
+            resources/app_icons.qrc
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/app/ui src/app/qml_ui
+    )
+    target_compile_definitions(qml_shortcut_binding_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(qml_ui_bootstrap_lifecycle_spec TEST
         SOURCES

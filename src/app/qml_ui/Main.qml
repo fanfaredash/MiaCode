@@ -80,4 +80,13 @@ ApplicationWindow {
         hostWindow: window
         applicationContext: window.applicationContext
     }
+
+    // Mounted on the root window rather than inside MainView: these bindings
+    // must survive whichever page or overlay is on screen.
+    ShortcutBindings {
+        shortcuts: window.applicationContext.shortcuts
+        commands: window.applicationContext.commands
+        shellController: window.shellController
+        chartCommandsEnabled: window.applicationContext.document.currentDifficultyId > 0
+    }
 }

@@ -376,6 +376,8 @@ The DirectComposition / D3D11 preview and timeline backend was **removed on 2026
 ## Misc / Platform
 
 - `MIACODE_LANG` — force UI language (overrides system locale; `app/ui/UiText.cpp`).
+- `MIACODE_UI_SKIN` — select the UI shell. Default is the QML v2 shell; set to `v1` (or pass
+  `--ui=v1`) to launch the QuickShell v1 shell instead (`app/main.cpp`, `resolveUiSkin()`).
 - `MIACODE_DISABLE_MMCSS` — opt out of MMCSS pro-audio thread scheduling (Windows; `common/Mmcss.cpp`).
 - `MIACODE_DISPLAY_VERSION_STRING` — override the displayed version string.
 - `MIACODE_SKIP_PREFLIGHT` — skip the launcher preflight checks (`wrapper/MiaCodeLauncher.cpp`).

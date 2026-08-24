@@ -15,6 +15,7 @@ QmlApplicationContext::QmlApplicationContext(
     , commands_(backend, document_, this)
     , pages_(backend, this)
     , editor_(this)
+    , shortcuts_(this)
     , platform_(this)
     , shell_(&shell)
 {
@@ -31,6 +32,7 @@ QObject* QmlApplicationContext::commands() { return &commands_; }
 QObject* QmlApplicationContext::shell() { return shell_; }
 QObject* QmlApplicationContext::pages() { return &pages_; }
 QObject* QmlApplicationContext::editor() { return &editor_; }
+QObject* QmlApplicationContext::shortcuts() { return &shortcuts_; }
 QObject* QmlApplicationContext::windowChrome() const { return windowChrome_; }
 QObject* QmlApplicationContext::platform() { return &platform_; }
 

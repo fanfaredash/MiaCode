@@ -781,3 +781,34 @@ void MainWindow::onLowerSubdivisionHalfStepSelection()
 {
     documentSection_->onLowerSubdivisionHalfStepSelection();
 }
+
+bool MainWindow::triggerShortcutCommand(const QString& id)
+{
+    // The id set is ShortcutRegistry's own, so a binding the user edits in
+    // Preferences reaches v2 and v1 identically. Preview commands are not here:
+    // QuickShellController already exposes them to QML directly.
+    using Handler = void (MainWindow::*)();
+    static const QHash<QString, Handler> kHandlers{
+        {QStringLiteral("transform.mirror_lr"), &MainWindow::onMirrorLeftRight},
+        {QStringLiteral("transform.mirror_ud"), &MainWindow::onMirrorUpDown},
+        {QStringLiteral("transform.rotate_180"), &MainWindow::onRotate180},
+        {QStringLiteral("transform.rotate_ccw_45"), &MainWindow::onRotate45CounterClockwise},
+        {QStringLiteral("transform.rotate_cw_45"), &MainWindow::onRotate45Clockwise},
+        {QStringLiteral("transform.subdivision_up"), &MainWindow::onRaiseSubdivisionSelection},
+        {QStringLiteral("transform.subdivision_down"), &MainWindow::onLowerSubdivisionSelection},
+        {QStringLiteral("transform.subdivision_half_up"), &MainWindow::onRaiseSubdivisionHalfStepSelection},
+        {QStringLiteral("transform.subdivision_half_down"), &MainWindow::onLowerSubdivisionHalfStepSelection},
+        {QStringLiteral("transform.toggle_break"), &MainWindow::onToggleBreakSelection},
+        {QStringLiteral("transform.toggle_ex"), &MainWindow::onToggleExSelection},
+        {QStringLiteral("transform.toggle_firework"), &MainWindow::onToggleFireworkSelection},
+        {QStringLiteral("transform.random_rotate"), &MainWindow::onRandomRotateSelection},
+        {QStringLiteral("transform.clear_complete_elements"), &MainWindow::onClearCompleteElementsSelection},
+        {QStringLiteral("chart.normalize"), &MainWindow::onNormalizeWholeChart},
+    };
+    const auto handler = kHandlers.constFind(id);
+    if (handler == kHandlers.cend()) {
+        return false;
+    }
+    (this->*(*handler))();
+    return true;
+}

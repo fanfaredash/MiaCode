@@ -5,6 +5,7 @@
 #include "QmlAnalysisModel.h"
 #include "QmlEditorPageHost.h"
 #include "QmlEditorController.h"
+#include "QmlShortcutModel.h"
 #include "QmlPreviewModel.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiSettings.h"
@@ -27,6 +28,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* shell READ shell CONSTANT)
     Q_PROPERTY(QObject* pages READ pages CONSTANT)
     Q_PROPERTY(QObject* editor READ editor CONSTANT)
+    Q_PROPERTY(QObject* shortcuts READ shortcuts CONSTANT)
     Q_PROPERTY(QObject* windowChrome READ windowChrome CONSTANT)
     Q_PROPERTY(QObject* platform READ platform CONSTANT)
 
@@ -41,6 +43,7 @@ public:
     QObject* shell();
     QObject* pages();
     QObject* editor();
+    QObject* shortcuts();
     QObject* windowChrome() const;
     QObject* platform();
     void setWindowChrome(QObject* chrome);
@@ -53,6 +56,7 @@ private:
     QmlCommandService commands_;
     QmlEditorPageHost pages_;
     miacode::qml_ui::QmlEditorController editor_;
+    miacode::qml_ui::QmlShortcutModel shortcuts_;
     QmlUiPlatformChrome platform_;
     QuickShellController* shell_ = nullptr;
     QObject* windowChrome_ = nullptr;

@@ -1,4 +1,5 @@
 #include "QmlCommandService.h"
+#include "QmlShortcutCommands.h"
 
 #include "QmlDocumentModel.h"
 #include "mainwindow/MainWindow.h"
@@ -29,4 +30,16 @@ void QmlCommandService::openPreferences()
     if (backend_ != nullptr) {
         backend_->onPreferences();
     }
+}
+
+bool QmlCommandService::triggerShortcutCommand(const QString& id)
+{
+    return backend_ != nullptr && backend_->triggerShortcutCommand(id);
+}
+
+QStringList QmlCommandService::shortcutCommandIds() const
+{
+    // Chart transforms only. Preview commands are bound in QML straight to
+    // QuickShellController, which already exposes them.
+    return miacode::qml_ui::qmlShortcutCommandIds();
 }

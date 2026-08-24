@@ -60,6 +60,9 @@ const QString kSelfFileName = QStringLiteral("DebugFlagIndexSpec.cpp");
 // the token in source, so filter it out globally rather than per-file.
 const QSet<QString> kCompileDefinitions = {
     QStringLiteral("MIACODE_SOURCE_ROOT"),
+    // Path to the spec-only MiaCode.UI import mirror; a dev-tools compile
+    // definition, not a runtime env flag.
+    QStringLiteral("MIACODE_QML_SPEC_IMPORT_ROOT"),
 };
 
 QSet<QString> collectFlags(const QString& text)

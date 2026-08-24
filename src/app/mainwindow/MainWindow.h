@@ -275,6 +275,13 @@ public:
     // the clicked token. QML owns the difficulty/revision gate; the same
     // suppress-and-restore sequence keeps the timeline cursor authoritative.
     bool seekPreviewToQmlEditorLocation(int difficultyId, int line, int column);
+    // v2 has no QAction/QMenu layer, and the v1 chart-transform actions carry
+    // Qt::WindowShortcut context on a MainWindow that is hidden and therefore
+    // never active — so none of them fire in v2. QML binds the same
+    // ShortcutRegistry ids and dispatches through here, which keeps one command
+    // table instead of nineteen new public methods. Returns false for an id
+    // this window does not own.
+    bool triggerShortcutCommand(const QString& id);
     bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);

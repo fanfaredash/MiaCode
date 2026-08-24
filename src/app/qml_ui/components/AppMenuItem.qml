@@ -46,8 +46,12 @@ MenuItem {
         }
 
         Text {
-            visible: (root.shortcut || "").length > 0
-            text: root.shortcut || ""
+            // MenuItem itself has no shortcut property; the spelling comes from
+            // the AppMenuAction the row was built from.
+            readonly property string shortcutLabel:
+                root.action && root.action.shortcutText ? root.action.shortcutText : ""
+            visible: shortcutLabel.length > 0
+            text: shortcutLabel
             font: root.font
             color: Theme.colors.text.disabled
             opacity: root.enabled ? 1 : 0.55

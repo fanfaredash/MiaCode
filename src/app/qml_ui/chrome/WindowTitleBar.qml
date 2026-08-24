@@ -6,6 +6,7 @@ Rectangle {
 
     required property var hostWindow
     required property var menuCommands
+    required property var shortcuts
     required property var platform
     property string documentTitle: ""
     property real leadingInset: 0
@@ -90,6 +91,7 @@ Rectangle {
                 height: menuHost.height
                 availableWidth: root.menuAvailableWidth
                 commands: root.menuCommands
+                shortcuts: root.shortcuts
                 commandsEnabled: root.visible
             }
             onLoaded: root.scheduleMainMenuReflow()
