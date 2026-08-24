@@ -12,6 +12,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QStringList>
@@ -81,6 +82,30 @@ int main(int argc, char** argv)
     }
     expect(entryLeftovers.isEmpty(),
            QStringLiteral("main.cpp has a single UI entry with no skin switch"), out, &failed);
+
+    // 入口 flag 的残留不限于 main.cpp：一处写在别处的 `--ui=v1` 注释会静默活过整个阶段，
+    // 因为它既不是 MIACODE_* 环境变量（debug_flag_index_spec 管不到），也不在 main.cpp 里。
+    QStringList entryFlagMentions;
+    QDirIterator sourceIt(sourceRoot() + QStringLiteral("/src"),
+                          {QStringLiteral("*.cpp"), QStringLiteral("*.h"), QStringLiteral("*.mm"),
+                           QStringLiteral("*.qml")},
+                          QDir::Files, QDirIterator::Subdirectories);
+    while (sourceIt.hasNext()) {
+        const QString path = sourceIt.next();
+        // This spec pins the token itself, so its own source is not a leftover.
+        if (sourceIt.fileName() == QStringLiteral("V1ShellRemovalSpec.cpp")) continue;
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) continue;
+        if (QString::fromUtf8(file.readAll()).contains(QStringLiteral("--ui=v1"))) {
+            entryFlagMentions.append(QDir(sourceRoot()).relativeFilePath(path));
+        }
+    }
+    if (!entryFlagMentions.isEmpty()) {
+        out << "  --ui=v1 still mentioned in: " << entryFlagMentions.join(QStringLiteral(", ")) << '\n';
+        out.flush();
+    }
+    expect(entryFlagMentions.isEmpty(),
+           QStringLiteral("no source file still documents the removed --ui=v1 entry"), out, &failed);
 
     // 表面再宿主分支随 v1 一起消失，否则阶段 2 会继承 29 处死分支。
     const QString controller = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp"));

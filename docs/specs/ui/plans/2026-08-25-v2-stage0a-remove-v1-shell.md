@@ -254,7 +254,7 @@ git commit -m "refactor(app): collapse startup to the single QML UI entry"
 
 **Files:**
 - Delete: `src/app/quick_shell/QuickShellBootstrap.{h,cpp}`、`QuickShellNativeSurfaceHost.{h,cpp}`、`QuickShellStyleBridge.{h,cpp}`、`QuickShellMacSurfaceSupport.{h,mm}`
-- Modify: `src/app/quick_shell/QuickShellController.{h,cpp}`、`src/app/qml_ui/QmlUiBootstrap.cpp`、`CMakeLists.txt`
+- Modify: `src/app/quick_shell/QuickShellController.{h,cpp}`、`src/app/qml_ui/QmlUiBootstrap.{h,cpp}`、`src/app/main.cpp`、`CMakeLists.txt`
 
 - [ ] **Step 1: 删除文件**
 
@@ -325,7 +325,35 @@ return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().previewCompositeW
 
 在 `src/app/qml_ui/QmlUiBootstrap.cpp:87-91` 附近，把三参数构造改为两参数，并删除上方那条解释 `surfaceHost_` 空指针的注释（它描述的机制已不存在）。
 
-- [ ] **Step 5: 构建**
+- [ ] **Step 5: 清理指向已删除类型的陈旧注释**
+
+删除引导与再宿主后，三处注释变成错的。它们都不含 `MIACODE_*` 环境变量，因此
+`debug_flag_index_spec` 抓不到；`--ui=v1` 那处由 `v1_shell_removal_spec` 覆盖，另外两处只能靠这一步。
+
+1. `src/app/qml_ui/QmlUiBootstrap.h:22` —— 注释仍写着 `QuickShell: --ui=v1.` 与
+   `no NativeSurfaceHost / StyleBridge`。改成只描述 v2 自身：它是唯一 UI 入口，与隐藏的
+   `MainWindow` 后端共享状态。**这一处有守卫**：改完 `v1_shell_removal_spec` 的
+   "no source file still documents the removed --ui=v1 entry" 断言必须转绿。
+2. `src/app/main.cpp:611` 附近 —— 注释写着 *"QML root windows are themed by QuickShellBootstrap"*，
+   而实际主题化发生在 `QmlUiBootstrap.cpp` 调用 `UiNativeWindowTheme::applyToWindow(window)`。
+   把 `QuickShellBootstrap` 改为 `QmlUiBootstrap`。
+3. `CMakeLists.txt:659` 附近 —— `# Default UI (v2). QuickShell v1: --ui=v1 / MIACODE_UI_SKIN=v1.`
+   删除后半句，只保留 v2 的说明。
+
+- [ ] **Step 6: 给承重的裸作用域加一行说明**
+
+Task 2 把 `if (uiSkin == UiSkin::QmlUiV2) {` 换成了裸 `{`。这个作用域**是承重的**：它把
+`qmlUiBootstrap` 的析构点限定在 `event_loop_exit` 计时与 `postExecObjectTeardownElapsed.start()`
+**之前**。删掉这对花括号会把析构推迟到外层作用域结束，静默破坏这两处关机计时，而编译不会报错。
+
+在 `src/app/main.cpp` 该裸 `{` 上方加一行：
+
+```cpp
+        // Scope the bootstrap so it is destroyed before the teardown timing below.
+        {
+```
+
+- [ ] **Step 7: 构建**
 
 ```bash
 cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCode --parallel 4
@@ -333,7 +361,7 @@ cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCod
 
 预期：编译通过。
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add -A
