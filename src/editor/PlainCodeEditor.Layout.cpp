@@ -27,6 +27,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScrollBar>
+#include <QScopedValueRollback>
 #include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCursor>
@@ -93,6 +94,15 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     });
     if (QScrollBar* vbar = verticalScrollBar(); vbar != nullptr) {
         vbar->setContextMenuPolicy(Qt::NoContextMenu);
+        verticalScrollBaseMaximum_ = vbar->maximum();
+        connect(vbar, &QScrollBar::rangeChanged, this, [this](int minimum, int maximum) {
+            Q_UNUSED(minimum);
+            if (updatingScrollBeyondLastLineRange_) {
+                return;
+            }
+            verticalScrollBaseMaximum_ = maximum;
+            updateScrollBeyondLastLineRange();
+        });
     }
     if (QScrollBar* hbar = horizontalScrollBar(); hbar != nullptr) {
         hbar->setContextMenuPolicy(Qt::NoContextMenu);
@@ -116,6 +126,7 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         format.setLeftMargin(kEditorDocumentLeftInset);
         frame->setFrameFormat(format);
     }
+    updateScrollBeyondLastLineRange();
     setCursorWidth(kEditorCursorVisibleWidth);
     updateCursorVisibility();
     lastCurrentLineHighlightRect_ = currentLineHighlightRect();
@@ -136,6 +147,7 @@ void PlainCodeEditor::setBlockSpacingPixels(int px)
     fmt.setBottomMargin(static_cast<qreal>(blockSpacingPixels_));
     cursor.mergeBlockFormat(fmt);
     cursor.endEditBlock();
+    updateScrollBeyondLastLineRange();
 }
 
 void PlainCodeEditor::setTopOverlayInsetPixels(int px)
@@ -158,6 +170,25 @@ void PlainCodeEditor::refreshLineNumberAreaLayout()
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
     lineNumberArea_->update();
     viewport()->update();
+    updateScrollBeyondLastLineRange();
+}
+
+void PlainCodeEditor::updateScrollBeyondLastLineRange()
+{
+    QScrollBar* vbar = verticalScrollBar();
+    if (vbar == nullptr || viewport() == nullptr) {
+        return;
+    }
+    const int lastLineHeight = qMax(1, fontMetrics().height() + blockSpacingPixels_);
+    const int virtualSpace = scrollBeyondLastLineEnabled_
+        ? qMax(0, viewport()->height() - lastLineHeight)
+        : 0;
+    const int desiredMaximum = verticalScrollBaseMaximum_ + virtualSpace;
+    if (vbar->maximum() == desiredMaximum) {
+        return;
+    }
+    const QScopedValueRollback<bool> guard(updatingScrollBeyondLastLineRange_, true);
+    vbar->setMaximum(desiredMaximum);
 }
 
 int PlainCodeEditor::lineNumberAreaWidth() const
@@ -188,6 +219,7 @@ void PlainCodeEditor::updateLineNumberArea()
 void PlainCodeEditor::resizeEvent(QResizeEvent* event)
 {
     QTextEdit::resizeEvent(event);
+    updateScrollBeyondLastLineRange();
 
     const QRect cr = contentsRect();
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));

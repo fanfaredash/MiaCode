@@ -1787,11 +1787,12 @@ void MainWindow::PreferencesSection::onPreferences()
     double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
     bool selectedAutoCompletionEnabled = state_.editorAutoCompletionEnabled_;
+    bool selectedScrollBeyondLastLineEnabled = state_.editorScrollBeyondLastLineEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
     // Row order (top to bottom): font size, line spacing, auto-completion,
-    // header display, IME block, and ignore muri issue prompts.
+    // scroll beyond last line, header display, IME block, and ignore muri issue prompts.
     // out, so it trails the prioritised rows.
     auto* editorFontSizeLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_font_size")), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -1924,6 +1925,32 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     editorLayout->addRow(autoCompletionLabel, autoCompletionCombo);
+
+    auto* scrollBeyondLastLineLabel = new QLabel(
+        UiText::text(QStringLiteral("preferences.scroll_beyond_last_line")),
+        editorGroup
+    );
+    auto* scrollBeyondLastLineCombo = new QComboBox(editorGroup);
+    scrollBeyondLastLineCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
+    scrollBeyondLastLineCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
+    scrollBeyondLastLineCombo->setCurrentIndex(selectedScrollBeyondLastLineEnabled ? 0 : 1);
+    styleRegisteredDialogCombo(scrollBeyondLastLineCombo, 12);
+    scrollBeyondLastLineCombo->setToolTip(
+        UiText::text(QStringLiteral("preferences.scroll_beyond_last_line_hint"))
+    );
+    connect(scrollBeyondLastLineCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [&](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedScrollBeyondLastLineEnabled = (index == 0);
+        owner_.applyEditorScrollBeyondLastLineEnabled(selectedScrollBeyondLastLineEnabled, true);
+        owner_.statusBar()->showMessage(
+            UiText::text(QStringLiteral("status.editor_text_display_updated")));
+    });
+    editorLayout->addRow(scrollBeyondLastLineLabel, scrollBeyondLastLineCombo);
 
     // Header display controls what the difficulty-page header edits next to Lv:
     // the chart-wide offset (default) or the per-difficulty designer.

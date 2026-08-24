@@ -162,6 +162,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `[|]` in one undo step). All gated by the single auto-completion pref; hold shortcut
   `tryHoldExpand` (typing `h` inserts a bare `h` and pops the `[8:1]`-style suggestions — it
   inserts NO bracket itself, so a following `[` yields `h[]`, never the old `h[[]]`).
+- Scroll beyond last line: `PlainCodeEditor::setScrollBeyondLastLineEnabled` extends the vertical
+  scrollbar range by viewport-sized virtual space, recomputed for viewport/font/line-spacing
+  changes without mutating the `QTextDocument` or its undo history. Preference key
+  `ui.editor_scroll_beyond_last_line`, default on, is exposed in Preferences → Editor and applied
+  to both the main chart editor and full-copy editor.
 - Bracket-completion dropdown ("tab 补全"): typing `( [ {` pops a simai-aware suggestion list under
   the caret; typing `h` pops the full-bracket hold durations (`[8:1]` …). Candidate
   data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure — `candidatesForOpening` for the

@@ -72,6 +72,11 @@ public:
     // Previously these were three separate toggles; they are unified here.
     void setAutoCompletionEnabled(bool enabled);
     bool autoCompletionEnabled() const { return autoCompletionEnabled_; }
+    // Allows the document's final line to scroll to the top portion of the
+    // viewport by extending the vertical scrollbar range. The extra space is
+    // visual only and never mutates the QTextDocument or its undo history.
+    void setScrollBeyondLastLineEnabled(bool enabled);
+    bool scrollBeyondLastLineEnabled() const { return scrollBeyondLastLineEnabled_; }
     // Feeds the '(' suggestion list. The chart body editor never holds the
     // &wholebpm metadata line, so the owning window pushes it in on load /
     // difficulty switch (see MainWindow::DocumentSection::setEditorText).
@@ -115,6 +120,7 @@ private:
     QRect previewFollowVisualCaretRect() const;
     int lineNumberAtAreaPosition(const QPoint& pos) const;
     void syncCursorVisualState();
+    void updateScrollBeyondLastLineRange();
     void updateCursorVisibility();
     void updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect);
     // Bracket auto-pairing helpers. Each returns true when it consumed the input
@@ -164,6 +170,9 @@ private:
     bool halfWidthInputEnabled_ = true;
     bool imeInputDisabled_ = false;
     bool autoCompletionEnabled_ = true;
+    bool scrollBeyondLastLineEnabled_ = true;
+    int verticalScrollBaseMaximum_ = 0;
+    bool updatingScrollBeyondLastLineRange_ = false;
     // Live state for the bracket-completion popup. completionOpening_ is null
     // when no popup is active; completionStartPos_ marks the document position
     // right after the opening bracket (where the user's filter text begins);

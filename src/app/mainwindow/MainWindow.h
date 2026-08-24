@@ -484,6 +484,7 @@ private:
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
+    void applyEditorScrollBeyondLastLineEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
     // Transient Alt-hold override: while the preview is paused, holding Alt

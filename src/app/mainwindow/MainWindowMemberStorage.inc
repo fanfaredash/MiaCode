@@ -649,6 +649,9 @@
         // empty-pair backspace, the bracket suggestion popup, and the 'h' hold-
         // duration suggestions. Was three separate toggles before they merged.
         bool editorAutoCompletionEnabled_ = true;
+        // VS Code-style editor.scrollBeyondLastLine behavior. Virtual viewport
+        // space only; it never changes the chart text or saved document.
+        bool editorScrollBeyondLastLineEnabled_ = true;
         // 顶部显示 preference: which field pair the difficulty header shows next
         // to Lv — the chart-wide offset (default) or the per-difficulty
         // designer. Persisted as ui.editor_header_top_display.
@@ -1089,6 +1092,7 @@
     bool& editorHalfWidthInputEnabled_ = state_.editorHalfWidthInputEnabled_;
     bool& editorOverwriteModeEnabled_ = state_.editorOverwriteModeEnabled_;
     bool& editorAutoCompletionEnabled_ = state_.editorAutoCompletionEnabled_;
+    bool& editorScrollBeyondLastLineEnabled_ = state_.editorScrollBeyondLastLineEnabled_;
     bool& editorImeInputDisabled_ = state_.editorImeInputDisabled_;
     SimaiDocument& document_ = state_.document_;
     QWidget*& welcomePage_ = ui_.welcomePage_;

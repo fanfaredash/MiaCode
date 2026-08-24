@@ -105,6 +105,16 @@ void PlainCodeEditor::setAutoCompletionEnabled(bool enabled)
     }
 }
 
+void PlainCodeEditor::setScrollBeyondLastLineEnabled(bool enabled)
+{
+    if (scrollBeyondLastLineEnabled_ == enabled) {
+        updateScrollBeyondLastLineRange();
+        return;
+    }
+    scrollBeyondLastLineEnabled_ = enabled;
+    updateScrollBeyondLastLineRange();
+}
+
 void PlainCodeEditor::setWholeBpmCandidate(const QString& bpm)
 {
     wholeBpmCandidate_ = bpm.trimmed();

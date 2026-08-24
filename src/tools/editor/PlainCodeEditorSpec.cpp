@@ -10,6 +10,7 @@
 #include <QFocusEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QScrollBar>
 #include <QTextStream>
 #include <QWindow>
 
@@ -559,6 +560,59 @@ int main(int argc, char** argv)
         QStringLiteral("Ctrl+Shift+_ key press is forwarded as Ctrl+Shift+- by PlainCodeEditor"),
         out,
         &failed);
+    {
+        PlainCodeEditor scrollEditor;
+        scrollEditor.resize(480, 240);
+        scrollEditor.setPlainText(QStringList(80, QStringLiteral("1,")).join(QLatin1Char('\n')));
+        scrollEditor.show();
+        QApplication::processEvents();
+
+        scrollEditor.document()->clearUndoRedoStacks();
+        scrollEditor.document()->setModified(false);
+        const int cleanUndoSteps = scrollEditor.document()->availableUndoSteps();
+        const QString cleanText = scrollEditor.toPlainText();
+        int documentChangeCount = 0;
+        QObject::connect(
+            scrollEditor.document(),
+            &QTextDocument::contentsChange,
+            [&documentChangeCount](int, int, int) { ++documentChangeCount; });
+
+        scrollEditor.setScrollBeyondLastLineEnabled(false);
+        QApplication::processEvents();
+        const int ordinaryMaximum = scrollEditor.verticalScrollBar()->maximum();
+
+        scrollEditor.setScrollBeyondLastLineEnabled(true);
+        QApplication::processEvents();
+        const int beyondMaximum = scrollEditor.verticalScrollBar()->maximum();
+        QTextCursor finalLineCursor(scrollEditor.document());
+        finalLineCursor.movePosition(QTextCursor::End);
+        scrollEditor.verticalScrollBar()->setValue(beyondMaximum);
+        QApplication::processEvents();
+        const int finalLineTopAtMaximum = scrollEditor.cursorRect(finalLineCursor).top();
+        expect(
+            scrollEditor.scrollBeyondLastLineEnabled()
+                && beyondMaximum > ordinaryMaximum + (scrollEditor.viewport()->height() / 2)
+                && finalLineTopAtMaximum <= scrollEditor.fontMetrics().height(),
+            QStringLiteral("scroll-beyond-last-line can place the final line at the viewport top"),
+            out,
+            &failed);
+
+        scrollEditor.resize(480, 360);
+        QApplication::processEvents();
+        const int resizedMaximum = scrollEditor.verticalScrollBar()->maximum();
+        scrollEditor.setScrollBeyondLastLineEnabled(false);
+        QApplication::processEvents();
+        const int resizedOrdinaryMaximum = scrollEditor.verticalScrollBar()->maximum();
+        expect(
+            resizedMaximum > resizedOrdinaryMaximum + (scrollEditor.viewport()->height() / 2)
+                && scrollEditor.toPlainText() == cleanText
+                && !scrollEditor.document()->isModified()
+                && scrollEditor.document()->availableUndoSteps() == cleanUndoSteps
+                && documentChangeCount == 0,
+            QStringLiteral("scroll-beyond-last-line resize and toggles preserve document and undo state"),
+            out,
+            &failed);
+    }
     {
         PlainCodeEditor gutterEditor;
         gutterEditor.resize(480, 240);

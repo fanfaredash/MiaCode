@@ -339,6 +339,7 @@ void MainWindow::EditorSection::loadPortableState()
     state_.editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     state_.editorOverwriteModeEnabled_ = false;
     state_.editorAutoCompletionEnabled_ = true;
+    state_.editorScrollBeyondLastLineEnabled_ = true;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -373,6 +374,8 @@ void MainWindow::EditorSection::loadPortableState()
     // key (the primary of the three) so existing users keep their setting.
     state_.editorAutoCompletionEnabled_ = ui.value("editor_auto_completion").toBool(
         ui.value("editor_auto_close_brackets").toBool(true));
+    state_.editorScrollBeyondLastLineEnabled_ =
+        ui.value("editor_scroll_beyond_last_line").toBool(true);
     // 顶部显示 — which field pair the difficulty header shows ("offset" default,
     // "designer" for the per-difficulty &des_N edit).
     state_.editorHeaderTopDisplay_ =
@@ -405,6 +408,7 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
     applyEditorAutoCompletionEnabled(state_.editorAutoCompletionEnabled_, false);
+    applyEditorScrollBeyondLastLineEnabled(state_.editorScrollBeyondLastLineEnabled_, false);
     applyEditorHeaderTopDisplay(state_.editorHeaderTopDisplay_, false);
     applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
@@ -800,6 +804,7 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
+    ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -963,6 +968,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
+    ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -1061,6 +1067,22 @@ void MainWindow::EditorSection::applyEditorAutoCompletionEnabled(bool enabled, b
     }
     if (ui_.copyAreaEditor_ != nullptr) {
         ui_.copyAreaEditor_->setAutoCompletionEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
+void MainWindow::EditorSection::applyEditorScrollBeyondLastLineEnabled(
+    bool enabled,
+    bool persistPreference)
+{
+    state_.editorScrollBeyondLastLineEnabled_ = enabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setScrollBeyondLastLineEnabled(enabled);
+    }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setScrollBeyondLastLineEnabled(enabled);
     }
     if (persistPreference) {
         persistEditorTextFontPreference();
@@ -1361,6 +1383,7 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     ui_.copyAreaEditor_->setAutoCompletionEnabled(state_.editorAutoCompletionEnabled_);
+    ui_.copyAreaEditor_->setScrollBeyondLastLineEnabled(state_.editorScrollBeyondLastLineEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
 
@@ -1435,6 +1458,11 @@ void MainWindow::applyEditorOverwriteModeEnabled(bool enabled, bool persistPrefe
 void MainWindow::applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorAutoCompletionEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorScrollBeyondLastLineEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorScrollBeyondLastLineEnabled(enabled, persistPreference);
 }
 
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
