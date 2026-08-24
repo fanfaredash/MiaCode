@@ -49,9 +49,17 @@ const QSet<QString> kRetiredFlags = {
     QStringLiteral("MIACODE_PREVIEW_DCOMP_QUIESCE_QSG"),
 };
 
-// This spec embeds flag-name literals (the retired allowlist above), which are
-// not real env reads, so its own source file is skipped during the code scan.
-const QString kSelfFileName = QStringLiteral("DebugFlagIndexSpec.cpp");
+// Spec files that embed MIACODE_* flag-name literals for contract checking
+// rather than reading them as real env flags, so they are skipped during the
+// code scan. This spec's own file is here for the retired allowlist above;
+// V1ShellRemovalSpec.cpp is here because it pins MIACODE_UI_SKIN as a token
+// that must NOT survive v1 shell removal — that literal would otherwise look
+// like a live flag read to this scan (see docs/specs/ui/plans/2026-08-25-v2-
+// stage0a-remove-v1-shell.md).
+const QSet<QString> kSelfExcludedFileNames = {
+    QStringLiteral("DebugFlagIndexSpec.cpp"),
+    QStringLiteral("V1ShellRemovalSpec.cpp"),
+};
 
 // MIACODE_* tokens that are CMake compile definitions (injected via
 // target_compile_definitions), not runtime env flags read with qgetenv. These
@@ -101,8 +109,9 @@ int main(int argc, char* argv[])
     const QString srcDir = root + QStringLiteral("/src");
     const QString docPath = root + QStringLiteral("/docs/ops/DEBUG_INDEX.md");
 
-    // 1. Every MIACODE_* literal read across the source tree (this spec's own
-    //    file excluded — it embeds the retired allowlist).
+    // 1. Every MIACODE_* literal read across the source tree (the spec files
+    //    in kSelfExcludedFileNames excluded — they embed flag-name literals
+    //    for contract checking, not real env reads).
     QSet<QString> codeFlags;
     int scanned = 0;
     QDirIterator it(
@@ -112,7 +121,14 @@ int main(int argc, char* argv[])
         QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QString path = it.next();
-        if (path.endsWith(kSelfFileName)) {
+        bool excluded = false;
+        for (const QString& name : kSelfExcludedFileNames) {
+            if (path.endsWith(name)) {
+                excluded = true;
+                break;
+            }
+        }
+        if (excluded) {
             continue;
         }
         codeFlags.unite(collectFlags(readFile(path)));

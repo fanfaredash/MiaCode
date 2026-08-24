@@ -1,3 +1,14 @@
+// Drift guard pinning the removal of the v1 QuickShell UI shell.
+//
+// This spec is EXPECTED TO FAIL until stage 0a of the v1 removal plan
+// completes — see docs/specs/ui/plans/2026-08-25-v2-stage0a-remove-v1-shell.md.
+// A red result here is the deliberate starting state, not a regression.
+//
+// Assertion group 5 pins QuickShellController as a survivor (v2 still uses
+// it) and only checks that it no longer branches on a native surface host.
+// When a later stage retires QuickShellController itself, this spec must be
+// updated to match rather than having its failure read as a regression.
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -10,6 +21,7 @@ namespace {
 bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
 {
     out << (condition ? "[PASS] " : "[FAIL] ") << message << '\n';
+    out.flush();
     if (!condition) ++*failed;
     return condition;
 }
