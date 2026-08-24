@@ -1,5 +1,6 @@
 #include "app/qml_ui/QmlEditorController.h"
 #include "app/qml_ui/QmlEditorInputBridge.h"
+#include "app/qml_ui/SimaiSyntaxHighlighter.h"
 #include "app/qml_ui/QmlEditorNavigationBridge.h"
 #include "app/qml_ui/QmlTouchPadAuthoringBridge.h"
 #include "editor/BookmarkCommentSyntax.h"
@@ -12,6 +13,8 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QPoint>
+#include <QQuickStyle>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRectF>
@@ -339,18 +342,138 @@ bool verifyCompletionPopupPresentsTheSelectedCandidate(QTextStream& out, int* fa
     controller.closeCompletion();
     return true;
 }
+// Loads the real SourceEditor.qml against the real controller. TextArea takes
+// the mouse grab on press, so the TapHandler the editor used to carry never
+// completed a tap inside it and the body context menu was dead on the desktop.
+bool verifyEditorContextMenuOpensFromMouseAndKeyboard(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    miacode::qml_ui::QmlEditorController controller;
+    engine.rootContext()->setContextProperty(QStringLiteral("sharedController"), &controller);
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+        import QtQuick
+        import QtQuick.Controls
+        import MiaCode.UI
+
+        Window {
+            id: win
+            width: 720; height: 480; visible: true
+
+            // Narrow stand-in for QmlDocumentModel: only the members
+            // SourceEditor actually consumes, so the real editor component runs
+            // unmodified against a deterministic document.
+            QtObject {
+                id: session
+                property string chartText: "1,2,3,4,\n5,6,7,8,\n"
+                property string metadataSourceText: ""
+                property int currentDifficultyId: 3
+                property real documentRevision: 42
+                property bool validationPending: false
+                property real validationRevision: 42
+                property var syntaxIssues: []
+                signal chartTextChanged2()
+                signal metadataSourceChanged()
+                signal documentStateChanged()
+                signal documentReplaced()
+                signal qmlEditorNavigationRequested(int difficultyId, real revision, int line,
+                                                    int column, int endLine, int endColumn,
+                                                    bool selectToken, bool focusEditor, bool centerView)
+                signal qmlTouchPadAuthoringRequested(string pad, bool useBacktickSeparator,
+                                                     int difficultyId, real revision,
+                                                     int anchor, int position)
+                function chartPosition(line, column) {
+                    const lines = session.chartText.split("\n")
+                    let offset = 0
+                    for (let i = 0; i < Math.min(line - 1, lines.length); ++i)
+                        offset += lines[i].length + 1
+                    return offset + Math.max(0, column - 1)
+                }
+                function setQmlEditorNavigationReadiness(a, b, c, d) {}
+                function setQmlEditorInteraction(a, b, c, d, e, f) {}
+                function setQmlTouchPadAuthoringCtrlHold(a) {}
+                function setTouchPadAuthoringPreviewAnchor(a, b, c, d) { return true }
+                function publishEditorCaret(a, b, c, d) { return true }
+                function selectDifficulty(a) {}
+            }
+
+            QtObject {
+                id: view
+                property int editorCursorLine: 1
+                property int editorCursorColumn: 1
+            }
+
+            property alias editor: sourceEditor
+            SourceEditor {
+                id: sourceEditor
+                objectName: "sourceEditor"
+                anchors.fill: parent
+                navigationVisible: true
+                viewState: view
+                documentSession: session
+                editorController: sharedController
+            }
+        }
+    )QML", QUrl(QStringLiteral("qrc:/SourceEditorContextMenuSpec.qml")));
+    if (!expect(component.isReady(),
+                QStringLiteral("real SourceEditor.qml loads in the spec harness"), out, failed)) {
+        for (const QQmlError& error : component.errors()) out << error.toString() << '\n';
+        return false;
+    }
+    std::unique_ptr<QObject> root(component.create());
+    auto* window = qobject_cast<QQuickWindow*>(root.get());
+    if (!expect(window != nullptr, QStringLiteral("SourceEditor harness creates a window"), out, failed)) {
+        return false;
+    }
+    window->show();
+    QTest::qWaitForWindowExposed(window);
+    QCoreApplication::processEvents();
+
+    QObject* menu = window->findChild<QObject*>(QStringLiteral("editorContextMenu"));
+    if (!expect(menu != nullptr, QStringLiteral("the editor exposes a context menu"), out, failed)) {
+        return false;
+    }
+    expect(!menu->property("visible").toBool(),
+           QStringLiteral("the editor context menu starts closed"), out, failed);
+
+    QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, QPoint(200, 60));
+    QCoreApplication::processEvents();
+    const bool openedByMouse = menu->property("visible").toBool();
+    expect(openedByMouse, QStringLiteral("a right-click in the editor body opens the context menu"),
+           out, failed);
+    QMetaObject::invokeMethod(menu, "close");
+    QCoreApplication::processEvents();
+
+    auto* editorItem = window->findChild<QQuickItem*>(QStringLiteral("sourceEditor"));
+    if (!expect(editorItem != nullptr, QStringLiteral("SourceEditor item is reachable"), out, failed)) {
+        return false;
+    }
+    QMetaObject::invokeMethod(editorItem, "openContextMenuAtCaret");
+    QCoreApplication::processEvents();
+    return expect(menu->property("visible").toBool(),
+                  QStringLiteral("the keyboard context-menu route opens the same menu at the caret"),
+                  out, failed);
+}
 } // namespace
 
 int main(int argc, char** argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
     QGuiApplication app(argc, argv);
     Q_UNUSED(app);
     QTextStream out(stdout);
     int failed = 0;
+    // MiaCode.UI's C++ elements are registered by the app module, which a spec
+    // executable does not link; register them for the mirrored import path.
+    qmlRegisterType<SimaiSyntaxHighlighter>("MiaCode.UI", 1, 0, "SimaiSyntaxHighlighter");
+    qmlRegisterType<miacode::qml_ui::QmlEditorInputBridge>(
+        "MiaCode.UI", 1, 0, "QmlEditorInputBridge");
     verifyQmlTextAreaKeyRouting(out, &failed);
     verifyCommandModifiedKeysNeverTypeText(out, &failed);
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
+    verifyEditorContextMenuOpensFromMouseAndKeyboard(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
     expect(opening.consumed && opening.transaction.replacementText == QStringLiteral("[]") && opening.transaction.position == 1, QStringLiteral("policy key input produces one QML edit transaction"), out, &failed);

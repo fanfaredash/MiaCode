@@ -1666,6 +1666,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/qml_ui/QmlEditorControllerSpec.cpp
             src/app/qml_ui/QmlEditorController.h
             src/app/qml_ui/QmlEditorController.cpp
+            src/app/qml_ui/SimaiSyntaxHighlighter.h
+            src/app/qml_ui/SimaiSyntaxHighlighter.cpp
             src/app/qml_ui/QmlEditorInputBridge.cpp
             src/app/qml_ui/QmlEditorInputBridge.h
             src/app/qml_ui/QmlTouchPadAuthoringBridge.h

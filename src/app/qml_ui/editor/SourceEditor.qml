@@ -287,33 +287,47 @@ Rectangle {
         }
     }
 
-    Menu {
+    AppMenu {
         id: editorContextMenu
+        objectName: "editorContextMenu"
         parent: Overlay.overlay
 
-        MenuItem {
+        AppMenuItem {
             text: qsTr("剪切")
             enabled: sourceArea.selectedText.length > 0
             onTriggered: sourceArea.cut()
         }
-        MenuItem {
+        AppMenuItem {
             text: qsTr("复制")
             enabled: sourceArea.selectedText.length > 0
             onTriggered: sourceArea.copy()
         }
-        MenuItem {
+        AppMenuItem {
             text: qsTr("粘贴")
             onTriggered: root.applyPastePayload(root.editorController.clipboardText())
         }
-        MenuSeparator {}
-        MenuItem {
+        AppMenuSeparator {}
+        AppMenuItem {
             text: qsTr("全选")
             onTriggered: root.selectAll()
         }
-        MenuItem {
+        AppMenuItem {
             text: qsTr("查找与替换")
             onTriggered: root.openFindReplace()
         }
+    }
+
+    // Both context-menu routes end here: a right-click passes the hit point,
+    // and the keyboard route (Menu key / Shift+F10) passes the caret.
+    function openContextMenuAt(x, y) {
+        sourceArea.forceActiveFocus()
+        const point = sourceArea.mapToItem(editorContextMenu.parent, x, y)
+        editorContextMenu.popup(point.x, point.y)
+    }
+
+    function openContextMenuAtCaret() {
+        const caret = sourceArea.cursorRectangle
+        openContextMenuAt(caret.x, caret.y + caret.height)
     }
 
     FindReplaceBar {
@@ -459,6 +473,12 @@ Rectangle {
                     event.accepted = true
                     return
                 }
+                if (event.key === Qt.Key_Menu
+                        || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
+                    root.openContextMenuAtCaret()
+                    event.accepted = true
+                    return
+                }
                 if (event.matches(StandardKey.SelectAll)) {
                     root.selectAll()
                     event.accepted = true
@@ -554,15 +574,15 @@ Rectangle {
                 sourceArea.forceActiveFocus()
             }
 
-            TapHandler {
+            // TextArea takes the mouse grab on press, so a TapHandler's
+            // release-within-bounds gesture never completes inside one and the
+            // context menu never opened. A right-button MouseArea does get the
+            // click, and leaves left-button selection to TextArea untouched —
+            // the same pattern the line-number gutter menu already uses.
+            MouseArea {
+                anchors.fill: parent
                 acceptedButtons: Qt.RightButton
-                gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: function(eventPoint) {
-                    sourceArea.forceActiveFocus()
-                    const point = sourceArea.mapToItem(editorContextMenu.parent,
-                                                       eventPoint.position.x, eventPoint.position.y)
-                    editorContextMenu.popup(point.x, point.y)
-                }
+                onClicked: mouse => root.openContextMenuAt(mouse.x, mouse.y)
             }
         }
     }
