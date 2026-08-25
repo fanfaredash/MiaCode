@@ -1,5 +1,12 @@
 # 阶段 0a：移除 v1 QuickShell 外壳与其入口 — 实施计划
 
+> **状态：已完成（2026-08-25）。** 源码净 −7,770 行（39 文件，+284/−8,054），16 个提交。
+> 两个漂移守卫（`v1_shell_removal_spec`、`debug_flag_index_spec`）均为绿；全量 Release 构建 0 error；
+> 全量 CTest 71/72，唯一失败 `qtavplayer_platform_spec` 为既有问题（本阶段起点 `31922400` 即复现）；
+> 运行时冒烟三个预览表面全部创建成功、无新增 QML 错误。
+>
+> 执行中发现并修正了本计划的 5 处缺陷，均记录在对应 Task 内，其中 Task 4a 是整段新增的前置任务。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 删除 v1 QuickShell 外壳、它的启动入口和原生表面再宿主机制，使 `MiaCode` 只剩一条 UI 启动路径。

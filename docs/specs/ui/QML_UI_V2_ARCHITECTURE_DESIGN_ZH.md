@@ -124,6 +124,7 @@ QML 收到的第一眼就是终态，不存在"活动难度尚未设定"的可�
 | 阶段 | 内容 | 完成标志 |
 |---|---|---|
 | 0 | 删除 v1 shell、扩展宿主（3,141 行，v2 未使用）、被舍弃的三组页面（偏好设置、延迟检测、媒体处理/音轨工具） | `--ui=v1` 与 `MIACODE_UI_SKIN` 消失；体量显著下降 |
+| 0a ✅ | **已完成 2026-08-25**：v1 外壳、原生表面再宿主、主题桥、macOS 表面支持、全部 v1 QML 与皮肤入口 | 源码净 **−7,770 行**（39 文件，+284/−8,054）。`QuickShellController` 保留待阶段 2。全量 CTest 71/72（唯一失败 `qtavplayer_platform_spec` 为既有问题，在本阶段起点即复现） |
 | 1 | 建立 `ChartWorkspace` 与 `AnalysisService`，文档域搬迁 | 隐藏 `PlainCodeEditor` 删除；文档不再有第二个所有者 |
 | 2 | 建立 `PreviewSession` 与 `TimelineSession`，`QuickShellController` 退役 | 轮询定时器消失；`surfaceHost` 分支归零 |
 | 3 | `ExportService`：视频沿用，封面/ZIP/Net 重建为 QML 并去除其引擎层的 widgets 耦合 | Widgets 对话框归零 |
