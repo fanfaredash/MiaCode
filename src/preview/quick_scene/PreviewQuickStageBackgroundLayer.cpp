@@ -391,7 +391,10 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
         state.media.presentationMode == miacode::preview::scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem;
     const QImage mediaImage = usesExternalMedia ? QImage() : media.image;
     const bool hasMedia = !mediaImage.isNull();
-    const double outerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0);
+    const bool hasVisibleStageMedia = hasMedia || (usesExternalMedia && state.media.stageMediaAvailable);
+    const double outerDarkAlpha = hasVisibleStageMedia
+        ? qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0)
+        : 0.0;
     const double innerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessInner, 1.0);
     if (!usesExternalMedia
         && media.sourceKind == StageMediaSourceKind::ResolvedFrame
@@ -413,7 +416,7 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     if (usesExternalMedia && state.media.stageMediaAvailable) {
         root->baseNode->setColor(Qt::transparent);
     } else {
-        root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : QColor(QStringLiteral("#1F2833")));
+        root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : QColor(QStringLiteral("#191A1B")));
     }
 
     if ((!hasMedia || usesExternalMedia) && textures != nullptr) {
