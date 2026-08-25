@@ -164,6 +164,16 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 ### 待处理功能缺口（2026-08-24 GUI 验证新发现，优先于 Step 5）
 
+- [ ] **P0 — 文本控制键与 undo/save-point 迁移（下一项）**：
+      1. 修复 `Backspace` / `Delete` 的控制字符不能进入 `SimaiTextEditPolicy` 普通文本插入路径；
+         保留空括号成对删除，普通删除交给 `TextArea` 原生行为，并补 `\b` / `\x7f` 的真实 QML 键盘回归。
+      2. 以 v1 的“undo save anchor”语义为参照，但由 `ChartWorkspace` 的完整文档 save point 作为唯一
+         dirty 真相；不得只给 `QmlEditorController` 增加局部 dirty 布尔值。
+      3. 迁移 `QmlDocumentModel` 的正文、元数据、难度和文件操作到 `ChartWorkspace` /
+         `ChartWorkspaceFileService`，再让 `AnalysisService` 的 revision 快照接管验证/Muri 投影。
+         过渡期 `MainWindow` 只能消费提交后的适配值，不能继续拥有或判定 v2 文档 dirty。
+      4. 回归：打开→编辑→撤销回初始、保存→编辑→撤销回保存点、元数据仍脏时正文撤销、分支编辑、
+         难度/文档切换，以及脏文档关闭。该项是阶段 1 完成、关闭流程手工回归和阶段 2 的前置条件。
 - [ ] 切换文档后 PV 异常：**多次复现失败，需求延后。** 埋点保留在树上
       （`editor/document_replaced` 与 `editor/document_shown`），日后若再次出现可直接取证。
       在拿到一次成功复现之前不再投入排查。排查记录见审计文档的“切换文档排查记录”。
@@ -291,11 +301,13 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 1. 阶段 1（进行中）：`ChartWorkspace`、`ChartWorkspaceFileService` 与 `AnalysisService` 的 Widgets-free
    契约规格和实现已落地；完整源码预检已从 `QmlDocumentProjection` 下沉复用，分析服务已产出
    revision-stamped 的验证/Muri 快照。下一步迁移生产文档事务与分析调度，消除 `MainWindow` 的第二所有者与缓存。
-2. 在上述事务迁移中关闭 undo/redo 的 dirty 标记缺口；不要为当前 QML 历史栈另写一次性补丁。
-3. 阶段 2：建立 `PreviewSession` 与 `TimelineSession`，删除 `QuickShellController` 的轮询和剩余兼容 API。
-4. 阶段 3：将导出、封面、ZIP 和 Net 收敛为 `ExportService` 作业模型；片头音、批量上传和禁用控件在此
+2. 先完成 P0 文本控制键修复；随后完成上述 QML 文档会话迁移及 undo/save-point 回归。该工作不依赖
+   0b/0c、性能平台、导出或阶段 2，但阶段 2、脏文档关闭回归依赖它。
+3. 将 `AnalysisService` 接入迁移后的文档会话，并以其 revision 快照替换 `MainWindow` 验证/Muri 缓存投影。
+4. 阶段 2：建立 `PreviewSession` 与 `TimelineSession`，删除 `QuickShellController` 的轮询和剩余兼容 API。
+5. 阶段 3：将导出、封面、ZIP 和 Net 收敛为 `ExportService` 作业模型；片头音、批量上传和禁用控件在此
    域解决。
-5. 阶段 4：删除 `MainWindow` 与 `Qt6::Widgets`；原生桌面回归作为每阶段验收，而非替代迁移契约。
+6. 阶段 4：删除 `MainWindow` 与 `Qt6::Widgets`；原生桌面回归作为每阶段验收，而非替代迁移契约。
 
 ## 更新规则
 
