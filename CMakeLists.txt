@@ -606,7 +606,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     resources/slide_data.qrc
     resources/preview_judge_effects.qrc
     resources/preview_runtime_qml.qrc
-    resources/quick_shell_qml.qrc
     resources/intro.qrc
 )
 
