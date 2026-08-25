@@ -1,15 +1,12 @@
 #include "QuickShellController.h"
 #include "QuickShellKeyboardActivation.h"
 
-#include "QuickShellNativeSurfaceHost.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
-#include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
-#include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
@@ -32,7 +29,6 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QWidgetAction>
-#include <QWindow>
 
 #include <functional>
 #include <utility>
@@ -336,12 +332,10 @@ void appendQuickShellLifecycleLog(const QString& action, const QString& payload 
 QuickShellController::QuickShellController(
     QuickShellCommandSink* commandSink,
     QuickShellStateSource* stateSource,
-    QuickShellNativeSurfaceHost* surfaceHost,
     QObject* parent)
     : QObject(parent)
     , commandSink_(commandSink)
     , stateSource_(stateSource)
-    , surfaceHost_(surfaceHost)
     , refreshTimer_(new QTimer(this))
 {
     if (stateSource_ != nullptr) {
@@ -443,11 +437,6 @@ QObject* QuickShellController::previewStageMediaHost() const
     return stateSource_ != nullptr ? stateSource_->shellPreviewStageMediaHostObject() : nullptr;
 }
 
-QWindow* QuickShellController::previewCompositeWindow() const
-{
-    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().previewCompositeWindow : nullptr;
-}
-
 bool QuickShellController::previewUsesSeparateSurface() const
 {
     return previewUsesSeparateSurface_;
@@ -534,31 +523,6 @@ QString QuickShellController::timelineSyncLabel() const
 QString QuickShellController::timelineFollowCodeLabel() const
 {
     return UiText::text(QStringLiteral("shell.follow_code"));
-}
-
-QWindow* QuickShellController::topChromeWindow() const
-{
-    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().topChrome : nullptr;
-}
-
-QWindow* QuickShellController::sidebarWindow() const
-{
-    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().sidebar : nullptr;
-}
-
-QWindow* QuickShellController::workspaceWindow() const
-{
-    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().workspace : nullptr;
-}
-
-QWindow* QuickShellController::bottomTabsWindow() const
-{
-    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().bottomTabs : nullptr;
-}
-
-QWindow* QuickShellController::statusWindow() const
-{
-    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().status : nullptr;
 }
 
 void QuickShellController::setPreviewFullscreen(bool fullscreen)
@@ -1125,119 +1089,6 @@ void QuickShellController::logPreviewInteraction(const QString& action, const QS
     appendQuickShellControllerLog(action.trimmed().isEmpty() ? QStringLiteral("preview_interaction") : action, payload);
 }
 
-void QuickShellController::syncTopChromeSurfaceSize(int width, int height)
-{
-    if (surfaceHost_ == nullptr) {
-        return;
-    }
-    surfaceHost_->syncTopChromeSurfaceSize(width, height);
-    if (QWidget* surface = surfaceHost_->topChromeSurfaceWidget(); surface != nullptr) {
-        appendQuickShellControllerLog(
-            QStringLiteral("sync_top_chrome"),
-            QString("size=%1x%2 handle=0x%3")
-                .arg(surface->width())
-                .arg(surface->height())
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
-        );
-    }
-}
-
-void QuickShellController::syncSidebarSurfaceSize(int width, int height)
-{
-    if (surfaceHost_ == nullptr) {
-        return;
-    }
-    surfaceHost_->syncSidebarSurfaceSize(width, height);
-    if (QWidget* surface = surfaceHost_->sidebarSurfaceWidget(); surface != nullptr) {
-        const miacode::diagnostics::SurfaceSizeKey surfaceKey{
-            static_cast<quintptr>(surface->winId()), surface->width(), surface->height()};
-        if (sidebarSurfaceLogGate_.shouldEmit(surfaceKey, false)) {
-            appendQuickShellControllerLog(
-                QStringLiteral("sync_sidebar"),
-                QString("size=%1x%2 handle=0x%3")
-                    .arg(surface->width())
-                    .arg(surface->height())
-                    .arg(static_cast<quintptr>(surface->winId()), 0, 16)
-            );
-        }
-    }
-}
-
-void QuickShellController::syncWorkspaceSurfaceSize(int width, int height)
-{
-    MC_OP("QuickShellController::syncWorkspaceSurfaceSize");
-    QElapsedTimer elapsed;
-    elapsed.start();
-    MIACODE_HANG_PHASE(
-        "QuickShellController::syncWorkspaceSurfaceSize",
-        QStringLiteral("requested=%1x%2").arg(width).arg(height));
-    if (surfaceHost_ == nullptr) {
-        return;
-    }
-    surfaceHost_->syncWorkspaceSurfaceSize(width, height);
-    if (QWidget* surface = surfaceHost_->workspaceSurfaceWidget(); surface != nullptr) {
-        const qint64 elapsedMs = elapsed.elapsed();
-        const bool slow = elapsedMs >= 50;
-        const miacode::diagnostics::SurfaceSizeKey surfaceKey{
-            static_cast<quintptr>(surface->winId()), surface->width(), surface->height()};
-        if (workspaceSurfaceLogGate_.shouldEmit(surfaceKey, slow)) {
-            appendQuickShellControllerLog(
-                QStringLiteral("sync_workspace"),
-                QString("size=%1x%2 requested=%3x%4 elapsed_ms=%5 handle=0x%6")
-                    .arg(surface->width())
-                    .arg(surface->height())
-                    .arg(width)
-                    .arg(height)
-                    .arg(elapsedMs)
-                    .arg(static_cast<quintptr>(surface->winId()), 0, 16),
-                slow ? miacode::debug_log::Level::Warn : miacode::debug_log::Level::Info
-            );
-        }
-    }
-}
-
-void QuickShellController::syncBottomTabsSurfaceSize(int width, int height)
-{
-    if (surfaceHost_ == nullptr) {
-        return;
-    }
-    surfaceHost_->syncBottomTabsSurfaceSize(width, height);
-    if (QWidget* surface = surfaceHost_->bottomTabsSurfaceWidget(); surface != nullptr) {
-        appendQuickShellControllerLog(
-            QStringLiteral("sync_bottom_tabs"),
-            QString("size=%1x%2 handle=0x%3")
-                .arg(surface->width())
-                .arg(surface->height())
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
-        );
-    }
-}
-
-void QuickShellController::syncBottomTabsToastAnchor(int x, int y, int width, int height, bool visible)
-{
-    if (surfaceHost_ == nullptr) {
-        return;
-    }
-    surfaceHost_->syncBottomTabsToastAnchor(x, y, width, height, visible);
-}
-
-void QuickShellController::syncStatusSurfaceSize(int width, int height)
-{
-    if (surfaceHost_ == nullptr) {
-        return;
-    }
-    surfaceHost_->syncStatusSurfaceSize(width, height);
-    if (QWidget* surface = surfaceHost_->statusSurfaceWidget(); surface != nullptr) {
-        appendQuickShellControllerLog(
-            QStringLiteral("sync_status"),
-            QString("size=%1x%2 handle=0x%3")
-                .arg(surface->width())
-                .arg(surface->height())
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
-        );
-    }
-}
-
 bool QuickShellController::hasShortcut(const QKeySequence& sequence) const
 {
     return commandSink_ != nullptr ? commandSink_->shellHasShortcut(sequence) : false;
@@ -1262,8 +1113,6 @@ void QuickShellController::refreshFromStateSource()
         return;
     }
 
-    const QString previousBottomTabsCurrentTabId = bottomTabsCurrentTabId_;
-    const QString previousPreviewSpeedLabel = previewSpeedLabel_;
     bool stateChanged = false;
     stateChanged |= assignIfChanged(windowTitle_, stateSource_->shellWindowTitle());
     stateChanged |= assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
@@ -1293,25 +1142,6 @@ void QuickShellController::refreshFromStateSource()
     if (assignIfChanged(previewFullscreen_, nextPreviewFullscreen)) {
         stateChanged = true;
         emit previewFullscreenChanged();
-    }
-
-    if (surfaceHost_ != nullptr && previousBottomTabsCurrentTabId != bottomTabsCurrentTabId_) {
-        surfaceHost_->refreshBottomTabsSurfaceVisibility();
-    }
-    if (surfaceHost_ != nullptr) {
-        // The bottom-tabs speed toast is anchored to the timeline strip, which is
-        // gone in fullscreen — there, MainWindow's own centered
-        // previewPlaybackRateToast_ (shown from applyPreviewPlaybackRate) is the
-        // speed feedback. Showing both gave the "两个 widget" report, so suppress
-        // this one whenever fullscreen.
-        if (!previewSpeedToastInitialized_) {
-            previewSpeedToastInitialized_ = true;
-        } else if (previousPreviewSpeedLabel != previewSpeedLabel_ && !previewFullscreen_) {
-            surfaceHost_->showBottomTabsSpeedToast(previewSpeedLabel_);
-        }
-        if (!bottomTabsVisible_ || previewFullscreen_) {
-            surfaceHost_->hideBottomTabsSpeedToast();
-        }
     }
 
     if (stateChanged) {

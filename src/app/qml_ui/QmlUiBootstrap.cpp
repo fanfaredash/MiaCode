@@ -81,13 +81,8 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     backend_->setVisible(false);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
-    // v2 chrome stays pure QML. Export/Latency editor overlays may use a
-    // local WindowContainer via QmlEditorPageHost; the main shell still
-    // avoids NativeSurfaceHost rehost of the whole MainWindow.
-    // QuickShellController already null-checks surfaceHost_ for every
-    // bridge API used by preview/timeline.
     controller_ = std::make_unique<QuickShellController>(
-        backend_.get(), backend_.get(), nullptr, this);
+        backend_.get(), backend_.get(), this);
     QObject::connect(
         controller_.get(),
         &QuickShellController::rootCloseAccepted,
@@ -227,7 +222,6 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         auto* platform = qobject_cast<QmlUiPlatformChrome*>(applicationContext_->platform());
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         // Timing comes from applicationContext.platform (hide before / attach after show).
-        // QuickShellBootstrap (v1) never constructs QmlUiWindowChrome.
         if (platform != nullptr && platform->hideBeforeChromeAttach()) {
             window->setVisible(false);
             windowChrome_->attach(window);

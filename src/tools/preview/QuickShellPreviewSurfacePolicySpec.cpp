@@ -49,23 +49,24 @@ bool verifyPolicy(QTextStream& err)
 
 bool verifyChartDropUsesQsgOnly(QTextStream& err)
 {
-    const QString bootstrap = readSource(QStringLiteral("src/app/quick_shell/QuickShellBootstrap.cpp"));
+    // v1 QuickShellBootstrap is gone; the surviving GUI bootstrap is the v2 QML entry.
+    const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));
     const QString mainWindowHeader = readSource(QStringLiteral("src/app/mainwindow/MainWindow.h"));
     return require(
                bootstrap.contains(QStringLiteral("ui/ChartDropOverlay.h")),
-               QStringLiteral("audio drop must keep the QuickShell overlay"),
+               QStringLiteral("audio drop must keep the GUI bootstrap overlay"),
                err)
         && require(
             bootstrap.contains(QStringLiteral("syncChartDropOverlay")),
-            QStringLiteral("audio drop must keep the QuickShell overlay lifecycle"),
+            QStringLiteral("audio drop must keep the GUI bootstrap overlay lifecycle"),
             err)
         && require(
             !bootstrap.contains(QStringLiteral("PreviewDCompSurface")),
-            QStringLiteral("QuickShell audio drop must not restore the removed DComp surface"),
+            QStringLiteral("audio drop must not restore the removed DComp surface"),
             err)
         && require(
             !bootstrap.contains(QStringLiteral("createInProcessPreviewSurface")),
-            QStringLiteral("QuickShell audio drop must stay on the QSG render path"),
+            QStringLiteral("audio drop must stay on the QSG render path"),
             err)
         && require(
             mainWindowHeader.contains(QStringLiteral("chartDropOverlayVisibleChanged")),

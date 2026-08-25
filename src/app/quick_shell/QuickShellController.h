@@ -1,14 +1,11 @@
 #pragma once
 
 #include "QuickShellContracts.h"
-#include "common/LogEmissionPolicy.h"
 
 #include <QObject>
 #include <QKeySequence>
-#include <QWindow>
 
 class QTimer;
-class QuickShellNativeSurfaceHost;
 
 class QuickShellController : public QObject
 {
@@ -37,7 +34,6 @@ class QuickShellController : public QObject
     Q_PROPERTY(bool previewFullscreen READ previewFullscreen WRITE setPreviewFullscreen NOTIFY previewFullscreenChanged)
     Q_PROPERTY(QObject* previewRuntime READ previewRuntime CONSTANT)
     Q_PROPERTY(QObject* previewStageMediaHost READ previewStageMediaHost CONSTANT)
-    Q_PROPERTY(QWindow* previewCompositeWindow READ previewCompositeWindow CONSTANT)
     Q_PROPERTY(bool previewUsesSeparateSurface READ previewUsesSeparateSurface NOTIFY shellStateChanged)
     Q_PROPERTY(QObject* timelineStateBridge READ timelineStateBridge CONSTANT)
     Q_PROPERTY(bool timelineSurfaceReady READ timelineSurfaceReady NOTIFY shellStateChanged)
@@ -61,17 +57,11 @@ class QuickShellController : public QObject
     Q_PROPERTY(QString timelineViewLockLabel READ timelineViewLockLabel CONSTANT)
     Q_PROPERTY(QString timelineSyncLabel READ timelineSyncLabel CONSTANT)
     Q_PROPERTY(QString timelineFollowCodeLabel READ timelineFollowCodeLabel CONSTANT)
-    Q_PROPERTY(QWindow* topChromeWindow READ topChromeWindow CONSTANT)
-    Q_PROPERTY(QWindow* sidebarWindow READ sidebarWindow CONSTANT)
-    Q_PROPERTY(QWindow* workspaceWindow READ workspaceWindow CONSTANT)
-    Q_PROPERTY(QWindow* bottomTabsWindow READ bottomTabsWindow CONSTANT)
-    Q_PROPERTY(QWindow* statusWindow READ statusWindow CONSTANT)
 
 public:
     QuickShellController(
         QuickShellCommandSink* commandSink,
         QuickShellStateSource* stateSource,
-        QuickShellNativeSurfaceHost* surfaceHost,
         QObject* parent = nullptr
     );
 
@@ -92,7 +82,6 @@ public:
     bool previewFullscreen() const;
     QObject* previewRuntime() const;
     QObject* previewStageMediaHost() const;
-    QWindow* previewCompositeWindow() const;
     bool previewUsesSeparateSurface() const;
     QObject* timelineStateBridge() const;
     bool timelineSurfaceReady() const;
@@ -110,11 +99,6 @@ public:
     QString timelineViewLockLabel() const;
     QString timelineSyncLabel() const;
     QString timelineFollowCodeLabel() const;
-    QWindow* topChromeWindow() const;
-    QWindow* sidebarWindow() const;
-    QWindow* workspaceWindow() const;
-    QWindow* bottomTabsWindow() const;
-    QWindow* statusWindow() const;
 
     void setPreviewFullscreen(bool fullscreen);
     void markNextCloseConfirmedExternally();
@@ -165,12 +149,6 @@ public:
     Q_INVOKABLE void logPreviewInteraction(const QString& action, const QString& payload = QString());
     Q_INVOKABLE void logShellLifecycle(const QString& action, const QString& payload = QString());
     Q_INVOKABLE void notifyRootCloseAccepted(const QString& source);
-    Q_INVOKABLE void syncTopChromeSurfaceSize(int width, int height);
-    Q_INVOKABLE void syncSidebarSurfaceSize(int width, int height);
-    Q_INVOKABLE void syncWorkspaceSurfaceSize(int width, int height);
-    Q_INVOKABLE void syncBottomTabsSurfaceSize(int width, int height);
-    Q_INVOKABLE void syncBottomTabsToastAnchor(int x, int y, int width, int height, bool visible);
-    Q_INVOKABLE void syncStatusSurfaceSize(int width, int height);
     bool hasShortcut(const QKeySequence& sequence) const;
     bool triggerShortcut(const QKeySequence& sequence);
 
@@ -185,7 +163,6 @@ private:
 
     QuickShellCommandSink* commandSink_ = nullptr;
     QuickShellStateSource* stateSource_ = nullptr;
-    QuickShellNativeSurfaceHost* surfaceHost_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
     QString windowTitle_;
     bool workspacePanelsSwapped_ = false;
@@ -211,8 +188,5 @@ private:
     bool validationTabVisible_ = false;
     bool muriTabVisible_ = false;
     bool exportPageActive_ = false;
-    bool previewSpeedToastInitialized_ = false;
     bool closeConfirmedExternally_ = false;
-    miacode::diagnostics::SurfaceLogGate sidebarSurfaceLogGate_;
-    miacode::diagnostics::SurfaceLogGate workspaceSurfaceLogGate_;
 };

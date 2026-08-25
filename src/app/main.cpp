@@ -608,7 +608,7 @@ int main(int argc, char* argv[])
     // Auto-theme native title bars of every QWidget top-level (dialogs,
     // message boxes) as they show, including tools-layer dialogs that can't
     // reach MainWindow::WindowSection. QML root windows are themed by
-    // QuickShellBootstrap. GUI-only: CLI runs above never show windows.
+    // QmlUiBootstrap. GUI-only: CLI runs above never show windows.
     UiNativeWindowTheme::installAutoApplyFilter();
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
@@ -673,6 +673,7 @@ int main(int argc, char* argv[])
 #ifdef Q_OS_WIN
         miacode::oplog::appendStartupBeaconLine("phase=before_qml_ui_bootstrap_start");
 #endif
+        // Scope the bootstrap so it is destroyed before the teardown timing below.
         {
             QmlUiBootstrap qmlUiBootstrap(appIcon);
             qmlUiBootstrap.setShowWelcomeDialogOnStartup(shouldShowWelcomeDialog);

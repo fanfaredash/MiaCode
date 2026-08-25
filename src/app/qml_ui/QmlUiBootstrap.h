@@ -18,8 +18,9 @@ class QuickShellController;
 class ChartDropOverlay;
 class QTimer;
 
-// Default UI entry (v2). Shares the hidden MainWindow backend with
-// QuickShell; no NativeSurfaceHost / StyleBridge. QuickShell: --ui=v1.
+// The single UI entry. Drives a hidden MainWindow as its backend: the
+// widgets layer keeps owning documents, actions and dialogs while the
+// whole visible shell is QML.
 class QmlUiBootstrap final : public QObject
 {
     Q_OBJECT
