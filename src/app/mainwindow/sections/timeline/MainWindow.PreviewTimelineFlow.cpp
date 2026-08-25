@@ -251,6 +251,7 @@ void MainWindow::TimelineSection::invalidatePreviewFollowBindingCache()
 {
     state_.previewFollowBindingCacheValid_ = false;
     state_.previewFollowBindingCache_ = TimelineQuickModel::PreviewFollowBinding();
+    qmlFollowNavigationCacheValid_ = false;
 }
 
 bool MainWindow::TimelineSection::cachedPreviewFollowBindingContainsSecond(double second) const

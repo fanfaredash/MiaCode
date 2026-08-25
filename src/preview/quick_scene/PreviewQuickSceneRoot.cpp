@@ -378,6 +378,9 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
                 .arg(pointerHex(window()))
         );
         syncVisibleHostWindowBinding("visible_changed");
+        if (runtime_ != nullptr && miacode::debug_options::runtimeDebugOutputEnabled()) {
+            runtime_->noteV2UiSceneRootVisibility(instanceId_, isVisible());
+        }
         update();
     });
 }
@@ -402,6 +405,9 @@ PreviewQuickSceneRoot::~PreviewQuickSceneRoot()
     );
     if (runtime_ != nullptr) {
         runtime_->setHoveredTouchPad(QString());
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            runtime_->noteV2UiSceneRootUnbound(instanceId_);
+        }
         if (boundWindow_ != nullptr) {
             runtime_->clearVisibleHostWindow(boundWindow_);
         }
@@ -427,6 +433,9 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
     }
     if (runtime_ != nullptr) {
         runtime_->setHoveredTouchPad(QString());
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            runtime_->noteV2UiSceneRootUnbound(instanceId_);
+        }
         if (boundWindow_ != nullptr) {
             runtime_->clearVisibleHostWindow(boundWindow_);
         }
@@ -438,7 +447,13 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            runtime_->noteV2UiSceneRootBound(instanceId_, isVisible());
+        }
         runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+            if (runtime_ != nullptr && miacode::debug_options::runtimeDebugOutputEnabled()) {
+                runtime_->noteV2UiSceneRootFrameStateDispatch(isVisible());
+            }
             update();
         });
         runtime_->setFrameSize(boundingRect().size().toSize());
@@ -576,6 +591,9 @@ void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::Preview
 {
     if (runtime_ != nullptr && boundWindow_ != nullptr) {
         runtime_->clearVisibleHostWindow(boundWindow_);
+    }
+    if (runtime_ != nullptr && miacode::debug_options::runtimeDebugOutputEnabled()) {
+        runtime_->noteV2UiSceneRootUnbound(instanceId_);
     }
     if (runtimeUpdateConnection_) {
         QObject::disconnect(runtimeUpdateConnection_);

@@ -43,14 +43,20 @@ Item {
         onSettingsRequested: root.settingsRequested()
     }
 
-    PreviewPane {
+    Loader {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Math.min(360, parent.width - 36)
-        visible: root.viewState.compactPanel === "preview"
-        previewSession: root.previewSession
-        shellController: root.shellController
-        onFullscreenRequested: root.fullscreenRequested()
+        // Unlike a visual `visible:false`, Loader removes the nested transport,
+        // statistics binding and PreviewSurface runtime subscription.
+        active: root.compact && root.viewState.compactPanel === "preview"
+
+        sourceComponent: PreviewPane {
+            anchors.fill: parent
+            previewSession: root.previewSession
+            shellController: root.shellController
+            onFullscreenRequested: root.fullscreenRequested()
+        }
     }
 }

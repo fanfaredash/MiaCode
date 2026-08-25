@@ -161,8 +161,22 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
       **未修的是 `Ctrl+Z` / `Ctrl+Y` 与文档置脏标记的联动**：撤销掉全部修改后，置脏标记不会
       随之复原，文档仍显示为已修改。按所有者要求，**参考 v1 的实现算法**来处理这条联动。
 - [x] 快捷键体系（`676150e0`）：成因是绑定上下文而非缺注册层。v2 经 `QmlShortcutModel` 复用
-      `ShortcutRegistry`，变换命令按 id 走 `MainWindow::triggerShortcutCommand`，预览命令直接绑
-      `QuickShellController`；菜单行通过 `AppMenuAction.shortcutText` 显示快捷键。
+  `ShortcutRegistry`，变换命令按 id 走 `MainWindow::triggerShortcutCommand`，预览命令直接绑
+  `QuickShellController`；菜单行通过 `AppMenuAction.shortcutText` 显示快捷键。
+
+### v2 预览性能修复（2026-08-25）
+
+- [x] 预览 surface 互斥生命周期：工作区、紧凑面板、全屏同一时刻只允许一个
+      `PreviewSurface` 订阅 `PreviewRuntime`；不可见分支由 Loader 卸载，不再收到 frame-state
+      fan-out。
+- [x] 预览统计投影去热路径化：`QmlPreviewModel` 缓存统计 entries，并按 position / transport /
+      playing / render mode / statistics 分离通知。播放位置不会重建统计、生成 note-icon URL 或探测
+      皮肤文件。
+- [x] QML 跟随去重：同一 token/已居中的 navigation 不再反复操作 `TextArea.select()`、装饰或
+      排队滚动；文档/难度导致的 follow binding cache 失效同时清除 QML navigation cache。
+- [ ] 播放期高位内存平台：当前证据为“跃升后稳定”而非持续泄漏（private memory 约 957 MB 平台，
+      第二段播放约 1051–1064 MB）。需继续拆分 QtAVPlayer/D3D11VA 帧池、QML/Qt Quick 和私有堆；
+      不得先验归咎于 preview texture cache。
 
 详细登记见
 [QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。

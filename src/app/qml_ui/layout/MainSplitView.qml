@@ -217,6 +217,9 @@ Item {
         PreviewPane {
             id: preview
             visible: !root.compact && root.viewState.previewVisible
+            // Fullscreen owns the sole live scene root while its overlay is
+            // active; leave this pane's transport chrome in place underneath.
+            surfaceActive: !fullscreenPreview.visible
             previewSession: root.previewSession
             shellController: root.shellController
             SplitView.preferredWidth: Math.max(
@@ -241,14 +244,19 @@ Item {
         z: 80
         color: Theme.colors.background.editor
 
-        Preview.PreviewSurface {
-            anchors.centerIn: parent
-            width: root.fittedFullscreenWidth(parent.width, parent.height)
-            height: root.fittedFullscreenHeight(parent.width, parent.height)
-            runtime: root.previewSession.runtime
-            mediaHost: root.previewSession.mediaHost
-            logger: root.shellController
-            surfaceRole: "fullscreen"
+        Loader {
+            anchors.fill: parent
+            active: fullscreenPreview.visible && width >= 64 && height >= 64
+
+            sourceComponent: Preview.PreviewSurface {
+                anchors.centerIn: parent
+                width: root.fittedFullscreenWidth(parent.width, parent.height)
+                height: root.fittedFullscreenHeight(parent.width, parent.height)
+                runtime: root.previewSession.runtime
+                mediaHost: root.previewSession.mediaHost
+                logger: root.shellController
+                surfaceRole: "fullscreen"
+            }
         }
 
         IconButton {

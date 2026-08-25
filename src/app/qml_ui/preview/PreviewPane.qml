@@ -7,6 +7,10 @@ Rectangle {
 
     required property var previewSession
     required property var shellController
+    // MainSplitView keeps the transport chrome mounted for layout stability, but
+    // exactly one PreviewSurface may subscribe to the runtime at a time. The
+    // compact and fullscreen owners use the same rule.
+    property bool surfaceActive: true
     signal fullscreenRequested()
 
     // Mirror QuickShellMain: backend aspect is authoritative (export page
@@ -48,14 +52,22 @@ Rectangle {
         anchors.bottom: transport.top
         clip: true
 
-        Preview.PreviewSurface {
-            anchors.centerIn: parent
-            width: root.fittedFrameWidth(parent.width, parent.height)
-            height: root.fittedFrameHeight(parent.width, parent.height)
-            runtime: root.previewSession.runtime
-            mediaHost: root.previewSession.mediaHost
-            logger: root.shellController
-            surfaceRole: "workspace"
+        Loader {
+            id: previewSurfaceLoader
+            anchors.fill: parent
+            // Do not construct an invisible scene root: it still subscribes to
+            // PreviewRuntime::frameStateChanged even when QSG skips painting it.
+            active: root.surfaceActive && root.visible && width >= 64 && height >= 64
+
+            sourceComponent: Preview.PreviewSurface {
+                anchors.centerIn: parent
+                width: root.fittedFrameWidth(parent.width, parent.height)
+                height: root.fittedFrameHeight(parent.width, parent.height)
+                runtime: root.previewSession.runtime
+                mediaHost: root.previewSession.mediaHost
+                logger: root.shellController
+                surfaceRole: "workspace"
+            }
         }
     }
 

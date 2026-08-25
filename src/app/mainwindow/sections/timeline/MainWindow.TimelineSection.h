@@ -238,6 +238,10 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
 private:
+    void noteV2QmlFollowProbe(
+        const TimelineQuickModel::PreviewFollowSpan* span,
+        bool centerView,
+        qint64 elapsedNs);
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredTimelineBridgeFlush();
     void invalidatePreviewFollowBindingCache();
@@ -273,4 +277,25 @@ private:
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;
+    qint64 v2QmlFollowProbeWindowStartMs_ = -1;
+    qint64 v2QmlFollowProbeCallCount_ = 0;
+    qint64 v2QmlFollowProbeSameTargetCount_ = 0;
+    qint64 v2QmlFollowProbeCenterRequestCount_ = 0;
+    qint64 v2QmlFollowProbeElapsedNs_ = 0;
+    qint64 v2QmlFollowProbeElapsedMaxNs_ = 0;
+    bool v2QmlFollowProbeHasLastTarget_ = false;
+    int v2QmlFollowProbeLastStartLine_ = 0;
+    int v2QmlFollowProbeLastStartCol_ = 0;
+    int v2QmlFollowProbeLastEndLine_ = 0;
+    int v2QmlFollowProbeLastEndCol_ = 0;
+    // QML navigation has no implicit QTextCursor-style no-op guard. Keep the
+    // last accepted request here so an unchanged playback token cannot re-run
+    // TextArea::select() and a deferred center-scroll at the timeline cadence.
+    bool qmlFollowNavigationCacheValid_ = false;
+    int qmlFollowNavigationStartLine_ = 0;
+    int qmlFollowNavigationStartCol_ = 0;
+    int qmlFollowNavigationEndLine_ = 0;
+    int qmlFollowNavigationEndCol_ = 0;
+    bool qmlFollowNavigationSelectToken_ = false;
+    bool qmlFollowNavigationCentered_ = false;
 };

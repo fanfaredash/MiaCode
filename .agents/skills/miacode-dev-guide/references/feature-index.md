@@ -68,8 +68,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `Keys.BeforeItem`, while `CompletionPopup.qml` remains unfocused so editor keyboard routing is retained.
   Timeline/preview reverse navigation is acknowledged only after `SourceEditor` reports a visible,
   non-metadata `QmlEditorNavigationReadiness` snapshot for the same difficulty/revision. Preview
-  statistics use structured entries from `QmlPreviewModel` and skin-aware note images from
-  `QmlNoteImageProvider`, backed by `TimelineNoteAssets`. Windows caption: `QmlUiWindowChrome`.
+  statistics use cached structured entries from `QmlPreviewModel` and skin-aware note images from
+  `QmlNoteImageProvider`, backed by `TimelineNoteAssets`: position, transport, playing, render-mode,
+  statistics and skin changes are separate notification domains, so a playback position refresh must
+  never rebuild the statistics model or probe skin files. `PreviewPane` / compact / fullscreen surface
+  lifetimes are mutually exclusive through QML Loaders — only the visible surface may subscribe to
+  `PreviewRuntime`. QML reverse follow retains an accepted navigation-target no-op cache; invalidate it
+  with the preview-follow binding cache on document/difficulty changes. Windows caption: `QmlUiWindowChrome`.
   Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QuickShell (v1, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
   (`QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`,

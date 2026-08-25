@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QStringList>
 #include <QVariantList>
 
 class MainWindow;
@@ -11,14 +12,14 @@ class QuickShellController;
 class QmlPreviewModel final : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(double positionSeconds READ positionSeconds WRITE setPositionSeconds NOTIFY changed)
-    Q_PROPERTY(double durationSeconds READ durationSeconds NOTIFY changed)
-    Q_PROPERTY(double lowerBoundSeconds READ lowerBoundSeconds NOTIFY changed)
-    Q_PROPERTY(double rate READ rate WRITE setRate NOTIFY changed)
-    Q_PROPERTY(bool playing READ playing WRITE setPlaying NOTIFY changed)
-    Q_PROPERTY(QString renderMode READ renderMode NOTIFY changed)
-    Q_PROPERTY(QString renderModeLabel READ renderModeLabel NOTIFY changed)
-    Q_PROPERTY(QVariantList statistics READ statistics NOTIFY changed)
+    Q_PROPERTY(double positionSeconds READ positionSeconds WRITE setPositionSeconds NOTIFY positionChanged)
+    Q_PROPERTY(double durationSeconds READ durationSeconds NOTIFY transportChanged)
+    Q_PROPERTY(double lowerBoundSeconds READ lowerBoundSeconds NOTIFY transportChanged)
+    Q_PROPERTY(double rate READ rate WRITE setRate NOTIFY transportChanged)
+    Q_PROPERTY(bool playing READ playing WRITE setPlaying NOTIFY playingChanged)
+    Q_PROPERTY(QString renderMode READ renderMode NOTIFY renderModeChanged)
+    Q_PROPERTY(QString renderModeLabel READ renderModeLabel NOTIFY renderModeChanged)
+    Q_PROPERTY(QVariantList statistics READ statistics NOTIFY statisticsChanged)
     Q_PROPERTY(QObject* runtime READ runtime CONSTANT)
     Q_PROPERTY(QObject* mediaHost READ mediaHost CONSTANT)
 
@@ -47,9 +48,38 @@ public:
     Q_INVOKABLE void endScrub(double second);
 
 signals:
-    void changed();
+    void positionChanged();
+    void transportChanged();
+    void playingChanged();
+    void renderModeChanged();
+    void statisticsChanged();
 
 private:
+    void refreshFromController(bool force = false);
+    void rebuildStatistics();
+    void refreshSkinDirectory();
+    void updateV2UiProbePlaybackState();
+    void resetV2UiProbe();
+    void appendV2UiProbeSummary() const;
+
     MainWindow* backend_ = nullptr;
     QuickShellController* controller_ = nullptr;
+    double positionSeconds_ = 0.0;
+    double durationSeconds_ = 0.0;
+    double lowerBoundSeconds_ = 0.0;
+    double rate_ = 1.0;
+    bool playing_ = false;
+    QString renderMode_;
+    QString renderModeLabel_;
+    QStringList statisticsTexts_;
+    QString skinDirectory_;
+    QVariantList statistics_;
+    bool v2UiProbeEnabled_ = false;
+    bool v2UiProbePlaybackActive_ = false;
+    mutable qint64 v2UiProbeStatisticsRebuildCount_ = 0;
+    mutable qint64 v2UiProbeStatisticsBuildNs_ = 0;
+    mutable qint64 v2UiProbeStatisticsBuildMaxNs_ = 0;
+    mutable qint64 v2UiProbeSkinResolveNs_ = 0;
+    mutable qint64 v2UiProbeSkinResolveMaxNs_ = 0;
+    qint64 v2UiProbeShellStateChangeCount_ = 0;
 };

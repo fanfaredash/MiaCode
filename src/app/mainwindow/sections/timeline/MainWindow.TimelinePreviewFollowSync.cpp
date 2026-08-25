@@ -57,6 +57,64 @@ void MainWindow::TimelineSection::setTouchPadAuthoringAnchor(double seekSecond, 
     state_.touchPadAuthoringAnchorTokenSecond_ = tokenSecond;
 }
 
+void MainWindow::TimelineSection::noteV2QmlFollowProbe(
+    const TimelineQuickModel::PreviewFollowSpan* span,
+    bool centerView,
+    qint64 elapsedNs)
+{
+    if (!state_.runtimeDebugOutputEnabled_ || !state_.qtPreviewPlaying_) {
+        return;
+    }
+    const int startLine = span != nullptr ? span->startLine : 1;
+    const int startCol = span != nullptr ? span->startCol : 1;
+    const int endLine = span != nullptr ? span->endLine : 1;
+    const int endCol = span != nullptr ? span->endCol : 1;
+    const bool sameTarget = v2QmlFollowProbeHasLastTarget_
+        && v2QmlFollowProbeLastStartLine_ == startLine
+        && v2QmlFollowProbeLastStartCol_ == startCol
+        && v2QmlFollowProbeLastEndLine_ == endLine
+        && v2QmlFollowProbeLastEndCol_ == endCol;
+    v2QmlFollowProbeHasLastTarget_ = true;
+    v2QmlFollowProbeLastStartLine_ = startLine;
+    v2QmlFollowProbeLastStartCol_ = startCol;
+    v2QmlFollowProbeLastEndLine_ = endLine;
+    v2QmlFollowProbeLastEndCol_ = endCol;
+    ++v2QmlFollowProbeCallCount_;
+    v2QmlFollowProbeSameTargetCount_ += sameTarget ? 1 : 0;
+    v2QmlFollowProbeCenterRequestCount_ += centerView ? 1 : 0;
+    v2QmlFollowProbeElapsedNs_ += elapsedNs;
+    v2QmlFollowProbeElapsedMaxNs_ = qMax(v2QmlFollowProbeElapsedMaxNs_, elapsedNs);
+
+    const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+    if (v2QmlFollowProbeWindowStartMs_ < 0) {
+        v2QmlFollowProbeWindowStartMs_ = nowMs;
+        return;
+    }
+    if (nowMs - v2QmlFollowProbeWindowStartMs_ < 1000) {
+        return;
+    }
+    const double count = static_cast<double>(qMax<qint64>(1, v2QmlFollowProbeCallCount_));
+    appendTimelinePerfLog(
+        QStringLiteral("edit/v2_follow_probe"),
+        QStringLiteral(
+            "action=window duration_ms=%1 requests=%2 same_target=%3 center_requests=%4 "
+            "request_avg_ms=%5 request_max_ms=%6"
+        )
+            .arg(nowMs - v2QmlFollowProbeWindowStartMs_)
+            .arg(v2QmlFollowProbeCallCount_)
+            .arg(v2QmlFollowProbeSameTargetCount_)
+            .arg(v2QmlFollowProbeCenterRequestCount_)
+            .arg(v2QmlFollowProbeElapsedNs_ / count / 1000000.0, 0, 'f', 3)
+            .arg(v2QmlFollowProbeElapsedMaxNs_ / 1000000.0, 0, 'f', 3)
+    );
+    v2QmlFollowProbeWindowStartMs_ = nowMs;
+    v2QmlFollowProbeCallCount_ = 0;
+    v2QmlFollowProbeSameTargetCount_ = 0;
+    v2QmlFollowProbeCenterRequestCount_ = 0;
+    v2QmlFollowProbeElapsedNs_ = 0;
+    v2QmlFollowProbeElapsedMaxNs_ = 0;
+}
+
 void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLine(
     double second,
     bool ensureVisible,
@@ -162,7 +220,8 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
             || action == QStringLiteral("anchor_unchanged")
             || action == QStringLiteral("binding_unchanged")
             || action == QStringLiteral("cursor_moved")
-            || action == QStringLiteral("paused_decoration");
+            || action == QStringLiteral("paused_decoration")
+            || action == QStringLiteral("qml_navigation_unchanged");
         constexpr qint64 kFollowPerfLogThresholdNs = 4 * 1000 * 1000;
         if (hotAction
             && totalElapsedNs < kFollowPerfLogThresholdNs
@@ -179,6 +238,10 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         const int startCol = (span != nullptr) ? span->startCol : 1;
         const int endLine = (span != nullptr) ? span->endLine : 1;
         const double totalElapsedMs = totalElapsedNs / 1000000.0;
+        if (action == QStringLiteral("cached_qml_navigation")
+            || action == QStringLiteral("qml_navigation")) {
+            noteV2QmlFollowProbe(span, centerView, totalElapsedNs);
+        }
         appendTimelinePerfLog(
             QStringLiteral("edit/follow_sync_perf"),
             QStringLiteral(
@@ -276,27 +339,60 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
     }
     const int targetLine = resolved ? binding.span.cursorLine : 1;
     const int targetCol = resolved ? binding.span.cursorCol : 1;
+    const int navigationStartLine = resolved ? binding.span.startLine : targetLine;
+    const int navigationStartCol = resolved ? binding.span.startCol : targetCol;
+    const int navigationEndLine = resolved ? binding.span.endLine : targetLine;
+    const int navigationEndCol = resolved ? binding.span.endCol : targetCol;
+    const bool selectToken = resolved && binding.span.hasVisibleBody;
+    const bool unchangedQmlNavigation = qmlFollowNavigationCacheValid_
+        && qmlFollowNavigationStartLine_ == navigationStartLine
+        && qmlFollowNavigationStartCol_ == navigationStartCol
+        && qmlFollowNavigationEndLine_ == navigationEndLine
+        && qmlFollowNavigationEndCol_ == navigationEndCol
+        && qmlFollowNavigationSelectToken_ == selectToken
+        // A false→true transition is the one case where an identical token
+        // still needs one center request.
+        && (!centerView || qmlFollowNavigationCentered_);
 
-    // A cached binding is only a parsed-timeline optimization. It must never
-    // become an instruction to skip the visible QML editor: the cache can be
-    // populated while code follow is paused or before the QML surface accepts
-    // navigation. The value bridge is idempotent on the QML side and retains
-    // the view-lock choice as a centering policy, not a caret-follow gate.
+    // The QML TextArea does not have QTextCursor's no-op selection shortcut.
+    // Once a request was accepted, repeating the same token would otherwise
+    // re-run select(), decoration projection and a deferred center-scroll at
+    // 30–60 Hz. Keep the cache only after an accepted QML request; a not-ready
+    // source remains retriable on the next cadence.
+    if (unchangedQmlNavigation && owner_.hasQmlEditorNavigationHandler()) {
+        logPerf(
+            QStringLiteral("qml_navigation_unchanged"),
+            resolved,
+            false,
+            resolved ? &span : nullptr,
+            resolveElapsedNs,
+            0,
+            0,
+            0);
+        return;
+    }
     if (owner_.requestQmlEditorNavigation(
-            resolved ? binding.span.startLine : targetLine,
-            resolved ? binding.span.startCol : targetCol,
-            resolved ? binding.span.endLine : targetLine,
-            resolved ? binding.span.endCol : targetCol,
-            resolved && binding.span.hasVisibleBody,
+            navigationStartLine,
+            navigationStartCol,
+            navigationEndLine,
+            navigationEndCol,
+            selectToken,
             false,
             centerView)) {
+        qmlFollowNavigationCacheValid_ = true;
+        qmlFollowNavigationStartLine_ = navigationStartLine;
+        qmlFollowNavigationStartCol_ = navigationStartCol;
+        qmlFollowNavigationEndLine_ = navigationEndLine;
+        qmlFollowNavigationEndCol_ = navigationEndCol;
+        qmlFollowNavigationSelectToken_ = selectToken;
+        qmlFollowNavigationCentered_ = centerView;
         QElapsedTimer overlayTimer;
         overlayTimer.start();
         owner_.setPreviewFollowDecoration(
-            resolved ? binding.span.startLine : targetLine,
-            resolved ? binding.span.startCol : targetCol,
-            resolved ? binding.span.endLine : targetLine,
-            resolved ? binding.span.endCol : targetCol,
+            navigationStartLine,
+            navigationStartCol,
+            navigationEndLine,
+            navigationEndCol,
             targetLine,
             targetCol);
         followOverlayElapsedNs = overlayTimer.nsecsElapsed();

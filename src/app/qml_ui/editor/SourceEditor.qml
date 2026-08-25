@@ -160,6 +160,16 @@ Rectangle {
             if (end <= start)
                 end = Math.min(sourceArea.text.length, start + 1)
         }
+        // Defence in depth for non-playback callers: the C++ playback bridge
+        // suppresses duplicate targets, but direct navigation must not turn an
+        // unchanged selection into another TextArea update and center-scroll.
+        if (sourceArea.selectionStart === start && sourceArea.selectionEnd === end) {
+            if (focusEditor)
+                sourceArea.forceActiveFocus()
+            if (centerView)
+                centerCursorInView()
+            return
+        }
         root.suppressBackendCaretPublish = true
         sourceArea.select(start, end)
         if (focusEditor)

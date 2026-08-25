@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QPointer>
 #include <QSize>
 #include <QUrl>
@@ -217,6 +218,13 @@ public:
     void noteFixedGatePresentWithoutTick(qint64 gateWaitNs);
     void noteFixedGateWatchdogKick();
     void noteFixedGateMissedTargetSlots(qint64 count);
+    // --debug-only v2 UI probe. PreviewQuickSceneRoot reports its live binding
+    // and each frame-state fan-out here; payload is emitted only in the
+    // existing pause resource gauge, never per frame.
+    void noteV2UiSceneRootBound(quint64 instanceId, bool visible);
+    void noteV2UiSceneRootUnbound(quint64 instanceId);
+    void noteV2UiSceneRootVisibility(quint64 instanceId, bool visible);
+    void noteV2UiSceneRootFrameStateDispatch(bool visible);
     void setActivePlaybackProfilingEnabled(bool enabled);
     void notePreviewClockMetrics(
         double audioDeltaSeconds,
@@ -438,6 +446,13 @@ private:
     double playbackTickIntervalSumMs_ = 0.0;
     double playbackTickIntervalMaxMs_ = 0.0;
     qint64 playbackTickIntervalSampleCount_ = 0;
+    // v2 UI probe state. All access is on the GUI thread. The map is retained
+    // across play transactions so the pause gauge can report current roots;
+    // dispatch counters reset on each explicit Play.
+    QHash<quint64, bool> v2UiSceneRootVisibility_;
+    qint64 v2UiSceneRootDispatchCount_ = 0;
+    qint64 v2UiSceneRootVisibleDispatchCount_ = 0;
+    qint64 v2UiSceneRootHiddenDispatchCount_ = 0;
     // Fixed-gate metrics (doc section 5.1): emitted by the present-driven fixed FPS gate path.
     qint64 fixedGateVisualTickCount_ = 0;
     qint64 fixedGatePresentWithoutTickCount_ = 0;

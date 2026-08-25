@@ -271,6 +271,37 @@ void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)
     }
 }
 
+void PreviewRuntime::noteV2UiSceneRootBound(quint64 instanceId, bool visible)
+{
+    v2UiSceneRootVisibility_.insert(instanceId, visible);
+}
+
+void PreviewRuntime::noteV2UiSceneRootUnbound(quint64 instanceId)
+{
+    v2UiSceneRootVisibility_.remove(instanceId);
+}
+
+void PreviewRuntime::noteV2UiSceneRootVisibility(quint64 instanceId, bool visible)
+{
+    if (!v2UiSceneRootVisibility_.contains(instanceId)) {
+        return;
+    }
+    v2UiSceneRootVisibility_.insert(instanceId, visible);
+}
+
+void PreviewRuntime::noteV2UiSceneRootFrameStateDispatch(bool visible)
+{
+    if (!activePlaybackProfiling_) {
+        return;
+    }
+    ++v2UiSceneRootDispatchCount_;
+    if (visible) {
+        ++v2UiSceneRootVisibleDispatchCount_;
+    } else {
+        ++v2UiSceneRootHiddenDispatchCount_;
+    }
+}
+
 void PreviewRuntime::clearVisibleHostWindow(QQuickWindow* window)
 {
     if (visibleHostWindow_ != window) {
@@ -1077,9 +1108,17 @@ QString PreviewRuntime::resourceGaugePayload() const
     //
     // tex_fresh=0 means "no present has refreshed these since the last reset/resize;
     // ignore them". It does NOT mean the repository is empty.
+    int v2UiSceneRootVisibleCount = 0;
+    for (auto it = v2UiSceneRootVisibility_.cbegin(); it != v2UiSceneRootVisibility_.cend(); ++it) {
+        if (it.value()) {
+            ++v2UiSceneRootVisibleCount;
+        }
+    }
     return QStringLiteral(
                "scene_revision=%1 tex_fresh=%2 cached_tex=%3 cached_tex_kb=%4 transient_tex=%5 "
-               "cached_tex_creates=%6 transient_tex_creates=%7 sprite_max=%8 present_total=%9")
+               "cached_tex_creates=%6 transient_tex_creates=%7 sprite_max=%8 present_total=%9 "
+               "v2ui_roots=%10 v2ui_roots_visible=%11 v2ui_root_dispatch=%12 "
+               "v2ui_root_dispatch_visible=%13 v2ui_root_dispatch_hidden=%14")
         .arg(static_cast<qulonglong>(frameState_.sceneContentRevision))
         .arg(pendingPresentedStatsRefresh_ ? 0 : 1)
         .arg(latestCachedTextureCount_)
@@ -1088,7 +1127,12 @@ QString PreviewRuntime::resourceGaugePayload() const
         .arg(cachedTextureCreateTotal_)
         .arg(transientTextureCreateTotal_)
         .arg(spriteCountMax_)
-        .arg(presentedFrameCountTotal_);
+        .arg(presentedFrameCountTotal_)
+        .arg(v2UiSceneRootVisibility_.size())
+        .arg(v2UiSceneRootVisibleCount)
+        .arg(v2UiSceneRootDispatchCount_)
+        .arg(v2UiSceneRootVisibleDispatchCount_)
+        .arg(v2UiSceneRootHiddenDispatchCount_);
 }
 
 void PreviewRuntime::notePresentedTextureStats(const PreviewTextureStats& stats)
@@ -1401,6 +1445,9 @@ void PreviewRuntime::setActivePlaybackProfilingEnabled(bool enabled)
         playbackTickIntervalSumMs_ = 0.0;
         playbackTickIntervalMaxMs_ = 0.0;
         playbackTickIntervalSampleCount_ = 0;
+        v2UiSceneRootDispatchCount_ = 0;
+        v2UiSceneRootVisibleDispatchCount_ = 0;
+        v2UiSceneRootHiddenDispatchCount_ = 0;
     }
     if (miacode::debug_options::previewProfileOutputEnabled()) {
         profilingSummaryDirty_ = true;

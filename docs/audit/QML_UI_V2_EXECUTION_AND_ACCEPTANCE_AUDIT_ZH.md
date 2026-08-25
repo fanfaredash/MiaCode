@@ -212,3 +212,68 @@ grep -E "editor/document_replaced|editor/document_shown" <chart>/.miacode/logs/m
 - 当前分支在三个后续修复提交之后，又加入了本文“根因修复轮”一节的六个修复提交与一个诊断提交。
   五项验收门槛的成因均已定位、修复，并于 2026-08-24 通过 macOS 原生桌面复验。
   阶段 2 仍未整体验收：另有三项功能缺口待处理，Windows 侧未验证。
+
+## Windows v2 预览性能审计、插桩与修复（2026-08-25）
+
+### 触发与证据边界
+
+用户在 Windows 上观察到切换 v2 UI 后预览帧率明显下降；后续还确认，在 v2 编辑器工作流
+（2026-08-24）接入前，v2 性能更好。不能把早于 v2 的固定帧门控、D3D11VA 两设备桥或旧版
+代码跟随功能直接当作版本切换根因，故本轮先在 `--debug` 下加入低扰动汇总插桩，再由用户在
+`超熊猫的周遊記（ワンダーパンダートラベラー）` 进行真实播放。
+
+首轮三次播放给出三条可重复的 v2 热路径：
+
+1. 普通工作区同时实例化工作区、隐藏紧凑面板与隐藏全屏三份 `PreviewSurface`。三份
+   `PreviewQuickSceneRoot` 都订阅 `PreviewRuntime::frameStateChanged`，所以不可见根仍收到
+   `update()`；这不是视频多 sink（普通工作区只有可见 surface 附着 VideoOutput），而是 QML/QSG
+   scene-root fan-out。
+2. `QuickShellController` 播放期约 16 ms 的统一状态刷新会令 `QmlPreviewModel::changed` 使全部
+   属性失效。原 `statistics()` 每次都新建六项 `QVariantMap`、解析字符串、生成图标 URL，并调用
+   `resolvePreviewSkinDir()`；后者检查 `tap.png`、`hold.png`、`star.png` 是否存在。两个常驻
+   `PreviewPane` 令一次状态刷新在日志中出现四次统计读取。
+3. v2 的 QML reverse-navigation 绕过了旧 `QTextCursor` 路径的 `alreadyAtSelectionEnd` 短路。
+   即使 playhead 仍在同一 token，`SourceEditor.selectBackendNavigation()` 仍执行 `select()`、
+   跟随装饰与 `Qt.callLater` 居中。成功样本中每秒 47–61 次请求，大量窗口为同一目标；单次
+   同步部分为 1.1–2.1 ms，最高 8.804 ms，且异步滚动/重绘不在该计时内。
+
+一次开启跟随后的播放（pid 27796）在约 258 ms 后非正常终止；下一进程消费
+`abandoned_session_marker`。该次没有 `fatal`、WER/AppCrash 或 dump，且紧接着的相同开启跟随
+播放可持续完成，因此不能把这一次归因成已经定位的 C++/驱动崩溃；本轮修复消除其高频触发条件，
+但不宣称闪退根因已关闭。
+
+### 已落地修复
+
+- `PreviewPane` 的 chart `PreviewSurface` 改为 Loader 生命周期；紧凑预览也由 Loader 创建，
+  全屏激活时工作区 surface 卸载，保证同一时刻只有一个 root 订阅运行时。
+- `QmlPreviewModel` 改为缓存的细粒度投影：播放位置、transport、playing、渲染模式与统计使用
+  独立通知；统计仅在统计文本或皮肤变动时重建。播放位置不再触发文件存在性检查或 QML model
+  重设。
+- `TimelineSection` 缓存已被 QML 接受的跟随导航目标；相同 selection/已完成居中的请求直接返回。
+  `SourceEditor` 也保留同 selection 的防御性短路。跟随绑定缓存失效时同步使导航 cache 失效，
+  不复用过期文档/难度目标。
+
+### 修复后真实播放复验
+
+pid 28064 的两段开启跟随播放均正常 pause/close，`exit_code=0`。第二段的关键汇总为：
+
+| 指标 | 修复前样本 | 修复后样本 |
+| --- | --- | --- |
+| 运行时 scene root | 3（1 visible + 2 hidden） | **1 visible** |
+| 隐藏 root 分发 | 每可见分发另有 2 次 | **0** (`v2ui_root_dispatch_hidden=0`) |
+| 统计投影 | 147 s 内 20,496 次读取（每 controller refresh 4 次） | 71 s 内 399 次重建；皮肤解析 0 ms |
+| QML 跟随 | 47–61 次/s，重复目标占多数 | 3–32 次/s，已发请求 `same_target=0` |
+| 播放期 present | — | **59.9504 FPS**（60 Hz 目标） |
+
+`qml_ui_bootstrap_lifecycle_spec` 与 `quickshell_preview_surface_policy_spec` 在 Windows Release
+通过，Release `MiaCode` 构建成功。`qml_editor_controller_spec` 在本机 Windows 环境挂起；其
+可执行文件未因本轮 app/QML 改动重建，故不将该结果记为本轮通过或回归，需另行处理其测试依赖。
+
+### 仍未关闭：高位但稳定的播放内存
+
+本轮日志不支持“播放时每帧持续泄漏”。第一段暂停后 private memory 从 1006 MB 降到约 958 MB，
+随后在 120–330 s 保持 957 MB；第二段开始后从该平台跃升到 1060 MB，随后的 30/60 s 样本为
+1051/1064 MB，暂停时为 1049 MB。即“首次播放/恢复后跃升到高平台，再在窄范围内稳定”。
+两段 `d_play_kb` 仍为约 +180 MB / +87 MB，远高于历史健康阈值；但 QSG 纹理仅约 22–26 MB，且
+GPU local usage 在暂停后下降，下一轮应拆分 QtAVPlayer/D3D11VA 帧池、QML/Qt Quick 资源和其它
+私有堆的保留关系，不能把它误报为已证实的纹理泄漏。
