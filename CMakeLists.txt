@@ -125,8 +125,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
-    src/app/WindowsIdleEventDiagnostics.h
-    src/app/WindowsIdleEventDiagnostics.cpp
     src/app/WindowVisibilityDiagnostics.h
     src/app/WindowVisibilityDiagnostics.cpp
     src/app/gpu_adapter_probe.cpp
@@ -2352,19 +2350,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
     if (WIN32)
         # Per-adapter VRAM gauge: CreateDXGIFactory1 + IDXGIAdapter3::QueryVideoMemoryInfo.
         target_link_libraries(process_diagnostics_spec PRIVATE dxgi)
-    endif()
-
-    miacode_add_dev_tool(windows_idle_event_diagnostics_spec TEST
-        SOURCES
-            src/tools/debug_index/WindowsIdleEventDiagnosticsSpec.cpp
-            src/app/WindowsIdleEventDiagnostics.h
-            src/app/WindowsIdleEventDiagnostics.cpp
-            ${_miacode_log_core}
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-    if (WIN32)
-        target_link_libraries(windows_idle_event_diagnostics_spec PRIVATE User32 Wtsapi32)
     endif()
 
     miacode_add_dev_tool(window_visibility_diagnostics_spec TEST

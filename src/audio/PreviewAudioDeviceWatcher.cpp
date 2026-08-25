@@ -248,9 +248,7 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
 
     // Without this line a capture that contains no `action=native_default_output_changed`
     // is ambiguous: the user may simply never have switched devices, or this listener may
-    // never have armed. Mirrors `action=registration` in
-    // src/app/WindowsIdleEventDiagnostics.cpp, which records the same thing for the
-    // Windows session/power notifications.
+    // never have armed. Recording the registration outcome itself removes that ambiguity.
     if (miacode::debug_options::audioDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Audio,

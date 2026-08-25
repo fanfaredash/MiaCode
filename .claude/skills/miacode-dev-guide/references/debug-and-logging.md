@@ -32,8 +32,7 @@ canonical doc is `docs/ops/DEBUG_INDEX.md`; this file is the code-owner-oriented
   DebugLog so the writer stays a pure channelized log (the profiler depends on it, not the reverse).
 - **Idle-freeze diagnostics:** `startup/process_identity` embeds product version plus CMake-generated
   `MIACODE_GIT_REVISION` / `MIACODE_GIT_DIRTY`; `idle/resource_gauge` samples immediately and every 30 s;
-  `ui/hang_watchdog` reports both marked phases (~2 s) and idle heartbeat stalls (~5 s); Windows
-  `windows/environment_event` records display-power, system-power, session, display, and device events.
+  `ui/hang_watchdog` reports both marked phases (~2 s) and idle heartbeat stalls (~5 s).
   Fatal-grade runtime records here are used for synchronous durability during a hang.
 - One process-level `qInstallMessageHandler` is installed in `src/app/main.cpp` (~`:2066`).
 - Options live in `src/common/DebugOptions.h` (env reads via `envFlagEnabled` /
