@@ -1069,6 +1069,11 @@ int TimelineQuickItem::timelineTop() const
     return cachedTimelineTop_;
 }
 
+qreal TimelineQuickItem::headerScale() const
+{
+    return qBound<qreal>(0.75, static_cast<qreal>(cachedTimelineTop_) / 34.0, 1.0);
+}
+
 bool TimelineQuickItem::isReady() const
 {
     return ready_;
@@ -1164,7 +1169,7 @@ void TimelineQuickItem::syncSourceState()
     const bool nextFollow = stateBridge_ != nullptr && stateBridge_->followPreviewEnabled();
     const bool nextViewportLock = stateBridge_ != nullptr && stateBridge_->viewportLockEnabled();
     const bool nextProgressFollow = stateBridge_ == nullptr || stateBridge_->followProgressEnabled();
-    const int nextTimelineTop = static_cast<int>(currentSceneState().timelineTop);
+    const int nextTimelineTop = stateBridge_ != nullptr ? stateBridge_->timelineTop() : 0;
     // Header-control visuals (zoom% text + follow-check tick + colour)
     // are emitted in TimelineQuickHeaderLayer's staticRoot rebuild,
     // which is gated on `appearanceChanged || gridRevision changed`.
@@ -1258,6 +1263,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         || cachedSceneBuildHeaderMarkerLeftLimit_ != headerMarkerLeftLimit_
         || cachedSceneBuildHeaderMarkerRightLimit_ != headerMarkerRightLimit_
         || cachedSceneBuildAppearanceRevision_ != appearanceRevision_
+        || cachedSceneBuildLayoutRevision_ != stateBridge_->layoutRevision()
         || cachedSceneBuildGridRevision_ != stateBridge_->gridRevision()
         || cachedSceneBuildWaveformRevision_ != stateBridge_->waveformRevision()
         || cachedSceneBuildHeaderRevision_ != stateBridge_->headerRevision()
@@ -1299,6 +1305,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         headerMarkerRightLimit_ > 0 ? headerMarkerRightLimit_ : request.viewportSize.width();
     request.zoomScale = stateBridge_->zoomScale();
     request.contentScale = stateBridge_->contentScale();
+    request.fitViewportHeight = true;
     request.waveformBrightness = stateBridge_->waveformBrightness();
     request.measureLineBrightness = stateBridge_->measureLineBrightness();
     request.waveformPhaseCompensationSeconds = stateBridge_->waveformPhaseCompensationSeconds();
@@ -1318,6 +1325,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
     request.followProgressEnabled = stateBridge_->followProgressEnabled();
     request.appearanceRevision = appearanceRevision_;
+    request.layoutRevision = stateBridge_->layoutRevision();
     request.gridRevision = stateBridge_->gridRevision();
     request.waveformRevision = stateBridge_->waveformRevision();
     request.headerRevision = stateBridge_->headerRevision();
@@ -1334,6 +1342,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildHeaderMarkerLeftLimit_ = headerMarkerLeftLimit_;
         cachedSceneBuildHeaderMarkerRightLimit_ = headerMarkerRightLimit_;
         cachedSceneBuildAppearanceRevision_ = appearanceRevision_;
+        cachedSceneBuildLayoutRevision_ = stateBridge_->layoutRevision();
         cachedSceneBuildGridRevision_ = stateBridge_->gridRevision();
         cachedSceneBuildWaveformRevision_ = stateBridge_->waveformRevision();
         cachedSceneBuildHeaderRevision_ = stateBridge_->headerRevision();
@@ -1682,10 +1691,22 @@ void TimelineQuickItem::geometryChange(const QRectF& newGeometry, const QRectF& 
 {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() != oldGeometry.size()) {
-        if (stateBridge_ != nullptr) {
-            stateBridge_->setQuickViewportSize(newGeometry.size().toSize());
-        }
-        syncSourceState();
+        pendingViewportSize_ = QSize(
+            qMax(1, qRound(newGeometry.width())),
+            qMax(1, qRound(newGeometry.height())));
+        viewportUpdatePending_ = true;
+        polish();
+    }
+}
+
+void TimelineQuickItem::updatePolish()
+{
+    if (!viewportUpdatePending_) {
+        return;
+    }
+    viewportUpdatePending_ = false;
+    if (stateBridge_ != nullptr) {
+        stateBridge_->setQuickViewportSize(pendingViewportSize_);
     }
 }
 
@@ -1754,7 +1775,12 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     const miacode::timeline::TimelineSceneState state = currentSceneState();
     const double clickSecond = clampSceneSecond(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, event->position().x()));
-    const QRectF headerRect(state.timelineLeft, 0.0, width() - state.timelineLeft, 28.0);
+    // Clickable header shares timelineTop with the painted header and first lane.
+    const QRectF headerRect(
+        state.timelineLeft,
+        0.0,
+        width() - state.timelineLeft,
+        static_cast<qreal>(state.timelineTop));
     const QRectF bodyRect(state.timelineLeft, state.timelineTop, width() - state.timelineLeft, state.timelineHeight);
     if (headerRect.contains(event->position())) {
         emit timelineUserInteractionStarted();

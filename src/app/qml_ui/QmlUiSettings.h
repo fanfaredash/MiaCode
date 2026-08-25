@@ -16,6 +16,9 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(int sidebarMinimumContentWidth READ sidebarMinimumContentWidth CONSTANT)
     Q_PROPERTY(int sidebarMaximumContentWidth READ sidebarMaximumContentWidth CONSTANT)
     Q_PROPERTY(bool bottomPanelVisible READ bottomPanelVisible WRITE setBottomPanelVisible NOTIFY bottomPanelVisibleChanged)
+    Q_PROPERTY(double bottomPanelHeightRatio READ bottomPanelHeightRatio WRITE setBottomPanelHeightRatio NOTIFY bottomPanelHeightRatioChanged)
+    Q_PROPERTY(double bottomPanelMinimumHeightRatio READ bottomPanelMinimumHeightRatio CONSTANT)
+    Q_PROPERTY(double bottomPanelMaximumHeightRatio READ bottomPanelMaximumHeightRatio CONSTANT)
     Q_PROPERTY(bool previewVisible READ previewVisible WRITE setPreviewVisible NOTIFY previewVisibleChanged)
     Q_PROPERTY(double previewWidthRatio READ previewWidthRatio WRITE setPreviewWidthRatio NOTIFY previewWidthRatioChanged)
     Q_PROPERTY(double previewMinimumWidthRatio READ previewMinimumWidthRatio CONSTANT)
@@ -35,6 +38,9 @@ public:
     int sidebarMinimumContentWidth() const;
     int sidebarMaximumContentWidth() const;
     bool bottomPanelVisible() const;
+    double bottomPanelHeightRatio() const;
+    double bottomPanelMinimumHeightRatio() const;
+    double bottomPanelMaximumHeightRatio() const;
     bool previewVisible() const;
     double previewWidthRatio() const;
     double previewMinimumWidthRatio() const;
@@ -49,6 +55,7 @@ public:
     void setSidebarVisible(bool value);
     void setSidebarWidth(int value);
     void setBottomPanelVisible(bool value);
+    void setBottomPanelHeightRatio(double value);
     void setPreviewVisible(bool value);
     void setPreviewWidthRatio(double value);
     void setFontSize(int value);
@@ -57,6 +64,7 @@ signals:
     void sidebarVisibleChanged();
     void sidebarWidthChanged();
     void bottomPanelVisibleChanged();
+    void bottomPanelHeightRatioChanged();
     void previewVisibleChanged();
     void previewWidthRatioChanged();
     void fontSizeChanged();
@@ -64,6 +72,8 @@ signals:
 private:
     static constexpr int kSidebarMinimumContentWidth = 120;
     static constexpr int kSidebarMaximumContentWidth = 272;
+    static constexpr double kBottomPanelMinimumHeightRatio = 0.2;
+    static constexpr double kBottomPanelMaximumHeightRatio = 0.65;
     static constexpr double kPreviewMinimumWidthRatio = 0.3;
     static constexpr double kPreviewMaximumWidthRatio = 0.5;
 
@@ -71,6 +81,7 @@ private:
     bool sidebarVisible_ = true;
     int sidebarWidth_ = 190;
     bool bottomPanelVisible_ = true;
+    double bottomPanelHeightRatio_ = 0.35;
     bool previewVisible_ = true;
     double previewWidthRatio_ = 0.5;
     QString uiFontFamily_;

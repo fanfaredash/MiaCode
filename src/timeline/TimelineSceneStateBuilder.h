@@ -46,6 +46,7 @@ struct TimelineSceneBuildRequest {
     int horizontalCullPaddingPx = 0;
     double zoomScale = 0.5;
     double contentScale = 1.0;
+    bool fitViewportHeight = false;
     double waveformBrightness = kTimelineWaveformBrightnessDefault;
     double measureLineBrightness = kTimelineMeasureLineBrightnessDefault;
     double waveformPhaseCompensationSeconds = 0.0;
@@ -66,6 +67,7 @@ struct TimelineSceneBuildRequest {
     bool followPreviewEnabled = false;
     bool followProgressEnabled = true;
     quint64 appearanceRevision = 0;
+    quint64 layoutRevision = 0;
     quint64 gridRevision = 0;
     quint64 waveformRevision = 0;
     quint64 headerRevision = 0;

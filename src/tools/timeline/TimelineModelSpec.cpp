@@ -817,13 +817,16 @@ int main(int argc, char** argv)
                    && !splitView.contains(QStringLiteral("activeBottomTab"))
                    && !viewState.contains(QStringLiteral("activeBottomTab")),
                QStringLiteral("v2 bottom tabs select through shell state instead of ViewState"));
-        expect(splitView.contains(QStringLiteral("bottomTabsHostHeight"))
-                   && splitView.contains(QStringLiteral("setBottomTabsHostHeight"))
-                   && splitView.contains(QStringLiteral("queueBottomTabsHostHeight"))
-                   && splitView.contains(QStringLiteral("bottomTabsHeightFeedback"))
-                   && !splitView.contains(QStringLiteral("bottomPanelHeight"))
+        expect(splitView.contains(QStringLiteral("persistBottomPanelHeightRatio"))
+                   && splitView.contains(QStringLiteral("bottomPanelHeightRatio"))
+                   && splitView.contains(QStringLiteral("bottomPanelMinimumHeightRatio"))
+                   && splitView.contains(QStringLiteral("bottomPanelMaximumHeightRatio"))
+                   && splitView.contains(QStringLiteral("onReleased: root.persistBottomPanelHeightRatio()"))
+                   && splitView.contains(QStringLiteral("centerSplit.height * root.preferences.bottomPanelHeightRatio"))
+                   && !splitView.contains(QStringLiteral("queueBottomTabsHostHeight"))
+                   && !splitView.contains(QStringLiteral("bottomTabsHeightFeedback"))
                    && !splitView.contains(QStringLiteral("maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0")),
-               QStringLiteral("v2 bottom height returns to the shell through debounced one-way feedback without a fixed 340px cap"));
+               QStringLiteral("v2 bottom height persists one SplitView ratio after divider release without a fixed 340px cap"));
         expect(panel.contains(QStringLiteral("headerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2"))
                    && panel.contains(QStringLiteral("headerRightLimit: Math.max(0, brightnessHitControl.x - 2)"))
                    && panel.contains(QStringLiteral("headerMarkerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2"))

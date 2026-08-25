@@ -403,17 +403,26 @@ void appendSprite(
 
 TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& request)
 {
-    const double contentScale = normalizedContentScale(request.contentScale);
-    // Lane/grid height uses the raw (uncapped) scale so the grid can grow past 100%; the
-    // header and all note 素材/markers keep using the capped contentScale above.
-    const double gridScale = gridContentScale(request.contentScale);
-    const int laneHeight = qMax(1, qRound(static_cast<qreal>(kLaneHeight) * static_cast<qreal>(gridScale)));
+    double contentScale = normalizedContentScale(request.contentScale);
+    if (request.fitViewportHeight) {
+        const double viewportScale =
+            (static_cast<double>(qMax(1, request.viewportSize.height())) - 17.0) / 197.0;
+        contentScale = qBound(0.5, viewportScale, 1.0);
+    }
     TimelineSceneLayoutMetrics metrics;
     metrics.viewportSize = request.viewportSize;
     metrics.timelineLeft = scaledMetric(kTimelineLeftMargin, contentScale);
     metrics.timelineTop = scaledMetric(kHeaderHeight + kTimelineTopMargin, headerContentScale(contentScale));
-    metrics.timelineHeight = kLaneCount * laneHeight;
-    metrics.laneHeight = laneHeight;
+    if (request.fitViewportHeight) {
+        metrics.timelineHeight = qMax<qreal>(
+            1.0,
+            static_cast<qreal>(request.viewportSize.height() - metrics.timelineTop));
+        metrics.laneHeight = metrics.timelineHeight / static_cast<qreal>(kLaneCount);
+    } else {
+        const double gridScale = gridContentScale(request.contentScale);
+        metrics.laneHeight = qMax<qreal>(1.0, static_cast<qreal>(kLaneHeight) * gridScale);
+        metrics.timelineHeight = kLaneCount * metrics.laneHeight;
+    }
     metrics.laneCount = kLaneCount;
     metrics.pixelsPerSecond = pixelsPerSecondForZoom(request.zoomScale);
     metrics.contentScale = contentScale;
@@ -509,6 +518,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     state.visibleEndSecond = xToSecond(state, request.viewportSize.width());
     state.waveformPhaseCompensationSeconds = qMax(0.0, request.waveformPhaseCompensationSeconds);
     state.appearanceRevision = request.appearanceRevision;
+    state.layoutRevision = request.layoutRevision;
     state.gridRevision = request.gridRevision;
     state.waveformRevision = request.waveformRevision;
     state.headerRevision = request.headerRevision;
@@ -1116,8 +1126,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             return;
         }
 
-        const int rowTop = state.timelineTop + (note.lane - 1) * state.laneHeight;
-        const int rowCenterY = rowTop + (state.laneHeight / 2);
+        const qreal rowTop = state.timelineTop + (note.lane - 1) * state.laneHeight;
+        const qreal rowCenterY = rowTop + (state.laneHeight / 2.0);
         const qreal baseIconScale =
             request.zoomScale <= 0.25 ? 0.5 : static_cast<qreal>(state.contentScale);
         QString iconType;

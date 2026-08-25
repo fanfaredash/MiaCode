@@ -10,6 +10,7 @@ namespace {
 constexpr auto kSidebarVisible = "ui/sidebarVisible";
 constexpr auto kSidebarWidth = "ui/sidebarWidth";
 constexpr auto kBottomPanelVisible = "ui/bottomPanelVisible";
+constexpr auto kBottomPanelHeightRatio = "ui/bottomPanelHeightRatio";
 constexpr auto kPreviewVisible = "ui/previewVisible";
 constexpr auto kPreviewWidthRatio = "ui/previewWidthRatio";
 constexpr auto kFontSize = "appearance/fontSize";
@@ -30,6 +31,9 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
                            settings_.value(kSidebarWidth, 190).toInt(),
                            kSidebarMaximumContentWidth);
     bottomPanelVisible_ = settings_.value(kBottomPanelVisible, true).toBool();
+    bottomPanelHeightRatio_ = qBound(kBottomPanelMinimumHeightRatio,
+                                     settings_.value(kBottomPanelHeightRatio, 0.35).toDouble(),
+                                     kBottomPanelMaximumHeightRatio);
     previewVisible_ = settings_.value(kPreviewVisible, true).toBool();
     previewWidthRatio_ = qBound(kPreviewMinimumWidthRatio,
                                 settings_.value(kPreviewWidthRatio, 0.5).toDouble(),
@@ -47,6 +51,9 @@ int QmlUiSettings::sidebarWidth() const { return sidebarWidth_; }
 int QmlUiSettings::sidebarMinimumContentWidth() const { return kSidebarMinimumContentWidth; }
 int QmlUiSettings::sidebarMaximumContentWidth() const { return kSidebarMaximumContentWidth; }
 bool QmlUiSettings::bottomPanelVisible() const { return bottomPanelVisible_; }
+double QmlUiSettings::bottomPanelHeightRatio() const { return bottomPanelHeightRatio_; }
+double QmlUiSettings::bottomPanelMinimumHeightRatio() const { return kBottomPanelMinimumHeightRatio; }
+double QmlUiSettings::bottomPanelMaximumHeightRatio() const { return kBottomPanelMaximumHeightRatio; }
 bool QmlUiSettings::previewVisible() const { return previewVisible_; }
 double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
 double QmlUiSettings::previewMinimumWidthRatio() const { return kPreviewMinimumWidthRatio; }
@@ -81,6 +88,15 @@ void QmlUiSettings::setBottomPanelVisible(bool value)
     bottomPanelVisible_ = value;
     settings_.setValue(kBottomPanelVisible, value);
     emit bottomPanelVisibleChanged();
+}
+
+void QmlUiSettings::setBottomPanelHeightRatio(double value)
+{
+    value = qBound(kBottomPanelMinimumHeightRatio, value, kBottomPanelMaximumHeightRatio);
+    if (qFuzzyCompare(bottomPanelHeightRatio_, value)) return;
+    bottomPanelHeightRatio_ = value;
+    settings_.setValue(kBottomPanelHeightRatio, value);
+    emit bottomPanelHeightRatioChanged();
 }
 
 void QmlUiSettings::setPreviewVisible(bool value)

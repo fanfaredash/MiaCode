@@ -35,6 +35,7 @@ class TimelineQuickItem : public QQuickItem
     Q_PROPERTY(bool viewportLockEnabled READ viewportLockEnabled WRITE setViewportLockEnabled NOTIFY viewportLockEnabledChanged)
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
     Q_PROPERTY(int timelineTop READ timelineTop NOTIFY sceneMetricsChanged)
+    Q_PROPERTY(qreal headerScale READ headerScale NOTIFY sceneMetricsChanged)
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)
 
 public:
@@ -63,6 +64,7 @@ public:
     bool followProgressEnabled() const;
     void setFollowProgressEnabled(bool enabled);
     int timelineTop() const;
+    qreal headerScale() const;
     bool isReady() const;
 
     Q_INVOKABLE void cycleZoomPreset();
@@ -98,6 +100,7 @@ signals:
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
+    void updatePolish() override;
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
     void itemChange(ItemChange change, const ItemChangeData& value) override;
     void hoverMoveEvent(QHoverEvent* event) override;
@@ -178,6 +181,7 @@ private:
     mutable int cachedSceneBuildHeaderMarkerLeftLimit_ = 0;
     mutable int cachedSceneBuildHeaderMarkerRightLimit_ = 0;
     mutable quint64 cachedSceneBuildAppearanceRevision_ = 0;
+    mutable quint64 cachedSceneBuildLayoutRevision_ = 0;
     mutable quint64 cachedSceneBuildGridRevision_ = 0;
     mutable quint64 cachedSceneBuildWaveformRevision_ = 0;
     mutable quint64 cachedSceneBuildHeaderRevision_ = 0;
@@ -206,6 +210,8 @@ private:
     double heldHorizontalKeyScrollRemainderPixels_ = 0.0;
     QElapsedTimer heldHorizontalKeyScrollElapsed_;
     QTimer heldHorizontalKeyScrollTimer_;
+    QSize pendingViewportSize_;
+    bool viewportUpdatePending_ = false;
     std::unique_ptr<TimelineQuickTextureCache> textures_;
     std::unique_ptr<TimelineQuickGridLayer> gridLayer_;
     std::unique_ptr<TimelineQuickWaveformLayer> waveformLayer_;

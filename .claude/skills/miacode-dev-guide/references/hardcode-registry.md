@@ -95,6 +95,15 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
   in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
   clamps — change all together. See `cross-chain-linkage.md`.
+- `src/app/qml_ui/QmlUiSettings.h` — v2 workspace split ratios: bottom panel height
+  `0.20..0.65` (default `0.35`) and preview width `0.30..0.50`. QML persists one ratio per
+  split after divider release and derives live geometry from the owning `SplitView` extent. The
+  active QSG timeline then fits its nine `qreal` lanes to the actual `TimelineQuickItem` viewport;
+  header/material scale remains capped at `1.0`, and viewport changes use a separate layout revision.
+  **Known, accepted:** `editorHost` still has `SplitView.minimumHeight: 180` (`MainSplitView.qml`).
+  At the v2 window floor (`Main.qml` `minimumHeight: 480`) a short left column can make the 65%
+  bottom-panel cap unreachable; the editor pixel floor wins. Do not treat this as a layout bug
+  to fix unless the product asks to retire that 180 px floor.
 - `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp` — toolbox media-prepend ffmpeg
   defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz` libmp3lame `-q:a 2`).
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp` — issue-row padding /

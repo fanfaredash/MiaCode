@@ -16,6 +16,7 @@ struct TimelineQuickHeaderRootNode : public QSGNode {
     quint64 staticRevision = 0;
     quint64 gridRevision = 0;
     quint64 headerRevision = 0;
+    quint64 layoutRevision = 0;
     quint64 appearanceRevision = 0;
 };
 
@@ -133,7 +134,8 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
     }
 
     const bool appearanceChanged = root->appearanceRevision != state.appearanceRevision;
-    if (appearanceChanged || root->staticRevision != state.gridRevision) {
+    const bool layoutChanged = root->layoutRevision != state.layoutRevision;
+    if (appearanceChanged || layoutChanged || root->staticRevision != state.gridRevision) {
         clearChildren(staticRoot);
         for (const auto& rect : state.laneOverlayRects) {
             staticRoot->appendChildNode(buildTimelineRectNode(rect));
@@ -217,7 +219,7 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         }
         root->staticRevision = state.gridRevision;
     }
-    if (appearanceChanged || root->gridRevision != state.gridRevision) {
+    if (appearanceChanged || layoutChanged || root->gridRevision != state.gridRevision) {
         // Beta21-fix7 — grid lines (bar lines + per-comma note ticks)
         // are rendered by the dedicated TimelineQuickGridLinesLayer,
         // which sits in its own slot AFTER waveformLayer and after
@@ -227,7 +229,7 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         clearChildren(gridContentRoot);
         root->gridRevision = state.gridRevision;
     }
-    if (appearanceChanged || root->headerRevision != state.headerRevision) {
+    if (appearanceChanged || layoutChanged || root->headerRevision != state.headerRevision) {
         clearChildren(headerContentRoot);
         if (textures != nullptr) {
             for (const auto& label : state.headerLabels) {
@@ -243,6 +245,7 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         }
         root->headerRevision = state.headerRevision;
     }
+    root->layoutRevision = state.layoutRevision;
     root->appearanceRevision = state.appearanceRevision;
     return root;
 }

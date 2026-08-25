@@ -47,6 +47,7 @@ public:
     // Reference-only mirror attach for the classic QWidget timeline path.
     void attachReferenceView(TimelineView* referenceView);
     void setQuickViewportSize(const QSize& viewportSize);
+    int timelineTop() const;
 
     void clear();
     void setTimelineData(const TimelineRenderSnapshot& snapshot);
@@ -118,6 +119,7 @@ public:
     void restorePlayheadIndicator(bool immediate = false);
 
     quint64 gridRevision() const { return gridRevision_; }
+    quint64 layoutRevision() const { return layoutRevision_; }
     quint64 waveformRevision() const { return waveformRevision_; }
     quint64 headerRevision() const { return headerRevision_; }
     quint64 notesRevision() const { return notesRevision_; }
@@ -186,6 +188,7 @@ private:
     bool playheadIndicatorSuppressed_ = false;
     miacode::timeline::TimelineSceneLayoutMetrics layoutMetrics_;
     bool layoutMetricsValid_ = false;
+    quint64 layoutRevision_ = 1;
     quint64 gridRevision_ = 1;
     quint64 waveformRevision_ = 1;
     quint64 headerRevision_ = 1;

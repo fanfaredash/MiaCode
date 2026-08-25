@@ -17,6 +17,7 @@ Rectangle {
 
     color: Theme.colors.background.surface
     clip: true
+    readonly property int contentTopMargin: 4
 
     BottomTabBar {
         id: tabs
@@ -34,6 +35,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
+        anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
         visible: root.shellController.bottomTabsCurrentTabId === "timeline"
         enabled: visible
@@ -63,10 +65,10 @@ Rectangle {
     AbstractButton {
         id: zoomHitControl
 
-        x: Math.round(4 * root.shellController.bottomTabsHeaderScale)
+        x: Math.round(4 * timelineItem.headerScale)
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
-        width: Math.max(56, Math.round(72 * root.shellController.bottomTabsHeaderScale))
-        height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
+        width: Math.max(56, Math.round(72 * timelineItem.headerScale))
+        height: Math.max(22, Math.round(22 * timelineItem.headerScale))
         visible: timelineItem.visible
         hoverEnabled: true
         focusPolicy: Qt.TabFocus
@@ -95,8 +97,8 @@ Rectangle {
     AbstractButton {
         id: brightnessHitControl
 
-        width: Math.max(28, Math.round(28 * root.shellController.bottomTabsHeaderScale))
-        height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
+        width: Math.max(28, Math.round(28 * timelineItem.headerScale))
+        height: Math.max(22, Math.round(22 * timelineItem.headerScale))
         x: Math.max(zoomHitControl.x + zoomHitControl.width + 8, parent.width - width - 8)
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         visible: timelineItem.visible
@@ -128,6 +130,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
+        anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
         visible: root.shellController.bottomTabsCurrentTabId === "validation"
 
@@ -222,6 +225,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
+        anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
         visible: root.shellController.bottomTabsCurrentTabId === "muri"
 

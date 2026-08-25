@@ -316,8 +316,13 @@ void TimelineQuickStateBridge::setQuickViewportSize(const QSize& viewportSize)
     }
     quickViewportSize_ = normalized;
     refreshLayoutMetrics();
-    bumpAllRevisions();
+    ++layoutRevision_;
     emit renderStateChanged();
+}
+
+int TimelineQuickStateBridge::timelineTop() const
+{
+    return layoutMetricsValid_ ? layoutMetrics_.timelineTop : 0;
 }
 
 QSize TimelineQuickStateBridge::effectiveViewportSize() const
@@ -337,6 +342,7 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.skinDirectory = skinDirectory_;
     request.zoomScale = zoomScale();
     request.contentScale = contentScale_;
+    request.fitViewportHeight = true;
     request.waveformBrightness = waveformBrightness_;
     request.measureLineBrightness = measureLineBrightness_;
     request.waveformPhaseCompensationSeconds = waveformPhaseCompensationSeconds_;

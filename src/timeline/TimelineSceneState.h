@@ -15,8 +15,8 @@ struct TimelineSceneLayoutMetrics {
     QSize viewportSize;
     int timelineLeft = 0;
     int timelineTop = 0;
-    int timelineHeight = 0;
-    int laneHeight = 0;
+    qreal timelineHeight = 0.0;
+    qreal laneHeight = 0.0;
     int laneCount = 0;
     int leadingCenteringPadding = 0;
     int trailingCenteringPadding = 0;
@@ -98,8 +98,8 @@ struct TimelineSceneSprite {
 struct TimelineSceneHoldSpan {
     int startX = 0;
     int endX = 0;
-    int rowTop = 0;
-    int laneHeight = 0;
+    qreal rowTop = 0.0;
+    qreal laneHeight = 0.0;
     QString spriteType;
     qreal baseIconScale = 1.0;
     QColor fallbackColor;
@@ -110,8 +110,8 @@ struct TimelineSceneState {
     QSize viewportSize;
     int timelineLeft = 0;
     int timelineTop = 0;
-    int timelineHeight = 0;
-    int laneHeight = 0;
+    qreal timelineHeight = 0.0;
+    qreal laneHeight = 0.0;
     int laneCount = 0;
     // Sub-pixel — see TimelineSceneBuildRequest::horizontalScrollValue.
     double horizontalScrollValue = 0.0;
@@ -131,6 +131,7 @@ struct TimelineSceneState {
     double maxNavigableSecond = 0.0;
     double waveformPhaseCompensationSeconds = 0.0;
     quint64 appearanceRevision = 0;
+    quint64 layoutRevision = 0;
     quint64 gridRevision = 0;
     quint64 waveformRevision = 0;
     quint64 headerRevision = 0;
