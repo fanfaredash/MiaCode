@@ -391,6 +391,59 @@ sources"的 token 清单里，而它归 Task 4 删除。因此这两条断言都
 "the v1 shell QML directory is gone" 共 3 条。Task 3 应转绿的是另外三条：
 "v1 shell sources are gone" 之外的 `--ui=v1`、`surfaceHost` 与 `main.cpp` 入口断言。
 
+## Task 4a: 把预览表面搬出 v1 目录（Task 4 的前置）
+
+**计划缺陷修正。** 原 Task 4 假设 `src/app/quick_shell/qml/` 整体不可达。这对其中 9 个文件成立
+（它们的非注释引用只剩自己的 qrc 条目），但 **`QuickShellPreviewSurface.qml` 有三个活消费者**：
+
+1. `src/app/qml_ui/preview/PreviewPane.qml:3,51` —— v2 的常规预览面板
+2. `src/app/qml_ui/layout/MainSplitView.qml:7,244` —— v2 的全屏预览覆盖层
+3. `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp:75` —— `setSource()` 按 qrc 路径加载；
+   该类在保留清单上，且由 `MainWindow::PreviewSection::ensureQuickShellPreviewCompositeSurfaceInitialized()`
+   在 v2 活路径上构造
+
+直接删目录会打断 v2 的预览渲染。它本来就不是外壳代码——它包装 `PreviewStageMediaItem`、
+`PreviewQuickSceneRoot`、`PreviewQuickHudLayer`，属于预览栈，放在 shell 目录里只是历史遗留。
+
+**Files:**
+- Move: `src/app/quick_shell/qml/QuickShellPreviewSurface.qml` → `src/preview/runtime/qml/PreviewSurface.qml`
+- Modify: `resources/preview_runtime_qml.qrc`、`resources/quick_shell_qml.qrc`、
+  `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp`、
+  `src/app/qml_ui/preview/PreviewPane.qml`、`src/app/qml_ui/layout/MainSplitView.qml`
+
+- [ ] **Step 1: 移动并改名**
+
+`git mv` 到 `src/preview/runtime/qml/PreviewSurface.qml`，与它包装的 `PreviewStageMediaItem.qml` 同置。
+改名去掉已死外壳的名字。
+
+- [ ] **Step 2: 换 qrc 注册**
+
+从 `resources/quick_shell_qml.qrc` 删除该条；在 `resources/preview_runtime_qml.qrc` 加入
+`<file alias="preview/runtime/qml/PreviewSurface.qml">../src/preview/runtime/qml/PreviewSurface.qml</file>`。
+
+- [ ] **Step 3: 更新三个消费者**
+
+- `QuickShellPreviewCompositeSurface.cpp:75` 的 `setSource` 改为
+  `qrc:/preview/runtime/qml/PreviewSurface.qml`
+- 两个 v2 QML 的 `import "qrc:/quick_shell/qml" as Shell` 改为
+  `import "qrc:/preview/runtime/qml" as Preview`，实例化改为 `Preview.PreviewSurface { ... }`
+  （保持 `surfaceRole` 等属性绑定不变）
+
+- [ ] **Step 4: 构建并实际运行**
+
+```bash
+cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCode --parallel 4
+```
+
+**这一步必须真的启动程序**：QML 的 qrc 路径错误编译期不报错，只在运行时炸。启动后确认预览面板
+出画，并切一次全屏预览（两个消费者各覆盖一次）。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git commit -m "refactor(preview): move the preview surface out of the v1 shell directory"
+```
+
 ## Task 4: 删除 v1 外壳 QML
 
 **Files:**
