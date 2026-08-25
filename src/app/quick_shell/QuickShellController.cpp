@@ -1115,7 +1115,9 @@ void QuickShellController::refreshFromStateSource()
 
     bool stateChanged = false;
     stateChanged |= assignIfChanged(windowTitle_, stateSource_->shellWindowTitle());
-    stateChanged |= assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
+    const bool panelsSwappedChanged =
+        assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
+    stateChanged |= panelsSwappedChanged;
     stateChanged |= assignIfChanged(previewSpeedLabel_, stateSource_->shellPreviewSpeedLabel());
     stateChanged |= assignIfChanged(muriCheckRenderMode_, stateSource_->shellMuriCheckRenderMode());
     stateChanged |= assignIfChanged(previewPlaying_, stateSource_->shellPreviewPlaying());
@@ -1142,6 +1144,10 @@ void QuickShellController::refreshFromStateSource()
     if (assignIfChanged(previewFullscreen_, nextPreviewFullscreen)) {
         stateChanged = true;
         emit previewFullscreenChanged();
+    }
+
+    if (panelsSwappedChanged) {
+        emit workspacePanelsSwappedChanged();
     }
 
     if (stateChanged) {

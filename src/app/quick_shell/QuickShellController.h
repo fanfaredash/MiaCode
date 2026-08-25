@@ -12,7 +12,7 @@ class QuickShellController : public QObject
     Q_OBJECT
 
     Q_PROPERTY(QString windowTitle READ windowTitle NOTIFY shellStateChanged)
-    Q_PROPERTY(bool workspacePanelsSwapped READ workspacePanelsSwapped NOTIFY shellStateChanged)
+    Q_PROPERTY(bool workspacePanelsSwapped READ workspacePanelsSwapped NOTIFY workspacePanelsSwappedChanged)
     Q_PROPERTY(QString previewSpeedLabel READ previewSpeedLabel NOTIFY shellStateChanged)
     Q_PROPERTY(bool muriCheckRenderMode READ muriCheckRenderMode NOTIFY shellStateChanged)
     Q_PROPERTY(bool previewPlaying READ previewPlaying NOTIFY shellStateChanged)
@@ -154,6 +154,7 @@ public:
 
 signals:
     void shellStateChanged();
+    void workspacePanelsSwappedChanged();
     void previewFullscreenChanged();
     void rootCloseAccepted(const QString& source);
 

@@ -100,6 +100,13 @@ Item {
         }
     }
 
+    function syncWorkspacePanelOrder() {
+        const targetPreviewIndex = root.shellController.workspacePanelsSwapped ? 0 : 1
+        const currentPreviewIndex = workspaceSplit.itemAt(0) === preview ? 0 : 1
+        if (currentPreviewIndex !== targetPreviewIndex)
+            workspaceSplit.moveItem(currentPreviewIndex, targetPreviewIndex)
+    }
+
     function fittedFullscreenWidth(hostWidth, hostHeight) {
         const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
         const safeWidth = Math.max(1, hostWidth)
@@ -115,6 +122,9 @@ Item {
 
     Connections {
         target: root.shellController
+        function onWorkspacePanelsSwappedChanged() {
+            root.syncWorkspacePanelOrder()
+        }
         function onShellStateChanged() {
             if (root.shellController.exportPageActive && fullscreenPreview.visible)
                 fullscreenPreview.visible = false
@@ -155,6 +165,7 @@ Item {
             id: workspaceSplit
             orientation: Qt.Horizontal
             SplitView.fillWidth: true
+            Component.onCompleted: root.syncWorkspacePanelOrder()
 
             handle: SplitHandle {
                 onReleased: root.persistPreviewWidthRatio()
