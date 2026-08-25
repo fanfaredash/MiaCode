@@ -107,6 +107,39 @@ int main(int argc, char** argv)
     expect(entryFlagMentions.isEmpty(),
            QStringLiteral("no source file still documents the removed --ui=v1 entry"), out, &failed);
 
+    // 已删除的类名同样不能只在 CMakeLists 里查。一处写在源码或 src/README.md 里的
+    // 引用编译期不可见、也不含 MIACODE_* 环境变量，会静默活过整个阶段——`--ui=v1`
+    // 那条扫描当初就是为同样的理由加的。
+    QStringList deletedTypeMentions;
+    QDirIterator typeIt(sourceRoot() + QStringLiteral("/src"),
+                        {QStringLiteral("*.cpp"), QStringLiteral("*.h"), QStringLiteral("*.mm"),
+                         QStringLiteral("*.qml"), QStringLiteral("*.md")},
+                        QDir::Files, QDirIterator::Subdirectories);
+    while (typeIt.hasNext()) {
+        const QString path = typeIt.next();
+        // This spec names the deleted types on purpose, so its own source is not a leftover.
+        if (typeIt.fileName() == QStringLiteral("V1ShellRemovalSpec.cpp")) continue;
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) continue;
+        const QString text = QString::fromUtf8(file.readAll());
+        for (const QString& type : {QStringLiteral("QuickShellBootstrap"),
+                                    QStringLiteral("QuickShellNativeSurfaceHost"),
+                                    QStringLiteral("QuickShellStyleBridge"),
+                                    QStringLiteral("QuickShellMacSurfaceSupport")}) {
+            if (text.contains(type)) {
+                deletedTypeMentions.append(
+                    QDir(sourceRoot()).relativeFilePath(path) + QStringLiteral(": ") + type);
+            }
+        }
+    }
+    if (!deletedTypeMentions.isEmpty()) {
+        out << "  deleted types still named in: "
+            << deletedTypeMentions.join(QStringLiteral(", ")) << '\n';
+        out.flush();
+    }
+    expect(deletedTypeMentions.isEmpty(),
+           QStringLiteral("no source file still names a deleted v1 shell type"), out, &failed);
+
     // 表面再宿主分支随 v1 一起消失，否则阶段 2 会继承 29 处死分支。
     const QString controller = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp"));
     const QString controllerHeader = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.h"));

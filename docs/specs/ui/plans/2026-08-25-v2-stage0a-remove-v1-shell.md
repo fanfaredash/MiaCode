@@ -460,7 +460,32 @@ cmake --build build-macos-spec --target debug_flag_index_spec --parallel 4 && ./
   `docs/specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md` 阶段 2 退役。
 ```
 
-- [ ] **Step 4: 更新一阶段 TODO 的范围声明**
+- [ ] **Step 4: 清理源码树里对已删类型的引用**
+
+`v1_shell_removal_spec` 的 "no source file still names a deleted v1 shell type" 断言会列出全部
+残留。当前应为 5 处（守卫加上之前，它们全部未被发现——这正是加这条扫描的理由）：
+
+1. `src/README.md:94` —— 仍把 `QuickShellBootstrap` 写成"正常 GUI 启动路径"，并称 widget 外壳
+   "作为原生表面宿主在 QuickShell 内"。两句都已不成立，且就在"Current defaults"一节里。
+   改为描述 `QmlUiBootstrap` 是唯一启动路径。
+2. `src/app/mainwindow/MainWindow.h:306` —— "Called from QuickShellBootstrap after the UI is ready"，
+   实际调用方是 `QmlUiBootstrap`。
+3. `src/app/qml_ui/QmlEditorPageHost.cpp:60` —— "same early-bind pattern as
+   QuickShellNativeSurfaceHost"，读者已无从查证该模式；改写为自述其绑定时机。
+4. `src/app/WindowsIdleEventDiagnostics.cpp:235` —— 注释称两个调用方之一是
+   `QuickShellBootstrap::beginAcceptedRootWindowShutdown`。**注意**：详见下方"Windows 诊断已死"。
+5. `src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp` —— Task 3 已把读取目标改为
+   `QmlUiBootstrap.cpp`，但注释里仍留有旧文件名。
+
+改完该断言必须转绿。
+
+> **Windows 诊断已死（记录，本阶段不处理）：** 追查第 4 条时发现，`WindowsIdleEventMonitor` 现在
+> 整体是死代码——生产代码里既无 `registerWindow()` 也无 `unregisterWindow()` 调用方，Windows 因此
+> 失去了空闲事件诊断。这是**既有问题**而非本次删除造成：v1 在本阶段开始前就已不可达
+> （`main.cpp` 只构造 `QmlUiBootstrap`），Task 3 只是移除了最后一个本已失效的调用方。
+> 需要单独决策是恢复接线还是删除该监视器。
+
+- [ ] **Step 5: 更新一阶段 TODO 的范围声明**
 
 在 `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md` 的「范围与契约」一节，删除这两条已不成立的条目：
 
@@ -471,7 +496,7 @@ cmake --build build-macos-spec --target debug_flag_index_spec --parallel 4 && ./
 - v1 入口：`--ui=v1` / `MIACODE_UI_SKIN=v1` → QuickShell
 ```
 
-- [ ] **Step 5: 确认守卫转绿，且结构契约通过**
+- [ ] **Step 6: 确认守卫转绿，且结构契约通过**
 
 ```bash
 cmake --build build-macos-spec --target debug_flag_index_spec v1_shell_removal_spec --parallel 4
@@ -480,7 +505,7 @@ cmake --build build-macos-spec --target debug_flag_index_spec v1_shell_removal_s
 
 预期：两者都退出码 0，`V1ShellRemoval spec passed.`
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 7: 提交**
 
 ```bash
 git add -A
@@ -544,7 +569,12 @@ git commit -m "docs(v2): record stage 0a completion"
 
 ## 不在本计划范围内
 
-- `QuickShellController` 本身的退役（阶段 2）。届时一并清理 Task 3 之后变成死代码的两处：
+- `QuickShellController` 本身的退役（阶段 2）。**退役面比表面看到的大一个量级**：审查实测，
+  控制器现存接口中 **34 个 `Q_PROPERTY` 有 14 个、35 个 `Q_INVOKABLE` 有 7 个在 v2 完全无消费者**，
+  其唯一调用方都在 Task 4 删除的 v1 QML 里。阶段 2 应以这份实测清单为范围依据，而不是靠零星发现。
+  另有 `previewUsesSeparateSurface` 与其契约侧 `shellPreviewUsesSeparateSurface()`：它是已删的
+  `previewCompositeWindow` 的搭档（v1 QML 里作 `Loader.active` 门控），v2 零消费者，一并退役。
+  届时还要清理 Task 3 之后变成死代码的两处：
   `QuickShellContracts.h` 里的 `QuickShellSurfaceBundle`（全仓零使用）与
   `QuickShellStateSource::shellPreviewCompositeWindow()`（无调用方，实现一直下探到
   `MainWindow::WindowSection`）。它们位于本阶段标记为"保留"的文件中，故不在此处动。
