@@ -245,13 +245,13 @@ Item {
         color: Theme.colors.background.editor
 
         Loader {
-            anchors.fill: parent
+            anchors.centerIn: parent
+            width: root.fittedFullscreenWidth(parent.width, parent.height)
+            height: root.fittedFullscreenHeight(parent.width, parent.height)
             active: fullscreenPreview.visible && width >= 64 && height >= 64
 
             sourceComponent: Preview.PreviewSurface {
-                anchors.centerIn: parent
-                width: root.fittedFullscreenWidth(parent.width, parent.height)
-                height: root.fittedFullscreenHeight(parent.width, parent.height)
+                anchors.fill: parent
                 runtime: root.previewSession.runtime
                 mediaHost: root.previewSession.mediaHost
                 logger: root.shellController

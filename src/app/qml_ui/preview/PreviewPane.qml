@@ -54,15 +54,15 @@ Rectangle {
 
         Loader {
             id: previewSurfaceLoader
-            anchors.fill: parent
+            anchors.centerIn: parent
+            width: root.fittedFrameWidth(parent.width, parent.height)
+            height: root.fittedFrameHeight(parent.width, parent.height)
             // Do not construct an invisible scene root: it still subscribes to
             // PreviewRuntime::frameStateChanged even when QSG skips painting it.
             active: root.surfaceActive && root.visible && width >= 64 && height >= 64
 
             sourceComponent: Preview.PreviewSurface {
-                anchors.centerIn: parent
-                width: root.fittedFrameWidth(parent.width, parent.height)
-                height: root.fittedFrameHeight(parent.width, parent.height)
+                anchors.fill: parent
                 runtime: root.previewSession.runtime
                 mediaHost: root.previewSession.mediaHost
                 logger: root.shellController
