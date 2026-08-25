@@ -640,3 +640,74 @@ git commit -m "docs(v2): record stage 0a completion"
   `MainWindow::WindowSection`）。它们位于本阶段标记为"保留"的文件中，故不在此处动。
 - 扩展宿主删除、被舍弃的三组页面删除——它们是阶段 0 的另外两个独立单元，各自单独成计划。
 - 任何 `ChartWorkspace` 相关工作（阶段 1）。
+
+---
+
+# 执行总结（2026-08-25）
+
+## 交付
+
+源码净 **−7,770 行**（39 文件，+284/−8,054），17 个提交。执行方式为子代理驱动：每个 Task 派一个全新
+子代理实现，之后依次做规格合规审查与代码质量审查，发现问题回到同一实现者修复再复审。
+
+| 提交 | 内容 |
+| --- | --- |
+| `1f61a691` `0c885454` `a61e6aae` `a8a30139` | Task 1：结构契约守卫（先红），及其三轮打磨 |
+| `2009c291` | Task 2：收敛为单一 UI 启动路径 |
+| `57780e6e` | Task 3：删除 v1 引导与表面再宿主，清掉控制器 29 处死分支（−3,758） |
+| `984a4faf` | 删除随 v1 失去接线的 `WindowsIdleEventMonitor` |
+| `22cc8db8` | Task 4a：预览表面搬出 v1 目录 |
+| `f3be3979` | Task 4：删除 v1 外壳 QML（−3,787） |
+| `5026cbc4` | Task 5：文档与两个漂移守卫转绿 |
+| `adb86dd1` `54c308d7` | 守卫扩展（见下文缺陷 3） |
+| `bc8f554e` `9341cfa8` `08882918` `96bea9ee` `85d6dc78` | 计划自身的修正与记录 |
+
+## 验证证据
+
+- Release 全量构建：0 error。
+- 全量 CTest：**71/72**。唯一失败 `qtavplayer_platform_spec` 为既有问题——已通过 checkout
+  本阶段起点 `31922400` 并在该处运行确认，非本阶段引入。
+- 两个漂移守卫均为绿。
+- 运行时冒烟：三个预览表面全部创建成功（`preview_surface_created` ×3），无新增 QML 错误。
+  **这一步不可省略**：QML 在加载时才解析 qrc 路径，构建期发现不了路径错误。
+
+## 计划自身暴露的 5 处缺陷
+
+全部由审查或实现者发现，无一是实现错误。记录成因而非仅记录症状，因为其中三类会在 0b / 0c 复现。
+
+| # | 缺陷 | 后果 | 发现方式 |
+| --- | --- | --- | --- |
+| 1 | 本计划依赖 `debug_flag_index_spec` 作闸门，却没意识到守卫自身嵌入的 `MIACODE_UI_SKIN` 字面量会污染它的扫描 | 闸门**反转**：Task 2 后静默通过（本该红），Task 5 后误报并建议重新登记一个已不存在的变量 | 质量审查**模拟下游状态实测**得出，读码看不出来 |
+| 2 | 排除机制用 `path.endsWith(name)` 匹配路径尾而非文件名 | `LegacyV1ShellRemovalSpec.cpp` 一类命名会被静默误排除 | 质量审查写探针证明 |
+| 3 | Task 3 文件清单漏了 `QmlUiBootstrap.h`，**且当时没有任何守卫覆盖这类残留** | 会静默活过整个阶段 | 质量审查。它指出的是「缺少守卫覆盖」这一根因，而非孤立的一处残留 |
+| 4 | 删除源文件会打断把该文件**当作文本读取**的 spec | 编译期完全不可见，只在运行 spec 时暴露 | Task 3 实现者遇到后上报 |
+| 5 | 「v1 QML 目录整体不可达」这一前提**是错的** | 按原计划执行会打断 v2 的预览渲染 | Task 4 实现者拒绝执行并上报 |
+
+## 给 0b / 0c 的可复用规则
+
+1. **按内容判断归属，不按目录。** 缺陷 5 的成因是 `QuickShellPreviewSurface.qml` 从来就不是外壳代码
+   ——它包装预览栈，只是历史上被放在 shell 目录里。删除任何目录前，逐文件确认其真实归属。
+2. **删除源文件前先跑** `grep -rln "<文件名>" src/tools/`。把源码当文本读的 spec 是编译期不可见的耦合。
+3. **守卫要扫全仓，不要只扫单个文件。** 缺陷 3 修复后，守卫从只扫 `main.cpp` 扩为扫描 `src/` 全树，
+   立即一次抓到全部 5 处残留，其中一处是人工排查没发现的。0b / 0c 的守卫应照此设计。
+4. **嵌有 `MIACODE_*` 字面量的新 spec** 必须加入 `DebugFlagIndexSpec.cpp` 的 `kSelfExcludedFileNames`，
+   否则重演缺陷 1。该文件现在有一条正向断言会在被排除文件真的读取 env 时报错。
+5. **涉及 QML 的删除必须实际运行程序验证**，构建通过不构成证据。
+6. **先确立既有失败基线。** 本阶段起点就有一个红测试；不先确认，收尾判据会被它误挡，或被误当成自己造成的。
+
+## 交接给阶段 2（`QuickShellController` 退役）
+
+- 退役面比零星发现的大一个量级：审查实测，控制器 **34 个 `Q_PROPERTY` 有 14 个、35 个 `Q_INVOKABLE`
+  有 7 个在 v2 完全无消费者**——它们唯一的调用方随 Task 4 的 v1 QML 一并删除了。阶段 2 应以这份
+  实测清单定范围。
+- 另有三处已确认死代码，因位于本阶段「保留」文件中而未动：`QuickShellContracts.h` 的
+  `QuickShellSurfaceBundle`（全仓零使用）、`QuickShellStateSource::shellPreviewCompositeWindow()`
+  （无调用方，实现下探至 `MainWindow::WindowSection`）、`previewUsesSeparateSurface` 与其契约侧
+  `shellPreviewUsesSeparateSurface()`。
+
+## 遗留的独立决策
+
+`WindowsIdleEventMonitor` 已按所有者决定删除（`984a4faf`）。它并非过时功能，而是随 v1 失去接线——
+它是为**尚未解决的** Windows 冻结问题做的取证工具，且该问题只在用户机器上可复现。若日后重启该调查，
+需要重建取证接线。历史记录保留在 `docs/ops/WINDOWS_IDLE_FREEZE_REPRO_ZH.md` 与
+`docs/audit/BRANCH_AUDIT_WINDOWS_IDLE_FREEZE_DIAGNOSTICS_ZH.md`。
