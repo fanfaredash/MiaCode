@@ -1,6 +1,6 @@
 import QtQuick
 import MiaCode.UI
-import "qrc:/quick_shell/qml" as Shell
+import "qrc:/preview/runtime/qml" as Preview
 
 Rectangle {
     id: root
@@ -48,7 +48,7 @@ Rectangle {
         anchors.bottom: transport.top
         clip: true
 
-        Shell.QuickShellPreviewSurface {
+        Preview.PreviewSurface {
             anchors.centerIn: parent
             width: root.fittedFrameWidth(parent.width, parent.height)
             height: root.fittedFrameHeight(parent.width, parent.height)

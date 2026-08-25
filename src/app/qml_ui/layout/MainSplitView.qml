@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import MiaCode.UI
-import "qrc:/quick_shell/qml" as Shell
+import "qrc:/preview/runtime/qml" as Preview
 
 Item {
     id: root
@@ -241,7 +241,7 @@ Item {
         z: 80
         color: Theme.colors.background.editor
 
-        Shell.QuickShellPreviewSurface {
+        Preview.PreviewSurface {
             anchors.centerIn: parent
             width: root.fittedFullscreenWidth(parent.width, parent.height)
             height: root.fittedFullscreenHeight(parent.width, parent.height)

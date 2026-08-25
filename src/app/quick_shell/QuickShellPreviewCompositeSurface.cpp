@@ -72,7 +72,7 @@ QuickShellPreviewCompositeSurface::QuickShellPreviewCompositeSurface(QObject* pa
             bindRootObject();
         }
     });
-    view_->setSource(QUrl(QStringLiteral("qrc:/quick_shell/qml/QuickShellPreviewSurface.qml")));
+    view_->setSource(QUrl(QStringLiteral("qrc:/preview/runtime/qml/PreviewSurface.qml")));
     if (view_->status() == QQuickView::Ready) {
         bindRootObject();
     }
