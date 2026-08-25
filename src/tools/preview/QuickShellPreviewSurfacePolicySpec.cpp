@@ -49,7 +49,7 @@ bool verifyPolicy(QTextStream& err)
 
 bool verifyChartDropUsesQsgOnly(QTextStream& err)
 {
-    // v1 QuickShellBootstrap is gone; the surviving GUI bootstrap is the v2 QML entry.
+    // The v1 shell is gone; the surviving GUI bootstrap is the v2 QML entry below.
     const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));
     const QString mainWindowHeader = readSource(QStringLiteral("src/app/mainwindow/MainWindow.h"));
     return require(

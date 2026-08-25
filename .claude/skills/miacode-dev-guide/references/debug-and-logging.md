@@ -261,11 +261,7 @@ Current default: root-window binding is ON; set `MIACODE_GPU_BIND_HIGH_PERFORMAN
 `docs/ops/DEBUG_INDEX.md` only because the `debug_flag_index_spec` guard greps every `MIACODE_*`
 literal in `src/`, including comments).
 
-### UI shell selection
-
-`MIACODE_UI_SKIN` picks the shell: default is the QML v2 shell, `v1` (or `--ui=v1`) launches
-QuickShell v1 (`app/main.cpp`, `resolveUiSkin()`). It is an env flag like any other, so it must
-stay listed in `docs/ops/DEBUG_INDEX.md` or `debug_flag_index_spec` fails.
+### Non-flag compile definitions
 
 `MIACODE_QML_SPEC_IMPORT_ROOT` is **not** an env flag — it is a dev-tools compile definition
 carrying the path to the spec-only MiaCode.UI import mirror, and is allow-listed in

@@ -12,13 +12,11 @@
 - 分支：`feature/qml-ui`
 - 上游：已合入 `origin/dev` @ `0e85b0b2`
 - 默认界面：`QmlUiBootstrap`（v2）
-- v1 入口：`--ui=v1` / `MIACODE_UI_SKIN=v1` → QuickShell
 - 构建目录：`build/`
 - 原型参考：`../MashiroEditor/src/ui`
 
 ## 范围与契约
 
-- v1 / v2 共存，保留 QuickShell 再宿主路径：`NativeSurfaceHost`、`StyleBridge`、`QuickShellMain.qml`。
 - v2 方向为纯 QML 主壳、C++ 域服务和已有 `QQuickItem` 时间轴/预览。
 - 视频导出页已经使用纯 QML `ExportVideoPage.qml`，由 `QmlExportSession` 提供业务状态和操作。
 - `QmlEditorPageHost` 负责全页导航，并通过局部 `WindowContainer` 宿主 v1 `LatencyDetectionPage`。

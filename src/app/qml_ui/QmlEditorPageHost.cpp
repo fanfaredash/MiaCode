@@ -57,7 +57,9 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
     , backend_(&backend)
 {
     // Eager surface so QML WindowContainer can bind pageWindow before the
-    // first overlay open (same early-bind pattern as QuickShellNativeSurfaceHost).
+    // first overlay open: the native window must exist before QML tries to
+    // wrap it, so it is created here in the constructor rather than lazily
+    // on first use.
     ensureSurface();
 }
 

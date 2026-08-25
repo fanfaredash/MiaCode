@@ -91,10 +91,10 @@ and the retained path together. Do not assume a directory name such as `legacy`,
 
 Current defaults:
 
-- GUI shell: `QuickShellBootstrap` is the normal GUI startup path from
-  `src/app/main.cpp`. The older widget shell is retained as native surfaces
-  hosted inside QuickShell and should not receive new top-level feature work
-  unless that is the explicit target.
+- GUI shell: `QmlUiBootstrap` (`src/app/qml_ui/`) is the single GUI startup
+  path from `src/app/main.cpp`. There is no alternate shell and no
+  native-surface re-hosting; the v1 QuickShell shell and its style bridge
+  were removed on 2026-08-25.
 - Preview chart rendering: Qt Quick/QSG through `preview/runtime/PreviewRuntime`
   and `preview/quick_scene/*`. This is the only preview renderer. The D3D11 /
   DirectComposition backend that used to live in `render/` and `sources/` was

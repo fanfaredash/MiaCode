@@ -303,7 +303,7 @@ public:
     void cancelChartAudioDrop();
     void handleAudioDrop(const QStringList& audioPaths);
     // Shows the first-run welcome / initial-config dialog (preview side +
-    // theme). Called from QuickShellBootstrap after the UI is ready.
+    // theme). Called from QmlUiBootstrap after the UI is ready.
     void showWelcomeDialog();
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;

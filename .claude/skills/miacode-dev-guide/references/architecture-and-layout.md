@@ -10,7 +10,11 @@ src/
   app/            App entry + window orchestration ONLY
     main.cpp        GUI boot, CLI export, export-worker entry, startup timing
     mainwindow/     MainWindow + sections/<feature>/ (partial-class slices)
-    quick_shell/    --quick-shell-beta QML shell + controller/style bridges
+    quick_shell/    QuickShellController + preview-surface/policy headers only (v2 uses
+                    them); the v1 QML shell, native-surface re-hosting, and style bridge
+                    were removed 2026-08-25, and `--ui=v1` no longer exists.
+                    QuickShellController itself retires in a later stage — see
+                    docs/specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md.
     ui/             UiText, UiTheme, ShortcutRegistry, WindowParityMetrics
   audio/          Audio backends + SFX runtime. Nothing else links BASS/miniaudio.
   common/         Cross-module utilities, debug logging, shared config headers
