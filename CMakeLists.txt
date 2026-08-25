@@ -122,6 +122,12 @@ endif()
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
+    src/app/v2/ChartWorkspace.cpp
+    src/app/v2/ChartWorkspace.h
+    src/app/v2/ChartWorkspaceFileService.cpp
+    src/app/v2/ChartWorkspaceFileService.h
+    src/app/v2/AnalysisService.cpp
+    src/app/v2/AnalysisService.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -1175,6 +1181,32 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common/DebugLog.h
         src/common/DebugLog.cpp
     )
+    set(_miacode_muri_analysis_core
+        src/common/MuriTypes.h
+        src/common/MuriTypes.cpp
+        src/tools/muri/MuriAnalyzer.h
+        src/tools/muri/MuriAnalyzer.cpp
+        src/tools/muri/MuriAnalyzerGeometry.h
+        src/tools/muri/MuriAnalyzerGeometry.cpp
+        src/tools/muri/MuriAnalyzerModel.h
+        src/tools/muri/MuriSlideReferenceData.h
+        src/tools/muri/MuriSlideReferenceData.cpp
+        src/tools/muri/MuriAnalyzerInternal.h
+        src/tools/muri/MuriDiagnosticCollector.h
+        src/tools/muri/MuriDiagnosticCollector.cpp
+        src/tools/muri/MuriDiagnosticLabels.h
+        src/tools/muri/MuriDiagnosticLabels.cpp
+        src/tools/muri/MuriRuntimeModelBuilder.h
+        src/tools/muri/MuriRuntimeModelBuilder.cpp
+        src/tools/muri/MuriOverlayBuilder.h
+        src/tools/muri/MuriOverlayBuilder.cpp
+        src/tools/muri/MuriSlideWifiJudge.h
+        src/tools/muri/MuriSlideWifiJudge.cpp
+        src/tools/muri/MuriSimpleNoteJudge.h
+        src/tools/muri/MuriSimpleNoteJudge.cpp
+        src/tools/muri/MuriStaticChecker.h
+        src/tools/muri/MuriStaticChecker.cpp
+    )
 
     # Qt Test is a dev-tools-only dependency: QML input regressions need a
     # supported way to deliver real mouse/key events into a QQuickWindow.
@@ -1541,10 +1573,54 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/qml_ui/QmlDocumentProjectionSpec.cpp
             ${_miacode_chart_core}
             ${_miacode_log_core}
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/ChartWorkspace.h
             src/app/qml_ui/QmlDocumentProjection.cpp
             src/app/qml_ui/QmlDocumentProjection.h
         LIBS Qt6::Core
         INCLUDES src
+    )
+
+    miacode_add_dev_tool(chart_workspace_spec TEST
+        SOURCES
+            src/tools/v2/ChartWorkspaceSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/ChartWorkspace.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(chart_workspace_file_service_spec TEST
+        SOURCES
+            src/tools/v2/ChartWorkspaceFileServiceSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/ChartWorkspace.h
+            src/app/v2/ChartWorkspaceFileService.cpp
+            src/app/v2/ChartWorkspaceFileService.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(analysis_service_spec TEST
+        SOURCES
+            src/tools/v2/AnalysisServiceSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            ${_miacode_muri_analysis_core}
+            src/timeline/TimelineSlowRefresh.h
+            src/timeline/TimelineSlowRefresh.cpp
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/ChartWorkspace.h
+            src/app/v2/AnalysisService.cpp
+            src/app/v2/AnalysisService.h
+            resources/fonts.qrc
+            resources/slide_data.qrc
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
     )
 
     miacode_add_dev_tool(qml_analysis_model_spec TEST

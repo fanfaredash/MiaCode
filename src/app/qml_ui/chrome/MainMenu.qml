@@ -331,7 +331,11 @@ Item {
         AppMenu {
             id: helpMenu
             title: qsTr("帮助(&H)")
-            AppMenuAction { text: qsTr("关于 MiaCode"); enabled: false }
+            AppMenuAction {
+                text: qsTr("关于 MiaCode")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.unavailableFeatureRequested(qsTr("关于 MiaCode"))
+            }
         }
     }
 

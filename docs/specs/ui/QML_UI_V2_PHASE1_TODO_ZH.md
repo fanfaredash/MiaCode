@@ -1,16 +1,25 @@
 # QML UI v2 一阶段 Todo
 
-> 当前工作清单。完成或调整条目时，同步更新本文件；架构与入口发生变化时，同步更新仓库指南。
+> 历史实施与验收清单。架构或入口变化时，同步更新目标架构文档与仓库指南。
 >
-> **2026-08-24 起本文的范围被架构重设计取代。** 本文记录的是"v2 外壳驱动隐藏 MainWindow"这一形态
-> 下的待办；目标架构见 [QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md)。
-> 其中"范围与契约"一节描述的 v1/v2 共存、QuickShell 再宿主路径、`--ui=v1` 入口都将在阶段 0 移除。
-> 未完成的功能条目在搬迁到对应域时一并处理，不再单独推进。
+> **2026-08-24 起本文的范围被架构重设计取代。** 本文保留为"v2 外壳驱动隐藏 MainWindow"形态的
+> 实施与验收历史；目标架构和后续工作以
+> [QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md) 为准。未完成项只作为
+> 风险与验收记录，在迁移到对应域时处理，不再按本文单独排期。
+>
+> **2026-08-25 校正：** 阶段 0a 已删除 v1 QuickShell 的入口、bootstrap、原生表面再宿主和全部壳层
+> QML；`--ui=v1`、`MIACODE_UI_SKIN` 已不存在。`QuickShellController` 仍由 v2 暂时使用，按目标架构
+> 在阶段 2 退役。
+>
+> **同日排期调整：** 阶段 0b（扩展宿主）和 0c（被裁剪页面）均延后；`TimelineQuickModel` 正文增量更新
+> 与播放期高位内存平台也延后。QML 功能缺口的范围和入口策略见
+> [QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md](QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md)：保留入口，但对尚无
+> QML 实现的功能明确提示“暂未更新支持”。
 
 ## 当前基线
 
 - 分支：`feature/qml-ui`
-- 上游：已合入 `origin/dev` @ `0e85b0b2`
+- 上游：阶段 0a 已完成（`85d6dc78`）；最近 v2 性能修复为 `3a0ce116`
 - 默认界面：`QmlUiBootstrap`（v2）
 - 构建目录：`build/`
 - 原型参考：`../MashiroEditor/src/ui`
@@ -24,15 +33,17 @@
 - 工作区模式由 `MainWindow` 切换，v2 从 `QuickShellController` 读取底栏显隐、预览画幅和导出页状态。
 - v2 时间轴保留 `TimelineQuickModel` → `TimelineQuickStateBridge` → `TimelineQuickItem` 的 QSG 渲染链，重点补齐 QML 主壳的交互与编辑器接入。
 - 实时预览和视频导出共用进程内 QSG 渲染路径。
-- 上游 v1 壳层改动与 v2 主壳分离；共享的 `MainWindow`、Controller、Preview、Timeline API 仍需同步。
+- v1 壳层、入口和表面再宿主已移除；当前 QML 主壳仍通过隐藏的 `MainWindow` 与
+  `QuickShellController` 取状态。这是阶段 1/2 的迁移边界，不应再扩展这套兼容胶水。
 
 ## 已完成
 
 ### 启动与壳层
 
-- [x] 恢复并保留 v1 QuickShell 文件和入口。
+- [x] 删除 v1 QuickShell 文件和入口；应用收口为单一 v2 QML 启动路径（阶段 0a，`85d6dc78`）。
 - [x] 接入 `src/app/qml_ui/`、`QmlUiBootstrap`、`MiaCode.UI` 模块与皮肤切换入口。
-- [x] v2 默认使用隐藏 `MainWindow` 和无主壳宿主的 `QuickShellController`。
+- [x] v2 暂以隐藏 `MainWindow` 和无原生 surface host 的 `QuickShellController` 运行；该兼容层在阶段 1/2
+      迁移后删除。
 - [x] 关窗流程接入 `confirmClose` → `notifyRootCloseAccepted` → `preparePreviewForShutdown`。
 - [x] Windows 客户区标题栏接入 `QmlUiWindowChrome`，品牌图使用 `resources/icons/app.png`。
 - [x] 设置入口调用现有 `MainWindow::onPreferences()`。
@@ -136,20 +147,20 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 ## 一阶段待办
 
-### P0 — 时间轴接入
+### P0 — 时间轴接入（历史实现状态；后续由阶段 2 `TimelineSession` 接管）
 
 - [x] Step 1：底栏已接入的时间轴与语法标签统一使用 `QuickShellController` 当前标签、显隐和文案状态，移除 `ViewState.activeBottomTab` 局部副本。
-- [ ] Step 2：接入时间轴顶部的缩放、亮度、视图锁定、进度同步与 Follow Code 交互。
-      控件与 header 限位已接入；窄窗口下的视觉与命中仍待桌面观察。
-- [ ] Step 3：将 v2 可见编辑器的光标行列接入时间轴光标与 Follow Code。
-      `Command`/`Ctrl`+点击已可 seek 预览（`f451ae09`）。
+- [x] Step 2：时间轴顶部的缩放、亮度、视图锁定、进度同步与 Follow Code 交互已接入。
+      窄窗口下的视觉与命中仍须列入原生桌面回归，不能由实现或 CTest 推断。
+- [x] Step 3：v2 可见编辑器的光标行列已接入时间轴光标与 Follow Code；
+      `Command`/`Ctrl`+点击可 seek 预览（`f451ae09`）。
 - [x] Step 4：将时间轴导航结果回写到 v2 可见编辑器，补齐跳转、选区和跟随视觉状态。
       播放时走 QML navigation 请求移动光标；暂停或关闭代码跟随时改为只读跟随装饰
       （span 高亮 + 跟随光标 + 不动 caret 的滚动），见 `ca943a82`。
-- [ ] Step 6：接入 Muri 标签、列表与问题跳转，与 v1 共用诊断状态。
-- [ ] Step 7：补齐底栏前台生命周期、面板高度同步、缩放与主题刷新。
-- [ ] Step 5（**已降级、暂缓**）：将 QML 正文编辑接入 `TimelineQuickModel` 增量更新路径，取消每次
-      输入对整份正文的全量刷新。这是优化项而非功能项；在功能完整性补齐之前不做。
+- [x] Step 6：Muri 标签、列表与问题跳转已接入，并复用 QML 分析投影；仍缺原生桌面观察记录。
+- [x] Step 7：底栏前台显隐、面板高度回写与缩放状态已接入；主题切换的原生桌面回归仍未执行。
+- [ ] Step 5（**不再按本清单推进**）：正文编辑的 `TimelineQuickModel` 增量更新优化由阶段 1 的
+      `ChartWorkspace` 单一所有者设计重新评估；**已延后**，在迁移前不得继续扩大全文同步路径。
 
 ### 待处理功能缺口（2026-08-24 GUI 验证新发现，优先于 Step 5）
 
@@ -176,7 +187,7 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
       排队滚动；文档/难度导致的 follow binding cache 失效同时清除 QML navigation cache。
 - [ ] 播放期高位内存平台：当前证据为“跃升后稳定”而非持续泄漏（private memory 约 957 MB 平台，
       第二段播放约 1051–1064 MB）。需继续拆分 QtAVPlayer/D3D11VA 帧池、QML/Qt Quick 和私有堆；
-      不得先验归咎于 preview texture cache。
+      不得先验归咎于 preview texture cache。**已延后。**
 
 详细登记见
 [QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。
@@ -208,18 +219,21 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
   - [x] 高亮规则：共享 v1 `BracketScopeHighlighter` 与 v2 `SimaiSyntaxHighlighter` 的词法规则，
         同步相关 CMake 源文件和仓库指南。
 
-### P3 — 页面接线与产品决策
+### P3 — 页面接线与产品决策（历史缺口；迁入目标架构的 `ExportService`）
 
 - [ ] `QmlExportSession` / `ExportVideoPage.qml` 接入片头音文件名和 `introSoundVolume`，并写入导出 snapshot。
 - [x] 将 v2 根窗口接入 ChartDrop；`QmlUiBootstrap` 注册 root window、安装拖放事件过滤器并创建/同步
       `ChartDropOverlay`，释放或取消时清理 overlay 与 root 绑定。
 - [ ] 手工确认 v2 工具箱的批量上传入口能够打开 `net.batchUpload.open`。
-- [ ] 梳理禁用菜单和按钮：已有后端的接入现有操作，暂缺能力的从界面移除。
-- [ ] 确定全屏预览采用工作区覆盖层或 v1 OS 全屏，并记录最终行为。
+- [x] 缺失 QML 实现的功能保留可发现入口并弹出“暂未更新支持”；已有后端的安全操作继续直接接入，
+      不再从界面移除。具体范围见 `QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md`。
+- [x] 全屏预览采用工作区覆盖层；v1 OS 全屏路径已随 v1 shell 删除。导出工作区中禁用进入全屏，
+      以规避硬件解码驱动问题。
 
-### P4 — 长期页面迁移
+### P4 — 长期页面迁移（已被架构决策替代）
 
-- [ ] 将 Latency 页面迁移为 QML 页面和窄业务 API，移除 v2 编辑区剩余的局部 `WindowContainer`。
+- [ ] 0c 已延后：继续保留 Latency 的 `WindowContainer` 与既有 Widget 页面；不在本阶段将它迁移为 QML
+      或删除。恢复 0c 时再依据产品决策重新立项。
 
 ## 手工回归清单
 
@@ -247,24 +261,45 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 | 标题栏 | `src/app/qml_ui/QmlUiWindowChrome.*` |
 | 工具侧栏 | `src/app/qml_ui/sidebar/ToolsSidebarPage.qml` |
 | 工作区状态 | `layout/MainSplitView.qml` / `preview/PreviewPane.qml` ← `shellController.*` |
-| v1 壳 | `src/app/quick_shell/` |
+| 临时 v2 兼容控制器 | `src/app/quick_shell/QuickShellController.*`（阶段 2 删除） |
 | 开发索引 | `.agents/skills/miacode-dev-guide/references/feature-index.md` |
 
-## 推进顺序
+## 历史清单的遗留风险
 
-原则：**先保证功能完整性，优化类条目一律靠后。**
+- 撤销/重做与 dirty 标记的联动尚未修复；它属于阶段 1 `ChartWorkspace` + `EditorService` 的事务/保存点
+  契约，不能继续依赖隐藏 `PlainCodeEditor` 的实现细节。
+- 切换文档后的 PV 报告未能复现，已延后；保留现有埋点，只有再次复现才重新排查。
+- 播放期高位内存目前证据为平台而非持续泄漏；在阶段 2 迁移 Preview/Timeline 前先做分层取证，不能先验
+  归因于 preview texture cache；**本项已延后**。
+- 阶段 0b（扩展宿主）和 0c（被裁剪页面）均已延后；不得将“延后”误记为已删除或功能不可用。
 
-1. ~~五项验收门槛的原生桌面复验~~ — 2026-08-24 macOS 复验通过；Windows 侧仍未验证。
-2. GUI 验证新发现的功能缺口：撤销栈的置脏联动（参考 v1 算法）。切换文档后 PV 已延后
-   （复现失败）；快捷键体系已完成。
-3. P0 时间轴接入剩余的 Step 2 / Step 3 / Step 6 / Step 7。
-4. P3 页面接线与产品决策。
-5. P4 Latency 页面迁移。
-6. Step 5（正文编辑增量刷新）等优化项。
+## 后续推进顺序（以目标架构为准）
+
+原则：**先消除双所有者与轮询，再补页面；优化类条目一律靠后。**
+
+### 阶段 1 当前证据（2026-08-25）
+
+- `ChartWorkspace` 已覆盖严格完整源码预检、活动难度、单次 revision 发布与 dirty save point；
+  `ChartWorkspaceFileService` 覆盖 BOM/系统编码打开和 `QSaveFile` 原子保存；`AnalysisService` 从同一
+  workspace revision 生成验证、偏移 marker、Muri 和静态引用快照。
+- Release `MiaCode` 构建通过；`qml_document_projection_spec`、`chart_workspace_spec`、
+  `chart_workspace_file_service_spec`、`analysis_service_spec`、`v1_shell_removal_spec` 与
+  `debug_flag_index_spec` 共 6/6 通过。
+- 以上服务仍未接管生产 QML 会话；现有 `QmlDocumentModel` 对 `MainWindow.DocumentBridge` 的依赖是
+  下一步唯一允许收缩的 v1 耦合边界，不得为过渡期新增第二套可写文档。
+
+1. 阶段 1（进行中）：`ChartWorkspace`、`ChartWorkspaceFileService` 与 `AnalysisService` 的 Widgets-free
+   契约规格和实现已落地；完整源码预检已从 `QmlDocumentProjection` 下沉复用，分析服务已产出
+   revision-stamped 的验证/Muri 快照。下一步迁移生产文档事务与分析调度，消除 `MainWindow` 的第二所有者与缓存。
+2. 在上述事务迁移中关闭 undo/redo 的 dirty 标记缺口；不要为当前 QML 历史栈另写一次性补丁。
+3. 阶段 2：建立 `PreviewSession` 与 `TimelineSession`，删除 `QuickShellController` 的轮询和剩余兼容 API。
+4. 阶段 3：将导出、封面、ZIP 和 Net 收敛为 `ExportService` 作业模型；片头音、批量上传和禁用控件在此
+   域解决。
+5. 阶段 4：删除 `MainWindow` 与 `Qt6::Widgets`；原生桌面回归作为每阶段验收，而非替代迁移契约。
 
 ## 更新规则
 
-1. 完成任务后勾选对应条目，并将稳定结果归入“已完成”。
+1. 仅对仍适用于隐藏 `MainWindow` 兼容形态的历史事实更新本文件；新工作写入目标架构的对应阶段。
 2. 架构、入口或跨模块契约变化时，同步更新仓库指南。
-3. 手工回归结果记录在对应条目中。
-4. v1 退役需要单独决策。
+3. 手工回归结果记录在对应条目中，不能由构建或 CTest 替代。
+4. 不得重新引入 v1 shell；如需恢复被裁剪功能，须单独作产品决策。

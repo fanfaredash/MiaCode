@@ -43,6 +43,7 @@ Item {
         onSelectCurrentLineRequested: splitView.selectCurrentLine()
         onValidateRequested: root.validateChart()
         onMetadataRequested: state.openMetadataEditor()
+        onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         onOpenRequested: openFileDialog.open()
         onSaveRequested: root.saveDocument()
         onSaveAsRequested: saveFileDialog.open()
@@ -89,6 +90,11 @@ Item {
     function validateChart() {
         splitView.validateChart()
         root.preferences.bottomPanelVisible = true
+    }
+
+    function showUnavailableFeature(featureName) {
+        unavailableFeatureDialog.featureName = featureName
+        unavailableFeatureDialog.open()
     }
 
     function saveDocument() {
@@ -192,6 +198,7 @@ Item {
             onRedoRequested: root.redo()
             onOpenRequested: openFileDialog.open()
             onSaveRequested: root.saveDocument()
+            onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         }
 
         Item {
@@ -287,6 +294,18 @@ Item {
 
     MessageDialog {
         id: fileErrorDialog
+        buttons: MessageDialog.Ok
+    }
+
+    // These actions remain discoverable while their dedicated QML pages and
+    // business APIs are pending. Keeping the explanation in the visible root
+    // window gives keyboard and pointer users the same immediate feedback.
+    MessageDialog {
+        id: unavailableFeatureDialog
+        property string featureName: ""
+        title: qsTr("暂未更新支持")
+        text: qsTr("%1 尚未更新到 QML 界面。").arg(featureName)
+        informativeText: qsTr("入口会保留，功能完成后将在此处提供。")
         buttons: MessageDialog.Ok
     }
 

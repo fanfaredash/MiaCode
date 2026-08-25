@@ -25,4 +25,5 @@ QtObject {
     signal selectCurrentLineRequested()
     signal validateRequested()
     signal metadataRequested()
+    signal unavailableFeatureRequested(string featureName)
 }

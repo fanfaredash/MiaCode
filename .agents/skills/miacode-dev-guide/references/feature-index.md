@@ -75,10 +75,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   lifetimes are mutually exclusive through QML Loaders — only the visible surface may subscribe to
   `PreviewRuntime`. QML reverse follow retains an accepted navigation-target no-op cache; invalidate it
   with the preview-follow binding cache on document/difficulty changes. Windows caption: `QmlUiWindowChrome`.
-  Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
-- QuickShell (v1, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
-  (`QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`,
-  `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`, `qml/QuickShellMain.qml`).
+  `app/v2/ChartWorkspace` now owns the strict full-source preflight used by
+  `QmlDocumentProjection`, while `AnalysisService` derives aligned validation/marker/Muri values
+  from the same revision; these are the staging contracts for moving production document ownership
+  and analysis out of `MainWindow`. Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
+- QuickShell compatibility: only `src/app/quick_shell/QuickShellController.*` and preview surface
+  policy helpers remain for v2. Stage 0a deleted the v1 bootstrap, native surface host, style bridge,
+  QML shell, `--ui=v1`, and `MIACODE_UI_SKIN`.
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`
@@ -147,6 +150,19 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - Storage: `src/core/chart/document/SimaiDocument.{h,cpp}` (`createEmpty`, `fromText`, `toText`,
   `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`).
+- Staged v2 owner: `src/app/v2/ChartWorkspace.{h,cpp}`. `preflightSource` performs the strict
+  all-difficulty validation currently consumed by `QmlDocumentProjection`; `replaceSource`,
+  `replaceActiveDifficultyChart`, `selectDifficulty`, and `markSaved` establish the future
+  single-owner revision/save-point contract. `src/tools/v2/ChartWorkspaceSpec.cpp` guards the
+  no-intermediate-state, one-notification, and dirty save-point behavior.
+- Staged v2 file flow: `src/app/v2/ChartWorkspaceFileService.{h,cpp}` performs value-returning
+  open/save/save-as around the workspace, preserving BOM/system-codec decode and `QSaveFile` atomic
+  write semantics. `src/tools/v2/ChartWorkspaceFileServiceSpec.cpp` covers open, save, save-as and
+  failure retention without a MainWindow or dialog.
+- Staged v2 analysis: `src/app/v2/AnalysisService.{h,cpp}` turns a `ChartWorkspace` snapshot into
+  one revision-stamped validation, shifted-marker, Muri and static-reference snapshot with no
+  MainWindow dependency. `src/tools/v2/AnalysisServiceSpec.cpp` guards identity propagation across
+  a document edit.
 - Timing metadata: `src/core/chart/document/SimaiTimingMetadata.{h,cpp}` (`buildTimingMetadata`,
   `buildTimingMetadataFromRawText`, `parseInlineTimeSignatureComment`).
 - Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`

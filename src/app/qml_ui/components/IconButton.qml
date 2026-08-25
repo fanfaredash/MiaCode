@@ -17,6 +17,7 @@ AbstractButton {
     implicitWidth: glyph.length > 0 ? 24 : 28
     implicitHeight: glyph.length > 0 ? 24 : 27
     hoverEnabled: true
+    Accessible.name: root.tooltip
 
     readonly property color glyphColor: !root.enabled ? Theme.colors.text.disabled
                                        : (root.active || root.hovered) ? Theme.colors.text.active

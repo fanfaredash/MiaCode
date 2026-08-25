@@ -10,6 +10,7 @@ src/
   app/            App entry + window orchestration ONLY
     main.cpp        GUI boot, CLI export, export-worker entry, startup timing
     mainwindow/     MainWindow + sections/<feature>/ (partial-class slices)
+    v2/             Staged Widgets-free application services (ChartWorkspace, AnalysisService)
     quick_shell/    --quick-shell-beta QML shell + controller/style bridges
     ui/             UiText, UiTheme, ShortcutRegistry, WindowParityMetrics
   audio/          Audio backends + SFX runtime. Nothing else links BASS/miniaudio.
@@ -80,6 +81,17 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
 - `MainWindow` is orchestration, not the home for every feature body. New window features land
   in `src/app/mainwindow/sections/<feature>/`.
 - `SimaiDocument` is the editable storage model for metadata + difficulty text.
+- `app/v2/ChartWorkspace` is the staged sole-owner boundary for the next document migration:
+  it publishes one monotonic revision per accepted transaction, carries active difficulty and
+  save-point dirty state, and rejects strict full-source replacements without publishing an
+  intermediate document. It must stay Widgets-free; `MainWindow` remains the production owner
+  until this boundary is fully adopted.
+- `app/v2/ChartWorkspaceFileService` is the corresponding file boundary: it decodes BOM UTF-8,
+  falls back to the system codec only after an invalid UTF-8 stream, and commits UTF-8 saves through
+  `QSaveFile`. It returns value failures instead of opening a dialog or reaching into MainWindow.
+- `app/v2/AnalysisService` consumes only a `ChartWorkspace` snapshot and domain/timeline helpers;
+  it produces matching strict validation, shifted note markers, Muri and static-reference values
+  stamped with the workspace revision. It must not read `MainWindow` caches or widget state.
 - Parser output is the shared intermediate representation for timeline, preview, Muri analysis,
   and export reconstruction.
 - Runtime SFX and export SFX must use the same note-to-sound semantics (see

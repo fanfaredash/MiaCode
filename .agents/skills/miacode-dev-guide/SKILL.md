@@ -34,7 +34,12 @@ same change.
   `ExportVideoPage.qml`; `QmlEditorPageHost` embeds Latency only. Workspace mode follows
   `QuickShellController`. `QmlDocumentModel` uses the public document bridge and shared
   validation snapshot. Windows title bar: `QmlUiWindowChrome`.
-- QuickShell (**v1**, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
+- Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` owns the first Widgets-free
+  document/revision/save-point contract and strict full-source preflight; `ChartWorkspaceFileService`
+  owns BOM/system-encoding file I/O plus atomic saves; `AnalysisService` derives revision-stamped
+  validation/marker/Muri snapshots. Current MainWindow ownership has not yet migrated).
+- QuickShell compatibility: `src/app/quick_shell/QuickShellController.*` remains temporarily for
+  v2; the v1 shell, `--ui=v1`, and `MIACODE_UI_SKIN` were deleted in stage 0a.
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)
 - Parser + validation: `src/core/chart/parser/` (`SimaiNativeParser*` — include-split TU)
 - Chart transforms / normalization: `src/core/chart/transform/`
