@@ -557,11 +557,11 @@ ceiling. This scale is **UI-only** (in-app timeline panel); it has no video-expo
 
 ### v2 follow-control and cadence contract
 
-- The four independent controls are View Lock, Timeline Sync, Follow Code, and Progress Follow.
-  `QuickShellController::openTimelineFollowSettingsMenu()` owns their accessible native-menu rows;
-  `TimelineQuickStateBridge` mirrors their values; `MainWindow.EditorDisplay.cpp` persists the
-  corresponding `viewport_lock`, `timeline_sync`, `follow_preview`, and `follow_progress` values.
-  Do not replace a saved boolean with a fixed default during either load or save.
+- Follow Code is the user-facing v2 editor control and lives inline in `BottomTabBar.qml`.
+  View Lock and Progress Follow stay enabled; `MainWindow.EditorDisplay.cpp` normalizes their
+  `viewport_lock` and `follow_progress` preferences to `true`. Timeline Sync has no v2 editor
+  control and retains its internal `timeline_sync` state. `TimelineQuickStateBridge` mirrors the
+  runtime values used by the timeline pipeline.
 - `TimelineSection::flushQtPreviewTimelinePosition()` may skip QSG state writes until the bridge is
   ready, but it must continue to call the code-follow tick while the validation or Muri tab is
   foreground. Bottom-tab visibility is a render-routing condition, not an editor-follow gate.

@@ -54,8 +54,6 @@ class QuickShellController : public QObject
     Q_PROPERTY(QString timelineTabLabel READ timelineTabLabel CONSTANT)
     Q_PROPERTY(QString validationTabLabel READ validationTabLabel CONSTANT)
     Q_PROPERTY(QString muriTabLabel READ muriTabLabel CONSTANT)
-    Q_PROPERTY(QString timelineViewLockLabel READ timelineViewLockLabel CONSTANT)
-    Q_PROPERTY(QString timelineSyncLabel READ timelineSyncLabel CONSTANT)
     Q_PROPERTY(QString timelineFollowCodeLabel READ timelineFollowCodeLabel CONSTANT)
 
 public:
@@ -96,8 +94,6 @@ public:
     QString timelineTabLabel() const;
     QString validationTabLabel() const;
     QString muriTabLabel() const;
-    QString timelineViewLockLabel() const;
-    QString timelineSyncLabel() const;
     QString timelineFollowCodeLabel() const;
 
     void setPreviewFullscreen(bool fullscreen);
@@ -129,19 +125,6 @@ public:
     Q_INVOKABLE void timelineUserInteractionStarted();
     Q_INVOKABLE void noteTimelineSurfaceReady();
     Q_INVOKABLE void timelineFollowPreviewToggled(bool enabled);
-    Q_INVOKABLE void timelineViewportLockToggled(bool enabled);
-    Q_INVOKABLE void timelineFollowProgressToggled(bool enabled);
-    Q_INVOKABLE void timelineSyncToggled(bool enabled);
-    // Pops a Qt Widgets QMenu containing the timeline-follow toggles
-    // (View Lock / Timeline Sync / Follow Code) anchored so its
-    // bottom-right sits just above the gear button's top-right. The
-    // QMenu rides the OS popup path used by every other native menu
-    // in the app, so it draws above WindowContainer-embedded
-    // workspace / preview windows without the focus quirks of QtQuick
-    // Popup.Window.
-    Q_INVOKABLE void openTimelineFollowSettingsMenu(int gearGlobalRight, int gearGlobalTop);
-    Q_INVOKABLE void openTimelineBrightnessMenu(int gearGlobalRight, int gearGlobalTop);
-    Q_INVOKABLE void openTimelineZoomMenu(int controlGlobalLeft, int controlGlobalTop, int controlWidth);
     Q_INVOKABLE bool stepPreviewBySeconds(double deltaSeconds, bool centerView = true);
     Q_INVOKABLE void beginPreviewHeldSeek(int direction, int key);
     Q_INVOKABLE void stopPreviewHeldSeek(int key = 0);

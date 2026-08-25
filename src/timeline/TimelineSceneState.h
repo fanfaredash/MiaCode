@@ -166,37 +166,6 @@ struct TimelineSceneState {
     bool hasDragCenterLine = false;
     TimelineSceneLine dragCenterLine;
 
-    // Phase 9d-native — header zoom-control visual. Emitted by the
-    // builder and drawn by TimelineQuickHeaderLayer into the QSG scene.
-    // The matching QML ToolButton in TimelineTabSurface.qml is kept
-    // invisible and handles input only, so the visual and the hit area
-    // stay in one place each.
-    bool hasHeaderControls = false;
-    TimelineSceneRect zoomButtonBg;
-    QVector<TimelineSceneRect> zoomButtonOverlayRects;
-    TimelineSceneRect zoomButtonBorder;        // 1-px stroke as a thin rect set
-    QVector<TimelineSceneLine> zoomButtonInteriorLines;
-    TimelineSceneTextLabel zoomButtonLabel;
-    QVector<TimelineSceneTriangle> zoomButtonGlyphTriangles;
-    TimelineSceneRect settingsButtonBg;
-    QVector<TimelineSceneRect> settingsButtonGlyphRects;
-    TimelineSceneRect settingsButtonBorder;
-    QVector<TimelineSceneLine> settingsButtonInteriorLines;
-    TimelineSceneRect followCheckBg;           // Phase 9d-native — opaque
-                                               // backdrop spanning indicator
-                                               // + gap + text so line markers
-                                               // don't leak through the text
-                                               // glyph gaps. No border.
-    TimelineSceneRect followCheckIndicator;    // checkbox box
-    TimelineSceneRect followCheckIndicatorBorder;
-    bool followCheckChecked = false;
-    TimelineSceneRect followCheckMark;         // tick mark when checked
-    TimelineSceneTextLabel followCheckLabel;
-    TimelineSceneRect progressFollowCheckBg;
-    TimelineSceneRect progressFollowCheckIndicator;
-    TimelineSceneRect progressFollowCheckIndicatorBorder;
-    bool progressFollowCheckChecked = true;
-    TimelineSceneTextLabel progressFollowCheckLabel;
 };
 
 }  // namespace miacode::timeline

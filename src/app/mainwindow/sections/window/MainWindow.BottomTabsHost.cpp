@@ -285,7 +285,7 @@ void MainWindow::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
         return;
     }
     // Issue #2 fix — in QuickShell mode the legacy QTabWidget is hidden
-    // (the QML BottomTabsQuickHost renders the tab bar instead) and the
+    // (the QML BottomTabBar renders the tab bar instead) and the
     // legacy widget's `isTabVisible(index)` may report false even when
     // the QML controller reports the tab as user-visible. The early
     // return on `!bottomTabsTabVisible(tabId)` then drops every click

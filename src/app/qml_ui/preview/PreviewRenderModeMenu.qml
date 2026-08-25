@@ -27,8 +27,8 @@ Popup {
             return
         parent = Overlay.overlay
         root.anchorItem = anchor
+        reposition()
         open()
-        Qt.callLater(root.reposition)
     }
 
     function reposition() {

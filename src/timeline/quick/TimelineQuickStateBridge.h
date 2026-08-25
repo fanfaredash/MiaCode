@@ -8,6 +8,7 @@
 #include <QSize>
 #include <QString>
 #include <QStringList>
+#include <QVariantList>
 #include <QVector>
 
 #include <memory>
@@ -23,11 +24,9 @@ class TimelineView;
 class TimelineQuickStateBridge : public QObject
 {
     Q_OBJECT
-    // QML-bindable mirrors of the follow flags. Used by
-    // BottomTabsQuickHost.qml's tab-strip checkboxes (the controls
-    // that replaced the cramped in-timeline visuals); the legacy QSG
-    // header rendering of the same toggles has been removed so we
-    // no longer have two sources of truth for the on-screen state.
+    // QML-bindable mirrors of the follow flags. BottomTabBar.qml exposes
+    // Follow Code through AppCheckBox; fixed follow states remain
+    // available to the timeline pipeline through this bridge.
     Q_PROPERTY(bool followPreviewEnabled READ followPreviewEnabled
                WRITE setFollowPreviewEnabled NOTIFY followPreviewEnabledChanged)
     Q_PROPERTY(bool viewportLockEnabled READ viewportLockEnabled
@@ -40,6 +39,8 @@ class TimelineQuickStateBridge : public QObject
                WRITE setWaveformBrightness NOTIFY waveformBrightnessChanged)
     Q_PROPERTY(double measureLineBrightness READ measureLineBrightness
                WRITE setMeasureLineBrightness NOTIFY measureLineBrightnessChanged)
+    Q_PROPERTY(double zoomScale READ zoomScale NOTIFY zoomScaleChanged)
+    Q_PROPERTY(QVariantList zoomPresetValues READ zoomPresetValues CONSTANT)
 
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
@@ -68,6 +69,8 @@ public:
     double zoomScale() const;
     void setZoomScale(double scale);
     QVector<double> zoomPresets() const;
+    QVariantList zoomPresetValues() const;
+    Q_INVOKABLE void applyZoomPreset(double scale);
     QStringList zoomInWheelShortcuts() const;
     QStringList zoomOutWheelShortcuts() const;
     void setZoomWheelShortcuts(const QStringList& zoomInShortcuts, const QStringList& zoomOutShortcuts);

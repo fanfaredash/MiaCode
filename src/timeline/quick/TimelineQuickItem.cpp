@@ -1111,48 +1111,6 @@ void TimelineQuickItem::setZoomScale(qreal scale)
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
 }
 
-void TimelineQuickItem::setZoomControlPressedPart(int part)
-{
-    const int normalized = qBound(-2, part, 2);
-    if (zoomControlPressedPart_ == normalized) {
-        return;
-    }
-    zoomControlPressedPart_ = normalized;
-    ++appearanceRevision_;
-    update();
-}
-
-void TimelineQuickItem::setZoomControlHoveredPart(int part)
-{
-    const int normalized = qBound(-2, part, 2);
-    if (zoomControlHoveredPart_ == normalized) {
-        return;
-    }
-    zoomControlHoveredPart_ = normalized;
-    ++appearanceRevision_;
-    update();
-}
-
-void TimelineQuickItem::setSettingsControlHovered(bool hovered)
-{
-    if (settingsControlHovered_ == hovered) {
-        return;
-    }
-    settingsControlHovered_ = hovered;
-    ++appearanceRevision_;
-    update();
-}
-
-void TimelineQuickItem::setSettingsControlPressed(bool pressed)
-{
-    if (settingsControlPressed_ == pressed) {
-        return;
-    }
-    settingsControlPressed_ = pressed;
-    ++appearanceRevision_;
-    update();
-}
-
 void TimelineQuickItem::refreshTheme()
 {
     cachedThemeSignature_ = 0;
@@ -1170,16 +1128,6 @@ void TimelineQuickItem::syncSourceState()
     const bool nextViewportLock = stateBridge_ != nullptr && stateBridge_->viewportLockEnabled();
     const bool nextProgressFollow = stateBridge_ == nullptr || stateBridge_->followProgressEnabled();
     const int nextTimelineTop = stateBridge_ != nullptr ? stateBridge_->timelineTop() : 0;
-    // Header-control visuals (zoom% text + follow-check tick + colour)
-    // are emitted in TimelineQuickHeaderLayer's staticRoot rebuild,
-    // which is gated on `appearanceChanged || gridRevision changed`.
-    // Toggling followPreview / zoom triggers a scene-state rebuild
-    // (cachedSceneBuildFollowPreviewEnabled_ check at the rebuildNeeded
-    // gate) but DOESN'T bump appearanceRevision_, so the QSG layer
-    // would keep rendering the previous control state until some
-    // unrelated theme/DPR/grid event happened to bump it. Bump it
-    // explicitly here so the visual reflects the new state on the
-    // next paint pass.
     bool appearanceBumpNeeded = false;
     if (!qFuzzyCompare(cachedZoomScale_ + 1.0, nextZoom + 1.0)) {
         cachedZoomScale_ = nextZoom;
@@ -1269,12 +1217,6 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         || cachedSceneBuildHeaderRevision_ != stateBridge_->headerRevision()
         || cachedSceneBuildNotesRevision_ != stateBridge_->notesRevision()
         || cachedSceneBuildOverlayRevision_ != stateBridge_->overlayRevision()
-        // Phase 9d-native polish — header-control state. Without these
-        // the native zoom-button text + follow-check tick only update
-        // when some other revision happens to bump (e.g., a playback
-        // tick), making the click feel unresponsive.
-        || cachedSceneBuildFollowPreviewEnabled_ != stateBridge_->followPreviewEnabled()
-        || cachedSceneBuildFollowProgressEnabled_ != stateBridge_->followProgressEnabled()
         || !qFuzzyCompare(cachedSceneBuildZoomScale_ + 1.0,
                           stateBridge_->zoomScale() + 1.0)
         || !qFuzzyCompare(cachedSceneBuildContentScale_ + 1.0,
@@ -1316,14 +1258,6 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.showSlideTracks = stateBridge_->showSlideTracks();
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
-    // Phase 9d-native — header-control state for the zoom button,
-    // emitted by the builder and drawn by TimelineQuickHeaderLayer.
-    request.zoomControlPressedPart = zoomControlPressedPart_;
-    request.zoomControlHoveredPart = zoomControlHoveredPart_;
-    request.settingsControlHovered = settingsControlHovered_;
-    request.settingsControlPressed = settingsControlPressed_;
-    request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
-    request.followProgressEnabled = stateBridge_->followProgressEnabled();
     request.appearanceRevision = appearanceRevision_;
     request.layoutRevision = stateBridge_->layoutRevision();
     request.gridRevision = stateBridge_->gridRevision();
@@ -1348,10 +1282,6 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildHeaderRevision_ = stateBridge_->headerRevision();
         cachedSceneBuildNotesRevision_ = stateBridge_->notesRevision();
         cachedSceneBuildOverlayRevision_ = stateBridge_->overlayRevision();
-        // Phase 9d-native polish — record header-control state so the
-        // next call's rebuildNeeded check can detect a change.
-        cachedSceneBuildFollowPreviewEnabled_ = stateBridge_->followPreviewEnabled();
-        cachedSceneBuildFollowProgressEnabled_ = stateBridge_->followProgressEnabled();
         cachedSceneBuildZoomScale_ = stateBridge_->zoomScale();
         cachedSceneBuildContentScale_ = stateBridge_->contentScale();
     }

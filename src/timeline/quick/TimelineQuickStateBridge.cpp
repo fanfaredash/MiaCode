@@ -14,6 +14,8 @@
 #include "timeline/TimelineSceneStateBuilder.h"
 #include "timeline/TimelineView.h"
 
+#include <QVariant>
+
 namespace {
 
 QVector<double> makeTimelineZoomPresets()
@@ -400,6 +402,21 @@ double TimelineQuickStateBridge::zoomScale() const
 QVector<double> TimelineQuickStateBridge::zoomPresets() const
 {
     return zoomPresets_;
+}
+
+QVariantList TimelineQuickStateBridge::zoomPresetValues() const
+{
+    QVariantList values;
+    values.reserve(zoomPresets_.size());
+    for (double scale : zoomPresets_) {
+        values.append(scale);
+    }
+    return values;
+}
+
+void TimelineQuickStateBridge::applyZoomPreset(double scale)
+{
+    setZoomScaleAnchored(scale, viewportCenterSecond());
 }
 
 QStringList TimelineQuickStateBridge::zoomInWheelShortcuts() const

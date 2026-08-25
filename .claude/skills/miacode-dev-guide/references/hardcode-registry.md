@@ -31,7 +31,7 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   circle (oversized → two-hand press). Read in `MuriAnalyzer.cpp` `buildRuntimeHandActions`, so it
   feeds BOTH the slide/wifi judge and the multi-touch diagnostics.
 - `TimelineThemeConfig.h` — timeline-scene theme colors for the Quick timeline path
-  (e.g. editor-cursor header marker `QColor(239,68,68,230)`); also the **tiered grid-line-height
+  (e.g. editor-cursor header marker follows `timelineCursor` at alpha 230, v2 dark `#F29A83`); also the **tiered grid-line-height
   feature**: toggle `kTimelineTieredGridLineHeightsEnabled` (default `1`; `0` = legacy full-height)
   + per-tier fractions `kTimelineGridHeightFraction{Measure 9/9, Subdivision 8/9, Comma 7/9}` +
   resolver `timelineGridLineHeightFraction()`. Lines anchor at the top of the content area and

@@ -70,10 +70,6 @@ public:
     Q_INVOKABLE void cycleZoomPreset();
     Q_INVOKABLE void stepZoomPreset(int deltaSteps);
     Q_INVOKABLE void setZoomScale(qreal scale);
-    Q_INVOKABLE void setZoomControlPressedPart(int part);
-    Q_INVOKABLE void setZoomControlHoveredPart(int part);
-    Q_INVOKABLE void setSettingsControlHovered(bool hovered);
-    Q_INVOKABLE void setSettingsControlPressed(bool pressed);
     Q_INVOKABLE void refreshTheme();
 
 signals:
@@ -135,10 +131,6 @@ private:
     int headerRightLimit_ = 0;
     int headerMarkerLeftLimit_ = 0;
     int headerMarkerRightLimit_ = 0;
-    int zoomControlPressedPart_ = 0;
-    int zoomControlHoveredPart_ = 0;
-    bool settingsControlHovered_ = false;
-    bool settingsControlPressed_ = false;
     qreal cachedZoomScale_ = 0.5;
     bool cachedFollowPreviewEnabled_ = false;
     bool cachedViewportLockEnabled_ = false;
@@ -168,12 +160,6 @@ private:
     // INT_MIN is the "never built" sentinel so the first call always
     // rebuilds.
     mutable int cachedScrollBucket_ = INT_MIN;
-    // Phase 9d-native polish — header-control state participates in
-    // the cache key so the native zoom-button text + follow-check tick
-    // update on click rather than waiting for a playback tick to bump
-    // an unrelated revision.
-    mutable bool cachedSceneBuildFollowPreviewEnabled_ = false;
-    mutable bool cachedSceneBuildFollowProgressEnabled_ = true;
     mutable double cachedSceneBuildZoomScale_ = -1.0;  // sentinel: forces first build
     mutable double cachedSceneBuildContentScale_ = -1.0;
     mutable int cachedSceneBuildHeaderLeftLimit_ = 0;

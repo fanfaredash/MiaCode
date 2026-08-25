@@ -119,6 +119,11 @@ struct TimelineThemeColors {
     QColor entryMarker;
     QColor cursorMarker;
     QColor muriMarker;
+    QColor controlFill;
+    QColor controlBorder;
+    QColor controlHover;
+    QColor controlPressed;
+    QColor controlAccent;
     QColor noteNormal;
     QColor noteEach;
     QColor noteBreak;
@@ -158,8 +163,13 @@ inline TimelineThemeColors timelineThemeColors()
         c.timelinePlayhead,
         c.timelineCursor,
         c.timelinePlayhead,
-        QColor(239, 68, 68, 230),
+        QColor(c.timelineCursor.red(), c.timelineCursor.green(), c.timelineCursor.blue(), 230),
         QColor(255, 146, 43, 230),
+        c.dark ? QColor("#202122") : QColor("#F3F4F6"),
+        c.dark ? QColor("#333536") : c.timelineBorder,
+        c.dark ? QColor("#2A2B2C") : QColor("#EEF5FF"),
+        c.dark ? QColor("#333536") : c.accentPressed,
+        c.dark ? QColor("#3994BC") : c.accent,
         c.accent,
         QColor(255, 214, 64),
         QColor(255, 146, 43),

@@ -256,27 +256,25 @@ const UiTheme::Colors& darkColors()
         QColor("#70849A"),                  // scrollHandleHover
         QColor("#D8E2EE"),                  // iconPrimary
         QColor("#95A4B7"),                  // iconSecondary
-        QColor("#1A2027"),                  // timelineWindow
-        QColor("#1D232B"),                  // timelineHeader
-        QColor("#171D24"),                  // timelineSidebar
-        QColor("#202833"),                  // timelineBase
-        QColor("#4A5C70"),                  // timelineBorder
-        QColor("#7FA5D8"),                  // timelineGridMajor
-        QColor(120, 152, 198, 140),         // timelineGridSubdivision
-        QColor(95, 120, 155, 80),           // timelineGridMinor
-        QColor(34, 42, 52, 210),            // timelineLaneEven
-        QColor(29, 36, 45, 210),            // timelineLaneOdd
-        QColor("#C8D5E5"),                  // timelineLabel
-        QColor("#8091A5"),                  // timelineAxis
-        // Waveform renders as a translucent filled silhouette ABOVE the grid.
-        // Aquamarine-mint family (matches the light theme's waveform tint); the
-        // blue grid lines show through its alpha. Distinct from the warm
-        // playhead/cursor markers. Alpha 160 is the base for the 1.0x
-        // brightness setting — the brightness slider scales this alpha
-        // (opacity), keeping the hue fixed (see adjustedTimelineWaveformColor).
-        QColor(95, 214, 180, 160),          // timelineWaveStroke
+        QColor("#191A1B"),                  // timelineWindow
+        QColor("#191A1B"),                  // timelineHeader
+        QColor("#191A1B"),                  // timelineSidebar
+        QColor("#121314"),                  // timelineBase
+        QColor("#2A2B2C"),                  // timelineBorder
+        QColor("#6E6E6E"),                  // timelineGridMajor
+        QColor(42, 43, 44, 140),            // timelineGridSubdivision
+        QColor(42, 43, 44, 70),             // timelineGridMinor
+        QColor(255, 255, 255, 11),          // timelineLaneEven
+        QColor(255, 255, 255, 5),           // timelineLaneOdd
+        QColor("#AEAEAE"),                  // timelineLabel
+        QColor("#6E6E6E"),                  // timelineAxis
+        // Waveform is a translucent fill above the grid. Hue matches v2
+        // accent (#3994BC). Alpha 144 is the 1.0x brightness base; the
+        // shipped 0.5x default therefore reads at ~72, so the silhouette
+        // stays quieter than the old mint fill. See adjustedTimelineWaveformColor.
+        QColor(57, 148, 188, 144),          // timelineWaveStroke
         QColor("#FFC90E"),                  // timelinePlayhead
-        QColor("#C96B5B"),                  // timelineCursor
+        QColor("#F29A83"),                  // timelineCursor
         QColor("#FF9B4A"),                  // timelineLimit
     };
     return theme;

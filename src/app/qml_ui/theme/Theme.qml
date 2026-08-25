@@ -56,6 +56,7 @@ QtObject {
     readonly property font codeFont: preferences ? preferences.codeFont : Qt.font({})
     readonly property int uiFontSize: preferences ? preferences.fontSize : 13
     readonly property int secondaryFontSize: uiFontSize - 1
+    readonly property int captionFontSize: uiFontSize - 3
 
     // Geometry aligned with v1 UiTheme dialog* sheets (colors stay local).
     readonly property int controlRadius: 6

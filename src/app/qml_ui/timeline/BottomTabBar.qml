@@ -45,36 +45,18 @@ Rectangle {
 
         Item { Layout.fillWidth: true }
 
-        CheckBox {
+        AppCheckBox {
             id: followCode
 
-            Layout.fillHeight: true
+            Layout.alignment: Qt.AlignVCenter
             Layout.rightMargin: 8
             visible: root.shellController.bottomTabsCurrentTabId === "timeline"
-            text: root.width < 420 ? "" : root.shellController.timelineFollowCodeLabel
+            text: root.shellController.timelineFollowCodeLabel
             checked: root.shellController.timelineStateBridge
                 ? root.shellController.timelineStateBridge.followPreviewEnabled
                 : false
-            focusPolicy: Qt.TabFocus
-            Accessible.name: root.shellController.timelineFollowCodeLabel
             Accessible.description: qsTr("跟随当前谱面代码位置")
             onClicked: root.shellController.timelineFollowPreviewToggled(checked)
-        }
-
-        IconButton {
-            Layout.alignment: Qt.AlignVCenter
-            Layout.rightMargin: 6
-            visible: root.shellController.bottomTabsCurrentTabId === "timeline"
-            iconSource: Qt.resolvedUrl("../resources/icons/more.svg")
-            tooltip: qsTr("时间轴跟随设置")
-            focusPolicy: Qt.TabFocus
-            Accessible.name: qsTr("时间轴跟随设置")
-            Accessible.description: qsTr("设置视图锁定和时间轴同步")
-            onClicked: {
-                const point = mapToGlobal(width, 0)
-                root.shellController.openTimelineFollowSettingsMenu(
-                    Math.round(point.x), Math.round(point.y))
-        }
         }
     }
 }
