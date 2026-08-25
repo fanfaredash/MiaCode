@@ -353,7 +353,20 @@ Task 2 把 `if (uiSkin == UiSkin::QmlUiV2) {` 换成了裸 `{`。这个作用域
         {
 ```
 
-- [ ] **Step 7: 构建**
+- [ ] **Step 7: 修好因删除而失效的 spec**
+
+`src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp` 把 `QuickShellBootstrap.cpp` 当作
+**文本**读取来做契约断言。文件删除后它读到空串并失败——而且这类耦合**编译期不可见**，只在运行
+spec 时暴露。把它改为读取存活的 GUI 引导 `src/app/qml_ui/QmlUiBootstrap.cpp`：四个 token 条件
+（含 `ui/ChartDropOverlay.h`、含 `syncChartDropOverlay`、不含 `PreviewDCompSurface`、
+不含 `createInProcessPreviewSurface`）在新文件上同样成立，守卫语义得以保留。
+
+> **教训（已对本阶段其余部分做过排查）：** 删除源文件前，先找出把它当文本读的 spec：
+> `grep -rln "<被删文件名>" src/tools/`。本阶段其余的 quick_shell 耦合都是对**保留**头文件的
+> `#include`（`QuickShellKeyboardActivation.h`、`QuickShellPopupPosition.h`）或注释，编译期可见，
+> 因此 Task 4 不存在同类隐藏断裂。
+
+- [ ] **Step 8: 构建**
 
 ```bash
 cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCode --parallel 4
@@ -361,7 +374,7 @@ cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCod
 
 预期：编译通过。
 
-- [ ] **Step 8: 提交**
+- [ ] **Step 9: 提交**
 
 ```bash
 git add -A
@@ -369,6 +382,14 @@ git commit -m "refactor(shell): delete the v1 bootstrap and native surface re-ho
 ```
 
 ---
+
+### Task 3 结束时的守卫状态（勿误判）
+
+`v1_shell_removal_spec` 此时仍有 **3 条** `[FAIL]`，不是 2 条：`resources/quick_shell_qml.qrc`
+同时出现在"v1 shell sources are gone"的文件清单与"the build no longer references removed v1 shell
+sources"的 token 清单里，而它归 Task 4 删除。因此这两条断言都要等 Task 4 才转绿，加上
+"the v1 shell QML directory is gone" 共 3 条。Task 3 应转绿的是另外三条：
+"v1 shell sources are gone" 之外的 `--ui=v1`、`surfaceHost` 与 `main.cpp` 入口断言。
 
 ## Task 4: 删除 v1 外壳 QML
 
@@ -523,6 +544,9 @@ git commit -m "docs(v2): record stage 0a completion"
 
 ## 不在本计划范围内
 
-- `QuickShellController` 本身的退役（阶段 2）。
+- `QuickShellController` 本身的退役（阶段 2）。届时一并清理 Task 3 之后变成死代码的两处：
+  `QuickShellContracts.h` 里的 `QuickShellSurfaceBundle`（全仓零使用）与
+  `QuickShellStateSource::shellPreviewCompositeWindow()`（无调用方，实现一直下探到
+  `MainWindow::WindowSection`）。它们位于本阶段标记为"保留"的文件中，故不在此处动。
 - 扩展宿主删除、被舍弃的三组页面删除——它们是阶段 0 的另外两个独立单元，各自单独成计划。
 - 任何 `ChartWorkspace` 相关工作（阶段 1）。
