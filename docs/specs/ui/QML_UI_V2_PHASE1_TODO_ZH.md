@@ -164,9 +164,10 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 ### 待处理功能缺口（2026-08-24 GUI 验证新发现，优先于 Step 5）
 
-- [ ] **P0 — 文本控制键与 undo/save-point 迁移（下一项）**：
-      1. 修复 `Backspace` / `Delete` 的控制字符不能进入 `SimaiTextEditPolicy` 普通文本插入路径；
-         保留空括号成对删除，普通删除交给 `TextArea` 原生行为，并补 `\b` / `\x7f` 的真实 QML 键盘回归。
+- [ ] **P0 — 文本控制键与 undo/save-point 迁移**：
+      1. **已完成：** 修复 `Backspace` / `Delete` 的控制字符不能进入 `SimaiTextEditPolicy` 普通文本插入路径；
+         保留空括号成对删除，普通删除交给 `TextArea` 原生行为，并以真实 `TextArea` + `QKeyEvent`
+         回归覆盖 `\b` / `\x7f`。
       2. 以 v1 的“undo save anchor”语义为参照，但由 `ChartWorkspace` 的完整文档 save point 作为唯一
          dirty 真相；不得只给 `QmlEditorController` 增加局部 dirty 布尔值。
       3. 迁移 `QmlDocumentModel` 的正文、元数据、难度和文件操作到 `ChartWorkspace` /

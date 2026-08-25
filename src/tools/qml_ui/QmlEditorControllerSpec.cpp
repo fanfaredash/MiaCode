@@ -225,6 +225,87 @@ bool verifyCommandModifiedKeysNeverTypeText(QTextStream& out, int* failed)
                       && editor->property("text").toString() == QStringLiteral("abc"),
                   QStringLiteral("the undo shortcut still reaches the QML undo route"), out, failed);
 }
+// Backspace and Delete arrive from a real QML TextArea with control characters
+// in QKeyEvent::text(). The smart policy may consume empty-pair Backspace, but
+// ordinary deletion must remain unaccepted so QQuickTextControl performs it.
+bool verifyDeletionControlCharactersUseNativeTextArea(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    miacode::qml_ui::QmlEditorController controller;
+    engine.rootContext()->setContextProperty(QStringLiteral("editorController"), &controller);
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+        import QtQuick
+        import QtQuick.Controls
+
+        TextArea {
+            id: editor
+            objectName: "editor"
+            focus: true
+            property int policyEditCount: 0
+            function applyEditorTransaction(transaction) {
+                if (!transaction.consumed)
+                    return false
+                if (transaction.hasEdit) {
+                    editor.remove(transaction.replacementStart, transaction.replacementEnd)
+                    editor.insert(transaction.replacementStart, transaction.replacementText)
+                    editor.select(transaction.anchor, transaction.position)
+                    policyEditCount += 1
+                }
+                return true
+            }
+            Keys.priority: Keys.BeforeItem
+            Keys.onPressed: function(event) {
+                const transaction = editorController.processKeyForQml(
+                    editor.text, editor.selectionStart, editor.selectionEnd,
+                    event.text, event.key, event.modifiers)
+                if (editor.applyEditorTransaction(transaction))
+                    event.accepted = true
+            }
+        }
+    )QML", QUrl(QStringLiteral("qrc:/QmlEditorDeletionSpec.qml")));
+    if (!expect(component.isReady(), QStringLiteral("QML deletion-key harness compiles"), out, failed)) {
+        for (const QQmlError& error : component.errors()) out << error.toString() << '\n';
+        return false;
+    }
+    std::unique_ptr<QObject> root(component.create());
+    auto* editor = qobject_cast<QQuickItem*>(root.get());
+    if (!expect(editor != nullptr, QStringLiteral("QML deletion-key harness creates a TextArea"),
+                out, failed)) {
+        return false;
+    }
+    editor->setFocus(true);
+
+    const auto resetEditor = [editor, root = root.get()](const QString& text, int caret) {
+        root->setProperty("text", text);
+        root->setProperty("policyEditCount", 0);
+        return QMetaObject::invokeMethod(editor, "select", Q_ARG(int, caret), Q_ARG(int, caret));
+    };
+    const auto sendKey = [editor](int key, const QString& text) {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier, text);
+        QCoreApplication::sendEvent(editor, &event);
+        QCoreApplication::processEvents();
+    };
+
+    bool selectionReady = resetEditor(QStringLiteral("ab"), 1);
+    sendKey(Qt::Key_Backspace, QStringLiteral("\b"));
+    const bool nativeBackspace = root->property("text").toString() == QStringLiteral("b")
+        && root->property("policyEditCount").toInt() == 0;
+
+    selectionReady = resetEditor(QStringLiteral("ab"), 1) && selectionReady;
+    sendKey(Qt::Key_Delete, QStringLiteral("\x7f"));
+    const bool nativeDelete = root->property("text").toString() == QStringLiteral("a")
+        && root->property("policyEditCount").toInt() == 0;
+
+    selectionReady = resetEditor(QStringLiteral("[]"), 1) && selectionReady;
+    sendKey(Qt::Key_Backspace, QStringLiteral("\b"));
+    const bool pairedBackspace = root->property("text").toString().isEmpty()
+        && root->property("policyEditCount").toInt() == 1;
+
+    return expect(selectionReady && nativeBackspace && nativeDelete && pairedBackspace,
+                  QStringLiteral("real QML Backspace/Delete keep native deletion while empty pairs delete together"),
+                  out, failed);
+}
 // Loads the real CompletionPopup.qml. Before this contract the delegate asked
 // for a bare `index` next to a required modelData, which QQmlDelegateModel
 // answers with "index is not defined", so no candidate ever highlighted and
@@ -740,6 +821,7 @@ int main(int argc, char** argv)
         "MiaCode.UI", 1, 0, "QmlEditorInputBridge");
     verifyQmlTextAreaKeyRouting(out, &failed);
     verifyCommandModifiedKeysNeverTypeText(out, &failed);
+    verifyDeletionControlCharactersUseNativeTextArea(out, &failed);
     verifyReentrantImeCommitIsAppliedOnce(out, &failed);
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
     verifyEditorPointerRoutes(out, &failed);

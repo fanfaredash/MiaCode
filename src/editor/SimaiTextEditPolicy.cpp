@@ -131,6 +131,12 @@ SimaiTextEditResult applySimaiTextEditPolicy(const SimaiTextEditRequest& request
         }
     }
 
+    // QKeyEvent::text() carries the control characters '\b' and '\x7f' for
+    // Backspace and Delete. They are commands, not insertable text: after the
+    // empty-pair special case above declines the event, the owning text
+    // control must perform its native selection/character/word deletion.
+    if (request.key == Qt::Key_Backspace || request.key == Qt::Key_Delete) return result;
+
     // In overwrite mode QTextEdit owns character replacement. Smart typing
     // must not consume the event or synthesize a regular insertion here.
     if (request.overwriteMode) return result;
