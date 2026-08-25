@@ -6,6 +6,7 @@ Rectangle {
 
     property string title
     property bool showMore: false
+    default property alias trailing: trailingRow.data
 
     implicitHeight: 34
     color: Theme.colors.background.surface
@@ -20,11 +21,19 @@ Rectangle {
         font.pixelSize: Theme.uiFontSize
     }
 
+    Row {
+        id: trailingRow
+        anchors.right: parent.right
+        anchors.rightMargin: 10
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 5
+    }
+
     Text {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.showMore
+        visible: root.showMore && trailingRow.children.length === 0
         text: "..."
         color: Theme.colors.text.secondary
         font.family: Theme.uiFont

@@ -4,6 +4,8 @@
 #include <QStringList>
 #include <QVariantList>
 
+#include "common/MuriRenderOptions.h"
+
 class MainWindow;
 class QuickShellController;
 
@@ -19,6 +21,8 @@ class QmlPreviewModel final : public QObject
     Q_PROPERTY(bool playing READ playing WRITE setPlaying NOTIFY playingChanged)
     Q_PROPERTY(QString renderMode READ renderMode NOTIFY renderModeChanged)
     Q_PROPERTY(QString renderModeLabel READ renderModeLabel NOTIFY renderModeChanged)
+    Q_PROPERTY(bool muriCheckEnabled READ muriCheckEnabled NOTIFY renderModeChanged)
+    Q_PROPERTY(bool smoothStarErase READ smoothStarErase NOTIFY renderModeChanged)
     Q_PROPERTY(QVariantList statistics READ statistics NOTIFY statisticsChanged)
     Q_PROPERTY(QObject* runtime READ runtime CONSTANT)
     Q_PROPERTY(QObject* mediaHost READ mediaHost CONSTANT)
@@ -33,6 +37,8 @@ public:
     bool playing() const;
     QString renderMode() const;
     QString renderModeLabel() const;
+    bool muriCheckEnabled() const;
+    bool smoothStarErase() const;
     QVariantList statistics() const;
     QString currentSkinDirectory() const;
     QObject* runtime() const;
@@ -42,6 +48,8 @@ public:
     void setRate(double value);
     void setPlaying(bool value);
     Q_INVOKABLE void toggleRenderMode();
+    Q_INVOKABLE void setMuriCheckEnabled(bool enabled);
+    Q_INVOKABLE void setSmoothStarErase(bool enabled);
     Q_INVOKABLE void stop();
     Q_INVOKABLE void beginScrub();
     Q_INVOKABLE void updateScrub(double second);
@@ -71,6 +79,9 @@ private:
     bool playing_ = false;
     QString renderMode_;
     QString renderModeLabel_;
+    RenderMode lastRegularMode_ = RenderMode::Native;
+    bool muriCheckEnabled_ = false;
+    bool smoothStarErase_ = true;
     QStringList statisticsTexts_;
     QString skinDirectory_;
     QVariantList statistics_;

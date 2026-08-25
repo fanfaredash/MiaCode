@@ -702,6 +702,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/timeline/BottomPanel.qml
     src/app/qml_ui/timeline/BottomTabBar.qml
     src/app/qml_ui/preview/PreviewPane.qml
+    src/app/qml_ui/preview/PreviewRenderModeMenu.qml
     src/app/qml_ui/preview/PreviewTransport.qml
     src/app/qml_ui/preview/NoteStatistics.qml
 )

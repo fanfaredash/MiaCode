@@ -12,7 +12,6 @@ Rectangle {
     signal saveRequested()
     signal undoRequested()
     signal redoRequested()
-    signal toggleRenderModeRequested()
     signal unavailableFeatureRequested(string featureName)
 
     property bool sidebarActive: false
@@ -20,7 +19,6 @@ Rectangle {
     property bool previewActive: false
     property bool canUndo: false
     property bool canRedo: false
-    property string renderModeLabel
 
     implicitHeight: 36
     color: Theme.colors.background.surface
@@ -72,31 +70,6 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 5
 
-        AbstractButton {
-            id: renderModeButton
-            implicitHeight: 27
-            implicitWidth: renderModeLabelText.implicitWidth + 16
-            hoverEnabled: true
-            onClicked: root.toggleRenderModeRequested()
-
-            contentItem: Text {
-                id: renderModeLabelText
-                text: root.renderModeLabel
-                color: !renderModeButton.enabled ? Theme.colors.text.disabled
-                     : (renderModeButton.hovered || renderModeButton.down) ? Theme.colors.text.active
-                     : Theme.colors.text.secondary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.uiFontSize
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            background: HoverChrome {
-                hovered: renderModeButton.hovered
-                pressed: renderModeButton.down
-                tone: "icon"
-            }
-        }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/panel-left.svg")
             tooltip: qsTr("切换侧栏 (Ctrl+B)")

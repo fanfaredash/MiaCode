@@ -1,0 +1,191 @@
+import QtQuick
+import QtQuick.Controls
+import MiaCode.UI
+
+// Sticky extras live in this popup (a Menu would dismiss on item click).
+Popup {
+    id: root
+
+    required property var previewSession
+
+    padding: Theme.menuPadding
+    modal: false
+    focus: true
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+    readonly property real rowWidth: Math.max(
+        180,
+        regularRow.implicitWidth,
+        muriRow.implicitWidth,
+        smoothSwitch.implicitWidth
+    )
+
+    property var anchorItem: null
+
+    function openAt(anchor) {
+        if (!anchor || Overlay.overlay === null)
+            return
+        parent = Overlay.overlay
+        root.anchorItem = anchor
+        open()
+        Qt.callLater(root.reposition)
+    }
+
+    function reposition() {
+        if (!root.anchorItem || Overlay.overlay === null)
+            return
+        const below = root.anchorItem.mapToItem(Overlay.overlay, 0, root.anchorItem.height)
+        x = Math.max(0, below.x + root.anchorItem.width - width)
+        y = below.y
+    }
+
+    onImplicitWidthChanged: if (visible)
+        reposition()
+    onImplicitHeightChanged: if (visible)
+        reposition()
+
+    contentItem: Column {
+        id: body
+        width: root.rowWidth
+        spacing: 0
+
+        component ModeRow: AbstractButton {
+            id: modeRow
+
+            required property string label
+            required property bool active
+
+            implicitHeight: 28
+            implicitWidth: 12 + 10 + modeLabel.implicitWidth + leftPadding + rightPadding
+            leftPadding: 12
+            rightPadding: 16
+            hoverEnabled: true
+            Accessible.name: modeRow.label
+            Accessible.checkable: true
+            Accessible.checked: modeRow.active
+
+            contentItem: Item {
+                Text {
+                    id: checkMark
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 12
+                    text: modeRow.active ? "✓" : ""
+                    color: Theme.colors.text.active
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.uiFontSize
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Text {
+                    id: modeLabel
+                    anchors.left: checkMark.right
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modeRow.label
+                    color: !modeRow.enabled ? Theme.colors.text.disabled
+                         : (modeRow.active || modeRow.hovered || modeRow.down) ? Theme.colors.text.active
+                         : Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.uiFontSize
+                }
+            }
+
+            background: HoverChrome {
+                selected: modeRow.active
+                hovered: modeRow.hovered
+                pressed: modeRow.down
+                tone: "nav"
+            }
+        }
+
+        ModeRow {
+            id: regularRow
+            width: body.width
+            label: qsTr("常规渲染")
+            active: !root.previewSession.muriCheckEnabled
+            onClicked: root.previewSession.setMuriCheckEnabled(false)
+        }
+
+        ModeRow {
+            id: muriRow
+            width: body.width
+            label: qsTr("无理检测")
+            active: root.previewSession.muriCheckEnabled
+            onClicked: root.previewSession.setMuriCheckEnabled(true)
+        }
+
+        Item {
+            width: parent.width
+            implicitHeight: 15
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                anchors.verticalCenter: parent.verticalCenter
+                height: 1
+                color: Theme.colors.border.normal
+            }
+        }
+
+        AppSwitch {
+            id: smoothSwitch
+            visible: !root.previewSession.muriCheckEnabled
+            width: body.width
+            leftPadding: 12
+            rightPadding: 16
+            text: qsTr("平滑星星消去动画")
+            checked: root.previewSession.smoothStarErase
+            onToggled: {
+                if (checked === root.previewSession.smoothStarErase)
+                    return
+                root.previewSession.setSmoothStarErase(checked)
+            }
+
+            Connections {
+                target: root.previewSession
+                function onRenderModeChanged() {
+                    if (smoothSwitch.checked !== root.previewSession.smoothStarErase)
+                        smoothSwitch.checked = root.previewSession.smoothStarErase
+                }
+            }
+        }
+
+        Column {
+            visible: root.previewSession.muriCheckEnabled
+            width: body.width
+            spacing: 4
+            leftPadding: 12
+            rightPadding: 16
+            topPadding: 4
+            bottomPadding: 4
+
+            Text {
+                width: parent.width - parent.leftPadding - parent.rightPadding
+                text: qsTr("无理判定半径")
+                color: Theme.colors.text.primary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+            }
+
+            Text {
+                width: parent.width - parent.leftPadding - parent.rightPadding
+                wrapMode: Text.Wrap
+                text: qsTr("A / B / C / D / E 各区半径不同，暂不可调。")
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+            }
+        }
+    }
+
+    background: Rectangle {
+        implicitWidth: 180
+        color: Theme.colors.background.elevated
+        border.width: Theme.controlBorderWidth
+        border.color: Theme.colors.border.normal
+        radius: Theme.controlRadius
+    }
+}

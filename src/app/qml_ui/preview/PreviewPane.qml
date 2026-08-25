@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import MiaCode.UI
 import "qrc:/preview/runtime/qml" as Preview
 
@@ -11,6 +12,7 @@ Rectangle {
     // exactly one PreviewSurface may subscribe to the runtime at a time. The
     // compact and fullscreen owners use the same rule.
     property bool surfaceActive: true
+    property real renderMenuClosedAt: 0
     signal fullscreenRequested()
 
     // Mirror QuickShellMain: backend aspect is authoritative (export page
@@ -42,6 +44,48 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         title: qsTr("预览")
+
+        AbstractButton {
+            id: renderModeButton
+            implicitWidth: renderModeLabelText.implicitWidth + 16
+            hoverEnabled: true
+            focusPolicy: Qt.TabFocus
+            Accessible.name: root.previewSession.renderModeLabel
+            Accessible.description: qsTr("打开预览渲染模式菜单")
+            onClicked: {
+                if (renderModeMenu.visible) {
+                    renderModeMenu.close()
+                    return
+                }
+                if (Date.now() - root.renderMenuClosedAt < 200)
+                    return
+                renderModeMenu.openAt(renderModeButton)
+            }
+
+            contentItem: Text {
+                id: renderModeLabelText
+                text: root.previewSession.renderModeLabel
+                color: !renderModeButton.enabled ? Theme.colors.text.disabled
+                     : (renderModeButton.hovered || renderModeButton.down) ? Theme.colors.text.active
+                     : Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            background: HoverChrome {
+                hovered: renderModeButton.hovered
+                pressed: renderModeButton.down
+                tone: "icon"
+            }
+        }
+    }
+
+    PreviewRenderModeMenu {
+        id: renderModeMenu
+        previewSession: root.previewSession
+        onClosed: root.renderMenuClosedAt = Date.now()
     }
 
     Item {
