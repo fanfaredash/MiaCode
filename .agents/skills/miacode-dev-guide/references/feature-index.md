@@ -236,6 +236,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `SimaiDocument::parseUnmanagedFields` (not `parseRawFields`) so a manually typed managed key
   (`des`/`des_N`/`lv_N`/`inote_N`/title/artist/first/video) can't bypass the model and emit a
   duplicate/divergent line.
+  **Metadata attention validation:** `SimaiDocument::invalidPropertyLineNumbers` identifies
+  property-looking lines that are not complete `&key=value` assignments. The metadata editor
+  underlines those lines and blocks field commit; `DocumentSection::rebuildFieldSidebar` marks
+  the metadata row while title, artist, top-level designer, jacket image, or property syntax is
+  incomplete, using live widget text rather than only the committed document model.
+  **Metadata attention validation:** `SimaiDocument::invalidPropertyLineNumbers` identifies
+  property-looking lines that are not complete `&key=value` assignments. The metadata editor
+  underlines those lines and blocks field commit; `DocumentSection::rebuildFieldSidebar` also
+  marks the metadata row with a glowing attention dot while title, artist, top-level designer,
+  jacket image, or property syntax is incomplete. The dot reads live widget text, not only the
+  last committed document model.
   **Export-side fallback contract (sync set):** the exported "谱师名义" (intro banner designer +
   chart-info-HUD `chartDesigner`) uses per-difficulty `&des_N`, falling back to top `&des` when
   the per-difficulty name is **blank including whitespace** — gate on `designer.trimmed().isEmpty()`,

@@ -174,8 +174,26 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
         const QString newTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
         const QString newArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
         const QString newDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
+        const QString rawExtraFields = ui_.metadataExtraEdit_ != nullptr
+            ? ui_.metadataExtraEdit_->toPlainText() : QString();
+        const QVector<int> invalidPropertyLines = SimaiDocument::invalidPropertyLineNumbers(rawExtraFields);
+        if (!invalidPropertyLines.isEmpty()) {
+            QStringList lineNumbers;
+            for (int line : invalidPropertyLines) lineNumbers.append(QString::number(line));
+            owner_.statusBar()->showMessage(
+                UiText::text(QStringLiteral("metadata.invalid_property_status"))
+                    .arg(lineNumbers.join(QStringLiteral(", "))), 6000);
+            if (ui_.metadataExtraEdit_ != nullptr) {
+                QTextCursor cursor(ui_.metadataExtraEdit_->document()->findBlockByLineNumber(
+                    invalidPropertyLines.first() - 1));
+                ui_.metadataExtraEdit_->setTextCursor(cursor);
+                ui_.metadataExtraEdit_->setFocus();
+            }
+            rebuildFieldSidebar();
+            return false;
+        }
         QVector<SimaiRawField> newExtraFields = SimaiDocument::parseUnmanagedFields(
-            ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
+            rawExtraFields,
             true
         );
         SimaiDocument::ensureDefaultClockCount(&newExtraFields);

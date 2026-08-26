@@ -578,6 +578,46 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     metadataItem->setData(kOutlineItemActiveRole,
                           state_.activeOutlineKey_ == QLatin1String("metadata")
                               || state_.activeOutlineKey_ == QLatin1String("latency"));
+    const QString liveTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : state_.document_.title;
+    const QString liveArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : state_.document_.artist;
+    const QString liveDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : state_.document_.designer;
+    const QString liveProperties = ui_.metadataExtraEdit_ != nullptr
+        ? ui_.metadataExtraEdit_->toPlainText()
+        : SimaiDocument::serializeRawFields(state_.document_.extraFields);
+    const bool missingCover = state_.currentFilePath_.isEmpty()
+        || miacode::chart_assets::resolveBackgroundMediaPath(
+               state_.currentFilePath_, /*includeVideoCandidates=*/false).isEmpty();
+    const QVector<int> invalidPropertyLines = SimaiDocument::invalidPropertyLineNumbers(liveProperties);
+    if (ui_.metadataExtraEdit_ != nullptr) {
+        QList<QTextEdit::ExtraSelection> selections;
+        for (int line : invalidPropertyLines) {
+            QTextBlock block = ui_.metadataExtraEdit_->document()->findBlockByLineNumber(line - 1);
+            if (!block.isValid()) continue;
+            QTextEdit::ExtraSelection selection;
+            selection.cursor = QTextCursor(block);
+            selection.cursor.select(QTextCursor::LineUnderCursor);
+            selection.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+            selection.format.setUnderlineColor(UiTheme::colors().dark ? QColor("#FF7B72") : QColor("#D1242F"));
+            selection.format.setToolTip(UiText::text(QStringLiteral("metadata.invalid_property")));
+            selections.append(selection);
+        }
+        ui_.metadataExtraEdit_->setExtraSelections(selections);
+    }
+    QStringList metadataProblems;
+    if (liveTitle.trimmed().isEmpty()) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.title")));
+    if (liveArtist.trimmed().isEmpty()) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.artist")));
+    if (liveDesigner.trimmed().isEmpty()) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.des")));
+    if (missingCover) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.cover")));
+    if (!invalidPropertyLines.isEmpty()) {
+        QStringList lineNumbers;
+        for (int line : invalidPropertyLines) lineNumbers.append(QString::number(line));
+        metadataProblems.append(UiText::text(QStringLiteral("metadata.invalid_property_lines"))
+                                    .arg(lineNumbers.join(QStringLiteral(", "))));
+    }
+    metadataItem->setData(kOutlineItemAttentionRole, !metadataProblems.isEmpty());
+    metadataItem->setToolTip(metadataProblems.isEmpty() ? metadataLabel
+        : UiText::text(QStringLiteral("metadata.needs_attention"))
+              .arg(metadataLabel, metadataProblems.join(QStringLiteral(", "))));
 
     // The latency-settings sidebar item is gone (L-A migration): the page is
     // now reached from the metadata page's "延迟与偏移校准" entry card (and

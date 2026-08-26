@@ -1812,9 +1812,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();
         updateWindowTitle();
+        rebuildFieldSidebar();
     });
-    connect(artistEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    connect(designerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
+    connect(artistEdit_, &QLineEdit::textChanged, this, [this]() { markCurrentFieldDirty(); rebuildFieldSidebar(); });
+    connect(designerEdit_, &QLineEdit::textChanged, this, [this]() { markCurrentFieldDirty(); rebuildFieldSidebar(); });
     if (metadataExtraEdit_ != nullptr) {
         connect(metadataExtraEdit_->document(), &QTextDocument::contentsChange, this, [this](int, int charsRemoved, int charsAdded) {
             if (suppressTextDirtyTracking_) {
@@ -1826,6 +1827,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             QTimer::singleShot(0, this, [this]() {
                 if (!suppressTextDirtyTracking_) {
                     markCurrentFieldDirty();
+                    rebuildFieldSidebar();
                 }
             });
         });

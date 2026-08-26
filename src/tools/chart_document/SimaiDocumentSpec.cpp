@@ -239,6 +239,16 @@ void runSpecs(QTextStream& out, int* failed)
         expectTrue(hasLine(out3, "&pvstart=3.5"), "populated &pvstart is preserved", failed, out);
     }
 
+    // --- Property assignment validation. ---
+    {
+        const QVector<int> invalid = SimaiDocument::invalidPropertyLineNumbers(
+            "&clock_count=4\n&missing_equals\n  &also_bad  \n&=empty_key\nplain text\n");
+        expectTrue(invalid == QVector<int>({2, 3, 4}),
+                   "property validation rejects malformed assignments", failed, out);
+        expectTrue(SimaiDocument::invalidPropertyLineNumbers("&clock_count=4\n&dummy=\n").isEmpty(),
+                   "property validation accepts complete assignments", failed, out);
+    }
+
     // --- Obsolete &miacode_bookmarks= field: reserved, ignored, not persisted. ---
     {
         const QString src =
