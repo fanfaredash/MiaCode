@@ -1,10 +1,15 @@
 #include "QmlAnalysisProjection.h"
 
+#include "app/v2/AnalysisService.h"
+
+#include <utility>
+
 namespace miacode::qml_ui {
 
 AnalysisProjection projectAnalysis(const AnalysisProjectionInput& input)
 {
     AnalysisProjection result;
+    result.difficultyId = input.activeDifficultyId;
     result.revision = input.validation.revision;
     const bool aligned = input.validation.available
         && !input.validation.pending
@@ -38,6 +43,51 @@ AnalysisProjection projectAnalysis(const AnalysisProjectionInput& input)
     for (AnalysisRow& row : result.muriRows) {
         row.difficultyId = input.activeDifficultyId;
         row.revision = input.validation.revision;
+        row.title = QStringLiteral("Muri: %1").arg(row.title);
+    }
+    return result;
+}
+
+AnalysisProjection projectAnalysis(
+    const miacode::v2::AnalysisSnapshot& snapshot,
+    int activeDifficultyId,
+    quint64 documentRevision,
+    const QVector<AnalysisRow>& muriRows)
+{
+    AnalysisProjection result;
+    result.difficultyId = activeDifficultyId;
+    result.revision = documentRevision;
+    if (activeDifficultyId <= 0) {
+        result.pending = false;
+        return result;
+    }
+
+    const bool current = snapshot.difficultyId == activeDifficultyId
+        && snapshot.revision == documentRevision;
+    if (!current || snapshot.pending || !snapshot.available) return result;
+
+    result.available = true;
+    result.pending = false;
+    result.noteMarkers = snapshot.noteMarkers;
+    result.validationRows.reserve(snapshot.validation.issues.size());
+    for (const SimaiNativeValidationIssue& issue : snapshot.validation.issues) {
+        AnalysisRow row;
+        row.line = issue.line;
+        row.column = issue.col;
+        row.endColumn = issue.endCol;
+        row.severity = issue.severity == SimaiNativeValidationSeverity::Warning
+            ? QStringLiteral("warning") : QStringLiteral("error");
+        row.title = row.severity == QLatin1String("warning")
+            ? QStringLiteral("Warning") : QStringLiteral("Error");
+        row.detail = issue.displayMessage;
+        row.difficultyId = activeDifficultyId;
+        row.revision = documentRevision;
+        result.validationRows.append(std::move(row));
+    }
+    result.muriRows = muriRows;
+    for (AnalysisRow& row : result.muriRows) {
+        row.difficultyId = activeDifficultyId;
+        row.revision = documentRevision;
         row.title = QStringLiteral("Muri: %1").arg(row.title);
     }
     return result;

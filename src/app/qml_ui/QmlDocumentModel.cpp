@@ -13,11 +13,13 @@
 
 QmlDocumentModel::QmlDocumentModel(
     MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
-    miacode::v2::ChartWorkspaceFileService& fileService, QObject* parent)
+    miacode::v2::ChartWorkspaceFileService& fileService,
+    miacode::v2::AnalysisService& analysisService, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
     , workspace_(&workspace)
     , fileService_(&fileService)
+    , analysisService_(&analysisService)
 {
     if (!workspace_->snapshot().hasDocument) {
         workspace_->openSource(
@@ -73,17 +75,11 @@ QmlDocumentModel::QmlDocumentModel(
             });
     });
     refreshDocumentState();
-    connect(backend_, &MainWindow::documentValidationChanged,
-            this, [this] {
-                // Timeline refreshes may emit while a source transaction is
-                // still installing its document.  Deferring the projection
-                // makes QML observe the completed transaction, never its
-                // previous chart paired with a new pending revision.
-                QMetaObject::invokeMethod(this, [this] {
-                    refreshDocumentState();
-                    emit syntaxIssuesChanged();
-                    emit documentStateChanged();
-                }, Qt::QueuedConnection);
+    connect(analysisService_, &miacode::v2::AnalysisService::snapshotChanged,
+            this, [this](int, quint64) {
+                refreshDocumentState();
+                emit syntaxIssuesChanged();
+                emit documentStateChanged();
             });
     connect(backend_, &MainWindow::documentReplaced, this, [this] {
         // A chart may be replaced by the backend directly (startup, root
@@ -444,7 +440,7 @@ bool QmlDocumentModel::removeDifficulty(int id)
 }
 void QmlDocumentModel::validateChart()
 {
-    backend_->validateActiveDocument();
+    if (analysisService_ != nullptr) analysisService_->requestAnalysis();
 }
 int QmlDocumentModel::chartPosition(int line, int column) const
 {
@@ -653,13 +649,11 @@ void QmlDocumentModel::refreshDocumentState()
     const miacode::v2::ChartWorkspaceSnapshot workspaceSnapshot =
         workspace_ != nullptr ? workspace_->snapshot()
                               : miacode::v2::ChartWorkspaceSnapshot();
-    validationSnapshot_ = backend_ != nullptr
-        ? backend_->documentValidationSnapshot()
+    validationSnapshot_ = analysisService_ != nullptr
+        ? miacode::qml_ui::projectDocumentValidation(
+              analysisService_->snapshot(), workspaceSnapshot.activeDifficultyId,
+              workspaceSnapshot.revision)
         : miacode::qml_ui::DocumentValidationProjection();
-    // AnalysisService will replace this legacy projection in the next task.
-    // Until then, the already-aligned MainWindow cache is adapted onto the
-    // workspace identity; document consumers never fall back to its revision.
-    validationSnapshot_.revision = workspaceSnapshot.revision;
     documentRevision_ = workspaceSnapshot.revision;
     miacode::qml_ui::DocumentPresentationInput input;
     input.activeDifficultyId = workspaceSnapshot.activeDifficultyId;

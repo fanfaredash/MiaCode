@@ -1,6 +1,7 @@
 #include "QmlApplicationContext.h"
 
 #include "mainwindow/MainWindow.h"
+#include "mainwindow/MainWindowShared.h"
 #include "QuickShellController.h"
 
 QmlApplicationContext::QmlApplicationContext(
@@ -10,9 +11,10 @@ QmlApplicationContext::QmlApplicationContext(
     : QObject(parent)
     , workspace_()
     , fileService_(workspace_)
+    , analysisService_(workspace_, miacode::mainwindow::shared::uiValidationLocale())
     , preferences_(this)
-    , document_(backend, workspace_, fileService_, this)
-    , analysis_(backend, this)
+    , document_(backend, workspace_, fileService_, analysisService_, this)
+    , analysis_(backend, workspace_, analysisService_, this)
     , preview_(backend, shell, this)
     , commands_(backend, document_, this)
     , pages_(backend, this)

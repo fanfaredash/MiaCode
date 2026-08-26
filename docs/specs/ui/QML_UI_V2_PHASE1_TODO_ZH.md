@@ -173,11 +173,15 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
          仍脏、分支编辑、难度切换和文档切换，不给 `QmlEditorController` 增加局部 dirty 真相。
       3. **已完成：** `QmlDocumentModel` 的正文、元数据、难度及 open/save/save-as/discard 已迁移到
          `ChartWorkspace` / `ChartWorkspaceFileService`；隐藏 `MainWindow` 只按单调 workspace revision
-         消费 committed 值，并将关闭流程的保存委托回 file service。`AnalysisService` 的 revision 接口
-         已保留；验证/Muri 的 QML 投影接管留给下一任务，本提交不混入。
-      4. Release 自动证据：`chart_workspace_spec`、`chart_workspace_file_service_spec`、
-         `analysis_service_spec`、`qml_document_lifecycle_contract_spec`、`qml_document_projection_spec`、
-         `simai_document_spec` 为 6/6 通过。`qml_editor_controller_spec` 在本机 Windows Qt Quick
+         消费 committed 值，并将关闭流程的保存委托回 file service。
+      4. **已完成（2026-08-26）：** `AnalysisService` 订阅 workspace revision，先原子发布 pending 身份，
+         再异步计算严格验证、偏移 marker、Muri 与静态引用；完成值仅在 `(difficultyId, revision)` 仍与
+         workspace 一致时整包发布。`QmlDocumentModel`、`QmlAnalysisModel` 与显式验证入口已脱离
+         `MainWindow` 验证/Muri 缓存投影，过期或 pending 快照不暴露诊断、marker 或 Muri 行。
+      5. Release 自动证据：`chart_workspace_spec`、`chart_workspace_file_service_spec`、
+         `analysis_service_spec`、`qml_analysis_model_spec`、`qml_document_lifecycle_contract_spec`、
+         `qml_document_projection_spec`、`simai_document_spec`、`muri_spec` 为 8/8 通过。
+         `qml_editor_controller_spec` 在本机 Windows Qt Quick
          运行时无 CPU 挂起，与审计中既知基础设施故障一致，安全终止后不记为通过；脏文档关闭仍保留
          原生桌面手工回归。
 - [ ] 切换文档后 PV 异常：**多次复现失败，需求延后。** 埋点保留在树上
@@ -293,23 +297,26 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 原则：**先消除双所有者与轮询，再补页面；优化类条目一律靠后。**
 
-### 阶段 1 当前证据（2026-08-25）
+### 阶段 1 当前证据（2026-08-26）
 
 - `ChartWorkspace` 已覆盖严格完整源码预检、活动难度、单次 revision 发布与 dirty save point；
   `ChartWorkspaceFileService` 覆盖 BOM/系统编码打开和 `QSaveFile` 原子保存；`AnalysisService` 从同一
-  workspace revision 生成验证、偏移 marker、Muri 和静态引用快照。
-- Release `MiaCode` 构建通过；`qml_document_projection_spec`、`chart_workspace_spec`、
-  `chart_workspace_file_service_spec`、`analysis_service_spec`、`v1_shell_removal_spec` 与
-  `debug_flag_index_spec` 共 6/6 通过。
-- 以上服务仍未接管生产 QML 会话；现有 `QmlDocumentModel` 对 `MainWindow.DocumentBridge` 的依赖是
-  下一步唯一允许收缩的 v1 耦合边界，不得为过渡期新增第二套可写文档。
+  workspace revision 先发布 pending，再异步生成验证、偏移 marker、Muri 和静态引用的单份 available
+  快照；旧 worker 完成值按 `(difficultyId, revision)` 丢弃。
+- `QmlDocumentModel` 与 `QmlAnalysisModel` 已接管该快照：诊断、marker 和 Muri 只从一份当前 identity
+  投影，显式验证也只重新请求 `AnalysisService`。隐藏 `MainWindow` 的分析缓存只留给 timeline/preview
+  与 legacy 页面兼容，不再是生产 QML 分析真相；其文档适配器仍只消费 committed workspace 值。
+- Release `MiaCode` 构建通过；`analysis_service_spec`、`qml_analysis_model_spec`、
+  `qml_document_projection_spec` 与 `qml_document_lifecycle_contract_spec` 共 4/4 通过。
 
 1. 阶段 1（进行中）：`ChartWorkspace`、`ChartWorkspaceFileService` 与 `AnalysisService` 的 Widgets-free
-   契约规格和实现已落地；完整源码预检已从 `QmlDocumentProjection` 下沉复用，分析服务已产出
-   revision-stamped 的验证/Muri 快照。下一步迁移生产文档事务与分析调度，消除 `MainWindow` 的第二所有者与缓存。
+   契约和生产 QML 接线已落地；完整源码预检已从 `QmlDocumentProjection` 下沉复用，文档事务、保存点
+   与 revision-stamped 分析投影均不再以 `MainWindow` 为真相。隐藏兼容对象仍供 timeline/preview 和
+   legacy 页面使用，待后续域迁移后删除。
 2. 先完成 P0 文本控制键修复；随后完成上述 QML 文档会话迁移及 undo/save-point 回归。该工作不依赖
    0b/0c、性能平台、导出或阶段 2，但阶段 2、脏文档关闭回归依赖它。
-3. 将 `AnalysisService` 接入迁移后的文档会话，并以其 revision 快照替换 `MainWindow` 验证/Muri 缓存投影。
+3. [x] 将 `AnalysisService` 接入迁移后的文档会话，并以其 revision 快照替换生产 QML 对
+   `MainWindow` 验证/Muri 缓存的投影依赖（2026-08-26）。
 4. 阶段 2：建立 `PreviewSession` 与 `TimelineSession`，删除 `QuickShellController` 的轮询和剩余兼容 API。
 5. 阶段 3：将导出、封面、ZIP 和 Net 收敛为 `ExportService` 作业模型；片头音、批量上传和禁用控件在此
    域解决。

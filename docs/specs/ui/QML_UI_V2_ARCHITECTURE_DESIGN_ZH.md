@@ -127,7 +127,7 @@ QML 收到的第一眼就是终态，不存在"活动难度尚未设定"的可�
 | 0a ✅ | **已完成 2026-08-25**：v1 外壳、原生表面再宿主、主题桥、macOS 表面支持、全部 v1 QML 与皮肤入口 | 源码净 **−7,770 行**（39 文件，+284/−8,054）。`QuickShellController` 保留待阶段 2。全量 CTest 71/72（唯一失败 `qtavplayer_platform_spec` 为既有问题，在本阶段起点即复现） |
 | 0b ⏸ | 删除扩展宿主 | **延后（2026-08-25 决策）**；保持现状，不在阶段 1 前删除或改写扩展 API。 |
 | 0c ⏸ | 删除被裁剪的偏好设置、延迟检测、媒体处理/音轨工具页面 | **延后（2026-08-25 决策）**；现有入口与 Widget 路径继续可用，尚未迁移为 QML 的入口按能力缺口策略说明状态。 |
-| 1 ⏳ | 建立 `ChartWorkspace` 与 `AnalysisService`，文档域搬迁 | **已起步（2026-08-25）：** `ChartWorkspace` 已提供 Widgets-free 的严格预检、单次 revision 发布与 save-point dirty 契约；`ChartWorkspaceFileService` 提供 BOM/系统编码打开及 `QSaveFile` 原子保存；`AnalysisService` 从该快照计算验证、偏移 markers、Muri 与静态引用。现有 QML 完整源码预检已复用前者；`MainWindow` 仍是生产文档/分析所有者，待后续事务迁移。完成标志仍为隐藏 `PlainCodeEditor` 删除、文档不再有第二个所有者。 |
+| 1 ⏳ | 建立 `ChartWorkspace` 与 `AnalysisService`，文档域搬迁 | **生产 QML 文档与分析真相已迁移（2026-08-26）：** `ChartWorkspace` 提供 Widgets-free 的严格预检、单次 revision 与 save-point dirty；`ChartWorkspaceFileService` 负责 BOM/系统编码与 `QSaveFile`；`AnalysisService` 订阅 workspace，先发布 pending，再异步发布同一 `(difficultyId, revision)` 的验证、偏移 markers、Muri 与静态引用整包。QML 文档/分析消费者会丢弃过期整包，显式验证不再调用 `MainWindow`。隐藏 `MainWindow` 只适配 committed 文档值并暂供 timeline/preview 与 legacy 页面，阶段完成标志仍为隐藏 `PlainCodeEditor` 与第二文档副本删除。 |
 | 2 | 建立 `PreviewSession` 与 `TimelineSession`，`QuickShellController` 退役 | 轮询定时器消失；`surfaceHost` 分支归零 |
 | 3 | `ExportService`：视频沿用，封面/ZIP/Net 重建为 QML 并去除其引擎层的 widgets 耦合 | Widgets 对话框归零 |
 | 4 | 删除 `MainWindow`，从链接中移除 `Qt6::Widgets` | 目标达成 |

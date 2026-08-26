@@ -7,6 +7,7 @@
 
 #include "QmlEditorNavigationBridge.h"
 #include "QmlDocumentProjection.h"
+#include "app/v2/AnalysisService.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
 
@@ -58,6 +59,7 @@ public:
     explicit QmlDocumentModel(
         MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
         miacode::v2::ChartWorkspaceFileService& fileService,
+        miacode::v2::AnalysisService& analysisService,
         QObject* parent = nullptr);
     ~QmlDocumentModel() override;
 
@@ -194,6 +196,7 @@ private:
     MainWindow* backend_ = nullptr;
     miacode::v2::ChartWorkspace* workspace_ = nullptr;
     miacode::v2::ChartWorkspaceFileService* fileService_ = nullptr;
+    miacode::v2::AnalysisService* analysisService_ = nullptr;
     QString metadataSourceError_;
     QString metadataSourceAttemptText_;
     QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataSourceIssues_;

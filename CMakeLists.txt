@@ -1575,6 +1575,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_log_core}
             src/app/v2/ChartWorkspace.cpp
             src/app/v2/ChartWorkspace.h
+            src/app/v2/AnalysisService.h
             src/app/qml_ui/QmlDocumentProjection.cpp
             src/app/qml_ui/QmlDocumentProjection.h
         LIBS Qt6::Core
@@ -1619,13 +1620,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/AnalysisService.h
             resources/fonts.qrc
             resources/slide_data.qrc
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
     )
 
     miacode_add_dev_tool(qml_analysis_model_spec TEST
         SOURCES
             src/tools/qml_ui/QmlAnalysisModelSpec.cpp
+            src/app/v2/AnalysisService.h
             src/app/qml_ui/QmlAnalysisProjection.cpp
             src/app/qml_ui/QmlAnalysisProjection.h
             src/app/qml_ui/QmlDocumentProjection.h

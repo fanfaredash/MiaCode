@@ -2,6 +2,7 @@
 #include <QTextStream>
 
 #include "app/qml_ui/QmlAnalysisProjection.h"
+#include "app/v2/AnalysisService.h"
 #include "timeline/TimelineAnalysisPublication.h"
 
 namespace {
@@ -75,6 +76,57 @@ bool verifyAnalysisObserversSeeCompleteProvenance(QTextStream& err)
                        && observed.staticReferencesSignature == signature,
                    QStringLiteral("a validation observer sees validation, Muri, and static-reference provenance from one completed revision"), err);
 }
+
+bool verifyWorkspaceSnapshotProjection(QTextStream& err)
+{
+    miacode::v2::AnalysisSnapshot snapshot;
+    snapshot.difficultyId = 5;
+    snapshot.revision = 72;
+    snapshot.available = true;
+    snapshot.validation.ok = false;
+    snapshot.validation.errorCount = 1;
+    snapshot.validation.strictNoteCount = 7;
+    snapshot.validation.issues = {{3, 4, 6, SimaiNativeValidationSeverity::Error,
+                                   QStringLiteral("bad note"), QStringLiteral("Bad note")}};
+    TimelineNoteMarker marker;
+    marker.second = 12.5;
+    marker.sourceLine = 3;
+    marker.sourceCol = 4;
+    snapshot.noteMarkers.append(marker);
+    const QVector<miacode::qml_ui::AnalysisRow> muriRows = {
+        {8, 2, 2, 12.5, QStringLiteral("error"), QStringLiteral("muri"),
+         QStringLiteral("Overlap"), QStringLiteral("two notes overlap")},
+    };
+
+    const auto current = miacode::qml_ui::projectAnalysis(snapshot, 5, 72, muriRows);
+    bool ok = require(current.available && !current.pending && current.difficultyId == 5
+                          && current.revision == 72 && current.validationRows.size() == 1
+                          && current.muriRows.size() == 1 && current.noteMarkers.size() == 1,
+                      QStringLiteral("one current service snapshot publishes diagnostics, markers, and Muri together"), err);
+    ok &= require(current.validationRows.constFirst().difficultyId == 5
+                      && current.validationRows.constFirst().revision == 72
+                      && current.muriRows.constFirst().difficultyId == 5
+                      && current.muriRows.constFirst().revision == 72,
+                  QStringLiteral("every QML row inherits the accepted workspace identity"), err);
+
+    for (const auto& stale : {
+             miacode::qml_ui::projectAnalysis(snapshot, 4, 72, muriRows),
+             miacode::qml_ui::projectAnalysis(snapshot, 5, 73, muriRows),
+             [&] {
+                 auto pending = snapshot;
+                 pending.available = false;
+                 pending.pending = true;
+                 pending.noteMarkers.clear();
+                 return miacode::qml_ui::projectAnalysis(pending, 5, 72, muriRows);
+             }(),
+         }) {
+        ok &= require(!stale.available && stale.pending
+                          && stale.validationRows.isEmpty() && stale.muriRows.isEmpty()
+                          && stale.noteMarkers.isEmpty(),
+                      QStringLiteral("a stale or pending identity leaks no partial diagnostics, markers, or Muri"), err);
+    }
+    return ok;
+}
 }
 
 int main()
@@ -83,6 +135,7 @@ int main()
     QTextStream out(stdout);
     bool ok = true;
     ok &= verifyAnalysisObserversSeeCompleteProvenance(err);
+    ok &= verifyWorkspaceSnapshotProjection(err);
     const auto aligned = miacode::qml_ui::projectAnalysis(alignedInput());
     ok &= require(aligned.available && !aligned.pending && aligned.validationRows.size() == 1
                       && aligned.muriRows.size() == 1 && aligned.validationRows.constFirst().revision == 72

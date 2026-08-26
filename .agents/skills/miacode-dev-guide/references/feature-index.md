@@ -62,8 +62,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   NativeSurfaceHost). Export uses `QmlExportSession` + `ExportVideoPage.qml`;
   `QmlEditorPageHost` embeds Latency only. `QmlDocumentModel` submits body, metadata, difficulty and
   file transactions to `app/v2/ChartWorkspace` / `ChartWorkspaceFileService`; the public
-  `MainWindow.DocumentBridge.cpp` entry is now a monotonic committed-value adapter. Validation still
-  reads `DocumentValidationSnapshot` from the shared cache until the next analysis-projection task.
+  `MainWindow.DocumentBridge.cpp` entry is now a monotonic committed-value adapter. `QmlDocumentModel`
+  and `QmlAnalysisModel` read `AnalysisService` directly; both reject a snapshot whose
+  `(difficultyId, revision)` differs from the workspace, so diagnostics, shifted markers and Muri
+  rows cannot mix across revisions. Explicit validation re-requests that service rather than the
+  hidden window's validation entry.
   `QmlEditorController` is the narrow QML
   text-transaction/completion/undo owner exposed by `QmlApplicationContext`; `SourceEditor.qml`
   forwards separate key, IME-commit and paste paths through `QmlEditorInputBridge` with
@@ -77,9 +80,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   lifetimes are mutually exclusive through QML Loaders — only the visible surface may subscribe to
   `PreviewRuntime`. QML reverse follow retains an accepted navigation-target no-op cache; invalidate it
   with the preview-follow binding cache on document/difficulty changes. Windows caption: `QmlUiWindowChrome`.
-  `app/v2/ChartWorkspace` owns UIv2's complete document and save point, while `AnalysisService`
-  exposes aligned validation/marker/Muri values from the same revision; QML analysis projection is
-  intentionally still pending. Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
+  Hidden `MainWindow` validation/Muri caches remain compatibility-only for timeline/preview and
+  legacy pages; they are not QML analysis truth. Checklist:
+  `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QuickShell compatibility: only `src/app/quick_shell/QuickShellController.*` and preview surface
   policy helpers remain for v2. Stage 0a deleted the v1 bootstrap, native surface host, style bridge,
   QML shell, `--ui=v1`, and `MIACODE_UI_SKIN`.
@@ -160,10 +163,14 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   open/save/save-as around the workspace, preserving BOM/system-codec decode and `QSaveFile` atomic
   write semantics. `src/tools/v2/ChartWorkspaceFileServiceSpec.cpp` covers open, save, save-as and
   failure retention without a MainWindow or dialog.
-- Staged v2 analysis: `src/app/v2/AnalysisService.{h,cpp}` turns a `ChartWorkspace` snapshot into
-  one revision-stamped validation, shifted-marker, Muri and static-reference snapshot with no
-  MainWindow dependency. `src/tools/v2/AnalysisServiceSpec.cpp` guards identity propagation across
-  a document edit.
+- Production UIv2 analysis: `src/app/v2/AnalysisService.{h,cpp}` subscribes to `ChartWorkspace`,
+  captures an immutable document value, publishes one pending `(difficultyId, revision)`, and
+  coalesces background work to the latest request. A current completion atomically replaces that
+  value with validation, shifted markers, Muri and static references; stale completion is dropped.
+  `QmlDocumentModel` projects validation counts/issues, while `QmlAnalysisModel` projects validation
+  and Muri rows plus the aligned marker count from the same value. `src/tools/v2/AnalysisServiceSpec.cpp`,
+  `src/tools/qml_ui/QmlDocumentProjectionSpec.cpp`, and `QmlAnalysisModelSpec.cpp` guard the
+  Widgets-free service and two-part identity gate.
 - Timing metadata: `src/core/chart/document/SimaiTimingMetadata.{h,cpp}` (`buildTimingMetadata`,
   `buildTimingMetadataFromRawText`, `parseInlineTimeSignatureComment`).
 - Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
@@ -342,13 +349,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `.StrictChecks.cpp` (see `SimaiNativeParser.cpp:1584`).
 - Validation UI: `sections/validation/MainWindow.ValidationFlow.cpp` (`runValidateSimai*`,
   `addValidationError`, `addValidationDecoration`).
-- Shared validation presentation: `ValidationCachedIssue` retains explicit parser severity;
-  `ValidationSection::documentValidationSnapshot` publishes the aligned active-difficulty cache.
-  Its UIv2 projection carries document and validation revisions plus available/pending state: a
-  cache from a different revision, difficulty, chart-text signature, or timing signature must
-  expose no diagnostics. Explicit validation, background timeline analysis and cache clearing emit
-  `MainWindow::documentValidationChanged`; UIv2 list, navigation and wave underlines consume the
-  same `QmlDocumentModel::syntaxIssues` projection.
+- Production UIv2 validation presentation: `AnalysisService::snapshot` carries pending/available,
+  strict parser severity/counts, shifted markers, Muri and static references under one workspace
+  identity. `QmlDocumentModel::syntaxIssues` and `QmlAnalysisModel` expose nothing until both
+  difficulty and revision match. `ValidationCachedIssue`, `documentValidationSnapshot`,
+  `qmlAnalysisSnapshot`, and `documentValidationChanged` remain MainWindow compatibility paths for
+  timeline/preview and legacy pages only.
 - Note-modifier sync set (one patch touches all): native parser (`.cpp`/`.TouchTap`/`.Slide`) →
   marker flags (`src/timeline/TimelineData.h`) → mirror (`TimelineQuickModel.cpp` +
   `TimelineRenderData.h` flags) → transform (`ChartBatchTransform.cpp`, must NOT `return false` on

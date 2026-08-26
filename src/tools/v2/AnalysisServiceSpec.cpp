@@ -1,6 +1,9 @@
 #include "app/v2/AnalysisService.h"
 
+#include <QCoreApplication>
+#include <QEventLoop>
 #include <QTextStream>
+#include <QTimer>
 
 namespace {
 
@@ -37,12 +40,61 @@ bool verifyRevisionStampedAnalysis(QTextStream& out)
     return ok;
 }
 
+bool verifyProductionPublicationDropsStaleWork(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    miacode::v2::AnalysisService service(workspace);
+    QVector<miacode::v2::AnalysisSnapshot> publications;
+    QObject::connect(
+        &service, &miacode::v2::AnalysisService::snapshotChanged,
+        &service, [&] { publications.append(service.snapshot()); });
+
+    const auto opened = workspace.openSource(sourceText());
+    const auto edited = workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}3,"));
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(
+        &service, &miacode::v2::AnalysisService::analysisReady,
+        &loop, [&](int difficultyId, quint64 revision) {
+            if (difficultyId == 5 && revision == edited.revision) loop.quit();
+        });
+    timeout.start(10000);
+    loop.exec();
+
+    const miacode::v2::AnalysisSnapshot current = service.snapshot();
+    bool oldAvailable = false;
+    bool openedPending = false;
+    bool editedPending = false;
+    for (const auto& publication : publications) {
+        openedPending = openedPending
+            || (publication.revision == opened.revision && publication.pending
+                && !publication.available);
+        editedPending = editedPending
+            || (publication.revision == edited.revision && publication.pending
+                && !publication.available);
+        oldAvailable = oldAvailable
+            || (publication.revision == opened.revision && publication.available);
+    }
+    return expect(opened.accepted && edited.accepted && openedPending && editedPending,
+                  QStringLiteral("each workspace identity atomically publishes pending before analysis"), out)
+        && expect(!oldAvailable,
+                  QStringLiteral("a completed old worker never publishes after a newer identity is requested"), out)
+        && expect(current.available && !current.pending && current.difficultyId == 5
+                      && current.revision == edited.revision && !current.noteMarkers.isEmpty()
+                      && !current.noteMarkerSignature.isEmpty(),
+                  QStringLiteral("the latest identity publishes validation, markers, Muri, and static references as one available snapshot"), out);
+}
+
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
+    QCoreApplication app(argc, argv);
     QTextStream out(stderr);
-    if (!verifyRevisionStampedAnalysis(out)) return 1;
+    if (!verifyRevisionStampedAnalysis(out)
+        || !verifyProductionPublicationDropsStaleWork(out)) return 1;
     QTextStream result(stdout);
     result << "Analysis service checks passed." << Qt::endl;
     return 0;

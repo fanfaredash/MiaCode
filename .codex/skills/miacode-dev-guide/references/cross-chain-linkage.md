@@ -21,6 +21,12 @@ Primary chain:
 
 Implication:
 
+- Production UIv2 analysis is a workspace-owned side chain: `ChartWorkspace::changed` publishes a
+  pending identity through `AnalysisService`, then one current completion publishes validation,
+  shifted markers, Muri, and static references together. `QmlDocumentModel` and `QmlAnalysisModel`
+  reject a different difficulty or revision and never adapt MainWindow validation/Muri caches back
+  into QML truth.
+
 - A parser change is rarely parser-only.
 - A new note property or timing rule usually needs timeline, preview, audio, export, and Muri review.
 - Slide/tap head-material flags such as `$`, `$$`, `@`, `?`, and `!` are mirrored data: keep `SimaiNativeParser`, `TimelineQuickModel`, `PreviewSkinSelectors`, timeline icons, and chart-transform token preservation aligned in the same patch.

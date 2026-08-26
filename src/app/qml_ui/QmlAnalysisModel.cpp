@@ -1,19 +1,63 @@
 #include "QmlAnalysisModel.h"
 
 #include "app/mainwindow/MainWindow.h"
+#include "common/MuriTypes.h"
+#include "tools/muri/MuriPanelEntries.h"
 
-#include <QMetaObject>
 #include <QVariantMap>
 
-QmlAnalysisModel::QmlAnalysisModel(MainWindow& backend, QObject* parent)
-    : QObject(parent), backend_(&backend)
+#include <utility>
+
+namespace {
+
+QVector<miacode::qml_ui::AnalysisRow> muriRowsForSnapshot(
+    const miacode::v2::AnalysisSnapshot& snapshot)
+{
+    QVector<miacode::qml_ui::AnalysisRow> rows;
+    const QVector<miacode::muri::MuriPanelEntry> entries =
+        miacode::muri::buildVisibleMuriPanelEntries(
+            snapshot.muri, snapshot.muriStaticReferences);
+    rows.reserve(entries.size());
+    for (const miacode::muri::MuriPanelEntry& entry : entries) {
+        miacode::qml_ui::AnalysisRow row;
+        row.line = qMax(1, entry.line);
+        row.column = qMax(1, entry.col);
+        row.endColumn = row.column;
+        row.second = entry.second;
+        row.severity = entry.alertLevel == MuriAlertLevel::Warning
+            ? QStringLiteral("warning") : QStringLiteral("error");
+        row.alert = entry.alertLevel == MuriAlertLevel::Warning
+            ? QStringLiteral("warning") : QStringLiteral("muri");
+        switch (entry.kind) {
+        case MuriKind::SlideTooFast: row.title = QStringLiteral("Slide too fast"); break;
+        case MuriKind::SlideHeadTap: row.title = QStringLiteral("Slide head tap"); break;
+        case MuriKind::TapOnSlide: row.title = QStringLiteral("Tap on slide"); break;
+        case MuriKind::Overlap: row.title = QStringLiteral("Overlap"); break;
+        case MuriKind::MultiTouch: row.title = QStringLiteral("Multi-touch"); break;
+        }
+        row.detail = renderMuriDetail(
+            entry.detailKind, entry.detailArgs, snapshot.locale).trimmed();
+        if (row.detail.isEmpty()) row.detail = entry.rawDetail;
+        rows.append(std::move(row));
+    }
+    return rows;
+}
+
+}  // namespace
+
+QmlAnalysisModel::QmlAnalysisModel(
+    MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
+    miacode::v2::AnalysisService& analysisService, QObject* parent)
+    : QObject(parent)
+    , backend_(&backend)
+    , workspace_(&workspace)
+    , analysisService_(&analysisService)
 {
     refresh();
-    connect(backend_, &MainWindow::documentValidationChanged, this, [this] {
-        QMetaObject::invokeMethod(this, [this] {
-            refresh();
-            emit changed();
-        }, Qt::QueuedConnection);
+    connect(analysisService_, &miacode::v2::AnalysisService::snapshotChanged,
+            this, [this](int, quint64) {
+        refresh();
+        emit changed();
     });
 }
 
@@ -21,10 +65,14 @@ QVariantList QmlAnalysisModel::validationRows() const { return rowsToVariantList
 QVariantList QmlAnalysisModel::muriRows() const { return rowsToVariantList(projection_.muriRows); }
 bool QmlAnalysisModel::pending() const { return projection_.pending; }
 bool QmlAnalysisModel::available() const { return projection_.available; }
+int QmlAnalysisModel::difficultyId() const { return projection_.difficultyId; }
+qulonglong QmlAnalysisModel::revision() const { return projection_.revision; }
+int QmlAnalysisModel::markerCount() const { return projection_.noteMarkers.size(); }
 
 void QmlAnalysisModel::activateRow(const QVariantMap& row)
 {
-    const miacode::qml_ui::AnalysisProjection current = backend_->qmlAnalysisSnapshot();
+    refresh();
+    const miacode::qml_ui::AnalysisProjection current = projection_;
     const int difficultyId = row.value(QStringLiteral("difficultyId")).toInt();
     const quint64 revision = row.value(QStringLiteral("revision")).toULongLong();
     const int line = row.value(QStringLiteral("line")).toInt();
@@ -41,7 +89,7 @@ void QmlAnalysisModel::activateRow(const QVariantMap& row)
     candidate.title = row.value(QStringLiteral("title")).toString();
     candidate.detail = row.value(QStringLiteral("detail")).toString();
     if (!miacode::qml_ui::analysisRowCanActivate(
-            current, candidate, backend_->documentActiveDifficultyId())) return;
+            current, candidate, current.difficultyId)) return;
     activationState_.begin(candidate);
     emit rowActivated(
         difficultyId, revision, qMax(1, line), qMax(1, column), qMax(column, endColumn), second);
@@ -59,9 +107,10 @@ void QmlAnalysisModel::completeRowActivation(
     completionIdentity.second = second;
     miacode::qml_ui::AnalysisRow pending;
     if (!activationState_.complete(completionIdentity, &pending)) return;
-    const miacode::qml_ui::AnalysisProjection current = backend_->qmlAnalysisSnapshot();
+    refresh();
+    const miacode::qml_ui::AnalysisProjection current = projection_;
     if (!miacode::qml_ui::analysisRowCanActivate(
-            current, pending, backend_->documentActiveDifficultyId())) return;
+            current, pending, current.difficultyId)) return;
     if (second >= 0.0) backend_->navigateShellTimelineToSecond(second);
 }
 
@@ -80,9 +129,19 @@ void QmlAnalysisModel::cancelRowActivation(
 
 void QmlAnalysisModel::refresh()
 {
-    projection_ = backend_->qmlAnalysisSnapshot();
+    const miacode::v2::ChartWorkspaceSnapshot workspaceSnapshot = workspace_ != nullptr
+        ? workspace_->snapshot() : miacode::v2::ChartWorkspaceSnapshot();
+    const miacode::v2::AnalysisSnapshot analysisSnapshot = analysisService_ != nullptr
+        ? analysisService_->snapshot() : miacode::v2::AnalysisSnapshot();
+    const bool current = analysisSnapshot.available && !analysisSnapshot.pending
+        && analysisSnapshot.difficultyId == workspaceSnapshot.activeDifficultyId
+        && analysisSnapshot.revision == workspaceSnapshot.revision;
+    projection_ = miacode::qml_ui::projectAnalysis(
+        analysisSnapshot, workspaceSnapshot.activeDifficultyId, workspaceSnapshot.revision,
+        current ? muriRowsForSnapshot(analysisSnapshot)
+                : QVector<miacode::qml_ui::AnalysisRow>());
     if (activationState_.hasPending() && !miacode::qml_ui::analysisRowCanActivate(
-            projection_, activationState_.pending(), backend_->documentActiveDifficultyId())) {
+            projection_, activationState_.pending(), workspaceSnapshot.activeDifficultyId)) {
         activationState_.cancel(activationState_.pending());
     }
 }

@@ -91,8 +91,10 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
   falls back to the system codec only after an invalid UTF-8 stream, and commits UTF-8 saves through
   `QSaveFile`. It returns value failures instead of opening a dialog or reaching into MainWindow.
 - `app/v2/AnalysisService` consumes only a `ChartWorkspace` snapshot and domain/timeline helpers;
-  it produces matching strict validation, shifted note markers, Muri and static-reference values
-  stamped with the workspace revision. It must not read `MainWindow` caches or widget state.
+  it subscribes to workspace changes, atomically publishes a pending identity, and asynchronously
+  produces matching strict validation, shifted note markers, Muri and static-reference values in
+  one available snapshot. Completion is accepted only while both difficulty and workspace revision
+  still match. It must not read `MainWindow` caches or widget state.
 - Parser output is the shared intermediate representation for timeline, preview, Muri analysis,
   and export reconstruction.
 - Runtime SFX and export SFX must use the same note-to-sound semantics (see

@@ -6,6 +6,10 @@
 #include "core/chart/document/SimaiDocument.h"
 #include "core/chart/parser/SimaiNativeParser.h"
 
+namespace miacode::v2 {
+struct AnalysisSnapshot;
+}
+
 namespace miacode::qml_ui {
 
 enum class DocumentValidationIssueSeverity {
@@ -95,6 +99,10 @@ struct DocumentSourcePreflightResult {
 DocumentValidationProjection projectDocumentValidation(
     const DocumentValidationProjectionInput& input,
     const DocumentValidationProjectionCache& cache);
+DocumentValidationProjection projectDocumentValidation(
+    const miacode::v2::AnalysisSnapshot& snapshot,
+    int activeDifficultyId,
+    quint64 documentRevision);
 DocumentPresentationState projectDocumentPresentation(const DocumentPresentationInput& input);
 DocumentSourceTransactionState projectDocumentSourceTransaction(
     const DocumentSourceTransactionInput& input);

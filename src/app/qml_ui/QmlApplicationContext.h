@@ -11,6 +11,7 @@
 #include "QmlUiSettings.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
+#include "app/v2/AnalysisService.h"
 
 #include <QObject>
 
@@ -53,6 +54,7 @@ public:
 private:
     miacode::v2::ChartWorkspace workspace_;
     miacode::v2::ChartWorkspaceFileService fileService_;
+    miacode::v2::AnalysisService analysisService_;
     QmlUiSettings preferences_;
     QmlDocumentModel document_;
     QmlAnalysisModel analysis_;

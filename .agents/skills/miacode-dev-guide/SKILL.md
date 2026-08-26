@@ -33,12 +33,12 @@ same change.
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`). Export uses `QmlExportSession` +
   `ExportVideoPage.qml`; `QmlEditorPageHost` embeds Latency only. Workspace mode follows
   `QuickShellController`. `QmlDocumentModel` submits body, metadata, difficulty and file operations
-  to the v2 workspace; legacy validation remains a temporary read-only projection. Windows title
+  to the v2 workspace; QML validation/Muri reads the workspace analysis service. Windows title
   bar: `QmlUiWindowChrome`.
 - Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` is UIv2's Widgets-free sole document,
   revision and complete-document save-point owner; `ChartWorkspaceFileService` owns BOM/system-
-  encoding file I/O plus atomic saves; `AnalysisService` exposes the revision-stamped validation/
-  marker/Muri snapshot interface for the next projection migration). Hidden `MainWindow` is a
+  encoding file I/O plus atomic saves; `AnalysisService` drives production QML validation/
+  shifted-marker/Muri projection with one revision-stamped pending/available snapshot). Hidden `MainWindow` is a
   monotonic committed-value adapter for timeline/preview and legacy-page compatibility; it does not
   determine UIv2 dirty state.
 - QuickShell compatibility: `src/app/quick_shell/QuickShellController.*` remains temporarily for

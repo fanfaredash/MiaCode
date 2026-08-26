@@ -1,6 +1,7 @@
 #include <QTextStream>
 
 #include "app/qml_ui/QmlDocumentProjection.h"
+#include "app/v2/AnalysisService.h"
 
 namespace {
 
@@ -111,6 +112,46 @@ bool verifyLevelOnlyDifficultySourceSpan(QTextStream& err)
                    QStringLiteral("level-only difficulty validation maps empty-chart error to its full-source field"), err);
 }
 
+bool verifyAnalysisSnapshotIdentityGate(QTextStream& err)
+{
+    miacode::v2::AnalysisSnapshot snapshot;
+    snapshot.difficultyId = 5;
+    snapshot.revision = 42;
+    snapshot.available = true;
+    snapshot.validation.ok = false;
+    snapshot.validation.errorCount = 1;
+    snapshot.validation.warningCount = 1;
+    snapshot.validation.strictNoteCount = 7;
+    snapshot.validation.issues = {
+        {2, 3, 5, SimaiNativeValidationSeverity::Error,
+         QStringLiteral("bad token"), QStringLiteral("Bad token")},
+        {4, 1, 2, SimaiNativeValidationSeverity::Warning,
+         QStringLiteral("compatibility warning"), QStringLiteral("Compatibility warning")},
+    };
+
+    const auto current = miacode::qml_ui::projectDocumentValidation(snapshot, 5, 42);
+    bool ok = require(current.available && !current.pending && current.revision == 42
+                          && current.errorCount == 1 && current.warningCount == 1
+                          && current.parsedNoteCount == 7 && current.issues.size() == 2,
+                      QStringLiteral("document diagnostics project from the current service snapshot"), err);
+    for (const auto& stale : {
+             miacode::qml_ui::projectDocumentValidation(snapshot, 4, 42),
+             miacode::qml_ui::projectDocumentValidation(snapshot, 5, 43),
+             [&] {
+                 auto pending = snapshot;
+                 pending.available = false;
+                 pending.pending = true;
+                 return miacode::qml_ui::projectDocumentValidation(pending, 5, 42);
+             }(),
+         }) {
+        ok &= require(!stale.available && stale.pending && stale.issues.isEmpty()
+                          && stale.errorCount == 0 && stale.warningCount == 0
+                          && stale.parsedNoteCount == 0,
+                      QStringLiteral("difficulty, revision, and pending gates discard stale diagnostics"), err);
+    }
+    return ok;
+}
+
 miacode::qml_ui::DocumentValidationProjectionCache matchingCache()
 {
     miacode::qml_ui::DocumentValidationProjectionCache cache;
@@ -144,6 +185,7 @@ int main()
     ok &= verifyMultiDifficultyStrictPreflight(err);
     ok &= verifyEffectiveInlineSourceSpan(err);
     ok &= verifyLevelOnlyDifficultySourceSpan(err);
+    ok &= verifyAnalysisSnapshotIdentityGate(err);
 
     const miacode::qml_ui::DocumentValidationProjection projection =
         miacode::qml_ui::projectDocumentValidation(currentInput(), matchingCache());

@@ -29,20 +29,21 @@ current but **code is source of truth** — verify and fix drift in the same cha
 8. `MainWindow::scheduleTimelineAnalysisRefresh` → analysis result build → deferred UI apply
 9. `PreviewRuntime::setNoteMarkers`
 
-Validation presentation shares that analysis result. Both explicit validation and background
-analysis populate `ValidationCacheEntry`, including the parser's explicit severity. The aligned
-active-difficulty cache is exposed as `DocumentValidationSnapshot`; `documentValidationChanged`
-updates UIv2's bottom list, navigation target and editor wave underline through one
-`QmlDocumentModel::syntaxIssues` projection. `QmlAnalysisModel` reads the narrower
-`MainWindow::qmlAnalysisSnapshot()` to render the Validation and Muri tabs; it receives only
-row values, never a `QListWidget` or mutable `MuriAnalyzer` state. Muri rows are visible only
-when their note-marker signature, active difficulty, and revision align with validation; otherwise
-the entire analysis projection is pending and empty. QML reads the cached projection's
-`documentRevision` / `validationRevision` / `validationPending` as one state: diagnostics
-and navigation must be hidden while the revisions differ. Full metadata-source replacement is
-a two-phase transaction: preflight every candidate difficulty with strict validation, retain the
-old document/editor text on any error, then load and refresh the timeline only after acceptance.
-Cache clearing publishes the same signal.
+Production UIv2 validation presentation no longer shares MainWindow's analysis cache. The
+workspace-owned side chain is `ChartWorkspace::changed` → `AnalysisService::requestAnalysis`:
+the service first publishes one pending `(difficultyId, revision)`, analyzes an immutable document
+copy off-thread, then atomically publishes strict validation, shifted note markers, Muri, and static
+references only if both identity fields still match the workspace. One worker may finish after a
+newer edit, but that completion is discarded and the latest coalesced request is dispatched.
+`QmlDocumentModel::syntaxIssues` and `QmlAnalysisModel` consume that same snapshot; a stale or pending
+value exposes no diagnostics, markers, Muri rows, or activation target. Explicit validation simply
+re-requests the service. The hidden window still builds compatibility analysis for timeline/preview
+and legacy pages, but `DocumentValidationSnapshot`, `qmlAnalysisSnapshot()`, and
+`documentValidationChanged` are no longer UIv2 projection inputs.
+
+Full metadata-source replacement remains a two-phase transaction: preflight every candidate
+difficulty with strict validation, retain the old document/editor text on any error, then commit
+the workspace and refresh hidden timeline/preview adapters only after acceptance.
 
 UIv2 document transactions are workspace-owned: `QmlDocumentModel` submits body, metadata,
 difficulty and file operations to `ChartWorkspace` / `ChartWorkspaceFileService`, then sends one
@@ -52,14 +53,12 @@ must not derive UIv2 dirty or revision truth. Open and save establish complete-d
 undo/redo simply resubmits restored body text, so dirty clears only when the entire serialized
 document equals the save point. Compatibility-only backend replacements are adopted as complete
 workspace replacements after `MainWindow::documentReplaced`; consumers still rederive text,
-difficulty tabs and bookmarks rather than retaining a previous-document cache. UIv2 explicit validation first schedules the ordinary timeline slow
-refresh, then publishes its immediate validation result; the scheduled generation is responsible
-for publishing the matching validation/Muri/static-reference revision. `ViewState` replacement
+difficulty tabs and bookmarks rather than retaining a previous-document cache. `ViewState` replacement
 tab reset is presentation-only: it must not issue another difficulty-selection request after
 `loadDocument()` has already activated the target field, or it creates a second timeline refresh
-and validation revision. The slow-analysis completion writes validation, Muri, and static-reference
-provenance before `documentValidationChanged`; synchronous observers may read the snapshot during
-that signal and must never see a validation-only intermediate state.
+and validation revision. MainWindow's slow-analysis completion still writes validation, Muri, and
+static-reference provenance before `documentValidationChanged` for compatibility consumers, but it
+must never be adapted back into the production QML snapshot.
 
 UIv2 text input is an explicit side chain, not a direct `TextArea.text` contract:
 `SourceEditor.qml` sends physical keys, committed IME text and paste payloads separately through

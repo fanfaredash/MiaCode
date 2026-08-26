@@ -76,6 +76,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Main window validation UI:
   - File: `src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp`
   - Key functions: `runValidateSimaiSilently`, `runValidateSimai`, `addValidationError`, `addValidationDecoration`, `refreshValidationPanelForActiveField`
+- Production UIv2 validation/Muri projection:
+  - Files: `src/app/v2/AnalysisService.{h,cpp}`, `src/app/qml_ui/QmlDocumentModel.cpp`, `src/app/qml_ui/QmlAnalysisModel.cpp`
+  - Owns: workspace-driven pending/available publication of validation, shifted markers, Muri and static references; QML consumers accept only the current `(difficultyId, revision)` and never read MainWindow analysis caches.
 
 ## 5. Timeline Data, Cursor Mapping, And Preview Synchronization
 
@@ -211,6 +214,8 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Main window usage:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Key functions: `scheduleTimelineAnalysisRefresh`, `scheduleTimelineAnalysisRefreshFromLatestPreviewState`, `dispatchTimelineAnalysisRefresh`
+- UIv2 usage: `AnalysisService` analyzes an immutable `ChartWorkspace` value off-thread and publishes
+  the complete current result atomically; `QmlAnalysisModel` shapes panel rows from that value.
 
 ## 11. Batch Transforms And Authoring Helpers
 

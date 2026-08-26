@@ -79,27 +79,48 @@ bool verifyNewDocumentPublishesFinalFileIdentity(QTextStream& err)
                    QStringLiteral("new-document replacement publishes after the final file identity is installed"), err);
 }
 
-bool verifyV2ValidationSchedulesMatchingMuriRefresh(QTextStream& err)
+bool verifyV2AnalysisUsesWorkspaceSnapshot(QTextStream& err)
 {
-    const QString validationRuntime = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/validation/MainWindow.ValidationRuntime.cpp"));
-    const int validationEntry = validationRuntime.indexOf(
-        QStringLiteral("bool MainWindow::validateActiveDocument()"));
-    const QString entry = validationEntry >= 0 ? validationRuntime.mid(validationEntry) : QString();
-    const QString analysisFlow = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelineAnalysisFlow.cpp"));
+    const QString applicationContext = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlApplicationContext.h"));
+    const QString analysisServiceHeader = sourceFile(
+        QStringLiteral("src/app/v2/AnalysisService.h"));
+    const QString analysisService = sourceFile(
+        QStringLiteral("src/app/v2/AnalysisService.cpp"));
+    const QString documentModel = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
+    const QString analysisModel = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlAnalysisModel.cpp"));
 
-    return require(containsAfter(entry,
-                                 QStringLiteral("timelineSection_->scheduleTimelineRefresh();"),
-                                 QStringLiteral("return validationSection_->runValidateSimaiSilently(false);")),
-                   QStringLiteral("v2 validation schedules a fresh timeline slow refresh before publishing validation"), err)
-        && require(containsAfter(analysisFlow,
-                                 QStringLiteral("guard->state_.validationCacheByDifficulty_[result.difficultyId]"),
-                                 QStringLiteral("guard->state_.muriAnalysisReportTimelineRevision_ = result.revision;"))
-                       && containsAfter(analysisFlow,
-                                        QStringLiteral("guard->state_.muriAnalysisReportTimelineRevision_ = result.revision;"),
-                                        QStringLiteral("guard->state_.muriStaticReferencesTimelineRevision_ = result.revision;")),
-                   QStringLiteral("the scheduled slow result publishes validation, Muri report, and static references at one revision"), err);
+    return require(applicationContext.contains(
+                       QStringLiteral("AnalysisService analysisService_;")),
+                   QStringLiteral("the production QML context owns one workspace analysis service"), err)
+        && require(analysisServiceHeader.contains(QStringLiteral("bool pending = false;"))
+                       && analysisServiceHeader.contains(QStringLiteral("SimaiNativeValidationReport validation;"))
+                       && analysisServiceHeader.contains(QStringLiteral("QVector<TimelineNoteMarker> noteMarkers;"))
+                       && analysisServiceHeader.contains(QStringLiteral("MuriAnalysisReport muri;"))
+                       && analysisServiceHeader.contains(QStringLiteral("QVector<MuriStaticReference> muriStaticReferences;")),
+                   QStringLiteral("pending, validation, markers, Muri, and static references share one snapshot value"), err)
+        && require(analysisService.contains(QStringLiteral("&ChartWorkspace::changed"))
+                       && containsAfter(analysisService,
+                                        QStringLiteral("snapshot_ = std::move(pending);"),
+                                        QStringLiteral("emit snapshotChanged"))
+                       && analysisService.contains(QStringLiteral("identityIsCurrent(")),
+                   QStringLiteral("workspace changes publish pending before async work and gate completion by identity"), err)
+        && require(!analysisService.contains(QStringLiteral("QtWidgets"))
+                       && !analysisServiceHeader.contains(QStringLiteral("QtWidgets"))
+                       && !analysisService.contains(QStringLiteral("#include \"mainwindow/"))
+                       && !analysisServiceHeader.contains(QStringLiteral("#include \"mainwindow/")),
+                   QStringLiteral("AnalysisService stays Widgets-free and independent of MainWindow"), err)
+        && require(documentModel.contains(QStringLiteral("analysisService_->snapshot()"))
+                       && documentModel.contains(QStringLiteral("analysisService_->requestAnalysis()"))
+                       && !documentModel.contains(QStringLiteral("backend_->documentValidationSnapshot()"))
+                       && !documentModel.contains(QStringLiteral("backend_->validateActiveDocument()")),
+                   QStringLiteral("document diagnostics and explicit validation consume the workspace service"), err)
+        && require(analysisModel.contains(QStringLiteral("analysisService_->snapshot()"))
+                       && analysisModel.contains(QStringLiteral("workspace_->snapshot()"))
+                       && !analysisModel.contains(QStringLiteral("backend_->qmlAnalysisSnapshot()")),
+                   QStringLiteral("QML analysis gates the service snapshot against the current workspace pair"), err);
 }
 
 bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
@@ -167,7 +188,7 @@ int main()
     QTextStream out(stdout);
     const bool ok = verifyBackendReplacementPublishesOneQmlRefresh(err)
         && verifyNewDocumentPublishesFinalFileIdentity(err)
-        && verifyV2ValidationSchedulesMatchingMuriRefresh(err)
+        && verifyV2AnalysisUsesWorkspaceSnapshot(err)
         && verifyWorkspaceOwnsProductionDocumentAndDirty(err);
     if (ok) {
         out << "qml_document_lifecycle_contract_spec ok" << Qt::endl;

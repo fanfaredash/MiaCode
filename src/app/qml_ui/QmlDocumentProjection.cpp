@@ -1,5 +1,6 @@
 #include "QmlDocumentProjection.h"
 
+#include "app/v2/AnalysisService.h"
 #include "app/v2/ChartWorkspace.h"
 
 namespace miacode::qml_ui {
@@ -29,6 +30,42 @@ DocumentValidationProjection projectDocumentValidation(
     projection.warningCount = cache.warningCount;
     projection.parsedNoteCount = cache.parsedNoteCount;
     projection.issues = cache.issues;
+    return projection;
+}
+
+DocumentValidationProjection projectDocumentValidation(
+    const miacode::v2::AnalysisSnapshot& snapshot,
+    int activeDifficultyId,
+    quint64 documentRevision)
+{
+    DocumentValidationProjection projection;
+    projection.revision = documentRevision;
+    if (activeDifficultyId <= 0) return projection;
+
+    const bool current = snapshot.difficultyId == activeDifficultyId
+        && snapshot.revision == documentRevision;
+    if (!current || snapshot.pending || !snapshot.available) {
+        projection.pending = true;
+        return projection;
+    }
+
+    projection.available = true;
+    projection.ok = snapshot.validation.ok;
+    projection.errorCount = snapshot.validation.errorCount;
+    projection.warningCount = snapshot.validation.warningCount;
+    projection.parsedNoteCount = snapshot.validation.strictNoteCount;
+    projection.issues.reserve(snapshot.validation.issues.size());
+    for (const SimaiNativeValidationIssue& issue : snapshot.validation.issues) {
+        projection.issues.append({
+            issue.line,
+            issue.col,
+            issue.endCol,
+            issue.severity == SimaiNativeValidationSeverity::Warning
+                ? DocumentValidationIssueSeverity::Warning
+                : DocumentValidationIssueSeverity::Error,
+            issue.displayMessage,
+        });
+    }
     return projection;
 }
 
