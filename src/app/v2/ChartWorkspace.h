@@ -43,6 +43,20 @@ struct ChartWorkspaceResult {
     QVector<ChartWorkspaceIssue> issues;
 };
 
+enum class ChartWorkspaceDocumentField {
+    Title,
+    Artist,
+    First,
+    Designer,
+    VideoPath,
+    ExtraText,
+};
+
+enum class ChartWorkspaceDifficultyField {
+    Level,
+    Designer,
+};
+
 // The sole document owner for the staged Qt Quick application layer.  It is
 // deliberately Qt Widgets-free: consumers read snapshots and submit one
 // transaction at a time, never retain a writable document copy.
@@ -56,10 +70,20 @@ public:
     static ChartWorkspacePreflightResult preflightSource(
         const QString& source, SimaiNativeValidationLocale locale);
 
-    ChartWorkspaceResult replaceSource(
-        const QString& source, const QString& filePath = QString());
+    // Opening establishes a new complete-document save point. Full-source
+    // editing is deliberately separate so it can never reset dirty state.
+    ChartWorkspaceResult openSource(
+        const QString& source, const QString& filePath = QString(),
+        int preferredDifficultyId = 0);
+    ChartWorkspaceResult replaceSource(const QString& source);
     ChartWorkspaceResult replaceActiveDifficultyChart(const QString& chartText);
+    bool updateDocumentField(ChartWorkspaceDocumentField field, const QString& value);
+    bool updateDifficultyField(
+        int difficultyId, ChartWorkspaceDifficultyField field, const QString& value);
     bool selectDifficulty(int difficultyId);
+    bool addDifficulty(int difficultyId);
+    bool removeDifficulty(int difficultyId);
+    bool unifyDesigners(const QString& canonicalName);
     bool markSaved(const QString& filePath = QString());
 
     ChartWorkspaceSnapshot snapshot() const;
@@ -73,6 +97,7 @@ signals:
 private:
     ChartWorkspaceResult reject(const QVector<ChartWorkspaceIssue>& issues = {}) const;
     ChartWorkspaceResult commit();
+    ChartWorkspaceResult acceptWithoutChange() const;
     void refreshSourceAndDirty();
 
     SimaiDocument document_;

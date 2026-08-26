@@ -11,9 +11,26 @@
 #include <QFileInfo>
 #include <QVariantMap>
 
-QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
-    : QObject(parent), backend_(&backend)
+QmlDocumentModel::QmlDocumentModel(
+    MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
+    miacode::v2::ChartWorkspaceFileService& fileService, QObject* parent)
+    : QObject(parent)
+    , backend_(&backend)
+    , workspace_(&workspace)
+    , fileService_(&fileService)
 {
+    if (!workspace_->snapshot().hasDocument) {
+        workspace_->openSource(
+            backend_->documentSourceText(), backend_->documentFilePath(),
+            backend_->documentActiveDifficultyId());
+    }
+    backend_->setQmlDocumentSaveHandler([this](const QString& path) {
+        return saveToPath(path);
+    });
+    // The workspace was seeded from the already-open backend document above.
+    // Publish that first committed identity as well so every subsequent
+    // backend navigation value is stamped with the workspace revision.
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
     backend_->setQmlTouchPadAuthoringHandler([this](const QString& pad, bool backtick) {
         const miacode::qml_ui::QmlTouchPadAuthoringContext context{
             currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
@@ -77,8 +94,7 @@ QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
         // coherent snapshot for the title, source editor, difficulty tabs,
         // and derived bookmark list rather than a new chart with old state.
         QMetaObject::invokeMethod(this, [this] {
-            clearMetadataSourceRejection();
-            emitDocumentStateChanged();
+            adoptBackendDocumentReplacement();
             // A desktop report says the editor keeps showing the outgoing
             // chart after a switch while the timeline and preview media follow
             // the incoming one. Nothing in the log records document identity,
@@ -92,8 +108,8 @@ QmlDocumentModel::QmlDocumentModel(MainWindow& backend, QObject* parent)
                     .arg(currentDifficultyId())
                     .arg(documentRevision_)
                     .arg(chartText().size())
-                    .arg(backend_ != nullptr ? backend_->documentDifficultyIds().size() : -1));
-            emit documentReplaced();
+                    .arg(workspace_ != nullptr
+                             ? workspace_->document().difficultyIds().size() : -1));
         }, Qt::QueuedConnection);
     });
 }
@@ -105,37 +121,41 @@ QmlDocumentModel::~QmlDocumentModel()
         backend_->setQmlTouchPadAuthoringContextHandler({});
         backend_->setQmlEditorNavigationHandler({});
         backend_->setQmlEditorFollowDecorationHandler({});
+        backend_->setQmlDocumentSaveHandler({});
     }
 }
 
 QString QmlDocumentModel::chartText() const
 {
-    return backend_->activeDocumentChartText();
+    if (workspace_ == nullptr) return {};
+    const SimaiDifficultyData* difficulty =
+        workspace_->document().difficulty(currentDifficultyId());
+    return difficulty != nullptr ? difficulty->chart : QString();
 }
 
 void QmlDocumentModel::setChartText(const QString& value)
 {
-    if (!backend_->updateActiveChartText(value)) return;
-    markDocumentChanged();
-    emit chartTextChanged();
+    if (workspace_ == nullptr
+        || !workspace_->replaceActiveDifficultyChart(value).accepted) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 
-QString QmlDocumentModel::metadataTitle() const { return backend_->documentField(MainWindow::DocumentField::Title); }
-QString QmlDocumentModel::metadataArtist() const { return backend_->documentField(MainWindow::DocumentField::Artist); }
-QString QmlDocumentModel::metadataFirst() const { return backend_->documentField(MainWindow::DocumentField::First); }
-QString QmlDocumentModel::metadataDesigner() const { return backend_->documentField(MainWindow::DocumentField::Designer); }
-QString QmlDocumentModel::metadataVideoPath() const { return backend_->documentField(MainWindow::DocumentField::VideoPath); }
-QString QmlDocumentModel::metadataExtraText() const { return backend_->documentField(MainWindow::DocumentField::ExtraText); }
+QString QmlDocumentModel::metadataTitle() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::Title); }
+QString QmlDocumentModel::metadataArtist() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::Artist); }
+QString QmlDocumentModel::metadataFirst() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::First); }
+QString QmlDocumentModel::metadataDesigner() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::Designer); }
+QString QmlDocumentModel::metadataVideoPath() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::VideoPath); }
+QString QmlDocumentModel::metadataExtraText() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::ExtraText); }
 QString QmlDocumentModel::metadataSourceText() const
 {
     return metadataSourceError_.isEmpty()
-        ? backend_->documentSourceText()
+        ? (workspace_ != nullptr ? workspace_->snapshot().sourceText : QString())
         : metadataSourceAttemptText_;
 }
 QString QmlDocumentModel::metadataSourceError() const { return metadataSourceError_; }
 QVariantList QmlDocumentModel::metadataSourceIssues() const { return sourceIssuesToVariantList(); }
 bool QmlDocumentModel::metadataSourceValid() const { return metadataSourceError_.isEmpty(); }
-bool QmlDocumentModel::unifiedDesignerEnabled() const { return backend_->documentUnifiedDesignerEnabled(); }
+bool QmlDocumentModel::unifiedDesignerEnabled() const { return unifiedDesignerEnabled_; }
 
 QStringList QmlDocumentModel::designerCandidates() const
 {
@@ -145,52 +165,67 @@ QStringList QmlDocumentModel::designerCandidates() const
         if (!normalized.isEmpty() && !values.contains(normalized)) values.append(normalized);
     };
     append(metadataDesigner());
-    for (int id : backend_->documentDifficultyIds()) {
-        append(backend_->difficultyField(id, MainWindow::DifficultyField::Designer));
+    if (workspace_ == nullptr) return values;
+    for (int id : workspace_->document().difficultyIds()) {
+        append(difficultyField(id, miacode::v2::ChartWorkspaceDifficultyField::Designer));
     }
     return values;
 }
 
 void QmlDocumentModel::setMetadataTitle(const QString& value)
 {
-    if (!backend_->updateDocumentField(MainWindow::DocumentField::Title, value)) return;
-    markDocumentChanged();
-    emit metadataChanged();
+    if (workspace_ == nullptr || !workspace_->updateDocumentField(
+            miacode::v2::ChartWorkspaceDocumentField::Title, value)) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataArtist(const QString& value)
 {
-    if (!backend_->updateDocumentField(MainWindow::DocumentField::Artist, value)) return;
-    markDocumentChanged();
-    emit metadataChanged();
+    if (workspace_ == nullptr || !workspace_->updateDocumentField(
+            miacode::v2::ChartWorkspaceDocumentField::Artist, value)) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataFirst(const QString& value)
 {
-    if (!backend_->updateDocumentField(MainWindow::DocumentField::First, value)) return;
-    markDocumentChanged();
-    emit metadataChanged();
+    if (workspace_ == nullptr || !workspace_->updateDocumentField(
+            miacode::v2::ChartWorkspaceDocumentField::First, value)) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataDesigner(const QString& value)
 {
-    if (!backend_->updateDocumentField(MainWindow::DocumentField::Designer, value)) return;
-    markDocumentChanged();
-    emit metadataChanged();
+    if (workspace_ == nullptr) return;
+    const bool changed = unifiedDesignerEnabled_
+        ? workspace_->unifyDesigners(value)
+        : workspace_->updateDocumentField(
+              miacode::v2::ChartWorkspaceDocumentField::Designer, value);
+    if (!changed) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataVideoPath(const QString& value)
 {
-    if (!backend_->updateDocumentField(MainWindow::DocumentField::VideoPath, value)) return;
-    markDocumentChanged();
-    emit metadataChanged();
+    if (workspace_ == nullptr || !workspace_->updateDocumentField(
+            miacode::v2::ChartWorkspaceDocumentField::VideoPath, value)) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataExtraText(const QString& value)
 {
-    if (!backend_->updateDocumentField(MainWindow::DocumentField::ExtraText, value)) return;
-    markDocumentChanged();
-    emit metadataChanged();
+    if (workspace_ == nullptr || !workspace_->updateDocumentField(
+            miacode::v2::ChartWorkspaceDocumentField::ExtraText, value)) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataSourceText(const QString& value)
 {
-    const MainWindow::DocumentSourceReplaceResult result = backend_->replaceDocumentSourceText(value);
-    metadataSourceIssues_ = result.issues;
+    if (workspace_ == nullptr) return;
+    const miacode::v2::ChartWorkspaceResult result = workspace_->replaceSource(value);
+    metadataSourceIssues_.clear();
+    metadataSourceIssues_.reserve(result.issues.size());
+    for (const miacode::v2::ChartWorkspaceIssue& issue : result.issues) {
+        metadataSourceIssues_.append({
+            issue.line, issue.column, issue.endColumn,
+            issue.severity == miacode::v2::ChartWorkspaceIssueSeverity::Warning
+                ? miacode::qml_ui::DocumentValidationIssueSeverity::Warning
+                : miacode::qml_ui::DocumentValidationIssueSeverity::Error,
+            issue.message});
+    }
     if (!result.accepted) {
         metadataSourceAttemptText_ = value;
         QStringList messages;
@@ -202,9 +237,8 @@ void QmlDocumentModel::setMetadataSourceText(const QString& value)
         emit metadataSourceChanged();
         return;
     }
-    // loadDocument() emits MainWindow::documentReplaced synchronously.  Its
-    // connection above clears any rejected-source draft and publishes the
-    // complete replacement snapshot exactly once.
+    clearMetadataSourceRejection();
+    publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
 }
 
 QString QmlDocumentModel::documentTitle() const
@@ -215,7 +249,10 @@ QString QmlDocumentModel::documentTitle() const
     return difficulty.isEmpty() ? chartTitle
         : QStringLiteral("%1 — %2").arg(chartTitle, difficulty);
 }
-QString QmlDocumentModel::currentFilePath() const { return backend_->documentFilePath(); }
+QString QmlDocumentModel::currentFilePath() const
+{
+    return workspace_ != nullptr ? workspace_->snapshot().filePath : QString();
+}
 QString QmlDocumentModel::currentFileName() const
 {
     return currentFilePath().isEmpty()
@@ -237,10 +274,13 @@ int QmlDocumentModel::currentDifficultyId() const { return presentationState_.ac
 QVariantList QmlDocumentModel::difficulties() const
 {
     QVariantList result;
-    for (int id : backend_->documentDifficultyIds()) {
+    if (workspace_ == nullptr) return result;
+    for (int id : workspace_->document().difficultyIds()) {
         const QString name = SimaiDocument::difficultyName(id);
-        const QString level = backend_->difficultyField(id, MainWindow::DifficultyField::Level);
-        const QString designer = backend_->difficultyField(id, MainWindow::DifficultyField::Designer);
+        const QString level = difficultyField(
+            id, miacode::v2::ChartWorkspaceDifficultyField::Level);
+        const QString designer = difficultyField(
+            id, miacode::v2::ChartWorkspaceDifficultyField::Designer);
         result.append(QVariantMap{
             {QStringLiteral("id"), id},
             {QStringLiteral("name"), name},
@@ -256,7 +296,8 @@ QVariantList QmlDocumentModel::difficulties() const
 QVariantList QmlDocumentModel::availableDifficulties() const
 {
     QVariantList result;
-    const QVector<int> existingIds = backend_->documentDifficultyIds();
+    const QVector<int> existingIds = workspace_ != nullptr
+        ? workspace_->document().difficultyIds() : QVector<int>();
     for (int id = 1; id <= 7; ++id) {
         if (!existingIds.contains(id)) {
             result.append(QVariantMap{
@@ -270,28 +311,31 @@ QVariantList QmlDocumentModel::availableDifficulties() const
 
 QString QmlDocumentModel::currentDifficultyLevel() const
 {
-    return backend_->difficultyField(currentDifficultyId(), MainWindow::DifficultyField::Level);
+    return difficultyField(
+        currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Level);
 }
 QString QmlDocumentModel::currentDifficultyDesigner() const
 {
-    return backend_->difficultyField(currentDifficultyId(), MainWindow::DifficultyField::Designer);
+    return difficultyField(
+        currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Designer);
 }
 void QmlDocumentModel::setCurrentDifficultyLevel(const QString& value)
 {
-    if (!backend_->updateDifficultyField(
-            currentDifficultyId(), MainWindow::DifficultyField::Level, value)) return;
-    markDocumentChanged();
-    emit currentDifficultyFieldsChanged();
-    emit currentDifficultyChanged();
-    emit difficultiesChanged();
+    if (workspace_ == nullptr || !workspace_->updateDifficultyField(
+            currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Level,
+            value)) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setCurrentDifficultyDesigner(const QString& value)
 {
-    if (!backend_->updateDifficultyField(
-            currentDifficultyId(), MainWindow::DifficultyField::Designer, value)) return;
-    markDocumentChanged();
-    emit currentDifficultyFieldsChanged();
-    emit difficultiesChanged();
+    if (workspace_ == nullptr) return;
+    const bool changed = unifiedDesignerEnabled_
+        ? workspace_->unifyDesigners(value)
+        : workspace_->updateDifficultyField(
+              currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Designer,
+              value);
+    if (!changed) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 
 QVariantList QmlDocumentModel::syntaxIssues() const
@@ -345,45 +389,57 @@ qulonglong QmlDocumentModel::bookmarkGeneration() const { return bookmarkGenerat
 bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 {
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
-    if (!backend_->openStartupTarget(path)) {
+    if (fileService_ == nullptr) return false;
+    const miacode::v2::ChartWorkspaceFileResult result = fileService_->open(path);
+    if (!result.accepted) {
         emit operationFailed(tr("打开失败"), tr("无法打开谱面文件。"));
         return false;
     }
+    unifiedDesignerEnabled_ = false;
+    clearMetadataSourceRejection();
+    publishWorkspaceCommit(
+        WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
     return true;
 }
 bool QmlDocumentModel::save()
 {
-    const bool saved = backend_->saveDocument();
-    if (saved) emitDocumentStateChanged();
-    return saved;
+    if (fileService_ == nullptr) return false;
+    const miacode::v2::ChartWorkspaceFileResult result = fileService_->save();
+    if (!result.accepted) return false;
+    publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+    return true;
 }
 bool QmlDocumentModel::saveAs(const QUrl& fileUrl)
 {
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
-    const bool saved = backend_->saveDocumentAs(path);
-    if (saved) emitDocumentStateChanged();
-    return saved;
+    return saveToPath(path);
 }
 void QmlDocumentModel::discardChanges()
 {
-    if (!backend_->discardDocumentChanges()) return;
+    if (fileService_ == nullptr || workspace_ == nullptr) return;
+    const QString path = workspace_->snapshot().filePath;
+    if (path.isEmpty()) return;
+    const miacode::v2::ChartWorkspaceFileResult result = fileService_->open(path);
+    if (!result.accepted) return;
+    clearMetadataSourceRejection();
+    publishWorkspaceCommit(
+        WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
 }
 void QmlDocumentModel::selectDifficulty(int id)
 {
-    if (!backend_->selectDocumentDifficulty(id)) return;
-    emitDocumentStateChanged();
+    if (workspace_ == nullptr || !workspace_->selectDifficulty(id)) return;
+    publishWorkspaceCommit(WorkspaceCommitKind::DifficultySelection);
 }
 bool QmlDocumentModel::addDifficulty(int id)
 {
-    const bool selected = backend_->addDocumentDifficulty(id);
-    if (!selected) return false;
-    emitDocumentStateChanged();
-    return selected;
+    if (workspace_ == nullptr || !workspace_->addDifficulty(id)) return false;
+    publishWorkspaceCommit(WorkspaceCommitKind::Structure);
+    return true;
 }
 bool QmlDocumentModel::removeDifficulty(int id)
 {
-    if (!backend_->removeDocumentDifficulty(id)) return false;
-    emitDocumentStateChanged();
+    if (workspace_ == nullptr || !workspace_->removeDifficulty(id)) return false;
+    publishWorkspaceCommit(WorkspaceCommitKind::Structure);
     return true;
 }
 void QmlDocumentModel::validateChart()
@@ -405,16 +461,16 @@ int QmlDocumentModel::chartPosition(int line, int column) const
 }
 void QmlDocumentModel::enableUnifiedDesigner(const QString& canonicalName)
 {
-    backend_->enableUnifiedDocumentDesigner(canonicalName);
-    markDocumentChanged();
+    if (workspace_ == nullptr) return;
+    unifiedDesignerEnabled_ = true;
+    workspace_->unifyDesigners(canonicalName);
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
     emit unifiedDesignerEnabledChanged();
-    emit metadataChanged();
-    emit difficultiesChanged();
 }
 void QmlDocumentModel::disableUnifiedDesigner()
 {
-    if (!backend_->documentUnifiedDesignerEnabled()) return;
-    backend_->disableUnifiedDocumentDesigner();
+    if (!unifiedDesignerEnabled_) return;
+    unifiedDesignerEnabled_ = false;
     emit unifiedDesignerEnabledChanged();
 }
 
@@ -505,8 +561,10 @@ void QmlDocumentModel::logEditorDocumentState(const QString& reason, int difficu
 QVariantList QmlDocumentModel::bookmarksForDifficulty(int difficultyId) const
 {
     QVariantList bookmarks;
-    const QStringList lines = backend_->documentDifficultyChartText(difficultyId)
-                                  .split(QLatin1Char('\n'));
+    if (workspace_ == nullptr) return bookmarks;
+    const SimaiDifficultyData* difficulty = workspace_->document().difficulty(difficultyId);
+    if (difficulty == nullptr) return bookmarks;
+    const QStringList lines = difficulty->chart.split(QLatin1Char('\n'));
     for (int index = 0; index < lines.size(); ++index) {
         const auto bookmark = miacode::editor::parseBookmarkComment(lines.at(index));
         if (!bookmark.has_value()) {
@@ -535,17 +593,40 @@ void QmlDocumentModel::navigateToBookmark(int difficultyId, int line)
                                       false, true, true);
 }
 
-void QmlDocumentModel::markDocumentChanged()
+void QmlDocumentModel::publishWorkspaceCommit(
+    WorkspaceCommitKind kind, bool replacement, bool usedSystemEncoding)
 {
-    refreshDocumentState();
-    emit dirtyChanged();
-    emit dirtyEditorKeysChanged();
-    emit metadataSourceChanged();
-    emit documentTitleChanged();
-    emit syntaxIssuesChanged();
-    ++bookmarkGeneration_;
-    emit bookmarksChanged();
-    emit documentStateChanged();
+    if (workspace_ == nullptr) return;
+    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
+    MainWindow::QmlDocumentCommitKind backendKind =
+        MainWindow::QmlDocumentCommitKind::Incremental;
+    switch (kind) {
+    case WorkspaceCommitKind::Incremental:
+        backendKind = MainWindow::QmlDocumentCommitKind::Incremental;
+        break;
+    case WorkspaceCommitKind::DifficultySelection:
+        backendKind = MainWindow::QmlDocumentCommitKind::DifficultySelection;
+        break;
+    case WorkspaceCommitKind::Structure:
+        backendKind = MainWindow::QmlDocumentCommitKind::Structure;
+        break;
+    case WorkspaceCommitKind::SourceReplacement:
+        backendKind = MainWindow::QmlDocumentCommitKind::SourceReplacement;
+        break;
+    case WorkspaceCommitKind::Open:
+        backendKind = MainWindow::QmlDocumentCommitKind::Open;
+        break;
+    case WorkspaceCommitKind::SavePoint:
+        backendKind = MainWindow::QmlDocumentCommitKind::SavePoint;
+        break;
+    }
+    if (backend_ != nullptr) {
+        backend_->applyCommittedQmlDocument(
+            snapshot.sourceText, snapshot.filePath, snapshot.activeDifficultyId,
+            snapshot.dirty, snapshot.revision, backendKind, usedSystemEncoding);
+    }
+    emitDocumentStateChanged();
+    if (replacement) emit documentReplaced();
 }
 
 void QmlDocumentModel::emitDocumentStateChanged()
@@ -569,14 +650,92 @@ void QmlDocumentModel::emitDocumentStateChanged()
 
 void QmlDocumentModel::refreshDocumentState()
 {
-    validationSnapshot_ = backend_->documentValidationSnapshot();
-    documentRevision_ = validationSnapshot_.revision;
+    const miacode::v2::ChartWorkspaceSnapshot workspaceSnapshot =
+        workspace_ != nullptr ? workspace_->snapshot()
+                              : miacode::v2::ChartWorkspaceSnapshot();
+    validationSnapshot_ = backend_ != nullptr
+        ? backend_->documentValidationSnapshot()
+        : miacode::qml_ui::DocumentValidationProjection();
+    // AnalysisService will replace this legacy projection in the next task.
+    // Until then, the already-aligned MainWindow cache is adapted onto the
+    // workspace identity; document consumers never fall back to its revision.
+    validationSnapshot_.revision = workspaceSnapshot.revision;
+    documentRevision_ = workspaceSnapshot.revision;
     miacode::qml_ui::DocumentPresentationInput input;
-    input.activeDifficultyId = backend_->documentActiveDifficultyId();
-    input.dirty = backend_->isWindowModified();
+    input.activeDifficultyId = workspaceSnapshot.activeDifficultyId;
+    input.dirty = workspaceSnapshot.dirty;
     input.documentRevision = documentRevision_;
     input.validation = validationSnapshot_;
     presentationState_ = miacode::qml_ui::projectDocumentPresentation(input);
+}
+
+bool QmlDocumentModel::saveToPath(const QString& path)
+{
+    if (fileService_ == nullptr || path.trimmed().isEmpty()) return false;
+    const miacode::v2::ChartWorkspaceFileResult result = fileService_->saveAs(path);
+    if (!result.accepted) return false;
+    publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+    return true;
+}
+
+void QmlDocumentModel::adoptBackendDocumentReplacement()
+{
+    if (backend_ == nullptr || workspace_ == nullptr) return;
+    const miacode::v2::ChartWorkspaceSnapshot current = workspace_->snapshot();
+    const QString backendSource = backend_->documentSourceText();
+    const QString backendPath = backend_->documentFilePath();
+    const int backendDifficultyId = backend_->documentActiveDifficultyId();
+    if (current.hasDocument && current.sourceText == backendSource
+        && current.filePath == backendPath
+        && current.activeDifficultyId == backendDifficultyId) {
+        return;
+    }
+
+    const miacode::v2::ChartWorkspaceResult adopted = workspace_->openSource(
+        backendSource, backendPath, backendDifficultyId);
+    if (!adopted.accepted) return;
+    unifiedDesignerEnabled_ = false;
+    clearMetadataSourceRejection();
+    emitDocumentStateChanged();
+    emit unifiedDesignerEnabledChanged();
+    emit documentReplaced();
+}
+
+QString QmlDocumentModel::documentField(
+    miacode::v2::ChartWorkspaceDocumentField field) const
+{
+    if (workspace_ == nullptr) return {};
+    const SimaiDocument& document = workspace_->document();
+    switch (field) {
+    case miacode::v2::ChartWorkspaceDocumentField::Title:
+        return document.title;
+    case miacode::v2::ChartWorkspaceDocumentField::Artist:
+        return document.artist;
+    case miacode::v2::ChartWorkspaceDocumentField::First:
+        return document.first;
+    case miacode::v2::ChartWorkspaceDocumentField::Designer:
+        return document.designer;
+    case miacode::v2::ChartWorkspaceDocumentField::VideoPath:
+        return document.videoPath;
+    case miacode::v2::ChartWorkspaceDocumentField::ExtraText:
+        return SimaiDocument::serializeRawFields(document.extraFields);
+    }
+    return {};
+}
+
+QString QmlDocumentModel::difficultyField(
+    int difficultyId, miacode::v2::ChartWorkspaceDifficultyField field) const
+{
+    if (workspace_ == nullptr) return {};
+    const SimaiDifficultyData* difficulty = workspace_->document().difficulty(difficultyId);
+    if (difficulty == nullptr) return {};
+    switch (field) {
+    case miacode::v2::ChartWorkspaceDifficultyField::Level:
+        return difficulty->level;
+    case miacode::v2::ChartWorkspaceDifficultyField::Designer:
+        return difficulty->designer;
+    }
+    return {};
 }
 
 void QmlDocumentModel::clearMetadataSourceRejection()

@@ -7,6 +7,8 @@
 
 #include "QmlEditorNavigationBridge.h"
 #include "QmlDocumentProjection.h"
+#include "app/v2/ChartWorkspace.h"
+#include "app/v2/ChartWorkspaceFileService.h"
 
 class MainWindow;
 
@@ -53,7 +55,10 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(qulonglong bookmarkGeneration READ bookmarkGeneration NOTIFY bookmarksChanged)
 
 public:
-    explicit QmlDocumentModel(MainWindow& backend, QObject* parent = nullptr);
+    explicit QmlDocumentModel(
+        MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
+        miacode::v2::ChartWorkspaceFileService& fileService,
+        QObject* parent = nullptr);
     ~QmlDocumentModel() override;
 
     QString chartText() const;
@@ -165,12 +170,30 @@ signals:
     void operationFailed(const QString& title, const QString& message);
 
 private:
-    void markDocumentChanged();
+    enum class WorkspaceCommitKind {
+        Incremental,
+        DifficultySelection,
+        Structure,
+        SourceReplacement,
+        Open,
+        SavePoint,
+    };
+
+    void publishWorkspaceCommit(
+        WorkspaceCommitKind kind, bool documentReplaced = false,
+        bool usedSystemEncoding = false);
+    bool saveToPath(const QString& path);
+    void adoptBackendDocumentReplacement();
+    QString documentField(miacode::v2::ChartWorkspaceDocumentField field) const;
+    QString difficultyField(
+        int difficultyId, miacode::v2::ChartWorkspaceDifficultyField field) const;
     void emitDocumentStateChanged();
     void refreshDocumentState();
     void clearMetadataSourceRejection();
     QVariantList sourceIssuesToVariantList() const;
     MainWindow* backend_ = nullptr;
+    miacode::v2::ChartWorkspace* workspace_ = nullptr;
+    miacode::v2::ChartWorkspaceFileService* fileService_ = nullptr;
     QString metadataSourceError_;
     QString metadataSourceAttemptText_;
     QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataSourceIssues_;
@@ -185,4 +208,5 @@ private:
     bool qmlImeComposing_ = false;
     miacode::qml_ui::QmlEditorNavigationReadiness qmlEditorNavigationReadiness_;
     qulonglong bookmarkGeneration_ = 0;
+    bool unifiedDesignerEnabled_ = false;
 };

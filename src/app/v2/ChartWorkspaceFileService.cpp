@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSaveFile>
 #include <QStringConverter>
 
@@ -15,9 +16,13 @@ ChartWorkspaceFileService::ChartWorkspaceFileService(ChartWorkspace& workspace)
 ChartWorkspaceFileResult ChartWorkspaceFileService::open(const QString& path) const
 {
     if (workspace_ == nullptr) return {false, 0, QStringLiteral("workspace_unavailable"), {}};
-    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     if (normalizedPath.isEmpty()) {
         return {false, workspace_->snapshot().revision, QStringLiteral("path_empty"), {}};
+    }
+    const QFileInfo inputInfo(normalizedPath);
+    if (inputInfo.isDir()) {
+        normalizedPath = QDir(inputInfo.absoluteFilePath()).filePath(QStringLiteral("maidata.txt"));
     }
     QFile file(normalizedPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -25,10 +30,10 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::open(const QString& path) co
     }
     bool usedSystemEncoding = false;
     const QString text = decodeDocumentText(file.readAll(), &usedSystemEncoding);
-    Q_UNUSED(usedSystemEncoding);
-    const ChartWorkspaceResult result = workspace_->replaceSource(text, normalizedPath);
+    const ChartWorkspaceResult result = workspace_->openSource(text, normalizedPath);
     return {result.accepted, result.revision,
-            result.accepted ? QString() : QStringLiteral("validation_failed"), result.issues};
+            result.accepted ? QString() : QStringLiteral("validation_failed"), result.issues,
+            usedSystemEncoding};
 }
 
 ChartWorkspaceFileResult ChartWorkspaceFileService::save() const

@@ -164,24 +164,29 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 ### 待处理功能缺口（2026-08-24 GUI 验证新发现，优先于 Step 5）
 
-- [ ] **P0 — 文本控制键与 undo/save-point 迁移**：
+- [x] **P0 — 文本控制键与 undo/save-point 迁移**（2026-08-26）：
       1. **已完成：** 修复 `Backspace` / `Delete` 的控制字符不能进入 `SimaiTextEditPolicy` 普通文本插入路径；
          保留空括号成对删除，普通删除交给 `TextArea` 原生行为，并以真实 `TextArea` + `QKeyEvent`
          回归覆盖 `\b` / `\x7f`。
-      2. 以 v1 的“undo save anchor”语义为参照，但由 `ChartWorkspace` 的完整文档 save point 作为唯一
-         dirty 真相；不得只给 `QmlEditorController` 增加局部 dirty 布尔值。
-      3. 迁移 `QmlDocumentModel` 的正文、元数据、难度和文件操作到 `ChartWorkspace` /
-         `ChartWorkspaceFileService`，再让 `AnalysisService` 的 revision 快照接管验证/Muri 投影。
-         过渡期 `MainWindow` 只能消费提交后的适配值，不能继续拥有或判定 v2 文档 dirty。
-      4. 回归：打开→编辑→撤销回初始、保存→编辑→撤销回保存点、元数据仍脏时正文撤销、分支编辑、
-         难度/文档切换，以及脏文档关闭。该项是阶段 1 完成、关闭流程手工回归和阶段 2 的前置条件。
+      2. **已完成：** `ChartWorkspace` 以完整规范化源码保存 save point；编辑/撤销只提交正文值，dirty
+         由当前完整文档与 save point 比较得出。覆盖打开后撤销回初始、保存后撤销回新保存点、元数据
+         仍脏、分支编辑、难度切换和文档切换，不给 `QmlEditorController` 增加局部 dirty 真相。
+      3. **已完成：** `QmlDocumentModel` 的正文、元数据、难度及 open/save/save-as/discard 已迁移到
+         `ChartWorkspace` / `ChartWorkspaceFileService`；隐藏 `MainWindow` 只按单调 workspace revision
+         消费 committed 值，并将关闭流程的保存委托回 file service。`AnalysisService` 的 revision 接口
+         已保留；验证/Muri 的 QML 投影接管留给下一任务，本提交不混入。
+      4. Release 自动证据：`chart_workspace_spec`、`chart_workspace_file_service_spec`、
+         `analysis_service_spec`、`qml_document_lifecycle_contract_spec`、`qml_document_projection_spec`、
+         `simai_document_spec` 为 6/6 通过。`qml_editor_controller_spec` 在本机 Windows Qt Quick
+         运行时无 CPU 挂起，与审计中既知基础设施故障一致，安全终止后不记为通过；脏文档关闭仍保留
+         原生桌面手工回归。
 - [ ] 切换文档后 PV 异常：**多次复现失败，需求延后。** 埋点保留在树上
       （`editor/document_replaced` 与 `editor/document_shown`），日后若再次出现可直接取证。
       在拿到一次成功复现之前不再投入排查。排查记录见审计文档的“切换文档排查记录”。
-- [ ] 撤销栈：**部分修复，仍有问题。** 已修的是历史被误清空与 undo/redo 的替换跨度
+- [x] 撤销栈 dirty 联动：历史被误清空与 undo/redo 的替换跨度
       （`581b782b`：不再被 controller 来源的同步清空，改为最小差异替换并选中所恢复的文本）。
-      **未修的是 `Ctrl+Z` / `Ctrl+Y` 与文档置脏标记的联动**：撤销掉全部修改后，置脏标记不会
-      随之复原，文档仍显示为已修改。按所有者要求，**参考 v1 的实现算法**来处理这条联动。
+      由 `581b782b` 修复；本次将 dirty 真相迁移为完整文档 save point，`Ctrl+Z` / `Ctrl+Y` 恢复到
+      已打开或已保存内容时会自动回到 clean，其他元数据仍有差异时仍保持 dirty。
 - [x] 快捷键体系（`676150e0`）：成因是绑定上下文而非缺注册层。v2 经 `QmlShortcutModel` 复用
   `ShortcutRegistry`，变换命令按 id 走 `MainWindow::triggerShortcutCommand`，预览命令直接绑
   `QuickShellController`；菜单行通过 `AppMenuAction.shortcutText` 显示快捷键。

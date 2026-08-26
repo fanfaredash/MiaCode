@@ -1588,10 +1588,12 @@ bool MainWindow::requestQmlEditorNavigation(
         return false;
     }
     const DocumentValidationSnapshot snapshot = documentValidationSnapshot();
+    const quint64 committedRevision = appliedQmlWorkspaceRevision_ > 0
+        ? appliedQmlWorkspaceRevision_ : snapshot.revision;
     const miacode::qml_ui::QmlEditorNavigationRequest request{
-        activeDifficultyId_, snapshot.revision, qMax(1, line), qMax(1, column),
+        activeDifficultyId_, committedRevision, qMax(1, line), qMax(1, column),
         qMax(qMax(1, line), endLine), qMax(1, endColumn), selectToken, focusEditor, centerView};
-    return request.accepts(activeDifficultyId_, snapshot.revision)
+    return request.accepts(activeDifficultyId_, committedRevision)
         && qmlEditorNavigationHandler_(request);
 }
 

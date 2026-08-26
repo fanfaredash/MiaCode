@@ -5,6 +5,8 @@
 #include <QtCore>
 #include <QtWidgets>
 
+#include <utility>
+
 QString MainWindow::DocumentSection::documentField(MainWindow::DocumentField field) const
 {
     switch (field) {
@@ -344,4 +346,111 @@ void MainWindow::enableUnifiedDocumentDesigner(const QString& canonicalName)
 void MainWindow::disableUnifiedDocumentDesigner()
 {
     documentSection_->disableUnifiedDocumentDesigner();
+}
+
+bool MainWindow::DocumentSection::applyCommittedQmlDocument(
+    const QString& sourceText, const QString& filePath, int activeDifficultyId,
+    bool dirty, quint64 revision, MainWindow::QmlDocumentCommitKind kind,
+    bool usedSystemEncoding)
+{
+    if (revision <= owner_.appliedQmlWorkspaceRevision_) return false;
+
+    const SimaiDocument committedDocument = SimaiDocument::fromText(sourceText);
+    const SimaiDocument previousDocument = state_.document_;
+    const QString previousSource = previousDocument.toText();
+    const int previousDifficultyId = state_.activeDifficultyId_;
+    const bool sourceChanged = previousSource != sourceText;
+    const bool timingChanged = previousDocument.first != committedDocument.first
+        || previousDocument.extraFields != committedDocument.extraFields;
+    const SimaiDifficultyData* previousDifficulty =
+        previousDocument.difficulty(activeDifficultyId);
+    const SimaiDifficultyData* committedDifficulty =
+        committedDocument.difficulty(activeDifficultyId);
+    const bool activeChartChanged = previousDifficulty == nullptr
+        || committedDifficulty == nullptr
+        || previousDifficulty->chart != committedDifficulty->chart;
+
+    owner_.appliedQmlWorkspaceRevision_ = revision;
+    switch (kind) {
+    case MainWindow::QmlDocumentCommitKind::Open:
+        applyOpenedDocumentState(
+            filePath,
+            usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
+            committedDocument,
+            false,
+            -1.0);
+        break;
+    case MainWindow::QmlDocumentCommitKind::Structure:
+    case MainWindow::QmlDocumentCommitKind::SourceReplacement:
+        loadDocument(committedDocument);
+        break;
+    case MainWindow::QmlDocumentCommitKind::DifficultySelection:
+        state_.document_ = committedDocument;
+        if (activeDifficultyId > 0 && activeDifficultyId != previousDifficultyId) {
+            switchToDifficultyField(activeDifficultyId);
+        }
+        break;
+    case MainWindow::QmlDocumentCommitKind::SavePoint:
+        state_.document_ = committedDocument;
+        if (filePath != state_.currentFilePath_) {
+            owner_.setCurrentFilePath(filePath, true);
+            owner_.addRecentFilePath(filePath);
+        }
+        break;
+    case MainWindow::QmlDocumentCommitKind::Incremental:
+        state_.document_ = committedDocument;
+        populateMetadataPage();
+        if (activeDifficultyId > 0 && committedDifficulty != nullptr) {
+            state_.activeDifficultyId_ = activeDifficultyId;
+            populateDifficultyPage(activeDifficultyId);
+        }
+        rebuildFieldSidebar();
+        if (timingChanged) {
+            owner_.refreshWaveformCache();
+            owner_.refreshTimelineMetadata();
+        } else if (activeChartChanged) {
+            owner_.scheduleTimelineRefresh();
+        }
+        break;
+    }
+
+    // loadDocument may apply a legacy project preference while constructing
+    // hidden widgets. Reassert the committed value so MainWindow cannot
+    // manufacture a second writable document during the transition.
+    state_.document_ = committedDocument;
+    if (activeDifficultyId > 0
+        && state_.document_.difficulty(activeDifficultyId) != nullptr
+        && state_.activeDifficultyId_ != activeDifficultyId) {
+        switchToDifficultyField(activeDifficultyId);
+    }
+    if (kind == MainWindow::QmlDocumentCommitKind::Open
+        || kind == MainWindow::QmlDocumentCommitKind::Structure
+        || kind == MainWindow::QmlDocumentCommitKind::SourceReplacement
+        || (sourceChanged && kind == MainWindow::QmlDocumentCommitKind::SavePoint)) {
+        populateMetadataPage();
+        if (activeDifficultyId > 0) populateDifficultyPage(activeDifficultyId);
+        rebuildFieldSidebar();
+    }
+    state_.documentDirty_ = dirty;
+    state_.currentFieldDirty_ = false;
+    anchorCurrentFieldCleanState();
+    updateDirtyState();
+    owner_.updateWindowTitle();
+    return true;
+}
+
+bool MainWindow::applyCommittedQmlDocument(
+    const QString& sourceText, const QString& filePath, int activeDifficultyId,
+    bool dirty, quint64 revision, QmlDocumentCommitKind kind,
+    bool usedSystemEncoding)
+{
+    return documentSection_->applyCommittedQmlDocument(
+        sourceText, filePath, activeDifficultyId, dirty, revision, kind,
+        usedSystemEncoding);
+}
+
+void MainWindow::setQmlDocumentSaveHandler(
+    std::function<bool(const QString&)> handler)
+{
+    qmlDocumentSaveHandler_ = std::move(handler);
 }

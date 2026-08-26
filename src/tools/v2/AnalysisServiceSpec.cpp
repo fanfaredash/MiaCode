@@ -21,7 +21,7 @@ QString sourceText()
 bool verifyRevisionStampedAnalysis(QTextStream& out)
 {
     miacode::v2::ChartWorkspace workspace;
-    const auto opened = workspace.replaceSource(sourceText());
+    const auto opened = workspace.openSource(sourceText());
     const auto first = miacode::v2::AnalysisService::analyze(workspace);
     bool ok = expect(opened.accepted && first.available && first.revision == opened.revision
                          && first.difficultyId == 5 && first.validation.ok

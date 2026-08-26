@@ -81,11 +81,12 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
 - `MainWindow` is orchestration, not the home for every feature body. New window features land
   in `src/app/mainwindow/sections/<feature>/`.
 - `SimaiDocument` is the editable storage model for metadata + difficulty text.
-- `app/v2/ChartWorkspace` is the staged sole-owner boundary for the next document migration:
+- `app/v2/ChartWorkspace` is UIv2's production sole-owner boundary:
   it publishes one monotonic revision per accepted transaction, carries active difficulty and
   save-point dirty state, and rejects strict full-source replacements without publishing an
-  intermediate document. It must stay Widgets-free; `MainWindow` remains the production owner
-  until this boundary is fully adopted.
+  intermediate document. It must stay Widgets-free; hidden `MainWindow` only consumes monotonic
+  committed values for timeline/preview and legacy-page compatibility and never determines UIv2
+  dirty state.
 - `app/v2/ChartWorkspaceFileService` is the corresponding file boundary: it decodes BOM UTF-8,
   falls back to the system codec only after an invalid UTF-8 stream, and commits UTF-8 saves through
   `QSaveFile`. It returns value failures instead of opening a dialog or reaching into MainWindow.

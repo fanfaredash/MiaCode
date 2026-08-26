@@ -44,13 +44,15 @@ a two-phase transaction: preflight every candidate difficulty with strict valida
 old document/editor text on any error, then load and refresh the timeline only after acceptance.
 Cache clearing publishes the same signal.
 
-Backend-owned document replacement is a separate atomic boundary: startup targets, root
-ChartDrop, native open/new/discard/recovery and accepted full-source replacement all funnel
-through `DocumentSection::loadDocument()`, which publishes `MainWindow::documentReplaced()` only
-after file identity, active difficulty, title and document-owned bookmarks are current.
-`QmlDocumentModel` republishes its complete state and its own `documentReplaced` signal from that
-backend event; consumers must rederive text, difficulty tabs and bookmarks rather than retaining a
-previous-document cache. UIv2 explicit validation first schedules the ordinary timeline slow
+UIv2 document transactions are workspace-owned: `QmlDocumentModel` submits body, metadata,
+difficulty and file operations to `ChartWorkspace` / `ChartWorkspaceFileService`, then sends one
+immutable snapshot plus its monotonic revision through `MainWindow::applyCommittedQmlDocument`.
+The hidden window may mirror that value for timeline/preview and legacy-page compatibility, but it
+must not derive UIv2 dirty or revision truth. Open and save establish complete-document save points;
+undo/redo simply resubmits restored body text, so dirty clears only when the entire serialized
+document equals the save point. Compatibility-only backend replacements are adopted as complete
+workspace replacements after `MainWindow::documentReplaced`; consumers still rederive text,
+difficulty tabs and bookmarks rather than retaining a previous-document cache. UIv2 explicit validation first schedules the ordinary timeline slow
 refresh, then publishes its immediate validation result; the scheduled generation is responsible
 for publishing the matching validation/Muri/static-reference revision. `ViewState` replacement
 tab reset is presentation-only: it must not issue another difficulty-selection request after

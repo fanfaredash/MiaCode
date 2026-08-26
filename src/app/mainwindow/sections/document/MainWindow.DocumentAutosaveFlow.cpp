@@ -519,6 +519,9 @@ bool MainWindow::DocumentSection::onSaveFileAs()
 
 bool MainWindow::DocumentSection::saveToPath(const QString& path)
 {
+    if (owner_.qmlDocumentSaveHandler_) {
+        return owner_.qmlDocumentSaveHandler_(path);
+    }
     MC_OP("MainWindow::DocumentSection::saveToPath");
     _mc_op_.note(QStringLiteral("path=%1").arg(path));
     QElapsedTimer totalTimer;

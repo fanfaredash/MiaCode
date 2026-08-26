@@ -248,8 +248,11 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         backend_->shellNoteQuickUiReady();
     }
 
-    if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {
-        backend_->openStartupTarget(startupOpenTarget.trimmed());
+    if (!startupOpenTarget.trimmed().isEmpty() && applicationContext_ != nullptr) {
+        auto* document = qobject_cast<QmlDocumentModel*>(applicationContext_->document());
+        if (document != nullptr) {
+            document->openFile(QUrl::fromLocalFile(startupOpenTarget.trimmed()));
+        }
     }
 
     if (showWelcomeDialogOnStartup_ && backend_ != nullptr) {

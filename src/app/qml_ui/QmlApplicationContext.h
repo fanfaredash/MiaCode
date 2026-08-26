@@ -9,6 +9,8 @@
 #include "QmlPreviewModel.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiSettings.h"
+#include "app/v2/ChartWorkspace.h"
+#include "app/v2/ChartWorkspaceFileService.h"
 
 #include <QObject>
 
@@ -49,6 +51,8 @@ public:
     void setWindowChrome(QObject* chrome);
 
 private:
+    miacode::v2::ChartWorkspace workspace_;
+    miacode::v2::ChartWorkspaceFileService fileService_;
     QmlUiSettings preferences_;
     QmlDocumentModel document_;
     QmlAnalysisModel analysis_;

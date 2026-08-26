@@ -5,6 +5,8 @@
 #include <QHash>
 #include <QRegularExpression>
 
+#include <utility>
+
 namespace miacode::v2 {
 namespace {
 
@@ -91,16 +93,18 @@ ChartWorkspacePreflightResult ChartWorkspace::preflightSource(
     return result;
 }
 
-ChartWorkspaceResult ChartWorkspace::replaceSource(const QString& source, const QString& filePath)
+ChartWorkspaceResult ChartWorkspace::openSource(
+    const QString& source, const QString& filePath, int preferredDifficultyId)
 {
     const ChartWorkspacePreflightResult preflight =
         preflightSource(source, SimaiNativeValidationLocale::English);
     if (!preflight.accepted) return reject(preflight.issues);
 
-    const int previousDifficulty = activeDifficultyId_;
     document_ = preflight.candidate;
-    activeDifficultyId_ = document_.difficulty(previousDifficulty) != nullptr
-        ? previousDifficulty : firstDifficultyId(document_);
+    const int requestedDifficulty = preferredDifficultyId > 0
+        ? preferredDifficultyId : activeDifficultyId_;
+    activeDifficultyId_ = document_.difficulty(requestedDifficulty) != nullptr
+        ? requestedDifficulty : firstDifficultyId(document_);
     filePath_ = filePath;
     hasDocument_ = true;
     sourceText_ = document_.toText();
@@ -109,21 +113,98 @@ ChartWorkspaceResult ChartWorkspace::replaceSource(const QString& source, const 
     return commit();
 }
 
+ChartWorkspaceResult ChartWorkspace::replaceSource(const QString& source)
+{
+    if (!hasDocument_) return reject();
+    const ChartWorkspacePreflightResult preflight =
+        preflightSource(source, SimaiNativeValidationLocale::English);
+    if (!preflight.accepted) return reject(preflight.issues);
+
+    const QString canonicalSource = preflight.candidate.toText();
+    if (canonicalSource == sourceText_) return acceptWithoutChange();
+
+    const int previousDifficulty = activeDifficultyId_;
+    document_ = preflight.candidate;
+    activeDifficultyId_ = document_.difficulty(previousDifficulty) != nullptr
+        ? previousDifficulty : firstDifficultyId(document_);
+    refreshSourceAndDirty();
+    return commit();
+}
+
 ChartWorkspaceResult ChartWorkspace::replaceActiveDifficultyChart(const QString& chartText)
 {
     if (!hasDocument_) return reject();
     SimaiDifficultyData* difficulty = document_.difficulty(activeDifficultyId_);
     if (difficulty == nullptr) return reject();
+    if (difficulty->chart == chartText) return acceptWithoutChange();
 
-    SimaiDocument candidate = document_;
-    candidate.difficulty(activeDifficultyId_)->chart = chartText;
-    const ChartWorkspacePreflightResult preflight =
-        preflightSource(candidate.toText(), SimaiNativeValidationLocale::English);
-    if (!preflight.accepted) return reject(preflight.issues);
-
-    document_ = preflight.candidate;
+    // A visible source editor must be able to publish incomplete tokens while
+    // the user is typing. Strict validation belongs to the complete-source
+    // replacement transaction above, not this incremental text transaction.
+    difficulty->chart = chartText;
     refreshSourceAndDirty();
     return commit();
+}
+
+bool ChartWorkspace::updateDocumentField(
+    ChartWorkspaceDocumentField field, const QString& value)
+{
+    if (!hasDocument_) return false;
+    bool changed = false;
+    switch (field) {
+    case ChartWorkspaceDocumentField::Title:
+        changed = document_.title != value;
+        document_.title = value;
+        break;
+    case ChartWorkspaceDocumentField::Artist:
+        changed = document_.artist != value;
+        document_.artist = value;
+        break;
+    case ChartWorkspaceDocumentField::First:
+        changed = document_.first != value;
+        document_.first = value;
+        break;
+    case ChartWorkspaceDocumentField::Designer:
+        changed = document_.designer != value;
+        document_.designer = value;
+        break;
+    case ChartWorkspaceDocumentField::VideoPath:
+        changed = document_.videoPath != value;
+        document_.videoPath = value;
+        break;
+    case ChartWorkspaceDocumentField::ExtraText: {
+        QVector<SimaiRawField> fields = SimaiDocument::parseUnmanagedFields(value, true);
+        SimaiDocument::ensureDefaultClockCount(&fields);
+        changed = document_.extraFields != fields;
+        document_.extraFields = std::move(fields);
+        break;
+    }
+    }
+    if (!changed) return false;
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::updateDifficultyField(
+    int difficultyId, ChartWorkspaceDifficultyField field, const QString& value)
+{
+    if (!hasDocument_) return false;
+    SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    if (difficulty == nullptr) return false;
+    switch (field) {
+    case ChartWorkspaceDifficultyField::Level:
+        if (difficulty->level == value) return false;
+        difficulty->level = value;
+        break;
+    case ChartWorkspaceDifficultyField::Designer:
+        if (difficulty->designer == value) return false;
+        difficulty->designer = value;
+        break;
+    }
+    refreshSourceAndDirty();
+    commit();
+    return true;
 }
 
 bool ChartWorkspace::selectDifficulty(int difficultyId)
@@ -133,6 +214,48 @@ bool ChartWorkspace::selectDifficulty(int difficultyId)
         return false;
     }
     activeDifficultyId_ = difficultyId;
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::addDifficulty(int difficultyId)
+{
+    if (!hasDocument_ || !SimaiDocument::isDifficultyId(difficultyId)
+        || document_.difficulty(difficultyId) != nullptr) {
+        return false;
+    }
+    document_.ensureDifficulty(difficultyId);
+    activeDifficultyId_ = difficultyId;
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::removeDifficulty(int difficultyId)
+{
+    if (!hasDocument_ || document_.difficulty(difficultyId) == nullptr) return false;
+    document_.removeDifficulty(difficultyId);
+    if (activeDifficultyId_ == difficultyId) {
+        activeDifficultyId_ = firstDifficultyId(document_);
+    }
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::unifyDesigners(const QString& canonicalName)
+{
+    if (!hasDocument_) return false;
+    bool changed = document_.designer != canonicalName;
+    document_.designer = canonicalName;
+    const QVector<QPair<int, QString>> designerSlots = document_.perDifficultyDesigners();
+    for (const QPair<int, QString>& slot : designerSlots) {
+        if (slot.second == canonicalName) continue;
+        document_.setDesignerForSlot(slot.first, canonicalName);
+        changed = true;
+    }
+    if (!changed) return false;
+    refreshSourceAndDirty();
     commit();
     return true;
 }
@@ -168,6 +291,11 @@ ChartWorkspaceResult ChartWorkspace::commit()
 {
     ++revision_;
     emit changed(revision_);
+    return {true, revision_, {}};
+}
+
+ChartWorkspaceResult ChartWorkspace::acceptWithoutChange() const
+{
     return {true, revision_, {}};
 }
 

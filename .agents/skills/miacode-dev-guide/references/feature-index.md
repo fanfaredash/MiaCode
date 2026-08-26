@@ -60,9 +60,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Default UI (v2): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
   `MiaCode.UI`). Shares hidden `MainWindow` + `QuickShellController` (no shell-wide
   NativeSurfaceHost). Export uses `QmlExportSession` + `ExportVideoPage.qml`;
-  `QmlEditorPageHost` embeds Latency only. `QmlDocumentModel` reaches document state through
-  the public operations in `sections/document/MainWindow.DocumentBridge.cpp`; validation reads
-  `DocumentValidationSnapshot` from the shared cache. `QmlEditorController` is the narrow QML
+  `QmlEditorPageHost` embeds Latency only. `QmlDocumentModel` submits body, metadata, difficulty and
+  file transactions to `app/v2/ChartWorkspace` / `ChartWorkspaceFileService`; the public
+  `MainWindow.DocumentBridge.cpp` entry is now a monotonic committed-value adapter. Validation still
+  reads `DocumentValidationSnapshot` from the shared cache until the next analysis-projection task.
+  `QmlEditorController` is the narrow QML
   text-transaction/completion/undo owner exposed by `QmlApplicationContext`; `SourceEditor.qml`
   forwards separate key, IME-commit and paste paths through `QmlEditorInputBridge` with
   `Keys.BeforeItem`, while `CompletionPopup.qml` remains unfocused so editor keyboard routing is retained.
@@ -75,10 +77,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   lifetimes are mutually exclusive through QML Loaders — only the visible surface may subscribe to
   `PreviewRuntime`. QML reverse follow retains an accepted navigation-target no-op cache; invalidate it
   with the preview-follow binding cache on document/difficulty changes. Windows caption: `QmlUiWindowChrome`.
-  `app/v2/ChartWorkspace` now owns the strict full-source preflight used by
-  `QmlDocumentProjection`, while `AnalysisService` derives aligned validation/marker/Muri values
-  from the same revision; these are the staging contracts for moving production document ownership
-  and analysis out of `MainWindow`. Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
+  `app/v2/ChartWorkspace` owns UIv2's complete document and save point, while `AnalysisService`
+  exposes aligned validation/marker/Muri values from the same revision; QML analysis projection is
+  intentionally still pending. Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QuickShell compatibility: only `src/app/quick_shell/QuickShellController.*` and preview surface
   policy helpers remain for v2. Stage 0a deleted the v1 bootstrap, native surface host, style bridge,
   QML shell, `--ui=v1`, and `MIACODE_UI_SKIN`.
@@ -150,12 +151,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - Storage: `src/core/chart/document/SimaiDocument.{h,cpp}` (`createEmpty`, `fromText`, `toText`,
   `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`).
-- Staged v2 owner: `src/app/v2/ChartWorkspace.{h,cpp}`. `preflightSource` performs the strict
-  all-difficulty validation currently consumed by `QmlDocumentProjection`; `replaceSource`,
-  `replaceActiveDifficultyChart`, `selectDifficulty`, and `markSaved` establish the future
-  single-owner revision/save-point contract. `src/tools/v2/ChartWorkspaceSpec.cpp` guards the
-  no-intermediate-state, one-notification, and dirty save-point behavior.
-- Staged v2 file flow: `src/app/v2/ChartWorkspaceFileService.{h,cpp}` performs value-returning
+- UIv2 document owner: `src/app/v2/ChartWorkspace.{h,cpp}`. `openSource` establishes a complete-
+  document save point; `replaceSource`, incremental body/metadata/difficulty transactions,
+  difficulty structure/selection, and `markSaved` publish one monotonic revision while content
+  comparison restores v1-style save-anchor dirty semantics. `src/tools/v2/ChartWorkspaceSpec.cpp`
+  guards no-intermediate-state, one-notification, branch edits and complete-document save points.
+- UIv2 file flow: `src/app/v2/ChartWorkspaceFileService.{h,cpp}` performs value-returning
   open/save/save-as around the workspace, preserving BOM/system-codec decode and `QSaveFile` atomic
   write semantics. `src/tools/v2/ChartWorkspaceFileServiceSpec.cpp` covers open, save, save-as and
   failure retention without a MainWindow or dialog.
@@ -168,10 +169,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
-- v2 document presentation boundary: `sections/document/MainWindow.DocumentBridge.cpp`
-  (`documentField`, `difficultyField`, document/difficulty update operations, save/discard and
-  unified-designer forwarding). `QmlDocumentModel` performs QML type conversion and signal
-  projection; it has no friend access to `MainWindow` internals.
+- v2 compatibility boundary: `sections/document/MainWindow.DocumentBridge.cpp`
+  (`applyCommittedQmlDocument`) rejects stale workspace revisions and mirrors only committed
+  document/file/difficulty/dirty values into hidden legacy consumers. `QmlDocumentModel` performs
+  QML type conversion and workspace signal projection; close-save routing delegates durable writes
+  back to `ChartWorkspaceFileService`.
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
   (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
   `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`

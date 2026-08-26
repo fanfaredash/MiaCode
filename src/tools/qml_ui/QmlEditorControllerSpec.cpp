@@ -3,6 +3,7 @@
 #include "app/qml_ui/SimaiSyntaxHighlighter.h"
 #include "app/qml_ui/QmlEditorNavigationBridge.h"
 #include "app/qml_ui/QmlTouchPadAuthoringBridge.h"
+#include "app/v2/ChartWorkspace.h"
 #include "editor/BookmarkCommentSyntax.h"
 
 #include <QCoreApplication>
@@ -224,6 +225,68 @@ bool verifyCommandModifiedKeysNeverTypeText(QTextStream& out, int* failed)
     return expect(root->property("undoRequests").toInt() == 1
                       && editor->property("text").toString() == QStringLiteral("abc"),
                   QStringLiteral("the undo shortcut still reaches the QML undo route"), out, failed);
+}
+
+QString applyRestoredTransaction(QString current, const QVariantMap& transaction)
+{
+    if (!transaction.value(QStringLiteral("hasEdit")).toBool()) return current;
+    const int start = transaction.value(QStringLiteral("replacementStart")).toInt();
+    const int end = transaction.value(QStringLiteral("replacementEnd")).toInt();
+    current.replace(start, end - start,
+                    transaction.value(QStringLiteral("replacementText")).toString());
+    return current;
+}
+
+bool verifyWorkspaceSavePointFollowsQmlUndo(
+    miacode::qml_ui::QmlEditorController& controller,
+    QTextStream& out, int* failed)
+{
+    using miacode::v2::ChartWorkspaceDocumentField;
+    const QString openedChart = QStringLiteral("(120){4}1,");
+    const QString editedChart = QStringLiteral("(120){4}2,");
+    const QString source = QStringLiteral(
+        "&title=opened\n&lv_5=12\n&inote_5=(120){4}1,\n");
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(source, QStringLiteral("chart.txt"), 5);
+
+    controller.resetQmlHistory(openedChart, 0, 0);
+    controller.recordQmlTransaction(
+        openedChart, editedChart, 0, 0, editedChart.size(), editedChart.size());
+    workspace.replaceActiveDifficultyChart(editedChart);
+    QString restored = applyRestoredTransaction(
+        editedChart, controller.undoQmlTransaction());
+    workspace.replaceActiveDifficultyChart(restored);
+    bool ok = expect(!workspace.snapshot().dirty && restored == openedChart,
+                     QStringLiteral("QML undo back to opened text restores the workspace save point"),
+                     out, failed);
+
+    workspace.replaceActiveDifficultyChart(editedChart);
+    workspace.markSaved();
+    const QString postSaveEdit = QStringLiteral("(120){4}3,");
+    controller.resetQmlHistory(editedChart, 0, 0);
+    controller.recordQmlTransaction(
+        editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
+    workspace.replaceActiveDifficultyChart(postSaveEdit);
+    restored = applyRestoredTransaction(
+        postSaveEdit, controller.undoQmlTransaction());
+    workspace.replaceActiveDifficultyChart(restored);
+    ok &= expect(!workspace.snapshot().dirty && restored == editedChart,
+                 QStringLiteral("QML undo back to post-save text restores the new workspace save point"),
+                 out, failed);
+
+    workspace.updateDocumentField(
+        ChartWorkspaceDocumentField::Title, QStringLiteral("metadata-dirty"));
+    controller.resetQmlHistory(editedChart, 0, 0);
+    controller.recordQmlTransaction(
+        editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
+    workspace.replaceActiveDifficultyChart(postSaveEdit);
+    restored = applyRestoredTransaction(
+        postSaveEdit, controller.undoQmlTransaction());
+    workspace.replaceActiveDifficultyChart(restored);
+    ok &= expect(workspace.snapshot().dirty && restored == editedChart,
+                 QStringLiteral("QML chart undo cannot clear an unrelated metadata mutation"),
+                 out, failed);
+    return ok;
 }
 // Backspace and Delete arrive from a real QML TextArea with control characters
 // in QKeyEvent::text(). The smart policy may consume empty-pair Backspace, but
@@ -827,6 +890,7 @@ int main(int argc, char** argv)
     verifyEditorPointerRoutes(out, &failed);
     verifyEditorTabsRecoverTheActiveDifficulty(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
+    verifyWorkspaceSavePointFollowsQmlUndo(controller, out, &failed);
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
     expect(opening.consumed && opening.transaction.replacementText == QStringLiteral("[]") && opening.transaction.position == 1, QStringLiteral("policy key input produces one QML edit transaction"), out, &failed);
     expect(controller.completionActive() && controller.completionIndex() == 0 && controller.completionCandidates().contains(QStringLiteral("8:1]")), QStringLiteral("opening bracket publishes a completion session"), out, &failed);

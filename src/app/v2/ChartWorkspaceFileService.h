@@ -12,6 +12,7 @@ struct ChartWorkspaceFileResult {
     quint64 revision = 0;
     QString error;
     QVector<ChartWorkspaceIssue> issues;
+    bool usedSystemEncoding = false;
 };
 
 // File-system boundary for ChartWorkspace.  This deliberately reports failures

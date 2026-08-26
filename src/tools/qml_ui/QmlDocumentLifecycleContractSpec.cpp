@@ -102,6 +102,63 @@ bool verifyV2ValidationSchedulesMatchingMuriRefresh(QTextStream& err)
                    QStringLiteral("the scheduled slow result publishes validation, Muri report, and static references at one revision"), err);
 }
 
+bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
+{
+    const QString applicationContext = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlApplicationContext.h"));
+    const QString documentModel = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
+    const QString mainWindow = sourceFile(
+        QStringLiteral("src/app/mainwindow/MainWindow.h"));
+    const QString documentBridge = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentBridge.cpp"));
+    const QString fileFlow = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp"));
+    const QString timelineFlow = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp"));
+    const QString validationFlow = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp"));
+
+    return require(
+               applicationContext.contains(QStringLiteral("ChartWorkspace workspace_;"))
+                   && applicationContext.contains(
+                       QStringLiteral("ChartWorkspaceFileService fileService_;")),
+               QStringLiteral("QmlApplicationContext owns one workspace and its file boundary"), err)
+        && require(documentModel.contains(
+                       QStringLiteral("workspace_->replaceActiveDifficultyChart(value)"))
+                       && documentModel.contains(
+                           QStringLiteral("workspace_->updateDocumentField("))
+                       && documentModel.contains(
+                           QStringLiteral("workspace_->updateDifficultyField("))
+                       && documentModel.contains(QStringLiteral("fileService_->open(path)"))
+                       && documentModel.contains(QStringLiteral("fileService_->save()")),
+                   QStringLiteral("production QML body, metadata, difficulty, and file operations submit workspace transactions"), err)
+        && require(!documentModel.contains(QStringLiteral("backend_->isWindowModified()"))
+                       && !documentModel.contains(
+                           QStringLiteral("backend_->updateActiveChartText(value)"))
+                       && !documentModel.contains(
+                           QStringLiteral("backend_->updateDocumentField("))
+                       && !documentModel.contains(
+                           QStringLiteral("backend_->updateDifficultyField("))
+                       && !documentModel.contains(
+                           QStringLiteral("backend_->saveDocument()")),
+                   QStringLiteral("QmlDocumentModel never asks MainWindow to own a mutation or determine dirty"), err)
+        && require(mainWindow.contains(QStringLiteral("applyCommittedQmlDocument("))
+                       && documentBridge.contains(
+                           QStringLiteral("revision <= owner_.appliedQmlWorkspaceRevision_"))
+                       && containsAfter(documentBridge,
+                                        QStringLiteral("state_.document_ = committedDocument;"),
+                                        QStringLiteral("state_.documentDirty_ = dirty;")),
+                   QStringLiteral("MainWindow accepts only monotonic committed adapter values and mirrors workspace dirty"), err)
+        && require(documentModel.contains(
+                       QStringLiteral("publishWorkspaceCommit(WorkspaceCommitKind::Incremental);"))
+                       && timelineFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0"))
+                       && validationFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0")),
+                   QStringLiteral("initial, navigation, and follow identities stay on the committed workspace revision"), err)
+        && require(fileFlow.contains(QStringLiteral("owner_.qmlDocumentSaveHandler_(path)")),
+                   QStringLiteral("legacy close-save routing delegates durable writes to the workspace file service"), err);
+}
+
 }  // namespace
 
 int main()
@@ -110,7 +167,8 @@ int main()
     QTextStream out(stdout);
     const bool ok = verifyBackendReplacementPublishesOneQmlRefresh(err)
         && verifyNewDocumentPublishesFinalFileIdentity(err)
-        && verifyV2ValidationSchedulesMatchingMuriRefresh(err);
+        && verifyV2ValidationSchedulesMatchingMuriRefresh(err)
+        && verifyWorkspaceOwnsProductionDocumentAndDirty(err);
     if (ok) {
         out << "qml_document_lifecycle_contract_spec ok" << Qt::endl;
     }

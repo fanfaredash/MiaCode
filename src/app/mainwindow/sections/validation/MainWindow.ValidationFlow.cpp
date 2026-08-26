@@ -1158,7 +1158,9 @@ void MainWindow::setPreviewFollowDecoration(
         miacode::qml_ui::QmlEditorFollowDecoration decoration;
         decoration.active = true;
         decoration.difficultyId = activeDifficultyId_;
-        decoration.revision = documentValidationSnapshot().revision;
+        const DocumentValidationSnapshot validation = documentValidationSnapshot();
+        decoration.revision = appliedQmlWorkspaceRevision_ > 0
+            ? appliedQmlWorkspaceRevision_ : validation.revision;
         decoration.startLine = qMax(1, startLine);
         decoration.startColumn = qMax(1, startCol);
         decoration.endLine = qMax(decoration.startLine, endLine >= 0 ? endLine : startLine);

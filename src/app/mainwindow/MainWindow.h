@@ -194,6 +194,15 @@ public:
         QVector<miacode::qml_ui::DocumentValidationProjectionIssue> issues;
     };
 
+    enum class QmlDocumentCommitKind {
+        Incremental,
+        DifficultySelection,
+        Structure,
+        SourceReplacement,
+        Open,
+        SavePoint,
+    };
+
     struct CliVideoExportRequest {
         QString chartPathOrDirectory;
         QString difficulty = QStringLiteral("MAS");
@@ -295,6 +304,14 @@ public:
     bool removeDocumentDifficulty(int difficultyId);
     void enableUnifiedDocumentDesigner(const QString& canonicalName);
     void disableUnifiedDocumentDesigner();
+    // Transitional one-way adapter: ChartWorkspace commits first, then the
+    // hidden MainWindow consumes this immutable value for timeline/preview and
+    // legacy-page compatibility. It never supplies UIv2 dirty/revision truth.
+    bool applyCommittedQmlDocument(
+        const QString& sourceText, const QString& filePath, int activeDifficultyId,
+        bool dirty, quint64 revision, QmlDocumentCommitKind kind,
+        bool usedSystemEncoding = false);
+    void setQmlDocumentSaveHandler(std::function<bool(const QString&)> handler);
     DocumentValidationSnapshot documentValidationSnapshot() const;
     QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
     void invalidateDocumentValidationRevision();
@@ -472,6 +489,8 @@ private:
         qmlEditorNavigationHandler_;
     std::function<void(const miacode::qml_ui::QmlEditorFollowDecoration&)>
         qmlEditorFollowDecorationHandler_;
+    std::function<bool(const QString&)> qmlDocumentSaveHandler_;
+    quint64 appliedQmlWorkspaceRevision_ = 0;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {

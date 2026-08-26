@@ -32,12 +32,15 @@ same change.
 - Default UI (**v2**): `src/app/qml_ui/` (`QmlUiBootstrap`, phase-1 checklist:
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`). Export uses `QmlExportSession` +
   `ExportVideoPage.qml`; `QmlEditorPageHost` embeds Latency only. Workspace mode follows
-  `QuickShellController`. `QmlDocumentModel` uses the public document bridge and shared
-  validation snapshot. Windows title bar: `QmlUiWindowChrome`.
-- Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` owns the first Widgets-free
-  document/revision/save-point contract and strict full-source preflight; `ChartWorkspaceFileService`
-  owns BOM/system-encoding file I/O plus atomic saves; `AnalysisService` derives revision-stamped
-  validation/marker/Muri snapshots. Current MainWindow ownership has not yet migrated).
+  `QuickShellController`. `QmlDocumentModel` submits body, metadata, difficulty and file operations
+  to the v2 workspace; legacy validation remains a temporary read-only projection. Windows title
+  bar: `QmlUiWindowChrome`.
+- Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` is UIv2's Widgets-free sole document,
+  revision and complete-document save-point owner; `ChartWorkspaceFileService` owns BOM/system-
+  encoding file I/O plus atomic saves; `AnalysisService` exposes the revision-stamped validation/
+  marker/Muri snapshot interface for the next projection migration). Hidden `MainWindow` is a
+  monotonic committed-value adapter for timeline/preview and legacy-page compatibility; it does not
+  determine UIv2 dirty state.
 - QuickShell compatibility: `src/app/quick_shell/QuickShellController.*` remains temporarily for
   v2; the v1 shell, `--ui=v1`, and `MIACODE_UI_SKIN` were deleted in stage 0a.
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)

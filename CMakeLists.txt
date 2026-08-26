@@ -1757,6 +1757,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(qml_editor_controller_spec TEST
         SOURCES
             src/tools/qml_ui/QmlEditorControllerSpec.cpp
+            ${_miacode_chart_core}
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/ChartWorkspace.h
             src/app/qml_ui/QmlEditorController.h
             src/app/qml_ui/QmlEditorController.cpp
             src/app/qml_ui/SimaiSyntaxHighlighter.h

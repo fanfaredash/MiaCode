@@ -8,8 +8,10 @@ QmlApplicationContext::QmlApplicationContext(
     QuickShellController& shell,
     QObject* parent)
     : QObject(parent)
+    , workspace_()
+    , fileService_(workspace_)
     , preferences_(this)
-    , document_(backend, this)
+    , document_(backend, workspace_, fileService_, this)
     , analysis_(backend, this)
     , preview_(backend, shell, this)
     , commands_(backend, document_, this)

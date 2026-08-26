@@ -31,7 +31,7 @@ bool verifySingleOwnerRevisionAndSavePoint(QTextStream& out)
                          emittedRevision = revision;
                      });
 
-    const auto opened = workspace.replaceSource(sourceWithTwoDifficulties(), QStringLiteral("chart.txt"));
+    const auto opened = workspace.openSource(sourceWithTwoDifficulties(), QStringLiteral("chart.txt"));
     auto state = workspace.snapshot();
     bool ok = expect(opened.accepted && opened.revision == 1 && changedCount == 1
                          && emittedRevision == 1 && state.hasDocument && !state.dirty
@@ -63,7 +63,7 @@ bool verifyRejectionDoesNotExposeIntermediateState(QTextStream& out)
     int changedCount = 0;
     QObject::connect(&workspace, &miacode::v2::ChartWorkspace::changed,
                      [&changedCount](quint64) { ++changedCount; });
-    const auto opened = workspace.replaceSource(sourceWithTwoDifficulties());
+    const auto opened = workspace.openSource(sourceWithTwoDifficulties());
     const auto before = workspace.snapshot();
     const auto rejected = workspace.replaceSource(QStringLiteral("&inote_5=(120){4}bad,\n"));
     const auto after = workspace.snapshot();
@@ -80,12 +80,108 @@ bool verifyExplicitSavePoint(QTextStream& out)
     int changedCount = 0;
     QObject::connect(&workspace, &miacode::v2::ChartWorkspace::changed,
                      [&changedCount](quint64) { ++changedCount; });
-    workspace.replaceSource(sourceWithTwoDifficulties());
+    workspace.openSource(sourceWithTwoDifficulties());
     workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}4,"));
     const bool marked = workspace.markSaved();
     const auto state = workspace.snapshot();
     return expect(marked && !state.dirty && state.revision == 3 && changedCount == 3,
                   QStringLiteral("saving advances the snapshot identity once and establishes a new dirty save point"), out);
+}
+
+bool verifyCompleteDocumentSaveAnchor(QTextStream& out)
+{
+    using miacode::v2::ChartWorkspaceDifficultyField;
+    using miacode::v2::ChartWorkspaceDocumentField;
+
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties(), QStringLiteral("first.txt"), 5);
+
+    // Open -> edit -> undo to the opened content.
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}3,"));
+    bool ok = expect(workspace.snapshot().dirty,
+                     QStringLiteral("editing after open dirties the complete document"), out);
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}1,"));
+    ok &= expect(!workspace.snapshot().dirty,
+                 QStringLiteral("restoring the opened chart body returns to the initial save point"), out);
+
+    // Save -> edit -> undo to the new save point.
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}4,"));
+    workspace.markSaved();
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}5,"));
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}4,"));
+    ok &= expect(!workspace.snapshot().dirty,
+                 QStringLiteral("restoring the post-save chart body returns to the new save point"), out);
+
+    // A chart undo must not hide unrelated metadata dirtiness.
+    workspace.updateDocumentField(ChartWorkspaceDocumentField::Title, QStringLiteral("metadata-dirty"));
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}6,"));
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}4,"));
+    ok &= expect(workspace.snapshot().dirty,
+                 QStringLiteral("chart undo cannot clear an outstanding metadata edit"), out);
+
+    // A branch can reach the same conceptual undo depth as a saved edit but
+    // remains dirty because the complete serialized document differs.
+    workspace.openSource(sourceWithTwoDifficulties(), QStringLiteral("branch.txt"), 5);
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}3,"));
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}1,"));
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}7,"));
+    ok &= expect(workspace.snapshot().dirty,
+                 QStringLiteral("a branch edit is compared by content, not undo-step depth"), out);
+
+    // Difficulty selection is identified by revision but never changes the
+    // full-document save anchor; level/designer edits do.
+    const quint64 beforeSwitch = workspace.snapshot().revision;
+    ok &= expect(workspace.selectDifficulty(6) && workspace.snapshot().dirty
+                     && workspace.snapshot().revision == beforeSwitch + 1,
+                 QStringLiteral("difficulty switching preserves dirty state and advances identity"), out);
+    ok &= expect(workspace.updateDifficultyField(
+                     6, ChartWorkspaceDifficultyField::Level, QStringLiteral("13+")),
+                 QStringLiteral("difficulty metadata is a workspace transaction"), out);
+
+    workspace.openSource(
+        QStringLiteral("&title=second\n&lv_4=10\n&inote_4=(120){4}4,\n"),
+        QStringLiteral("second.txt"), 4);
+    ok &= expect(!workspace.snapshot().dirty
+                     && workspace.snapshot().filePath == QLatin1String("second.txt")
+                     && workspace.snapshot().activeDifficultyId == 4,
+                 QStringLiteral("opening another document installs a distinct clean save point"), out);
+    return ok;
+}
+
+bool verifyDocumentAndDifficultyTransactions(QTextStream& out)
+{
+    using miacode::v2::ChartWorkspaceDocumentField;
+
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    bool ok = expect(workspace.updateDocumentField(
+                         ChartWorkspaceDocumentField::First, QStringLiteral("1.25"))
+                         && workspace.snapshot().dirty,
+                     QStringLiteral("timing metadata changes the complete document"), out);
+    ok &= expect(workspace.addDifficulty(4)
+                     && workspace.snapshot().activeDifficultyId == 4
+                     && workspace.document().difficulty(4) != nullptr,
+                 QStringLiteral("adding a difficulty commits and selects it"), out);
+    ok &= expect(workspace.removeDifficulty(4)
+                     && workspace.document().difficulty(4) == nullptr
+                     && workspace.snapshot().activeDifficultyId == 5,
+                 QStringLiteral("removing the active difficulty commits a valid fallback selection"), out);
+    ok &= expect(workspace.unifyDesigners(QStringLiteral("shared"))
+                     && workspace.document().designer == QLatin1String("shared")
+                     && workspace.document().difficulty(5)->designer == QLatin1String("shared")
+                     && workspace.document().difficulty(6)->designer == QLatin1String("shared"),
+                 QStringLiteral("unified designer mutation is owned by the workspace"), out);
+    return ok;
+}
+
+bool verifyIncrementalChartAllowsIntermediateText(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    const auto result = workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}1["));
+    return expect(result.accepted && workspace.snapshot().dirty
+                      && workspace.document().difficulty(5)->chart == QLatin1String("(120){4}1["),
+                  QStringLiteral("incremental chart edits accept an incomplete token for later analysis"), out);
 }
 
 bool verifyInlineSourceSpanWinsOverLaterLevel(QTextStream& out)
@@ -106,6 +202,9 @@ int main()
     const bool ok = verifySingleOwnerRevisionAndSavePoint(out)
         && verifyRejectionDoesNotExposeIntermediateState(out)
         && verifyExplicitSavePoint(out)
+        && verifyCompleteDocumentSaveAnchor(out)
+        && verifyDocumentAndDifficultyTransactions(out)
+        && verifyIncrementalChartAllowsIntermediateText(out)
         && verifyInlineSourceSpanWinsOverLaterLevel(out);
     if (!ok) return 1;
     QTextStream result(stdout);

@@ -20,6 +20,10 @@ public:
     bool addDocumentDifficulty(int difficultyId);
     void enableUnifiedDocumentDesigner(const QString& canonicalName);
     void disableUnifiedDocumentDesigner();
+    bool applyCommittedQmlDocument(
+        const QString& sourceText, const QString& filePath, int activeDifficultyId,
+        bool dirty, quint64 revision, MainWindow::QmlDocumentCommitKind kind,
+        bool usedSystemEncoding);
     // Opens the modal "manage per-difficulty designers" dialog: seven rows for
     // &des_1..7 plus the "all difficulties share one designer" toggle. Commits
     // on OK (chart-less names become standalone &des_N — no phantom

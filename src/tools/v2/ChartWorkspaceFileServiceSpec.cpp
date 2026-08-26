@@ -23,8 +23,10 @@ bool verifyOpenSaveAndSaveAs(QTextStream& out)
     QTemporaryDir directory;
     const QString openedPath = directory.filePath(QStringLiteral("opened.txt"));
     const QString savedPath = directory.filePath(QStringLiteral("saved.txt"));
+    const QString maidataPath = directory.filePath(QStringLiteral("maidata.txt"));
     const QByteArray bomSource("\xEF\xBB\xBF&lv_5=12\n&inote_5=(120){4}1,\n");
-    if (!expect(directory.isValid() && writeBytes(openedPath, bomSource),
+    if (!expect(directory.isValid() && writeBytes(openedPath, bomSource)
+                    && writeBytes(maidataPath, bomSource),
                 QStringLiteral("temporary document is prepared"), out)) return false;
 
     miacode::v2::ChartWorkspace workspace;
@@ -45,13 +47,18 @@ bool verifyOpenSaveAndSaveAs(QTextStream& out)
     const auto savedAs = files.saveAs(savedPath);
     ok &= expect(savedAs.accepted && workspace.snapshot().filePath == savedPath,
                  QStringLiteral("save as changes file identity only after a successful write"), out);
+
+    const auto reopenedFromDirectory = files.open(directory.path());
+    ok &= expect(reopenedFromDirectory.accepted
+                     && workspace.snapshot().filePath == maidataPath,
+                 QStringLiteral("opening a chart directory resolves its maidata.txt child"), out);
     return ok;
 }
 
 bool verifyFailedOpenRetainsWorkspace(QTextStream& out)
 {
     miacode::v2::ChartWorkspace workspace;
-    workspace.replaceSource(QStringLiteral("&lv_5=12\n&inote_5=(120){4}1,\n"));
+    workspace.openSource(QStringLiteral("&lv_5=12\n&inote_5=(120){4}1,\n"));
     miacode::v2::ChartWorkspaceFileService files(workspace);
     const auto before = workspace.snapshot();
     const auto result = files.open(QStringLiteral("Z:/does-not-exist/maidata.txt"));
