@@ -247,7 +247,9 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
       `qml_export_video_page_spec` 与 `video_export_intro_sound_spec` 为 3/3 通过（2026-08-26）。
 - [x] 将 v2 根窗口接入 ChartDrop；`QmlUiBootstrap` 注册 root window、安装拖放事件过滤器并创建/同步
       `ChartDropOverlay`，释放或取消时清理 overlay 与 root 绑定。
-- [ ] 手工确认 v2 工具箱的批量上传入口能够打开 `net.batchUpload.open`。
+- [x] 手工确认 v2 工具箱的批量上传入口能够打开 `net.batchUpload.open`（2026-08-26，Windows
+      Release `build/Release/MiaCode.exe`：真实窗口 UI Automation 选择“工具”→“Net 批量上传”后，
+      观察到独立 `QDialog` 窗口标题为“Net 批量上传”；详见执行审计记录）。
 - [x] 缺失 QML 实现的功能保留可发现入口并弹出“暂未更新支持”；已有后端的安全操作继续直接接入，
       不再从界面移除。具体范围见 `QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md`。
 - [x] 全屏预览采用工作区覆盖层；v1 OS 全屏路径已随 v1 shell 删除。导出工作区中禁用进入全屏，

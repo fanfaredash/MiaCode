@@ -277,3 +277,10 @@ pid 28064 的两段开启跟随播放均正常 pause/close，`exit_code=0`。第
 两段 `d_play_kb` 仍为约 +180 MB / +87 MB，远高于历史健康阈值；但 QSG 纹理仅约 22–26 MB，且
 GPU local usage 在暂停后下降，下一轮应拆分 QtAVPlayer/D3D11VA 帧池、QML/Qt Quick 资源和其它
 私有堆的保留关系，不能把它误报为已证实的纹理泄漏。
+
+## Windows v2 工具箱批量上传入口手工验证（2026-08-26）
+
+使用 `build/Release/MiaCode.exe` 在本机 Windows 桌面原生窗口运行验证，未使用 offscreen、静态审阅
+或 CTest 代替 GUI 观察。应用启动后先处理“上次未正常退出”提示，随后通过 Windows UI Automation
+依次选择 Activity Bar 的“工具”、工具侧栏的“Net 批量上传”。操作后观察到独立 `QDialog` 窗口，
+窗口标题为“Net 批量上传”，证明入口已实际打开 `net.batchUpload.open`。
