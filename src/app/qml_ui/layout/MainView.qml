@@ -184,7 +184,6 @@ Item {
             previewActive: root.compact
                            ? state.compactPanel === "preview"
                            : state.previewVisible
-            renderModeLabel: root.previewSession.renderModeLabel
             canUndo: splitView.canUndo
             canRedo: splitView.canRedo
             onToggleSidebarRequested: root.toggleSidebar()
@@ -193,7 +192,6 @@ Item {
                 root.preferences.bottomPanelVisible = state.bottomPanelVisible
             }
             onTogglePreviewRequested: root.togglePreview()
-            onToggleRenderModeRequested: root.previewSession.toggleRenderMode()
             onUndoRequested: root.undo()
             onRedoRequested: root.redo()
             onOpenRequested: openFileDialog.open()

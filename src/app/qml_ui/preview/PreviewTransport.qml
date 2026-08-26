@@ -38,6 +38,7 @@ Rectangle {
         return Math.min(0, bound)
     }
     property bool scrubActive: false
+    property real rateMenuClosedAt: 0
     property real activeScrubSecond: root.previewSession.positionSeconds
     readonly property real displayedSeconds: root.scrubActive
         ? root.activeScrubSecond
@@ -47,7 +48,7 @@ Rectangle {
     // independent of NoteStatistics column switching.
     readonly property int _fixedChromeWidth: {
         const fullscreenW = exportPageActive ? 0 : 28
-        return 28 + 5 + 28 + 5 + 72 + 5 + fullscreenW
+        return 28 + 5 + 28 + 5 + rateButton.implicitWidth + 5 + fullscreenW
     }
     readonly property bool timeFitsFull: {
         const margins = 16
@@ -141,15 +142,24 @@ Rectangle {
             font.pixelSize: Theme.secondaryFontSize
         }
 
-        AppComboBox {
-            id: rateBox
-            Layout.preferredWidth: 72
+        AppDropDownButton {
+            id: rateButton
+            Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
-            compact: true
-            model: ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x"]
-            readonly property var rates: [0.5, 0.75, 1, 1.25, 1.5, 2]
-            currentIndex: Math.max(0, rates.indexOf(root.previewSession.rate))
-            onActivated: root.previewSession.rate = rates[currentIndex]
+            text: qsTr("%1x").arg(root.previewSession.rate)
+            sizeToLabels: rateMenu.rateLabels
+            tooltip: qsTr("播放速度")
+            expanded: rateMenu.visible
+            Accessible.description: qsTr("打开播放速度预设")
+            onClicked: {
+                if (rateMenu.visible) {
+                    rateMenu.close()
+                    return
+                }
+                if (Date.now() - root.rateMenuClosedAt < 200)
+                    return
+                rateMenu.openAt(rateButton)
+            }
         }
 
         IconButton {
@@ -160,5 +170,11 @@ Rectangle {
             tooltip: qsTr("全屏预览")
             onClicked: root.fullscreenRequested()
         }
+    }
+
+    PreviewRateMenu {
+        id: rateMenu
+        previewSession: root.previewSession
+        onClosed: root.rateMenuClosedAt = Date.now()
     }
 }

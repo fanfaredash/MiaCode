@@ -11,6 +11,7 @@ namespace {
 
 struct TimelineQuickGridRootNode : public QSGNode {
     quint64 revision = 0;
+    quint64 layoutRevision = 0;
     quint64 appearanceRevision = 0;
 };
 
@@ -40,7 +41,9 @@ QSGNode* TimelineQuickGridLayer::updateNode(
         delete oldNode;
         root = new TimelineQuickGridRootNode();
     }
-    if (root->revision == state.gridRevision && root->appearanceRevision == state.appearanceRevision) {
+    if (root->revision == state.gridRevision
+        && root->layoutRevision == state.layoutRevision
+        && root->appearanceRevision == state.appearanceRevision) {
         return root;
     }
     clearChildren(root);
@@ -48,6 +51,7 @@ QSGNode* TimelineQuickGridLayer::updateNode(
         root->appendChildNode(buildTimelineRectNode(rect));
     }
     root->revision = state.gridRevision;
+    root->layoutRevision = state.layoutRevision;
     root->appearanceRevision = state.appearanceRevision;
     return root;
 }

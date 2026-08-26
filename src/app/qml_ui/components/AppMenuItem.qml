@@ -8,13 +8,16 @@ import MiaCode.UI
 MenuItem {
     id: root
 
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     implicitHeight: 28
     leftPadding: 12
     rightPadding: subMenu ? 22 : 16
     topPadding: 3
     bottomPadding: 3
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
+    readonly property real textWidth: label.contentWidth
+    readonly property real chromeWidth: leftPadding + rightPadding
+                                        + (checkable ? 12 + row.spacing : 0)
 
     readonly property color labelColor: {
         if (!root.enabled)
@@ -25,19 +28,18 @@ MenuItem {
     }
 
     contentItem: RowLayout {
+        id: row
         spacing: 10
 
-        Text {
+        Item {
             Layout.preferredWidth: root.checkable ? 12 : 0
             visible: root.checkable
-            text: root.checked ? "✓" : ""
-            color: Theme.colors.text.active
-            font: root.font
-            horizontalAlignment: Text.AlignHCenter
         }
 
         ControlsImpl.MnemonicLabel {
+            id: label
             Layout.fillWidth: true
+            Layout.preferredWidth: contentWidth
             text: root.text
             font: root.font
             color: root.labelColor
@@ -59,8 +61,22 @@ MenuItem {
     }
 
     background: HoverChrome {
-        selected: root.highlighted
+        selected: root.checked
+        hovered: root.highlighted
+        pressed: root.down
         tone: "nav"
+    }
+
+    indicator: Text {
+        x: root.mirrored ? root.width - width - root.rightPadding : root.leftPadding
+        y: root.topPadding + (root.availableHeight - height) / 2
+        width: 12
+        height: implicitHeight
+        visible: root.checkable
+        text: root.checked ? "✓" : ""
+        color: Theme.colors.text.active
+        font: root.font
+        horizontalAlignment: Text.AlignHCenter
     }
 
     // Same placement contract as Qt Basic MenuItem; sized down slightly.

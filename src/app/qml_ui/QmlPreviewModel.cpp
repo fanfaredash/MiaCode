@@ -155,18 +155,15 @@ void QmlPreviewModel::refreshFromController(bool force)
     const bool nextPlaying = controller_->previewPlaying();
     const RenderMode nextRenderModeValue = backend_->muriRenderMode();
     const QString nextRenderMode = muriRenderModeToken(nextRenderModeValue);
-    QString nextRenderModeLabel;
-    switch (nextRenderModeValue) {
-    case RenderMode::EraseByArea:
-        nextRenderModeLabel = tr("按区消去");
-        break;
-    case RenderMode::MaimuriDxStyle:
-        nextRenderModeLabel = tr("无理检测");
-        break;
-    case RenderMode::Native:
-        nextRenderModeLabel = tr("常规模式");
-        break;
+    if (nextRenderModeValue == RenderMode::Native
+        || nextRenderModeValue == RenderMode::EraseByArea) {
+        lastRegularMode_ = nextRenderModeValue;
     }
+    const bool nextMuriCheckEnabled = nextRenderModeValue == RenderMode::MaimuriDxStyle;
+    const bool nextSmoothStarErase = lastRegularMode_ != RenderMode::EraseByArea;
+    const QString nextRenderModeLabel = nextMuriCheckEnabled
+        ? tr("无理检测")
+        : tr("常规渲染");
     const QStringList nextStatisticsTexts = controller_->previewStatsTexts();
 
     const bool positionChangedValue = force || nextPosition != positionSeconds_;
@@ -177,7 +174,9 @@ void QmlPreviewModel::refreshFromController(bool force)
     const bool playingChangedValue = force || nextPlaying != playing_;
     const bool renderModeChangedValue = force
         || nextRenderMode != renderMode_
-        || nextRenderModeLabel != renderModeLabel_;
+        || nextRenderModeLabel != renderModeLabel_
+        || nextMuriCheckEnabled != muriCheckEnabled_
+        || nextSmoothStarErase != smoothStarErase_;
     const bool statisticsChangedValue = force || nextStatisticsTexts != statisticsTexts_;
 
     positionSeconds_ = nextPosition;
@@ -187,6 +186,8 @@ void QmlPreviewModel::refreshFromController(bool force)
     playing_ = nextPlaying;
     renderMode_ = nextRenderMode;
     renderModeLabel_ = nextRenderModeLabel;
+    muriCheckEnabled_ = nextMuriCheckEnabled;
+    smoothStarErase_ = nextSmoothStarErase;
     if (statisticsChangedValue) {
         statisticsTexts_ = nextStatisticsTexts;
         rebuildStatistics();
@@ -233,6 +234,8 @@ double QmlPreviewModel::rate() const { return rate_; }
 bool QmlPreviewModel::playing() const { return playing_; }
 QString QmlPreviewModel::renderMode() const { return renderMode_; }
 QString QmlPreviewModel::renderModeLabel() const { return renderModeLabel_; }
+bool QmlPreviewModel::muriCheckEnabled() const { return muriCheckEnabled_; }
+bool QmlPreviewModel::smoothStarErase() const { return smoothStarErase_; }
 QVariantList QmlPreviewModel::statistics() const { return statistics_; }
 
 QString QmlPreviewModel::currentSkinDirectory() const
@@ -253,6 +256,38 @@ void QmlPreviewModel::setPlaying(bool value)
 void QmlPreviewModel::toggleRenderMode()
 {
     controller_->toggleMuriRenderMode();
+    refreshFromController();
+}
+
+void QmlPreviewModel::setMuriCheckEnabled(bool enabled)
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    const RenderMode current = backend_->muriRenderMode();
+    if (enabled) {
+        if (current == RenderMode::MaimuriDxStyle) {
+            return;
+        }
+        backend_->setMuriRenderMode(RenderMode::MaimuriDxStyle);
+    } else {
+        if (current != RenderMode::MaimuriDxStyle) {
+            return;
+        }
+        backend_->setMuriRenderMode(lastRegularMode_);
+    }
+    refreshFromController();
+}
+
+void QmlPreviewModel::setSmoothStarErase(bool enabled)
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    lastRegularMode_ = enabled ? RenderMode::Native : RenderMode::EraseByArea;
+    if (backend_->muriRenderMode() != RenderMode::MaimuriDxStyle) {
+        backend_->setMuriRenderMode(lastRegularMode_);
+    }
     refreshFromController();
 }
 

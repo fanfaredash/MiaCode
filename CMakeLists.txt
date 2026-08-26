@@ -659,6 +659,8 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/ViewState.qml
     src/app/qml_ui/theme/Theme.qml
     src/app/qml_ui/components/IconButton.qml
+    src/app/qml_ui/components/AppCheckBox.qml
+    src/app/qml_ui/components/AppDropDownButton.qml
     src/app/qml_ui/components/AppTab.qml
     src/app/qml_ui/components/PanelHeader.qml
     src/app/qml_ui/components/SplitHandle.qml
@@ -701,7 +703,11 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/editor/LineNumberGutter.qml
     src/app/qml_ui/timeline/BottomPanel.qml
     src/app/qml_ui/timeline/BottomTabBar.qml
+    src/app/qml_ui/timeline/TimelineZoomMenu.qml
+    src/app/qml_ui/timeline/TimelineBrightnessMenu.qml
     src/app/qml_ui/preview/PreviewPane.qml
+    src/app/qml_ui/preview/PreviewRenderModeMenu.qml
+    src/app/qml_ui/preview/PreviewRateMenu.qml
     src/app/qml_ui/preview/PreviewTransport.qml
     src/app/qml_ui/preview/NoteStatistics.qml
 )
@@ -736,6 +742,7 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/more.svg
     src/app/qml_ui/resources/icons/metadata.svg
     src/app/qml_ui/resources/icons/app-icon.svg
+    src/app/qml_ui/resources/icons/chevron-down.svg
     # Canonical MiaCode brand PNG (same asset as resources/app_icons.qrc).
     resources/icons/app.png
 )

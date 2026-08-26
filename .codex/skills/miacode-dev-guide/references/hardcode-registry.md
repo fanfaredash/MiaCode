@@ -48,7 +48,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: static tap-on-slide threshold min/max/default plus shared Muri timing cutoffs such as tap-on-slide warning, the slide-head no-startup-tap warning cutoff (`50 ms`), the slide-head late-warning cutoff (`150 ms`), and the slide runtime available window (current default `24 h`)
   - Scope: static and runtime Muri collision interpretation across preview, timeline refresh, dump tooling, and export
 - `src/common/TimelineThemeConfig.h`
-  - Owns: timeline-scene theme colors shared by the Quick and QWidget render paths; the waveform brightness clamp/default (`0.2..2.0`, default `0.5`); the grid-line brightness clamp/default (`0.2..2.0`, default `1.0`); and the red editor-cursor header marker color (`QColor(239, 68, 68, 230)`)
+  - Owns: timeline-scene theme colors shared by the Quick and QWidget render paths; the waveform brightness clamp/default (`0.2..2.0`, default `0.5`); the grid-line brightness clamp/default (`0.2..2.0`, default `1.0`); and the editor-cursor header marker (timelineCursor RGB at alpha 230)
   - Current tuning note: waveform brightness scales fill alpha so the hue stays stable in both themes, while grid-line brightness fades/darkens/lightens the meter-driven bar-line color (`gridMajor`), within-measure beat/subdivision color (`gridSubdivision`), and comma/note-position tick color (`gridMinor`)
   - Scope: timeline renderer visual parity
 

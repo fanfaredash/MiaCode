@@ -33,7 +33,7 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   circle (oversized → two-hand press). Read in `MuriAnalyzer.cpp` `buildRuntimeHandActions`, so it
   feeds BOTH the slide/wifi judge and the multi-touch diagnostics.
 - `TimelineThemeConfig.h` — timeline-scene theme colors for the Quick timeline path
-  (e.g. editor-cursor header marker `QColor(239,68,68,230)`); also the **tiered grid-line-height
+  (e.g. editor-cursor header marker follows `timelineCursor` at alpha 230, v2 dark `#F29A83`); also the **tiered grid-line-height
   feature**: toggle `kTimelineTieredGridLineHeightsEnabled` (default `1`; `0` = legacy full-height)
   + per-tier fractions `kTimelineGridHeightFraction{Measure 9/9, Subdivision 8/9, Comma 7/9}` +
   resolver `timelineGridLineHeightFraction()`. Lines anchor at the top of the content area and
@@ -89,8 +89,8 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   (`maxBufferedFrames` derived from frame size, ×2; `requestedBufferBytes` `2 * max(frameBytes,1MiB)`).
 - `src/app/mainwindow/MainWindow.cpp` + `sections/window/*.cpp` — preview panel spacing, fullscreen
   overlay timing/opacity/reveal geometry, bottom-tab resize bounds (hot zone `8 px`, content scale
-  `kBottomTabsContentScaleMin/Max = 0.5..4.0` in `MainWindow.WindowShell.cpp`), fixed `30 Hz`
-  timeline UI cadence. The `4.0` max is a SAFETY bound only — the real ceiling above 100% is
+  `kBottomTabsContentScaleMin/Max = 0.5..4.0` in `MainWindow.WindowShell.cpp`), and timeline UI
+  cadence selected from display refresh / `30` / `60` / `120 Hz`. The `4.0` max is a SAFETY bound only — the real ceiling above 100% is
   `kBottomTabsMaxWindowHeightFraction = 2/3` of the whole window height. **Two-tier scale above
   100%:** only the note GRID height grows (raw scale); the header ("顶部变换"), note 素材/markers and
   lane-label fonts CAP at 100%. The 语法/无理 issue-list fonts are a fixed 90% of base, uniform /
@@ -98,6 +98,15 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
   in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
   clamps — change all together. See `cross-chain-linkage.md`.
+- `src/app/qml_ui/QmlUiSettings.h` — v2 workspace split ratios: bottom panel height
+  `0.20..0.65` (default `0.35`) and preview width `0.30..0.50`. QML persists one ratio per
+  split after divider release and derives live geometry from the owning `SplitView` extent. The
+  active QSG timeline then fits its nine `qreal` lanes to the actual `TimelineQuickItem` viewport;
+  header/material scale remains capped at `1.0`, and viewport changes use a separate layout revision.
+  **Known, accepted:** `editorHost` still has `SplitView.minimumHeight: 180` (`MainSplitView.qml`).
+  At the v2 window floor (`Main.qml` `minimumHeight: 480`) a short left column can make the 65%
+  bottom-panel cap unreachable; the editor pixel floor wins. Do not treat this as a layout bug
+  to fix unless the product asks to retire that 180 px floor.
 - `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp` — toolbox media-prepend ffmpeg
   defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz` libmp3lame `-q:a 2`).
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp` — issue-row padding /

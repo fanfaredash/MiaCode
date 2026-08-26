@@ -1,8 +1,6 @@
 #include "QuickShellController.h"
-#include "QuickShellKeyboardActivation.h"
 
 #include "UiText.h"
-#include "UiTheme.h"
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -10,281 +8,15 @@
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
-#include <QAction>
 #include <QElapsedTimer>
-#include <QEnterEvent>
-#include <QFontMetrics>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QMenu>
-#include <QMouseEvent>
-#include <QKeyEvent>
-#include <QPaintEvent>
-#include <QPainter>
-#include <QPainterPath>
 #include <QPoint>
 #include <QPointer>
-#include <QSlider>
 #include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
-#include <QWidgetAction>
-
-#include <functional>
-#include <utility>
 
 namespace {
 
 constexpr int kQuickShellActiveRefreshIntervalMs = 16;
 constexpr int kQuickShellIdleRefreshIntervalMs = 250;
-constexpr int kTimelineBrightnessPercentMin = 20;
-constexpr int kTimelineBrightnessPercentMax = 200;
-constexpr int kTimelineBrightnessPercentStep = 5;
-
-QString timelineZoomMenuLabel(double scale)
-{
-    return QStringLiteral("%1%").arg(qRound(scale * 100.0));
-}
-
-int brightnessToPercent(double brightness, double fallback)
-{
-    const double normalized = qIsFinite(brightness) ? brightness : fallback;
-    const int percent = qRound(normalized * 100.0);
-    const int stepped = qRound(static_cast<double>(percent) / kTimelineBrightnessPercentStep)
-        * kTimelineBrightnessPercentStep;
-    return qBound(
-        kTimelineBrightnessPercentMin,
-        stepped,
-        kTimelineBrightnessPercentMax);
-}
-
-double brightnessFromPercent(int percent)
-{
-    return static_cast<double>(qBound(
-        kTimelineBrightnessPercentMin,
-        percent,
-        kTimelineBrightnessPercentMax)) / 100.0;
-}
-
-// Custom QMenu item widget for the timeline-follow settings menu.
-// Paints a 14×14 rounded-square indicator + checkmark + label that
-// pixel-matches the QML CheckBox style used elsewhere in the shell.
-// Handles its own click events so QMenu doesn't dismiss when the
-// user toggles a toggle — that's the "menu stays open" behaviour
-// the spec asked for. The widget swallows the mouse release in its
-// own area so QMenu's default close-on-release path never fires.
-class FollowSettingsCheckItem : public QWidget
-{
-public:
-    FollowSettingsCheckItem(const QString& text, bool initialChecked,
-                            std::function<void(bool)> onToggled,
-                            QWidget* parent = nullptr)
-        : QWidget(parent)
-        , text_(text)
-        , checked_(initialChecked)
-        , onToggled_(std::move(onToggled))
-    {
-        setCursor(Qt::PointingHandCursor);
-        setFocusPolicy(Qt::StrongFocus);
-        setAccessibleName(text_);
-        setAccessibleDescription(text_);
-        setMouseTracking(true);
-        setAttribute(Qt::WA_Hover, true);
-    }
-
-    bool isChecked() const { return checked_; }
-
-    void toggle()
-    {
-        checked_ = !checked_;
-        update();
-        if (onToggled_) {
-            onToggled_(checked_);
-        }
-    }
-
-    QSize sizeHint() const override
-    {
-        QFont labelFont = font();
-        labelFont.setWeight(QFont::DemiBold);
-        const QFontMetrics fm(labelFont);
-        const int textW = fm.horizontalAdvance(text_);
-        const int width = kPaddingLeft_ + kBoxSize_ + kBoxGap_ + textW + kPaddingRight_;
-        const int height = qMax(kRowHeightMin_, fm.height() + kRowPadV_ * 2);
-        return QSize(width, height);
-    }
-
-protected:
-    void enterEvent(QEnterEvent*) override { hovered_ = true; update(); }
-    void leaveEvent(QEvent*) override { hovered_ = false; update(); }
-
-    void mouseReleaseEvent(QMouseEvent* event) override
-    {
-        if (event->button() != Qt::LeftButton || !rect().contains(event->pos())) {
-            QWidget::mouseReleaseEvent(event);
-            return;
-        }
-        toggle();
-        // Consume so QMenu's release handler never fires — menu stays
-        // open. The user dismisses via Esc or click-outside.
-        event->accept();
-    }
-
-    void keyPressEvent(QKeyEvent* event) override
-    {
-        if (miacode::quick_shell::isMenuToggleActivationKey(event->key())) {
-            toggle();
-            event->accept();
-            return;
-        }
-        // Keep Escape unhandled so QMenu retains its normal dismiss path.
-        QWidget::keyPressEvent(event);
-    }
-
-    void paintEvent(QPaintEvent*) override
-    {
-        const UiTheme::Colors& c = UiTheme::colors();
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing, true);
-
-        if (hovered_) {
-            const QRect bg = rect().adjusted(2, 2, -2, -2);
-            p.setPen(Qt::NoPen);
-            p.setBrush(c.menuHoverBg);
-            p.drawRoundedRect(bg, 4, 4);
-        }
-
-        const QRect box(
-            kPaddingLeft_,
-            (height() - kBoxSize_) / 2,
-            kBoxSize_,
-            kBoxSize_);
-        if (checked_) {
-            p.setPen(QPen(c.accent, 1));
-            p.setBrush(c.accent);
-            p.drawRoundedRect(box, 3, 3);
-            // Checkmark — matches QML Canvas line path (0.24,0.55) →
-            // (0.44,0.74) → (0.78,0.28).
-            p.setPen(QPen(c.accentText, 1.6,
-                          Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-            p.setBrush(Qt::NoBrush);
-            QPainterPath path;
-            path.moveTo(box.x() + kBoxSize_ * 0.24,
-                        box.y() + kBoxSize_ * 0.55);
-            path.lineTo(box.x() + kBoxSize_ * 0.44,
-                        box.y() + kBoxSize_ * 0.74);
-            path.lineTo(box.x() + kBoxSize_ * 0.78,
-                        box.y() + kBoxSize_ * 0.28);
-            p.drawPath(path);
-        } else {
-            p.setPen(QPen(hovered_ ? c.accent : c.border, 1));
-            p.setBrush(c.cardBg);
-            p.drawRoundedRect(box, 3, 3);
-        }
-
-        QFont labelFont = font();
-        labelFont.setWeight(QFont::DemiBold);
-        p.setFont(labelFont);
-        p.setPen(c.textPrimary);
-        const QRect textRect = rect().adjusted(
-            kPaddingLeft_ + kBoxSize_ + kBoxGap_,
-            0,
-            -kPaddingRight_,
-            0);
-        p.drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, text_);
-    }
-
-private:
-    static constexpr int kPaddingLeft_ = 10;
-    static constexpr int kPaddingRight_ = 14;
-    static constexpr int kBoxSize_ = 14;
-    static constexpr int kBoxGap_ = 8;
-    static constexpr int kRowHeightMin_ = 26;
-    static constexpr int kRowPadV_ = 5;
-
-    QString text_;
-    bool checked_ = false;
-    bool hovered_ = false;
-    std::function<void(bool)> onToggled_;
-};
-
-class TimelineBrightnessSliderItem : public QWidget
-{
-public:
-    TimelineBrightnessSliderItem(
-        const QString& labelText,
-        int initialPercent,
-        std::function<void(int)> onValueChanged,
-        QWidget* parent = nullptr)
-        : QWidget(parent)
-        , onValueChanged_(std::move(onValueChanged))
-    {
-        const UiTheme::Colors& c = UiTheme::colors();
-        auto* root = new QVBoxLayout(this);
-        root->setContentsMargins(12, 8, 12, 8);
-        root->setSpacing(6);
-
-        auto* labelRow = new QHBoxLayout();
-        labelRow->setContentsMargins(0, 0, 0, 0);
-        labelRow->setSpacing(10);
-        auto* titleLabel = new QLabel(labelText, this);
-        QFont titleFont = titleLabel->font();
-        titleFont.setWeight(QFont::DemiBold);
-        titleLabel->setFont(titleFont);
-        titleLabel->setStyleSheet(QStringLiteral("color:%1;").arg(c.textPrimary.name()));
-        valueLabel_ = new QLabel(this);
-        valueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        valueLabel_->setMinimumWidth(QFontMetrics(valueLabel_->font()).horizontalAdvance(QStringLiteral("200%")));
-        valueLabel_->setStyleSheet(QStringLiteral("color:%1;").arg(c.textSecondary.name()));
-        labelRow->addWidget(titleLabel, 1);
-        labelRow->addWidget(valueLabel_, 0);
-        root->addLayout(labelRow);
-
-        slider_ = new QSlider(Qt::Horizontal, this);
-        slider_->setRange(kTimelineBrightnessPercentMin, kTimelineBrightnessPercentMax);
-        slider_->setSingleStep(kTimelineBrightnessPercentStep);
-        slider_->setPageStep(kTimelineBrightnessPercentStep);
-        slider_->setTickInterval(kTimelineBrightnessPercentStep);
-        slider_->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-        root->addWidget(slider_);
-
-        setMinimumWidth(250);
-        const int clamped = qBound(kTimelineBrightnessPercentMin, initialPercent, kTimelineBrightnessPercentMax);
-        updateValueLabel(clamped);
-        slider_->setValue(clamped);
-        connect(slider_, &QSlider::valueChanged, this, [this](int value) {
-            const int stepped = qBound(
-                kTimelineBrightnessPercentMin,
-                qRound(static_cast<double>(value) / kTimelineBrightnessPercentStep) * kTimelineBrightnessPercentStep,
-                kTimelineBrightnessPercentMax);
-            if (stepped != value) {
-                slider_->setValue(stepped);
-                return;
-            }
-            updateValueLabel(stepped);
-            if (onValueChanged_) {
-                onValueChanged_(stepped);
-            }
-        });
-    }
-
-    QSize sizeHint() const override
-    {
-        return QSize(270, QWidget::sizeHint().height());
-    }
-
-private:
-    void updateValueLabel(int percent)
-    {
-        if (valueLabel_ != nullptr) {
-            valueLabel_->setText(QStringLiteral("%1%").arg(percent));
-        }
-    }
-
-    QLabel* valueLabel_ = nullptr;
-    QSlider* slider_ = nullptr;
-    std::function<void(int)> onValueChanged_;
-};
 
 template <typename T>
 bool assignIfChanged(T& target, const T& value)
@@ -508,16 +240,6 @@ QString QuickShellController::validationTabLabel() const
 QString QuickShellController::muriTabLabel() const
 {
     return UiText::text(QStringLiteral("window.muri"));
-}
-
-QString QuickShellController::timelineViewLockLabel() const
-{
-    return UiText::text(QStringLiteral("shell.view_lock"));
-}
-
-QString QuickShellController::timelineSyncLabel() const
-{
-    return UiText::text(QStringLiteral("shell.timeline_sync"));
 }
 
 QString QuickShellController::timelineFollowCodeLabel() const
@@ -813,199 +535,6 @@ void QuickShellController::timelineFollowPreviewToggled(bool enabled)
     refreshFromStateSource();
 }
 
-void QuickShellController::timelineViewportLockToggled(bool enabled)
-{
-    if (commandSink_ == nullptr) {
-        return;
-    }
-    commandSink_->shellTimelineViewportLockToggled(enabled);
-    refreshFromStateSource();
-}
-
-void QuickShellController::timelineFollowProgressToggled(bool enabled)
-{
-    if (commandSink_ == nullptr) {
-        return;
-    }
-    commandSink_->shellTimelineFollowProgressToggled(enabled);
-    refreshFromStateSource();
-}
-
-void QuickShellController::timelineSyncToggled(bool enabled)
-{
-    if (commandSink_ == nullptr) {
-        return;
-    }
-    commandSink_->shellTimelineSyncToggled(enabled);
-    refreshFromStateSource();
-}
-
-void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, int gearGlobalTop)
-{
-    if (stateSource_ == nullptr) {
-        return;
-    }
-    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
-        stateSource_->shellTimelineStateBridgeObject());
-    if (bridge == nullptr) {
-        return;
-    }
-
-    // Heap-allocate so popup() can return immediately; WA_DeleteOnClose
-    // tears the menu down once the user dismisses (Esc / click-outside).
-    auto* menu = new QMenu();
-    menu->setAttribute(Qt::WA_DeleteOnClose);
-    UiTheme::styleRoundedMenu(*menu);
-
-    // Each item is a custom QWidget that paints the QML-CheckBox look
-    // (rounded square indicator + accent fill + white checkmark + hover
-    // background) and toggles via its own mouseReleaseEvent. The widget
-    // accepts the event so QMenu's close-on-release path never fires —
-    // that's how the menu stays open across multiple toggles.
-    const auto addToggleWidget = [&](const QString& label, bool initialChecked,
-                                     void (QuickShellController::*slot)(bool)) {
-        auto* item = new FollowSettingsCheckItem(label, initialChecked,
-            [this, slot](bool checked) {
-                (this->*slot)(checked);
-            });
-        auto* widgetAction = new QWidgetAction(menu);
-        widgetAction->setDefaultWidget(item);
-        // Arrow-key navigation activates the QWidgetAction, while mouse and
-        // focused Space/Enter invoke FollowSettingsCheckItem::toggle() directly.
-        // Both paths deliberately share the row's one toggle routine.
-        connect(widgetAction, &QWidgetAction::triggered, item, [item]() {
-            item->toggle();
-        });
-        menu->addAction(widgetAction);
-    };
-
-    addToggleWidget(
-        UiText::text(QStringLiteral("shell.view_lock")),
-        bridge->viewportLockEnabled(),
-        &QuickShellController::timelineViewportLockToggled);
-    // Timeline Sync sits above Follow Code so the bottom-most menu
-    // item matches the inline tab-strip chip (which now shows Follow
-    // Code) — visually the two anchors are at the same Y on screen.
-    addToggleWidget(
-        UiText::text(QStringLiteral("shell.timeline_sync")),
-        bridge->timelineSyncEnabled(),
-        &QuickShellController::timelineSyncToggled);
-    addToggleWidget(
-        UiText::text(QStringLiteral("shell.follow_code")),
-        bridge->followPreviewEnabled(),
-        &QuickShellController::timelineFollowPreviewToggled);
-    addToggleWidget(
-        UiText::text(QStringLiteral("timeline.progress_follow")),
-        bridge->followProgressEnabled(),
-        &QuickShellController::timelineFollowProgressToggled);
-
-    // Layout once so sizeHint reflects all four rows + the rounded
-    // stylesheet padding; only after that can we anchor the bottom-
-    // right corner. menu->popup() handles the rest of the show path.
-    menu->adjustSize();
-    const QSize menuSize = menu->sizeHint();
-    const int x = gearGlobalRight - menuSize.width();
-    const int y = gearGlobalTop - menuSize.height() - 4;
-    menu->popup(QPoint(x, y));
-}
-
-void QuickShellController::openTimelineBrightnessMenu(int gearGlobalRight, int gearGlobalTop)
-{
-    if (stateSource_ == nullptr) {
-        return;
-    }
-    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
-        stateSource_->shellTimelineStateBridgeObject());
-    if (bridge == nullptr) {
-        return;
-    }
-
-    auto* menu = new QMenu();
-    menu->setAttribute(Qt::WA_DeleteOnClose);
-    UiTheme::styleRoundedMenu(*menu);
-
-    const QPointer<TimelineQuickStateBridge> bridgeGuard(bridge);
-    const auto addBrightnessSlider = [&](const QString& label, int initialPercent, std::function<void(TimelineQuickStateBridge*, double)> setter) {
-        auto* item = new TimelineBrightnessSliderItem(
-            label,
-            initialPercent,
-            [bridgeGuard, setter = std::move(setter)](int percent) {
-                if (bridgeGuard == nullptr) {
-                    return;
-                }
-                setter(bridgeGuard.data(), brightnessFromPercent(percent));
-            });
-        auto* widgetAction = new QWidgetAction(menu);
-        widgetAction->setDefaultWidget(item);
-        menu->addAction(widgetAction);
-    };
-
-    addBrightnessSlider(
-        UiText::text(QStringLiteral("shell.timeline_waveform_brightness")),
-        brightnessToPercent(
-            bridge->waveformBrightness(),
-            miacode::timeline::kTimelineWaveformBrightnessDefault),
-        [](TimelineQuickStateBridge* target, double brightness) {
-            target->setWaveformBrightness(brightness);
-        });
-    addBrightnessSlider(
-        UiText::text(QStringLiteral("shell.timeline_measure_line_brightness")),
-        brightnessToPercent(
-            bridge->measureLineBrightness(),
-            miacode::timeline::kTimelineMeasureLineBrightnessDefault),
-        [](TimelineQuickStateBridge* target, double brightness) {
-            target->setMeasureLineBrightness(brightness);
-        });
-
-    menu->adjustSize();
-    const QSize menuSize = menu->sizeHint();
-    const int x = gearGlobalRight - menuSize.width();
-    const int y = gearGlobalTop - menuSize.height() - 4;
-    menu->popup(QPoint(x, y));
-}
-
-void QuickShellController::openTimelineZoomMenu(int controlGlobalLeft, int controlGlobalTop, int controlWidth)
-{
-    if (stateSource_ == nullptr) {
-        return;
-    }
-    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
-        stateSource_->shellTimelineStateBridgeObject());
-    if (bridge == nullptr) {
-        return;
-    }
-
-    const QVector<double> presets = bridge->zoomPresets();
-    if (presets.isEmpty()) {
-        return;
-    }
-
-    auto* menu = new QMenu();
-    menu->setAttribute(Qt::WA_DeleteOnClose);
-    UiTheme::styleRoundedMenu(*menu);
-    menu->setMinimumWidth(qMax(1, controlWidth));
-
-    const QPointer<TimelineQuickStateBridge> bridgeGuard(bridge);
-    const double currentScale = bridge->zoomScale();
-    for (double preset : presets) {
-        QAction* action = menu->addAction(timelineZoomMenuLabel(preset));
-        action->setCheckable(true);
-        action->setChecked(qAbs(preset - currentScale) <= 1e-6);
-        QObject::connect(action, &QAction::triggered, menu, [bridgeGuard, preset]() {
-            if (bridgeGuard == nullptr) {
-                return;
-            }
-            bridgeGuard->setZoomScaleAnchored(preset, bridgeGuard->viewportCenterSecond());
-        });
-    }
-
-    menu->adjustSize();
-    const QSize menuSize = menu->sizeHint();
-    const int x = controlGlobalLeft;
-    const int y = controlGlobalTop - menuSize.height() - 4;
-    menu->popup(QPoint(x, y));
-}
-
 bool QuickShellController::stepPreviewBySeconds(double deltaSeconds, bool centerView)
 {
     if (commandSink_ == nullptr) {
@@ -1115,7 +644,9 @@ void QuickShellController::refreshFromStateSource()
 
     bool stateChanged = false;
     stateChanged |= assignIfChanged(windowTitle_, stateSource_->shellWindowTitle());
-    stateChanged |= assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
+    const bool panelsSwappedChanged =
+        assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
+    stateChanged |= panelsSwappedChanged;
     stateChanged |= assignIfChanged(previewSpeedLabel_, stateSource_->shellPreviewSpeedLabel());
     stateChanged |= assignIfChanged(muriCheckRenderMode_, stateSource_->shellMuriCheckRenderMode());
     stateChanged |= assignIfChanged(previewPlaying_, stateSource_->shellPreviewPlaying());
@@ -1142,6 +673,10 @@ void QuickShellController::refreshFromStateSource()
     if (assignIfChanged(previewFullscreen_, nextPreviewFullscreen)) {
         stateChanged = true;
         emit previewFullscreenChanged();
+    }
+
+    if (panelsSwappedChanged) {
+        emit workspacePanelsSwappedChanged();
     }
 
     if (stateChanged) {

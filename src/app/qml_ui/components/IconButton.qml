@@ -48,10 +48,22 @@ AbstractButton {
         }
     }
 
-    background: HoverChrome {
-        hovered: root.hovered
-        pressed: root.down
-        tone: "icon"
+    background: Item {
+        HoverChrome {
+            anchors.fill: parent
+            hovered: root.hovered
+            pressed: root.down
+            tone: "icon"
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            visible: root.activeFocus
+            radius: Theme.itemRadius
+            color: "transparent"
+            border.width: 1
+            border.color: Theme.colors.accent.primary
+        }
     }
 
     Tooltip {

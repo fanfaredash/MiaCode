@@ -46,6 +46,7 @@ struct TimelineSceneBuildRequest {
     int horizontalCullPaddingPx = 0;
     double zoomScale = 0.5;
     double contentScale = 1.0;
+    bool fitViewportHeight = false;
     double waveformBrightness = kTimelineWaveformBrightnessDefault;
     double measureLineBrightness = kTimelineMeasureLineBrightnessDefault;
     double waveformPhaseCompensationSeconds = 0.0;
@@ -56,16 +57,8 @@ struct TimelineSceneBuildRequest {
     bool showSlideTracks = true;
     bool playheadIndicatorSuppressed = false;
     bool dragActive = false;
-    // Phase 9d-native — header control state. Drives the zoom visual
-    // emitted into TimelineSceneState and drawn by
-    // TimelineQuickHeaderLayer; the QML ToolButton handles input only.
-    int zoomControlPressedPart = 0;
-    int zoomControlHoveredPart = 0;
-    bool settingsControlHovered = false;
-    bool settingsControlPressed = false;
-    bool followPreviewEnabled = false;
-    bool followProgressEnabled = true;
     quint64 appearanceRevision = 0;
+    quint64 layoutRevision = 0;
     quint64 gridRevision = 0;
     quint64 waveformRevision = 0;
     quint64 headerRevision = 0;

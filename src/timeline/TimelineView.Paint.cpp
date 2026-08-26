@@ -878,7 +878,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         painter.save();
         painter.setClipRect(QRect(left, 0, viewport()->width() - left, top));
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(239, 68, 68, 230));
+        painter.setBrush(miacode::timeline::timelineThemeColors().cursorMarker);
         const qreal cursorMarkerTipY =
             static_cast<qreal>(top) - scaledTimelineHeaderMetric(kTimelineTopMarkerTipOffsetPx);
         const qreal cursorMarkerBaseY = qMax<qreal>(

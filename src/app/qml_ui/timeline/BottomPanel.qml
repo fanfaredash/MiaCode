@@ -13,10 +13,13 @@ Rectangle {
     required property var preferences
     required property var commands
     required property var shellController
+    property real zoomMenuClosedAt: 0
+    property real brightnessMenuClosedAt: 0
     signal analysisRowActivated(int difficultyId, var revision, int line, int column, int endColumn, double second)
 
     color: Theme.colors.background.surface
     clip: true
+    readonly property int contentTopMargin: 4
 
     BottomTabBar {
         id: tabs
@@ -34,17 +37,16 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
+        anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
         visible: root.shellController.bottomTabsCurrentTabId === "timeline"
         enabled: visible
         stateBridge: root.shellController.timelineStateBridge
-        // Keep the QSG header's label and marker clip limits in the same
-        // coordinate space as the transparent input controls below. This is
-        // the v2 equivalent of TimelineTabSurface.qml's native header bounds.
-        headerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2
-        headerRightLimit: Math.max(0, brightnessHitControl.x - 2)
-        headerMarkerLeftLimit: zoomHitControl.x + zoomHitControl.width + 2
-        headerMarkerRightLimit: Math.max(0, brightnessHitControl.x - 2)
+        // Keep header labels and markers clear of the QML controls.
+        headerLeftLimit: zoomButton.x + zoomButton.width + 2
+        headerRightLimit: Math.max(0, brightnessButton.x - 2)
+        headerMarkerLeftLimit: zoomButton.x + zoomButton.width + 2
+        headerMarkerRightLimit: Math.max(0, brightnessButton.x - 2)
         onHeaderNavigateRequested: second => root.shellController.timelineHeaderNavigate(second)
         onTimelineWheelNavigateRequested: second => root.shellController.timelineWheelNavigate(second)
         onCenterNavigateRequested: second => root.shellController.timelineCenterNavigate(second)
@@ -53,81 +55,76 @@ Rectangle {
         onTimelineUserInteractionStarted: root.shellController.timelineUserInteractionStarted()
         onTimelineSurfaceReady: root.shellController.noteTimelineSurfaceReady()
         onFollowPreviewToggled: enabled => root.shellController.timelineFollowPreviewToggled(enabled)
-        onFollowProgressToggled: enabled => root.shellController.timelineFollowProgressToggled(enabled)
         onPreviewPlayPauseRequested: root.shellController.togglePreviewPlayback()
     }
 
-    // The timeline header remains a single QSG-rendered visual. These transparent
-    // controls are only its v2 input/accessibility layer, so visual and hit geometry
-    // share the header scale provided by the shell without duplicating its drawing.
-    AbstractButton {
-        id: zoomHitControl
+    AppDropDownButton {
+        id: zoomButton
 
-        x: Math.round(4 * root.shellController.bottomTabsHeaderScale)
+        x: Math.round(4 * timelineItem.headerScale)
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
-        width: Math.max(56, Math.round(72 * root.shellController.bottomTabsHeaderScale))
-        height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
+        height: Math.min(implicitHeight, Math.max(1, timelineItem.timelineTop))
         visible: timelineItem.visible
-        hoverEnabled: true
-        focusPolicy: Qt.TabFocus
-        Accessible.name: qsTr("时间轴缩放")
+        text: qsTr("%1%").arg(Math.round(root.shellController.timelineStateBridge
+            ? root.shellController.timelineStateBridge.zoomScale * 100
+            : 50))
+        sizeToLabels: zoomMenu.zoomLabels
+        tooltip: qsTr("时间轴缩放")
+        expanded: zoomMenu.visible
         Accessible.description: qsTr("打开时间轴缩放预设")
         onClicked: {
-            const point = mapToGlobal(0, 0)
-            root.shellController.openTimelineZoomMenu(
-                Math.round(point.x), Math.round(point.y), Math.round(width))
-        }
-        onHoveredChanged: timelineItem.setZoomControlHoveredPart(hovered ? 1 : 0)
-        onPressedChanged: timelineItem.setZoomControlPressedPart(pressed ? 1 : 0)
-        contentItem: Item {}
-        background: Item {
-            Rectangle {
-                anchors.fill: parent
-                visible: zoomHitControl.activeFocus
-                color: "transparent"
-                border.width: 1
-                border.color: Theme.colors.accent.primary
-                radius: 3
+            if (zoomMenu.visible) {
+                zoomMenu.close()
+                return
             }
+            if (Date.now() - root.zoomMenuClosedAt < 200)
+                return
+            zoomMenu.openAt(zoomButton)
         }
     }
 
-    AbstractButton {
-        id: brightnessHitControl
+    IconButton {
+        id: brightnessButton
 
-        width: Math.max(28, Math.round(28 * root.shellController.bottomTabsHeaderScale))
-        height: Math.max(22, Math.round(22 * root.shellController.bottomTabsHeaderScale))
-        x: Math.max(zoomHitControl.x + zoomHitControl.width + 8, parent.width - width - 8)
+        width: Math.max(28, Math.round(28 * timelineItem.headerScale))
+        height: Math.max(24, Math.round(24 * timelineItem.headerScale))
+        x: Math.max(zoomButton.x + zoomButton.width + 8, parent.width - width - 8)
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         visible: timelineItem.visible
-        hoverEnabled: true
-        focusPolicy: Qt.TabFocus
-        Accessible.name: qsTr("时间轴亮度")
+        iconSource: Qt.resolvedUrl("icons/settings.svg")
+        iconWidth: Math.max(16, Math.round(16 * timelineItem.headerScale))
+        iconHeight: iconWidth
+        tooltip: qsTr("时间轴亮度")
+        active: brightnessMenu.visible
         Accessible.description: qsTr("打开波形和小节线亮度设置")
         onClicked: {
-            const point = mapToGlobal(width, 0)
-            root.shellController.openTimelineBrightnessMenu(
-                Math.round(point.x), Math.round(point.y))
-        }
-        onHoveredChanged: timelineItem.setSettingsControlHovered(hovered)
-        onPressedChanged: timelineItem.setSettingsControlPressed(pressed)
-        contentItem: Item {}
-        background: Item {
-            Rectangle {
-                anchors.fill: parent
-                visible: brightnessHitControl.activeFocus
-                color: "transparent"
-                border.width: 1
-                border.color: Theme.colors.accent.primary
-                radius: 3
+            if (brightnessMenu.visible) {
+                brightnessMenu.close()
+                return
             }
+            if (Date.now() - root.brightnessMenuClosedAt < 200)
+                return
+            brightnessMenu.openAt(brightnessButton)
         }
+    }
+
+    TimelineZoomMenu {
+        id: zoomMenu
+        stateBridge: root.shellController.timelineStateBridge
+        onClosed: root.zoomMenuClosedAt = Date.now()
+    }
+
+    TimelineBrightnessMenu {
+        id: brightnessMenu
+        stateBridge: root.shellController.timelineStateBridge
+        onClosed: root.brightnessMenuClosedAt = Date.now()
     }
 
     Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
+        anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
         visible: root.shellController.bottomTabsCurrentTabId === "validation"
 
@@ -222,6 +219,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
+        anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
         visible: root.shellController.bottomTabsCurrentTabId === "muri"
 

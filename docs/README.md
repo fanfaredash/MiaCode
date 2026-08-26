@@ -24,7 +24,9 @@
 - 谱面诊断：[specs/chart/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md](specs/chart/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md)
 - 编辑器/书签：[specs/editor/BOOKMARK_REDESIGN_SPEC.md](specs/editor/BOOKMARK_REDESIGN_SPEC.md)
 - UI 菜单指示：[specs/ui/UI_MENU_SELECTION_INDICATOR_SPEC_ZH.md](specs/ui/UI_MENU_SELECTION_INDICATOR_SPEC_ZH.md)
-- QML UI v2 一阶段工作清单：[specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md](specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md)
+- QML UI v2 目标架构（现行阶段划分）：[specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md)
+- QML UI v2 一阶段工作清单（历史实施记录，2026-08-24 起由目标架构取代）：[specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md](specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md)
+- QML UI v2 功能缺口：[specs/ui/QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md](specs/ui/QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md)
 - 无理检测：[specs/muri/MURI_DETECTION_SPEC.md](specs/muri/MURI_DETECTION_SPEC.md)
 - Timeline 行为：[specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md](specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md)
 

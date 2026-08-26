@@ -403,17 +403,26 @@ void appendSprite(
 
 TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& request)
 {
-    const double contentScale = normalizedContentScale(request.contentScale);
-    // Lane/grid height uses the raw (uncapped) scale so the grid can grow past 100%; the
-    // header and all note 素材/markers keep using the capped contentScale above.
-    const double gridScale = gridContentScale(request.contentScale);
-    const int laneHeight = qMax(1, qRound(static_cast<qreal>(kLaneHeight) * static_cast<qreal>(gridScale)));
+    double contentScale = normalizedContentScale(request.contentScale);
+    if (request.fitViewportHeight) {
+        const double viewportScale =
+            (static_cast<double>(qMax(1, request.viewportSize.height())) - 17.0) / 197.0;
+        contentScale = qBound(0.5, viewportScale, 1.0);
+    }
     TimelineSceneLayoutMetrics metrics;
     metrics.viewportSize = request.viewportSize;
     metrics.timelineLeft = scaledMetric(kTimelineLeftMargin, contentScale);
     metrics.timelineTop = scaledMetric(kHeaderHeight + kTimelineTopMargin, headerContentScale(contentScale));
-    metrics.timelineHeight = kLaneCount * laneHeight;
-    metrics.laneHeight = laneHeight;
+    if (request.fitViewportHeight) {
+        metrics.timelineHeight = qMax<qreal>(
+            1.0,
+            static_cast<qreal>(request.viewportSize.height() - metrics.timelineTop));
+        metrics.laneHeight = metrics.timelineHeight / static_cast<qreal>(kLaneCount);
+    } else {
+        const double gridScale = gridContentScale(request.contentScale);
+        metrics.laneHeight = qMax<qreal>(1.0, static_cast<qreal>(kLaneHeight) * gridScale);
+        metrics.timelineHeight = kLaneCount * metrics.laneHeight;
+    }
     metrics.laneCount = kLaneCount;
     metrics.pixelsPerSecond = pixelsPerSecondForZoom(request.zoomScale);
     metrics.contentScale = contentScale;
@@ -509,6 +518,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     state.visibleEndSecond = xToSecond(state, request.viewportSize.width());
     state.waveformPhaseCompensationSeconds = qMax(0.0, request.waveformPhaseCompensationSeconds);
     state.appearanceRevision = request.appearanceRevision;
+    state.layoutRevision = request.layoutRevision;
     state.gridRevision = request.gridRevision;
     state.waveformRevision = request.waveformRevision;
     state.headerRevision = request.headerRevision;
@@ -1116,8 +1126,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             return;
         }
 
-        const int rowTop = state.timelineTop + (note.lane - 1) * state.laneHeight;
-        const int rowCenterY = rowTop + (state.laneHeight / 2);
+        const qreal rowTop = state.timelineTop + (note.lane - 1) * state.laneHeight;
+        const qreal rowCenterY = rowTop + (state.laneHeight / 2.0);
         const qreal baseIconScale =
             request.zoomScale <= 0.25 ? 0.5 : static_cast<qreal>(state.contentScale);
         QString iconType;
@@ -1434,185 +1444,6 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 2.0,
             };
         }
-    }
-
-    // Phase 9d-native - emit the header zoom control visual. Mirrors
-    // the invisible QML hit zones in TimelineTabSurface.qml: body opens
-    // the preset menu, right-side upper/lower zones step zoom in/out.
-    if (state.timelineTop > 4 && request.viewportSize.width() > 0) {
-        state.hasHeaderControls = true;
-        const qreal headerControlScale = static_cast<qreal>(headerContentScale(state.contentScale));
-        // Phase 9d-native polish — use the application's default UI
-        // font (matches the menu-bar font, including Chinese fallback
-        // chain) at the same pixel size and weight the QML controls use.
-        QFont controlFont;
-        controlFont.setPixelSize(qMax(1, qRound(12.0 * headerControlScale)));
-        controlFont.setWeight(QFont::DemiBold);
-        const QFontMetricsF controlMetrics(controlFont);
-        const int btnHeight = qMax(1, qRound(22.0 * headerControlScale));
-        const int btnY = qMax(0, (state.timelineTop - btnHeight) / 2);
-        const QColor cardBg = theme.window.lightnessF() < 0.5
-            ? QColor(31, 41, 55) : QColor(243, 244, 246);
-        const QColor borderColor = theme.border;
-        const QColor arrowColor = theme.label;
-        const QColor hoverBg = theme.window.lightnessF() < 0.5
-            ? QColor(44, 56, 70)
-            : QColor(238, 245, 255);
-        const QColor pressedBg = theme.window.lightnessF() < 0.5
-            ? QColor(62, 121, 208)
-            : QColor(38, 104, 185);
-        const QColor accentColor = theme.window.lightnessF() < 0.5
-            ? QColor(96, 165, 250)
-            : QColor(46, 119, 208);
-        const QColor pressedGlyphColor = QColor(255, 255, 255);
-
-        // ---- Zoom button (left) ----
-        const QString zoomText = QStringLiteral("%1%").arg(
-            qRound(request.zoomScale * 100.0));
-        const qreal zoomTextW = controlMetrics.horizontalAdvance(zoomText);
-        const int zoomBodyW = qMax(42, qRound(54.0 * headerControlScale));
-        const int zoomStepperW = qMax(14, qRound(18.0 * headerControlScale));
-        const int zoomBtnW = zoomBodyW + zoomStepperW;
-        const int zoomBtnX = qRound(4.0 * headerControlScale);
-        const bool bodyPressed = request.zoomControlPressedPart == 1;
-        const bool upPressed = request.zoomControlPressedPart == 2;
-        const bool downPressed = request.zoomControlPressedPart == -2;
-        const bool bodyHovered = request.zoomControlHoveredPart == 1;
-        const bool upHovered = request.zoomControlHoveredPart == 2;
-        const bool downHovered = request.zoomControlHoveredPart == -2;
-        const qreal pressedOffset = qMax<qreal>(1.0, qRound(headerControlScale));
-        state.zoomButtonBg = TimelineSceneRect{
-            QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
-            cardBg,
-        };
-        const qreal separatorX = zoomBtnX + zoomBodyW;
-        const auto appendZoomPartOverlay = [&](const QRectF& rect, bool hovered, bool pressed) {
-            if (!hovered && !pressed) {
-                return;
-            }
-            state.zoomButtonOverlayRects.append(TimelineSceneRect{
-                rect,
-                pressed ? pressedBg : hoverBg,
-            });
-        };
-        appendZoomPartOverlay(
-            QRectF(zoomBtnX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomBodyW - 1.0), qMax<qreal>(1.0, btnHeight - 2.0)),
-            bodyHovered,
-            bodyPressed);
-        appendZoomPartOverlay(
-            QRectF(separatorX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
-            upHovered,
-            upPressed);
-        appendZoomPartOverlay(
-            QRectF(separatorX + 1.0, btnY + (btnHeight * 0.5), qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
-            downHovered,
-            downPressed);
-        state.zoomButtonBorder = TimelineSceneRect{
-            // Drawn as a thin frame via 4 hairlines below; we keep one
-            // descriptor for "the border colour" so the source can pick
-            // it up. Width/height encode line thickness via
-            // a sentinel: we use the rect itself plus 1-px hairlines
-            // emitted by the source.
-            QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
-            (bodyHovered || upHovered || downHovered || bodyPressed || upPressed || downPressed)
-                ? accentColor
-                : borderColor,
-        };
-        TimelineSceneTextLabel zoomLabel;
-        zoomLabel.text = zoomText;
-        zoomLabel.font = controlFont;
-        zoomLabel.color = bodyPressed ? pressedGlyphColor : theme.label;
-        zoomLabel.logicalSize = timelineTextLogicalSize(controlFont, zoomText);
-        zoomLabel.topLeft = QPointF(
-            zoomBtnX + ((zoomBodyW - zoomTextW) * 0.5) - kTimelineTextHorizontalPadding,
-            btnY + (btnHeight - controlMetrics.height()) * 0.5
-                - kTimelineTextVerticalPadding
-                + (bodyPressed ? pressedOffset : 0.0));
-        state.zoomButtonLabel = zoomLabel;
-
-        state.zoomButtonInteriorLines.append(TimelineSceneLine{
-            QPointF(separatorX, btnY),
-            QPointF(separatorX, btnY + btnHeight),
-            (bodyHovered || upHovered || downHovered || bodyPressed || upPressed || downPressed)
-                ? accentColor
-                : borderColor,
-            1.0,
-        });
-        const qreal arrowCx = separatorX + (zoomStepperW * 0.5);
-        QFont arrowFont = controlFont;
-        arrowFont.setPixelSize(qMax(7, qRound(9.0 * headerControlScale)));
-        arrowFont.setWeight(QFont::DemiBold);
-        arrowFont.setStretch(QFont::Expanded);
-        const QFontMetricsF arrowMetrics(arrowFont);
-        const qreal arrowHalfWidth =
-            arrowMetrics.horizontalAdvance(QStringLiteral("\u25B2")) * 0.3;
-        const qreal arrowTriangleHeight = qMax<qreal>(1.0, arrowMetrics.height() * 0.3);
-        const qreal arrowInnerGap = qMax<qreal>(2.0, qRound(4.0 * headerControlScale));
-        const qreal arrowStackCenterY = btnY + (btnHeight * 0.5);
-        const qreal upBaseY =
-            arrowStackCenterY - (arrowInnerGap * 0.5) + (upPressed ? pressedOffset : 0.0);
-        const qreal downBaseY =
-            arrowStackCenterY + (arrowInnerGap * 0.5) + (downPressed ? pressedOffset : 0.0);
-        const qreal upTipY = upBaseY - arrowTriangleHeight;
-        const qreal downTipY = downBaseY + arrowTriangleHeight;
-        state.zoomButtonGlyphTriangles.append(TimelineSceneTriangle{
-            QPointF(arrowCx, upTipY),
-            QPointF(arrowCx - arrowHalfWidth, upBaseY),
-            QPointF(arrowCx + arrowHalfWidth, upBaseY),
-            upPressed ? pressedGlyphColor : arrowColor,
-        });
-        state.zoomButtonGlyphTriangles.append(TimelineSceneTriangle{
-            QPointF(arrowCx, downTipY),
-            QPointF(arrowCx + arrowHalfWidth, downBaseY),
-            QPointF(arrowCx - arrowHalfWidth, downBaseY),
-            downPressed ? pressedGlyphColor : arrowColor,
-        });
-
-        // ---- Brightness/settings button (right) ----
-        const int settingsBtnW = qMax(1, qRound(28.0 * headerControlScale));
-        const int settingsBtnX = qMax(
-            zoomBtnX + zoomBtnW + qRound(8.0 * headerControlScale),
-            request.viewportSize.width() - qRound(8.0 * headerControlScale) - settingsBtnW);
-        const qreal settingsPressedOffset = request.settingsControlPressed ? pressedOffset : 0.0;
-        const QColor settingsButtonBg = request.settingsControlPressed
-            ? pressedBg
-            : (request.settingsControlHovered ? hoverBg : cardBg);
-        const QColor settingsButtonStroke = (request.settingsControlHovered || request.settingsControlPressed)
-            ? accentColor
-            : borderColor;
-        const QColor settingsGlyphColor = request.settingsControlPressed ? pressedGlyphColor : arrowColor;
-        state.settingsButtonBg = TimelineSceneRect{
-            QRectF(settingsBtnX, btnY, settingsBtnW, btnHeight),
-            settingsButtonBg,
-        };
-        state.settingsButtonBorder = TimelineSceneRect{
-            QRectF(settingsBtnX, btnY, settingsBtnW, btnHeight),
-            settingsButtonStroke,
-        };
-        const qreal iconLeft = settingsBtnX + qRound(7.0 * headerControlScale);
-        const qreal iconRight = settingsBtnX + settingsBtnW - qRound(7.0 * headerControlScale);
-        const qreal knobSize = qMax<qreal>(2.0, qRound(3.0 * headerControlScale));
-        const auto appendSliderGlyphLine = [&](qreal y, qreal knobCenterX) {
-            const qreal shiftedY = y + settingsPressedOffset;
-            state.settingsButtonInteriorLines.append(TimelineSceneLine{
-                QPointF(iconLeft, shiftedY),
-                QPointF(iconRight, shiftedY),
-                settingsGlyphColor,
-                qMax<qreal>(1.0, headerControlScale),
-            });
-            state.settingsButtonGlyphRects.append(TimelineSceneRect{
-                QRectF(knobCenterX - knobSize * 0.5, shiftedY - knobSize * 0.5, knobSize, knobSize),
-                settingsGlyphColor,
-            });
-        };
-        appendSliderGlyphLine(btnY + qRound(6.0 * headerControlScale), settingsBtnX + qRound(12.0 * headerControlScale));
-        appendSliderGlyphLine(btnY + qRound(11.0 * headerControlScale), settingsBtnX + qRound(18.0 * headerControlScale));
-        appendSliderGlyphLine(btnY + qRound(16.0 * headerControlScale), settingsBtnX + qRound(14.0 * headerControlScale));
-
-        // Follow controls are no longer drawn in the timeline header.
-        // Code Follow lives in BottomTabsQuickHost.qml, while View Lock
-        // and Progress Follow keep fixed default behavior and are not
-        // materialised as scene-state visuals.
     }
 
     return state;

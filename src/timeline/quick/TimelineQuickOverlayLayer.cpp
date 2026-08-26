@@ -20,6 +20,7 @@ struct TimelineQuickOverlayRootNode : public QSGNode {
     quint64 headerRevision = 0;
     quint64 headerDynamicRevision = 0;
     quint64 dynamicRevision = 0;
+    quint64 layoutRevision = 0;
     quint64 appearanceRevision = 0;
 };
 
@@ -190,7 +191,8 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
     }
 
     const bool appearanceChanged = root->appearanceRevision != state.appearanceRevision;
-    if (slotsRebuilt || appearanceChanged || root->staticRevision != state.gridRevision) {
+    const bool layoutChanged = root->layoutRevision != state.layoutRevision;
+    if (slotsRebuilt || appearanceChanged || layoutChanged || root->staticRevision != state.gridRevision) {
         clearChildren(staticRoot);
         for (const auto& rect : state.frameRects) {
             staticRoot->appendChildNode(buildTimelineRectNode(rect));
@@ -218,6 +220,7 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
 
     if (slotsRebuilt
         || appearanceChanged
+        || layoutChanged
         || root->transformedStaticNotesRevision != state.notesRevision
         || root->transformedStaticRevision != state.overlayRevision) {
         clearChildren(transformedStaticRoot);
@@ -239,7 +242,10 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
         root->transformedStaticRevision = state.overlayRevision;
     }
 
-    if (slotsRebuilt || appearanceChanged || root->dynamicRevision != state.overlayDynamicRevision) {
+    if (slotsRebuilt
+        || appearanceChanged
+        || layoutChanged
+        || root->dynamicRevision != state.overlayDynamicRevision) {
         updateVerticalLineSlot(
             dynamic_cast<QSGSimpleRectNode*>(childAt(transformedDynamicRoot, 0)),
             state.hasPlayheadLine,
@@ -257,6 +263,7 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
 
     if (slotsRebuilt
         || appearanceChanged
+        || layoutChanged
         || root->headerRevision != state.headerRevision
         || root->headerDynamicRevision != state.overlayDynamicRevision) {
         clearChildren(headerTriangleRoot);
@@ -272,6 +279,7 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
         root->headerRevision = state.headerRevision;
         root->headerDynamicRevision = state.overlayDynamicRevision;
     }
+    root->layoutRevision = state.layoutRevision;
     root->appearanceRevision = state.appearanceRevision;
     return root;
 }

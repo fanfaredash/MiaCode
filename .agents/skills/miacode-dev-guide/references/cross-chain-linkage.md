@@ -533,17 +533,18 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
    `timelineView_->setContentScale`. Device height via `scaledBottomTabsTimelineContentHeight` /
    `bottomTabsContentScaleForTimelineContentHeight` (piecewise inverse — header caps at 100%,
    lanes grow). `bottomTabsHeaderScaleForContentScale` = `0.5 + min(scale,1)*0.5` (caps at 1.0).
-2. QML v2: `MainSplitView.qml` reads `QuickShellController::bottomTabsHostHeight` as its
-   one-way `SplitView.preferredHeight`; only a completed divider gesture sends the measured height
-   back through a short debounce. It must not create a pixel preference, install a fixed 340px cap,
-   or feed every layout `heightChanged` back to the controller — `WindowShell` is the sole clamp
-   authority. `BottomPanel.qml` maps header input controls through `timelineItem.y` and supplies all
-   four QSG header limits from its zoom/brightness hit geometry.
-3. QSG scene: `TimelineSceneStateBuilder::buildLayoutMetrics` — **two-tier split**:
-   `gridContentScale` (raw, up to 4.0) drives ONLY `laneHeight`/`timelineHeight`;
-   `normalizedContentScale` (capped at 1.0) is stored as `state.contentScale` and drives note
-   素材/markers, lane-label fonts, header (`headerContentScale`), margins. Notes position off
-   `laneHeight` (grows), size off `contentScale` (capped) → taller grid, 100% markers.
+2. QML v2: `MainSplitView.qml` owns bottom-panel geometry as one persisted height ratio
+   (`0.20..0.65`, default `0.35`). Divider dragging changes the live `SplitView` geometry and writes
+   that ratio only when released. `TimelineQuickItem` consumes its actual anchored viewport size,
+   excluding the tab strip; the backend host height does not feed panel geometry or timeline layout.
+3. QSG scene: `TimelineQuickItem::geometryChange` retains the newest viewport and applies it from
+   `updatePolish`, coalescing repeated geometry changes before scene-graph sync. The bridge increments
+   `layoutRevision` without changing the grid/waveform/header/notes data revisions. With
+   `TimelineSceneBuildRequest::fitViewportHeight`, `TimelineSceneStateBuilder::buildLayoutMetrics`
+   keeps the header/material scale in the legacy `0.5..1.0` visual range, then assigns every remaining
+   logical pixel to nine equal `qreal` lanes. Each QSG layer includes `layoutRevision` in its geometry
+   cache key while retaining data and texture caches. `BottomPanel.qml` derives transparent header hit
+   geometry from `TimelineQuickItem::headerScale`, so input and QSG visuals share the same metric.
 4. Legacy `TimelineView` parity: `TimelineView.Core.cpp` `laneHeight()` uses the raw scale;
    `scaledTimelineMetric` / `headerContentScale` stay capped.
 5. 语法/无理 list fonts are a fixed 90% of base (`kBottomTabsIssueListFontScale`), uniform /
@@ -551,19 +552,20 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
    `UiTheme::scrollBarStyleSheet()` like the editor. `QuickShellController::bottomTabsHeaderScale`
    (QML tab strip) still inherits the capped header scale.
 
-**SYNC-PAIR:** the `4.0` max is duplicated as `kBottomTabsContentScaleMax`
+**COMPATIBILITY SYNC-PAIR:** the `4.0` max is duplicated as `kBottomTabsContentScaleMax`
 (`MainWindow.WindowShell.cpp`), `kMaxContentScale` (`TimelineSceneStateBuilder.cpp`), and a literal
 `4.0` in the `setContentScale` clamps of `TimelineView.cpp` / `TimelineView.Core.cpp` /
-`TimelineQuickStateBridge.cpp` — change all together (also `hardcode-registry.md`). This scale is
-**UI-only** (in-app timeline panel); it has no video-export consumer.
+`TimelineQuickStateBridge.cpp` — change all together for the classic/reference path (also
+`hardcode-registry.md`). Active QML timeline height uses its viewport-fit mode and has no `4.0` grid
+ceiling. This scale is **UI-only** (in-app timeline panel); it has no video-export consumer.
 
 ### v2 follow-control and cadence contract
 
-- The four independent controls are View Lock, Timeline Sync, Follow Code, and Progress Follow.
-  `QuickShellController::openTimelineFollowSettingsMenu()` owns their accessible native-menu rows;
-  `TimelineQuickStateBridge` mirrors their values; `MainWindow.EditorDisplay.cpp` persists the
-  corresponding `viewport_lock`, `timeline_sync`, `follow_preview`, and `follow_progress` values.
-  Do not replace a saved boolean with a fixed default during either load or save.
+- Follow Code is the user-facing v2 editor control and lives inline in `BottomTabBar.qml`.
+  View Lock and Progress Follow stay enabled; `MainWindow.EditorDisplay.cpp` normalizes their
+  `viewport_lock` and `follow_progress` preferences to `true`. Timeline Sync has no v2 editor
+  control and retains its internal `timeline_sync` state. `TimelineQuickStateBridge` mirrors the
+  runtime values used by the timeline pipeline.
 - `TimelineSection::flushQtPreviewTimelinePosition()` may skip QSG state writes until the bridge is
   ready, but it must continue to call the code-follow tick while the validation or Muri tab is
   foreground. Bottom-tab visibility is a render-routing condition, not an editor-follow gate.

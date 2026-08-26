@@ -36,6 +36,10 @@ ApplicationWindow {
                                   ? " — " + mainView.documentTitle
                                   : "")
     color: Theme.colors.background.surface
+    topPadding: 0
+    leftPadding: 0
+    rightPadding: 0
+    bottomPadding: 0
 
     palette.window: Theme.colors.background.surface
     palette.windowText: Theme.colors.text.primary

@@ -1,5 +1,7 @@
 # QML UI v2 阶段 1 与阶段 2 Implementation Plan
 
+> **状态：历史计划。** 以 `bd663a53`（2026-08-24）为基线撰写。其中「本阶段不能删除 v1 QuickShell」等约束已被阶段 0a（2026-08-25）取代。现行阶段划分、已完成/延后项以 [QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](../specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md) 第 8 节为准。不要按本文未勾选步骤继续施工。
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不扩张 `MainWindow` 职责、不退回 Widgets 主壳的前提下，使 QML UI v2 具备可验证的文档状态边界，以及可日常制谱的 timeline、诊断和文本编辑工作流。

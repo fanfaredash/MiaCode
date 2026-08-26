@@ -324,6 +324,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Scene-state + Quick surface: `src/timeline/TimelineSceneState*`, `TimelineSceneStateBuilder.*`,
   `TimelineNoteAssets.*`, `src/timeline/quick/TimelineQuick*Layer.*`, `TimelineQuickItem.*`,
   `TimelineQuickStateBridge.*`, `src/common/TimelineThemeConfig.h`.
+- v2 timeline header popups: zoom presets `src/app/qml_ui/timeline/TimelineZoomMenu.qml`
+  (`applyZoomPreset` → `setZoomScaleAnchored(..., viewportCenterSecond())`); waveform/grid
+  brightness `TimelineBrightnessMenu.qml` (live `AppSlider`s, Popup stays open while dragging).
+  Their QML buttons live in `BottomPanel.qml`. The tab bar exposes Follow Code inline; View Lock and
+  Progress Follow stay enabled, and Timeline Sync has no v2 editor control.
 - Refresh orchestration: `sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   (`applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`,
   `requestTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`, `seekTimelineToCursor`).
@@ -369,6 +374,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `PreviewSceneAssetLoader.*`, `PreviewSceneAssetRepository.*`, `PreviewQuickRuntimeSurface.*`,
   `PreviewQuickExportSession.*`, `qml/PreviewRuntimeView.qml`. `PreviewRuntime` is the on-screen
   preview host (`QQuickView`) and the export session renders `PreviewQuickSceneRoot` headlessly.
+- v2 preview playback rate: `src/app/qml_ui/preview/PreviewTransport.qml` + `PreviewRateMenu.qml`
+  (`AppDropDownButton` + `AppMenu`, same chrome as timeline zoom). Rate writes `QmlPreviewModel::rate`.
 - Stage-media host (background image+video, both shells): `src/preview/runtime/PreviewStageMediaHost.{h,cpp}`,
   `qml/PreviewStageMediaItem.qml`. **`PreviewMediaController` / `src/preview/video/` was removed**
   — background media now flows through `PreviewStageMediaHost` plus `PreviewRuntime`'s

@@ -14,6 +14,7 @@ namespace {
 
 struct TimelineQuickGridLinesRootNode : public QSGNode {
     quint64 gridRevision = 0;
+    quint64 layoutRevision = 0;
     quint64 appearanceRevision = 0;
 };
 
@@ -135,7 +136,9 @@ QSGNode* TimelineQuickGridLinesLayer::updateNode(
     }
 
     const bool appearanceChanged = root->appearanceRevision != state.appearanceRevision;
-    if (appearanceChanged || root->gridRevision != state.gridRevision) {
+    if (appearanceChanged
+        || root->layoutRevision != state.layoutRevision
+        || root->gridRevision != state.gridRevision) {
         clearChildren(contentRoot);
         // Same per-color batching as the previous in-headerLayer path.
         // The Blending=true override in TimelineQuickFlatColorBatchBuilder
@@ -151,6 +154,7 @@ QSGNode* TimelineQuickGridLinesLayer::updateNode(
         gridBatch.flush();
         root->gridRevision = state.gridRevision;
     }
+    root->layoutRevision = state.layoutRevision;
     root->appearanceRevision = state.appearanceRevision;
     return root;
 }

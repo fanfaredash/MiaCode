@@ -11,6 +11,7 @@ Rectangle {
     required property var pages
     property bool compact: false
     readonly property bool primarySidebarVisible: compact || viewState.sidebarVisible
+    readonly property real activityBarWidth: activityBar.width
 
     signal settingsRequested()
 
