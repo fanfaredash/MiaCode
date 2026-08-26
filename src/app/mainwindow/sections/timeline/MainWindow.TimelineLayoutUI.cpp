@@ -4,10 +4,8 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
@@ -553,10 +551,6 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
     owner_.updateEditorHeaderLayoutMode();
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->updateGeometry();
-        ui_.timelineView_->viewport()->update();
-    }
     const qint64 totalMs = totalTimer.elapsed();
     if (totalMs >= kPageLayoutTotalSlowMs) {
         appendPageLayoutDiag(

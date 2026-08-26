@@ -8,14 +8,16 @@ Rectangle {
     required property var viewState
     required property var documentSession
     required property var editorController
+    required property var syncController
     property bool metadataMode: false
     // EditorPane must provide effective visibility (including its own host),
     // so an editor retained behind an overlay cannot acknowledge navigation.
     property bool navigationVisible: false
     property bool imeComposing: false
-    // Backend-originated selections must not loop back into the legacy
-    // cursor→timeline bridge.  QML remains the visual owner of the caret.
-    property bool suppressBackendCaretPublish: false
+    property int programmaticSelectionDepth: 0
+    property bool contextCaretPending: false
+    property double pendingNavigationSequence: 0
+    property bool pendingNavigationApplied: false
     property var bookmarks: []
     property int pendingBookmarkLine: -1
     // Read-only projection of preview follow while paused or with 代码跟随 off.
@@ -27,16 +29,75 @@ Rectangle {
     onMetadataModeChanged: {
         syncTextFromController()
         publishNavigationReadiness()
+        scheduleEditorContext(false)
         root.followDecorationActive = false
     }
-    onNavigationVisibleChanged: publishNavigationReadiness()
+    onNavigationVisibleChanged: {
+        publishNavigationReadiness()
+        scheduleEditorContext(false)
+    }
 
     function publishNavigationReadiness() {
-        if (!root.documentSession)
+        if (!root.syncController || !root.documentSession)
             return
-        root.documentSession.setQmlEditorNavigationReadiness(
+        root.syncController.setEditorReadiness(
             root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
             root.navigationVisible, root.metadataMode)
+    }
+
+    function scheduleEditorContext(publishCaret) {
+        root.contextCaretPending = root.contextCaretPending
+            || (publishCaret && root.programmaticSelectionDepth === 0)
+        editorContextTimer.restart()
+    }
+
+    Timer {
+        id: editorContextTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (!root.syncController || !root.documentSession)
+                return
+            const publishCaret = root.contextCaretPending
+                && root.editorController.publishCaretForQml(
+                    root.documentSession.currentDifficultyId,
+                    root.documentSession.documentRevision,
+                    sourceArea.selectionStart, sourceArea.selectionEnd,
+                    root.imeComposing)
+            root.contextCaretPending = false
+            root.syncController.setEditorContext(
+                root.documentSession.currentDifficultyId,
+                root.documentSession.documentRevision,
+                sourceArea.selectionStart, sourceArea.selectionEnd,
+                sourceArea.activeFocus, root.imeComposing,
+                root.viewState.editorCursorLine,
+                root.viewState.editorCursorColumn,
+                publishCaret)
+        }
+    }
+
+    Timer {
+        id: navigationAckTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (root.syncController && root.pendingNavigationSequence > 0)
+                root.syncController.acknowledgeNavigation(
+                    root.pendingNavigationSequence, root.pendingNavigationApplied)
+            root.pendingNavigationSequence = 0
+            root.pendingNavigationApplied = false
+        }
+    }
+
+    function beginProgrammaticSelection() {
+        root.contextCaretPending = false
+        editorContextTimer.stop()
+        ++root.programmaticSelectionDepth
+    }
+
+    function endProgrammaticSelection() {
+        root.programmaticSelectionDepth = Math.max(0, root.programmaticSelectionDepth - 1)
+        root.scheduleEditorContext(false)
     }
 
     // The QML undo stack belongs to one difficulty's source. It is reset when
@@ -55,9 +116,11 @@ Rectangle {
             || root.historyDifficultyId !== root.documentSession.currentDifficultyId
             || root.historyMetadataMode !== root.metadataMode
         if (sourceArea.text !== controllerText) {
+            root.beginProgrammaticSelection()
             sourceArea.syncingFromController = true
             sourceArea.text = controllerText
             sourceArea.syncingFromController = false
+            root.endProgrammaticSelection()
             sourceArea.historyText = controllerText
             sourceArea.historyAnchor = sourceArea.selectionStart
             sourceArea.historyPosition = sourceArea.selectionEnd
@@ -131,52 +194,44 @@ Rectangle {
         centerCursorInView()
     }
 
-    function centerCursorInView() {
-        Qt.callLater(() => {
+    Timer {
+        id: cursorCenterTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (!root.documentSession || root.metadataMode || !sourceArea)
+                return
             const flickable = editorScroll.contentItem
+            if (!flickable)
+                return
             const target = sourceArea.y + sourceArea.cursorRectangle.y
                 + sourceArea.cursorRectangle.height / 2 - flickable.height / 2
             flickable.contentY = Math.max(0, Math.min(
                 Math.max(0, flickable.contentHeight - flickable.height), target))
-        })
+        }
     }
 
-    function selectBackendNavigation(line, column, endLine, endColumn, selectToken, focusEditor, centerView) {
-        const position = root.documentSession.chartPosition(Math.max(1, line), Math.max(1, column))
-        let start = position
-        let end = position
-        const hasExactSelection = selectToken && (endLine > line || endColumn > column)
-        if (hasExactSelection) {
-            // Timeline spans use an inclusive end column, whereas TextArea
-            // selection uses an exclusive offset.
-            end = Math.max(position, root.documentSession.chartPosition(
-                Math.max(1, endLine), Math.max(1, endColumn + 1)))
-        } else if (selectToken) {
-            const delimiters = " /,`\n\r\t"
-            while (start > 0 && delimiters.indexOf(sourceArea.text.charAt(start - 1)) < 0)
-                --start
-            while (end < sourceArea.text.length && delimiters.indexOf(sourceArea.text.charAt(end)) < 0)
-                ++end
-            if (end <= start)
-                end = Math.min(sourceArea.text.length, start + 1)
-        }
-        // Defence in depth for non-playback callers: the C++ playback bridge
-        // suppresses duplicate targets, but direct navigation must not turn an
-        // unchanged selection into another TextArea update and center-scroll.
-        if (sourceArea.selectionStart === start && sourceArea.selectionEnd === end) {
+    function centerCursorInView() {
+        cursorCenterTimer.restart()
+    }
+
+    function applyNavigation(sequence, difficultyId, revision, start, end, focusEditor, reveal) {
+        const accepted = root.navigationVisible && !root.metadataMode
+            && difficultyId === root.documentSession.currentDifficultyId
+            && revision === root.documentSession.documentRevision
+            && start >= 0 && end >= start && end <= sourceArea.text.length
+        if (accepted) {
+            root.beginProgrammaticSelection()
+            sourceArea.select(start, end)
             if (focusEditor)
                 sourceArea.forceActiveFocus()
-            if (centerView)
+            root.endProgrammaticSelection()
+            if (reveal)
                 centerCursorInView()
-            return
         }
-        root.suppressBackendCaretPublish = true
-        sourceArea.select(start, end)
-        if (focusEditor)
-            sourceArea.forceActiveFocus()
-        root.suppressBackendCaretPublish = false
-        if (centerView)
-            centerCursorInView()
+        root.pendingNavigationSequence = sequence
+        root.pendingNavigationApplied = accepted
+        navigationAckTimer.restart()
     }
 
     function createBookmarkAtLine(line) {
@@ -204,33 +259,40 @@ Rectangle {
         bookmarkTitleDialog.open()
     }
 
-    function applyFollowDecoration(active, difficultyId, revision, startLine, startColumn,
-                                   endLine, endColumn, cursorLine, cursorColumn, ensureVisible) {
-        if (!active || root.metadataMode
-                || difficultyId !== root.documentSession.currentDifficultyId
-                || revision !== root.documentSession.documentRevision) {
+    function applyFollowProjection() {
+        if (!root.syncController || !root.syncController.followActive || root.metadataMode
+                || root.syncController.followDifficultyId
+                   !== root.documentSession.currentDifficultyId
+                || root.syncController.followRevision
+                   !== root.documentSession.documentRevision) {
             root.followDecorationActive = false
             return false
         }
-        root.followDecorationStart = root.documentSession.chartPosition(startLine, startColumn)
-        // Timeline spans use an inclusive end column; a text offset is exclusive.
+        root.followDecorationStart = Math.max(
+            0, Math.min(sourceArea.text.length, root.syncController.followStart))
         root.followDecorationEnd = Math.max(
             root.followDecorationStart,
-            root.documentSession.chartPosition(endLine, endColumn + 1))
-        root.followDecorationCursor = root.documentSession.chartPosition(cursorLine, cursorColumn)
+            Math.min(sourceArea.text.length, root.syncController.followEnd))
+        root.followDecorationCursor = Math.max(
+            0, Math.min(sourceArea.text.length, root.syncController.followCaret))
         root.followDecorationActive = true
-        if (ensureVisible)
+        if (root.syncController.followReveal)
             root.ensureFollowDecorationVisible()
         return true
     }
 
     // Scrolls the decoration into view without touching the caret or selection,
     // which is what separates paused follow from the playing caret-move path.
-    function ensureFollowDecorationVisible() {
-        Qt.callLater(() => {
-            if (!root.followDecorationActive)
+    Timer {
+        id: decorationCenterTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (!root.followDecorationActive || !sourceArea)
                 return
             const flickable = editorScroll.contentItem
+            if (!flickable)
+                return
             const rect = sourceArea.positionToRectangle(root.followDecorationCursor)
             const top = sourceArea.y + rect.y
             const bottom = top + rect.height
@@ -239,7 +301,11 @@ Rectangle {
             flickable.contentY = Math.max(0, Math.min(
                 Math.max(0, flickable.contentHeight - flickable.height),
                 top + rect.height / 2 - flickable.height / 2))
-        })
+        }
+    }
+
+    function ensureFollowDecorationVisible() {
+        decorationCenterTimer.restart()
     }
 
     function collectBookmarks() {
@@ -254,40 +320,9 @@ Rectangle {
     function seekPreviewToCaret() {
         if (root.metadataMode || sourceArea.selectedText.length > 0)
             return false
-        return root.documentSession.seekPreviewToEditorLocation(
+        return root.syncController.seekPreviewToEditorLocation(
             root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
             root.viewState.editorCursorLine, root.viewState.editorCursorColumn)
-    }
-
-    function revealSyntaxIssue(difficultyId, revision, line, column, endColumn, completion, cancellation) {
-        if (root.metadataMode) {
-            if (cancellation)
-                cancellation()
-            return
-        }
-        if (difficultyId > 0 && difficultyId !== root.documentSession.currentDifficultyId)
-            root.documentSession.selectDifficulty(difficultyId)
-        Qt.callLater(() => {
-            // Diagnostics are 1-based and are valid only for the revision
-            // that produced them; select after a requested difficulty switch.
-            if (root.documentSession.validationPending
-                    || revision !== root.documentSession.validationRevision
-                    || root.documentSession.validationRevision
-                       !== root.documentSession.documentRevision) {
-                if (cancellation)
-                    cancellation()
-                return
-            }
-            const start = root.documentSession.chartPosition(line, column)
-            const end = root.documentSession.chartPosition(line, Math.max(column, endColumn + 1))
-            root.suppressBackendCaretPublish = true
-            sourceArea.forceActiveFocus()
-            sourceArea.select(start, Math.max(start + 1, end))
-            root.suppressBackendCaretPublish = false
-            root.centerCursorInView()
-            if (completion)
-                completion()
-        })
     }
 
     function updateCursorPosition() {
@@ -511,11 +546,12 @@ Rectangle {
                 z: -1
             }
 
-            // Preview follow caret — the v1 blue line. Distinct from the real
-            // caret so a paused seek is visible without stealing the cursor.
+            // Preview follow caret. Distinct from the real caret so a paused
+            // seek is visible without stealing the cursor.
             Rectangle {
                 readonly property rect caretRect: sourceArea.positionToRectangle(root.followDecorationCursor)
                 visible: root.followDecorationActive
+                    && (root.syncController.followPlaybackActive || !sourceArea.activeFocus)
                 x: caretRect.x
                 y: caretRect.y
                 width: 2
@@ -545,21 +581,9 @@ Rectangle {
             }
             onCursorPositionChanged: {
                 root.updateCursorPosition()
-                if (!root.suppressBackendCaretPublish
-                        && root.editorController.publishCaretForQml(
-                        root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
-                        selectionStart, selectionEnd, root.imeComposing)) {
-                    root.documentSession.publishEditorCaret(
-                        root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
-                        root.viewState.editorCursorLine, root.viewState.editorCursorColumn)
-                }
-                root.documentSession.setQmlEditorInteraction(
-                    root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
-                    selectionStart, selectionEnd, activeFocus, root.imeComposing)
+                root.scheduleEditorContext(root.programmaticSelectionDepth === 0)
             }
-            onActiveFocusChanged: root.documentSession.setQmlEditorInteraction(
-                root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
-                selectionStart, selectionEnd, activeFocus, root.imeComposing)
+            onActiveFocusChanged: root.scheduleEditorContext(false)
             function applyEditorTransaction(transaction) {
                 return root.applyEditorTransaction(transaction)
             }
@@ -574,7 +598,7 @@ Rectangle {
             Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_Control) {
-                    root.documentSession.setQmlTouchPadAuthoringCtrlHold(true)
+                    root.syncController.setTouchPadControlHold(true)
                     return
                 }
                 if (event.matches(StandardKey.Find)) {
@@ -635,7 +659,7 @@ Rectangle {
             }
             Keys.onReleased: function(event) {
                 if (event.key === Qt.Key_Control)
-                    root.documentSession.setQmlTouchPadAuthoringCtrlHold(false)
+                    root.syncController.setTouchPadControlHold(false)
             }
             Component.onCompleted: {
                 root.syncTextFromController()
@@ -669,8 +693,29 @@ Rectangle {
             }
 
             cursorDelegate: Rectangle {
+                id: editorCaret
                 width: 1
                 color: Theme.colors.text.editor
+                visible: sourceArea.activeFocus && !sourceArea.readOnly
+                    && sourceArea.selectionStart === sourceArea.selectionEnd
+                    && !root.syncController.followPlaybackActive
+
+                Connections {
+                    target: sourceArea
+                    function onCursorPositionChanged() {
+                        editorCaret.opacity = 1
+                        caretBlinkTimer.restart()
+                    }
+                }
+
+                Timer {
+                    id: caretBlinkTimer
+                    running: editorCaret.visible && interval > 0
+                    repeat: true
+                    interval: Application.styleHints.cursorFlashTime / 2
+                    onTriggered: editorCaret.opacity = editorCaret.opacity > 0 ? 0 : 1
+                    onRunningChanged: editorCaret.opacity = 1
+                }
             }
 
             CompletionPopup {
@@ -701,12 +746,22 @@ Rectangle {
             // inside one. A Ctrl+drag is a selection, not a jump.
             PointHandler {
                 acceptedButtons: Qt.LeftButton
+                target: null
+                onActiveChanged: {
+                    if (active && !root.metadataMode)
+                        root.syncController.beginPointerInteraction(
+                            root.documentSession.currentDifficultyId,
+                            root.documentSession.documentRevision)
+                }
+            }
+
+            PointHandler {
+                acceptedButtons: Qt.LeftButton
                 acceptedModifiers: Qt.ControlModifier
                 target: null
                 onActiveChanged: {
-                    // Deferred like v1's release dispatch: TextArea finishes
-                    // placing the caret for this click first, so the seek uses
-                    // the final location rather than the previous one.
+                    // TextArea finishes placing the caret before the release
+                    // dispatch, so the seek uses the final location.
                     if (!active)
                         Qt.callLater(() => root.seekPreviewToCaret())
                 }
@@ -750,38 +805,35 @@ Rectangle {
         function onDocumentStateChanged() {
             root.editorController.setDocumentContextForQml(
                 root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
-            root.documentSession.setQmlEditorInteraction(
-                root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
-                sourceArea.selectionStart, sourceArea.selectionEnd, sourceArea.activeFocus,
-                root.imeComposing)
             root.publishNavigationReadiness()
+            root.scheduleEditorContext(false)
+            root.applyFollowProjection()
         }
-        function onQmlEditorNavigationRequested(difficultyId, revision, line, column, endLine,
-                                                endColumn, selectToken, focusEditor, centerView) {
-            if (!root.navigationVisible || root.metadataMode
-                    || difficultyId !== root.documentSession.currentDifficultyId
-                    || revision !== root.documentSession.documentRevision)
-                return
-            root.selectBackendNavigation(
-                line, column, endLine, endColumn, selectToken, focusEditor, centerView)
+    }
+
+    Connections {
+        target: root.syncController
+        function onNavigationRequested(sequence, difficultyId, revision, start, end,
+                                       focusEditor, reveal) {
+            root.applyNavigation(sequence, difficultyId, revision, start, end,
+                                 focusEditor, reveal)
         }
-        function onQmlEditorFollowDecorationChanged(active, difficultyId, revision, startLine,
-                                                    startColumn, endLine, endColumn, cursorLine,
-                                                    cursorColumn, ensureVisible) {
-            root.applyFollowDecoration(active, difficultyId, revision, startLine, startColumn,
-                                       endLine, endColumn, cursorLine, cursorColumn, ensureVisible)
+        function onFollowChanged() {
+            root.applyFollowProjection()
         }
-        function onQmlTouchPadAuthoringRequested(pad, useBacktickSeparator, difficultyId,
-                                                  revision, anchor, position) {
+        function onTouchPadAuthoringRequested(pad, useBacktickSeparator, difficultyId,
+                                               revision, anchor, position) {
             if (root.metadataMode || !sourceArea.activeFocus || root.imeComposing
                     || difficultyId !== root.documentSession.currentDifficultyId
                     || revision !== root.documentSession.documentRevision)
                 return
+            root.beginProgrammaticSelection()
             sourceArea.select(anchor, position)
+            root.endProgrammaticSelection()
             const tx = root.editorController.touchPadAuthoringForQml(
                 sourceArea.text, anchor, position, pad, useBacktickSeparator)
             if (root.applyEditorTransaction(tx)) {
-                root.documentSession.setTouchPadAuthoringPreviewAnchor(
+                root.syncController.setTouchPadPreviewAnchor(
                     difficultyId, root.documentSession.documentRevision,
                     sourceArea.text, tx.touchTokenStart)
             }
@@ -794,17 +846,19 @@ Rectangle {
         value: Flickable.StopAtBounds
     }
 
-    Component.onCompleted: publishNavigationReadiness()
+    Component.onCompleted: {
+        publishNavigationReadiness()
+        scheduleEditorContext(false)
+        applyFollowProjection()
+    }
     Component.onDestruction: {
-        if (root.documentSession)
-            root.documentSession.setQmlEditorNavigationReadiness(-1, 0, false, true)
+        if (root.syncController)
+            root.syncController.setEditorReadiness(-1, 0, false, true)
     }
 
     onImeComposingChanged: {
-        root.documentSession.setQmlEditorInteraction(
-            root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
-            sourceArea.selectionStart, sourceArea.selectionEnd, sourceArea.activeFocus, root.imeComposing)
+        root.scheduleEditorContext(false)
         if (root.imeComposing)
-            root.documentSession.setQmlTouchPadAuthoringCtrlHold(false)
+            root.syncController.setTouchPadControlHold(false)
     }
 }

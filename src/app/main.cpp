@@ -203,10 +203,21 @@ int main(int argc, char* argv[])
     // QApplication construction) still gets a chance to flush the
     // last-known document text — though in practice early crashes happen
     // before any document is loaded so the snapshot is empty / safe.
-    miacode::crash_recovery::install();
+    //
+    // MIACODE_SKIP_CRASH_HANDLER leaves SIGSEGV / SEH unhooked so Windows
+    // LocalDumps can capture the original 0xC0000005. MinGW's SIGSEGV
+    // handler converts that AV into a signal, which ends the process
+    // without a WER dump.
+    if (miacode::debug_options::envFlagEnabled("MIACODE_SKIP_CRASH_HANDLER")) {
 #ifdef Q_OS_WIN
-    miacode::oplog::appendStartupBeaconLine("phase=after_crash_recovery_install");
+        miacode::oplog::appendStartupBeaconLine("phase=crash_recovery_skipped");
 #endif
+    } else {
+        miacode::crash_recovery::install();
+#ifdef Q_OS_WIN
+        miacode::oplog::appendStartupBeaconLine("phase=after_crash_recovery_install");
+#endif
+    }
 
 #ifdef Q_OS_WIN
     // Force PER_MONITOR_AWARE_V2 DPI awareness for BOTH the editor and

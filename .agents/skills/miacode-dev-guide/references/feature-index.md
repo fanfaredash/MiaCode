@@ -71,17 +71,20 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   text-transaction/completion/undo owner exposed by `QmlApplicationContext`; `SourceEditor.qml`
   forwards separate key, IME-commit and paste paths through `QmlEditorInputBridge` with
   `Keys.BeforeItem`, while `CompletionPopup.qml` remains unfocused so editor keyboard routing is retained.
-  Timeline/preview reverse navigation is acknowledged only after `SourceEditor` reports a visible,
-  non-metadata `QmlEditorNavigationReadiness` snapshot for the same difficulty/revision. Preview
+  `EditorSyncController` is exposed separately by `QmlApplicationContext`. `SourceEditor` publishes
+  readiness and deferred focus/selection/IME context to it, consumes text-position follow state,
+  and acknowledges sequenced navigation after applying a programmatic selection. Playback follow is
+  a read-only projection; timeline clicks, bookmarks and diagnostics use discrete navigation. Preview
   statistics use cached structured entries from `QmlPreviewModel` and skin-aware note images from
   `QmlNoteImageProvider`, backed by `TimelineNoteAssets`: position, transport, playing, render-mode,
   statistics and skin changes are separate notification domains, so a playback position refresh must
   never rebuild the statistics model or probe skin files. `PreviewPane` / compact / fullscreen surface
   lifetimes are mutually exclusive through QML Loaders — only the visible surface may subscribe to
-  `PreviewRuntime`. QML reverse follow retains an accepted navigation-target no-op cache; invalidate it
-  with the preview-follow binding cache on document/difficulty changes. Windows caption: `QmlUiWindowChrome`.
-  Hidden `MainWindow` validation/Muri caches remain compatibility-only for timeline/preview and
-  legacy pages; they are not QML analysis truth. Checklist:
+  `PreviewRuntime`. Follow-decoration projection suppresses unchanged targets and repeated centering
+  requests before entering QML. Windows caption: `QmlUiWindowChrome`.
+  `app/v2/ChartWorkspace` owns UIv2 document state and save points, while `AnalysisService` derives
+  aligned validation/marker/Muri values from the same revision. `EditorSyncController` owns editor
+  navigation, follow, caret and authoring synchronization. Checklist:
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QuickShell compatibility: only `src/app/quick_shell/QuickShellController.*` and preview surface
   policy helpers remain for v2. Stage 0a deleted the v1 bootstrap, native surface host, style bridge,
@@ -374,23 +377,23 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 ## 5. Timeline, cursor mapping, preview sync
 
 - Quick model: `src/timeline/TimelineQuickModel.{h,cpp}` (lightweight parse, cursor anchors,
-  preview-follow buckets, incremental edit apply; owns comma-only `C` anchor lookup).
-- Widget timeline: `src/timeline/TimelineView.{h,cpp}` + `.Core/.Interaction/.Paint.cpp`
-  (include-split). Visible-range paint, playhead/cursor, waveform, follow-preview.
+  preview-follow buckets, immutable-text incremental edit apply; owns comma-only `C` anchor lookup).
 - Scene-state + Quick surface: `src/timeline/TimelineSceneState*`, `TimelineSceneStateBuilder.*`,
   `TimelineNoteAssets.*`, `src/timeline/quick/TimelineQuick*Layer.*`, `TimelineQuickItem.*`,
   `TimelineQuickStateBridge.*`, `src/common/TimelineThemeConfig.h`.
 - Refresh orchestration: `sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   (`applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`,
-  `requestTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`, `seekTimelineToCursor`).
+  `requestTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`,
+  `updateTimelineCursorFromEditorLocation`, `seekPreviewToEditorLocation`).
 - Slow refresh workers: `src/timeline/TimelineSlowRefresh.{h,cpp}`.
 - Timing getters: same `PreviewTimelineFlow.cpp` (`currentTimingMetadata`, `parsedFirstSeconds`,
   `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`).
-- **Ctrl touch-area authoring (2026-07-20, QML gate tightened 2026-08-24):** `WindowSection` owns the Ctrl-hold/editor-context
+- **Ctrl touch-area authoring (2026-07-20, controller boundary 2026-08-26):** `EditorSyncController` owns the Ctrl-hold/editor-context
   gate → `PreviewSection::applyEffectivePreviewOutlineVariantToCanvas` enables the runtime →
   `PreviewQuickSceneRoot` exclusively owns pointer press/move/release/cancel → `PreviewRuntime`
-  applies `TouchPadAuthoringState` hover/pressed styles and emits the committed pad → the central
-  `FrameBootstrap` connection plans/applies the edit through `TouchPadAuthoringEdit`, resolves the
+  applies `TouchPadAuthoringState` hover/pressed styles and emits the committed pad →
+  `EditorSyncController` emits one queued value request → `SourceEditor` applies the edit through
+  `QmlEditorController::touchPadAuthoringForQml`, resolves the
   caret token through `TimelineQuickModel::resolveTimelineSecondForCursor`, and seeks discretely to
   `max(0, tokenSecond - 1/60)`. The comma-delimited token is selected by the editor caret (caret
   immediately before a comma belongs to the left token); tokens containing only whitespace,
@@ -400,12 +403,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   exact pad already present in the token removes only its first occurrence together with the
   adjacent separator (while preserving leading timing controls and trailing whitespace). Press
   must finish on the same pad; moving away, ungrab, focus/app deactivation, page/context
-  invalidation, or Ctrl release cancels. In UIv2, `QmlDocumentModel` snapshots active difficulty,
-  caret difficulty/revision/selection, focus and IME composition through
-  `setQmlEditorInteraction`; `QmlTouchPadAuthoringBridge` accepts only focused, non-composing,
-  same-difficulty and same-revision snapshots. Once a QML handler is registered,
-  `WindowSection::touchPadAuthoringEditableContext` must not fall back to the hidden legacy
-  `QTextEdit`. Gesture/style and bookmark-marker source contracts are in
+  invalidation, or Ctrl release cancels. The controller accepts only focused, non-composing,
+  same-difficulty and same-revision snapshots. Gesture/style and bookmark-marker source contracts are in
   `TouchPadAuthoringStateSpec`; QML gate coverage is in `QmlEditorControllerSpec` and
   `TouchPadAuthoringStateSpec`; token/undo coverage is in `PlainCodeEditorSpec`.
 

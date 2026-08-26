@@ -292,15 +292,9 @@ void MainWindow::WindowSection::focusPreviewInteractionTarget(QObject* watched, 
 
 bool MainWindow::WindowSection::touchPadAuthoringEditableContext() const
 {
-    auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_);
-    const bool legacyEditorContext = !owner_.hasQmlTouchPadAuthoringHandler()
-        && owner_.editorStack_ != nullptr
-        && owner_.editorStack_->currentWidget() == owner_.chartPage_
-        && editor != nullptr && !editor->isReadOnly();
-    const bool qmlEditorContext = owner_.qmlTouchPadAuthoringContextActive();
     return state_.previewTouchPadAuthoringShortcutEnabled_
         && owner_.hasActiveDifficulty()
-        && (legacyEditorContext || qmlEditorContext)
+        && owner_.editorAuthoringContextActive()
         && !state_.exportPreviewActive_
         && QApplication::activeModalWidget() == nullptr
         && QApplication::activePopupWidget() == nullptr;
@@ -323,9 +317,6 @@ void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWid
             }
             if (widget == ui_.editorWidget_ || (ui_.editorWidget_ != nullptr && ui_.editorWidget_->isAncestorOf(widget))) {
                 return QStringLiteral("editor");
-            }
-            if (widget == ui_.timelineView_ || (ui_.timelineView_ != nullptr && ui_.timelineView_->isAncestorOf(widget))) {
-                return QStringLiteral("timeline");
             }
             return QStringLiteral("window");
         };
@@ -725,10 +716,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     auto* watchedWidget = qobject_cast<QWidget*>(watched);
     const auto extensionGestureTargetForWatched = [this](QObject* watchedObject) {
         auto* editorScrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_);
-        if (watchedObject == owner_.timelineView_
-            || (owner_.timelineView_ != nullptr && watchedObject == owner_.timelineView_->viewport())) {
-            return QStringLiteral("timeline");
-        }
         if (watchedObject == owner_.previewSlider_
             || watchedObject == owner_.previewCanvas_
             || watchedObject == owner_.previewCanvasContainer_
@@ -1260,10 +1247,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         auto* wheelEvent = static_cast<QWheelEvent*>(event);
         QString target = QStringLiteral("any");
         auto* editorScrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_);
-        if (watched == owner_.timelineView_
-            || (owner_.timelineView_ != nullptr && watched == owner_.timelineView_->viewport())) {
-            target = QStringLiteral("timeline");
-        } else if (watched == owner_.previewSlider_
+        if (watched == owner_.previewSlider_
                    || watched == owner_.previewCanvas_
                    || watched == owner_.previewCanvasFrame_) {
             target = QStringLiteral("preview");
@@ -1462,14 +1446,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     false,
                     0.0,
                     false);
-                // Intentionally no View Lock action here: when playback is
-                // already paused, a left-click's text position is by
-                // definition already visible (you can only click on visible
-                // pixels). The previous applyPreviewFollowCursor(centerView=
-                // true, suppressSignals=true) added in `42a9f06 view locked`
-                // overwrote drag selections and froze the caret blink via
-                // QSignalBlocker. The View Lock path while paused should be
-                // a no-op — Qt's default click handling is correct.
             });
         }
     }

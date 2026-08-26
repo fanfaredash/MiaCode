@@ -1,6 +1,4 @@
 #include "QmlDocumentModel.h"
-#include "QmlEditorNavigationBridge.h"
-#include "QmlTouchPadAuthoringBridge.h"
 
 #include "editor/BookmarkCommentSyntax.h"
 
@@ -33,47 +31,6 @@ QmlDocumentModel::QmlDocumentModel(
     // Publish that first committed identity as well so every subsequent
     // backend navigation value is stamped with the workspace revision.
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
-    backend_->setQmlTouchPadAuthoringHandler([this](const QString& pad, bool backtick) {
-        const miacode::qml_ui::QmlTouchPadAuthoringContext context{
-            currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
-            qmlEditorFocused_, qmlImeComposing_};
-        if (!context.accepts()) return false;
-        // SourceEditor performs the returned value transaction.  That keeps
-        // touch authoring in the same one-step QML undo stack as keyboard,
-        // IME, paste and Replace All instead of resetting it through a full
-        // document assignment here.
-        emit qmlTouchPadAuthoringRequested(
-            pad, backtick, currentDifficultyId(), documentRevision_,
-            qmlCaretAnchor_, qmlCaretPosition_);
-        return true;
-    });
-    backend_->setQmlTouchPadAuthoringContextHandler([this] {
-        return miacode::qml_ui::QmlTouchPadAuthoringContext{
-            currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
-            qmlEditorFocused_, qmlImeComposing_}.accepts();
-    });
-    backend_->setQmlEditorNavigationHandler([this](
-        const miacode::qml_ui::QmlEditorNavigationRequest& request) {
-        return miacode::qml_ui::routeQmlEditorNavigation(
-            request, qmlEditorNavigationReadiness_, currentDifficultyId(), documentRevision_,
-            [this](const miacode::qml_ui::QmlEditorNavigationRequest& accepted) {
-                emit qmlEditorNavigationRequested(
-                    accepted.difficultyId, accepted.revision, accepted.line, accepted.column,
-                    accepted.endLine, accepted.endColumn, accepted.selectToken,
-                    accepted.focusEditor, accepted.centerView);
-            });
-    });
-    backend_->setQmlEditorFollowDecorationHandler([this](
-        const miacode::qml_ui::QmlEditorFollowDecoration& decoration) {
-        miacode::qml_ui::routeQmlEditorFollowDecoration(
-            decoration, qmlEditorNavigationReadiness_, currentDifficultyId(), documentRevision_,
-            [this](const miacode::qml_ui::QmlEditorFollowDecoration& routed) {
-                emit qmlEditorFollowDecorationChanged(
-                    routed.active, routed.difficultyId, routed.revision, routed.startLine,
-                    routed.startColumn, routed.endLine, routed.endColumn, routed.cursorLine,
-                    routed.cursorColumn, routed.ensureVisible);
-            });
-    });
     refreshDocumentState();
     connect(analysisService_, &miacode::v2::AnalysisService::snapshotChanged,
             this, [this](int, quint64) {
@@ -113,10 +70,6 @@ QmlDocumentModel::QmlDocumentModel(
 QmlDocumentModel::~QmlDocumentModel()
 {
     if (backend_ != nullptr) {
-        backend_->setQmlTouchPadAuthoringHandler({});
-        backend_->setQmlTouchPadAuthoringContextHandler({});
-        backend_->setQmlEditorNavigationHandler({});
-        backend_->setQmlEditorFollowDecorationHandler({});
         backend_->setQmlDocumentSaveHandler({});
     }
 }
@@ -470,71 +423,6 @@ void QmlDocumentModel::disableUnifiedDesigner()
     emit unifiedDesignerEnabledChanged();
 }
 
-bool QmlDocumentModel::publishEditorCaret(int difficultyId, qulonglong revision, int line, int column)
-{
-    if (backend_ == nullptr || revision != documentRevision_
-        || difficultyId != currentDifficultyId() || difficultyId <= 0) {
-        return false;
-    }
-    backend_->publishQmlEditorCaret(difficultyId, line, column);
-    return true;
-}
-
-void QmlDocumentModel::setQmlEditorInteraction(int difficultyId, qulonglong revision, int anchor,
-                                               int position, bool focused, bool imeComposing)
-{
-    qmlCaretDifficultyId_ = difficultyId;
-    qmlCaretRevision_ = revision;
-    qmlCaretAnchor_ = anchor;
-    qmlCaretPosition_ = position;
-    qmlEditorFocused_ = focused;
-    qmlImeComposing_ = imeComposing;
-    if (backend_ != nullptr) backend_->refreshQmlTouchPadAuthoringContext();
-}
-
-void QmlDocumentModel::setQmlEditorNavigationReadiness(
-    int difficultyId, qulonglong revision, bool sourceVisible, bool metadataMode)
-{
-    qmlEditorNavigationReadiness_ = miacode::qml_ui::QmlEditorNavigationReadiness{
-        difficultyId, static_cast<quint64>(revision), sourceVisible, metadataMode};
-}
-
-void QmlDocumentModel::setQmlTouchPadAuthoringCtrlHold(bool active)
-{
-    if (backend_ == nullptr) {
-        return;
-    }
-    // Never arm the runtime on the strength of a stale QML focus snapshot.
-    const miacode::qml_ui::QmlTouchPadAuthoringContext context{
-        currentDifficultyId(), qmlCaretDifficultyId_, documentRevision_, qmlCaretRevision_,
-        qmlEditorFocused_, qmlImeComposing_};
-    backend_->setQmlTouchPadAuthoringCtrlHold(active && context.accepts());
-}
-
-bool QmlDocumentModel::setTouchPadAuthoringPreviewAnchor(
-    int difficultyId, qulonglong revision, const QString& text, int tokenStart)
-{
-    if (backend_ == nullptr || difficultyId != currentDifficultyId()
-        || revision != documentRevision_ || text != chartText()) {
-        return false;
-    }
-    const int position = qBound(0, tokenStart, text.size());
-    const int newline = text.lastIndexOf(QLatin1Char('\n'), qMax(0, position - 1));
-    const int line = text.left(position).count(QLatin1Char('\n')) + 1;
-    const int column = position - newline;
-    return backend_->applyQmlTouchPadAuthoringPreviewAnchor(difficultyId, line, column);
-}
-
-bool QmlDocumentModel::seekPreviewToEditorLocation(
-    int difficultyId, qulonglong revision, int line, int column)
-{
-    if (backend_ == nullptr || revision != documentRevision_
-        || difficultyId != currentDifficultyId() || difficultyId <= 0) {
-        return false;
-    }
-    return backend_->seekPreviewToQmlEditorLocation(difficultyId, line, column);
-}
-
 void QmlDocumentModel::logEditorDocumentState(const QString& reason, int difficultyId,
                                               qulonglong revision, int shownChars,
                                               bool metadataMode)
@@ -585,8 +473,11 @@ void QmlDocumentModel::navigateToBookmark(int difficultyId, int line)
     if (difficultyId != currentDifficultyId()) {
         return;
     }
-    emit qmlEditorNavigationRequested(difficultyId, documentRevision_, line, 1, line, 1,
-                                      false, true, true);
+    QMetaObject::invokeMethod(this, [this, difficultyId, line] {
+        if (backend_ != nullptr && difficultyId == currentDifficultyId()) {
+            backend_->requestEditorNavigation(line, 1, line, 1, false, true, true);
+        }
+    }, Qt::QueuedConnection);
 }
 
 void QmlDocumentModel::publishWorkspaceCommit(

@@ -1,13 +1,12 @@
 #include "MainWindow.TimelineSection.h"
+#include "app/v2/EditorSyncController.h"
 #include "../../MainWindowShared.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "audio/PreviewAudioPlaybackFlowPolicy.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
@@ -223,6 +222,7 @@ void MainWindow::TimelineSection::seekPreviewDiscreteToSecond(double second, boo
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
+    owner_.editorSyncController().setPlaybackActive(false);
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
     }
@@ -766,6 +766,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.qtPreviewTimelineDirty_ = true;
     }
     state_.qtPreviewPlaying_ = false;
+    owner_.editorSyncController().setPlaybackActive(false);
     if (owner_.extensionManager_ != nullptr && (wasPlaying || hadStartupSync)) {
         owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{
             {QStringLiteral("source"), QStringLiteral("preview")},

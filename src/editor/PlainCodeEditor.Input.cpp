@@ -469,7 +469,6 @@ void PlainCodeEditor::changeEvent(QEvent* event)
 
 void PlainCodeEditor::focusInEvent(QFocusEvent* event)
 {
-    const QRect previousRect = previewFollowVisualCaretRect();
     QTextEdit::focusInEvent(event);
     // Re-apply IME disable after the base-class focus handler, which may
     // re-assert WA_InputMethodEnabled based on editability. Our
@@ -479,9 +478,6 @@ void PlainCodeEditor::focusInEvent(QFocusEvent* event)
     if (imeInputDisabled_) {
         setAttribute(Qt::WA_InputMethodEnabled, false);
         QGuiApplication::inputMethod()->update(Qt::ImEnabled);
-    }
-    if (viewport() != nullptr && previousRect.isValid()) {
-        viewport()->update(previousRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
     }
 }
 
@@ -503,22 +499,7 @@ void PlainCodeEditor::focusOutEvent(QFocusEvent* event)
     if (!pointerInsideCompletionPopup && userMovedFocus) {
         closeBracketCompletion();
     }
-    const QRect previousRect = previewFollowVisualCaretRect();
     QTextEdit::focusOutEvent(event);
-    const QRect currentRect = previewFollowVisualCaretRect();
-    if (viewport() == nullptr) {
-        return;
-    }
-    QRect dirtyRect;
-    if (previousRect.isValid()) {
-        dirtyRect = previousRect;
-    }
-    if (currentRect.isValid()) {
-        dirtyRect = dirtyRect.isNull() ? currentRect : dirtyRect.united(currentRect);
-    }
-    if (dirtyRect.isValid()) {
-        viewport()->update(dirtyRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
-    }
 }
 
 QPoint PlainCodeEditor::completionPopupPointerPosition() const

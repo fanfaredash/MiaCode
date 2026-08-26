@@ -1,8 +1,6 @@
 #include "app/qml_ui/QmlEditorController.h"
 #include "app/qml_ui/QmlEditorInputBridge.h"
 #include "app/qml_ui/SimaiSyntaxHighlighter.h"
-#include "app/qml_ui/QmlEditorNavigationBridge.h"
-#include "app/qml_ui/QmlTouchPadAuthoringBridge.h"
 #include "app/v2/ChartWorkspace.h"
 #include "editor/BookmarkCommentSyntax.h"
 
@@ -536,16 +534,6 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                 signal metadataSourceChanged()
                 signal documentStateChanged()
                 signal documentReplaced()
-                signal qmlEditorNavigationRequested(int difficultyId, real revision, int line,
-                                                    int column, int endLine, int endColumn,
-                                                    bool selectToken, bool focusEditor, bool centerView)
-                signal qmlTouchPadAuthoringRequested(string pad, bool useBacktickSeparator,
-                                                     int difficultyId, real revision,
-                                                     int anchor, int position)
-                signal qmlEditorFollowDecorationChanged(bool active, int difficultyId, real revision,
-                                                        int startLine, int startColumn, int endLine,
-                                                        int endColumn, int cursorLine, int cursorColumn,
-                                                        bool ensureVisible)
                 function chartPosition(line, column) {
                     const lines = session.chartText.split("\n")
                     let offset = 0
@@ -553,11 +541,6 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                         offset += lines[i].length + 1
                     return offset + Math.max(0, column - 1)
                 }
-                function setQmlEditorNavigationReadiness(a, b, c, d) {}
-                function setQmlEditorInteraction(a, b, c, d, e, f) {}
-                function setQmlTouchPadAuthoringCtrlHold(a) {}
-                function setTouchPadAuthoringPreviewAnchor(a, b, c, d) { return true }
-                function publishEditorCaret(a, b, c, d) { return true }
                 function selectDifficulty(a) {}
                 function logEditorDocumentState(a, b, c, d, e) {}
                 property int seekRequests: 0
@@ -565,6 +548,32 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                 property int seekColumn: -1
                 property int seekDifficultyId: -1
                 property real seekRevision: -1
+            }
+
+            QtObject {
+                id: sync
+                property bool followActive: false
+                property int followDifficultyId: -1
+                property real followRevision: 0
+                property int followStart: 0
+                property int followEnd: 0
+                property int followCaret: 0
+                property bool followReveal: false
+                property bool followPlaybackActive: false
+                signal navigationRequested(real sequence, int difficultyId, real revision,
+                                           int start, int end, bool focusEditor, bool reveal)
+                signal navigationFinished(real sequence, bool applied)
+                signal followChanged()
+                signal touchPadAuthoringRequested(string pad, bool useBacktickSeparator,
+                                                  int difficultyId, real revision,
+                                                  int anchor, int position)
+                function setEditorReadiness(a, b, c, d) {}
+                function setEditorContext(a, b, c, d, e, f, g, h, i) {}
+                function acknowledgeNavigation(a, b) {}
+                function setTouchPadControlHold(a) {}
+                function setTouchPadPreviewAnchor(a, b, c, d) { return true }
+                function beginPointerInteraction(a, b) { return true }
+                function requestNavigation(a, b, c, d, e, f) { return 1 }
                 function seekPreviewToEditorLocation(difficultyId, revision, line, column) {
                     session.seekRequests += 1
                     session.seekDifficultyId = difficultyId
@@ -591,7 +600,9 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                 viewState: view
                 documentSession: session
                 editorController: sharedController
+                syncController: sync
             }
+            property alias syncStub: sync
         }
     )QML", QUrl(QStringLiteral("qrc:/SourceEditorContextMenuSpec.qml")));
     if (!expect(component.isReady(),
@@ -732,15 +743,28 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
     // Paused preview follow: a decoration, not a caret move. Before this
     // channel existed the paused branch only painted the hidden widget, so a
     // seek while paused produced nothing at all in the visible QML editor.
-    const auto sendDecoration = [session](bool active, int difficultyId, double revision,
-                                          int startLine, int startColumn, int endLine,
-                                          int endColumn, int cursorLine, int cursorColumn,
-                                          bool ensureVisible) {
-        QMetaObject::invokeMethod(
-            session, "qmlEditorFollowDecorationChanged", Q_ARG(bool, active),
-            Q_ARG(int, difficultyId), Q_ARG(double, revision), Q_ARG(int, startLine),
-            Q_ARG(int, startColumn), Q_ARG(int, endLine), Q_ARG(int, endColumn),
-            Q_ARG(int, cursorLine), Q_ARG(int, cursorColumn), Q_ARG(bool, ensureVisible));
+    auto* sync = root->property("syncStub").value<QObject*>();
+    const auto sendDecoration = [session, sync](bool active, int difficultyId, double revision,
+                                                int startLine, int startColumn, int endLine,
+                                                int endColumn, int cursorLine, int cursorColumn,
+                                                bool ensureVisible) {
+        const QString text = session->property("chartText").toString();
+        const auto positionFor = [&text](int line, int column) {
+            int position = 0;
+            for (int currentLine = 1; currentLine < line; ++currentLine) {
+                const int newline = text.indexOf(QLatin1Char('\n'), position);
+                position = newline < 0 ? text.size() : newline + 1;
+            }
+            return qBound(position, position + qMax(0, column - 1), text.size());
+        };
+        sync->setProperty("followActive", active);
+        sync->setProperty("followDifficultyId", difficultyId);
+        sync->setProperty("followRevision", revision);
+        sync->setProperty("followStart", positionFor(startLine, startColumn));
+        sync->setProperty("followEnd", positionFor(endLine, endColumn + 1));
+        sync->setProperty("followCaret", positionFor(cursorLine, cursorColumn));
+        sync->setProperty("followReveal", ensureVisible);
+        QMetaObject::invokeMethod(sync, "followChanged");
         QCoreApplication::processEvents();
     };
     sendDecoration(true, 3, 42, 2, 3, 2, 5, 2, 3, false);
@@ -986,16 +1010,6 @@ int main(int argc, char** argv)
                && !controller.acceptsTouchAuthoring(3, 42, true, false)
                && controller.acceptsTouchAuthoring(3, 42, false, true),
            QStringLiteral("caret and Ctrl touch authoring reject stale revisions and IME composition"), out, &failed);
-    miacode::qml_ui::QmlTouchPadAuthoringContext touchContext{3, 3, 42, 42, true, false};
-    QString touchText;
-    int touchCaret = 0;
-    expect(touchContext.accepts()
-               && miacode::qml_ui::applyQmlTouchPadAuthoringEdit(
-                   &touchText, &touchCaret, QStringLiteral("A1"), false)
-               && touchText == QStringLiteral("A1") && touchCaret == 2
-               && !miacode::qml_ui::QmlTouchPadAuthoringContext{3, 3, 42, 41, true, false}.accepts()
-               && !miacode::qml_ui::QmlTouchPadAuthoringContext{3, 3, 42, 42, true, true}.accepts(),
-           QStringLiteral("QML preview context gates and applies the shared touch-pad edit"), out, &failed);
     const auto touchTransaction = controller.touchPadAuthoringForQml(
         QStringLiteral("1,,"), 2, 2, QStringLiteral("A1"), false);
     expect(touchTransaction.value(QStringLiteral("consumed")).toBool()
@@ -1005,68 +1019,6 @@ int main(int argc, char** argv)
                       == QStringLiteral("A1")
                && touchTransaction.value(QStringLiteral("touchTokenStart")).toInt() == 2,
            QStringLiteral("Ctrl touch authoring is returned as one editor transaction with its token anchor"), out, &failed);
-    const miacode::qml_ui::QmlEditorNavigationReadiness decorationReadiness{3, 42, true, false};
-    const miacode::qml_ui::QmlEditorFollowDecoration liveDecoration{
-        true, 3, 42, 2, 3, 2, 5, 2, 3, true};
-    int deliveredDecorations = 0;
-    bool lastDecorationActive = false;
-    const auto routeDecoration = [&deliveredDecorations, &lastDecorationActive](
-                                     const miacode::qml_ui::QmlEditorFollowDecoration& decoration,
-                                     const miacode::qml_ui::QmlEditorNavigationReadiness& readiness) {
-        return miacode::qml_ui::routeQmlEditorFollowDecoration(
-            decoration, readiness, 3, 42,
-            [&deliveredDecorations, &lastDecorationActive](
-                const miacode::qml_ui::QmlEditorFollowDecoration& routed) {
-                ++deliveredDecorations;
-                lastDecorationActive = routed.active;
-            });
-    };
-    expect(routeDecoration(liveDecoration, decorationReadiness) && lastDecorationActive
-               && !routeDecoration(liveDecoration, {3, 42, false, false}) && !lastDecorationActive
-               && !routeDecoration(liveDecoration, {3, 42, true, true}) && !lastDecorationActive
-               && !routeDecoration({true, 3, 41, 2, 3, 2, 5, 2, 3, true}, decorationReadiness)
-               && !routeDecoration({true, 4, 42, 2, 3, 2, 5, 2, 3, true}, decorationReadiness)
-               && deliveredDecorations == 5,
-           QStringLiteral("a follow decoration always reaches QML but only paints on a visible, current chart source"),
-           out, &failed);
-
-    const miacode::qml_ui::QmlEditorNavigationRequest navigationRequest{
-        3, 42, 7, 4, 8, 9, true, false, true};
-    expect(navigationRequest.accepts(3, 42)
-               && !navigationRequest.accepts(4, 42)
-               && !navigationRequest.accepts(3, 41)
-               && !miacode::qml_ui::QmlEditorNavigationRequest{
-                   3, 42, 8, 4, 7, 9, true, false, true}.accepts(3, 42),
-           QStringLiteral("reverse editor navigation rejects a different difficulty, stale revision, or backwards range"), out, &failed);
-    int deliveredNavigationRequests = 0;
-    const auto routeNavigation = [&navigationRequest, &deliveredNavigationRequests](
-                                     const miacode::qml_ui::QmlEditorNavigationReadiness& readiness) {
-        return miacode::qml_ui::routeQmlEditorNavigation(
-            navigationRequest, readiness, 3, 42,
-            [&deliveredNavigationRequests](const miacode::qml_ui::QmlEditorNavigationRequest&) {
-                ++deliveredNavigationRequests;
-            });
-    };
-    expect(!routeNavigation({3, 42, false, false})
-               && deliveredNavigationRequests == 0
-               && !routeNavigation({3, 42, true, true})
-               && deliveredNavigationRequests == 0
-               && routeNavigation({3, 42, true, false})
-               && deliveredNavigationRequests == 1,
-           QStringLiteral("reverse navigation acknowledges only a visible chart source, never hidden or metadata editors"),
-           out, &failed);
-    const auto rejectedRoute = [](const miacode::qml_ui::QmlTouchPadAuthoringContext& context) {
-        return miacode::qml_ui::resolveTouchPadAuthoringRoute(true, context.accepts());
-    };
-    expect(rejectedRoute({3, 3, 42, 42, false, false})
-                   == miacode::qml_ui::TouchPadAuthoringRoute::Reject
-               && rejectedRoute({3, 3, 42, 41, true, false})
-                   == miacode::qml_ui::TouchPadAuthoringRoute::Reject
-               && rejectedRoute({3, 3, 42, 42, true, true})
-                   == miacode::qml_ui::TouchPadAuthoringRoute::Reject
-               && miacode::qml_ui::resolveTouchPadAuthoringRoute(false, false)
-                   == miacode::qml_ui::TouchPadAuthoringRoute::Legacy,
-           QStringLiteral("an installed QML handler rejects unfocused, stale, and IME touch edits without legacy fallback"), out, &failed);
     const auto createdBookmark = controller.createBookmarkForQml(QStringLiteral("1,2,"), 1, QStringLiteral("intro"));
     expect(createdBookmark.value(QStringLiteral("hasEdit")).toBool()
                && createdBookmark.value(QStringLiteral("replacementText")).toString().contains(QStringLiteral("[intro]")),
@@ -1117,17 +1069,16 @@ int main(int argc, char** argv)
                && source.contains(QStringLiteral("FindReplaceBar"))
                && source.contains(QStringLiteral("bookmarksForQml"))
                && source.contains(QStringLiteral("publishCaretForQml"))
-               && source.contains(QStringLiteral("publishEditorCaret"))
-               && source.contains(QStringLiteral("setQmlEditorInteraction"))
+               && source.contains(QStringLiteral("syncController.setEditorContext"))
                && source.contains(QStringLiteral("recordQmlTransaction"))
                && source.contains(QStringLiteral("editorContextMenu"))
                && source.contains(QStringLiteral("centerCursorInView"))
                && source.contains(QStringLiteral("Keys.priority: Keys.BeforeItem"))
                && source.contains(QStringLiteral("transaction.suppressFallbackInsert"))
-               && source.contains(QStringLiteral("setQmlTouchPadAuthoringCtrlHold"))
-               && source.contains(QStringLiteral("setQmlEditorNavigationReadiness"))
-               && source.contains(QStringLiteral("onQmlEditorNavigationRequested"))
-               && source.contains(QStringLiteral("onQmlTouchPadAuthoringRequested"))
+               && source.contains(QStringLiteral("syncController.setTouchPadControlHold"))
+               && source.contains(QStringLiteral("syncController.setEditorReadiness"))
+               && source.contains(QStringLiteral("onNavigationRequested"))
+               && source.contains(QStringLiteral("onTouchPadAuthoringRequested"))
                && source.contains(QStringLiteral("touchPadAuthoringForQml"))
                && source.count(QStringLiteral("onJumpRequested: root.jumpToLine(line)")) == 1,
            QStringLiteral("SourceEditor routes keyboard completion, context actions, reverse navigation, and revision-safe touch editing"), out, &failed);
@@ -1138,23 +1089,15 @@ int main(int argc, char** argv)
                && sidebarSource.contains(QStringLiteral("bookmarksForDifficulty"))
                && sidebarSource.contains(QStringLiteral("navigateToBookmark")),
            QStringLiteral("bookmarks are grouped under their difficulty in the sidebar instead of overlaying the editor"), out, &failed);
-    QFile documentModelSource(QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
-    QFile mainWindowHeader(QStringLiteral("src/app/mainwindow/MainWindow.h"));
-    expect(documentModelSource.open(QIODevice::ReadOnly) && mainWindowHeader.open(QIODevice::ReadOnly),
-           QStringLiteral("QML touch-pad ownership boundaries are available to wiring test"), out, &failed);
-    const QString documentSource = QString::fromUtf8(documentModelSource.readAll());
-    const QString mainWindowSource = QString::fromUtf8(mainWindowHeader.readAll());
-    expect(documentSource.contains(QStringLiteral("setQmlTouchPadAuthoringCtrlHold(active && context.accepts())"))
-               && mainWindowSource.contains(
-                   QStringLiteral("void setQmlTouchPadAuthoringCtrlHold(bool active);")),
-           QStringLiteral("QML Ctrl authoring arms preview through a public narrow MainWindow bridge"), out, &failed);
     QFile followSyncSource(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
     expect(followSyncSource.open(QIODevice::ReadOnly),
-           QStringLiteral("preview follow synchronization is available to bridge wiring test"), out, &failed);
+           QStringLiteral("preview follow synchronization source is available"), out, &failed);
     const QString followSource = QString::fromUtf8(followSyncSource.readAll());
-    expect(followSource.contains(QStringLiteral("requestQmlEditorNavigation("))
-               && followSource.contains(QStringLiteral("cached_qml_navigation")),
-           QStringLiteral("preview follow replays cached bindings through the revision-safe QML editor sink"), out, &failed);
+    expect(followSource.contains(QStringLiteral("EditorFollowState"))
+               && followSource.contains(QStringLiteral("publishFollow"))
+               && source.contains(QStringLiteral("navigationAckTimer"))
+               && source.contains(QStringLiteral("decorationCenterTimer")),
+           QStringLiteral("editor synchronization uses value projection and item-owned queues"), out, &failed);
     return failed == 0 ? 0 : 1;
 }

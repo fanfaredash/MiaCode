@@ -3,7 +3,6 @@
 #include <QHash>
 #include <QMetaObject>
 #include <QObject>
-#include <QPointer>
 #include <QFont>
 #include <QSize>
 #include <QString>
@@ -18,8 +17,6 @@
 #include "common/WaveformCache.h"
 #include "timeline/TimelineRenderData.h"
 #include "timeline/TimelineSceneState.h"
-
-class TimelineView;
 
 class TimelineQuickStateBridge : public QObject
 {
@@ -45,8 +42,6 @@ class TimelineQuickStateBridge : public QObject
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
 
-    // Reference-only mirror attach for the classic QWidget timeline path.
-    void attachReferenceView(TimelineView* referenceView);
     void setQuickViewportSize(const QSize& viewportSize);
     int timelineTop() const;
 
@@ -75,6 +70,7 @@ public:
     QStringList zoomOutWheelShortcuts() const;
     void setZoomWheelShortcuts(const QStringList& zoomInShortcuts, const QStringList& zoomOutShortcuts);
     double viewportCenterSecond();
+    QSize viewportSize() const;
     void setZoomScaleAnchored(double scale, double anchorSecond);
     double contentScale() const;
     void setContentScale(double scale);
@@ -161,7 +157,6 @@ private:
     void bumpOverlayRevision();
     void bumpOverlayDynamicRevision();
 
-    QPointer<TimelineView> referenceView_;
     TimelineRenderSnapshot snapshot_;
     std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;
     QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkersByLocation_;

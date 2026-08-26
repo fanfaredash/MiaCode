@@ -726,10 +726,10 @@ bool incrementalMatchesRebuild(
     QTextDocument document(originalText);
     TimelineQuickModel incremental;
     TimelineQuickModel rebuilt;
-    incremental.rebuildFromDocument(&document, firstSeconds, timingMetadata);
+    incremental.rebuildFromText(document.toPlainText(), firstSeconds, timingMetadata);
     applyDocumentChange(&document, position, charsRemoved, insertedText);
-    incremental.applyContentsChange(&document, position, charsRemoved, insertedText.size(), firstSeconds, timingMetadata);
-    rebuilt.rebuildFromDocument(&document, firstSeconds, timingMetadata);
+    incremental.applyTextChange(document.toPlainText(), position, charsRemoved, insertedText.size(), firstSeconds, timingMetadata);
+    rebuilt.rebuildFromText(document.toPlainText(), firstSeconds, timingMetadata);
     return sameSnapshot(incremental.snapshot(), rebuilt.snapshot());
 }
 
@@ -1270,8 +1270,8 @@ int main(int argc, char** argv)
         cursor.insertText(QStringLiteral("1-4[8:1]"));
 
         const QString updated = document.toPlainText();
-        const bool incrementalApplied = incremental.applyContentsChange(
-            &document,
+        const bool incrementalApplied = incremental.applyTextChange(
+            document.toPlainText(),
             position,
             QStringLiteral("1/2").size(),
             QStringLiteral("1-4[8:1]").size(),
@@ -1309,8 +1309,8 @@ int main(int argc, char** argv)
         cursor.insertText(QStringLiteral("{16} 1-4[8:1] (160)"));
 
         const QString updated = document.toPlainText();
-        const bool incrementalApplied = incremental.applyContentsChange(
-            &document,
+        const bool incrementalApplied = incremental.applyTextChange(
+            document.toPlainText(),
             0,
             1,
             QStringLiteral("{16} 1-4[8:1] (160)").size(),
@@ -1348,8 +1348,8 @@ int main(int argc, char** argv)
         cursor.insertText(QStringLiteral("{16} (160)\n8b"));
 
         const QString updated = document.toPlainText();
-        const bool incrementalApplied = incremental.applyContentsChange(
-            &document,
+        const bool incrementalApplied = incremental.applyTextChange(
+            document.toPlainText(),
             0,
             1,
             QStringLiteral("{16} (160)\n8b").size(),
@@ -1492,10 +1492,10 @@ int main(int argc, char** argv)
         QTextDocument document(originalText);
         TimelineQuickModel incremental;
         TimelineQuickModel rebuilt;
-        incremental.rebuildFromDocument(&document, 0.0);
+        incremental.rebuildFromText(document.toPlainText(), 0.0);
         applyDocumentChange(&document, 0, 0, QStringLiteral("(240){8}"));
-        incremental.applyContentsChange(&document, 0, 0, QStringLiteral("(240){8}").size(), 0.0);
-        rebuilt.rebuildFromDocument(&document, 0.0);
+        incremental.applyTextChange(document.toPlainText(), 0, 0, QStringLiteral("(240){8}").size(), 0.0);
+        rebuilt.rebuildFromText(document.toPlainText(), 0.0);
 
         const QVector<double> incrementalStarts = flattenSnapshotLineStarts(incremental.snapshot());
         const QVector<double> rebuiltStarts = flattenSnapshotLineStarts(rebuilt.snapshot());
@@ -2153,13 +2153,13 @@ int main(int argc, char** argv)
         };
         QTextDocument document(original);
         TimelineQuickModel incremental;
-        incremental.rebuildFromDocument(&document, 0.0);
+        incremental.rebuildFromText(document.toPlainText(), 0.0);
         for (const EditStep& step : steps) {
             applyDocumentChange(&document, step.pos, step.charsRemoved, step.inserted);
-            incremental.applyContentsChange(
-                &document, step.pos, step.charsRemoved, step.inserted.size(), 0.0);
+            incremental.applyTextChange(
+                document.toPlainText(), step.pos, step.charsRemoved, step.inserted.size(), 0.0);
             TimelineQuickModel rebuilt;
-            rebuilt.rebuildFromDocument(&document, 0.0);
+            rebuilt.rebuildFromText(document.toPlainText(), 0.0);
             expect(sameSnapshot(incremental.snapshot(), rebuilt.snapshot()),
                    QStringLiteral("incremental hold edit matches rebuild after: %1").arg(step.note));
         }

@@ -10,7 +10,8 @@ src/
   app/            App entry + window orchestration ONLY
     main.cpp        GUI boot, CLI export, export-worker entry, startup timing
     mainwindow/     MainWindow + sections/<feature>/ (partial-class slices)
-    v2/             Staged Widgets-free application services (ChartWorkspace, AnalysisService)
+    v2/             Widgets-free application services (ChartWorkspace, AnalysisService,
+                    EditorSyncController)
     quick_shell/    --quick-shell-beta QML shell + controller/style bridges
     ui/             UiText, UiTheme, ShortcutRegistry, WindowParityMetrics
   audio/          Audio backends + SFX runtime. Nothing else links BASS/miniaudio.
@@ -28,7 +29,7 @@ src/
     quick_scene/  ACTIVE QSG chart layer renderers (PreviewQuick*Layer, *SceneRoot)
     runtime/      PreviewRuntime, PreviewQuickExportSession, PreviewStageMediaHost,
                   PreviewSceneAsset*
-  timeline/       Editor timeline strip: data + QSG surface
+  timeline/       Editor timeline strip: value model + QSG surface
     quick/          TimelineQuick*Layer / TimelineQuickItem
   tools/          Standalone helpers + spec/probe targets
     latency/ muri/ video_export/ chart_transform/ probe/ editor/ preview/ ...
@@ -95,6 +96,11 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
   produces matching strict validation, shifted note markers, Muri and static-reference values in
   one available snapshot. Completion is accepted only while both difficulty and workspace revision
   still match. It must not read `MainWindow` caches or widget state.
+- `app/v2/EditorSyncController` is the sole player/timeline/editor synchronization boundary.
+  Playback publishes revision-stamped text-position projections; timeline, bookmark and diagnostic
+  navigation use sequenced requests with QML acknowledgement; editor focus, selection and IME context
+  are queued value updates. The controller has no `PlainCodeEditor`, `TimelineView` or
+  `QmlDocumentModel` handler-registration dependency.
 - Parser output is the shared intermediate representation for timeline, preview, Muri analysis,
   and export reconstruction.
 - Runtime SFX and export SFX must use the same note-to-sound semantics (see

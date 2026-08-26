@@ -9,6 +9,7 @@ QmlApplicationContext::QmlApplicationContext(
     QuickShellController& shell,
     QObject* parent)
     : QObject(parent)
+    , backend_(backend)
     , workspace_()
     , fileService_(workspace_)
     , analysisService_(workspace_, miacode::mainwindow::shared::uiValidationLocale())
@@ -36,6 +37,7 @@ QObject* QmlApplicationContext::commands() { return &commands_; }
 QObject* QmlApplicationContext::shell() { return shell_; }
 QObject* QmlApplicationContext::pages() { return &pages_; }
 QObject* QmlApplicationContext::editor() { return &editor_; }
+QObject* QmlApplicationContext::editorSync() { return &backend_.editorSyncController(); }
 QObject* QmlApplicationContext::shortcuts() { return &shortcuts_; }
 QObject* QmlApplicationContext::windowChrome() const { return windowChrome_; }
 QObject* QmlApplicationContext::platform() { return &platform_; }

@@ -4,10 +4,8 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"

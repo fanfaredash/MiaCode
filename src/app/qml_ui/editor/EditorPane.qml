@@ -10,6 +10,7 @@ Rectangle {
     required property var documentSession
     required property var commands
     required property var editorController
+    required property var editorSync
 
     readonly property bool metadataSourceActive: viewState.metadataEditorActive
         && viewState.metadataEditorMode === 1
@@ -17,6 +18,9 @@ Rectangle {
         || metadataSourceActive
     readonly property bool canUndo: sourceVisible && sourceEditor.canUndo
     readonly property bool canRedo: sourceVisible && sourceEditor.canRedo
+    property double pendingActivationSequence: 0
+    property var pendingActivationCompletion: null
+    property var pendingActivationCancellation: null
 
     function undo() {
         if (sourceVisible)
@@ -48,8 +52,7 @@ Rectangle {
                 || revision !== root.documentSession.documentRevision
                 || root.documentSession.validationPending)
             return
-        viewState.openDifficultyEditor(difficultyId)
-        sourceEditor.revealSyntaxIssue(difficultyId, revision, line, column, endColumn)
+        requestIssueNavigation(difficultyId, revision, line, column, endColumn, null, null)
     }
 
     function revealAnalysisRow(difficultyId, revision, line, column, endColumn, second, analysisSession) {
@@ -61,9 +64,58 @@ Rectangle {
             cancel()
             return
         }
-        viewState.openDifficultyEditor(difficultyId)
-        sourceEditor.revealSyntaxIssue(difficultyId, revision, line, column, endColumn, () =>
-            analysisSession.completeRowActivation(difficultyId, revision, line, column, endColumn, second), cancel)
+        requestIssueNavigation(
+            difficultyId, revision, line, column, endColumn,
+            () => analysisSession.completeRowActivation(
+                difficultyId, revision, line, column, endColumn, second),
+            cancel)
+    }
+
+    function requestIssueNavigation(difficultyId, revision, line, column, endColumn,
+                                    completion, cancellation) {
+        if (difficultyId !== root.documentSession.currentDifficultyId)
+            root.documentSession.selectDifficulty(difficultyId)
+        root.viewState.openDifficultyEditor(difficultyId)
+        Qt.callLater(() => {
+            if (difficultyId !== root.documentSession.currentDifficultyId
+                    || revision !== root.documentSession.documentRevision) {
+                if (cancellation)
+                    cancellation()
+                return
+            }
+            const start = root.documentSession.chartPosition(line, column)
+            const end = Math.max(start + 1, root.documentSession.chartPosition(
+                line, Math.max(column, endColumn + 1)))
+            const sequence = root.editorSync.requestNavigation(
+                difficultyId, revision, start, end, true, true)
+            if (sequence <= 0) {
+                if (cancellation)
+                    cancellation()
+                return
+            }
+            root.pendingActivationSequence = sequence
+            root.pendingActivationCompletion = completion
+            root.pendingActivationCancellation = cancellation
+        })
+    }
+
+    Connections {
+        target: root.editorSync
+        function onNavigationFinished(sequence, applied) {
+            if (sequence !== root.pendingActivationSequence)
+                return
+            const completion = root.pendingActivationCompletion
+            const cancellation = root.pendingActivationCancellation
+            root.pendingActivationSequence = 0
+            root.pendingActivationCompletion = null
+            root.pendingActivationCancellation = null
+            if (applied) {
+                if (completion)
+                    completion()
+            } else if (cancellation) {
+                cancellation()
+            }
+        }
     }
 
     color: Theme.colors.background.editor
@@ -218,6 +270,7 @@ Rectangle {
         viewState: root.viewState
         documentSession: root.documentSession
         editorController: root.editorController
+        syncController: root.editorSync
     }
 
     Flickable {

@@ -15,13 +15,10 @@
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
-#include "editor/TouchPadAuthoringEdit.h"
-#include "app/qml_ui/QmlTouchPadAuthoringBridge.h"
 #include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
-#include "TimelineView.h"
 #include "BusySpinner.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -80,9 +77,27 @@ void appendPreviewFramePacingDiagLog(const QString& action, const QString& paylo
 
 }  // namespace
 
-MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
+MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
+    editorSyncController_ = std::make_unique<miacode::v2::EditorSyncController>(this);
+    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::editorContextChanged,
+            this, &MainWindow::refreshEditorAuthoringContext);
+    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::caretLocationPublished,
+            this, [this](int difficultyId, qulonglong, int line, int column) {
+                if (difficultyId == activeDifficultyId_) {
+                    publishEditorCaret(difficultyId, line, column);
+                }
+            });
+    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::pointerInteractionStarted,
+            this, &MainWindow::handleEditorPointerInteraction);
+    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::touchPadControlHoldChanged,
+            this, &MainWindow::setTouchPadAuthoringCtrlHold);
+    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::touchPadPreviewAnchorPublished,
+            this, &MainWindow::applyTouchPadAuthoringPreviewAnchor);
+    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::previewSeekPublished,
+            this, &MainWindow::seekPreviewToEditorLocation);
+
     QElapsedTimer startupStageTimer;
     startupStageTimer.start();
     qint64 startupLastMs = 0;
@@ -92,9 +107,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         startupLastMs = nowMs;
         appendStartupTimingStage(QString("mainwindow/%1").arg(stageName), nowMs, deltaMs);
     };
-
-    quickShellBootstrapMode_ = quickShellBootstrapMode;
-    timelineWidgetlessQuickRoute_ = quickShellBootstrapMode_;
 
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
@@ -1330,72 +1342,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     previewCanvas_ = new PreviewRuntime(this);
     connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, bool backtickSeparator) {
-        const bool qmlHandlerInstalled = static_cast<bool>(qmlTouchPadAuthoringHandler_);
-        const bool qmlHandled = qmlHandlerInstalled
-            && qmlTouchPadAuthoringHandler_(pad, backtickSeparator);
-        const auto route = miacode::qml_ui::resolveTouchPadAuthoringRoute(
-            qmlHandlerInstalled, qmlHandled);
-        if (route == miacode::qml_ui::TouchPadAuthoringRoute::Qml
-            || route == miacode::qml_ui::TouchPadAuthoringRoute::Reject) {
-            return;
-        }
-        auto* editor = qobject_cast<QTextEdit*>(editorWidget_);
-        if (editor == nullptr || editor->document() == nullptr || editor->isReadOnly()
-            || !hasActiveDifficulty() || editorStack_ == nullptr
-            || editorStack_->currentWidget() != chartPage_
-            || exportPreviewActive_ || QApplication::activeModalWidget() != nullptr
-            || QApplication::activePopupWidget() != nullptr || pad.trimmed().isEmpty()) {
-            return;
-        }
-        QTextCursor cursor = editor->textCursor();
-        // Read the pre-edit offsets NOW: QTextCursor is document-attached and is
-        // shifted by the very edit recorded below, so undo would otherwise be
-        // handed an offset moved by the inserted/removed length.
-        const int originalAnchor = cursor.anchor();
-        const int originalPosition = cursor.position();
-        // The click targets the TEXT CARET, always — never the preview-follow
-        // highlight. Resolving a playhead second onto a token is not something a
-        // user can predict, so the authoring point is the one they set by hand in
-        // the editor. Paused caret moves already drag the preview along (the
-        // cursorPositionChanged → timeline-sync path), so the two normally agree;
-        // when a manual preview seek pulls them apart the caret still wins.
-        const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
-            editor->toPlainText(), originalPosition, pad, backtickSeparator);
-        if (!editPlan.valid) {
-            return;
-        }
-        QTextCursor tokenCursor(editor->document());
-        tokenCursor.setPosition(editPlan.tokenStart);
-        const QTextBlock tokenBlock = tokenCursor.block();
-        double tokenSecond = 0.0;
-        const bool hasTokenSecond = tokenBlock.isValid()
-            && resolveTimelineSecondForCursor(
-                tokenBlock.blockNumber() + 1,
-                editPlan.tokenStart - tokenBlock.position() + 1,
-                &tokenSecond);
-        if (!miacode::editor::applyTouchPadAuthoringEdit(editor->document(), &cursor, editPlan)) {
-            return;
-        }
-        editor->setTextCursor(cursor);
-        const double seekSecond = hasTokenSecond
-            ? qMax(0.0, tokenSecond - miacode::preview_interaction::kTouchPadAuthoringPreviewLeadSeconds)
-            : -1.0;
-        if (documentSection_ != nullptr) {
-            // Undo restores the caret the click was made from, selection and all.
-            documentSection_->recordChartCursorUndoEntry(
-                originalAnchor,
-                originalPosition,
-                cursor,
-                seekSecond);
-        }
-        editor->setFocus(Qt::OtherFocusReason);
-        if (hasTokenSecond) {
-            // The seek lands BEFORE the token so the touch stays visible, which
-            // would otherwise draw the highlight on the preceding token. Record
-            // what this parked playhead means first, so the seek's own deferred
-            // decoration refresh already sees it.
-            setTouchPadAuthoringAnchor(seekSecond, tokenSecond);
-            seekPreviewDiscreteToSecond(seekSecond, true);
+        if (editorSyncController_ != nullptr) {
+            editorSyncController_->requestTouchPadAuthoring(pad, backtickSeparator);
         }
     });
     if (editorStack_ != nullptr) {
@@ -1696,40 +1644,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::measureLineBrightnessChanged, this, [this](double) {
         savePortableState();
     });
-    if (!timelineWidgetlessQuickRoute_) {
-        timelineView_ = new TimelineView(bottomTabs_);
-        timelineQuickStateBridge_->attachReferenceView(timelineView_);
-        connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
-            timelineSection_->onTimelineHeaderNavigateRequested(second);
-        });
-        connect(timelineView_, &TimelineView::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
-        connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
-            timelineSection_->onTimelineUserInteractionStarted();
-        });
-        connect(timelineView_, &TimelineView::timelineDragStarted, this, [this]() {
-            timelineSection_->onTimelineDragStarted();
-        });
-        connect(timelineView_, &TimelineView::timelineWheelNavigateRequested, this, [this](double second) {
-            timelineSection_->onTimelineWheelNavigateRequested(second);
-        });
-        connect(timelineView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
-            timelineSection_->onTimelineCenterNavigateRequested(second);
-        });
-        connect(timelineView_, &TimelineView::timelineDragFinished, this, [this](double second) {
-            timelineSection_->onTimelineDragFinished(second);
-        });
-        connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
-            timelineSection_->onTimelineFollowPreviewToggled(enabled);
-        });
-        connect(timelineView_, &TimelineView::viewportLockToggled, this, [this](bool enabled) {
-            timelineSection_->onTimelineViewportLockToggled(enabled);
-        });
-        connect(timelineView_, &TimelineView::followProgressToggled, this, [this](bool enabled) {
-            timelineSection_->onTimelineFollowProgressToggled(enabled);
-        });
-        bottomTabs_->addTab(timelineView_, UiText::text(QStringLiteral("tab.timeline")));
-    }
-
     if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
         if (copyAreaEditor_ != nullptr) {
             auto* mainVScroll = editor->verticalScrollBar();
@@ -1899,13 +1813,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         UiText::text(QStringLiteral("window.muri"))
     );
     connect(bottomTabs_, &QTabWidget::currentChanged, this, [this](int) {
-        if (!quickShellBottomTabsProxyActive() && !timelineWidgetlessQuickRoute_) {
-            if (bottomTabs_->currentWidget() == timelineView_) {
-                currentBottomTabsTabId_ = BottomTabsTabId::Timeline;
-                if (timelineSection_ != nullptr) {
-                    timelineSection_->flushDeferredTimelineBridgeState();
-                }
-            } else if (bottomTabs_->currentWidget() == errorList_) {
+        if (!quickShellBottomTabsProxyActive()) {
+            if (bottomTabs_->currentWidget() == errorList_) {
                 currentBottomTabsTabId_ = BottomTabsTabId::Validation;
             } else if (bottomTabs_->currentWidget() == muriList_) {
                 currentBottomTabsTabId_ = BottomTabsTabId::Muri;

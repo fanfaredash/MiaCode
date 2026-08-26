@@ -31,6 +31,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* shell READ shell CONSTANT)
     Q_PROPERTY(QObject* pages READ pages CONSTANT)
     Q_PROPERTY(QObject* editor READ editor CONSTANT)
+    Q_PROPERTY(QObject* editorSync READ editorSync CONSTANT)
     Q_PROPERTY(QObject* shortcuts READ shortcuts CONSTANT)
     Q_PROPERTY(QObject* windowChrome READ windowChrome CONSTANT)
     Q_PROPERTY(QObject* platform READ platform CONSTANT)
@@ -46,12 +47,14 @@ public:
     QObject* shell();
     QObject* pages();
     QObject* editor();
+    QObject* editorSync();
     QObject* shortcuts();
     QObject* windowChrome() const;
     QObject* platform();
     void setWindowChrome(QObject* chrome);
 
 private:
+    MainWindow& backend_;
     miacode::v2::ChartWorkspace workspace_;
     miacode::v2::ChartWorkspaceFileService fileService_;
     miacode::v2::AnalysisService analysisService_;

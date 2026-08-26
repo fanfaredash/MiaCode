@@ -19,7 +19,6 @@
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "DialogLocalization.h"
 #include "UiText.h"

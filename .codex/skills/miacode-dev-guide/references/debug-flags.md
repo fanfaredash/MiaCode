@@ -147,6 +147,10 @@ Dev-tool-only parser repro hook:
 - `MIACODE_ENABLE_DIAG_D3D11`
   - enables the supplementary startup D3D11 diagnostic probe; disabled by default so vendor graphics drivers are not loaded before Qt initializes
   - owner: `src/app/startup_diagnostics_win32.cpp`
+- `MIACODE_SKIP_CRASH_HANDLER`
+  - skips `crash_recovery::install()` so SIGSEGV / SEH / terminate hooks stay off
+  - diagnostic-only: lets Windows LocalDumps capture the original `0xC0000005` instead of MinGW converting it to SIGSEGV and exiting with no WER dump
+  - owner: `src/app/main.cpp`
 - `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS`
   - Tier 2A predictive playhead. Biases the rendered visual time forward by N display intervals (scaled by current playback rate) so the frame represents audio time at the moment it's actually visible — eliminates the perceived "audio leads video by one frame" lag from the GUI→render→composite→present pipeline
   - default `1.0` (≈16.7ms at 60Hz); set to `0` to disable, allowed range `[0, 4]`

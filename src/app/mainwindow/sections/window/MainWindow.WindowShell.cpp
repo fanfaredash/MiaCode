@@ -4,7 +4,6 @@
 #include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
 #include "../timeline/MainWindow.TimelineSection.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "UiNativeWindowTheme.h"
@@ -67,7 +66,7 @@ constexpr double kBottomTabsContentScaleMin = 0.5;
 // in setShellBottomTabsHeight so the preview panel keeps a minimum). Above 100% only the
 // note GRID height keeps growing; the header ("顶部变换") and the note 素材/markers cap at 100%.
 // SYNC PAIR: mirrored by kMaxContentScale in TimelineSceneStateBuilder.cpp and the
-// setContentScale clamps in TimelineView.cpp / TimelineQuickStateBridge.cpp.
+// setContentScale clamps in TimelineQuickStateBridge.cpp.
 constexpr double kBottomTabsContentScaleMax = 4.0;
 // The bottom tab may grow past 100%, but not without bound — cap it at this fraction of the
 // whole window height so the preview area above always keeps roughly a third of the window.
@@ -1057,9 +1056,6 @@ void MainWindow::WindowSection::applyUiTheme()
             vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
         }
     }
-    if (owner_.timelineView_ != nullptr) {
-        owner_.timelineView_->refreshTheme();
-    }
     this->updateBottomTabsDeviceHeight();
     if (owner_.chartBracketHighlighter_ != nullptr) {
         owner_.chartBracketHighlighter_->rehighlight();
@@ -1271,9 +1267,6 @@ void MainWindow::WindowSection::applyBottomTabsContentScale()
     const double headerScale = bottomTabsHeaderScaleForContentScale(scale);
     if (owner_.timelineQuickStateBridge_ != nullptr) {
         owner_.timelineQuickStateBridge_->setContentScale(scale);
-    }
-    if (owner_.timelineView_ != nullptr) {
-        owner_.timelineView_->setContentScale(scale);
     }
     applyScaledTabBarFont(owner_.bottomTabs_, headerScale);
     applyScaledTabBarFont(owner_.quickShellBottomTabsProxy_, headerScale);

@@ -77,6 +77,7 @@ Path overrides:
 Other logging knobs:
 
 - `MIACODE_SKIP_ASYNCLOG_FLUSH` — skip the async-log flush on shutdown (diagnostics only).
+- `MIACODE_SKIP_CRASH_HANDLER` — skip `crash_recovery::install()` (SIGSEGV / SEH / terminate hooks). Use with Windows LocalDumps so an access violation stays `0xC0000005` and writes a dump; MinGW's SIGSEGV handler otherwise ends the process without WER.
 
 ## PV Memory Diagnostic
 

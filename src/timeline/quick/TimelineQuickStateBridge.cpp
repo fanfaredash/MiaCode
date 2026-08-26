@@ -12,7 +12,6 @@
 #include "UiText.h"
 #include "common/TimelineThemeConfig.h"
 #include "timeline/TimelineSceneStateBuilder.h"
-#include "timeline/TimelineView.h"
 
 #include <QVariant>
 
@@ -185,21 +184,6 @@ void TimelineQuickStateBridge::bumpOverlayRevision()
 void TimelineQuickStateBridge::bumpOverlayDynamicRevision()
 {
     ++overlayDynamicRevision_;
-}
-
-void TimelineQuickStateBridge::attachReferenceView(TimelineView* referenceView)
-{
-    if (referenceView_ == referenceView) {
-        return;
-    }
-    if (referenceView_ != nullptr && referenceView_->stateBridge() == this) {
-        referenceView_->setStateBridge(nullptr);
-    }
-    referenceView_ = referenceView;
-    if (referenceView_ != nullptr) {
-        referenceView_->setStateBridge(this);
-    }
-    emit renderStateChanged();
 }
 
 void TimelineQuickStateBridge::clear()
@@ -458,6 +442,11 @@ double TimelineQuickStateBridge::viewportCenterSecond()
                 - static_cast<double>(layoutMetrics_.leadingCenteringPadding)
                 - static_cast<double>(layoutMetrics_.timelineLeft))
                / pixelsPerSecond));
+}
+
+QSize TimelineQuickStateBridge::viewportSize() const
+{
+    return effectiveViewportSize();
 }
 
 double TimelineQuickStateBridge::contentScale() const

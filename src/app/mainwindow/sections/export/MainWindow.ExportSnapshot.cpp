@@ -6,7 +6,6 @@
 #include "SimaiNativeParser.h"
 #include "TimelineQuickModel.h"
 #include "TimelineSlowRefresh.h"
-#include "TimelineView.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "UiText.h"
 #include "UiTheme.h"

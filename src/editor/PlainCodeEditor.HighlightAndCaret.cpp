@@ -181,28 +181,6 @@ QRect PlainCodeEditor::currentLineHighlightRect() const
     return currentLineHighlightRectForCursor(this, textCursor(), blockSpacingPixels_);
 }
 
-QRect PlainCodeEditor::previewFollowVisualCaretRect() const
-{
-    if (!previewFollowVisualCaretActive_ || document() == nullptr || viewport() == nullptr) {
-        return QRect();
-    }
-
-    const int normalizedLine = qMax(1, previewFollowVisualCaretLine_);
-    QTextBlock block = document()->findBlockByNumber(normalizedLine - 1);
-    if (!block.isValid()) {
-        return QRect();
-    }
-
-    QTextCursor cursor(document());
-    cursor.setPosition(block.position() + qBound(0, previewFollowVisualCaretCol_ - 1, block.text().size()));
-    QRect caretRect = cursorRect(cursor);
-    if (!caretRect.isValid()) {
-        return QRect();
-    }
-    caretRect = caretRect.intersected(viewport()->rect());
-    return caretRect.isValid() ? caretRect : QRect();
-}
-
 QPointF PlainCodeEditor::normalizedViewportHitPosition(const QPointF& position) const
 {
     return normalizedViewportHitPositionForBlockSpacing(this, position);
@@ -278,74 +256,6 @@ void PlainCodeEditor::updateCurrentLineHighlightRegion(const QRect& previousRect
     viewport()->update(expandedDirtyRect);
 }
 
-void PlainCodeEditor::setPreviewFollowVisualCaret(bool active, int line, int col)
-{
-    const bool normalizedActive = active;
-    const int normalizedLine = qMax(1, line);
-    const int normalizedCol = qMax(1, col);
-    if (previewFollowVisualCaretActive_ == normalizedActive
-        && previewFollowVisualCaretLine_ == normalizedLine
-        && previewFollowVisualCaretCol_ == normalizedCol) {
-        return;
-    }
-
-    const QRect previousRect = previewFollowVisualCaretRect();
-    previewFollowVisualCaretActive_ = normalizedActive;
-    previewFollowVisualCaretLine_ = normalizedLine;
-    previewFollowVisualCaretCol_ = normalizedCol;
-    const QRect currentRect = previewFollowVisualCaretRect();
-
-    if (viewport() == nullptr) {
-        return;
-    }
-    QRect dirtyRect;
-    if (previousRect.isValid()) {
-        dirtyRect = previousRect;
-    }
-    if (currentRect.isValid()) {
-        dirtyRect = dirtyRect.isNull() ? currentRect : dirtyRect.united(currentRect);
-    }
-    if (!dirtyRect.isValid()) {
-        return;
-    }
-    viewport()->update(dirtyRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
-}
-
-bool PlainCodeEditor::applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals)
-{
-    if (document() == nullptr) {
-        return false;
-    }
-
-    const int oldVScroll = !centerView && verticalScrollBar() != nullptr ? verticalScrollBar()->value() : 0;
-    const int oldHScroll = !centerView && horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0;
-
-    if (suppressSignals) {
-        QSignalBlocker blocker(this);
-        setTextCursor(cursor);
-    } else {
-        setTextCursor(cursor);
-    }
-
-    syncCursorVisualState();
-
-    if (centerView) {
-        if (QScrollBar* vbar = verticalScrollBar()) {
-            const QRect caretRect = cursorRect();
-            const int centeredValue = vbar->value() + caretRect.center().y() - (viewport()->height() / 2);
-            vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
-        }
-    } else {
-        if (QScrollBar* vbar = verticalScrollBar()) {
-            vbar->setValue(qBound(vbar->minimum(), oldVScroll, vbar->maximum()));
-        }
-        if (QScrollBar* hbar = horizontalScrollBar()) {
-            hbar->setValue(qBound(hbar->minimum(), oldHScroll, hbar->maximum()));
-        }
-    }
-    return true;
-}
-
 void PlainCodeEditor::paintEvent(QPaintEvent* event)
 {
     {
@@ -373,13 +283,4 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
         painter.drawRoundedRect(highlightRect, 4.0, 4.0);
     }
 
-    if (!hasFocus() && previewFollowVisualCaretActive_) {
-        const QRect caretRect = previewFollowVisualCaretRect();
-        if (caretRect.isValid()) {
-            const UiTheme::Colors& c = UiTheme::colors();
-            QColor caretColor = c.accent;
-            caretColor.setAlpha(c.dark ? 232 : 212);
-            painter.fillRect(QRect(caretRect.left(), caretRect.top(), qMax(1, kEditorCursorVisibleWidth), caretRect.height()), caretColor);
-        }
-    }
 }

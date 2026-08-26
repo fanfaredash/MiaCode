@@ -974,8 +974,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     // Phase 7 — scroll-bucket note culling. When the caller has opted
     // in via horizontalCullPaddingPx (and bumps notesRevision per
     // bucket), bisect the line range against the visible viewport
-    // expanded by padding. This mirrors what legacy TimelineView
-    // already does (TimelineView.Paint.cpp:44). When the caller
+    // expanded by padding. When the caller
     // hasn't opted in, fall back to the full chart range to preserve
     // legacy behaviour.
     TimelineVisibleLineRange visibleNoteRange{0, static_cast<int>(request.snapshot.lines.size())};

@@ -1,12 +1,11 @@
 #include "MainWindow.TimelineSection.h"
+#include "app/v2/EditorSyncController.h"
 #include "../../MainWindowShared.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
@@ -563,6 +562,7 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     state_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
     state_.qtPreviewPlaying_ = true;
+    owner_.editorSyncController().setPlaybackActive(true);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
             effectiveStartSecond,
@@ -682,6 +682,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     state_.qtPreviewPlaying_ = false;
+    owner_.editorSyncController().setPlaybackActive(false);
     miacode::mainwindow::shared::writePreviewPauseSecond(
         state_.qtPreviewPauseSecond_, wallClockPauseSecond, state_.qtPreviewPlaying_, "pause_qt_preview_playback_exact");
     state_.pausedPreviewMediaSeekPending_ = false;
@@ -1107,6 +1108,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
+    owner_.editorSyncController().setPlaybackActive(false);
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
     }
@@ -1169,6 +1171,7 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
+    owner_.editorSyncController().setPlaybackActive(false);
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
     }

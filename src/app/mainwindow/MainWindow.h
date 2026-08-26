@@ -28,7 +28,6 @@
 #include "timeline/TimelineData.h"
 #include "timeline/TimelineQuickModel.h"
 #include "timeline/TimelineSlowRefresh.h"
-#include "TimelineView.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "tools/video_export/VideoExportSnapshot.h"
@@ -38,7 +37,7 @@
 #include "app/ui/AppBackgroundSettings.h"
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
-#include "app/qml_ui/QmlEditorNavigationBridge.h"
+#include "app/v2/EditorSyncController.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
@@ -93,6 +92,7 @@ class QProcess;
 class QProgressDialog;
 class QPropertyAnimation;
 class QResizeEvent;
+class QShortcut;
 class QStackedWidget;
 class QSlider;
 class QSplitter;
@@ -105,7 +105,6 @@ class QWheelEvent;
 class QWindow;
 class PreviewAudioDeviceWatcher;
 class QtPreviewSfxRuntime;
-class TimelineView;
 class TimelineQuickStateBridge;
 class QuickShellPreviewCompositeSurface;
 class VideoExportDialog;
@@ -232,7 +231,7 @@ public:
         int skinLoadWaitMs = 2000;
     };
 
-    explicit MainWindow(bool quickShellBootstrapMode = false, QWidget* parent = nullptr);
+    explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
     bool exportPreviewVideoFromCli(
         const CliVideoExportRequest& request,
@@ -249,41 +248,17 @@ public:
     QString documentDifficultyChartText(int difficultyId) const;
     QString documentFilePath() const;
     int documentActiveDifficultyId() const;
-    // Narrow v2 bridge: QML may request a timeline caret sync only for the
-    // already-active difficulty. Revision ownership stays with QmlDocumentModel.
-    void publishQmlEditorCaret(int difficultyId, int line, int column);
-    // The QML editor is a presentation surface, so timeline/preview reverse
-    // navigation reaches it through this narrow value request rather than the
-    // hidden legacy PlainCodeEditor.
-    void setQmlEditorNavigationHandler(
-        std::function<bool(const miacode::qml_ui::QmlEditorNavigationRequest&)> handler);
-    bool hasQmlEditorNavigationHandler() const { return static_cast<bool>(qmlEditorNavigationHandler_); }
-    bool requestQmlEditorNavigation(int line, int column, int endLine, int endColumn,
-                                    bool selectToken, bool focusEditor, bool centerView);
-    // Preview follow paints a decoration instead of moving the caret while
-    // paused or with 代码跟随 off. v1 renders it on the hidden PlainCodeEditor,
-    // so without this channel the visible QML editor showed no follow at all
-    // once playback stopped.
-    void setQmlEditorFollowDecorationHandler(
-        std::function<void(const miacode::qml_ui::QmlEditorFollowDecoration&)> handler);
-    bool hasQmlEditorFollowDecorationHandler() const
-    {
-        return static_cast<bool>(qmlEditorFollowDecorationHandler_);
-    }
-    void setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler);
-    bool hasQmlTouchPadAuthoringHandler() const { return static_cast<bool>(qmlTouchPadAuthoringHandler_); }
-    void setQmlTouchPadAuthoringContextHandler(std::function<bool()> handler);
-    bool qmlTouchPadAuthoringContextActive() const;
-    void refreshQmlTouchPadAuthoringContext();
-    // QML has already validated its difficulty/revision/focus snapshot. Keep
-    // its transient Ctrl gesture outside the private preview implementation.
-    void setQmlTouchPadAuthoringCtrlHold(bool active);
-    bool applyQmlTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column);
-    // A Ctrl/Command click in the QML editor is the v2 equivalent of the v1
-    // editor-viewport ctrl-click jump: park playback and seek the preview to
-    // the clicked token. QML owns the difficulty/revision gate; the same
-    // suppress-and-restore sequence keeps the timeline cursor authoritative.
-    bool seekPreviewToQmlEditorLocation(int difficultyId, int line, int column);
+    void publishEditorCaret(int difficultyId, int line, int column);
+    void handleEditorPointerInteraction(int difficultyId);
+    miacode::v2::EditorSyncController& editorSyncController();
+    const miacode::v2::EditorSyncController& editorSyncController() const;
+    bool requestEditorNavigation(int line, int column, int endLine, int endColumn,
+                                 bool selectToken, bool focusEditor, bool centerView);
+    bool editorAuthoringContextActive() const;
+    void refreshEditorAuthoringContext();
+    void setTouchPadAuthoringCtrlHold(bool active);
+    bool applyTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column);
+    bool seekPreviewToEditorLocation(int difficultyId, int line, int column);
     // v2 has no QAction/QMenu layer, and the v1 chart-transform actions carry
     // Qt::WindowShortcut context on a MainWindow that is hidden and therefore
     // never active — so none of them fire in v2. QML binds the same
@@ -483,14 +458,9 @@ public:
         DisplayRefresh,
     };
 private:
-    std::function<bool(const QString&, bool)> qmlTouchPadAuthoringHandler_;
-    std::function<bool()> qmlTouchPadAuthoringContextHandler_;
-    std::function<bool(const miacode::qml_ui::QmlEditorNavigationRequest&)>
-        qmlEditorNavigationHandler_;
-    std::function<void(const miacode::qml_ui::QmlEditorFollowDecoration&)>
-        qmlEditorFollowDecorationHandler_;
     std::function<bool(const QString&)> qmlDocumentSaveHandler_;
     quint64 appliedQmlWorkspaceRevision_ = 0;
+    std::unique_ptr<miacode::v2::EditorSyncController> editorSyncController_;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {
@@ -650,14 +620,6 @@ private:
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
     void refreshEditorExtraSelections();
-    void setPreviewFollowDecoration(
-        int startLine,
-        int startCol,
-        int endLine = -1,
-        int endCol = -1,
-        int cursorLine = -1,
-        int cursorCol = -1,
-        bool ensureVisible = false);
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();

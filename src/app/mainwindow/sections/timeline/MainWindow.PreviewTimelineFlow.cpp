@@ -5,10 +5,8 @@
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "../validation/EditorSelectionUtils.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "MainEntrypoints.h"
@@ -251,7 +249,6 @@ void MainWindow::TimelineSection::invalidatePreviewFollowBindingCache()
 {
     state_.previewFollowBindingCacheValid_ = false;
     state_.previewFollowBindingCache_ = TimelineQuickModel::PreviewFollowBinding();
-    qmlFollowNavigationCacheValid_ = false;
 }
 
 bool MainWindow::TimelineSection::cachedPreviewFollowBindingContainsSecond(double second) const
@@ -467,9 +464,6 @@ QString MainWindow::TimelineSection::activeChartText() const
 {
     if (!hasActiveDifficulty()) {
         return QString();
-    }
-    if (ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.chartPage_) {
-        return editorText();
     }
     const SimaiDifficultyData* difficultyData = state_.document_.difficulty(state_.activeDifficultyId_);
     return difficultyData != nullptr ? difficultyData->chart : QString();
@@ -707,7 +701,7 @@ void MainWindow::TimelineSection::updateCurrentFileLabel()
 
 QString MainWindow::TimelineSection::editorText() const
 {
-    return qobject_cast<PlainCodeEditor*>(ui_.editorWidget_)->toPlainText();
+    return activeChartText();
 }
 
 void MainWindow::TimelineSection::scheduleTimelineRefresh()
@@ -892,9 +886,6 @@ void MainWindow::TimelineSection::onTimelineViewportLockToggled(bool enabled)
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setViewportLockEnabled(enabled);
     }
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setViewportLockEnabled(enabled);
-    }
     owner_.savePortableState();
     if (!enabled || !hasActiveDifficulty()) {
         return;
@@ -910,9 +901,6 @@ void MainWindow::TimelineSection::onTimelineFollowProgressToggled(bool enabled)
     state_.previewProgressFollowEnabled_ = enabled;
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setFollowProgressEnabled(enabled);
-    }
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setFollowProgressEnabled(enabled);
     }
     owner_.savePortableState();
 }
@@ -1097,20 +1085,22 @@ bool MainWindow::TimelineSection::resolveTimelineSecondForCursor(int line, int c
     return state_.timelineQuickModel_.resolveTimelineSecondForCursor(line, col, second);
 }
 
-void MainWindow::TimelineSection::seekTimelineToCursor(int line, int col)
+void MainWindow::TimelineSection::updateTimelineCursorFromEditorLocation(
+    int line, int col, bool centerView)
 {
     if (state_.timelineQuickStateBridge_ == nullptr) {
         return;
     }
     const double second = timelineSecondForCursor(line, col);
+    const bool bridgeCenterView = !state_.qtPreviewPlaying_ && centerView;
     if (state_.timelineQuickStateBridge_ != nullptr) {
         if (quickTimelineBridgeReady() && timelineTabIsForeground()) {
             state_.pendingQuickTimelineCursorSync_ = false;
             state_.pendingQuickTimelineCursorSecond_ = 0.0;
             state_.pendingQuickTimelineCursorCenterView_ = false;
-            state_.timelineQuickStateBridge_->setCursorSeconds(second, true);
+            state_.timelineQuickStateBridge_->setCursorSeconds(second, bridgeCenterView);
         } else {
-            queueTimelineCursorBridgeUpdate(second, true);
+            queueTimelineCursorBridgeUpdate(second, bridgeCenterView);
         }
     }
 }
@@ -1125,28 +1115,18 @@ void MainWindow::TimelineSection::syncTimelineToEditorCursor(bool centerView)
         return;
     }
     const auto [line, col] = owner_.currentCursorLineCol();
-    const double second = timelineSecondForCursor(line, col);
     if (state_.runtimeDebugOutputEnabled_) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("timeline/deferred_ui"),
-            QStringLiteral("action=sync_timeline_to_editor_cursor second=%1 center=%2 quick_ready=%3")
-                .arg(second, 0, 'f', 6)
+            QStringLiteral("action=sync_timeline_to_editor_cursor line=%1 col=%2 center=%3 quick_ready=%4")
+                .arg(line)
+                .arg(col)
                 .arg((!state_.qtPreviewPlaying_ && centerView) ? 1 : 0)
                 .arg(quickTimelineBridgeReady() ? 1 : 0)
         );
     }
-    if (state_.timelineQuickStateBridge_ != nullptr) {
-        const bool bridgeCenterView = !state_.qtPreviewPlaying_ && centerView;
-        if (quickTimelineBridgeReady() && timelineTabIsForeground()) {
-            state_.pendingQuickTimelineCursorSync_ = false;
-            state_.pendingQuickTimelineCursorSecond_ = 0.0;
-            state_.pendingQuickTimelineCursorCenterView_ = false;
-            state_.timelineQuickStateBridge_->setCursorSeconds(second, bridgeCenterView);
-        } else {
-            queueTimelineCursorBridgeUpdate(second, bridgeCenterView);
-        }
-    }
+    updateTimelineCursorFromEditorLocation(line, col, centerView);
 }
 
 void MainWindow::TimelineSection::navigateTimelineToSecond(double second, bool focusEditor)
@@ -1208,103 +1188,16 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
         *followOverlayElapsedNs = 0;
     }
 
-    // QML owns the visible source editor in v2.  Give its revision-aware
-    // bridge the first opportunity to realize a timeline/preview location.
-    // When that v2 bridge is installed but its visible source is not ready,
-    // never move the hidden legacy editor behind its back.
-    if (owner_.requestQmlEditorNavigation(
-            line, col, line, col, selectToken, focusEditor, centerView)) {
-        return true;
-    }
-    if (owner_.hasQmlEditorNavigationHandler()) {
-        return false;
-    }
-
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
-        return false;
-    }
-
-    QTextBlock block = editor->document()->findBlockByNumber(line - 1);
-    if (!block.isValid()) {
-        QElapsedTimer cursorTimer;
-        cursorTimer.start();
-        owner_.jumpToLocation(line, col);
-        if (cursorMoveElapsedNs != nullptr) {
-            *cursorMoveElapsedNs = cursorTimer.nsecsElapsed();
-        }
-        return true;
-    }
-
-    const QString blockText = block.text();
-    const int lineLength = blockText.size();
-    int localIndex = qBound(0, col - 1, qMax(0, lineLength));
-
-    QTextCursor cursor(editor->document());
+    Q_UNUSED(suppressSignals);
+    int startColumn = col;
+    int endColumn = col;
     if (selectToken) {
-        const int commentIndex = blockText.indexOf(QStringLiteral("||"));
-        const int scanEnd = (commentIndex >= 0) ? commentIndex : lineLength;
-        if (localIndex > scanEnd) {
-            localIndex = scanEnd;
-        }
-        auto isDelimiter = [](QChar ch) {
-            return ch.isSpace() || ch == QChar('/') || ch == QChar(',') || ch == QChar('`');
-        };
-
-        int tokenStart = localIndex;
-        while (tokenStart > 0 && !isDelimiter(blockText.at(tokenStart - 1))) {
-            --tokenStart;
-        }
-        int tokenEnd = localIndex;
-        while (tokenEnd < scanEnd && !isDelimiter(blockText.at(tokenEnd))) {
-            ++tokenEnd;
-        }
-        if (tokenEnd <= tokenStart) {
-            tokenStart = qBound(0, localIndex, lineLength);
-            tokenEnd = qMin(lineLength, tokenStart + 1);
-        }
-
-        cursor.setPosition(block.position() + tokenStart);
-        cursor.setPosition(block.position() + tokenEnd, QTextCursor::KeepAnchor);
-    } else {
-        cursor.setPosition(block.position() + localIndex);
+        state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(
+            line, col, &startColumn, &endColumn);
     }
-
-    QElapsedTimer cursorTimer;
-    cursorTimer.start();
-    if (suppressSignals) {
-        QSignalBlocker blocker(editor);
-        editor->setTextCursor(cursor);
-    } else {
-        editor->setTextCursor(cursor);
-    }
-
-    if (centerView) {
-        if (QScrollBar* vbar = editor->verticalScrollBar()) {
-            const QRect caretRect = editor->cursorRect();
-            const int centeredValue = vbar->value() + caretRect.center().y() - (editor->viewport()->height() / 2);
-            vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
-        }
-    }
-    if (cursorMoveElapsedNs != nullptr) {
-        *cursorMoveElapsedNs = cursorTimer.nsecsElapsed();
-    }
-
-    QElapsedTimer followOverlayTimer;
-    followOverlayTimer.start();
-    if (focusEditor) {
-        editor->setFocus();
-        owner_.clearPreviewFollowDecoration();
-    } else {
-        int startCol = col;
-        int endCol = col;
-        state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
-        owner_.setPreviewFollowDecoration(line, startCol, line, endCol);
-    }
-    if (followOverlayElapsedNs != nullptr) {
-        *followOverlayElapsedNs = followOverlayTimer.nsecsElapsed();
-    }
-    return true;
+    return owner_.requestEditorNavigation(
+        line, startColumn, line, endColumn,
+        selectToken, focusEditor, centerView);
 }
 
 
@@ -1567,37 +1460,65 @@ bool MainWindow::resolveTimelineSecondForCursor(int line, int col, double* secon
     return timelineSection_->resolveTimelineSecondForCursor(line, col, second);
 }
 
-void MainWindow::publishQmlEditorCaret(int difficultyId, int line, int column)
+void MainWindow::publishEditorCaret(int difficultyId, int line, int column)
 {
     if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_) {
         return;
     }
-    timelineSection_->seekTimelineToCursor(qMax(1, line), qMax(1, column));
+    timelineSection_->updateTimelineCursorFromEditorLocation(
+        qMax(1, line), qMax(1, column), false);
 }
 
-void MainWindow::setQmlEditorNavigationHandler(
-    std::function<bool(const miacode::qml_ui::QmlEditorNavigationRequest&)> handler)
+void MainWindow::handleEditorPointerInteraction(int difficultyId)
 {
-    qmlEditorNavigationHandler_ = std::move(handler);
+    if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_
+        || !qtPreviewPlaying_) {
+        return;
+    }
+    pauseQtPreviewPlaybackExact();
+    updatePauseButtonAppearance();
+    syncEditorCursorToPreviewSecond(qMax(0.0, qtPreviewPauseSecond_), true, false);
 }
 
-bool MainWindow::requestQmlEditorNavigation(
+miacode::v2::EditorSyncController& MainWindow::editorSyncController()
+{
+    return *editorSyncController_;
+}
+
+const miacode::v2::EditorSyncController& MainWindow::editorSyncController() const
+{
+    return *editorSyncController_;
+}
+
+bool MainWindow::requestEditorNavigation(
     int line, int column, int endLine, int endColumn, bool selectToken, bool focusEditor, bool centerView)
 {
-    if (!qmlEditorNavigationHandler_ || !hasActiveDifficulty()) {
+    if (!hasActiveDifficulty() || editorSyncController_ == nullptr) {
         return false;
     }
-    const DocumentValidationSnapshot snapshot = documentValidationSnapshot();
-    const quint64 committedRevision = appliedQmlWorkspaceRevision_ > 0
-        ? appliedQmlWorkspaceRevision_ : snapshot.revision;
-    const miacode::qml_ui::QmlEditorNavigationRequest request{
-        activeDifficultyId_, committedRevision, qMax(1, line), qMax(1, column),
-        qMax(qMax(1, line), endLine), qMax(1, endColumn), selectToken, focusEditor, centerView};
-    return request.accepts(activeDifficultyId_, committedRevision)
-        && qmlEditorNavigationHandler_(request);
+    const QString text = activeDocumentChartText();
+    const auto positionFor = [&text](int targetLine, int targetColumn) {
+        int position = 0;
+        int currentLine = 1;
+        while (currentLine < qMax(1, targetLine) && position < text.size()) {
+            const int newline = text.indexOf(QLatin1Char('\n'), position);
+            if (newline < 0) {
+                return text.size();
+            }
+            position = newline + 1;
+            ++currentLine;
+        }
+        return qBound(position, position + qMax(0, targetColumn - 1), text.size());
+    };
+    const int start = positionFor(line, column);
+    const int end = selectToken
+        ? qMax(start, positionFor(qMax(line, endLine), qMax(1, endColumn + 1)))
+        : start;
+    return editorSyncController_->requestNavigation(
+        activeDifficultyId_, appliedQmlWorkspaceRevision_, start, end, focusEditor, centerView) != 0;
 }
 
-bool MainWindow::applyQmlTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column)
+bool MainWindow::applyTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column)
 {
     if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_) {
         return false;
@@ -1613,7 +1534,7 @@ bool MainWindow::applyQmlTouchPadAuthoringPreviewAnchor(int difficultyId, int li
     return true;
 }
 
-bool MainWindow::seekPreviewToQmlEditorLocation(int difficultyId, int line, int column)
+bool MainWindow::seekPreviewToEditorLocation(int difficultyId, int line, int column)
 {
     if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_) {
         return false;
@@ -1622,9 +1543,8 @@ bool MainWindow::seekPreviewToQmlEditorLocation(int difficultyId, int line, int 
     if (!resolveTimelineSecondForCursor(qMax(1, line), qMax(1, column), &second)) {
         return false;
     }
-    // Same order as the v1 editor-viewport ctrl-click dispatch: park playback
-    // first so the seek lands on a stable clock, suppress the timeline cursor
-    // feedback while seeking, then hand the timeline its new cursor.
+    // Park playback first so the seek lands on a stable clock, suppress the
+    // timeline cursor feedback while seeking, then publish the new cursor.
     if (qtPreviewPlaying_) {
         pauseQtPreviewPlaybackExact();
     }
@@ -1638,25 +1558,9 @@ bool MainWindow::seekPreviewToQmlEditorLocation(int difficultyId, int line, int 
     return true;
 }
 
-void MainWindow::setQmlTouchPadAuthoringHandler(std::function<bool(const QString&, bool)> handler)
+bool MainWindow::editorAuthoringContextActive() const
 {
-    qmlTouchPadAuthoringHandler_ = std::move(handler);
-}
-
-void MainWindow::setQmlTouchPadAuthoringContextHandler(std::function<bool()> handler)
-{
-    qmlTouchPadAuthoringContextHandler_ = std::move(handler);
-    refreshQmlTouchPadAuthoringContext();
-}
-
-bool MainWindow::qmlTouchPadAuthoringContextActive() const
-{
-    return qmlTouchPadAuthoringContextHandler_ && qmlTouchPadAuthoringContextHandler_();
-}
-
-void MainWindow::seekTimelineToCursor(int line, int col)
-{
-    timelineSection_->seekTimelineToCursor(line, col);
+    return editorSyncController_ != nullptr && editorSyncController_->editorContextActive();
 }
 
 void MainWindow::syncTimelineToEditorCursor(bool centerView)

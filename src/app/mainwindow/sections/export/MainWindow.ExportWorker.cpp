@@ -6,7 +6,6 @@
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"

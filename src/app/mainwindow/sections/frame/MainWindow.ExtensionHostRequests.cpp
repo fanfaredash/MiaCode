@@ -18,7 +18,6 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
-#include "TimelineView.h"
 #include "BusySpinner.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -2407,21 +2406,20 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("currentSecond"), qtPreviewPauseSecond_},
                 {QStringLiteral("zoomScale"), timelineQuickStateBridge_ != nullptr
                      ? timelineQuickStateBridge_->zoomScale()
-                     : (timelineView_ != nullptr ? timelineView_->zoomScale() : 0.0)},
+                     : 0.0},
                 // Rounded on purpose: the bridge scroll became sub-pixel, but this payload is
                 // an extension-facing contract that has always carried a whole-pixel integer.
                 {QStringLiteral("horizontalScrollValue"), timelineQuickStateBridge_ != nullptr
                      ? qRound(timelineQuickStateBridge_->horizontalScrollValue())
-                     : (timelineView_ != nullptr ? timelineView_->horizontalScrollValue() : 0)},
+                     : 0},
                 {QStringLiteral("viewportCenterSecond"), timelineQuickStateBridge_ != nullptr
                      ? timelineQuickStateBridge_->viewportCenterSecond()
                      : qtPreviewPauseSecond_},
                 {QStringLiteral("followPreview"), timelineQuickStateBridge_ != nullptr
                      ? timelineQuickStateBridge_->followPreviewEnabled()
-                     : (timelineView_ != nullptr && timelineView_->followPreviewEnabled())},
-                {QStringLiteral("followProgress"), timelineQuickStateBridge_ == nullptr
-                     ? (timelineView_ == nullptr || timelineView_->followProgressEnabled())
-                     : timelineQuickStateBridge_->followProgressEnabled()},
+                     : false},
+                {QStringLiteral("followProgress"), timelineQuickStateBridge_ != nullptr
+                     && timelineQuickStateBridge_->followProgressEnabled()},
                 {QStringLiteral("textLength"), editorText().size()},
                 {QStringLiteral("noteMarkerCount"), state_.latestTimelineNoteMarkers_.size()},
                 {QStringLiteral("extensionMarkers"), extensionMarkers},
@@ -2432,7 +2430,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             return okValue(QJsonObject{
                 {QStringLiteral("zoomScale"), timelineQuickStateBridge_ != nullptr
                      ? timelineQuickStateBridge_->zoomScale()
-                     : (timelineView_ != nullptr ? timelineView_->zoomScale() : 0.0)},
+                     : 0.0},
                 {QStringLiteral("presets"), [&]() {
                      QJsonArray presets;
                      if (timelineQuickStateBridge_ != nullptr) {
@@ -2447,12 +2445,12 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
         if (method == QStringLiteral("timeline/getVisibleRange")) {
             const double zoomScale = timelineQuickStateBridge_ != nullptr
                 ? timelineQuickStateBridge_->zoomScale()
-                : (timelineView_ != nullptr ? timelineView_->zoomScale() : 0.5);
+                : 0.5;
             const double centerSecond = timelineQuickStateBridge_ != nullptr
                 ? timelineQuickStateBridge_->viewportCenterSecond()
                 : qtPreviewPauseSecond_;
-            const int viewportWidth = timelineView_ != nullptr && timelineView_->viewport() != nullptr
-                ? timelineView_->viewport()->width()
+            const int viewportWidth = timelineQuickStateBridge_ != nullptr
+                ? timelineQuickStateBridge_->viewportSize().width()
                 : 0;
             const double pixelsPerSecond = qMax(1.0, 120.0 * zoomScale);
             const double halfSpan = viewportWidth > 0 ? (static_cast<double>(viewportWidth) / pixelsPerSecond) * 0.5 : 0.0;
@@ -2465,7 +2463,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 // an extension-facing contract that has always carried a whole-pixel integer.
                 {QStringLiteral("horizontalScrollValue"), timelineQuickStateBridge_ != nullptr
                      ? qRound(timelineQuickStateBridge_->horizontalScrollValue())
-                     : (timelineView_ != nullptr ? timelineView_->horizontalScrollValue() : 0)},
+                     : 0},
                 {QStringLiteral("viewportWidth"), viewportWidth},
             });
         }
@@ -2504,8 +2502,6 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     : qtPreviewPauseSecond_);
             if (timelineQuickStateBridge_ != nullptr) {
                 timelineQuickStateBridge_->stepZoomPreset(delta, anchorSecond);
-            } else if (timelineView_ != nullptr) {
-                timelineView_->stepZoomPresetForQuickSurface(delta, anchorSecond);
             } else {
                 return errorObject(QStringLiteral("Timeline host is not available."));
             }
@@ -2519,8 +2515,6 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     : qtPreviewPauseSecond_);
             if (timelineQuickStateBridge_ != nullptr) {
                 timelineQuickStateBridge_->setZoomScaleAnchored(scale, anchorSecond);
-            } else if (timelineView_ != nullptr) {
-                timelineView_->stepZoomPresetForQuickSurface(scale > timelineView_->zoomScale() ? 1 : -1, anchorSecond);
             } else {
                 return errorObject(QStringLiteral("Timeline host is not available."));
             }
@@ -2536,9 +2530,8 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             state_.previewFollowEnabled_ = enabled;
             if (timelineQuickStateBridge_ != nullptr) {
                 timelineQuickStateBridge_->setFollowPreviewEnabled(enabled);
-            }
-            if (timelineView_ != nullptr) {
-                timelineView_->setFollowPreviewEnabled(enabled);
+            } else {
+                return errorObject(QStringLiteral("Timeline host is not available."));
             }
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
@@ -2546,9 +2539,8 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             const bool enabled = params.value(QStringLiteral("enabled")).toBool(params.value(QStringLiteral("value")).toBool(true));
             if (timelineQuickStateBridge_ != nullptr) {
                 timelineQuickStateBridge_->setFollowProgressEnabled(enabled);
-            }
-            if (timelineView_ != nullptr) {
-                timelineView_->setFollowProgressEnabled(enabled);
+            } else {
+                return errorObject(QStringLiteral("Timeline host is not available."));
             }
             return QJsonObject{{QStringLiteral("ok"), true}};
         }

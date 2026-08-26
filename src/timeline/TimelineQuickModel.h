@@ -8,8 +8,6 @@
 #include "core/chart/document/SimaiTimingMetadata.h"
 #include "timeline/TimelineRenderData.h"
 
-class QTextDocument;
-
 class TimelineQuickModel
 {
 public:
@@ -43,12 +41,8 @@ public:
         const QString& text,
         double firstSeconds,
         const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
-    bool rebuildFromDocument(
-        const QTextDocument* document,
-        double firstSeconds,
-        const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
-    bool applyContentsChange(
-        const QTextDocument* document,
+    bool applyTextChange(
+        const QString& text,
         int position,
         int charsRemoved,
         int charsAdded,
@@ -131,18 +125,10 @@ private:
         double lastNoteSecond = 0.0;
     };
 
-    bool replaceDocumentTail(
-        const QTextDocument* document,
-        int startLineIndex,
-        double firstSeconds,
-        const miacode::simai::SimaiTimingMetadata& timingMetadata);
     bool rebuildFromLineTexts(
         const QVector<QString>& lines,
         double firstSeconds,
         const miacode::simai::SimaiTimingMetadata& timingMetadata);
-    QVector<QString> collectDocumentLines(const QTextDocument* document) const;
-    QVector<QString> collectDocumentLines(const QTextDocument* document, int startLineIndex, int endLineIndex) const;
-    int lineIndexForDocumentPosition(const QTextDocument* document, int position) const;
     int lineIndexForStoredPosition(int position) const;
     bool parseLine(LineState* lineState, const ParseState& startState);
     void shiftLineTiming(LineState* lineState, double deltaSeconds) const;

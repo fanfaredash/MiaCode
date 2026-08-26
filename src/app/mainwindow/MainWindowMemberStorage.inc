@@ -1,6 +1,5 @@
     struct MainWindowUiRefs {
         QWidget* editorWidget_ = nullptr;
-        TimelineView* timelineView_ = nullptr;
         QPlainTextEdit* outputView_ = nullptr;
         QListWidget* errorList_ = nullptr;
         QListWidget* muriList_ = nullptr;
@@ -212,8 +211,6 @@
         PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
         TimelineQuickStateBridge* timelineQuickStateBridge_ = nullptr;
-        bool quickShellBootstrapMode_ = false;
-        bool timelineWidgetlessQuickRoute_ = false;
         bool quickShellBackendActive_ = false;
         bool qmlExportCenterActive_ = false;
         bool quickShellUiFocusBridgeMode_ = false;
@@ -706,13 +703,6 @@
         QVector<QPointer<QShortcut>> extensionShortcutObjects_;
         QJsonObject extensionProjectData_;
         DeletedDifficultyUndoState deletedDifficultyUndoState_;
-        bool previewFollowDecorationActive_ = false;
-        int previewFollowDecorationStartLine_ = 1;
-        int previewFollowDecorationStartCol_ = 1;
-        int previewFollowDecorationEndLine_ = 1;
-        int previewFollowDecorationEndCol_ = 1;
-        int previewFollowDecorationCursorLine_ = 1;
-        int previewFollowDecorationCursorCol_ = 1;
         QByteArray validationExtraSelectionsSignature_;
         QByteArray lastEditorExtraSelectionsSignature_;
         QVector<QTextEdit::ExtraSelection> cachedValidationExtraSelections_;
@@ -730,8 +720,6 @@
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
     QuickShellPreviewCompositeSurface*& quickShellPreviewCompositeSurface_ = state_.quickShellPreviewCompositeSurface_;
     TimelineQuickStateBridge*& timelineQuickStateBridge_ = state_.timelineQuickStateBridge_;
-    bool& quickShellBootstrapMode_ = state_.quickShellBootstrapMode_;
-    bool& timelineWidgetlessQuickRoute_ = state_.timelineWidgetlessQuickRoute_;
     bool& quickShellBackendActive_ = state_.quickShellBackendActive_;
     bool& qmlExportCenterActive_ = state_.qmlExportCenterActive_;
     bool& quickShellUiFocusBridgeMode_ = state_.quickShellUiFocusBridgeMode_;
@@ -751,7 +739,6 @@
     QThreadPool*& previewWarmupPool_ = state_.previewWarmupPool_;
     QThreadPool*& timelineSlowRefreshPool_ = state_.timelineSlowRefreshPool_;
     QThreadPool*& timelineAnalysisPool_ = state_.timelineAnalysisPool_;
-    TimelineView*& timelineView_ = ui_.timelineView_;
     QTabWidget*& quickShellBottomTabsProxy_ = ui_.quickShellBottomTabsProxy_;
     QPlainTextEdit*& outputView_ = ui_.outputView_;
     QListWidget*& errorList_ = ui_.errorList_;
@@ -1229,13 +1216,6 @@
     QHash<QString, QSet<QString>>& ignoredHeaderIssueTypesByFile_ = state_.ignoredHeaderIssueTypesByFile_;
     QVector<ValidationDecoration>& validationDecorations_ = state_.validationDecorations_;
     DeletedDifficultyUndoState& deletedDifficultyUndoState_ = state_.deletedDifficultyUndoState_;
-    bool& previewFollowDecorationActive_ = state_.previewFollowDecorationActive_;
-    int& previewFollowDecorationStartLine_ = state_.previewFollowDecorationStartLine_;
-    int& previewFollowDecorationStartCol_ = state_.previewFollowDecorationStartCol_;
-    int& previewFollowDecorationEndLine_ = state_.previewFollowDecorationEndLine_;
-    int& previewFollowDecorationEndCol_ = state_.previewFollowDecorationEndCol_;
-    int& previewFollowDecorationCursorLine_ = state_.previewFollowDecorationCursorLine_;
-    int& previewFollowDecorationCursorCol_ = state_.previewFollowDecorationCursorCol_;
     QByteArray& validationExtraSelectionsSignature_ = state_.validationExtraSelectionsSignature_;
     QByteArray& lastEditorExtraSelectionsSignature_ = state_.lastEditorExtraSelectionsSignature_;
     QVector<QTextEdit::ExtraSelection>& cachedValidationExtraSelections_ = state_.cachedValidationExtraSelections_;

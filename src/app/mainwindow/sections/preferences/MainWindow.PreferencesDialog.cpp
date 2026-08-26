@@ -8,7 +8,6 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
-#include "TimelineView.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "UiComponents.h"
 #include "UiText.h"

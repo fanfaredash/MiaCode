@@ -15,6 +15,7 @@ Item {
     readonly property var shellController: applicationContext.shell
     readonly property var pages: applicationContext.pages
     readonly property var editorController: applicationContext.editor
+    readonly property var editorSync: applicationContext.editorSync
     readonly property var platform: applicationContext.platform
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
@@ -217,6 +218,7 @@ Item {
                 shellController: root.shellController
                 pages: root.pages
                 editorController: root.editorController
+                editorSync: root.editorSync
                 compact: root.compact
                 onSettingsRequested: root.commands.openPreferences()
             }

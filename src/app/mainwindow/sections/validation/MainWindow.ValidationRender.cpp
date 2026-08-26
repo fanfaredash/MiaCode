@@ -3,7 +3,6 @@
 #include "../window/MainWindow.WindowSection.h"
 
 #include "DialogLocalization.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "preview/runtime/PreviewRuntime.h"

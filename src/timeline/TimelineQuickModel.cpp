@@ -1,8 +1,5 @@
 #include "timeline/TimelineQuickModel.h"
 
-#include <QTextBlock>
-#include <QTextDocument>
-
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -32,15 +29,6 @@ void applyInitialTimingMetadata(
         : kDefaultMeterDenominator;
 }
 
-QString lineTextForBlock(const QTextBlock& block)
-{
-    QString text = block.text();
-    if (text.endsWith(QLatin1Char('\r'))) {
-        text.chop(1);
-    }
-    return text;
-}
-
 }  // namespace
 
 void TimelineQuickModel::clear()
@@ -67,16 +55,6 @@ void TimelineQuickModel::clear()
     linesWithNotes_.clear();
 }
 
-bool TimelineQuickModel::replaceDocumentTail(
-    const QTextDocument* document,
-    int startLineIndex,
-    double firstSeconds,
-    const miacode::simai::SimaiTimingMetadata& timingMetadata)
-{
-    Q_UNUSED(startLineIndex);
-    return rebuildFromDocument(document, firstSeconds, timingMetadata);
-}
-
 bool TimelineQuickModel::rebuildFromText(
     const QString& text,
     double firstSeconds,
@@ -89,34 +67,35 @@ bool TimelineQuickModel::rebuildFromText(
     return rebuildFromLineTexts(lines, firstSeconds, timingMetadata);
 }
 
-bool TimelineQuickModel::rebuildFromDocument(
-    const QTextDocument* document,
-    double firstSeconds,
-    const miacode::simai::SimaiTimingMetadata& timingMetadata)
-{
-    return rebuildFromLineTexts(collectDocumentLines(document), firstSeconds, timingMetadata);
-}
-
-bool TimelineQuickModel::applyContentsChange(
-    const QTextDocument* document,
+bool TimelineQuickModel::applyTextChange(
+    const QString& text,
     int position,
     int charsRemoved,
     int charsAdded,
     double firstSeconds,
     const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
-    if (document == nullptr || lines_.isEmpty()) {
-        return rebuildFromDocument(document, firstSeconds, timingMetadata);
+    if (lines_.isEmpty()) {
+        return rebuildFromText(text, firstSeconds, timingMetadata);
+    }
+
+    QVector<QString> currentLines = text.split(QLatin1Char('\n')).toVector();
+    if (currentLines.isEmpty()) {
+        currentLines.append(QString());
     }
 
     const int startLineIndex = lineIndexForStoredPosition(position);
     const int oldEndLineIndex = charsRemoved > 0
         ? lineIndexForStoredPosition(position + charsRemoved)
         : startLineIndex;
+    const int boundedNewEndPosition = qBound(0, position + charsAdded, text.size());
     const int newEndLineIndex = charsAdded > 0
-        ? lineIndexForDocumentPosition(document, position + charsAdded)
+        ? text.left(boundedNewEndPosition).count(QLatin1Char('\n'))
         : startLineIndex;
-    const QVector<QString> replacementLines = collectDocumentLines(document, startLineIndex, newEndLineIndex);
+    const int replacementStart = qBound(0, startLineIndex, currentLines.size() - 1);
+    const int replacementEnd = qBound(replacementStart, newEndLineIndex, currentLines.size() - 1);
+    const QVector<QString> replacementLines = currentLines.mid(
+        replacementStart, replacementEnd - replacementStart + 1);
 
     QVector<LineState> inserted;
     inserted.reserve(replacementLines.size());
@@ -536,50 +515,6 @@ bool TimelineQuickModel::rebuildFromLineTexts(
     rebuildFollowSelectionSpans();
     rebuildSnapshotDuration();
     return true;
-}
-
-QVector<QString> TimelineQuickModel::collectDocumentLines(const QTextDocument* document) const
-{
-    if (document == nullptr) {
-        return {QString()};
-    }
-    return collectDocumentLines(document, 0, qMax(0, document->blockCount() - 1));
-}
-
-QVector<QString> TimelineQuickModel::collectDocumentLines(
-    const QTextDocument* document,
-    int startLineIndex,
-    int endLineIndex) const
-{
-    QVector<QString> lines;
-    if (document == nullptr) {
-        lines.append(QString());
-        return lines;
-    }
-
-    const int boundedStart = qMax(0, startLineIndex);
-    const int boundedEnd = qMax(boundedStart, endLineIndex);
-    QTextBlock block = document->findBlockByNumber(boundedStart);
-    int currentLine = boundedStart;
-    while (block.isValid() && currentLine <= boundedEnd) {
-        lines.append(lineTextForBlock(block));
-        block = block.next();
-        ++currentLine;
-    }
-    if (lines.isEmpty()) {
-        lines.append(QString());
-    }
-    return lines;
-}
-
-int TimelineQuickModel::lineIndexForDocumentPosition(const QTextDocument* document, int position) const
-{
-    if (document == nullptr) {
-        return 0;
-    }
-    const int boundedPosition = qBound(0, position, document->characterCount());
-    const QTextBlock block = document->findBlock(boundedPosition);
-    return block.isValid() ? qMax(0, block.blockNumber()) : qMax(0, document->blockCount() - 1);
 }
 
 int TimelineQuickModel::lineIndexForStoredPosition(int position) const

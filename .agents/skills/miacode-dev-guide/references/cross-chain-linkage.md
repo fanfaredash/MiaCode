@@ -19,10 +19,10 @@ current but **code is source of truth** — verify and fix drift in the same cha
 
 ## 1. Edit → parse → timeline → preview chain
 
-1. editor `contentsChange` / `scheduleTimelineRefresh`
+1. QML source transaction / `scheduleTimelineRefresh`
 2. `MainWindow::applyTimelineQuickChange` / `refreshTimelineQuickModelFromCurrentText`
-3. `TimelineQuickModel::applyContentsChange` / `rebuildFromText`
-4. `TimelineView::setTimelineData`
+3. `TimelineQuickModel::applyTextChange` / `rebuildFromText`
+4. `TimelineQuickStateBridge::setTimelineData`
 5. `MainWindow::requestTimelineSlowRefresh`
 6. `SimaiNativeParser::parseForTimeline`
 7. preview snapshot publication + `applyLatestTimelinePreviewStateToPausedPreview` (when paused)
@@ -65,16 +65,22 @@ UIv2 text input is an explicit side chain, not a direct `TextArea.text` contract
 `QmlEditorInputBridge` to `QmlEditorController`; the controller returns one edit transaction,
 completion state and controller-owned undo/redo history. The editor applies that transaction,
 then publishes its current difficulty, document revision, anchor/position, focus and IME-composing
-state through `QmlDocumentModel::setQmlEditorInteraction`. Its `TextArea` key route is
+state through the deferred `EditorSyncController::setEditorContext` boundary. Its `TextArea` key route is
 `Keys.BeforeItem`, so Tab/Enter/arrows/Escape reach the completion controller before native text
-handling. Ctrl+touch authoring must consume only that snapshot: `QmlTouchPadAuthoringBridge`
-rejects stale revisions, a different difficulty, unfocused editor and active composition.
-`MainWindow` uses the QML handler exclusively while it is registered; it must not silently fall
-back to the legacy hidden editor. Reverse timeline/preview navigation additionally passes through
-`QmlEditorNavigationReadiness`: `SourceEditor` reports its visible, non-metadata source together
-with active difficulty/revision; only a matching ready state emits
-`qmlEditorNavigationRequested` and acknowledges the request. A hidden or metadata source returns
-false without moving the legacy editor.
+handling. Ctrl+touch authoring consumes only that controller snapshot and rejects stale revisions,
+a different difficulty, an unfocused editor and active composition. Reverse timeline/preview
+navigation uses the same controller: `SourceEditor` reports its visible, non-metadata readiness,
+applies a matching sequenced request inside a programmatic-selection guard, defers context
+publication, and acknowledges completion.
+
+Editor pointer positioning has three separate value-event paths. A normal caret move publishes a
+queued line/column value and updates only the timeline cursor while retaining the current viewport.
+A pointer press publishes a queued interaction event and pauses active playback. Ctrl/Command+click waits
+for TextArea to place the caret, then publishes a queued preview-seek request that pauses playback,
+performs the discrete seek with playhead centering, and updates the timeline cursor. MainWindow
+receives each event after the originating JavaScript stack has returned. Programmatic navigation
+invalidates the manual-caret deduplication cache so a later hand move back to the previous location
+is delivered.
 
 Implications:
 
@@ -119,7 +125,7 @@ Implications:
   + prepared `drawOrder` in `PreviewPreparedSceneCache`. Changing "who's on top" → update the helper
   and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`,
   `PreviewSlideMotionLayerState.cpp` (all in `src/core/scene/`) plus the preview specs together.
-- Timeline note stacking mirrors preview order: see `src/timeline/TimelineView.Paint.cpp`,
+- Timeline note stacking mirrors preview order: see `src/timeline/quick/TimelineQuickNotesLayer.cpp`,
   `src/core/scene/PreviewLayerOrder.h`, and `src/preview/quick_scene/*` together.
 - Realtime preview + export Quick scene roots share `PreviewPreparedSceneCache`-driven note
   windows; layer order is owned by `PreviewQuickSceneRoot` + `PreviewLayerOrder.h`. Adding/changing
@@ -529,8 +535,8 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
 `setShellBottomTabsHeight`). Propagation:
 
 1. `MainWindow.WindowShell.cpp`: `setShellBottomTabsHeight` (drag) / restore →
-   `applyBottomTabsContentScale` → `timelineQuickStateBridge_->setContentScale` +
-   `timelineView_->setContentScale`. Device height via `scaledBottomTabsTimelineContentHeight` /
+   `applyBottomTabsContentScale` → `timelineQuickStateBridge_->setContentScale`. Device height via
+   `scaledBottomTabsTimelineContentHeight` /
    `bottomTabsContentScaleForTimelineContentHeight` (piecewise inverse — header caps at 100%,
    lanes grow). `bottomTabsHeaderScaleForContentScale` = `0.5 + min(scale,1)*0.5` (caps at 1.0).
 2. QML v2: `MainSplitView.qml` owns bottom-panel geometry as one persisted height ratio
@@ -545,17 +551,14 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
    logical pixel to nine equal `qreal` lanes. Each QSG layer includes `layoutRevision` in its geometry
    cache key while retaining data and texture caches. `BottomPanel.qml` derives transparent header hit
    geometry from `TimelineQuickItem::headerScale`, so input and QSG visuals share the same metric.
-4. Legacy `TimelineView` parity: `TimelineView.Core.cpp` `laneHeight()` uses the raw scale;
-   `scaledTimelineMetric` / `headerContentScale` stay capped.
-5. 语法/无理 list fonts are a fixed 90% of base (`kBottomTabsIssueListFontScale`), uniform /
+4. 语法/无理 list fonts are a fixed 90% of base (`kBottomTabsIssueListFontScale`), uniform /
    height-independent (NOT `headerScale`-driven); their scrollbars use
    `UiTheme::scrollBarStyleSheet()` like the editor. `QuickShellController::bottomTabsHeaderScale`
    (QML tab strip) still inherits the capped header scale.
 
-**COMPATIBILITY SYNC-PAIR:** the `4.0` max is duplicated as `kBottomTabsContentScaleMax`
+The `4.0` max is duplicated as `kBottomTabsContentScaleMax`
 (`MainWindow.WindowShell.cpp`), `kMaxContentScale` (`TimelineSceneStateBuilder.cpp`), and a literal
-`4.0` in the `setContentScale` clamps of `TimelineView.cpp` / `TimelineView.Core.cpp` /
-`TimelineQuickStateBridge.cpp` — change all together for the classic/reference path (also
+`4.0` in `TimelineQuickStateBridge.cpp::setContentScale` — change all three together (also
 `hardcode-registry.md`). Active QML timeline height uses its viewport-fit mode and has no `4.0` grid
 ceiling. This scale is **UI-only** (in-app timeline panel); it has no video-export consumer.
 
@@ -569,6 +572,15 @@ ceiling. This scale is **UI-only** (in-app timeline panel); it has no video-expo
 - `TimelineSection::flushQtPreviewTimelinePosition()` may skip QSG state writes until the bridge is
   ready, but it must continue to call the code-follow tick while the validation or Muri tab is
   foreground. Bottom-tab visibility is a render-routing condition, not an editor-follow gate.
+- `TimelineSection::syncEditorCursorToPreviewSecond` publishes `EditorFollowState` text positions to
+  `EditorSyncController`; it never moves the real selection. `SourceEditor` applies follow projection
+  after its queued notification and may reveal it when Follow Code is enabled. During active playback
+  the real TextArea caret is hidden and the projected follow caret remains visible; after playback
+  pauses, editor focus restores the real caret.
+- Timeline clicks, bookmarks and diagnostics call the controller's sequenced navigation path.
+  `SourceEditor` applies the selection inside a programmatic-selection guard, defers context publication,
+  then acknowledges the sequence. Touch authoring uses the same controller context and queue; its
+  Ctrl state and post-edit preview anchor also cross queued controller boundaries.
 
 ## Update this file when
 

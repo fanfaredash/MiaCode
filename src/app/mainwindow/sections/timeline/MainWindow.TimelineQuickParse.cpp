@@ -5,10 +5,8 @@
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "../validation/EditorSelectionUtils.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
@@ -53,19 +51,8 @@ void MainWindow::TimelineSection::applyTimelineQuickChange(int position, int cha
 
     const double firstSeconds = parsedFirstSeconds();
     const miacode::simai::SimaiTimingMetadata timingMetadata = currentTimingMetadata();
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    QTextDocument* document = editor != nullptr ? editor->document() : nullptr;
-    if (document != nullptr) {
-        state_.timelineQuickModel_.applyContentsChange(
-            document,
-            position,
-            charsRemoved,
-            charsAdded,
-            firstSeconds,
-            timingMetadata);
-    } else {
-        state_.timelineQuickModel_.rebuildFromText(activeChartText(), firstSeconds, timingMetadata);
-    }
+    state_.timelineQuickModel_.applyTextChange(
+        activeChartText(), position, charsRemoved, charsAdded, firstSeconds, timingMetadata);
     invalidatePreviewFollowBindingCache();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setTimelineData(state_.timelineQuickModel_.snapshot());

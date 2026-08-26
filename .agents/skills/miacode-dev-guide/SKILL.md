@@ -38,9 +38,9 @@ same change.
 - Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` is UIv2's Widgets-free sole document,
   revision and complete-document save-point owner; `ChartWorkspaceFileService` owns BOM/system-
   encoding file I/O plus atomic saves; `AnalysisService` drives production QML validation/
-  shifted-marker/Muri projection with one revision-stamped pending/available snapshot). Hidden `MainWindow` is a
-  monotonic committed-value adapter for timeline/preview and legacy-page compatibility; it does not
-  determine UIv2 dirty state.
+  shifted-marker/Muri projection with one revision-stamped pending/available snapshot;
+  `EditorSyncController` owns queued player/timeline/editor follow, navigation, caret and authoring
+  synchronization). `MainWindow` consumes committed workspace values for timeline and preview.
 - QuickShell compatibility: `src/app/quick_shell/QuickShellController.*` remains temporarily for
   v2; the v1 shell, `--ui=v1`, and `MIACODE_UI_SKIN` were deleted in stage 0a.
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)
@@ -53,7 +53,7 @@ same change.
   (`PreviewRuntime`, `PreviewQuickExportSession`, `PreviewStageMediaHost`, `PreviewSceneAsset*`)
 - Audio backends + SFX runtime: `src/audio/` (`BassPreviewAudioBackend`,
   `MiniaudioPreviewAudioBackend`, `QtPreviewSfxRuntime*`, `PreviewAudioSettings`)
-- Timeline data + QSG timeline surface: `src/timeline/` (+ `quick/`)
+- Timeline value model + sole QSG timeline surface: `src/timeline/` (+ `quick/`)
 - Tools: `src/tools/{latency,muri,video_export,chart_transform,...}`
 - Shared config headers + logging + oplog: `src/common/`
 

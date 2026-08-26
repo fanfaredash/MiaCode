@@ -4,7 +4,6 @@
 #include "../validation/MainWindow.ValidationSection.h"
 
 #include "common/DebugLog.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
@@ -82,10 +81,7 @@ QWidget* MainWindow::bottomTabsPageForTab(BottomTabsTabId tabId) const
 {
     switch (tabId) {
     case BottomTabsTabId::Timeline:
-        if (timelineWidgetlessQuickRoute_) {
-            return nullptr;
-        }
-        return timelineView_;
+        return nullptr;
     case BottomTabsTabId::Validation:
         return errorList_;
     case BottomTabsTabId::Muri:
@@ -101,7 +97,7 @@ QTabWidget* MainWindow::bottomTabsContainerForTab(BottomTabsTabId tabId) const
     if (tabId == BottomTabsTabId::Unknown) {
         return nullptr;
     }
-    if (tabId == BottomTabsTabId::Timeline && timelineWidgetlessQuickRoute_) {
+    if (tabId == BottomTabsTabId::Timeline) {
         return nullptr;
     }
     if (quickShellBottomTabsProxyActive() && tabId != BottomTabsTabId::Timeline) {
@@ -162,7 +158,7 @@ QString MainWindow::currentBottomTabsTabIdString() const
 
 bool MainWindow::bottomTabsTabVisible(BottomTabsTabId tabId) const
 {
-    if (tabId == BottomTabsTabId::Timeline && timelineWidgetlessQuickRoute_) {
+    if (tabId == BottomTabsTabId::Timeline) {
         return timelineTabVisible_;
     }
     const QTabWidget* container = bottomTabsContainerForTab(tabId);
@@ -328,7 +324,7 @@ void MainWindow::setCurrentBottomTabsTabId(const QString& tabId)
 
 void MainWindow::setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible)
 {
-    if (tabId == BottomTabsTabId::Timeline && timelineWidgetlessQuickRoute_) {
+    if (tabId == BottomTabsTabId::Timeline) {
         if (timelineTabVisible_ == visible) {
             return;
         }

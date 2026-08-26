@@ -6,7 +6,6 @@
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
@@ -483,33 +482,22 @@ void MainWindow::PreviewSection::setTouchPadAuthoringCtrlHoldActive(bool active)
     applyEffectivePreviewOutlineVariantToCanvas();
 }
 
-void MainWindow::refreshQmlTouchPadAuthoringContext()
+void MainWindow::refreshEditorAuthoringContext()
 {
     if (previewSection_ != nullptr) {
         previewSection_->applyEffectivePreviewOutlineVariantToCanvas();
     }
 }
 
-void MainWindow::setQmlTouchPadAuthoringCtrlHold(bool active)
+void MainWindow::setTouchPadAuthoringCtrlHold(bool active)
 {
-    // This is deliberately a QML-only bridge. The actual preview state
-    // mutator remains private to MainWindow's preview section.
-    setTouchPadAuthoringCtrlHoldActive(active && qmlTouchPadAuthoringContextActive());
+    setTouchPadAuthoringCtrlHoldActive(active && editorAuthoringContextActive());
 }
 
 void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
 {
     if (state_.previewCanvas_ != nullptr) {
-        auto* editor = qobject_cast<QTextEdit*>(ui_.editorWidget_);
-        const bool legacyEditorContext = !owner_.hasQmlTouchPadAuthoringHandler()
-            &&
-            owner_.hasActiveDifficulty()
-            && ui_.editorStack_ != nullptr
-            && ui_.editorStack_->currentWidget() == ui_.chartPage_
-            && editor != nullptr
-            && !editor->isReadOnly();
-        const bool editableAuthoringContext = (legacyEditorContext
-            || owner_.qmlTouchPadAuthoringContextActive())
+        const bool editableAuthoringContext = owner_.editorAuthoringContextActive()
             && !state_.exportPreviewActive_
             && QApplication::activeModalWidget() == nullptr
             && QApplication::activePopupWidget() == nullptr;

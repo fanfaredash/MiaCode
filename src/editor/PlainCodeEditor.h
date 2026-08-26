@@ -43,11 +43,9 @@ public:
     void refreshLineNumberAreaLayout();
     void setBatchTransformActions(const QList<QAction*>& actions);
     void setMoreBatchTransformActions(const QList<QAction*>& actions);
-    void setPreviewFollowVisualCaret(bool active, int line = 1, int col = 1);
     void setBookmarkedLines(const QSet<int>& lines);
     const QSet<int>& bookmarkedLines() const { return bookmarkedLines_; }
     int lineNumberAtGlobalPosition(const QPoint& globalPos) const;
-    bool applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals = true);
     QPointF normalizedViewportHitPosition(const QPointF& position) const;
     void setHalfWidthInputEnabled(bool enabled);
     bool halfWidthInputEnabled() const { return halfWidthInputEnabled_; }
@@ -118,7 +116,6 @@ private slots:
 
 private:
     QRect currentLineHighlightRect() const;
-    QRect previewFollowVisualCaretRect() const;
     int lineNumberAtAreaPosition(const QPoint& pos) const;
     void syncCursorVisualState();
     void updateCursorVisibility();
@@ -189,9 +186,6 @@ private:
     QList<QAction*> batchTransformActions_;
     QList<QAction*> moreBatchTransformActions_;
     QRect lastCurrentLineHighlightRect_;
-    bool previewFollowVisualCaretActive_ = false;
-    int previewFollowVisualCaretLine_ = 1;
-    int previewFollowVisualCaretCol_ = 1;
     QSet<int> bookmarkedLines_;
     LineNumberArea* lineNumberArea_;
 };

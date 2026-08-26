@@ -38,8 +38,7 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   + per-tier fractions `kTimelineGridHeightFraction{Measure 9/9, Subdivision 8/9, Comma 7/9}` +
   resolver `timelineGridLineHeightFraction()`. Lines anchor at the top of the content area and
   extend down by `fraction * timelineHeight`. Consumed by `TimelineSceneStateBuilder.cpp`
-  `addGridLine` (QSG via pre-baked `state.gridLines`) AND `TimelineView.Paint.cpp` (widget
-  path — bar + comma tiers only; that path has no separate quarter-note subdivision lines).
+  `addGridLine` through pre-baked `state.gridLines` consumed by the QSG timeline.
 - `VideoExportRuntimePolicy.{h,cpp}` (`src/tools/video_export/`) — export PBO env precedence + worker
   crash-retry policy (`kVideoExportWorkerMaxCrashRetries = 1`) and file-size preset policy
   (bitrate coefficient/min/max, peak-rate/buffer multipliers, GOP seconds, audio cap, x264 CRF,
@@ -95,9 +94,9 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   100%:** only the note GRID height grows (raw scale); the header ("顶部变换"), note 素材/markers and
   lane-label fonts CAP at 100%. The 语法/无理 issue-list fonts are a fixed 90% of base, uniform /
   height-independent (`kBottomTabsIssueListFontScale = 0.9`). The `4.0` max is a
-  SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
-  in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
-  clamps — change all together. See `cross-chain-linkage.md`.
+  sync set mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
+  in `TimelineQuickStateBridge.cpp::setContentScale`; change all three together. See
+  `cross-chain-linkage.md`.
 - `src/app/qml_ui/QmlUiSettings.h` — v2 workspace split ratios: bottom panel height
   `0.20..0.65` (default `0.35`) and preview width `0.30..0.50`. QML persists one ratio per
   split after divider release and derives live geometry from the owning `SplitView` extent. The
@@ -115,8 +114,8 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   `kTimelineAnalysisIdleDelayMs` (`180 ms`).
 - `src/common/PreviewInteractionConfig.h` — shared preview-slider seek (discrete `1/120 s`,
   held ramp `+1.0x/s` to `3.0x`, timer `16 ms`).
-- `src/timeline/TimelineView.cpp` — zoom presets `25/50/75/100/150/200`, header label sizing, minor
-  beat line `1.4 px`, dense comma cap `32` subdivisions.
+- `src/timeline/quick/TimelineQuickStateBridge.cpp` — zoom presets
+  `25/50/75/100/150/200/300` and content-scale clamping.
 
 ## 3. Promote a constant out of a `.cpp` when
 

@@ -5,7 +5,6 @@
 #include <QUrl>
 #include <QVariantList>
 
-#include "QmlEditorNavigationBridge.h"
 #include "QmlDocumentProjection.h"
 #include "app/v2/AnalysisService.h"
 #include "app/v2/ChartWorkspace.h"
@@ -119,17 +118,6 @@ public:
     Q_INVOKABLE bool removeDifficulty(int id);
     Q_INVOKABLE void validateChart();
     Q_INVOKABLE int chartPosition(int line, int column) const;
-    Q_INVOKABLE bool publishEditorCaret(int difficultyId, qulonglong revision, int line, int column);
-    Q_INVOKABLE void setQmlEditorInteraction(int difficultyId, qulonglong revision, int anchor, int position, bool focused, bool imeComposing);
-    Q_INVOKABLE void setQmlEditorNavigationReadiness(int difficultyId, qulonglong revision,
-                                                     bool sourceVisible, bool metadataMode);
-    Q_INVOKABLE void setQmlTouchPadAuthoringCtrlHold(bool active);
-    Q_INVOKABLE bool setTouchPadAuthoringPreviewAnchor(int difficultyId, qulonglong revision,
-                                                       const QString& text, int tokenStart);
-    // Ctrl/Command click in the visible QML editor: seek the preview to the
-    // clicked token instead of only moving the timeline cursor.
-    Q_INVOKABLE bool seekPreviewToEditorLocation(int difficultyId, qulonglong revision,
-                                                 int line, int column);
     // Paired with the editor/document_replaced projection line: what the
     // visible editor actually ended up showing. The two together identify
     // whether a stale editor is a projection problem or a QML one.
@@ -156,18 +144,6 @@ signals:
     void dirtyEditorKeysChanged();
     void documentStateChanged();
     void documentReplaced();
-    void qmlEditorNavigationRequested(int difficultyId, qulonglong revision, int line,
-                                      int column, int endLine, int endColumn, bool selectToken,
-                                      bool focusEditor, bool centerView);
-    // Paused / 代码跟随-off preview follow: a read-only decoration, never a
-    // caret move. The editor paints the playhead's span and follow caret.
-    void qmlEditorFollowDecorationChanged(bool active, int difficultyId, qulonglong revision,
-                                          int startLine, int startColumn, int endLine,
-                                          int endColumn, int cursorLine, int cursorColumn,
-                                          bool ensureVisible);
-    void qmlTouchPadAuthoringRequested(const QString& pad, bool useBacktickSeparator,
-                                       int difficultyId, qulonglong revision,
-                                       int anchor, int position);
     void bookmarksChanged();
     void operationFailed(const QString& title, const QString& message);
 
@@ -203,13 +179,6 @@ private:
     miacode::qml_ui::DocumentValidationProjection validationSnapshot_;
     miacode::qml_ui::DocumentPresentationState presentationState_;
     quint64 documentRevision_ = 0;
-    int qmlCaretDifficultyId_ = -1;
-    quint64 qmlCaretRevision_ = 0;
-    int qmlCaretAnchor_ = 0;
-    int qmlCaretPosition_ = 0;
-    bool qmlEditorFocused_ = false;
-    bool qmlImeComposing_ = false;
-    miacode::qml_ui::QmlEditorNavigationReadiness qmlEditorNavigationReadiness_;
     qulonglong bookmarkGeneration_ = 0;
     bool unifiedDesignerEnabled_ = false;
 };

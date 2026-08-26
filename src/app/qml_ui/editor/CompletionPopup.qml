@@ -46,7 +46,7 @@ Popup {
                          + root.topPadding + root.bottomPadding)
 
     function updateAnchor() {
-        if (!root.parent || !root.editor)
+        if (!root.visible || !root.parent || !root.editor)
             return
         const caret = root.editor.cursorRectangle
         const below = root.editor.mapToItem(root.parent, caret.x, caret.y + caret.height)
@@ -70,6 +70,7 @@ Popup {
 
     Connections {
         target: root.editor
+        enabled: root.visible
         function onCursorRectangleChanged() { root.updateAnchor() }
         // The editor itself moves and resizes when panels are dragged, and
         // mapToItem does not re-evaluate for that either.
@@ -91,6 +92,7 @@ Popup {
 
     Connections {
         target: root.parent
+        enabled: root.visible
         function onWidthChanged() { root.updateAnchor() }
         function onHeightChanged() { root.updateAnchor() }
     }

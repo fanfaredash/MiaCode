@@ -74,7 +74,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     miacode::oplog::appendStartupBeaconLine("qml_ui/start_enter");
     appendQmlUiRuntimeLog(QStringLiteral("start_enter"));
 
-    backend_ = std::make_unique<MainWindow>(true);
+    backend_ = std::make_unique<MainWindow>();
     backend_->setQuickShellBackendActive(true);
     backend_->setQmlExportCenterActive(true);
     backend_->hide();

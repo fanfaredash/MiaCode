@@ -128,6 +128,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/ChartWorkspaceFileService.h
     src/app/v2/AnalysisService.cpp
     src/app/v2/AnalysisService.h
+    src/app/v2/EditorSyncController.cpp
+    src/app/v2/EditorSyncController.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -576,8 +578,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/TimelineNoteAssets.cpp
     src/timeline/TimelineSlowRefresh.h
     src/timeline/TimelineSlowRefresh.cpp
-    src/timeline/TimelineView.h
-    src/timeline/TimelineView.cpp
     src/timeline/quick/TimelineQuickItem.h
     src/timeline/quick/TimelineQuickItem.cpp
     src/timeline/quick/TimelineQuickStateBridge.h
@@ -1793,7 +1793,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/qml_ui/SimaiSyntaxHighlighter.cpp
             src/app/qml_ui/QmlEditorInputBridge.cpp
             src/app/qml_ui/QmlEditorInputBridge.h
-            src/app/qml_ui/QmlTouchPadAuthoringBridge.h
             ${_miacode_log_core}
             src/editor/TouchPadAuthoringEdit.h
             src/editor/TouchPadAuthoringEdit.cpp
