@@ -169,7 +169,6 @@ bool buildJudgeOverlaySimplePlacement(
 
 bool buildJudgeOverlayStraightPlacement(
     const TimelineNoteMarker& marker,
-    bool includeNegativeBoundary,
     PreviewJudgeOverlayPlacement* placement,
     bool* useRightImage
 )
@@ -179,9 +178,12 @@ bool buildJudgeOverlayStraightPlacement(
     }
     const QPointF tangent = slideEndTangentLogical(marker);
     const qreal tangentAngleDegrees = qRadiansToDegrees(qAtan2(tangent.y(), tangent.x()));
-    const bool shouldUseRightImage = includeNegativeBoundary
-        ? (tangentAngleDegrees >= -90.0 && tangentAngleDegrees <= 90.0)
-        : (tangentAngleDegrees > -90.0 && tangentAngleDegrees <= 90.0);
+    // The two exactly vertical straight slides need opposite handedness:
+    // 8->5 (+90 degrees) uses the left sprite while 4->1 (-90 degrees) uses
+    // the right sprite. Keep the -90 degree boundary in the right-handed
+    // half-plane and the +90 degree boundary out of it.
+    const bool shouldUseRightImage =
+        tangentAngleDegrees >= -90.0 && tangentAngleDegrees < 90.0;
     const QPointF laneUnit = laneUnitVector(qBound(1, marker.endLane, 8));
     placement->logicalCenter =
         QPointF(kLogicalCanvasCenter, kLogicalCanvasCenter)

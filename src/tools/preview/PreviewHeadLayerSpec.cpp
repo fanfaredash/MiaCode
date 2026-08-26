@@ -6,6 +6,7 @@
 #include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewActiveMarkerView.h"
 #include "core/scene/PreviewHeadLayerState.h"
+#include "core/scene/PreviewJudgeOverlayShared.h"
 #include "core/scene/PreviewOpacityCurves.h"
 #include "core/scene/PreviewPreparedSceneCache.h"
 #include "core/scene/PreviewSceneConstants.h"
@@ -752,6 +753,48 @@ bool verifyNormalMineModeRestoresExOverlay(QTextStream& err)
     return verifyMaterial(false, err) && verifyMaterial(true, err);
 }
 
+bool verifyVerticalStraightSlideCpUsesMirroredSprite(QTextStream& err)
+{
+    const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+        QStringLiteral("(120){4}8-5[4:1],4-1[4:1],\nE")
+    );
+    if (!require(parsed.ok, QStringLiteral("vertical straight-slide CP chart parses"), err)) {
+        return false;
+    }
+
+    int checkedSlides = 0;
+    for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+        if (marker.type != QLatin1String("slide")) {
+            continue;
+        }
+        miacode::preview::scene::PreviewJudgeOverlayPlacement placement;
+        bool useRightImage = true;
+        if (!require(
+                miacode::preview::scene::buildJudgeOverlayStraightPlacement(
+                    marker,
+                    &placement,
+                    &useRightImage),
+                QStringLiteral("vertical straight-slide CP placement builds"),
+                err)) {
+            return false;
+        }
+        const bool expectedRightImage = marker.lane == 4 && marker.endLane == 1;
+        if (!require(
+                useRightImage == expectedRightImage,
+                QStringLiteral("%1-%2 CP selects the expected mirrored sprite")
+                    .arg(marker.lane)
+                    .arg(marker.endLane),
+                err)) {
+            return false;
+        }
+        ++checkedSlides;
+    }
+    return require(
+        checkedSlides == 2,
+        QStringLiteral("vertical straight-slide CP test checks both 8-5 and 4-1"),
+        err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -791,6 +834,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyNormalMineModeRestoresExOverlay(err)) {
+        return 1;
+    }
+    if (!verifyVerticalStraightSlideCpUsesMirroredSprite(err)) {
         return 1;
     }
 

@@ -88,7 +88,6 @@ bool buildJudgeOverlaySimplePlacement(
 );
 bool buildJudgeOverlayStraightPlacement(
     const TimelineNoteMarker& marker,
-    bool includeNegativeBoundary,
     PreviewJudgeOverlayPlacement* placement,
     bool* useRightImage = nullptr
 );
