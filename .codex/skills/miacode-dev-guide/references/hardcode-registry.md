@@ -153,7 +153,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep local while this remains a single Net toolbox operation; promote if other importers/downloaders start sharing the same remote-resource policy
 - `src/tools/net/NetBatchUploadWorker.cpp`, `src/tools/net/NetUploadDiagnostics.cpp`
   - Owns: Net batch-upload timeout, pacing, rate-limit retry, and diagnostic safety bounds
-  - Current tuning note: requests time out after `90 s`; completed non-fatal items pause `5 s` before the next upload; HTTP 429 / Cloudflare 1015 retries once after `Retry-After` with a `60 s` fallback and clamps parsed waits to `3600 s`. Timeout POSTs are not retried. Failure details include the complete response body and selected non-sensitive headers, never request credentials, cookies, or multipart bodies.
+  - Current tuning note: requests time out after `90 s`; completed non-fatal items pause `5 s` before the next upload; HTTP 429 / Cloudflare 1015 retries once after `Retry-After` with a `60 s` fallback and clamps parsed waits to `3600 s`. Timeout POSTs are not retried. The independent upload audit file is named `net-upload.log` under the active MiaCode log directory and is synchronously flushed after each entry. Failure details include the complete response body and selected non-sensitive headers, never request credentials, cookies, or multipart bodies.
   - Rule: keep these values local to Net upload while only this state-changing endpoint uses them; any retry expansion must preserve the duplicate-upload risk boundary.
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp`
   - Owns: wrapped Validation/Muri issue-row padding, minimum row height, and ignored-row opacity used by the shared rich-text list delegate
