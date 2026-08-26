@@ -1473,7 +1473,7 @@ VideoExportDialog::VideoExportDialog(
     });
     connect(introSoundImportButton_, &QPushButton::clicked, this, &VideoExportDialog::importIntroSound);
     connect(introSoundVolumeSlider_, &QSlider::valueChanged, this, [this](int value) {
-        const double volume = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
+        const double volume = qBound(0.0, static_cast<double>(value) / 100.0, 2.0);
         baseTask_.introSoundVolume = volume;
         miacode::preview_sfx::setSelectedIntroSoundVolume(volume);
         persistExportOnlySettings();

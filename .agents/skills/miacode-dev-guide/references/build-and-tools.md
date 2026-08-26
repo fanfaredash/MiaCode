@@ -70,7 +70,9 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `chart_workspace_spec`, `chart_workspace_file_service_spec`,
   `analysis_service_spec` (the production async workspace-analysis contract; links Qt Core/Gui but
   deliberately not Widgets), `qml_document_projection_spec`, `qml_analysis_model_spec`,
-  `qml_document_lifecycle_contract_spec`,
+  `qml_document_lifecycle_contract_spec`, `qml_export_intro_sound_contract_spec`,
+  `qml_export_video_page_spec` (instantiates the real `ExportVideoPage.qml` with its App* controls),
+  `video_export_intro_sound_spec` (preferences, difficulty reseed and snapshot→worker round-trip),
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
   `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in
   `docs/ops/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the

@@ -1680,6 +1680,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(qml_document_lifecycle_contract_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    miacode_add_dev_tool(qml_export_intro_sound_contract_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlExportIntroSoundContractSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(qml_export_intro_sound_contract_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(qml_export_video_page_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlExportVideoPageSpec.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+        INCLUDES src
+    )
+    target_compile_definitions(qml_export_video_page_spec PRIVATE
+        "MIACODE_QML_SPEC_IMPORT_ROOT=\"${MIACODE_QML_SPEC_IMPORT_ROOT}\"")
+
     miacode_add_dev_tool(qml_document_replacement_sequence_spec TEST
         SOURCES
             src/tools/qml_ui/QmlDocumentReplacementSequenceSpec.cpp
@@ -2275,6 +2293,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/timeline/TimelineData.h
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
+    )
+
+    miacode_add_dev_tool(video_export_intro_sound_spec TEST
+        SOURCES
+            src/tools/video_export/VideoExportIntroSoundSpec.cpp
+            src/tools/video_export/VideoExportSettings.cpp
+            src/tools/video_export/VideoExportRuntimePolicy.cpp
+            src/tools/video_export/VideoExportSnapshot.cpp
+            src/timeline/TimelineMarkerOffset.h
+            src/audio/PreviewAudioSettings.h
+            src/audio/PreviewAudioSettings.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            ${_miacode_muri_analysis_core}
+            resources/fonts.qrc
+            resources/slide_data.qrc
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/app/ui src/common src/audio src/core/chart src/core/chart/document src/core/chart/parser src/core/video src/timeline src/tools src/tools/video_export
     )
 
     miacode_add_dev_tool(video_export_audio_render_plan_spec TEST

@@ -232,6 +232,10 @@ Implication:
 
 - New export settings must be added on both serialization and deserialization sides.
 - Shared preview/export timing settings now also cross this boundary through `VideoExportSnapshot::toJson/fromJson` and `buildVideoExportTaskFromSnapshot`; if you add or reinterpret timing offsets, update preview state persistence and export snapshot/task reconstruction together.
+- Intro sound follows the same boundary: `QmlExportSession` and the Widgets dialog both update the
+  `preview_sfx` selected basename/independent 0..2 volume, `VideoExportSettings` preserves the volume
+  preference and both values during difficulty reseeding, and `intro.sound_file` /
+  `intro.sound_volume` must survive snapshot parsing and worker-task reconstruction.
 - Worker protocol changes must be reflected in both `main.cpp` and MainWindow worker-event handling.
 - `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
 - Static Muri thresholds that affect analyzer timing, such as the tap-on-slide threshold, must also cross this boundary; otherwise preview-time diagnostics and export-time overlays will drift.

@@ -260,6 +260,9 @@ Defined in `CMakeLists.txt` behind `MIACODE_BUILD_DEV_TOOLS`:
 - `soundtouch_probe`
 - `simai_parser_spec`
 - `chart_batch_transform_spec`
+- `qml_export_intro_sound_contract_spec`
+- `qml_export_video_page_spec`
+- `video_export_intro_sound_spec`
 
 When these helpers change scope, update both this file and any packaging assumptions.
 

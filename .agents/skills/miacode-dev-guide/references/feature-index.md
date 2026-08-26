@@ -496,6 +496,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   single-file output path and range tab remain single-export-only. Never replace those batch
   settings with instructional text that sends the user to the other mode. The former
   `BatchVideoExportDialog` is deleted.
+- The shared Intro tab exposes the selected intro-sound basename and its independent 0..2 volume in
+  both UIs. `QmlExportSession` enumerates/imports `assets/music`, updates `preview_sfx` immediately
+  (asset reload for the file, level apply for volume), and preserves both values when difficulty
+  reseeding calls `copyVideoExportUserSettings`. `VideoExportSettings` owns the shared
+  `intro_sound_volume` preference; the selected basename remains in portable preview state.
 - Controller + pipeline: `VideoExportController.{h,cpp}` (⚠ ~5000 lines — see god-file list),
   `VideoExportQuickRenderBackend.*`, `VideoExportAudioRenderPlan.*`, `VideoExportAudioBackend.h`,
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,

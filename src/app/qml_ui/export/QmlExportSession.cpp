@@ -5,8 +5,10 @@
 #include "DialogLocalization.h"
 #include "UiText.h"
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/video/PreviewRenderSettings.h"
+#include "audio/QtPreviewSfxRuntime.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/VideoExportPreferences.h"
 #include "tools/video_export/VideoExportSettings.h"
@@ -15,7 +17,9 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QSettings>
@@ -163,6 +167,59 @@ int QmlExportSession::introModeIndex() const
 bool QmlExportSession::introLevelTextRender() const
 {
     return task_.intro.lvRenderMode.compare(QStringLiteral("text"), Qt::CaseInsensitive) == 0;
+}
+
+QVariantList QmlExportSession::introSoundOptions() const
+{
+    QVariantList list;
+    list.append(QVariantMap{
+        {QStringLiteral("label"),
+         UiText::text(QStringLiteral("dialog.render_settings.music.default_intro_sound"))},
+        {QStringLiteral("fileName"), QString()},
+    });
+    const QString musicDirectory = miacode::preview_sfx::assetMusicDirectory();
+    if (musicDirectory.isEmpty()) {
+        return list;
+    }
+    const QFileInfoList entries = QDir(musicDirectory).entryInfoList(
+        miacode::preview_sfx::supportedIntroSoundFileExtensions(),
+        QDir::Files,
+        QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo& entry : entries) {
+        list.append(QVariantMap{
+            {QStringLiteral("label"), entry.fileName()},
+            {QStringLiteral("fileName"), entry.fileName()},
+        });
+    }
+    return list;
+}
+
+int QmlExportSession::introSoundIndex() const
+{
+    const QString selected = miacode::preview_sfx::normalizeIntroSoundFileName(
+        task_.introSoundFileName);
+    const QVariantList options = introSoundOptions();
+    for (int i = 0; i < options.size(); ++i) {
+        if (options.at(i).toMap().value(QStringLiteral("fileName")).toString() == selected) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+QString QmlExportSession::introSoundLabel() const
+{
+    return UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound"));
+}
+
+QString QmlExportSession::introSoundVolumeLabel() const
+{
+    return UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound_volume"));
+}
+
+QString QmlExportSession::introSoundImportLabel() const
+{
+    return UiText::text(QStringLiteral("dialog.render_settings.video.skin.import"));
 }
 
 double QmlExportSession::exportEndSeconds() const
@@ -341,6 +398,12 @@ void QmlExportSession::applyPreferences()
     task_.intro.mode = QStringLiteral("auto");
     task_.intro.lvRenderMode = QStringLiteral("atlas");
     miacode::video_export::applyVideoExportPreferences(settings, &task_);
+    miacode::preview_sfx::setSelectedIntroSoundVolume(task_.introSoundVolume);
+    if (backend_ != nullptr
+        && backend_->previewSfxRuntime_ != nullptr
+        && backend_->previewSfxRuntime_->audioEngineInitialized()) {
+        backend_->previewSfxRuntime_->applyLevels(backend_->previewAudioSettings_);
+    }
     const int savedWidth = task_.outputWidth;
     const int savedHeight = task_.outputHeight;
     resolutionIndex_ = 1;
@@ -590,6 +653,43 @@ void QmlExportSession::browseIntroBackground()
     if (!path.isEmpty()) {
         setIntroCustomBackgroundPath(path);
     }
+}
+
+void QmlExportSession::importIntroSound()
+{
+    const QString selectedPath = QFileDialog::getOpenFileName(
+        nullptr,
+        introSoundLabel(),
+        QString(),
+        QStringLiteral("Audio (*.wav *.mp3 *.ogg *.flac)"));
+    if (selectedPath.isEmpty()) {
+        return;
+    }
+
+    const QString musicDirectory = miacode::preview_sfx::assetMusicDirectory();
+    if (musicDirectory.isEmpty() || !QDir().mkpath(musicDirectory)) {
+        return;
+    }
+
+    const QFileInfo sourceInfo(selectedPath);
+    QString importedName = sourceInfo.fileName();
+    QString importedPath = QDir(musicDirectory).filePath(importedName);
+    if (QFileInfo(selectedPath).canonicalFilePath() != QFileInfo(importedPath).canonicalFilePath()) {
+        int suffix = 2;
+        while (QFileInfo::exists(importedPath)) {
+            importedName = QStringLiteral("%1_%2.%3")
+                .arg(sourceInfo.completeBaseName())
+                .arg(suffix++)
+                .arg(sourceInfo.suffix());
+            importedPath = QDir(musicDirectory).filePath(importedName);
+        }
+        if (!QFile::copy(selectedPath, importedPath)) {
+            return;
+        }
+    }
+
+    emit introSoundOptionsChanged();
+    setIntroSoundFileName(importedName);
 }
 
 void QmlExportSession::browseBatchOutputDirectory()
@@ -1122,6 +1222,55 @@ void QmlExportSession::setIntroLevelTextRender(bool value)
     if (backend_ != nullptr) {
         backend_->refreshExportIntroState();
     }
+}
+
+void QmlExportSession::setIntroSoundIndex(int index)
+{
+    const QVariantList options = introSoundOptions();
+    if (index < 0 || index >= options.size()) {
+        return;
+    }
+    setIntroSoundFileName(
+        options.at(index).toMap().value(QStringLiteral("fileName")).toString());
+}
+
+void QmlExportSession::setIntroSoundFileName(const QString& fileName)
+{
+    const QString normalized = miacode::preview_sfx::normalizeIntroSoundFileName(fileName);
+    if (task_.introSoundFileName == normalized) {
+        return;
+    }
+    task_.introSoundFileName = normalized;
+    miacode::preview_sfx::setSelectedIntroSoundFileName(normalized);
+    if (backend_ != nullptr) {
+        backend_->previewIntroSoundFileName_ = normalized;
+        if (backend_->previewSfxRuntime_ != nullptr
+            && backend_->previewSfxRuntime_->audioEngineInitialized()) {
+            backend_->previewSfxRuntime_->reloadAssets(backend_->previewAudioSettings_);
+        }
+        backend_->savePortableState();
+    }
+    emit introChanged();
+}
+
+void QmlExportSession::setIntroSoundVolume(double value)
+{
+    if (!qIsFinite(value)) {
+        return;
+    }
+    const double normalized = qBound(0.0, value, 2.0);
+    if (qFuzzyCompare(task_.introSoundVolume + 1.0, normalized + 1.0)) {
+        return;
+    }
+    task_.introSoundVolume = normalized;
+    miacode::preview_sfx::setSelectedIntroSoundVolume(normalized);
+    if (backend_ != nullptr
+        && backend_->previewSfxRuntime_ != nullptr
+        && backend_->previewSfxRuntime_->audioEngineInitialized()) {
+        backend_->previewSfxRuntime_->applyLevels(backend_->previewAudioSettings_);
+    }
+    emit introChanged();
+    savePreferences();
 }
 
 void QmlExportSession::setExportStartSeconds(double value)

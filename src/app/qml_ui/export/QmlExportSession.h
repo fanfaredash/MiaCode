@@ -72,6 +72,13 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(int introModeIndex READ introModeIndex WRITE setIntroModeIndex NOTIFY introChanged)
     Q_PROPERTY(bool introCardShadow READ introCardShadow WRITE setIntroCardShadow NOTIFY introChanged)
     Q_PROPERTY(bool introLevelTextRender READ introLevelTextRender WRITE setIntroLevelTextRender NOTIFY introChanged)
+    Q_PROPERTY(QVariantList introSoundOptions READ introSoundOptions NOTIFY introSoundOptionsChanged)
+    Q_PROPERTY(int introSoundIndex READ introSoundIndex WRITE setIntroSoundIndex NOTIFY introChanged)
+    Q_PROPERTY(QString introSoundFileName READ introSoundFileName WRITE setIntroSoundFileName NOTIFY introChanged)
+    Q_PROPERTY(double introSoundVolume READ introSoundVolume WRITE setIntroSoundVolume NOTIFY introChanged)
+    Q_PROPERTY(QString introSoundLabel READ introSoundLabel CONSTANT)
+    Q_PROPERTY(QString introSoundVolumeLabel READ introSoundVolumeLabel CONSTANT)
+    Q_PROPERTY(QString introSoundImportLabel READ introSoundImportLabel CONSTANT)
 
     // Range
     Q_PROPERTY(double exportStartSeconds READ exportStartSeconds WRITE setExportStartSeconds NOTIFY rangeChanged)
@@ -138,6 +145,13 @@ public:
     int introModeIndex() const;
     bool introCardShadow() const { return task_.intro.cardShadow; }
     bool introLevelTextRender() const;
+    QVariantList introSoundOptions() const;
+    int introSoundIndex() const;
+    QString introSoundFileName() const { return task_.introSoundFileName; }
+    double introSoundVolume() const { return task_.introSoundVolume; }
+    QString introSoundLabel() const;
+    QString introSoundVolumeLabel() const;
+    QString introSoundImportLabel() const;
     IntroBannerSpec previewIntroSpec() const;
 
     double exportStartSeconds() const { return task_.exportStartSeconds; }
@@ -158,6 +172,7 @@ public:
     Q_INVOKABLE void refreshFromDocument();
     Q_INVOKABLE void browseOutputPath();
     Q_INVOKABLE void browseIntroBackground();
+    Q_INVOKABLE void importIntroSound();
     Q_INVOKABLE void browseBatchOutputDirectory();
     Q_INVOKABLE void addChartDirectories();
     Q_INVOKABLE void removeChartDirectory(int index);
@@ -200,6 +215,9 @@ public:
     void setIntroModeIndex(int index);
     void setIntroCardShadow(bool value);
     void setIntroLevelTextRender(bool value);
+    void setIntroSoundIndex(int index);
+    void setIntroSoundFileName(const QString& fileName);
+    void setIntroSoundVolume(double value);
     void setExportStartSeconds(double value);
     void setExportEndSeconds(double value);
     void setBatchOutputDirectory(const QString& path);
@@ -217,6 +235,7 @@ signals:
     void gameplayChanged();
     void skinChanged();
     void introChanged();
+    void introSoundOptionsChanged();
     void rangeChanged();
     void batchChanged();
 

@@ -3,6 +3,7 @@
 #include "VideoExportRuntimePolicy.h"
 
 #include <QRegularExpression>
+#include <QtNumeric>
 
 namespace miacode::video_export {
 
@@ -118,6 +119,11 @@ void applyVideoExportPreferences(const QJsonObject& settings, VideoExportTask* t
                                       .toString(task->intro.fontDisplayPath);
     task->intro.fontBodyPath = settings.value(QStringLiteral("intro_card_font_body"))
                                    .toString(task->intro.fontBodyPath);
+    const double introSoundVolume = settings.value(QStringLiteral("intro_sound_volume"))
+                                        .toDouble(task->introSoundVolume);
+    if (qIsFinite(introSoundVolume)) {
+        task->introSoundVolume = qBound(0.0, introSoundVolume, 2.0);
+    }
 }
 
 void appendVideoExportPreferences(QJsonObject* settings, const VideoExportTask& task)
@@ -144,6 +150,9 @@ void appendVideoExportPreferences(QJsonObject* settings, const VideoExportTask& 
         task.intro.lvRenderMode.compare(QStringLiteral("text"), Qt::CaseInsensitive) == 0);
     settings->insert(QStringLiteral("intro_card_font_display"), task.intro.fontDisplayPath);
     settings->insert(QStringLiteral("intro_card_font_body"), task.intro.fontBodyPath);
+    settings->insert(
+        QStringLiteral("intro_sound_volume"),
+        qBound(0.0, qIsFinite(task.introSoundVolume) ? task.introSoundVolume : 1.0, 2.0));
 }
 
 QString sanitizeVideoExportTimestamp(QString text)
@@ -238,6 +247,11 @@ void copyVideoExportUserSettings(const VideoExportTask& source, VideoExportTask*
     target->intro.lvRenderMode = source.intro.lvRenderMode;
     target->intro.fontDisplayPath = source.intro.fontDisplayPath;
     target->intro.fontBodyPath = source.intro.fontBodyPath;
+    target->introSoundFileName = source.introSoundFileName;
+    target->introSoundVolume = qBound(
+        0.0,
+        qIsFinite(source.introSoundVolume) ? source.introSoundVolume : 1.0,
+        2.0);
 }
 
 }  // namespace miacode::video_export

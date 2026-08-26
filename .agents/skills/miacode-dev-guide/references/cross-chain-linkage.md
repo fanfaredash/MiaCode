@@ -372,7 +372,10 @@ snapshot boundary. The dialog persists the 0..2 volume (0%..200%), applies it im
 `QtPreviewSfxRuntime::applyLevels`, and export restores it from `intro.sound_volume` before the
 prepared FFmpeg intro-audio filter applies the multiplier. This is an independent multiplier: the
 preview `track_start` level must not inherit the normal global/answer SFX attenuation, matching the
-export filter. Keep preview and export volume behavior aligned when changing this setting.
+export filter. The v2 `QmlExportSession` follows the same rule: file changes normalize to a basename,
+update portable preview state and reload preview assets; volume changes update shared export
+preferences and apply levels. `copyVideoExportUserSettings` must retain both during difficulty
+reseeding. Keep preview and export volume behavior aligned when changing this setting.
 
 `fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
 `render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame

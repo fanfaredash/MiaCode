@@ -10,6 +10,10 @@ Rectangle {
 
     required property var pages
     readonly property var session: pages && pages.exportSession ? pages.exportSession : null
+    readonly property bool introSettingsEnabled: !!root.session
+                                                  && root.session.introEnabled
+                                                  && (root.session.activeTab === "batch"
+                                                      || root.session.fullRangeExport)
 
     color: Theme.colors.background.surface
     clip: true
@@ -538,6 +542,71 @@ Rectangle {
                             onToggled: if (root.session) root.session.introEnabled = checked
                         }
                         RowLayout {
+                            Layout.fillWidth: true
+                            enabled: root.introSettingsEnabled
+
+                            Text {
+                                text: root.session ? root.session.introSoundLabel : ""
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 120
+                            }
+                            AppComboBox {
+                                id: introSoundCombo
+                                objectName: "introSoundCombo"
+                                Layout.fillWidth: true
+                                model: root.session ? root.session.introSoundOptions : []
+                                textRole: "label"
+                                currentIndex: root.session ? root.session.introSoundIndex : 0
+                                focusPolicy: Qt.StrongFocus
+                                Accessible.name: root.session ? root.session.introSoundLabel : ""
+                                onActivated: if (root.session) root.session.introSoundIndex = currentIndex
+                            }
+                            AppButton {
+                                id: introSoundImportButton
+                                objectName: "introSoundImportButton"
+                                text: root.session ? root.session.introSoundImportLabel : ""
+                                focusPolicy: Qt.StrongFocus
+                                Accessible.name: root.session
+                                                 ? root.session.introSoundImportLabel + " "
+                                                   + root.session.introSoundLabel
+                                                 : ""
+                                onClicked: if (root.session) root.session.importIntroSound()
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            enabled: root.introSettingsEnabled
+
+                            Text {
+                                text: root.session ? root.session.introSoundVolumeLabel : ""
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 120
+                            }
+                            AppSlider {
+                                id: introSoundVolumeSlider
+                                objectName: "introSoundVolumeSlider"
+                                Layout.fillWidth: true
+                                from: 0
+                                to: 200
+                                stepSize: 1
+                                value: root.session ? root.session.introSoundVolume * 100 : 100
+                                focusPolicy: Qt.StrongFocus
+                                Accessible.name: root.session ? root.session.introSoundVolumeLabel : ""
+                                Accessible.description: Math.round(value) + "%"
+                                onMoved: if (root.session) root.session.introSoundVolume = value / 100
+                            }
+                            Text {
+                                Layout.preferredWidth: 52
+                                text: Math.round(introSoundVolumeSlider.value) + "%"
+                                color: Theme.colors.text.active
+                                font.family: Theme.uiFont
+                                horizontalAlignment: Text.AlignRight
+                            }
+                        }
+                        RowLayout {
+                            enabled: root.introSettingsEnabled
                             Text {
                                 text: qsTr("背景")
                                 color: Theme.colors.text.secondary
@@ -553,6 +622,7 @@ Rectangle {
                         }
                         RowLayout {
                             visible: root.session && root.session.introBackgroundModeIndex === 1
+                            enabled: root.introSettingsEnabled
                             AppTextField {
                                 Layout.fillWidth: true
                                 text: root.session ? root.session.introCustomBackgroundPath : ""
@@ -564,11 +634,13 @@ Rectangle {
                             }
                         }
                         AppSwitch {
+                            enabled: root.introSettingsEnabled
                             text: qsTr("背景虚化")
                             checked: root.session ? root.session.introBlurBackground : true
                             onToggled: if (root.session) root.session.introBlurBackground = checked
                         }
                         RowLayout {
+                            enabled: root.introSettingsEnabled
                             Text {
                                 text: qsTr("谱面类型")
                                 color: Theme.colors.text.secondary
@@ -583,11 +655,13 @@ Rectangle {
                             }
                         }
                         AppSwitch {
+                            enabled: root.introSettingsEnabled
                             text: qsTr("难度卡阴影")
                             checked: root.session ? root.session.introCardShadow : false
                             onToggled: if (root.session) root.session.introCardShadow = checked
                         }
                         AppSwitch {
+                            enabled: root.introSettingsEnabled
                             text: qsTr("等级文本渲染")
                             checked: root.session ? root.session.introLevelTextRender : false
                             onToggled: if (root.session) root.session.introLevelTextRender = checked

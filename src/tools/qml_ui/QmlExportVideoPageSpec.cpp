@@ -1,0 +1,254 @@
+#include <QCoreApplication>
+#include <QGuiApplication>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQuickStyle>
+#include <QTextStream>
+
+#include <memory>
+
+#ifndef MIACODE_QML_SPEC_IMPORT_ROOT
+#error "MIACODE_QML_SPEC_IMPORT_ROOT must be defined"
+#endif
+
+namespace {
+
+bool require(bool condition, const QString& message, QTextStream& err)
+{
+    if (!condition) {
+        err << "FAIL: " << message << Qt::endl;
+    }
+    return condition;
+}
+
+std::unique_ptr<QObject> createHarness(QQmlEngine& engine, QTextStream& err)
+{
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+import QtQuick
+import MiaCode.UI
+
+Item {
+    width: 900
+    height: 700
+
+    QtObject {
+        id: session
+        objectName: "fakeExportSession"
+        property var difficulties: []
+        property int selectedDifficultyId: 5
+        property string activeTab: "export"
+        property string settingsTab: "intro"
+        property string unavailableReason: ""
+        property bool exportRunning: false
+        property string outputPath: "out.mp4"
+        property int resolutionIndex: 0
+        property var resolutionOptions: [{ label: "1024x1024", width: 1024, height: 1024 }]
+        property int fps: 60
+        property var fpsOptions: [30, 60, 120]
+        property int audioBitrateKbps: 192
+        property var audioBitrateOptions: [128, 192, 320]
+        property int presetIndex: 1
+        property var presetOptions: ["Fast", "High quality"]
+        property int sizePresetIndex: 0
+        property var sizePresetOptions: ["Standard"]
+        property real backgroundBrightnessOuter: 0.5
+        property real backgroundBrightnessInner: 0.2
+        property real layoutSquareScale: 0.95
+        property int backgroundScaleModeIndex: 0
+        property var backgroundScaleModeOptions: ["Fill"]
+        property bool smoothBrightness: true
+        property bool showTimestamp: true
+        property bool showObjectStatsHud: false
+        property bool showChartInfoHud: false
+        property bool fixHudTextLayout: false
+        property bool clockCountEnabled: false
+        property real tapFlowSpeed: 7.5
+        property real touchFlowSpeed: 7.5
+        property var skinOptions: []
+        property int skinIndex: -1
+        property var judgeEffectOptions: []
+        property int judgeEffectIndex: 0
+        property var outlineOptions: []
+        property int outlineIndex: 1
+        property bool introEnabled: true
+        property int introBackgroundModeIndex: 0
+        property string introCustomBackgroundPath: ""
+        property bool introBlurBackground: true
+        property int introModeIndex: 0
+        property bool introCardShadow: false
+        property bool introLevelTextRender: false
+        property var introSoundOptions: [
+            { label: "Default intro sound", fileName: "" },
+            { label: "custom.wav", fileName: "custom.wav" }
+        ]
+        property int introSoundIndex: 1
+        property string introSoundFileName: "custom.wav"
+        property real introSoundVolume: 1.25
+        property string introSoundLabel: "Intro sound"
+        property string introSoundVolumeLabel: "Intro sound volume"
+        property string introSoundImportLabel: "Import"
+        property real exportStartSeconds: 0.0
+        property real exportEndSeconds: 1.0
+        property real contentDurationSeconds: 1.0
+        property bool fullRangeExport: true
+        property var chartDirectories: []
+        property var batchDifficultyChecks: []
+        property string batchOutputDirectory: ""
+        property int importRequests: 0
+
+        function selectDifficulty(id) {}
+        function browseBatchOutputDirectory() {}
+        function addChartDirectories() {}
+        function clearChartDirectories() {}
+        function removeChartDirectory(index) {}
+        function setBatchDifficultyChecked(id, checked) {}
+        function browseOutputPath() {}
+        function openSkinDirectory() {}
+        function openJudgeLineDirectory() {}
+        function browseIntroBackground() {}
+        function importIntroSound() { importRequests += 1 }
+        function setExportStartToCurrentPreview() {}
+        function setExportEndToCurrentPreview() {}
+        function setExportStartText(text) { return text }
+        function setExportEndText(text) { return text }
+        function startExport() {}
+        function cancelExport() {}
+    }
+
+    QtObject {
+        id: pages
+        property var exportSession: session
+    }
+
+    ExportVideoPage {
+        anchors.fill: parent
+        pages: pages
+    }
+}
+)QML", QUrl(QStringLiteral("qrc:/QmlExportVideoPageSpec.qml")));
+    if (component.status() == QQmlComponent::Error) {
+        for (const QQmlError& error : component.errors()) {
+            err << "FAIL: export page harness load: " << error.toString() << Qt::endl;
+        }
+        return {};
+    }
+    std::unique_ptr<QObject> object(component.create());
+    if (!object) {
+        for (const QQmlError& error : component.errors()) {
+            err << "FAIL: export page harness create: " << error.toString() << Qt::endl;
+        }
+    }
+    return object;
+}
+
+bool verifyRealExportPageControls(QTextStream& err)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    const std::unique_ptr<QObject> root = createHarness(engine, err);
+    if (!root) {
+        return false;
+    }
+    QCoreApplication::processEvents();
+
+    QObject* session = root->findChild<QObject*>(QStringLiteral("fakeExportSession"));
+    QObject* combo = root->findChild<QObject*>(QStringLiteral("introSoundCombo"));
+    QObject* importButton = root->findChild<QObject*>(QStringLiteral("introSoundImportButton"));
+    QObject* volumeSlider = root->findChild<QObject*>(QStringLiteral("introSoundVolumeSlider"));
+    bool ok = require(
+        session != nullptr && combo != nullptr && importButton != nullptr && volumeSlider != nullptr,
+        QStringLiteral("the real ExportVideoPage creates all three intro-sound controls"),
+        err);
+    if (!ok) {
+        return false;
+    }
+
+    ok &= require(
+        combo->property("currentIndex").toInt() == 1
+            && qAbs(volumeSlider->property("value").toDouble() - 125.0) <= 1e-9,
+        QStringLiteral("the combo and slider bind to the session filename index and 0..200 percent volume"),
+        err);
+    ok &= require(
+        combo->property("enabled").toBool()
+            && importButton->property("enabled").toBool()
+            && volumeSlider->property("enabled").toBool(),
+        QStringLiteral("intro-sound controls are enabled for an enabled full-range intro"),
+        err);
+    ok &= require(
+        combo->property("focusPolicy").toInt() == Qt::StrongFocus
+            && importButton->property("focusPolicy").toInt() == Qt::StrongFocus
+            && volumeSlider->property("focusPolicy").toInt() == Qt::StrongFocus,
+        QStringLiteral("every intro-sound control is keyboard focusable"),
+        err);
+
+    combo->setProperty("currentIndex", 0);
+    QMetaObject::invokeMethod(combo, "activated", Q_ARG(int, 0));
+    ok &= require(
+        session->property("introSoundIndex").toInt() == 0,
+        QStringLiteral("activating the real combo writes the selected option to the session"),
+        err);
+
+    QMetaObject::invokeMethod(importButton, "clicked");
+    ok &= require(
+        session->property("importRequests").toInt() == 1,
+        QStringLiteral("the real import button invokes the session import action"),
+        err);
+
+    volumeSlider->setProperty("value", 175.0);
+    QMetaObject::invokeMethod(volumeSlider, "moved");
+    ok &= require(
+        qAbs(session->property("introSoundVolume").toDouble() - 1.75) <= 1e-9,
+        QStringLiteral("moving the real slider writes the independent 0..2 volume multiplier"),
+        err);
+
+    session->setProperty("introEnabled", false);
+    QCoreApplication::processEvents();
+    ok &= require(
+        !combo->property("enabled").toBool()
+            && !importButton->property("enabled").toBool()
+            && !volumeSlider->property("enabled").toBool(),
+        QStringLiteral("turning the intro off disables its sound controls"),
+        err);
+
+    session->setProperty("introEnabled", true);
+    session->setProperty("fullRangeExport", false);
+    QCoreApplication::processEvents();
+    ok &= require(
+        !combo->property("enabled").toBool(),
+        QStringLiteral("a partial single export disables intro sound settings"),
+        err);
+
+    session->setProperty("activeTab", QStringLiteral("batch"));
+    QCoreApplication::processEvents();
+    ok &= require(
+        combo->property("enabled").toBool()
+            && importButton->property("enabled").toBool()
+            && volumeSlider->property("enabled").toBool(),
+        QStringLiteral("batch export keeps intro sound settings available regardless of the single range"),
+        err);
+    return ok;
+}
+
+}  // namespace
+
+int main(int argc, char** argv)
+{
+#ifdef Q_OS_WIN
+    // Qt 6.8's offscreen/minimal QPA initialization can hang before main-loop
+    // entry on Windows. This harness creates no QQuickWindow, so the native
+    // platform plugin remains headless while allowing the real controls to load.
+    qputenv("QT_QPA_PLATFORM", "windows");
+#else
+    qputenv("QT_QPA_PLATFORM", "offscreen");
+#endif
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QGuiApplication app(argc, argv);
+    QTextStream err(stderr);
+    const bool ok = verifyRealExportPageControls(err);
+    if (ok) {
+        QTextStream out(stdout);
+        out << "qml_export_video_page_spec ok" << Qt::endl;
+    }
+    return ok ? 0 : 1;
+}

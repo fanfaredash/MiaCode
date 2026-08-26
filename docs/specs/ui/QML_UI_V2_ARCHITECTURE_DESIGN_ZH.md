@@ -84,7 +84,8 @@ v2 应用层  src/app/v2/
 - **依赖**：`editor/SimaiTextEditPolicy`、`editor/SimaiCompletionCatalog`、`ChartWorkspace`。
 
 ### ExportService
-- **做什么**：视频导出（已有 `QmlExportSession`）、封面导出、ZIP 打包、Net 批量上传/下载，统一为作业模型（提交 → 进度 → 结果）。
+- **做什么**：视频导出（已有 `QmlExportSession`，片头音选择/导入/独立音量已贯通现有
+  snapshot/worker）、封面导出、ZIP 打包、Net 批量上传/下载，统一为作业模型（提交 → 进度 → 结果）。
 - **依赖**：`tools/video_export`、`tools/cover_export`、`tools/zip_export`、`tools/net`。这三项存活功能的引擎层需要先去 widgets 化：`zip_export` 已干净（0/2 文件耦合），`net` 一半耦合（4/8），`cover_export` 大部分是 Widgets 对话框（9/13）。
 
 ### ShortcutService

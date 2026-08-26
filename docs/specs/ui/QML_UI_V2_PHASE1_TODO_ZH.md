@@ -241,7 +241,10 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 
 ### P3 — 页面接线与产品决策（历史缺口；迁入目标架构的 `ExportService`）
 
-- [ ] `QmlExportSession` / `ExportVideoPage.qml` 接入片头音文件名和 `introSoundVolume`，并写入导出 snapshot。
+- [x] `QmlExportSession` / `ExportVideoPage.qml` 已接入片头音文件名、导入和 0%–200%
+      `introSoundVolume`；单/批量与难度重播保留设置，并沿既有 snapshot/worker 边界写入最终任务。
+      Release `qml_export_intro_sound_contract_spec`、真实 QML 组件
+      `qml_export_video_page_spec` 与 `video_export_intro_sound_spec` 为 3/3 通过（2026-08-26）。
 - [x] 将 v2 根窗口接入 ChartDrop；`QmlUiBootstrap` 注册 root window、安装拖放事件过滤器并创建/同步
       `ChartDropOverlay`，释放或取消时清理 overlay 与 root 绑定。
 - [ ] 手工确认 v2 工具箱的批量上传入口能够打开 `net.batchUpload.open`。
@@ -262,7 +265,8 @@ offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 
 - [ ] play、pause、seek 按 completion 更新界面状态。
 - [ ] EraseByArea、烟花时长和 BGM 过轨静音行为正确。
 - [ ] 音频拖放建谱和 ChartDrop 覆盖层行为正确。
-- [ ] QML 导出片头音文件和音量进入最终任务。
+- [ ] QML 导出片头音文件和音量进入最终任务（自动规格已覆盖会话、真实 QML 控件及
+      snapshot→worker 重建；仍需原生桌面试听与成片确认）。
 - [ ] `d534b393` 的 bookmark / touch input 改动完成 GUI 回归。
 
 ## 关键路径
