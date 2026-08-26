@@ -1024,30 +1024,13 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // Captured BEFORE the reset below: seeds the page's difficulty badge
     // default (decision D4 — "the difficulty that was active on entry").
     const int previousActiveDifficultyId = state_.activeDifficultyId_;
-    // Carry the current preview position INTO the export audition so it doesn't
-    // snap to 0 — matching the difficulty-tab switch (which preserves progress
-    // when a difficulty / the latency page was active before the switch). Read
-    // the authoritative clock while it is still live (before stopQtPreviewPlayback
-    // below); installExportPreviewAuditionScene consumes this one-shot seed.
-    // The metadata (谱面信息) page keeps no audition, but leaving a difficulty for
-    // it stopped playback with keepPosition=true, so qtPreviewPauseSecond_ still
-    // holds the last position — carry it into the export page too. Source detected
-    // from the stack (currentWidget is still the page we're LEAVING; the switch to
-    // exportPage_ happens later), because activeOutlineKey_ was already overwritten
-    // with the destination by the sidebar handler. A stale cross-file value is
-    // guarded by loadDocument resetting qtPreviewPauseSecond_ to 0.
-    const bool leavingMetadataPage = ui_.editorStack_ != nullptr
-        && ui_.metadataPage_ != nullptr
-        && ui_.editorStack_->currentWidget() == ui_.metadataPage_;
-    const bool restoreEntryPreview = owner_.hasActiveDifficulty()
-        || state_.latencySandboxAuditionActive_
-        || state_.exportPreviewAuditionActive_   // re-entering export from export (sidebar re-click)
-        || leavingMetadataPage;
-    state_.exportPreviewEntrySeedSecond_ = restoreEntryPreview
-        ? qMax(0.0, state_.qtPreviewPlaying_
-              ? owner_.currentPreviewAuthoritativeAudioClockSecond()
-              : state_.qtPreviewPauseSecond_)
-        : -1.0;
+    // Entering the export page is a fresh WYSIWYG audition: seed chart time 0.
+    // installExportPreviewAuditionScene consumes this one-shot seed, then
+    // refreshExportIntroState moves the playhead to the negative-time intro head
+    // when 添加片头 is enabled. Rebuilding the video panel while already inside
+    // the export page still preserves its position through the separate
+    // lastExportAuditionDifficultyId_ path.
+    state_.exportPreviewEntrySeedSecond_ = 0.0;
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites

@@ -1265,15 +1265,9 @@ void paintCenterDisplay(
     const int titlePixelSize = qMax(1, qRound(44.0 / 1080.0 * playShort));
     const qreal headerCenterOffsetY = (137.3 * 2.0 / 3.0) / 1080.0 * playShort;
 
-    QFont titleFont = miacode::preview::scene::previewHudTimestampFontForArea(
-        miacode::preview::scene::PreviewHudFontArea::CenterDisplay,
-        titlePixelSize,
-        QFont::Black);
+    QFont titleFont = miacode::preview::scene::previewHudTimestampFont(titlePixelSize, QFont::Black);
     titleFont.setPixelSize(titlePixelSize);
-    QFont valueFont = miacode::preview::scene::previewHudTimestampFontForArea(
-        miacode::preview::scene::PreviewHudFontArea::CenterDisplay,
-        valuePixelSize,
-        QFont::Black);
+    QFont valueFont = miacode::preview::scene::previewHudTimestampFont(valuePixelSize, QFont::Black);
     valueFont.setPixelSize(valuePixelSize);
     const QFontMetricsF titleMetrics(titleFont);
     const QFontMetricsF valueMetrics(valueFont);

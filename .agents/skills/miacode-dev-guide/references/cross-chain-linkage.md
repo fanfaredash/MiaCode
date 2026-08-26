@@ -452,7 +452,10 @@ switch — the panel is recreated); teardown is in `endExportPreviewSession`
 (`teardownExportPreviewAuditionScene` — stop + clear flag + invalidate snapshot; no cache/restore,
 the destination field reinstalls its own preview). Unlike latency, audio levels are NOT
 mode-switched (export uses the user's normal mix). Export progress is status-bar-only and never
-touches the transport — preview and a running export are independent. Review together:
+touches the transport — preview and a running export are independent. Entering/re-entering the
+export page always starts a fresh audition at the 片头 head when 片头 is enabled (otherwise chart
+time 0); only video-panel recreation while remaining on the export page preserves its position.
+Review together:
 `MainWindow.ExportSnapshot.cpp`, `MainWindow.ExportFlow.cpp` (lifecycle),
 `PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `MainWindow.ExportWorker.cpp` +
 `WindowSection.cpp` (progress decoupling). Supersedes the reverted "导出效果预览".

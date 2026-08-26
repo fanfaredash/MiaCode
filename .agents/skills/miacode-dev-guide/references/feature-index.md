@@ -941,11 +941,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   音乐 + 字体 tabs and now reads **视频 / 游戏 / 性能** (性能 = 预览刷新率). `buildExportInjectedSettings`
   keeps only 判定效果 / slide 层叠 / 中心显示. ⚠ **W1 note:** the preview-settings
   `createDialogMenuButton` must keep the `ensurePolished()`+`setFixedHeight(qMax(sizeHint,30)+4)`
-  or its dropdowns clip their bottom border (`qt-ui-layout-pitfalls` W1).) HUD font
-  picker areas are independently persisted under `app.video_export.hud_font_paths`: chart info,
-  bottom-left timestamp, center display, object stats, and debug info. Center display rendering
-  must use `PreviewHudFontArea::CenterDisplay`; do not route it through the timestamp area.
-  The **default** (no custom font) HUD
+  or its dropdowns clip their bottom border (`qt-ui-layout-pitfalls` W1).) The **default** (no custom font) HUD
   family is **"Xiaolai Mono"** — embedded resource `:/fonts/xiaolai_mono.ttf`
   (`resources/fonts.qrc` → `assets/fonts/XiaolaiMono-Regular.subset.ttf`), loaded in
   `PreviewHudState.cpp::previewHudTimestampFont` (replaced the old JetBrains Mono, 2026-06-19).
