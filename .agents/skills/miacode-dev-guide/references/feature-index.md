@@ -240,13 +240,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   property-looking lines that are not complete `&key=value` assignments. The metadata editor
   underlines those lines and blocks field commit; `DocumentSection::rebuildFieldSidebar` marks
   the metadata row while title, artist, top-level designer, jacket image, or property syntax is
-  incomplete, using live widget text rather than only the committed document model.
-  **Metadata attention validation:** `SimaiDocument::invalidPropertyLineNumbers` identifies
-  property-looking lines that are not complete `&key=value` assignments. The metadata editor
-  underlines those lines and blocks field commit; `DocumentSection::rebuildFieldSidebar` also
-  marks the metadata row with a glowing attention dot while title, artist, top-level designer,
-  jacket image, or property syntax is incomplete. The dot reads live widget text, not only the
-  last committed document model.
+  incomplete. Required text fields are reported missing only when both the parsed TXT document
+  model and the corresponding metadata-page input are blank, preventing load-order false alerts;
+  property syntax uses live widget text only for uncommitted edits on the metadata page.
   **Export-side fallback contract (sync set):** the exported "谱师名义" (intro banner designer +
   chart-info-HUD `chartDesigner`) uses per-difficulty `&des_N`, falling back to top `&des` when
   the per-difficulty name is **blank including whitespace** — gate on `designer.trimmed().isEmpty()`,
@@ -314,6 +310,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `.StrictChecks.cpp` (see `SimaiNativeParser.cpp:1584`).
 - Validation UI: `sections/validation/MainWindow.ValidationFlow.cpp` (`runValidateSimai*`,
   `addValidationError`, `addValidationDecoration`).
+- Difficulty level completeness is a validation-UI concern rather than chart-token syntax:
+  `ValidationSection::currentDifficultyLevelMissing` adds “未填写难度” to the syntax tab and
+  error summary from the live `difficultyLevelEdit_`; changing the field refreshes that panel.
 - Note-modifier sync set (one patch touches all): native parser (`.cpp`/`.TouchTap`/`.Slide`) →
   marker flags (`src/timeline/TimelineData.h`) → mirror (`TimelineQuickModel.cpp` +
   `TimelineRenderData.h` flags) → transform (`ChartBatchTransform.cpp`, must NOT `return false` on

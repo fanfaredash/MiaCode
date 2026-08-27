@@ -578,10 +578,15 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     metadataItem->setData(kOutlineItemActiveRole,
                           state_.activeOutlineKey_ == QLatin1String("metadata")
                               || state_.activeOutlineKey_ == QLatin1String("latency"));
-    const QString liveTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : state_.document_.title;
-    const QString liveArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : state_.document_.artist;
-    const QString liveDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : state_.document_.designer;
-    const QString liveProperties = ui_.metadataExtraEdit_ != nullptr
+    const QString inputTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
+    const QString inputArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
+    const QString inputDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
+    const bool titleMissing = state_.document_.title.trimmed().isEmpty() && inputTitle.trimmed().isEmpty();
+    const bool artistMissing = state_.document_.artist.trimmed().isEmpty() && inputArtist.trimmed().isEmpty();
+    const bool designerMissing = state_.document_.designer.trimmed().isEmpty() && inputDesigner.trimmed().isEmpty();
+    const bool useLiveMetadataEdits = state_.activeOutlineKey_ == QLatin1String("metadata")
+        && state_.currentFieldDirty_;
+    const QString liveProperties = useLiveMetadataEdits && ui_.metadataExtraEdit_ != nullptr
         ? ui_.metadataExtraEdit_->toPlainText()
         : SimaiDocument::serializeRawFields(state_.document_.extraFields);
     const bool missingCover = state_.currentFilePath_.isEmpty()
@@ -604,9 +609,9 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         ui_.metadataExtraEdit_->setExtraSelections(selections);
     }
     QStringList metadataProblems;
-    if (liveTitle.trimmed().isEmpty()) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.title")));
-    if (liveArtist.trimmed().isEmpty()) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.artist")));
-    if (liveDesigner.trimmed().isEmpty()) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.des")));
+    if (titleMissing) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.title")));
+    if (artistMissing) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.artist")));
+    if (designerMissing) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.des")));
     if (missingCover) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.cover")));
     if (!invalidPropertyLines.isEmpty()) {
         QStringList lineNumbers;
@@ -1437,6 +1442,10 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
         state_.qtPreviewPauseSecond_, 0.0, state_.qtPreviewPlaying_, "load_document");
     state_.lastExportAuditionDifficultyId_ = 0;
     state_.activeOutlineKey_ = state_.document_.difficultyIds().isEmpty() ? QStringLiteral("welcome") : QStringLiteral("chart");
+    // Keep the metadata inputs synchronized even when the initial destination
+    // is a difficulty page. Sidebar completeness checks intentionally require
+    // both the parsed TXT model and the input page to report the same blank.
+    populateMetadataPage();
     activateInitialField();
     updateMetadataPageMode();
     // Restore the per-project "all difficulties share the same designer"

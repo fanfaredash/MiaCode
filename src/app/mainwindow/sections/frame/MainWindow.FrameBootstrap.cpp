@@ -1832,7 +1832,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             });
         });
     }
-    connect(difficultyLevelEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
+    connect(difficultyLevelEdit_, &QLineEdit::textChanged, this, [this]() {
+        markCurrentFieldDirty();
+        refreshValidationPanelForActiveField();
+    });
     connect(firstEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     connect(difficultyDesignerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     // Offset only repositions notes relative to the audio, so a live reflow on
