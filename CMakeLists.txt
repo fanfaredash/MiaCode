@@ -130,6 +130,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/AnalysisService.h
     src/app/v2/EditorSyncController.cpp
     src/app/v2/EditorSyncController.h
+    src/app/v2/UiRequestService.cpp
+    src/app/v2/UiRequestService.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -677,6 +679,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppMenuAction.qml
     src/app/qml_ui/components/AppMenuItem.qml
     src/app/qml_ui/components/AppMenuSeparator.qml
+    src/app/qml_ui/components/UiRequestHost.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml
@@ -1610,6 +1613,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/ChartWorkspaceFileService.cpp
             src/app/v2/ChartWorkspaceFileService.h
         LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    # Qt6::Core + Qt6::Test only: this target failing to link is how we notice a
+    # QFileDialog / QMessageBox creeping back into the request boundary.
+    miacode_add_dev_tool(ui_request_service_spec TEST
+        SOURCES
+            src/tools/v2/UiRequestServiceSpec.cpp
+            src/app/v2/UiRequestService.cpp
+            src/app/v2/UiRequestService.h
+        LIBS Qt6::Core Qt6::Test
         INCLUDES src
     )
 

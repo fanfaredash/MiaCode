@@ -6,6 +6,7 @@
 #include <QStringList>
 #include <QVariantList>
 
+#include "app/v2/UiRequestService.h"
 #include "tools/video_export/VideoExportController.h"
 
 class MainWindow;
@@ -16,6 +17,9 @@ class MainWindow;
 class QmlExportSession final : public QObject
 {
     Q_OBJECT
+    // File picking and messaging happen through this boundary so the session
+    // itself never constructs a Widgets dialog.
+    Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
     Q_PROPERTY(bool pageSessionActive READ pageSessionActive NOTIFY pageSessionActiveChanged)
     Q_PROPERTY(int selectedDifficultyId READ selectedDifficultyId NOTIFY selectedDifficultyIdChanged)
     Q_PROPERTY(QString activeTab READ activeTab WRITE setActiveTab NOTIFY activeTabChanged)
@@ -94,6 +98,7 @@ class QmlExportSession final : public QObject
 public:
     explicit QmlExportSession(MainWindow& backend, QObject* parent = nullptr);
 
+    QObject* uiRequests() { return &uiRequests_; }
     bool pageSessionActive() const { return pageSessionActive_; }
     int selectedDifficultyId() const { return selectedDifficultyId_; }
     QString activeTab() const;
@@ -253,7 +258,10 @@ private:
     int resolveDefaultDifficultyId(int previousActiveDifficultyId) const;
     VideoExportTask buildRequestedTask() const;
     void applyOwnerLiveFields(VideoExportTask* task) const;
+    void applyIntroSoundImport(const QString& selectedPath);
+    void addChartDirectory(const QString& path);
 
+    miacode::v2::UiRequestService uiRequests_;
     MainWindow* backend_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;

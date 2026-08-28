@@ -1,6 +1,7 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QQmlComponent>
+#include <QVariantMap>
 #include <QQmlEngine>
 #include <QQuickStyle>
 #include <QTextStream>
@@ -33,8 +34,24 @@ Item {
     height: 700
 
     QtObject {
+        id: fakeRequests
+        objectName: "fakeUiRequests"
+        signal fileRequested(string requestId, var request)
+        signal noticeRequested(var notice)
+        property string resolvedId: ""
+        property string resolvedPath: ""
+        property string cancelledId: ""
+        function submitFileResult(requestId, fileUrl) {
+            resolvedId = requestId
+            resolvedPath = fileUrl.toString()
+        }
+        function cancelFileRequest(requestId) { cancelledId = requestId }
+    }
+
+    QtObject {
         id: session
         objectName: "fakeExportSession"
+        property var uiRequests: fakeRequests
         property var difficulties: []
         property int selectedDifficultyId: 5
         property string activeTab: "export"
@@ -230,6 +247,93 @@ bool verifyRealExportPageControls(QTextStream& err)
     return ok;
 }
 
+// The page must own the whole pick/notice loop in QML: a service request has to
+// configure and open a real Qt Quick dialog, and the dialog's answer has to go
+// back to the service. Nothing here may reach a Widgets dialog.
+bool verifyRequestHostLoop(QTextStream& err)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    const std::unique_ptr<QObject> root = createHarness(engine, err);
+    if (!root) {
+        return false;
+    }
+    QCoreApplication::processEvents();
+
+    QObject* requests = root->findChild<QObject*>(QStringLiteral("fakeUiRequests"));
+    QObject* host = root->findChild<QObject*>(QStringLiteral("exportUiRequestHost"));
+    QObject* fileDialog = root->findChild<QObject*>(QStringLiteral("uiRequestFileDialog"));
+    QObject* folderDialog = root->findChild<QObject*>(QStringLiteral("uiRequestFolderDialog"));
+    QObject* noticeDialog = root->findChild<QObject*>(QStringLiteral("uiRequestNoticeDialog"));
+    bool ok = require(requests != nullptr && host != nullptr && fileDialog != nullptr
+                          && folderDialog != nullptr && noticeDialog != nullptr,
+                      QStringLiteral("the real export page hosts file, folder and notice dialogs"),
+                      err);
+    if (!ok) {
+        return false;
+    }
+
+    QVariantMap saveRequest;
+    saveRequest.insert(QStringLiteral("title"), QStringLiteral("Choose output"));
+    saveRequest.insert(QStringLiteral("startPath"), QStringLiteral("/tmp/out.mp4"));
+    saveRequest.insert(QStringLiteral("nameFilters"), QStringList{QStringLiteral("MP4 (*.mp4)")});
+    saveRequest.insert(QStringLiteral("saveMode"), true);
+    saveRequest.insert(QStringLiteral("selectFolder"), false);
+    QMetaObject::invokeMethod(requests, "fileRequested", Q_ARG(QString, QStringLiteral("file-1")),
+                              Q_ARG(QVariant, QVariant(saveRequest)));
+    QCoreApplication::processEvents();
+    ok &= require(host->property("activeFileRequestId").toString() == QStringLiteral("file-1")
+                      && fileDialog->property("title").toString() == QStringLiteral("Choose output")
+                      && fileDialog->property("nameFilters").toStringList()
+                          == QStringList{QStringLiteral("MP4 (*.mp4)")},
+                  QStringLiteral("a save request configures the real file dialog and records its id"),
+                  err);
+
+    QMetaObject::invokeMethod(fileDialog, "accepted");
+    QCoreApplication::processEvents();
+    ok &= require(requests->property("resolvedId").toString() == QStringLiteral("file-1")
+                      && host->property("activeFileRequestId").toString().isEmpty(),
+                  QStringLiteral("accepting the dialog returns the pick to the service and clears the id"),
+                  err);
+
+    QVariantMap folderRequest;
+    folderRequest.insert(QStringLiteral("title"), QStringLiteral("Choose folder"));
+    folderRequest.insert(QStringLiteral("startPath"), QString());
+    folderRequest.insert(QStringLiteral("nameFilters"), QStringList());
+    folderRequest.insert(QStringLiteral("saveMode"), false);
+    folderRequest.insert(QStringLiteral("selectFolder"), true);
+    QMetaObject::invokeMethod(requests, "fileRequested", Q_ARG(QString, QStringLiteral("file-2")),
+                              Q_ARG(QVariant, QVariant(folderRequest)));
+    QCoreApplication::processEvents();
+    ok &= require(host->property("activeFolderRequestId").toString() == QStringLiteral("file-2")
+                      && folderDialog->property("title").toString() == QStringLiteral("Choose folder"),
+                  QStringLiteral("a folder request routes to the folder dialog, not the file dialog"),
+                  err);
+
+    QMetaObject::invokeMethod(folderDialog, "rejected");
+    QCoreApplication::processEvents();
+    ok &= require(requests->property("cancelledId").toString() == QStringLiteral("file-2")
+                      && host->property("activeFolderRequestId").toString().isEmpty(),
+                  QStringLiteral("dismissing the folder dialog cancels the request instead of dropping it"),
+                  err);
+
+    QVariantMap notice;
+    notice.insert(QStringLiteral("severity"), QStringLiteral("warning"));
+    notice.insert(QStringLiteral("title"), QStringLiteral("Batch export"));
+    notice.insert(QStringLiteral("text"), QStringLiteral("2 of 3 exported"));
+    notice.insert(QStringLiteral("details"), QStringLiteral("failed: chart-c"));
+    QMetaObject::invokeMethod(requests, "noticeRequested", Q_ARG(QVariant, QVariant(notice)));
+    QCoreApplication::processEvents();
+    ok &= require(noticeDialog->property("title").toString() == QStringLiteral("Batch export")
+                      && noticeDialog->property("text").toString()
+                          == QStringLiteral("2 of 3 exported")
+                      && noticeDialog->property("informativeText").toString()
+                          == QStringLiteral("failed: chart-c"),
+                  QStringLiteral("a notice renders through the QML message dialog with its detail block"),
+                  err);
+    return ok;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -245,7 +349,7 @@ int main(int argc, char** argv)
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QGuiApplication app(argc, argv);
     QTextStream err(stderr);
-    const bool ok = verifyRealExportPageControls(err);
+    const bool ok = verifyRealExportPageControls(err) && verifyRequestHostLoop(err);
     if (ok) {
         QTextStream out(stdout);
         out << "qml_export_video_page_spec ok" << Qt::endl;

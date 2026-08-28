@@ -738,4 +738,9 @@ Rectangle {
         }
 
     }
+
+    UiRequestHost {
+        objectName: "exportUiRequestHost"
+        requests: root.session ? root.session.uiRequests : null
+    }
 }

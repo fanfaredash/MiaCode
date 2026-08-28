@@ -105,7 +105,12 @@
 
 ### 阶段 3 —— `ExportService` 与 Widget 对话框归零
 
-- [ ] `QmlExportSession` 的 `QFileDialog` / `QMessageBox` 换成 QML 侧 `QtQuick.Dialogs` + 结果值。
+- [x] `QmlExportSession` 的 `QFileDialog` / `QMessageBox` 换成 QML 侧 `QtQuick.Dialogs` + 结果值
+      （2026-08-29）。落点是可复用的 `miacode::v2::UiRequestService` + `components/UiRequestHost.qml`，
+      而不是导出页就地改写——B 类的 Net / 音视频处理 / 偏好设置页同样需要选文件与提示，共用这一条边界。
+      `ui_request_service_spec` 只链 `Qt6::Core` + `Qt6::Test`，所以任何把 Widgets 对话框放回这条边界的
+      改动都会**链接失败**，不依赖字符串扫描；`qml_export_video_page_spec` 驱动真实 `FileDialog` /
+      `FolderDialog` / `MessageDialog` 走完请求—应答回环。仍需原生桌面确认实际弹窗外观与取消语义。
 - [ ] 封面导出、Net 上传/下载、ZIP、批量导出重建为 QML 页面 + 无 Widgets 作业 API。
 - [ ] 删除 `VideoExportDialog` 组、`BatchExportPanel`、`ExportLauncherPage`、`CoverStudioWindow` 组、`NetBatch*Dialog`。
 - [ ] `ChartDropOverlay` 改为 QML 覆盖层。

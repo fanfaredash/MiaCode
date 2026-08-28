@@ -2,7 +2,6 @@
 
 #include "mainwindow/MainWindow.h"
 #include "mainwindow/sections/export/MainWindow.ExportSection.h"
-#include "DialogLocalization.h"
 #include "UiText.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
@@ -18,10 +17,8 @@
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QJsonObject>
-#include <QMessageBox>
 #include <QSettings>
 #include <QUrl>
 
@@ -552,21 +549,20 @@ void QmlExportSession::startExport()
         batchExportRunning_ = false;
         exportRunning_ = false;
         emit exportRunningChanged();
+        const QString batchTitle = UiText::text(QStringLiteral("dialog.batch_export.title"));
         if (!launched) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Critical,
-                backend_,
-                UiText::text(QStringLiteral("dialog.batch_export.title")),
+            uiRequests_.postNotice(
+                miacode::v2::NoticeSeverity::Error,
+                batchTitle,
                 error.isEmpty()
                     ? UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"))
                     : error);
             return;
         }
         if (result.canceled) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Information,
-                backend_,
-                UiText::text(QStringLiteral("dialog.batch_export.title")),
+            uiRequests_.postNotice(
+                miacode::v2::NoticeSeverity::Information,
+                batchTitle,
                 UiText::text(QStringLiteral("dialog.batch_export.message.canceled")));
             return;
         }
@@ -575,25 +571,22 @@ void QmlExportSession::startExport()
         };
         const QString successDetails = shortenDetails(result.exportedFiles.join(QLatin1Char('\n')));
         if (result.failedCharts.isEmpty()) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Information,
-                backend_,
-                UiText::text(QStringLiteral("dialog.batch_export.title")),
-                UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(result.successCount)
-                    + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails));
+            uiRequests_.postNotice(
+                miacode::v2::NoticeSeverity::Information,
+                batchTitle,
+                UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(result.successCount),
+                successDetails);
             return;
         }
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            backend_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
+        uiRequests_.postNotice(
+            miacode::v2::NoticeSeverity::Warning,
+            batchTitle,
             UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
-                .arg(result.successCount).arg(result.failedCharts.size())
-                + (successDetails.isEmpty() ? QString()
-                    : QStringLiteral("\n\n")
-                        + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
-                        + QStringLiteral("\n") + successDetails)
-                + QStringLiteral("\n\n") + shortenDetails(result.failedCharts.join(QLatin1Char('\n'))));
+                .arg(result.successCount).arg(result.failedCharts.size()),
+            (successDetails.isEmpty() ? QString()
+                : UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
+                    + QStringLiteral("\n") + successDetails + QStringLiteral("\n\n"))
+                + shortenDetails(result.failedCharts.join(QLatin1Char('\n'))));
         return;
     }
 
@@ -608,9 +601,8 @@ void QmlExportSession::startExport()
             buildRequestedTask(), selectedDifficultyId_, &error)) {
         exportRunning_ = false;
         emit exportRunningChanged();
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            backend_,
+        uiRequests_.postNotice(
+            miacode::v2::NoticeSeverity::Error,
             UiText::text(QStringLiteral("dialog.video_export.title")),
             error.isEmpty()
                 ? UiText::text(QStringLiteral("dialog.video_export.error.launch_failed"))
@@ -633,35 +625,43 @@ void QmlExportSession::cancelExport()
 
 void QmlExportSession::browseOutputPath()
 {
-    const QString path = QFileDialog::getSaveFileName(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.video_export.title")),
-        task_.outputPath,
-        QStringLiteral("MP4 (*.mp4)"));
-    if (!path.isEmpty()) {
-        setOutputPath(path);
-    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.video_export.title"));
+    request.startPath = task_.outputPath;
+    request.nameFilters = QStringList{QStringLiteral("MP4 (*.mp4)")};
+    request.saveMode = true;
+    uiRequests_.requestFile(request, [this](const QString& path) {
+        if (!path.isEmpty()) {
+            setOutputPath(path);
+        }
+    });
 }
 
 void QmlExportSession::browseIntroBackground()
 {
-    const QString path = QFileDialog::getOpenFileName(
-        nullptr,
-        QStringLiteral("选择片头背景"),
-        task_.intro.customBackgroundPath,
-        QStringLiteral("Images (*.png *.jpg *.jpeg *.webp)"));
-    if (!path.isEmpty()) {
-        setIntroCustomBackgroundPath(path);
-    }
+    miacode::v2::FileRequest request;
+    request.title = QStringLiteral("选择片头背景");
+    request.startPath = task_.intro.customBackgroundPath;
+    request.nameFilters = QStringList{QStringLiteral("Images (*.png *.jpg *.jpeg *.webp)")};
+    uiRequests_.requestFile(request, [this](const QString& path) {
+        if (!path.isEmpty()) {
+            setIntroCustomBackgroundPath(path);
+        }
+    });
 }
 
 void QmlExportSession::importIntroSound()
 {
-    const QString selectedPath = QFileDialog::getOpenFileName(
-        nullptr,
-        introSoundLabel(),
-        QString(),
-        QStringLiteral("Audio (*.wav *.mp3 *.ogg *.flac)"));
+    miacode::v2::FileRequest request;
+    request.title = introSoundLabel();
+    request.nameFilters = QStringList{QStringLiteral("Audio (*.wav *.mp3 *.ogg *.flac)")};
+    uiRequests_.requestFile(request, [this](const QString& path) {
+        applyIntroSoundImport(path);
+    });
+}
+
+void QmlExportSession::applyIntroSoundImport(const QString& selectedPath)
+{
     if (selectedPath.isEmpty()) {
         return;
     }
@@ -694,21 +694,29 @@ void QmlExportSession::importIntroSound()
 
 void QmlExportSession::browseBatchOutputDirectory()
 {
-    const QString path = QFileDialog::getExistingDirectory(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.batch_export.select_folder")),
-        batchOutputDirectory_);
-    if (!path.isEmpty()) {
-        setBatchOutputDirectory(path);
-    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.batch_export.select_folder"));
+    request.startPath = batchOutputDirectory_;
+    request.selectFolder = true;
+    uiRequests_.requestFile(request, [this](const QString& path) {
+        if (!path.isEmpty()) {
+            setBatchOutputDirectory(path);
+        }
+    });
 }
 
 void QmlExportSession::addChartDirectories()
 {
-    const QString path = QFileDialog::getExistingDirectory(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.batch_export.select_charts")),
-        QString());
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.batch_export.select_charts"));
+    request.selectFolder = true;
+    uiRequests_.requestFile(request, [this](const QString& path) {
+        addChartDirectory(path);
+    });
+}
+
+void QmlExportSession::addChartDirectory(const QString& path)
+{
     if (path.isEmpty() || chartDirectories_.contains(path)) {
         return;
     }
