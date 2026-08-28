@@ -89,7 +89,6 @@ class PreviewStageMediaHost;
 struct IntroBannerSpec;
 class QPlainTextEdit;
 class QProcess;
-class QProgressDialog;
 class QPropertyAnimation;
 class QResizeEvent;
 class QShortcut;
@@ -349,7 +348,6 @@ public:
     quint64 shellPreviewPaneRestoreGeneration() const override;
     double shellPreviewPaneWidthRatio() const override;
     bool shellPreviewFullscreen() const override;
-    double shellVideoExportProgressSeconds() const override;
     QObject* shellPreviewRuntimeObject() const override;
     QObject* shellPreviewStageMediaHostObject() const override;
     bool shellPreviewUsesSeparateSurface() const override;

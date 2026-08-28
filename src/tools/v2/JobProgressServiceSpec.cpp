@@ -47,9 +47,18 @@ bool verifyLifecycle(QTextStream& err)
     service.report(140, QStringLiteral("over"));
     ok &= require(service.percent() == 100, QStringLiteral("percent clamps at a hundred"), err);
 
+    service.reportIndeterminate(QStringLiteral("Encoding"));
+    ok &= require(service.indeterminate() && service.label() == QStringLiteral("Encoding"),
+                  QStringLiteral("a stage without measurable progress switches to indeterminate"),
+                  err);
+    service.report(10, QStringLiteral("Back to measured"));
+    ok &= require(!service.indeterminate() && service.percent() == 10,
+                  QStringLiteral("a measured report leaves indeterminate mode"), err);
+
     service.end();
     ok &= require(!service.active() && service.percent() == 0 && service.title().isEmpty()
-                      && service.label().isEmpty() && !service.cancellable(),
+                      && service.label().isEmpty() && !service.cancellable()
+                      && !service.indeterminate(),
                   QStringLiteral("end clears the job back to idle"), err);
 
     const int afterEnd = changed.count();
@@ -63,6 +72,7 @@ bool verifyLifecycle(QTextStream& err)
 bool verifyCooperativeCancel(QTextStream& err)
 {
     miacode::v2::JobProgressService service;
+    QSignalSpy cancellations(&service, &miacode::v2::JobProgressService::cancellationRequested);
 
     service.requestCancel();
     bool ok = require(!service.cancelRequested(),
@@ -73,18 +83,25 @@ bool verifyCooperativeCancel(QTextStream& err)
     ok &= require(!service.cancelRequested(),
                   QStringLiteral("a job declared uncancellable cannot be cancelled"), err);
 
-    service.begin(QStringLiteral("Job"), QStringLiteral("Working"), true);
+    const quint64 cancellable = service.begin(QStringLiteral("Job"), QStringLiteral("Working"), true);
     service.requestCancel();
     ok &= require(service.cancelRequested() && service.active(),
                   QStringLiteral("cancel only raises a flag; the job stays active until it stops itself"),
                   err);
+    ok &= require(cancellations.count() == 1
+                      && cancellations.at(0).at(0).toULongLong() == cancellable,
+                  QStringLiteral("cancellation names the job it belongs to, so one job cannot cancel another"),
+                  err);
+
+    service.requestCancel();
+    ok &= require(cancellations.count() == 1,
+                  QStringLiteral("a second cancel on the same job does not re-fire"), err);
 
     // The critical one: a cancel left over from the previous job must not abort
     // the next one at its first checkpoint.
-    service.begin(QStringLiteral("Next job"), QStringLiteral("Working"), true);
-    ok &= require(!service.cancelRequested(),
-                  QStringLiteral("a new job starts uncancelled even after the previous was cancelled"),
-                  err);
+    const quint64 next = service.begin(QStringLiteral("Next job"), QStringLiteral("Working"), true);
+    ok &= require(!service.cancelRequested() && next != cancellable,
+                  QStringLiteral("a new job starts uncancelled, under a fresh token"), err);
     return ok;
 }
 

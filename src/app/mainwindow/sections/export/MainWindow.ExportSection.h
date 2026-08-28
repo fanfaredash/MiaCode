@@ -78,7 +78,6 @@ public:
     );
     bool runVideoExportWorkerSync(
         const VideoExportSnapshot& snapshot,
-        QProgressDialog* progressDialog,
         bool* canceledByUser,
         QString* errorMessage,
         const std::function<void(int percent, const QString& rawMessage)>& progressCallback = {},
@@ -142,11 +141,10 @@ private:
         const BatchExportCallbacks& callbacks,
         QString* errorMessage);
     // ---- Inline export progress on the preview transport (A3 amended) ----
-    void beginInlineExportProgress();
+    void reportExportProgress(int percent, const QString& label);
     // percent < 0 keeps the current percent (label-only update); an empty
     // label keeps the current label.
-    void updateInlineExportProgress(int percent, const QString& label);
-    void endInlineExportProgress();
+    void endExportProgress();
 
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;

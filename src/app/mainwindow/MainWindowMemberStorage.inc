@@ -69,7 +69,6 @@
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QTimer* visualLayoutPersistTimer_ = nullptr;
         QObject* editorViewport_ = nullptr;
-        QProgressDialog* videoExportProgressDialog_ = nullptr;
         QPointer<QDialog> netBatchDownloadDialog_;
         QPointer<QDialog> netBatchUploadDialog_;
         QPointer<QDialog> pvBatchCompressionDialog_;
@@ -341,11 +340,8 @@
         bool videoExportWorkerSuccess_ = false;
         bool videoExportWorkerCompletionReceived_ = false;
         bool videoExportWorkerCancelRequested_ = false;
-        // Legacy inline-progress state. The embedded export panel now uses the
-        // normal QProgressDialog path; this state is still cleared defensively
-        // so any stale inline session cannot keep the panel button in cancel mode.
-        bool videoExportUseInlineProgress_ = false;
-        double videoExportInlineProgressSecond_ = -1.0;
+        // Token of the shared progress job this export owns, 0 when none.
+        quint64 videoExportJobToken_ = 0;
         // Difficulty the embedded video panel was seeded with (0 = none).
         int embeddedVideoExportDifficultyId_ = 0;
         // Export-page preview audition (2026-06-13): while the embedded video
@@ -809,7 +805,6 @@
     QTimer*& visualLayoutPersistTimer_ = ui_.visualLayoutPersistTimer_;
     QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
-    QProgressDialog*& videoExportProgressDialog_ = ui_.videoExportProgressDialog_;
     QPointer<QDialog>& netBatchDownloadDialog_ = ui_.netBatchDownloadDialog_;
     QPointer<QDialog>& netBatchUploadDialog_ = ui_.netBatchUploadDialog_;
     QPointer<QDialog>& pvBatchCompressionDialog_ = ui_.pvBatchCompressionDialog_;
@@ -910,8 +905,7 @@
     bool& videoExportWorkerSuccess_ = state_.videoExportWorkerSuccess_;
     bool& videoExportWorkerCompletionReceived_ = state_.videoExportWorkerCompletionReceived_;
     bool& videoExportWorkerCancelRequested_ = state_.videoExportWorkerCancelRequested_;
-    bool& videoExportUseInlineProgress_ = state_.videoExportUseInlineProgress_;
-    double& videoExportInlineProgressSecond_ = state_.videoExportInlineProgressSecond_;
+    quint64& videoExportJobToken_ = state_.videoExportJobToken_;
     int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
     bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
     double& exportPreviewEntrySeedSecond_ = state_.exportPreviewEntrySeedSecond_;

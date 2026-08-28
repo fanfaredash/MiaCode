@@ -1,5 +1,6 @@
 #include "QmlExportSession.h"
 
+#include "app/v2/JobProgressService.h"
 #include "mainwindow/MainWindow.h"
 #include "mainwindow/sections/export/MainWindow.ExportSection.h"
 #include "UiText.h"
@@ -530,11 +531,31 @@ void QmlExportSession::startExport()
         emit exportRunningChanged();
         MainWindow::ExportSection::BatchExportResult result;
         MainWindow::ExportSection::BatchExportCallbacks callbacks;
-        callbacks.progressChanged = [](int, const QString&) {
+        // Batch runs synchronously on the UI thread, so it reports onto the same
+        // shell overlay every other job uses. Before this the callback pumped
+        // events and threw the percentage away, leaving batch with no progress
+        // at all.
+        miacode::v2::JobProgressService* const jobProgress =
+            backend_ != nullptr ? backend_->jobProgressService() : nullptr;
+        const QString batchJobTitle = UiText::text(QStringLiteral("dialog.batch_export.title"));
+        quint64 batchJobToken = 0;
+        if (jobProgress != nullptr) {
+            batchJobToken = jobProgress->begin(
+                batchJobTitle,
+                UiText::text(QStringLiteral("export.preparing_package")),
+                /*cancellable=*/true);
+        }
+        callbacks.progressChanged = [jobProgress, batchJobToken](int percent, const QString& label) {
+            if (jobProgress != nullptr && jobProgress->token() == batchJobToken) {
+                jobProgress->report(percent, label);
+            }
             QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         };
-        callbacks.cancellationRequested = [this]() {
-            return batchCancellationRequested_;
+        callbacks.cancellationRequested = [this, jobProgress, batchJobToken]() {
+            const bool shellCancelled = jobProgress != nullptr
+                && jobProgress->token() == batchJobToken
+                && jobProgress->cancelRequested();
+            return batchCancellationRequested_ || shellCancelled;
         };
         VideoExportTask batchTask = buildRequestedTask();
         // Batch is always full-range, so keep the user's intro preference even
@@ -549,6 +570,9 @@ void QmlExportSession::startExport()
             &result,
             callbacks,
             &error);
+        if (jobProgress != nullptr && jobProgress->token() == batchJobToken) {
+            jobProgress->end();
+        }
         batchExportRunning_ = false;
         exportRunning_ = false;
         emit exportRunningChanged();

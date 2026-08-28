@@ -82,7 +82,6 @@ public:
     // no inline export progress is showing. The QML transport rides its
     // normal playback slider/time display with this value (seeking disabled
     // while active); stage/ETA text goes to the shared status bar instead.
-    virtual double shellVideoExportProgressSeconds() const { return -1.0; }
     // Export-page negative-time intro region: the preview timeline's lower bound
     // (<= 0; -introDuration while 添加片头 is on, else 0). The transport slider's
     // `from` uses this so the intro can be scrubbed/played left of chart 0.

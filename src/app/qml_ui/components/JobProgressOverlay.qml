@@ -74,6 +74,7 @@ Item {
                 width: parent.width
                 from: 0
                 to: 100
+                indeterminate: !!root.progress && root.progress.indeterminate
                 value: root.progress ? root.progress.percent : 0
             }
 

@@ -117,9 +117,15 @@
 ### 阶段 3 —— `ExportService` 与 Widget 对话框归零
 
 已建成的共享边界（`src/app/v2/`，均无 Widgets，各自有只链 `Qt6::Core`+`Qt6::Test` 的 spec）：
-`UiRequestService`（选文件 / 消息 / 带动作的消息）与 `JobProgressService`（进度 + 协作式取消）。
-`MainWindow` 持有唯一实例，`MainView.qml` 承载唯一的 `UiRequestHost` 与 `JobProgressOverlay`。
-后续每个页面复用它们，不再各写一套对话框代码。
+`UiRequestService`（选文件 / 消息 / 带动作的消息）与 `JobProgressService`（进度 + 不确定态 +
+按 token 的协作式取消）。`MainWindow` 持有唯一实例，`MainView.qml` 承载唯一的 `UiRequestHost`
+与 `JobProgressOverlay`。
+
+- [x] **进度条归一（2026-08-29）**：视频导出、批量导出、ZIP 打包、音视频处理（4 条 ffmpeg 流程）
+      现在全部走同一个 `JobProgressOverlay`。`src/app` 已无 `QProgressDialog`。同时删除了两处
+      并行进度表示：预览传输条上的 inline 导出进度（`videoExportUseInlineProgress_` 自嵌入面板
+      删除后再无人置 true）与恒返回 -1 的 `shellVideoExportProgressSeconds()`（连带去掉
+      `QuickShellController` 轮询间隔对它的依赖）。
 
 - [x] `QmlExportSession` 的 `QFileDialog` / `QMessageBox` 换成 QML 侧 `QtQuick.Dialogs` + 结果值
       （2026-08-29）。落点是可复用的 `miacode::v2::UiRequestService` + `components/UiRequestHost.qml`，

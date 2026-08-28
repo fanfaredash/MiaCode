@@ -1,3 +1,4 @@
+#include "app/v2/JobProgressService.h"
 #include "MainWindow.DialogsSection.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
@@ -300,38 +301,41 @@ bool replaceFileWithTemp(const QString& tempPath, const QString& destinationPath
     return true;
 }
 
-// Runs ffmpeg modally with a progress dialog. When `totalDurationSeconds` is
-// positive the bar tracks real percent-done — matching the video-export
-// progress UX — by reading ffmpeg's machine-readable `-progress pipe:1`
-// stream: each block carries an `out_time_us=` line (the output timestamp
-// reached so far) which, divided by the expected total duration, gives the
-// percentage. When the duration is unknown (<= 0) it falls back to an
-// indeterminate busy bar.
+// Runs ffmpeg on the shell's shared progress surface. When
+// `totalDurationSeconds` is positive the bar tracks real percent-done by
+// reading ffmpeg's machine-readable `-progress pipe:1` stream: each block
+// carries an `out_time_us=` line (the output timestamp reached so far) which,
+// divided by the expected total duration, gives the percentage. When the
+// duration is unknown (<= 0) it falls back to an indeterminate busy bar.
 bool runFfmpegBlocking(
     const QString& ffmpegPath,
     const QStringList& args,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
+    const QString& title,
     const QString& label,
     double totalDurationSeconds,
     QString* error,
     bool* cancelled = nullptr)
 {
+    if (jobProgress == nullptr) {
+        if (error != nullptr) {
+            *error = QStringLiteral("progress surface unavailable");
+        }
+        return false;
+    }
     if (cancelled != nullptr) {
         *cancelled = false;
     }
     const bool determinate = totalDurationSeconds > 0.0;
-    QProgressDialog progress(label, QString(), 0, determinate ? 100 : 0, parent);
-    progress.setWindowModality(Qt::ApplicationModal);
-    // Real Cancel button (mirrors the export flow). Clicking it asks for
-    // confirmation before actually aborting the ffmpeg process (see below).
-    progress.setCancelButtonText(UiText::text(QStringLiteral("action.cancel")));
-    progress.setMinimumDuration(0);
-    progress.setAutoClose(false);
-    progress.setAutoReset(false);
-    if (determinate) {
-        progress.setValue(0);
+    const quint64 jobToken = jobProgress->begin(title, label, /*cancellable=*/true);
+    if (!determinate) {
+        jobProgress->reportIndeterminate(label);
     }
-    progress.show();
+    const auto endJob = [jobProgress, jobToken]() {
+        if (jobProgress->token() == jobToken) {
+            jobProgress->end();
+        }
+    };
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
     QStringList progressArgs;
@@ -345,19 +349,12 @@ bool runFfmpegBlocking(
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.start(ffmpegPath, progressArgs, QIODevice::ReadOnly);
     if (!process.waitForStarted(5000)) {
+        endJob();
         if (error != nullptr) {
             *error = process.errorString();
         }
         return false;
     }
-
-    // Cancel = abort immediately (no confirmation prompt). Clicking the
-    // dialog's Cancel button just flags the loop below, which kills the ffmpeg
-    // process; the caller then surfaces a "canceled" popup.
-    bool cancelConfirmed = false;
-    QObject::connect(&progress, &QProgressDialog::canceled, &progress, [&]() {
-        cancelConfirmed = true;
-    });
 
     QString progressBuffer;
     QString stderrTail;
@@ -380,7 +377,8 @@ bool runFfmpegBlocking(
                         const double seconds = static_cast<double>(lastMicros) / 1000000.0;
                         // Cap at 99% until the process actually exits so the
                         // bar doesn't read "done" while ffmpeg is still muxing.
-                        progress.setValue(qBound(0, qRound(seconds / totalDurationSeconds * 100.0), 99));
+                        jobProgress->report(
+                            qBound(0, qRound(seconds / totalDurationSeconds * 100.0), 99), label);
                     }
                 }
             }
@@ -397,13 +395,13 @@ bool runFfmpegBlocking(
     while (process.state() != QProcess::NotRunning) {
         process.waitForReadyRead(100);
         pump();
-        // AllEvents (not ExcludeUserInputEvents) so the Cancel button receives
-        // clicks; the dialog is application-modal, so the main window stays inert.
+        // AllEvents (not ExcludeUserInputEvents) so the overlay's Cancel button
+        // receives clicks; the overlay swallows input to everything beneath it.
         QCoreApplication::processEvents(QEventLoop::AllEvents);
-        if (cancelConfirmed) {
+        if (jobProgress->cancelRequested()) {
             process.kill();
             process.waitForFinished(2000);
-            progress.close();
+            endJob();
             if (cancelled != nullptr) {
                 *cancelled = true;
             }
@@ -416,9 +414,9 @@ bool runFfmpegBlocking(
     process.waitForFinished(200);
     pump();  // drain anything emitted between the last read and exit
     if (determinate) {
-        progress.setValue(100);
+        jobProgress->report(100, label);
     }
-    progress.close();
+    endJob();
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         if (error != nullptr) {
@@ -489,7 +487,7 @@ bool probeMediaDurationSeconds(const QString& ffmpegPath, const QString& mediaPa
 bool compressVideoUnder20Mb(
     const QString& ffmpegPath,
     const QString& videoPath,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr,
     bool* preservedCompressed = nullptr)
@@ -551,7 +549,8 @@ bool compressVideoUnder20Mb(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.compressing_video")),
             UiText::text(QStringLiteral("media_tools.compressing_video")),
             durationSeconds,
             error,
@@ -604,7 +603,7 @@ bool compressVideoUnder20Mb(
 bool convertTrackTo44100Hz(
     const QString& ffmpegPath,
     const QString& trackPath,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr)
 {
@@ -633,7 +632,8 @@ bool convertTrackTo44100Hz(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.processing_audio")),
             UiText::text(QStringLiteral("media_tools.processing_audio")),
             trackDurationSeconds,
             error,
@@ -648,7 +648,7 @@ bool prependTrackSilence(
     const QString& ffmpegPath,
     const QString& trackPath,
     double silenceSeconds,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr)
 {
@@ -683,7 +683,8 @@ bool prependTrackSilence(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.processing_track_mp3")),
             UiText::text(QStringLiteral("media_tools.processing_track_mp3")),
             totalDurationSeconds,
             error,
@@ -698,7 +699,7 @@ bool prependPvBlack(
     const QString& ffmpegPath,
     const QString& pvPath,
     double silenceSeconds,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr)
 {
@@ -739,7 +740,8 @@ bool prependPvBlack(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.processing_pv_mp4")),
             UiText::text(QStringLiteral("media_tools.processing_pv_mp4")),
             totalDurationSeconds,
             error,
@@ -824,7 +826,7 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     QString error;
     bool cancelled = false;
     bool preservedCompressed = false;
-    if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled, &preservedCompressed)) {
+    if (!compressVideoUnder20Mb(ffmpegPath, videoPath, owner_.jobProgressService(), &error, &cancelled, &preservedCompressed)) {
         if (cancelled) {
             QMessageBox::information(
                 UiDialogs::effectiveParentWidget(&owner_), title,
@@ -898,7 +900,7 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
 
     QString error;
     bool cancelled = false;
-    if (!convertTrackTo44100Hz(ffmpegPath, trackPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled)) {
+    if (!convertTrackTo44100Hz(ffmpegPath, trackPath, owner_.jobProgressService(), &error, &cancelled)) {
         if (cancelled) {
             QMessageBox::information(
                 UiDialogs::effectiveParentWidget(&owner_), title,
@@ -1252,7 +1254,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
     QString error;
     bool cancelled = false;
     const QWidget* parent = UiDialogs::effectiveParentWidget(&owner_);
-    if (isTrack && !prependTrackSilence(ffmpegPath, trackPath, silenceSeconds, const_cast<QWidget*>(parent), &error, &cancelled)) {
+    if (isTrack && !prependTrackSilence(ffmpegPath, trackPath, silenceSeconds, owner_.jobProgressService(), &error, &cancelled)) {
         if (cancelled) {
             QMessageBox::information(
                 UiDialogs::effectiveParentWidget(&owner_), title,
@@ -1267,7 +1269,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
         reloadPreviewMediaAfterFileOperation(isTrack);
         return;
     }
-    if (!isTrack && !prependPvBlack(ffmpegPath, videoPath, silenceSeconds, const_cast<QWidget*>(parent), &error, &cancelled)) {
+    if (!isTrack && !prependPvBlack(ffmpegPath, videoPath, silenceSeconds, owner_.jobProgressService(), &error, &cancelled)) {
         if (cancelled) {
             QMessageBox::information(
                 UiDialogs::effectiveParentWidget(&owner_), title,

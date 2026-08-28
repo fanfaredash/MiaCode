@@ -98,7 +98,6 @@
 #include <QPlatformSurfaceEvent>
 #include <QPropertyAnimation>
 #include <QProcess>
-#include <QProgressDialog>
 #include <QPushButton>
 #include <QEasingCurve>
 #include <QResizeEvent>

@@ -779,7 +779,6 @@ bool MainWindow::ExportSection::runBatchExport(
         };
         if (!runVideoExportWorkerSync(
                 snapshot,
-                nullptr,
                 &canceledThisItem,
                 &failureText,
                 updateBatchProgress,
@@ -863,10 +862,8 @@ bool MainWindow::ExportSection::launchQmlVideoExport(
     VideoExportTask task = requestedTask;
     applySharedExportTaskSettings(task);
     VideoExportSnapshot snapshot;
-    owner_.videoExportUseInlineProgress_ = false;
     if (!buildVideoExportSnapshot(task, &snapshot, errorMessage, difficultyId)
         || !launchVideoExportWorker(snapshot, errorMessage)) {
-        owner_.videoExportUseInlineProgress_ = false;
         return false;
     }
     return true;
