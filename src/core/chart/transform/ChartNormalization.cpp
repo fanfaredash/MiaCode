@@ -12,6 +12,38 @@
 #include "core/chart/transform/Non384SnapTable.h"
 
 namespace miacode::chart_transform {
+
+namespace {
+
+bool selectionStartsAtLineStart(const QString& text, int selectionStart)
+{
+    return selectionStart <= 0 || text.at(selectionStart - 1) == QLatin1Char('\n');
+}
+
+bool selectionEndsAtLineBoundary(const QString& text, int selectionEnd)
+{
+    return selectionEnd >= text.size()
+        || (selectionEnd < text.size() && text.at(selectionEnd) == QLatin1Char('\n'))
+        || (selectionEnd > 0 && text.at(selectionEnd - 1) == QLatin1Char('\n'));
+}
+
+}  // namespace
+
+QString composeNormalizedSelectionReplacement(
+    const QString& original,
+    int selectionStart,
+    int selectionEnd,
+    const QString& normalizedText)
+{
+    QString replacement = normalizedText;
+    if (!selectionStartsAtLineStart(original, selectionStart)) {
+        replacement.prepend(QStringLiteral("\n\n"));
+    }
+    if (!selectionEndsAtLineBoundary(original, selectionEnd)) {
+        replacement.append(QLatin1Char('\n'));
+    }
+    return replacement;
+}
 namespace {
 
 constexpr double kNormalizationEpsilon = 1e-6;

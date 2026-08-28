@@ -169,34 +169,6 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     return result;
 }
 
-bool selectionStartsAtLineStart(const QString& text, int selectionStart)
-{
-    return selectionStart <= 0 || text.at(selectionStart - 1) == QLatin1Char('\n');
-}
-
-bool selectionEndsAtLineBoundary(const QString& text, int selectionEnd)
-{
-    return selectionEnd >= text.size()
-        || (selectionEnd < text.size() && text.at(selectionEnd) == QLatin1Char('\n'))
-        || (selectionEnd > 0 && text.at(selectionEnd - 1) == QLatin1Char('\n'));
-}
-
-QString composeNormalizedSelectionReplacement(
-    const QString& original,
-    int selectionStart,
-    int selectionEnd,
-    const QString& normalizedText)
-{
-    QString replacement = normalizedText;
-    if (!selectionStartsAtLineStart(original, selectionStart)) {
-        replacement.prepend(QStringLiteral("\n\n"));
-    }
-    if (!selectionEndsAtLineBoundary(original, selectionEnd)) {
-        replacement.append(QLatin1Char('\n'));
-    }
-    return replacement;
-}
-
 }  // namespace
 
 QString MainWindow::DocumentSection::resolveInitialOpenDirectory() const
@@ -438,7 +410,8 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
         return;
     }
 
-    const QString replacement = composeNormalizedSelectionReplacement(original, begin, finish, normalized.text);
+    const QString replacement = miacode::chart_transform::composeNormalizedSelectionReplacement(
+        original, begin, finish, normalized.text);
     if (replacement == original.mid(begin, finish - begin)) {
         owner_.statusBar()->showMessage(
             UiText::text(QStringLiteral("status.normalize.already_normalized"))
