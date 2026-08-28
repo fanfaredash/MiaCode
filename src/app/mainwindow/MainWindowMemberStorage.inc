@@ -13,7 +13,6 @@
         QAction* preferencesAction_ = nullptr;
         QAction* saveAsAction_ = nullptr;
         QAction* packAsZipAction_ = nullptr;
-        QAction* netBatchDownloadAction_ = nullptr;
         QAction* transformMirrorLeftRightAction_ = nullptr;
         QAction* transformMirrorUpDownAction_ = nullptr;
         QAction* transformRotate180Action_ = nullptr;
@@ -69,8 +68,6 @@
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QTimer* visualLayoutPersistTimer_ = nullptr;
         QObject* editorViewport_ = nullptr;
-        QPointer<QDialog> netBatchDownloadDialog_;
-        QPointer<QDialog> netBatchUploadDialog_;
         QPointer<QDialog> pvBatchCompressionDialog_;
         QPointer<QLabel> aboutIconLabel_;
         QWidget* welcomePage_ = nullptr;
@@ -748,7 +745,6 @@
     QAction*& preferencesAction_ = ui_.preferencesAction_;
     QAction*& saveAsAction_ = ui_.saveAsAction_;
     QAction*& packAsZipAction_ = ui_.packAsZipAction_;
-    QAction*& netBatchDownloadAction_ = ui_.netBatchDownloadAction_;
     QAction*& transformMirrorLeftRightAction_ = ui_.transformMirrorLeftRightAction_;
     QAction*& transformMirrorUpDownAction_ = ui_.transformMirrorUpDownAction_;
     QAction*& transformRotate180Action_ = ui_.transformRotate180Action_;
@@ -805,8 +801,6 @@
     QTimer*& visualLayoutPersistTimer_ = ui_.visualLayoutPersistTimer_;
     QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
-    QPointer<QDialog>& netBatchDownloadDialog_ = ui_.netBatchDownloadDialog_;
-    QPointer<QDialog>& netBatchUploadDialog_ = ui_.netBatchUploadDialog_;
     QPointer<QDialog>& pvBatchCompressionDialog_ = ui_.pvBatchCompressionDialog_;
     QPointer<QLabel>& aboutIconLabel_ = ui_.aboutIconLabel_;
     QSoundEffect*& invalidStarPreviewEnableSound_ = state_.invalidStarPreviewEnableSound_;

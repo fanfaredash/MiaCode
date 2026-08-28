@@ -18,7 +18,6 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "extensions/ExtensionManager.h"
 #include "tools/latency/LatencyDetectionPage.h"
-#include "tools/net/NetBatchUploadDialog.h"
 #include "tools/media/PvBatchCompressionDialog.h"
 #include "app/ui/AppBackgroundPainter.h"
 
@@ -1000,9 +999,6 @@ void MainWindow::WindowSection::applyUiTheme()
         // Theme-aware card/label colors are frozen at construction otherwise —
         // re-apply so the BPM & latency page follows light/dark switches too.
         owner_.latencyDetectionPage_->applyThemeStyles();
-    }
-    if (!owner_.netBatchUploadDialog_.isNull()) {
-        static_cast<miacode::net::NetBatchUploadDialog*>(owner_.netBatchUploadDialog_.data())->applyThemeStyles();
     }
     if (!owner_.pvBatchCompressionDialog_.isNull()) {
         static_cast<miacode::media::PvBatchCompressionDialog*>(owner_.pvBatchCompressionDialog_.data())->applyThemeStyles();

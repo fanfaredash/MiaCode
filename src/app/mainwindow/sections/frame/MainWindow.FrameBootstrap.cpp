@@ -225,10 +225,6 @@ MainWindow::MainWindow(QWidget* parent)
         QAction* exportCoverAction = toolsMenu->addAction(UiText::text(QStringLiteral("action.export_cover")));
         connect(exportCoverAction, &QAction::triggered, this, &MainWindow::onExportCover);
     }
-    if (netBatchDownloadAction_ != nullptr) {
-        toolsMenu->addSeparator();
-        toolsMenu->addAction(netBatchDownloadAction_);
-    }
     extensionManager_ = std::make_unique<miacode::extensions::ExtensionManager>(this);
     miacode::extensions::ExtensionHostCallbacks extensionCallbacks;
     extensionCallbacks.activeDocument = [this]() {
@@ -1307,11 +1303,6 @@ MainWindow::MainWindow(QWidget* parent)
 
     if (normalizeWholeChartAction_ != nullptr) {
         toolboxMenu_->addAction(normalizeWholeChartAction_);
-    }
-
-    if (netBatchDownloadAction_ != nullptr) {
-        toolboxMenu_->addSeparator();
-        toolboxMenu_->addAction(netBatchDownloadAction_);
     }
 
     // Copy Area is intentionally hidden from the toolbox per the toolbox

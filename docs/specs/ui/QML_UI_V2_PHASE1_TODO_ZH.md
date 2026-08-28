@@ -32,7 +32,7 @@
 | 隐藏 `PlainCodeEditor` | 仍在 `FrameBootstrap.cpp:291` 构造；**20 个文件**仍引用 | `src/editor/`、`src/app/mainwindow/sections/*` |
 | `QuickShellController` | 1,251 行（`src/app/quick_shell/` 全目录）；`surfaceHost_` 分支已归零；**`refreshTimer_` 轮询仍在**（`QuickShellController.cpp:71/82-84/693-699`） | — |
 | QML 仍消费的 controller 属性/方法 | **25 个**（`shellController.*`） | `src/app/qml_ui/**/*.qml` |
-| Widget UI 代码量 | cover_export **5,780** / net **1,479** / latency **1,040** / media **393**<br>*（2026-08-29 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691）* | `src/tools/*` |
+| Widget UI 代码量 | cover_export **5,780** / latency **1,040** / media **393**<br>*（2026-08-29 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479）* | `src/tools/*` |
 
 ### v2 自身新代码里的 Widgets 泄漏（优先清）
 
@@ -65,8 +65,7 @@
 | 延迟校准 | `ToolsSidebarPage.qml` → `openLatencyPage()` | `LatencyDetectionPage`（`WindowContainer` 宿主，1,040 行） |
 | 音视频处理 | → `openMediaProcessingTools()` | `MainWindow::onMediaProcessingTools()` → `PvBatchCompressionDialog` |
 | 整谱规范化 | → `openNormalizeWholeChart()` | `MainWindow::onNormalizeWholeChart()` |
-| Net 批量下载 | → `openNetBatchDownload()` | `NetBatchDownloadDialog`　**（2026-08-29 决定：不做原生化）** |
-| Net 批量上传 | → `openNetBatchUpload()` | `NetBatchUploadDialog`　**（2026-08-29 决定暂缓）** |
+| ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
 | 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（5,780 行） |
 | ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
 | 偏好设置 | `QmlCommandService::openPreferences()` | `MainWindow::onPreferences()` |
@@ -79,12 +78,10 @@
 > 必须在本批工作中改齐，否则只读架构文档的人会做反。
 >
 > **排期决定（2026-08-29 所有者）：**
-> - **Net 批量下载：不做原生化**，保留现有 Widget 实现。
-> - **Net 批量上传：暂缓。**
+> - **Net：功能暂时移除。** 入口与两个 Widget 对话框已删除；`src/tools/net` 的引擎部分保留。
 > - **封面导出：放到最后做**（本批最末一项，不是取消）。
 >
-> `Qt6::Widgets` 的最终摘除依赖这三项，所以阶段 4 的完成标志目前被它们挡住——这是排期结果，
-> 不是"还没轮到"。
+> `Qt6::Widgets` 的最终摘除现在只剩封面导出、音视频处理、偏好设置、延迟校准四项挡着。
 
 ### C. 已是 QML 页面，但仍借 Widgets 完成子流程（1 项）
 

@@ -35,8 +35,6 @@ public:
     Q_INVOKABLE bool leaveOverlayPage();
     Q_INVOKABLE void openMediaProcessingTools();
     Q_INVOKABLE void openNormalizeWholeChart();
-    Q_INVOKABLE void openNetBatchDownload();
-    Q_INVOKABLE void openNetBatchUpload();
     Q_INVOKABLE void openBatchExport();
     Q_INVOKABLE void openCoverExport();
     Q_INVOKABLE void packAsZip();

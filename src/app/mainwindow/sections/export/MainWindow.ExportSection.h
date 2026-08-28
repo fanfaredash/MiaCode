@@ -39,8 +39,6 @@ public:
                               const QString& chartPath,
                               const QString& dialogTitle,
                               const QString& pickedPath);
-    void onNetBatchDownload();
-    void onNetBatchUpload();
     // ---- QML export shell (v2) ----
     VideoExportTask buildVideoExportSeedTaskPublic(int difficultyId = 0);
     bool startQmlExportAudition(int difficultyId, const VideoExportTask& visualTask);

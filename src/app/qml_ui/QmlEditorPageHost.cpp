@@ -350,26 +350,6 @@ void QmlEditorPageHost::openNormalizeWholeChart()
     }
 }
 
-void QmlEditorPageHost::openNetBatchDownload()
-{
-    if (overlayActive()) {
-        leaveOverlayPage();
-    }
-    if (backend_ != nullptr) {
-        backend_->onNetBatchDownload();
-    }
-}
-
-void QmlEditorPageHost::openNetBatchUpload()
-{
-    if (overlayActive()) {
-        leaveOverlayPage();
-    }
-    if (backend_ != nullptr) {
-        backend_->onNetBatchUpload();
-    }
-}
-
 void QmlEditorPageHost::openBatchExport()
 {
     openVideoExportPage(QStringLiteral("batch"));

@@ -391,11 +391,6 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     );
     connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
 
-    owner_.netBatchDownloadAction_ = new QAction(
-        UiText::text(QStringLiteral("net.net_batch_download_action")),
-        &owner_
-    );
-    connect(owner_.netBatchDownloadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchDownload);
     owner_.normalizeWholeChartAction_ = new QAction(
         UiText::text(QStringLiteral("menu.format_chart")),
         &owner_
