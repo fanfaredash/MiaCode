@@ -12,7 +12,7 @@
 class MainWindow;
 
 // Pure-QML export settings session for the v2 shell. Does not host or modify
-// VideoExportDialog / ExportLauncherPage. Drives audition + worker launch via
+// VideoExportDialog. Drives audition + worker launch via
 // MainWindow::ExportSection.
 class QmlExportSession final : public QObject
 {

@@ -26,11 +26,6 @@ void MainWindow::setQuickShellBackendActive(bool active)
     }
 }
 
-void MainWindow::setQmlExportCenterActive(bool active)
-{
-    qmlExportCenterActive_ = active;
-}
-
 bool MainWindow::shellTimelineSurfaceReady() const
 {
     return quickTimelineSurfaceReady_;

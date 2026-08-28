@@ -61,9 +61,6 @@ namespace miacode::latency {
 class LatencySandboxController;
 class LatencyDetectionPage;
 }
-namespace miacode::export_page {
-class ExportLauncherPage;
-}
 namespace miacode::video_export {
 class BatchExportPanel;
 }
@@ -138,7 +135,6 @@ class MainWindow : public QMainWindow,
     // with an explicitly selected difficulty and reads document/difficulty
     // state for its badge row — same narrow-feature rationale as the
     // latency page above.
-    friend class miacode::export_page::ExportLauncherPage;
     friend class QmlCommandService;
     friend class QmlEditorPageHost;
     friend class QmlExportSession;
@@ -300,10 +296,6 @@ public:
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellBackendActive(bool active);
-    // QmlUi v2 owns the export center in pure QML. QuickShell / classic Widgets
-    // still enter ExportLauncherPage via onPageEntered.
-    void setQmlExportCenterActive(bool active);
-    bool qmlExportCenterActive() const { return qmlExportCenterActive_; }
     void preparePreviewForShutdown();
     bool shellTimelineSurfaceReady() const override;
     void noteQuickTimelineSurfaceReady();

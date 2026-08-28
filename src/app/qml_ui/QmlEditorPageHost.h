@@ -10,7 +10,7 @@ class QBoxLayout;
 class QWidget;
 
 // Hosts v1 LatencyDetectionPage inside the v2 editor area via WindowContainer.
-// Video export uses pure QML (QmlExportSession + ExportVideoPage) — ExportLauncherPage
+// Video export uses pure QML (QmlExportSession + ExportVideoPage) — no Widgets page
 // is never attached in the QML shell.
 class QmlEditorPageHost final : public QObject
 {

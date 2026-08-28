@@ -17,7 +17,6 @@
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "extensions/ExtensionManager.h"
-#include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/net/NetBatchUploadDialog.h"
 #include "tools/media/PvBatchCompressionDialog.h"
@@ -1003,9 +1002,6 @@ void MainWindow::WindowSection::applyUiTheme()
         // Theme-aware card/label colors are frozen at construction otherwise —
         // re-apply so the BPM & latency page follows light/dark switches too.
         owner_.latencyDetectionPage_->applyThemeStyles();
-    }
-    if (owner_.exportPage_ != nullptr) {
-        owner_.exportPage_->applyThemeStyles();
     }
     if (!owner_.embeddedVideoExportPanel_.isNull()) {
         // The export hub's embedded video panel bakes its stylesheets/icons at

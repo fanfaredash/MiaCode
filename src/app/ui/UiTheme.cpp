@@ -790,7 +790,6 @@ QString exportLauncherPageStyleSheet()
         // on a theme switch. The page is otherwise transparent (flat redesign),
         // which left the header/sub-nav band showing through to whatever painted
         // behind it. Mirrors the metadata page's `#MetadataPage { background }`.
-        "QWidget#ExportLauncherPage { background: %7; }"
         "QLabel[role=\"disabledReason\"] {"
         " color: %4;"
         "}"

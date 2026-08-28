@@ -32,13 +32,13 @@
 | 隐藏 `PlainCodeEditor` | 仍在 `FrameBootstrap.cpp:291` 构造；**20 个文件**仍引用 | `src/editor/`、`src/app/mainwindow/sections/*` |
 | `QuickShellController` | 1,251 行（`src/app/quick_shell/` 全目录）；`surfaceHost_` 分支已归零；**`refreshTimer_` 轮询仍在**（`QuickShellController.cpp:71/82-84/693-699`） | — |
 | QML 仍消费的 controller 属性/方法 | **25 个**（`shellController.*`） | `src/app/qml_ui/**/*.qml` |
-| Widget UI 代码量 | cover_export **5,780** / video_export dialog 组 **5,508**（另 `BatchExportPanel` 716） / net **1,479** / latency **1,040** / export_page **738** / media **393** | `src/tools/*` |
+| Widget UI 代码量 | cover_export **5,780** / video_export dialog 组 **5,508**（另 `BatchExportPanel` 716） / net **1,479** / latency **1,040** / media **393**<br>*（export_page 738 已于 2026-08-29 删除）* | `src/tools/*` |
 
 ### v2 自身新代码里的 Widgets 泄漏（优先清）
 
 | 位置 | 内容 |
 |---|---|
-| `src/app/qml_ui/export/QmlExportSession.cpp` | `QFileDialog` ×5（:636/:648/:660/:697/:708）、`QMessageBox` ×5（:557/:567/:579/:587/:612） |
+| ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**，改走 `UiRequestService` |
 | `src/app/qml_ui/QmlEditorPageHost.*` | `QWidget` 宿主表面 + `WindowContainer` 适配（`MainSplitView.qml:192`） |
 | `src/app/ui/ChartDropOverlay.h:7` | `class ChartDropOverlay final : public QWidget`，被 v2 root window 拖放路径使用 |
 
@@ -83,7 +83,15 @@
 
 ### D. 影子 Widget 状态（无用户入口，但仍在链上）
 
-- `ExportLauncherPage`（738 行）在 `FrameBootstrap.cpp:932` 构造并加入 `editorStack_`；QML 的 `switchToExportField()` 仍依赖它维护导出难度选择（`DocumentUi.cpp:303/752/905/1087/1105`）。它不是死代码，是阶段 3 必须一起搬的隐藏状态源。
+- [x] `ExportLauncherPage`（738 行）已删除（2026-08-29）。导出难度的真相移到 `QmlExportSession`：
+      `resolveToolsMenuExportDifficultyId()` 现在读 `pageSessionActive() + selectedDifficultyId()`，
+      原先的 `menuActionDifficultyId()` / `selectedDifficultyId()` 两级回退只差一个会话门控，合并为一处。
+      同时删掉恒真的 `qmlExportCenterActive_` 标志——它只在 `QmlUiBootstrap` 里被置 true，v1 外壳删除后
+      它守护的每个 `else` 分支都是死代码。隐藏 `editorStack_` 里换成一个空 `QWidget` 占位：
+      `PreviewPlaybackGlue.cpp:42` 等 7 处仍在用 `currentWidget() == chartPage_/metadataPage_`
+      判断"当前是哪个字段"，若导出页不再占据栈位，这些判断会在导出页上误判。
+      **本项没有新增行为 spec**（`MainWindow` 无法实例化）；保证来自编译、`export_page` 零引用，
+      以及全量 CTest 未新增失败。导出难度在 Tools 菜单各动作里的实际取值仍需原生桌面确认。
 
 ## 4. 阶段任务与完成标志
 
@@ -112,7 +120,8 @@
       改动都会**链接失败**，不依赖字符串扫描；`qml_export_video_page_spec` 驱动真实 `FileDialog` /
       `FolderDialog` / `MessageDialog` 走完请求—应答回环。仍需原生桌面确认实际弹窗外观与取消语义。
 - [ ] 封面导出、Net 上传/下载、ZIP、批量导出重建为 QML 页面 + 无 Widgets 作业 API。
-- [ ] 删除 `VideoExportDialog` 组、`BatchExportPanel`、`ExportLauncherPage`、`CoverStudioWindow` 组、`NetBatch*Dialog`。
+- [ ] 删除 `VideoExportDialog` 组、`BatchExportPanel`、`CoverStudioWindow` 组、`NetBatch*Dialog`。
+      *（`ExportLauncherPage` 已于 2026-08-29 删除。）*
 - [ ] `ChartDropOverlay` 改为 QML 覆盖层。
 - **完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui` 为空。
 

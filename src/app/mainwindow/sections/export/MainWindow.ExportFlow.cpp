@@ -19,7 +19,7 @@
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
-#include "tools/export_page/ExportLauncherPage.h"
+#include "app/qml_ui/export/QmlExportSession.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/BatchExportPanel.h"
@@ -1229,11 +1229,13 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
     Q_UNUSED(difficultyId);
     // The Tools menu follows the same embedded page route as clicking the
     // Batch Export sub-nav. It deliberately never constructs a modal dialog.
-    if (owner_.documentSection_ != nullptr && owner_.documentSection_->switchToExportField()) {
-        if (owner_.exportPage_ != nullptr) {
-            owner_.exportPage_->openBatchExportSubPage();
-        }
-        return;
+    // Select the tab BEFORE switching: switchToExportField defers the page
+    // build one event-loop tick, so a tab set afterwards would race it.
+    if (owner_.qmlExportSession_ != nullptr) {
+        owner_.qmlExportSession_->setActiveTab(QStringLiteral("batch"));
+    }
+    if (owner_.documentSection_ != nullptr) {
+        owner_.documentSection_->switchToExportField();
     }
 }
 

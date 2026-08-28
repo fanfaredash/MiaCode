@@ -76,7 +76,6 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
 
     backend_ = std::make_unique<MainWindow>();
     backend_->setQuickShellBackendActive(true);
-    backend_->setQmlExportCenterActive(true);
     backend_->hide();
     backend_->setVisible(false);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));

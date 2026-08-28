@@ -1,7 +1,7 @@
 #include "MainWindow.ExportSection.h"
 
 #include "../window/MainWindow.WindowSection.h"
-#include "tools/export_page/ExportLauncherPage.h"
+#include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/net/NetBatchDownloadDialog.h"
 #include "tools/net/NetBatchUploadDialog.h"
 
@@ -15,13 +15,10 @@ MainWindow::ExportSection::ExportSection(MainWindow& owner, MainWindow::MainWind
 
 int MainWindow::resolveToolsMenuExportDifficultyId() const
 {
-    if (exportPage_ != nullptr) {
-        const int pageDifficultyId = exportPage_->menuActionDifficultyId();
-        if (SimaiDocument::isDifficultyId(pageDifficultyId)
-            && document_.difficulty(pageDifficultyId) != nullptr) {
-            return pageDifficultyId;
-        }
-        const int selectedDifficultyId = exportPage_->selectedDifficultyId();
+    // While the export page is open it owns the difficulty the Tools-menu
+    // export actions apply to; MainWindow keeps activeDifficultyId_ == 0 there.
+    if (qmlExportSession_ != nullptr && qmlExportSession_->pageSessionActive()) {
+        const int selectedDifficultyId = qmlExportSession_->selectedDifficultyId();
         if (SimaiDocument::isDifficultyId(selectedDifficultyId)
             && document_.difficulty(selectedDifficultyId) != nullptr) {
             return selectedDifficultyId;

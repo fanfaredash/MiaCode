@@ -81,7 +81,10 @@
         QLabel* metadataEmptyHintLabel_ = nullptr;
         QWidget* chartPage_ = nullptr;
         miacode::latency::LatencyDetectionPage* latencyDetectionPage_ = nullptr;
-        miacode::export_page::ExportLauncherPage* exportPage_ = nullptr;
+        // Empty stand-in for the export field. The export centre itself is
+        // pure QML; this only keeps the hidden stack's page identity distinct
+        // so "is the chart / metadata field current" stays answerable.
+        QWidget* exportPlaceholderPage_ = nullptr;
         QmlExportSession* qmlExportSession_ = nullptr;
         // E-C embedded video-export panel: a VideoExportDialog in embedded
         // panel mode, hosted inside the Export hub page's video sub-page.
@@ -212,7 +215,6 @@
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
         TimelineQuickStateBridge* timelineQuickStateBridge_ = nullptr;
         bool quickShellBackendActive_ = false;
-        bool qmlExportCenterActive_ = false;
         bool quickShellUiFocusBridgeMode_ = false;
         bool quickTimelineSurfaceReady_ = false;
         quint64 deferredTimelineBridgeFlushGeneration_ = 0;
@@ -721,7 +723,6 @@
     QuickShellPreviewCompositeSurface*& quickShellPreviewCompositeSurface_ = state_.quickShellPreviewCompositeSurface_;
     TimelineQuickStateBridge*& timelineQuickStateBridge_ = state_.timelineQuickStateBridge_;
     bool& quickShellBackendActive_ = state_.quickShellBackendActive_;
-    bool& qmlExportCenterActive_ = state_.qmlExportCenterActive_;
     bool& quickShellUiFocusBridgeMode_ = state_.quickShellUiFocusBridgeMode_;
     bool& quickTimelineSurfaceReady_ = state_.quickTimelineSurfaceReady_;
     quint64& deferredTimelineBridgeFlushGeneration_ = state_.deferredTimelineBridgeFlushGeneration_;
@@ -1099,7 +1100,7 @@
     QLabel*& welcomeEmptyHintLabel_ = ui_.welcomeEmptyHintLabel_;
     QWidget*& metadataPage_ = ui_.metadataPage_;
     miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
-    miacode::export_page::ExportLauncherPage*& exportPage_ = ui_.exportPage_;
+    QWidget*& exportPlaceholderPage_ = ui_.exportPlaceholderPage_;
     QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
     QPointer<VideoExportDialog>& embeddedVideoExportPanel_ = ui_.embeddedVideoExportPanel_;
     QPointer<miacode::video_export::BatchExportPanel>& embeddedBatchExportPanel_ = ui_.embeddedBatchExportPanel_;

@@ -193,7 +193,7 @@ BatchExportPanel::BatchExportPanel(
     setObjectName(QStringLiteral("EmbeddedBatchExportPanel"));
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     rootLayout_ = new QVBoxLayout(this);
-    // ExportLauncherPage already applies the common 4px panel-host inset.
+    // The panel host already applies the common 4px inset.
     // Adding it again here made the batch tab strip sit below the ordinary
     // embedded video-export tab strip.
     rootLayout_->setContentsMargins(0, 0, 0, 0);

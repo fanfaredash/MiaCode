@@ -21,7 +21,6 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
-#include "tools/export_page/ExportLauncherPage.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/muri/MuriAnalyzer.h"
@@ -300,8 +299,8 @@ void MainWindow::DocumentSection::syncEditorHeaderMinimumWidth()
                 return 0;
             }
             int difficultyId = state_.activeDifficultyId_;
-            if (!SimaiDocument::isDifficultyId(difficultyId) && ui_.exportPage_ != nullptr) {
-                difficultyId = ui_.exportPage_->selectedDifficultyId();
+            if (!SimaiDocument::isDifficultyId(difficultyId) && ui_.qmlExportSession_ != nullptr) {
+                difficultyId = ui_.qmlExportSession_->selectedDifficultyId();
             }
             const QString labelText = SimaiDocument::isDifficultyId(difficultyId)
                 ? SimaiDocument::difficultyShortName(difficultyId)
@@ -749,9 +748,6 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     // The export page derives its difficulty badges + card availability from
     // the same document state this sidebar reflects — refresh it on the same
     // triggers (document load, difficulty add/delete, page switches). Cheap.
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->refreshFromDocument();
-    }
 }
 
 void MainWindow::DocumentSection::populateMetadataPage()
@@ -902,10 +898,7 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     // Leaving the export page (possibly) — tear down its embedded video
     // panel unconditionally (idempotent), same pattern as the latency
     // onPageLeft calls in the other switch functions.
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -950,7 +943,7 @@ bool MainWindow::DocumentSection::switchToExportField()
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
-    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr) {
+    if (ui_.exportPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return false;
     }
     // The export page is noticeably slow to switch to — building its embedded
@@ -1026,7 +1019,7 @@ void MainWindow::tickOutlineBusySpinner()
 
 void MainWindow::DocumentSection::performSwitchToExportField()
 {
-    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr) {
+    if (ui_.exportPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return;
     }
     // Captured BEFORE the reset below: seeds the page's difficulty badge
@@ -1041,7 +1034,7 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // it stopped playback with keepPosition=true, so qtPreviewPauseSecond_ still
     // holds the last position — carry it into the export page too. Source detected
     // from the stack (currentWidget is still the page we're LEAVING; the switch to
-    // exportPage_ happens later), because activeOutlineKey_ was already overwritten
+    // the export field happens later), because activeOutlineKey_ was already overwritten
     // with the destination by the sidebar handler. A stale cross-file value is
     // guarded by loadDocument resetting qtPreviewPauseSecond_ to 0.
     const bool leavingMetadataPage = ui_.editorStack_ != nullptr
@@ -1067,10 +1060,7 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1084,7 +1074,7 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     state_.activeOutlineKey_ = "export";
     owner_.tickOutlineBusySpinner();
     populateMetadataPage();  // keeps document fields in sync for sidebar use
-    ui_.editorStack_->setCurrentWidget(ui_.exportPage_);
+    ui_.editorStack_->setCurrentWidget(ui_.exportPlaceholderPage_);
     setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
@@ -1097,12 +1087,8 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // The expensive part — building the embedded video panel — happens inside
     // onPageEntered. It ticks the spinner at its own sub-step boundaries so the
     // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
-    // QmlUi v2 owns a pure-QML export center; classic / QuickShell still enter
-    // ExportLauncherPage so the Widgets hub panels stay intact.
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->enter(previousActiveDifficultyId);
-    } else if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
     }
     owner_.tickOutlineBusySpinner();
     // Entering the export page changes the preview aspect (square → export video
@@ -1131,10 +1117,7 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1188,10 +1171,7 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1284,10 +1264,7 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();

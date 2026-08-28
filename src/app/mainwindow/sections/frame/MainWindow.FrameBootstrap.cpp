@@ -39,7 +39,6 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
-#include "tools/export_page/ExportLauncherPage.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/latency/LatencySandboxController.h"
@@ -929,8 +928,8 @@ MainWindow::MainWindow(QWidget* parent)
     editorStack_->addWidget(metadataPage_);
     ui_.latencyDetectionPage_ = new miacode::latency::LatencyDetectionPage(this);
     editorStack_->addWidget(ui_.latencyDetectionPage_);
-    ui_.exportPage_ = new miacode::export_page::ExportLauncherPage(this);
-    editorStack_->addWidget(ui_.exportPage_);
+    ui_.exportPlaceholderPage_ = new QWidget(this);
+    editorStack_->addWidget(ui_.exportPlaceholderPage_);
     ui_.qmlExportSession_ = new QmlExportSession(*this, this);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
