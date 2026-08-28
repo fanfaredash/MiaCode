@@ -334,6 +334,23 @@ Rectangle {
         root.viewState.editorCursorColumn = lines[lines.length - 1].length + 1
     }
 
+    // Human-readable summary of what normalize will act on.
+    function selectionDescription() {
+        if (sourceArea.selectionStart === sourceArea.selectionEnd)
+            return qsTr("将规范化整份谱面正文。")
+        const startLine = sourceArea.text.substring(0, sourceArea.selectionStart).split("\n").length
+        const endLine = sourceArea.text.substring(0, sourceArea.selectionEnd).split("\n").length
+        return qsTr("将规范化选中的第 %1 - %2 行。").arg(startLine).arg(endLine)
+    }
+
+    function applyNormalization(options) {
+        const transaction = root.documentSession.normalizeChartSelection(
+            sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd, options)
+        if (!transaction.consumed || !transaction.hasEdit)
+            return false
+        return root.applyEditorTransaction(transaction, false)
+    }
+
     function applyEditorTransaction(transaction, centerCursor) {
         if (!transaction.consumed)
             return false

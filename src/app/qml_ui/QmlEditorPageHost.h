@@ -34,6 +34,8 @@ public:
     Q_INVOKABLE bool openLatencyPage();
     Q_INVOKABLE bool leaveOverlayPage();
     Q_INVOKABLE void openMediaProcessingTools();
+    // Normalize acts on the editor's live selection, so the host only asks;
+    // EditorPane owns the options dialog and the transform.
     Q_INVOKABLE void openNormalizeWholeChart();
     Q_INVOKABLE void openBatchExport();
     Q_INVOKABLE void openCoverExport();
@@ -41,6 +43,7 @@ public:
     Q_INVOKABLE void syncPageSize(int width, int height);
 
 signals:
+    void normalizeWholeChartRequested();
     void activePageIdChanged();
     void pageWindowChanged();
 

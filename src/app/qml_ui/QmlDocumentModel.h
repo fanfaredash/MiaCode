@@ -129,6 +129,17 @@ public:
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
     Q_INVOKABLE void disableUnifiedDesigner();
 
+    // Normalizes the selected range (or the whole text when nothing is
+    // selected) and returns the result as a value: { ok, changed, text,
+    // selectionStart, selectionEnd, error }. It does NOT commit — the editor
+    // applies it as one of its own transactions so undo covers it.
+    Q_INVOKABLE QVariantMap normalizeChartSelection(
+        const QString& text, int anchor, int position, const QVariantMap& options) const;
+
+    // Stored normalize options, as the same map normalizeChartSelection takes.
+    Q_INVOKABLE QVariantMap normalizeOptions() const;
+    Q_INVOKABLE void setNormalizeOptions(const QVariantMap& options);
+
 signals:
     void chartTextChanged();
     void metadataChanged();

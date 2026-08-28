@@ -26,6 +26,27 @@ void MainWindow::setQuickShellBackendActive(bool active)
     }
 }
 
+miacode::chart_transform::ChartNormalizationOptions MainWindow::chartNormalizeOptions() const
+{
+    return miacode::chart_transform::ChartNormalizationOptions{
+        true,
+        chartNormalizeReduceTo384Grid_,
+        chartNormalizeSplitEveryFourMeasures_,
+        chartNormalizeSyntax_,
+        chartNormalizeSectionMeasureCount_};
+}
+
+void MainWindow::setChartNormalizeOptions(
+    const miacode::chart_transform::ChartNormalizationOptions& options)
+{
+    chartNormalizeStartAtNewMeasure_ = true;
+    chartNormalizeReduceTo384Grid_ = options.reduceTo384Grid;
+    chartNormalizeSplitEveryFourMeasures_ = options.splitEveryFourMeasures;
+    chartNormalizeSectionMeasureCount_ = options.sectionMeasureCount;
+    chartNormalizeSyntax_ = options.syntax;
+    savePortableState();
+}
+
 miacode::v2::UiRequestService* MainWindow::uiRequestService() const
 {
     return uiRequests_;

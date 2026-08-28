@@ -155,6 +155,7 @@ public:
 
 signals:
     void videoExportWorkerRunningChanged(bool running);
+    void normalizeWholeChartRequested();
     void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
@@ -299,6 +300,10 @@ public:
     void setQuickShellBackendActive(bool active);
     // Narrow public handles on the shared Widgets-free UI boundary. No new
     // friend declarations: the QML layer reaches these through the context.
+    // Whole-chart normalize options. MainWindow stays the single owner so
+    // savePortableState() remains the only writer of the stored copy.
+    miacode::chart_transform::ChartNormalizationOptions chartNormalizeOptions() const;
+    void setChartNormalizeOptions(const miacode::chart_transform::ChartNormalizationOptions& options);
     miacode::v2::UiRequestService* uiRequestService() const;
     miacode::v2::JobProgressService* jobProgressService() const;
     void preparePreviewForShutdown();

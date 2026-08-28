@@ -686,6 +686,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
     src/app/qml_ui/editor/CompletionPopup.qml
+    src/app/qml_ui/editor/NormalizeOptionsDialog.qml
     src/app/qml_ui/editor/FindReplaceBar.qml
     src/app/qml_ui/editor/BookmarkList.qml
     src/app/qml_ui/editor/LineNumberGutter.qml

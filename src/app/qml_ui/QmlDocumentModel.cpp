@@ -1,3 +1,4 @@
+#include "core/chart/transform/ChartNormalization.h"
 #include "QmlDocumentModel.h"
 
 #include "editor/BookmarkCommentSyntax.h"
@@ -646,4 +647,100 @@ QVariantList QmlDocumentModel::sourceIssuesToVariantList() const
         });
     }
     return result;
+}
+
+namespace {
+
+miacode::chart_transform::ChartNormalizationOptions normalizeOptionsFromVariant(
+    const QVariantMap& options)
+{
+    miacode::chart_transform::ChartNormalizationOptions parsed;
+    parsed.startAtNewMeasure = true;
+    parsed.reduceTo384Grid = options.value(QStringLiteral("reduceTo384Grid"), true).toBool();
+    parsed.splitEveryFourMeasures =
+        options.value(QStringLiteral("splitEveryFourMeasures"), true).toBool();
+    parsed.sectionMeasureCount = options.value(QStringLiteral("sectionMeasureCount"), 4).toInt();
+    parsed.syntax = options.value(QStringLiteral("syntax")).toString() == QStringLiteral("hinata")
+        ? miacode::chart_transform::ChartNormalizationSyntax::Hinata
+        : miacode::chart_transform::ChartNormalizationSyntax::Fpd;
+    return parsed;
+}
+
+}  // namespace
+
+QVariantMap QmlDocumentModel::normalizeChartSelection(
+    const QString& text, int anchor, int position, const QVariantMap& options) const
+{
+    // Shaped as one of SourceEditor's editor transactions so the existing apply
+    // path records it on the undo stack like any other edit.
+    QVariantMap transaction;
+    transaction.insert(QStringLiteral("consumed"), false);
+    transaction.insert(QStringLiteral("hasEdit"), false);
+    transaction.insert(QStringLiteral("undoGroup"), true);
+    if (workspace_ == nullptr) {
+        transaction.insert(QStringLiteral("error"), QStringLiteral("workspace_unavailable"));
+        return transaction;
+    }
+
+    const int begin = qBound(0, qMin(anchor, position), text.size());
+    const int end = qBound(begin, qMax(anchor, position), text.size());
+    // No selection means the whole chart, matching the Widgets entry.
+    const int selectionStart = begin == end ? 0 : begin;
+    const int selectionEnd = begin == end ? text.size() : end;
+
+    const auto normalized = miacode::chart_transform::normalizeChartSelectionText(
+        text,
+        selectionStart,
+        selectionEnd,
+        miacode::simai::buildTimingMetadata(workspace_->document()),
+        normalizeOptionsFromVariant(options));
+    if (!normalized.ok) {
+        transaction.insert(QStringLiteral("error"), normalized.errorMessage);
+        return transaction;
+    }
+
+    const QString replacement = miacode::chart_transform::composeNormalizedSelectionReplacement(
+        text, selectionStart, selectionEnd, normalized.text);
+    transaction.insert(QStringLiteral("consumed"), true);
+    if (replacement == text.mid(selectionStart, selectionEnd - selectionStart)) {
+        // Already normalized: consumed but with no edit, so the caller can say
+        // so instead of recording an undo step that changes nothing.
+        return transaction;
+    }
+
+    const int transformedEnd = selectionStart + replacement.size();
+    const bool forward = position >= anchor;
+    transaction.insert(QStringLiteral("hasEdit"), true);
+    transaction.insert(QStringLiteral("replacementStart"), selectionStart);
+    transaction.insert(QStringLiteral("replacementEnd"), selectionEnd);
+    transaction.insert(QStringLiteral("replacementText"), replacement);
+    transaction.insert(QStringLiteral("anchor"), forward ? selectionStart : transformedEnd);
+    transaction.insert(QStringLiteral("position"), forward ? transformedEnd : selectionStart);
+    return transaction;
+}
+
+QVariantMap QmlDocumentModel::normalizeOptions() const
+{
+    QVariantMap map;
+    if (backend_ == nullptr) {
+        return map;
+    }
+    const auto options = backend_->chartNormalizeOptions();
+    map.insert(QStringLiteral("reduceTo384Grid"), options.reduceTo384Grid);
+    map.insert(QStringLiteral("splitEveryFourMeasures"), options.splitEveryFourMeasures);
+    map.insert(QStringLiteral("sectionMeasureCount"), options.sectionMeasureCount);
+    map.insert(
+        QStringLiteral("syntax"),
+        options.syntax == miacode::chart_transform::ChartNormalizationSyntax::Hinata
+            ? QStringLiteral("hinata")
+            : QStringLiteral("fpd"));
+    return map;
+}
+
+void QmlDocumentModel::setNormalizeOptions(const QVariantMap& options)
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    backend_->setChartNormalizeOptions(normalizeOptionsFromVariant(options));
 }

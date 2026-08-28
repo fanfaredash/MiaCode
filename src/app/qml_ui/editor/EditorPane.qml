@@ -11,6 +11,7 @@ Rectangle {
     required property var commands
     required property var editorController
     required property var editorSync
+    required property var pages
 
     readonly property bool metadataSourceActive: viewState.metadataEditorActive
         && viewState.metadataEditorMode === 1
@@ -423,4 +424,40 @@ Rectangle {
             }
         }
     }
+    // 整谱规范化: the sidebar entry asks, this pane collects options and applies
+    // the transform as one editor transaction so undo covers it.
+    Connections {
+        target: root.pages
+        function onNormalizeWholeChartRequested() {
+            // Normalize acts on chart body. With no difficulty open (or the
+            // metadata source showing) there is nothing to act on, so the entry
+            // does nothing rather than transforming the wrong text.
+            if (!root.sourceVisible || root.metadataSourceActive)
+                return
+            const stored = root.documentSession.normalizeOptions()
+            normalizeDialog.reduceTo384Grid = stored.reduceTo384Grid
+            normalizeDialog.splitEveryFourMeasures = stored.splitEveryFourMeasures
+            normalizeDialog.sectionMeasureCount = stored.sectionMeasureCount
+            normalizeDialog.syntax = stored.syntax
+            normalizeDialog.selectionDescription = sourceEditor.selectionDescription()
+            normalizeDialog.open()
+        }
+    }
+
+    NormalizeOptionsDialog {
+        id: normalizeDialog
+        objectName: "normalizeOptionsDialog"
+
+        onAccepted: {
+            const options = {
+                reduceTo384Grid: normalizeDialog.reduceTo384Grid,
+                splitEveryFourMeasures: normalizeDialog.splitEveryFourMeasures,
+                sectionMeasureCount: normalizeDialog.sectionMeasureCount,
+                syntax: normalizeDialog.syntax
+            }
+            root.documentSession.setNormalizeOptions(options)
+            sourceEditor.applyNormalization(options)
+        }
+    }
+
 }

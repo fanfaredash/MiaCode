@@ -179,6 +179,7 @@ Item {
                         viewState: root.viewState
                         documentSession: root.documentSession
                         commands: root.commands
+                        pages: root.pages
                     }
 
                     // v2 video export center: QML chrome + ExportVideoController panel surface.

@@ -61,6 +61,11 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
     // wrap it, so it is created here in the constructor rather than lazily
     // on first use.
     ensureSurface();
+    // The menu action and the chart.normalize shortcut land on MainWindow;
+    // re-emit so the editor sees one request regardless of where it came from.
+    connect(&backend, &MainWindow::normalizeWholeChartRequested, this, [this]() {
+        openNormalizeWholeChart();
+    });
 }
 
 QmlEditorPageHost::~QmlEditorPageHost()
@@ -345,9 +350,7 @@ void QmlEditorPageHost::openNormalizeWholeChart()
     if (overlayActive()) {
         leaveOverlayPage();
     }
-    if (backend_ != nullptr) {
-        backend_->onNormalizeWholeChart();
-    }
+    emit normalizeWholeChartRequested();
 }
 
 void QmlEditorPageHost::openBatchExport()

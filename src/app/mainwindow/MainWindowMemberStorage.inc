@@ -1069,6 +1069,9 @@
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;
     bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;
     bool& chartNormalizeSplitEveryFourMeasures_ = state_.chartNormalizeSplitEveryFourMeasures_;
+    int& chartNormalizeSectionMeasureCount_ = state_.chartNormalizeSectionMeasureCount_;
+    miacode::chart_transform::ChartNormalizationSyntax& chartNormalizeSyntax_ =
+        state_.chartNormalizeSyntax_;
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;
