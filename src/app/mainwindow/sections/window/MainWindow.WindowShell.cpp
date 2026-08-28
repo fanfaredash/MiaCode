@@ -20,7 +20,6 @@
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/net/NetBatchUploadDialog.h"
 #include "tools/media/PvBatchCompressionDialog.h"
-#include "tools/video_export/VideoExportDialog.h"
 #include "app/ui/AppBackgroundPainter.h"
 
 #include <QtCore>

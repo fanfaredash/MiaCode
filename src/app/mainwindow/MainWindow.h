@@ -103,7 +103,6 @@ class PreviewAudioDeviceWatcher;
 class QtPreviewSfxRuntime;
 class TimelineQuickStateBridge;
 class QuickShellPreviewCompositeSurface;
-class VideoExportDialog;
 
 namespace miacode::waveform {
 class WaveformCacheService;

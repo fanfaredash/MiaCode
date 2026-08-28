@@ -321,11 +321,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/muri/MuriPanelEntries.cpp
     src/tools/muri/MuriStaticChecker.h
     src/tools/muri/MuriStaticChecker.cpp
-    src/tools/video_export/VideoExportDialog.h
-    src/tools/video_export/VideoExportDialog.cpp
-    src/tools/video_export/VideoExportDialog.SettingsPersistence.cpp
-    src/tools/video_export/VideoExportDialog.IntroControls.cpp
-    src/tools/video_export/VideoExportDialog.ExportFlow.cpp
     src/tools/video_export/VideoExportSettings.h
     src/tools/video_export/VideoExportSettings.cpp
     src/tools/video_export/HudFontSettings.h
@@ -347,8 +342,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportRuntimePolicy.cpp
     src/tools/video_export/VideoExportQuickRenderBackend.h
     src/tools/video_export/VideoExportQuickRenderBackend.cpp
-    src/tools/video_export/IntroPreviewWidget.h
-    src/tools/video_export/IntroPreviewWidget.cpp
     src/tools/video_export/RawVideoPipeTransport.h
     src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h

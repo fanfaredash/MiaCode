@@ -17,7 +17,6 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportRuntimePolicy.h"
-#include "tools/video_export/VideoExportDialog.h"
 
 #include <QtCore>
 #include <QtGui>

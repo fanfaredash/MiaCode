@@ -484,7 +484,7 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
         ui_.editorStack_->updateGeometry();
         // updateGeometry() alone only marks the stack's size hint dirty — it does
         // NOT re-lay-out the current page. The export page inserts a heavy embedded
-        // VideoExportDialog panel on entry, so its (and any freshly-shown page's)
+        // export page on entry, so its (and any freshly-shown page's)
         // internal layout must be invalidated + activated here, or its children
         // keep the geometry they were first built with. invalidate() clears cached
         // sizeHints so the just-inserted panel is measured fresh; activate() does a

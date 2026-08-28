@@ -35,7 +35,7 @@ public:
     void onPackAsZip();
     void onNetBatchDownload();
     void onNetBatchUpload();
-    // ---- QML export shell (v2; does not create VideoExportDialog) ----
+    // ---- QML export shell (v2) ----
     VideoExportTask buildVideoExportSeedTaskPublic(int difficultyId = 0);
     bool startQmlExportAudition(int difficultyId, const VideoExportTask& visualTask);
     void stopQmlExportAudition();
@@ -110,14 +110,9 @@ private:
     // (buildVideoExportTaskFromSnapshot). Empty when the difficulty has no
     // parseable chart body.
     QVector<TimelineNoteMarker> buildParsedMarkersForDifficulty(int difficultyId) const;
-    // Constructs a VideoExportDialog wired with the full set of live-preview
-    // callbacks + the owner-wired Gameplay injection. Shared by the modal
-    // (Tools menu) path and the embedded panel; caller owns the returned
-    // dialog.
-    VideoExportDialog* buildConfiguredVideoExportDialog(const VideoExportTask& task, QWidget* parent);
-    // The preview-state bracket both paths wrap around the dialog/panel
-    // lifetime: exportPreviewActive_ + debug-HUD suppression + chart-info
-    // HUD on begin; full restore + aspect reset on end.
+    // The preview-state bracket the export page wraps around its session:
+    // exportPreviewActive_ + debug-HUD suppression + chart-info HUD on begin;
+    // full restore + aspect reset on end.
     void beginExportPreviewSession(const VideoExportTask& task);
     void endExportPreviewSession();
     // Pushes the seed task's per-difficulty metadata into the preview canvas'

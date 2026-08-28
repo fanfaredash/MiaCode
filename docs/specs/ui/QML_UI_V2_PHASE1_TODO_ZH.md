@@ -32,7 +32,7 @@
 | 隐藏 `PlainCodeEditor` | 仍在 `FrameBootstrap.cpp:291` 构造；**20 个文件**仍引用 | `src/editor/`、`src/app/mainwindow/sections/*` |
 | `QuickShellController` | 1,251 行（`src/app/quick_shell/` 全目录）；`surfaceHost_` 分支已归零；**`refreshTimer_` 轮询仍在**（`QuickShellController.cpp:71/82-84/693-699`） | — |
 | QML 仍消费的 controller 属性/方法 | **25 个**（`shellController.*`） | `src/app/qml_ui/**/*.qml` |
-| Widget UI 代码量 | cover_export **5,780** / video_export dialog 组 **5,508** / net **1,479** / latency **1,040** / media **393**<br>*（export_page 738、BatchExportPanel 组 947 及 MainWindow 侧嵌入面板机制 479 行已于 2026-08-29 删除）* | `src/tools/*` |
+| Widget UI 代码量 | cover_export **5,780** / net **1,479** / latency **1,040** / media **393**<br>*（2026-08-29 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691）* | `src/tools/*` |
 
 ### v2 自身新代码里的 Widgets 泄漏（优先清）
 
@@ -120,11 +120,13 @@
       改动都会**链接失败**，不依赖字符串扫描；`qml_export_video_page_spec` 驱动真实 `FileDialog` /
       `FolderDialog` / `MessageDialog` 走完请求—应答回环。仍需原生桌面确认实际弹窗外观与取消语义。
 - [ ] 封面导出（暂缓）、Net 上传/下载、ZIP、整谱规范化重建为 QML 页面 + 无 Widgets 作业 API。
-- [ ] 删除 `VideoExportDialog` 组、`CoverStudioWindow` 组、`NetBatch*Dialog`。
-      *（`ExportLauncherPage` 与 `BatchExportPanel` 组已于 2026-08-29 删除。）*
-      **注意 `VideoExportDialog` 尚未成为死代码**：扩展宿主仍能经
-      `ExtensionHostRequests.cpp:1389/2893` → `onExportPreviewVideo()` 打开它的模态形态。
-      它的删除依赖 0b（扩展宿主），不能只看 UI 入口就判定可删。
+- [ ] 删除 `CoverStudioWindow` 组、`NetBatch*Dialog`。
+      *（`ExportLauncherPage`、`BatchExportPanel` 组、`VideoExportDialog` 组已于 2026-08-29 删除。）*
+- [x] **废弃 `VideoExportDialog` 的扩展 API 形态**（2026-08-29）。扩展命令 `export.video.start`
+      与方法 `export/startVideoExport` 原本打开模态导出对话框，现在改为打开 QML 导出中心的单个导出页
+      （`onExportPreviewVideo()` 保留同名但换成 QML 路由）。扩展面能力未削减，Widgets 对话框消失。
+      `FontLibrary`、`HudFontSettings`、`CardFontSettings` 被 cover_export 与 MainWindow 对话框复用，
+      **未随组删除**。
 - [ ] `ChartDropOverlay` 改为 QML 覆盖层。
 - **完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui` 为空。
 
