@@ -16,6 +16,7 @@ Item {
     // only be open once at a time, so one id per dialog is enough.
     property string activeFileRequestId: ""
     property string activeFolderRequestId: ""
+    property string activeNoticeId: ""
 
     visible: false
     width: 0
@@ -59,10 +60,12 @@ Item {
     Connections {
         target: root.requests
         function onFileRequested(requestId, request) { root.openRequest(requestId, request) }
-        function onNoticeRequested(notice) {
+        function onNoticeRequested(requestId, notice) {
+            root.activeNoticeId = requestId
             noticeDialog.title = notice.title
             noticeDialog.text = notice.text
             noticeDialog.informativeText = notice.details
+            noticeDialog.actionLabel = notice.actionLabel || ""
             noticeDialog.open()
         }
     }
@@ -97,9 +100,26 @@ Item {
         }
     }
 
+    // A notice with an extra action offers it as Open; plain notices are Ok
+    // only. Either way the service is told exactly once which one was chosen.
     MessageDialog {
         id: noticeDialog
         objectName: "uiRequestNoticeDialog"
-        buttons: MessageDialog.Ok
+        property string actionLabel: ""
+        buttons: actionLabel.length > 0
+                 ? (MessageDialog.Open | MessageDialog.Close)
+                 : MessageDialog.Ok
+
+        function resolve(actionChosen) {
+            const requestId = root.activeNoticeId
+            root.activeNoticeId = ""
+            if (requestId.length > 0 && root.requests)
+                root.requests.submitNoticeResult(requestId, actionChosen)
+        }
+
+        onButtonClicked: function(button, role) {
+            noticeDialog.resolve(button === MessageDialog.Open)
+        }
+        onRejected: noticeDialog.resolve(false)
     }
 }

@@ -136,7 +136,7 @@ bool verifyNotices(QTextStream& err)
     if (!ok) {
         return false;
     }
-    const QVariantMap error = notices.at(0).at(0).toMap();
+    const QVariantMap error = notices.at(0).at(1).toMap();
     ok &= require(error.value(QStringLiteral("severity")).toString() == QStringLiteral("error")
                       && error.value(QStringLiteral("title")).toString() == QStringLiteral("Export")
                       && error.value(QStringLiteral("text")).toString()
@@ -144,13 +144,66 @@ bool verifyNotices(QTextStream& err)
                       && error.value(QStringLiteral("details")).toString()
                           == QStringLiteral("ffmpeg missing"),
                   QStringLiteral("an error notice carries severity, title, text and details"), err);
-    ok &= require(notices.at(1).at(0).toMap().value(QStringLiteral("severity")).toString()
+    ok &= require(notices.at(1).at(1).toMap().value(QStringLiteral("severity")).toString()
                       == QStringLiteral("information")
-                      && notices.at(2).at(0).toMap().value(QStringLiteral("severity")).toString()
+                      && notices.at(2).at(1).toMap().value(QStringLiteral("severity")).toString()
                           == QStringLiteral("warning"),
                   QStringLiteral("severity maps to stable lowercase identifiers for QML"), err);
-    ok &= require(notices.at(1).at(0).toMap().value(QStringLiteral("details")).toString().isEmpty(),
+    ok &= require(notices.at(1).at(1).toMap().value(QStringLiteral("details")).toString().isEmpty(),
                   QStringLiteral("an omitted detail block stays empty rather than absent"), err);
+    ok &= require(notices.at(0).at(0).toString().isEmpty()
+                      && notices.at(0).at(1).toMap().value(QStringLiteral("actionLabel"))
+                          .toString().isEmpty(),
+                  QStringLiteral("a fire-and-forget notice carries no request id and no action"), err);
+    return ok;
+}
+
+bool verifyActionableNotices(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy notices(&service, &miacode::v2::UiRequestService::noticeRequested);
+
+    QList<bool> outcomes;
+    const QString id = service.requestNoticeAction(
+        miacode::v2::NoticeSeverity::Information,
+        QStringLiteral("Pack as ZIP"),
+        QStringLiteral("Exported 12 files"),
+        QStringLiteral("maidata.txt"),
+        QStringLiteral("Open folder"),
+        [&outcomes](bool actionChosen) { outcomes.append(actionChosen); });
+
+    bool ok = require(!id.isEmpty() && notices.count() == 1
+                          && service.pendingNoticeCount() == 1,
+                      QStringLiteral("an actionable notice stays pending until the viewer answers"),
+                      err);
+    if (!ok) {
+        return false;
+    }
+    ok &= require(notices.at(0).at(0).toString() == id
+                      && notices.at(0).at(1).toMap().value(QStringLiteral("actionLabel")).toString()
+                          == QStringLiteral("Open folder"),
+                  QStringLiteral("the payload carries the id and the extra action's label"), err);
+
+    service.submitNoticeResult(id, true);
+    ok &= require(outcomes == QList<bool>{true} && service.pendingNoticeCount() == 0,
+                  QStringLiteral("choosing the action resolves the notice once"), err);
+
+    service.submitNoticeResult(id, false);
+    ok &= require(outcomes.size() == 1,
+                  QStringLiteral("a resolved notice never fires again"), err);
+
+    QList<bool> dismissed;
+    const QString second = service.requestNoticeAction(
+        miacode::v2::NoticeSeverity::Error, QStringLiteral("t"), QStringLiteral("x"),
+        QString(), QStringLiteral("Retry"),
+        [&dismissed](bool actionChosen) { dismissed.append(actionChosen); });
+    service.submitNoticeResult(second, false);
+    ok &= require(dismissed == QList<bool>{false},
+                  QStringLiteral("dismissing without the action still resolves, with false"), err);
+
+    service.submitNoticeResult(QStringLiteral("notice-does-not-exist"), true);
+    ok &= require(dismissed.size() == 1,
+                  QStringLiteral("an unknown notice id is ignored"), err);
     return ok;
 }
 
@@ -161,7 +214,7 @@ int main(int argc, char** argv)
     QCoreApplication app(argc, argv);
     QTextStream err(stderr);
     const bool ok = verifyFileRequestRoundTrip(err) && verifyCancellationAndUnknownIds(err)
-        && verifyNotices(err);
+        && verifyNotices(err) && verifyActionableNotices(err);
     if (ok) {
         QTextStream out(stdout);
         out << "ui_request_service_spec ok" << Qt::endl;

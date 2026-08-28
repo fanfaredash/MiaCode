@@ -44,12 +44,50 @@ void UiRequestService::postNotice(NoticeSeverity severity,
                                   const QString& text,
                                   const QString& details)
 {
+    emitNotice(severity, title, text, details, QString());
+}
+
+QString UiRequestService::requestNoticeAction(NoticeSeverity severity,
+                                              const QString& title,
+                                              const QString& text,
+                                              const QString& details,
+                                              const QString& actionLabel,
+                                              NoticeCallback onResolved)
+{
+    const QString requestId = QStringLiteral("notice-%1").arg(nextRequestSerial_++);
+    pendingNotices_.insert(requestId, std::move(onResolved));
+    emitNotice(severity, title, text, details, actionLabel, requestId);
+    return requestId;
+}
+
+QString UiRequestService::emitNotice(NoticeSeverity severity,
+                                     const QString& title,
+                                     const QString& text,
+                                     const QString& details,
+                                     const QString& actionLabel,
+                                     const QString& requestId)
+{
     QVariantMap notice;
     notice.insert(QStringLiteral("severity"), severityId(severity));
     notice.insert(QStringLiteral("title"), title);
     notice.insert(QStringLiteral("text"), text);
     notice.insert(QStringLiteral("details"), details);
-    emit noticeRequested(notice);
+    notice.insert(QStringLiteral("actionLabel"), actionLabel);
+    emit noticeRequested(requestId, notice);
+    return requestId;
+}
+
+void UiRequestService::submitNoticeResult(const QString& requestId, bool actionChosen)
+{
+    const auto pending = pendingNotices_.find(requestId);
+    if (pending == pendingNotices_.end()) {
+        return;
+    }
+    const NoticeCallback callback = std::move(pending.value());
+    pendingNotices_.erase(pending);
+    if (callback) {
+        callback(actionChosen);
+    }
 }
 
 void UiRequestService::submitFileResult(const QString& requestId, const QUrl& fileUrl)

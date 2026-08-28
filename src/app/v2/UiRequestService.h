@@ -42,29 +42,51 @@ class UiRequestService final : public QObject
 
 public:
     using FileCallback = std::function<void(const QString& path)>;
+    // true when the viewer chose the notice's extra action.
+    using NoticeCallback = std::function<void(bool actionChosen)>;
 
     explicit UiRequestService(QObject* parent = nullptr);
 
     // Returns the id the shell must echo back when the pick resolves.
     QString requestFile(const FileRequest& request, FileCallback onResolved);
+
+    // Fire-and-forget message. Nothing is waiting on the viewer's dismissal.
     void postNotice(NoticeSeverity severity,
                     const QString& title,
                     const QString& text,
                     const QString& details = QString());
 
+    // Message carrying one extra action button beside the dismissal. The
+    // continuation runs once, with true only when that action was chosen.
+    QString requestNoticeAction(NoticeSeverity severity,
+                                const QString& title,
+                                const QString& text,
+                                const QString& details,
+                                const QString& actionLabel,
+                                NoticeCallback onResolved);
+
     int pendingFileRequestCount() const { return static_cast<int>(pendingFileRequests_.size()); }
+    int pendingNoticeCount() const { return static_cast<int>(pendingNotices_.size()); }
 
     Q_INVOKABLE void submitFileResult(const QString& requestId, const QUrl& fileUrl);
     Q_INVOKABLE void cancelFileRequest(const QString& requestId);
+    Q_INVOKABLE void submitNoticeResult(const QString& requestId, bool actionChosen);
 
 signals:
     void fileRequested(const QString& requestId, const QVariantMap& request);
-    void noticeRequested(const QVariantMap& notice);
+    void noticeRequested(const QString& requestId, const QVariantMap& notice);
 
 private:
     void resolve(const QString& requestId, const QString& path);
+    QString emitNotice(NoticeSeverity severity,
+                       const QString& title,
+                       const QString& text,
+                       const QString& details,
+                       const QString& actionLabel,
+                       const QString& requestId = QString());
 
     QHash<QString, FileCallback> pendingFileRequests_;
+    QHash<QString, NoticeCallback> pendingNotices_;
     quint64 nextRequestSerial_ = 1;
 };
 

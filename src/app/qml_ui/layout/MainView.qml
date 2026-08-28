@@ -17,6 +17,8 @@ Item {
     readonly property var editorController: applicationContext.editor
     readonly property var editorSync: applicationContext.editorSync
     readonly property var platform: applicationContext.platform
+    readonly property var uiRequests: applicationContext.uiRequests
+    readonly property var jobProgress: applicationContext.jobProgress
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
     // 打开文件时的未保存决策。关闭应用走 v1 shell confirmClose 协议，
@@ -376,5 +378,19 @@ Item {
             root.commands.selectDifficulty(difficultyId)
             state.activeSidebarView = "chart"
         }
+    }
+
+    // One host for the whole shell. Every Widgets-free flow — export, pack as
+    // ZIP, the tool pages — routes its file picks and messages here, so a page
+    // never owns dialog code and two pages can never open competing pickers.
+    UiRequestHost {
+        objectName: "shellUiRequestHost"
+        requests: root.uiRequests
+    }
+
+    JobProgressOverlay {
+        objectName: "shellJobProgress"
+        anchors.fill: parent
+        progress: root.jobProgress
     }
 }

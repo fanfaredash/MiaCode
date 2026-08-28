@@ -26,6 +26,16 @@ void MainWindow::setQuickShellBackendActive(bool active)
     }
 }
 
+miacode::v2::UiRequestService* MainWindow::uiRequestService() const
+{
+    return uiRequests_;
+}
+
+miacode::v2::JobProgressService* MainWindow::jobProgressService() const
+{
+    return jobProgress_;
+}
+
 bool MainWindow::shellTimelineSurfaceReady() const
 {
     return quickTimelineSurfaceReady_;

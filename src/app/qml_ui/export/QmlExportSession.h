@@ -95,9 +95,11 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(QString batchOutputDirectory READ batchOutputDirectory WRITE setBatchOutputDirectory NOTIFY batchChanged)
 
 public:
-    explicit QmlExportSession(MainWindow& backend, QObject* parent = nullptr);
+    QmlExportSession(MainWindow& backend,
+                     miacode::v2::UiRequestService& uiRequests,
+                     QObject* parent = nullptr);
 
-    QObject* uiRequests() { return &uiRequests_; }
+    QObject* uiRequests() { return uiRequests_; }
     bool pageSessionActive() const { return pageSessionActive_; }
     int selectedDifficultyId() const { return selectedDifficultyId_; }
     QString activeTab() const;
@@ -260,7 +262,7 @@ private:
     void applyIntroSoundImport(const QString& selectedPath);
     void addChartDirectory(const QString& path);
 
-    miacode::v2::UiRequestService uiRequests_;
+    miacode::v2::UiRequestService* uiRequests_ = nullptr;
     MainWindow* backend_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;

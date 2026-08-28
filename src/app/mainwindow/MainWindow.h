@@ -50,6 +50,10 @@ class QEvent;
 class PreviewStageMediaHost;
 class QmlEditorPageHost;
 class QmlExportSession;
+namespace miacode::v2 {
+class UiRequestService;
+class JobProgressService;
+}
 class QmlUiBootstrap;
 class QFrame;
 class QGraphicsOpacityEffect;
@@ -294,6 +298,10 @@ public:
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellBackendActive(bool active);
+    // Narrow public handles on the shared Widgets-free UI boundary. No new
+    // friend declarations: the QML layer reaches these through the context.
+    miacode::v2::UiRequestService* uiRequestService() const;
+    miacode::v2::JobProgressService* jobProgressService() const;
     void preparePreviewForShutdown();
     bool shellTimelineSurfaceReady() const override;
     void noteQuickTimelineSurfaceReady();

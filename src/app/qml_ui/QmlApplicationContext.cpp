@@ -1,3 +1,5 @@
+#include "app/v2/JobProgressService.h"
+#include "app/v2/UiRequestService.h"
 #include "QmlApplicationContext.h"
 
 #include "mainwindow/MainWindow.h"
@@ -41,6 +43,13 @@ QObject* QmlApplicationContext::editorSync() { return &backend_.editorSyncContro
 QObject* QmlApplicationContext::shortcuts() { return &shortcuts_; }
 QObject* QmlApplicationContext::windowChrome() const { return windowChrome_; }
 QObject* QmlApplicationContext::platform() { return &platform_; }
+
+// Owned by MainWindow so the export session (built before this context) and the
+// QML shell share one boundary; a second instance would mean a second dialog
+// host and duplicated pickers.
+QObject* QmlApplicationContext::uiRequests() { return backend_.uiRequestService(); }
+
+QObject* QmlApplicationContext::jobProgress() { return backend_.jobProgressService(); }
 
 void QmlApplicationContext::setWindowChrome(QObject* chrome)
 {

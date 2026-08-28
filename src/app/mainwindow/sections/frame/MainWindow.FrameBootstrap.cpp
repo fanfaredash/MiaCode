@@ -40,6 +40,8 @@
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "app/qml_ui/export/QmlExportSession.h"
+#include "app/v2/JobProgressService.h"
+#include "app/v2/UiRequestService.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
@@ -930,7 +932,9 @@ MainWindow::MainWindow(QWidget* parent)
     editorStack_->addWidget(ui_.latencyDetectionPage_);
     ui_.exportPlaceholderPage_ = new QWidget(this);
     editorStack_->addWidget(ui_.exportPlaceholderPage_);
-    ui_.qmlExportSession_ = new QmlExportSession(*this, this);
+    ui_.uiRequests_ = new miacode::v2::UiRequestService(this);
+    ui_.jobProgress_ = new miacode::v2::JobProgressService(this);
+    ui_.qmlExportSession_ = new QmlExportSession(*this, *ui_.uiRequests_, this);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
     if (editorFindBar_ != nullptr) {

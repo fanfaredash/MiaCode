@@ -132,6 +132,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/EditorSyncController.h
     src/app/v2/UiRequestService.cpp
     src/app/v2/UiRequestService.h
+    src/app/v2/JobProgressService.cpp
+    src/app/v2/JobProgressService.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -666,6 +668,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppMenuItem.qml
     src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/components/UiRequestHost.qml
+    src/app/qml_ui/components/JobProgressOverlay.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml
@@ -1609,6 +1612,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/v2/UiRequestServiceSpec.cpp
             src/app/v2/UiRequestService.cpp
             src/app/v2/UiRequestService.h
+        LIBS Qt6::Core Qt6::Test
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(job_progress_service_spec TEST
+        SOURCES
+            src/tools/v2/JobProgressServiceSpec.cpp
+            src/app/v2/JobProgressService.cpp
+            src/app/v2/JobProgressService.h
         LIBS Qt6::Core Qt6::Test
         INCLUDES src
     )

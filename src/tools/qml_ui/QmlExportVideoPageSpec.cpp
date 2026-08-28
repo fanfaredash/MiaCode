@@ -37,15 +37,21 @@ Item {
         id: fakeRequests
         objectName: "fakeUiRequests"
         signal fileRequested(string requestId, var request)
-        signal noticeRequested(var notice)
+        signal noticeRequested(string requestId, var notice)
         property string resolvedId: ""
         property string resolvedPath: ""
         property string cancelledId: ""
+        property string noticeResolvedId: ""
+        property bool noticeActionChosen: false
         function submitFileResult(requestId, fileUrl) {
             resolvedId = requestId
             resolvedPath = fileUrl.toString()
         }
         function cancelFileRequest(requestId) { cancelledId = requestId }
+        function submitNoticeResult(requestId, actionChosen) {
+            noticeResolvedId = requestId
+            noticeActionChosen = actionChosen
+        }
     }
 
     QtObject {
@@ -141,6 +147,14 @@ Item {
     ExportVideoPage {
         anchors.fill: parent
         pages: pages
+    }
+
+    // The shell hosts one of these for every page; instantiate it directly so
+    // the request loop is verified against the real component rather than
+    // against whichever page happens to embed it.
+    UiRequestHost {
+        objectName: "exportUiRequestHost"
+        requests: fakeRequests
     }
 }
 )QML", QUrl(QStringLiteral("qrc:/QmlExportVideoPageSpec.qml")));
@@ -322,7 +336,10 @@ bool verifyRequestHostLoop(QTextStream& err)
     notice.insert(QStringLiteral("title"), QStringLiteral("Batch export"));
     notice.insert(QStringLiteral("text"), QStringLiteral("2 of 3 exported"));
     notice.insert(QStringLiteral("details"), QStringLiteral("failed: chart-c"));
-    QMetaObject::invokeMethod(requests, "noticeRequested", Q_ARG(QVariant, QVariant(notice)));
+    notice.insert(QStringLiteral("actionLabel"), QString());
+    QMetaObject::invokeMethod(requests, "noticeRequested",
+                              Q_ARG(QString, QStringLiteral("notice-1")),
+                              Q_ARG(QVariant, QVariant(notice)));
     QCoreApplication::processEvents();
     ok &= require(noticeDialog->property("title").toString() == QStringLiteral("Batch export")
                       && noticeDialog->property("text").toString()
@@ -331,6 +348,24 @@ bool verifyRequestHostLoop(QTextStream& err)
                           == QStringLiteral("failed: chart-c"),
                   QStringLiteral("a notice renders through the QML message dialog with its detail block"),
                   err);
+
+    // An actionable notice must offer the extra button and report which one the
+    // viewer picked, otherwise "open the folder I just wrote" silently no-ops.
+    QVariantMap actionable = notice;
+    actionable.insert(QStringLiteral("actionLabel"), QStringLiteral("Open folder"));
+    QMetaObject::invokeMethod(requests, "noticeRequested",
+                              Q_ARG(QString, QStringLiteral("notice-2")),
+                              Q_ARG(QVariant, QVariant(actionable)));
+    QCoreApplication::processEvents();
+    ok &= require(noticeDialog->property("actionLabel").toString()
+                      == QStringLiteral("Open folder"),
+                  QStringLiteral("an actionable notice carries its action into the dialog"), err);
+
+    QMetaObject::invokeMethod(noticeDialog, "rejected");
+    QCoreApplication::processEvents();
+    ok &= require(requests->property("noticeResolvedId").toString() == QStringLiteral("notice-2")
+                      && !requests->property("noticeActionChosen").toBool(),
+                  QStringLiteral("dismissing an actionable notice resolves it as not-chosen"), err);
     return ok;
 }
 

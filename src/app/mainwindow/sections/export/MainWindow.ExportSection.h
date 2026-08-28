@@ -33,6 +33,12 @@ public:
     // seeds the dialog's default difficulty token.
     void onBatchExportPreviewVideo(int difficultyId = 0);
     void onPackAsZip();
+    // Continuation of onPackAsZip once the shell has answered the save picker.
+    // An empty path means the pick was cancelled.
+    void packChartToZipAtPath(const QString& chartText,
+                              const QString& chartPath,
+                              const QString& dialogTitle,
+                              const QString& pickedPath);
     void onNetBatchDownload();
     void onNetBatchUpload();
     // ---- QML export shell (v2) ----

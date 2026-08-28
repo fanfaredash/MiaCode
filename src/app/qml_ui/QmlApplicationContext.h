@@ -35,6 +35,9 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* shortcuts READ shortcuts CONSTANT)
     Q_PROPERTY(QObject* windowChrome READ windowChrome CONSTANT)
     Q_PROPERTY(QObject* platform READ platform CONSTANT)
+    // Shared Widgets-free UI boundary, hosted once by MainView.qml.
+    Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
+    Q_PROPERTY(QObject* jobProgress READ jobProgress CONSTANT)
 
 public:
     QmlApplicationContext(MainWindow& backend, QuickShellController& shell, QObject* parent = nullptr);
@@ -51,6 +54,8 @@ public:
     QObject* shortcuts();
     QObject* windowChrome() const;
     QObject* platform();
+    QObject* uiRequests();
+    QObject* jobProgress();
     void setWindowChrome(QObject* chrome);
 
 private:

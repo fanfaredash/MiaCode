@@ -38,7 +38,7 @@
 
 | 位置 | 内容 |
 |---|---|
-| ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**，改走 `UiRequestService` |
+| ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**。`src/app/qml_ui` 全目录现已无 Widgets 对话框 |
 | `src/app/qml_ui/QmlEditorPageHost.*` | `QWidget` 宿主表面 + `WindowContainer` 适配（`MainSplitView.qml:192`） |
 | `src/app/ui/ChartDropOverlay.h:7` | `class ChartDropOverlay final : public QWidget`，被 v2 root window 拖放路径使用 |
 
@@ -65,9 +65,9 @@
 | 延迟校准 | `ToolsSidebarPage.qml` → `openLatencyPage()` | `LatencyDetectionPage`（`WindowContainer` 宿主，1,040 行） |
 | 音视频处理 | → `openMediaProcessingTools()` | `MainWindow::onMediaProcessingTools()` → `PvBatchCompressionDialog` |
 | 整谱规范化 | → `openNormalizeWholeChart()` | `MainWindow::onNormalizeWholeChart()` |
-| Net 批量下载 / 上传 | → `openNetBatchDownload/Upload()` | `NetBatchDownloadDialog` / `NetBatchUploadDialog` |
+| Net 批量下载 / 上传 | → `openNetBatchDownload/Upload()` | `NetBatchDownloadDialog` / `NetBatchUploadDialog`　**（2026-08-29 决定暂缓）** |
 | 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（5,780 行） |
-| 打包 ZIP | → `packAsZip()` | `MainWindow::onPackAsZip()`（引擎 `zip_export` 本身无 Widgets） |
+| ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
 | 偏好设置 | `QmlCommandService::openPreferences()` | `MainWindow::onPreferences()` |
 | ~~批量导出~~ | `openBatchExport()` | **已完成（2026-08-29）**：QML `ExportVideoPage` 的 batch 页是唯一批量界面，`BatchExportPanel` 组已删除 |
 
@@ -75,7 +75,10 @@
 >
 > **0c 已于 2026-08-29 由所有者重新定向：偏好设置 / 延迟检测 / 音视频处理三页「补成 QML」，不删除。**
 > 这推翻了架构文档第 10 节记录的相反决定（"哪怕功能会缺失也要做"）——那节与第 8 节的 0c ⏸ 行
-> 必须在本批工作中改齐，否则只读架构文档的人会做反。封面导出按同一决定**暂缓**。
+> 必须在本批工作中改齐，否则只读架构文档的人会做反。
+>
+> **暂缓项（2026-08-29 所有者决定）：封面导出、Net 批量下载/上传。** 两者的 Widget 实现继续可用，
+> 不在本批推进；`Qt6::Widgets` 的最终摘除依赖它们，所以阶段 4 的完成标志目前被这两项挡住。
 
 ### C. 已是 QML 页面，但仍借 Widgets 完成子流程（1 项）
 
@@ -112,6 +115,11 @@
 - **完成标志**：`refreshTimer_` 消失；`src/app/quick_shell/` 删除；QML 不再出现 `shellController`。
 
 ### 阶段 3 —— `ExportService` 与 Widget 对话框归零
+
+已建成的共享边界（`src/app/v2/`，均无 Widgets，各自有只链 `Qt6::Core`+`Qt6::Test` 的 spec）：
+`UiRequestService`（选文件 / 消息 / 带动作的消息）与 `JobProgressService`（进度 + 协作式取消）。
+`MainWindow` 持有唯一实例，`MainView.qml` 承载唯一的 `UiRequestHost` 与 `JobProgressOverlay`。
+后续每个页面复用它们，不再各写一套对话框代码。
 
 - [x] `QmlExportSession` 的 `QFileDialog` / `QMessageBox` 换成 QML 侧 `QtQuick.Dialogs` + 结果值
       （2026-08-29）。落点是可复用的 `miacode::v2::UiRequestService` + `components/UiRequestHost.qml`，
