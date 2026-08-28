@@ -65,7 +65,8 @@
 | 延迟校准 | `ToolsSidebarPage.qml` → `openLatencyPage()` | `LatencyDetectionPage`（`WindowContainer` 宿主，1,040 行） |
 | 音视频处理 | → `openMediaProcessingTools()` | `MainWindow::onMediaProcessingTools()` → `PvBatchCompressionDialog` |
 | 整谱规范化 | → `openNormalizeWholeChart()` | `MainWindow::onNormalizeWholeChart()` |
-| Net 批量下载 / 上传 | → `openNetBatchDownload/Upload()` | `NetBatchDownloadDialog` / `NetBatchUploadDialog`　**（2026-08-29 决定暂缓）** |
+| Net 批量下载 | → `openNetBatchDownload()` | `NetBatchDownloadDialog`　**（2026-08-29 决定：不做原生化）** |
+| Net 批量上传 | → `openNetBatchUpload()` | `NetBatchUploadDialog`　**（2026-08-29 决定暂缓）** |
 | 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（5,780 行） |
 | ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
 | 偏好设置 | `QmlCommandService::openPreferences()` | `MainWindow::onPreferences()` |
@@ -77,8 +78,13 @@
 > 这推翻了架构文档第 10 节记录的相反决定（"哪怕功能会缺失也要做"）——那节与第 8 节的 0c ⏸ 行
 > 必须在本批工作中改齐，否则只读架构文档的人会做反。
 >
-> **暂缓项（2026-08-29 所有者决定）：封面导出、Net 批量下载/上传。** 两者的 Widget 实现继续可用，
-> 不在本批推进；`Qt6::Widgets` 的最终摘除依赖它们，所以阶段 4 的完成标志目前被这两项挡住。
+> **排期决定（2026-08-29 所有者）：**
+> - **Net 批量下载：不做原生化**，保留现有 Widget 实现。
+> - **Net 批量上传：暂缓。**
+> - **封面导出：放到最后做**（本批最末一项，不是取消）。
+>
+> `Qt6::Widgets` 的最终摘除依赖这三项，所以阶段 4 的完成标志目前被它们挡住——这是排期结果，
+> 不是"还没轮到"。
 
 ### C. 已是 QML 页面，但仍借 Widgets 完成子流程（1 项）
 
