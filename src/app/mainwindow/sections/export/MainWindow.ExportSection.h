@@ -35,23 +35,6 @@ public:
     void onPackAsZip();
     void onNetBatchDownload();
     void onNetBatchUpload();
-    // ---- E-C embedded video panel (hosted by the Export hub page) ----
-    // Builds a VideoExportDialog in embedded panel mode seeded with the given
-    // difficulty, begins the export-preview session (exportPreviewActive_,
-    // debug-HUD suppression, chart-info HUD), and wires exportConfirmed to a
-    // snapshot + worker launch with the normal progress popup.
-    // Returns nullptr when the difficulty/preview isn't
-    // available. The host inserts the widget into its layout; ownership stays
-    // with this section (destroyEmbeddedVideoExportPanel deletes it).
-    QWidget* createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent);
-    // Finalizes the embedded panel session (range-preview stop + live-preview
-    // restore + export-preview session end) and deletes the panel. Idempotent;
-    // a running worker is NOT cancelled.
-    void destroyEmbeddedVideoExportPanel();
-    QWidget* createEmbeddedBatchExportPanel(int difficultyId, QWidget* parent);
-    void updateEmbeddedBatchExportPreviewDifficulty(int difficultyId);
-    void destroyEmbeddedBatchExportPanel();
-
     // ---- QML export shell (v2; does not create VideoExportDialog) ----
     VideoExportTask buildVideoExportSeedTaskPublic(int difficultyId = 0);
     bool startQmlExportAudition(int difficultyId, const VideoExportTask& visualTask);
@@ -149,8 +132,6 @@ private:
     // and invalidates the snapshot so the next difficulty switch rebuilds.
     void installExportPreviewAuditionScene(int difficultyId);
     void teardownExportPreviewAuditionScene();
-    void handleEmbeddedExportConfirmed();
-    void handleBatchExportConfirmed();
     bool runBatchExport(
         const VideoExportTask& templateTask,
         const QStringList& chartDirectories,

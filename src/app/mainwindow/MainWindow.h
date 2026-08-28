@@ -62,7 +62,6 @@ class LatencySandboxController;
 class LatencyDetectionPage;
 }
 namespace miacode::video_export {
-class BatchExportPanel;
 }
 namespace miacode::ui {
 class AppBackgroundPainter;

@@ -21,7 +21,6 @@
 #include "tools/net/NetBatchUploadDialog.h"
 #include "tools/media/PvBatchCompressionDialog.h"
 #include "tools/video_export/VideoExportDialog.h"
-#include "tools/video_export/BatchExportPanel.h"
 #include "app/ui/AppBackgroundPainter.h"
 
 #include <QtCore>
@@ -1002,17 +1001,6 @@ void MainWindow::WindowSection::applyUiTheme()
         // Theme-aware card/label colors are frozen at construction otherwise —
         // re-apply so the BPM & latency page follows light/dark switches too.
         owner_.latencyDetectionPage_->applyThemeStyles();
-    }
-    if (!owner_.embeddedVideoExportPanel_.isNull()) {
-        // The export hub's embedded video panel bakes its stylesheets/icons at
-        // construction; re-theme it in place so a switch while the 视频导出
-        // sub-page is showing follows light/dark. (The page now paints its own
-        // dark canvas, so the panel's reparented root is backstopped even if its
-        // own background rule is slow to repaint; this re-themes its children.)
-        owner_.embeddedVideoExportPanel_->applyThemeStyles();
-    }
-    if (!owner_.embeddedBatchExportPanel_.isNull()) {
-        owner_.embeddedBatchExportPanel_->applyThemeStyles();
     }
     if (!owner_.netBatchUploadDialog_.isNull()) {
         static_cast<miacode::net::NetBatchUploadDialog*>(owner_.netBatchUploadDialog_.data())->applyThemeStyles();

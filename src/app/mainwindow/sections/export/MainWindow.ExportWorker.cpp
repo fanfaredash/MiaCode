@@ -1489,9 +1489,6 @@ void MainWindow::ExportSection::updateInlineExportProgress(int percent, const QS
 void MainWindow::ExportSection::endInlineExportProgress()
 {
     const bool inlineProgressActive = owner_.videoExportInlineProgressSecond_ >= 0.0;
-    if (!owner_.embeddedVideoExportPanel_.isNull()) {
-        owner_.embeddedVideoExportPanel_->setEmbeddedExportRunning(false);
-    }
     if (!inlineProgressActive) {
         return;
     }

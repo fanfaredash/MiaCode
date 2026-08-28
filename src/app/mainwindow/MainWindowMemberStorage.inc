@@ -86,13 +86,6 @@
         // so "is the chart / metadata field current" stays answerable.
         QWidget* exportPlaceholderPage_ = nullptr;
         QmlExportSession* qmlExportSession_ = nullptr;
-        // E-C embedded video-export panel: a VideoExportDialog in embedded
-        // panel mode, hosted inside the Export hub page's video sub-page.
-        // Created/destroyed by ExportSection::create/destroyEmbeddedVideoExportPanel.
-        QPointer<VideoExportDialog> embeddedVideoExportPanel_;
-        // Batch counterpart: owns the shared VideoExportDialog settings host
-        // plus the batch-only output-directory and queue controls.
-        QPointer<miacode::video_export::BatchExportPanel> embeddedBatchExportPanel_;
         // BPM/offset summary on the metadata page's "延迟与偏移校准" entry
         // card (L-A migration); refreshed by populateMetadataPage.
         QLabel* latencyEntrySummaryLabel_ = nullptr;
@@ -1102,8 +1095,6 @@
     miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
     QWidget*& exportPlaceholderPage_ = ui_.exportPlaceholderPage_;
     QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
-    QPointer<VideoExportDialog>& embeddedVideoExportPanel_ = ui_.embeddedVideoExportPanel_;
-    QPointer<miacode::video_export::BatchExportPanel>& embeddedBatchExportPanel_ = ui_.embeddedBatchExportPanel_;
     QLabel*& latencyEntrySummaryLabel_ = ui_.latencyEntrySummaryLabel_;
     QWidget*& metadataCard_ = ui_.metadataCard_;
     QLabel*& metadataEmptyHintLabel_ = ui_.metadataEmptyHintLabel_;

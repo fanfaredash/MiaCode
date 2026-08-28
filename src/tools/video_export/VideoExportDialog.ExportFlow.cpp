@@ -352,7 +352,7 @@ void VideoExportDialog::setBatchSettingsPanelMode()
 {
     setEmbeddedPanelMode(true, false);
 
-    // BatchExportPanel supplies the only footer/action. Hiding the existing
+    // The embedding batch host supplies the only footer/action. Hiding the existing
     // dialog footer avoids competing start actions in the fixed page frame.
     if (buttonBox_ != nullptr) {
         buttonBox_->hide();

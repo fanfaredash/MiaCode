@@ -112,7 +112,7 @@ QString exportLauncherPageStyleSheet();
 QString embeddedExportTabStyleSheet();
 QString metadataEmptyHintLabelStyleSheet();
 QString outlineListStyleSheet();
-// Compact, rounded row treatment for BatchExportPanel's numbered chart-folder
+// Compact, rounded row treatment for the batch queue's numbered chart-folder
 // list. Kept separate from the editor outline list because the two surfaces
 // have different density and selection semantics.
 QString batchExportChartDirectoryListStyleSheet();

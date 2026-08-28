@@ -114,7 +114,7 @@ public:
     // The compact embedded single-export page omits the intro preview; callers
     // can retain it only when they explicitly host the preview column.
     void setEmbeddedPanelMode(bool embedded, bool retainIntroPreview = false);
-    // Reuses the dialog's shared settings tabs inside BatchExportPanel. It
+    // Reuses the dialog's shared settings tabs inside a batch host. It
     // removes the single-file output path and export-range surface, leaving the
     // batch host to own its footer and its first task tab.
     void setBatchSettingsPanelMode();
