@@ -59,6 +59,10 @@ Item {
         editorPane.selectCurrentLine()
     }
 
+    function applyChartTransform(opId) {
+        return editorPane.applyChartTransform(opId)
+    }
+
     function validateChart() {
         root.commands.validateDocument()
         root.viewState.bottomPanelVisible = true

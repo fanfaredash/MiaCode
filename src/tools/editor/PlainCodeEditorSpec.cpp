@@ -1,4 +1,5 @@
 #include "editor/PlainCodeEditor.h"
+#include "core/chart/transform/ChartBatchTransform.h"
 #include "editor/BracketCompletionPopup.h"
 #include "editor/BookmarkCommentSyntax.h"
 #include "editor/TouchPadAuthoringEdit.h"
@@ -46,7 +47,7 @@ void expectClearCompleteElements(
     int* failed)
 {
     int changed = -1;
-    const QString actual = miacode::editor::clearCompleteElementsInSelection(
+    const QString actual = miacode::chart_transform::clearCompleteElementsInSelection(
         input,
         selectionStart,
         selectionEnd,
@@ -70,7 +71,7 @@ void expectClearCompleteElementsReplacement(
     int* failed)
 {
     int changed = -1;
-    const QString transformedFull = miacode::editor::clearCompleteElementsInSelection(
+    const QString transformedFull = miacode::chart_transform::clearCompleteElementsInSelection(
         input,
         selectionStart,
         selectionEnd,

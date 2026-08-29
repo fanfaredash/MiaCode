@@ -94,6 +94,10 @@ Item {
         splitView.selectAll()
     }
 
+    function applyChartTransform(opId) {
+        return splitView.applyChartTransform(opId)
+    }
+
     function validateChart() {
         splitView.validateChart()
         root.preferences.bottomPanelVisible = true

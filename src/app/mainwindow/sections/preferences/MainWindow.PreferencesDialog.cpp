@@ -748,62 +748,6 @@ MainWindow::PreferencesSection::PreferencesSection(
 void MainWindow::PreferencesSection::applyConfiguredShortcuts()
 {
     applyConfiguredShortcut(
-        owner_.transformMirrorLeftRightAction_,
-        QStringLiteral("transform.mirror_lr"),
-        QKeySequence(Qt::CTRL | Qt::Key_J));
-    applyConfiguredShortcut(
-        owner_.transformMirrorUpDownAction_,
-        QStringLiteral("transform.mirror_ud"),
-        QKeySequence(Qt::CTRL | Qt::Key_K));
-    applyConfiguredShortcut(
-        owner_.transformRotate180Action_,
-        QStringLiteral("transform.rotate_180"),
-        QKeySequence(Qt::CTRL | Qt::Key_L));
-    applyConfiguredShortcut(
-        owner_.transformRotate45CounterClockwiseAction_,
-        QStringLiteral("transform.rotate_ccw_45"),
-        QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
-    applyConfiguredShortcut(
-        owner_.transformRotate45ClockwiseAction_,
-        QStringLiteral("transform.rotate_cw_45"),
-        QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
-    applyConfiguredShortcut(
-        owner_.transformClearCompleteElementsAction_,
-        QStringLiteral("transform.clear_complete_elements"),
-        QKeySequence(Qt::CTRL | Qt::Key_Q));
-    applyConfiguredShortcut(
-        owner_.transformRaiseSubdivisionAction_,
-        QStringLiteral("transform.subdivision_up"),
-        QKeySequence(QStringLiteral("Ctrl+=")));
-    applyConfiguredShortcut(
-        owner_.transformLowerSubdivisionAction_,
-        QStringLiteral("transform.subdivision_down"),
-        QKeySequence(QStringLiteral("Ctrl+-")));
-    applyConfiguredShortcutList(
-        owner_.transformRaiseSubdivisionHalfStepAction_,
-        QStringLiteral("transform.subdivision_half_up"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))});
-    applyConfiguredShortcutList(
-        owner_.transformLowerSubdivisionHalfStepAction_,
-        QStringLiteral("transform.subdivision_half_down"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))});
-    applyConfiguredShortcut(
-        owner_.transformToggleBreakAction_,
-        QStringLiteral("transform.toggle_break"),
-        QKeySequence(Qt::CTRL | Qt::Key_B));
-    applyConfiguredShortcut(
-        owner_.transformToggleExAction_,
-        QStringLiteral("transform.toggle_ex"),
-        QKeySequence(Qt::CTRL | Qt::Key_N));
-    applyConfiguredShortcut(
-        owner_.transformToggleFireworkAction_,
-        QStringLiteral("transform.toggle_firework"),
-        QKeySequence(Qt::CTRL | Qt::Key_M));
-    applyConfiguredShortcut(
-        owner_.transformRandomRotateAction_,
-        QStringLiteral("transform.random_rotate"),
-        QKeySequence(Qt::CTRL | Qt::Key_Comma));
-    applyConfiguredShortcut(
         owner_.stopOrPlayPreviewShortcutAction_,
         QStringLiteral("preview.stop_or_play"),
         QKeySequence(QStringLiteral("Ctrl+Shift+C")),

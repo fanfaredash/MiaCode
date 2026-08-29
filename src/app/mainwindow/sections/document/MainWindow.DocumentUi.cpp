@@ -105,47 +105,8 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
     if (ui_.stopPreviewAction_ != nullptr) {
         ui_.stopPreviewAction_->setEnabled(playbackEnabled);
     }
-    if (ui_.transformMirrorLeftRightAction_ != nullptr) {
-        ui_.transformMirrorLeftRightAction_->setEnabled(enabled);
-    }
-    if (ui_.transformMirrorUpDownAction_ != nullptr) {
-        ui_.transformMirrorUpDownAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRotate180Action_ != nullptr) {
-        ui_.transformRotate180Action_->setEnabled(enabled);
-    }
-    if (ui_.transformRotate45CounterClockwiseAction_ != nullptr) {
-        ui_.transformRotate45CounterClockwiseAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRotate45ClockwiseAction_ != nullptr) {
-        ui_.transformRotate45ClockwiseAction_->setEnabled(enabled);
-    }
     if (ui_.normalizeWholeChartAction_ != nullptr) {
         ui_.normalizeWholeChartAction_->setEnabled(enabled);
-    }
-    if (ui_.transformToggleBreakAction_ != nullptr) {
-        ui_.transformToggleBreakAction_->setEnabled(enabled);
-    }
-    if (ui_.transformToggleExAction_ != nullptr) {
-        ui_.transformToggleExAction_->setEnabled(enabled);
-    }
-    if (ui_.transformToggleFireworkAction_ != nullptr) {
-        ui_.transformToggleFireworkAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRandomRotateAction_ != nullptr) {
-        ui_.transformRandomRotateAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRaiseSubdivisionAction_ != nullptr) {
-        ui_.transformRaiseSubdivisionAction_->setEnabled(enabled);
-    }
-    if (ui_.transformLowerSubdivisionAction_ != nullptr) {
-        ui_.transformLowerSubdivisionAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRaiseSubdivisionHalfStepAction_ != nullptr) {
-        ui_.transformRaiseSubdivisionHalfStepAction_->setEnabled(enabled);
-    }
-    if (ui_.transformLowerSubdivisionHalfStepAction_ != nullptr) {
-        ui_.transformLowerSubdivisionHalfStepAction_->setEnabled(enabled);
     }
     if (ui_.stopPreviewButton_ != nullptr) {
         ui_.stopPreviewButton_->setEnabled(playbackEnabled);

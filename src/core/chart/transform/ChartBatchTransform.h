@@ -33,4 +33,14 @@ QString lowerSubdivisionForSelection(const QString& input, const QString& suffix
 QString raiseSubdivisionHalfStepForSelection(const QString& input, const QString& suffixContext, int* changedCount = nullptr);
 QString lowerSubdivisionHalfStepForSelection(const QString& input, const QString& suffixContext, int* changedCount = nullptr);
 
+// Clears every complete note element inside the selection, leaving the timing
+// skeleton. Lived in PlainCodeEditor.h while the Widgets editor owned the
+// chart-editing commands; it is a text transform over a selection like the rest
+// of this header, and has no widget in it.
+QString clearCompleteElementsInSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    int* changedCount = nullptr);
+
 }  // namespace miacode::chart_transform

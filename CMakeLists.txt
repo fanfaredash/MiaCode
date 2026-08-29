@@ -1673,17 +1673,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/qml_ui/QmlShortcutModel.cpp
             src/app/qml_ui/QmlShortcutModel.h
             src/app/qml_ui/QmlShortcutCommands.h
+            src/app/qml_ui/ChartTransformCommands.h
+            src/core/chart/transform/ChartBatchTransform.h
+            src/core/chart/transform/ChartBatchTransform.Parsers.cpp
+            src/core/chart/transform/ChartBatchTransform.Subdivision.cpp
+            src/core/chart/transform/ChartBatchTransform.Selection.cpp
+            src/core/chart/transform/ChartBatchTransform.Transform.cpp
             src/app/ui/ShortcutRegistry.cpp
             src/app/ui/ShortcutRegistry.h
             src/common/InputShortcutGesture.h
             src/common/InputShortcutGesture.cpp
+            ${_miacode_log_core}
             resources/app_icons.qrc
         LIBS Qt6::Core Qt6::Gui
-        INCLUDES src src/app/ui src/app/qml_ui
+        INCLUDES src src/app/ui src/app/qml_ui src/core/chart src/core/chart/transform
     )
-    target_compile_definitions(qml_shortcut_binding_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
     miacode_add_dev_tool(v1_shell_removal_spec TEST
         SOURCES
             src/tools/qml_ui/V1ShellRemovalSpec.cpp
@@ -1742,6 +1746,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(plain_code_editor_spec TEST
         SOURCES
             src/tools/editor/PlainCodeEditorSpec.cpp
+            src/core/chart/transform/ChartBatchTransform.h
+            src/core/chart/transform/ChartBatchTransform.Parsers.cpp
+            src/core/chart/transform/ChartBatchTransform.Subdivision.cpp
+            src/core/chart/transform/ChartBatchTransform.Selection.cpp
+            src/core/chart/transform/ChartBatchTransform.Transform.cpp
             src/editor/PlainCodeEditor.h
             src/editor/PlainCodeEditor.cpp
             src/editor/PlainCodeEditor.Layout.cpp

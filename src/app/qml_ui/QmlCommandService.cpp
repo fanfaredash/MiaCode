@@ -32,14 +32,11 @@ void QmlCommandService::openPreferences()
     }
 }
 
-bool QmlCommandService::triggerShortcutCommand(const QString& id)
-{
-    return backend_ != nullptr && backend_->triggerShortcutCommand(id);
-}
-
 QStringList QmlCommandService::shortcutCommandIds() const
 {
-    // Chart transforms only. Preview commands are bound in QML straight to
-    // QuickShellController, which already exposes them.
+    // Chart transforms only, and the shell binds them to the editor rather than
+    // back to MainWindow: a transform acts on the editor's selection, which is
+    // the one thing this side does not have. Preview commands are bound in QML
+    // straight to QuickShellController, which already exposes them.
     return miacode::qml_ui::qmlShortcutCommandIds();
 }

@@ -1,8 +1,8 @@
+#include "app/qml_ui/ChartTransformCommands.h"
 #include "app/qml_ui/QmlShortcutCommands.h"
 #include "app/qml_ui/QmlShortcutModel.h"
 #include "ShortcutRegistry.h"
 
-#include <QFile>
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QSet>
@@ -18,12 +18,6 @@ bool expect(bool condition, const QString& message, QTextStream& out, int* faile
     return condition;
 }
 
-QString readSource(const QString& relativePath)
-{
-    QFile file(QStringLiteral(MIACODE_SOURCE_ROOT) + QLatin1Char('/') + relativePath);
-    if (!file.open(QIODevice::ReadOnly)) return QString();
-    return QString::fromUtf8(file.readAll());
-}
 
 } // namespace
 
@@ -74,19 +68,39 @@ int main(int argc, char** argv)
     expect(!model.standardDisplayText(static_cast<int>(QKeySequence::Save)).isEmpty(),
            QStringLiteral("standard-key menu rows can render their platform spelling"), out, &failed);
 
-    // The dispatcher must own every id the QML side binds, or the shortcut
-    // fires into nothing.
-    const QString dispatcher =
-        readSource(QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp"));
-    QStringList undispatched;
-    for (const QString& id : boundIds) {
-        if (!dispatcher.contains(QStringLiteral("\"%1\"").arg(id))) undispatched.append(id);
+    // The bound ids and the dispatch table are now derived from one another, so
+    // an id without a handler is unrepresentable — what can still drift is the
+    // registry's hand-written editable-id list. A transform the registry offers
+    // for rebinding but the table does not know is a shortcut the user can
+    // customize and never fire; one the table knows but the registry does not
+    // is a command with no configurable binding.
+    QSet<QString> registryTransformIds;
+    for (const auto& definition : ShortcutRegistry::instance().editableShortcuts()) {
+        if (definition.id.startsWith(QStringLiteral("transform."))) {
+            registryTransformIds.insert(definition.id);
+        }
     }
-    if (!undispatched.isEmpty()) {
-        out << "  ids with no dispatcher entry: " << undispatched.join(QStringLiteral(", ")) << '\n';
+    const QSet<QString> tableIds(boundIds.cbegin(), boundIds.cend());
+    const QStringList registryOnly = QStringList(
+        (registryTransformIds - tableIds).values());
+    const QStringList tableOnly = QStringList((tableIds - registryTransformIds).values());
+    if (!registryOnly.isEmpty()) out << "  rebindable but undispatched: " << registryOnly.join(QStringLiteral(", ")) << '\n';
+    if (!tableOnly.isEmpty()) out << "  dispatched but not rebindable: " << tableOnly.join(QStringLiteral(", ")) << '\n';
+    expect(!registryTransformIds.isEmpty() && registryOnly.isEmpty() && tableOnly.isEmpty(),
+           QStringLiteral("the rebindable transform ids and the dispatch table describe the same set"), out, &failed);
+
+    // And the table dispatches to a real transform, not an empty slot: a mirror
+    // over one bar renumbers every button.
+    int mirrored = 0;
+    const QString sample = QStringLiteral("{8}1,2,3,4,");
+    QString mirrorResult;
+    for (const miacode::qml_ui::ChartTransformSpec& spec : miacode::qml_ui::chartTransformSpecs()) {
+        if (spec.id == QStringLiteral("transform.mirror_lr") && spec.apply) {
+            mirrorResult = spec.apply(sample, QString(), &mirrored);
+        }
     }
-    expect(!dispatcher.isEmpty() && undispatched.isEmpty(),
-           QStringLiteral("every bound command id has a backend dispatcher entry"), out, &failed);
+    expect(mirrored > 0 && mirrorResult != sample,
+           QStringLiteral("a table entry reaches the shared chart transform"), out, &failed);
 
     if (failed != 0) {
         out << "QmlShortcutBinding spec failed: " << failed << '\n';

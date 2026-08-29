@@ -1,4 +1,6 @@
 #include "ui/UiText.h"
+#include "ChartTransformCommands.h"
+#include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "QmlDocumentModel.h"
 
@@ -7,6 +9,9 @@
 #include "app/mainwindow/MainWindow.h"
 #include "common/DebugLog.h"
 #include "core/chart/document/SimaiDocument.h"
+
+#include <algorithm>
+#include <functional>
 
 #include <QFileInfo>
 #include <QVariantMap>
@@ -678,6 +683,74 @@ miacode::chart_transform::ChartNormalizationOptions normalizeOptionsFromVariant(
 }
 
 }  // namespace
+
+QStringList QmlDocumentModel::chartTransformIds() const
+{
+    QStringList ids;
+    for (const miacode::qml_ui::ChartTransformSpec& spec : miacode::qml_ui::chartTransformSpecs()) {
+        ids.append(spec.id);
+    }
+    return ids;
+}
+
+QVariantMap QmlDocumentModel::transformChartSelection(
+    const QString& text, int anchor, int position, const QString& opId) const
+{
+    QVariantMap transaction;
+    transaction.insert(QStringLiteral("consumed"), false);
+    transaction.insert(QStringLiteral("hasEdit"), false);
+    transaction.insert(QStringLiteral("undoGroup"), true);
+    transaction.insert(QStringLiteral("changed"), 0);
+
+    const int begin = qBound(0, qMin(anchor, position), text.size());
+    const int end = qBound(begin, qMax(anchor, position), text.size());
+    if (begin >= end) {
+        // Every one of these edits a range, so an empty selection is a
+        // no-target, not a whole-chart shortcut.
+        transaction.insert(QStringLiteral("error"), QStringLiteral("no_selection"));
+        return transaction;
+    }
+
+    const auto specs = miacode::qml_ui::chartTransformSpecs();
+    const auto spec = std::find_if(specs.cbegin(), specs.cend(),
+                                   [&opId](const miacode::qml_ui::ChartTransformSpec& candidate) {
+                                       return candidate.id == opId;
+                                   });
+    if (spec == specs.cend()) {
+        transaction.insert(QStringLiteral("error"), QStringLiteral("unknown_transform"));
+        return transaction;
+    }
+
+    const QString selected = text.mid(begin, end - begin);
+    int changed = 0;
+    QString replacement;
+    if (spec->apply) {
+        replacement = spec->apply(selected, text.mid(end), &changed);
+    } else {
+        const QString transformedFull =
+            miacode::chart_transform::clearCompleteElementsInSelection(text, begin, end, &changed);
+        // The transform rewrites the whole text; the selection's new extent is
+        // whatever is left once the untouched tail is accounted for.
+        const int untouchedSuffix = text.size() - end;
+        replacement = transformedFull.mid(begin, transformedFull.size() - untouchedSuffix - begin);
+    }
+
+    transaction.insert(QStringLiteral("consumed"), true);
+    transaction.insert(QStringLiteral("changed"), changed);
+    if (replacement == selected) {
+        return transaction;
+    }
+
+    const int transformedEnd = begin + replacement.size();
+    const bool forward = position >= anchor;
+    transaction.insert(QStringLiteral("hasEdit"), true);
+    transaction.insert(QStringLiteral("replacementStart"), begin);
+    transaction.insert(QStringLiteral("replacementEnd"), end);
+    transaction.insert(QStringLiteral("replacementText"), replacement);
+    transaction.insert(QStringLiteral("anchor"), forward ? begin : transformedEnd);
+    transaction.insert(QStringLiteral("position"), forward ? transformedEnd : begin);
+    return transaction;
+}
 
 QVariantMap QmlDocumentModel::normalizeChartSelection(
     const QString& text, int anchor, int position, const QVariantMap& options) const

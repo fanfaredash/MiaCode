@@ -261,7 +261,6 @@ public:
     // ShortcutRegistry ids and dispatches through here, which keeps one command
     // table instead of nineteen new public methods. Returns false for an id
     // this window does not own.
-    bool triggerShortcutCommand(const QString& id);
     bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
@@ -400,21 +399,7 @@ private slots:
     void restoreBackupFilePath(const QString& path);
     bool onSaveFile();
     bool onSaveFileAs();
-    void onMirrorLeftRight();
-    void onMirrorUpDown();
-    void onRotate180();
-    void onRotate45CounterClockwise();
-    void onRotate45Clockwise();
     void onNormalizeWholeChart();
-    void onToggleBreakSelection();
-    void onToggleExSelection();
-    void onToggleFireworkSelection();
-    void onRandomRotateSelection();
-    void onClearCompleteElementsSelection();
-    void onRaiseSubdivisionSelection();
-    void onLowerSubdivisionSelection();
-    void onRaiseSubdivisionHalfStepSelection();
-    void onLowerSubdivisionHalfStepSelection();
     void onStopPreview();
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);
@@ -584,7 +569,6 @@ private:
     double timelineSecondForCursor(int line, int col) const;
     bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
     void jumpToLocation(int line, int col);
-    QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
     QString editorText() const;
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;

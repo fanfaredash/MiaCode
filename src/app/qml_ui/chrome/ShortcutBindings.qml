@@ -22,6 +22,12 @@ Item {
     // Transforms edit the chart, so they are inert without one.
     property bool chartCommandsEnabled: true
 
+    // A transform acts on the editor's selection, which only the editor knows.
+    // Routing it through the backend meant reading a hidden widget's cursor
+    // that nothing ever synced from here, so every transform found an empty
+    // selection and silently did nothing.
+    signal chartTransformRequested(string opId)
+
     Instantiator {
         model: root.commands.shortcutCommandIds()
         delegate: Shortcut {
@@ -32,7 +38,7 @@ Item {
                 : ""
             enabled: root.chartCommandsEnabled && sequence !== ""
             context: Qt.WindowShortcut
-            onActivated: root.commands.triggerShortcutCommand(modelData)
+            onActivated: root.chartTransformRequested(modelData)
         }
     }
 

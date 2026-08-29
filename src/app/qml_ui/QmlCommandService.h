@@ -25,11 +25,9 @@ public:
     Q_INVOKABLE void disableUnifiedDesigner();
     // Reuses MainWindow::onPreferences() — same dialog as v1 Tools/Preferences.
     Q_INVOKABLE void openPreferences();
-    // Chart-transform commands reach the backend by their ShortcutRegistry id;
-    // see MainWindow::triggerShortcutCommand for why v2 needs this at all.
-    Q_INVOKABLE bool triggerShortcutCommand(const QString& id);
     // The registry ids v2 binds as window shortcuts, in one place so QML does
-    // not carry a second copy of the command table.
+    // not carry a second copy of the command table. The shell binds them to the
+    // editor, not back to the backend — see QmlDocumentModel::transformChartSelection.
     Q_INVOKABLE QStringList shortcutCommandIds() const;
 
 private:

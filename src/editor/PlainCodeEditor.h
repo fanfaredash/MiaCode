@@ -22,11 +22,6 @@ bool completionPopupContainsPointer(const QRect& popupBounds, const QPoint& glob
 QChar normalizedHalfWidthChar(QChar ch);
 QString normalizedHalfWidthText(QString text);
 QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text);
-QString clearCompleteElementsInSelection(
-    const QString& text,
-    int selectionStart,
-    int selectionEnd,
-    int* changedCount = nullptr);
 }
 
 class PlainCodeEditor : public QTextEdit

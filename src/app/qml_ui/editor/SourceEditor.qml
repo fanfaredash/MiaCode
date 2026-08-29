@@ -351,6 +351,19 @@ Rectangle {
         return root.applyEditorTransaction(transaction, false)
     }
 
+    // 谱面变换 uses the same transaction path as normalization, so a mirror or a
+    // subdivision step lands on the undo stack as one step and the selection
+    // survives it. Returns false when there is nothing selected to act on.
+    function applyChartTransform(opId) {
+        if (root.metadataMode)
+            return false
+        const transaction = root.documentSession.transformChartSelection(
+            sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd, opId)
+        if (!transaction.consumed || !transaction.hasEdit)
+            return false
+        return root.applyEditorTransaction(transaction, false)
+    }
+
     function applyEditorTransaction(transaction, centerCursor) {
         if (!transaction.consumed)
             return false

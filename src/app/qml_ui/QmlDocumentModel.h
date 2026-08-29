@@ -136,6 +136,18 @@ public:
     Q_INVOKABLE QVariantMap normalizeChartSelection(
         const QString& text, int anchor, int position, const QVariantMap& options) const;
 
+    // Applies one of the 谱面变换 commands to the selected range, returned as an
+    // editor transaction the same way normalizeChartSelection is. `opId` is the
+    // ShortcutRegistry id ("transform.mirror_lr", …), so the shortcut table,
+    // the menu and this dispatch all name the operation identically.
+    //
+    // These used to be MainWindow methods that read the hidden Widgets editor's
+    // cursor. Nothing ever carried the QML selection into that widget, so in v2
+    // every one of them found an empty selection and did nothing.
+    Q_INVOKABLE QVariantMap transformChartSelection(
+        const QString& text, int anchor, int position, const QString& opId) const;
+    Q_INVOKABLE QStringList chartTransformIds() const;
+
     // Stored normalize options, as the same map normalizeChartSelection takes.
     Q_INVOKABLE QVariantMap normalizeOptions() const;
     Q_INVOKABLE void setNormalizeOptions(const QVariantMap& options);

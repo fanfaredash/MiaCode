@@ -292,30 +292,6 @@ MainWindow::MainWindow(QWidget* parent)
     editor->setLineWrapMode(QTextEdit::WidgetWidth);
     editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     editor->setPlainText(QString());
-    auto* batchTransformGroupSeparator = new QAction(this);
-    batchTransformGroupSeparator->setSeparator(true);
-    auto* batchTransformClearSeparator = new QAction(this);
-    batchTransformClearSeparator->setSeparator(true);
-    editor->setBatchTransformActions({
-        transformMirrorLeftRightAction_,
-        transformMirrorUpDownAction_,
-        transformRotate180Action_,
-        transformRotate45CounterClockwiseAction_,
-        transformRotate45ClockwiseAction_,
-        batchTransformGroupSeparator,
-        transformRaiseSubdivisionAction_,
-        transformLowerSubdivisionAction_,
-        transformRaiseSubdivisionHalfStepAction_,
-        transformLowerSubdivisionHalfStepAction_,
-        batchTransformClearSeparator,
-        transformClearCompleteElementsAction_,
-    });
-    editor->setMoreBatchTransformActions({
-        transformToggleBreakAction_,
-        transformToggleExAction_,
-        transformToggleFireworkAction_,
-        transformRandomRotateAction_,
-    });
     connect(editor, &PlainCodeEditor::undoShortcutRequested, this, [this]() {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
@@ -341,21 +317,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(editor, &PlainCodeEditor::selectionReplacementAboutToEdit, this, [this](int anchor, int position) {
         if (documentSection_ != nullptr) {
             documentSection_->recordChartSelectionUndoRestoreAfterNextEdit(anchor, position);
-        }
-    });
-    connect(editor, &PlainCodeEditor::clearCompleteElementsShortcutRequested, this, [this]() {
-        if (transformClearCompleteElementsAction_ != nullptr) {
-            transformClearCompleteElementsAction_->trigger();
-        }
-    });
-    connect(editor, &PlainCodeEditor::raiseSubdivisionHalfStepShortcutRequested, this, [this]() {
-        if (transformRaiseSubdivisionHalfStepAction_ != nullptr) {
-            transformRaiseSubdivisionHalfStepAction_->trigger();
-        }
-    });
-    connect(editor, &PlainCodeEditor::lowerSubdivisionHalfStepShortcutRequested, this, [this]() {
-        if (transformLowerSubdivisionHalfStepAction_ != nullptr) {
-            transformLowerSubdivisionHalfStepAction_->trigger();
         }
     });
     connect(editor, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {

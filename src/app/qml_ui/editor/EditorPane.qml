@@ -48,6 +48,10 @@ Rectangle {
             sourceEditor.selectCurrentLine()
     }
 
+    function applyChartTransform(opId) {
+        return sourceVisible && sourceEditor.applyChartTransform(opId)
+    }
+
     function revealSyntaxIssue(difficultyId, revision, line, column, endColumn) {
         if (revision !== root.documentSession.validationRevision
                 || revision !== root.documentSession.documentRevision

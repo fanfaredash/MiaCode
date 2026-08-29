@@ -298,94 +298,6 @@ bool MainWindow::DocumentSection::applyBatchTransform(const QString& opName, con
     return true;
 }
 
-bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
-{
-    if (!transform) {
-        return false;
-    }
-    return applySelectionBatchTransform(
-        opName,
-        [transform](const QString& selected, const QString&, int* changedCount) {
-            return transform(selected, changedCount);
-        });
-}
-
-bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& opName, const SelectionContextBatchTransform& transform)
-{
-    MC_OP("MainWindow::DocumentSection::applySelectionBatchTransform");
-    _mc_op_.note(QStringLiteral("op=%1").arg(opName));
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    const QTextCursor oldCursor = editor->textCursor();
-    const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
-    const int oldHScroll = editor->horizontalScrollBar() != nullptr ? editor->horizontalScrollBar()->value() : 0;
-    int startPos = -1;
-    int endPos = -1;
-    if (!currentSelectionRange(&startPos, &endPos)) {
-        owner_.statusBar()->showMessage(QString("%1: no selection.").arg(opName));
-        return false;
-    }
-
-    const QString original = owner_.editorText();
-    const int begin = qMin(startPos, endPos);
-    const int finish = qMax(startPos, endPos);
-    if (begin < 0 || finish <= begin || finish > original.size()) {
-        owner_.statusBar()->showMessage(QString("%1: invalid selection range.").arg(opName));
-        return false;
-    }
-
-    const QString selected = original.mid(begin, finish - begin);
-    const QString suffixContext = original.mid(finish);
-    int changed = 0;
-    const QString transformed = transform(selected, suffixContext, &changed);
-    if (transformed == selected) {
-        owner_.statusBar()->showMessage(QString("%1: no note index changed.").arg(opName));
-        return false;
-    }
-
-    const bool forwardSelection = oldCursor.hasSelection()
-        ? (oldCursor.position() >= oldCursor.anchor())
-        : true;
-    const int originalAnchor = forwardSelection ? begin : finish;
-    const int originalPosition = forwardSelection ? finish : begin;
-
-    QTextCursor editCursor = oldCursor;
-    editCursor.beginEditBlock();
-    editCursor.setPosition(begin);
-    editCursor.setPosition(finish, QTextCursor::KeepAnchor);
-    editCursor.insertText(transformed);
-    editCursor.endEditBlock();
-
-    QTextCursor restoredCursor(editor->document());
-    const int maxPos = editor->document()->characterCount() - 1;
-    const int transformedEnd = begin + transformed.size();
-    const int restoredAnchor = qBound(0, forwardSelection ? begin : transformedEnd, maxPos);
-    const int restoredPosition = qBound(0, forwardSelection ? transformedEnd : begin, maxPos);
-    restoredCursor.setPosition(restoredAnchor);
-    restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
-    editor->setTextCursor(restoredCursor);
-    recordChartSelectionTransformUndoEntry(originalAnchor, originalPosition, restoredCursor);
-    if (editor->verticalScrollBar() != nullptr) {
-        editor->verticalScrollBar()->setValue(qBound(
-            editor->verticalScrollBar()->minimum(),
-            oldVScroll,
-            editor->verticalScrollBar()->maximum()
-        ));
-    }
-    if (editor->horizontalScrollBar() != nullptr) {
-        editor->horizontalScrollBar()->setValue(qBound(
-            editor->horizontalScrollBar()->minimum(),
-            oldHScroll,
-            editor->horizontalScrollBar()->maximum()
-        ));
-    }
-
-    markCurrentFieldDirty();
-    state_.lastPreviewNoteMarkerSignature_.clear();
-    owner_.refreshTimelineMetadata();
-    owner_.statusBar()->showMessage(QString("%1 applied on selection: %2 replacement(s).").arg(opName).arg(changed));
-    return true;
-}
-
 bool MainWindow::maybeSaveBeforeContinue()
 {
     return documentSection_->maybeSaveBeforeContinue();
@@ -645,11 +557,6 @@ void MainWindow::handleAudioDrop(const QStringList& audioPaths)
 bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform& transform)
 {
     return documentSection_->applyBatchTransform(opName, transform);
-}
-
-bool MainWindow::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
-{
-    return documentSection_->applySelectionBatchTransform(opName, transform);
 }
 
 std::pair<int, int> MainWindow::currentCursorLineCol() const

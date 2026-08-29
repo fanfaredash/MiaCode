@@ -75,7 +75,6 @@
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void resetAutosaveState(const QString& referenceText);
     bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
-    bool applySelectionBatchTransform(const QString& opName, const BatchTransform& transform);
     std::pair<int, int> currentCursorLineCol() const;
     std::pair<int, int> currentSelectionOrCursorLineCol() const;
     bool currentSelectionRange(int* startPos, int* endPos) const;

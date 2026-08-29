@@ -92,5 +92,6 @@ ApplicationWindow {
         commands: window.applicationContext.commands
         shellController: window.shellController
         chartCommandsEnabled: window.applicationContext.document.currentDifficultyId > 0
+        onChartTransformRequested: opId => mainView.applyChartTransform(opId)
     }
 }
