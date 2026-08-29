@@ -164,6 +164,12 @@ signals:
     // workspace page is active. Emitted where those change rather than sampled
     // — QuickShellController used to poll all of it on a timer.
     void shellPresentationChanged();
+    // The preview playhead moved. Emitted from applyQtPreviewPosition — the one
+    // function that moves it, on a tick or on a seek — so the shell's transport
+    // is told rather than left to sample. It is separate from
+    // shellPresentationChanged because it fires per frame during playback and
+    // the bottom panel has no reason to wake for it.
+    void shellPreviewPlayheadChanged();
 
 public:
     enum class DocumentField {

@@ -561,7 +561,7 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
         state_.qtPreviewPauseSecond_, effectiveStartSecond, state_.qtPreviewPlaying_, "finalize_qt_preview_playback_start");
     state_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
-    state_.qtPreviewPlaying_ = true;
+    owner_.setPreviewPlayingFlag(true);
     owner_.editorSyncController().setPlaybackActive(true);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
@@ -681,7 +681,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     clearPreviewPlayingRetainedSeek();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
-    state_.qtPreviewPlaying_ = false;
+    owner_.setPreviewPlayingFlag(false);
     owner_.editorSyncController().setPlaybackActive(false);
     miacode::mainwindow::shared::writePreviewPauseSecond(
         state_.qtPreviewPauseSecond_, wallClockPauseSecond, state_.qtPreviewPlaying_, "pause_qt_preview_playback_exact");
@@ -1107,7 +1107,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
     // Spec: pause-for-reanchor lands in 暂停-R, so request R-centring.
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
-    state_.qtPreviewPlaying_ = false;
+    owner_.setPreviewPlayingFlag(false);
     owner_.editorSyncController().setPlaybackActive(false);
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
@@ -1170,7 +1170,7 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    state_.qtPreviewPlaying_ = false;
+    owner_.setPreviewPlayingFlag(false);
     owner_.editorSyncController().setPlaybackActive(false);
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);

@@ -393,7 +393,7 @@ void MainWindow::preparePreviewForShutdown()
         previewHeldSeekTimer_->stop();
     }
     setPreviewFixedTimerHighResolutionActive(false);
-    qtPreviewPlaying_ = false;
+    setPreviewPlayingFlag(false);
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setActivePlaybackProfilingEnabled(false);
     }

@@ -1,7 +1,5 @@
 #include "QmlPreviewModel.h"
 
-#include <QTimer>
-
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/MuriRenderOptions.h"
@@ -28,22 +26,18 @@ constexpr std::array<StatisticDescriptor, 6> kStatisticDescriptors{{
     {"total", "Total"},
 }};
 
-constexpr int kClockSampleIntervalMs = 33;
-
 } // namespace
 
 QmlPreviewModel::QmlPreviewModel(MainWindow& backend, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
-    , clockTimer_(new QTimer(this))
 {
     v2UiProbeEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
-    clockTimer_->setInterval(kClockSampleIntervalMs);
-    connect(clockTimer_, &QTimer::timeout, this, [this]() {
+    connect(backend_, &MainWindow::shellPresentationChanged, this, [this]() {
         updateV2UiProbePlaybackState();
         refreshFromBackend();
     });
-    connect(backend_, &MainWindow::shellPresentationChanged, this, [this]() {
+    connect(backend_, &MainWindow::shellPreviewPlayheadChanged, this, [this]() {
         updateV2UiProbePlaybackState();
         refreshFromBackend();
     });
@@ -145,19 +139,6 @@ void QmlPreviewModel::rebuildStatistics()
     }
 }
 
-void QmlPreviewModel::updateClockSampling()
-{
-    if (clockTimer_ == nullptr) {
-        return;
-    }
-    // Idle costs nothing: the timer only exists to follow a moving clock.
-    if (playing_ && !clockTimer_->isActive()) {
-        clockTimer_->start();
-    } else if (!playing_ && clockTimer_->isActive()) {
-        clockTimer_->stop();
-    }
-}
-
 void QmlPreviewModel::refreshFromBackend(bool force)
 {
     if (backend_ == nullptr) {
@@ -227,7 +208,6 @@ void QmlPreviewModel::refreshFromBackend(bool force)
         emit statisticsChanged();
     }
     emit presentationChanged();
-    updateClockSampling();
 }
 
 void QmlPreviewModel::updateV2UiProbePlaybackState()

@@ -95,6 +95,15 @@
       检测到 ≥119.5 Hz 时才把 120 FPS 放进菜单，并把「屏幕最大刷新率」一项显示成
       `屏幕最大刷新率 (N Hz)`；v2 偏好设置 → 性能 的 `QmlPreferencesModel::frameRateOptions`
       两者都没做。留到「v1 & v2 文案逐项对比」那一轮一起处理。
+- [x] **预览走带的时间条停在 0**（2026-08-30 用户报告，同日修复）。阶段 2 退役
+      `QuickShellController` 时，它那条轮询计时器是 shell 唯一的预览状态来源；替代方案
+      把底栏那一半改成推送，预览这一半却换成了一个以 `playing_` 为闸门的采样计时器——
+      而没有任何东西告诉模型播放已经开始，闸门永不开启，于是时间轴跟随一切正常、走带
+      却一直停在 0。现在播放头由**移动它的那个函数**（`applyQtPreviewPosition`）通过
+      `shellPreviewPlayheadChanged` 播报，播放标志由**唯一的写入者**
+      （`MainWindow::setPreviewPlayingFlag`）播报，模型不再采样任何东西——顺带修好了
+      暂停时拖动时间轴/键盘定位不会移动走带滑块的问题。
+      漂移守卫：`preview_transport_push_spec`。
 - [ ] **导出区间的可视化进度条**（2026-08-29 记录）。导出页的区间只有起止秒数输入框，
       缺少 v1 那条能直观看出区间落在整曲何处的进度条 / 区间条。
 - [x] **启动崩溃恢复弹窗仍是 Widgets**（2026-08-29 已修）：`MainWindow.DocumentAutosaveFlow.cpp`

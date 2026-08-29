@@ -214,6 +214,20 @@ double MainWindow::shellPreviewPositionSeconds() const
     return windowSection_->shellPreviewPositionSeconds();
 }
 
+void MainWindow::setPreviewPlayingFlag(bool playing)
+{
+    if (state_.qtPreviewPlaying_ == playing) {
+        return;
+    }
+    state_.qtPreviewPlaying_ = playing;
+    // Announce after the caller has finished its transition, not from the
+    // middle of it: several of these sites write the pause second on the line
+    // after the flag, and a listener that read between the two would take a
+    // position the app had already moved past.
+    QMetaObject::invokeMethod(
+        this, [this]() { emit shellPresentationChanged(); }, Qt::QueuedConnection);
+}
+
 double MainWindow::shellPreviewDurationSeconds() const
 {
     return windowSection_->shellPreviewDurationSeconds();

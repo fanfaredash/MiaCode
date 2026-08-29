@@ -8,16 +8,18 @@
 #include "common/MuriRenderOptions.h"
 
 class MainWindow;
-class QTimer;
 
 // Real-time preview state exposed to the pure-QML UI. Playback and rendering
 // remain owned by MiaCode's preview runtime.
 //
 // This reads MainWindow directly. It used to read QuickShellController, which
 // polled ~25 unrelated values off MainWindow on a timer that ran whether or not
-// anything was playing. Discrete state is pushed now
-// (MainWindow::shellPresentationChanged); the one value that genuinely has to
-// be sampled is the playback clock, and its timer runs only while playing.
+// anything was playing. Everything is pushed now: shellPresentationChanged for
+// discrete shell state, shellPreviewPlayheadChanged from the one function that
+// moves the playhead. The playhead briefly went through a sampling timer
+// instead, which is worse in both directions — it aliased the clock during
+// playback, and it never started at all when playback began somewhere that did
+// not announce itself.
 class QmlPreviewModel final : public QObject
 {
     Q_OBJECT
@@ -80,7 +82,6 @@ signals:
 
 private:
     void refreshFromBackend(bool force = false);
-    void updateClockSampling();
     void rebuildStatistics();
     void refreshSkinDirectory();
     void updateV2UiProbePlaybackState();
@@ -88,9 +89,6 @@ private:
     void appendV2UiProbeSummary() const;
 
     MainWindow* backend_ = nullptr;
-    // Runs only while the preview is playing: a media clock is the one thing
-    // here that cannot be pushed.
-    QTimer* clockTimer_ = nullptr;
     double positionSeconds_ = 0.0;
     double durationSeconds_ = 0.0;
     double lowerBoundSeconds_ = 0.0;

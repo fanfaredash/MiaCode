@@ -197,6 +197,13 @@
     void pauseQtPreviewPlaybackExact();
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
+    // Single writer for qtPreviewPlaying_. The flag has never travelled alone —
+    // every site that flips it also tells EditorSyncController — and the QML
+    // shell needs it too: its play/pause control reads it, and for a while
+    // nothing announced the flip at all, which is how the transport ended up
+    // frozen while the timeline followed along fine. Assign through here, never
+    // directly.
+    void setPreviewPlayingFlag(bool playing);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
     void onTimelineRenderCadenceTick();
