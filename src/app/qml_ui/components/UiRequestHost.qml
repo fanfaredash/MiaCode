@@ -66,6 +66,7 @@ Item {
             noticeDialog.text = notice.text
             noticeDialog.informativeText = notice.details
             noticeDialog.actionLabel = notice.actionLabel || ""
+            noticeDialog.confirmation = !!notice.confirmation
             noticeDialog.open()
         }
     }
@@ -106,9 +107,14 @@ Item {
         id: noticeDialog
         objectName: "uiRequestNoticeDialog"
         property string actionLabel: ""
-        buttons: actionLabel.length > 0
-                 ? (MessageDialog.Open | MessageDialog.Close)
-                 : MessageDialog.Ok
+        property bool confirmation: false
+        // A question offers Yes/No; a message with an extra action offers
+        // Open/Close; a plain message is Ok only.
+        buttons: confirmation
+                 ? (MessageDialog.Yes | MessageDialog.No)
+                 : (actionLabel.length > 0
+                    ? (MessageDialog.Open | MessageDialog.Close)
+                    : MessageDialog.Ok)
 
         function resolve(actionChosen) {
             const requestId = root.activeNoticeId
@@ -118,7 +124,9 @@ Item {
         }
 
         onButtonClicked: function(button, role) {
-            noticeDialog.resolve(button === MessageDialog.Open)
+            noticeDialog.resolve(noticeDialog.confirmation
+                                 ? button === MessageDialog.Yes
+                                 : button === MessageDialog.Open)
         }
         onRejected: noticeDialog.resolve(false)
     }

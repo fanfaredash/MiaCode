@@ -56,6 +56,14 @@ public:
                     const QString& text,
                     const QString& details = QString());
 
+    // A yes/no question. The continuation runs once; declining and dismissing
+    // are the same answer, so a caller can never mistake "closed the dialog"
+    // for consent.
+    QString requestConfirmation(const QString& title,
+                                const QString& text,
+                                const QString& acceptLabel,
+                                NoticeCallback onResolved);
+
     // Message carrying one extra action button beside the dismissal. The
     // continuation runs once, with true only when that action was chosen.
     QString requestNoticeAction(NoticeSeverity severity,
@@ -83,7 +91,8 @@ private:
                        const QString& text,
                        const QString& details,
                        const QString& actionLabel,
-                       const QString& requestId = QString());
+                       const QString& requestId = QString(),
+                       bool confirmation = false);
 
     QHash<QString, FileCallback> pendingFileRequests_;
     QHash<QString, NoticeCallback> pendingNotices_;

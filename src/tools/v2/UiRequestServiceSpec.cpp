@@ -207,6 +207,47 @@ bool verifyActionableNotices(QTextStream& err)
     return ok;
 }
 
+bool verifyConfirmations(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy notices(&service, &miacode::v2::UiRequestService::noticeRequested);
+
+    QList<bool> answers;
+    const QString id = service.requestConfirmation(
+        QStringLiteral("Sample rate"),
+        QStringLiteral("Convert track.mp3 to 44100 Hz?"),
+        QStringLiteral("Convert"),
+        [&answers](bool accepted) { answers.append(accepted); });
+
+    bool ok = require(notices.count() == 1 && service.pendingNoticeCount() == 1,
+                      QStringLiteral("a confirmation is published and stays pending"), err);
+    if (!ok) {
+        return false;
+    }
+    const QVariantMap payload = notices.at(0).at(1).toMap();
+    ok &= require(payload.value(QStringLiteral("confirmation")).toBool()
+                      && payload.value(QStringLiteral("actionLabel")).toString()
+                          == QStringLiteral("Convert"),
+                  QStringLiteral("the shell can tell a question from a plain message"), err);
+
+    service.submitNoticeResult(id, true);
+    ok &= require(answers == QList<bool>{true}, QStringLiteral("accepting answers true"), err);
+
+    // The one that matters: dismissing must never read as consent.
+    QList<bool> dismissedAnswers;
+    const QString second = service.requestConfirmation(
+        QStringLiteral("t"), QStringLiteral("x"), QStringLiteral("Go"),
+        [&dismissedAnswers](bool accepted) { dismissedAnswers.append(accepted); });
+    service.submitNoticeResult(second, false);
+    ok &= require(dismissedAnswers == QList<bool>{false},
+                  QStringLiteral("declining or dismissing a confirmation answers false"), err);
+
+    ok &= require(!notices.at(0).at(0).toString().isEmpty()
+                      && notices.at(0).at(0).toString() != QStringLiteral("notice-1"),
+                  QStringLiteral("confirmations get their own request ids"), err);
+    return ok;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -214,7 +255,7 @@ int main(int argc, char** argv)
     QCoreApplication app(argc, argv);
     QTextStream err(stderr);
     const bool ok = verifyFileRequestRoundTrip(err) && verifyCancellationAndUnknownIds(err)
-        && verifyNotices(err) && verifyActionableNotices(err);
+        && verifyNotices(err) && verifyActionableNotices(err) && verifyConfirmations(err);
     if (ok) {
         QTextStream out(stdout);
         out << "ui_request_service_spec ok" << Qt::endl;

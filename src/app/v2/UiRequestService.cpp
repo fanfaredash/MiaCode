@@ -47,6 +47,18 @@ void UiRequestService::postNotice(NoticeSeverity severity,
     emitNotice(severity, title, text, details, QString());
 }
 
+QString UiRequestService::requestConfirmation(const QString& title,
+                                              const QString& text,
+                                              const QString& acceptLabel,
+                                              NoticeCallback onResolved)
+{
+    const QString requestId = QStringLiteral("confirm-%1").arg(nextRequestSerial_++);
+    pendingNotices_.insert(requestId, std::move(onResolved));
+    emitNotice(NoticeSeverity::Information, title, text, QString(), acceptLabel, requestId,
+               /*confirmation=*/true);
+    return requestId;
+}
+
 QString UiRequestService::requestNoticeAction(NoticeSeverity severity,
                                               const QString& title,
                                               const QString& text,
@@ -65,9 +77,11 @@ QString UiRequestService::emitNotice(NoticeSeverity severity,
                                      const QString& text,
                                      const QString& details,
                                      const QString& actionLabel,
-                                     const QString& requestId)
+                                     const QString& requestId,
+                                     bool confirmation)
 {
     QVariantMap notice;
+    notice.insert(QStringLiteral("confirmation"), confirmation);
     notice.insert(QStringLiteral("severity"), severityId(severity));
     notice.insert(QStringLiteral("title"), title);
     notice.insert(QStringLiteral("text"), text);
