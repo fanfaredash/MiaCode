@@ -68,6 +68,7 @@ double QmlUiSettings::previewMinimumWidthRatio() const { return kPreviewMinimumW
 double QmlUiSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
 QString QmlUiSettings::uiFontFamily() const { return uiFontFamily_; }
 QFont QmlUiSettings::codeFont() const { return codeFont_; }
+int QmlUiSettings::editorBlockSpacing() const { return editorBlockSpacing_; }
 int QmlUiSettings::fontSize() const { return fontSize_; }
 bool QmlUiSettings::editorHalfWidthInputEnabled() const { return editorHalfWidthInputEnabled_; }
 bool QmlUiSettings::editorOverwriteModeEnabled() const { return editorOverwriteModeEnabled_; }
@@ -122,6 +123,19 @@ void QmlUiSettings::setPreviewWidthRatio(double value)
     previewWidthRatio_ = value;
     settings_.setValue(kPreviewWidthRatio, value);
     emit previewWidthRatioChanged();
+}
+
+void QmlUiSettings::setEditorAppearance(int pointSize, double lineSpacingFactor)
+{
+    const QFont font = miacode::mainwindow::shared::editorFont(pointSize);
+    const int blockSpacing =
+        miacode::mainwindow::shared::blockSpacingPixelsForPointSize(pointSize, lineSpacingFactor);
+    if (codeFont_ == font && editorBlockSpacing_ == blockSpacing) {
+        return;
+    }
+    codeFont_ = font;
+    editorBlockSpacing_ = blockSpacing;
+    emit editorAppearanceChanged();
 }
 
 void QmlUiSettings::setFontSize(int value)

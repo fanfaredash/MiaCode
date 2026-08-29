@@ -16,7 +16,10 @@ Dialog {
     anchors.centerIn: Overlay.overlay
     width: Math.min(680, Overlay.overlay ? Overlay.overlay.width - 48 : 680)
     height: Math.min(520, Overlay.overlay ? Overlay.overlay.height - 48 : 520)
-    standardButtons: Dialog.Close
+    footer: DialogFooter {
+        cancelText: qsTr("关闭")
+        onRejected: root.reject()
+    }
     closePolicy: Popup.CloseOnEscape
 
     readonly property bool busy: !!root.mediaTools && root.mediaTools.batchRunning

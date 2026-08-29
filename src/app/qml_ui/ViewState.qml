@@ -21,6 +21,9 @@ QtObject {
     // 继续由宿主偏好服务持久化。
     property string activeSidebarView: "chart"
     property bool difficultySectionExpanded: true
+    // 书签分组的展开状态属于当前工作台会话。未被触碰过的分组跟随活动难度：
+    // 当前难度展开，其余折叠——与 v1 的 outlineBookmarkGroupExpanded_ 一致。
+    property var bookmarkGroupsExpanded: ({})
     property bool bottomPanelVisible: true
     property bool previewVisible: true
     property string compactPanel: ""
@@ -33,6 +36,19 @@ QtObject {
 
     function containsEditor(key) {
         return openEditorTabs.indexOf(key) >= 0
+    }
+
+    function bookmarkGroupExpanded(difficultyId) {
+        const stored = bookmarkGroupsExpanded[difficultyId]
+        return stored === undefined ? difficultyId === activeDifficultyId : stored
+    }
+
+    // Reassignment, not mutation: a QML var property only notifies when it is
+    // assigned, so editing the map in place would leave every binding stale.
+    function setBookmarkGroupExpanded(difficultyId, expanded) {
+        const next = Object.assign({}, bookmarkGroupsExpanded)
+        next[difficultyId] = expanded
+        bookmarkGroupsExpanded = next
     }
 
     function recordEditorUse(key) {

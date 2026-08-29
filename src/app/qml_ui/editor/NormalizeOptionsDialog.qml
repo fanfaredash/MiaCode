@@ -12,37 +12,49 @@ Dialog {
     // line/column range), supplied by the caller.
     property string selectionDescription: ""
 
+    // Option lists come from the document model so the labels stay the ones the
+    // Widgets dialog used ("每 4 小节" / "不分段" / "日向").
+    required property var documentSession
+
     // Seed values; the caller reads the same-named properties back on accept.
     property bool reduceTo384Grid: true
-    property bool splitEveryFourMeasures: true
     property int sectionMeasureCount: 4
     property string syntax: "fpd"
 
-    readonly property var sectionOptions: [4, 8]
-    readonly property var syntaxOptions: ["fpd", "hinata"]
+    readonly property var gridOptions: documentSession.normalizeGridOptions()
+    readonly property var sectionOptions: documentSession.normalizeSectionOptions()
+    readonly property var syntaxOptions: documentSession.normalizeSyntaxOptions()
+
+    function indexOfValue(options, value) {
+        for (let i = 0; i < options.length; ++i) {
+            if (options[i].value === value)
+                return i
+        }
+        return 0
+    }
 
     title: qsTr("整谱规范化")
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(420, Overlay.overlay ? Overlay.overlay.width - 48 : 420)
-    standardButtons: Dialog.Ok | Dialog.Cancel
+    footer: DialogFooter {
+        acceptText: qsTr("确定")
+        cancelText: qsTr("取消")
+        onAccepted: root.accept()
+        onRejected: root.reject()
+    }
     closePolicy: Popup.CloseOnEscape
 
-    // Splitting into sections is what the measure count applies to; without it
-    // the number has no meaning, so bind availability rather than letting the
-    // user set a value that is silently ignored.
     onAccepted: {
-        root.reduceTo384Grid = reduceCheck.checked
-        root.splitEveryFourMeasures = splitCheck.checked
-        root.sectionMeasureCount = root.sectionOptions[sectionCombo.currentIndex]
-        root.syntax = root.syntaxOptions[syntaxCombo.currentIndex]
+        root.reduceTo384Grid = root.gridOptions[reduceCombo.currentIndex].value
+        root.sectionMeasureCount = root.sectionOptions[sectionCombo.currentIndex].value
+        root.syntax = root.syntaxOptions[syntaxCombo.currentIndex].value
     }
 
     onAboutToShow: {
-        reduceCheck.checked = root.reduceTo384Grid
-        splitCheck.checked = root.splitEveryFourMeasures
-        sectionCombo.currentIndex = Math.max(0, root.sectionOptions.indexOf(root.sectionMeasureCount))
-        syntaxCombo.currentIndex = Math.max(0, root.syntaxOptions.indexOf(root.syntax))
+        reduceCombo.currentIndex = root.indexOfValue(root.gridOptions, root.reduceTo384Grid)
+        sectionCombo.currentIndex = root.indexOfValue(root.sectionOptions, root.sectionMeasureCount)
+        syntaxCombo.currentIndex = root.indexOfValue(root.syntaxOptions, root.syntax)
     }
 
     contentItem: ColumnLayout {
@@ -57,25 +69,26 @@ Dialog {
             wrapMode: Text.WordWrap
         }
 
-        AppCheckBox {
-            id: reduceCheck
-            objectName: "normalizeReduce384Check"
+        RowLayout {
             Layout.fillWidth: true
-            text: qsTr("对齐到 384 分网格")
-        }
-
-        AppCheckBox {
-            id: splitCheck
-            objectName: "normalizeSplitCheck"
-            Layout.fillWidth: true
-            text: qsTr("按小节分段")
+            Text {
+                text: qsTr("对齐到 384 分网格")
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+            }
+            AppComboBox {
+                id: reduceCombo
+                objectName: "normalizeReduce384Combo"
+                Layout.fillWidth: true
+                textRole: "label"
+                model: root.gridOptions
+            }
         }
 
         RowLayout {
             Layout.fillWidth: true
-            enabled: splitCheck.checked
             Text {
-                text: qsTr("每段小节数")
+                text: qsTr("谱面分段")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
             }
@@ -83,6 +96,7 @@ Dialog {
                 id: sectionCombo
                 objectName: "normalizeSectionCombo"
                 Layout.fillWidth: true
+                textRole: "label"
                 model: root.sectionOptions
             }
         }
@@ -90,7 +104,7 @@ Dialog {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: qsTr("语法")
+                text: qsTr("整理语法")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
             }
@@ -98,7 +112,8 @@ Dialog {
                 id: syntaxCombo
                 objectName: "normalizeSyntaxCombo"
                 Layout.fillWidth: true
-                model: [qsTr("FPD"), qsTr("Hinata")]
+                textRole: "label"
+                model: root.syntaxOptions
             }
         }
     }

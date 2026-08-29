@@ -24,7 +24,10 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(double previewMinimumWidthRatio READ previewMinimumWidthRatio CONSTANT)
     Q_PROPERTY(double previewMaximumWidthRatio READ previewMaximumWidthRatio CONSTANT)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily CONSTANT)
-    Q_PROPERTY(QFont codeFont READ codeFont CONSTANT)
+    // Editor appearance is not constant: 偏好设置 writes it while the shell is
+    // running, and the QML editor is the only thing that renders it now.
+    Q_PROPERTY(QFont codeFont READ codeFont NOTIFY editorAppearanceChanged)
+    Q_PROPERTY(int editorBlockSpacing READ editorBlockSpacing NOTIFY editorAppearanceChanged)
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY fontSizeChanged)
     Q_PROPERTY(bool editorHalfWidthInputEnabled READ editorHalfWidthInputEnabled CONSTANT)
     Q_PROPERTY(bool editorOverwriteModeEnabled READ editorOverwriteModeEnabled CONSTANT)
@@ -49,6 +52,7 @@ public:
     double previewMaximumWidthRatio() const;
     QString uiFontFamily() const;
     QFont codeFont() const;
+    int editorBlockSpacing() const;
     int fontSize() const;
     bool editorHalfWidthInputEnabled() const;
     bool editorOverwriteModeEnabled() const;
@@ -61,6 +65,9 @@ public:
     void setPreviewVisible(bool value);
     void setPreviewWidthRatio(double value);
     void setFontSize(int value);
+    // Pushed by QmlApplicationContext whenever 偏好设置 changes the editor's
+    // point size or line spacing; this object holds no policy of its own.
+    void setEditorAppearance(int pointSize, double lineSpacingFactor);
 
 signals:
     void sidebarVisibleChanged();
@@ -70,6 +77,7 @@ signals:
     void previewVisibleChanged();
     void previewWidthRatioChanged();
     void fontSizeChanged();
+    void editorAppearanceChanged();
 
 private:
     static constexpr int kSidebarMinimumContentWidth = 120;
@@ -88,6 +96,7 @@ private:
     double previewWidthRatio_ = 0.5;
     QString uiFontFamily_;
     QFont codeFont_;
+    int editorBlockSpacing_ = 0;
     int fontSize_ = 13;
     bool editorHalfWidthInputEnabled_ = true;
     bool editorOverwriteModeEnabled_ = false;

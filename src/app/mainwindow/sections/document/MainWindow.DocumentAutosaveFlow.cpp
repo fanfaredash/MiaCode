@@ -1,4 +1,5 @@
-﻿#include "MainWindow.DocumentSection.h"
+﻿#include "app/v2/UiRequestService.h"
+#include "MainWindow.DocumentSection.h"
 #include "../../MainWindowShared.h"
 #include "../editor/MainWindow.EditorSection.h"
 #include "../window/MainWindow.WindowSection.h"
@@ -174,38 +175,46 @@ void MainWindow::DocumentSection::refreshRestoreBackupMenu(QMenu* restoreBackupM
 
 void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path, bool mentionAbnormalExit)
 {
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        return;
+    }
+    const QString title = UiText::text(QStringLiteral("dialog.restore_backup.title"));
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const QFileInfo backupInfo(normalizedPath);
     if (normalizedPath.isEmpty() || !backupInfo.exists() || !backupInfo.isFile()) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.restore_backup.title")),
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning, title,
             UiText::text(QStringLiteral("dialog.restore_backup.missing"))
-                .arg(QDir::toNativeSeparators(normalizedPath))
-        );
+                .arg(QDir::toNativeSeparators(normalizedPath)));
         return;
     }
 
     const QString backupTimestampLabel = backupInfo.lastModified().isValid()
         ? backupInfo.lastModified().toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))
         : QFileInfo(normalizedPath).fileName();
-    const QString restoreConfirmText = mentionAbnormalExit
-        ? UiText::text(QStringLiteral("dialog.restore_backup.abnormal_exit_confirm"))
-              .arg(backupTimestampLabel)
-        : UiText::text(QStringLiteral("dialog.restore_backup.confirm"))
-              .arg(backupTimestampLabel);
-    const auto choice = UiDialogs::showMessageBox(
-        QMessageBox::Question,
-        &owner_,
-        UiText::text(QStringLiteral("dialog.restore_backup.title")),
-        restoreConfirmText,
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
-    if (choice != QMessageBox::Yes) {
+    requests->requestConfirmation(
+        title,
+        mentionAbnormalExit
+            ? UiText::text(QStringLiteral("dialog.restore_backup.abnormal_exit_confirm"))
+                  .arg(backupTimestampLabel)
+            : UiText::text(QStringLiteral("dialog.restore_backup.confirm")).arg(backupTimestampLabel),
+        title,
+        [this, normalizedPath, title](bool accepted) {
+            if (accepted) {
+                applyBackupFile(normalizedPath, title);
+            }
+        });
+}
+
+void MainWindow::DocumentSection::applyBackupFile(const QString& normalizedPath, const QString& title)
+{
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
         return;
     }
-
+    // Read the on-disk chart as the undo baseline BEFORE overwriting the
+    // document, exactly as the confirm-and-apply version did inline.
     QString diskReferenceText = state_.document_.toText();
     if (!state_.currentFilePath_.isEmpty()) {
         QFile currentFile(state_.currentFilePath_);
@@ -216,13 +225,10 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path, boo
 
     QFile file(normalizedPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.restore_backup.title")),
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Error, title,
             UiText::text(QStringLiteral("dialog.restore_backup.read_failed"))
-                .arg(QDir::toNativeSeparators(normalizedPath))
-        );
+                .arg(QDir::toNativeSeparators(normalizedPath)));
         return;
     }
 
@@ -237,10 +243,12 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path, boo
     state_.currentFieldDirty_ = true;
     updateDirtyState();
     owner_.scheduleTimelineRefresh();
-    owner_.statusBar()->showMessage(
-        UiText::text(QStringLiteral("status.restore_backup.loaded")),
-        10000
-    );
+    // The status bar this used to write to is hidden under the QML shell, so
+    // the confirmation of a successful restore goes to the shared notice
+    // surface instead of vanishing.
+    requests->postNotice(
+        miacode::v2::NoticeSeverity::Information, title,
+        UiText::text(QStringLiteral("status.restore_backup.loaded")));
 }
 
 void MainWindow::DocumentSection::schedulePendingAbnormalExitBackupRestore()

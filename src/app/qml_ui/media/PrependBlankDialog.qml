@@ -23,7 +23,12 @@ Dialog {
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(440, Overlay.overlay ? Overlay.overlay.width - 48 : 440)
-    standardButtons: Dialog.Ok | Dialog.Cancel
+    footer: DialogFooter {
+        acceptText: qsTr("确定")
+        cancelText: qsTr("取消")
+        onAccepted: root.accept()
+        onRejected: root.reject()
+    }
     closePolicy: Popup.CloseOnEscape
 
     function loadContext(context) {

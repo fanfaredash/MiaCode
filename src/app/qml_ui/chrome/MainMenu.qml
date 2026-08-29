@@ -108,7 +108,7 @@ Item {
     }
 
     // Top-level entry: real control width drives overflow math.
-    component TopLevelItem: AbstractButton {
+    component TopLevelItem: ChromeRow {
         id: btn
 
         required property var menu
@@ -121,8 +121,9 @@ Item {
         topPadding: 0
         bottomPadding: 0
         visible: root.visibleCount > btn.menuIndex
-        hoverEnabled: true
         focusPolicy: Qt.NoFocus
+        tone: "bar"
+        selected: btn.menuOpen
 
         readonly property bool menuOpen: btn.menu && btn.menu.visible
 
@@ -140,12 +141,6 @@ Item {
             verticalAlignment: Text.AlignVCenter
         }
 
-        background: HoverChrome {
-            selected: btn.menuOpen
-            hovered: btn.hovered
-            pressed: btn.down
-            tone: "bar"
-        }
 
         onClicked: root.openAnchoredMenu(btn.menu, btn)
 

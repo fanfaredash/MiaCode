@@ -139,6 +139,11 @@ public:
     // Stored normalize options, as the same map normalizeChartSelection takes.
     Q_INVOKABLE QVariantMap normalizeOptions() const;
     Q_INVOKABLE void setNormalizeOptions(const QVariantMap& options);
+    // Sectioning is one choice, not a toggle plus a count: 4 / 2 / 0 measures,
+    // where 0 means no sectioning. splitEveryFourMeasures is derived from it.
+    Q_INVOKABLE QVariantList normalizeGridOptions() const;
+    Q_INVOKABLE QVariantList normalizeSectionOptions() const;
+    Q_INVOKABLE QVariantList normalizeSyntaxOptions() const;
 
 signals:
     void chartTextChanged();

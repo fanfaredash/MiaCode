@@ -1,3 +1,4 @@
+#include "ui/UiText.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "QmlDocumentModel.h"
 
@@ -452,7 +453,9 @@ QVariantList QmlDocumentModel::bookmarksForDifficulty(int difficultyId) const
     const QStringList lines = difficulty->chart.split(QLatin1Char('\n'));
     for (int index = 0; index < lines.size(); ++index) {
         const auto bookmark = miacode::editor::parseBookmarkComment(lines.at(index));
-        if (!bookmark.has_value()) {
+        // Control comments (a bare 拍号, or an empty `||`) are chart data, not
+        // sections, so the outline skips them the way the Widgets one did.
+        if (!bookmark.has_value() || bookmark->control) {
             continue;
         }
         bookmarks.append(QVariantMap{
@@ -657,9 +660,11 @@ miacode::chart_transform::ChartNormalizationOptions normalizeOptionsFromVariant(
     miacode::chart_transform::ChartNormalizationOptions parsed;
     parsed.startAtNewMeasure = true;
     parsed.reduceTo384Grid = options.value(QStringLiteral("reduceTo384Grid"), true).toBool();
-    parsed.splitEveryFourMeasures =
-        options.value(QStringLiteral("splitEveryFourMeasures"), true).toBool();
     parsed.sectionMeasureCount = options.value(QStringLiteral("sectionMeasureCount"), 4).toInt();
+    // The Widgets dialog derived this from the sectioning choice rather than
+    // carrying it separately; keeping it derived stops QML producing a
+    // combination the engine never saw from that path.
+    parsed.splitEveryFourMeasures = parsed.sectionMeasureCount == 4;
     parsed.syntax = options.value(QStringLiteral("syntax")).toString() == QStringLiteral("hinata")
         ? miacode::chart_transform::ChartNormalizationSyntax::Hinata
         : miacode::chart_transform::ChartNormalizationSyntax::Fpd;
@@ -727,7 +732,6 @@ QVariantMap QmlDocumentModel::normalizeOptions() const
     }
     const auto options = backend_->chartNormalizeOptions();
     map.insert(QStringLiteral("reduceTo384Grid"), options.reduceTo384Grid);
-    map.insert(QStringLiteral("splitEveryFourMeasures"), options.splitEveryFourMeasures);
     map.insert(QStringLiteral("sectionMeasureCount"), options.sectionMeasureCount);
     map.insert(
         QStringLiteral("syntax"),
@@ -743,4 +747,47 @@ void QmlDocumentModel::setNormalizeOptions(const QVariantMap& options)
         return;
     }
     backend_->setChartNormalizeOptions(normalizeOptionsFromVariant(options));
+}
+
+QVariantList QmlDocumentModel::normalizeGridOptions() const
+{
+    const auto row = [](bool on, const char* key) {
+        QVariantMap option;
+        option.insert(QStringLiteral("value"), on);
+        option.insert(QStringLiteral("label"), UiText::text(QString::fromLatin1(key)));
+        return QVariant(option);
+    };
+    return QVariantList{
+        row(true, "preferences.on"),
+        row(false, "preferences.off"),
+    };
+}
+
+QVariantList QmlDocumentModel::normalizeSectionOptions() const
+{
+    const auto row = [](int measures, const char* key) {
+        QVariantMap option;
+        option.insert(QStringLiteral("value"), measures);
+        option.insert(QStringLiteral("label"), UiText::text(QString::fromLatin1(key)));
+        return QVariant(option);
+    };
+    return QVariantList{
+        row(4, "document.chart_section_every_4_measures"),
+        row(2, "document.chart_section_every_2_measures"),
+        row(0, "document.chart_section_none"),
+    };
+}
+
+QVariantList QmlDocumentModel::normalizeSyntaxOptions() const
+{
+    const auto row = [](const QString& token, const QString& label) {
+        QVariantMap option;
+        option.insert(QStringLiteral("value"), token);
+        option.insert(QStringLiteral("label"), label);
+        return QVariant(option);
+    };
+    return QVariantList{
+        row(QStringLiteral("fpd"), QStringLiteral("v1")),
+        row(QStringLiteral("hinata"), QStringLiteral("v2")),
+    };
 }

@@ -28,29 +28,24 @@ Rectangle {
             spacing: 8
             Repeater {
                 model: root.session ? root.session.difficulties : []
-                delegate: AbstractButton {
+                delegate: ChromeRow {
                     id: badge
                     required property var modelData
                     implicitHeight: 28
-                    implicitWidth: badgeLabel.implicitWidth + 20
+                    implicitWidth: badgeLabel.implicitWidth + leftPadding + rightPadding
                     checkable: true
                     checked: root.session && root.session.selectedDifficultyId === modelData.id
+                    selected: badge.checked
                     onClicked: if (root.session) root.session.selectDifficulty(modelData.id)
                     contentItem: Text {
                         id: badgeLabel
-                        text: modelData.name
+                        text: badge.modelData.name
                         color: badge.checked ? Theme.colors.text.active : Theme.colors.text.secondary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.secondaryFontSize
                         font.bold: true
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                    }
-                    background: HoverChrome {
-                        selected: badge.checked
-                        hovered: badge.hovered
-                        pressed: badge.down
-                        tone: "nav"
                     }
                 }
             }

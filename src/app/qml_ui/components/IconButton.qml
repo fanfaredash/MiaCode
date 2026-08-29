@@ -58,7 +58,7 @@ AbstractButton {
 
         Rectangle {
             anchors.fill: parent
-            visible: root.activeFocus
+            visible: root.visualFocus
             radius: Theme.itemRadius
             color: "transparent"
             border.width: 1

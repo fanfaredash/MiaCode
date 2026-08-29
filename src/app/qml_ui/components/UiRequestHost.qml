@@ -1,5 +1,8 @@
 import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
 import QtQuick.Dialogs
+import MiaCode.UI
 
 // Renders the file picks and notices that a Widgets-free application service
 // asks for. Drop one of these next to any page that owns a UiRequestService and
@@ -101,20 +104,23 @@ Item {
         }
     }
 
-    // A notice with an extra action offers it as Open; plain notices are Ok
-    // only. Either way the service is told exactly once which one was chosen.
-    MessageDialog {
+    // Notices are an app-styled Dialog, not QtQuick.Dialogs.MessageDialog:
+    // that one renders as the platform's own alert (an NSAlert on macOS), which
+    // cannot take the shell's typography or buttons and read as a foreign
+    // window in the middle of the app.
+    Dialog {
         id: noticeDialog
         objectName: "uiRequestNoticeDialog"
+
         property string actionLabel: ""
         property bool confirmation: false
-        // A question offers Yes/No; a message with an extra action offers
-        // Open/Close; a plain message is Ok only.
-        buttons: confirmation
-                 ? (MessageDialog.Yes | MessageDialog.No)
-                 : (actionLabel.length > 0
-                    ? (MessageDialog.Open | MessageDialog.Close)
-                    : MessageDialog.Ok)
+        property string informativeText: ""
+        property string text: ""
+
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(460, Overlay.overlay ? Overlay.overlay.width - 48 : 460)
+        closePolicy: Popup.CloseOnEscape
 
         function resolve(actionChosen) {
             const requestId = root.activeNoticeId
@@ -123,11 +129,48 @@ Item {
                 root.requests.submitNoticeResult(requestId, actionChosen)
         }
 
-        onButtonClicked: function(button, role) {
-            noticeDialog.resolve(noticeDialog.confirmation
-                                 ? button === MessageDialog.Yes
-                                 : button === MessageDialog.Open)
-        }
+        // Dismissing by Escape or the scrim answers the same as declining, so a
+        // closed window is never read as consent.
         onRejected: noticeDialog.resolve(false)
+
+        footer: DialogFooter {
+            acceptText: noticeDialog.confirmation
+                        ? qsTr("是")
+                        : (noticeDialog.actionLabel.length > 0 ? noticeDialog.actionLabel : "")
+            cancelText: noticeDialog.confirmation
+                        ? qsTr("否")
+                        : (noticeDialog.actionLabel.length > 0 ? qsTr("关闭") : qsTr("确定"))
+            onAccepted: {
+                noticeDialog.resolve(true)
+                noticeDialog.close()
+            }
+            onRejected: {
+                noticeDialog.resolve(false)
+                noticeDialog.close()
+            }
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                objectName: "uiRequestNoticeText"
+                Layout.fillWidth: true
+                text: noticeDialog.text
+                color: Theme.colors.text.active
+                font.family: Theme.uiFont
+                wrapMode: Text.WordWrap
+            }
+            Text {
+                Layout.fillWidth: true
+                Layout.maximumHeight: 220
+                visible: noticeDialog.informativeText.length > 0
+                text: noticeDialog.informativeText
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+                wrapMode: Text.WordWrap
+                elide: Text.ElideRight
+            }
+        }
     }
 }

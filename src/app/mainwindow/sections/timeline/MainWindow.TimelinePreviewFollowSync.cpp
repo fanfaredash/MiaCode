@@ -73,10 +73,16 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
 
     QElapsedTimer timer;
     timer.start();
-    const DocumentValidationSnapshot snapshot = owner_.documentValidationSnapshot();
     miacode::v2::EditorFollowState follow;
     follow.difficultyId = owner_.activeDifficultyId();
-    follow.revision = snapshot.revision;
+    // The workspace revision QML last committed — the same identity
+    // requestEditorNavigation publishes, and the one the editor compares
+    // against. This used to carry the validation snapshot's revision instead,
+    // which is timelineRevision_: a different counter that only advances on
+    // some of the commits the workspace counts, so a single difficulty switch
+    // was enough to put the two permanently out of step and silently kill
+    // 代码跟随 for the rest of the session.
+    follow.revision = owner_.appliedQmlWorkspaceRevision_;
     follow.start = binding.span.startPosition;
     follow.end = binding.span.endPositionExclusive;
     follow.caret = binding.span.cursorPosition;

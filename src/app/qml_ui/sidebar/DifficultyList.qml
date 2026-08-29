@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import MiaCode.UI
 
 Column {
@@ -17,20 +18,20 @@ Column {
         width: root.width
         height: 30
 
-        AbstractButton {
+        ChromeRow {
             id: sectionButton
             anchors.left: parent.left
             anchors.right: actions.left
             anchors.verticalCenter: parent.verticalCenter
             height: parent.height
-            hoverEnabled: true
+            leftPadding: 8
+            tone: "hover"
             onClicked: {
                 root.viewState.difficultySectionExpanded
                     = !root.viewState.difficultySectionExpanded
             }
 
             contentItem: Text {
-                leftPadding: 8
                 text: (root.viewState.difficultySectionExpanded ? "▾  " : "▸  ")
                     + qsTr("难度")
                 color: Theme.colors.text.secondary
@@ -38,11 +39,6 @@ Column {
                 font.pixelSize: Theme.secondaryFontSize
                 font.bold: true
                 verticalAlignment: Text.AlignVCenter
-            }
-
-            background: HoverChrome {
-                hovered: sectionButton.hovered
-                tone: "hover"
             }
 
             Tooltip {
@@ -84,33 +80,70 @@ Column {
             // currentDifficultyId 负责正文数据源，不参与导航选中状态。
             readonly property bool activeEditor: root.viewState.activeEditorKey
                 === root.viewState.difficultyEditorKey(modelData.id)
+            // `bookmarkGeneration` is an explicit QML binding dependency;
+            // invokable return values alone cannot observe document edits.
+            readonly property var bookmarks: {
+                const generation = root.documentSession.bookmarkGeneration
+                return root.documentSession.bookmarksForDifficulty(modelData.id)
+            }
+            readonly property bool bookmarksExpanded:
+                root.viewState.bookmarkGroupExpanded(modelData.id)
 
             width: root.width
             visible: root.viewState.difficultySectionExpanded
 
-            NavRow {
-                id: difficultyButton
+            Item {
                 width: parent.width
                 height: root.viewState.difficultySectionExpanded ? 30 : 0
-                text: difficultyGroup.modelData.label
-                selected: difficultyGroup.activeEditor
-                onClicked: root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+
+                // The fold control sits BESIDE the navigation row, never inside
+                // its contentItem: the row's highlight spans the whole row and
+                // would otherwise run underneath the chevron.
+                NavRow {
+                    id: difficultyButton
+                    anchors.left: parent.left
+                    anchors.right: foldButton.visible ? foldButton.left : parent.right
+                    height: parent.height
+                    textLeftPadding: 26
+                    text: difficultyGroup.modelData.label
+                    selected: difficultyGroup.activeEditor
+                    onClicked: root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+
+                    // Difficulty colour block, same palette as v1's badge icon.
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 10
+                        height: 10
+                        radius: 3
+                        color: Theme.difficultyColor(difficultyGroup.modelData.id)
+                    }
+                }
+
+                IconButton {
+                    id: foldButton
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: difficultyGroup.bookmarks.length > 0
+                             && root.viewState.difficultySectionExpanded
+                    glyph: difficultyGroup.bookmarksExpanded ? "▾" : "▸"
+                    tooltip: difficultyGroup.bookmarksExpanded
+                        ? qsTr("折叠书签") : qsTr("展开书签")
+                    onClicked: root.viewState.setBookmarkGroupExpanded(
+                        difficultyGroup.modelData.id, !difficultyGroup.bookmarksExpanded)
+                }
             }
 
             Repeater {
-                // `bookmarkGeneration` is an explicit QML binding dependency;
-                // invokable return values alone cannot observe document edits.
-                model: {
-                    const generation = root.documentSession.bookmarkGeneration
-                    return root.documentSession.bookmarksForDifficulty(
-                        difficultyGroup.modelData.id)
-                }
+                model: difficultyGroup.bookmarksExpanded ? difficultyGroup.bookmarks : []
 
                 delegate: NavRow {
                     required property var modelData
                     width: parent.width
                     height: root.viewState.difficultySectionExpanded ? 26 : 0
-                    textLeftPadding: 24
+                    textLeftPadding: 30
                     text: qsTr("书签 %1：%2").arg(modelData.line).arg(modelData.title)
                     Accessible.name: qsTr("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
                     onClicked: {
@@ -146,7 +179,12 @@ Column {
         anchors.centerIn: parent
         modal: true
         title: qsTr("删除当前难度")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: removeDifficultyDialog.accept()
+            onRejected: removeDifficultyDialog.reject()
+        }
         onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
 
         Label {

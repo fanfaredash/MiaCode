@@ -366,7 +366,12 @@ Rectangle {
         anchors.centerIn: parent
         modal: true
         title: qsTr("选择统一谱师")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: canonicalDesignerDialog.accept()
+            onRejected: canonicalDesignerDialog.reject()
+        }
         onAccepted: root.commands.enableUnifiedDesigner(designerChoice.currentText)
         onRejected: unifiedDesignerSwitch.checked = root.documentSession.unifiedDesignerEnabled
 
@@ -390,7 +395,12 @@ Rectangle {
         anchors.centerIn: parent
         modal: true
         title: qsTr("删除当前难度")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: removeDifficultyDialog.accept()
+            onRejected: removeDifficultyDialog.reject()
+        }
         onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
 
         Label {
@@ -436,7 +446,6 @@ Rectangle {
                 return
             const stored = root.documentSession.normalizeOptions()
             normalizeDialog.reduceTo384Grid = stored.reduceTo384Grid
-            normalizeDialog.splitEveryFourMeasures = stored.splitEveryFourMeasures
             normalizeDialog.sectionMeasureCount = stored.sectionMeasureCount
             normalizeDialog.syntax = stored.syntax
             normalizeDialog.selectionDescription = sourceEditor.selectionDescription()
@@ -447,11 +456,11 @@ Rectangle {
     NormalizeOptionsDialog {
         id: normalizeDialog
         objectName: "normalizeOptionsDialog"
+        documentSession: root.documentSession
 
         onAccepted: {
             const options = {
                 reduceTo384Grid: normalizeDialog.reduceTo384Grid,
-                splitEveryFourMeasures: normalizeDialog.splitEveryFourMeasures,
                 sectionMeasureCount: normalizeDialog.sectionMeasureCount,
                 syntax: normalizeDialog.syntax
             }

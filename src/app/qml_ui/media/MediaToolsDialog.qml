@@ -15,7 +15,10 @@ Dialog {
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(560, Overlay.overlay ? Overlay.overlay.width - 48 : 560)
-    standardButtons: Dialog.Close
+    footer: DialogFooter {
+        cancelText: qsTr("关闭")
+        onRejected: root.reject()
+    }
     closePolicy: Popup.CloseOnEscape
 
     signal prependRequested(bool isTrack)
@@ -23,12 +26,14 @@ Dialog {
     contentItem: ColumnLayout {
         spacing: 4
 
-        component ToolRow: AbstractButton {
+        component ToolRow: ChromeRow {
             id: toolRow
             required property string label
             required property string description
             Layout.fillWidth: true
             implicitHeight: rowLayout.implicitHeight + 16
+            leftPadding: 12
+            rightPadding: 12
             contentItem: ColumnLayout {
                 id: rowLayout
                 spacing: 2
@@ -47,11 +52,6 @@ Dialog {
                     font.pixelSize: Theme.secondaryFontSize
                     wrapMode: Text.WordWrap
                 }
-            }
-            background: HoverChrome {
-                hovered: toolRow.hovered
-                pressed: toolRow.down
-                tone: "nav"
             }
         }
 

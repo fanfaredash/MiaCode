@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import MiaCode.UI
 import MiaCode.Timeline
 
@@ -140,10 +141,9 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.analysisSession.pending
                     ? qsTr("正在分析…")
-                    : qsTr("%1 个错误，%2 个警告，已解析 %3 个物件")
+                    : qsTr("%1 个错误，%2 个警告")
                         .arg(root.documentSession.syntaxErrorCount)
                         .arg(root.documentSession.syntaxWarningCount)
-                        .arg(root.documentSession.parsedNoteCount)
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize
@@ -164,20 +164,23 @@ Rectangle {
             clip: true
             model: root.analysisSession.validationRows
 
-            delegate: ItemDelegate {
+            // The severity column is measured, not guessed: a hard-coded width
+            // let "警告 · L44:C1" overflow its box and the detail column then
+            // painted straight over the tail. The floor only aligns the columns
+            // when the label happens to be narrower.
+            delegate: ChromeRow {
                 id: issueDelegate
                 required property var modelData
                 width: ListView.view.width
                 height: 34
-                hoverEnabled: true
-                leftPadding: 10
-                rightPadding: 10
+                tone: "hover"
                 onClicked: root.analysisSession.activateRow(modelData)
 
-                contentItem: Row {
+                contentItem: RowLayout {
                     spacing: 10
                     Label {
-                        width: 72
+                        id: issueLocation
+                        Layout.preferredWidth: Math.max(implicitWidth, 100)
                         text: "%1 · L%2:C%3".arg(issueDelegate.modelData.severity === "error"
                             ? qsTr("错误") : qsTr("警告"))
                             .arg(issueDelegate.modelData.line).arg(issueDelegate.modelData.column)
@@ -185,20 +188,17 @@ Rectangle {
                                ? Theme.colors.syntax.error
                                : Theme.colors.syntax.warning
                         font: Theme.codeFont
+                        verticalAlignment: Text.AlignVCenter
                     }
                     Label {
-                        width: Math.max(0, issueDelegate.width - 120)
+                        Layout.fillWidth: true
                         text: issueDelegate.modelData.detail
                         color: Theme.colors.text.primary
                         elide: Text.ElideRight
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.uiFontSize
+                        verticalAlignment: Text.AlignVCenter
                     }
-                }
-
-                background: HoverChrome {
-                    hovered: issueDelegate.highlighted || issueDelegate.hovered
-                    tone: "hover"
                 }
             }
 
@@ -229,27 +229,29 @@ Rectangle {
             anchors.margins: 8
             clip: true
             model: root.analysisSession.muriRows
-            delegate: ItemDelegate {
+            delegate: ChromeRow {
                 id: muriDelegate
                 required property var modelData
                 width: ListView.view.width
                 height: 42
-                hoverEnabled: true
+                tone: "hover"
                 onClicked: root.analysisSession.activateRow(modelData)
-                contentItem: Column {
+                contentItem: ColumnLayout {
                     spacing: 2
                     Label {
+                        Layout.fillWidth: true
                         text: "[%1] %2 · L%3:C%4".arg(muriDelegate.modelData.alert === "warning"
                             ? qsTr("警告") : qsTr("警报"))
                             .arg(muriDelegate.modelData.title)
                             .arg(muriDelegate.modelData.line).arg(muriDelegate.modelData.column)
                         color: muriDelegate.modelData.severity === "warning"
                                ? Theme.colors.syntax.warning : Theme.colors.syntax.error
+                        elide: Text.ElideRight
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.uiFontSize
                     }
                     Label {
-                        width: muriDelegate.width - 20
+                        Layout.fillWidth: true
                         text: muriDelegate.modelData.detail
                         elide: Text.ElideRight
                         color: Theme.colors.text.secondary
@@ -257,7 +259,6 @@ Rectangle {
                         font.pixelSize: Theme.secondaryFontSize
                     }
                 }
-                background: HoverChrome { hovered: muriDelegate.highlighted || muriDelegate.hovered; tone: "hover" }
             }
             ScrollBar.vertical: ScrollBar {}
         }

@@ -54,6 +54,8 @@ QtObject {
 
     readonly property string uiFont: preferences ? preferences.uiFontFamily : ""
     readonly property font codeFont: preferences ? preferences.codeFont : Qt.font({})
+    // 行距, in the pixels of bottom margin each text block carries.
+    readonly property int codeBlockSpacing: preferences ? preferences.editorBlockSpacing : 0
     readonly property int uiFontSize: preferences ? preferences.fontSize : 13
     readonly property int secondaryFontSize: uiFontSize - 1
     readonly property int captionFontSize: uiFontSize - 3
@@ -67,5 +69,20 @@ QtObject {
     // Default inset so adjacent HoverChrome pills do not touch.
     readonly property int chromeInsetX: 3
     readonly property int chromeInsetY: 2
+    // Content inset for a chromed row. HoverChrome insets itself from the
+    // control but never the content, so ChromeRow spends this on padding to
+    // keep text off the highlight edge.
+    readonly property int rowPaddingX: 10
+
+    // Per-difficulty swatch, matching v1 difficultyColor() in MainWindowShared.
+    readonly property var difficultyColors: [
+        "#69A6FF", "#78C85A", "#DCC548", "#E35C50", "#7A4FD1", "#D548B6", "#E29A46"
+    ]
+    readonly property color difficultyColorFallback: "#8A8F98"
+    function difficultyColor(difficultyId) {
+        return difficultyId >= 1 && difficultyId <= difficultyColors.length
+            ? difficultyColors[difficultyId - 1]
+            : difficultyColorFallback
+    }
 }
 

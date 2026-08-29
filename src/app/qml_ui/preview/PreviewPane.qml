@@ -45,10 +45,10 @@ Rectangle {
         anchors.top: parent.top
         title: qsTr("预览")
 
-        AbstractButton {
+        ChromeRow {
             id: renderModeButton
-            implicitWidth: renderModeLabelText.implicitWidth + 16
-            hoverEnabled: true
+            implicitWidth: renderModeLabelText.implicitWidth + leftPadding + rightPadding
+            tone: "icon"
             focusPolicy: Qt.TabFocus
             Accessible.name: root.previewSession.renderModeLabel
             Accessible.description: qsTr("打开预览渲染模式菜单")
@@ -74,11 +74,6 @@ Rectangle {
                 verticalAlignment: Text.AlignVCenter
             }
 
-            background: HoverChrome {
-                hovered: renderModeButton.hovered
-                pressed: renderModeButton.down
-                tone: "icon"
-            }
         }
     }
 

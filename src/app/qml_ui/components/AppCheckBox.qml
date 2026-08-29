@@ -47,7 +47,7 @@ CheckBox {
         Rectangle {
             anchors.fill: parent
             anchors.margins: -2
-            visible: root.activeFocus
+            visible: root.visualFocus
             radius: 6
             color: "transparent"
             border.width: 1

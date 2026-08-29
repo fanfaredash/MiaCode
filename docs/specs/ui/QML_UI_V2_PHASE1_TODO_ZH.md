@@ -68,7 +68,7 @@
 | ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
 | 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（5,780 行） |
 | ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
-| ~~偏好设置~~ | `QmlCommandService::openPreferences()` | **已完成（2026-08-29）**：`PreferencesDialog.qml`（界面/编辑器/性能/快捷键）+ `ShortcutEditorDialog.qml`，`QmlPreferencesModel` 承接；扩展页签与背景功能已删除 |
+| ~~偏好设置~~ | `QmlCommandService::openPreferences()` | **已完成（2026-08-29）**：`PreferencesDialog.qml`（界面/编辑器/性能/快捷键四页签，快捷键录制内置为页签而非二级弹窗），`QmlPreferencesModel` 承接；扩展页签与背景功能已删除 |
 | ~~批量导出~~ | `openBatchExport()` | **已完成（2026-08-29）**：QML `ExportVideoPage` 的 batch 页是唯一批量界面，`BatchExportPanel` 组已删除 |
 
 > 0b（扩展宿主）仍是已延后状态，不得记为"已删除"或"功能不可用"。
@@ -81,13 +81,39 @@
 > - **Net：功能暂时移除。** 入口与两个 Widget 对话框已删除；`src/tools/net` 的引擎部分保留。
 > - **封面导出：放到最后做**（本批最末一项，不是取消）。
 >
-> `Qt6::Widgets` 的最终摘除现在只剩封面导出、音视频处理、偏好设置、延迟校准四项挡着。
+> `Qt6::Widgets` 的最终摘除在 B 类里只剩**封面导出**一项挡着（音视频处理 / 偏好设置 /
+> 延迟校准三项已于 2026-08-29 补成 QML）。B 类之外还有 §3.C 的保存/退出确认弹窗、
+> `ChartDropOverlay`，以及阶段 4 的 `MainWindow` 与 `src/app/ui/` 辅助件。
 
-### C. 已是 QML 页面，但仍借 Widgets 完成子流程（1 项）
+### C. 已知功能缺失（v1 有、v2 尚未补）
+
+- [ ] **导出区间的可视化进度条**（2026-08-29 记录）。导出页的区间只有起止秒数输入框，
+      缺少 v1 那条能直观看出区间落在整曲何处的进度条 / 区间条。
+- [x] **启动崩溃恢复弹窗仍是 Widgets**（2026-08-29 已修）：`MainWindow.DocumentAutosaveFlow.cpp`
+      的三处 `UiDialogs::showMessageBox` 已改走 `UiRequestService`；
+      `restoreBackupFilePath` 在确认处切开为 `restoreBackupFilePath` + `applyBackupFile` 续延。
+- [ ] **保存 / 退出确认弹窗仍是 Widgets**（2026-08-29 记录，用户报告；已定位）。
+      `MainWindow.DocumentFlow.Internal.h:55` 的 `showUnsavedChangesDialog()` 是一个
+      `QMessageBox::exec()`（保存 / 放弃 / 取消三按钮），被 `maybeSaveBeforeContinue()` 与
+      `maybeSaveCurrentFieldChanges()` 使用。
+      **这条比其他弹窗贵**：它是同步的，返回值一路喂给 `closeEvent()`——而 `closeEvent` 必须
+      当场给出"关不关"的答复，`UiRequestService` 的续延模型给不出。要迁移就得把关闭流程本身
+      改成两段式（先 `event->ignore()`，确认返回后再自行关闭），沿用 §7 的顺序契约：
+      破坏性清理只能发生在确认返回 true 之后。剩余 `UiDialogs::showMessageBox` 调用点还有
+      `DocumentFileFlow`（新建覆盖确认、拖入谱面后的切换确认、打开失败）、`DocumentFlow`
+      （启动路径缺失）、`DocumentUi:416`（删除难度确认）、`DocumentAutosaveFlow`（保存失败）、
+      `FrameBootstrap:260`（扩展 showMessage）。
+- [x] **控件高亮有记忆**（2026-08-29 报告，同日修复）。所有者已确认所指即 `AppComboBox`。
+      成因是 `background.border.color` 读 `activeFocus`：ComboBox 点击即取焦点并保持，
+      重开弹窗时焦点被恢复，边框继续是重音色。改用 `visualFocus`——只有键盘到达的焦点才画指示。
+      同一属性同步应用到 `AppCheckBox` / `IconButton` 的焦点环。文本输入控件（`AppTextField` /
+      `AppTextArea`）**保持 `activeFocus`**：正在输入时边框就该亮着。
+
+### D. 已是 QML 页面，但仍借 Widgets 完成子流程（0 项）
 
 - 视频导出页：文件选择与结果提示走 `QFileDialog` / `QMessageBox`（见 §2）。
 
-### D. 影子 Widget 状态（无用户入口，但仍在链上）
+### E. 影子 Widget 状态（无用户入口，但仍在链上）
 
 - [x] `ExportLauncherPage`（738 行）已删除（2026-08-29）。导出难度的真相移到 `QmlExportSession`：
       `resolveToolsMenuExportDifficultyId()` 现在读 `pageSessionActive() + selectedDifficultyId()`，
@@ -100,6 +126,26 @@
       以及全量 CTest 未新增失败。导出难度在 Tools 菜单各动作里的实际取值仍需原生桌面确认。
 
 ## 4. 阶段任务与完成标志
+
+### 4.0 排期（2026-08-29 所有者指定）
+
+**本批**（做完一项提交一次）：
+
+1. 阶段 1 + 阶段 2 —— 删隐藏 `PlainCodeEditor`、修 `qml_document_lifecycle_contract_spec`、
+   `shellController` 消费点迁往 `PreviewSession` / `TimelineSession`、退役 `src/app/quick_shell/`。
+2. 关于 MiaCode / 音频设置 / 预览设置 —— 三个「暂未更新支持」入口补上真实实现。
+3. 侧边栏书签折叠重新设计 —— 去掉右侧那个独立折叠按钮，改为**复用难度行本身**：
+   点击非当前难度＝切换难度（行为不变），点击**当前**难度＝展开 / 收起它的书签，
+   折叠指示器放在**左侧**。
+4. 保存 / 退出确认弹窗改为 QML（连带 §3.C 列出的其余 `showMessageBox` 调用点）。
+
+**下一轮**（难度更高，本批完成后才开始）：
+
+1. 导出区间的可视化进度条。
+2. **v1 / v2 文案逐项比对**。v1 文案经过多轮迭代，v2 重构时出现大量偏差，
+   怀疑多语言模块（`UiText`）没有完整搬迁。若属实需要重建，并尽可能恢复原文案。
+3. 封面导出功能重构。
+
 
 ### 阶段 1（收尾）—— 文档域单一所有者
 
@@ -170,6 +216,12 @@
 - 预览：三态渲染模式（`PreviewRenderModeMenu.qml`）、负时间传输条、surface 互斥生命周期、统计投影去热路径。
 - 导出：`ExportVideoPage.qml` + `QmlExportSession`，含片头音文件与 0–200% 音量，写入单个/批量 snapshot 与 worker。
 - ChartDrop：root window 登记 + 事件过滤器 + overlay 同步。
+- 行高亮：`ChromeRow.qml`（2026-08-29）把「HoverChrome 背景 + 内容内缩」封成一个类型，13 处
+  `background: HoverChrome` 调用点迁移完毕。剩余直用者只有 `AppMenuItem`（必须是 MenuItem）
+  与四个纯图标按钮（内容居中，没有会贴边的文字）。
+- 编辑器外观：`EditorTextStyle`（QML 类型）把 行距 落到 TextArea 的 QTextDocument 上（每个
+  块的 bottomMargin），`QmlUiSettings::setEditorAppearance` 让 字号 / 行距 都能实时到达 QML
+  编辑器——此前两者都只写到了 v2 已不显示的 Widgets 编辑器。
 
 ## 6. 验收规则
 
@@ -214,11 +266,27 @@
   C —— `EditorSyncController` 队列边界。
 - **待复核（D 项，未执行）**：`QV4_MM_AGGRESSIVE_GC=1` 下，代码跟随开启完整播放 10 轮、跨多 token、反复开关跟随、暂停/继续/停止/重播、弹窗开与关两种状态；Windows Release 与 Linux Release 各一轮。**这是本次重构最关键的验收，缺它则崩溃只能算"推测已修"。**
 
+### 7.-1 GUI 验收结论（2026-08-29，所有者在 macOS 上走查）
+
+所有者对本轮构建做了一次原生桌面走查，并判定：**除音视频处理工具外，全部判定为 GUI 验收通过。**
+
+- **通过**：§7.3 的五项 + 新语义、§7.4 的底栏/时间轴菜单/渲染模式/面板互换/菜单栏位置、
+  §7.6 的脏文档撤销联动、§7.9 的手工回归清单，以及 2026-08-29 两轮修复的可见结果
+  （行高亮覆盖、对话框统一页脚与样式、快捷键录制、规范化下拉、侧边栏难度色块与书签折叠、
+  语法列不再重叠、行距/字号实时生效、代码跟随在切换难度后仍然工作）。
+- **未验收**：**音视频处理工具**（`MediaToolsDialog` / `PrependBlankDialog` /
+  `PvBatchCompressionDialog` 四条 ffmpeg 流程 + PV 批量队列）。保持未验收状态。
+- **这份结论覆盖不到的**：本次走查在 macOS 上进行，所以
+  ① §7.2 的 D 项（`QV4_MM_AGGRESSIVE_GC=1` 压测，要求 Windows Release 与 Linux Release 各一轮）
+  **不因此结论而关闭**；
+  ② §7.10 的「Windows 侧整体从未验证」同样不变。
+  这两条继续按原状挂着，不得由本条推断为通过。
+
 ### 7.3 二阶段五项桌面验收已因同步链重写而失效
 
 - 2026-08-24 记为通过的五项（`ca943a82` 暂停跟随装饰、`2a27630d` 书签/右键菜单、`75c89635` 命令修饰键、`f4251ca0` IME 提交递归、`f451ae09` Command+点击 seek，以及 `5ee23d38` 窄窗口 completion popup）针对的是旧跟随/导航链。
 - `117a76a1` 把整条链换成值对象 + 队列投递，并重写了 caret 显隐、系统周期闪烁与播放中暂停语义；上游 merge 提交自述「Native GUI acceptance remains pending」。
-- **待复核**：五项全部重跑，外加新语义——普通点击只移动 caret 不居中；Ctrl/Command+点击先暂停再 seek 并居中 playhead；播放中指针按下立即暂停；播放期普通 caret 隐藏、跟随光标显示，暂停后由焦点恢复；caret 闪烁跟随 `Application.styleHints.cursorFlashTime`。
+- **已复核（2026-08-29，macOS，见 §7.-1）**：五项与新语义随本轮走查一并判定通过——普通点击只移动 caret 不居中；Ctrl/Command+点击先暂停再 seek 并居中 playhead；播放中指针按下立即暂停；播放期普通 caret 隐藏、跟随光标显示，暂停后由焦点恢复；caret 闪烁跟随 `Application.styleHints.cursorFlashTime`。Windows 侧仍未验证。
 
 ### 7.4 本次 UI 重构无任何 GUI 验收记录
 
@@ -230,7 +298,7 @@
 - macOS 自定义菜单栏位置修正、响应式预览尺寸修正
 - 新增共享控件 `AppCheckBox`、`AppDropDownButton`
 
-**待复核**：窄窗口与 1280×720 下的命中区与视觉；浅/深色；中文/英文；Large system font。
+**已复核（2026-08-29，macOS，见 §7.-1）**。窄窗口 / 1280×720 / 浅深色 / 中英文 / Large system font 的逐项组合未单独留记录，若后续出现相关报告按新问题处理。
 
 ### 7.5 底栏高度配置键变更，无迁移
 
@@ -240,7 +308,7 @@
 ### 7.6 撤销栈 dirty 联动（已修，待 GUI 复核）
 
 dirty 真相已迁到 `ChartWorkspace` 的完整文档 save point，`Ctrl+Z` / `Ctrl+Y` 回到已打开或已保存内容会自动回 clean。
-**待复核**：脏文档关闭流程的原生桌面回归（自动 spec 不覆盖对话框）。
+**已复核（2026-08-29，macOS，见 §7.-1）**。
 
 ### 7.7 切换文档后 PV 异常（延后）
 
@@ -252,16 +320,18 @@ dirty 真相已迁到 `ChartWorkspace` 的完整文档 save point，`Ctrl+Z` / `
 现有证据是"跃升后稳定"（private memory 约 957 MB 平台，第二段播放 1,051–1,064 MB），不是持续泄漏。
 **待复核**：阶段 2 迁移 Preview/Timeline **之前**先做分层取证（QtAVPlayer/D3D11VA 帧池、QML/Qt Quick、私有堆），不得先验归因于 preview texture cache。
 
-### 7.9 手工回归清单（全部未执行）
+### 7.9 手工回归清单（2026-08-29 macOS 走查判定通过，见 §7.-1）
 
-- [ ] 脏文档、播放中、导出任务运行时的关窗流程与 v1 一致。
-- [ ] 设备热插拔暂停后，下一次播放走 cold Prepare。
-- [ ] play / pause / seek 按 completion 更新界面状态。
-- [ ] EraseByArea、烟花时长、BGM 过轨静音行为正确。
-- [ ] 音频拖放建谱与 ChartDrop 覆盖层（含 cancel）行为正确。
-- [ ] QML 导出片头音文件与音量：原生试听 + 成片确认（自动规格只覆盖到 snapshot→worker 重建）。
-- [ ] `d534b393` 的 bookmark / touch input 改动 GUI 回归。
-- [ ] root 拖放、播放中关闭。
+- [x] 脏文档、播放中、导出任务运行时的关窗流程与 v1 一致。
+- [x] 设备热插拔暂停后，下一次播放走 cold Prepare。
+- [x] play / pause / seek 按 completion 更新界面状态。
+- [x] EraseByArea、烟花时长、BGM 过轨静音行为正确。
+- [x] 音频拖放建谱与 ChartDrop 覆盖层（含 cancel）行为正确。
+- [x] QML 导出片头音文件与音量：原生试听 + 成片确认。
+- [x] `d534b393` 的 bookmark / touch input 改动 GUI 回归。
+- [x] root 拖放、播放中关闭。
+- [ ] **音视频处理工具（未验收）**：采样率 / 提取音频 / 前置空白 / 音量归一化四条 ffmpeg 流程，
+      以及 PV 批量压制队列的进度、取消与失败呈现。这是唯一还没被走查覆盖的 v2 页面。
 
 ### 7.10 已知且接受、不修
 

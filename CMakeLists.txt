@@ -650,6 +650,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/SplitHandle.qml
     src/app/qml_ui/components/Tooltip.qml
     src/app/qml_ui/components/HoverChrome.qml
+    src/app/qml_ui/components/ChromeRow.qml
     src/app/qml_ui/components/NavRow.qml
     src/app/qml_ui/components/AppTextField.qml
     src/app/qml_ui/components/AppTextArea.qml
@@ -662,6 +663,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppMenuItem.qml
     src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/components/UiRequestHost.qml
+    src/app/qml_ui/components/DialogFooter.qml
     src/app/qml_ui/components/JobProgressOverlay.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
@@ -689,7 +691,6 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/media/PvBatchCompressionDialog.qml
     src/app/qml_ui/media/PrependBlankDialog.qml
     src/app/qml_ui/preferences/PreferencesDialog.qml
-    src/app/qml_ui/preferences/ShortcutEditorDialog.qml
     src/app/qml_ui/latency/LatencyPage.qml
     src/app/qml_ui/editor/FindReplaceBar.qml
     src/app/qml_ui/editor/BookmarkList.qml
@@ -750,6 +751,8 @@ qt_add_qml_module(MiaCode
     SOURCES
         src/app/qml_ui/SimaiSyntaxHighlighter.cpp
         src/app/qml_ui/SimaiSyntaxHighlighter.h
+        src/app/qml_ui/EditorTextStyle.cpp
+        src/app/qml_ui/EditorTextStyle.h
         src/app/qml_ui/QmlApplicationContext.cpp
         src/app/qml_ui/QmlApplicationContext.h
         src/app/qml_ui/QmlCommandService.cpp
@@ -1800,6 +1803,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/qml_ui/QmlEditorController.cpp
             src/app/qml_ui/SimaiSyntaxHighlighter.h
             src/app/qml_ui/SimaiSyntaxHighlighter.cpp
+            src/app/qml_ui/EditorTextStyle.h
+            src/app/qml_ui/EditorTextStyle.cpp
             src/app/qml_ui/QmlEditorInputBridge.cpp
             src/app/qml_ui/QmlEditorInputBridge.h
             ${_miacode_log_core}

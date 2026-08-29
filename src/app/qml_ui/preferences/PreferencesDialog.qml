@@ -7,6 +7,10 @@ import MiaCode.UI
 // on each change — there is no OK/Apply, matching the Widgets dialog it
 // replaces. Language and theme are the exceptions: they need a restart, so the
 // page says so instead of pretending the change already took.
+//
+// 快捷键 is a page here, not a dialog of its own: a modal opened from a modal
+// stacked two scrims over the same settings and put the key capture behind an
+// extra Escape.
 Dialog {
     id: root
 
@@ -17,12 +21,49 @@ Dialog {
     title: qsTr("偏好设置")
     modal: true
     anchors.centerIn: Overlay.overlay
-    width: Math.min(640, Overlay.overlay ? Overlay.overlay.width - 48 : 640)
-    height: Math.min(520, Overlay.overlay ? Overlay.overlay.height - 48 : 520)
-    standardButtons: Dialog.Close
+    width: Math.min(700, Overlay.overlay ? Overlay.overlay.width - 48 : 700)
+    height: Math.min(560, Overlay.overlay ? Overlay.overlay.height - 48 : 560)
+    footer: DialogFooter {
+        cancelText: qsTr("关闭")
+        onRejected: root.reject()
+    }
     closePolicy: Popup.CloseOnEscape
 
     property int activePage: 0
+    // Id of the command whose binding is being recorded; "" when idle.
+    property string capturingId: ""
+    property var shortcutRows: []
+
+    onActivePageChanged: root.capturingId = ""
+    onAboutToShow: {
+        root.capturingId = ""
+        root.refreshShortcuts()
+    }
+
+    // Reassigning the model resets ListView.contentY, which threw the reader
+    // back to the top of the list after every recorded binding. Restore the
+    // scroll position around the rebuild.
+    function refreshShortcuts() {
+        const keepY = shortcutList.contentY
+        root.shortcutRows = root.shortcuts.editableShortcuts()
+        shortcutList.contentY = Math.max(
+            0, Math.min(keepY, Math.max(0, shortcutList.contentHeight - shortcutList.height)))
+    }
+
+    function describeShortcut(event) {
+        // Modifier-only presses keep the capture armed: they are the first half
+        // of a chord, not a binding.
+        if (event.key === Qt.Key_Control || event.key === Qt.Key_Shift
+                || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)
+            return ""
+        let parts = []
+        if (event.modifiers & Qt.ControlModifier) parts.push("Ctrl")
+        if (event.modifiers & Qt.AltModifier) parts.push("Alt")
+        if (event.modifiers & Qt.ShiftModifier) parts.push("Shift")
+        if (event.modifiers & Qt.MetaModifier) parts.push("Meta")
+        parts.push(root.shortcuts.keyName(event.key))
+        return parts.join("+")
+    }
 
     function indexOfValue(options, value) {
         for (let i = 0; i < options.length; ++i) {
@@ -187,24 +228,122 @@ Dialog {
         }
 
         // ---- 快捷键 ----
+        // Clicking a row arms capture: the next key press carrying at least one
+        // non-modifier becomes that command's binding. Escape cancels the
+        // capture rather than closing 偏好设置, so an accidental arm cannot lose
+        // the row being edited.
         ColumnLayout {
             Layout.fillWidth: true
+            Layout.fillHeight: true
             visible: root.activePage === 3
-            spacing: 10
+            spacing: 8
+
+            Text {
+                Layout.fillWidth: true
+                text: root.capturingId.length > 0
+                      ? qsTr("按下新的快捷键，Esc 取消。")
+                      : qsTr("点击一行以录制新的快捷键。")
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+            }
+
+            ListView {
+                id: shortcutList
+                objectName: "shortcutList"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                focus: true
+                model: root.shortcutRows
+                ScrollBar.vertical: ScrollBar {}
+
+                Keys.onPressed: function(event) {
+                    if (root.capturingId.length === 0)
+                        return
+                    event.accepted = true
+                    if (event.key === Qt.Key_Escape) {
+                        root.capturingId = ""
+                        return
+                    }
+                    const text = root.describeShortcut(event)
+                    if (text.length === 0)
+                        return
+                    root.shortcuts.setShortcutText(root.capturingId, text)
+                    root.capturingId = ""
+                    root.refreshShortcuts()
+                }
+
+                // The row is NOT one big button: the reset button sits beside
+                // the clickable area, not inside it, so the highlight stops
+                // where the recording hit area stops.
+                delegate: RowLayout {
+                    id: shortcutRow
+                    required property var modelData
+                    width: ListView.view.width
+                    spacing: 8
+
+                    ChromeRow {
+                        id: captureArea
+                        Layout.fillWidth: true
+                        implicitHeight: 34
+                        selected: root.capturingId === shortcutRow.modelData.id
+                        onClicked: {
+                            root.capturingId = shortcutRow.modelData.id
+                            shortcutList.forceActiveFocus()
+                        }
+                        contentItem: RowLayout {
+                            spacing: 8
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.preferences.localizedText(shortcutRow.modelData.labelKey)
+                                      || shortcutRow.modelData.labelFallback
+                                elide: Text.ElideRight
+                                color: Theme.colors.text.active
+                                font.family: Theme.uiFont
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            Text {
+                                Layout.preferredWidth: 170
+                                text: root.capturingId === shortcutRow.modelData.id
+                                      ? qsTr("录制中…")
+                                      : shortcutRow.modelData.shortcutText
+                                color: shortcutRow.modelData.isDefault
+                                       ? Theme.colors.text.secondary
+                                       : Theme.colors.accent.primary
+                                font.family: Theme.uiFont
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+
+                    AppButton {
+                        text: qsTr("恢复默认")
+                        enabled: !shortcutRow.modelData.isDefault
+                        onClicked: {
+                            root.shortcuts.resetShortcut(shortcutRow.modelData.id)
+                            root.refreshShortcuts()
+                        }
+                    }
+                }
+            }
 
             AppButton {
-                objectName: "preferencesEditShortcutsButton"
-                text: qsTr("编辑快捷键...")
-                onClicked: shortcutEditor.open()
-            }
-            AppButton {
                 objectName: "preferencesResetShortcutsButton"
+                Layout.alignment: Qt.AlignLeft
                 text: qsTr("全部恢复默认")
-                onClicked: root.shortcuts.resetAllShortcuts()
+                onClicked: {
+                    root.shortcuts.resetAllShortcuts()
+                    root.refreshShortcuts()
+                }
             }
         }
 
-        Item { Layout.fillHeight: true }
+        // The shortcut page owns the slack itself; this only pads the pages
+        // whose controls are a short stack at the top.
+        Item {
+            Layout.fillHeight: true
+            visible: root.activePage !== 3
+        }
     }
 
     component LabeledCombo: RowLayout {
@@ -231,10 +370,4 @@ Dialog {
         }
     }
 
-    ShortcutEditorDialog {
-        id: shortcutEditor
-        objectName: "shortcutEditorDialog"
-        shortcuts: root.shortcuts
-        preferences: root.preferences
-    }
 }

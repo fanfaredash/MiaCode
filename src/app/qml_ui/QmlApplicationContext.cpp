@@ -29,6 +29,17 @@ QmlApplicationContext::QmlApplicationContext(
     , latency_(backend, this)
     , shell_(&shell)
 {
+    // 字号 / 行距 used to stop at the Widgets editor, which v2 no longer shows,
+    // so the QML editor never saw either. The model still owns persistence;
+    // this only mirrors the applied values onto the settings the shell reads.
+    const auto syncEditorAppearance = [this]() {
+        preferences_.setEditorAppearance(backend_.currentEditorTextFontSize(),
+                                         backend_.currentEditorLineSpacingFactor());
+    };
+    syncEditorAppearance();
+    connect(&preferencesModel_, &miacode::qml_ui::QmlPreferencesModel::editorChanged,
+            this, syncEditorAppearance);
+
     editor_.setHalfWidthInputEnabled(preferences_.editorHalfWidthInputEnabled());
     editor_.setOverwriteMode(preferences_.editorOverwriteModeEnabled());
     editor_.setAutoCompletionEnabled(preferences_.editorAutoCompletionEnabled());

@@ -414,7 +414,12 @@ Rectangle {
         parent: Overlay.overlay
         modal: true
         title: qsTr("重命名书签")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: bookmarkTitleDialog.accept()
+            onRejected: bookmarkTitleDialog.reject()
+        }
         onAccepted: root.renameBookmarkAtLine(root.pendingBookmarkLine, bookmarkTitleField.text)
         AppTextField {
             id: bookmarkTitleField
@@ -689,6 +694,11 @@ Rectangle {
                     root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
                 root.updateCursorPosition()
                 editorScroll.refreshLineTops()
+            }
+
+            EditorTextStyle {
+                textDocument: sourceArea.textDocument
+                blockSpacing: Theme.codeBlockSpacing
             }
 
             SimaiSyntaxHighlighter {

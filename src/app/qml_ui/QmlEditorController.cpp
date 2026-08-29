@@ -387,7 +387,7 @@ QVariantList QmlEditorController::bookmarksForQml(const QString& text) const
     const QStringList lines = text.split(QLatin1Char('\n'));
     for (int i = 0; i < lines.size(); ++i) {
         const auto bookmark = miacode::editor::parseBookmarkComment(lines.at(i));
-        if (!bookmark.has_value()) continue;
+        if (!bookmark.has_value() || bookmark->control) continue;
         result.append(QVariantMap{{QStringLiteral("line"), i + 1}, {QStringLiteral("title"), bookmark->title}});
     }
     return result;

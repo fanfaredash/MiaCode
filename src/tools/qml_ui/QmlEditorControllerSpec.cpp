@@ -1,5 +1,6 @@
 #include "app/qml_ui/QmlEditorController.h"
 #include "app/qml_ui/QmlEditorInputBridge.h"
+#include "app/qml_ui/EditorTextStyle.h"
 #include "app/qml_ui/SimaiSyntaxHighlighter.h"
 #include "app/v2/ChartWorkspace.h"
 #include "editor/BookmarkCommentSyntax.h"
@@ -904,6 +905,7 @@ int main(int argc, char** argv)
     // MiaCode.UI's C++ elements are registered by the app module, which a spec
     // executable does not link; register them for the mirrored import path.
     qmlRegisterType<SimaiSyntaxHighlighter>("MiaCode.UI", 1, 0, "SimaiSyntaxHighlighter");
+    qmlRegisterType<EditorTextStyle>("MiaCode.UI", 1, 0, "EditorTextStyle");
     qmlRegisterType<miacode::qml_ui::QmlEditorInputBridge>(
         "MiaCode.UI", 1, 0, "QmlEditorInputBridge");
     verifyQmlTextAreaKeyRouting(out, &failed);
@@ -1032,6 +1034,21 @@ int main(int argc, char** argv)
                       == QStringLiteral("1,2, || [verse]")
                && miacode::editor::removeBookmarkComment(QStringLiteral("1,2, || [intro]")) == QStringLiteral("1,2,"),
            QStringLiteral("bookmark parse and serialization stay in BookmarkCommentSyntax"), out, &failed);
+    const auto meterComment = miacode::editor::parseBookmarkComment(QStringLiteral("1,2, || 4/4"));
+    const auto emptyComment = miacode::editor::parseBookmarkComment(QStringLiteral("1,2, ||"));
+    expect(meterComment.has_value() && meterComment->control
+               && emptyComment.has_value() && emptyComment->control
+               && !miacode::editor::parseBookmarkComment(QStringLiteral("1,2, || [intro]"))->control
+               && !miacode::editor::parseBookmarkComment(QStringLiteral("1,2, ||| block")).has_value(),
+           QStringLiteral("a bare meter or empty comment is control data, and ||| is not a bookmark marker at all"), out, &failed);
+    expect(miacode::editor::parseBookmarkComment(QStringLiteral("1, || intro, 4 measures"))->title
+               == QStringLiteral("intro"),
+           QStringLiteral("an unlabelled comment names its bookmark by its first token, as the Widgets outline did"), out, &failed);
+    const auto filteredBookmarks =
+        controller.bookmarksForQml(QStringLiteral("1,2, || 4/4\n3,4, || [verse]\n5,6, ||"));
+    expect(filteredBookmarks.size() == 1
+               && filteredBookmarks.first().toMap().value(QStringLiteral("line")).toInt() == 2,
+           QStringLiteral("bookmark listings skip control comments instead of showing 拍号 as sections"), out, &failed);
 
     InputMethodReceiver inputTarget;
     miacode::qml_ui::QmlEditorInputBridge inputBridge;
@@ -1087,8 +1104,10 @@ int main(int argc, char** argv)
     const QString sidebarSource = QString::fromUtf8(difficultyList.readAll());
     expect(sidebarSource.contains(QStringLiteral("bookmarkGeneration"))
                && sidebarSource.contains(QStringLiteral("bookmarksForDifficulty"))
-               && sidebarSource.contains(QStringLiteral("navigateToBookmark")),
-           QStringLiteral("bookmarks are grouped under their difficulty in the sidebar instead of overlaying the editor"), out, &failed);
+               && sidebarSource.contains(QStringLiteral("navigateToBookmark"))
+               && sidebarSource.contains(QStringLiteral("Theme.difficultyColor"))
+               && sidebarSource.contains(QStringLiteral("setBookmarkGroupExpanded")),
+           QStringLiteral("bookmarks are grouped under their difficulty in the sidebar, foldable and colour-coded, instead of overlaying the editor"), out, &failed);
     QFile followSyncSource(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
     expect(followSyncSource.open(QIODevice::ReadOnly),
@@ -1096,6 +1115,10 @@ int main(int argc, char** argv)
     const QString followSource = QString::fromUtf8(followSyncSource.readAll());
     expect(followSource.contains(QStringLiteral("EditorFollowState"))
                && followSource.contains(QStringLiteral("publishFollow"))
+               // The follow identity must be the workspace revision the editor
+               // compares against, not the unrelated timeline counter.
+               && followSource.contains(QStringLiteral("appliedQmlWorkspaceRevision_"))
+               && !followSource.contains(QStringLiteral("documentValidationSnapshot()"))
                && source.contains(QStringLiteral("navigationAckTimer"))
                && source.contains(QStringLiteral("decorationCenterTimer")),
            QStringLiteral("editor synchronization uses value projection and item-owned queues"), out, &failed);
