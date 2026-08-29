@@ -90,10 +90,12 @@ QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text)
     return normalizedHalfWidthText(text);
 }
 
-QString clearCompleteElementsInSelection(
+namespace {
+QString transformCompleteElementsInSelection(
     const QString& text,
     int selectionStart,
     int selectionEnd,
+    bool resetToTap,
     int* changedCount)
 {
     if (changedCount != nullptr) {
@@ -222,8 +224,9 @@ QString clearCompleteElementsInSelection(
     // directive sits behind a newline/space instead of tight against the prior
     // comma — clearing a passage that spans several {} subdivisions must NOT
     // collapse them into one. Returns true if a note token was actually dropped.
-    const auto appendClearedNoteSpan = [&](int spanStart, int spanEnd) {
+    const auto appendTransformedNoteSpan = [&](int spanStart, int spanEnd) {
         bool droppedNote = false;
+        QString noteText;
         int pos = spanStart;
         while (pos < spanEnd) {
             const QChar ch = text.at(pos);
@@ -244,12 +247,15 @@ QString clearCompleteElementsInSelection(
                 output.append(ch);
                 ++pos;
             } else {
-                // Note token — cleared.
+                if (resetToTap && noteText.isEmpty()) {
+                    output.append(QLatin1Char('1'));
+                }
+                noteText.append(ch);
                 droppedNote = true;
                 ++pos;
             }
         }
-        return droppedNote;
+        return droppedNote && (!resetToTap || noteText != QLatin1String("1"));
     };
     const auto appendClearedSegment = [&](int commaIndex) {
         const int fullPrefixEnd = leadingPrefixEnd(segmentStart, commaIndex);
@@ -259,7 +265,7 @@ QString clearCompleteElementsInSelection(
             && (isElementBoundary(segmentStart) || partialPrefixEnd > segmentStart);
         output.append(text.mid(segmentStart, prefixEnd - segmentStart));
         if (canClear) {
-            if (appendClearedNoteSpan(prefixEnd, commaIndex)) {
+            if (appendTransformedNoteSpan(prefixEnd, commaIndex)) {
                 ++changed;
             }
             output.append(QLatin1Char(','));
@@ -328,6 +334,27 @@ QString clearCompleteElementsInSelection(
         *changedCount = changed;
     }
     return output;
+}
+}  // namespace
+
+QString clearCompleteElementsInSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    int* changedCount)
+{
+    return transformCompleteElementsInSelection(
+        text, selectionStart, selectionEnd, false, changedCount);
+}
+
+QString resetTapNotesInSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    int* changedCount)
+{
+    return transformCompleteElementsInSelection(
+        text, selectionStart, selectionEnd, true, changedCount);
 }
 }
 
@@ -830,6 +857,14 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         && !(event->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
     if (plainEnterKey || ctrlEnterKey) {
         insertLineBreakAtCursor(this);
+        return;
+    }
+    if (matchesShortcutId(
+            event,
+            QStringLiteral("transform.reset_tap_notes"),
+            {QKeySequence(Qt::CTRL | Qt::Key_W)})) {
+        emit resetTapNotesShortcutRequested();
+        event->accept();
         return;
     }
 

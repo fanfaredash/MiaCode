@@ -577,6 +577,7 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
                 QStringLiteral("transform.rotate_ccw_45"),
                 QStringLiteral("transform.rotate_cw_45"),
                 QStringLiteral("transform.clear_complete_elements"),
+                QStringLiteral("transform.reset_tap_notes"),
                 QStringLiteral("transform.subdivision_up"),
                 QStringLiteral("transform.subdivision_down"),
                 QStringLiteral("transform.subdivision_half_up"),
@@ -843,6 +844,10 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         owner_.transformClearCompleteElementsAction_,
         QStringLiteral("transform.clear_complete_elements"),
         QKeySequence(Qt::CTRL | Qt::Key_Q));
+    applyConfiguredShortcut(
+        owner_.transformResetTapNotesAction_,
+        QStringLiteral("transform.reset_tap_notes"),
+        QKeySequence(Qt::CTRL | Qt::Key_W));
     applyConfiguredShortcut(
         owner_.transformRaiseSubdivisionAction_,
         QStringLiteral("transform.subdivision_up"),

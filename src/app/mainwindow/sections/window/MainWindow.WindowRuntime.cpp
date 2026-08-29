@@ -851,6 +851,7 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
         owner_.transformRotate45CounterClockwiseAction_,
         owner_.transformRotate45ClockwiseAction_,
         owner_.transformClearCompleteElementsAction_,
+        owner_.transformResetTapNotesAction_,
         owner_.normalizeWholeChartAction_,
         owner_.transformToggleBreakAction_,
         owner_.transformToggleExAction_,

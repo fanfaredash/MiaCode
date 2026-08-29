@@ -95,6 +95,7 @@ public:
     void onToggleFireworkSelection();
     void onRandomRotateSelection();
     void onClearCompleteElementsSelection();
+    void onResetTapNotesSelection();
     void onRaiseSubdivisionSelection();
     void onLowerSubdivisionSelection();
     void onRaiseSubdivisionHalfStepSelection();

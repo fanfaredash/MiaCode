@@ -125,6 +125,14 @@
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
     },
+    "transform.reset_tap_notes": {
+      "label_key": "shortcut.transform.reset_tap_notes",
+      "label_zh": "重置摆键",
+      "label_en": "Reset to Single Tap",
+      "default": "Ctrl+W",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
     "preview.stop_or_play": {
       "label_key": "shortcut.preview.stop_or_play",
       "label_zh": "停止或播放预览",

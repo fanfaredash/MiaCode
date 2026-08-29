@@ -494,6 +494,13 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         QKeySequence(Qt::CTRL | Qt::Key_Q));
     connect(owner_.transformClearCompleteElementsAction_, &QAction::triggered, &owner_, &MainWindow::onClearCompleteElementsSelection);
     transformMenu->addAction(owner_.transformClearCompleteElementsAction_);
+    owner_.transformResetTapNotesAction_ = new QAction(UiText::text(QStringLiteral("action.transform.reset_tap_notes")), &owner_);
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformResetTapNotesAction_,
+        QStringLiteral("transform.reset_tap_notes"),
+        QKeySequence(Qt::CTRL | Qt::Key_W));
+    connect(owner_.transformResetTapNotesAction_, &QAction::triggered, &owner_, &MainWindow::onResetTapNotesSelection);
+    transformMenu->addAction(owner_.transformResetTapNotesAction_);
     transformMenu->addSeparator();
 
     auto* moreTransformMenu = transformMenu->addMenu(UiText::text(QStringLiteral("action.transform.more")));

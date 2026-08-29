@@ -632,6 +632,64 @@ void MainWindow::DocumentSection::onClearCompleteElementsSelection()
     owner_.statusBar()->showMessage(QStringLiteral("一键清空 applied on selection: %1 replacement(s).").arg(changed));
 }
 
+void MainWindow::DocumentSection::onResetTapNotesSelection()
+{
+    MC_OP("MainWindow::DocumentSection::onResetTapNotesSelection");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr) {
+        owner_.statusBar()->showMessage(QStringLiteral("重置摆键: editor unavailable."));
+        return;
+    }
+    int startPos = -1;
+    int endPos = -1;
+    if (!currentSelectionRange(&startPos, &endPos)) {
+        owner_.statusBar()->showMessage(QStringLiteral("重置摆键: no selection."));
+        return;
+    }
+    const QTextCursor oldCursor = editor->textCursor();
+    const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
+    const int oldHScroll = editor->horizontalScrollBar() != nullptr ? editor->horizontalScrollBar()->value() : 0;
+    const QString original = owner_.editorText();
+    const int begin = qMin(startPos, endPos);
+    const int finish = qMax(startPos, endPos);
+    int changed = 0;
+    const QString transformedFull = miacode::editor::resetTapNotesInSelection(original, begin, finish, &changed);
+    if (transformedFull == original) {
+        owner_.statusBar()->showMessage(QStringLiteral("重置摆键: no note changed."));
+        return;
+    }
+    const int unchangedSuffixLength = original.size() - finish;
+    const int transformedSelectionEnd = transformedFull.size() - unchangedSuffixLength;
+    const QString transformedSelection = transformedFull.mid(begin, transformedSelectionEnd - begin);
+    const bool forwardSelection = oldCursor.hasSelection() ? (oldCursor.position() >= oldCursor.anchor()) : true;
+    const int originalAnchor = forwardSelection ? begin : finish;
+    const int originalPosition = forwardSelection ? finish : begin;
+    QTextCursor editCursor = oldCursor;
+    editCursor.beginEditBlock();
+    editCursor.setPosition(begin);
+    editCursor.setPosition(finish, QTextCursor::KeepAnchor);
+    editCursor.insertText(transformedSelection);
+    editCursor.endEditBlock();
+    QTextCursor restoredCursor(editor->document());
+    const int maxPos = editor->document()->characterCount() - 1;
+    const int transformedEnd = begin + transformedSelection.size();
+    restoredCursor.setPosition(qBound(0, forwardSelection ? begin : transformedEnd, maxPos));
+    restoredCursor.setPosition(qBound(0, forwardSelection ? transformedEnd : begin, maxPos), QTextCursor::KeepAnchor);
+    editor->setTextCursor(restoredCursor);
+    recordChartSelectionTransformUndoEntry(originalAnchor, originalPosition, restoredCursor);
+    if (editor->verticalScrollBar() != nullptr) editor->verticalScrollBar()->setValue(qBound(editor->verticalScrollBar()->minimum(), oldVScroll, editor->verticalScrollBar()->maximum()));
+    if (editor->horizontalScrollBar() != nullptr) editor->horizontalScrollBar()->setValue(qBound(editor->horizontalScrollBar()->minimum(), oldHScroll, editor->horizontalScrollBar()->maximum()));
+    markCurrentFieldDirty();
+    state_.lastPreviewNoteMarkerSignature_.clear();
+    owner_.refreshTimelineMetadata();
+    owner_.statusBar()->showMessage(QStringLiteral("重置摆键 applied on selection: %1 replacement(s).").arg(changed));
+}
+
 void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
 {
     MC_OP("MainWindow::DocumentSection::onRaiseSubdivisionSelection");
@@ -760,6 +818,11 @@ void MainWindow::onRandomRotateSelection()
 void MainWindow::onClearCompleteElementsSelection()
 {
     documentSection_->onClearCompleteElementsSelection();
+}
+
+void MainWindow::onResetTapNotesSelection()
+{
+    documentSection_->onResetTapNotesSelection();
 }
 
 void MainWindow::onRaiseSubdivisionSelection()

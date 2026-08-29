@@ -24,6 +24,11 @@ QString clearCompleteElementsInSelection(
     int selectionStart,
     int selectionEnd,
     int* changedCount = nullptr);
+QString resetTapNotesInSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    int* changedCount = nullptr);
 }
 
 class PlainCodeEditor : public QTextEdit
@@ -87,6 +92,7 @@ signals:
     void redoShortcutRequested();
     void selectionReplacementAboutToEdit(int anchor, int position);
     void clearCompleteElementsShortcutRequested();
+    void resetTapNotesShortcutRequested();
     void raiseSubdivisionHalfStepShortcutRequested();
     void lowerSubdivisionHalfStepShortcutRequested();
     void editorOverwriteModeChanged(bool enabled);

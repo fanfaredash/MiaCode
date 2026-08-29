@@ -31,6 +31,7 @@ const QStringList& editableShortcutIds()
         QStringLiteral("transform.toggle_firework"),
         QStringLiteral("transform.random_rotate"),
         QStringLiteral("transform.clear_complete_elements"),
+        QStringLiteral("transform.reset_tap_notes"),
         QStringLiteral("preview.stop_or_play"),
         QStringLiteral("preview.play_pause_global"),
         QStringLiteral("preview.speed_down"),

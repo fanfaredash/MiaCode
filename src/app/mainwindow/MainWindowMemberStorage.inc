@@ -26,6 +26,7 @@
         QAction* transformToggleFireworkAction_ = nullptr;
         QAction* transformRandomRotateAction_ = nullptr;
         QAction* transformClearCompleteElementsAction_ = nullptr;
+        QAction* transformResetTapNotesAction_ = nullptr;
         QAction* transformRaiseSubdivisionAction_ = nullptr;
         QAction* transformLowerSubdivisionAction_ = nullptr;
         QAction* transformRaiseSubdivisionHalfStepAction_ = nullptr;
@@ -771,6 +772,7 @@
     QAction*& transformToggleFireworkAction_ = ui_.transformToggleFireworkAction_;
     QAction*& transformRandomRotateAction_ = ui_.transformRandomRotateAction_;
     QAction*& transformClearCompleteElementsAction_ = ui_.transformClearCompleteElementsAction_;
+    QAction*& transformResetTapNotesAction_ = ui_.transformResetTapNotesAction_;
     QAction*& transformRaiseSubdivisionAction_ = ui_.transformRaiseSubdivisionAction_;
     QAction*& transformLowerSubdivisionAction_ = ui_.transformLowerSubdivisionAction_;
     QAction*& transformRaiseSubdivisionHalfStepAction_ = ui_.transformRaiseSubdivisionHalfStepAction_;

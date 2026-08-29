@@ -300,6 +300,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         transformLowerSubdivisionHalfStepAction_,
         batchTransformClearSeparator,
         transformClearCompleteElementsAction_,
+        transformResetTapNotesAction_,
     });
     editor->setMoreBatchTransformActions({
         transformToggleBreakAction_,
@@ -1830,6 +1831,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         markCurrentFieldDirty();
         updateWindowTitle();
         rebuildFieldSidebar();
+    });
+    connect(editor, &PlainCodeEditor::resetTapNotesShortcutRequested, this, [this]() {
+        if (transformResetTapNotesAction_ != nullptr) {
+            transformResetTapNotesAction_->trigger();
+        }
     });
     connect(artistEdit_, &QLineEdit::textChanged, this, [this]() { markCurrentFieldDirty(); rebuildFieldSidebar(); });
     connect(designerEdit_, &QLineEdit::textChanged, this, [this]() { markCurrentFieldDirty(); rebuildFieldSidebar(); });
