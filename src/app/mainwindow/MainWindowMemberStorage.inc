@@ -68,7 +68,6 @@
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QTimer* visualLayoutPersistTimer_ = nullptr;
         QObject* editorViewport_ = nullptr;
-        QPointer<QDialog> pvBatchCompressionDialog_;
         QPointer<QLabel> aboutIconLabel_;
         QWidget* welcomePage_ = nullptr;
         QLabel* welcomeEmptyHintLabel_ = nullptr;
@@ -801,7 +800,6 @@
     QTimer*& visualLayoutPersistTimer_ = ui_.visualLayoutPersistTimer_;
     QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
-    QPointer<QDialog>& pvBatchCompressionDialog_ = ui_.pvBatchCompressionDialog_;
     QPointer<QLabel>& aboutIconLabel_ = ui_.aboutIconLabel_;
     QSoundEffect*& invalidStarPreviewEnableSound_ = state_.invalidStarPreviewEnableSound_;
     QSoundEffect*& invalidStarPreviewDisableSound_ = state_.invalidStarPreviewDisableSound_;

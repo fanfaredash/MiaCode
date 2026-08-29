@@ -134,6 +134,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/UiRequestService.h
     src/app/v2/JobProgressService.cpp
     src/app/v2/JobProgressService.h
+    src/app/qml_ui/media/QmlMediaToolsModel.cpp
+    src/app/qml_ui/media/QmlMediaToolsModel.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -364,8 +366,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/media/PvBatchCompressionScanner.cpp
     src/tools/media/PvBatchCompressionWorker.h
     src/tools/media/PvBatchCompressionWorker.cpp
-    src/tools/media/PvBatchCompressionDialog.h
-    src/tools/media/PvBatchCompressionDialog.cpp
     src/tools/cover_export/CoverLayoutModel.h
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverCompositionState.h
@@ -687,6 +687,9 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/editor/SourceEditor.qml
     src/app/qml_ui/editor/CompletionPopup.qml
     src/app/qml_ui/editor/NormalizeOptionsDialog.qml
+    src/app/qml_ui/media/MediaToolsDialog.qml
+    src/app/qml_ui/media/PvBatchCompressionDialog.qml
+    src/app/qml_ui/media/PrependBlankDialog.qml
     src/app/qml_ui/editor/FindReplaceBar.qml
     src/app/qml_ui/editor/BookmarkList.qml
     src/app/qml_ui/editor/LineNumberGutter.qml

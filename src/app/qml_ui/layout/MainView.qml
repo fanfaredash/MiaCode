@@ -19,6 +19,7 @@ Item {
     readonly property var platform: applicationContext.platform
     readonly property var uiRequests: applicationContext.uiRequests
     readonly property var jobProgress: applicationContext.jobProgress
+    readonly property var mediaTools: applicationContext.mediaTools
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
     // 打开文件时的未保存决策。关闭应用走 v1 shell confirmClose 协议，
@@ -392,5 +393,32 @@ Item {
         objectName: "shellJobProgress"
         anchors.fill: parent
         progress: root.jobProgress
+    }
+
+    // 音视频处理 lives at shell level: the tools menu, the latency page and the
+    // tools sidebar all reach the same dialog.
+    MediaToolsDialog {
+        id: mediaToolsDialog
+        objectName: "shellMediaToolsDialog"
+        mediaTools: root.mediaTools
+        onPrependRequested: function(isTrack) {
+            const context = root.mediaTools.prependContext(isTrack)
+            // An unavailable target has already explained itself as a notice.
+            if (!context.available)
+                return
+            prependBlankDialog.loadContext(context)
+            prependBlankDialog.open()
+        }
+    }
+
+    PrependBlankDialog {
+        id: prependBlankDialog
+        objectName: "shellPrependBlankDialog"
+        mediaTools: root.mediaTools
+    }
+
+    Connections {
+        target: root.pages
+        function onMediaToolsRequested() { mediaToolsDialog.open() }
     }
 }

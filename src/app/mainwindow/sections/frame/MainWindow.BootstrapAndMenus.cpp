@@ -374,12 +374,12 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         UiText::text(QStringLiteral("media_tools.prepend_track_silence_action")),
         &owner_
     );
-    connect(owner_.prependTrackSilenceAction_, &QAction::triggered, &owner_, &MainWindow::onPrependTrackSilence);
+    connect(owner_.prependTrackSilenceAction_, &QAction::triggered, &owner_, &MainWindow::onMediaProcessingTools);
     owner_.prependPvBlackAction_ = new QAction(
         UiText::text(QStringLiteral("media_tools.prepend_pv_black_screen_action")),
         &owner_
     );
-    connect(owner_.prependPvBlackAction_, &QAction::triggered, &owner_, &MainWindow::onPrependPvBlack);
+    connect(owner_.prependPvBlackAction_, &QAction::triggered, &owner_, &MainWindow::onMediaProcessingTools);
     owner_.compressBackgroundVideoAction_ = new QAction(
         UiText::text(QStringLiteral("media_tools.compress_video_action")),
         &owner_

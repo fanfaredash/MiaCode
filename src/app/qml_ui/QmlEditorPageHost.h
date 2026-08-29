@@ -44,6 +44,7 @@ public:
 
 signals:
     void normalizeWholeChartRequested();
+    void mediaToolsRequested();
     void activePageIdChanged();
     void pageWindowChanged();
 

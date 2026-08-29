@@ -66,6 +66,9 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
     connect(&backend, &MainWindow::normalizeWholeChartRequested, this, [this]() {
         openNormalizeWholeChart();
     });
+    connect(&backend, &MainWindow::mediaToolsRequested, this, [this]() {
+        openMediaProcessingTools();
+    });
 }
 
 QmlEditorPageHost::~QmlEditorPageHost()
@@ -340,9 +343,7 @@ void QmlEditorPageHost::openMediaProcessingTools()
     if (overlayActive()) {
         leaveOverlayPage();
     }
-    if (backend_ != nullptr) {
-        backend_->onMediaProcessingTools();
-    }
+    emit mediaToolsRequested();
 }
 
 void QmlEditorPageHost::openNormalizeWholeChart()

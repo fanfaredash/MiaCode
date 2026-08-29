@@ -156,6 +156,7 @@ public:
 signals:
     void videoExportWorkerRunningChanged(bool running);
     void normalizeWholeChartRequested();
+    void mediaToolsRequested();
     void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
@@ -423,11 +424,22 @@ private slots:
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onSkinSettings();
+    // Asks the QML shell to show the media tools page. Kept as a slot because
+    // the latency page and the tools menu both still trigger it.
     void onMediaProcessingTools();
-    void onPrependTrackSilence();
-    void onPrependPvBlack();
+
+public:
+    // 音视频处理's narrow surface for the QML page. Public rather than another
+    // friend declaration: the QML layer reaches these through the context.
     void onCompressBackgroundVideo();
     void onConvertTrackTo44100Hz();
+    // Prepend-blank, split around the QML dialog.
+    QVariantMap prependMediaBlankContext(bool isTrack);
+    QVariantMap detectMediaBlankTiming(bool isTrack);
+    void restoreMediaBlankBackup(bool isTrack);
+    void applyMediaBlank(bool isTrack, double beats, double bpm);
+
+private slots:
     void onReadTitleFromTrack();
     void onReadArtistFromTrack();
     void onExtractBackgroundFromTrack();

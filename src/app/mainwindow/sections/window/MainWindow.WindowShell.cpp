@@ -18,7 +18,6 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "extensions/ExtensionManager.h"
 #include "tools/latency/LatencyDetectionPage.h"
-#include "tools/media/PvBatchCompressionDialog.h"
 #include "app/ui/AppBackgroundPainter.h"
 
 #include <QtCore>
@@ -999,9 +998,6 @@ void MainWindow::WindowSection::applyUiTheme()
         // Theme-aware card/label colors are frozen at construction otherwise —
         // re-apply so the BPM & latency page follows light/dark switches too.
         owner_.latencyDetectionPage_->applyThemeStyles();
-    }
-    if (!owner_.pvBatchCompressionDialog_.isNull()) {
-        static_cast<miacode::media::PvBatchCompressionDialog*>(owner_.pvBatchCompressionDialog_.data())->applyThemeStyles();
     }
     if (owner_.metadataEmptyHintLabel_ != nullptr) {
         owner_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());

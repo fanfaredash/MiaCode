@@ -32,7 +32,7 @@
 | 隐藏 `PlainCodeEditor` | 仍在 `FrameBootstrap.cpp:291` 构造；**20 个文件**仍引用 | `src/editor/`、`src/app/mainwindow/sections/*` |
 | `QuickShellController` | 1,251 行（`src/app/quick_shell/` 全目录）；`surfaceHost_` 分支已归零；**`refreshTimer_` 轮询仍在**（`QuickShellController.cpp:71/82-84/693-699`） | — |
 | QML 仍消费的 controller 属性/方法 | **25 个**（`shellController.*`） | `src/app/qml_ui/**/*.qml` |
-| Widget UI 代码量 | cover_export **5,780** / latency **1,040** / media **393**<br>*（2026-08-29 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479）* | `src/tools/*` |
+| Widget UI 代码量 | cover_export **5,780** / latency **1,040**<br>*（2026-08-29 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479、`PvBatchCompressionDialog` 393）* | `src/tools/*` |
 
 ### v2 自身新代码里的 Widgets 泄漏（优先清）
 
@@ -63,7 +63,7 @@
 | 功能 | v2 入口 | 落点 |
 |---|---|---|
 | 延迟校准 | `ToolsSidebarPage.qml` → `openLatencyPage()` | `LatencyDetectionPage`（`WindowContainer` 宿主，1,040 行） |
-| 音视频处理 | → `openMediaProcessingTools()` | `MainWindow::onMediaProcessingTools()` → `PvBatchCompressionDialog` |
+| ~~音视频处理~~ | → `openMediaProcessingTools()` | **已完成（2026-08-29）**：`MediaToolsDialog.qml` 启动页 + `PrependBlankDialog.qml` + `PvBatchCompressionDialog.qml`（QML），`QmlMediaToolsModel` 承接；`src/tools/media` 已无 Widgets |
 | ~~整谱规范化~~ | → `openNormalizeWholeChart()` | **已完成（2026-08-29）**：`NormalizeOptionsDialog.qml` + `QmlDocumentModel::normalizeChartSelection`，结果作为编辑器事务应用（undo 覆盖）；Widget 对话框与 `DocumentSection::onNormalizeWholeChart` 已删除 |
 | ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
 | 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（5,780 行） |

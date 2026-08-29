@@ -9,6 +9,7 @@
 #include "QmlPreviewModel.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiSettings.h"
+#include "media/QmlMediaToolsModel.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
 #include "app/v2/AnalysisService.h"
@@ -38,6 +39,7 @@ class QmlApplicationContext final : public QObject
     // Shared Widgets-free UI boundary, hosted once by MainView.qml.
     Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
     Q_PROPERTY(QObject* jobProgress READ jobProgress CONSTANT)
+    Q_PROPERTY(QObject* mediaTools READ mediaTools CONSTANT)
 
 public:
     QmlApplicationContext(MainWindow& backend, QuickShellController& shell, QObject* parent = nullptr);
@@ -56,6 +58,7 @@ public:
     QObject* platform();
     QObject* uiRequests();
     QObject* jobProgress();
+    QObject* mediaTools();
     void setWindowChrome(QObject* chrome);
 
 private:
@@ -72,6 +75,7 @@ private:
     miacode::qml_ui::QmlEditorController editor_;
     miacode::qml_ui::QmlShortcutModel shortcuts_;
     QmlUiPlatformChrome platform_;
+    miacode::qml_ui::QmlMediaToolsModel mediaTools_;
     QuickShellController* shell_ = nullptr;
     QObject* windowChrome_ = nullptr;
 };
