@@ -59,3 +59,13 @@ void MainWindow::onExtractBackgroundFromTrack()
 {
     dialogsSection_->onExtractBackgroundFromTrack();
 }
+
+void MainWindow::onImportBackgroundImage()
+{
+    dialogsSection_->onImportBackgroundImage();
+}
+
+void MainWindow::onImportBackgroundVideo()
+{
+    dialogsSection_->onImportBackgroundVideo();
+}

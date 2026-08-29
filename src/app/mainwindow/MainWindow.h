@@ -323,6 +323,8 @@ private slots:
     void onReadTitleFromTrack();
     void onReadArtistFromTrack();
     void onExtractBackgroundFromTrack();
+    void onImportBackgroundImage();
+    void onImportBackgroundVideo();
     // Opens the "manage per-difficulty designers" dialog (rows for &des_1..7
     // plus the "all difficulties share one designer" toggle). See
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.

@@ -168,6 +168,8 @@ Current filename convention:
 - `bg.png`
 - `bg.jpeg`
 
+The metadata page's direct media import is a preview/export synchronization entry point. Image import preserves JPG/JPEG/PNG bytes under `bg.<source-extension>`; video import writes `pv.mp4` and updates the document's explicit `&video=` value to `pv.mp4`. `ChartMediaImport.h` moves other same-kind candidates aside before committing and retains them after success as uniquely numbered `<stem>_bak[_N].<ext>` copies, so resolver priority cannot leave an older `bg.*` active and replacement remains recoverable. The dialog must release the preview decoder before replacement and re-sync the stage-media route afterward; export then observes the same shared resolver/document field without a separate export-side copy path.
+
 If you add or remove supported media names, keep preview and export aligned.
 If you change preview-time background-media ownership or media lookup, review `MainWindow.*`, `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`, `PreviewMediaController.*`, `PreviewStageMediaHost.*`, `PreviewStageMediaItem.qml`, `QuickShellPreviewCompositeSurface.*`, `QuickShellPreviewSurface.qml`, and the export path in the same patch.
 

@@ -58,6 +58,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - File: `src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp`
   - Key functions: `updateEditorHeader`, `updateEditorHeaderLayoutMode`, `switchToWelcomePage`, `switchToMetadataField`, `switchToDifficultyField`, `activateInitialField`
   - Owns: code-area header context text, difficulty-level/designer controls visibility, welcome/metadata/chart page switching, and the no-difficulty reset path used after loading or creating an empty chart
+- Metadata-page chart media import:
+  - Files: `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.TrackMetadata.cpp`, `src/common/ChartMediaImport.h`
+  - Key functions: `MainWindow::DialogsSection::onImportBackgroundImage`, `MainWindow::DialogsSection::onImportBackgroundVideo`, `miacode::chart_media_import::importToChartDirectory`
+  - Owns: direct file import for JPG/JPEG/PNG jacket art and MP4 background video through the platform-native picker (the Windows path calls `GetOpenFileNameW` with the visible QuickShell root HWND so the Open-button result returns reliably), canonical `bg.<source-extension>` / `pv.mp4` naming, transactional replacement of shadowing same-kind candidates while preserving uniquely numbered `<stem>_bak[_N].<ext>` copies, preview-media release/reload, and `&video=pv.mp4` writeback so preview and export select the imported PV
 - Batch text editing surface:
   - Files: `src/editor/PlainCodeEditor.h`, `src/editor/PlainCodeEditor.cpp`
   - Class: `PlainCodeEditor`

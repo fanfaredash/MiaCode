@@ -1838,6 +1838,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/preview/PreviewMediaCacheStampSpec.cpp
             src/common/FileContentStamp.h
             src/common/ChartAssetPaths.h
+            src/common/ChartMediaImport.h
         LIBS Qt6::Core
         INCLUDES src src/common
     )

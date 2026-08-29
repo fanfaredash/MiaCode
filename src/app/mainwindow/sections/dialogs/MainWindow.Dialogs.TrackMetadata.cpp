@@ -9,6 +9,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
+#include "common/ChartMediaImport.h"
 #include "common/ChartClockCount.h"
 #include "common/Id3TagReader.h"
 #include "common/OperationLog.h"
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "common/DebugLog.h"
 
@@ -35,7 +37,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <commdlg.h>
 #include <RestartManager.h>
+#pragma comment(lib, "Comdlg32.lib")
 #pragma comment(lib, "Rstrtmgr.lib")
 #endif
 
@@ -55,6 +59,93 @@ QString promptForMetadataMp3(QWidget* parent, const QString& initialDir, const Q
         initialDir,
         UiText::text(QStringLiteral("track_metadata.mp3_audio_mp3_all_files"))
     );
+}
+
+QString promptForChartMediaFile(
+    QWidget* logicalParent,
+    const QString& initialDir,
+    const QString& dialogTitle,
+    const QString& filter)
+{
+#ifdef Q_OS_WIN
+    // QFileDialog's Windows-native helper is reached through QuickShell's
+    // hidden QWidget backend. The picker can visibly select a file and fill
+    // the filename field, yet fail to deliver the Open-button acceptance back
+    // to Qt. Call the Windows picker directly and give it the visible
+    // QuickShell root HWND so Open has an unambiguous owner and return path.
+    std::wstring nativeFilter;
+    const QStringList filterSections = filter.split(QStringLiteral(";;"), Qt::SkipEmptyParts);
+    for (const QString& section : filterSections) {
+        const int patternOpen = section.lastIndexOf(QStringLiteral(" ("));
+        const bool hasPattern = patternOpen >= 0 && section.endsWith(QLatin1Char(')'));
+        const QString label = section;
+        QString patterns = hasPattern
+            ? section.mid(patternOpen + 2, section.size() - patternOpen - 3)
+            : QStringLiteral("*.*");
+        patterns.replace(QLatin1Char(' '), QLatin1Char(';'));
+
+        nativeFilter.append(label.toStdWString());
+        nativeFilter.push_back(L'\0');
+        nativeFilter.append(patterns.toStdWString());
+        nativeFilter.push_back(L'\0');
+    }
+    if (nativeFilter.empty()) {
+        nativeFilter.append(L"Files");
+        nativeFilter.push_back(L'\0');
+        nativeFilter.append(L"*.*");
+        nativeFilter.push_back(L'\0');
+    }
+    nativeFilter.push_back(L'\0');
+
+    std::vector<wchar_t> selectedPath(32768, L'\0');
+    const std::wstring nativeInitialDir = QDir::toNativeSeparators(initialDir).toStdWString();
+    const std::wstring nativeTitle = dialogTitle.toStdWString();
+    QWindow* ownerWindow = UiDialogs::applicationDialogTransientParent();
+    if (ownerWindow == nullptr && logicalParent != nullptr) {
+        ownerWindow = logicalParent->windowHandle();
+    }
+
+    OPENFILENAMEW request{};
+    request.lStructSize = sizeof(request);
+    request.hwndOwner = ownerWindow != nullptr
+        ? reinterpret_cast<HWND>(ownerWindow->winId())
+        : nullptr;
+    request.lpstrFilter = nativeFilter.c_str();
+    request.nFilterIndex = 1;
+    request.lpstrFile = selectedPath.data();
+    request.nMaxFile = static_cast<DWORD>(selectedPath.size());
+    request.lpstrInitialDir = nativeInitialDir.empty() ? nullptr : nativeInitialDir.c_str();
+    request.lpstrTitle = nativeTitle.c_str();
+    request.Flags = OFN_EXPLORER
+        | OFN_FILEMUSTEXIST
+        | OFN_PATHMUSTEXIST
+        | OFN_NOCHANGEDIR
+        | OFN_ENABLESIZING;
+
+    if (::GetOpenFileNameW(&request) == TRUE) {
+        return QDir::fromNativeSeparators(QString::fromWCharArray(selectedPath.data()));
+    }
+    const DWORD dialogError = ::CommDlgExtendedError();
+    if (dialogError != 0) {
+        qWarning() << "Native chart-media picker failed:" << dialogError;
+    }
+    return QString();
+#else
+    QFileDialog dialog(UiDialogs::effectiveParentWidget(logicalParent));
+    dialog.setWindowTitle(dialogTitle);
+    if (!initialDir.isEmpty()) {
+        dialog.setDirectory(initialDir);
+    }
+    dialog.setNameFilter(filter);
+    dialog.setFileMode(QFileDialog::ExistingFile);
+    dialog.setAcceptMode(QFileDialog::AcceptOpen);
+    UiDialogs::prepareDialogWindow(&dialog, logicalParent);
+    if (dialog.exec() != QDialog::Accepted) {
+        return QString();
+    }
+    const QStringList selectedFiles = dialog.selectedFiles();
+    return selectedFiles.isEmpty() ? QString() : selectedFiles.constFirst();
+#endif
 }
 
 // Shared helper for the title/artist buttons. Reads the ID3v2 tag of the
@@ -243,4 +334,140 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
             : UiText::text(QStringLiteral("track_metadata.wrote_bg_jpg_from_the")),
         6000
     );
+}
+
+void MainWindow::DialogsSection::onImportBackgroundImage()
+{
+    importBackgroundMedia(false);
+}
+
+void MainWindow::DialogsSection::onImportBackgroundVideo()
+{
+    importBackgroundMedia(true);
+}
+
+void MainWindow::DialogsSection::importBackgroundMedia(bool video)
+{
+    MC_OP("MainWindow::DialogsSection::importBackgroundMedia");
+    using miacode::chart_media_import::Kind;
+
+    const Kind kind = video ? Kind::Video : Kind::Image;
+    const QString title = UiText::text(video
+        ? QStringLiteral("track_metadata.import_background_video")
+        : QStringLiteral("track_metadata.import_background_image"));
+    const QString chartDirPath = resolveCurrentChartDirectory();
+    QWidget* parent = UiDialogs::effectiveParentWidget(&owner_);
+    if (chartDirPath.isEmpty()) {
+        QMessageBox::warning(
+            parent,
+            title,
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart")));
+        return;
+    }
+
+    const QString filter = UiText::text(video
+        ? QStringLiteral("track_metadata.video_file_filter")
+        : QStringLiteral("track_metadata.image_file_filter"));
+    const QString sourcePath = promptForChartMediaFile(&owner_, chartDirPath, title, filter);
+    if (sourcePath.isEmpty()) {
+        return;
+    }
+
+    if (!miacode::chart_media_import::isSupportedSource(sourcePath, kind)) {
+        QMessageBox::warning(
+            parent,
+            title,
+            UiText::text(QStringLiteral("track_metadata.unsupported_media_file")));
+        return;
+    }
+    if (!video) {
+        QImageReader reader(sourcePath);
+        if (!reader.canRead()) {
+            QMessageBox::warning(
+                parent,
+                title,
+                UiText::text(QStringLiteral("track_metadata.failed_to_read_image")));
+            return;
+        }
+    }
+
+    const QString targetPath = QDir(chartDirPath).filePath(
+        miacode::chart_media_import::targetFileName(sourcePath, kind));
+    const QStringList existing = miacode::chart_media_import::existingCandidatePaths(chartDirPath, kind);
+    bool replacesExisting = false;
+    for (const QString& path : existing) {
+        if (!miacode::chart_media_import::pathsReferToSameFile(path, sourcePath)
+            || !miacode::chart_media_import::pathsReferToSameFile(path, targetPath)) {
+            replacesExisting = true;
+            break;
+        }
+    }
+    if (replacesExisting) {
+        const auto answer = QMessageBox::question(
+            parent,
+            title,
+            UiText::text(video
+                ? QStringLiteral("track_metadata.background_video_exists_overwrite")
+                : QStringLiteral("track_metadata.background_image_exists_overwrite")),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            return;
+        }
+    }
+
+    owner_.statusBar()->showMessage(
+        UiText::text(video
+            ? QStringLiteral("track_metadata.copying_background_video")
+            : QStringLiteral("track_metadata.copying_background_image")));
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+    releasePreviewMediaForFileOperation();
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const miacode::chart_media_import::Result imported =
+        miacode::chart_media_import::importToChartDirectory(sourcePath, chartDirPath, kind);
+    QApplication::restoreOverrideCursor();
+
+    if (!imported.ok) {
+        reloadPreviewMediaAfterFileOperation(false);
+        QMessageBox::critical(
+            parent,
+            title,
+            UiText::text(QStringLiteral("track_metadata.failed_to_import_media"))
+                .arg(imported.error));
+        return;
+    }
+
+    if (video && state_.document_.videoPath != QStringLiteral("pv.mp4")) {
+        // Keep explicit &video= authoring aligned with the canonical imported
+        // filename. Otherwise an older override would continue to shadow the
+        // newly copied pv.mp4 in both preview and export.
+        state_.document_.videoPath = QStringLiteral("pv.mp4");
+        state_.documentDirty_ = true;
+        owner_.updateDirtyState();
+    }
+
+    reloadPreviewMediaAfterFileOperation(false);
+    owner_.rebuildFieldSidebar();
+    _mc_op_.note(QStringLiteral("kind=%1 source=%2 target=%3 changed=%4 backups=%5 cleanup_warnings=%6")
+                     .arg(video ? QStringLiteral("video") : QStringLiteral("image"),
+                          sourcePath,
+                          imported.targetPath)
+                     .arg(imported.changed ? 1 : 0)
+                     .arg(imported.backupPaths.size())
+                     .arg(imported.cleanupWarnings.size()));
+
+    if (!imported.cleanupWarnings.isEmpty()) {
+        QMessageBox::warning(
+            parent,
+            title,
+            UiText::text(QStringLiteral("track_metadata.imported_with_cleanup_warning"))
+                .arg(imported.cleanupWarnings.join(QStringLiteral("\n"))));
+    }
+    owner_.statusBar()->showMessage(
+        UiText::text(video
+            ? QStringLiteral("track_metadata.imported_background_video")
+            : QStringLiteral("track_metadata.imported_background_image"))
+            .arg(imported.targetPath),
+        6000);
 }

@@ -769,9 +769,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(manageDesignersButton, &QToolButton::clicked, this, &MainWindow::onManagePerDifficultyDesigners);
     designerWrapLayout->addWidget(manageDesignersButton, 0, Qt::AlignRight);
 
-    // Cover-extraction row. The label is intentionally short ("曲绘") so the
-    // form column stays compact; the button text carries the action and the
-    // tooltip spells out the bg.jpg destination.
+    // Jacket import row. Keep the two related actions together: extracting an
+    // embedded MP3 cover remains available, while direct file import avoids
+    // requiring users to rename/copy bg.* by hand.
     auto* coverWrap = new QWidget(metadataPage_);
     auto* coverWrapLayout = new QHBoxLayout(coverWrap);
     coverWrapLayout->setContentsMargins(0, 0, 0, 0);
@@ -781,12 +781,29 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     extractCoverButton->setToolTip(UiText::text(QStringLiteral("metadata.choose_an_mp3_and_write")));
     connect(extractCoverButton, &QToolButton::clicked, this, &MainWindow::onExtractBackgroundFromTrack);
     coverWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignLeft);
+    auto* importCoverButton = new QToolButton(metadataPage_);
+    importCoverButton->setText(UiText::text(QStringLiteral("metadata.read_from_file")));
+    importCoverButton->setToolTip(UiText::text(QStringLiteral("metadata.choose_image_and_copy")));
+    connect(importCoverButton, &QToolButton::clicked, this, &MainWindow::onImportBackgroundImage);
+    coverWrapLayout->addWidget(importCoverButton, 0, Qt::AlignLeft);
     coverWrapLayout->addStretch(1);
+
+    auto* videoWrap = new QWidget(metadataPage_);
+    auto* videoWrapLayout = new QHBoxLayout(videoWrap);
+    videoWrapLayout->setContentsMargins(0, 0, 0, 0);
+    videoWrapLayout->setSpacing(6);
+    auto* importVideoButton = new QToolButton(metadataPage_);
+    importVideoButton->setText(UiText::text(QStringLiteral("metadata.read_from_file")));
+    importVideoButton->setToolTip(UiText::text(QStringLiteral("metadata.choose_video_and_copy")));
+    connect(importVideoButton, &QToolButton::clicked, this, &MainWindow::onImportBackgroundVideo);
+    videoWrapLayout->addWidget(importVideoButton, 0, Qt::AlignLeft);
+    videoWrapLayout->addStretch(1);
 
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.title"))), titleWrap);
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.artist"))), artistWrap);
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.des"))), designerWrap);
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.cover"))), coverWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.background_video"))), videoWrap);
     metadataCardLayout->addLayout(metadataForm);
 
     auto* extraMetadataLabel = new QLabel(UiText::text(QStringLiteral("metadata.other_fields")), metadataPage_);
