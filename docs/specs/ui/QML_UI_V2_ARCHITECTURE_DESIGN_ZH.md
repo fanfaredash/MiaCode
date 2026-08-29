@@ -127,9 +127,9 @@ QML 收到的第一眼就是终态，不存在"活动难度尚未设定"的可�
 | 0 | 删除 v1 shell、扩展宿主（3,141 行，v2 未使用）、被舍弃的三组页面（偏好设置、延迟检测、媒体处理/音轨工具） | `--ui=v1` 与 `MIACODE_UI_SKIN` 消失；体量显著下降 |
 | 0a ✅ | **已完成 2026-08-25**：v1 外壳、原生表面再宿主、主题桥、macOS 表面支持、全部 v1 QML 与皮肤入口 | 源码净 **−7,770 行**（39 文件，+284/−8,054）。`QuickShellController` 保留待阶段 2。全量 CTest 71/72（唯一失败 `qtavplayer_platform_spec` 为既有问题，在本阶段起点即复现） |
 | 0b ⏸ | 删除扩展宿主 | **延后（2026-08-25 决策）**；保持现状，不在阶段 1 前删除或改写扩展 API。 |
-| 0c ⏸ | 删除被裁剪的偏好设置、延迟检测、媒体处理/音轨工具页面 | **延后（2026-08-25 决策）**；现有入口与 Widget 路径继续可用，尚未迁移为 QML 的入口按能力缺口策略说明状态。 |
-| 1 ⏳ | 建立 `ChartWorkspace` 与 `AnalysisService`，文档域搬迁 | **生产 QML 文档与分析真相已迁移（2026-08-26）：** `ChartWorkspace` 提供 Widgets-free 的严格预检、单次 revision 与 save-point dirty；`ChartWorkspaceFileService` 负责 BOM/系统编码与 `QSaveFile`；`AnalysisService` 订阅 workspace，先发布 pending，再异步发布同一 `(difficultyId, revision)` 的验证、偏移 markers、Muri 与静态引用整包。QML 文档/分析消费者会丢弃过期整包，显式验证不再调用 `MainWindow`。隐藏 `MainWindow` 只适配 committed 文档值并暂供 timeline/preview 与 legacy 页面，阶段完成标志仍为隐藏 `PlainCodeEditor` 与第二文档副本删除。 |
-| 2 | 建立 `PreviewSession` 与 `TimelineSession`，`QuickShellController` 退役 | 轮询定时器消失；`surfaceHost` 分支归零 |
+| 0c ✅ | ~~删除~~ **补成 QML**：偏好设置、延迟检测、媒体处理/音轨工具页面 | **方向已于 2026-08-29 由所有者改判：三页不删，重建为 QML 原生页**，2026-08-29 全部完成。`PreferencesDialog.qml` + `QmlPreferencesModel`（四页签，快捷键录制内置）、`LatencyPage.qml` + `QmlLatencyModel`、`MediaToolsDialog.qml` 一族 + `QmlMediaToolsModel`。`WindowContainer` 与整套 widget 宿主机制随之删除。**音视频处理工具仍未通过原生桌面验收。** |
+| 1 ✅ | 建立 `ChartWorkspace` 与 `AnalysisService`，文档域搬迁 | **生产 QML 文档与分析真相已迁移（2026-08-26）：** `ChartWorkspace` 提供 Widgets-free 的严格预检、单次 revision 与 save-point dirty；`ChartWorkspaceFileService` 负责 BOM/系统编码与 `QSaveFile`；`AnalysisService` 订阅 workspace，先发布 pending，再异步发布同一 `(difficultyId, revision)` 的验证、偏移 markers、Muri 与静态引用整包。QML 文档/分析消费者会丢弃过期整包，显式验证不再调用 `MainWindow`。隐藏 `MainWindow` 只适配 committed 文档值并暂供 timeline/preview 与 legacy 页面。**完成标志已于 2026-08-30 达成：`src/editor/PlainCodeEditor.*` 与第二份文档副本已删除**，应用不再链接任何 Widgets 文本编辑器。 |
+| 2 ✅ | 建立 `PreviewSession` 与 `TimelineSession`，`QuickShellController` 退役 | **已完成 2026-08-30**（`TimelineQuickModel` 所有权除外，所有者决定延后）。落点是三个对象而非两个：`QmlTimelineModel` / `QmlPreviewModel` / `QmlShellLifecycle`。轮询定时器消失，离散状态由 `MainWindow::shellPresentationChanged` 推送、播放头由 `shellPreviewPlayheadChanged` 推送；`surfaceHost` 分支归零 |
 | 3 | `ExportService`：视频沿用，封面/ZIP/Net 重建为 QML 并去除其引擎层的 widgets 耦合 | Widgets 对话框归零 |
 | 4 | 删除 `MainWindow`，从链接中移除 `Qt6::Widgets` | 目标达成 |
 
@@ -146,11 +146,15 @@ QML 收到的第一眼就是终态，不存在"活动难度尚未设定"的可�
 
 | 删除项 | 后果 |
 |---|---|
-| 偏好设置对话框 | **0c 延后：** 现有 Widget 路径继续可用；删除后才会失去编辑器字体/行距/输入策略、预览音频与渲染设置、快捷键自定义的 UI。 |
-| 延迟检测页 | **0c 延后：** 现有 `WindowContainer` 路径继续可用；删除后才会移除该混合渲染树。 |
-| 媒体处理 / 音轨工具 | **0c 延后：** 现有入口继续可用；删除后才会失去前置静音、PV 黑场、背景视频压缩、采样率转换和从音轨读取标题/艺术家的功能。 |
+| ~~偏好设置对话框~~ | **未删除。** 2026-08-29 所有者改判为补成 QML，已完成，能力无缺口。 |
+| ~~延迟检测页~~ | **未删除。** 同上；`WindowContainer` 混合渲染树随重建一并移除。 |
+| ~~媒体处理 / 音轨工具~~ | **未删除。** 同上；四条 ffmpeg 流程与 PV 批量队列均已是 QML 页面（**尚未通过原生桌面验收**）。 |
+| Net 批量下载 / 上传 | **功能暂时移除（2026-08-29 所有者决定）**：两个 Widget 对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面。 |
+| 应用背景（Preferences → 背景页签） | **已删除（2026-08-29 所有者决定）**：painter 画在一个 `WA_DontShowOnScreen` 的窗口上，配置的是看不见的东西。恢复需要在 QML 外壳里重新实现，不是回滚删除。 |
+| 扩展页签与开发者工具 | **已删除（2026-08-29）**。 |
 
-以上均为用户明确授权（"哪怕功能会缺失也要做"），后续再补。
+原先"哪怕功能会缺失也要做"的授权覆盖的是 0c 那三页；**该授权已于 2026-08-29 被所有者收回**，
+三页改为重建。本表现在记录的是**实际**的删除与后果，不是当初的计划。
 
 ## 11. 非目标
 
