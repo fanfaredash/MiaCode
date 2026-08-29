@@ -68,7 +68,7 @@
 | ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
 | 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（5,780 行） |
 | ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
-| 偏好设置 | `QmlCommandService::openPreferences()` | `MainWindow::onPreferences()` |
+| 偏好设置 | `QmlCommandService::openPreferences()` | `MainWindow::onPreferences()`（2,284 行，扩展页签已于 2026-08-29 移除）<br>**背景页签在 v2 下无效果**，见 §7.x |
 | ~~批量导出~~ | `openBatchExport()` | **已完成（2026-08-29）**：QML `ExportVideoPage` 的 batch 页是唯一批量界面，`BatchExportPanel` 组已删除 |
 
 > 0b（扩展宿主）仍是已延后状态，不得记为"已删除"或"功能不可用"。
@@ -180,6 +180,17 @@
 4. 原生桌面验收按平台分别记录；macOS 通过不能推断 Windows 通过。
 
 ## 7. 遗留问题与更新后待复核
+
+### 7.0 偏好设置「背景」页签在 v2 下不产生任何效果（待产品决定）
+
+- **证据**：`AppBackgroundPainter` 构造在 `MainWindow` 上（`FrameBootstrap.cpp:1873`），而 `MainWindow`
+  在 `FrameBootstrap.cpp:117` 无条件 `setAttribute(Qt::WA_DontShowOnScreen)`。painter 只被
+  `setSettings()` 调用过，画的是 toolbar / statusbar / tabwidget 等 Widget chrome。
+  QML 外壳的配色来自 `theme/Theme.qml` 的硬编码色值；`src/app/qml_ui` 全目录**没有任何**
+  文件引用 app background 设置。
+- **含义**：该页签 410 行 UI 加 14 个 overlay alpha 旋钮，配置的是一个画进不可见窗口的 painter。
+- **待定**：照搬为 QML 页 = 为无效果的功能写界面；要让它重新有效果 = 在 QML 外壳里重新实现背景
+  绘制，那是一个功能项而非「重建偏好设置对话框」。**在决定之前不动这一页。**
 
 **本章是交接面。** 每条写明：问题是什么、当前状态、以及在 `117a76a1` 之后**必须重新核实什么**。
 未列为"已复核"的条目，一律不得由构建、CTest 或历史记录推断为通过。
