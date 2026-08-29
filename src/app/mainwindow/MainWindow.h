@@ -80,7 +80,6 @@ class QPushButton;
 class QShowEvent;
 class QThreadPool;
 class BracketScopeHighlighter;
-class PlainCodeEditor;
 class PreviewRuntime;
 class PreviewStageMediaHost;
 struct IntroBannerSpec;
@@ -622,10 +621,6 @@ private:
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
     void setPauseDisplayAltHoldActive(bool active);
     void setTouchPadAuthoringCtrlHoldActive(bool active);
-    void activateBookmarkAtLine(int line);
-    void setFullCopyAreaVisible(bool visible);
-    void syncCopyAreaEditorAppearance();
-    void syncCopyAreaLineCount();
     void addRecentFilePath(const QString& path);
     void openRecentFilePath(const QString& path);
     void refreshRecentFilesMenu(QMenu* recentFilesMenu);

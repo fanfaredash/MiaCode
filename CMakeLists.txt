@@ -274,19 +274,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/ChartClockCount.h
     src/common/PreviewSfxTiming.h
     src/common/PreviewSfxTimeline.h
-    src/editor/PlainCodeEditor.h
-    src/editor/PlainCodeEditor.cpp
-    src/editor/PlainCodeEditor.Layout.cpp
-    src/editor/PlainCodeEditor.HighlightAndCaret.cpp
-    src/editor/PlainCodeEditor.BracketCompletion.cpp
-    src/editor/PlainCodeEditor.Input.cpp
-    src/editor/PlainCodeEditor.Bookmarks.cpp
     src/editor/BookmarkCommentSyntax.h
     src/editor/BookmarkCommentSyntax.cpp
     src/editor/TouchPadAuthoringEdit.h
     src/editor/TouchPadAuthoringEdit.cpp
-    src/editor/BracketCompletionPopup.h
-    src/editor/BracketCompletionPopup.cpp
     src/editor/SimaiCompletionCatalog.h
     src/editor/SimaiCompletionCatalog.cpp
     src/editor/SimaiTextEditPolicy.h

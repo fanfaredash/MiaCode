@@ -1,7 +1,6 @@
 #include "MainWindow.WindowSection.h"
 #include "../../MainWindowShared.h"
 
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
 #include "ShortcutRegistry.h"
@@ -199,9 +198,6 @@ bool MainWindow::WindowSection::quickShellFocusBridgeActive() const
 
 QTextEdit* MainWindow::WindowSection::resolveRestorableTextEdit(QWidget* widget) const
 {
-    if (owner_.editorWidget_ != nullptr && widgetMatchesOrDescendsFrom(widget, owner_.editorWidget_)) {
-        return qobject_cast<QTextEdit*>(owner_.editorWidget_);
-    }
     if (owner_.metadataExtraEdit_ != nullptr && widgetMatchesOrDescendsFrom(widget, owner_.metadataExtraEdit_)) {
         return owner_.metadataExtraEdit_;
     }
@@ -314,9 +310,6 @@ void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWid
         const auto focusRole = [this](QWidget* widget) {
             if (widget == nullptr) {
                 return QStringLiteral("none");
-            }
-            if (widget == ui_.editorWidget_ || (ui_.editorWidget_ != nullptr && ui_.editorWidget_->isAncestorOf(widget))) {
-                return QStringLiteral("editor");
             }
             return QStringLiteral("window");
         };
@@ -715,7 +708,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     }
     auto* watchedWidget = qobject_cast<QWidget*>(watched);
     const auto extensionGestureTargetForWatched = [this](QObject* watchedObject) {
-        auto* editorScrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_);
         if (watchedObject == owner_.previewSlider_
             || watchedObject == owner_.previewCanvas_
             || watchedObject == owner_.previewCanvasContainer_
@@ -724,11 +716,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             || watchedObject == owner_.previewFullscreenWindow_
             || watchedObject == owner_.previewFullscreenHost_) {
             return QStringLiteral("preview");
-        }
-        if (watchedObject == owner_.editorWidget_
-            || watchedObject == owner_.editorViewport_
-            || (editorScrollArea != nullptr && watchedObject == editorScrollArea->viewport())) {
-            return QStringLiteral("editor");
         }
         return QStringLiteral("any");
     };
@@ -740,55 +727,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         }
         return false;
     };
-    if (event != nullptr
-        && event->type() == QEvent::ToolTip
-        && watched == owner_.editorViewport_
-        && state_.extensionRegistrationsByKind_.contains(QStringLiteral("providers/hover"))) {
-        auto* helpEvent = static_cast<QHelpEvent*>(event);
-        const QJsonObject response = owner_.handleExtensionHostRequest(QStringLiteral("providers/showHover"), QJsonObject{
-            {QStringLiteral("globalX"), helpEvent->globalPos().x()},
-            {QStringLiteral("globalY"), helpEvent->globalPos().y()},
-        });
-        if (extensionProviderResponseShown(response)) {
-            event->accept();
-            return true;
-        }
-    }
-    if (event != nullptr
-        && event->type() == QEvent::KeyPress
-        && (watched == owner_.editorWidget_ || watched == owner_.editorViewport_)
-        && (state_.extensionRegistrationsByKind_.contains(QStringLiteral("providers/completion"))
-            || state_.extensionRegistrationsByKind_.contains(QStringLiteral("providers/codeAction")))) {
-        auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (!keyEvent->isAutoRepeat()) {
-            const bool completionShortcut =
-                keyEvent->key() == Qt::Key_Space
-                && (keyEvent->modifiers() & Qt::ControlModifier)
-                && !(keyEvent->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
-            const bool codeActionShortcut =
-                ((keyEvent->key() == Qt::Key_Period
-                  && (keyEvent->modifiers() & Qt::ControlModifier)
-                  && !(keyEvent->modifiers() & (Qt::AltModifier | Qt::MetaModifier)))
-                 || (keyEvent->key() == Qt::Key_Return
-                     && (keyEvent->modifiers() & Qt::AltModifier)
-                     && !(keyEvent->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))));
-            if (completionShortcut || codeActionShortcut) {
-                const QPoint globalPos = watchedWidget != nullptr
-                    ? watchedWidget->mapToGlobal(watchedWidget->rect().center())
-                    : QCursor::pos();
-                const QJsonObject response = owner_.handleExtensionHostRequest(
-                    completionShortcut ? QStringLiteral("providers/showCompletions") : QStringLiteral("providers/showCodeActions"),
-                    QJsonObject{
-                        {QStringLiteral("globalX"), globalPos.x()},
-                        {QStringLiteral("globalY"), globalPos.y()},
-                    });
-                if (extensionProviderResponseShown(response)) {
-                    event->accept();
-                    return true;
-                }
-            }
-        }
-    }
     if (event != nullptr
         && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
@@ -900,9 +838,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     if (owner_.runtimeDebugOutputEnabled_
         && event != nullptr
         && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
-        && (watched == owner_.editorWidget_
-            || watched == owner_.editorViewport_
-            || watched == owner_.metadataExtraEdit_
+        && (watched == owner_.metadataExtraEdit_
             || watched == owner_.editorFindEdit_
             || watched == owner_.editorReplaceEdit_
             || watched == owner_.previewPanel_
@@ -919,24 +855,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                 .arg(this->formatFocusReason(focusEvent != nullptr ? focusEvent->reason() : Qt::NoFocusReason))
                 .arg(event->spontaneous() ? 1 : 0)
         );
-    }
-    if (event != nullptr && event->type() == QEvent::FocusIn && this->isTextInputWidget(watchedWidget)) {
-        owner_.stopPreviewHeldSeek();
-    }
-    if (watched == owner_.editorViewport_
-        && event != nullptr
-        && (event->type() == QEvent::Wheel || event->type() == QEvent::MouseButtonPress)
-        && owner_.qtPreviewPlaying_
-        && owner_.previewFollowEnabled_
-        && owner_.previewViewportLockEnabled_) {
-        owner_.pauseQtPreviewPlaybackExact();
-        owner_.updatePauseButtonAppearance();
-        const double second = qMax(0.0, owner_.qtPreviewPauseSecond_);
-        QTimer::singleShot(0, &owner_, [this, second]() {
-            if (owner_.previewFollowEnabled_ && owner_.previewViewportLockEnabled_) {
-                owner_.syncEditorCursorToPreviewSecond(second, true, false);
-            }
-        });
     }
     // Hold-key pause display toggle (default Alt, rebindable — see
     // pauseDisplayHoldKey() above): while the preview is paused, holding the
@@ -1246,14 +1164,10 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     if (event->type() == QEvent::Wheel && hasExtensionGestureKind(QStringLiteral("input/wheelGesture"))) {
         auto* wheelEvent = static_cast<QWheelEvent*>(event);
         QString target = QStringLiteral("any");
-        auto* editorScrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_);
         if (watched == owner_.previewSlider_
                    || watched == owner_.previewCanvas_
                    || watched == owner_.previewCanvasFrame_) {
             target = QStringLiteral("preview");
-        } else if (watched == owner_.editorWidget_
-                   || (editorScrollArea != nullptr && watched == editorScrollArea->viewport())) {
-            target = QStringLiteral("editor");
         }
         int delta = wheelEvent->angleDelta().y();
         if (delta == 0) {
@@ -1397,199 +1311,24 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             }
         }
     }
-    if (watched == owner_.editorFindEdit_ || watched == owner_.editorReplaceEdit_) {
-        if (event->type() == QEvent::KeyPress || event->type() == QEvent::ShortcutOverride) {
-            auto* keyEvent = static_cast<QKeyEvent*>(event);
-            const bool ctrlOnly = (keyEvent->modifiers() & Qt::ControlModifier)
-                && !(keyEvent->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
-            if ((keyEvent->matches(QKeySequence::Find))
-                || (ctrlOnly && keyEvent->key() == Qt::Key_F)) {
-                this->onToggleFindReplace();
-                return true;
-            }
-        }
-    }
-    if (watched == owner_.editorViewport_ && event->type() == QEvent::MouseButtonPress) {
-        auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        const bool ctrlLeftClick = mouseEvent->button() == Qt::LeftButton
-            && (mouseEvent->modifiers() & Qt::ControlModifier);
-        if (ctrlLeftClick) {
-            if (!owner_.editorCtrlLeftJumpPending_) {
-                owner_.editorCtrlLeftJumpInteractionOp_ = ++owner_.previewInteractionSequence_;
-                const quint64 opId = owner_.editorCtrlLeftJumpInteractionOp_;
-                appendPreviewInteractionLog(
-                    QStringLiteral("ctrl_click_press"),
-                    QString("op=%1 source=editor_ctrl_click x=%2 y=%3 modifiers=%4")
-                        .arg(opId)
-                        .arg(mouseEvent->pos().x())
-                        .arg(mouseEvent->pos().y())
-                        .arg(static_cast<int>(mouseEvent->modifiers())));
-            }
-            owner_.editorCtrlLeftJumpPending_ = true;
-            owner_.editorCtrlLeftJumpDragged_ = false;
-            owner_.editorCtrlLeftJumpPressPos_ = mouseEvent->pos();
-        } else if (mouseEvent->button() == Qt::LeftButton) {
-            owner_.editorCtrlLeftJumpPending_ = false;
-            owner_.editorCtrlLeftJumpDragged_ = false;
-            owner_.editorCtrlLeftJumpDispatchActive_ = false;
-            owner_.editorCtrlLeftJumpInteractionOp_ = 0;
-        }
-        if (mouseEvent->button() == Qt::LeftButton && !owner_.qtPreviewPlaying_ && !ctrlLeftClick) {
-            QTimer::singleShot(0, &owner_, [this]() {
-                const bool syncTimelineCursor =
-                    !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
-                owner_.scheduleDeferredEditorUiUpdate(
-                    false,
-                    false,
-                    syncTimelineCursor,
-                    owner_.timelineSyncEnabled_,
-                    false,
-                    0.0,
-                    false);
-            });
-        }
-    }
-    if (watched == owner_.editorViewport_ && event->type() == QEvent::MouseMove && owner_.editorCtrlLeftJumpPending_) {
-        auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent->buttons().testFlag(Qt::LeftButton)
-            && (mouseEvent->pos() - owner_.editorCtrlLeftJumpPressPos_).manhattanLength() >= QApplication::startDragDistance()) {
-            owner_.editorCtrlLeftJumpDragged_ = true;
-        }
-    }
-    if (watched == owner_.editorViewport_ && event->type() == QEvent::MouseButtonRelease) {
-        auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent->button() == Qt::LeftButton && owner_.editorCtrlLeftJumpPending_) {
-            const bool wasDragged = owner_.editorCtrlLeftJumpDragged_;
-            const bool shouldJump = !wasDragged
-                && (mouseEvent->modifiers() & Qt::ControlModifier);
-            const QPoint releasePos = mouseEvent->pos();
-            const quint64 opId = owner_.editorCtrlLeftJumpInteractionOp_ != 0
-                ? owner_.editorCtrlLeftJumpInteractionOp_
-                : ++owner_.previewInteractionSequence_;
-            owner_.editorCtrlLeftJumpPending_ = false;
-            owner_.editorCtrlLeftJumpDragged_ = false;
-            appendPreviewInteractionLog(
-                QStringLiteral("ctrl_click_release"),
-                QString("op=%1 source=editor_ctrl_click should_jump=%2 dragged=%3 x=%4 y=%5 modifiers=%6")
-                    .arg(opId)
-                    .arg(shouldJump ? 1 : 0)
-                    .arg(wasDragged ? 1 : 0)
-                    .arg(releasePos.x())
-                    .arg(releasePos.y())
-                    .arg(static_cast<int>(mouseEvent->modifiers())));
-            if (shouldJump) {
-                owner_.editorCtrlLeftJumpDispatchActive_ = true;
-                owner_.deferredEditorUiTimelineCursorPending_ = false;
-                owner_.deferredEditorUiCenterView_ = false;
-                owner_.pendingQuickTimelineCursorSync_ = false;
-                owner_.pendingQuickTimelineCursorSecond_ = 0.0;
-                owner_.pendingQuickTimelineCursorCenterView_ = false;
-                appendPreviewInteractionLog(
-                    QStringLiteral("ctrl_click_dispatch"),
-                    QString("op=%1 source=editor_ctrl_click x=%2 y=%3")
-                        .arg(opId)
-                        .arg(releasePos.x())
-                        .arg(releasePos.y()));
-                auto* editor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_);
-                if (editor == nullptr) {
-                    appendPreviewInteractionLog(
-                        QStringLiteral("ctrl_click_abort"),
-                        QString("op=%1 source=editor_ctrl_click reason=no_editor").arg(opId));
-                    owner_.editorCtrlLeftJumpDispatchActive_ = false;
-                    owner_.editorCtrlLeftJumpInteractionOp_ = 0;
-                    return false;
-                }
-                const QPoint normalizedReleasePos =
-                    editor->normalizedViewportHitPosition(QPointF(releasePos)).toPoint();
-                const QTextCursor cursor = editor->cursorForPosition(normalizedReleasePos);
-                const int line = cursor.blockNumber() + 1;
-                const int col = cursor.positionInBlock() + 1;
-                const double second = owner_.timelineSecondForCursor(line, col);
-                appendPreviewInteractionLog(
-                    QStringLiteral("ctrl_click_resolved"),
-                    QString("op=%1 source=editor_ctrl_click line=%2 col=%3 second=%4 playing=%5 normalized_x=%6 normalized_y=%7")
-                        .arg(opId)
-                        .arg(line)
-                        .arg(col)
-                        .arg(second, 0, 'f', 6)
-                        .arg(owner_.qtPreviewPlaying_ ? 1 : 0)
-                        .arg(normalizedReleasePos.x())
-                        .arg(normalizedReleasePos.y()));
-                if (owner_.qtPreviewPlaying_) {
-                    appendPreviewInteractionLog(
-                        QStringLiteral("ctrl_click_pause_begin"),
-                        QString("op=%1 source=editor_ctrl_click current_second=%2")
-                            .arg(opId)
-                            .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
-                    owner_.pauseQtPreviewPlaybackExact();
-                    appendPreviewInteractionLog(
-                        QStringLiteral("ctrl_click_pause_complete"),
-                        QString("op=%1 source=editor_ctrl_click paused_second=%2")
-                            .arg(opId)
-                            .arg(owner_.qtPreviewPauseSecond_, 0, 'f', 6));
-                }
-                const bool previousSuppressTimelineCursorSync = owner_.suppressTimelineCursorSync_;
-                owner_.suppressTimelineCursorSync_ = true;
-                appendPreviewInteractionLog(
-                    QStringLiteral("ctrl_click_seek_begin"),
-                    QString("op=%1 source=editor_ctrl_click target_second=%2")
-                        .arg(opId)
-                        .arg(second, 0, 'f', 6));
-                owner_.seekPreviewDiscreteToSecond(second, true);
-                if (owner_.timelineQuickStateBridge_ != nullptr) {
-                    owner_.deferTimelineCursorBridgeUpdate(second, false);
-                }
-                appendPreviewInteractionLog(
-                    QStringLiteral("ctrl_click_seek_complete"),
-                    QString("op=%1 source=editor_ctrl_click final_second=%2")
-                        .arg(opId)
-                        .arg(owner_.qtPreviewPauseSecond_, 0, 'f', 6));
-                owner_.suppressTimelineCursorSync_ = previousSuppressTimelineCursorSync;
-                owner_.editorCtrlLeftJumpDispatchActive_ = false;
-                owner_.editorCtrlLeftJumpInteractionOp_ = 0;
-            } else {
-                owner_.editorCtrlLeftJumpDispatchActive_ = false;
-                owner_.editorCtrlLeftJumpInteractionOp_ = 0;
-            }
-        }
-    }
-    if (watched == owner_.editorViewport_ && event->type() == QEvent::FocusIn && !owner_.qtPreviewPlaying_) {
-        QTimer::singleShot(0, &owner_, [this]() {
-            const bool syncTimelineCursor =
-                !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
-            owner_.scheduleDeferredEditorUiUpdate(
-                false,
-                false,
-                syncTimelineCursor,
-                owner_.timelineSyncEnabled_,
-                false,
-                0.0,
-                false);
-        });
-    }
     return owner_.QMainWindow::eventFilter(watched, event);
 }
 
 QTextEdit* MainWindow::WindowSection::activeFindTarget() const
 {
-    auto* chartEditor = qobject_cast<QTextEdit*>(owner_.editorWidget_);
     QWidget* focus = QApplication::focusWidget();
     if (focus != nullptr) {
-        if (chartEditor != nullptr && (focus == chartEditor || chartEditor->isAncestorOf(focus))) {
-            return chartEditor;
-        }
         if (owner_.metadataExtraEdit_ != nullptr && (focus == owner_.metadataExtraEdit_ || owner_.metadataExtraEdit_->isAncestorOf(focus))) {
             return owner_.metadataExtraEdit_;
         }
     }
 
-    if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.chartPage_ && chartEditor != nullptr) {
-        return chartEditor;
-    }
-    if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.metadataPage_ && owner_.metadataExtraEdit_ != nullptr) {
+    // The chart body's find/replace is the QML bar's; only the metadata extra
+    // fields still have a QTextEdit on this side.
+    if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.metadataPage_) {
         return owner_.metadataExtraEdit_;
     }
-    return chartEditor != nullptr ? chartEditor : owner_.metadataExtraEdit_;
+    return owner_.metadataExtraEdit_;
 }
 
 bool MainWindow::WindowSection::runFindInEditor(bool backward)
@@ -1644,9 +1383,7 @@ void MainWindow::WindowSection::applyFindOverlayInset()
         (owner_.editorFindBar_ != nullptr && owner_.editorFindBar_->isVisible())
         ? owner_.editorFindBar_->height() + kEditorFindBarOverlayGap
         : 0;
-    if (auto* plainEditor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_); plainEditor != nullptr) {
-        plainEditor->setTopOverlayInsetPixels(topInset);
-    }
+    Q_UNUSED(topInset);
 }
 
 void MainWindow::WindowSection::hideFindReplaceBar()

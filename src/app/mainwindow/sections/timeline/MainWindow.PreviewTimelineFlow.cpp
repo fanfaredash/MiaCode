@@ -4,7 +4,6 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "../validation/EditorSelectionUtils.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -1105,30 +1104,6 @@ void MainWindow::TimelineSection::updateTimelineCursorFromEditorLocation(
     }
 }
 
-void MainWindow::TimelineSection::syncTimelineToEditorCursor(bool centerView)
-{
-    if (state_.suppressTimelineCursorSync_
-        || state_.editorCtrlLeftJumpPending_
-        || state_.editorCtrlLeftJumpDispatchActive_
-        || !hasActiveDifficulty()
-        || state_.timelineQuickStateBridge_ == nullptr) {
-        return;
-    }
-    const auto [line, col] = owner_.currentCursorLineCol();
-    if (state_.runtimeDebugOutputEnabled_) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/deferred_ui"),
-            QStringLiteral("action=sync_timeline_to_editor_cursor line=%1 col=%2 center=%3 quick_ready=%4")
-                .arg(line)
-                .arg(col)
-                .arg((!state_.qtPreviewPlaying_ && centerView) ? 1 : 0)
-                .arg(quickTimelineBridgeReady() ? 1 : 0)
-        );
-    }
-    updateTimelineCursorFromEditorLocation(line, col, centerView);
-}
-
 void MainWindow::TimelineSection::navigateTimelineToSecond(double second, bool focusEditor)
 {
     if (state_.timelineQuickStateBridge_ == nullptr) {
@@ -1311,9 +1286,12 @@ void MainWindow::flushDeferredEditorUiUpdate()
         && (state_.qtPreviewPlaying_
             || state_.previewStartupSyncPending_
             || state_.previewLateVideoStartPending_);
-    if (syncTimelineCursor && !previewFollowOwnsPlaybackCursor) {
-        syncTimelineToEditorCursor(centerView);
-    }
+    // The editor→timeline cursor sync is published by EditorSyncController now
+    // (caretLocationPublished → publishEditorCaret); this branch read the hidden
+    // widget's cursor, which no QML selection ever reached.
+    Q_UNUSED(syncTimelineCursor);
+    Q_UNUSED(previewFollowOwnsPlaybackCursor);
+    Q_UNUSED(centerView);
 }
 
 void MainWindow::resetPreviewTrackTimelineOffsets()
@@ -1601,11 +1579,6 @@ bool MainWindow::seekPreviewToEditorLocation(int difficultyId, int line, int col
 bool MainWindow::editorAuthoringContextActive() const
 {
     return editorSyncController_ != nullptr && editorSyncController_->editorContextActive();
-}
-
-void MainWindow::syncTimelineToEditorCursor(bool centerView)
-{
-    timelineSection_->syncTimelineToEditorCursor(centerView);
 }
 
 void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)

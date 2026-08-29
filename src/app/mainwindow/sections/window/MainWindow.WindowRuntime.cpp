@@ -751,8 +751,6 @@ QString MainWindow::WindowSection::describeFocusWidget(QWidget* widget) const
     parts.append(QStringLiteral("focus=%1").arg(widget->hasFocus() ? 1 : 0));
     parts.append(QStringLiteral("policy=%1").arg(focusPolicyName(widget->focusPolicy())));
     parts.append(QStringLiteral("in_owner=%1").arg(owner_.isAncestorOf(widget) || widget == &owner_ ? 1 : 0));
-    parts.append(QStringLiteral("in_editor=%1").arg(matchesOrDescendsFrom(widget, owner_.editorWidget_) ? 1 : 0));
-    parts.append(QStringLiteral("viewport=%1").arg(widget == owner_.editorViewport_ ? 1 : 0));
     parts.append(QStringLiteral("in_metadata=%1").arg(matchesOrDescendsFrom(widget, owner_.metadataExtraEdit_) ? 1 : 0));
     parts.append(QStringLiteral("in_preview=%1").arg(matchesOrDescendsFrom(widget, owner_.previewPanel_) ? 1 : 0));
 
@@ -762,7 +760,7 @@ QString MainWindow::WindowSection::describeFocusWidget(QWidget* widget) const
 
     QTextEdit* restorableTextEdit = this->resolveRestorableTextEdit(widget);
     if (restorableTextEdit != nullptr) {
-        const bool chartEditor = restorableTextEdit == owner_.editorWidget_;
+        const bool chartEditor = false;
         const QTextCursor cursor = restorableTextEdit->textCursor();
         const int selectionLength = qAbs(cursor.position() - cursor.anchor());
         parts.append(QStringLiteral("restorable=1"));

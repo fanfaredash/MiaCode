@@ -5,7 +5,6 @@
 #include "BracketScopeHighlighter.h"
 #include "BusySpinner.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -206,7 +205,10 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
         ui_.editorValidationSummaryWidget_->adjustSize();
     }
 
-    const auto [line, col] = currentCursorLineCol();
+    // The caret label belongs to the hidden header; the QML status bar shows
+    // the real one. Nothing here can read the QML caret, so it stays at 1:1.
+    const int line = 1;
+    const int col = 1;
     const QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
     ui_.editorCursorLabel_->setText(cursorText);
     ui_.editorCursorLabel_->setFixedWidth(QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText) + 10);
@@ -783,7 +785,6 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
         ui_.difficultyDesignerEdit_->setText(difficultyData->designer);
         ui_.difficultyDesignerEdit_->setModified(false);
     }
-    setEditorText(difficultyData->chart);
     updateEditorHeader();
     updateEditorEmptyState();
     updateEditorStatus();
@@ -809,22 +810,6 @@ void MainWindow::DocumentSection::syncHeaderDesignerEditFromModel()
     }
     ui_.difficultyDesignerEdit_->setText(difficultyData->designer);
     ui_.difficultyDesignerEdit_->setModified(false);
-}
-
-void MainWindow::DocumentSection::applyDifficultySwitchEditorScrollRestore(
-    int verticalScrollValue,
-    int horizontalScrollValue)
-{
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr) {
-        return;
-    }
-    if (QScrollBar* vertical = editor->verticalScrollBar(); vertical != nullptr) {
-        vertical->setValue(qBound(vertical->minimum(), verticalScrollValue, vertical->maximum()));
-    }
-    if (QScrollBar* horizontal = editor->horizontalScrollBar(); horizontal != nullptr) {
-        horizontal->setValue(qBound(horizontal->minimum(), horizontalScrollValue, horizontal->maximum()));
-    }
 }
 
 void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
@@ -1188,18 +1173,6 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
               ? owner_.currentPreviewAuthoritativeAudioClockSecond()
               : state_.qtPreviewPauseSecond_)
         : 0.0;
-    int restoreVerticalScrollValue = 0;
-    int restoreHorizontalScrollValue = 0;
-    if (restoreSwitchView) {
-        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-            if (QScrollBar* vertical = editor->verticalScrollBar(); vertical != nullptr) {
-                restoreVerticalScrollValue = vertical->value();
-            }
-            if (QScrollBar* horizontal = editor->horizontalScrollBar(); horizontal != nullptr) {
-                restoreHorizontalScrollValue = horizontal->value();
-            }
-        }
-    }
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
@@ -1229,15 +1202,6 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     populateDifficultyPage(difficultyId);
     if (owner_.editorSection_ != nullptr) {
         owner_.editorSection_->syncBookmarksFromEditorText();
-    }
-    if (restoreSwitchView) {
-        applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
-        QTimer::singleShot(0, &owner_, [this, difficultyId, restoreVerticalScrollValue, restoreHorizontalScrollValue]() {
-            if (state_.activeDifficultyId_ != difficultyId || !owner_.hasActiveDifficulty()) {
-                return;
-            }
-            applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
-        });
     }
     const double previousPreviewTrackDurationSeconds = state_.previewTrackDurationSeconds_;
     const std::shared_ptr<const miacode::waveform::WaveformData> previousWaveformData =

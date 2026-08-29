@@ -74,10 +74,6 @@
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void resetAutosaveState(const QString& referenceText);
-    bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
-    std::pair<int, int> currentCursorLineCol() const;
-    std::pair<int, int> currentSelectionOrCursorLineCol() const;
-    bool currentSelectionRange(int* startPos, int* endPos) const;
     void setEditorText(const QString& text);
     void setMetadataExtraText(const QString& text);
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
@@ -97,7 +93,6 @@
     void updateCurrentFileLabel();
     void updatePauseButtonAppearance();
     void updateDirtyState();
-    bool currentFieldHasUndoChanges() const;
     void refreshCurrentFieldDirtyState();
     void markCurrentFieldDirty();
     bool undoDeletedDifficultyField();
@@ -172,7 +167,6 @@
     const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
     void applyAlignedMuriAnalysisReportToViews();
     double currentPreviewAuthoritativeAudioClockSecond() const;
-    void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
     void deferTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredEditorUiUpdate(

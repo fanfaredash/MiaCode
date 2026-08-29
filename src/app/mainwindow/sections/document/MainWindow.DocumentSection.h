@@ -65,12 +65,7 @@ public:
     bool onSaveFile();
     bool onSaveFileAs();
     bool saveToPath(const QString& path);
-    bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
-    std::pair<int, int> currentCursorLineCol() const;
-    std::pair<int, int> currentSelectionOrCursorLineCol() const;
-    bool currentSelectionRange(int* startPos, int* endPos) const;
     void setMetadataExtraText(const QString& text);
-    void setEditorText(const QString& text);
     void updatePauseButtonAppearance();
     void updateDirtyState();
     bool currentFieldHasUndoChanges() const;
@@ -135,7 +130,6 @@ public:
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();
-    void applyDifficultySwitchEditorScrollRestore(int verticalScrollValue, int horizontalScrollValue);
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:

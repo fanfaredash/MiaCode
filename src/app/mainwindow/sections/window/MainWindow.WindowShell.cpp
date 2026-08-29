@@ -963,16 +963,7 @@ void MainWindow::WindowSection::applyUiTheme()
         UiTheme::applyApplicationTheme(*app);
     }
 
-    if (owner_.editorWidget_ != nullptr) {
-        owner_.editorWidget_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
-        if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_)) {
-            if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
-                vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
-            }
-            if (QScrollBar* hbar = scrollArea->horizontalScrollBar()) {
-                hbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
-            }
-        }
+    if (owner_.outlineList_ != nullptr) {
     }
     if (owner_.editorFindBar_ != nullptr) {
         owner_.editorFindBar_->setStyleSheet(UiTheme::editorFindBarStyleSheet());
@@ -1025,9 +1016,6 @@ void MainWindow::WindowSection::applyUiTheme()
         }
     }
     this->updateBottomTabsDeviceHeight();
-    if (owner_.chartBracketHighlighter_ != nullptr) {
-        owner_.chartBracketHighlighter_->rehighlight();
-    }
     if (owner_.metadataBracketHighlighter_ != nullptr) {
         owner_.metadataBracketHighlighter_->rehighlight();
     }

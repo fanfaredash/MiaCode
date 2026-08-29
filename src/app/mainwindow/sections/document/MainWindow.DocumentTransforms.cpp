@@ -3,7 +3,6 @@
 #include "../../MainWindowShared.h"
 
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"

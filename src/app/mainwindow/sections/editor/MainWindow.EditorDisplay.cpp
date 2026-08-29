@@ -5,7 +5,6 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "editor/BookmarkCommentSyntax.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -999,13 +998,6 @@ void MainWindow::EditorSection::applyEditorTextFontSize(int pointSize, bool pers
     const bool previousSuppress = state_.suppressTextDirtyTracking_;
     state_.suppressTextDirtyTracking_ = true;
     state_.editorTextFontPointSize_ = normalized;
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        QSignalBlocker blocker(editor);
-        editor->setFont(editorFont(normalized));
-        editor->setBlockSpacingPixels(blockSpacingPixels);
-        editor->refreshLineNumberAreaLayout();
-    }
-    syncCopyAreaEditorAppearance();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
@@ -1026,12 +1018,6 @@ void MainWindow::EditorSection::applyEditorLineSpacingFactor(double factor, bool
     state_.editorLineSpacingFactor_ = normalizeEditorLineSpacingFactor(factor);
     const int blockSpacingPixels =
         blockSpacingPixelsForPointSize(state_.editorTextFontPointSize_, state_.editorLineSpacingFactor_);
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        QSignalBlocker blocker(editor);
-        editor->setBlockSpacingPixels(blockSpacingPixels);
-        editor->refreshLineNumberAreaLayout();
-    }
-    syncCopyAreaEditorAppearance();
     if (ui_.metadataExtraEdit_ != nullptr) {
         applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixels);
     }
@@ -1044,12 +1030,6 @@ void MainWindow::EditorSection::applyEditorLineSpacingFactor(double factor, bool
 void MainWindow::EditorSection::applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference)
 {
     state_.editorHalfWidthInputEnabled_ = enabled;
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        editor->setHalfWidthInputEnabled(enabled);
-    }
-    if (ui_.copyAreaEditor_ != nullptr) {
-        ui_.copyAreaEditor_->setHalfWidthInputEnabled(enabled);
-    }
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
@@ -1058,14 +1038,6 @@ void MainWindow::EditorSection::applyEditorHalfWidthInputEnabled(bool enabled, b
 void MainWindow::EditorSection::applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference)
 {
     state_.editorOverwriteModeEnabled_ = enabled;
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        QSignalBlocker blocker(editor);
-        editor->setEditorOverwriteMode(enabled);
-    }
-    if (ui_.copyAreaEditor_ != nullptr) {
-        QSignalBlocker blocker(ui_.copyAreaEditor_);
-        ui_.copyAreaEditor_->setEditorOverwriteMode(enabled);
-    }
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
@@ -1074,12 +1046,6 @@ void MainWindow::EditorSection::applyEditorOverwriteModeEnabled(bool enabled, bo
 void MainWindow::EditorSection::applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference)
 {
     state_.editorAutoCompletionEnabled_ = enabled;
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        editor->setAutoCompletionEnabled(enabled);
-    }
-    if (ui_.copyAreaEditor_ != nullptr) {
-        ui_.copyAreaEditor_->setAutoCompletionEnabled(enabled);
-    }
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
@@ -1103,31 +1069,9 @@ void MainWindow::EditorSection::applyEditorHeaderTopDisplay(EditorHeaderTopDispl
 void MainWindow::EditorSection::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
 {
     state_.editorImeInputDisabled_ = disabled;
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        editor->setImeInputDisabled(disabled);
-    }
-    if (ui_.copyAreaEditor_ != nullptr) {
-        ui_.copyAreaEditor_->setImeInputDisabled(disabled);
-    }
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
-}
-
-void MainWindow::EditorSection::refreshEditorBookmarkLines()
-{
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr) {
-        return;
-    }
-    const int activeDifficultyId = state_.activeDifficultyId_;
-    QSet<int> lines;
-    for (const EditorBookmark& bookmark : std::as_const(state_.editorBookmarks_)) {
-        if (bookmark.difficultyId == activeDifficultyId && bookmark.line > 0) {
-            lines.insert(bookmark.line);
-        }
-    }
-    editor->setBookmarkedLines(lines);
 }
 
 void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, int charsRemoved, int charsAdded)
@@ -1156,253 +1100,9 @@ void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, 
     const bool mutated = !editorBookmarkListsEqual(state_.editorBookmarks_, derived);
     state_.editorBookmarks_ = derived;
 
-    refreshEditorBookmarkLines();
     if (mutated && owner_.documentSection_ != nullptr) {
         owner_.documentSection_->rebuildFieldSidebar();
     }
-}
-
-void MainWindow::EditorSection::createBookmarkAtLine(int line, bool beginRenameInSidebar)
-{
-    const int normalizedLine = qMax(1, line);
-    const int activeDifficultyId = state_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(activeDifficultyId)) {
-        return;
-    }
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
-        return;
-    }
-    const QTextBlock block = blockForOneBasedLine(editor->document(), normalizedLine);
-    if (!block.isValid()) {
-        return;
-    }
-    const QString lineText = block.text();
-    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
-    if (info.isBookmark) {
-        if (owner_.documentSection_ != nullptr) {
-            owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, normalizedLine, false);
-        }
-        return;
-    }
-
-    const QString label = QStringLiteral("|| [%1]").arg(defaultExplicitBookmarkLabel());
-    int revealLine = normalizedLine;
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    if (info.hasMarker) {
-        cursor.setPosition(block.position() + lineText.size());
-        cursor.insertText(QStringLiteral("\n") + label);
-        revealLine = normalizedLine + 1;
-    } else {
-        cursor.setPosition(block.position() + lineText.size());
-        cursor.insertText(lineText.trimmed().isEmpty()
-            ? label
-            : QStringLiteral(" ") + label);
-    }
-    cursor.endEditBlock();
-
-    syncBookmarksFromEditorText();
-    if (owner_.documentSection_ != nullptr) {
-        owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, revealLine, beginRenameInSidebar);
-    }
-}
-
-bool MainWindow::EditorSection::renameBookmark(int difficultyId, int line, const QString& name)
-{
-    const QString trimmed = name.trimmed();
-    if (!SimaiDocument::isDifficultyId(difficultyId)) {
-        return false;
-    }
-    if (difficultyId != state_.activeDifficultyId_) {
-        state_.activeOutlineKey_ = QStringLiteral("chart");
-        if (!owner_.switchToDifficultyField(difficultyId)) {
-            return false;
-        }
-    }
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
-        return false;
-    }
-    const QTextBlock block = blockForOneBasedLine(editor->document(), qMax(1, line));
-    if (!block.isValid()) {
-        return false;
-    }
-    const QString lineText = block.text();
-    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
-    if (!info.isBookmark) {
-        return false;
-    }
-    QString currentDerivedTitle = defaultBookmarkNameFromComment(info.normalizedComment);
-    if (currentDerivedTitle.isEmpty()) {
-        currentDerivedTitle = fallbackBookmarkNameForLine(qMax(1, line));
-    }
-
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    bool changed = false;
-    if (trimmed.isEmpty()) {
-        if (info.hasExplicitLabel) {
-            const int removeStart = info.labelStart - 1;
-            const int removeEnd = qMax(info.afterLabel, info.labelEnd + 1);
-            cursor.setPosition(block.position() + removeStart);
-            cursor.setPosition(block.position() + removeEnd, QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-            changed = true;
-        }
-    } else if (info.hasExplicitLabel) {
-        const QString oldLabel = lineText.mid(info.labelStart, info.labelEnd - info.labelStart).trimmed();
-        if (oldLabel != trimmed) {
-            cursor.setPosition(block.position() + info.labelStart);
-            cursor.setPosition(block.position() + info.labelEnd, QTextCursor::KeepAnchor);
-            cursor.insertText(trimmed);
-            changed = true;
-        }
-    } else if (trimmed != currentDerivedTitle) {
-        int insertPos = info.rawCommentStart;
-        while (insertPos < lineText.size() && lineText.at(insertPos).isSpace()) {
-            ++insertPos;
-        }
-        cursor.setPosition(block.position() + insertPos);
-        cursor.insertText(QStringLiteral("[%1] ").arg(trimmed));
-        changed = true;
-    }
-    cursor.endEditBlock();
-
-    if (changed) {
-        syncBookmarksFromEditorText();
-        if (owner_.documentSection_ != nullptr) {
-            owner_.documentSection_->revealBookmarkInSidebar(difficultyId, qMax(1, line), false);
-        }
-    }
-    return changed;
-}
-
-void MainWindow::EditorSection::activateBookmarkAtLine(int line)
-{
-    owner_.jumpToLocation(qMax(1, line), 1);
-}
-
-void MainWindow::EditorSection::deleteBookmarkAtLineWithConfirmation(int line)
-{
-    const int activeDifficultyId = state_.activeDifficultyId_;
-    const auto it = std::find_if(state_.editorBookmarks_.begin(), state_.editorBookmarks_.end(), [activeDifficultyId, line](const EditorBookmark& bookmark) {
-        return bookmark.difficultyId == activeDifficultyId && bookmark.line == line;
-    });
-    if (it == state_.editorBookmarks_.end()) {
-        return;
-    }
-    if (!confirmDeleteBookmark(UiDialogs::effectiveParentWidget(&owner_), *it)) {
-        return;
-    }
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
-        return;
-    }
-    const QTextBlock block = blockForOneBasedLine(editor->document(), qMax(1, line));
-    if (!block.isValid()) {
-        return;
-    }
-    const QString lineText = block.text();
-    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
-    if (!info.isBookmark) {
-        return;
-    }
-    const bool standalone = lineIsStandaloneComment(lineText, info);
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    if (standalone) {
-        if (block.next().isValid()) {
-            cursor.setPosition(block.position());
-            cursor.setPosition(block.next().position(), QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-        } else if (block.previous().isValid()) {
-            const QTextBlock previousBlock = block.previous();
-            cursor.setPosition(previousBlock.position() + previousBlock.length() - 1);
-            cursor.setPosition(block.position() + block.length() - 1, QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-        } else {
-            cursor.setPosition(block.position());
-            cursor.setPosition(block.position() + lineText.size(), QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-        }
-    } else {
-        const int removeStartInLine =
-            info.marker > 0 && lineText.at(info.marker - 1).isSpace()
-            ? info.marker - 1
-            : info.marker;
-        cursor.setPosition(block.position() + removeStartInLine);
-        cursor.setPosition(block.position() + lineText.size(), QTextCursor::KeepAnchor);
-        cursor.removeSelectedText();
-    }
-    cursor.endEditBlock();
-
-    syncBookmarksFromEditorText();
-    if (owner_.documentSection_ != nullptr) {
-        owner_.documentSection_->rebuildFieldSidebar();
-    }
-}
-
-void MainWindow::EditorSection::setFullCopyAreaVisible(bool visible)
-{
-    if (ui_.copyAreaPanel_ == nullptr || ui_.fullCopyAreaAction_ == nullptr) {
-        return;
-    }
-    ui_.copyAreaPanel_->setVisible(visible);
-    ui_.fullCopyAreaAction_->setChecked(visible);
-    if (visible) {
-        syncCopyAreaEditorAppearance();
-        syncCopyAreaLineCount();
-        if (ui_.chartCopySplitter_ != nullptr) {
-            ui_.chartCopySplitter_->setSizes({1, 1});
-        }
-        if (ui_.copyAreaEditor_ != nullptr) {
-            ui_.copyAreaEditor_->setFocus();
-        }
-    } else if (ui_.editorWidget_ != nullptr) {
-        ui_.editorWidget_->setFocus();
-    }
-}
-
-void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
-{
-    if (ui_.copyAreaEditor_ == nullptr) {
-        return;
-    }
-    const int blockSpacingPixels = blockSpacingPixelsForPointSize(
-        state_.editorTextFontPointSize_,
-        state_.editorLineSpacingFactor_);
-    QSignalBlocker blocker(ui_.copyAreaEditor_);
-    ui_.copyAreaEditor_->setFont(editorFont(state_.editorTextFontPointSize_));
-    ui_.copyAreaEditor_->setBlockSpacingPixels(blockSpacingPixels);
-    ui_.copyAreaEditor_->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
-    ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
-    ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
-    ui_.copyAreaEditor_->setAutoCompletionEnabled(state_.editorAutoCompletionEnabled_);
-    ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
-}
-
-void MainWindow::EditorSection::syncCopyAreaLineCount()
-{
-    if (ui_.copyAreaEditor_ == nullptr) {
-        return;
-    }
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr || ui_.copyAreaEditor_->document() == nullptr) {
-        return;
-    }
-    const int sourceLines = qMax(1, editor->document()->blockCount());
-    const int copyLines = qMax(1, ui_.copyAreaEditor_->document()->blockCount());
-    if (copyLines >= sourceLines) {
-        return;
-    }
-    QTextCursor cursor(ui_.copyAreaEditor_->document());
-    cursor.movePosition(QTextCursor::End);
-    cursor.beginEditBlock();
-    for (int i = copyLines; i < sourceLines; ++i) {
-        cursor.insertBlock();
-    }
-    cursor.endEditBlock();
 }
 
 void MainWindow::loadPortableState()
@@ -1495,22 +1195,3 @@ void MainWindow::applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool p
     editorSection_->applyEditorHeaderTopDisplay(mode, persistPreference);
 }
 
-void MainWindow::activateBookmarkAtLine(int line)
-{
-    editorSection_->activateBookmarkAtLine(line);
-}
-
-void MainWindow::setFullCopyAreaVisible(bool visible)
-{
-    editorSection_->setFullCopyAreaVisible(visible);
-}
-
-void MainWindow::syncCopyAreaEditorAppearance()
-{
-    editorSection_->syncCopyAreaEditorAppearance();
-}
-
-void MainWindow::syncCopyAreaLineCount()
-{
-    editorSection_->syncCopyAreaLineCount();
-}

@@ -169,7 +169,6 @@ bool MainWindow::DocumentSection::updateActiveChartText(const QString& value)
         return false;
     }
     difficulty->chart = value;
-    setEditorText(value);
     state_.documentDirty_ = true;
     markCurrentFieldDirty();
     updateDirtyState();

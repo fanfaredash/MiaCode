@@ -9,12 +9,10 @@
 #include "../preview/MainWindow.PreviewSection.h"
 #include "../timeline/MainWindow.TimelineSection.h"
 #include "../validation/MainWindow.ValidationSection.h"
-#include "../validation/EditorSelectionUtils.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
@@ -1380,7 +1378,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                         line.chop(1);
                     }
                 }
-                setEditorText(lines.join(QLatin1Char('\n')));
+                if (!applyChartTextThroughWorkspace(lines.join(QLatin1Char('\n')))) {
+                    return errorObject(QStringLiteral("No active editor."));
+                }
                 markCurrentFieldDirty();
                 refreshTimelineMetadata();
             } else if (id == QStringLiteral("editor.undo") && undoAction_ != nullptr) {
@@ -1929,7 +1929,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             if (!hasActiveDifficulty()) {
                 return errorObject(QStringLiteral("No active difficulty."));
             }
-            setEditorText(params.value(QStringLiteral("text")).toString());
+            if (!applyChartTextThroughWorkspace(params.value(QStringLiteral("text")).toString())) {
+                return errorObject(QStringLiteral("No active editor."));
+            }
             markCurrentFieldDirty();
             refreshTimelineMetadata();
             return QJsonObject{{QStringLiteral("ok"), true}};
@@ -1976,7 +1978,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             for (const TextEdit& edit : edits) {
                 next.replace(edit.start, edit.end - edit.start, edit.text);
             }
-            setEditorText(next);
+            if (!applyChartTextThroughWorkspace(next)) {
+                return errorObject(QStringLiteral("No active editor."));
+            }
             markCurrentFieldDirty();
             refreshTimelineMetadata();
             return okValue(QJsonObject{{QStringLiteral("applied"), edits.size()}});
@@ -1991,7 +1995,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     line.chop(1);
                 }
             }
-            setEditorText(lines.join(QLatin1Char('\n')));
+            if (!applyChartTextThroughWorkspace(lines.join(QLatin1Char('\n')))) {
+                return errorObject(QStringLiteral("No active editor."));
+            }
             markCurrentFieldDirty();
             refreshTimelineMetadata();
             return QJsonObject{{QStringLiteral("ok"), true}};

@@ -4,7 +4,6 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -245,57 +244,6 @@ void MainWindow::DocumentSection::cancelPendingStartupRestore()
     }
     state_.startupRestorePending_ = false;
     ++state_.startupRestoreGeneration_;
-}
-
-bool MainWindow::DocumentSection::applyBatchTransform(const QString& opName, const BatchTransform& transform)
-{
-    MC_OP("MainWindow::DocumentSection::applyBatchTransform");
-    _mc_op_.note(QStringLiteral("op=%1").arg(opName));
-    const QString original = owner_.editorText();
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    const QTextCursor oldCursor = editor->textCursor();
-    const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
-    const int oldHScroll = editor->horizontalScrollBar() != nullptr ? editor->horizontalScrollBar()->value() : 0;
-    int changed = 0;
-    const QString transformed = transform(original, &changed);
-    if (transformed == original) {
-        owner_.statusBar()->showMessage(QString("%1: no note index changed.").arg(opName));
-        return false;
-    }
-
-    QTextCursor editCursor = oldCursor;
-    editCursor.beginEditBlock();
-    editCursor.select(QTextCursor::Document);
-    editCursor.insertText(transformed);
-    editCursor.endEditBlock();
-
-    QTextCursor restoredCursor(editor->document());
-    const int maxPos = editor->document()->characterCount() - 1;
-    const int restoredAnchor = qBound(0, oldCursor.anchor(), maxPos);
-    const int restoredPosition = qBound(0, oldCursor.position(), maxPos);
-    restoredCursor.setPosition(restoredAnchor);
-    restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
-    editor->setTextCursor(restoredCursor);
-    if (editor->verticalScrollBar() != nullptr) {
-        editor->verticalScrollBar()->setValue(qBound(
-            editor->verticalScrollBar()->minimum(),
-            oldVScroll,
-            editor->verticalScrollBar()->maximum()
-        ));
-    }
-    if (editor->horizontalScrollBar() != nullptr) {
-        editor->horizontalScrollBar()->setValue(qBound(
-            editor->horizontalScrollBar()->minimum(),
-            oldHScroll,
-            editor->horizontalScrollBar()->maximum()
-        ));
-    }
-
-    markCurrentFieldDirty();
-    state_.lastPreviewNoteMarkerSignature_.clear();
-    owner_.refreshTimelineMetadata();
-    owner_.statusBar()->showMessage(QString("%1 applied: %2 replacement(s).").arg(opName).arg(changed));
-    return true;
 }
 
 bool MainWindow::maybeSaveBeforeContinue()
@@ -554,35 +502,11 @@ void MainWindow::handleAudioDrop(const QStringList& audioPaths)
     }
 }
 
-bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform& transform)
-{
-    return documentSection_->applyBatchTransform(opName, transform);
-}
-
-std::pair<int, int> MainWindow::currentCursorLineCol() const
-{
-    return documentSection_->currentCursorLineCol();
-}
-
-std::pair<int, int> MainWindow::currentSelectionOrCursorLineCol() const
-{
-    return documentSection_->currentSelectionOrCursorLineCol();
-}
-
-bool MainWindow::currentSelectionRange(int* startPos, int* endPos) const
-{
-    return documentSection_->currentSelectionRange(startPos, endPos);
-}
-
 void MainWindow::setMetadataExtraText(const QString& text)
 {
     documentSection_->setMetadataExtraText(text);
 }
 
-void MainWindow::setEditorText(const QString& text)
-{
-    documentSection_->setEditorText(text);
-}
 
 void MainWindow::updatePauseButtonAppearance()
 {
@@ -592,11 +516,6 @@ void MainWindow::updatePauseButtonAppearance()
 void MainWindow::updateDirtyState()
 {
     documentSection_->updateDirtyState();
-}
-
-bool MainWindow::currentFieldHasUndoChanges() const
-{
-    return documentSection_->currentFieldHasUndoChanges();
 }
 
 void MainWindow::refreshCurrentFieldDirtyState()

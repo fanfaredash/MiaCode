@@ -9,12 +9,10 @@
 #include "../preview/MainWindow.PreviewSection.h"
 #include "../timeline/MainWindow.TimelineSection.h"
 #include "../validation/MainWindow.ValidationSection.h"
-#include "../validation/EditorSelectionUtils.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -242,7 +240,7 @@ MainWindow::MainWindow(QWidget* parent)
             }
             return false;
         }
-        setEditorText(text);
+        applyChartTextThroughWorkspace(text);
         markCurrentFieldDirty();
         refreshTimelineMetadata();
         return true;
@@ -283,112 +281,11 @@ MainWindow::MainWindow(QWidget* parent)
     }
     logStartupStage("menus_and_actions_ready");
 
-    auto* editor = new PlainCodeEditor(this);
-    const QFont codeFont = editorFont();
-    editorTextFontPointSize_ = qBound(kEditorTextFontSizeMin, codeFont.pointSize(), kEditorTextFontSizeMax);
-    editor->setFont(codeFont);
-    editor->setBlockSpacingPixels(blockSpacingPixelsForPointSize(editorTextFontPointSize_, editorLineSpacingFactor_));
-    editor->refreshLineNumberAreaLayout();
-    editor->setLineWrapMode(QTextEdit::WidgetWidth);
-    editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    editor->setPlainText(QString());
-    connect(editor, &PlainCodeEditor::undoShortcutRequested, this, [this]() {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("selection_restore/editor_shortcut_forward"),
-            QStringLiteral("action=undo has_action=%1").arg(undoAction_ != nullptr ? 1 : 0),
-            true
-        );
-        if (undoAction_ != nullptr) {
-            undoAction_->trigger();
-        }
-    });
-    connect(editor, &PlainCodeEditor::redoShortcutRequested, this, [this]() {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("selection_restore/editor_shortcut_forward"),
-            QStringLiteral("action=redo has_action=%1").arg(redoAction_ != nullptr ? 1 : 0),
-            true
-        );
-        if (redoAction_ != nullptr) {
-            redoAction_->trigger();
-        }
-    });
-    connect(editor, &PlainCodeEditor::selectionReplacementAboutToEdit, this, [this](int anchor, int position) {
-        if (documentSection_ != nullptr) {
-            documentSection_->recordChartSelectionUndoRestoreAfterNextEdit(anchor, position);
-        }
-    });
-    connect(editor, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
-        applyEditorOverwriteModeEnabled(enabled, true);
-    });
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::activateBookmarkAtLine);
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkRenameRequested, this, [this](int line) {
-        if (documentSection_ != nullptr) {
-            documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
-        }
-    });
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkDeleteRequested, this, [this](int line) {
-        if (editorSection_ != nullptr) {
-            editorSection_->deleteBookmarkAtLineWithConfirmation(line);
-        }
-    });
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkContextMenuRequested, this,
-            [this, editor](int line, const QPoint& globalPos) {
-        // Line-number-gutter right-click: the same bookmark actions the editor
-        // body menu offers, anchored at the gutter position.
-        QMenu menu(editor);
-        menu.setFont(uiAccentFont(10));
-        styleRoundedMenu(menu);
-        const bool hasBookmark = editor->bookmarkedLines().contains(line);
-        if (!hasBookmark) {
-            QAction* createAction = menu.addAction(UiText::text(QStringLiteral("metadata.insert_bookmark")));
-            connect(createAction, &QAction::triggered, this, [this, line]() {
-                if (editorSection_ != nullptr) {
-                    editorSection_->createBookmarkAtLine(line, true);
-                }
-            });
-        } else {
-            QAction* renameAction = menu.addAction(UiText::text(QStringLiteral("metadata.rename_bookmark")));
-            connect(renameAction, &QAction::triggered, this, [this, line]() {
-                if (documentSection_ != nullptr) {
-                    documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
-                }
-            });
-            QAction* deleteAction = menu.addAction(UiText::text(QStringLiteral("editor.delete_bookmark")));
-            connect(deleteAction, &QAction::triggered, this, [this, line]() {
-                if (editorSection_ != nullptr) {
-                    editorSection_->deleteBookmarkAtLineWithConfirmation(line);
-                }
-            });
-            QAction* revealAction = menu.addAction(UiText::text(QStringLiteral("metadata.show_in_sidebar")));
-            connect(revealAction, &QAction::triggered, this, [this, line]() {
-                if (documentSection_ != nullptr) {
-                    documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, false);
-                }
-            });
-        }
-        menu.exec(globalPos);
-    });
-    chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
-    editorWidget_ = editor;
-    editorWidget_->setFont(codeFont);
-    editorWidget_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
-    editorWidget_->setAutoFillBackground(false);
-    editorWidget_->setAttribute(Qt::WA_TranslucentBackground, true);
-    if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(editorWidget_)) {
-        if (QWidget* editorViewport = scrollArea->viewport(); editorViewport != nullptr) {
-            editorViewport->setAutoFillBackground(false);
-            editorViewport->setAttribute(Qt::WA_TranslucentBackground, true);
-        }
-        if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
-            vbar->setStyleSheet(modernScrollBarStyle());
-        }
-        if (QScrollBar* hbar = scrollArea->horizontalScrollBar()) {
-            hbar->setStyleSheet(modernScrollBarStyle());
-        }
-    }
-    logStartupStage("editor_widget_ready");
+    // The chart editor is a QML TextArea. What used to stand here — a hidden
+    // PlainCodeEditor, its bracket highlighter, its context menu and its
+    // shortcut forwarding — mirrored a document nobody could see and took
+    // input nobody could give it, because this window carries
+    // WA_DontShowOnScreen.
 
     auto* central = new QWidget(this);
     central->setObjectName("EditorShell");
@@ -848,38 +745,11 @@ MainWindow::MainWindow(QWidget* parent)
     auto* chartLayout = new QVBoxLayout(chartPage_);
     chartLayout->setContentsMargins(0, 0, 0, 0);
     chartLayout->setSpacing(0);
-    chartCopySplitter_ = new QSplitter(Qt::Horizontal, chartPage_);
-    chartCopySplitter_->setChildrenCollapsible(false);
-    chartCopySplitter_->setHandleWidth(1);
-    chartCopySplitter_->addWidget(editorWidget_);
-    copyAreaPanel_ = new QWidget(chartCopySplitter_);
-    copyAreaPanel_->setObjectName("CopyAreaPanel");
-    copyAreaPanel_->setAttribute(Qt::WA_StyledBackground, true);
-    copyAreaPanel_->setStyleSheet(UiTheme::editorShellStyleSheet());
-    auto* copyAreaLayout = new QVBoxLayout(copyAreaPanel_);
-    copyAreaLayout->setContentsMargins(0, 0, 0, 0);
-    copyAreaLayout->setSpacing(0);
-    copyAreaEditor_ = new PlainCodeEditor(copyAreaPanel_);
-    copyAreaEditor_->setLineWrapMode(QTextEdit::WidgetWidth);
-    copyAreaEditor_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    copyAreaEditor_->setPlaceholderText(UiText::text(QStringLiteral("metadata.copy_area")));
-    copyAreaEditor_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
-    connect(copyAreaEditor_, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
-        applyEditorOverwriteModeEnabled(enabled, true);
-    });
-    if (QScrollBar* vbar = copyAreaEditor_->verticalScrollBar()) {
-        vbar->setStyleSheet(modernScrollBarStyle());
-    }
-    if (QScrollBar* hbar = copyAreaEditor_->horizontalScrollBar()) {
-        hbar->setStyleSheet(modernScrollBarStyle());
-    }
-    syncCopyAreaEditorAppearance();
-    copyAreaLayout->addWidget(copyAreaEditor_, 1);
-    chartCopySplitter_->addWidget(copyAreaPanel_);
-    chartCopySplitter_->setStretchFactor(0, 1);
-    chartCopySplitter_->setStretchFactor(1, 1);
-    copyAreaPanel_->hide();
-    chartLayout->addWidget(chartCopySplitter_, 1);
+    // chartPage_ stays an (empty) stack page: seven call sites still read
+    // editorStack_->currentWidget() to tell which field is showing, and the
+    // export page needed a placeholder for the same reason. What it used to
+    // hold — the chart editor beside the 复制区 panel — is QML now, and the
+    // 复制区 had no v2 entry point at all.
 
     editorStack_->addWidget(welcomePage_);
     editorStack_->addWidget(metadataPage_);
@@ -1120,9 +990,7 @@ MainWindow::MainWindow(QWidget* parent)
                 return;
             }
             activeOutlineKey_ = "chart";
-            if (switchToDifficultyField(difficultyId) && editorWidget_ != nullptr) {
-                editorWidget_->setFocus();
-            }
+            switchToDifficultyField(difficultyId);
         }
     });
     connect(outlineList_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* current) {
@@ -1136,28 +1004,6 @@ MainWindow::MainWindow(QWidget* parent)
         // Double-click = inline rename (the old jump-to-timeline action moved
         // to the context menu's "跳到时间轴位置").
         outlineList_->editItem(current);
-    });
-    connect(outlineList_, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
-        // Inline-rename commit. Rebuilds run under QSignalBlocker and the
-        // accent-marker updates block signals too, so reaching here means the
-        // item editor wrote a new display text.
-        if (item == nullptr || editorSection_ == nullptr) {
-            return;
-        }
-        if (item->data(kOutlineItemKindRole).toString() != QLatin1String("bookmark")) {
-            return;
-        }
-        const int difficultyId = item->data(kOutlineItemDifficultyRole).toInt();
-        const int line = item->data(kOutlineItemLineRole).toInt();
-        editorSection_->renameBookmark(difficultyId, line, item->text());
-        // Rebuild queued (not inline): the view may still hold the closing
-        // editor for this item. Restores canonical text on an empty/refused
-        // rename and refreshes the tooltip on success.
-        QTimer::singleShot(0, this, [this]() {
-            if (documentSection_ != nullptr) {
-                documentSection_->rebuildFieldSidebar();
-            }
-        });
     });
     outlineList_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(outlineList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
@@ -1188,18 +1034,6 @@ MainWindow::MainWindow(QWidget* parent)
             connect(renameAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (documentSection_ != nullptr) {
                     documentSection_->revealBookmarkInSidebar(bookmarkDifficultyId, line, true);
-                }
-            });
-            QAction* deleteAction = menu.addAction(UiText::text(QStringLiteral("metadata.delete")));
-            connect(deleteAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
-                if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
-                    activeOutlineKey_ = "chart";
-                    if (!switchToDifficultyField(bookmarkDifficultyId)) {
-                        return;
-                    }
-                }
-                if (editorSection_ != nullptr) {
-                    editorSection_->deleteBookmarkAtLineWithConfirmation(line);
                 }
             });
             QAction* timelineAction = menu.addAction(UiText::text(QStringLiteral("metadata.jump_to_timeline_position")));
@@ -1262,23 +1096,6 @@ MainWindow::MainWindow(QWidget* parent)
 
     if (normalizeWholeChartAction_ != nullptr) {
         toolboxMenu_->addAction(normalizeWholeChartAction_);
-    }
-
-    // Copy Area is intentionally hidden from the toolbox per the toolbox
-    // revamp. The feature itself is kept intact — copyAreaPanel_/copyAreaEditor_,
-    // fullCopyAreaAction_, and setFullCopyAreaVisible() all still exist — so
-    // flipping this constant back to `true` resurfaces it unchanged.
-    constexpr bool kCopyAreaIntegratedIntoToolbox = false;
-    if (kCopyAreaIntegratedIntoToolbox) {
-        QMenu* copyAreaMenu = toolboxMenu_->addMenu(
-            UiText::text(QStringLiteral("metadata.copy_area_2"))
-        );
-        styleRoundedMenu(*copyAreaMenu);
-        fullCopyAreaAction_ = copyAreaMenu->addAction(
-            UiText::text(QStringLiteral("metadata.full_copy_area"))
-        );
-        fullCopyAreaAction_->setCheckable(true);
-        connect(fullCopyAreaAction_, &QAction::toggled, this, &MainWindow::setFullCopyAreaVisible);
     }
 
     QAction* toolboxNetGroupEndAction = toolboxMenu_->addSeparator();
@@ -1606,97 +1423,6 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::measureLineBrightnessChanged, this, [this](double) {
         savePortableState();
-    });
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
-        if (copyAreaEditor_ != nullptr) {
-            auto* mainVScroll = editor->verticalScrollBar();
-            auto* copyVScroll = copyAreaEditor_->verticalScrollBar();
-            if (mainVScroll != nullptr && copyVScroll != nullptr) {
-                connect(mainVScroll, &QScrollBar::valueChanged, this, [copyVScroll](int value) {
-                    if (copyVScroll->value() != value) {
-                        copyVScroll->setValue(qBound(copyVScroll->minimum(), value, copyVScroll->maximum()));
-                    }
-                });
-                connect(copyVScroll, &QScrollBar::valueChanged, this, [mainVScroll](int value) {
-                    if (mainVScroll->value() != value) {
-                        mainVScroll->setValue(qBound(mainVScroll->minimum(), value, mainVScroll->maximum()));
-                    }
-                });
-            }
-        }
-        connect(editor->document(), &QTextDocument::contentsChange, this, [this](int position, int charsRemoved, int charsAdded) {
-            if (suppressTextDirtyTracking_) {
-                return;
-            }
-            if (charsRemoved == 0 && charsAdded == 0) {
-                return;
-            }
-            if (documentSection_ != nullptr) {
-                documentSection_->syncChartSelectionTransformUndoState();
-            }
-            QTimer::singleShot(0, this, [this]() {
-                if (!suppressTextDirtyTracking_) {
-                    markCurrentFieldDirty();
-                }
-            });
-            ++timelineRevision_;
-            if (extensionManager_ != nullptr) {
-                extensionManager_->publishEvent(QStringLiteral("editor.text.changed"), QJsonObject{
-                    {QStringLiteral("source"), QStringLiteral("editor")},
-                    {QStringLiteral("data"), QJsonObject{
-                        {QStringLiteral("position"), position},
-                        {QStringLiteral("removed"), charsRemoved},
-                        {QStringLiteral("added"), charsAdded},
-                    }},
-                }, true);
-            }
-            syncCopyAreaLineCount();
-            applyTimelineQuickChange(position, charsRemoved, charsAdded);
-            if (editorSection_ != nullptr) {
-                editorSection_->syncBookmarksFromEditorText(position, charsRemoved, charsAdded);
-            }
-            requestTimelineSlowRefresh();
-            bool syncPreviewFollow = false;
-            double previewFollowSecond = 0.0;
-            if (hasActiveDifficulty() && previewFollowEnabled_) {
-                syncPreviewFollow = true;
-                previewFollowSecond = qMax(0.0, currentPreviewAuthoritativeAudioClockSecond());
-            }
-            const bool syncTimelineCursor =
-                !syncPreviewFollow
-                && (!quickShellUiFocusBridgeMode_ || quickTimelineSurfaceReady_);
-            scheduleDeferredEditorUiUpdate(
-                true,
-                true,
-                syncTimelineCursor,
-                !qtPreviewPlaying_ && !syncPreviewFollow && timelineSyncEnabled_,
-                syncPreviewFollow,
-                previewFollowSecond,
-                false
-            );
-        });
-    }
-    connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
-        if (extensionManager_ != nullptr) {
-            const QTextCursor cursor = qobject_cast<PlainCodeEditor*>(editorWidget_)->textCursor();
-            extensionManager_->publishEvent(QStringLiteral("editor.selection.changed"), QJsonObject{
-                {QStringLiteral("source"), QStringLiteral("editor")},
-                {QStringLiteral("data"), QJsonObject{
-                    {QStringLiteral("position"), cursor.position()},
-                    {QStringLiteral("anchor"), cursor.anchor()},
-                }},
-            }, true);
-        }
-        const bool syncTimelineCursor = !quickShellUiFocusBridgeMode_ || quickTimelineSurfaceReady_;
-        scheduleDeferredEditorUiUpdate(
-            true,
-            false,
-            syncTimelineCursor,
-            !qtPreviewPlaying_ && timelineSyncEnabled_,
-            false,
-            0.0,
-            false
-        );
     });
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();

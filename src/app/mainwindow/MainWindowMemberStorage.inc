@@ -1,5 +1,4 @@
     struct MainWindowUiRefs {
-        QWidget* editorWidget_ = nullptr;
         QPlainTextEdit* outputView_ = nullptr;
         QListWidget* errorList_ = nullptr;
         QListWidget* muriList_ = nullptr;
@@ -39,7 +38,6 @@
         QAction* previewVideoSettingsAction_ = nullptr;
         QAction* skinSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
-        QAction* fullCopyAreaAction_ = nullptr;
         QAction* aboutAction_ = nullptr;
         QAction* fontDecreaseAction_ = nullptr;
         QAction* fontIncreaseAction_ = nullptr;
@@ -53,7 +51,6 @@
         QTimer* timelineAnalysisIdleTimer_ = nullptr;
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QTimer* visualLayoutPersistTimer_ = nullptr;
-        QObject* editorViewport_ = nullptr;
         QPointer<QLabel> aboutIconLabel_;
         QWidget* welcomePage_ = nullptr;
         QLabel* welcomeEmptyHintLabel_ = nullptr;
@@ -76,9 +73,6 @@
         // BPM/offset summary on the metadata page's "延迟与偏移校准" entry
         // card (L-A migration); refreshed by populateMetadataPage.
         QLabel* latencyEntrySummaryLabel_ = nullptr;
-        QSplitter* chartCopySplitter_ = nullptr;
-        QWidget* copyAreaPanel_ = nullptr;
-        PlainCodeEditor* copyAreaEditor_ = nullptr;
         QStackedWidget* editorStack_ = nullptr;
         QDockWidget* outlineDock_ = nullptr;
         QListWidget* outlineList_ = nullptr;
@@ -179,7 +173,6 @@
         QTimer* previewFullscreenCursorPollTimer_ = nullptr;
         QPropertyAnimation* previewFullscreenControlsAnimation_ = nullptr;
         QPropertyAnimation* previewFullscreenControlsOpacityAnimation_ = nullptr;
-        BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;
         BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
     };
 
@@ -687,7 +680,6 @@
     MainWindowState state_;
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
     std::unique_ptr<miacode::extensions::ExtensionManager> extensionManager_;
-    QWidget*& editorWidget_ = ui_.editorWidget_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
     QuickShellPreviewCompositeSurface*& quickShellPreviewCompositeSurface_ = state_.quickShellPreviewCompositeSurface_;
@@ -750,7 +742,6 @@
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
     QAction*& skinSettingsAction_ = ui_.skinSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
-    QAction*& fullCopyAreaAction_ = ui_.fullCopyAreaAction_;
     QAction*& aboutAction_ = ui_.aboutAction_;
     QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
     QAction*& fontIncreaseAction_ = ui_.fontIncreaseAction_;
@@ -764,7 +755,6 @@
     QTimer*& timelineAnalysisIdleTimer_ = ui_.timelineAnalysisIdleTimer_;
     QTimer*& bottomTabsContentScalePersistTimer_ = ui_.bottomTabsContentScalePersistTimer_;
     QTimer*& visualLayoutPersistTimer_ = ui_.visualLayoutPersistTimer_;
-    QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
     QPointer<QLabel>& aboutIconLabel_ = ui_.aboutIconLabel_;
     QSoundEffect*& invalidStarPreviewEnableSound_ = state_.invalidStarPreviewEnableSound_;
@@ -1060,9 +1050,6 @@
     QWidget*& metadataCard_ = ui_.metadataCard_;
     QLabel*& metadataEmptyHintLabel_ = ui_.metadataEmptyHintLabel_;
     QWidget*& chartPage_ = ui_.chartPage_;
-    QSplitter*& chartCopySplitter_ = ui_.chartCopySplitter_;
-    QWidget*& copyAreaPanel_ = ui_.copyAreaPanel_;
-    PlainCodeEditor*& copyAreaEditor_ = ui_.copyAreaEditor_;
     QStackedWidget*& editorStack_ = ui_.editorStack_;
     QDockWidget*& outlineDock_ = ui_.outlineDock_;
     QListWidget*& outlineList_ = ui_.outlineList_;
@@ -1162,7 +1149,6 @@
     bool& chartDropOverlayActive_ = state_.chartDropOverlayActive_;
     bool& quickShellPreviewCompositeSurfaceActive_ = state_.quickShellPreviewCompositeSurfaceActive_;
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache>& previewProgressStatsCache_ = state_.previewProgressStatsCache_;
-    BracketScopeHighlighter*& chartBracketHighlighter_ = ui_.chartBracketHighlighter_;
     BracketScopeHighlighter*& metadataBracketHighlighter_ = ui_.metadataBracketHighlighter_;
     QHash<int, ValidationCacheEntry>& validationCacheByDifficulty_ = state_.validationCacheByDifficulty_;
     QHash<QString, QSet<QString>>& ignoredHeaderIssueTypesByFile_ = state_.ignoredHeaderIssueTypesByFile_;
