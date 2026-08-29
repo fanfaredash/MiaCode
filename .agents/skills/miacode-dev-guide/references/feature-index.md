@@ -130,9 +130,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`).
 - Timing metadata: `src/core/chart/document/SimaiTimingMetadata.{h,cpp}` (`buildTimingMetadata`,
   `buildTimingMetadataFromRawText`, `parseInlineTimeSignatureComment`).
-- Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
+- Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFileFlow.cpp`
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
-  `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
+  `loadDocument`) plus `MainWindow.DocumentUi.cpp` (`rebuildFieldSidebar`,
+  `populateMetadataPage`, `populateDifficultyPage`). On Windows, `onOpenFile` uses
+  `promptForSimaiFile` with the visible QuickShell root HWND as the native picker owner.
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
   (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
   `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`
@@ -1142,8 +1144,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `ChartBatchTransform.{h,cpp}` (`transformChartText`, `toggleBreak/Ex/FireworkForSelection`,
   `randomRotateForSelection`), `ChartNormalization.{h,cpp}` (`normalizeChartText`),
-  `Non384SnapTable.*`. MainWindow entries: `onMirror*`, `onRotate*`, `onNormalizeWholeChart`,
-  `onToggle*Selection`.
+  `Non384SnapTable.*`. Selection skeleton transforms `clearCompleteElementsInSelection` and
+  `resetTapNotesInSelection` live in `PlainCodeEditor.Input.cpp`; the latter replaces every
+  occupied selected beat with one lane-1 tap while preserving timing directives, whitespace,
+  comments, and empty beats. MainWindow entries: `onMirror*`, `onRotate*`,
+  `onNormalizeWholeChart`, `onToggle*Selection`, `onClearCompleteElementsSelection`, and
+  `onResetTapNotesSelection`; shortcuts are registry-backed (`Ctrl+Q` / `Ctrl+W` defaults).
 
 ## 12. Toolbox media utilities
 

@@ -30,10 +30,20 @@
 #include "tools/muri/MuriStaticChecker.h"
 
 #include <algorithm>
+#include <array>
 
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#pragma comment(lib, "Comdlg32.lib")
+#endif
 
 using namespace miacode::mainwindow::shared;
 #include "MainWindow.DocumentFlow.Internal.h"
@@ -41,6 +51,60 @@ using namespace miacode::mainwindow::shared;
 using namespace miacode::mainwindow::documentflow_detail;
 
 namespace {
+
+QString promptForSimaiFile(QWidget* logicalParent, const QString& initialDirectory)
+{
+#ifdef Q_OS_WIN
+    // QuickShell keeps MainWindow as a hidden QWidget backend. A static
+    // QFileDialog therefore gives the Windows picker that hidden HWND as its
+    // owner, while capture/streaming software activates the visible QML root
+    // HWND. Windows then treats the root and picker as unrelated top-level
+    // windows and lets them repeatedly overtake one another. Own the native
+    // picker directly from the visible root so its modal relationship remains
+    // intact across external foreground-window changes.
+    QWindow* ownerWindow = UiDialogs::applicationDialogTransientParent();
+    if (ownerWindow == nullptr && logicalParent != nullptr) {
+        logicalParent->winId();
+        ownerWindow = logicalParent->windowHandle();
+    }
+
+    std::array<wchar_t, 32768> selectedPath{};
+    const std::wstring nativeInitialDirectory =
+        QDir::toNativeSeparators(initialDirectory).toStdWString();
+    constexpr wchar_t nativeFilter[] =
+        L"Simai (*.txt *.simai)\0*.txt;*.simai\0All Files (*.*)\0*.*\0";
+
+    OPENFILENAMEW request{};
+    request.lStructSize = sizeof(request);
+    request.hwndOwner = ownerWindow != nullptr
+        ? reinterpret_cast<HWND>(ownerWindow->winId())
+        : nullptr;
+    request.lpstrFilter = nativeFilter;
+    request.nFilterIndex = 1;
+    request.lpstrFile = selectedPath.data();
+    request.nMaxFile = static_cast<DWORD>(selectedPath.size());
+    request.lpstrInitialDir = nativeInitialDirectory.empty()
+        ? nullptr
+        : nativeInitialDirectory.c_str();
+    request.lpstrTitle = L"Open simai file";
+    request.Flags = OFN_EXPLORER
+        | OFN_FILEMUSTEXIST
+        | OFN_PATHMUSTEXIST
+        | OFN_NOCHANGEDIR
+        | OFN_ENABLESIZING;
+
+    if (::GetOpenFileNameW(&request) != TRUE) {
+        return QString();
+    }
+    return QDir::fromNativeSeparators(QString::fromWCharArray(selectedPath.data()));
+#else
+    return QFileDialog::getOpenFileName(
+        logicalParent,
+        QStringLiteral("Open simai file"),
+        initialDirectory,
+        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)"));
+#endif
+}
 
 struct PreparedDocumentOpenPayload {
     bool success = false;
@@ -471,12 +535,7 @@ void MainWindow::DocumentSection::onOpenFile()
 
     owner_.windowSection_->logWindowGeometryDebug("open_file_before_dialog");
     owner_.windowSection_->logTopLevelWindowSnapshot("open_file_before_dialog");
-    const QString path = QFileDialog::getOpenFileName(
-        &owner_,
-        QStringLiteral("Open simai file"),
-        owner_.resolveInitialOpenDirectory(),
-        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
-    );
+    const QString path = promptForSimaiFile(&owner_, owner_.resolveInitialOpenDirectory());
     owner_.windowSection_->logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     owner_.windowSection_->logTopLevelWindowSnapshot("open_file_after_dialog");
     if (path.isEmpty()) {

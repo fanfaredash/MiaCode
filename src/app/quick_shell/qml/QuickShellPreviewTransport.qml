@@ -20,7 +20,6 @@ Rectangle {
     readonly property int transportTextPixelSize: 13
     readonly property int transportTextWeight: Font.Medium
     // Keep textual transport affordances on one semantic foreground token.
-    // The Muri-mode question deliberately shares the speed-label colour.
     readonly property color transportTextColor: shellTheme.transportPrimaryTextColor()
 
     Components.Theme {
@@ -89,51 +88,6 @@ Rectangle {
 
     function transportButtonBorderColor() {
         return shellTheme.transportButtonBorderColor()
-    }
-
-    component RenderModeToggleButton: Components.ShellToolButton {
-        id: modeButton
-        required property var shellRoot
-
-        Layout.preferredWidth: shellRoot.metric("previewTransportButtonWidth", 30)
-        Layout.preferredHeight: shellRoot.controlButtonHeight
-        paletteMap: shellRoot.paletteMap
-        metricsMap: shellRoot.metricsMap
-        fullscreenMode: shellRoot.fullscreenMode
-        enabled: !shellRoot.inputBlocked
-        onPressed: shellRoot.focusRequested()
-        onClicked: {
-            shellRoot.focusRequested()
-            if (shellRoot.controller)
-                shellRoot.controller.toggleMuriRenderMode()
-        }
-        contentItem: Item {
-            implicitWidth: 18
-            implicitHeight: 18
-
-            // Chart review intentionally recedes into the transport: the
-            // button chrome supplies the affordance, while a tiny dot marks
-            // the quiet/default mode. Muri check is a visible question.
-            Rectangle {
-                anchors.centerIn: parent
-                width: 3
-                height: 3
-                radius: 1.5
-                color: modeButton.shellRoot.transportTextColor
-                visible: !(modeButton.shellRoot.controller && modeButton.shellRoot.controller.muriCheckRenderMode)
-            }
-
-            Text {
-                anchors.centerIn: parent
-                text: "?"
-                color: modeButton.shellRoot.transportTextColor
-                font.pixelSize: 16
-                font.weight: Font.Light
-                visible: !!(modeButton.shellRoot.controller && modeButton.shellRoot.controller.muriCheckRenderMode)
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-        }
     }
 
     // Single source of truth for the on-screen handle centre (slider-local x).
@@ -544,8 +498,6 @@ Rectangle {
                         }
                     }
 
-                    RenderModeToggleButton { shellRoot: root }
-
                     Label {
                         Layout.preferredWidth: Math.max(
                             timeSummaryTextMetrics.advanceWidth + 2,
@@ -569,8 +521,6 @@ Rectangle {
                     visible: !(controller && controller.workspacePanelsSwapped)
                     Layout.alignment: Qt.AlignRight
                     spacing: 8
-
-                    RenderModeToggleButton { shellRoot: root }
 
                     Components.ShellToolButton {
                         text: controller ? controller.previewSpeedLabel : "1x"
