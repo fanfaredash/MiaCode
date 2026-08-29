@@ -42,8 +42,11 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   path — bar + comma tiers only; that path has no separate quarter-note subdivision lines).
 - `VideoExportRuntimePolicy.{h,cpp}` (`src/tools/video_export/`) — export PBO env precedence + worker
   crash-retry policy (`kVideoExportWorkerMaxCrashRetries = 1`) and file-size preset policy
-  (bitrate coefficient/min/max, peak-rate/buffer multipliers, GOP seconds, audio cap, x264 CRF,
-  and whether export suppresses video backgrounds).
+  (bitrate coefficient/min/max, peak-rate/buffer multipliers, GOP seconds, audio cap, relative
+  x264 CRF adjustment, and whether export suppresses video backgrounds). The relative adjustment
+  preserves the Fast/High Quality gap: Compact adds 1 and the ultra-compact modes add 3. Both
+  ultra-compact modes use a fixed 4000 kbps video target and peak-rate ceiling; non-standard x264
+  exports apply the bitrate/VBV limits alongside CRF so the size policy covers software encoders.
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
