@@ -75,7 +75,8 @@
         QWidget* metadataCard_ = nullptr;
         QLabel* metadataEmptyHintLabel_ = nullptr;
         QWidget* chartPage_ = nullptr;
-        miacode::latency::LatencyDetectionPage* latencyDetectionPage_ = nullptr;
+        // Empty stand-in for the latency field; the page itself is QML now.
+        QWidget* latencyPlaceholderPage_ = nullptr;
         // Empty stand-in for the export field. The export centre itself is
         // pure QML; this only keeps the hidden stack's page identity distinct
         // so "is the chart / metadata field current" stays answerable.
@@ -1083,7 +1084,7 @@
     QWidget*& welcomePage_ = ui_.welcomePage_;
     QLabel*& welcomeEmptyHintLabel_ = ui_.welcomeEmptyHintLabel_;
     QWidget*& metadataPage_ = ui_.metadataPage_;
-    miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
+    QWidget*& latencyPlaceholderPage_ = ui_.latencyPlaceholderPage_;
     QWidget*& exportPlaceholderPage_ = ui_.exportPlaceholderPage_;
     QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
     miacode::v2::UiRequestService*& uiRequests_ = ui_.uiRequests_;

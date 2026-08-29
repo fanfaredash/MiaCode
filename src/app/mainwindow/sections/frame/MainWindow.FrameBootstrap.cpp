@@ -41,7 +41,6 @@
 #include "app/qml_ui/export/QmlExportSession.h"
 #include "app/v2/JobProgressService.h"
 #include "app/v2/UiRequestService.h"
-#include "tools/latency/LatencyDetectionPage.h"
 #include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -923,8 +922,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     editorStack_->addWidget(welcomePage_);
     editorStack_->addWidget(metadataPage_);
-    ui_.latencyDetectionPage_ = new miacode::latency::LatencyDetectionPage(this);
-    editorStack_->addWidget(ui_.latencyDetectionPage_);
+    ui_.latencyPlaceholderPage_ = new QWidget(this);
+    editorStack_->addWidget(ui_.latencyPlaceholderPage_);
     ui_.exportPlaceholderPage_ = new QWidget(this);
     editorStack_->addWidget(ui_.exportPlaceholderPage_);
     ui_.uiRequests_ = new miacode::v2::UiRequestService(this);

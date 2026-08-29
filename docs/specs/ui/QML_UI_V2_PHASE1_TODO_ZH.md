@@ -32,14 +32,14 @@
 | 隐藏 `PlainCodeEditor` | 仍在 `FrameBootstrap.cpp:291` 构造；**20 个文件**仍引用 | `src/editor/`、`src/app/mainwindow/sections/*` |
 | `QuickShellController` | 1,251 行（`src/app/quick_shell/` 全目录）；`surfaceHost_` 分支已归零；**`refreshTimer_` 轮询仍在**（`QuickShellController.cpp:71/82-84/693-699`） | — |
 | QML 仍消费的 controller 属性/方法 | **25 个**（`shellController.*`） | `src/app/qml_ui/**/*.qml` |
-| Widget UI 代码量 | cover_export **5,780** / latency **1,040**<br>*（2026-08-29 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479、`PvBatchCompressionDialog` 393）* | `src/tools/*` |
+| Widget UI 代码量 | cover_export **5,780**<br>*（2026-08-29 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479、`PvBatchCompressionDialog` 393）* | `src/tools/*` |
 
 ### v2 自身新代码里的 Widgets 泄漏（优先清）
 
 | 位置 | 内容 |
 |---|---|
 | ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**。`src/app/qml_ui` 全目录现已无 Widgets 对话框 |
-| `src/app/qml_ui/QmlEditorPageHost.*` | `QWidget` 宿主表面 + `WindowContainer` 适配（`MainSplitView.qml:192`） |
+| ~~`src/app/qml_ui/QmlEditorPageHost.*`~~ | ~~`QWidget` 宿主表面 + `WindowContainer`~~ —— **已删除（2026-08-29）**。`src/app/qml_ui` 全目录无 `QWidget` |
 | `src/app/ui/ChartDropOverlay.h:7` | `class ChartDropOverlay final : public QWidget`，被 v2 root window 拖放路径使用 |
 
 `MainView.qml` 的对话框已是 `QtQuick.Dialogs`（非 Widgets），这条不用改。
@@ -62,7 +62,7 @@
 
 | 功能 | v2 入口 | 落点 |
 |---|---|---|
-| 延迟校准 | `ToolsSidebarPage.qml` → `openLatencyPage()` | `LatencyDetectionPage`（`WindowContainer` 宿主，1,040 行） |
+| ~~延迟校准~~ | `ToolsSidebarPage.qml` → `openLatencyPage()` | **已完成（2026-08-29）**：`LatencyPage.qml` + `QmlLatencyModel`，`LatencySandboxController` 原样复用；`WindowContainer` 与 `QmlEditorPageHost` 的整套 widget 宿主机制已删除 |
 | ~~音视频处理~~ | → `openMediaProcessingTools()` | **已完成（2026-08-29）**：`MediaToolsDialog.qml` 启动页 + `PrependBlankDialog.qml` + `PvBatchCompressionDialog.qml`（QML），`QmlMediaToolsModel` 承接；`src/tools/media` 已无 Widgets |
 | ~~整谱规范化~~ | → `openNormalizeWholeChart()` | **已完成（2026-08-29）**：`NormalizeOptionsDialog.qml` + `QmlDocumentModel::normalizeChartSelection`，结果作为编辑器事务应用（undo 覆盖）；Widget 对话框与 `DocumentSection::onNormalizeWholeChart` 已删除 |
 | ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
@@ -157,8 +157,8 @@
 ### 0b / 0c（延后，未取消）
 
 - [ ] 0b 扩展宿主删除 —— 保持现状。
-- [ ] 0c 偏好设置 / 延迟检测 / 音视频处理页 —— **2026-08-29 决定补成 QML 原生页（不删除）**，与阶段 3
-      的 B 类条目同批推进；同批必须改齐架构文档第 8、10 节。
+- [x] 0c 偏好设置 / 延迟检测 / 音视频处理页 —— **三页均已补成 QML 原生页（2026-08-29）**。
+      架构文档第 8、10 节仍记录着相反的删除决定，需改齐。
 
 ## 5. 已完成（事实登记，不再逐条展开）
 

@@ -19,6 +19,7 @@ Item {
     required property var pages
     required property var editorController
     required property var editorSync
+    required property var latency
     property bool compact: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
@@ -189,20 +190,12 @@ Item {
                         pages: root.pages
                     }
 
-                    // LatencyDetectionPage (and any remaining full-page widget host).
-                    WindowContainer {
-                        id: nativePageHost
+                    LatencyPage {
+                        id: latencyPage
                         anchors.fill: parent
-                        visible: root.pages.activePageId === "latency" && root.pages.pageWindow !== null
-                        window: root.pages.pageWindow
-                        function syncNativeSize() {
-                            if (visible && width > 0 && height > 0)
-                                root.pages.syncPageSize(width, height)
-                        }
-                        onVisibleChanged: syncNativeSize()
-                        onWidthChanged: syncNativeSize()
-                        onHeightChanged: syncNativeSize()
-                        Component.onCompleted: syncNativeSize()
+                        visible: root.pages.activePageId === "latency"
+                        latency: root.latency
+                        pages: root.pages
                     }
                 }
 

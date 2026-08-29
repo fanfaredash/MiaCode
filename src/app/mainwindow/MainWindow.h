@@ -62,7 +62,6 @@ class QHideEvent;
 class QLabel;
 namespace miacode::latency {
 class LatencySandboxController;
-class LatencyDetectionPage;
 }
 namespace miacode::video_export {
 }
@@ -129,7 +128,6 @@ class MainWindow : public QMainWindow,
     // applyLatencyDetectorBpm/Offset writers and to read the document
     // state for refresh.
     friend class miacode::latency::LatencySandboxController;
-    friend class miacode::latency::LatencyDetectionPage;
     // The Export hub page launches the existing ExportSection entry slots
     // with an explicitly selected difficulty and reads document/difficulty
     // state for its badge row — same narrow-feature rationale as the
@@ -146,7 +144,7 @@ public:
     PreviewStageMediaHost* previewStageMediaHost() const;
 
     // Accessor for the latency-detection sandbox controller. The
-    // LatencyDetectionPage UI binds its controls to the controller
+    // The QML latency page binds its controls to the controller
     // (BPM/offset/subdivision/SFX-volume + audition lifecycle).
     // Always non-null after construction.
     miacode::latency::LatencySandboxController* latencySandboxController() const;
@@ -602,6 +600,16 @@ public:
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
+    // 延迟校准's narrow surface for the QML page. Reads mirror what the
+    // Widgets page derived from the document; writes are the existing
+    // applyLatencyDetector* transactions.
+    double latencyDocumentWholeBpm() const;
+    double latencyDocumentOffsetSeconds() const;
+    int latencyDocumentClockCount() const;
+    QString latencyTrackPath() const;
+    void applyLatencyDetectorBpm(double bpm);
+    void applyLatencyDetectorOffset(double seconds);
+    void applyLatencyDetectorClockCount(int clockCount);
     // Re-applies shortcut bindings to the live QActions after an edit.
     void applyConfiguredShortcuts();
     // Performance + workspace settings the QML preferences page drives.

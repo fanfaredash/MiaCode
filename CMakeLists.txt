@@ -138,6 +138,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/qml_ui/media/QmlMediaToolsModel.h
     src/app/qml_ui/preferences/QmlPreferencesModel.cpp
     src/app/qml_ui/preferences/QmlPreferencesModel.h
+    src/app/qml_ui/latency/QmlLatencyModel.cpp
+    src/app/qml_ui/latency/QmlLatencyModel.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -297,8 +299,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/latency/LatencyTestChartBuilder.cpp
     src/tools/latency/LatencySandboxController.h
     src/tools/latency/LatencySandboxController.cpp
-    src/tools/latency/LatencyDetectionPage.h
-    src/tools/latency/LatencyDetectionPage.cpp
     src/tools/muri/MuriAnalyzer.h
     src/tools/muri/MuriAnalyzer.cpp
     src/tools/muri/MuriAnalyzerGeometry.h
@@ -690,6 +690,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/media/PrependBlankDialog.qml
     src/app/qml_ui/preferences/PreferencesDialog.qml
     src/app/qml_ui/preferences/ShortcutEditorDialog.qml
+    src/app/qml_ui/latency/LatencyPage.qml
     src/app/qml_ui/editor/FindReplaceBar.qml
     src/app/qml_ui/editor/BookmarkList.qml
     src/app/qml_ui/editor/LineNumberGutter.qml

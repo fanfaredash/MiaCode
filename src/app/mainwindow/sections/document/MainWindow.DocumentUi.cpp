@@ -22,7 +22,6 @@
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "app/qml_ui/export/QmlExportSession.h"
-#include "tools/latency/LatencyDetectionPage.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -892,7 +891,7 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
-    if (ui_.latencyDetectionPage_ == nullptr || ui_.editorStack_ == nullptr) {
+    if (ui_.latencyPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return false;
     }
     // Leaving the export page (possibly) — tear down its embedded video
@@ -920,7 +919,7 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
     populateMetadataPage();  // keeps document fields in sync for sidebar use
-    ui_.editorStack_->setCurrentWidget(ui_.latencyDetectionPage_);
+    ui_.editorStack_->setCurrentWidget(ui_.latencyPlaceholderPage_);
     // Bottom timeline + bottom tabs remain visible: the sandbox audition
     // drives them with the synthesized test chart, so the user can watch
     // the taps scroll past the judge line in sync with the song.
@@ -932,7 +931,6 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    ui_.latencyDetectionPage_->onPageEntered();
     owner_.refreshLayoutAfterPageSwitch();
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     return true;
@@ -1055,9 +1053,6 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
     if (ui_.qmlExportSession_ != nullptr) {
@@ -1112,9 +1107,6 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
     if (ui_.qmlExportSession_ != nullptr) {
@@ -1166,9 +1158,6 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
     if (ui_.qmlExportSession_ != nullptr) {
@@ -1259,9 +1248,6 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
     if (ui_.qmlExportSession_ != nullptr) {

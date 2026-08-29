@@ -1352,6 +1352,46 @@ void MainWindow::applyLatencyDetectorOffset(double seconds)
     timelineSection_->applyLatencyDetectorOffset(seconds);
 }
 
+double MainWindow::latencyDocumentWholeBpm() const
+{
+    // Same resolution the Widgets page used: prefer &wholebpm, else the first
+    // inline (BPM) of any non-empty difficulty. BPM is song-wide and the
+    // latency page has no active difficulty, so scanning is correct here.
+    bool ok = false;
+    const double whole = parsedWholeBpm(&ok);
+    if (ok && whole > 0.0) {
+        return whole;
+    }
+    for (const int id : document_.difficultyIds()) {
+        const SimaiDifficultyData* difficultyData = document_.difficulty(id);
+        if (difficultyData == nullptr || difficultyData->chart.isEmpty()) {
+            continue;
+        }
+        const double firstBpm = miacode::chart_clock::firstBpmFromChart(difficultyData->chart);
+        if (firstBpm > 0.0) {
+            return firstBpm;
+        }
+    }
+    return 0.0;
+}
+
+double MainWindow::latencyDocumentOffsetSeconds() const
+{
+    bool ok = false;
+    const double value = document_.first.trimmed().toDouble(&ok);
+    return ok ? value : 0.0;
+}
+
+int MainWindow::latencyDocumentClockCount() const
+{
+    return parsedClockCount();
+}
+
+QString MainWindow::latencyTrackPath() const
+{
+    return lastTrackPath_;
+}
+
 void MainWindow::applyLatencyDetectorBpm(double bpm)
 {
     timelineSection_->applyLatencyDetectorBpm(bpm);

@@ -5,7 +5,6 @@
 #include "common/AdoptedWidgetCoordinates.h"
 #include "common/DebugLog.h"
 #include "app/qml_ui/export/QmlExportSession.h"
-#include "tools/latency/LatencyDetectionPage.h"
 
 #include <QBoxLayout>
 #include <QStackedWidget>
@@ -26,41 +25,12 @@ void appendPageHostLog(const QString& action, const QString& detail = QString())
         text);
 }
 
-void applySurfaceStyle(QWidget* surface)
-{
-    if (surface == nullptr) {
-        return;
-    }
-    const UiTheme::Colors& colors = UiTheme::colors();
-    QPalette palette = surface->palette();
-    palette.setColor(QPalette::Window, colors.windowBg);
-    surface->setPalette(palette);
-    surface->setAutoFillBackground(true);
-}
-
-void activateSurfaceLayout(QWidget* surface)
-{
-    if (surface == nullptr) {
-        return;
-    }
-    if (QLayout* layout = surface->layout(); layout != nullptr) {
-        layout->activate();
-    }
-    surface->updateGeometry();
-    surface->update();
-}
-
 } // namespace
 
 QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
 {
-    // Eager surface so QML WindowContainer can bind pageWindow before the
-    // first overlay open: the native window must exist before QML tries to
-    // wrap it, so it is created here in the constructor rather than lazily
-    // on first use.
-    ensureSurface();
     // The menu action and the chart.normalize shortcut land on MainWindow;
     // re-emit so the editor sees one request regardless of where it came from.
     connect(&backend, &MainWindow::normalizeWholeChartRequested, this, [this]() {
@@ -77,24 +47,6 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
     });
 }
 
-QmlEditorPageHost::~QmlEditorPageHost()
-{
-    detachCurrentPage(true);
-    if (pageWindow_ != nullptr) {
-        pageWindow_->setParent(nullptr);
-        delete pageWindow_.data();
-        pageWindow_ = nullptr;
-    }
-    delete surfaceWidget_;
-    surfaceWidget_ = nullptr;
-    surfaceLayout_ = nullptr;
-}
-
-QWindow* QmlEditorPageHost::pageWindow() const
-{
-    return pageWindow_.data();
-}
-
 QObject* QmlEditorPageHost::exportSession() const
 {
     return backend_ != nullptr ? static_cast<QObject*>(backend_->qmlExportSession_) : nullptr;
@@ -105,151 +57,8 @@ void QmlEditorPageHost::markExportPageActive()
     if (activePageId_ == QLatin1String("export")) {
         return;
     }
-    // Detach latency (or any) full-page widget before marking export active —
-    // export chrome is QML, not this WindowContainer surface.
-    if (attachedPage_ != nullptr) {
-        detachCurrentPage(true);
-    } else if (!activePageId_.isEmpty()) {
-        activePageId_.clear();
-        emit activePageIdChanged();
-    }
     activePageId_ = QStringLiteral("export");
     emit activePageIdChanged();
-}
-
-void QmlEditorPageHost::ensureSurface()
-{
-    if (surfaceWidget_ != nullptr) {
-        return;
-    }
-
-    surfaceWidget_ = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint);
-    surfaceWidget_->setObjectName(QStringLiteral("QmlUiEditorPageSurface"));
-    surfaceWidget_->setAttribute(Qt::WA_NativeWindow);
-    surfaceWidget_->setAttribute(Qt::WA_StyledBackground, true);
-    surfaceWidget_->setFocusPolicy(Qt::StrongFocus);
-    surfaceWidget_->setContentsMargins(0, 0, 0, 0);
-    surfaceWidget_->setMinimumSize(QSize(64, 64));
-    surfaceWidget_->resize(960, 720);
-    applySurfaceStyle(surfaceWidget_);
-    // hide() before winId() — same flash-avoidance contract as QuickShell.
-    surfaceWidget_->hide();
-    surfaceWidget_->winId();
-
-    surfaceLayout_ = new QVBoxLayout(surfaceWidget_);
-    surfaceLayout_->setContentsMargins(0, 0, 0, 0);
-    surfaceLayout_->setSpacing(0);
-
-    pageWindow_ = QWindow::fromWinId(surfaceWidget_->winId());
-    if (pageWindow_ != nullptr) {
-        pageWindow_->QObject::setParent(this);
-        miacode::ui::bindAdoptedSurfaceWindow(surfaceWidget_, pageWindow_.data());
-    }
-    appendPageHostLog(
-        QStringLiteral("surface_ready"),
-        QStringLiteral("window=%1").arg(pageWindow_ != nullptr ? 1 : 0));
-    emit pageWindowChanged();
-}
-
-void QmlEditorPageHost::setSurfaceVisible(bool visible)
-{
-    if (surfaceWidget_ == nullptr) {
-        return;
-    }
-#ifdef Q_OS_MACOS
-    // After WindowContainer adoption, QWidget::show/hide on the Qt::Tool
-    // panel can rip the content NSView back out of the Quick window.
-    // Keep the bridge permanently shown; visibility is driven by the
-    // foreign QWindow / WindowContainer only.
-    if (visible && !surfaceWidget_->isVisible()) {
-        surfaceWidget_->show();
-    }
-#else
-    if (visible) {
-        if (!surfaceWidget_->isVisible()) {
-            surfaceWidget_->show();
-        }
-    } else if (surfaceWidget_->isVisible()) {
-        surfaceWidget_->hide();
-    }
-#endif
-    if (pageWindow_ != nullptr && pageWindow_->isVisible() != visible) {
-        pageWindow_->setVisible(visible);
-    }
-}
-
-bool QmlEditorPageHost::attachPageWidget(QWidget* page, const QString& pageId)
-{
-    if (page == nullptr || backend_ == nullptr) {
-        return false;
-    }
-
-    ensureSurface();
-    if (surfaceWidget_ == nullptr || surfaceLayout_ == nullptr || pageWindow_ == nullptr) {
-        appendPageHostLog(QStringLiteral("attach_failed"), pageId);
-        return false;
-    }
-
-    if (attachedPage_ == page && activePageId_ == pageId) {
-        applySurfaceStyle(surfaceWidget_);
-        page->show();
-        setSurfaceVisible(true);
-        activateSurfaceLayout(surfaceWidget_);
-        return true;
-    }
-
-    detachCurrentPage(true);
-
-    if (backend_->editorStack_ != nullptr && page->parentWidget() == backend_->editorStack_) {
-        backend_->editorStack_->removeWidget(page);
-    }
-    surfaceLayout_->addWidget(page);
-    page->show();
-    attachedPage_ = page;
-    applySurfaceStyle(surfaceWidget_);
-    activateSurfaceLayout(surfaceWidget_);
-
-    // Flip overlayActive first so WindowContainer adopts the HWND, then show
-    // the bridge widget (Windows needs QWidget::show for paint; after adoption
-    // the HWND is already reparented into the Quick window — no floating Tool).
-    if (activePageId_ != pageId) {
-        activePageId_ = pageId;
-        emit activePageIdChanged();
-    }
-    setSurfaceVisible(true);
-
-    appendPageHostLog(
-        QStringLiteral("attach_ok"),
-        QStringLiteral("page=%1 size=%2x%3")
-            .arg(pageId)
-            .arg(surfaceWidget_->width())
-            .arg(surfaceWidget_->height()));
-    return true;
-}
-
-void QmlEditorPageHost::detachCurrentPage(bool restoreToEditorStack)
-{
-    if (attachedPage_ == nullptr) {
-        return;
-    }
-
-    QWidget* page = attachedPage_.data();
-    attachedPage_ = nullptr;
-    if (surfaceLayout_ != nullptr) {
-        surfaceLayout_->removeWidget(page);
-    }
-    page->setParent(nullptr);
-
-    if (restoreToEditorStack && backend_ != nullptr && backend_->editorStack_ != nullptr) {
-        backend_->editorStack_->addWidget(page);
-    }
-
-    setSurfaceVisible(false);
-
-    if (!activePageId_.isEmpty()) {
-        activePageId_.clear();
-        emit activePageIdChanged();
-    }
 }
 
 void QmlEditorPageHost::rememberResumeDifficulty()
@@ -307,16 +116,12 @@ bool QmlEditorPageHost::openLatencyPage()
     if (!backend_->switchToLatencyField()) {
         return false;
     }
-    if (!attachPageWidget(backend_->latencyDetectionPage_, QStringLiteral("latency"))) {
-        return false;
+    // The page is QML now; only the active id has to change so MainSplitView
+    // shows it.
+    if (activePageId_ != QLatin1String("latency")) {
+        activePageId_ = QStringLiteral("latency");
+        emit activePageIdChanged();
     }
-    QTimer::singleShot(0, this, [this]() {
-        if (surfaceWidget_ != nullptr && attachedPage_ != nullptr) {
-            syncPageSize(surfaceWidget_->width(), surfaceWidget_->height());
-            activateSurfaceLayout(surfaceWidget_);
-            attachedPage_->update();
-        }
-    });
     return true;
 }
 
@@ -329,18 +134,11 @@ bool QmlEditorPageHost::leaveOverlayPage()
         return true;
     }
 
-    const bool leavingExport = activePageId_ == QLatin1String("export");
-    if (leavingExport) {
-        if (backend_->qmlExportSession_ != nullptr) {
-            backend_->qmlExportSession_->leave();
-        }
-        if (!activePageId_.isEmpty()) {
-            activePageId_.clear();
-            emit activePageIdChanged();
-        }
-    } else {
-        detachCurrentPage(true);
+    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession_ != nullptr) {
+        backend_->qmlExportSession_->leave();
     }
+    activePageId_.clear();
+    emit activePageIdChanged();
     return resumeChartOrMetadata();
 }
 
@@ -379,24 +177,4 @@ void QmlEditorPageHost::packAsZip()
         return;
     }
     backend_->onPackAsZip();
-}
-
-void QmlEditorPageHost::syncPageSize(int width, int height)
-{
-    if (surfaceWidget_ == nullptr) {
-        return;
-    }
-    const int w = qMax(64, width);
-    const int h = qMax(64, height);
-    const QSize nextSize(w, h);
-    if (surfaceWidget_->size() != nextSize) {
-        surfaceWidget_->resize(nextSize);
-    }
-    if (attachedPage_ != nullptr && attachedPage_->size() != nextSize) {
-        attachedPage_->resize(nextSize);
-    }
-    activateSurfaceLayout(surfaceWidget_);
-    if (attachedPage_ != nullptr) {
-        attachedPage_->update();
-    }
 }

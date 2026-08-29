@@ -26,6 +26,7 @@ QmlApplicationContext::QmlApplicationContext(
     , platform_(this)
     , mediaTools_(backend, this)
     , preferencesModel_(backend, this)
+    , latency_(backend, this)
     , shell_(&shell)
 {
     editor_.setHalfWidthInputEnabled(preferences_.editorHalfWidthInputEnabled());
@@ -61,6 +62,8 @@ QObject* QmlApplicationContext::jobProgress() { return backend_.jobProgressServi
 QObject* QmlApplicationContext::mediaTools() { return &mediaTools_; }
 
 QObject* QmlApplicationContext::preferencesModel() { return &preferencesModel_; }
+
+QObject* QmlApplicationContext::latency() { return &latency_; }
 
 void QmlApplicationContext::setWindowChrome(QObject* chrome)
 {

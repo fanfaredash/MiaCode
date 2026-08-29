@@ -21,6 +21,7 @@ Item {
     readonly property var jobProgress: applicationContext.jobProgress
     readonly property var mediaTools: applicationContext.mediaTools
     readonly property var preferencesModel: applicationContext.preferencesModel
+    readonly property var latency: applicationContext.latency
     readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
@@ -224,6 +225,7 @@ Item {
                 pages: root.pages
                 editorController: root.editorController
                 editorSync: root.editorSync
+                latency: root.latency
                 compact: root.compact
                 onSettingsRequested: root.commands.openPreferences()
             }
