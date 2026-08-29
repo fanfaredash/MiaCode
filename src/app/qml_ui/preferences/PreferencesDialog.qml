@@ -29,6 +29,9 @@ Dialog {
     }
     closePolicy: Popup.CloseOnEscape
 
+    // Drag by the title bar: these change what the preview shows.
+    DialogDrag { dialog: root }
+
     property int activePage: 0
     // Id of the command whose binding is being recorded; "" when idle.
     property string capturingId: ""

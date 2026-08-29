@@ -29,6 +29,9 @@ Dialog {
     }
     closePolicy: Popup.CloseOnEscape
 
+    // Drag by the title bar: these change what the preview shows.
+    DialogDrag { dialog: root }
+
     function put(key, value) { root.previewSettings.setValue(key, value) }
 
     // 1.0 / 1.25 / 1.5 — one decimal where that is the whole number, two where

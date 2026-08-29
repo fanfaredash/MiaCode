@@ -55,6 +55,9 @@ Dialog {
     }
     closePolicy: Popup.CloseOnEscape
 
+    // Drag by the title bar: these change what the preview shows.
+    DialogDrag { dialog: root }
+
     contentItem: ColumnLayout {
         spacing: 8
 
