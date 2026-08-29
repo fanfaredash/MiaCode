@@ -13,6 +13,8 @@ Item {
 
     required property var commands
     required property var shortcuts
+    // Source of the 调整 menu's operation rows; see chartTransformMenu().
+    required property var documentSession
     property bool commandsEnabled: true
     property real availableWidth: Number.POSITIVE_INFINITY
 
@@ -299,6 +301,65 @@ Item {
         AppMenu {
             id: adjustMenu
             title: qsTr("调整(&M)")
+
+            // Rows, labels and grouping come from the shared transform table,
+            // so this menu cannot drift from the shortcut editor or the
+            // editor's context menu.
+            readonly property var transformRows: root.documentSession.chartTransformMenu()
+
+            Repeater {
+                model: adjustMenu.transformRows.filter(row => row.section === 0)
+                delegate: AppMenuAction {
+                    required property var modelData
+                    text: modelData.label
+                    shortcutText: root.shortcuts.displayText(modelData.id)
+                    enabled: root.commandsEnabled
+                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                }
+            }
+            AppMenuSeparator {}
+            Repeater {
+                model: adjustMenu.transformRows.filter(row => row.section === 1)
+                delegate: AppMenuAction {
+                    required property var modelData
+                    text: modelData.label
+                    shortcutText: root.shortcuts.displayText(modelData.id)
+                    enabled: root.commandsEnabled
+                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                }
+            }
+            AppMenuSeparator {}
+            Repeater {
+                model: adjustMenu.transformRows.filter(row => row.section === 2)
+                delegate: AppMenuAction {
+                    required property var modelData
+                    text: modelData.label
+                    shortcutText: root.shortcuts.displayText(modelData.id)
+                    enabled: root.commandsEnabled
+                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                }
+            }
+            AppMenuAction {
+                text: qsTr("整谱规范化")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.normalizeChartRequested()
+            }
+
+            AppMenu {
+                title: root.documentSession.chartTransformMoreLabel()
+                Repeater {
+                    model: adjustMenu.transformRows.filter(row => row.section === 3)
+                    delegate: AppMenuAction {
+                        required property var modelData
+                        text: modelData.label
+                        shortcutText: root.shortcuts.displayText(modelData.id)
+                        enabled: root.commandsEnabled
+                        onTriggered: root.commands.chartTransformRequested(modelData.id)
+                    }
+                }
+            }
+
+            AppMenuSeparator {}
             AppMenuAction {
                 text: qsTr("切换侧栏")
                 shortcut: root.shortcuts.sequence("view.toggle_sidebar", "Ctrl+B")

@@ -693,6 +693,24 @@ QStringList QmlDocumentModel::chartTransformIds() const
     return ids;
 }
 
+QVariantList QmlDocumentModel::chartTransformMenu() const
+{
+    QVariantList rows;
+    for (const miacode::qml_ui::ChartTransformSpec& spec : miacode::qml_ui::chartTransformSpecs()) {
+        rows.append(QVariantMap{
+            {QStringLiteral("id"), spec.id},
+            {QStringLiteral("label"), UiText::text(spec.labelKey)},
+            {QStringLiteral("section"), spec.section},
+        });
+    }
+    return rows;
+}
+
+QString QmlDocumentModel::chartTransformMoreLabel() const
+{
+    return UiText::text(QStringLiteral("action.transform.more"));
+}
+
 QVariantMap QmlDocumentModel::transformChartSelection(
     const QString& text, int anchor, int position, const QString& opId) const
 {

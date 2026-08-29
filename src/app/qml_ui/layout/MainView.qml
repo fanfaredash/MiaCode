@@ -54,6 +54,8 @@ Item {
         onOpenRequested: openFileDialog.open()
         onSaveRequested: root.saveDocument()
         onSaveAsRequested: saveFileDialog.open()
+        onChartTransformRequested: opId => root.applyChartTransform(opId)
+        onNormalizeChartRequested: root.pages.openNormalizeWholeChart()
     }
 
     function toggleSidebar() {
@@ -163,6 +165,7 @@ Item {
             platform: root.platform
             menuCommands: menuCommands
             shortcuts: root.applicationContext.shortcuts
+            documentSession: root.documentSession
             leadingInset: root.applicationContext.windowChrome
                 ? root.applicationContext.windowChrome.titleBarLeadingInset
                 : 0
@@ -180,6 +183,7 @@ Item {
                 availableWidth: width
                 commands: menuCommands
                 shortcuts: root.applicationContext.shortcuts
+                documentSession: root.documentSession
                 commandsEnabled: true
             }
         }

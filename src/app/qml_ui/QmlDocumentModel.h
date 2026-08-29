@@ -147,6 +147,11 @@ public:
     Q_INVOKABLE QVariantMap transformChartSelection(
         const QString& text, int anchor, int position, const QString& opId) const;
     Q_INVOKABLE QStringList chartTransformIds() const;
+    // The same table as rows a menu can render: { id, label, section }. Both
+    // the menubar's 调整 menu and the editor's context menu build from this, so
+    // neither carries its own copy of the operation list or its labels.
+    Q_INVOKABLE QVariantList chartTransformMenu() const;
+    Q_INVOKABLE QString chartTransformMoreLabel() const;
 
     // Stored normalize options, as the same map normalizeChartSelection takes.
     Q_INVOKABLE QVariantMap normalizeOptions() const;

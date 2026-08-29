@@ -446,6 +446,12 @@ Rectangle {
         objectName: "editorContextMenu"
         parent: Overlay.overlay
 
+        readonly property var transformRows: root.documentSession.chartTransformMenu()
+        // sourceArea keeps its selection while the popup holds focus
+        // (persistentSelection), so this can bind live like 剪切 / 复制 above.
+        readonly property bool hasSelection:
+            sourceArea.selectedText.length > 0 && !root.metadataMode
+
         AppMenuItem {
             text: qsTr("剪切")
             enabled: sourceArea.selectedText.length > 0
@@ -468,6 +474,52 @@ Rectangle {
         AppMenuItem {
             text: qsTr("查找与替换")
             onTriggered: root.openFindReplace()
+        }
+        AppMenuSeparator {}
+
+        // Same rows, labels and grouping as the menubar's 调整 menu — both read
+        // documentSession.chartTransformMenu(). Every one of them edits the
+        // selection, so they are disabled without one.
+        Repeater {
+            model: editorContextMenu.transformRows.filter(row => row.section === 0)
+            delegate: AppMenuItem {
+                required property var modelData
+                text: modelData.label
+                enabled: editorContextMenu.hasSelection
+                onTriggered: root.applyChartTransform(modelData.id)
+            }
+        }
+        AppMenuSeparator {}
+        Repeater {
+            model: editorContextMenu.transformRows.filter(row => row.section === 1)
+            delegate: AppMenuItem {
+                required property var modelData
+                text: modelData.label
+                enabled: editorContextMenu.hasSelection
+                onTriggered: root.applyChartTransform(modelData.id)
+            }
+        }
+        AppMenuSeparator {}
+        Repeater {
+            model: editorContextMenu.transformRows.filter(row => row.section === 2)
+            delegate: AppMenuItem {
+                required property var modelData
+                text: modelData.label
+                enabled: editorContextMenu.hasSelection
+                onTriggered: root.applyChartTransform(modelData.id)
+            }
+        }
+        AppMenu {
+            title: root.documentSession.chartTransformMoreLabel()
+            enabled: editorContextMenu.hasSelection
+            Repeater {
+                model: editorContextMenu.transformRows.filter(row => row.section === 3)
+                delegate: AppMenuItem {
+                    required property var modelData
+                    text: modelData.label
+                    onTriggered: root.applyChartTransform(modelData.id)
+                }
+            }
         }
     }
 

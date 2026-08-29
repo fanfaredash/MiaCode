@@ -25,5 +25,7 @@ QtObject {
     signal selectCurrentLineRequested()
     signal validateRequested()
     signal metadataRequested()
+    signal chartTransformRequested(string opId)
+    signal normalizeChartRequested()
     signal unavailableFeatureRequested(string featureName)
 }
