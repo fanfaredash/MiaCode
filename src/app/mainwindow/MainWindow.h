@@ -18,7 +18,6 @@
 #include <QTextEdit>
 #include <QVector>
 
-#include "app/quick_shell/QuickShellContracts.h"
 #include "PreviewAudioSettings.h"
 #include "common/PreviewTimingSettings.h"
 #include "PreviewRenderSettings.h"
@@ -112,10 +111,9 @@ namespace miacode::preview::scene {
 class PreviewProgressStatsCache;
 }
 
-class MainWindow : public QMainWindow,
-                   public QuickShellCommandSink,
-                   public QuickShellStateSource,
-                   public QuickShellNativeContentProvider
+// The three QuickShell* abstract bases are gone with the polling controller
+// that needed them: the QML sessions call these methods on MainWindow directly.
+class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
@@ -160,6 +158,11 @@ signals:
     // final file identity and active difficulty.  UIv2 uses this to reset
     // every derived editor presentation (text, bookmarks and tabs) together.
     void documentReplaced();
+    // The shell's presentation changed: which bottom tab is showing, which tabs
+    // exist, whether the panel is up, the preview canvas aspect, or which
+    // workspace page is active. Emitted where those change rather than sampled
+    // — QuickShellController used to poll all of it on a timer.
+    void shellPresentationChanged();
 
 public:
     enum class DocumentField {
@@ -309,86 +312,86 @@ public:
     miacode::v2::UiRequestService* uiRequestService() const;
     miacode::v2::JobProgressService* jobProgressService() const;
     void preparePreviewForShutdown();
-    bool shellTimelineSurfaceReady() const override;
+    bool shellTimelineSurfaceReady() const;
     void noteQuickTimelineSurfaceReady();
-    bool confirmShellClose() override;
-    void toggleShellPreviewPlayback() override;
-    void stopShellPreview() override;
-    void seekShellPreview(double second) override;
-    void beginShellPreviewScrub() override;
-    void updateShellPreviewScrub(double second, bool centerView) override;
-    void endShellPreviewScrub(double second, bool centerView) override;
-    void setShellPreviewRate(double rate) override;
-    void toggleShellMuriRenderMode() override;
+    bool confirmShellClose();
+    void toggleShellPreviewPlayback();
+    void stopShellPreview();
+    void seekShellPreview(double second);
+    void beginShellPreviewScrub();
+    void updateShellPreviewScrub(double second, bool centerView);
+    void endShellPreviewScrub(double second, bool centerView);
+    void setShellPreviewRate(double rate);
+    void toggleShellMuriRenderMode();
     RenderMode muriRenderMode() const;
-    void nudgeShellPreviewRate(int direction) override;
-    bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView) override;
-    void beginShellPreviewHeldSeek(int direction, int key) override;
-    void stopShellPreviewHeldSeek(int key = 0) override;
-    void setShellPreviewFullscreen(bool fullscreen) override;
-    void setShellPreviewPaneWidthRatio(double ratio) override;
-    void setShellBottomTabsHeight(int height) override;
-    void setShellBottomTabsCurrentTab(const QString& tabId) override;
-    void navigateShellTimelineToSecond(double second) override;
-    void wheelShellTimelineNavigate(double second) override;
-    void centerShellTimelineNavigate(double second) override;
-    void shellTimelineDragStarted() override;
-    void shellTimelineDragFinished(double second) override;
-    void shellTimelineUserInteractionStarted() override;
-    void shellTimelineSurfaceReady() override;
-    void shellTimelineFollowPreviewToggled(bool enabled) override;
-    void shellTimelineViewportLockToggled(bool enabled) override;
-    void shellTimelineFollowProgressToggled(bool enabled) override;
-    void shellTimelineSyncToggled(bool enabled) override;
-    bool shellHasShortcut(const QKeySequence& sequence) const override;
-    bool shellTriggerShortcut(const QKeySequence& sequence) override;
-    QString shellWindowTitle() const override;
-    bool shellWorkspacePanelsSwapped() const override;
-    QString shellPreviewSpeedLabel() const override;
-    bool shellMuriCheckRenderMode() const override;
-    bool shellPreviewPlaying() const override;
-    double shellPreviewPositionSeconds() const override;
-    double shellPreviewDurationSeconds() const override;
-    double shellPreviewLowerBoundSeconds() const override;
-    QStringList shellPreviewStatsTexts() const override;
-    double shellPreviewCanvasAspectRatio() const override;
-    quint64 shellPreviewPaneRestoreGeneration() const override;
-    double shellPreviewPaneWidthRatio() const override;
-    bool shellPreviewFullscreen() const override;
-    QObject* shellPreviewRuntimeObject() const override;
-    QObject* shellPreviewStageMediaHostObject() const override;
-    bool shellPreviewUsesSeparateSurface() const override;
-    QWindow* shellPreviewCompositeWindow() const override;
-    QObject* shellTimelineStateBridgeObject() const override;
-    QString shellBottomTabsCurrentTabId() const override;
-    bool shellBottomTabsVisible() const override;
-    bool shellTimelineTabVisible() const override;
-    bool shellValidationTabVisible() const override;
-    bool shellMuriTabVisible() const override;
-    bool shellExportPageActive() const override;
-    QWidget* shellWindowWidget() const override;
-    QDockWidget* shellOutlineDockWidget() const override;
-    bool shellOutlineDockCollapsed() const override;
-    int shellOutlineDockExpandedWidth() const override;
-    QWidget* shellWorkspaceWidget() const override;
-    QWidget* shellBottomTabsWidget() const override;
-    int shellBottomTabsHeight() const override;
-    double shellBottomTabsHeaderScale() const override;
-    QWidget* shellPreviewPanelWidget() const override;
-    double shellNormalizedPreviewCanvasAspectRatio() const override;
-    void shellRefreshLayoutAfterResize() override;
-    void shellSetRootWindowFrameGeometry(const QRect& geometry) override;
-    void shellNoteQuickUiReady() override;
+    void nudgeShellPreviewRate(int direction);
+    bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView);
+    void beginShellPreviewHeldSeek(int direction, int key);
+    void stopShellPreviewHeldSeek(int key = 0);
+    void setShellPreviewFullscreen(bool fullscreen);
+    void setShellPreviewPaneWidthRatio(double ratio);
+    void setShellBottomTabsHeight(int height);
+    void setShellBottomTabsCurrentTab(const QString& tabId);
+    void navigateShellTimelineToSecond(double second);
+    void wheelShellTimelineNavigate(double second);
+    void centerShellTimelineNavigate(double second);
+    void shellTimelineDragStarted();
+    void shellTimelineDragFinished(double second);
+    void shellTimelineUserInteractionStarted();
+    void shellTimelineSurfaceReady();
+    void shellTimelineFollowPreviewToggled(bool enabled);
+    void shellTimelineViewportLockToggled(bool enabled);
+    void shellTimelineFollowProgressToggled(bool enabled);
+    void shellTimelineSyncToggled(bool enabled);
+    bool shellHasShortcut(const QKeySequence& sequence) const;
+    bool shellTriggerShortcut(const QKeySequence& sequence);
+    QString shellWindowTitle() const;
+    bool shellWorkspacePanelsSwapped() const;
+    QString shellPreviewSpeedLabel() const;
+    bool shellMuriCheckRenderMode() const;
+    bool shellPreviewPlaying() const;
+    double shellPreviewPositionSeconds() const;
+    double shellPreviewDurationSeconds() const;
+    double shellPreviewLowerBoundSeconds() const;
+    QStringList shellPreviewStatsTexts() const;
+    double shellPreviewCanvasAspectRatio() const;
+    quint64 shellPreviewPaneRestoreGeneration() const;
+    double shellPreviewPaneWidthRatio() const;
+    bool shellPreviewFullscreen() const;
+    QObject* shellPreviewRuntimeObject() const;
+    QObject* shellPreviewStageMediaHostObject() const;
+    bool shellPreviewUsesSeparateSurface() const;
+    QWindow* shellPreviewCompositeWindow() const;
+    QObject* shellTimelineStateBridgeObject() const;
+    QString shellBottomTabsCurrentTabId() const;
+    bool shellBottomTabsVisible() const;
+    bool shellTimelineTabVisible() const;
+    bool shellValidationTabVisible() const;
+    bool shellMuriTabVisible() const;
+    bool shellExportPageActive() const;
+    QWidget* shellWindowWidget() const;
+    QDockWidget* shellOutlineDockWidget() const;
+    bool shellOutlineDockCollapsed() const;
+    int shellOutlineDockExpandedWidth() const;
+    QWidget* shellWorkspaceWidget() const;
+    QWidget* shellBottomTabsWidget() const;
+    int shellBottomTabsHeight() const;
+    double shellBottomTabsHeaderScale() const;
+    QWidget* shellPreviewPanelWidget() const;
+    double shellNormalizedPreviewCanvasAspectRatio() const;
+    void shellRefreshLayoutAfterResize();
+    void shellSetRootWindowFrameGeometry(const QRect& geometry);
+    void shellNoteQuickUiReady();
 
 protected:
-    void closeEvent(QCloseEvent* event) override;
-    bool event(QEvent* event) override;
-    bool eventFilter(QObject* watched, QEvent* event) override;
-    void resizeEvent(QResizeEvent* event) override;
-    void moveEvent(QMoveEvent* event) override;
-    void showEvent(QShowEvent* event) override;
-    void hideEvent(QHideEvent* event) override;
-    void changeEvent(QEvent* event) override;
+    void closeEvent(QCloseEvent* event);
+    bool event(QEvent* event);
+    bool eventFilter(QObject* watched, QEvent* event);
+    void resizeEvent(QResizeEvent* event);
+    void moveEvent(QMoveEvent* event);
+    void showEvent(QShowEvent* event);
+    void hideEvent(QHideEvent* event);
+    void changeEvent(QEvent* event);
 
 private slots:
     void onNewFile();

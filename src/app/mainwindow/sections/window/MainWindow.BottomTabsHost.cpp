@@ -341,6 +341,9 @@ void MainWindow::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
     }
+    if (previousTabId != tabId) {
+        emit shellPresentationChanged();
+    }
 }
 
 void MainWindow::setCurrentBottomTabsTabId(const QString& tabId)
@@ -358,6 +361,7 @@ void MainWindow::setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible)
         if (!visible && currentBottomTabsTabId() == tabId) {
             restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId::Validation);
         }
+        emit shellPresentationChanged();
         return;
     }
     QTabWidget* container = bottomTabsContainerForTab(tabId);
@@ -372,6 +376,7 @@ void MainWindow::setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible)
     if (!visible && currentBottomTabsTabId() == tabId) {
         restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId::Timeline);
     }
+    emit shellPresentationChanged();
 }
 
 void MainWindow::restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId preferredTabId)

@@ -770,7 +770,7 @@ int main(int argc, char** argv)
         const QString tabBar = qmlSource(QStringLiteral("src/app/qml_ui/timeline/BottomTabBar.qml"));
         const QString splitView = qmlSource(QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
         const QString viewState = qmlSource(QStringLiteral("src/app/qml_ui/ViewState.qml"));
-        const QString controller = qmlSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp"));
+        const QString timelineSession = qmlSource(QStringLiteral("src/app/qml_ui/QmlTimelineModel.h"));
         const QString timelineTick = qmlSource(
             QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTick.cpp"));
         const QString editorDisplay = qmlSource(
@@ -778,29 +778,29 @@ int main(int argc, char** argv)
         const QString zoomMenu = qmlSource(QStringLiteral("src/app/qml_ui/timeline/TimelineZoomMenu.qml"));
         const QString brightnessMenu = qmlSource(QStringLiteral("src/app/qml_ui/timeline/TimelineBrightnessMenu.qml"));
         expect(!panel.isEmpty() && !tabBar.isEmpty() && !splitView.isEmpty()
-                   && !viewState.isEmpty() && !controller.isEmpty() && !timelineTick.isEmpty()
+                   && !viewState.isEmpty() && !timelineSession.isEmpty() && !timelineTick.isEmpty()
                    && !editorDisplay.isEmpty() && !zoomMenu.isEmpty() && !brightnessMenu.isEmpty(),
                QStringLiteral("v2 timeline control QML sources are available to the developer spec"));
         const QString controls = panel + tabBar;
         expect(zoomMenu.contains(QStringLiteral("applyZoomPreset"))
                    && brightnessMenu.contains(QStringLiteral("waveformBrightness"))
                    && brightnessMenu.contains(QStringLiteral("measureLineBrightness"))
-                   && controls.contains(QStringLiteral("timelineFollowPreviewToggled")),
-               QStringLiteral("v2 timeline zoom and brightness menus are QML and follow-code stays on the controller"));
-        expect(!controller.contains(QStringLiteral("openTimelineZoomMenu"))
-                   && !controller.contains(QStringLiteral("openTimelineBrightnessMenu"))
-                   && !controller.contains(QStringLiteral("TimelineBrightnessSliderItem")),
+                   && controls.contains(QStringLiteral("followPreviewToggled")),
+               QStringLiteral("v2 timeline zoom and brightness menus are QML and follow-code stays on the session"));
+        expect(!timelineSession.contains(QStringLiteral("openTimelineZoomMenu"))
+                   && !timelineSession.contains(QStringLiteral("openTimelineBrightnessMenu"))
+                   && !timelineSession.contains(QStringLiteral("TimelineBrightnessSliderItem")),
                QStringLiteral("v2 timeline zoom and brightness no longer pop QWidget menus"));
         expect(!controls.contains(QStringLiteral("openTimelineFollowSettingsMenu"))
-                   && !controller.contains(QStringLiteral("FollowSettingsCheckItem")),
+                   && !timelineSession.contains(QStringLiteral("FollowSettingsCheckItem")),
                QStringLiteral("v2 exposes follow-code directly without extra follow settings"));
-        expect(tabBar.contains(QStringLiteral("bottomTabsCurrentTabId"))
-                   && tabBar.contains(QStringLiteral("setBottomTabsCurrentTabId"))
+        expect(tabBar.contains(QStringLiteral("currentTabId"))
+                   && tabBar.contains(QStringLiteral("setCurrentTabId"))
                    && !tabBar.contains(QStringLiteral("activeBottomTab"))
                    && !panel.contains(QStringLiteral("activeBottomTab"))
                    && !splitView.contains(QStringLiteral("activeBottomTab"))
                    && !viewState.contains(QStringLiteral("activeBottomTab")),
-               QStringLiteral("v2 bottom tabs select through shell state instead of ViewState"));
+               QStringLiteral("v2 bottom tabs select through the timeline session instead of ViewState"));
         expect(splitView.contains(QStringLiteral("persistBottomPanelHeightRatio"))
                    && splitView.contains(QStringLiteral("bottomPanelHeightRatio"))
                    && splitView.contains(QStringLiteral("bottomPanelMinimumHeightRatio"))

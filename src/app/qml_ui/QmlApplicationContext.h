@@ -7,6 +7,8 @@
 #include "QmlEditorController.h"
 #include "QmlShortcutModel.h"
 #include "QmlPreviewModel.h"
+#include "QmlShellLifecycle.h"
+#include "QmlTimelineModel.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiSettings.h"
 #include "media/QmlMediaToolsModel.h"
@@ -19,7 +21,6 @@
 #include <QObject>
 
 class MainWindow;
-class QuickShellController;
 
 // Root contract injected into MiaCode.UI. Every visual component reaches the
 // application through these cohesive service objects.
@@ -31,7 +32,10 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* preferences READ preferences CONSTANT)
     Q_PROPERTY(QObject* preview READ preview CONSTANT)
     Q_PROPERTY(QObject* commands READ commands CONSTANT)
+    // Root-window close contract; the polling shell controller it replaced
+    // is gone, so this is deliberately small.
     Q_PROPERTY(QObject* shell READ shell CONSTANT)
+    Q_PROPERTY(QObject* timeline READ timeline CONSTANT)
     Q_PROPERTY(QObject* pages READ pages CONSTANT)
     Q_PROPERTY(QObject* editor READ editor CONSTANT)
     Q_PROPERTY(QObject* editorSync READ editorSync CONSTANT)
@@ -46,7 +50,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* latency READ latency CONSTANT)
 
 public:
-    QmlApplicationContext(MainWindow& backend, QuickShellController& shell, QObject* parent = nullptr);
+    explicit QmlApplicationContext(MainWindow& backend, QObject* parent = nullptr);
 
     QObject* document();
     QObject* analysis();
@@ -54,6 +58,7 @@ public:
     QObject* preview();
     QObject* commands();
     QObject* shell();
+    QObject* timeline();
     QObject* pages();
     QObject* editor();
     QObject* editorSync();
@@ -76,6 +81,7 @@ private:
     QmlDocumentModel document_;
     QmlAnalysisModel analysis_;
     QmlPreviewModel preview_;
+    miacode::qml_ui::QmlTimelineModel timeline_;
     QmlCommandService commands_;
     QmlEditorPageHost pages_;
     miacode::qml_ui::QmlEditorController editor_;
@@ -84,6 +90,6 @@ private:
     miacode::qml_ui::QmlMediaToolsModel mediaTools_;
     miacode::qml_ui::QmlPreferencesModel preferencesModel_;
     miacode::qml_ui::QmlLatencyModel latency_;
-    QuickShellController* shell_ = nullptr;
+    miacode::qml_ui::QmlShellLifecycle lifecycle_;
     QObject* windowChrome_ = nullptr;
 };

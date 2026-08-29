@@ -1410,11 +1410,6 @@ void MainWindow::refreshTimelineMetadata()
     timelineSection_->refreshTimelineMetadata();
 }
 
-void MainWindow::applyTimelineQuickChange(int position, int charsRemoved, int charsAdded)
-{
-    timelineSection_->applyTimelineQuickChange(position, charsRemoved, charsAdded);
-}
-
 void MainWindow::refreshTimelineQuickModelFromCurrentText()
 {
     timelineSection_->refreshTimelineQuickModelFromCurrentText();

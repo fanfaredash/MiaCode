@@ -6,7 +6,7 @@ ApplicationWindow {
     id: window
 
     required property var applicationContext
-    readonly property var shellController: applicationContext.shell
+    readonly property var shellLifecycle: applicationContext.shell
     readonly property var platform: applicationContext.platform
 
     width: 1280
@@ -68,14 +68,14 @@ ApplicationWindow {
         value: window.applicationContext.preferences
     }
 
-    // Same close contract as QuickShell v1: confirm via MainWindow, then notify
-    // bootstrap so preparePreviewForShutdown runs before teardown.
+    // Confirm via MainWindow, then tell bootstrap, so preparePreviewForShutdown
+    // runs before teardown.
     onClosing: function(close) {
-        const confirmed = window.shellController.confirmClose()
+        const confirmed = window.shellLifecycle.confirmClose()
         if (!confirmed)
             close.accepted = false
         if (close.accepted)
-            window.shellController.notifyRootCloseAccepted("qml_ui_root_closing")
+            window.shellLifecycle.notifyRootCloseAccepted("qml_ui_root_closing")
     }
 
     MainView {
@@ -90,7 +90,7 @@ ApplicationWindow {
     ShortcutBindings {
         shortcuts: window.applicationContext.shortcuts
         commands: window.applicationContext.commands
-        shellController: window.shellController
+        previewSession: window.applicationContext.preview
         chartCommandsEnabled: window.applicationContext.document.currentDifficultyId > 0
         onChartTransformRequested: opId => mainView.applyChartTransform(opId)
     }

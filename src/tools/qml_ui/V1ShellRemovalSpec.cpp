@@ -1,14 +1,9 @@
 // Drift guard pinning the removal of the v1 QuickShell UI shell.
 //
-// This spec is EXPECTED TO FAIL until stage 0a of the v1 removal plan
-// completes — see docs/specs/ui/plans/2026-08-25-v2-stage0a-remove-v1-shell.md.
-// A red result here is the deliberate starting state, not a regression.
-//
-// The "QuickShellController is still present for v2" assertion pins it as a
-// survivor (v2 still uses it) — this spec only checks that it no longer
-// branches on a native surface host. When a later stage retires
-// QuickShellController itself, this spec must be updated to match rather
-// than having its failure read as a regression.
+// It also pins stage 2's removal of QuickShellController — the polling adapter
+// that outlived the v1 shell. If a future change reintroduces a QML-facing
+// object that samples MainWindow on a timer, this is the assertion to update
+// deliberately rather than to read a failure here as a regression.
 
 #include <QCoreApplication>
 #include <QDir>
@@ -47,7 +42,7 @@ int main(int argc, char** argv)
     int failed = 0;
 
     // v1 外壳的启动编排、原生表面再宿主、主题桥与 macOS 表面支持全部删除。
-    // QuickShellController 不在此列：v2 仍在使用，按架构设计阶段 2 退役。
+    // QuickShellController 已于阶段 2 退役（2026-08-30）。
     const QStringList removedFiles{
         QStringLiteral("src/app/quick_shell/QuickShellBootstrap.h"),
         QStringLiteral("src/app/quick_shell/QuickShellBootstrap.cpp"),
@@ -140,24 +135,17 @@ int main(int argc, char** argv)
     expect(deletedTypeMentions.isEmpty(),
            QStringLiteral("no source file still names a deleted v1 shell type"), out, &failed);
 
-    // 表面再宿主分支随 v1 一起消失，否则阶段 2 会继承 29 处死分支。
-    const QString controller = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp"));
-    const QString controllerHeader = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.h"));
-    expect(!controller.isEmpty() && !controllerHeader.isEmpty(),
-           QStringLiteral("QuickShellController is still present for v2"), out, &failed);
-    QStringList surfaceHostLeftovers;
-    for (const QString& token : {QStringLiteral("surfaceHost_"), QStringLiteral("QuickShellNativeSurfaceHost")}) {
-        if (controller.contains(token))
-            surfaceHostLeftovers.append(QStringLiteral("QuickShellController.cpp: ") + token);
-        if (controllerHeader.contains(token))
-            surfaceHostLeftovers.append(QStringLiteral("QuickShellController.h: ") + token);
-    }
-    if (!surfaceHostLeftovers.isEmpty()) {
-        out << "  still branches on: " << surfaceHostLeftovers.join(QStringLiteral(", ")) << '\n';
-    }
-    expect(surfaceHostLeftovers.isEmpty(),
-           QStringLiteral("QuickShellController no longer branches on a native surface host"),
-           out, &failed);
+    // 阶段 2 已退役 QuickShellController：轮询适配器整体删除，QML 改为直接
+    // 消费 QmlPreviewModel / QmlTimelineModel / QmlShellLifecycle。
+    expect(readSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp")).isEmpty()
+               && readSource(QStringLiteral("src/app/quick_shell/QuickShellController.h")).isEmpty()
+               && readSource(QStringLiteral("src/app/quick_shell/QuickShellContracts.h")).isEmpty(),
+           QStringLiteral("the polling shell controller and its contracts are gone"), out, &failed);
+    const QString mainQml = readSource(QStringLiteral("src/app/qml_ui/Main.qml"));
+    const QString splitViewQml = readSource(QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
+    expect(!mainQml.contains(QStringLiteral("shellController"))
+               && !splitViewQml.contains(QStringLiteral("shellController")),
+           QStringLiteral("QML no longer consumes a shell controller"), out, &failed);
 
     // 构建系统不得再引用已删除的源文件。
     const QString cmake = readSource(QStringLiteral("CMakeLists.txt"));

@@ -169,7 +169,14 @@
 > 阶段 2 的其余部分（`shellController.*` 消费点迁移、MainWindow 改推送、删 `refreshTimer_`
 > 与 `src/app/quick_shell/`）按「一次做到底」推进。
 
-- [ ] 把 25 个 `shellController.*` QML 消费点搬到两个新会话对象。
+- [x] 把 25 个 `shellController.*` QML 消费点搬走（2026-08-30）。落点是三个对象而非两个：
+      `QmlTimelineModel`（时间轴与底栏页签）、`QmlPreviewModel`（原有对象，接管预览剩余项：
+      画布比例、播放切换、速度步进、交互日志）、`QmlShellLifecycle`（根窗口关闭契约）。
+      其中三处不需要新对象：`exportPageActive` 与 QML 已有的 `pages.activePageId === "export"`
+      是同一个条件；`workspacePanelsSwapped` 就是 `preferencesModel.previewOnLeft`。
+- [x] **轮询消失**（2026-08-30）。`refreshTimer_` 每隔 200ms/33ms 拉 ~25 个值、无论是否播放。
+      现在离散状态由 `MainWindow::shellPresentationChanged` 推送；唯一仍需采样的是播放时钟，
+      它的定时器**只在播放期间运行**。
 - [ ] `TimelineQuickModel` 所有权从 `MainWindow` 迁到 `TimelineSession`。**已延后。**
       *更正（2026-08-30）：此前记的「增量解析本身已完成，剩下的只是所有权」在实现上成立、
       在运行上不成立。`applyTextChange(QString,…)` 确实取代了 `applyContentsChange(QTextDocument*)`，
@@ -177,7 +184,12 @@
       所以 v2 从未走过增量路径——每次编辑都是 `scheduleTimelineRefresh()` 全量重建。
       隐藏编辑器删除后连这条驱动也没有了。要恢复增量，得改由工作区提交驱动（它知道确切编辑范围），
       这正是本项要做的事，不只是搬所有权。*
-- **完成标志**：`refreshTimer_` 消失；`src/app/quick_shell/` 删除；QML 不再出现 `shellController`。
+- **完成标志**：~~`refreshTimer_` 消失~~✅；~~QML 不再出现 `shellController`~~✅；
+      `src/app/quick_shell/` 部分删除——`QuickShellController.{h,cpp}`（866 行）与
+      `QuickShellContracts.h`（127 行，三个抽象基类）已删；目录里剩下的
+      `QuickShellPreviewCompositeSurface.*` / `QuickShellPopupPosition.h` /
+      `QuickShellKeyboardActivation.h` / `QuickShellPreviewSurfacePolicy.h` 是预览合成表面的
+      平台管道，与外壳控制器无关，随阶段 4 的 `MainWindow` 一并处理。
 
 ### 阶段 3 —— `ExportService` 与 Widget 对话框归零
 

@@ -12,7 +12,7 @@ Item {
     readonly property var preferences: applicationContext.preferences
     readonly property var previewSession: applicationContext.preview
     readonly property var commands: applicationContext.commands
-    readonly property var shellController: applicationContext.shell
+    readonly property var timelineSession: applicationContext.timeline
     readonly property var pages: applicationContext.pages
     readonly property var editorController: applicationContext.editor
     readonly property var editorSync: applicationContext.editorSync
@@ -195,7 +195,7 @@ Item {
             sidebarActive: root.compact
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible
-            bottomActive: state.bottomPanelVisible && root.shellController.bottomTabsVisible
+            bottomActive: state.bottomPanelVisible && root.timelineSession.panelVisible
             previewActive: root.compact
                            ? state.compactPanel === "preview"
                            : state.previewVisible
@@ -229,7 +229,8 @@ Item {
                 preferences: root.preferences
                 previewSession: root.previewSession
                 commands: root.commands
-                shellController: root.shellController
+                timelineSession: root.timelineSession
+                preferencesModel: root.preferencesModel
                 pages: root.pages
                 editorController: root.editorController
                 editorSync: root.editorSync
@@ -245,7 +246,6 @@ Item {
                 preferences: root.preferences
                 previewSession: root.previewSession
                 commands: root.commands
-                shellController: root.shellController
                 pages: root.pages
                 compact: root.compact
                 onSettingsRequested: root.commands.openPreferences()

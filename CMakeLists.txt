@@ -151,12 +151,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/cli_shared.cpp
     src/app/cli_video_export.cpp
     src/app/cli_video_export_worker.cpp
-    src/app/quick_shell/QuickShellContracts.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp
     src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
-    src/app/quick_shell/QuickShellController.h
-    src/app/quick_shell/QuickShellController.cpp
     src/common/AdoptedWidgetCoordinates.h
     src/common/AdoptedWidgetCoordinates.cpp
     src/common/AdoptedSurfaceDragAutoScroll.h
@@ -759,6 +756,10 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlAnalysisModel.h
         src/app/qml_ui/QmlPreviewModel.cpp
         src/app/qml_ui/QmlPreviewModel.h
+        src/app/qml_ui/QmlTimelineModel.cpp
+        src/app/qml_ui/QmlTimelineModel.h
+        src/app/qml_ui/QmlShellLifecycle.cpp
+        src/app/qml_ui/QmlShellLifecycle.h
         src/app/qml_ui/QmlNoteImageProvider.cpp
         src/app/qml_ui/QmlNoteImageProvider.h
         src/app/qml_ui/QmlUiSettings.cpp

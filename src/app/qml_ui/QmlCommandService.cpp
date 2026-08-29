@@ -36,7 +36,7 @@ QStringList QmlCommandService::shortcutCommandIds() const
 {
     // Chart transforms only, and the shell binds them to the editor rather than
     // back to MainWindow: a transform acts on the editor's selection, which is
-    // the one thing this side does not have. Preview commands are bound in QML
-    // straight to QuickShellController, which already exposes them.
+    // the one thing this side does not have. Preview commands bind straight to
+    // the preview session instead of coming through here.
     return miacode::qml_ui::qmlShortcutCommandIds();
 }

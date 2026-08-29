@@ -18,7 +18,7 @@ Item {
 
     required property var shortcuts
     required property var commands
-    required property var shellController
+    required property var previewSession
     // Transforms edit the chart, so they are inert without one.
     property bool chartCommandsEnabled: true
 
@@ -42,16 +42,15 @@ Item {
         }
     }
 
-    // Preview commands already have a QML-facing surface on the shell
-    // controller, so they bind straight to it instead of going through the
-    // backend command table.
+    // Preview commands bind straight to the preview session instead of going
+    // through the backend command table.
     Shortcut {
         sequence: root.shortcuts.revision >= 0
             ? root.shortcuts.sequence("preview.stop_or_play", "Ctrl+X")
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.shellController.stopPreview()
+        onActivated: root.previewSession.stop()
     }
 
     Shortcut {
@@ -60,7 +59,7 @@ Item {
             : ""
         enabled: sequence !== ""
         context: Qt.ApplicationShortcut
-        onActivated: root.shellController.togglePreviewPlayback()
+        onActivated: root.previewSession.togglePlayback()
     }
 
     Shortcut {
@@ -69,7 +68,7 @@ Item {
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.shellController.adjustPreviewSpeed(-1)
+        onActivated: root.previewSession.adjustRate(-1)
     }
 
     Shortcut {
@@ -78,6 +77,6 @@ Item {
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.shellController.adjustPreviewSpeed(1)
+        onActivated: root.previewSession.adjustRate(1)
     }
 }

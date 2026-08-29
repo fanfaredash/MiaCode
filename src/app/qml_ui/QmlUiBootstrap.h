@@ -14,7 +14,6 @@ class QQuickWindow;
 
 class MainWindow;
 class QmlApplicationContext;
-class QuickShellController;
 class ChartDropOverlay;
 class QTimer;
 
@@ -40,7 +39,6 @@ private:
 
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
-    std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QmlApplicationContext> applicationContext_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
     // Owns the native-event filter; must outlive the root window.

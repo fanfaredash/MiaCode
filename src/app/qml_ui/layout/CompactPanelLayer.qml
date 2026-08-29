@@ -9,7 +9,6 @@ Item {
     required property var preferences
     required property var previewSession
     required property var commands
-    required property var shellController
     required property var pages
     property bool compact: false
     signal fullscreenRequested()
@@ -55,7 +54,6 @@ Item {
         sourceComponent: PreviewPane {
             anchors.fill: parent
             previewSession: root.previewSession
-            shellController: root.shellController
             onFullscreenRequested: root.fullscreenRequested()
         }
     }

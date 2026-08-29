@@ -4,12 +4,8 @@
 
 #include "mainwindow/MainWindow.h"
 #include "mainwindow/MainWindowShared.h"
-#include "QuickShellController.h"
 
-QmlApplicationContext::QmlApplicationContext(
-    MainWindow& backend,
-    QuickShellController& shell,
-    QObject* parent)
+QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* parent)
     : QObject(parent)
     , backend_(backend)
     , workspace_()
@@ -18,7 +14,8 @@ QmlApplicationContext::QmlApplicationContext(
     , preferences_(this)
     , document_(backend, workspace_, fileService_, analysisService_, this)
     , analysis_(backend, workspace_, analysisService_, this)
-    , preview_(backend, shell, this)
+    , preview_(backend, this)
+    , timeline_(backend, this)
     , commands_(backend, document_, this)
     , pages_(backend, this)
     , editor_(this)
@@ -27,7 +24,7 @@ QmlApplicationContext::QmlApplicationContext(
     , mediaTools_(backend, this)
     , preferencesModel_(backend, this)
     , latency_(backend, this)
-    , shell_(&shell)
+    , lifecycle_(backend, this)
 {
     // 字号 / 行距 used to stop at the Widgets editor, which v2 no longer shows,
     // so the QML editor never saw either. The model still owns persistence;
@@ -55,7 +52,8 @@ QObject* QmlApplicationContext::analysis() { return &analysis_; }
 QObject* QmlApplicationContext::preferences() { return &preferences_; }
 QObject* QmlApplicationContext::preview() { return &preview_; }
 QObject* QmlApplicationContext::commands() { return &commands_; }
-QObject* QmlApplicationContext::shell() { return shell_; }
+QObject* QmlApplicationContext::shell() { return &lifecycle_; }
+QObject* QmlApplicationContext::timeline() { return &timeline_; }
 QObject* QmlApplicationContext::pages() { return &pages_; }
 QObject* QmlApplicationContext::editor() { return &editor_; }
 QObject* QmlApplicationContext::editorSync() { return &backend_.editorSyncController(); }

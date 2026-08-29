@@ -13,7 +13,8 @@ Rectangle {
     required property var analysisSession
     required property var preferences
     required property var commands
-    required property var shellController
+    required property var timelineSession
+    required property var previewSession
     property real zoomMenuClosedAt: 0
     property real brightnessMenuClosedAt: 0
     signal analysisRowActivated(int difficultyId, var revision, int line, int column, int endColumn, double second)
@@ -29,7 +30,7 @@ Rectangle {
         anchors.top: parent.top
         documentSession: root.documentSession
         analysisSession: root.analysisSession
-        shellController: root.shellController
+        timelineSession: root.timelineSession
     }
 
     TimelineQuickItem {
@@ -40,23 +41,23 @@ Rectangle {
         anchors.top: tabs.bottom
         anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
-        visible: root.shellController.bottomTabsCurrentTabId === "timeline"
+        visible: root.timelineSession.currentTabId === "timeline"
         enabled: visible
-        stateBridge: root.shellController.timelineStateBridge
+        stateBridge: root.timelineSession.stateBridge
         // Keep header labels and markers clear of the QML controls.
         headerLeftLimit: zoomButton.x + zoomButton.width + 2
         headerRightLimit: Math.max(0, brightnessButton.x - 2)
         headerMarkerLeftLimit: zoomButton.x + zoomButton.width + 2
         headerMarkerRightLimit: Math.max(0, brightnessButton.x - 2)
-        onHeaderNavigateRequested: second => root.shellController.timelineHeaderNavigate(second)
-        onTimelineWheelNavigateRequested: second => root.shellController.timelineWheelNavigate(second)
-        onCenterNavigateRequested: second => root.shellController.timelineCenterNavigate(second)
-        onTimelineDragStarted: root.shellController.timelineDragStarted()
-        onTimelineDragFinished: second => root.shellController.timelineDragFinished(second)
-        onTimelineUserInteractionStarted: root.shellController.timelineUserInteractionStarted()
-        onTimelineSurfaceReady: root.shellController.noteTimelineSurfaceReady()
-        onFollowPreviewToggled: enabled => root.shellController.timelineFollowPreviewToggled(enabled)
-        onPreviewPlayPauseRequested: root.shellController.togglePreviewPlayback()
+        onHeaderNavigateRequested: second => root.timelineSession.headerNavigate(second)
+        onTimelineWheelNavigateRequested: second => root.timelineSession.wheelNavigate(second)
+        onCenterNavigateRequested: second => root.timelineSession.centerNavigate(second)
+        onTimelineDragStarted: root.timelineSession.dragStarted()
+        onTimelineDragFinished: second => root.timelineSession.dragFinished(second)
+        onTimelineUserInteractionStarted: root.timelineSession.userInteractionStarted()
+        onTimelineSurfaceReady: root.timelineSession.surfaceReady()
+        onFollowPreviewToggled: enabled => root.timelineSession.followPreviewToggled(enabled)
+        onPreviewPlayPauseRequested: root.previewSession.togglePlayback()
     }
 
     AppDropDownButton {
@@ -66,8 +67,8 @@ Rectangle {
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         height: Math.min(implicitHeight, Math.max(1, timelineItem.timelineTop))
         visible: timelineItem.visible
-        text: qsTr("%1%").arg(Math.round(root.shellController.timelineStateBridge
-            ? root.shellController.timelineStateBridge.zoomScale * 100
+        text: qsTr("%1%").arg(Math.round(root.timelineSession.stateBridge
+            ? root.timelineSession.stateBridge.zoomScale * 100
             : 50))
         sizeToLabels: zoomMenu.zoomLabels
         tooltip: qsTr("时间轴缩放")
@@ -111,13 +112,13 @@ Rectangle {
 
     TimelineZoomMenu {
         id: zoomMenu
-        stateBridge: root.shellController.timelineStateBridge
+        stateBridge: root.timelineSession.stateBridge
         onClosed: root.zoomMenuClosedAt = Date.now()
     }
 
     TimelineBrightnessMenu {
         id: brightnessMenu
-        stateBridge: root.shellController.timelineStateBridge
+        stateBridge: root.timelineSession.stateBridge
         onClosed: root.brightnessMenuClosedAt = Date.now()
     }
 
@@ -127,7 +128,7 @@ Rectangle {
         anchors.top: tabs.bottom
         anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
-        visible: root.shellController.bottomTabsCurrentTabId === "validation"
+        visible: root.timelineSession.currentTabId === "validation"
 
         Row {
             id: summaryRow
@@ -221,7 +222,7 @@ Rectangle {
         anchors.top: tabs.bottom
         anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
-        visible: root.shellController.bottomTabsCurrentTabId === "muri"
+        visible: root.timelineSession.currentTabId === "muri"
 
         ListView {
             id: muriList

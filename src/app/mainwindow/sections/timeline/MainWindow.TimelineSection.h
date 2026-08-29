@@ -39,7 +39,6 @@ public:
     QString editorText() const;
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();
-    void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
     bool timelineTabIsForeground() const;
     bool quickTimelineBridgeReady() const;
