@@ -1734,52 +1734,26 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(qml_document_replacement_sequence_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
-    miacode_add_dev_tool(plain_code_editor_spec TEST
+    miacode_add_dev_tool(adopted_surface_geometry_spec TEST
         SOURCES
-            src/tools/editor/PlainCodeEditorSpec.cpp
-            src/core/chart/transform/ChartBatchTransform.h
-            src/core/chart/transform/ChartBatchTransform.Parsers.cpp
-            src/core/chart/transform/ChartBatchTransform.Subdivision.cpp
-            src/core/chart/transform/ChartBatchTransform.Selection.cpp
-            src/core/chart/transform/ChartBatchTransform.Transform.cpp
-            src/editor/PlainCodeEditor.h
-            src/editor/PlainCodeEditor.cpp
-            src/editor/PlainCodeEditor.Layout.cpp
-            src/editor/PlainCodeEditor.HighlightAndCaret.cpp
-            src/editor/PlainCodeEditor.BracketCompletion.cpp
-            src/editor/PlainCodeEditor.Input.cpp
-            src/editor/PlainCodeEditor.Bookmarks.cpp
-            src/editor/BookmarkCommentSyntax.h
-            src/editor/BookmarkCommentSyntax.cpp
-            src/editor/TouchPadAuthoringEdit.h
-            src/editor/TouchPadAuthoringEdit.cpp
-            src/core/chart/parser/SimaiCommentScan.h
-            src/core/chart/parser/SimaiCommentScan.cpp
-            src/editor/BracketCompletionPopup.h
-            src/editor/BracketCompletionPopup.cpp
-            src/editor/SimaiCompletionCatalog.h
-            src/editor/SimaiCompletionCatalog.cpp
-            src/editor/BookmarkCommentSyntax.h
-            src/editor/BookmarkCommentSyntax.cpp
-            src/editor/SimaiTextEditPolicy.h
-            src/editor/SimaiTextEditPolicy.cpp
-            src/app/ui/UiText.h
-            src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-                                            src/app/ui/UiTheme.h
-            src/app/ui/UiTheme.cpp
-            src/app/ui/ShortcutRegistry.h
-            src/app/ui/ShortcutRegistry.cpp
-            src/common/InputShortcutGesture.h
-            src/common/InputShortcutGesture.cpp
+            src/tools/ui/AdoptedSurfaceGeometrySpec.cpp
             src/common/AdoptedWidgetCoordinates.h
             src/common/AdoptedWidgetCoordinates.cpp
             src/common/AdoptedSurfaceDragAutoScroll.h
             src/common/AdoptedSurfaceDragAutoScroll.cpp
-            ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/common src/extensions
+        INCLUDES src src/common
+    )
+
+    miacode_add_dev_tool(touch_pad_authoring_edit_spec TEST
+        SOURCES
+            src/tools/editor/TouchPadAuthoringEditSpec.cpp
+            src/editor/TouchPadAuthoringEdit.h
+            src/editor/TouchPadAuthoringEdit.cpp
+            src/core/chart/parser/SimaiCommentScan.h
+            src/core/chart/parser/SimaiCommentScan.cpp
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/editor
     )
 
     miacode_add_dev_tool(simai_completion_catalog_spec TEST

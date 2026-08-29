@@ -153,10 +153,21 @@
 
 剩余：
 
-- [ ] 删除隐藏 `PlainCodeEditor` 与第二份文档副本（阶段完成标志）。当前仍有 20 个文件引用它。
-- [ ] 修复 `qml_document_lifecycle_contract_spec`（**当前为红**，见 §7.1）。
+- [x] 删除隐藏 `PlainCodeEditor` 与第二份文档副本（2026-08-30）。`src/editor/PlainCodeEditor.*`
+      与 `BracketCompletionPopup.*` 已删除，应用不再链接任何 Widgets 文本编辑器。
+      过程中修好了两个原本已坏的功能：扩展 `editor/*` API 与 14 个谱面变换命令，
+      两者此前都作用在一个从未被 QML 选区同步过的隐藏光标上。
+- [x] 修复 `qml_document_lifecycle_contract_spec`（2026-08-29，见 §7.1）。
+- [ ] **增量时间轴解析已实际失效**（2026-08-30 记录）。`applyTimelineQuickChange` 只由隐藏编辑器的
+      `contentsChange` 驱动，而每次 v2 写入都经 `setEditorText` 抑制脏跟踪，所以它从未运行——
+      v2 的每一次编辑都是全量重建。隐藏编辑器删除后这条路彻底断了。重新接上的正确位置是工作区提交
+      （它知道确切编辑范围），属于阶段 2 `TimelineQuickModel` 所有权那一项，**所有者已决定继续延后**。
 
 ### 阶段 2 —— `PreviewSession` / `TimelineSession`，退役 `QuickShellController`
+
+> **2026-08-30 所有者决定：`TimelineQuickModel` 所有权迁移继续延后。**
+> 阶段 2 的其余部分（`shellController.*` 消费点迁移、MainWindow 改推送、删 `refreshTimer_`
+> 与 `src/app/quick_shell/`）按「一次做到底」推进。
 
 - [ ] 把 25 个 `shellController.*` QML 消费点搬到两个新会话对象。
 - [ ] `TimelineQuickModel` 所有权从 `MainWindow` 迁到 `TimelineSession`。

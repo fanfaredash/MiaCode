@@ -83,6 +83,29 @@ int main(int argc, char** argv)
     // Each independent v1 event supplies every input and every expected output
     // field. A new result field cannot silently escape the shared runner.
     const QList<PolicyCase> cases = {
+        // Half-width normalization, carried over from the Widgets editor's spec:
+        // that editor had its own copy of the conversion, and the policy — the
+        // one v2 actually runs — had no coverage for these characters.
+        {QStringLiteral("ideographic comma normalizes to a slash separator"),
+         {QString(), 0, 0, QStringLiteral("、"), Qt::Key_unknown, Qt::NoModifier,
+          true, true, false, true, QString()},
+         {true, {QStringLiteral("/"), 1, 1, true, true, 0, 0, QStringLiteral("/"), false}, {}}},
+        {QStringLiteral("full-width comma normalizes to the beat separator"),
+         {QString(), 0, 0, QStringLiteral("，"), Qt::Key_unknown, Qt::NoModifier,
+          true, true, false, true, QString()},
+         {true, {QStringLiteral(","), 1, 1, true, true, 0, 0, QStringLiteral(","), false}, {}}},
+        {QStringLiteral("full-width slash, hash and colon convert to half width"),
+         {QString(), 0, 0, QStringLiteral("／＃："), Qt::Key_unknown, Qt::NoModifier,
+          true, true, false, true, QString()},
+         {true, {QStringLiteral("/#:"), 3, 3, true, true, 0, 0, QStringLiteral("/#:"), false}, {}}},
+        {QStringLiteral("shift-6 forces a caret regardless of the IME's glyph"),
+         {QString(), 0, 0, QStringLiteral("＾"), Qt::Key_6, Qt::ShiftModifier,
+          false, true, false, true, QString()},
+         {true, {QStringLiteral("^"), 1, 1, true, true, 0, 0, QStringLiteral("^"), false}, {}}},
+        {QStringLiteral("half-width conversion is off when the preference is off"),
+         {QString(), 0, 0, QStringLiteral("，"), Qt::Key_unknown, Qt::NoModifier,
+          true, false, false, true, QString()},
+         {true, {QStringLiteral("，"), 1, 1, true, true, 0, 0, QStringLiteral("，"), false}, {}}},
         {QStringLiteral("IME half-width bracket conversion"),
          {QString(), 0, 0, QStringLiteral("【"), Qt::Key_BracketLeft, Qt::NoModifier,
           true, true, false, true, QString()},
