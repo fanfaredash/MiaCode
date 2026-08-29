@@ -170,8 +170,13 @@
 > 与 `src/app/quick_shell/`）按「一次做到底」推进。
 
 - [ ] 把 25 个 `shellController.*` QML 消费点搬到两个新会话对象。
-- [ ] `TimelineQuickModel` 所有权从 `MainWindow` 迁到 `TimelineSession`。
-      *（增量解析本身已完成：`applyTextChange(QString,…)` 取代 `applyContentsChange(QTextDocument*)`，`MainWindow.TimelineQuickParse.cpp:54` 已无全量回退分支。剩下的只是所有权。）*
+- [ ] `TimelineQuickModel` 所有权从 `MainWindow` 迁到 `TimelineSession`。**已延后。**
+      *更正（2026-08-30）：此前记的「增量解析本身已完成，剩下的只是所有权」在实现上成立、
+      在运行上不成立。`applyTextChange(QString,…)` 确实取代了 `applyContentsChange(QTextDocument*)`，
+      但唯一的驱动方是隐藏编辑器的 `contentsChange`，而它被 `setEditorText` 的抑制挡住，
+      所以 v2 从未走过增量路径——每次编辑都是 `scheduleTimelineRefresh()` 全量重建。
+      隐藏编辑器删除后连这条驱动也没有了。要恢复增量，得改由工作区提交驱动（它知道确切编辑范围），
+      这正是本项要做的事，不只是搬所有权。*
 - **完成标志**：`refreshTimer_` 消失；`src/app/quick_shell/` 删除；QML 不再出现 `shellController`。
 
 ### 阶段 3 —— `ExportService` 与 Widget 对话框归零
