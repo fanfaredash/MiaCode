@@ -52,11 +52,11 @@
 
 `MainView.qml:304` 的 `unavailableFeatureDialog` 当前只被三处触发：
 
-| 功能 | 触发点 |
+| 功能 | 状态 |
 |---|---|
-| 关于 MiaCode | `chrome/MainMenu.qml:337` |
-| 音频设置 | `chrome/MainToolBar.qml:58` |
-| 预览设置 | `chrome/MainToolBar.qml:63` |
+| ~~关于 MiaCode~~ | **已完成（2026-08-30）**：`components/AboutDialog.qml`，事实来自 `QmlUiSettings::aboutInfo()`（版本宏 + `QSysInfo` + UiText）。v1 的图标彩蛋（连点三次）未搬。 |
+| ~~音频设置~~ | **已完成（2026-08-30）**：`preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel`。10 条通道（音量 + 静音）与 Break 星星尾判音开关，写入即应用到运行中的预览并持久化；「设为/恢复本地默认」两个预设按钮保留。**试听（audition）未搬**——见 §3.C。 |
+| 预览设置 | 仍弹「暂未更新支持」。Widgets 对话框里的 视频 / 玩法 / 性能 三组，约 20 个控件（缩放模式、内外亮度、方形缩放、流速、中央显示、判定特效、星星叠放顺序、判定文字距离、暂停时判定线、平滑亮度、时间戳、触控板创作快捷键、调试输出）。 |
 
 ### B. 有入口，但落到 Widget 对话框/页面（8 项）
 
@@ -87,6 +87,9 @@
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
 
+- [ ] **音频设置的试听未搬**（2026-08-30 记录）。Widgets 对话框拖动音量条时会用一个
+      对话框本地的 `QtPreviewSfxRuntime` 播一次对应音效（预览正在播放时抑制，避免重叠）。
+      QML 页面写入即生效但不试听。要补需要给 QML 页一个同样的本地 SFX 运行时。
 - [ ] **导出区间的可视化进度条**（2026-08-29 记录）。导出页的区间只有起止秒数输入框，
       缺少 v1 那条能直观看出区间落在整曲何处的进度条 / 区间条。
 - [x] **启动崩溃恢复弹窗仍是 Widgets**（2026-08-29 已修）：`MainWindow.DocumentAutosaveFlow.cpp`

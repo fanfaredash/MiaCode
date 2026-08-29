@@ -481,6 +481,40 @@ void MainWindow::PreviewSection::setTouchPadAuthoringCtrlHoldActive(bool active)
     applyEffectivePreviewOutlineVariantToCanvas();
 }
 
+PreviewAudioSettings MainWindow::currentPreviewAudioSettings() const
+{
+    return state_.previewAudioSettings_;
+}
+
+void MainWindow::applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings)
+{
+    state_.previewAudioSettings_ = settings;
+    state_.previewAudioSettings_.normalize();
+    // Break-slide tail cheer is an app-scoped sound-design choice, not a
+    // per-chart mix, so the page's value is what the preference becomes.
+    state_.breakSlideTailCheerMutedPreference_ =
+        state_.previewAudioSettings_.breakSlideTailCheerMuted;
+    applyPreviewAudioSettingsToRuntime();
+    // The mixer is project-scoped; savePortableState carries the app-level
+    // companions edited from the same page.
+    saveProjectAudioPreferences();
+    savePortableState();
+}
+
+void MainWindow::savePreviewAudioSettingsAsSoftwareDefault()
+{
+    state_.previewAudioSettings_.normalize();
+    state_.softwarePreviewAudioSettings_ = previewAudioSettingsWithBreakSlideTailCheerPreference(
+        state_.previewAudioSettings_, state_.breakSlideTailCheerMutedPreference_);
+    savePortableState();
+}
+
+void MainWindow::restorePreviewAudioSettingsFromSoftwareDefault()
+{
+    applyPreviewAudioSettingsFromUi(previewAudioSettingsWithBreakSlideTailCheerPreference(
+        state_.softwarePreviewAudioSettings_, state_.breakSlideTailCheerMutedPreference_));
+}
+
 void MainWindow::refreshEditorAuthoringContext()
 {
     if (previewSection_ != nullptr) {

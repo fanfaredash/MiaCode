@@ -23,6 +23,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* paren
     , platform_(this)
     , mediaTools_(backend, this)
     , preferencesModel_(backend, this)
+    , audioSettings_(backend, this)
     , latency_(backend, this)
     , lifecycle_(backend, this)
 {
@@ -71,6 +72,7 @@ QObject* QmlApplicationContext::jobProgress() { return backend_.jobProgressServi
 QObject* QmlApplicationContext::mediaTools() { return &mediaTools_; }
 
 QObject* QmlApplicationContext::preferencesModel() { return &preferencesModel_; }
+QObject* QmlApplicationContext::audioSettings() { return &audioSettings_; }
 
 QObject* QmlApplicationContext::latency() { return &latency_; }
 

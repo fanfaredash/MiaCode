@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QSettings>
 #include <QString>
+#include <QVariantMap>
 
 // 桌面工作台的持久化边界。QML 在拖动期间维护临时几何，只在用户完成
 // 操作后写入这里，从而避免分隔线移动时连续刷新配置文件。
@@ -36,6 +37,9 @@ class QmlUiSettings final : public QObject
 public:
     // Localized lookup for QML that holds a UiText key rather than a string.
     Q_INVOKABLE QString localizedText(const QString& key) const;
+    // What 关于 MiaCode shows: version, platform triple and build type. Read
+    // from the build's own macros so the page cannot drift from the binary.
+    Q_INVOKABLE QVariantMap aboutInfo() const;
     explicit QmlUiSettings(QObject* parent = nullptr);
 
     bool sidebarVisible() const;

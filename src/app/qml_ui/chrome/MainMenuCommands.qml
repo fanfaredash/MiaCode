@@ -27,5 +27,6 @@ QtObject {
     signal metadataRequested()
     signal chartTransformRequested(string opId)
     signal normalizeChartRequested()
+    signal aboutRequested()
     signal unavailableFeatureRequested(string featureName)
 }

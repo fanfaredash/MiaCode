@@ -13,6 +13,7 @@
 #include "QmlUiSettings.h"
 #include "media/QmlMediaToolsModel.h"
 #include "preferences/QmlPreferencesModel.h"
+#include "preview/QmlAudioSettingsModel.h"
 #include "latency/QmlLatencyModel.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
@@ -47,6 +48,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* jobProgress READ jobProgress CONSTANT)
     Q_PROPERTY(QObject* mediaTools READ mediaTools CONSTANT)
     Q_PROPERTY(QObject* preferencesModel READ preferencesModel CONSTANT)
+    Q_PROPERTY(QObject* audioSettings READ audioSettings CONSTANT)
     Q_PROPERTY(QObject* latency READ latency CONSTANT)
 
 public:
@@ -69,6 +71,7 @@ public:
     QObject* jobProgress();
     QObject* mediaTools();
     QObject* preferencesModel();
+    QObject* audioSettings();
     QObject* latency();
     void setWindowChrome(QObject* chrome);
 
@@ -89,6 +92,7 @@ private:
     QmlUiPlatformChrome platform_;
     miacode::qml_ui::QmlMediaToolsModel mediaTools_;
     miacode::qml_ui::QmlPreferencesModel preferencesModel_;
+    miacode::qml_ui::QmlAudioSettingsModel audioSettings_;
     miacode::qml_ui::QmlLatencyModel latency_;
     miacode::qml_ui::QmlShellLifecycle lifecycle_;
     QObject* windowChrome_ = nullptr;

@@ -56,6 +56,7 @@ Item {
         onSaveAsRequested: saveFileDialog.open()
         onChartTransformRequested: opId => root.applyChartTransform(opId)
         onNormalizeChartRequested: root.pages.openNormalizeWholeChart()
+        onAboutRequested: aboutDialog.open()
     }
 
     function toggleSidebar() {
@@ -211,6 +212,7 @@ Item {
             onRedoRequested: root.redo()
             onOpenRequested: openFileDialog.open()
             onSaveRequested: root.saveDocument()
+            onAudioSettingsRequested: audioSettingsDialog.open()
             onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         }
 
@@ -427,6 +429,18 @@ Item {
         id: prependBlankDialog
         objectName: "shellPrependBlankDialog"
         mediaTools: root.mediaTools
+    }
+
+    AudioSettingsDialog {
+        id: audioSettingsDialog
+        objectName: "shellAudioSettingsDialog"
+        audioSettings: root.applicationContext.audioSettings
+    }
+
+    AboutDialog {
+        id: aboutDialog
+        objectName: "shellAboutDialog"
+        preferences: root.preferences
     }
 
     PreferencesDialog {

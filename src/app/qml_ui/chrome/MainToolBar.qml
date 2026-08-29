@@ -12,6 +12,7 @@ Rectangle {
     signal saveRequested()
     signal undoRequested()
     signal redoRequested()
+    signal audioSettingsRequested()
     signal unavailableFeatureRequested(string featureName)
 
     property bool sidebarActive: false
@@ -55,7 +56,7 @@ Rectangle {
         IconButton {
             iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
             tooltip: qsTr("音频设置")
-            onClicked: root.unavailableFeatureRequested(qsTr("音频设置"))
+            onClicked: root.audioSettingsRequested()
         }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/preview-settings.svg")

@@ -1,9 +1,12 @@
 #include "QmlUiSettings.h"
 
 #include "mainwindow/MainWindowShared.h"
+#include "AppVersion.h"
 #include "ui/UiText.h"
 
+#include <QCoreApplication>
 #include <QGuiApplication>
+#include <QSysInfo>
 #include <QtGlobal>
 
 namespace {
@@ -44,6 +47,34 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
     editorOverwriteModeEnabled_ = editorUi.value(QStringLiteral("editor_overwrite_mode")).toBool(false);
     editorAutoCompletionEnabled_ = editorUi.value(QStringLiteral("editor_auto_completion")).toBool(
         editorUi.value(QStringLiteral("editor_auto_close_brackets")).toBool(true));
+}
+
+QVariantMap QmlUiSettings::aboutInfo() const
+{
+    QString version = QString::fromLatin1(MIACODE_DISPLAY_VERSION_STRING).trimmed();
+    if (version.isEmpty()) {
+        version = QCoreApplication::applicationVersion().trimmed();
+    }
+    if (version.isEmpty()) {
+        version = QStringLiteral("0.0.0");
+    }
+    return QVariantMap{
+        {QStringLiteral("version"), version},
+        {QStringLiteral("platform"), QStringLiteral("%1 / %2 / %3")
+                                         .arg(QSysInfo::productType())
+                                         .arg(QSysInfo::currentCpuArchitecture())
+                                         .arg(QSysInfo::buildAbi())},
+        {QStringLiteral("buildType"),
+#ifdef NDEBUG
+         QStringLiteral("Release")
+#else
+         QStringLiteral("Debug")
+#endif
+        },
+        {QStringLiteral("platformLabel"), UiText::text(QStringLiteral("about.platform"))},
+        {QStringLiteral("buildTypeLabel"), UiText::text(QStringLiteral("about.build_type"))},
+        {QStringLiteral("title"), UiText::text(QStringLiteral("action.about"))},
+    };
 }
 
 QString QmlUiSettings::localizedText(const QString& key) const

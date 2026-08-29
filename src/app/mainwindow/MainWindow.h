@@ -288,6 +288,14 @@ public:
     // active chart from the MainWindow side (the extension host). Without it
     // they would be writing into a document copy the QML editor overwrites on
     // its next commit.
+    // 音频设置 page. The mixer is a value type, so the page reads a copy and
+    // hands one back; every write lands on the same runtime-apply and persist
+    // path the Widgets dialog used, rather than the page poking members.
+    PreviewAudioSettings currentPreviewAudioSettings() const;
+    void applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings);
+    void savePreviewAudioSettingsAsSoftwareDefault();
+    void restorePreviewAudioSettingsFromSoftwareDefault();
+
     void setQmlChartTextHandler(std::function<bool(const QString&)> handler);
     bool applyChartTextThroughWorkspace(const QString& text);
     DocumentValidationSnapshot documentValidationSnapshot() const;
