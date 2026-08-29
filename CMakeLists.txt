@@ -656,6 +656,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/components/UiRequestHost.qml
     src/app/qml_ui/components/DialogFooter.qml
+    src/app/qml_ui/components/EditableValue.qml
     src/app/qml_ui/components/LabeledCombo.qml
     src/app/qml_ui/components/LabeledSlider.qml
     src/app/qml_ui/components/AboutDialog.qml

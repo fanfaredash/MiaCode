@@ -104,6 +104,10 @@
       （`MainWindow::setPreviewPlayingFlag`）播报，模型不再采样任何东西——顺带修好了
       暂停时拖动时间轴/键盘定位不会移动走带滑块的问题。
       漂移守卫：`preview_transport_push_spec`。
+- [x] **数值读数不能输入**（2026-08-30 用户要求，同日完成）。v1 的 `EditableValueLabel`
+      单击即可就地输入；v2 现在是 `components/EditableValue.qml`，**双击**读数（音量的
+      「50%」、预览设置的各滑块、偏好设置字号）变成输入框，提交时钳制到区间并对齐步进，
+      与拖动走同一条应用路径。Esc 取消，失焦提交。
 - [ ] **导出区间的可视化进度条**（2026-08-29 记录）。导出页的区间只有起止秒数输入框，
       缺少 v1 那条能直观看出区间落在整曲何处的进度条 / 区间条。
 - [x] **启动崩溃恢复弹窗仍是 Widgets**（2026-08-29 已修）：`MainWindow.DocumentAutosaveFlow.cpp`

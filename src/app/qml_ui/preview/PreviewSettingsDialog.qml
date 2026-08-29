@@ -31,6 +31,13 @@ Dialog {
 
     function put(key, value) { root.previewSettings.setValue(key, value) }
 
+    // 1.0 / 1.25 / 1.5 — one decimal where that is the whole number, two where
+    // the quarter step needs it. Same rule the Widgets dialog used.
+    function flowSpeedLabel(speed) {
+        const oneDecimal = Math.round(speed * 10) / 10
+        return Math.abs(speed - oneDecimal) < 0.001 ? speed.toFixed(1) : speed.toFixed(2)
+    }
+
     contentItem: ColumnLayout {
         spacing: 10
 
@@ -142,7 +149,9 @@ Dialog {
                 to: root.values.flowSpeedMax
                 stepSize: root.values.flowSpeedStep
                 value: root.values.tapFlowSpeed
-                readout: root.values.tapFlowSpeed.toFixed(2)
+                suffix: ""
+                decimals: 2
+                readout: root.flowSpeedLabel(root.values.tapFlowSpeed)
                 onMoved: function(v) { root.put("tapFlowSpeed", v) }
             }
             LabeledSlider {
@@ -152,7 +161,9 @@ Dialog {
                 to: root.values.flowSpeedMax
                 stepSize: root.values.flowSpeedStep
                 value: root.values.touchFlowSpeed
-                readout: root.values.touchFlowSpeed.toFixed(2)
+                suffix: ""
+                decimals: 2
+                readout: root.flowSpeedLabel(root.values.touchFlowSpeed)
                 onMoved: function(v) { root.put("touchFlowSpeed", v) }
             }
             LabeledCombo {

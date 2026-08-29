@@ -102,12 +102,19 @@ Dialog {
                         restoreMode: Binding.RestoreNone
                     }
                 }
-                Text {
-                    Layout.preferredWidth: 40
-                    horizontalAlignment: Text.AlignRight
+                // Double-clicking the percentage types it. A short handle
+                // cannot land on an exact number, and these are numbers people
+                // want exactly.
+                EditableValue {
+                    Layout.preferredWidth: 44
+                    Layout.preferredHeight: 22
                     text: channelRow.channel.percent + "%"
-                    color: Theme.colors.text.active
-                    font.family: Theme.uiFont
+                    value: channelRow.channel.percent
+                    from: 0
+                    to: 100
+                    onCommitted: function(v) {
+                        root.audioSettings.setChannelPercent(channelRow.modelData, Math.round(v))
+                    }
                 }
             }
         }

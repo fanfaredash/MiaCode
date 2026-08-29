@@ -15,7 +15,8 @@ RowLayout {
     property real stepSize: 1
     property real value: 0
     property string suffix: "%"
-    property string readout: Math.round(root.value) + root.suffix
+    property int decimals: 0
+    property string readout: root.value.toFixed(root.decimals) + root.suffix
     signal moved(real value)
     // Held handles matter to some pages (auditioning waits for the release), so
     // the state is published rather than kept inside.
@@ -49,11 +50,17 @@ RowLayout {
             restoreMode: Binding.RestoreNone
         }
     }
-    Text {
+    // Double-clicking the read-out types the value. `moved` carries it, so a
+    // typed value reaches the caller by the same route a dragged one does.
+    EditableValue {
         Layout.preferredWidth: 48
-        horizontalAlignment: Text.AlignRight
+        Layout.preferredHeight: 22
         text: root.readout
-        color: Theme.colors.text.active
-        font.family: Theme.uiFont
+        value: root.value
+        from: root.from
+        to: root.to
+        stepSize: root.stepSize
+        decimals: root.decimals
+        onCommitted: function(v) { root.moved(v) }
     }
 }
