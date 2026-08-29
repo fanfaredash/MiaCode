@@ -25,11 +25,17 @@ QmlApplicationContext::QmlApplicationContext(
     , shortcuts_(this)
     , platform_(this)
     , mediaTools_(backend, this)
+    , preferencesModel_(backend, this)
     , shell_(&shell)
 {
     editor_.setHalfWidthInputEnabled(preferences_.editorHalfWidthInputEnabled());
     editor_.setOverwriteMode(preferences_.editorOverwriteModeEnabled());
     editor_.setAutoCompletionEnabled(preferences_.editorAutoCompletionEnabled());
+    // A shortcut edited in the QML page must reach the live QActions, otherwise
+    // it would only take effect after a restart.
+    connect(&shortcuts_, &miacode::qml_ui::QmlShortcutModel::revisionChanged, this, [this]() {
+        backend_.applyConfiguredShortcuts();
+    });
 }
 
 QObject* QmlApplicationContext::document() { return &document_; }
@@ -53,6 +59,8 @@ QObject* QmlApplicationContext::uiRequests() { return backend_.uiRequestService(
 QObject* QmlApplicationContext::jobProgress() { return backend_.jobProgressService(); }
 
 QObject* QmlApplicationContext::mediaTools() { return &mediaTools_; }
+
+QObject* QmlApplicationContext::preferencesModel() { return &preferencesModel_; }
 
 void QmlApplicationContext::setWindowChrome(QObject* chrome)
 {

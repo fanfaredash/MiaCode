@@ -31,6 +31,8 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(bool editorAutoCompletionEnabled READ editorAutoCompletionEnabled CONSTANT)
 
 public:
+    // Localized lookup for QML that holds a UiText key rather than a string.
+    Q_INVOKABLE QString localizedText(const QString& key) const;
     explicit QmlUiSettings(QObject* parent = nullptr);
 
     bool sidebarVisible() const;

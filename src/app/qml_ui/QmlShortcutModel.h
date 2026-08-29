@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QVariantList>
 #include <QString>
 
 namespace miacode::qml_ui {
@@ -35,6 +36,16 @@ public:
     // than a registry id still need the platform spelling to display.
     Q_INVOKABLE QString standardDisplayText(int standardKey) const;
     Q_INVOKABLE void reload();
+
+    // Shortcut editing. editableShortcuts() returns one row per command:
+    // { id, label, shortcutText, defaultText, isDefault }.
+    Q_INVOKABLE QVariantList editableShortcuts() const;
+    Q_INVOKABLE bool setShortcutText(const QString& id, const QString& shortcutText);
+    Q_INVOKABLE void resetShortcut(const QString& id);
+    Q_INVOKABLE void resetAllShortcuts();
+    // Portable name for one key code, so QML can compose a binding string
+    // without knowing Qt's key-name table.
+    Q_INVOKABLE QString keyName(int key) const;
 
 signals:
     void revisionChanged();

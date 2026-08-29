@@ -1430,6 +1430,36 @@ void MainWindow::persistEditorTextFontPreference() const
     editorSection_->persistEditorTextFontPreference();
 }
 
+int MainWindow::currentEditorTextFontSize() const
+{
+    return editorTextFontPointSize_;
+}
+
+double MainWindow::currentEditorLineSpacingFactor() const
+{
+    return editorLineSpacingFactor_;
+}
+
+bool MainWindow::currentEditorHalfWidthInputEnabled() const
+{
+    return editorHalfWidthInputEnabled_;
+}
+
+bool MainWindow::currentEditorAutoCompletionEnabled() const
+{
+    return editorAutoCompletionEnabled_;
+}
+
+bool MainWindow::currentEditorImeInputDisabled() const
+{
+    return editorImeInputDisabled_;
+}
+
+bool MainWindow::currentWorkspacePanelsSwapped() const
+{
+    return workspacePanelsSwapped_;
+}
+
 void MainWindow::applyEditorTextFontSize(int pointSize, bool persistPreference)
 {
     editorSection_->applyEditorTextFontSize(pointSize, persistPreference);

@@ -46,6 +46,14 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
         editorUi.value(QStringLiteral("editor_auto_close_brackets")).toBool(true));
 }
 
+QString QmlUiSettings::localizedText(const QString& key) const
+{
+    const QString value = UiText::text(key);
+    // UiText echoes the key back when a translation is missing; report that as
+    // empty so callers can fall through to their own fallback.
+    return value == key ? QString() : value;
+}
+
 bool QmlUiSettings::sidebarVisible() const { return sidebarVisible_; }
 int QmlUiSettings::sidebarWidth() const { return sidebarWidth_; }
 int QmlUiSettings::sidebarMinimumContentWidth() const { return kSidebarMinimumContentWidth; }

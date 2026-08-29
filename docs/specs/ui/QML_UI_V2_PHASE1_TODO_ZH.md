@@ -68,7 +68,7 @@
 | ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
 | 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（5,780 行） |
 | ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
-| 偏好设置 | `QmlCommandService::openPreferences()` | `MainWindow::onPreferences()`（2,284 行，扩展页签已于 2026-08-29 移除）<br>背景页签已随背景功能删除，见 §7.0 |
+| ~~偏好设置~~ | `QmlCommandService::openPreferences()` | **已完成（2026-08-29）**：`PreferencesDialog.qml`（界面/编辑器/性能/快捷键）+ `ShortcutEditorDialog.qml`，`QmlPreferencesModel` 承接；扩展页签与背景功能已删除 |
 | ~~批量导出~~ | `openBatchExport()` | **已完成（2026-08-29）**：QML `ExportVideoPage` 的 batch 页是唯一批量界面，`BatchExportPanel` 组已删除 |
 
 > 0b（扩展宿主）仍是已延后状态，不得记为"已删除"或"功能不可用"。

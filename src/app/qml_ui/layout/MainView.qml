@@ -20,6 +20,8 @@ Item {
     readonly property var uiRequests: applicationContext.uiRequests
     readonly property var jobProgress: applicationContext.jobProgress
     readonly property var mediaTools: applicationContext.mediaTools
+    readonly property var preferencesModel: applicationContext.preferencesModel
+    readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
     // 打开文件时的未保存决策。关闭应用走 v1 shell confirmClose 协议，
@@ -417,8 +419,17 @@ Item {
         mediaTools: root.mediaTools
     }
 
+    PreferencesDialog {
+        id: preferencesDialog
+        objectName: "shellPreferencesDialog"
+        preferencesModel: root.preferencesModel
+        shortcuts: root.shortcutModel
+        preferences: root.preferences
+    }
+
     Connections {
         target: root.pages
         function onMediaToolsRequested() { mediaToolsDialog.open() }
+        function onPreferencesRequested() { preferencesDialog.open() }
     }
 }

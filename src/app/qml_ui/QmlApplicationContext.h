@@ -10,6 +10,7 @@
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiSettings.h"
 #include "media/QmlMediaToolsModel.h"
+#include "preferences/QmlPreferencesModel.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
 #include "app/v2/AnalysisService.h"
@@ -40,6 +41,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
     Q_PROPERTY(QObject* jobProgress READ jobProgress CONSTANT)
     Q_PROPERTY(QObject* mediaTools READ mediaTools CONSTANT)
+    Q_PROPERTY(QObject* preferencesModel READ preferencesModel CONSTANT)
 
 public:
     QmlApplicationContext(MainWindow& backend, QuickShellController& shell, QObject* parent = nullptr);
@@ -59,6 +61,7 @@ public:
     QObject* uiRequests();
     QObject* jobProgress();
     QObject* mediaTools();
+    QObject* preferencesModel();
     void setWindowChrome(QObject* chrome);
 
 private:
@@ -76,6 +79,7 @@ private:
     miacode::qml_ui::QmlShortcutModel shortcuts_;
     QmlUiPlatformChrome platform_;
     miacode::qml_ui::QmlMediaToolsModel mediaTools_;
+    miacode::qml_ui::QmlPreferencesModel preferencesModel_;
     QuickShellController* shell_ = nullptr;
     QObject* windowChrome_ = nullptr;
 };

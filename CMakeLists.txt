@@ -136,6 +136,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/JobProgressService.h
     src/app/qml_ui/media/QmlMediaToolsModel.cpp
     src/app/qml_ui/media/QmlMediaToolsModel.h
+    src/app/qml_ui/preferences/QmlPreferencesModel.cpp
+    src/app/qml_ui/preferences/QmlPreferencesModel.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -686,6 +688,8 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/media/MediaToolsDialog.qml
     src/app/qml_ui/media/PvBatchCompressionDialog.qml
     src/app/qml_ui/media/PrependBlankDialog.qml
+    src/app/qml_ui/preferences/PreferencesDialog.qml
+    src/app/qml_ui/preferences/ShortcutEditorDialog.qml
     src/app/qml_ui/editor/FindReplaceBar.qml
     src/app/qml_ui/editor/BookmarkList.qml
     src/app/qml_ui/editor/LineNumberGutter.qml

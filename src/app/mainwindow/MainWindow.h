@@ -155,6 +155,7 @@ signals:
     void videoExportWorkerRunningChanged(bool running);
     void normalizeWholeChartRequested();
     void mediaToolsRequested();
+    void preferencesRequested();
     void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
@@ -538,7 +539,6 @@ private:
     QRect previewFullscreenControlCardRect(bool visible) const;
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
-    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(
         const QString& value,
         PreviewCanvasFrameRateMode fallback) const;
@@ -574,11 +574,7 @@ private:
     QString previewSkinVariantStorageValue() const;
     QStringList availablePreviewSkinDirectoryNames() const;
     QString previewSkinDisplayName(const QString& directoryName) const;
-    double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
-    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
-    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
-    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
     double timelineSecondForCursor(int line, int col) const;
     bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
@@ -595,6 +591,10 @@ private:
     void applyPortablePreviewSettings(const QJsonObject& preview);
     void loadPortableState();
     void savePortableState() const;
+
+public:
+    // 偏好设置's narrow surface for the QML page. Every setter already took a
+    // "persist" flag, so the QML model is a projection rather than new policy.
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
@@ -602,6 +602,23 @@ private:
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
+    // Re-applies shortcut bindings to the live QActions after an edit.
+    void applyConfiguredShortcuts();
+    // Performance + workspace settings the QML preferences page drives.
+    void setWorkspacePanelsSwapped(bool swapped, bool persistState);
+    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
+    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    double currentPreviewCanvasRefreshRate() const;
+    int currentEditorTextFontSize() const;
+    double currentEditorLineSpacingFactor() const;
+    bool currentEditorHalfWidthInputEnabled() const;
+    bool currentEditorAutoCompletionEnabled() const;
+    bool currentEditorImeInputDisabled() const;
+    bool currentWorkspacePanelsSwapped() const;
+
+private:
     // Transient Alt-hold override: while the preview is paused, holding Alt
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
     void setPauseDisplayAltHoldActive(bool active);

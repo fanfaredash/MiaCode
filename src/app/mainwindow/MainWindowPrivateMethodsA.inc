@@ -251,7 +251,6 @@
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     void updatePreviewWorkspaceLayout();
     void updatePreviewPanelLayout(int panelWidthOverride = -1, int panelHeightOverride = -1);
-    void setWorkspacePanelsSwapped(bool swapped, bool persistState);
     void applyWorkspacePanelArrangement();
     void cacheWorkspaceLayoutSizes();
     void restoreWorkspaceLayoutSizes();

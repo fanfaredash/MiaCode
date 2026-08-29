@@ -69,6 +69,12 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
     connect(&backend, &MainWindow::mediaToolsRequested, this, [this]() {
         openMediaProcessingTools();
     });
+    connect(&backend, &MainWindow::preferencesRequested, this, [this]() {
+        if (overlayActive()) {
+            leaveOverlayPage();
+        }
+        emit preferencesRequested();
+    });
 }
 
 QmlEditorPageHost::~QmlEditorPageHost()
