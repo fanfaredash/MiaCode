@@ -389,14 +389,6 @@ public:
         return hostCall(QStringLiteral("editor/getText"));
     }
 
-    Q_INVOKABLE QJSValue getVisibleRange()
-    {
-        if (kind_ == Kind::Timeline) {
-            return hostCall(QStringLiteral("timeline/getVisibleRange"));
-        }
-        return hostCall(QStringLiteral("editor/getVisibleRange"));
-    }
-
     Q_INVOKABLE QJSValue revealRange(const QJSValue& range)
     {
         return hostCall(QStringLiteral("editor/revealRange"), runtime_->scriptValueToJson(range));
@@ -425,18 +417,6 @@ public:
     Q_INVOKABLE QJSValue setSelection(const QJSValue& range)
     {
         return hostCall(QStringLiteral("editor/setSelection"), runtime_->scriptValueToJson(range));
-    }
-
-    Q_INVOKABLE QJSValue addDecoration(const QJSValue& range, const QJSValue& options)
-    {
-        QJsonObject params = runtime_->scriptValueToJson(range);
-        params.insert(QStringLiteral("options"), runtime_->scriptValueToJson(options));
-        return hostCall(QStringLiteral("editor/addDecoration"), params);
-    }
-
-    Q_INVOKABLE QJSValue clearDecorations(const QString& ownerId = {})
-    {
-        return hostCall(QStringLiteral("editor/clearDecorations"), QJsonObject{{QStringLiteral("ownerId"), ownerId}});
     }
 
     Q_INVOKABLE QJSValue getLine(int line)
@@ -509,26 +489,6 @@ public:
     Q_INVOKABLE QJSValue showCodeActions(const QJSValue& context = {})
     {
         return hostCall(QStringLiteral("editor/showCodeActions"), runtime_->scriptValueToJson(context));
-    }
-
-    Q_INVOKABLE QJSValue addGutterIcon(const QJSValue& options)
-    {
-        return hostCall(QStringLiteral("editor/addGutterIcon"), runtime_->scriptValueToJson(options));
-    }
-
-    Q_INVOKABLE QJSValue clearGutterIcons(const QString& ownerId = {})
-    {
-        return hostCall(QStringLiteral("editor/clearGutterIcons"), QJsonObject{{QStringLiteral("ownerId"), ownerId}});
-    }
-
-    Q_INVOKABLE QJSValue fold(const QJSValue& range)
-    {
-        return hostCall(QStringLiteral("editor/fold"), runtime_->scriptValueToJson(range));
-    }
-
-    Q_INVOKABLE QJSValue unfold(const QJSValue& range)
-    {
-        return hostCall(QStringLiteral("editor/unfold"), runtime_->scriptValueToJson(range));
     }
 
     Q_INVOKABLE QJSValue registerHoverProvider(const QJSValue& provider)

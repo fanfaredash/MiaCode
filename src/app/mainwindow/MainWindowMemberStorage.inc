@@ -677,7 +677,6 @@
         QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
         QHash<QString, QSet<QString>> ignoredHeaderIssueTypesByFile_;
         QVector<ValidationDecoration> validationDecorations_;
-        QHash<QString, QVector<QTextEdit::ExtraSelection>> extensionEditorExtraSelections_;
         QHash<QString, QVector<ExtensionDiagnosticEntry>> extensionDiagnosticsByOwner_;
         QHash<QString, QVector<ExtensionTimelineMarkerEntry>> extensionTimelineMarkersByOwner_;
         QVector<QJsonObject> extensionExportPresets_;
@@ -694,10 +693,6 @@
         QVector<QPointer<QShortcut>> extensionShortcutObjects_;
         QJsonObject extensionProjectData_;
         DeletedDifficultyUndoState deletedDifficultyUndoState_;
-        QByteArray validationExtraSelectionsSignature_;
-        QByteArray lastEditorExtraSelectionsSignature_;
-        QVector<QTextEdit::ExtraSelection> cachedValidationExtraSelections_;
-        QVector<QTextEdit::ExtraSelection> currentEditorExtraSelections_;
         QString activeOutlineKey_ = "metadata";
         int activeDifficultyId_ = 0;
     };
@@ -1201,9 +1196,5 @@
     QHash<QString, QSet<QString>>& ignoredHeaderIssueTypesByFile_ = state_.ignoredHeaderIssueTypesByFile_;
     QVector<ValidationDecoration>& validationDecorations_ = state_.validationDecorations_;
     DeletedDifficultyUndoState& deletedDifficultyUndoState_ = state_.deletedDifficultyUndoState_;
-    QByteArray& validationExtraSelectionsSignature_ = state_.validationExtraSelectionsSignature_;
-    QByteArray& lastEditorExtraSelectionsSignature_ = state_.lastEditorExtraSelectionsSignature_;
-    QVector<QTextEdit::ExtraSelection>& cachedValidationExtraSelections_ = state_.cachedValidationExtraSelections_;
-    QVector<QTextEdit::ExtraSelection>& currentEditorExtraSelections_ = state_.currentEditorExtraSelections_;
     QString& activeOutlineKey_ = state_.activeOutlineKey_;
     int& activeDifficultyId_ = state_.activeDifficultyId_;

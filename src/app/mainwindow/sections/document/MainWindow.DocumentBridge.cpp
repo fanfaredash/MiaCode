@@ -449,6 +449,20 @@ bool MainWindow::applyCommittedQmlDocument(
         usedSystemEncoding);
 }
 
+void MainWindow::setQmlChartTextHandler(std::function<bool(const QString&)> handler)
+{
+    qmlChartTextHandler_ = std::move(handler);
+}
+
+bool MainWindow::applyChartTextThroughWorkspace(const QString& text)
+{
+    // No handler means no QML document owner is attached, which in v2 only
+    // happens before bootstrap finishes. Refuse rather than fall back to the
+    // local copy: a write that does not reach the workspace is lost on the
+    // next commit, which is worse than a reported failure.
+    return qmlChartTextHandler_ ? qmlChartTextHandler_(text) : false;
+}
+
 void MainWindow::setQmlDocumentSaveHandler(
     std::function<bool(const QString&)> handler)
 {

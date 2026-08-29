@@ -283,6 +283,12 @@ public:
         bool dirty, quint64 revision, QmlDocumentCommitKind kind,
         bool usedSystemEncoding = false);
     void setQmlDocumentSaveHandler(std::function<bool(const QString&)> handler);
+    // Write-back into the workspace for the few callers that still edit the
+    // active chart from the MainWindow side (the extension host). Without it
+    // they would be writing into a document copy the QML editor overwrites on
+    // its next commit.
+    void setQmlChartTextHandler(std::function<bool(const QString&)> handler);
+    bool applyChartTextThroughWorkspace(const QString& text);
     DocumentValidationSnapshot documentValidationSnapshot() const;
     QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
     void invalidateDocumentValidationRevision();
@@ -466,6 +472,7 @@ public:
     };
 private:
     std::function<bool(const QString&)> qmlDocumentSaveHandler_;
+    std::function<bool(const QString&)> qmlChartTextHandler_;
     quint64 appliedQmlWorkspaceRevision_ = 0;
     std::unique_ptr<miacode::v2::EditorSyncController> editorSyncController_;
     using BatchTransform = std::function<QString(const QString&, int*)>;
@@ -648,7 +655,6 @@ private:
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
-    void refreshEditorExtraSelections();
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();

@@ -86,6 +86,19 @@ bool EditorSyncController::editorContextActive() const
         && contextRevision_ == readyRevision_;
 }
 
+EditorSelectionState EditorSyncController::editorSelection() const
+{
+    EditorSelectionState selection;
+    selection.difficultyId = contextDifficultyId_;
+    selection.revision = contextRevision_;
+    selection.anchor = contextAnchor_;
+    selection.position = contextPosition_;
+    selection.focused = editorFocused_;
+    selection.valid = editorVisible_ && !metadataMode_ && contextDifficultyId_ > 0
+        && contextDifficultyId_ == readyDifficultyId_ && contextRevision_ == readyRevision_;
+    return selection;
+}
+
 void EditorSyncController::setEditorReadiness(
     int difficultyId, qulonglong revision, bool visible, bool metadataMode)
 {

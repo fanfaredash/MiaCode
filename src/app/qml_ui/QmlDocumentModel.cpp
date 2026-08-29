@@ -29,6 +29,11 @@ QmlDocumentModel::QmlDocumentModel(
     backend_->setQmlDocumentSaveHandler([this](const QString& path) {
         return saveToPath(path);
     });
+    backend_->setQmlChartTextHandler([this](const QString& text) {
+        if (workspace_ == nullptr) return false;
+        setChartText(text);
+        return chartText() == text;
+    });
     // The workspace was seeded from the already-open backend document above.
     // Publish that first committed identity as well so every subsequent
     // backend navigation value is stamped with the workspace revision.
@@ -73,6 +78,7 @@ QmlDocumentModel::~QmlDocumentModel()
 {
     if (backend_ != nullptr) {
         backend_->setQmlDocumentSaveHandler({});
+        backend_->setQmlChartTextHandler({});
     }
 }
 

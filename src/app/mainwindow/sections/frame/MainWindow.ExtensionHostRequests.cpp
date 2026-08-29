@@ -999,13 +999,75 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             }
             return removed;
         };
-        const auto collectProviders = [this](const QString& kind, QJsonObject context) {
+        // The chart editor is QML. Everything below reads the active chart text
+        // and the selection the QML editor last published, and writes back
+        // through the workspace — an edit made to the hidden widget's document
+        // would be discarded by the next commit from QML.
+        const auto chartSelection = [this]() {
+            return editorSyncController_->editorSelection();
+        };
+        const auto selectionOffsets = [this, chartSelection](int* startOut, int* endOut) {
+            const miacode::v2::EditorSelectionState selection = chartSelection();
+            const int size = editorText().size();
+            const int anchor = qBound(0, selection.anchor, size);
+            const int position = qBound(0, selection.position, size);
+            *startOut = qMin(anchor, position);
+            *endOut = qMax(anchor, position);
+            return selection.valid;
+        };
+        const auto lineColumnAt = [](const QString& text, int offset) {
+            const int clamped = qBound(0, offset, text.size());
+            const int line = text.left(clamped).count(QLatin1Char('\n')) + 1;
+            const int lineStart = text.lastIndexOf(QLatin1Char('\n'), qMax(0, clamped - 1)) + 1;
+            return QPair<int, int>(line, clamped - lineStart + 1);
+        };
+        const auto offsetAt = [](const QString& text, int line, int column) -> int {
+            int offset = 0;
+            for (int current = 1; current < qMax(1, line); ++current) {
+                const int newline = text.indexOf(QLatin1Char('\n'), offset);
+                if (newline < 0) return static_cast<int>(text.size());
+                offset = newline + 1;
+            }
+            const int lineEnd = text.indexOf(QLatin1Char('\n'), offset);
+            const int limit = lineEnd < 0 ? static_cast<int>(text.size()) : lineEnd;
+            return qBound(offset, offset + qMax(0, column - 1), limit);
+        };
+        // Moving the QML caret is a navigation request, so it passes the same
+        // identity gate every other preview→editor handoff does.
+        const auto selectChartRange = [this](int start, int end, bool reveal) {
+            return editorSyncController_->requestNavigation(
+                       activeDifficultyId_, appliedQmlWorkspaceRevision_,
+                       qMax(0, start), qMax(qMax(0, start), end), false, reveal) != 0;
+        };
+        const auto replaceChartRange = [this, selectChartRange](
+                                           int start, int end, const QString& insert) {
+            const QString original = editorText();
+            const int from = qBound(0, start, original.size());
+            const int to = qBound(from, end, original.size());
+            QString next = original;
+            next.replace(from, to - from, insert);
+            if (!applyChartTextThroughWorkspace(next)) {
+                return false;
+            }
+            // The revision moved with the write, so the caret request has to be
+            // stamped after it, not before.
+            selectChartRange(from + insert.size(), from + insert.size(), true);
+            return true;
+        };
+        const auto collectProviders = [this, chartSelection, lineColumnAt](
+                                          const QString& kind, QJsonObject context) {
             if (!context.contains(QStringLiteral("token")) && !context.contains(QStringLiteral("text"))) {
-                auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-                if (editor != nullptr) {
-                    const QTextCursor cursor = editor->textCursor();
-                    const QString lineText = cursor.block().text();
-                    int start = qBound(0, cursor.positionInBlock(), lineText.size());
+                const miacode::v2::EditorSelectionState selection = chartSelection();
+                if (selection.valid) {
+                    const QString text = editorText();
+                    const QPair<int, int> at = lineColumnAt(text, selection.position);
+                    const int lineStart = qBound(0, selection.position, text.size())
+                        - (at.second - 1);
+                    const int lineEnd = text.indexOf(QLatin1Char('\n'), lineStart) < 0
+                        ? text.size()
+                        : text.indexOf(QLatin1Char('\n'), lineStart);
+                    const QString lineText = text.mid(lineStart, lineEnd - lineStart);
+                    int start = qBound(0, at.second - 1, lineText.size());
                     int end = start;
                     const auto isTokenChar = [](QChar ch) {
                         return ch.isLetterOrNumber() || ch == QLatin1Char('_') || ch == QLatin1Char('#') || ch == QLatin1Char('&');
@@ -1017,7 +1079,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                         ++end;
                     }
                     context.insert(QStringLiteral("token"), lineText.mid(start, end - start));
-                    context.insert(QStringLiteral("line"), cursor.blockNumber() + 1);
+                    context.insert(QStringLiteral("line"), at.first);
                     context.insert(QStringLiteral("startCol"), start + 1);
                     context.insert(QStringLiteral("endCol"), end + 1);
                 }
@@ -1063,7 +1125,6 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     addExtensionDiagnosticToPanel(diagnostic);
                 }
             }
-            refreshEditorExtraSelections();
             updateEditorValidationSummary();
         };
         const auto activeDifficultyJson = [this]() {
@@ -1195,7 +1256,8 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             }
             return okValue(result);
         };
-        const auto documentEdit = [this, okValue, errorObject](const QJsonObject& request) {
+        const auto documentEdit = [this, okValue, errorObject, selectionOffsets,
+                                   replaceChartRange](const QJsonObject& request) {
             if (!hasActiveDifficulty()) {
                 return errorObject(QStringLiteral("No active difficulty."));
             }
@@ -1209,19 +1271,25 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 const QString kind = op.value(QStringLiteral("op")).toString().trimmed();
                 const QString path = op.value(QStringLiteral("path")).toString().trimmed();
                 if (kind == QStringLiteral("replaceText") || path == QStringLiteral("/text") || path == QStringLiteral("/difficulty/text")) {
-                    setEditorText(op.value(QStringLiteral("value")).toString(op.value(QStringLiteral("text")).toString()));
-                    ++applied;
-                } else if (kind == QStringLiteral("insertText")) {
-                    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-                    if (editor == nullptr) {
+                    if (!applyChartTextThroughWorkspace(
+                            op.value(QStringLiteral("value")).toString(op.value(QStringLiteral("text")).toString()))) {
                         return errorObject(QStringLiteral("No active editor."));
                     }
-                    QTextCursor cursor = editor->textCursor();
-                    if (op.contains(QStringLiteral("position"))) {
-                        cursor.setPosition(qBound(0, op.value(QStringLiteral("position")).toInt(), editor->toPlainText().size()));
+                    ++applied;
+                } else if (kind == QStringLiteral("insertText")) {
+                    int start = 0;
+                    int end = 0;
+                    if (!selectionOffsets(&start, &end)) {
+                        return errorObject(QStringLiteral("No active editor."));
                     }
-                    cursor.insertText(op.value(QStringLiteral("text")).toString(op.value(QStringLiteral("value")).toString()));
-                    editor->setTextCursor(cursor);
+                    if (op.contains(QStringLiteral("position"))) {
+                        start = end = op.value(QStringLiteral("position")).toInt();
+                    }
+                    if (!replaceChartRange(
+                            start, end,
+                            op.value(QStringLiteral("text")).toString(op.value(QStringLiteral("value")).toString()))) {
+                        return errorObject(QStringLiteral("No active editor."));
+                    }
                     ++applied;
                 } else if (kind == QStringLiteral("applyTextEdits")) {
                     const QString original = editorText();
@@ -1246,7 +1314,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     for (const TextEdit& edit : edits) {
                         next.replace(edit.start, edit.end - edit.start, edit.text);
                     }
-                    setEditorText(next);
+                    if (!applyChartTextThroughWorkspace(next)) {
+                        return errorObject(QStringLiteral("No active editor."));
+                    }
                     applied += edits.size();
                 } else if (path == QStringLiteral("/metadata/title")) {
                     if (titleEdit_ != nullptr) {
@@ -1283,7 +1353,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             }
             return okValue(QJsonObject{{QStringLiteral("applied"), applied}});
         };
-        const auto executeInternalCommand = [this, okValue, errorObject, documentEdit](const QString& command, const QJsonObject& args) {
+        const auto executeInternalCommand = [this, okValue, errorObject, documentEdit,
+                                             selectionOffsets, selectChartRange,
+                                             replaceChartRange](const QString& command, const QJsonObject& args) {
             const QString id = command.trimmed();
             if (id == QStringLiteral("app.openPreferences")) {
                 onPreferences();
@@ -1316,18 +1388,33 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             } else if (id == QStringLiteral("editor.redo") && redoAction_ != nullptr) {
                 redoAction_->trigger();
             } else if (id == QStringLiteral("editor.cut") || id == QStringLiteral("editor.copy") || id == QStringLiteral("editor.paste") || id == QStringLiteral("editor.selectAll")) {
-                auto* editor = qobject_cast<QPlainTextEdit*>(editorWidget_);
-                if (editor == nullptr) {
+                // These used to call cut()/copy()/paste() on the hidden widget,
+                // which needed a focus this side of the app can no longer have.
+                // Expressed against the chart text and the QML selection they
+                // mean the same thing and actually happen.
+                const QString text = editorText();
+                int start = 0;
+                int end = 0;
+                if (!hasActiveDifficulty() || !selectionOffsets(&start, &end)) {
                     return errorObject(QStringLiteral("No active editor."));
                 }
-                if (id == QStringLiteral("editor.cut")) {
-                    editor->cut();
+                QClipboard* clipboard = QGuiApplication::clipboard();
+                if (id == QStringLiteral("editor.selectAll")) {
+                    selectChartRange(0, text.size(), false);
                 } else if (id == QStringLiteral("editor.copy")) {
-                    editor->copy();
-                } else if (id == QStringLiteral("editor.paste")) {
-                    editor->paste();
-                } else {
-                    editor->selectAll();
+                    if (clipboard != nullptr) {
+                        clipboard->setText(text.mid(start, end - start));
+                    }
+                } else if (id == QStringLiteral("editor.cut")) {
+                    if (clipboard != nullptr) {
+                        clipboard->setText(text.mid(start, end - start));
+                    }
+                    if (!replaceChartRange(start, end, QString())) {
+                        return errorObject(QStringLiteral("No active editor."));
+                    }
+                } else if (!replaceChartRange(
+                               start, end, clipboard != nullptr ? clipboard->text() : QString())) {
+                    return errorObject(QStringLiteral("No active editor."));
                 }
             } else if (id == QStringLiteral("preview.play")) {
                 toggleShellPreviewPlayback();
@@ -1686,10 +1773,15 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             return QJsonObject{{QStringLiteral("ok"), url.isValid() && QDesktopServices::openUrl(url)}};
         }
         if (method == QStringLiteral("window/focusEditor")) {
-            if (editorWidget_ != nullptr) {
-                editorWidget_->setFocus();
-            }
-            return QJsonObject{{QStringLiteral("ok"), editorWidget_ != nullptr}};
+            // Focusing the chart editor means focusing a QML item, which this
+            // side cannot reach. A navigation request to the current caret is
+            // the closest honest equivalent: it brings the editor to the front
+            // of the workspace and reveals the caret.
+            int start = 0;
+            int end = 0;
+            const bool ok = hasActiveDifficulty() && selectionOffsets(&start, &end)
+                && selectChartRange(start, end, true);
+            return QJsonObject{{QStringLiteral("ok"), ok}};
         }
         if (method == QStringLiteral("window/focusMetadataPanel")) {
             const bool ok = switchToMetadataField();
@@ -1934,188 +2026,124 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             markCurrentFieldDirty();
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
+        // The editor surface below is the QML one. Methods that only had
+        // meaning against a live QWidget — getVisibleRange (viewport geometry),
+        // addDecoration / clearDecorations (extra selections painted into the
+        // widget), and the addGutterIcon / clearGutterIcons / fold / unfold
+        // registrations that never had an implementation at all — were reading
+        // and drawing on a control inside a WA_DontShowOnScreen window, so they
+        // reported hidden-layout numbers and painted where nobody looks. They
+        // are gone rather than reimplemented; what remains reads the workspace
+        // and moves the QML caret through the same identity gate the preview
+        // uses.
         if (method == QStringLiteral("editor/getCursor") || method == QStringLiteral("editor/getSelection")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            QTextCursor cursor = editor != nullptr ? editor->textCursor() : QTextCursor();
+            const QString text = editorText();
+            int start = 0;
+            int end = 0;
+            selectionOffsets(&start, &end);
+            const miacode::v2::EditorSelectionState selection = chartSelection();
+            const QPair<int, int> at = lineColumnAt(text, selection.position);
             return okValue(QJsonObject{
-                {QStringLiteral("position"), cursor.position()},
-                {QStringLiteral("anchor"), cursor.anchor()},
-                {QStringLiteral("selectionStart"), cursor.selectionStart()},
-                {QStringLiteral("selectionEnd"), cursor.selectionEnd()},
-                {QStringLiteral("line"), cursor.blockNumber()},
-                {QStringLiteral("column"), cursor.positionInBlock()},
+                {QStringLiteral("position"), qBound(0, selection.position, text.size())},
+                {QStringLiteral("anchor"), qBound(0, selection.anchor, text.size())},
+                {QStringLiteral("selectionStart"), start},
+                {QStringLiteral("selectionEnd"), end},
+                {QStringLiteral("line"), at.first - 1},
+                {QStringLiteral("column"), at.second - 1},
             });
         }
         if (method == QStringLiteral("editor/getText")) {
             return okValue(hasActiveDifficulty() ? editorText() : QString());
         }
-        if (method == QStringLiteral("editor/getVisibleRange")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr) {
-                return errorObject(QStringLiteral("No active editor."));
-            }
-            const QTextCursor first = editor->cursorForPosition(QPoint(0, 0));
-            const QTextCursor last = editor->cursorForPosition(QPoint(qMax(0, editor->viewport()->width() - 1), qMax(0, editor->viewport()->height() - 1)));
-            return okValue(QJsonObject{
-                {QStringLiteral("start"), first.position()},
-                {QStringLiteral("end"), last.position()},
-                {QStringLiteral("startLine"), first.blockNumber() + 1},
-                {QStringLiteral("endLine"), last.blockNumber() + 1},
-                {QStringLiteral("viewportWidth"), editor->viewport()->width()},
-                {QStringLiteral("viewportHeight"), editor->viewport()->height()},
-            });
-        }
         if (method == QStringLiteral("editor/revealRange")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr) {
+            if (!hasActiveDifficulty()) {
                 return errorObject(QStringLiteral("No active editor."));
             }
-            QTextCursor cursor = editor->textCursor();
-            const int start = params.value(QStringLiteral("start")).toInt(-1);
-            const int end = params.value(QStringLiteral("end")).toInt(start);
-            if (start >= 0) {
-                cursor.setPosition(start);
-                if (end >= start) {
-                    cursor.setPosition(end, QTextCursor::KeepAnchor);
-                }
-            } else if (!miacode::mainwindow::editor_selection::buildSelectionCursor(
-                           editor,
-                           qMax(1, params.value(QStringLiteral("line")).toInt(1)),
-                           qMax(1, params.value(QStringLiteral("col")).toInt(1)),
-                           qMax(1, params.value(QStringLiteral("endLine")).toInt(params.value(QStringLiteral("line")).toInt(1))),
-                           qMax(1, params.value(QStringLiteral("endCol")).toInt(params.value(QStringLiteral("col")).toInt(1))),
-                           &cursor)) {
+            const QString text = editorText();
+            int start = params.value(QStringLiteral("start")).toInt(-1);
+            int end = params.value(QStringLiteral("end")).toInt(start);
+            if (start < 0) {
+                const int line = qMax(1, params.value(QStringLiteral("line")).toInt(1));
+                const int column = qMax(1, params.value(QStringLiteral("col")).toInt(1));
+                start = offsetAt(text, line, column);
+                end = offsetAt(text,
+                               qMax(1, params.value(QStringLiteral("endLine")).toInt(line)),
+                               qMax(1, params.value(QStringLiteral("endCol")).toInt(column)));
+            }
+            if (!selectChartRange(start, end, true)) {
                 return errorObject(QStringLiteral("Invalid range."));
             }
-            editor->setTextCursor(cursor);
-            editor->ensureCursorVisible();
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("editor/getParsedSnapshot")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            const QTextCursor cursor = editor != nullptr ? editor->textCursor() : QTextCursor();
+            const QString text = hasActiveDifficulty() ? editorText() : QString();
+            const miacode::v2::EditorSelectionState selection = chartSelection();
+            const QPair<int, int> at = lineColumnAt(text, selection.position);
             return okValue(QJsonObject{
                 {QStringLiteral("activeDifficultyId"), activeDifficultyId_},
-                {QStringLiteral("textLength"), hasActiveDifficulty() ? editorText().size() : 0},
-                {QStringLiteral("lineCount"), editor != nullptr && editor->document() != nullptr ? editor->document()->blockCount() : 0},
+                {QStringLiteral("textLength"), text.size()},
+                {QStringLiteral("lineCount"), text.isEmpty()
+                     ? 0 : text.count(QLatin1Char('\n')) + 1},
                 {QStringLiteral("cursor"), QJsonObject{
-                     {QStringLiteral("position"), cursor.position()},
-                     {QStringLiteral("line"), cursor.blockNumber() + 1},
-                     {QStringLiteral("column"), cursor.positionInBlock() + 1},
+                     {QStringLiteral("position"), qBound(0, selection.position, text.size())},
+                     {QStringLiteral("line"), at.first},
+                     {QStringLiteral("column"), at.second},
                  }},
                 {QStringLiteral("noteMarkerCount"), state_.latestTimelineNoteMarkers_.size()},
                 {QStringLiteral("noteMarkerSignature"), QString::fromLatin1(state_.latestTimelineNoteMarkerSignature_.toHex())},
             });
         }
         if (method == QStringLiteral("editor/insertText") || method == QStringLiteral("editor/replaceSelection")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr || !hasActiveDifficulty()) {
+            int start = 0;
+            int end = 0;
+            if (!hasActiveDifficulty() || !selectionOffsets(&start, &end)) {
                 return errorObject(QStringLiteral("No active editor difficulty."));
             }
-            QTextCursor cursor = editor->textCursor();
-            cursor.insertText(params.value(QStringLiteral("text")).toString());
-            editor->setTextCursor(cursor);
-            markCurrentFieldDirty();
-            refreshTimelineMetadata();
+            if (!replaceChartRange(start, end, params.value(QStringLiteral("text")).toString())) {
+                return errorObject(QStringLiteral("No active editor difficulty."));
+            }
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("editor/setSelection")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr) {
+            if (!selectChartRange(qMax(0, params.value(QStringLiteral("start")).toInt()),
+                                  qMax(0, params.value(QStringLiteral("end")).toInt()),
+                                  false)) {
                 return errorObject(QStringLiteral("No active editor."));
             }
-            QTextCursor cursor = editor->textCursor();
-            cursor.setPosition(qMax(0, params.value(QStringLiteral("start")).toInt()));
-            cursor.setPosition(qMax(0, params.value(QStringLiteral("end")).toInt()), QTextCursor::KeepAnchor);
-            editor->setTextCursor(cursor);
-            return QJsonObject{{QStringLiteral("ok"), true}};
-        }
-        if (method == QStringLiteral("editor/addDecoration")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr) {
-                return errorObject(QStringLiteral("No active editor."));
-            }
-            const QString ownerId = params.value(QStringLiteral("ownerId")).toString(
-                params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension")));
-            const QJsonObject range = params.value(QStringLiteral("range")).toObject(params);
-            const QJsonObject options = params.value(QStringLiteral("options")).toObject();
-            const int start = range.value(QStringLiteral("start")).toInt(-1);
-            const int end = range.value(QStringLiteral("end")).toInt(-1);
-            QTextCursor cursor;
-            if (start >= 0 && end >= start) {
-                cursor = editor->textCursor();
-                cursor.setPosition(start);
-                cursor.setPosition(end, QTextCursor::KeepAnchor);
-            } else if (!miacode::mainwindow::editor_selection::buildSelectionCursor(
-                           editor,
-                           qMax(1, range.value(QStringLiteral("line")).toInt(1)),
-                           qMax(1, range.value(QStringLiteral("col")).toInt(1)),
-                           qMax(1, range.value(QStringLiteral("endLine")).toInt(range.value(QStringLiteral("line")).toInt(1))),
-                           qMax(1, range.value(QStringLiteral("endCol")).toInt(range.value(QStringLiteral("col")).toInt(1))),
-                           &cursor)) {
-                return errorObject(QStringLiteral("Invalid decoration range."));
-            }
-            QTextEdit::ExtraSelection selection;
-            selection.cursor = cursor;
-            QColor background = colorFromJsonValue(options.value(QStringLiteral("backgroundColor")), QColor(255, 214, 102, 64));
-            if (options.contains(QStringLiteral("backgroundColor")) || options.value(QStringLiteral("background")).toBool(true)) {
-                background.setAlpha(options.value(QStringLiteral("backgroundAlpha")).toInt(background.alpha()));
-                selection.format.setBackground(background);
-            }
-            const QString underlineStyle = options.value(QStringLiteral("underlineStyle")).toString(QStringLiteral("wave")).toLower();
-            if (options.value(QStringLiteral("underline")).toBool(true)) {
-                selection.format.setUnderlineStyle(underlineStyle == QStringLiteral("single")
-                                                       ? QTextCharFormat::SingleUnderline
-                                                       : QTextCharFormat::WaveUnderline);
-                selection.format.setUnderlineColor(colorFromJsonValue(options.value(QStringLiteral("underlineColor")), UiTheme::colors().accent));
-            }
-            const QString toolTip = options.value(QStringLiteral("tooltip")).toString(options.value(QStringLiteral("message")).toString());
-            if (!toolTip.isEmpty()) {
-                selection.format.setToolTip(toolTip);
-            }
-            state_.extensionEditorExtraSelections_[ownerId].append(selection);
-            state_.lastEditorExtraSelectionsSignature_.clear();
-            refreshEditorExtraSelections();
-            return okValue(QJsonObject{{QStringLiteral("ownerId"), ownerId}, {QStringLiteral("count"), state_.extensionEditorExtraSelections_.value(ownerId).size()}});
-        }
-        if (method == QStringLiteral("editor/clearDecorations")) {
-            const QString ownerId = params.value(QStringLiteral("ownerId")).toString();
-            if (ownerId.trimmed().isEmpty()) {
-                state_.extensionEditorExtraSelections_.clear();
-            } else {
-                state_.extensionEditorExtraSelections_.remove(ownerId);
-            }
-            state_.lastEditorExtraSelectionsSignature_.clear();
-            refreshEditorExtraSelections();
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("editor/getLine") || method == QStringLiteral("editor/getCurrentLine")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr) {
+            if (!hasActiveDifficulty()) {
                 return errorObject(QStringLiteral("No active editor."));
             }
+            const QString text = editorText();
             const int requestedLine = method == QStringLiteral("editor/getCurrentLine")
-                ? editor->textCursor().blockNumber() + 1
-                : params.value(QStringLiteral("line")).toInt(1);
-            QTextBlock block = editor->document()->findBlockByNumber(qMax(1, requestedLine) - 1);
-            if (!block.isValid()) {
+                ? lineColumnAt(text, chartSelection().position).first
+                : qMax(1, params.value(QStringLiteral("line")).toInt(1));
+            const QStringList lines = text.split(QLatin1Char('\n'));
+            if (requestedLine > lines.size()) {
                 return errorObject(QStringLiteral("Line not found."));
             }
+            const int position = offsetAt(text, requestedLine, 1);
             return okValue(QJsonObject{
                 {QStringLiteral("line"), requestedLine},
-                {QStringLiteral("text"), block.text()},
-                {QStringLiteral("position"), block.position()},
-                {QStringLiteral("length"), block.length()},
+                {QStringLiteral("text"), lines.at(requestedLine - 1)},
+                {QStringLiteral("position"), position},
+                // Matches QTextBlock::length(): the text plus its terminator.
+                {QStringLiteral("length"), lines.at(requestedLine - 1).size() + 1},
             });
         }
         if (method == QStringLiteral("editor/getCurrentToken")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr) {
+            if (!hasActiveDifficulty()) {
                 return errorObject(QStringLiteral("No active editor."));
             }
-            const QTextCursor cursor = editor->textCursor();
-            const QString lineText = cursor.block().text();
-            int start = qBound(0, cursor.positionInBlock(), lineText.size());
+            const QString text = editorText();
+            const miacode::v2::EditorSelectionState selection = chartSelection();
+            const QPair<int, int> at = lineColumnAt(text, selection.position);
+            const int lineStart = offsetAt(text, at.first, 1);
+            const int newline = text.indexOf(QLatin1Char('\n'), lineStart);
+            const QString lineText = text.mid(lineStart, (newline < 0 ? text.size() : newline) - lineStart);
+            int start = qBound(0, at.second - 1, lineText.size());
             int end = start;
             const auto isTokenChar = [](QChar ch) {
                 return ch.isLetterOrNumber() || ch == QLatin1Char('_') || ch == QLatin1Char('#') || ch == QLatin1Char('&');
@@ -2128,38 +2156,34 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             }
             return okValue(QJsonObject{
                 {QStringLiteral("text"), lineText.mid(start, end - start)},
-                {QStringLiteral("line"), cursor.blockNumber() + 1},
+                {QStringLiteral("line"), at.first},
                 {QStringLiteral("startCol"), start + 1},
                 {QStringLiteral("endCol"), end + 1},
-                {QStringLiteral("start"), cursor.block().position() + start},
-                {QStringLiteral("end"), cursor.block().position() + end},
+                {QStringLiteral("start"), lineStart + start},
+                {QStringLiteral("end"), lineStart + end},
             });
         }
         if (method == QStringLiteral("editor/replaceRange")) {
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            if (editor == nullptr || !hasActiveDifficulty()) {
+            if (!hasActiveDifficulty()) {
                 return errorObject(QStringLiteral("No active editor difficulty."));
             }
-            QTextCursor cursor;
-            const int start = params.value(QStringLiteral("start")).toInt(-1);
-            const int end = params.value(QStringLiteral("end")).toInt(-1);
-            if (start >= 0 && end >= start) {
-                cursor = editor->textCursor();
-                cursor.setPosition(start);
-                cursor.setPosition(end, QTextCursor::KeepAnchor);
-            } else if (!miacode::mainwindow::editor_selection::buildSelectionCursor(
-                           editor,
-                           qMax(1, params.value(QStringLiteral("line")).toInt(1)),
-                           qMax(1, params.value(QStringLiteral("col")).toInt(1)),
-                           qMax(1, params.value(QStringLiteral("endLine")).toInt(params.value(QStringLiteral("line")).toInt(1))),
-                           qMax(1, params.value(QStringLiteral("endCol")).toInt(params.value(QStringLiteral("col")).toInt(1))),
-                           &cursor)) {
+            const QString text = editorText();
+            int start = params.value(QStringLiteral("start")).toInt(-1);
+            int end = params.value(QStringLiteral("end")).toInt(-1);
+            if (start < 0 || end < start) {
+                const int line = qMax(1, params.value(QStringLiteral("line")).toInt(1));
+                const int column = qMax(1, params.value(QStringLiteral("col")).toInt(1));
+                start = offsetAt(text, line, column);
+                end = offsetAt(text,
+                               qMax(1, params.value(QStringLiteral("endLine")).toInt(line)),
+                               qMax(1, params.value(QStringLiteral("endCol")).toInt(column)));
+            }
+            if (end < start) {
                 return errorObject(QStringLiteral("Invalid range."));
             }
-            cursor.insertText(params.value(QStringLiteral("text")).toString());
-            editor->setTextCursor(cursor);
-            markCurrentFieldDirty();
-            refreshTimelineMetadata();
+            if (!replaceChartRange(start, end, params.value(QStringLiteral("text")).toString())) {
+                return errorObject(QStringLiteral("No active editor difficulty."));
+            }
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("editor/showHover")) {
@@ -2230,7 +2254,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 const QPoint globalPos(
                     params.value(QStringLiteral("globalX")).toInt(QCursor::pos().x()),
                     params.value(QStringLiteral("globalY")).toInt(QCursor::pos().y()));
-                QToolTip::showText(globalPos, text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>")), editorWidget_);
+                QToolTip::showText(globalPos, text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>")), nullptr);
             }
             return okValue(QJsonObject{{QStringLiteral("shown"), true}, {QStringLiteral("item"), items.first()}});
         }
@@ -2273,14 +2297,6 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 runExtensionCommand(command);
             }
             return okValue(QJsonObject{{QStringLiteral("shown"), true}, {QStringLiteral("accepted"), true}, {QStringLiteral("item"), item}});
-        }
-        if (method == QStringLiteral("editor/addGutterIcon")
-            || method == QStringLiteral("editor/clearGutterIcons")
-            || method == QStringLiteral("editor/fold")
-            || method == QStringLiteral("editor/unfold")) {
-            QJsonObject contribution = registeredContribution(params, method);
-            state_.extensionRegistrationsByKind_[method].append(contribution);
-            return okValue(contribution);
         }
         if (method == QStringLiteral("validation/run") || method == QStringLiteral("diagnostics/validateDocument")) {
             const bool ok = runValidateSimaiSilently(false);
@@ -2333,7 +2349,6 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 entries.append(diagnostic);
                 addExtensionDiagnosticToPanel(diagnostic);
             }
-            refreshEditorExtraSelections();
             updateEditorValidationSummary();
             return okValue(QJsonObject{{QStringLiteral("ownerId"), ownerId}, {QStringLiteral("count"), entries.size()}});
         }
