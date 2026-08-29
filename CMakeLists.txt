@@ -1620,6 +1620,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src
     )
 
+    miacode_add_dev_tool(editor_sync_controller_spec TEST
+        SOURCES
+            src/tools/v2/EditorSyncControllerSpec.cpp
+            src/app/v2/EditorSyncController.cpp
+            src/app/v2/EditorSyncController.h
+        LIBS Qt6::Core Qt6::Test
+        INCLUDES src
+    )
+
     miacode_add_dev_tool(job_progress_service_spec TEST
         SOURCES
             src/tools/v2/JobProgressServiceSpec.cpp

@@ -137,8 +137,8 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
         QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp"));
     const QString timelineFlow = sourceFile(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp"));
-    const QString validationFlow = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp"));
+    const QString followSync = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
 
     return require(
                applicationContext.contains(QStringLiteral("ChartWorkspace workspace_;"))
@@ -171,10 +171,24 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                                         QStringLiteral("state_.document_ = committedDocument;"),
                                         QStringLiteral("state_.documentDirty_ = dirty;")),
                    QStringLiteral("MainWindow accepts only monotonic committed adapter values and mirrors workspace dirty"), err)
+        // What the gate DOES with the pair is a behaviour regression against the
+        // real object (editor_sync_controller_spec); it used to be an
+        // `appliedQmlWorkspaceRevision_ > 0` scan here, which went red when the
+        // guard moved into EditorSyncController — a scan cannot tell a moved
+        // guard from a deleted one. What stays here is the half a source
+        // contract can actually see: both publishers read the revision
+        // MainWindow last accepted from the workspace. The follow path once
+        // sent the validation snapshot's revision instead — a different counter
+        // that matched only by coincidence, and silently disabled 代码跟随 for
+        // the rest of the session once a difficulty switch separated the two.
         && require(documentModel.contains(
                        QStringLiteral("publishWorkspaceCommit(WorkspaceCommitKind::Incremental);"))
-                       && timelineFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0"))
-                       && validationFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0")),
+                       && timelineFlow.contains(
+                           QStringLiteral("editorSyncController_->requestNavigation("))
+                       && timelineFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_"))
+                       && followSync.contains(
+                           QStringLiteral("follow.revision = owner_.appliedQmlWorkspaceRevision_"))
+                       && !followSync.contains(QStringLiteral("documentValidationSnapshot()")),
                    QStringLiteral("initial, navigation, and follow identities stay on the committed workspace revision"), err)
         && require(fileFlow.contains(QStringLiteral("owner_.qmlDocumentSaveHandler_(path)")),
                    QStringLiteral("legacy close-save routing delegates durable writes to the workspace file service"), err);

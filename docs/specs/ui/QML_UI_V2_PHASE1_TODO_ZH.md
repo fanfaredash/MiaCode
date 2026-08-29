@@ -249,14 +249,24 @@
 **本章是交接面。** 每条写明：问题是什么、当前状态、以及在 `117a76a1` 之后**必须重新核实什么**。
 未列为"已复核"的条目，一律不得由构建、CTest 或历史记录推断为通过。
 
-### 7.1 `qml_document_lifecycle_contract_spec` 当前为红（阻塞项）
+### 7.1 `qml_document_lifecycle_contract_spec` 已恢复绿（2026-08-29 已处置）
 
 - **现象**：断言 `initial, navigation, and follow identities stay on the committed workspace revision` 失败。
 - **原因**：该断言用源码字符串扫描，要求 `appliedQmlWorkspaceRevision_ > 0` 同时出现在
   `MainWindow.PreviewTimelineFlow.cpp` 与 `MainWindow.ValidationFlow.cpp`。`117a76a1` 重写了这两个文件：
   前者改为把 revision 直接交给 `editorSyncController_->requestNavigation(...)`（`PreviewTimelineFlow.cpp:1518`），
   后者的诊断跳转整段移走，只剩 `clearPreviewFollowDecoration()` 里的 `publishFollow`。
-- **待复核**：身份门控是否真的完整地搬进了 `EditorSyncController`（而不是丢失）。确认后**改写 spec 为行为回归**，不要把字符串塞回去。
+- **已复核（2026-08-29）**：门控确实完整地在 `EditorSyncController` 里，而且比原来更强——
+  每条路径在**提交时**和**投递时**各查一次 `readinessAccepts`，因此在提交后、队列跑完前
+  失效的请求不会被投递，而是以 `applied=false` 收尾。
+- **处置**：新增 `editor_sync_controller_spec`（`src/tools/v2/EditorSyncControllerSpec.cpp`，
+  只链 `Qt6::Core` + `Qt6::Test`），六项行为断言直接驱动真实对象：未就绪拒绝、
+  过期 revision / 不同难度拒绝、投递前失效则不投递并回报未应用、隐藏编辑器会结清挂起导航、
+  元数据模式不接受谱面导航、caret / 指针 / 触控锚点 / 预览 seek 共用同一门控且相同 caret 不重复发布、
+  follow 作为投影原样携带发布方身份（这正是本轮 代码跟随 缺陷的落点）。
+- 契约 spec 里那条断言改为只主张源码层面能看见的一半：导航与 follow 两个发布方都读
+  `appliedQmlWorkspaceRevision_`，且 follow 不再读验证快照的 revision。
+- **CTest 基线随之变化**：80 项、唯一预期红是 `qtavplayer_platform_spec`，干净一轮是 79/80。
 
 ### 7.2 QV4 GC 崩溃（Windows `0xC0000005` @ `Qt6Qml.dll+0x169A39`）
 
