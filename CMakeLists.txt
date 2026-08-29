@@ -138,6 +138,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/qml_ui/media/QmlMediaToolsModel.h
     src/app/qml_ui/preview/QmlAudioSettingsModel.cpp
     src/app/qml_ui/preview/QmlAudioSettingsModel.h
+    src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp
+    src/app/qml_ui/preview/QmlPreviewSettingsModel.h
     src/app/qml_ui/preferences/QmlPreferencesModel.cpp
     src/app/qml_ui/preferences/QmlPreferencesModel.h
     src/app/qml_ui/latency/QmlLatencyModel.cpp
@@ -654,6 +656,8 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/components/UiRequestHost.qml
     src/app/qml_ui/components/DialogFooter.qml
+    src/app/qml_ui/components/LabeledCombo.qml
+    src/app/qml_ui/components/LabeledSlider.qml
     src/app/qml_ui/components/AboutDialog.qml
     src/app/qml_ui/components/JobProgressOverlay.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
@@ -696,6 +700,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/preview/PreviewTransport.qml
     src/app/qml_ui/preview/NoteStatistics.qml
     src/app/qml_ui/preview/AudioSettingsDialog.qml
+    src/app/qml_ui/preview/PreviewSettingsDialog.qml
 )
 foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
     get_filename_component(qml_name "${qml_file}" NAME)

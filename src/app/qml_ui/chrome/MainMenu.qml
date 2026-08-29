@@ -382,6 +382,17 @@ Item {
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.togglePreviewRequested()
             }
+            AppMenuSeparator {}
+            AppMenuAction {
+                text: qsTr("音频设置")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.audioSettingsRequested()
+            }
+            AppMenuAction {
+                text: qsTr("预览设置")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.previewSettingsRequested()
+            }
         }
 
         AppMenu {

@@ -65,14 +65,6 @@ Dialog {
         return parts.join("+")
     }
 
-    function indexOfValue(options, value) {
-        for (let i = 0; i < options.length; ++i) {
-            if (options[i].value === value)
-                return i
-        }
-        return 0
-    }
-
     contentItem: ColumnLayout {
         spacing: 10
 
@@ -93,7 +85,7 @@ Dialog {
 
         Rectangle {
             Layout.fillWidth: true
-            height: 1
+            Layout.preferredHeight: 1
             color: Theme.colors.border.normal
         }
 
@@ -141,28 +133,14 @@ Dialog {
             visible: root.activePage === 1
             spacing: 10
 
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    Layout.preferredWidth: 120
-                    text: qsTr("字号")
-                    color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
-                }
-                AppSlider {
-                    objectName: "preferencesFontSizeSlider"
-                    Layout.fillWidth: true
-                    from: root.preferencesModel.editorFontSizeMinimum
-                    to: root.preferencesModel.editorFontSizeMaximum
-                    stepSize: 1
-                    value: root.preferencesModel.editorFontSize
-                    onMoved: root.preferencesModel.editorFontSize = Math.round(value)
-                }
-                Text {
-                    text: root.preferencesModel.editorFontSize + " pt"
-                    color: Theme.colors.text.active
-                    font.family: Theme.uiFont
-                }
+            LabeledSlider {
+                objectName: "preferencesFontSizeSlider"
+                label: qsTr("字号")
+                from: root.preferencesModel.editorFontSizeMinimum
+                to: root.preferencesModel.editorFontSizeMaximum
+                value: root.preferencesModel.editorFontSize
+                readout: root.preferencesModel.editorFontSize + " pt"
+                onMoved: function(v) { root.preferencesModel.editorFontSize = Math.round(v) }
             }
             LabeledCombo {
                 objectName: "preferencesLineSpacingCombo"
@@ -343,30 +321,6 @@ Dialog {
         Item {
             Layout.fillHeight: true
             visible: root.activePage !== 3
-        }
-    }
-
-    component LabeledCombo: RowLayout {
-        id: labeledCombo
-        required property string label
-        property var options: []
-        property var currentValue
-        signal picked(var value)
-        Layout.fillWidth: true
-        Text {
-            Layout.preferredWidth: 120
-            text: labeledCombo.label
-            color: Theme.colors.text.secondary
-            font.family: Theme.uiFont
-        }
-        AppComboBox {
-            Layout.fillWidth: true
-            textRole: "label"
-            model: labeledCombo.options
-            currentIndex: root.indexOfValue(labeledCombo.options, labeledCombo.currentValue)
-            onActivated: function(index) {
-                labeledCombo.picked(labeledCombo.options[index].value)
-            }
         }
     }
 

@@ -28,5 +28,7 @@ QtObject {
     signal chartTransformRequested(string opId)
     signal normalizeChartRequested()
     signal aboutRequested()
+    signal audioSettingsRequested()
+    signal previewSettingsRequested()
     signal unavailableFeatureRequested(string featureName)
 }

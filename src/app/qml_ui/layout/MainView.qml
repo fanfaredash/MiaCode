@@ -57,6 +57,8 @@ Item {
         onChartTransformRequested: opId => root.applyChartTransform(opId)
         onNormalizeChartRequested: root.pages.openNormalizeWholeChart()
         onAboutRequested: aboutDialog.open()
+        onAudioSettingsRequested: audioSettingsDialog.open()
+        onPreviewSettingsRequested: previewSettingsDialog.open()
     }
 
     function toggleSidebar() {
@@ -213,6 +215,7 @@ Item {
             onOpenRequested: openFileDialog.open()
             onSaveRequested: root.saveDocument()
             onAudioSettingsRequested: audioSettingsDialog.open()
+            onPreviewSettingsRequested: previewSettingsDialog.open()
             onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         }
 
@@ -435,6 +438,12 @@ Item {
         id: audioSettingsDialog
         objectName: "shellAudioSettingsDialog"
         audioSettings: root.applicationContext.audioSettings
+    }
+
+    PreviewSettingsDialog {
+        id: previewSettingsDialog
+        objectName: "shellPreviewSettingsDialog"
+        previewSettings: root.applicationContext.previewSettings
     }
 
     AboutDialog {

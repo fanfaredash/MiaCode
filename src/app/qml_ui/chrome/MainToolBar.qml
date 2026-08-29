@@ -13,6 +13,7 @@ Rectangle {
     signal undoRequested()
     signal redoRequested()
     signal audioSettingsRequested()
+    signal previewSettingsRequested()
     signal unavailableFeatureRequested(string featureName)
 
     property bool sidebarActive: false
@@ -61,7 +62,7 @@ Rectangle {
         IconButton {
             iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
             tooltip: qsTr("预览设置")
-            onClicked: root.unavailableFeatureRequested(qsTr("预览设置"))
+            onClicked: root.previewSettingsRequested()
         }
     }
 

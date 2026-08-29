@@ -16,6 +16,7 @@
 #include <QSet>
 #include <QStringList>
 #include <QTextEdit>
+#include <QVariantMap>
 #include <QVector>
 
 #include "PreviewAudioSettings.h"
@@ -295,6 +296,15 @@ public:
     void applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings);
     void savePreviewAudioSettingsAsSoftwareDefault();
     void restorePreviewAudioSettingsFromSoftwareDefault();
+
+    // 预览设置 page. Read as one map, written one key at a time: each of these
+    // has its own way of reaching the running preview — a canvas setter, a
+    // stage-media reroute, an outline recompute, a muri re-apply — and that
+    // wiring belongs here beside the members rather than in the QML layer. The
+    // map also carries the ranges (square scale, flow speed) so the page does
+    // not restate limits the preview owns.
+    QVariantMap previewRenderSettings() const;
+    void setPreviewRenderSetting(const QString& key, const QVariant& value);
 
     void setQmlChartTextHandler(std::function<bool(const QString&)> handler);
     bool applyChartTextThroughWorkspace(const QString& text);

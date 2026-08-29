@@ -56,7 +56,7 @@
 |---|---|
 | ~~关于 MiaCode~~ | **已完成（2026-08-30）**：`components/AboutDialog.qml`，事实来自 `QmlUiSettings::aboutInfo()`（版本宏 + `QSysInfo` + UiText）。v1 的图标彩蛋（连点三次）未搬。 |
 | ~~音频设置~~ | **已完成（2026-08-30）**：`preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel`。10 条通道（音量 + 静音）与 Break 星星尾判音开关，写入即应用到运行中的预览并持久化；「设为/恢复本地默认」两个预设按钮保留。**试听已于同日补齐**：模型自带 `QtPreviewSfxRuntime`（首次试听时才创建，页面关闭时释放），220 ms 静默去抖，拖动中不响、松手才响，预览正在播放时不试听。顺带修好两处：主静音会带着其余通道一起变（v1 行为），以及行不再随每次改动整体重建（原先会在拖动中把滑块本身销毁）。 |
-| 预览设置 | 仍弹「暂未更新支持」。Widgets 对话框里的 视频 / 玩法 / 性能 三组，约 20 个控件（缩放模式、内外亮度、方形缩放、流速、中央显示、判定特效、星星叠放顺序、判定文字距离、暂停时判定线、平滑亮度、时间戳、触控板创作快捷键、调试输出）。 |
+| ~~预览设置~~ | **已完成（2026-08-30）**：`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel`，视频 / 玩法 两个页签。值住在 `MainWindow::previewRenderSettings()` / `setPreviewRenderSetting()`（每个键各自的 canvas setter / 舞台媒体重路由 / 轮廓重算 / muri 重应用，写入即持久化）；文案全部取自 `dialog.render_settings.*` 的 UiText 键，与 v1 同源。v1 的第三个页签 **性能** 只有「预览刷新率」一项，v2 已在 偏好设置 → 性能 里，未在此重复。判定效果显示由 v1 的下拉勾选改为四个并排复选框（四个状态同时可见）。 |
 
 ### B. 有入口，但落到 Widget 对话框/页面（8 项）
 
@@ -91,6 +91,10 @@
       `QtPreviewSfxRuntime`：首次试听时才创建（构造会起一条音频工作线程，多数会话根本不开
       这个页面），页面关闭时 `releaseAudition()` 释放，与 v1 对话框本地运行时同一生命周期。
       样本未就绪时先发一次异步加载，由它的 completion 播放等待中的那一声。
+- [ ] **预览刷新率的 120 FPS 选项在 v2 未按屏幕刷新率过滤**（2026-08-30 记录）。v1 只在
+      检测到 ≥119.5 Hz 时才把 120 FPS 放进菜单，并把「屏幕最大刷新率」一项显示成
+      `屏幕最大刷新率 (N Hz)`；v2 偏好设置 → 性能 的 `QmlPreferencesModel::frameRateOptions`
+      两者都没做。留到「v1 & v2 文案逐项对比」那一轮一起处理。
 - [ ] **导出区间的可视化进度条**（2026-08-29 记录）。导出页的区间只有起止秒数输入框，
       缺少 v1 那条能直观看出区间落在整曲何处的进度条 / 区间条。
 - [x] **启动崩溃恢复弹窗仍是 Widgets**（2026-08-29 已修）：`MainWindow.DocumentAutosaveFlow.cpp`
@@ -137,7 +141,7 @@
 
 1. 阶段 1 + 阶段 2 —— 删隐藏 `PlainCodeEditor`、修 `qml_document_lifecycle_contract_spec`、
    `shellController` 消费点迁往 `PreviewSession` / `TimelineSession`、退役 `src/app/quick_shell/`。
-2. 关于 MiaCode / 音频设置 / 预览设置 —— 三个「暂未更新支持」入口补上真实实现。
+2. ~~关于 MiaCode / 音频设置 / 预览设置~~ —— **已完成（2026-08-30）**，三个「暂未更新支持」入口全部补上真实实现；`unavailableFeatureDialog` 在 A 类已无触发点。
 3. 侧边栏书签折叠重新设计 —— 去掉右侧那个独立折叠按钮，改为**复用难度行本身**：
    点击非当前难度＝切换难度（行为不变），点击**当前**难度＝展开 / 收起它的书签，
    折叠指示器放在**左侧**。
