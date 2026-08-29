@@ -148,7 +148,6 @@
         // Indeterminate spinner floated over the "Export" sidebar row while the
         // (synchronous, ~hundreds-of-ms) export-page build runs.
         miacode::ui::BusySpinner* outlineBusySpinner_ = nullptr;
-        miacode::ui::AppBackgroundPainter* appBackgroundPainter_ = nullptr;
         QSplitter* workspaceSplitter_ = nullptr;
         QWidget* previewPanel_ = nullptr;
         QWidget* previewLeftColumn_ = nullptr;
@@ -619,7 +618,6 @@
         miacode::preview_gameplay::CenterDisplayMode previewCenterDisplayMode_ =
             miacode::preview_gameplay::kDefaultCenterDisplayMode;
         bool previewShowValidationSummary_ = true;
-        miacode::ui::AppBackgroundSettings appBackgroundSettings_;
         bool ignoreMuriIssuePrompts_ = false;
         bool chartNormalizeStartAtNewMeasure_ = true;
         bool chartNormalizeReduceTo384Grid_ = false;
@@ -1062,7 +1060,6 @@
     bool& exportShowChartInfoHud_ = state_.exportShowChartInfoHud_;
     miacode::preview_gameplay::CenterDisplayMode& previewCenterDisplayMode_ = state_.previewCenterDisplayMode_;
     bool& previewShowValidationSummary_ = state_.previewShowValidationSummary_;
-    miacode::ui::AppBackgroundSettings& appBackgroundSettings_ = state_.appBackgroundSettings_;
     bool& ignoreMuriIssuePrompts_ = state_.ignoreMuriIssuePrompts_;
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;
     bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;
@@ -1141,7 +1138,6 @@
     QLabel*& editorEmptyStateLabel_ = ui_.editorEmptyStateLabel_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
     miacode::ui::BusySpinner*& outlineBusySpinner_ = ui_.outlineBusySpinner_;
-    miacode::ui::AppBackgroundPainter*& appBackgroundPainter_ = ui_.appBackgroundPainter_;
     QSplitter*& workspaceSplitter_ = ui_.workspaceSplitter_;
     QWidget*& previewPanel_ = ui_.previewPanel_;
     QWidget*& previewLeftColumn_ = ui_.previewLeftColumn_;

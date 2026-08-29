@@ -5,7 +5,6 @@
 #include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "UiTheme.h"
-#include "app/ui/AppBackgroundPainter.h"
 
 #include <QAction>
 #include <QApplication>
@@ -263,13 +262,6 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
         if (backgroundPainter.isActive()) {
             const QRect dirtyRect = event != nullptr ? event->rect() : viewport()->rect();
             backgroundPainter.setClipRect(dirtyRect);
-            if (miacode::ui::paintAppBackgroundForWidget(viewport(), backgroundPainter)) {
-                const UiTheme::Colors& c = UiTheme::colors();
-                QColor editorSurface = c.inputBg;
-                editorSurface.setAlpha(
-                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
-                backgroundPainter.fillRect(dirtyRect, editorSurface);
-            }
         }
     }
     QTextEdit::paintEvent(event);

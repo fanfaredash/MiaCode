@@ -34,7 +34,6 @@
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
-#include "app/ui/AppBackgroundSettings.h"
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/EditorSyncController.h"
@@ -68,7 +67,6 @@ class LatencyDetectionPage;
 namespace miacode::video_export {
 }
 namespace miacode::ui {
-class AppBackgroundPainter;
 class BusySpinner;
 }
 class QListWidget;
@@ -540,10 +538,6 @@ private:
     QRect previewFullscreenControlCardRect(bool visible) const;
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
-    void applyAppBackgroundSettings(
-        const miacode::ui::AppBackgroundSettings& settings,
-        bool persistPreference,
-        bool refreshTheme = true);
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(
         const QString& value,

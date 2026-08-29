@@ -6,7 +6,6 @@
 #include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "UiTheme.h"
-#include "app/ui/AppBackgroundPainter.h"
 
 #include <QAction>
 #include <QApplication>
@@ -62,15 +61,7 @@ protected:
         QPainter painter(this);
         const QRect dirtyRect = event != nullptr ? event->rect() : rect();
         painter.setClipRect(dirtyRect);
-        if (miacode::ui::paintAppBackgroundForWidget(this, painter)) {
-            const UiTheme::Colors& c = UiTheme::colors();
-            QColor editorSurface = c.inputBg;
-            editorSurface.setAlpha(
-                UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
-            painter.fillRect(dirtyRect, editorSurface);
-        } else {
-            painter.fillRect(dirtyRect, UiTheme::colors().inputBg);
-        }
+        painter.fillRect(dirtyRect, UiTheme::colors().inputBg);
     }
 };
 }  // namespace
@@ -208,14 +199,7 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
     QPainter painter(lineNumberArea_);
     const UiTheme::Colors& c = UiTheme::colors();
     const QRect dirtyRect = event != nullptr ? event->rect() : lineNumberArea_->rect();
-    if (miacode::ui::paintAppBackgroundForWidget(lineNumberArea_, painter)) {
-        QColor sidebarSurface = c.timelineSidebar;
-        sidebarSurface.setAlpha(
-            UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
-        painter.fillRect(dirtyRect, sidebarSurface);
-    } else {
-        painter.fillRect(dirtyRect, c.timelineSidebar);
-    }
+    painter.fillRect(dirtyRect, c.timelineSidebar);
     painter.setPen(c.textSecondary);
     painter.setFont(lineNumberArea_->font());
 

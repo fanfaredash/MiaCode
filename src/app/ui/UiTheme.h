@@ -20,16 +20,6 @@ enum class ResolvedTheme {
     Dark,
 };
 
-enum class AppBackgroundOverlayRole {
-    Toolbar,
-    StatusBar,
-    Panel,
-    Card,
-    EditorHeader,
-    Input,
-    CodeEditor,
-};
-
 struct Colors {
     bool dark = false;
     QColor windowBg;
@@ -85,7 +75,6 @@ struct Colors {
 ResolvedTheme resolvedTheme();
 bool isDarkTheme();
 const Colors& colors();
-int appBackgroundOverlayAlpha(AppBackgroundOverlayRole role, bool darkTheme);
 QPalette applicationPalette();
 void applyApplicationTheme(QApplication& app);
 

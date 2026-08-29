@@ -19,7 +19,6 @@
 #include <QWidgetAction>
 #include <QStyleHints>
 
-#include "app/ui/AppBackgroundPainter.h"
 
 namespace {
 
@@ -35,27 +34,6 @@ QString cssRgba(const QColor& color, int alpha)
         .arg(color.green())
         .arg(color.blue())
         .arg(alpha);
-}
-
-QString cssSurface(const QColor& color, int alpha)
-{
-    return miacode::ui::appBackgroundIsActiveForTheme()
-        ? cssRgba(color, alpha)
-        : css(color);
-}
-
-QString cssSurfaceWhenBackgroundActive(const QColor& activeColor, const QColor& inactiveColor, int alpha)
-{
-    return miacode::ui::appBackgroundIsActiveForTheme()
-        ? cssRgba(activeColor, alpha)
-        : css(inactiveColor);
-}
-
-QString cssWhenBackgroundDisabled(const QColor& color)
-{
-    return miacode::ui::appBackgroundIsActiveForTheme()
-        ? QStringLiteral("transparent")
-        : css(color);
 }
 
 int backgroundOverlayAlphaProperty(const char* propertyName, int fallback)
@@ -324,41 +302,6 @@ const Colors& colors()
     return isDarkTheme() ? darkColors() : lightColors();
 }
 
-int appBackgroundOverlayAlpha(AppBackgroundOverlayRole role, bool darkTheme)
-{
-    switch (role) {
-    case AppBackgroundOverlayRole::Toolbar:
-        return backgroundOverlayAlphaProperty(
-            darkTheme ? "miacode.appBackgroundToolbarAlphaDark" : "miacode.appBackgroundToolbarAlphaLight",
-            darkTheme ? 198 : 206);
-    case AppBackgroundOverlayRole::StatusBar:
-        return backgroundOverlayAlphaProperty(
-            darkTheme ? "miacode.appBackgroundStatusAlphaDark" : "miacode.appBackgroundStatusAlphaLight",
-            darkTheme ? 208 : 216);
-    case AppBackgroundOverlayRole::Panel:
-        return backgroundOverlayAlphaProperty(
-            darkTheme ? "miacode.appBackgroundPanelAlphaDark" : "miacode.appBackgroundPanelAlphaLight",
-            darkTheme ? 176 : 190);
-    case AppBackgroundOverlayRole::Card:
-        return backgroundOverlayAlphaProperty(
-            darkTheme ? "miacode.appBackgroundCardAlphaDark" : "miacode.appBackgroundCardAlphaLight",
-            darkTheme ? 184 : 196);
-    case AppBackgroundOverlayRole::EditorHeader:
-        return backgroundOverlayAlphaProperty(
-            darkTheme ? "miacode.appBackgroundEditorHeaderAlphaDark" : "miacode.appBackgroundEditorHeaderAlphaLight",
-            darkTheme ? 188 : 196);
-    case AppBackgroundOverlayRole::Input:
-        return backgroundOverlayAlphaProperty(
-            darkTheme ? "miacode.appBackgroundInputAlphaDark" : "miacode.appBackgroundInputAlphaLight",
-            darkTheme ? 196 : 204);
-    case AppBackgroundOverlayRole::CodeEditor:
-        return backgroundOverlayAlphaProperty(
-            darkTheme ? "miacode.appBackgroundCodeEditorAlphaDark" : "miacode.appBackgroundCodeEditorAlphaLight",
-            darkTheme ? 196 : 204);
-    }
-    return darkTheme ? 196 : 204;
-}
-
 QPalette applicationPalette()
 {
     const Colors& c = colors();
@@ -400,14 +343,14 @@ QString applicationStyleSheet()
         "QMainWindow::separator { background: %3; width: 1px; height: 1px; }"
         "QToolTip { background: %9; color: %2; border: 1px solid %10; }"
     )
-        .arg(cssSurface(c.toolbarBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Toolbar, c.dark)))
+        .arg(css(c.toolbarBg))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.menuHoverBg))
-        .arg(cssSurface(c.statusBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::StatusBar, c.dark)))
+        .arg(css(c.statusBg))
         .arg(css(c.textSecondary))
-        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
-        .arg(cssSurface(c.panelBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Panel, c.dark)))
+        .arg(css(c.cardBg))
+        .arg(css(c.panelBg))
         .arg(css(c.menuBg))
         .arg(css(c.menuBorder));
 }
@@ -507,7 +450,7 @@ QString timelineZoomButtonStyleSheet()
         "QToolButton:pressed { background: %6; color: %7; }"
     )
         .arg(css(c.textPrimary))
-        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
+        .arg(css(c.cardBg))
         .arg(css(c.borderStrong))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
@@ -555,7 +498,7 @@ QString editorTextEditStyleSheet()
         "selection-background-color: %3;"
         "selection-color: %4;"
     )
-        .arg(cssSurface(c.inputBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Input, c.dark)))
+        .arg(css(c.inputBg))
         .arg(css(c.textPrimary))
         .arg(css(c.selection))
         .arg(css(c.selectionText));
@@ -573,15 +516,12 @@ QString editorShellStyleSheet()
         "QWidget#EditorDifficultyControls QLineEdit { background: %6; color: %4; border: 1px solid %7; border-radius: 6px; padding: 4px 6px; selection-background-color: %8; selection-color: %9; }"
         "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %10; }"
     )
-        .arg(cssSurface(c.panelBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Panel, c.dark)))
-        .arg(cssSurfaceWhenBackgroundActive(
-            c.toolbarBg,
-            c.cardBg,
-            appBackgroundOverlayAlpha(AppBackgroundOverlayRole::EditorHeader, c.dark)))
+        .arg(css(c.panelBg))
+        .arg(css(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textSecondary))
-        .arg(cssSurface(c.inputBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Input, c.dark)))
+        .arg(css(c.inputBg))
         .arg(css(c.borderSoft))
         .arg(css(c.selection))
         .arg(css(c.selectionText))
@@ -633,7 +573,7 @@ QString metadataPageStyleSheet()
         "QToolButton, QPushButton { color: %2; border: 1px solid %3; border-radius: 6px; background: %4; padding: 4px 8px; }"
         "QToolButton:hover, QPushButton:hover { background: %9; border-color: %8; }"
     )
-        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
+        .arg(css(c.cardBg))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.inputBg))
@@ -766,13 +706,13 @@ QString latencyDetectionPageStyleSheet()
         " border-radius: 3px;"
         "}"
     )
-        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
+        .arg(css(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textMuted))
         .arg(css(c.accent))
         .arg(css(pageBackground))
-        .arg(cssSurface(c.inputBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Input, c.dark)))
+        .arg(css(c.inputBg))
         .arg(css(c.borderSoft))
         .arg(css(c.selection))
         .arg(css(c.selectionText))
@@ -950,13 +890,13 @@ QString previewPanelStyleSheet()
         "QSlider::sub-page:horizontal { background: %10; border-radius: 3px; }"
         "QSlider::handle:horizontal { width: 12px; margin: -4px 0; border-radius: 6px; background: %7; border: 1px solid %8; }"
     )
-        .arg(cssSurface(c.panelBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Panel, c.dark)))
+        .arg(css(c.panelBg))
         .arg(css(c.border))
         .arg(css(c.canvasBg))
         .arg(css(c.borderSoft))
-        .arg(cssSurface(c.cardAltBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
+        .arg(css(c.cardAltBg))
         .arg(css(c.textPrimary))
-        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
+        .arg(css(c.cardBg))
         .arg(css(c.borderSoft))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))

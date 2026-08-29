@@ -22,7 +22,6 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
-#include "app/ui/AppBackgroundPainter.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
