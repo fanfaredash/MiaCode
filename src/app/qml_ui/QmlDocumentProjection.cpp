@@ -78,10 +78,14 @@ DocumentPresentationState projectDocumentPresentation(const DocumentPresentation
     state.validationRevision = input.validation.revision;
     state.validationPending = input.validation.pending;
     state.validationAvailable = input.validation.available;
+    for (const int difficultyId : input.dirtyDifficultyIds) {
+        state.dirtyEditorKeys.append(QStringLiteral("difficulty:%1").arg(difficultyId));
+    }
+    // The metadata tab shows the whole file's source, so what it marks is the
+    // file: it is dirty exactly when the document is. That is not the same
+    // question as any one difficulty's, which is why both are listed.
     if (input.dirty) {
-        state.dirtyEditorKeys = input.activeDifficultyId > 0
-            ? QStringList{QStringLiteral("difficulty:%1").arg(input.activeDifficultyId)}
-            : QStringList{QStringLiteral("metadata")};
+        state.dirtyEditorKeys.append(QStringLiteral("metadata"));
     }
     state.validation = input.validation;
     return state;

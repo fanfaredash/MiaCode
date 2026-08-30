@@ -4,6 +4,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <functional>
+
 class MainWindow;
 class QmlDocumentModel;
 
@@ -13,7 +15,16 @@ class QmlCommandService final : public QObject
 public:
     QmlCommandService(MainWindow& backend, QmlDocumentModel& document, QObject* parent = nullptr);
 
-    Q_INVOKABLE bool openDocument(const QUrl& fileUrl);
+    // Everything that would discard the open document goes through one guard,
+    // and the guard lives here rather than in each caller: an entry point that
+    // forgets to ask is how work gets lost, and there is no way to forget if
+    // asking is what opening *is*.
+    //
+    // These do not return a verdict — the answer arrives from a dialog, so
+    // there is none to return yet. The action happens later, or not at all.
+    Q_INVOKABLE void openDocument(const QUrl& fileUrl);
+    Q_INVOKABLE void openRecentDocument(const QString& path);
+    Q_INVOKABLE void closeDocument();
     Q_INVOKABLE bool saveDocument();
     Q_INVOKABLE bool saveDocumentAs(const QUrl& fileUrl);
     Q_INVOKABLE void discardDocumentChanges();
@@ -31,6 +42,8 @@ public:
     Q_INVOKABLE QStringList shortcutCommandIds() const;
 
 private:
+    void whenDocumentMayBeLeft(std::function<void()> proceed);
+
     MainWindow* backend_ = nullptr;
     QmlDocumentModel* document_ = nullptr;
 };

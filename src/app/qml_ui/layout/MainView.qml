@@ -25,10 +25,6 @@ Item {
     readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
-    // 打开文件时的未保存决策。关闭应用走 v1 shell confirmClose 协议，
-    // 不在这里再维护一套 closeApproved / pendingClose。
-    property url pendingOpenFile
-    property bool continueAfterSaveAs: false
 
     ViewState { id: state }
 
@@ -57,6 +53,8 @@ Item {
         onChartTransformRequested: opId => root.applyChartTransform(opId)
         onNormalizeChartRequested: root.pages.openNormalizeWholeChart()
         onAboutRequested: aboutDialog.open()
+        onOpenRecentRequested: path => root.commands.openRecentDocument(path)
+        onCloseDocumentRequested: root.commands.closeDocument()
         onAudioSettingsRequested: audioSettingsDialog.open()
         onPreviewSettingsRequested: previewSettingsDialog.open()
     }
@@ -121,29 +119,16 @@ Item {
         root.commands.saveDocument()
     }
 
+    // The unsaved-changes question is not asked here any more. It is asked by
+    // commands.openDocument itself, along with every other action that would
+    // discard the document — there used to be two three-way prompts written
+    // twice, and only one of them covered anything but 打开.
     function requestOpenFile(fileUrl) {
-        if (!root.documentSession.dirty) {
-            root.commands.openDocument(fileUrl)
-            return
-        }
-        root.pendingOpenFile = fileUrl
-        unsavedChangesDialog.open()
+        root.commands.openDocument(fileUrl)
     }
 
     function requestClose() {
         root.hostWindow.close()
-    }
-
-    function clearPendingAction() {
-        root.pendingOpenFile = ""
-        root.continueAfterSaveAs = false
-    }
-
-    function continuePendingAction() {
-        const fileToOpen = root.pendingOpenFile
-        root.clearPendingAction()
-        if (fileToOpen.toString().length > 0)
-            root.commands.openDocument(fileToOpen)
     }
 
     Component.onCompleted: {
@@ -298,18 +283,7 @@ Item {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "txt"
         nameFilters: [qsTr("Simai 文件 (*.txt *.simai)"), qsTr("所有文件 (*.*)")]
-        onAccepted: {
-            const saved = root.commands.saveDocumentAs(selectedFile)
-            if (saved && root.continueAfterSaveAs) {
-                root.continuePendingAction()
-            } else if (!saved && root.continueAfterSaveAs) {
-                root.clearPendingAction()
-            }
-        }
-        onRejected: {
-            if (root.continueAfterSaveAs)
-                root.clearPendingAction()
-        }
+        onAccepted: root.commands.saveDocumentAs(selectedFile)
     }
 
     ChoiceDialog {
@@ -331,44 +305,6 @@ Item {
         details: qsTr("入口会保留，功能完成后将在此处提供。")
         choices: [{ id: "ok", label: qsTr("确定"), role: "accept" }]
         dismissChoiceId: "ok"
-    }
-
-    // The 打开文件 half of the unsaved-changes question. The window-close half
-    // asks the same three things through UiRequestService, because there the
-    // decision has to reach C++; here the whole flow is already QML-side.
-    ChoiceDialog {
-        id: unsavedChangesDialog
-        objectName: "shellUnsavedChangesDialog"
-        title: qsTr("未保存的更改")
-        message: qsTr("当前谱面有未保存的更改。")
-        details: qsTr("保存更改后继续，或丢弃本次编辑。")
-        choices: [
-            { id: "save", label: qsTr("保存"), role: "accept" },
-            { id: "discard", label: qsTr("放弃"), role: "destructive" },
-            { id: "cancel", label: qsTr("取消"), role: "reject" }
-        ]
-        dismissChoiceId: "cancel"
-
-        onChosen: function(choiceId) {
-            if (choiceId === "save") {
-                if (root.documentSession.currentFilePath.length === 0) {
-                    root.continueAfterSaveAs = true
-                    saveFileDialog.open()
-                } else {
-                    if (root.commands.saveDocument())
-                        root.continuePendingAction()
-                    else
-                        root.clearPendingAction()
-                }
-                return
-            }
-            if (choiceId === "discard") {
-                root.commands.discardDocumentChanges()
-                root.continuePendingAction()
-                return
-            }
-            root.clearPendingAction()
-        }
     }
 
     Connections {

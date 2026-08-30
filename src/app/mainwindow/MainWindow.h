@@ -345,6 +345,11 @@ public:
     void requestShellClose(std::function<void(bool)> onDecided);
     // The same question about the document alone, for flows that replace it.
     void requestLeaveDocument(std::function<void(bool)> onDecided);
+    // 打开最近. The list has always been kept (and persisted) here; until now
+    // its only reader was the hidden MainWindow's own File menu, so under v2
+    // nothing could see it. Entries that no longer exist on disk are dropped
+    // as they are read, which is what the Widgets menu did when it rebuilt.
+    QStringList recentDocumentPaths();
     void toggleShellPreviewPlayback();
     void stopShellPreview();
     void seekShellPreview(double second);

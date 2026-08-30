@@ -14,7 +14,37 @@ QmlCommandService::QmlCommandService(
 {
 }
 
-bool QmlCommandService::openDocument(const QUrl& fileUrl) { return document_->openFile(fileUrl); }
+void QmlCommandService::whenDocumentMayBeLeft(std::function<void()> proceed)
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    backend_->requestLeaveDocument([proceed = std::move(proceed)](bool mayLeave) {
+        if (mayLeave && proceed) {
+            proceed();
+        }
+    });
+}
+
+void QmlCommandService::openDocument(const QUrl& fileUrl)
+{
+    whenDocumentMayBeLeft([this, fileUrl]() { document_->openFile(fileUrl); });
+}
+
+void QmlCommandService::openRecentDocument(const QString& path)
+{
+    if (path.trimmed().isEmpty()) {
+        return;
+    }
+    whenDocumentMayBeLeft(
+        [this, path]() { document_->openFile(QUrl::fromLocalFile(path)); });
+}
+
+void QmlCommandService::closeDocument()
+{
+    whenDocumentMayBeLeft([this]() { document_->closeDocument(); });
+}
+
 bool QmlCommandService::saveDocument() { return document_->save(); }
 bool QmlCommandService::saveDocumentAs(const QUrl& fileUrl) { return document_->saveAs(fileUrl); }
 void QmlCommandService::discardDocumentChanges() { document_->discardChanges(); }

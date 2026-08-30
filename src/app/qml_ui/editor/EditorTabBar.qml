@@ -9,6 +9,7 @@ Rectangle {
 
     required property var viewState
     required property var documentSession
+    required property var commands
 
     readonly property int minimumTabWidth: 100
     readonly property int preferredTabWidth: 160
@@ -25,6 +26,25 @@ Rectangle {
                 return difficulties[index]
         }
         return null
+    }
+
+    // Closing a tab whose difficulty has unsaved edits asks first. The metadata
+    // tab shows the whole file's source, so what it would discard is the whole
+    // document — that decision belongs to the file-level prompt, not to closing
+    // a view of it, and closing it here never asks.
+    function requestCloseTab(key) {
+        const difficultyId = root.difficultyIdForKey(key)
+        const sectionDirty = difficultyId > 0
+            && root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
+        if (!sectionDirty) {
+            root.viewState.closeEditor(key)
+            return
+        }
+        root.closingKey = key
+        root.closingDifficultyId = difficultyId
+        closeTabDialog.title = qsTr("关闭「%1」").arg(root.titleForKey(key))
+        closeTabDialog.message = qsTr("「%1」有未保存的更改。").arg(root.titleForKey(key))
+        closeTabDialog.open()
     }
 
     function difficultyIdForKey(key) {
@@ -120,9 +140,46 @@ Rectangle {
                     active: root.viewState.activeEditorKey === modelData
                     closable: true
                     onClicked: root.activateTab(modelData)
-                    onCloseRequested: root.viewState.closeEditor(modelData)
+                    onCloseRequested: root.requestCloseTab(modelData)
                 }
             }
+        }
+    }
+
+    property string closingKey: ""
+    property int closingDifficultyId: 0
+
+    // 保存 stores the whole file, because the file is what gets written — the
+    // message says so rather than letting the button imply it saved only this
+    // difficulty. 放弃 puts this difficulty back and leaves every other one
+    // exactly as it is.
+    ChoiceDialog {
+        id: closeTabDialog
+        objectName: "editorTabCloseDialog"
+        details: qsTr("保存会写入整个谱面文件，包括其他难度的改动；放弃只把这个难度还原到上次保存时的内容。")
+        choices: [
+            { id: "save", label: qsTr("保存"), role: "accept" },
+            { id: "discard", label: qsTr("放弃"), role: "destructive" },
+            { id: "cancel", label: qsTr("取消"), role: "reject" }
+        ]
+        dismissChoiceId: "cancel"
+
+        onChosen: function(choiceId) {
+            const key = root.closingKey
+            const difficultyId = root.closingDifficultyId
+            root.closingKey = ""
+            root.closingDifficultyId = 0
+            if (choiceId === "cancel" || key.length === 0)
+                return
+            if (choiceId === "save") {
+                // A failed save keeps the tab: the edits are still only in
+                // memory, and closing would be the one thing that loses them.
+                if (!root.commands.saveDocument())
+                    return
+            } else {
+                root.documentSession.revertDifficultyChart(difficultyId)
+            }
+            root.viewState.closeEditor(key)
         }
     }
 

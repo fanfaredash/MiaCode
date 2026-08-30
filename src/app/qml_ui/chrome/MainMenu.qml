@@ -16,6 +16,10 @@ Item {
     // Source of the 调整 menu's operation rows; see chartTransformMenu().
     required property var documentSession
     property bool commandsEnabled: true
+    // Re-read each time the menu opens rather than kept live: the list only
+    // changes when a document is opened, and a menu nobody is looking at has no
+    // reason to hold a copy.
+    property var recentDocuments: []
     property real availableWidth: Number.POSITIVE_INFINITY
 
     readonly property int overflowButtonWidth: 30
@@ -220,6 +224,32 @@ Item {
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.openRequested()
             }
+            AppMenu {
+                id: recentMenu
+                title: qsTr("打开最近")
+                enabled: root.commandsEnabled
+                onAboutToShow: root.recentDocuments = root.documentSession.recentDocuments()
+
+                Repeater {
+                    model: root.recentDocuments
+                    delegate: AppMenuItem {
+                        required property string modelData
+                        text: modelData
+                        onTriggered: root.commands.openRecentRequested(modelData)
+                    }
+                }
+                AppMenuItem {
+                    visible: root.recentDocuments.length === 0
+                    enabled: false
+                    text: qsTr("暂无最近文档")
+                }
+            }
+            AppMenuAction {
+                text: qsTr("关闭文档")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.closeDocumentRequested()
+            }
+            AppMenuSeparator {}
             AppMenuAction {
                 text: qsTr("保存")
                 shortcut: StandardKey.Save

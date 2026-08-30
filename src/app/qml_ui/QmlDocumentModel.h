@@ -106,6 +106,10 @@ public:
     bool validationPending() const;
     bool validationAvailable() const;
     bool dirty() const;
+    // Put one difficulty's chart back to the last save point, leaving the rest
+    // of the document alone. This is what "放弃" means when the thing being
+    // closed is one tab rather than the file.
+    Q_INVOKABLE bool revertDifficultyChart(int difficultyId);
     QStringList dirtyEditorKeys() const;
     qulonglong bookmarkGeneration() const;
 
@@ -113,6 +117,14 @@ public:
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAs(const QUrl& fileUrl);
     Q_INVOKABLE void discardChanges();
+    // Leaves the shell with no document: no difficulties, so no tabs and no
+    // source. The guard that asks about unsaved work lives at the command
+    // boundary, not here.
+    Q_INVOKABLE void closeDocument();
+    // 打开最近, newest first, already pruned of files that are gone. A read of
+    // document history, which is why it sits here; opening one is a command and
+    // sits behind the unsaved-changes guard.
+    Q_INVOKABLE QStringList recentDocuments();
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);

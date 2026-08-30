@@ -302,6 +302,22 @@ void MainWindow::addRecentFilePath(const QString& path)
     savePortableState();
 }
 
+QStringList MainWindow::recentDocumentPaths()
+{
+    QStringList existing;
+    for (const QString& path : recentFilePaths_) {
+        const QFileInfo info(path);
+        if (info.exists() && info.isFile()) {
+            existing.append(path);
+        }
+    }
+    if (existing != recentFilePaths_) {
+        recentFilePaths_ = existing;
+        savePortableState();
+    }
+    return existing;
+}
+
 void MainWindow::openRecentFilePath(const QString& path)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);

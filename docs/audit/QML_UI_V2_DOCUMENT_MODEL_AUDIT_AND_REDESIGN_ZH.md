@@ -207,10 +207,25 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
 
 1. ~~**Esc / 非文本键**（2.1）~~ —— **已完成（2026-08-30）**。
 2. ~~**每视图撤销历史**（3.3）~~ —— **已完成（2026-08-30）**。
-3. **section 级脏**（3.1）——`ChartWorkspace` + 投影 + 标签栏脏点。
-4. **关闭标签的守卫**（3.2）——依赖 3。
-5. **新建 / 打开最近 / 关闭文档**（3.5）——依赖统一的 `requestLeaveDocument`。
-6. **两套三选一收敛成一套**。
+3. ~~**section 级脏**（3.1）~~ —— **已完成（2026-08-30）**。
+4. ~~**关闭标签的守卫**（3.2）~~ —— **已完成（2026-08-30）**。
+5. ~~**打开最近 / 关闭文档**~~ —— **已完成（2026-08-30）**。**新建仍缺失**：
+   v1 的 `onNewFile` 要先选目录再建文件，是一条独立的流程，且所有者未报告，另行安排。
+6. ~~**两套三选一收敛成一套**~~ —— **已完成（2026-08-30）**。`MainView` 那份
+   `unsavedChangesDialog` 已删除，打开 / 打开最近 / 关闭文档 / 关窗 / 音频拖放建谱
+   全部走 `MainWindow::requestLeaveDocument`。
+
+## 7. 本轮新发现，尚未处理
+
+- [ ] **未命名文档选「保存」会掉进 Widgets 的 `QFileDialog`**（2026-08-30 发现）。
+      `requestLeaveDocument` 的 save 分支走 `onSaveFile()`，而它在
+      `currentFilePath_` 为空时转 `onSaveFileAs()`——那是
+      `QFileDialog::getSaveFileName`，挂在隐藏的 `MainWindow` 上。
+      这条自 `ab5e5715` 起就是 v2 关窗流程的一部分，只是当时没被看见。
+      修法：save 分支在无路径时改走 `UiRequestService::requestFile`，
+      这会把 `applyUnsavedChangesChoice` 从「返回 bool」改成续延式，
+      连带 `maybeSaveBeforeContinue` 的同步版也要重新安排。**这是下一项。**
+- [ ] **新建文档**在 v2 仍无入口（见上）。
 
 ## 6. 所有者已拍板（2026-08-30）
 

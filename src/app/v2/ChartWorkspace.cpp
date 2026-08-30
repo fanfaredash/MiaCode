@@ -109,6 +109,7 @@ ChartWorkspaceResult ChartWorkspace::openSource(
     hasDocument_ = true;
     sourceText_ = document_.toText();
     savedSourceText_ = sourceText_;
+    savedDocument_ = document_;
     dirty_ = false;
     return commit();
 }
@@ -266,15 +267,60 @@ bool ChartWorkspace::markSaved(const QString& filePath)
     const QString nextFilePath = filePath.isEmpty() ? filePath_ : filePath;
     if (!dirty_ && filePath_ == nextFilePath) return false;
     savedSourceText_ = sourceText_;
+    savedDocument_ = document_;
     dirty_ = false;
     filePath_ = nextFilePath;
     commit();
     return true;
 }
 
+ChartWorkspaceResult ChartWorkspace::closeDocument()
+{
+    if (!hasDocument_) return acceptWithoutChange();
+    document_ = SimaiDocument();
+    savedDocument_ = SimaiDocument();
+    sourceText_.clear();
+    savedSourceText_.clear();
+    filePath_.clear();
+    activeDifficultyId_ = 0;
+    hasDocument_ = false;
+    dirty_ = false;
+    return commit();
+}
+
+ChartWorkspaceResult ChartWorkspace::revertDifficultyChart(int difficultyId)
+{
+    if (!hasDocument_) return reject();
+    SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    const SimaiDifficultyData* saved = savedDocument_.difficulty(difficultyId);
+    if (difficulty == nullptr || saved == nullptr) return reject();
+    if (difficulty->chart == saved->chart) return acceptWithoutChange();
+    difficulty->chart = saved->chart;
+    refreshSourceAndDirty();
+    return commit();
+}
+
+QVector<int> ChartWorkspace::computeDirtyDifficultyIds() const
+{
+    QVector<int> ids;
+    if (!hasDocument_) return ids;
+    for (const int id : document_.difficultyIds()) {
+        const SimaiDifficultyData* current = document_.difficulty(id);
+        const SimaiDifficultyData* saved = savedDocument_.difficulty(id);
+        if (current == nullptr) continue;
+        // A difficulty added since the save point has no earlier text to be
+        // compared against; everything in it is new, so it is changed.
+        if (saved == nullptr || saved->chart != current->chart) {
+            ids.append(id);
+        }
+    }
+    return ids;
+}
+
 ChartWorkspaceSnapshot ChartWorkspace::snapshot() const
 {
-    return {sourceText_, filePath_, activeDifficultyId_, revision_, dirty_, hasDocument_};
+    return {sourceText_, filePath_, activeDifficultyId_, revision_, dirty_, hasDocument_,
+            computeDirtyDifficultyIds()};
 }
 
 const SimaiDocument& ChartWorkspace::document() const

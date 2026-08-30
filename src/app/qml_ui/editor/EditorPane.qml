@@ -132,6 +132,7 @@ Rectangle {
         anchors.top: parent.top
         viewState: root.viewState
         documentSession: root.documentSession
+        commands: root.commands
     }
 
     Rectangle {

@@ -348,6 +348,32 @@ QStringList QmlDocumentModel::dirtyEditorKeys() const
 }
 qulonglong QmlDocumentModel::bookmarkGeneration() const { return bookmarkGeneration_; }
 
+QStringList QmlDocumentModel::recentDocuments()
+{
+    return backend_ != nullptr ? backend_->recentDocumentPaths() : QStringList{};
+}
+
+void QmlDocumentModel::closeDocument()
+{
+    if (workspace_ == nullptr) return;
+    if (!workspace_->closeDocument().accepted) return;
+    unifiedDesignerEnabled_ = false;
+    clearMetadataSourceRejection();
+    publishWorkspaceCommit(WorkspaceCommitKind::Open, true);
+}
+
+bool QmlDocumentModel::revertDifficultyChart(int difficultyId)
+{
+    if (workspace_ == nullptr) return false;
+    const miacode::v2::ChartWorkspaceResult result =
+        workspace_->revertDifficultyChart(difficultyId);
+    if (!result.accepted) return false;
+    // A section going back to its saved text is a source replacement as far as
+    // every consumer is concerned: the text they hold is no longer current.
+    publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+    return true;
+}
+
 bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 {
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
@@ -564,6 +590,7 @@ void QmlDocumentModel::refreshDocumentState()
     miacode::qml_ui::DocumentPresentationInput input;
     input.activeDifficultyId = workspaceSnapshot.activeDifficultyId;
     input.dirty = workspaceSnapshot.dirty;
+    input.dirtyDifficultyIds = workspaceSnapshot.dirtyDifficultyIds;
     input.documentRevision = documentRevision_;
     input.validation = validationSnapshot_;
     presentationState_ = miacode::qml_ui::projectDocumentPresentation(input);
