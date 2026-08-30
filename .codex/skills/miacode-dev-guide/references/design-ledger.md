@@ -31,6 +31,8 @@ Use this file to separate hard contracts from adjustable implementation choices.
 
 ## 3. Current Defaults That Are Adjustable
 
+- QML editor-tab order is session-local presentation state. Dragging exchanges two open difficulty tabs only; metadata is never a drag source or destination, and the operation preserves the active editor and MRU history without changing difficulty IDs, document serialization, or dirty state.
+
 - Preview canvas default aspect ratio is square unless temporarily changed by export UI.
 - Preview Tap/Touch flow speeds both default to the shared value in `PreviewGameplayConfig.h`; persisted settings now store them separately, while older single-speed settings still fan out to both on load.
 - The firework judge effect currently lasts `1.0 s`; its coloured spokes hold through `0.3 s`, reach alpha `0.5` at `0.5 s`, and then keep a visible smooth fade tail until the effect ends.

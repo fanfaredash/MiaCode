@@ -898,6 +898,99 @@ bool verifyEditorTabsRecoverTheActiveDifficulty(QTextStream& out, int* failed)
                   QStringLiteral("syncing difficulties restores the active difficulty's editor"),
                   out, failed);
 }
+
+bool verifyDifficultyTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+        import QtQuick
+        import QtQuick.Controls
+        import MiaCode.UI
+
+        Window {
+            width: 480
+            height: 34
+            visible: true
+
+            QtObject {
+                id: documentSession
+                property var difficulties: [
+                    { id: 5, label: "BASIC", designer: "" },
+                    { id: 6, label: "ADVANCED", designer: "" },
+                    { id: 7, label: "EXPERT", designer: "" }
+                ]
+                property var dirtyEditorKeys: []
+                property string currentFilePath: ""
+                property string currentFileName: ""
+                function saveDifficultySection(difficultyId) { return true }
+                function revertDifficultyChart(difficultyId) { return true }
+            }
+
+            QtObject { id: commands }
+
+            ViewState {
+                id: state
+                objectName: "tabDragViewState"
+                Component.onCompleted: {
+                    openDifficultyEditor(5)
+                    openDifficultyEditor(6)
+                    openDifficultyEditor(7)
+                }
+            }
+
+            EditorTabBar {
+                objectName: "editorTabBar"
+                anchors.fill: parent
+                viewState: state
+                documentSession: documentSession
+                commands: commands
+            }
+        }
+    )QML", QUrl(QStringLiteral("qrc:/EditorTabBarDragSpec.qml")));
+    if (!expect(component.isReady(),
+                QStringLiteral("real EditorTabBar.qml loads in the drag harness"), out, failed)) {
+        for (const QQmlError& error : component.errors()) out << error.toString() << '\n';
+        return false;
+    }
+    std::unique_ptr<QObject> root(component.create());
+    auto* window = qobject_cast<QQuickWindow*>(root.get());
+    if (!expect(window != nullptr,
+                QStringLiteral("editor-tab drag harness creates a window"), out, failed)) {
+        return false;
+    }
+    window->show();
+    Q_UNUSED(QTest::qWaitForWindowExposed(window));
+    QCoreApplication::processEvents();
+
+    QObject* state = window->findChild<QObject*>(QStringLiteral("tabDragViewState"));
+    if (!expect(state != nullptr,
+                QStringLiteral("editor-tab drag harness exposes its real view state"), out, failed)) {
+        return false;
+    }
+    if (!expect(state->property("openEditorTabs").toStringList()
+                    == QStringList{QStringLiteral("difficulty:5"),
+                                   QStringLiteral("difficulty:6"),
+                                   QStringLiteral("difficulty:7")},
+                QStringLiteral("the drag harness starts with three ordered difficulty tabs"), out, failed)) {
+        return false;
+    }
+
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 17));
+    QTest::mouseMove(window, QPoint(240, 17), 20);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, QPoint(240, 17));
+    QCoreApplication::processEvents();
+
+    return expect(state->property("openEditorTabs").toStringList()
+                      == QStringList{QStringLiteral("difficulty:6"),
+                                     QStringLiteral("difficulty:5"),
+                                     QStringLiteral("difficulty:7")}
+                      && state->property("activeEditorKey").toString()
+                          == QStringLiteral("difficulty:7"),
+                  QStringLiteral("dragging one difficulty tab onto another swaps only their order"),
+                  out, failed);
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -922,6 +1015,7 @@ int main(int argc, char** argv)
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
     verifyEditorPointerRoutes(out, &failed);
     verifyEditorTabsRecoverTheActiveDifficulty(out, &failed);
+    verifyDifficultyTabsCanBeDraggedToSwap(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     verifyWorkspaceSavePointFollowsQmlUndo(controller, out, &failed);
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);

@@ -84,6 +84,18 @@ Rectangle {
         viewState.activateEditor(key)
     }
 
+    function difficultyKeyAt(rowX) {
+        for (let index = 0; index < tabRepeater.count; ++index) {
+            const key = root.viewState.openEditorTabs[index]
+            const item = tabRepeater.itemAt(index)
+            if (root.difficultyIdForKey(key) <= 0 || !item)
+                continue
+            if (rowX >= item.x && rowX < item.x + item.width)
+                return key
+        }
+        return ""
+    }
+
     function revealActiveTab() {
         const index = viewState.openEditorTabs.indexOf(viewState.activeEditorKey)
         const item = index >= 0 ? tabRepeater.itemAt(index) : null
@@ -110,6 +122,7 @@ Rectangle {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
+        interactive: root.draggingDifficultyKey.length === 0
         ScrollBar.horizontal: ScrollBar {
             policy: root.tabsOverflow ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
             height: 3
@@ -128,6 +141,9 @@ Rectangle {
                 delegate: AppTab {
                     required property string modelData
 
+                    property bool difficultyTab: root.difficultyIdForKey(modelData) > 0
+                    property bool suppressClickAfterDrag: false
+
                     width: root.tabWidth
                     height: parent.height
                     preferredTabWidth: root.tabWidth
@@ -139,8 +155,37 @@ Rectangle {
                     tooltip: root.tooltipForKey(modelData)
                     active: root.viewState.activeEditorKey === modelData
                     closable: true
-                    onClicked: root.activateTab(modelData)
+                    opacity: tabDrag.active ? 0.65 : 1
+                    onClicked: {
+                        if (!tabDrag.active && !suppressClickAfterDrag)
+                            root.activateTab(modelData)
+                    }
                     onCloseRequested: root.requestCloseTab(modelData)
+
+                    DragHandler {
+                        id: tabDrag
+
+                        enabled: parent.difficultyTab
+                        target: null
+                        acceptedButtons: Qt.LeftButton
+
+                        onActiveChanged: {
+                            if (active) {
+                                root.draggingDifficultyKey = modelData
+                                return
+                            }
+                            if (root.draggingDifficultyKey !== modelData)
+                                return
+                            root.draggingDifficultyKey = ""
+                            const positionInRow = tabRow.mapFromItem(
+                                parent, centroid.position.x, centroid.position.y)
+                            const targetKey = root.difficultyKeyAt(positionInRow.x)
+                            if (targetKey.length > 0)
+                                root.viewState.swapDifficultyEditors(modelData, targetKey)
+                            suppressClickAfterDrag = true
+                            Qt.callLater(function() { suppressClickAfterDrag = false })
+                        }
+                    }
                 }
             }
         }
@@ -148,6 +193,7 @@ Rectangle {
 
     property string closingKey: ""
     property int closingDifficultyId: 0
+    property string draggingDifficultyKey: ""
 
     // 保存 stores the whole file, because the file is what gets written — the
     // message says so rather than letting the button imply it saved only this
@@ -228,4 +274,3 @@ Rectangle {
         }
     }
 }
-
