@@ -39,7 +39,6 @@ public:
     QString editorText() const;
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();
-    void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
     bool timelineTabIsForeground() const;
     bool quickTimelineBridgeReady() const;
@@ -69,7 +68,6 @@ public:
     double timelineSecondForCursor(int line, int col) const;
     bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
     void updateTimelineCursorFromEditorLocation(int line, int col, bool centerView);
-    void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
     void deferTimelineCursorBridgeUpdate(double second, bool centerView);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;

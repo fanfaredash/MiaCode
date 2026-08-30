@@ -79,13 +79,13 @@ int main(int argc, char** argv)
         err << "FAIL: scene source should consume matching left/right gestures and ignore Shift\n";
         return 1;
     }
-    const QString editorLayoutSource = readSource(QStringLiteral("src/editor/PlainCodeEditor.Layout.cpp"));
-    const QString editorHeaderSource = readSource(QStringLiteral("src/editor/PlainCodeEditor.h"));
-    if (!editorLayoutSource.contains(QStringLiteral("painter.fillRect(rowRect, markerColor)"))
-        || !editorLayoutSource.contains(QStringLiteral("isBookmarkLine ? c.accent"))
-        || editorLayoutSource.contains(QStringLiteral("lineNumberUnderlineHorizontalBounds"))
-        || editorLayoutSource.contains(QStringLiteral("painter.drawLine"))
-        || editorHeaderSource.contains(QStringLiteral("lineNumberUnderlineHorizontalBounds"))) {
+    // The gutter is QML now; the assertion is the same one, re-pointed. A
+    // bookmarked line is marked by colouring the row, not by underlining it.
+    const QString gutterSource = readSource(QStringLiteral("src/app/qml_ui/editor/LineNumberGutter.qml"));
+    if (!gutterSource.contains(QStringLiteral("ctx.fillStyle = Theme.colors.accent.primary"))
+        || !gutterSource.contains(QStringLiteral("root.bookmarkedLines.some(item => item.line === line + 1)"))
+        || gutterSource.contains(QStringLiteral("ctx.lineTo"))
+        || gutterSource.contains(QStringLiteral("ctx.stroke"))) {
         err << "FAIL: bookmark gutter should keep color cues without underline drawing\n";
         return 1;
     }

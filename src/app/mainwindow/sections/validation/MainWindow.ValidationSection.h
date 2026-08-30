@@ -23,7 +23,6 @@ public:
     void loadProjectValidationPreferences();
     void saveProjectValidationPreferences(const QString& chartFilePath = QString()) const;
     void applyIgnoreMuriIssuePrompts(bool enabled, bool persistPreference);
-    void refreshEditorExtraSelections();
     const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
     void applyAlignedMuriAnalysisReportToViews();
     void updateEditorValidationSummary();
@@ -62,10 +61,6 @@ public:
 private:
     bool isMuriDiagnosticsTabActive() const;
     void rebuildMuriDiagnosticsPanel();
-    void refreshEditorExtraSelectionsForReason(const QString& reason);
-    void rebuildValidationExtraSelectionsCache(const QString& reason);
-    void applyEditorExtraSelectionsForReason(const QString& reason);
-    QByteArray buildValidationExtraSelectionsSignature() const;
 
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;

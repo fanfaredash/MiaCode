@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QObject>
+
+#include <functional>
 #include <QStringList>
 #include <QUrl>
 #include <QVariantList>
@@ -51,6 +53,12 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(bool validationPending READ validationPending NOTIFY documentStateChanged)
     Q_PROPERTY(bool validationAvailable READ validationAvailable NOTIFY documentStateChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
+    // Which section a save writes. A tab is what a person works in, so 保存
+    // means "save what I am doing" — the active difficulty, leaving the other
+    // difficulties on disk as they are. The whole-source view's section is the
+    // whole file, which is why the shell has to say when that view is in front.
+    Q_PROPERTY(bool wholeSourceEditorActive READ wholeSourceEditorActive
+                   WRITE setWholeSourceEditorActive NOTIFY wholeSourceEditorActiveChanged)
     Q_PROPERTY(QStringList dirtyEditorKeys READ dirtyEditorKeys NOTIFY dirtyEditorKeysChanged)
     Q_PROPERTY(qulonglong bookmarkGeneration READ bookmarkGeneration NOTIFY bookmarksChanged)
 
@@ -107,6 +115,31 @@ public:
     bool validationPending() const;
     bool validationAvailable() const;
     bool dirty() const;
+    // Put one difficulty's chart back to the last save point, leaving the rest
+    // of the document alone. This is what "放弃" means when the thing being
+    // closed is one tab rather than the file.
+    Q_INVOKABLE bool revertDifficultyChart(int difficultyId);
+    // Write one difficulty to the file, leaving the others at their on-disk
+    // text. Used where the thing being saved is named rather than implied.
+    Q_INVOKABLE bool saveDifficultySection(int difficultyId);
+    // The same save, allowed to ask for a path. The answer arrives on
+    // sectionSaveFinished because a file pick cannot be waited for.
+    Q_INVOKABLE void requestSaveDifficultySection(int difficultyId);
+    // The unsaved-changes flow, asked one section at a time.
+    //
+    // 保存 writes one difficulty, so a single question about "the document"
+    // could only ever save one of them and would drop the rest on the way out.
+    // Each changed difficulty is therefore asked about in turn, with the editor
+    // switched to it first so the question is about something visible; whatever
+    // is left over (metadata, added or removed difficulties) is asked about
+    // last, as the file.
+    //
+    // onDecided(false) means the user cancelled and nothing should continue.
+    void requestLeaveDocument(std::function<void(bool)> onDecided);
+
+    bool wholeSourceEditorActive() const;
+    void setWholeSourceEditorActive(bool active);
+    int saveSectionDifficultyId() const;
     QStringList dirtyEditorKeys() const;
     qulonglong bookmarkGeneration() const;
 
@@ -114,6 +147,23 @@ public:
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAs(const QUrl& fileUrl);
     Q_INVOKABLE void discardChanges();
+    // Leaves the shell with no document: no difficulties, so no tabs and no
+    // source. The guard that asks about unsaved work lives at the command
+    // boundary, not here.
+    Q_INVOKABLE void closeDocument();
+    // 打开最近 / 恢复备份, newest first, each entry { path, label }. Reads of
+    // document history, which is why they sit here; acting on one is a command
+    // and sits behind the unsaved-changes guard.
+    Q_INVOKABLE QVariantList recentDocuments();
+    Q_INVOKABLE QVariantList backupDocuments();
+    // Restore an autosave snapshot. Confirms first, through the shell.
+    Q_INVOKABLE void restoreBackup(const QString& path);
+    // 新建: pick an audio file; the chart is created beside it, in that same
+    // folder rather than in a new one. A chart's track is found by name — only
+    // track.mp3/.wav/.flac/.ogg count — so the picked file is copied to that
+    // name unless it already has it.
+    // The unsaved-changes guard belongs to the caller in QmlCommandService.
+    Q_INVOKABLE void createDocumentFromPickedAudio();
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);
@@ -130,6 +180,39 @@ public:
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
     Q_INVOKABLE void disableUnifiedDesigner();
 
+    // Normalizes the selected range (or the whole text when nothing is
+    // selected) and returns the result as a value: { ok, changed, text,
+    // selectionStart, selectionEnd, error }. It does NOT commit — the editor
+    // applies it as one of its own transactions so undo covers it.
+    Q_INVOKABLE QVariantMap normalizeChartSelection(
+        const QString& text, int anchor, int position, const QVariantMap& options) const;
+
+    // Applies one of the 谱面变换 commands to the selected range, returned as an
+    // editor transaction the same way normalizeChartSelection is. `opId` is the
+    // ShortcutRegistry id ("transform.mirror_lr", …), so the shortcut table,
+    // the menu and this dispatch all name the operation identically.
+    //
+    // These used to be MainWindow methods that read the hidden Widgets editor's
+    // cursor. Nothing ever carried the QML selection into that widget, so in v2
+    // every one of them found an empty selection and did nothing.
+    Q_INVOKABLE QVariantMap transformChartSelection(
+        const QString& text, int anchor, int position, const QString& opId) const;
+    Q_INVOKABLE QStringList chartTransformIds() const;
+    // The same table as rows a menu can render: { id, label, section }. Both
+    // the menubar's 调整 menu and the editor's context menu build from this, so
+    // neither carries its own copy of the operation list or its labels.
+    Q_INVOKABLE QVariantList chartTransformMenu() const;
+    Q_INVOKABLE QString chartTransformMoreLabel() const;
+
+    // Stored normalize options, as the same map normalizeChartSelection takes.
+    Q_INVOKABLE QVariantMap normalizeOptions() const;
+    Q_INVOKABLE void setNormalizeOptions(const QVariantMap& options);
+    // Sectioning is one choice, not a toggle plus a count: 4 / 2 / 0 measures,
+    // where 0 means no sectioning. splitEveryFourMeasures is derived from it.
+    Q_INVOKABLE QVariantList normalizeGridOptions() const;
+    Q_INVOKABLE QVariantList normalizeSectionOptions() const;
+    Q_INVOKABLE QVariantList normalizeSyntaxOptions() const;
+
 signals:
     void chartTextChanged();
     void metadataChanged();
@@ -142,6 +225,8 @@ signals:
     void currentDifficultyFieldsChanged();
     void syntaxIssuesChanged();
     void dirtyChanged();
+    void sectionSaveFinished(int difficultyId, bool saved);
+    void wholeSourceEditorActiveChanged();
     void dirtyEditorKeysChanged();
     void documentStateChanged();
     void documentReplaced();
@@ -182,4 +267,16 @@ private:
     quint64 documentRevision_ = 0;
     qulonglong bookmarkGeneration_ = 0;
     bool unifiedDesignerEnabled_ = false;
+    bool wholeSourceEditorActive_ = false;
+    // Saving needs a path. A document that has never been written has none, so
+    // the save asks for one first — through the shell's file request, which
+    // makes it a continuation like the rest of this flow. Without this, 保存 on
+    // a never-saved chart wrote nothing and said nothing: the file service
+    // refused an empty path and the prompt just went away.
+    void createChartBesideAudio(const QString& audioPath);
+    void ensureTrackCopyThenCreate(const QString& audioPath, const QString& targetPath);
+    void createEmptyDocumentAt(const QString& targetPath);
+    void saveSectionOrAskForPath(int difficultyId, std::function<void(bool)> onSaved);
+    void askNextDirtySection(std::function<void(bool)> onDecided);
+    void askAboutRemainingDocument(std::function<void(bool)> onDecided);
 };

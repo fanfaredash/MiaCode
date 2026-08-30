@@ -13,7 +13,6 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
@@ -163,201 +162,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     editMenu->addSeparator();
 
-    const auto invokeOnFocusedTextWidget = [this](const auto& textEditHandler, const auto& lineEditHandler) {
-        if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
-            if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
-                lineEditHandler(lineEdit);
-                return;
-            }
-            if (auto* textEdit = qobject_cast<QTextEdit*>(focus); textEdit != nullptr) {
-                textEditHandler(textEdit);
-                return;
-            }
-        }
-        if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr) {
-            textEditHandler(editor);
-        }
-    };
-
-    auto* cutAction = new QAction(UiText::text(QStringLiteral("action.cut")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        cutAction,
-        QStringLiteral("edit.cut"),
-        QKeySequence::Cut);
-    connect(cutAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
-        invokeOnFocusedTextWidget(
-            [](QTextEdit* textEdit) { textEdit->cut(); },
-            [](QLineEdit* lineEdit) { lineEdit->cut(); }
-        );
-    });
-    editMenu->addAction(cutAction);
-
-    auto* copyAction = new QAction(UiText::text(QStringLiteral("action.copy")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        copyAction,
-        QStringLiteral("edit.copy"),
-        QKeySequence::Copy);
-    connect(copyAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
-        invokeOnFocusedTextWidget(
-            [](QTextEdit* textEdit) { textEdit->copy(); },
-            [](QLineEdit* lineEdit) { lineEdit->copy(); }
-        );
-    });
-    editMenu->addAction(copyAction);
-
-    auto* pasteAction = new QAction(UiText::text(QStringLiteral("action.paste")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        pasteAction,
-        QStringLiteral("edit.paste"),
-        QKeySequence::Paste);
-    connect(pasteAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
-        invokeOnFocusedTextWidget(
-            [](QTextEdit* textEdit) { textEdit->paste(); },
-            [](QLineEdit* lineEdit) { lineEdit->paste(); }
-        );
-    });
-    editMenu->addAction(pasteAction);
-
-    editMenu->addSeparator();
-
-    owner_.undoAction_ = new QAction(UiText::text(QStringLiteral("action.undo")), &owner_);
-    ShortcutRegistry::instance().applyShortcuts(
-        owner_.undoAction_,
-        QStringLiteral("edit.undo"),
-        QKeySequence::keyBindings(QKeySequence::Undo));
-    connect(owner_.undoAction_, &QAction::triggered, &owner_, [this]() {
-        const auto focusSummary = []() {
-            if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
-                return QStringLiteral("%1(name=%2 ptr=0x%3)")
-                    .arg(focus->metaObject() != nullptr ? focus->metaObject()->className() : QStringLiteral("unknown"))
-                    .arg(focus->objectName().isEmpty() ? QStringLiteral("(none)") : focus->objectName())
-                    .arg(reinterpret_cast<quintptr>(focus), 0, 16);
-            }
-            return QStringLiteral("null");
-        };
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("selection_restore/undo_action"),
-            QStringLiteral("triggered focus=%1").arg(focusSummary()),
-            true
-        );
-        const auto undoChartEditor = [this]() {
-            if (owner_.documentSection_ != nullptr) {
-                const bool handled = owner_.documentSection_->undoChartEditorWithSelectionRestore();
-                miacode::debug_log::appendLine(
-                    miacode::debug_log::Channel::Runtime,
-                    QStringLiteral("selection_restore/undo_action"),
-                    QStringLiteral("chart_editor_path handled=%1").arg(handled ? 1 : 0),
-                    true
-                );
-                return handled;
-            }
-            if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr
-                && editor->document() != nullptr
-                && editor->document()->isUndoAvailable()) {
-                editor->undo();
-                miacode::debug_log::appendLine(
-                    miacode::debug_log::Channel::Runtime,
-                    QStringLiteral("selection_restore/undo_action"),
-                    QStringLiteral("chart_editor_fallback handled=1"),
-                    true
-                );
-                return true;
-            }
-            return false;
-        };
-        bool handled = false;
-        if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
-            if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
-                if (lineEdit->isUndoAvailable()) {
-                    lineEdit->undo();
-                    handled = true;
-                }
-            } else if (auto* textEdit = qobject_cast<QTextEdit*>(focus); textEdit != nullptr) {
-                if (textEdit == owner_.editorWidget_) {
-                    handled = undoChartEditor();
-                } else if (textEdit->document() != nullptr && textEdit->document()->isUndoAvailable()) {
-                    textEdit->undo();
-                    handled = true;
-                }
-            }
-        }
-        if (!handled) {
-            handled = undoChartEditor();
-        }
-        if (!handled) {
-            (void)owner_.undoDeletedDifficultyField();
-        }
-    });
-    editMenu->addAction(owner_.undoAction_);
-
-    owner_.redoAction_ = new QAction(UiText::text(QStringLiteral("action.redo")), &owner_);
-    ShortcutRegistry::instance().applyShortcuts(
-        owner_.redoAction_,
-        QStringLiteral("edit.redo"),
-        QKeySequence::keyBindings(QKeySequence::Redo));
-    connect(owner_.redoAction_, &QAction::triggered, &owner_, [this]() {
-        const auto focusSummary = []() {
-            if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
-                return QStringLiteral("%1(name=%2 ptr=0x%3)")
-                    .arg(focus->metaObject() != nullptr ? focus->metaObject()->className() : QStringLiteral("unknown"))
-                    .arg(focus->objectName().isEmpty() ? QStringLiteral("(none)") : focus->objectName())
-                    .arg(reinterpret_cast<quintptr>(focus), 0, 16);
-            }
-            return QStringLiteral("null");
-        };
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("selection_restore/redo_action"),
-            QStringLiteral("triggered focus=%1").arg(focusSummary()),
-            true
-        );
-        const auto redoChartEditor = [this]() {
-            if (owner_.documentSection_ != nullptr) {
-                const bool handled = owner_.documentSection_->redoChartEditorWithSelectionRestore();
-                miacode::debug_log::appendLine(
-                    miacode::debug_log::Channel::Runtime,
-                    QStringLiteral("selection_restore/redo_action"),
-                    QStringLiteral("chart_editor_path handled=%1").arg(handled ? 1 : 0),
-                    true
-                );
-                return handled;
-            }
-            if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr
-                && editor->document() != nullptr
-                && editor->document()->isRedoAvailable()) {
-                editor->redo();
-                miacode::debug_log::appendLine(
-                    miacode::debug_log::Channel::Runtime,
-                    QStringLiteral("selection_restore/redo_action"),
-                    QStringLiteral("chart_editor_fallback handled=1"),
-                    true
-                );
-                return true;
-            }
-            return false;
-        };
-        bool handled = false;
-        if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
-            if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
-                if (lineEdit->isRedoAvailable()) {
-                    lineEdit->redo();
-                    handled = true;
-                }
-            } else if (auto* textEdit = qobject_cast<QTextEdit*>(focus); textEdit != nullptr) {
-                if (textEdit == owner_.editorWidget_) {
-                    handled = redoChartEditor();
-                } else if (textEdit->document() != nullptr && textEdit->document()->isRedoAvailable()) {
-                    textEdit->redo();
-                    handled = true;
-                }
-            }
-        }
-        if (!handled) {
-            handled = redoChartEditor();
-        }
-    });
-    editMenu->addAction(owner_.redoAction_);
+    // 剪切 / 复制 / 粘贴 / 撤销 / 重做 used to be dispatched here by looking at
+    // QApplication::focusWidget(). This window is WA_DontShowOnScreen, so it
+    // never holds focus and the dispatch never resolved to anything; the QML
+    // shell binds all five to the editor it actually shows.
 
     editMenu->addSeparator();
 
@@ -374,12 +182,12 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         UiText::text(QStringLiteral("media_tools.prepend_track_silence_action")),
         &owner_
     );
-    connect(owner_.prependTrackSilenceAction_, &QAction::triggered, &owner_, &MainWindow::onPrependTrackSilence);
+    connect(owner_.prependTrackSilenceAction_, &QAction::triggered, &owner_, &MainWindow::onMediaProcessingTools);
     owner_.prependPvBlackAction_ = new QAction(
         UiText::text(QStringLiteral("media_tools.prepend_pv_black_screen_action")),
         &owner_
     );
-    connect(owner_.prependPvBlackAction_, &QAction::triggered, &owner_, &MainWindow::onPrependPvBlack);
+    connect(owner_.prependPvBlackAction_, &QAction::triggered, &owner_, &MainWindow::onMediaProcessingTools);
     owner_.compressBackgroundVideoAction_ = new QAction(
         UiText::text(QStringLiteral("media_tools.compress_video_action")),
         &owner_
@@ -391,142 +199,16 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     );
     connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
 
-    owner_.netBatchDownloadAction_ = new QAction(
-        UiText::text(QStringLiteral("net.net_batch_download_action")),
-        &owner_
-    );
-    connect(owner_.netBatchDownloadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchDownload);
     owner_.normalizeWholeChartAction_ = new QAction(
         UiText::text(QStringLiteral("menu.format_chart")),
         &owner_
     );
     connect(owner_.normalizeWholeChartAction_, &QAction::triggered, &owner_, &MainWindow::onNormalizeWholeChart);
 
-    owner_.transformMirrorLeftRightAction_ = new QAction(UiText::text(QStringLiteral("action.transform.mirror_lr")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformMirrorLeftRightAction_,
-        QStringLiteral("transform.mirror_lr"),
-        QKeySequence(Qt::CTRL | Qt::Key_J));
-    connect(owner_.transformMirrorLeftRightAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorLeftRight);
-    transformMenu->addAction(owner_.transformMirrorLeftRightAction_);
-
-    owner_.transformMirrorUpDownAction_ = new QAction(UiText::text(QStringLiteral("action.transform.mirror_ud")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformMirrorUpDownAction_,
-        QStringLiteral("transform.mirror_ud"),
-        QKeySequence(Qt::CTRL | Qt::Key_K));
-    connect(owner_.transformMirrorUpDownAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorUpDown);
-    transformMenu->addAction(owner_.transformMirrorUpDownAction_);
-
-    owner_.transformRotate180Action_ = new QAction(UiText::text(QStringLiteral("action.transform.rotate_180")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformRotate180Action_,
-        QStringLiteral("transform.rotate_180"),
-        QKeySequence(Qt::CTRL | Qt::Key_L));
-    connect(owner_.transformRotate180Action_, &QAction::triggered, &owner_, &MainWindow::onRotate180);
-    transformMenu->addAction(owner_.transformRotate180Action_);
-
-    owner_.transformRotate45CounterClockwiseAction_ = new QAction(UiText::text(QStringLiteral("action.transform.rotate_ccw_45")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformRotate45CounterClockwiseAction_,
-        QStringLiteral("transform.rotate_ccw_45"),
-        QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
-    connect(owner_.transformRotate45CounterClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45CounterClockwise);
-    transformMenu->addAction(owner_.transformRotate45CounterClockwiseAction_);
-
-    owner_.transformRotate45ClockwiseAction_ = new QAction(UiText::text(QStringLiteral("action.transform.rotate_cw_45")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformRotate45ClockwiseAction_,
-        QStringLiteral("transform.rotate_cw_45"),
-        QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
-    connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
-    transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
-
-    transformMenu->addSeparator();
-    owner_.transformRaiseSubdivisionAction_ = new QAction(
-        UiText::text(QStringLiteral("document.subdivision_plus_1")),
-        &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformRaiseSubdivisionAction_,
-        QStringLiteral("transform.subdivision_up"),
-        QKeySequence(QStringLiteral("Ctrl+=")));
-    connect(owner_.transformRaiseSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onRaiseSubdivisionSelection);
-    transformMenu->addAction(owner_.transformRaiseSubdivisionAction_);
-
-    owner_.transformLowerSubdivisionAction_ = new QAction(
-        UiText::text(QStringLiteral("document.subdivision_minus_1")),
-        &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformLowerSubdivisionAction_,
-        QStringLiteral("transform.subdivision_down"),
-        QKeySequence(QStringLiteral("Ctrl+-")));
-    connect(owner_.transformLowerSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionSelection);
-    transformMenu->addAction(owner_.transformLowerSubdivisionAction_);
-
-    owner_.transformRaiseSubdivisionHalfStepAction_ = new QAction(
-        UiText::text(QStringLiteral("document.subdivision_plus_half")),
-        &owner_);
-    ShortcutRegistry::instance().applyShortcuts(
-        owner_.transformRaiseSubdivisionHalfStepAction_,
-        QStringLiteral("transform.subdivision_half_up"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))});
-    connect(owner_.transformRaiseSubdivisionHalfStepAction_, &QAction::triggered, &owner_, &MainWindow::onRaiseSubdivisionHalfStepSelection);
-    transformMenu->addAction(owner_.transformRaiseSubdivisionHalfStepAction_);
-
-    owner_.transformLowerSubdivisionHalfStepAction_ = new QAction(
-        UiText::text(QStringLiteral("document.subdivision_minus_half")),
-        &owner_);
-    ShortcutRegistry::instance().applyShortcuts(
-        owner_.transformLowerSubdivisionHalfStepAction_,
-        QStringLiteral("transform.subdivision_half_down"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))});
-    connect(owner_.transformLowerSubdivisionHalfStepAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionHalfStepSelection);
-    transformMenu->addAction(owner_.transformLowerSubdivisionHalfStepAction_);
-    transformMenu->addSeparator();
-
-    owner_.transformClearCompleteElementsAction_ = new QAction(
-        UiText::text(QStringLiteral("menu.clear_elements")),
-        &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformClearCompleteElementsAction_,
-        QStringLiteral("transform.clear_complete_elements"),
-        QKeySequence(Qt::CTRL | Qt::Key_Q));
-    connect(owner_.transformClearCompleteElementsAction_, &QAction::triggered, &owner_, &MainWindow::onClearCompleteElementsSelection);
-    transformMenu->addAction(owner_.transformClearCompleteElementsAction_);
-    transformMenu->addSeparator();
-
-    auto* moreTransformMenu = transformMenu->addMenu(UiText::text(QStringLiteral("action.transform.more")));
-    owner_.transformToggleBreakAction_ = new QAction(UiText::text(QStringLiteral("action.transform.toggle_break")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformToggleBreakAction_,
-        QStringLiteral("transform.toggle_break"),
-        QKeySequence(Qt::CTRL | Qt::Key_B));
-    connect(owner_.transformToggleBreakAction_, &QAction::triggered, &owner_, &MainWindow::onToggleBreakSelection);
-    moreTransformMenu->addAction(owner_.transformToggleBreakAction_);
-
-    owner_.transformToggleExAction_ = new QAction(UiText::text(QStringLiteral("action.transform.toggle_ex")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformToggleExAction_,
-        QStringLiteral("transform.toggle_ex"),
-        QKeySequence(Qt::CTRL | Qt::Key_N));
-    connect(owner_.transformToggleExAction_, &QAction::triggered, &owner_, &MainWindow::onToggleExSelection);
-    moreTransformMenu->addAction(owner_.transformToggleExAction_);
-
-    owner_.transformToggleFireworkAction_ = new QAction(UiText::text(QStringLiteral("action.transform.toggle_firework")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformToggleFireworkAction_,
-        QStringLiteral("transform.toggle_firework"),
-        QKeySequence(Qt::CTRL | Qt::Key_M));
-    connect(owner_.transformToggleFireworkAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFireworkSelection);
-    moreTransformMenu->addAction(owner_.transformToggleFireworkAction_);
-
-    owner_.transformRandomRotateAction_ = new QAction(UiText::text(QStringLiteral("action.transform.random_rotate")), &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformRandomRotateAction_,
-        QStringLiteral("transform.random_rotate"),
-        QKeySequence(Qt::CTRL | Qt::Key_Comma));
-    connect(owner_.transformRandomRotateAction_, &QAction::triggered, &owner_, &MainWindow::onRandomRotateSelection);
-    moreTransformMenu->addAction(owner_.transformRandomRotateAction_);
+    // 谱面变换 has no Widgets menu any more: the operations act on the QML
+    // editor's selection (QmlDocumentModel::transformChartSelection), and the
+    // shortcut defaults come from resources/shortcuts.json rather than from
+    // these QAction registrations.
 
     owner_.stopPreviewAction_ = new QAction(UiText::text(QStringLiteral("action.stop_preview")), &owner_);
     owner_.stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));

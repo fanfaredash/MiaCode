@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+
+#include <QVariantList>
 #include <memory>
 #include <utility>
 
@@ -16,9 +18,9 @@
 #include <QSet>
 #include <QStringList>
 #include <QTextEdit>
+#include <QVariantMap>
 #include <QVector>
 
-#include "app/quick_shell/QuickShellContracts.h"
 #include "PreviewAudioSettings.h"
 #include "common/PreviewTimingSettings.h"
 #include "PreviewRenderSettings.h"
@@ -34,7 +36,6 @@
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
-#include "app/ui/AppBackgroundSettings.h"
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/EditorSyncController.h"
@@ -50,6 +51,13 @@ class QEvent;
 class PreviewStageMediaHost;
 class QmlEditorPageHost;
 class QmlExportSession;
+namespace miacode::v2 {
+class UiRequestService;
+class JobProgressService;
+}
+namespace miacode::qml_ui {
+class QmlPreviewSettingsModel;
+}
 class QmlUiBootstrap;
 class QFrame;
 class QGraphicsOpacityEffect;
@@ -59,16 +67,10 @@ class QHideEvent;
 class QLabel;
 namespace miacode::latency {
 class LatencySandboxController;
-class LatencyDetectionPage;
-}
-namespace miacode::export_page {
-class ExportLauncherPage;
 }
 namespace miacode::video_export {
-class BatchExportPanel;
 }
 namespace miacode::ui {
-class AppBackgroundPainter;
 class BusySpinner;
 }
 class QListWidget;
@@ -83,13 +85,11 @@ class QPushButton;
 class QShowEvent;
 class QThreadPool;
 class BracketScopeHighlighter;
-class PlainCodeEditor;
 class PreviewRuntime;
 class PreviewStageMediaHost;
 struct IntroBannerSpec;
 class QPlainTextEdit;
 class QProcess;
-class QProgressDialog;
 class QPropertyAnimation;
 class QResizeEvent;
 class QShortcut;
@@ -107,7 +107,6 @@ class PreviewAudioDeviceWatcher;
 class QtPreviewSfxRuntime;
 class TimelineQuickStateBridge;
 class QuickShellPreviewCompositeSurface;
-class VideoExportDialog;
 
 namespace miacode::waveform {
 class WaveformCacheService;
@@ -118,10 +117,9 @@ namespace miacode::preview::scene {
 class PreviewProgressStatsCache;
 }
 
-class MainWindow : public QMainWindow,
-                   public QuickShellCommandSink,
-                   public QuickShellStateSource,
-                   public QuickShellNativeContentProvider
+// The three QuickShell* abstract bases are gone with the polling controller
+// that needed them: the QML sessions call these methods on MainWindow directly.
+class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
@@ -133,16 +131,15 @@ class MainWindow : public QMainWindow,
     // applyLatencyDetectorBpm/Offset writers and to read the document
     // state for refresh.
     friend class miacode::latency::LatencySandboxController;
-    friend class miacode::latency::LatencyDetectionPage;
     // The Export hub page launches the existing ExportSection entry slots
     // with an explicitly selected difficulty and reads document/difficulty
     // state for its badge row — same narrow-feature rationale as the
     // latency page above.
-    friend class miacode::export_page::ExportLauncherPage;
     friend class QmlCommandService;
     friend class QmlEditorPageHost;
     friend class QmlExportSession;
     friend class QmlPreviewModel;
+    friend class miacode::qml_ui::QmlPreviewSettingsModel;
 
 public:
     // Phase 4c — non-owning accessor for the preview stage-media host
@@ -151,13 +148,16 @@ public:
     PreviewStageMediaHost* previewStageMediaHost() const;
 
     // Accessor for the latency-detection sandbox controller. The
-    // LatencyDetectionPage UI binds its controls to the controller
+    // The QML latency page binds its controls to the controller
     // (BPM/offset/subdivision/SFX-volume + audition lifecycle).
     // Always non-null after construction.
     miacode::latency::LatencySandboxController* latencySandboxController() const;
 
 signals:
     void videoExportWorkerRunningChanged(bool running);
+    void normalizeWholeChartRequested();
+    void mediaToolsRequested();
+    void preferencesRequested();
     void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
@@ -167,6 +167,17 @@ signals:
     // final file identity and active difficulty.  UIv2 uses this to reset
     // every derived editor presentation (text, bookmarks and tabs) together.
     void documentReplaced();
+    // The shell's presentation changed: which bottom tab is showing, which tabs
+    // exist, whether the panel is up, the preview canvas aspect, or which
+    // workspace page is active. Emitted where those change rather than sampled
+    // — QuickShellController used to poll all of it on a timer.
+    void shellPresentationChanged();
+    // The preview playhead moved. Emitted from applyQtPreviewPosition — the one
+    // function that moves it, on a tick or on a seek — so the shell's transport
+    // is told rather than left to sample. It is separate from
+    // shellPresentationChanged because it fires per frame during playback and
+    // the bottom panel has no reason to wake for it.
+    void shellPreviewPlayheadChanged();
 
 public:
     enum class DocumentField {
@@ -267,7 +278,6 @@ public:
     // ShortcutRegistry ids and dispatches through here, which keeps one command
     // table instead of nineteen new public methods. Returns false for an id
     // this window does not own.
-    bool triggerShortcutCommand(const QString& id);
     bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
@@ -288,7 +298,48 @@ public:
         const QString& sourceText, const QString& filePath, int activeDifficultyId,
         bool dirty, quint64 revision, QmlDocumentCommitKind kind,
         bool usedSystemEncoding = false);
+    // An audition scene — the export page's or the latency page's — is
+    // installed and playable. Called by whoever installed it, with the two
+    // things only that installer can answer: whether the scene still matches
+    // its source, and how to build it again.
+    void setAuditionSceneReady(std::function<bool()> stillCurrent,
+                               std::function<void()> reinstall);
+    void clearAuditionSceneReady();
+    // True when an audition scene can be played right now. Rebuilds it once if
+    // it has gone stale — the readiness gate for these pages had no recovery at
+    // all, so a Play that was refused stayed refused until the page happened to
+    // reinstall for some other reason.
+    bool ensureAuditionSceneReady();
+
     void setQmlDocumentSaveHandler(std::function<bool(const QString&)> handler);
+    // The v2 shell answers the unsaved-changes question itself, because only it
+    // can see which difficulties changed — MainWindow mirrors one flag for the
+    // whole file. Without a handler installed the Widgets prompt still runs,
+    // which is what the hidden window's own File menu still needs.
+    void setQmlLeaveDocumentHandler(std::function<void(std::function<void(bool)>)> handler);
+    // Write-back into the workspace for the few callers that still edit the
+    // active chart from the MainWindow side (the extension host). Without it
+    // they would be writing into a document copy the QML editor overwrites on
+    // its next commit.
+    // 音频设置 page. The mixer is a value type, so the page reads a copy and
+    // hands one back; every write lands on the same runtime-apply and persist
+    // path the Widgets dialog used, rather than the page poking members.
+    PreviewAudioSettings currentPreviewAudioSettings() const;
+    void applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings);
+    void savePreviewAudioSettingsAsSoftwareDefault();
+    void restorePreviewAudioSettingsFromSoftwareDefault();
+
+    // 预览设置 page. Read as one map, written one key at a time: each of these
+    // has its own way of reaching the running preview — a canvas setter, a
+    // stage-media reroute, an outline recompute, a muri re-apply — and that
+    // wiring belongs here beside the members rather than in the QML layer. The
+    // map also carries the ranges (square scale, flow speed) so the page does
+    // not restate limits the preview owns.
+    QVariantMap previewRenderSettings() const;
+    void setPreviewRenderSetting(const QString& key, const QVariant& value);
+
+    void setQmlChartTextHandler(std::function<bool(const QString&)> handler);
+    bool applyChartTextThroughWorkspace(const QString& text);
     DocumentValidationSnapshot documentValidationSnapshot() const;
     QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
     bool ignoreMuriIssuePrompts() const;
@@ -303,92 +354,117 @@ public:
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellBackendActive(bool active);
-    // QmlUi v2 owns the export center in pure QML. QuickShell / classic Widgets
-    // still enter ExportLauncherPage via onPageEntered.
-    void setQmlExportCenterActive(bool active);
-    bool qmlExportCenterActive() const { return qmlExportCenterActive_; }
+    // Narrow public handles on the shared Widgets-free UI boundary. No new
+    // friend declarations: the QML layer reaches these through the context.
+    // Whole-chart normalize options. MainWindow stays the single owner so
+    // savePortableState() remains the only writer of the stored copy.
+    miacode::chart_transform::ChartNormalizationOptions chartNormalizeOptions() const;
+    void setChartNormalizeOptions(const miacode::chart_transform::ChartNormalizationOptions& options);
+    miacode::v2::UiRequestService* uiRequestService() const;
+    miacode::v2::JobProgressService* jobProgressService() const;
     void preparePreviewForShutdown();
-    bool shellTimelineSurfaceReady() const override;
+    bool shellTimelineSurfaceReady() const;
     void noteQuickTimelineSurfaceReady();
-    bool confirmShellClose() override;
-    void toggleShellPreviewPlayback() override;
-    void stopShellPreview() override;
-    void seekShellPreview(double second) override;
-    void beginShellPreviewScrub() override;
-    void updateShellPreviewScrub(double second, bool centerView) override;
-    void endShellPreviewScrub(double second, bool centerView) override;
-    void setShellPreviewRate(double rate) override;
-    void toggleShellMuriRenderMode() override;
+    // Asks whether the window may close, answering through the continuation.
+    // It cannot be a return value: the unsaved-changes prompt is a QML dialog
+    // now, and the only way to get an answer out of one synchronously would be
+    // a nested event loop inside a window's close handler.
+    void requestShellClose(std::function<void(bool)> onDecided);
+    // The same question about the document alone, for flows that replace it.
+    void requestLeaveDocument(std::function<void(bool)> onDecided);
+    // 打开最近. The list has always been kept (and persisted) here; until now
+    // its only reader was the hidden MainWindow's own File menu, so under v2
+    // nothing could see it. Entries that no longer exist on disk are dropped
+    // as they are read, which is what the Widgets menu did when it rebuilt.
+    // Each entry is { path, label }. The label is the containing folder's name,
+    // which for a chart is the song — v1's rule, and the reason its menu was
+    // readable: a full path is both too wide for a menu and mostly the same
+    // prefix repeated. The path rides along for the tooltip.
+    QVariantList recentDocumentEntries();
+    // Autosave snapshots for the open chart, newest first, as { path, label }.
+    // Same shape and the same reason.
+    QVariantList backupDocumentEntries();
+    // Restore one of them. Confirms through the shell before overwriting.
+    void restoreBackupDocument(const QString& path);
+    // Remember a chart the shell just created or opened.
+    void noteRecentDocument(const QString& path);
+    void toggleShellPreviewPlayback();
+    void stopShellPreview();
+    void seekShellPreview(double second);
+    void beginShellPreviewScrub();
+    void updateShellPreviewScrub(double second, bool centerView);
+    void endShellPreviewScrub(double second, bool centerView);
+    void setShellPreviewRate(double rate);
+    void toggleShellMuriRenderMode();
     RenderMode muriRenderMode() const;
-    void nudgeShellPreviewRate(int direction) override;
-    bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView) override;
-    void beginShellPreviewHeldSeek(int direction, int key) override;
-    void stopShellPreviewHeldSeek(int key = 0) override;
-    void setShellPreviewFullscreen(bool fullscreen) override;
-    void setShellPreviewPaneWidthRatio(double ratio) override;
-    void setShellBottomTabsHeight(int height) override;
-    void setShellBottomTabsCurrentTab(const QString& tabId) override;
-    void navigateShellTimelineToSecond(double second) override;
-    void wheelShellTimelineNavigate(double second) override;
-    void centerShellTimelineNavigate(double second) override;
-    void shellTimelineDragStarted() override;
-    void shellTimelineDragFinished(double second) override;
-    void shellTimelineUserInteractionStarted() override;
-    void shellTimelineSurfaceReady() override;
-    void shellTimelineFollowPreviewToggled(bool enabled) override;
-    void shellTimelineViewportLockToggled(bool enabled) override;
-    void shellTimelineFollowProgressToggled(bool enabled) override;
-    void shellTimelineSyncToggled(bool enabled) override;
-    bool shellHasShortcut(const QKeySequence& sequence) const override;
-    bool shellTriggerShortcut(const QKeySequence& sequence) override;
-    QString shellWindowTitle() const override;
-    bool shellWorkspacePanelsSwapped() const override;
-    QString shellPreviewSpeedLabel() const override;
-    bool shellMuriCheckRenderMode() const override;
-    bool shellPreviewPlaying() const override;
-    double shellPreviewPositionSeconds() const override;
-    double shellPreviewDurationSeconds() const override;
-    double shellPreviewLowerBoundSeconds() const override;
-    QStringList shellPreviewStatsTexts() const override;
-    double shellPreviewCanvasAspectRatio() const override;
-    quint64 shellPreviewPaneRestoreGeneration() const override;
-    double shellPreviewPaneWidthRatio() const override;
-    bool shellPreviewFullscreen() const override;
-    double shellVideoExportProgressSeconds() const override;
-    QObject* shellPreviewRuntimeObject() const override;
-    QObject* shellPreviewStageMediaHostObject() const override;
-    bool shellPreviewUsesSeparateSurface() const override;
-    QWindow* shellPreviewCompositeWindow() const override;
-    QObject* shellTimelineStateBridgeObject() const override;
-    QString shellBottomTabsCurrentTabId() const override;
-    bool shellBottomTabsVisible() const override;
-    bool shellTimelineTabVisible() const override;
-    bool shellValidationTabVisible() const override;
-    bool shellMuriTabVisible() const override;
-    bool shellExportPageActive() const override;
-    QWidget* shellWindowWidget() const override;
-    QDockWidget* shellOutlineDockWidget() const override;
-    bool shellOutlineDockCollapsed() const override;
-    int shellOutlineDockExpandedWidth() const override;
-    QWidget* shellWorkspaceWidget() const override;
-    QWidget* shellBottomTabsWidget() const override;
-    int shellBottomTabsHeight() const override;
-    double shellBottomTabsHeaderScale() const override;
-    QWidget* shellPreviewPanelWidget() const override;
-    double shellNormalizedPreviewCanvasAspectRatio() const override;
-    void shellRefreshLayoutAfterResize() override;
-    void shellSetRootWindowFrameGeometry(const QRect& geometry) override;
-    void shellNoteQuickUiReady() override;
+    void nudgeShellPreviewRate(int direction);
+    bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView);
+    void beginShellPreviewHeldSeek(int direction, int key);
+    void stopShellPreviewHeldSeek(int key = 0);
+    void setShellPreviewFullscreen(bool fullscreen);
+    void setShellPreviewPaneWidthRatio(double ratio);
+    void setShellBottomTabsHeight(int height);
+    void setShellBottomTabsCurrentTab(const QString& tabId);
+    void navigateShellTimelineToSecond(double second);
+    void wheelShellTimelineNavigate(double second);
+    void centerShellTimelineNavigate(double second);
+    void shellTimelineDragStarted();
+    void shellTimelineDragFinished(double second);
+    void shellTimelineUserInteractionStarted();
+    void shellTimelineSurfaceReady();
+    void shellTimelineFollowPreviewToggled(bool enabled);
+    void shellTimelineViewportLockToggled(bool enabled);
+    void shellTimelineFollowProgressToggled(bool enabled);
+    void shellTimelineSyncToggled(bool enabled);
+    bool shellHasShortcut(const QKeySequence& sequence) const;
+    bool shellTriggerShortcut(const QKeySequence& sequence);
+    QString shellWindowTitle() const;
+    bool shellWorkspacePanelsSwapped() const;
+    QString shellPreviewSpeedLabel() const;
+    bool shellMuriCheckRenderMode() const;
+    bool shellPreviewPlaying() const;
+    double shellPreviewPositionSeconds() const;
+    double shellPreviewDurationSeconds() const;
+    double shellPreviewLowerBoundSeconds() const;
+    QStringList shellPreviewStatsTexts() const;
+    double shellPreviewCanvasAspectRatio() const;
+    quint64 shellPreviewPaneRestoreGeneration() const;
+    double shellPreviewPaneWidthRatio() const;
+    bool shellPreviewFullscreen() const;
+    QObject* shellPreviewRuntimeObject() const;
+    QObject* shellPreviewStageMediaHostObject() const;
+    bool shellPreviewUsesSeparateSurface() const;
+    QWindow* shellPreviewCompositeWindow() const;
+    QObject* shellTimelineStateBridgeObject() const;
+    QString shellBottomTabsCurrentTabId() const;
+    bool shellBottomTabsVisible() const;
+    bool shellTimelineTabVisible() const;
+    bool shellValidationTabVisible() const;
+    bool shellMuriTabVisible() const;
+    bool shellExportPageActive() const;
+    QWidget* shellWindowWidget() const;
+    QDockWidget* shellOutlineDockWidget() const;
+    bool shellOutlineDockCollapsed() const;
+    int shellOutlineDockExpandedWidth() const;
+    QWidget* shellWorkspaceWidget() const;
+    QWidget* shellBottomTabsWidget() const;
+    int shellBottomTabsHeight() const;
+    double shellBottomTabsHeaderScale() const;
+    QWidget* shellPreviewPanelWidget() const;
+    double shellNormalizedPreviewCanvasAspectRatio() const;
+    void shellRefreshLayoutAfterResize();
+    void shellSetRootWindowFrameGeometry(const QRect& geometry);
+    void shellNoteQuickUiReady();
 
 protected:
-    void closeEvent(QCloseEvent* event) override;
-    bool event(QEvent* event) override;
-    bool eventFilter(QObject* watched, QEvent* event) override;
-    void resizeEvent(QResizeEvent* event) override;
-    void moveEvent(QMoveEvent* event) override;
-    void showEvent(QShowEvent* event) override;
-    void hideEvent(QHideEvent* event) override;
-    void changeEvent(QEvent* event) override;
+    void closeEvent(QCloseEvent* event);
+    bool event(QEvent* event);
+    bool eventFilter(QObject* watched, QEvent* event);
+    void resizeEvent(QResizeEvent* event);
+    void moveEvent(QMoveEvent* event);
+    void showEvent(QShowEvent* event);
+    void hideEvent(QHideEvent* event);
+    void changeEvent(QEvent* event);
 
 private slots:
     void onNewFile();
@@ -398,21 +474,7 @@ private slots:
     void restoreBackupFilePath(const QString& path);
     bool onSaveFile();
     bool onSaveFileAs();
-    void onMirrorLeftRight();
-    void onMirrorUpDown();
-    void onRotate180();
-    void onRotate45CounterClockwise();
-    void onRotate45Clockwise();
     void onNormalizeWholeChart();
-    void onToggleBreakSelection();
-    void onToggleExSelection();
-    void onToggleFireworkSelection();
-    void onRandomRotateSelection();
-    void onClearCompleteElementsSelection();
-    void onRaiseSubdivisionSelection();
-    void onLowerSubdivisionSelection();
-    void onRaiseSubdivisionHalfStepSelection();
-    void onLowerSubdivisionHalfStepSelection();
     void onStopPreview();
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);
@@ -422,16 +484,25 @@ private slots:
     void onExportCover();
     void onBatchExportPreviewVideo();
     void onPackAsZip();
-    void onNetBatchDownload();
-    void onNetBatchUpload();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onSkinSettings();
+    // Asks the QML shell to show the media tools page. Kept as a slot because
+    // the latency page and the tools menu both still trigger it.
     void onMediaProcessingTools();
-    void onPrependTrackSilence();
-    void onPrependPvBlack();
+
+public:
+    // 音视频处理's narrow surface for the QML page. Public rather than another
+    // friend declaration: the QML layer reaches these through the context.
     void onCompressBackgroundVideo();
     void onConvertTrackTo44100Hz();
+    // Prepend-blank, split around the QML dialog.
+    QVariantMap prependMediaBlankContext(bool isTrack);
+    QVariantMap detectMediaBlankTiming(bool isTrack);
+    void restoreMediaBlankBackup(bool isTrack);
+    void applyMediaBlank(bool isTrack, double beats, double bpm);
+
+private slots:
     void onReadTitleFromTrack();
     void onReadArtistFromTrack();
     void onExtractBackgroundFromTrack();
@@ -440,7 +511,6 @@ private slots:
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
     void onManagePerDifficultyDesigners();
     void onPreferences();
-    void showExtensionDevToolsDialog();
     void onAbout();
     void onToggleFindReplace();
     void onFindNext();
@@ -462,6 +532,8 @@ public:
     };
 private:
     std::function<bool(const QString&)> qmlDocumentSaveHandler_;
+    std::function<void(std::function<void(bool)>)> qmlLeaveDocumentHandler_;
+    std::function<bool(const QString&)> qmlChartTextHandler_;
     quint64 appliedQmlWorkspaceRevision_ = 0;
     std::unique_ptr<miacode::v2::EditorSyncController> editorSyncController_;
     using BatchTransform = std::function<QString(const QString&, int*)>;
@@ -526,11 +598,6 @@ private:
     QRect previewFullscreenControlCardRect(bool visible) const;
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
-    void applyAppBackgroundSettings(
-        const miacode::ui::AppBackgroundSettings& settings,
-        bool persistPreference,
-        bool refreshTheme = true);
-    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(
         const QString& value,
         PreviewCanvasFrameRateMode fallback) const;
@@ -566,16 +633,11 @@ private:
     QString previewSkinVariantStorageValue() const;
     QStringList availablePreviewSkinDirectoryNames() const;
     QString previewSkinDisplayName(const QString& directoryName) const;
-    double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
-    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
-    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
-    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
     double timelineSecondForCursor(int line, int col) const;
     bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
     void jumpToLocation(int line, int col);
-    QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
     QString editorText() const;
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
@@ -587,20 +649,47 @@ private:
     void applyPortablePreviewSettings(const QJsonObject& preview);
     void loadPortableState();
     void savePortableState() const;
+
+public:
+    // 偏好设置's narrow surface for the QML page. Every setter already took a
+    // "persist" flag, so the QML model is a projection rather than new policy.
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
+    // 延迟校准's narrow surface for the QML page. Reads mirror what the
+    // Widgets page derived from the document; writes are the existing
+    // applyLatencyDetector* transactions.
+    double latencyDocumentWholeBpm() const;
+    double latencyDocumentOffsetSeconds() const;
+    int latencyDocumentClockCount() const;
+    QString latencyTrackPath() const;
+    void applyLatencyDetectorBpm(double bpm);
+    void applyLatencyDetectorOffset(double seconds);
+    void applyLatencyDetectorClockCount(int clockCount);
+    // Re-applies shortcut bindings to the live QActions after an edit.
+    void applyConfiguredShortcuts();
+    // Performance + workspace settings the QML preferences page drives.
+    void setWorkspacePanelsSwapped(bool swapped, bool persistState);
+    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
+    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    double currentPreviewCanvasRefreshRate() const;
+    int currentEditorTextFontSize() const;
+    double currentEditorLineSpacingFactor() const;
+    bool currentEditorHalfWidthInputEnabled() const;
+    bool currentEditorAutoCompletionEnabled() const;
+    bool currentEditorImeInputDisabled() const;
+    bool currentWorkspacePanelsSwapped() const;
+
+private:
     // Transient Alt-hold override: while the preview is paused, holding Alt
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
     void setPauseDisplayAltHoldActive(bool active);
     void setTouchPadAuthoringCtrlHoldActive(bool active);
-    void activateBookmarkAtLine(int line);
-    void setFullCopyAreaVisible(bool visible);
-    void syncCopyAreaEditorAppearance();
-    void syncCopyAreaLineCount();
     void addRecentFilePath(const QString& path);
     void openRecentFilePath(const QString& path);
     void refreshRecentFilesMenu(QMenu* recentFilesMenu);
@@ -614,7 +703,6 @@ private:
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
-    void refreshEditorExtraSelections();
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();

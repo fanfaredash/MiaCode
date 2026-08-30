@@ -1,3 +1,6 @@
+#include "tools/media/PvBatchCompressionScanner.h"
+#include "app/v2/UiRequestService.h"
+#include "app/v2/JobProgressService.h"
 #include "MainWindow.DialogsSection.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
@@ -8,7 +11,6 @@
 #include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiTheme.h"
-#include "tools/media/PvBatchCompressionDialog.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/Id3TagReader.h"
@@ -300,38 +302,41 @@ bool replaceFileWithTemp(const QString& tempPath, const QString& destinationPath
     return true;
 }
 
-// Runs ffmpeg modally with a progress dialog. When `totalDurationSeconds` is
-// positive the bar tracks real percent-done — matching the video-export
-// progress UX — by reading ffmpeg's machine-readable `-progress pipe:1`
-// stream: each block carries an `out_time_us=` line (the output timestamp
-// reached so far) which, divided by the expected total duration, gives the
-// percentage. When the duration is unknown (<= 0) it falls back to an
-// indeterminate busy bar.
+// Runs ffmpeg on the shell's shared progress surface. When
+// `totalDurationSeconds` is positive the bar tracks real percent-done by
+// reading ffmpeg's machine-readable `-progress pipe:1` stream: each block
+// carries an `out_time_us=` line (the output timestamp reached so far) which,
+// divided by the expected total duration, gives the percentage. When the
+// duration is unknown (<= 0) it falls back to an indeterminate busy bar.
 bool runFfmpegBlocking(
     const QString& ffmpegPath,
     const QStringList& args,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
+    const QString& title,
     const QString& label,
     double totalDurationSeconds,
     QString* error,
     bool* cancelled = nullptr)
 {
+    if (jobProgress == nullptr) {
+        if (error != nullptr) {
+            *error = QStringLiteral("progress surface unavailable");
+        }
+        return false;
+    }
     if (cancelled != nullptr) {
         *cancelled = false;
     }
     const bool determinate = totalDurationSeconds > 0.0;
-    QProgressDialog progress(label, QString(), 0, determinate ? 100 : 0, parent);
-    progress.setWindowModality(Qt::ApplicationModal);
-    // Real Cancel button (mirrors the export flow). Clicking it asks for
-    // confirmation before actually aborting the ffmpeg process (see below).
-    progress.setCancelButtonText(UiText::text(QStringLiteral("action.cancel")));
-    progress.setMinimumDuration(0);
-    progress.setAutoClose(false);
-    progress.setAutoReset(false);
-    if (determinate) {
-        progress.setValue(0);
+    const quint64 jobToken = jobProgress->begin(title, label, /*cancellable=*/true);
+    if (!determinate) {
+        jobProgress->reportIndeterminate(label);
     }
-    progress.show();
+    const auto endJob = [jobProgress, jobToken]() {
+        if (jobProgress->token() == jobToken) {
+            jobProgress->end();
+        }
+    };
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
     QStringList progressArgs;
@@ -345,19 +350,12 @@ bool runFfmpegBlocking(
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.start(ffmpegPath, progressArgs, QIODevice::ReadOnly);
     if (!process.waitForStarted(5000)) {
+        endJob();
         if (error != nullptr) {
             *error = process.errorString();
         }
         return false;
     }
-
-    // Cancel = abort immediately (no confirmation prompt). Clicking the
-    // dialog's Cancel button just flags the loop below, which kills the ffmpeg
-    // process; the caller then surfaces a "canceled" popup.
-    bool cancelConfirmed = false;
-    QObject::connect(&progress, &QProgressDialog::canceled, &progress, [&]() {
-        cancelConfirmed = true;
-    });
 
     QString progressBuffer;
     QString stderrTail;
@@ -380,7 +378,8 @@ bool runFfmpegBlocking(
                         const double seconds = static_cast<double>(lastMicros) / 1000000.0;
                         // Cap at 99% until the process actually exits so the
                         // bar doesn't read "done" while ffmpeg is still muxing.
-                        progress.setValue(qBound(0, qRound(seconds / totalDurationSeconds * 100.0), 99));
+                        jobProgress->report(
+                            qBound(0, qRound(seconds / totalDurationSeconds * 100.0), 99), label);
                     }
                 }
             }
@@ -397,13 +396,13 @@ bool runFfmpegBlocking(
     while (process.state() != QProcess::NotRunning) {
         process.waitForReadyRead(100);
         pump();
-        // AllEvents (not ExcludeUserInputEvents) so the Cancel button receives
-        // clicks; the dialog is application-modal, so the main window stays inert.
+        // AllEvents (not ExcludeUserInputEvents) so the overlay's Cancel button
+        // receives clicks; the overlay swallows input to everything beneath it.
         QCoreApplication::processEvents(QEventLoop::AllEvents);
-        if (cancelConfirmed) {
+        if (jobProgress->cancelRequested()) {
             process.kill();
             process.waitForFinished(2000);
-            progress.close();
+            endJob();
             if (cancelled != nullptr) {
                 *cancelled = true;
             }
@@ -416,9 +415,9 @@ bool runFfmpegBlocking(
     process.waitForFinished(200);
     pump();  // drain anything emitted between the last read and exit
     if (determinate) {
-        progress.setValue(100);
+        jobProgress->report(100, label);
     }
-    progress.close();
+    endJob();
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         if (error != nullptr) {
@@ -489,7 +488,7 @@ bool probeMediaDurationSeconds(const QString& ffmpegPath, const QString& mediaPa
 bool compressVideoUnder20Mb(
     const QString& ffmpegPath,
     const QString& videoPath,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr,
     bool* preservedCompressed = nullptr)
@@ -551,7 +550,8 @@ bool compressVideoUnder20Mb(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.compressing_video")),
             UiText::text(QStringLiteral("media_tools.compressing_video")),
             durationSeconds,
             error,
@@ -604,7 +604,7 @@ bool compressVideoUnder20Mb(
 bool convertTrackTo44100Hz(
     const QString& ffmpegPath,
     const QString& trackPath,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr)
 {
@@ -633,7 +633,8 @@ bool convertTrackTo44100Hz(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.processing_audio")),
             UiText::text(QStringLiteral("media_tools.processing_audio")),
             trackDurationSeconds,
             error,
@@ -648,7 +649,7 @@ bool prependTrackSilence(
     const QString& ffmpegPath,
     const QString& trackPath,
     double silenceSeconds,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr)
 {
@@ -683,7 +684,8 @@ bool prependTrackSilence(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.processing_track_mp3")),
             UiText::text(QStringLiteral("media_tools.processing_track_mp3")),
             totalDurationSeconds,
             error,
@@ -698,7 +700,7 @@ bool prependPvBlack(
     const QString& ffmpegPath,
     const QString& pvPath,
     double silenceSeconds,
-    QWidget* parent,
+    miacode::v2::JobProgressService* jobProgress,
     QString* error,
     bool* cancelled = nullptr)
 {
@@ -739,7 +741,8 @@ bool prependPvBlack(
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
-            parent,
+            jobProgress,
+            UiText::text(QStringLiteral("media_tools.processing_pv_mp4")),
             UiText::text(QStringLiteral("media_tools.processing_pv_mp4")),
             totalDurationSeconds,
             error,
@@ -752,37 +755,28 @@ bool prependPvBlack(
 
 } // namespace
 
-void MainWindow::DialogsSection::onPrependTrackSilence()
-{
-    onPrependMediaBlank(MediaBlankTarget::Track);
-}
-
-void MainWindow::DialogsSection::onPrependPvBlack()
-{
-    onPrependMediaBlank(MediaBlankTarget::Pv);
-}
-
 void MainWindow::DialogsSection::onCompressBackgroundVideo()
 {
     MC_OP("MainWindow::DialogsSection::onCompressBackgroundVideo");
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        return;
+    }
     const QString title = UiText::text(QStringLiteral("media_tools.compress_video"));
     const QString chartDirPath = resolveCurrentChartDirectory();
     if (chartDirPath.isEmpty()) {
-        QMessageBox::warning(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart"))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning, title,
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart")));
         return;
     }
 
-    const QString videoPath = miacode::chart_assets::resolveChartVideoPath(owner_.currentFilePath_, owner_.document_.videoPath);
+    const QString videoPath = miacode::chart_assets::resolveChartVideoPath(
+        owner_.currentFilePath_, owner_.document_.videoPath);
     if (!QFileInfo::exists(videoPath)) {
-        QMessageBox::warning(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.no_background_mp4_video_was"))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning, title,
+            UiText::text(QStringLiteral("media_tools.no_background_mp4_video_was")));
         return;
     }
 
@@ -793,29 +787,39 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     constexpr qint64 kCompressTargetBytes = miacode::media::kPvCompressionTargetBytes;
     const qint64 videoSizeBytes = videoInfo.size();
     if (videoSizeBytes > 0 && videoSizeBytes <= kCompressTargetBytes) {
-        QMessageBox::information(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.the_current_video_is_already_2")).arg(QLocale().formattedDataSize(videoSizeBytes))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Information, title,
+            UiText::text(QStringLiteral("media_tools.the_current_video_is_already_2"))
+                .arg(QLocale().formattedDataSize(videoSizeBytes)));
         return;
     }
-    const QString backupName = QStringLiteral("%1_bak.%2").arg(videoInfo.completeBaseName(), videoInfo.suffix());
-    if (QMessageBox::question(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.compress_1_under_20_mib")).arg(videoInfo.fileName(), backupName)
-        ) != QMessageBox::Yes) {
-        return;
-    }
+    const QString backupName =
+        QStringLiteral("%1_bak.%2").arg(videoInfo.completeBaseName(), videoInfo.suffix());
+    requests->requestConfirmation(
+        title,
+        UiText::text(QStringLiteral("media_tools.compress_1_under_20_mib"))
+            .arg(videoInfo.fileName(), backupName),
+        UiText::text(QStringLiteral("media_tools.compress_video")),
+        [this, title, videoPath, backupName](bool accepted) {
+            if (accepted) {
+                runCompressBackgroundVideo(title, videoPath, backupName);
+            }
+        });
+}
 
+void MainWindow::DialogsSection::runCompressBackgroundVideo(
+    const QString& title, const QString& videoPath, const QString& backupName)
+{
+    MC_OP("MainWindow::DialogsSection::runCompressBackgroundVideo");
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        return;
+    }
     const QString ffmpegPath = resolveMediaToolFfmpegExecutable();
     if (ffmpegPath.isEmpty()) {
-        QMessageBox::critical(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.ffmpeg_was_not_found_place"))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Error, title,
+            UiText::text(QStringLiteral("media_tools.ffmpeg_was_not_found_place")));
         return;
     }
 
@@ -824,73 +828,76 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     QString error;
     bool cancelled = false;
     bool preservedCompressed = false;
-    if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled, &preservedCompressed)) {
-        if (cancelled) {
-            QMessageBox::information(
-                UiDialogs::effectiveParentWidget(&owner_), title,
-                UiText::text(QStringLiteral("media_tools.video_compression_canceled")));
-        } else if (preservedCompressed) {
-            // Compression succeeded; only the auto-replace was blocked by the
-            // file lock. The compressed clip was kept beside the original — this
-            // is a heads-up, not a hard failure.
-            QMessageBox::information(UiDialogs::effectiveParentWidget(&owner_), title, error);
-        } else {
-            QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
-        }
+    if (!compressVideoUnder20Mb(
+            ffmpegPath, videoPath, owner_.jobProgressService(), &error, &cancelled,
+            &preservedCompressed)) {
+        // preservedCompressed means the encode succeeded and only the
+        // auto-replace was blocked by a file lock — a heads-up, not a failure.
+        requests->postNotice(
+            (cancelled || preservedCompressed) ? miacode::v2::NoticeSeverity::Information
+                                               : miacode::v2::NoticeSeverity::Error,
+            title,
+            cancelled ? UiText::text(QStringLiteral("media_tools.video_compression_canceled"))
+                      : error);
         reloadPreviewMediaAfterFileOperation(false);
         return;
     }
     reloadPreviewMediaAfterFileOperation(false);
-    owner_.statusBar()->showMessage(
-        UiText::text(QStringLiteral("media_tools.compressed_1_under_20_mib")).arg(videoInfo.fileName()),
-        6000
-    );
     showMediaOperationCompleteDialog(
         title,
-        UiText::text(QStringLiteral("media_tools.compressed_1_under_20_mib_2")).arg(videoInfo.fileName(), backupName),
-        videoPath
-    );
+        UiText::text(QStringLiteral("media_tools.compressed_1_under_20_mib_2"))
+            .arg(QFileInfo(videoPath).fileName(), backupName),
+        videoPath);
 }
 
 void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
 {
     MC_OP("MainWindow::DialogsSection::onConvertTrackTo44100Hz");
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        return;
+    }
     const QString title = UiText::text(QStringLiteral("media_tools.sample_rate"));
     const QString chartDirPath = resolveCurrentChartDirectory();
     if (chartDirPath.isEmpty()) {
-        QMessageBox::warning(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart"))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning, title,
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart")));
         return;
     }
 
     const QString trackPath = QDir(chartDirPath).filePath(QStringLiteral("track.mp3"));
     if (!QFileInfo::exists(trackPath)) {
-        QMessageBox::warning(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.track_mp3_was_not_found"))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning, title,
+            UiText::text(QStringLiteral("media_tools.track_mp3_was_not_found")));
         return;
     }
 
-    if (QMessageBox::question(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.convert_track_mp3_to_44100"))
-        ) != QMessageBox::Yes) {
+    requests->requestConfirmation(
+        title,
+        UiText::text(QStringLiteral("media_tools.convert_track_mp3_to_44100")),
+        UiText::text(QStringLiteral("media_tools.sample_rate")),
+        [this, title, trackPath](bool accepted) {
+            if (accepted) {
+                runConvertTrackTo44100Hz(title, trackPath);
+            }
+        });
+}
+
+void MainWindow::DialogsSection::runConvertTrackTo44100Hz(
+    const QString& title, const QString& trackPath)
+{
+    MC_OP("MainWindow::DialogsSection::runConvertTrackTo44100Hz");
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
         return;
     }
-
     const QString ffmpegPath = resolveMediaToolFfmpegExecutable();
     if (ffmpegPath.isEmpty()) {
-        QMessageBox::critical(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.ffmpeg_was_not_found_place"))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Error, title,
+            UiText::text(QStringLiteral("media_tools.ffmpeg_was_not_found_place")));
         return;
     }
 
@@ -898,407 +905,190 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
 
     QString error;
     bool cancelled = false;
-    if (!convertTrackTo44100Hz(ffmpegPath, trackPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled)) {
-        if (cancelled) {
-            QMessageBox::information(
-                UiDialogs::effectiveParentWidget(&owner_), title,
-                UiText::text(QStringLiteral("media_tools.sample_rate_conversion_canceled")));
-        } else {
-            QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
-        }
+    if (!convertTrackTo44100Hz(ffmpegPath, trackPath, owner_.jobProgressService(), &error, &cancelled)) {
+        requests->postNotice(
+            cancelled ? miacode::v2::NoticeSeverity::Information
+                      : miacode::v2::NoticeSeverity::Error,
+            title,
+            cancelled
+                ? UiText::text(QStringLiteral("media_tools.sample_rate_conversion_canceled"))
+                : error);
         reloadPreviewMediaAfterFileOperation(true);
         return;
     }
     reloadPreviewMediaAfterFileOperation(true);
-    owner_.statusBar()->showMessage(
-        UiText::text(QStringLiteral("media_tools.converted_track_mp3_to_44100")),
-        6000
-    );
     showMediaOperationCompleteDialog(
         title,
         UiText::text(QStringLiteral("media_tools.converted_track_mp3_to_44100_2")),
-        trackPath
-    );
+        trackPath);
 }
 
-void MainWindow::DialogsSection::onMediaProcessingTools()
+MainWindow::DialogsSection::MediaBlankPaths MainWindow::DialogsSection::resolveMediaBlankPaths(MediaBlankTarget target) const
 {
-    MC_OP("MainWindow::DialogsSection::onMediaProcessingTools");
-    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(UiText::text(QStringLiteral("media_tools.audio_video_processing")));
-    dialog.setModal(true);
-    dialog.setMinimumWidth(480);
-    dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
-
-    auto* rootLayout = new QVBoxLayout(&dialog);
-    rootLayout->setContentsMargins(14, 14, 14, 12);
-    rootLayout->setSpacing(10);
-
-    struct MediaToolEntry {
-        QString label;
-        QString description;
-        void (MainWindow::DialogsSection::*handler)();
-    };
-    const QVector<MediaToolEntry> entries = {
-        { UiText::text(QStringLiteral("media_tools.sample_rate")),
-          UiText::text(QStringLiteral("media_tools.convert_track_mp3_to_44100_2")),
-          &MainWindow::DialogsSection::onConvertTrackTo44100Hz },
-        { UiText::text(QStringLiteral("media_tools.compress_video")),
-          UiText::text(QStringLiteral("media_tools.compress_the_background_video_under")),
-          &MainWindow::DialogsSection::onCompressBackgroundVideo },
-        { UiText::text(QStringLiteral("media_tools.batch_pv_title")),
-          UiText::text(QStringLiteral("media_tools.batch_pv_description")),
-          &MainWindow::DialogsSection::onBatchCompressPv },
-        { UiText::text(QStringLiteral("media_tools.prepend_track_silence")),
-          UiText::text(QStringLiteral("media_tools.insert_silence_at_the_start")),
-          &MainWindow::DialogsSection::onPrependTrackSilence },
-        { UiText::text(QStringLiteral("media_tools.prepend_pv_black_screen")),
-          UiText::text(QStringLiteral("media_tools.insert_a_black_screen_at")),
-          &MainWindow::DialogsSection::onPrependPvBlack },
-    };
-
-    QVector<QPushButton*> toolButtons;
-    QVector<QLabel*> descLabels;
-    toolButtons.reserve(entries.size());
-    descLabels.reserve(entries.size());
-    for (const MediaToolEntry& entry : entries) {
-        auto* card = new QFrame(&dialog);
-        card->setObjectName("AboutCard");
-        auto* cardLayout = new QHBoxLayout(card);
-        cardLayout->setContentsMargins(16, 12, 16, 12);
-        cardLayout->setSpacing(12);
-
-        auto* button = new QPushButton(entry.label, card);
-        button->setCursor(Qt::PointingHandCursor);
-        toolButtons.append(button);
-        // Each button runs its existing handler, which shows its own
-        // confirm prompt and a determinate progress bar. The dialog stays
-        // open (modal) so several tools can be run in one sitting.
-        connect(button, &QPushButton::clicked, &dialog, [this, &dialog, handler = entry.handler]() {
-            if (handler == &MainWindow::DialogsSection::onBatchCompressPv) {
-                dialog.accept();
-                QTimer::singleShot(0, &owner_, [this]() { onBatchCompressPv(); });
-                return;
-            }
-            (this->*handler)();
-        });
-        cardLayout->addWidget(button, 0, Qt::AlignTop);
-
-        auto* desc = new QLabel(entry.description, card);
-        desc->setObjectName("AboutValue");
-        desc->setWordWrap(true);
-        descLabels.append(desc);
-        cardLayout->addWidget(desc, 1);
-
-        rootLayout->addWidget(card);
-    }
-
-    // Give every button the same width, wide enough for the longest label so
-    // the multi-character Chinese labels (e.g. "音频开头静音处理") don't clip.
-    int uniformButtonWidth = 0;
-    for (QPushButton* button : toolButtons) {
-        const int advance = button->fontMetrics().horizontalAdvance(button->text());
-        uniformButtonWidth = qMax(uniformButtonWidth, qMax(advance, button->sizeHint().width()));
-    }
-    uniformButtonWidth += 40;  // padding beyond the raw text advance
-    for (QPushButton* button : toolButtons) {
-        button->setFixedWidth(uniformButtonWidth);
-    }
-
-    // Widen the dialog so the longest description fits on a single line next to
-    // its button (button + spacing + full description text + all the margins).
-    int widestDescription = 0;
-    for (QLabel* desc : descLabels) {
-        widestDescription = qMax(widestDescription, desc->fontMetrics().horizontalAdvance(desc->text()));
-    }
-    const int requiredWidth = 14 + 14            // rootLayout left/right margins
-        + 16 + 16                                // card left/right margins
-        + uniformButtonWidth + 12                // button + card spacing
-        + widestDescription + 16;                // description + slack
-    dialog.setMinimumWidth(qMax(480, requiredWidth));
-
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    UiDialogs::localizeButtonBox(buttonBox);
-    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
-
-    dialog.exec();
-}
-
-void MainWindow::DialogsSection::onBatchCompressPv()
-{
-    MC_OP("MainWindow::DialogsSection::onBatchCompressPv");
-    miacode::media::PvBatchCompressionDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    owner_.pvBatchCompressionDialog_ = &dialog;
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
-    dialog.exec();
-    owner_.pvBatchCompressionDialog_ = nullptr;
-}
-
-void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
-{
-    MC_OP("MainWindow::DialogsSection::onPrependMediaBlank");
-    const bool isTrack = target == MediaBlankTarget::Track;
-    const QString title = isTrack
-        ? (UiText::text(QStringLiteral("media_tools.prepend_track_silence")))
-        : (UiText::text(QStringLiteral("media_tools.prepend_pv_black_screen")));
+    MediaBlankPaths paths;
+    paths.isTrack = target == MediaBlankTarget::Track;
+    paths.title = paths.isTrack
+        ? UiText::text(QStringLiteral("media_tools.prepend_track_silence"))
+        : UiText::text(QStringLiteral("media_tools.prepend_pv_black_screen"));
     const QString chartDirPath = resolveCurrentChartDirectory();
     if (chartDirPath.isEmpty()) {
-        QMessageBox::warning(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart"))
-        );
-        return;
+        return paths;
     }
-
-    const QDir chartDir(chartDirPath);
-    const QString trackPath = chartDir.filePath(QStringLiteral("track.mp3"));
-    const QString videoPath = miacode::chart_assets::resolveChartVideoPath(owner_.currentFilePath_, owner_.document_.videoPath);
-    const QString inputPath = isTrack ? trackPath : videoPath;
-    const QFileInfo inputInfo(inputPath);
-    const QString inputName = isTrack ? QStringLiteral("track.mp3") : inputInfo.fileName();
-    const QString backupName = isTrack
+    paths.inputPath = paths.isTrack
+        ? QDir(chartDirPath).filePath(QStringLiteral("track.mp3"))
+        : miacode::chart_assets::resolveChartVideoPath(
+              owner_.currentFilePath_, owner_.document_.videoPath);
+    const QFileInfo inputInfo(paths.inputPath);
+    paths.inputName = paths.isTrack ? QStringLiteral("track.mp3") : inputInfo.fileName();
+    paths.backupName = paths.isTrack
         ? QStringLiteral("track_bak.mp3")
         : QStringLiteral("%1_bak.%2").arg(inputInfo.completeBaseName(), inputInfo.suffix());
-    const QString backupPath = inputPath.isEmpty()
+    paths.backupPath = paths.inputPath.isEmpty()
         ? QString()
-        : inputInfo.dir().filePath(backupName);
-    if (!QFileInfo::exists(inputPath)) {
-        QMessageBox::warning(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
+        : inputInfo.dir().filePath(paths.backupName);
+    return paths;
+}
+
+QVariantMap MainWindow::DialogsSection::prependMediaBlankContext(MediaBlankTarget target)
+{
+    MC_OP("MainWindow::DialogsSection::prependMediaBlankContext");
+    QVariantMap context;
+    context.insert(QStringLiteral("available"), false);
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        return context;
+    }
+    const MediaBlankPaths paths = resolveMediaBlankPaths(target);
+    context.insert(QStringLiteral("title"), paths.title);
+    context.insert(QStringLiteral("isTrack"), paths.isTrack);
+    if (paths.inputPath.isEmpty()) {
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning, paths.title,
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart")));
+        return context;
+    }
+    if (!QFileInfo::exists(paths.inputPath)) {
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning, paths.title,
             UiText::text(QStringLiteral("media_tools.1_was_not_found_next"))
-                .arg(isTrack
-                    ? inputName
-                    : UiText::text(QStringLiteral("media_tools.background_mp4_video")))
-        );
-        return;
+                .arg(paths.isTrack
+                         ? paths.inputName
+                         : UiText::text(QStringLiteral("media_tools.background_mp4_video"))));
+        return context;
     }
 
-    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(title);
-    dialog.setModal(true);
-    dialog.setMinimumWidth(360);
-    dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
-
-    auto* layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(14, 14, 14, 12);
-    layout->setSpacing(10);
-
-    auto* form = new QFormLayout();
-    form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    auto* beatsSpin = new QDoubleSpinBox(&dialog);
-    beatsSpin->setRange(0.125, 512.0);
-    beatsSpin->setDecimals(3);
-    beatsSpin->setSingleStep(1.0);
-    auto* bpmSpin = new QDoubleSpinBox(&dialog);
-    bpmSpin->setRange(1.0, 999.0);
-    bpmSpin->setDecimals(3);
-    bpmSpin->setSingleStep(1.0);
     const QVector<SimaiRawField> extraFields = SimaiDocument::parseRawFields(
-        ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
-        true
-    );
-    const QString chartText = owner_.activeChartText();
-    const auto detectedBeats = [extraFields]() {
-        const int clockCount = mediaBlankClockCountFromFields(extraFields);
-        return clockCount > 0 ? clockCount : 4;
-    };
-    const auto detectedBpm = [extraFields, chartText]() {
-        const double wholeBpm = miacode::chart_clock::wholeBpmFromFields(extraFields);
-        if (wholeBpm > 0.0) {
-            return wholeBpm;
-        }
-        const double chartBpm = miacode::chart_clock::firstBpmFromChart(chartText);
-        return chartBpm > 0.0 ? chartBpm : miacode::chart_clock::kFallbackClockBpm;
-    };
-    const auto analyzeTrackBpmAndMeter = [this]() -> QPair<double, QString> {
-        const QString trackPath = miacode::chart_assets::resolveTrackPath(owner_.currentFilePath_);
-        const auto decoded = miacode::latency_analysis::decodeMonoTrack(trackPath);
-        if (decoded.samples.isEmpty()) {
-            return {0.0, QString()};
-        }
-        const auto envelope = miacode::latency_analysis::buildOnsetEnvelope(decoded.samples, decoded.sampleRate);
-        const auto result = miacode::latency_analysis::detectBpm(envelope);
-        if (!(result.bpm > 0.0)) {
-            return {0.0, QString()};
-        }
-        return {result.bpm, result.meterId};
-    };
-    beatsSpin->setValue(detectedBeats());
-    bpmSpin->setValue(detectedBpm());
-    auto* beatsRow = new QWidget(&dialog);
-    auto* beatsRowLayout = new QHBoxLayout(beatsRow);
-    beatsRowLayout->setContentsMargins(0, 0, 0, 0);
-    beatsRowLayout->setSpacing(6);
-    beatsRowLayout->addWidget(beatsSpin, 1);
-    auto* detectBeatsButton = new QPushButton(UiText::text(QStringLiteral("media_tools.detect")), beatsRow);
-    beatsRowLayout->addWidget(detectBeatsButton, 0);
-    auto* bpmRow = new QWidget(&dialog);
-    auto* bpmRowLayout = new QHBoxLayout(bpmRow);
-    bpmRowLayout->setContentsMargins(0, 0, 0, 0);
-    bpmRowLayout->setSpacing(6);
-    bpmRowLayout->addWidget(bpmSpin, 1);
-    auto* detectBpmButton = new QPushButton(UiText::text(QStringLiteral("media_tools.detect")), bpmRow);
-    bpmRowLayout->addWidget(detectBpmButton, 0);
-    const auto applyDetectedBeats = [beatsSpin, analyzeTrackBpmAndMeter, detectedBeats]() {
-        const QPair<double, QString> detected = analyzeTrackBpmAndMeter();
-        beatsSpin->setValue(detected.second.isEmpty() ? detectedBeats() : mediaBlankBeatsFromMeterId(detected.second));
-    };
-    const auto applyDetectedBpm = [bpmSpin, analyzeTrackBpmAndMeter, detectedBpm]() {
-        const QPair<double, QString> detected = analyzeTrackBpmAndMeter();
-        bpmSpin->setValue(detected.first > 0.0 ? detected.first : detectedBpm());
-    };
-    connect(detectBeatsButton, &QPushButton::clicked, &dialog, applyDetectedBeats);
-    connect(detectBpmButton, &QPushButton::clicked, &dialog, applyDetectedBpm);
-    form->addRow(UiText::text(QStringLiteral("media_tools.beats")), beatsRow);
-    form->addRow(QStringLiteral("BPM"), bpmRow);
+        ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(), true);
+    const int clockCount = mediaBlankClockCountFromFields(extraFields);
+    const double wholeBpm = miacode::chart_clock::wholeBpmFromFields(extraFields);
+    const double chartBpm = miacode::chart_clock::firstBpmFromChart(owner_.activeChartText());
 
-    // Live, plain-language description of what the entered beats/BPM produce —
-    // updates as either spinner changes so the user sees the resulting blank
-    // length before committing. Placed ABOVE the inputs.
-    auto* summaryLabel = new QLabel(&dialog);
-    summaryLabel->setWordWrap(true);
-    const auto formatNumber = [](double value) {
-        QString text = QString::number(value, 'f', 3);
-        if (text.contains(QLatin1Char('.'))) {
-            while (text.endsWith(QLatin1Char('0'))) {
-                text.chop(1);
-            }
-            if (text.endsWith(QLatin1Char('.'))) {
-                text.chop(1);
-            }
-        }
-        return text;
-    };
-    const auto updateSummary = [summaryLabel, beatsSpin, bpmSpin, isTrack, inputName, formatNumber]() {
-        const double bpm = bpmSpin->value();
-        const double beats = beatsSpin->value();
-        const double seconds = bpm > 0.0 ? beats * 60.0 / bpm : 0.0;
-        const QString mediaKind = isTrack
-            ? UiText::text(QStringLiteral("media_tools.silence"))
-            : UiText::text(QStringLiteral("media_tools.a_black_screen"));
-        const QString target = isTrack
-            ? QStringLiteral("track.mp3")
-            : UiText::text(QStringLiteral("media_tools.the_background_video"));
-        summaryLabel->setText(UiText::text(QStringLiteral("media_tools.prepends_1_to_2_3"))
-            .arg(mediaKind, target, formatNumber(beats), formatNumber(bpm), formatNumber(seconds)));
-    };
-    connect(beatsSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog, [updateSummary](double) { updateSummary(); });
-    connect(bpmSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog, [updateSummary](double) { updateSummary(); });
-    updateSummary();
-    layout->addWidget(summaryLabel);
+    context.insert(QStringLiteral("available"), true);
+    context.insert(QStringLiteral("inputName"), paths.inputName);
+    context.insert(QStringLiteral("backupName"), paths.backupName);
+    context.insert(QStringLiteral("hasBackup"), QFileInfo::exists(paths.backupPath));
+    context.insert(QStringLiteral("beats"), clockCount > 0 ? clockCount : 4);
+    context.insert(
+        QStringLiteral("bpm"),
+        wholeBpm > 0.0 ? wholeBpm
+                       : (chartBpm > 0.0 ? chartBpm : miacode::chart_clock::kFallbackClockBpm));
+    return context;
+}
 
-    // Divider between the descriptive text block and the input fields. Colour
-    // comes from the theme palette so it adapts to light/dark mode.
-    auto* separator = new QFrame(&dialog);
-    separator->setFrameShape(QFrame::HLine);
-    separator->setFrameShadow(QFrame::Plain);
-    separator->setFixedHeight(1);
-    separator->setStyleSheet(
-        QStringLiteral("background-color: %1; border: none;")
-            .arg(UiTheme::colors().borderSoft.name(QColor::HexRgb)));
-    layout->addWidget(separator);
+QVariantMap MainWindow::DialogsSection::detectMediaBlankTiming(MediaBlankTarget target)
+{
+    // Analysis reads the chart's own track regardless of which media the blank
+    // is going in front of: the beat grid comes from the audio either way.
+    Q_UNUSED(target);
+    QVariantMap detected;
+    const QString trackPath = miacode::chart_assets::resolveTrackPath(owner_.currentFilePath_);
+    const auto decoded = miacode::latency_analysis::decodeMonoTrack(trackPath);
+    if (decoded.samples.isEmpty()) {
+        return detected;
+    }
+    const auto envelope =
+        miacode::latency_analysis::buildOnsetEnvelope(decoded.samples, decoded.sampleRate);
+    const auto result = miacode::latency_analysis::detectBpm(envelope);
+    if (!(result.bpm > 0.0)) {
+        return detected;
+    }
+    detected.insert(QStringLiteral("bpm"), result.bpm);
+    if (!result.meterId.isEmpty()) {
+        detected.insert(QStringLiteral("beats"), mediaBlankBeatsFromMeterId(result.meterId));
+    }
+    return detected;
+}
 
-    layout->addLayout(form);
-
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    auto* restoreButton = buttonBox->addButton(
-        UiText::text(QStringLiteral("media_tools.restore_backup")),
-        QDialogButtonBox::ActionRole
-    );
-    UiDialogs::localizeButtonBox(buttonBox);
-    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    connect(restoreButton, &QPushButton::clicked, &dialog, [backupPath, inputPath, isTrack, title, this]() {
-        releasePreviewMediaForFileOperation();
-        QString error;
-        if (!restoreFileFromBackup(backupPath, inputPath, &error)) {
-            QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
-            reloadPreviewMediaAfterFileOperation(isTrack);
-            return;
-        }
-        QMessageBox::information(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.backup_restored"))
-        );
-        reloadPreviewMediaAfterFileOperation(isTrack);
-    });
-    layout->addWidget(buttonBox, 0, Qt::AlignRight);
-    if (dialog.exec() != QDialog::Accepted) {
+void MainWindow::DialogsSection::restoreMediaBlankBackup(MediaBlankTarget target)
+{
+    MC_OP("MainWindow::DialogsSection::restoreMediaBlankBackup");
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
         return;
     }
+    const MediaBlankPaths paths = resolveMediaBlankPaths(target);
+    releasePreviewMediaForFileOperation();
+    QString error;
+    if (!restoreFileFromBackup(paths.backupPath, paths.inputPath, &error)) {
+        requests->postNotice(miacode::v2::NoticeSeverity::Error, paths.title, error);
+    } else {
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Information, paths.title,
+            UiText::text(QStringLiteral("media_tools.backup_restored")));
+    }
+    reloadPreviewMediaAfterFileOperation(paths.isTrack);
+}
 
-    const double silenceSeconds = beatsSpin->value() * 60.0 / bpmSpin->value();
+void MainWindow::DialogsSection::applyMediaBlank(MediaBlankTarget target, double beats, double bpm)
+{
+    MC_OP("MainWindow::DialogsSection::applyMediaBlank");
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr || !(bpm > 0.0) || !(beats > 0.0)) {
+        return;
+    }
+    const MediaBlankPaths paths = resolveMediaBlankPaths(target);
     const QString ffmpegPath = resolveMediaToolFfmpegExecutable();
     if (ffmpegPath.isEmpty()) {
-        QMessageBox::critical(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::text(QStringLiteral("media_tools.ffmpeg_was_not_found_place"))
-        );
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Error, paths.title,
+            UiText::text(QStringLiteral("media_tools.ffmpeg_was_not_found_place")));
         return;
     }
 
+    const double silenceSeconds = beats * 60.0 / bpm;
     releasePreviewMediaForFileOperation();
 
     QString error;
     bool cancelled = false;
-    const QWidget* parent = UiDialogs::effectiveParentWidget(&owner_);
-    if (isTrack && !prependTrackSilence(ffmpegPath, trackPath, silenceSeconds, const_cast<QWidget*>(parent), &error, &cancelled)) {
-        if (cancelled) {
-            QMessageBox::information(
-                UiDialogs::effectiveParentWidget(&owner_), title,
-                UiText::text(QStringLiteral("media_tools.track_mp3_processing_canceled")));
-        } else {
-            QMessageBox::critical(
-                UiDialogs::effectiveParentWidget(&owner_),
-                UiText::text(QStringLiteral("media_tools.track_mp3_failed")),
-                error
-            );
-        }
-        reloadPreviewMediaAfterFileOperation(isTrack);
-        return;
-    }
-    if (!isTrack && !prependPvBlack(ffmpegPath, videoPath, silenceSeconds, const_cast<QWidget*>(parent), &error, &cancelled)) {
-        if (cancelled) {
-            QMessageBox::information(
-                UiDialogs::effectiveParentWidget(&owner_), title,
-                UiText::text(QStringLiteral("media_tools.video_processing_canceled")));
-        } else {
-            QMessageBox::critical(
-                UiDialogs::effectiveParentWidget(&owner_),
-                UiText::text(QStringLiteral("media_tools.video_failed")),
-                error
-            );
-        }
-        reloadPreviewMediaAfterFileOperation(isTrack);
+    const bool ok = paths.isTrack
+        ? prependTrackSilence(
+              ffmpegPath, paths.inputPath, silenceSeconds, owner_.jobProgressService(), &error,
+              &cancelled)
+        : prependPvBlack(
+              ffmpegPath, paths.inputPath, silenceSeconds, owner_.jobProgressService(), &error,
+              &cancelled);
+    if (!ok) {
+        requests->postNotice(
+            cancelled ? miacode::v2::NoticeSeverity::Information
+                      : miacode::v2::NoticeSeverity::Error,
+            paths.title,
+            cancelled
+                ? UiText::text(paths.isTrack
+                                   ? QStringLiteral("media_tools.track_mp3_processing_canceled")
+                                   : QStringLiteral("media_tools.video_processing_canceled"))
+                : error);
+        reloadPreviewMediaAfterFileOperation(paths.isTrack);
         return;
     }
 
-    reloadPreviewMediaAfterFileOperation(isTrack);
-    owner_.statusBar()->showMessage(
-        UiText::text(QStringLiteral("media_tools.prepended_2_seconds_of_blank"))
-            .arg(inputName)
-            .arg(silenceSeconds, 0, 'f', 3),
-        6000
-    );
+    reloadPreviewMediaAfterFileOperation(paths.isTrack);
     showMediaOperationCompleteDialog(
-        title,
+        paths.title,
         UiText::text(QStringLiteral("media_tools.prepended_2_s_of_3"))
-            .arg(inputName)
+            .arg(paths.inputName)
             .arg(silenceSeconds, 0, 'f', 3)
-            .arg(isTrack
-                ? UiText::text(QStringLiteral("media_tools.silence"))
-                : UiText::text(QStringLiteral("media_tools.black_screen")))
-            .arg(backupName),
-        inputPath
-    );
+            .arg(paths.isTrack ? UiText::text(QStringLiteral("media_tools.silence"))
+                               : UiText::text(QStringLiteral("media_tools.black_screen")))
+            .arg(paths.backupName),
+        paths.inputPath);
 }

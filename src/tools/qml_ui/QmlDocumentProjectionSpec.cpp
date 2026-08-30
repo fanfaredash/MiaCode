@@ -47,6 +47,42 @@ bool verifyMutationPresentationState(QTextStream& err)
         && verify(QStringLiteral("accepted full-source mutation"), false);
 }
 
+// The dirty dot marks the section that changed, not the tab that happens to be
+// showing. Editing Expert and switching to Master used to move the dot with the
+// user, because the file's single flag was all the shell had to draw with.
+bool verifyDirtyEditorKeys(QTextStream& err)
+{
+    miacode::qml_ui::DocumentPresentationInput input;
+    input.dirty = true;
+    input.dirtyDifficultyIds = {3};
+    input.activeDifficultyId = 5;
+    const auto state = miacode::qml_ui::projectDocumentPresentation(input);
+    bool ok = require(state.dirtyEditorKeys.contains(QStringLiteral("difficulty:3"))
+                          && !state.dirtyEditorKeys.contains(QStringLiteral("difficulty:5")),
+                      QStringLiteral("the edited difficulty is marked, not the shown one"), err);
+
+    // The metadata tab renders the whole file's source, so it answers the
+    // file's question — dirty whenever the document is, whichever difficulty
+    // moved.
+    ok &= require(state.dirtyEditorKeys.contains(QStringLiteral("metadata")),
+                  QStringLiteral("the whole-source tab follows the document"), err);
+
+    miacode::qml_ui::DocumentPresentationInput clean;
+    clean.activeDifficultyId = 5;
+    const auto cleanState = miacode::qml_ui::projectDocumentPresentation(clean);
+    ok &= require(cleanState.dirtyEditorKeys.isEmpty(),
+                  QStringLiteral("a saved document marks nothing"), err);
+
+    miacode::qml_ui::DocumentPresentationInput many;
+    many.dirty = true;
+    many.dirtyDifficultyIds = {2, 3, 4};
+    many.activeDifficultyId = 2;
+    const auto manyState = miacode::qml_ui::projectDocumentPresentation(many);
+    ok &= require(manyState.dirtyEditorKeys.size() == 4,
+                  QStringLiteral("every edited difficulty keeps its own mark"), err);
+    return ok;
+}
+
 bool verifyRejectedSourceTransaction(QTextStream& err)
 {
     miacode::qml_ui::DocumentSourceTransactionInput input;
@@ -181,6 +217,7 @@ int main()
     bool ok = true;
 
     ok &= verifyMutationPresentationState(err);
+    ok &= verifyDirtyEditorKeys(err);
     ok &= verifyRejectedSourceTransaction(err);
     ok &= verifyMultiDifficultyStrictPreflight(err);
     ok &= verifyEffectiveInlineSourceSpan(err);

@@ -3,20 +3,31 @@
 #include "../document/MainWindow.DocumentSection.h"
 #include "../window/MainWindow.WindowSection.h"
 
-#include "DialogLocalization.h"
 #include "UiText.h"
+#include "app/v2/JobProgressService.h"
+#include "app/v2/UiRequestService.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "tools/zip_export/ChartZipPackager.h"
 
-#include <QtCore>
-#include <QtWidgets>
+#include <QCoreApplication>
+#include <QDesktopServices>
+#include <QDir>
+#include <QEventLoop>
+#include <QFileInfo>
+#include <QUrl>
 
 using namespace miacode::mainwindow::shared;
 
 void MainWindow::ExportSection::onPackAsZip()
 {
     MC_OP("MainWindow::ExportSection::onPackAsZip");
+
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        _mc_op_.fail(QStringLiteral("ui request service unavailable"));
+        return;
+    }
 
     const QString dialogTitle = UiText::text(QStringLiteral("export.export_as_zip"));
 
@@ -26,22 +37,11 @@ void MainWindow::ExportSection::onPackAsZip()
         owner_.documentSection_->applyCurrentFieldToDocument();
     }
 
-    // Prefer the live title edit when the metadata page is showing, exactly
-    // like the video-export path does, so the default name tracks edits that
-    // haven't been committed to a difficulty yet.
-    QString chartTitle = owner_.document_.title;
-    if (owner_.editorStack_ != nullptr
-        && owner_.editorStack_->currentWidget() == owner_.metadataPage_
-        && owner_.titleEdit_ != nullptr) {
-        chartTitle = owner_.titleEdit_->text();
-    }
-
     const QString chartText = owner_.document_.toText();
     if (chartText.isEmpty()) {
         _mc_op_.fail(QStringLiteral("empty chart"));
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            &owner_,
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Warning,
             dialogTitle,
             UiText::text(QStringLiteral("export.the_chart_is_empty_there")));
         return;
@@ -54,59 +54,38 @@ void MainWindow::ExportSection::onPackAsZip()
     if (defaultDir.isEmpty() && owner_.documentSection_ != nullptr) {
         defaultDir = owner_.documentSection_->resolveInitialOpenDirectory();
     }
-    const QString defaultName = miacode::zip_export::sanitizedZipStem(chartTitle) + QStringLiteral(".zip");
-    const QString defaultPath = defaultDir.isEmpty()
-        ? defaultName
-        : QDir(defaultDir).filePath(defaultName);
+    const QString defaultName =
+        miacode::zip_export::sanitizedZipStem(owner_.document_.title) + QStringLiteral(".zip");
 
-    QString outputPath = QFileDialog::getSaveFileName(
-        &owner_,
-        dialogTitle,
-        defaultPath,
-        QStringLiteral("ZIP (*.zip)"));
-    if (outputPath.isEmpty()) {
+    miacode::v2::FileRequest request;
+    request.title = dialogTitle;
+    request.startPath = defaultDir.isEmpty() ? defaultName : QDir(defaultDir).filePath(defaultName);
+    request.nameFilters = QStringList{QStringLiteral("ZIP (*.zip)")};
+    request.saveMode = true;
+    requests->requestFile(request, [this, chartText, chartPath, dialogTitle](const QString& picked) {
+        packChartToZipAtPath(chartText, chartPath, dialogTitle, picked);
+    });
+}
+
+void MainWindow::ExportSection::packChartToZipAtPath(
+    const QString& chartText,
+    const QString& chartPath,
+    const QString& dialogTitle,
+    const QString& pickedPath)
+{
+    MC_OP("MainWindow::ExportSection::packChartToZipAtPath");
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    miacode::v2::JobProgressService* const jobProgress = owner_.jobProgressService();
+    if (requests == nullptr || jobProgress == nullptr || pickedPath.isEmpty()) {
         return;
     }
+
+    QString outputPath = pickedPath;
     if (!outputPath.endsWith(QStringLiteral(".zip"), Qt::CaseInsensitive)) {
         outputPath += QStringLiteral(".zip");
     }
     owner_.setLastOpenDirectory(outputPath);
     _mc_op_.note(QStringLiteral("out=%1").arg(outputPath));
-
-    // Progress dialog modeled on the batch-export one: window-modal, shows
-    // immediately, cancelable.
-    // macOS: parent through effectiveParentWidget. MainWindow is a
-    // WA_DontShowOnScreen quick-shell host, and a window-modal dialog parented
-    // to it becomes a macOS sheet that orderFronts the hidden window as an
-    // empty white shell. Windows keeps the original direct parenting.
-#ifdef Q_OS_MACOS
-    QWidget* const progressParent = UiDialogs::effectiveParentWidget(&owner_);
-#else
-    QWidget* const progressParent = &owner_;
-#endif
-    QProgressDialog progress(
-        UiText::text(QStringLiteral("export.preparing_package")),
-        UiText::text(QStringLiteral("action.cancel")),
-        0,
-        100,
-        progressParent);
-    progress.setWindowTitle(dialogTitle);
-    progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    // Non-minimizable: a minimized, parentless progress popup over the
-    // WA_DontShowOnScreen quick-shell host can never be re-raised and deadlocks
-    // the app while it stays application-modal.
-    progress.setWindowFlag(Qt::WindowMinimizeButtonHint, false);
-    progress.setWindowModality(Qt::WindowModal);
-#ifdef Q_OS_MACOS
-    UiDialogs::applyDetachedParentBehavior(&progress, &owner_);
-#endif
-    progress.setMinimumDuration(0);
-    progress.setAutoClose(false);
-    progress.setAutoReset(false);
-    progress.setValue(0);
-    UiDialogs::configureDialogPreviewShortcuts(&progress);
-    owner_.windowSection_->applySystemWindowBackdrop(&progress);
-    progress.show();
 
     miacode::zip_export::ChartZipInput input;
     input.chartText = chartText;
@@ -114,29 +93,35 @@ void MainWindow::ExportSection::onPackAsZip()
     input.videoFieldValue = owner_.document_.videoPath;
     input.outputZipPath = outputPath;
 
-    const auto onProgress = [&progress](int current, int total, const QString& entryName) -> bool {
+    jobProgress->begin(
+        dialogTitle,
+        UiText::text(QStringLiteral("export.preparing_package")),
+        /*cancellable=*/true);
+
+    // The packager is synchronous and reports from the UI thread, so pump the
+    // event loop at each entry: that is what repaints the overlay and delivers
+    // the cancel click. Cancellation stays cooperative — we return false and the
+    // packager unwinds itself.
+    const auto onProgress = [jobProgress](int current, int total, const QString& entryName) -> bool {
         const int safeTotal = qMax(1, total);
-        progress.setValue(qBound(0, qRound(static_cast<double>(current - 1) * 100.0 / safeTotal), 100));
-        progress.setLabelText(
+        jobProgress->report(
+            qRound(static_cast<double>(current - 1) * 100.0 / safeTotal),
             UiText::text(QStringLiteral("export.packaging_1_2_3"))
                 .arg(current)
                 .arg(total)
                 .arg(entryName));
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        return !progress.wasCanceled();
+        return !jobProgress->cancelRequested();
     };
 
     const miacode::zip_export::ChartZipResult result =
         miacode::zip_export::packChartToZip(input, onProgress);
-
-    progress.setValue(100);
-    progress.hide();
+    jobProgress->end();
 
     if (result.canceled) {
         _mc_op_.note(QStringLiteral("canceled"));
-        UiDialogs::showMessageBox(
-            QMessageBox::Information,
-            &owner_,
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Information,
             dialogTitle,
             UiText::text(QStringLiteral("export.packaging_canceled")));
         return;
@@ -144,12 +129,10 @@ void MainWindow::ExportSection::onPackAsZip()
 
     if (!result.ok) {
         _mc_op_.fail(result.errorMessage);
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
+        requests->postNotice(
+            miacode::v2::NoticeSeverity::Error,
             dialogTitle,
-            UiText::text(QStringLiteral("export.packaging_failed_1"))
-                .arg(result.errorMessage));
+            UiText::text(QStringLiteral("export.packaging_failed_1")).arg(result.errorMessage));
         return;
     }
 
@@ -157,37 +140,22 @@ void MainWindow::ExportSection::onPackAsZip()
     if (details.size() > 3000) {
         details = details.left(3000) + QStringLiteral("\n...");
     }
-    const QString body =
+    requests->requestNoticeAction(
+        miacode::v2::NoticeSeverity::Information,
+        dialogTitle,
         UiText::text(QStringLiteral("export.exported_to_1_2_file"))
             .arg(QDir::toNativeSeparators(outputPath))
             .arg(result.includedEntries.size())
-            .arg(details);
-
-    QMessageBox dialog(
-        QMessageBox::Information,
-        dialogTitle,
-        body,
-        QMessageBox::NoButton,
-        UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    UiDialogs::configureDialogPreviewShortcuts(&dialog);
-    UiDialogs::applyDetachedParentBehavior(&dialog, &owner_);
-
-    QPushButton* openFolderButton = dialog.addButton(
+            .arg(QString()),
+        details,
         UiText::text(QStringLiteral("action.open_folder")),
-        QMessageBox::AcceptRole);
-    dialog.addButton(
-        UiText::text(QStringLiteral("action.close")),
-        QMessageBox::RejectRole);
-    dialog.setDefaultButton(openFolderButton);
-
-    dialog.exec();
-
-    if (dialog.clickedButton() == openFolderButton) {
-        const QFileInfo zipFileInfo(outputPath);
-        const QString dir = zipFileInfo.absoluteDir().absolutePath();
-        if (!dir.isEmpty()) {
-            QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
-        }
-    }
+        [outputPath](bool openFolder) {
+            if (!openFolder) {
+                return;
+            }
+            const QString dir = QFileInfo(outputPath).absoluteDir().absolutePath();
+            if (!dir.isEmpty()) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+            }
+        });
 }

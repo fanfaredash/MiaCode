@@ -1,6 +1,5 @@
 #include "QmlPreviewModel.h"
 
-#include "app/quick_shell/QuickShellController.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/MuriRenderOptions.h"
@@ -29,18 +28,18 @@ constexpr std::array<StatisticDescriptor, 6> kStatisticDescriptors{{
 
 } // namespace
 
-QmlPreviewModel::QmlPreviewModel(
-    MainWindow& backend,
-    QuickShellController& controller,
-    QObject* parent)
+QmlPreviewModel::QmlPreviewModel(MainWindow& backend, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
-    , controller_(&controller)
 {
     v2UiProbeEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
-    connect(controller_, &QuickShellController::shellStateChanged, this, [this]() {
+    connect(backend_, &MainWindow::shellPresentationChanged, this, [this]() {
         updateV2UiProbePlaybackState();
-        refreshFromController();
+        refreshFromBackend();
+    });
+    connect(backend_, &MainWindow::shellPreviewPlayheadChanged, this, [this]() {
+        updateV2UiProbePlaybackState();
+        refreshFromBackend();
     });
     connect(backend_, &MainWindow::previewSkinDirectoryChanged, this, [this]() {
         refreshSkinDirectory();
@@ -48,7 +47,7 @@ QmlPreviewModel::QmlPreviewModel(
         emit statisticsChanged();
     });
     refreshSkinDirectory();
-    refreshFromController(/*force=*/true);
+    refreshFromBackend(/*force=*/true);
 }
 
 void QmlPreviewModel::resetV2UiProbe()
@@ -140,19 +139,19 @@ void QmlPreviewModel::rebuildStatistics()
     }
 }
 
-void QmlPreviewModel::refreshFromController(bool force)
+void QmlPreviewModel::refreshFromBackend(bool force)
 {
-    if (controller_ == nullptr || backend_ == nullptr) {
+    if (backend_ == nullptr) {
         return;
     }
-    const double nextPosition = controller_->previewPositionSeconds();
-    const double nextDuration = controller_->previewDurationSeconds();
-    const double nextLowerBound = controller_->previewLowerBoundSeconds();
-    QString nextRateLabel = controller_->previewSpeedLabel().trimmed();
+    const double nextPosition = backend_->shellPreviewPositionSeconds();
+    const double nextDuration = backend_->shellPreviewDurationSeconds();
+    const double nextLowerBound = backend_->shellPreviewLowerBoundSeconds();
+    QString nextRateLabel = backend_->shellPreviewSpeedLabel().trimmed();
     nextRateLabel.remove(QLatin1Char('x'), Qt::CaseInsensitive);
     bool rateOk = false;
     const double nextRate = nextRateLabel.toDouble(&rateOk);
-    const bool nextPlaying = controller_->previewPlaying();
+    const bool nextPlaying = backend_->shellPreviewPlaying();
     const RenderMode nextRenderModeValue = backend_->muriRenderMode();
     const QString nextRenderMode = muriRenderModeToken(nextRenderModeValue);
     if (nextRenderModeValue == RenderMode::Native
@@ -164,7 +163,7 @@ void QmlPreviewModel::refreshFromController(bool force)
     const QString nextRenderModeLabel = nextMuriCheckEnabled
         ? tr("无理检测")
         : tr("常规渲染");
-    const QStringList nextStatisticsTexts = controller_->previewStatsTexts();
+    const QStringList nextStatisticsTexts = backend_->shellPreviewStatsTexts();
 
     const bool positionChangedValue = force || nextPosition != positionSeconds_;
     const bool transportChangedValue = force
@@ -208,14 +207,15 @@ void QmlPreviewModel::refreshFromController(bool force)
     if (statisticsChangedValue) {
         emit statisticsChanged();
     }
+    emit presentationChanged();
 }
 
 void QmlPreviewModel::updateV2UiProbePlaybackState()
 {
-    if (!v2UiProbeEnabled_ || controller_ == nullptr) {
+    if (!v2UiProbeEnabled_ || backend_ == nullptr) {
         return;
     }
-    const bool playingNow = controller_->previewPlaying();
+    const bool playingNow = backend_->shellPreviewPlaying();
     if (playingNow && !v2UiProbePlaybackActive_) {
         resetV2UiProbe();
     } else if (!playingNow && v2UiProbePlaybackActive_) {
@@ -243,20 +243,25 @@ QString QmlPreviewModel::currentSkinDirectory() const
     return skinDirectory_;
 }
 
-QObject* QmlPreviewModel::runtime() const { return controller_->previewRuntime(); }
-QObject* QmlPreviewModel::mediaHost() const { return controller_->previewStageMediaHost(); }
+QObject* QmlPreviewModel::runtime() const { return backend_->shellPreviewRuntimeObject(); }
+QObject* QmlPreviewModel::mediaHost() const { return backend_->shellPreviewStageMediaHostObject(); }
 
-void QmlPreviewModel::setPositionSeconds(double value) { controller_->seekPreview(value); }
-void QmlPreviewModel::setRate(double value) { controller_->setPreviewRate(value); }
+double QmlPreviewModel::canvasAspectRatio() const
+{
+    return backend_ != nullptr ? backend_->shellPreviewCanvasAspectRatio() : 1.0;
+}
+
+void QmlPreviewModel::setPositionSeconds(double value) { backend_->seekShellPreview(value); }
+void QmlPreviewModel::setRate(double value) { backend_->setShellPreviewRate(value); }
 void QmlPreviewModel::setPlaying(bool value)
 {
-    if (value != playing()) controller_->togglePreviewPlayback();
+    if (value != playing()) backend_->toggleShellPreviewPlayback();
 }
 
 void QmlPreviewModel::toggleRenderMode()
 {
-    controller_->toggleMuriRenderMode();
-    refreshFromController();
+    backend_->toggleShellMuriRenderMode();
+    refreshFromBackend();
 }
 
 void QmlPreviewModel::setMuriCheckEnabled(bool enabled)
@@ -276,7 +281,7 @@ void QmlPreviewModel::setMuriCheckEnabled(bool enabled)
         }
         backend_->setMuriRenderMode(lastRegularMode_);
     }
-    refreshFromController();
+    refreshFromBackend();
 }
 
 void QmlPreviewModel::setSmoothStarErase(bool enabled)
@@ -288,13 +293,28 @@ void QmlPreviewModel::setSmoothStarErase(bool enabled)
     if (backend_->muriRenderMode() != RenderMode::MaimuriDxStyle) {
         backend_->setMuriRenderMode(lastRegularMode_);
     }
-    refreshFromController();
+    refreshFromBackend();
 }
 
-void QmlPreviewModel::stop() { controller_->stopPreview(); }
+void QmlPreviewModel::stop() { backend_->stopShellPreview(); }
 
-void QmlPreviewModel::beginScrub() { controller_->beginPreviewScrub(); }
+void QmlPreviewModel::togglePlayback() { backend_->toggleShellPreviewPlayback(); }
 
-void QmlPreviewModel::updateScrub(double second) { controller_->updatePreviewScrub(second, true); }
+void QmlPreviewModel::adjustRate(int direction) { backend_->nudgeShellPreviewRate(direction); }
 
-void QmlPreviewModel::endScrub(double second) { controller_->endPreviewScrub(second, true); }
+void QmlPreviewModel::logPreviewInteraction(const QString& action, const QString& payload)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("qml_ui/preview_interaction"),
+        action.trimmed().isEmpty()
+            ? payload
+            : (payload.isEmpty() ? action : QStringLiteral("%1 %2").arg(action, payload)),
+        true);
+}
+
+void QmlPreviewModel::beginScrub() { backend_->beginShellPreviewScrub(); }
+
+void QmlPreviewModel::updateScrub(double second) { backend_->updateShellPreviewScrub(second, true); }
+
+void QmlPreviewModel::endScrub(double second) { backend_->endShellPreviewScrub(second, true); }

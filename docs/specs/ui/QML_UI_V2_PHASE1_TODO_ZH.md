@@ -1,336 +1,637 @@
-# QML UI v2 一阶段 Todo
+# QML UI v2 补完清单
 
-> 历史实施与验收清单。架构或入口变化时，同步更新目标架构文档与仓库指南。
+> 文件名沿用历史（多处文档与仓库指南指向它），内容已重写为**当前唯一在推进的工作清单**。
+> 目标架构与阶段定义见 [QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md)；
+> 本文只登记「还差什么、完成标志是什么、什么待复核」。
 >
-> **2026-08-24 起本文的范围被架构重设计取代。** 本文保留为"v2 外壳驱动隐藏 MainWindow"形态的
-> 实施与验收历史；目标架构和后续工作以
-> [QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md) 为准。未完成项只作为
-> 风险与验收记录，在迁移到对应域时处理，不再按本文单独排期。
->
-> **2026-08-25 校正：** 阶段 0a 已删除 v1 QuickShell 的入口、bootstrap、原生表面再宿主和全部壳层
-> QML；`--ui=v1`、`MIACODE_UI_SKIN` 已不存在。`QuickShellController` 仍由 v2 暂时使用，按目标架构
-> 在阶段 2 退役。
->
-> **同日排期调整：** 阶段 0b（扩展宿主）和 0c（被裁剪页面）均延后；`TimelineQuickModel` 正文增量更新
-> 与播放期高位内存平台也延后。QML 功能缺口的范围和入口策略见
-> [QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md](QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md)：保留入口，但对尚无
-> QML 实现的功能明确提示“暂未更新支持”。
+> **基线：`4f30a2d2`（2026-08-30）**。本文所有数字均为该基线上的源码实测，不是估算。
+> 上一版基线是 `117a76a1`（2026-08-29）；阶段 1、阶段 2 与三个「暂未更新支持」入口
+> 都在这两个基线之间落地，第 2 章的实测表已按新基线整体重测。
 
-## 当前基线
+## 0. 2026-08-30 反馈闭环与接线复核
 
-- 分支：`feature/qml-ui`
-- 上游：阶段 0a 已完成（`85d6dc78`）；最近 v2 性能修复为 `3a0ce116`
-- 默认界面：`QmlUiBootstrap`（v2）
-- 构建目录：`build/`
-- 原型参考：`../MashiroEditor/src/ui`
+- [x] **调整菜单动态项丢失**：`MainMenu.qml` 的 `Repeater` 曾创建非视觉的
+      `AppMenuAction`，Qt Quick `Menu` 不会把它插入菜单，因而顶部只剩分隔线、`更多…`
+      为空。现改为 `AppMenuItem`，快捷键文本由该视觉行直接承载；`Ctrl+J` 等全部谱面变换
+      仍只来自 `ChartTransformCommands` + `ShortcutRegistry` 的同一张表。`qml_main_menu_spec`
+      守住四个视觉 delegate、快捷键行与 `Ctrl+J` 的表项契约。
+- [x] **移除「预览 → 切换实时预览」**：已移除菜单、工具栏、命令总线、持久化开关和隐藏预览
+      分支。预览区常驻，避免销毁唯一 live `PreviewSurface` 后无入口恢复。
+- [x] **字体/皮肤入口一致**：导出页的“皮肤”页签与“预览设置 → 皮肤”并存；二者都走 v2 的
+      owner-live 预览状态和 `UiRequestService`，HUD 字体变更均调用 `PreviewRuntime::update()`
+      立即刷新右侧预览，不恢复任何 v1 控件接线。
+- [ ] **隐藏 v1/Widgets 接线复核（证据见下，旧有“仅封面导出”结论作废）**：
+      1. `QmlUiBootstrap` 仍创建并隐藏 `MainWindow`；所有 QML 模型经它取得大量状态与命令。
+      2. `QmlEditorPageHost` 的导出/延迟/离开页面路径仍调用
+         `switchToExportField` / `switchToLatencyField` / `switchToDifficultyField` /
+         `switchToMetadataField`。这些 `DocumentSection` 方法仍依赖 `editorStack_`、占位页、旧预览
+         控件和侧栏 spinner；这是功能可用性会受隐藏 Widgets 状态影响的活跃接线。
+      3. `QmlUiBootstrap` 仍创建 `ChartDropOverlay(QWidget)` 作为 root 拖放原生覆盖层。
+      4. `openCoverExport()` → `ExportSection::onExportCover()` 仍创建 `CoverStudioWindow`；这是
+         唯一已登记的完整 Widget 功能面。
+      5. 本次已删除 `QmlEditorPageHost.cpp` 中遗留的 `QBoxLayout` / `QStackedWidget` /
+         `QWindow` / `AdoptedWidgetCoordinates` 等**未使用** include；它们不是活跃调用，但此前使
+         “`src/app/qml_ui` 无 Widgets”这一表述不可靠。
 
-## 范围与契约
+      已核对的非误报项：ZIP 打包使用 `UiRequestService`，偏好设置只转发
+      `preferencesRequested` 给 QML，音视频工具也经 QML 请求边界；这些不是 v1 UI 回接。
+      后续拆除必须先为页面切换、拖放和封面导出建立 v2 所有者，不能再把 v1 控件重新接回 QML。
 
-- v2 方向为纯 QML 主壳、C++ 域服务和已有 `QQuickItem` 时间轴/预览。
-- 视频导出页已经使用纯 QML `ExportVideoPage.qml`，由 `QmlExportSession` 提供业务状态和操作。
-- `QmlEditorPageHost` 负责全页导航，并通过局部 `WindowContainer` 宿主 v1 `LatencyDetectionPage`。
-- v2 共享隐藏的 `MainWindow` 与 `QuickShellController(surfaceHost=nullptr)`。
-- 工作区模式由 `MainWindow` 切换，v2 从 `QuickShellController` 读取底栏显隐、预览画幅和导出页状态。
-- v2 时间轴保留 `TimelineQuickModel` → `TimelineQuickStateBridge` → `TimelineQuickItem` 的 QSG 渲染链，重点补齐 QML 主壳的交互与编辑器接入。
-- 实时预览和视频导出共用进程内 QSG 渲染路径。
-- v1 壳层、入口和表面再宿主已移除；当前 QML 主壳仍通过隐藏的 `MainWindow` 与
-  `QuickShellController` 取状态。这是阶段 1/2 的迁移边界，不应再扩展这套兼容胶水。
+## 1. 目标边界
 
-## 已完成
+只有三件事在范围内：
 
-### 启动与壳层
+1. **功能对齐补完** —— v2 QML 能原生完成 `dev` 上的既有工作流。
+2. **删除 v1** —— 隐藏的 `MainWindow`、隐藏的 `PlainCodeEditor`、`QuickShellController` 兼容层与全部 Widget 页面/对话框。
+3. **从链接中移除 `Qt6::Widgets`** —— `CMakeLists.txt:101` 的 `COMPONENTS` 与 `:844` 的 `target_link_libraries` 都不再出现 `Widgets`，`src/app/main.cpp:436` 由 `QApplication` 改为 `QGuiApplication`。
 
-- [x] 删除 v1 QuickShell 文件和入口；应用收口为单一 v2 QML 启动路径（阶段 0a，`85d6dc78`）。
-- [x] 接入 `src/app/qml_ui/`、`QmlUiBootstrap`、`MiaCode.UI` 模块与皮肤切换入口。
-- [x] v2 暂以隐藏 `MainWindow` 和无原生 surface host 的 `QuickShellController` 运行；该兼容层在阶段 1/2
-      迁移后删除。
-- [x] 关窗流程接入 `confirmClose` → `notifyRootCloseAccepted` → `preparePreviewForShutdown`。
-- [x] Windows 客户区标题栏接入 `QmlUiWindowChrome`，品牌图使用 `resources/icons/app.png`。
-- [x] 设置入口调用现有 `MainWindow::onPreferences()`。
+与这三件事无关的重构一律不做（见架构文档第 11 节非目标）。
 
-### 预览与时间轴
+### 判定规则
 
-- [x] 预览接入 `QuickShellPreviewSurface`，时间轴完成 `TimelineQuickItem` 基础渲染接入。
-- [x] v2 根窗口显示后提交 Quick UI ready，释放 PV/BG 首次加载门闩。
-- [x] 普通预览和全屏预览移除人工画面缩进。
-- [x] `QmlPreviewModel::renderMode` 接入三态切换、工具栏文字和预览标题。
-- [x] 预览传输条接入负时间下界和完整 scrub 生命周期。
-- [x] 清理 v2 QML 中已删除渲染后端的状态与资源。
+- 一个条目只有同时满足「v2 QML 原生可用」**且**「不再需要任何 Widgets 类型」才能勾掉。仅"能通过隐藏 Widget 达成"记为**未完成**。
+- 自动 spec 通过 **不等于** 验收。原生桌面验收单独记录在第 6、7 章，构建与 CTest 不能替代。
+- 失败是**值**不是对话框：应用层不得弹窗、不得阻塞（架构文档第 7 节）。新代码引入 `QMessageBox` / `QFileDialog` 视为反向进度。
 
-### 页面与控件
+## 2. 基线实测：还挂着多少 Widgets
 
-- [x] 视频导出中心迁移为 `ExportVideoPage.qml` + `QmlExportSession`。
-- [x] Latency 页面通过编辑区局部 `WindowContainer` 接入。
-- [x] 导出工作区状态接入底栏显隐、预览画幅和导出模式。
-- [x] 工具侧栏接入音视频处理、规范化、Net、批量导出、封面导出和打包入口。
-- [x] 完成 `AppTextField`、`AppTextArea`、`AppButton`、`AppComboBox`、`AppSlider`、`AppMenu*` 共享皮肤。
-- [x] 完成 `HoverChrome`、`NavRow`、`AppSwitch`、IconButton glyph 的悬停和选中样式。
-- [x] 标题栏菜单在窄窗口中折叠到溢出菜单，文档标题保持居中。
-- [x] Activity Bar、小窗口紧凑覆盖层、QML 多标签编辑器、元数据双视图、谱面字段侧栏和底栏 Tab 已接入。
-
-### 文档模型与诊断
-
-- [x] `QmlDocumentModel` 通过 `MainWindow.DocumentBridge.cpp` 的公开查询与操作访问文档，已移除对 `MainWindow` 私有字段的 friend 访问。
-- [x] v2 启动目标改用公开 `openStartupTarget()`，已移除 `friend class QmlUiBootstrap`。
-- [x] `DocumentValidationSnapshot` 将现有验证缓存投影为 QML 数据，包含问题位置、显式严重度、错误数、警告数和 strict 解析物件数。
-- [x] 同步检查、后台分析和缓存清理统一发布 `documentValidationChanged`；底栏列表、问题跳转和编辑器波浪线共用 `syntaxIssues`。
-
-### 一阶段 P0 文档事务与验证收尾（自动验证，2026-08-24）
-
-- [x] 文档状态发布已收口为同一份 `activeDifficultyId`、dirty、`documentRevision`、
-      `validationRevision`、available/pending 投影。`qml_document_projection_spec` 验证的是该
-      投影/预检状态契约：输入 revision 一致时的状态、缓存 revision/难度/谱面/timing 不匹配时隐藏
-      旧诊断并标为 pending，以及完整源码预检失败时保留 committed source/revision 与全局行列诊断。
-      它不直接调用正文、`&first`、额外 timing、等级/谱师或完整源码替换的真实 QML/MainWindow 变更路径。
-- [x] 完整源码替换的生产路径先对全部难度作严格预检；失败时保留已提交文档和 revision，仅将尝试源码与
-      带全局行列位置的诊断投影给编辑器。通过后才加载文档并请求时间轴刷新（本次为源码路由审阅，非 GUI
-      端到端执行）。`simai_document_spec` 同时覆盖 `&first` 可保存序列化、独立/难度谱师及
-      `&clock_count` 的 load/save round-trip。
-- [x] Release 证据：`cmake --build build-devtools --config Release --parallel 2` 成功；
-      `ctest -C Release -R 'qml_document_projection_spec|simai_document_spec|timeline_model_spec|muri_spec|plain_code_editor_spec'`
-      5/5 通过。该组覆盖文档投影/诊断、序列化、时间轴模型、Muri 和编辑器回归。
-- [x] `batch_export_panel_spec` 的开发工具目标显式链接其 `VideoExportSettings` 与
-      `VideoExportRuntimePolicy` 依赖；编辑器规格以确定性的 popup press/release 路径覆盖候选项提交。
-      Cocoa 原生焦点转移与光标几何不属于该合成事件规格，保留为 GUI 手工验证。
-
-### 一阶段 P0 手工验证矩阵（仍待执行）
-
-| 场景 | 自动证据 | 本机手工状态 |
-|------|----------|--------------|
-| 正文、`&first`、额外 timing、等级/谱师、完整源码变更 | `qml_document_projection_spec` 断言投影/预检 revision 和诊断状态；源码审阅确认 accepted full-source transaction 才请求时间轴刷新 | 未执行真实变更路径或 GUI 观察；预览未启动 |
-| 打开、编辑、切换难度、保存/另存为、放弃 | 静态路由审阅：QML `openFile/save/saveAs/discardChanges` → 窄 MainWindow API；`simai_document_spec` 覆盖序列化 round-trip | 未执行真实文件或对话框流程，不能当作端到端通过 |
-| QML 诊断列表、时间轴与预览刷新 | 文档投影与 `timeline_model_spec` 通过；源码审阅确认 timing 变更刷新 waveform/metadata 并 schedule timeline | 未执行 GUI/预览观察，未验证实际画面或播放 |
-| Windows/macOS 视觉、音频、拖放 | 不适用 | 未执行；不得由本次 macOS 自动构建推断通过 |
-
-### 二阶段编辑器与联动收口（自动验证，2026-08-24）
-
-- [x] 编辑输入的纯策略、QML controller 与 widget adapter 共用同一套半角、括号、hold 和补全事务；
-      QML 路径将 IME commit、粘贴、选择区替换、Replace All、书签操作和 undo/redo 记入 controller
-      事务历史。`simai_text_edit_policy_spec`、`plain_code_editor_spec`、
-      `simai_completion_catalog_spec` 与 `qml_editor_controller_spec` 覆盖该边界。
-- [x] `SourceEditor.qml` 的 completion popup 保持无焦点，键盘仍由编辑器路由；查找替换、书签的
-      创建/删除/重命名、诊断跳转和 caret→timeline 发布均经过窄 controller/document 接口。
-- [x] `QmlTouchPadAuthoringBridge` 仅在 editor 有焦点、非 IME composition、难度一致且 caret revision
-      与文档 revision 一致时接受 Ctrl+touch 创作；`touch_pad_authoring_state_spec` 覆盖有效与拒绝路径。
-- [x] 静态可访问性检查：窗口按钮、书签行号 gutter 与书签重命名输入都提供 `Accessible` 元数据；
-      gutter 可经 Tab 聚焦，Enter/Ctrl+Shift+B/Delete/F2 和右键菜单均有对应操作。completion popup
-      不获取焦点，Escape 关闭其会话，避免诊断或候选项抢占编辑器焦点。
-- [x] Release 针对性 CTest（Qt 6.10.2，2026-08-24）：
-      `ctest --test-dir build -C Release -R 'qml_.*_spec|simai_text_edit_policy_spec|plain_code_editor_spec|simai_completion_catalog_spec|timeline_model_spec|timeline_marker_offset_spec|muri_spec|touch_pad_authoring_state_spec' --output-on-failure`
-      为 11/11 通过。
-
-### 二阶段桌面手工回归矩阵（五项验收门槛已通过，其余仍待执行）
-
-本机以 `QT_QPA_PLATFORM=offscreen` 启动 QML 桌面壳会触发既有 macOS 原生主题/平台插件崩溃，不能把
-offscreen 自动化结果当成桌面视觉或输入验证。以下状态来自 2026-08-24 的原生桌面验收与修复后复验；
-未列为通过的项目不得由构建或 CTest 推断为通过。**通过仅代表 macOS 本次观察，Windows 侧尚未验证。**
-
-| 流程 | 自动/静态证据 | 原生 GUI 状态（2026-08-24 修复轮后） |
+| 项 | 实测（`4f30a2d2`） | 位置 |
 |---|---|---|
-| 1280×720、窄窗口、Large system font、浅/深色、中文/英文、错误/警告非仅颜色 | QML 静态审阅；主题令牌与文本/图标语义已接入；`qml_editor_controller_spec` 载入真实 `CompletionPopup.qml` 断言高亮、宽度与锚点翻转 | completion popup 与窄窗口 Timeline 缩放已复验通过（`5ee23d38`）。字号/浅深色/多语言的完整矩阵仍未逐项走过。 |
-| 连续编辑与分析 | revision 投影、`qml_document_projection_spec`、`qml_analysis_model_spec` | Validation 上一轮通过；Muri 未重新观察，不能从自动测试推断桌面通过。 |
-| timeline 缩放、亮度、follow、拖拽/滚轮/播放与三 tab | `timeline_model_spec`、`timeline_marker_offset_spec`；暂停跟随装饰的路由与 QML 渲染回归在 `qml_editor_controller_spec` | 通过：暂停跟随（`ca943a82`）、缩放/命中/四个 follow 状态均已复验。 |
-| IME、半角、括号、hold、查找替换、书签、undo/redo、诊断跳转 | 编辑器四项 specs；真实 `TextArea` + 真实 `QKeyEvent` 的命令修饰键回归；真实 `QInputMethodEvent` 的再入提交回归 | 通过：书签、正文右键菜单（`2a27630d`）、命令修饰键写入字面字符（`75c89635`）、IME 提交递归复制（`f4251ca0`，由 `--debug` 日志确证 depth 630 / 631 次插入）。**撤销栈另有问题**，见下方“待处理功能缺口”。 |
-| caret/selection→timeline 与 Ctrl+touch 创作 gate | `qml_editor_controller_spec`、`touch_pad_authoring_state_spec` | 通过：`Command`+点击 seek 预览（`f451ae09`）已复验。 |
-| root 拖放、脏文档关闭、播放中关闭、ChartDrop cancel | 生命周期规格与静态路由审阅 | 未执行。 |
+| 链接声明 | `COMPONENTS … Widgets …` + `Qt6::Widgets` | `CMakeLists.txt:101`、`:844` |
+| 应用对象 | `QApplication` | `src/app/main.cpp:436` |
+| 隐藏 `MainWindow` | **72 文件 / 42,750 行**（上一基线 73 / 48,732，−5,982） | `src/app/mainwindow/` |
+| ~~隐藏 `PlainCodeEditor`~~ | **已删除（2026-08-30）**。树上只剩三处提到这个名字：两条注释与 `ExtensionOpenBridge.cpp:337` 的 lint 规则名 | — |
+| ~~`QuickShellController`~~ | **已退役（2026-08-30）**。`src/app/quick_shell/` 只剩 **246 行**预览合成表面管道（`QuickShellPreviewCompositeSurface.*` + 三个策略头），与外壳控制器无关 | — |
+| QML 仍消费的 controller 属性/方法 | **0 个**（`shellController` 在 `*.qml` 里零命中） | — |
+| Widget UI 代码量 | cover_export **8,587 行 / 25 文件**，其中 CoverStudio 组 **5,925**<br>*（2026-08-29–30 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479、`PvBatchCompressionDialog` 393、`PlainCodeEditor` 组 2,272、`QuickShellController` 组 993）* | `src/tools/cover_export` |
 
-> 修复轮本身只有自动证据（会话无显示器/截屏权限）；原生桌面复验由用户另行执行，五项验收门槛已通过。
-> 详细的根因、回归、复验结果与未完成项见
-> [QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。
+### v2 自身新代码里的 Widgets 泄漏（优先清）
 
-### 上游同步
+| 位置 | 内容 |
+|---|---|
+| ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**。`src/app/qml_ui` 全目录现已无 Widgets 对话框 |
+| `src/app/qml_ui/QmlEditorPageHost.*` | 已不再收养 `QWidget`，但仍通过隐藏 `MainWindow::DocumentSection` 切页；该路径会操作 `editorStack_` / 占位页等 Widgets，不能记作“仅页面记账”（详见 §0） |
+| `src/app/ui/ChartDropOverlay.h:7` | `class ChartDropOverlay final : public QWidget`，被 v2 root window 拖放路径使用 |
 
-- [x] 合入 `origin/dev` @ `0e85b0b2`。
-- [x] 接受 DComp、`src/render`、`src/sources` 删除，保留进程内 QSG 路径。
-- [x] 保留 `d3d11`、`dxgi`，MinGW 链接 `d3dcompiler`。
-- [x] 合入预览音频 Worker facade、设备监听和启动诊断改动。
+`MainView.qml` 的对话框已是 `QtQuick.Dialogs`（非 Widgets），这条不用改。
 
-## 一阶段待办
+## 3. 功能对齐缺口
 
-### P0 — 时间轴接入（历史实现状态；后续由阶段 2 `TimelineSession` 接管）
+按「v2 用户能不能原生做到」分三类。
 
-- [x] Step 1：底栏已接入的时间轴与语法标签统一使用 `QuickShellController` 当前标签、显隐和文案状态，移除 `ViewState.activeBottomTab` 局部副本。
-- [x] Step 2：时间轴顶部的缩放、亮度、视图锁定、进度同步与 Follow Code 交互已接入。
-      窄窗口下的视觉与命中仍须列入原生桌面回归，不能由实现或 CTest 推断。
-- [x] Step 3：v2 可见编辑器的光标行列已接入时间轴光标与 Follow Code；
-      `Command`/`Ctrl`+点击可 seek 预览（`f451ae09`）。
-- [x] Step 4：将时间轴导航结果回写到 v2 可见编辑器，补齐跳转、选区和跟随视觉状态。
-      播放时走 QML navigation 请求移动光标；暂停或关闭代码跟随时改为只读跟随装饰
-      （span 高亮 + 跟随光标 + 不动 caret 的滚动），见 `ca943a82`。
-- [x] Step 6：Muri 标签、列表与问题跳转已接入，并复用 QML 分析投影；仍缺原生桌面观察记录。
-- [x] Step 7：底栏前台显隐、面板高度回写与缩放状态已接入；主题切换的原生桌面回归仍未执行。
-- [ ] Step 5（**不再按本清单推进**）：正文编辑的 `TimelineQuickModel` 增量更新优化由阶段 1 的
-      `ChartWorkspace` 单一所有者设计重新评估；**已延后**，在迁移前不得继续扩大全文同步路径。
+### A. 无 QML 实现，入口弹「暂未更新支持」（0 项，已清空）
 
-### 待处理功能缺口（2026-08-24 GUI 验证新发现，优先于 Step 5）
+三处触发点全部补上了真实实现（2026-08-30）。`unavailableFeatureRequested` 在 `*.qml` 里
+**已无任何发出方**——`MainToolBar` / `MainMenuCommands` 的信号声明与 `MainView` 的处理器
+仍留在树上作为通用机制，尚未删除；若确认不再需要，随阶段 4 一并清掉。
 
-- [x] **P0 — 文本控制键与 undo/save-point 迁移**（2026-08-26）：
-      1. **已完成：** 修复 `Backspace` / `Delete` 的控制字符不能进入 `SimaiTextEditPolicy` 普通文本插入路径；
-         保留空括号成对删除，普通删除交给 `TextArea` 原生行为，并以真实 `TextArea` + `QKeyEvent`
-         回归覆盖 `\b` / `\x7f`。
-      2. **已完成：** `ChartWorkspace` 以完整规范化源码保存 save point；编辑/撤销只提交正文值，dirty
-         由当前完整文档与 save point 比较得出。覆盖打开后撤销回初始、保存后撤销回新保存点、元数据
-         仍脏、分支编辑、难度切换和文档切换，不给 `QmlEditorController` 增加局部 dirty 真相。
-      3. **已完成：** `QmlDocumentModel` 的正文、元数据、难度及 open/save/save-as/discard 已迁移到
-         `ChartWorkspace` / `ChartWorkspaceFileService`；隐藏 `MainWindow` 只按单调 workspace revision
-         消费 committed 值，并将关闭流程的保存委托回 file service。
-      4. **已完成（2026-08-26）：** `AnalysisService` 订阅 workspace revision，先原子发布 pending 身份，
-         再异步计算严格验证、偏移 marker、Muri 与静态引用；完成值仅在 `(difficultyId, revision)` 仍与
-         workspace 一致时整包发布。`QmlDocumentModel`、`QmlAnalysisModel` 与显式验证入口已脱离
-         `MainWindow` 验证/Muri 缓存投影，过期或 pending 快照不暴露诊断、marker 或 Muri 行。
-      5. Release 自动证据：`chart_workspace_spec`、`chart_workspace_file_service_spec`、
-         `analysis_service_spec`、`qml_analysis_model_spec`、`qml_document_lifecycle_contract_spec`、
-         `qml_document_projection_spec`、`simai_document_spec`、`muri_spec` 为 8/8 通过。
-         `qml_editor_controller_spec` 在本机 Windows Qt Quick
-         运行时无 CPU 挂起，与审计中既知基础设施故障一致，安全终止后不记为通过；脏文档关闭仍保留
-         原生桌面手工回归。
-- [ ] 切换文档后 PV 异常：**多次复现失败，需求延后。** 埋点保留在树上
-      （`editor/document_replaced` 与 `editor/document_shown`），日后若再次出现可直接取证。
-      在拿到一次成功复现之前不再投入排查。排查记录见审计文档的“切换文档排查记录”。
-- [x] 撤销栈 dirty 联动：历史被误清空与 undo/redo 的替换跨度
-      （`581b782b`：不再被 controller 来源的同步清空，改为最小差异替换并选中所恢复的文本）。
-      由 `581b782b` 修复；本次将 dirty 真相迁移为完整文档 save point，`Ctrl+Z` / `Ctrl+Y` 恢复到
-      已打开或已保存内容时会自动回到 clean，其他元数据仍有差异时仍保持 dirty。
-- [x] 快捷键体系（`676150e0`）：成因是绑定上下文而非缺注册层。v2 经 `QmlShortcutModel` 复用
-  `ShortcutRegistry`，变换命令按 id 走 `MainWindow::triggerShortcutCommand`，预览命令直接绑
-  `QuickShellController`；菜单行通过 `AppMenuAction.shortcutText` 显示快捷键。
+| 功能 | 状态 |
+|---|---|
+| ~~关于 MiaCode~~ | **已完成（2026-08-30）**：`components/AboutDialog.qml`，事实来自 `QmlUiSettings::aboutInfo()`（版本宏 + `QSysInfo` + UiText）。v1 的图标彩蛋（连点三次）未搬。 |
+| ~~音频设置~~ | **已完成（2026-08-30）**：`preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel`。10 条通道（音量 + 静音）与 Break 星星尾判音开关，写入即应用到运行中的预览并持久化；「设为/恢复本地默认」两个预设按钮保留。**试听已于同日补齐**：模型自带 `QtPreviewSfxRuntime`（首次试听时才创建，页面关闭时释放），220 ms 静默去抖，拖动中不响、松手才响，预览正在播放时不试听。顺带修好两处：主静音会带着其余通道一起变（v1 行为），以及行不再随每次改动整体重建（原先会在拖动中把滑块本身销毁）。 |
+| ~~预览设置~~ | **已完成（2026-08-30）**：`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel`，视频 / 玩法 / 皮肤三个页签。值住在 `MainWindow::previewRenderSettings()` / `setPreviewRenderSetting()`（每个键各自的 canvas setter / 舞台媒体重路由 / 轮廓重算 / muri 重应用，写入即持久化）；皮肤页另承载全局皮肤、判定效果、判定线，以及分区域 HUD 字体的选择、导入、重置和样张。HUD 字体变更后直接请求运行中的 `PreviewRuntime` 重绘。文案全部取自 `dialog.render_settings.*` 的 UiText 键，与 v1 同源。v1 的第三个页签 **性能** 只有「预览刷新率」一项，v2 已在 偏好设置 → 性能 里，未在此重复。判定效果显示由 v1 的下拉勾选改为四个并排复选框（四个状态同时可见）。 |
 
-### v2 预览性能修复（2026-08-25）
+### B. 有入口，但落到 Widget 对话框/页面（8 项中剩 1 项：封面导出）
 
-- [x] 预览 surface 互斥生命周期：工作区、紧凑面板、全屏同一时刻只允许一个
-      `PreviewSurface` 订阅 `PreviewRuntime`；不可见分支由 Loader 卸载，不再收到 frame-state
-      fan-out。
-- [x] 预览统计投影去热路径化：`QmlPreviewModel` 缓存统计 entries，并按 position / transport /
-      playing / render mode / statistics 分离通知。播放位置不会重建统计、生成 note-icon URL 或探测
-      皮肤文件。
-- [x] QML 跟随去重：同一 token/已居中的 navigation 不再反复操作 `TextArea.select()`、装饰或
-      排队滚动；文档/难度导致的 follow binding cache 失效同时清除 QML navigation cache。
-- [ ] 播放期高位内存平台：当前证据为“跃升后稳定”而非持续泄漏（private memory 约 957 MB 平台，
-      第二段播放约 1051–1064 MB）。需继续拆分 QtAVPlayer/D3D11VA 帧池、QML/Qt Quick 和私有堆；
-      不得先验归咎于 preview texture cache。**已延后。**
+| 功能 | v2 入口 | 落点 |
+|---|---|---|
+| ~~延迟校准~~ | `ToolsSidebarPage.qml` → `openLatencyPage()` | **已完成（2026-08-29）**：`LatencyPage.qml` + `QmlLatencyModel`，`LatencySandboxController` 原样复用；`WindowContainer` 与 `QmlEditorPageHost` 的整套 widget 宿主机制已删除 |
+| ~~音视频处理~~ | → `openMediaProcessingTools()` | **已完成（2026-08-29）**：`MediaToolsDialog.qml` 启动页 + `PrependBlankDialog.qml` + `PvBatchCompressionDialog.qml`（QML），`QmlMediaToolsModel` 承接；`src/tools/media` 已无 Widgets |
+| ~~整谱规范化~~ | → `openNormalizeWholeChart()` | **已完成（2026-08-29）**：`NormalizeOptionsDialog.qml` + `QmlDocumentModel::normalizeChartSelection`，结果作为编辑器事务应用（undo 覆盖）；Widget 对话框与 `DocumentSection::onNormalizeWholeChart` 已删除 |
+| ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
+| 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（组内 5,925 行；`src/tools/cover_export` 全目录 8,587 行 / 25 文件）。**本批最末一项，所有者决定放到最后做** |
+| ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
+| ~~偏好设置~~ | `QmlCommandService::openPreferences()` | **已完成（2026-08-29）**：`PreferencesDialog.qml`（界面/编辑器/性能/快捷键四页签，快捷键录制内置为页签而非二级弹窗），`QmlPreferencesModel` 承接；扩展页签与背景功能已删除 |
+| ~~批量导出~~ | `openBatchExport()` | **已完成（2026-08-29）**：QML `ExportVideoPage` 的 batch 页是唯一批量界面，`BatchExportPanel` 组已删除 |
 
-详细登记见
-[QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md](../../audit/QML_UI_V2_EXECUTION_AND_ACCEPTANCE_AUDIT_ZH.md)。
+> 0b（扩展宿主）仍是已延后状态，不得记为"已删除"或"功能不可用"。
+>
+> **0c 已于 2026-08-29 由所有者重新定向：偏好设置 / 延迟检测 / 音视频处理三页「补成 QML」，不删除。**
+> 这推翻了架构文档第 10 节记录的相反决定（"哪怕功能会缺失也要做"）——那节与第 8 节的 0c ⏸ 行
+> 必须在本批工作中改齐，否则只读架构文档的人会做反。
+>
+> **排期决定（2026-08-29 所有者）：**
+> - **Net：功能暂时移除。** 入口与两个 Widget 对话框已删除；`src/tools/net` 的引擎部分保留。
+> - **封面导出：放到最后做**（本批最末一项，不是取消）。
+>
+> `Qt6::Widgets` 的最终摘除在 B 类里只剩**封面导出**一项挡着（音视频处理 / 偏好设置 /
+> 延迟校准三项已于 2026-08-29 补成 QML）。B 类之外还有 §3.C 的保存/退出确认弹窗、
+> `ChartDropOverlay`，以及阶段 4 的 `MainWindow` 与 `src/app/ui/` 辅助件。
 
-### P1 — 文档模型与诊断契约（已完成）
+### C. 已知功能缺失（v1 有、v2 尚未补）
 
-- [x] 收紧 `QmlDocumentModel` 边界，将对 `MainWindow` 私有字段的直接读写迁移到窄公开 API。
-- [x] 将 v2 启动目标迁移到公开 `openStartupTarget()`，清理 `friend class QmlUiBootstrap`。
-- [x] 将 `runValidateSimaiSilently` 的结果接入 `syntaxIssues`、错误数、警告数和音符数。
-- [x] 让底栏检查列表、诊断跳转和编辑器错误波浪线消费同一份诊断数据。
+- [x] **新建 = 打开任意音频并原地建谱**（2026-08-30 所有者定型，同日实现）。
+      先说清为什么不能是"一个能同时选文件夹和文件的窗口"：Qt 给不出。
+      `QtQuick.Dialogs.FileDialog` 的 `FileMode` 只有 `OpenFile / OpenFiles / SaveFile`，
+      `FolderDialog` 是另一个类型；两者都没有任何自定义挂点
+      （FileDialog 全部成员只有 `fileMode` / `selectedFile(s)` / `currentFile(s)` /
+      `currentFolder` / `options` / `nameFilters` / `selectedNameFilter`），
+      Widgets 的 `QFileDialog` 也只有 `setSidebarUrls`（仅非原生生效）。
+      平台层的 `NSOpenPanel.accessoryView` / `IFileDialogCustomize` 存在但 Qt 不暴露。
+      **所以选择只能落在一种资源上**，所有者定为音频。
+      现在的行为：`文件 → 新建`（Ctrl+N）→ 过离开守卫 → 选音频 →
+      **在音频所在目录原地建 `maidata.txt`**（不是子文件夹）→
+      把音频复制一份为 `track.<原扩展名>`；**本来就叫 `track.*` 就不复制**。
+      `maidata.txt` 或 `track.*` 已存在时各确认一次。
+      还有一条不能沉默的情形：引擎按 `track.mp3 → .wav → .flac → .ogg` 的顺序找音轨，
+      所以复制落在靠后的扩展名、而靠前的已存在时，谱面会用另一个文件——
+      这时会明确提示是哪个，而不是留到播放时才发现。
+- [x] **恢复 v2 字体功能**（2026-08-30）。`QmlExportSession` 以 QML 原生文件请求边界复用
+      `FontLibrary` 的导入/校验/便携复制数据层：导出页的片头页可独立选择、导入、重置难度卡
+      display/body 字体，并即时刷新试听；导出页的 `皮肤` 页签**和**`预览设置 → 皮肤` 都可按区域
+      选择、导入、重置 HUD 字体，且会立即重绘右侧预览。片头字段仍由 `VideoExportSettings` 持久化并流入试听/导出快照；
+      HUD 继续经 `preview::scene::setPreviewHudCustomFontPath` 分区持久化。未恢复任何 v1 窗口或
+      Widgets 接线。
 
-### P2 — 文本编辑器逻辑移植
+- [x] **音频设置的试听**（2026-08-30 记录，同日补齐）。`QmlAudioSettingsModel` 自带一个
+      `QtPreviewSfxRuntime`：首次试听时才创建（构造会起一条音频工作线程，多数会话根本不开
+      这个页面），页面关闭时 `releaseAudition()` 释放，与 v1 对话框本地运行时同一生命周期。
+      样本未就绪时先发一次异步加载，由它的 completion 播放等待中的那一声。
+- [ ] **预览刷新率的 120 FPS 选项在 v2 未按屏幕刷新率过滤**（2026-08-30 记录）。v1 只在
+      检测到 ≥119.5 Hz 时才把 120 FPS 放进菜单，并把「屏幕最大刷新率」一项显示成
+      `屏幕最大刷新率 (N Hz)`；v2 偏好设置 → 性能 的 `QmlPreferencesModel::frameRateOptions`
+      两者都没做。留到「v1 & v2 文案逐项对比」那一轮一起处理。
+- [x] **预览走带的时间条停在 0**（2026-08-30 用户报告，同日修复）。阶段 2 退役
+      `QuickShellController` 时，它那条轮询计时器是 shell 唯一的预览状态来源；替代方案
+      把底栏那一半改成推送，预览这一半却换成了一个以 `playing_` 为闸门的采样计时器——
+      而没有任何东西告诉模型播放已经开始，闸门永不开启，于是时间轴跟随一切正常、走带
+      却一直停在 0。现在播放头由**移动它的那个函数**（`applyQtPreviewPosition`）通过
+      `shellPreviewPlayheadChanged` 播报，播放标志由**唯一的写入者**
+      （`MainWindow::setPreviewPlayingFlag`）播报，模型不再采样任何东西——顺带修好了
+      暂停时拖动时间轴/键盘定位不会移动走带滑块的问题。
+      漂移守卫：`preview_transport_push_spec`。
+- [x] **数值读数不能输入**（2026-08-30 用户要求，同日完成）。v1 的 `EditableValueLabel`
+      单击即可就地输入；v2 现在是 `components/EditableValue.qml`，**双击**读数（音量的
+      「50%」、预览设置的各滑块、偏好设置字号）变成输入框，提交时钳制到区间并对齐步进，
+      与拖动走同一条应用路径。Esc 取消，失焦提交。
+- [x] **设置弹窗不能拖动**（2026-08-30 用户要求，同日完成）。`components/DialogDrag.qml`
+      把一块透明抓取区挂到样式自己画的标题栏上——外观零改动——首次拖动时释放居中锚点，
+      位置在本次会话内跨开关保留，并始终钳制在窗口内。已用于 音频设置 / 预览设置 / 偏好设置。
+      **仍是 modal**：遮罩会把预览压暗一半，且弹窗开着时无法按播放。用户只要求「可拖动」，
+      所以没动 modal；若要边放边调，需要把这两个预览类弹窗改成 modeless。
+- [x] **导出区间的可视化进度条**（2026-08-30）：`ExportRangeSelector.qml` 补回整曲轨道、
+      区间高亮、双端点与只读播放头；最小区间为 `min(5 s, 全谱时长)`，端点只移动自身、选中区间可整体平移，
+      都经与右侧预览相同的 scrub 通道拖动。短区间有视觉最小宽度；移动的「开始／结束」标签替换为静态提示带内的
+      悬停／拖动时间戳，起止数值输入保留且随未聚焦的范围变更刷新。
+- [x] **启动崩溃恢复弹窗仍是 Widgets**（2026-08-29 已修）：`MainWindow.DocumentAutosaveFlow.cpp`
+      的三处 `UiDialogs::showMessageBox` 已改走 `UiRequestService`；
+      `restoreBackupFilePath` 在确认处切开为 `restoreBackupFilePath` + `applyBackupFile` 续延。
+- [x] **保存 / 退出确认弹窗仍是 Widgets**（2026-08-29 记录，用户报告；2026-08-30 已修）。
+      关闭流程改为两段式：`Main.qml` 的 `onClosing` 一律先拒绝，再问
+      `QmlShellLifecycle::requestClose()`，答案经 `closeDecided` 回来后窗口自己再关一次。
+      C++ 侧 `confirmShellClose()` 换成 `requestShellClose(continuation)`，问句之下的所有清理
+      原样搬进续延（**顺序契约不变**：破坏性清理只在确认为 true 之后）。提示本体是
+      `UiRequestService::requestChoice`——新增的三选一请求，未列出的答案一律解析为 dismissal，
+      所以「关掉窗口」永远不会被当成保存或放弃。
+      同一轮里另外三处 v2 能走到的 Widgets 弹窗一并处理：**音频拖放建谱**（预览确认 + 未保存
+      决策 + 三个结果提示）、**保存失败**的三条、**启动目标缺失**的两条。
+      还顺带修了一个双弹窗缺陷：删除难度时 `DifficultyList.qml` 已经问过一次，
+      `deleteDifficultyField` 又在后面弹了一个 Widgets 确认——现在 v2 桥接传
+      `alreadyConfirmed=true`。以及删掉了没有任何调用方的 `confirmDeleteBookmark`。
+      **留在树上的 `showMessageBox`**：`onNewFile` / `onOpenFile` / `openRecentFile` /
+      `switchToWelcomePage` / 扩展 `showMessage` / 删除难度的 v1 与扩展路径——全部只挂在隐藏
+      `MainWindow` 自己的 File 菜单 `QAction` 或扩展宿主上，QML 外壳没有任何入口能走到，
+      随阶段 4 一起消失。同理 `showUnsavedChangesDialog` 与 `maybeSaveBeforeContinue()` 同步版。
+- [x] **打开文件的未保存提示是平台原生弹窗**（2026-08-30 记录并修复）。`MainView.qml` 的三个
+      `QtQuick.Dialogs.MessageDialog` 在 macOS 上渲染成 NSAlert——不是 Widgets，但同样不是
+      应用自己的界面。现在都是 `components/ChoiceDialog.qml`，`src/app/qml_ui` 已无
+      `MessageDialog`。
+- [x] **控件高亮有记忆**（2026-08-29 报告，同日修复）。所有者已确认所指即 `AppComboBox`。
+      成因是 `background.border.color` 读 `activeFocus`：ComboBox 点击即取焦点并保持，
+      重开弹窗时焦点被恢复，边框继续是重音色。改用 `visualFocus`——只有键盘到达的焦点才画指示。
+      同一属性同步应用到 `AppCheckBox` / `IconButton` 的焦点环。文本输入控件（`AppTextField` /
+      `AppTextArea`）**保持 `activeFocus`**：正在输入时边框就该亮着。
 
-- [x] 文本编辑器主要逻辑从 v1 移植到 v2。
-  - [x] 共享编辑规则：保留 v2 QML `TextArea` 与 `QTextDocument`，从
-        `PlainCodeEditor.Input.cpp` / `PlainCodeEditor.BracketCompletion.cpp` 抽取控件无关的
-        文本编辑事务、半角转换、括号处理与补全状态，供 v1 / v2 共用。
-  - [x] v2 编辑控制器：连接 `TextArea` / `QQuickTextDocument`，统一管理光标、选择区、
-        编辑事务、覆盖模式、补全状态和现有编辑偏好，通过 `QmlApplicationContext`
-        向 `SourceEditor.qml` 提供窄接口。
-  - [x] 基础输入：移植半角字符、IME commit、粘贴、Enter / Ctrl+Enter、Insert 覆盖模式、
-        成对括号、右括号越过、空括号成对删除、已有 `[` 进入和 `h` hold 补全入口。
-  - [x] 智能补全：复用 `SimaiCompletionCatalog`，用 QML 候选列表承接 BPM、细分与时值候选，
-        支持实时过滤、光标锚定、上下选择、Tab / Enter 接受、Esc 关闭和鼠标选择。
-  - [x] 编辑命令：接入选择区替换记录、撤销 / 重做路由、谱面变换快捷键、上下文菜单、
-        选择区和光标行列同步，通过 `QmlCommandService` 与窄公开 API 连接现有后端。
-  - [x] 编辑辅助：`LineNumberGutter.qml` 接入书签显示、跳转和右键操作；补齐查找界面、
-        预览跟随视觉光标、诊断跳转、错误波浪线和底栏统计。
-  - [x] 高亮规则：共享 v1 `BracketScopeHighlighter` 与 v2 `SimaiSyntaxHighlighter` 的词法规则，
-        同步相关 CMake 源文件和仓库指南。
+### D. 已是 QML 页面，但仍借 Widgets 完成子流程（0 项）
 
-### P3 — 页面接线与产品决策（历史缺口；迁入目标架构的 `ExportService`）
+已清零。视频导出页的文件选择与结果提示于 2026-08-29 改走 `UiRequestService` +
+`components/UiRequestHost.qml`；`src/app/qml_ui` 全目录再无 Widgets 对话框
+（`QmlShortcutModel.h` 里唯一的 `QtWidgets` 字样是一条注释）。
 
-- [x] `QmlExportSession` / `ExportVideoPage.qml` 已接入片头音文件名、导入和 0%–200%
-      `introSoundVolume`；单/批量与难度重播保留设置，并沿既有 snapshot/worker 边界写入最终任务。
-      Release `qml_export_intro_sound_contract_spec`、真实 QML 组件
-      `qml_export_video_page_spec` 与 `video_export_intro_sound_spec` 为 3/3 通过（2026-08-26）。
-- [x] 将 v2 根窗口接入 ChartDrop；`QmlUiBootstrap` 注册 root window、安装拖放事件过滤器并创建/同步
-      `ChartDropOverlay`，释放或取消时清理 overlay 与 root 绑定。
-- [x] 手工确认 v2 工具箱的批量上传入口能够打开 `net.batchUpload.open`（2026-08-26，Windows
-      Release `build/Release/MiaCode.exe`：真实窗口 UI Automation 选择“工具”→“Net 批量上传”后，
-      观察到独立 `QDialog` 窗口标题为“Net 批量上传”；详见执行审计记录）。
-- [x] 缺失 QML 实现的功能保留可发现入口并弹出“暂未更新支持”；已有后端的安全操作继续直接接入，
-      不再从界面移除。具体范围见 `QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md`。
-- [x] 全屏预览采用工作区覆盖层；v1 OS 全屏路径已随 v1 shell 删除。导出工作区中禁用进入全屏，
-      以规避硬件解码驱动问题。
+### E. 影子 Widget 状态（无用户入口，但仍在链上）
 
-### P4 — 长期页面迁移（已被架构决策替代）
+- [x] `ExportLauncherPage`（738 行）已删除（2026-08-29）。导出难度的真相移到 `QmlExportSession`：
+      `resolveToolsMenuExportDifficultyId()` 现在读 `pageSessionActive() + selectedDifficultyId()`，
+      原先的 `menuActionDifficultyId()` / `selectedDifficultyId()` 两级回退只差一个会话门控，合并为一处。
+      同时删掉恒真的 `qmlExportCenterActive_` 标志——它只在 `QmlUiBootstrap` 里被置 true，v1 外壳删除后
+      它守护的每个 `else` 分支都是死代码。隐藏 `editorStack_` 里换成一个空 `QWidget` 占位：
+      `PreviewPlaybackGlue.cpp:42` 等 7 处仍在用 `currentWidget() == chartPage_/metadataPage_`
+      判断"当前是哪个字段"，若导出页不再占据栈位，这些判断会在导出页上误判。
+      **本项没有新增行为 spec**（`MainWindow` 无法实例化）；保证来自编译、`export_page` 零引用，
+      以及全量 CTest 未新增失败。导出难度在 Tools 菜单各动作里的实际取值仍需原生桌面确认。
 
-- [ ] 0c 已延后：继续保留 Latency 的 `WindowContainer` 与既有 Widget 页面；不在本阶段将它迁移为 QML
-      或删除。恢复 0c 时再依据产品决策重新立项。
+## 4. 阶段任务与完成标志
 
-## 手工回归清单
+### 4.0 排期（2026-08-29 所有者指定）
 
-- [ ] 脏文档、播放中、导出任务运行时的关窗流程与 v1 一致。
-- [ ] 设备热插拔暂停后，下一次播放走 cold Prepare。
-- [ ] play、pause、seek 按 completion 更新界面状态。
-- [ ] EraseByArea、烟花时长和 BGM 过轨静音行为正确。
-- [ ] 音频拖放建谱和 ChartDrop 覆盖层行为正确。
-- [ ] QML 导出片头音文件和音量进入最终任务（自动规格已覆盖会话、真实 QML 控件及
-      snapshot→worker 重建；仍需原生桌面试听与成片确认）。
-- [ ] `d534b393` 的 bookmark / touch input 改动完成 GUI 回归。
+**本批**（做完一项提交一次）：
 
-## 关键路径
+1. ~~阶段 1 + 阶段 2~~ —— **已完成（2026-08-30）**。隐藏 `PlainCodeEditor` 已删、
+   `qml_document_lifecycle_contract_spec` 已绿、25 个 `shellController` 消费点已迁往
+   `QmlTimelineModel` / `QmlPreviewModel` / `QmlShellLifecycle`、`QuickShellController`
+   与轮询已退役。唯一留在阶段 2 里的是 `TimelineQuickModel` 所有权，**所有者已决定延后**。
+2. ~~关于 MiaCode / 音频设置 / 预览设置~~ —— **已完成（2026-08-30）**，三个「暂未更新支持」入口全部补上真实实现；`unavailableFeatureDialog` 在 A 类已无触发点。
+3. ~~侧边栏书签折叠重新设计~~ —— **已完成（2026-08-30）**。右侧那个独立折叠按钮已删除，
+   难度行本身就是折叠控件：点击非当前难度＝切换难度（行为不变），点击**当前**难度＝
+   展开 / 收起它的书签；折叠指示器在**左侧**，与「难度」分组标题的箭头对齐，
+   槽位恒占位所以各行色块仍然对齐。**只有当前难度显示书签**——行既然是折叠控件，
+   非当前行按下去是切换而不是折叠，留在别的难度上的展开态就会是一个屏幕上没有东西能收起的列表。
+   漂移守卫：`qml_editor_controller_spec` 新增一条断言（`foldsBookmarks` 存在、`foldButton` 不存在）。
+4. ~~保存 / 退出确认弹窗改为 QML~~ —— **已完成（2026-08-30）**。关闭流程改为两段式，
+   未保存提示走 `UiRequestService::requestChoice`（新增的三选一请求）+ `ChoiceDialog.qml`；
+   §3.C 列出的调用点里**所有 v2 能走到的**都已迁移，v1 菜单专属的那些留给阶段 4。
+
+**本批四项全部完成。** 下一轮见下。
+
+**批次中途插入并已完成（2026-08-30，用户报告 / 要求）**：预览走带时间条停在 0（回归，见 §3.C）、
+数值读数双击输入、设置弹窗可拖动。
+
+**插入本批之后、下一轮之前（2026-08-30 所有者指定）：文档机制全盘审计与重新设计。**
+所有者报告 7 项缺陷并判定文档机制需要重新设计（和 v1 不完全相同）。审计与设计已写在
+[QML_UI_V2_DOCUMENT_MODEL_AUDIT_AND_REDESIGN_ZH.md](../../audit/QML_UI_V2_DOCUMENT_MODEL_AUDIT_AND_REDESIGN_ZH.md)，
+含三个待拍板的产品决定。落地顺序见该文第 5 章：
+Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签守卫 → 新建/打开最近/关闭文档 → 两套三选一收敛。
+
+**下一轮**（难度更高，文档机制重做之后才开始）：
+
+1. **v1 / v2 文案逐项比对**。v1 文案经过多轮迭代，v2 重构时出现大量偏差，
+   怀疑多语言模块（`UiText`）没有完整搬迁。若属实需要重建，并尽可能恢复原文案。
+2. 封面导出功能重构。
+
+
+### 阶段 1（收尾）—— 文档域单一所有者
+
+已落地：`ChartWorkspace`、`ChartWorkspaceFileService`、`AnalysisService`（`src/app/v2/`），生产 QML 的文档事务、save-point dirty、revision-stamped 分析快照均不再以 `MainWindow` 为真相。
+
+剩余：
+
+- [x] 删除隐藏 `PlainCodeEditor` 与第二份文档副本（2026-08-30）。`src/editor/PlainCodeEditor.*`
+      与 `BracketCompletionPopup.*` 已删除，应用不再链接任何 Widgets 文本编辑器。
+      过程中修好了两个原本已坏的功能：扩展 `editor/*` API 与 14 个谱面变换命令，
+      两者此前都作用在一个从未被 QML 选区同步过的隐藏光标上。
+- [x] 修复 `qml_document_lifecycle_contract_spec`（2026-08-29，见 §7.1）。
+- **阶段 1 除延后项外已收尾。**
+- [ ] **增量时间轴解析已实际失效**（2026-08-30 记录）。`applyTimelineQuickChange` 只由隐藏编辑器的
+      `contentsChange` 驱动，而每次 v2 写入都经 `setEditorText` 抑制脏跟踪，所以它从未运行——
+      v2 的每一次编辑都是全量重建。隐藏编辑器删除后这条路彻底断了。重新接上的正确位置是工作区提交
+      （它知道确切编辑范围），属于阶段 2 `TimelineQuickModel` 所有权那一项，**所有者已决定继续延后**。
+
+### 阶段 2 —— `PreviewSession` / `TimelineSession`，退役 `QuickShellController`
+
+> **2026-08-30 所有者决定：`TimelineQuickModel` 所有权迁移继续延后。**
+> 阶段 2 的其余部分（`shellController.*` 消费点迁移、MainWindow 改推送、删 `refreshTimer_`
+> 与 `src/app/quick_shell/`）按「一次做到底」推进。
+
+- [x] 把 25 个 `shellController.*` QML 消费点搬走（2026-08-30）。落点是三个对象而非两个：
+      `QmlTimelineModel`（时间轴与底栏页签）、`QmlPreviewModel`（原有对象，接管预览剩余项：
+      画布比例、播放切换、速度步进、交互日志）、`QmlShellLifecycle`（根窗口关闭契约）。
+      其中三处不需要新对象：`exportPageActive` 与 QML 已有的 `pages.activePageId === "export"`
+      是同一个条件；`workspacePanelsSwapped` 就是 `preferencesModel.previewOnLeft`。
+- [x] **轮询消失**（2026-08-30）。`refreshTimer_` 每隔 200ms/33ms 拉 ~25 个值、无论是否播放。
+      现在离散状态由 `MainWindow::shellPresentationChanged` 推送。
+      *更正（2026-08-30 同日）：这一条最初留了一个「播放时钟仍需采样、定时器只在播放期间运行」
+      的例外，而那个例外本身就是缺陷——闸门 `playing_` 从来没有推送方，定时器从未启动，走带
+      一直停在 0（见 §3.C）。播放头改由 `applyQtPreviewPosition` 通过
+      `shellPreviewPlayheadChanged` 推送，采样定时器已删除，`QmlPreviewModel` 现在不采样任何东西。
+      漂移守卫 `preview_transport_push_spec` 会拒绝把定时器放回去。*
+- [ ] `TimelineQuickModel` 所有权从 `MainWindow` 迁到 `TimelineSession`。**已延后。**
+      *更正（2026-08-30）：此前记的「增量解析本身已完成，剩下的只是所有权」在实现上成立、
+      在运行上不成立。`applyTextChange(QString,…)` 确实取代了 `applyContentsChange(QTextDocument*)`，
+      但唯一的驱动方是隐藏编辑器的 `contentsChange`，而它被 `setEditorText` 的抑制挡住，
+      所以 v2 从未走过增量路径——每次编辑都是 `scheduleTimelineRefresh()` 全量重建。
+      隐藏编辑器删除后连这条驱动也没有了。要恢复增量，得改由工作区提交驱动（它知道确切编辑范围），
+      这正是本项要做的事，不只是搬所有权。*
+- **完成标志**：~~`refreshTimer_` 消失~~✅；~~QML 不再出现 `shellController`~~✅；
+      `src/app/quick_shell/` 部分删除——`QuickShellController.{h,cpp}`（866 行）与
+      `QuickShellContracts.h`（127 行，三个抽象基类）已删；目录里剩下的
+      `QuickShellPreviewCompositeSurface.*` / `QuickShellPopupPosition.h` /
+      `QuickShellKeyboardActivation.h` / `QuickShellPreviewSurfacePolicy.h` 是预览合成表面的
+      平台管道，与外壳控制器无关，随阶段 4 的 `MainWindow` 一并处理。
+
+### 阶段 3 —— `ExportService` 与 Widget 对话框归零
+
+已建成的共享边界（`src/app/v2/`，均无 Widgets，各自有只链 `Qt6::Core`+`Qt6::Test` 的 spec）：
+`UiRequestService`（选文件 / 消息 / 带动作的消息）与 `JobProgressService`（进度 + 不确定态 +
+按 token 的协作式取消）。`MainWindow` 持有唯一实例，`MainView.qml` 承载唯一的 `UiRequestHost`
+与 `JobProgressOverlay`。
+
+- [x] **进度条归一（2026-08-29）**：视频导出、批量导出、ZIP 打包、音视频处理（4 条 ffmpeg 流程）
+      现在全部走同一个 `JobProgressOverlay`。`src/app` 已无 `QProgressDialog`。同时删除了两处
+      并行进度表示：预览传输条上的 inline 导出进度（`videoExportUseInlineProgress_` 自嵌入面板
+      删除后再无人置 true）与恒返回 -1 的 `shellVideoExportProgressSeconds()`（连带去掉
+      `QuickShellController` 轮询间隔对它的依赖）。
+
+- [x] `QmlExportSession` 的 `QFileDialog` / `QMessageBox` 换成 QML 侧 `QtQuick.Dialogs` + 结果值
+      （2026-08-29）。落点是可复用的 `miacode::v2::UiRequestService` + `components/UiRequestHost.qml`，
+      而不是导出页就地改写——B 类的 Net / 音视频处理 / 偏好设置页同样需要选文件与提示，共用这一条边界。
+      `ui_request_service_spec` 只链 `Qt6::Core` + `Qt6::Test`，所以任何把 Widgets 对话框放回这条边界的
+      改动都会**链接失败**，不依赖字符串扫描；`qml_export_video_page_spec` 驱动真实 `FileDialog` /
+      `FolderDialog` / `MessageDialog` 走完请求—应答回环。仍需原生桌面确认实际弹窗外观与取消语义。
+- [ ] 封面导出（暂缓）、Net 上传/下载、ZIP、整谱规范化重建为 QML 页面 + 无 Widgets 作业 API。
+- [ ] 删除 `CoverStudioWindow` 组、`NetBatch*Dialog`。
+      *（`ExportLauncherPage`、`BatchExportPanel` 组、`VideoExportDialog` 组已于 2026-08-29 删除。）*
+- [x] **废弃 `VideoExportDialog` 的扩展 API 形态**（2026-08-29）。扩展命令 `export.video.start`
+      与方法 `export/startVideoExport` 原本打开模态导出对话框，现在改为打开 QML 导出中心的单个导出页
+      （`onExportPreviewVideo()` 保留同名但换成 QML 路由）。扩展面能力未削减，Widgets 对话框消失。
+      `FontLibrary`、`HudFontSettings`、`CardFontSettings` 被 cover_export 与 MainWindow 对话框复用，
+      **未随组删除**。
+- [ ] `ChartDropOverlay` 改为 QML 覆盖层。
+- **完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui` 为空。
+
+### 阶段 4 —— 删除 `MainWindow`，摘掉 `Qt6::Widgets`
+
+- [ ] 搬迁/删除 `src/app/mainwindow/` 全部 73 文件。
+- [ ] `src/app/ui/` 的 widget 辅助件（`UiComponents`、`EditableValueLabel`、`FlowLayout`、`BusySpinner`、`AppBackgroundPainter`）随之处理。
+- [ ] `main.cpp` 换 `QGuiApplication`；`CMakeLists.txt` 去掉 `Widgets`。
+- **完成标志**：上述两处 CMake 声明不含 `Widgets`，且 Release 构建 + 全量 CTest 通过。
+
+### 0b（延后，未取消）/ 0c（已改判并完成）
+
+- [ ] 0b 扩展宿主删除 —— 保持现状。
+- [x] 0c 偏好设置 / 延迟检测 / 音视频处理页 —— **三页均已补成 QML 原生页（2026-08-29）**。
+      ~~架构文档第 8、10 节仍记录着相反的删除决定，需改齐。~~ **已改齐（2026-08-30）**：
+      架构文档第 8 节的 0c 行改为 ✅「不删，补成 QML」，阶段 1 / 2 行同步标记完成；
+      第 10 节「范围裁剪的代价」改为记录**实际**删除项（Net 暂移除、应用背景、扩展页签），
+      并写明「哪怕功能会缺失也要做」那条授权已被所有者收回。
+
+## 5. 已完成（事实登记，不再逐条展开）
+
+- 阶段 0a：v1 QuickShell 外壳、入口、原生表面再宿主、皮肤切换（`resolveUiSkin`）全部删除，`--ui=v1` / `MIACODE_UI_SKIN` 不复存在。
+- 文档域：`ChartWorkspace` + `ChartWorkspaceFileService` + `AnalysisService` 接管文档事务、save-point dirty 与 revision 分析快照。
+- 编辑器：共享 `SimaiTextEditPolicy`、补全、书签、查找替换、诊断跳转、语法高亮、快捷键（`QmlShortcutModel` 复用 `ShortcutRegistry`）。
+- 同步链：`EditorSyncController` 统一播放跟随、离散导航、编辑器上下文与触控创作，全部经队列边界投递；`TimelineView`（QWidget 时间轴，约 3,470 行）已删除。
+- 时间轴/底栏：缩放、亮度、follow-code、validation / Muri 三 tab、底栏高度联动、工作区面板互换。
+- 预览：三态渲染模式（`PreviewRenderModeMenu.qml`）、负时间传输条、surface 互斥生命周期、统计投影去热路径。
+- 导出：`ExportVideoPage.qml` + `QmlExportSession`，含片头音文件与 0–200% 音量，写入单个/批量 snapshot 与 worker。
+- ChartDrop：root window 登记 + 事件过滤器 + overlay 同步。
+- 行高亮：`ChromeRow.qml`（2026-08-29）把「HoverChrome 背景 + 内容内缩」封成一个类型，13 处
+  `background: HoverChrome` 调用点迁移完毕。剩余直用者只有 `AppMenuItem`（必须是 MenuItem）
+  与四个纯图标按钮（内容居中，没有会贴边的文字）。
+- 编辑器外观：`EditorTextStyle`（QML 类型）把 行距 落到 TextArea 的 QTextDocument 上（每个
+  块的 bottomMargin），`QmlUiSettings::setEditorAppearance` 让 字号 / 行距 都能实时到达 QML
+  编辑器——此前两者都只写到了 v2 已不显示的 Widgets 编辑器。
+- 设置页（2026-08-30）：关于 MiaCode、音频设置（含试听）、预览设置三页原生化，A 类清零。
+  混音十条通道与预览的二十项都以**表**的形式存在（`QmlAudioSettingsModel` 的 `ChannelSpec`、
+  `MainWindow::previewRenderSettings()` 的键值对），而不是逐个属性——Widgets 对话框正是因为
+  逐个手写才让滑块与静音按钮各自接线并走样。
+- 共享表单控件（2026-08-30）：`LabeledCombo` / `LabeledSlider` 从偏好设置里的内联组件提升为
+  组件；`EditableValue` 补回 v1 `EditableValueLabel` 的就地输入（改为双击）；`DialogDrag`
+  让设置弹窗可以拖开，且不改变任何外观。
+- 推送而非轮询（2026-08-30）：`shellPresentationChanged`（离散壳状态）与
+  `shellPreviewPlayheadChanged`（播放头）取代了 `QuickShellController` 的轮询定时器，
+  `QmlPreviewModel` 不再采样任何东西；`preview_transport_push_spec` 钉住这条契约。
+
+## 6. 验收规则
+
+1. 每个域搬迁**之前**先补该域的契约回归，确认红态再搬（架构文档第 9 节）。
+2. QML 回归驱动**真实组件与真实事件**，不用源码字符串扫描代替。
+   —— §7.1 正是源码扫描式契约的失效案例。
+3. `QT_QPA_PLATFORM=offscreen` 在本机会触发既有 macOS 平台插件崩溃，**不能**用作桌面视觉/输入验收。
+4. 原生桌面验收按平台分别记录；macOS 通过不能推断 Windows 通过。
+
+## 7. 遗留问题与更新后待复核
+
+### 7.0 应用背景功能已移除（2026-08-29 决定，已执行）
+
+- **证据**：`AppBackgroundPainter` 构造在 `MainWindow` 上（`FrameBootstrap.cpp:1873`），而 `MainWindow`
+  在 `FrameBootstrap.cpp:117` 无条件 `setAttribute(Qt::WA_DontShowOnScreen)`。painter 只被
+  `setSettings()` 调用过，画的是 toolbar / statusbar / tabwidget 等 Widget chrome。
+  QML 外壳的配色来自 `theme/Theme.qml` 的硬编码色值；`src/app/qml_ui` 全目录**没有任何**
+  文件引用 app background 设置。
+- **含义**：该页签 410 行 UI 加 14 个 overlay alpha 旋钮，配置的是一个画进不可见窗口的 painter。
+- **处置**：所有者决定一并移除。`AppBackgroundPainter` / `AppBackgroundSettings`、六个
+  `AppBackgroundSurface*` widget 包装、`UiTheme` 的 overlay-alpha 体系与背景页签全部删除
+  （净 −1,711 行）。`PlainCodeEditor` 的三处背景绘制分支随之简化为直接填色。
+  恢复该功能需要在 QML 外壳里重新实现，不是回滚这次删除。
+
+**本章是交接面。** 每条写明：问题是什么、当前状态、以及在 `117a76a1` 之后**必须重新核实什么**。
+未列为"已复核"的条目，一律不得由构建、CTest 或历史记录推断为通过。
+
+### 7.1 `qml_document_lifecycle_contract_spec` 已恢复绿（2026-08-29 已处置）
+
+- **现象**：断言 `initial, navigation, and follow identities stay on the committed workspace revision` 失败。
+- **原因**：该断言用源码字符串扫描，要求 `appliedQmlWorkspaceRevision_ > 0` 同时出现在
+  `MainWindow.PreviewTimelineFlow.cpp` 与 `MainWindow.ValidationFlow.cpp`。`117a76a1` 重写了这两个文件：
+  前者改为把 revision 直接交给 `editorSyncController_->requestNavigation(...)`（`PreviewTimelineFlow.cpp:1518`），
+  后者的诊断跳转整段移走，只剩 `clearPreviewFollowDecoration()` 里的 `publishFollow`。
+- **已复核（2026-08-29）**：门控确实完整地在 `EditorSyncController` 里，而且比原来更强——
+  每条路径在**提交时**和**投递时**各查一次 `readinessAccepts`，因此在提交后、队列跑完前
+  失效的请求不会被投递，而是以 `applied=false` 收尾。
+- **处置**：新增 `editor_sync_controller_spec`（`src/tools/v2/EditorSyncControllerSpec.cpp`，
+  只链 `Qt6::Core` + `Qt6::Test`），六项行为断言直接驱动真实对象：未就绪拒绝、
+  过期 revision / 不同难度拒绝、投递前失效则不投递并回报未应用、隐藏编辑器会结清挂起导航、
+  元数据模式不接受谱面导航、caret / 指针 / 触控锚点 / 预览 seek 共用同一门控且相同 caret 不重复发布、
+  follow 作为投影原样携带发布方身份（这正是本轮 代码跟随 缺陷的落点）。
+- 契约 spec 里那条断言改为只主张源码层面能看见的一半：导航与 follow 两个发布方都读
+  `appliedQmlWorkspaceRevision_`，且 follow 不再读验证快照的 revision。
+- **CTest 基线**（2026-08-30 更新）：**82 项**、唯一预期红仍是 `qtavplayer_platform_spec`，
+  干净一轮是 **81/82**。这一轮新增 `editor_sync_controller_spec`、`preview_transport_push_spec`。
+  数字会继续变；读的时候以本次运行的总数为准，不要以记忆中的数字判断。
+
+### 7.2 QV4 GC 崩溃（Windows `0xC0000005` @ `Qt6Qml.dll+0x169A39`）
+
+- 根因与复现见 [QML_RUNTIME_CRASH_AUDIT_ZH.md](../../audit/QML_RUNTIME_CRASH_AUDIT_ZH.md)。
+- 审计推荐的 A/B/C 已落地：A —— `centerCursorInView()` 改为单一可合并的 `cursorCenterTimer.restart()`（`SourceEditor.qml:214`）；
+  B —— `CompletionPopup.qml` 的光标/布局 `Connections` 已 `enabled: root.visible`；
+  C —— `EditorSyncController` 队列边界。
+- **待复核（D 项，未执行）**：`QV4_MM_AGGRESSIVE_GC=1` 下，代码跟随开启完整播放 10 轮、跨多 token、反复开关跟随、暂停/继续/停止/重播、弹窗开与关两种状态；Windows Release 与 Linux Release 各一轮。**这是本次重构最关键的验收，缺它则崩溃只能算"推测已修"。**
+
+### 7.-1 GUI 验收结论（2026-08-29，所有者在 macOS 上走查）
+
+所有者对本轮构建做了一次原生桌面走查，并判定：**除音视频处理工具外，全部判定为 GUI 验收通过。**
+
+- **通过**：§7.3 的五项 + 新语义、§7.4 的底栏/时间轴菜单/渲染模式/面板互换/菜单栏位置、
+  §7.6 的脏文档撤销联动、§7.9 的手工回归清单，以及 2026-08-29 两轮修复的可见结果
+  （行高亮覆盖、对话框统一页脚与样式、快捷键录制、规范化下拉、侧边栏难度色块与书签折叠、
+  语法列不再重叠、行距/字号实时生效、代码跟随在切换难度后仍然工作）。
+- **未验收**：**音视频处理工具**（`MediaToolsDialog` / `PrependBlankDialog` /
+  `PvBatchCompressionDialog` 四条 ffmpeg 流程 + PV 批量队列）。保持未验收状态。
+- **这份结论覆盖不到的**：走查发生在 2026-08-29，**此后落地的一切都不在其范围内**——
+  逐项清单见 §7.-0。另外本次走查在 macOS 上进行，所以
+  ① §7.2 的 D 项（`QV4_MM_AGGRESSIVE_GC=1` 压测，要求 Windows Release 与 Linux Release 各一轮）
+  **不因此结论而关闭**；
+  ② §7.10 的「Windows 侧整体从未验证」同样不变。
+  这两条继续按原状挂着，不得由本条推断为通过。
+
+### 7.-0 2026-08-30 之后新增，全部**未验收**
+
+§7.-1 的走查发生在 2026-08-29。此后落地的东西没有任何一项被在原生桌面上看过，
+不得由构建或 CTest 推断为通过：
+
+- [ ] **关于 MiaCode**：版本号 / 平台三元组 / 构建类型是否正确；平台与构建类型两行可选中。
+- [ ] **音频设置**：十条通道的音量与静音、Break 星星尾判音开关、两个本地预设按钮；
+      **试听**（松手出声、拖动中安静、预览播放时不试听）；主静音是否带动其余九行；
+      拖动滑块是否不再中途中断。
+- [ ] **预览设置**：视频 / 玩法两个页签共 20 项是否即时改变预览。
+- [ ] **走带时间条**：播放时是否跟走；**暂停时**拖时间轴 / 键盘定位是否也移动滑块。
+- [ ] **双击输入数值**：音量「50%」、预览设置各滑块、偏好设置字号。
+- [ ] **弹窗拖动**：音频设置 / 预览设置 / 偏好设置拖标题栏；关掉再开是否保留位置；
+      窗口缩小后是否仍被钳制在窗口内。
+- [ ] **谱面变换的菜单与右键菜单入口**（2026-08-29 落地，走查在其之前，未覆盖）。
+- [x] **侧边栏书签折叠**（2026-08-30 所有者验收通过）。
+- [ ] **关闭确认**：脏文档关窗 → 保存 / 放弃 / 取消三条路径；取消后窗口与所有面板是否完好
+      （破坏性清理必须只在确认之后发生）；Escape 与标题栏关闭按钮是否都等于取消。
+- [ ] **难度标签拖动排序**：两个已打开难度标签拖到彼此上方是否交换顺序；当前编辑难度不切换，
+      元数据标签同样可参与，关闭或重开文档后不应把排序写入谱面。
+- [ ] **导出区间选择器**：范围页验证端点只移动自身、选中区间整体平移且时长不变；最小区间为
+      `min(5 s, 全谱时长)`，短区间的端点和主体仍可明确命中。确认悬停／拖动只显示一个时间戳、不出现会换行的
+      「开始／结束」标签；两类拖动都让右侧预览暂停并经同一 scrub 通道定位，播放头只读，数值输入与拖动双向同步。
+- [ ] **打开文件的未保存提示**：三条路径 + 未命名文档选「保存」是否转到另存为。
+- [ ] **音频拖放建谱**：预览确认 → 未保存决策 → 结果提示（失败 / 单个成功后询问切换 / 部分失败）。
+- [ ] **删除难度只弹一次**（此前会连弹两个，第二个是 Widgets）。
+- [ ] **保存失败 / 启动目标缺失**的提示是否为应用自己的弹窗。
+- [x] **导出片头播放**（2026-08-30 所有者验收通过）：从 -5s 起播时进度条跟走、按钮显示播放中。
+- [x] **导出页试听不再卡住**（2026-08-30 所有者验收通过）：进入导出页后在顶部切难度再播放。
+- [ ] **Esc 不再输入字符**：编辑器里按 Esc 应什么都不发生；补全弹窗开着时关闭补全，
+      查找栏开着时关闭查找栏。
+- [ ] **跨难度撤销互不干扰**：在 A 改、切到 B、Ctrl+Z 只影响 B 自己的历史；切回 A 撤销仍在。
+- [ ] **脏点留在真正改过的难度上**：改 Expert 切到 Master，脏点不应跟着走。
+- [ ] **关标签的三选一**：改过的难度关标签应询问；「放弃」只还原它一个、其他难度不动；
+      保存失败或取消另存为时标签应保留。
+- [ ] **Save 只写当前难度**：改两个难度按 Ctrl+S，文件里应只更新当前那个；
+      关窗时应逐个切到未保存难度询问，取消应真的不关。
+- [ ] **未命名文档保存**：新建后不保存直接关标签 / 关窗选「保存」应弹出另存为；
+      取消选择应保留标签 / 不关窗。
+- [ ] **打开最近 / 恢复备份**：标签是否可读（文件夹名 / 时间戳），tooltip 是否给出完整路径；
+      列表为空时只有一行禁用提示，且**上方没有空白行**。
+- [ ] **新建**：选一个 `song.mp3` → 同目录出现 `track.mp3` 与 `maidata.txt` 并自动打开；
+      选一个本来就叫 `track.mp3` 的 → 不产生多余副本；对已有谱面的目录再来一次 → 应询问覆盖。
+- [ ] **新建 / 打开最近 / 恢复备份 / 关闭文档**在有未保存改动时是否先询问。
+- [ ] **自动保存恢复实时**：编辑后静置约 2 秒，`恢复备份` 里 `latest` 的时间戳应更新
+      （不必等 2 分钟，也不必关闭应用）；历史快照仍是 2 分钟一档，属预期。
+
+### 7.-2 自动保存的**每次编辑安全网**在 v2 从未运行（2026-08-30 所有者报告，已复核并修复）
+
+**报告**：改动后静置一小段时间没有产生备份，关闭后才产生；与 v1 的体感有差距。
+
+**复核结论：报告属实，而且比"备份不实时"更严重。**
+
+自动保存有**两条**写入路径，v2 只有一条在跑：
+
+| | 触发 | 间隔 | v2 |
+|---|---|---|---|
+| `autosaveTimer_` | `updateDirtyState()` 在文档变脏时启动 | **2 分钟** | ✅ 在跑（v2 每次提交都经 `applyCommittedQmlDocument` → `updateDirtyState()`） |
+| `autosaveIdleTimer_` | **`markCurrentFieldDirty()`** | **2 秒**（防抖） | ❌ **从不触发** |
+
+`markCurrentFieldDirty()` 的调用方**全部**是隐藏 v1 `QLineEdit` 的 `textChanged`
+（`artistEdit_` / `designerEdit_` / `difficultyLevelEdit_` / `firstEdit_` /
+`difficultyDesignerEdit_`，见 `FrameBootstrap.cpp:1428-1450`）加两处直接调用。
+v2 的编辑器是 QML，**没有任何东西往那些隐藏输入框里打字**——所以这条路在 v2 上是死的。
+
+于是观察到的现象完全对上：编辑后 2 分钟内什么都不写；关闭时 `requestLeaveDocument` 里的
+`runAutosaveCheck(false)` 补写一次 `latest.bak`，所以"关掉才出现备份"。
+
+**更严重的一半**：`markCurrentFieldDirty()` 里还有崩溃恢复的快照投递——
+`miacode::crash_recovery::updateSnapshot()`，全树**只有这一个调用方**。
+所以 v2 下**异常退出不会留下任何恢复内容**：那条注释里写的"每次编辑的安全网"在 v2 上不存在。
+这不是体验差距，是数据丢失面。
+
+**更正此前的记录**：2026-08-30 我曾把这条记为「自动保存本身在跑，缺的只是手动恢复入口」。
+那句话只对了一半——2 分钟的例行快照在跑，**每次编辑的安全网不在**。
+
+**溯源**：这条不是"v2 从来没接"，是**接过、然后随着被删的部件一起走了**。
+`ad66ac39`（删除隐藏谱面编辑器）移除的代码里有：
+
+```cpp
+QTimer::singleShot(0, this, [this]() {
+    if (!suppressTextDirtyTracking_) {
+        markCurrentFieldDirty();
+    }
+});
+```
+
+那是隐藏编辑器 `textChanged` 的处理器，也就是这张安全网**唯一**的驱动方。
+删掉编辑器时它一并消失，QML 侧没有接替。
+
+**已修（2026-08-30）**：把 `markCurrentFieldDirty()` 里的两件事抽成
+`noteDocumentEditedForAutosave()`——重启 2 秒防抖、投递崩溃快照——
+`markCurrentFieldDirty()` 调它（所以只有**一份**实现，v1 与 v2 两条路都走它），
+v2 侧由 `applyCommittedQmlDocument()` 在 **`sourceChanged && dirty`** 时调用。
+打开与保存也经过那里，但都不是编辑：前者的源码相对刚载入的内容没变，两者都让文档回到干净。
+`updateDirtyState()` 仍排在前面，因为启动例行计时器是它的活。
+漂移守卫：`qml_document_lifecycle_contract_spec`。
+
+### 7.3 二阶段五项桌面验收已因同步链重写而失效
+
+- 2026-08-24 记为通过的五项（`ca943a82` 暂停跟随装饰、`2a27630d` 书签/右键菜单、`75c89635` 命令修饰键、`f4251ca0` IME 提交递归、`f451ae09` Command+点击 seek，以及 `5ee23d38` 窄窗口 completion popup）针对的是旧跟随/导航链。
+- `117a76a1` 把整条链换成值对象 + 队列投递，并重写了 caret 显隐、系统周期闪烁与播放中暂停语义；上游 merge 提交自述「Native GUI acceptance remains pending」。
+- **已复核（2026-08-29，macOS，见 §7.-1）**：五项与新语义随本轮走查一并判定通过——普通点击只移动 caret 不居中；Ctrl/Command+点击先暂停再 seek 并居中 playhead；播放中指针按下立即暂停；播放期普通 caret 隐藏、跟随光标显示，暂停后由焦点恢复；caret 闪烁跟随 `Application.styleHints.cursorFlashTime`。Windows 侧仍未验证。
+
+### 7.4 本次 UI 重构无任何 GUI 验收记录
+
+`04401157` 合入的这批改动尚未被任何人在原生桌面上看过：
+
+- 底栏（时间轴）UI 重构、`TimelineZoomMenu` / `TimelineBrightnessMenu`
+- `PreviewRenderModeMenu`（sticky popup，非 `Menu`）
+- 时间轴高度随底栏拖拽联动、工作区面板互换
+- macOS 自定义菜单栏位置修正、响应式预览尺寸修正
+- 新增共享控件 `AppCheckBox`、`AppDropDownButton`
+
+**已复核（2026-08-29，macOS，见 §7.-1）**。窄窗口 / 1280×720 / 浅深色 / 中英文 / Large system font 的逐项组合未单独留记录，若后续出现相关报告按新问题处理。
+
+### 7.5 底栏高度配置键变更，无迁移
+
+`QmlUiSettings` 的 `ui/bottomPanelHeight`（像素）已换成 `ui/bottomPanelHeightRatio`（比例，默认 0.35，`QmlUiSettings.cpp:33-36`），**没有写迁移**。老用户升级后底栏高度会回到默认值。
+**待复核**：确认这是有意为之；若否，补一次性迁移。
+
+### 7.6 撤销栈 dirty 联动（已修，待 GUI 复核）
+
+dirty 真相已迁到 `ChartWorkspace` 的完整文档 save point，`Ctrl+Z` / `Ctrl+Y` 回到已打开或已保存内容会自动回 clean。
+**已复核（2026-08-29，macOS，见 §7.-1）**。
+
+### 7.7 切换文档后 PV 异常（延后）
+
+多次复现失败，需求延后。埋点保留在树上（`editor/document_replaced`、`editor/document_shown`）。
+**待复核**：仅在再次复现时重启排查，不预先投入。
+
+### 7.8 播放期高位内存平台（延后）
+
+现有证据是"跃升后稳定"（private memory 约 957 MB 平台，第二段播放 1,051–1,064 MB），不是持续泄漏。
+**待复核**：阶段 2 迁移 Preview/Timeline **之前**先做分层取证（QtAVPlayer/D3D11VA 帧池、QML/Qt Quick、私有堆），不得先验归因于 preview texture cache。
+
+### 7.9 手工回归清单（2026-08-29 macOS 走查判定通过，见 §7.-1）
+
+- [x] 脏文档、播放中、导出任务运行时的关窗流程与 v1 一致。
+- [x] 设备热插拔暂停后，下一次播放走 cold Prepare。
+- [x] play / pause / seek 按 completion 更新界面状态。
+- [x] EraseByArea、烟花时长、BGM 过轨静音行为正确。
+- [x] 音频拖放建谱与 ChartDrop 覆盖层（含 cancel）行为正确。
+- [x] QML 导出片头音文件与音量：原生试听 + 成片确认。
+- [x] `d534b393` 的 bookmark / touch input 改动 GUI 回归。
+- [x] root 拖放、播放中关闭。
+- [ ] **音视频处理工具（未验收）**：采样率 / 提取音频 / 前置空白 / 音量归一化四条 ffmpeg 流程，
+      以及 PV 批量压制队列的进度、取消与失败呈现。这是唯一还没被走查覆盖的 v2 页面。
+
+### 7.10 已知且接受、不修
+
+- 低窗口高度下底栏拖不到标称 65%：`MainSplitView.qml` 的 `editorHost` 有 `SplitView.minimumHeight: 180`，`Main.qml` 窗口最低高度 480。标称范围仍是 20%–65%，这是当前壳层约束，不要去改 180，除非产品明确要求取消该像素下限。
+- Windows 侧整体从未验证。
+- 诊断开关 `MIACODE_SKIP_CRASH_HANDLER`：配合 Windows LocalDumps 时跳过 `crash_recovery::install()`，让访问冲突保持 `0xC0000005` 并生成转储。
+
+## 8. 关键路径
 
 | 角色 | 路径 |
-|------|------|
-| 皮肤切换 | `src/app/main.cpp` → `resolveUiSkin()` |
+|---|---|
 | v2 启动 | `src/app/qml_ui/QmlUiBootstrap.*` |
 | 契约根 | `src/app/qml_ui/QmlApplicationContext.*` |
-| 文档桥 | `src/app/qml_ui/QmlDocumentModel.*` |
+| 文档所有者 | `src/app/v2/ChartWorkspace.*`、`ChartWorkspaceFileService.*` |
+| 分析快照 | `src/app/v2/AnalysisService.*` → `QmlAnalysisModel.*` / `QmlAnalysisProjection.*` |
+| 同步控制器 | `src/app/v2/EditorSyncController.*` |
+| 文档桥 | `src/app/qml_ui/QmlDocumentModel.*`、`QmlDocumentProjection.*`、`sections/document/MainWindow.DocumentBridge.cpp` |
 | 预览桥 | `src/app/qml_ui/QmlPreviewModel.*` |
 | 编辑器 | `src/app/qml_ui/QmlEditorController.*`、`QmlEditorInputBridge.*`、`editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
-| 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`ExportVideoPage.qml` |
-| Latency 页宿主 | `src/app/qml_ui/QmlEditorPageHost.*` |
+| 快捷键 | `src/app/qml_ui/QmlShortcutModel.*` ← `src/app/ui/ShortcutRegistry.*` |
+| 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`export/ExportVideoPage.qml` |
+| 页面宿主（待删） | `src/app/qml_ui/QmlEditorPageHost.*`（不再收养 `QWidget`，但切页仍依赖隐藏 `DocumentSection` 的 Widgets 状态；见 §0） |
 | 主壳 | `src/app/qml_ui/Main.qml`、`layout/MainView.qml` |
-| 标题栏 | `src/app/qml_ui/QmlUiWindowChrome.*` |
-| 工具侧栏 | `src/app/qml_ui/sidebar/ToolsSidebarPage.qml` |
-| 工作区状态 | `layout/MainSplitView.qml` / `preview/PreviewPane.qml` ← `shellController.*` |
-| 临时 v2 兼容控制器 | `src/app/quick_shell/QuickShellController.*`（阶段 2 删除） |
+| 设置页 | `preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel.*`、`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel.*`、`preferences/PreferencesDialog.qml` + `QmlPreferencesModel.*` |
+| 表单控件 | `components/LabeledCombo.qml`、`LabeledSlider.qml`、`EditableValue.qml`、`DialogDrag.qml` |
 | 开发索引 | `.agents/skills/miacode-dev-guide/references/feature-index.md` |
 
-## 历史清单的遗留风险
+## 9. 更新规则
 
-- 撤销/重做与 dirty 标记的联动尚未修复；它属于阶段 1 `ChartWorkspace` + `EditorService` 的事务/保存点
-  契约，不能继续依赖隐藏 `PlainCodeEditor` 的实现细节。
-- 切换文档后的 PV 报告未能复现，已延后；保留现有埋点，只有再次复现才重新排查。
-- 播放期高位内存目前证据为平台而非持续泄漏；在阶段 2 迁移 Preview/Timeline 前先做分层取证，不能先验
-  归因于 preview texture cache；**本项已延后**。
-- 阶段 0b（扩展宿主）和 0c（被裁剪页面）均已延后；不得将“延后”误记为已删除或功能不可用。
-
-## 后续推进顺序（以目标架构为准）
-
-原则：**先消除双所有者与轮询，再补页面；优化类条目一律靠后。**
-
-### 阶段 1 当前证据（2026-08-26）
-
-- `ChartWorkspace` 已覆盖严格完整源码预检、活动难度、单次 revision 发布与 dirty save point；
-  `ChartWorkspaceFileService` 覆盖 BOM/系统编码打开和 `QSaveFile` 原子保存；`AnalysisService` 从同一
-  workspace revision 先发布 pending，再异步生成验证、偏移 marker、Muri 和静态引用的单份 available
-  快照；旧 worker 完成值按 `(difficultyId, revision)` 丢弃。
-- `QmlDocumentModel` 与 `QmlAnalysisModel` 已接管该快照：诊断、marker 和 Muri 只从一份当前 identity
-  投影，显式验证也只重新请求 `AnalysisService`。隐藏 `MainWindow` 的分析缓存只留给 timeline/preview
-  与 legacy 页面兼容，不再是生产 QML 分析真相；其文档适配器仍只消费 committed workspace 值。
-- Release `MiaCode` 构建通过；`analysis_service_spec`、`qml_analysis_model_spec`、
-  `qml_document_projection_spec` 与 `qml_document_lifecycle_contract_spec` 共 4/4 通过。
-
-1. 阶段 1（进行中）：`ChartWorkspace`、`ChartWorkspaceFileService` 与 `AnalysisService` 的 Widgets-free
-   契约和生产 QML 接线已落地；完整源码预检已从 `QmlDocumentProjection` 下沉复用，文档事务、保存点
-   与 revision-stamped 分析投影均不再以 `MainWindow` 为真相。隐藏兼容对象仍供 timeline/preview 和
-   legacy 页面使用，待后续域迁移后删除。
-2. 先完成 P0 文本控制键修复；随后完成上述 QML 文档会话迁移及 undo/save-point 回归。该工作不依赖
-   0b/0c、性能平台、导出或阶段 2，但阶段 2、脏文档关闭回归依赖它。
-3. [x] 将 `AnalysisService` 接入迁移后的文档会话，并以其 revision 快照替换生产 QML 对
-   `MainWindow` 验证/Muri 缓存的投影依赖（2026-08-26）。
-4. 阶段 2：建立 `PreviewSession` 与 `TimelineSession`，删除 `QuickShellController` 的轮询和剩余兼容 API。
-5. 阶段 3：将导出、封面、ZIP 和 Net 收敛为 `ExportService` 作业模型；片头音、批量上传和禁用控件在此
-   域解决。
-6. 阶段 4：删除 `MainWindow` 与 `Qt6::Widgets`；原生桌面回归作为每阶段验收，而非替代迁移契约。
-
-## 更新规则
-
-1. 仅对仍适用于隐藏 `MainWindow` 兼容形态的历史事实更新本文件；新工作写入目标架构的对应阶段。
-2. 架构、入口或跨模块契约变化时，同步更新仓库指南。
-3. 手工回归结果记录在对应条目中，不能由构建或 CTest 替代。
-4. 不得重新引入 v1 shell；如需恢复被裁剪功能，须单独作产品决策。
+1. 条目状态变化时**同时**更新本文与架构文档第 8 节的阶段表。
+2. 架构、入口或跨模块契约变化时，同步更新仓库指南（`feature-index.md` / `cross-chain-linkage.md`）。
+3. 原生桌面验收结果写进第 7 章对应条目，注明平台与日期；构建与 CTest 不能替代。
+4. 不得重新引入 v1 shell；恢复被裁剪功能须单独作产品决策。
+5. 新代码不得引入 `Qt6::Widgets` 类型——那是本清单唯一的终点条件。

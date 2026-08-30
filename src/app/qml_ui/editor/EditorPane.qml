@@ -11,6 +11,7 @@ Rectangle {
     required property var commands
     required property var editorController
     required property var editorSync
+    required property var pages
 
     readonly property bool metadataSourceActive: viewState.metadataEditorActive
         && viewState.metadataEditorMode === 1
@@ -45,6 +46,10 @@ Rectangle {
     function selectCurrentLine() {
         if (sourceVisible)
             sourceEditor.selectCurrentLine()
+    }
+
+    function applyChartTransform(opId) {
+        return sourceVisible && sourceEditor.applyChartTransform(opId)
     }
 
     function revealSyntaxIssue(difficultyId, revision, line, column, endColumn) {
@@ -127,6 +132,7 @@ Rectangle {
         anchors.top: parent.top
         viewState: root.viewState
         documentSession: root.documentSession
+        commands: root.commands
     }
 
     Rectangle {
@@ -365,7 +371,12 @@ Rectangle {
         anchors.centerIn: parent
         modal: true
         title: qsTr("选择统一谱师")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: canonicalDesignerDialog.accept()
+            onRejected: canonicalDesignerDialog.reject()
+        }
         onAccepted: root.commands.enableUnifiedDesigner(designerChoice.currentText)
         onRejected: unifiedDesignerSwitch.checked = root.documentSession.unifiedDesignerEnabled
 
@@ -389,7 +400,12 @@ Rectangle {
         anchors.centerIn: parent
         modal: true
         title: qsTr("删除当前难度")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: removeDifficultyDialog.accept()
+            onRejected: removeDifficultyDialog.reject()
+        }
         onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
 
         Label {
@@ -423,4 +439,39 @@ Rectangle {
             }
         }
     }
+    // 整谱规范化: the sidebar entry asks, this pane collects options and applies
+    // the transform as one editor transaction so undo covers it.
+    Connections {
+        target: root.pages
+        function onNormalizeWholeChartRequested() {
+            // Normalize acts on chart body. With no difficulty open (or the
+            // metadata source showing) there is nothing to act on, so the entry
+            // does nothing rather than transforming the wrong text.
+            if (!root.sourceVisible || root.metadataSourceActive)
+                return
+            const stored = root.documentSession.normalizeOptions()
+            normalizeDialog.reduceTo384Grid = stored.reduceTo384Grid
+            normalizeDialog.sectionMeasureCount = stored.sectionMeasureCount
+            normalizeDialog.syntax = stored.syntax
+            normalizeDialog.selectionDescription = sourceEditor.selectionDescription()
+            normalizeDialog.open()
+        }
+    }
+
+    NormalizeOptionsDialog {
+        id: normalizeDialog
+        objectName: "normalizeOptionsDialog"
+        documentSession: root.documentSession
+
+        onAccepted: {
+            const options = {
+                reduceTo384Grid: normalizeDialog.reduceTo384Grid,
+                sectionMeasureCount: normalizeDialog.sectionMeasureCount,
+                syntax: normalizeDialog.syntax
+            }
+            root.documentSession.setNormalizeOptions(options)
+            sourceEditor.applyNormalization(options)
+        }
+    }
+
 }

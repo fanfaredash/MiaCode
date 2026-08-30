@@ -7,16 +7,16 @@ Rectangle {
 
     signal toggleSidebarRequested()
     signal toggleBottomRequested()
-    signal togglePreviewRequested()
     signal openRequested()
     signal saveRequested()
     signal undoRequested()
     signal redoRequested()
+    signal audioSettingsRequested()
+    signal previewSettingsRequested()
     signal unavailableFeatureRequested(string featureName)
 
     property bool sidebarActive: false
     property bool bottomActive: false
-    property bool previewActive: false
     property bool canUndo: false
     property bool canRedo: false
 
@@ -55,12 +55,12 @@ Rectangle {
         IconButton {
             iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
             tooltip: qsTr("音频设置")
-            onClicked: root.unavailableFeatureRequested(qsTr("音频设置"))
+            onClicked: root.audioSettingsRequested()
         }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
             tooltip: qsTr("预览设置")
-            onClicked: root.unavailableFeatureRequested(qsTr("预览设置"))
+            onClicked: root.previewSettingsRequested()
         }
     }
 
@@ -81,12 +81,6 @@ Rectangle {
             tooltip: qsTr("切换底部面板")
             active: root.bottomActive
             onClicked: root.toggleBottomRequested()
-        }
-        IconButton {
-            iconSource: Qt.resolvedUrl("icons/panel-right.svg")
-            tooltip: qsTr("切换预览区")
-            active: root.previewActive
-            onClicked: root.togglePreviewRequested()
         }
     }
 

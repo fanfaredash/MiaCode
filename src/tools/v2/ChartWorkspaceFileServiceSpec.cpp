@@ -37,14 +37,14 @@ bool verifyOpenSaveAndSaveAs(QTextStream& out)
                      QStringLiteral("open decodes a BOM document and commits one clean workspace"), out);
 
     workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}2,"));
-    const auto saved = files.save();
+    const auto saved = files.save(5);
     QFile savedOpened(openedPath);
     savedOpened.open(QIODevice::ReadOnly);
     ok &= expect(saved.accepted && !workspace.snapshot().dirty
                      && savedOpened.readAll().contains("(120){4}2,"),
                  QStringLiteral("save atomically writes the workspace and establishes its save point"), out);
 
-    const auto savedAs = files.saveAs(savedPath);
+    const auto savedAs = files.saveAs(savedPath, 0);
     ok &= expect(savedAs.accepted && workspace.snapshot().filePath == savedPath,
                  QStringLiteral("save as changes file identity only after a successful write"), out);
 
@@ -52,6 +52,36 @@ bool verifyOpenSaveAndSaveAs(QTextStream& out)
     ok &= expect(reopenedFromDirectory.accepted
                      && workspace.snapshot().filePath == maidataPath,
                  QStringLiteral("opening a chart directory resolves its maidata.txt child"), out);
+
+    // Saving one difficulty leaves the others on disk as they were. A single
+    // question about "the document" cannot express that, which is why the
+    // unsaved-changes flow walks the changed difficulties one at a time.
+    const QString twoDifficulties =
+        QStringLiteral("&lv_5=12\n&inote_5=(120){4}1,\n&lv_6=13\n&inote_6=(120){4}3,\n");
+    const QString multiPath = directory.filePath(QStringLiteral("multi.txt"));
+    ok &= expect(writeBytes(multiPath, twoDifficulties.toUtf8()),
+                 QStringLiteral("a two-difficulty document is prepared"), out);
+    ok &= expect(files.open(multiPath).accepted,
+                 QStringLiteral("the two-difficulty document opens clean"), out);
+
+    workspace.selectDifficulty(5);
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}5,"));
+    workspace.selectDifficulty(6);
+    workspace.replaceActiveDifficultyChart(QStringLiteral("(120){4}6,"));
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds.size() == 2,
+                 QStringLiteral("both difficulties are reported changed"), out);
+
+    ok &= expect(files.save(5).accepted, QStringLiteral("saving one difficulty succeeds"), out);
+    QFile multiFile(multiPath);
+    multiFile.open(QIODevice::ReadOnly);
+    const QByteArray afterSectionSave = multiFile.readAll();
+    ok &= expect(afterSectionSave.contains("(120){4}5,")
+                     && afterSectionSave.contains("(120){4}3,")
+                     && !afterSectionSave.contains("(120){4}6,"),
+                 QStringLiteral("only the saved difficulty reaches the file"), out);
+    ok &= expect(workspace.snapshot().dirty
+                     && workspace.snapshot().dirtyDifficultyIds == QVector<int>{6},
+                 QStringLiteral("the other difficulty stays unsaved and still says so"), out);
     return ok;
 }
 

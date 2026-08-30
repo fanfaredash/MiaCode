@@ -2,6 +2,22 @@ import QtQuick
 import MiaCode.UI
 
 // Shared hover / selection fill for v2 shell chrome (not form controls).
+//
+// CONTRACT: this is a *background*. It insets itself from the control's edges,
+// but it does NOT inset the control's content — a control whose contentItem has
+// no padding renders its text flush against the highlight edge.
+//
+// Do not write `background: HoverChrome` on a new row: use ChromeRow, which is
+// this chrome plus the content padding, so the inset cannot be forgotten. The
+// direct users left are the ones that cannot be a ChromeRow: AppMenuItem
+// (must stay a MenuItem for Menu to lay it out), and icon-only buttons whose
+// content is centred rather than laid against an edge, so there is no text to
+// push off the highlight (IconButton, AppTab, ActivityBar, WindowCaptionButtons).
+//
+// A second trap, which no type can prevent: never put an interactive child
+// inside the contentItem of a control backed by this — the highlight spans the
+// whole control, so it will run underneath that child. Put the child beside the
+// chromed row instead (see the shortcut editor's 恢复默认 button).
 // tones:
 //   nav   — sidebar / list / menu rows (selected → gray lift); default chromeInset*
 //   bar   — MenuBarItem; default vertical inset 3

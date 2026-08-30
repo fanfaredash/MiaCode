@@ -15,6 +15,14 @@ MenuItem {
     bottomPadding: 3
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
+    // Where the full identity goes when the label is deliberately short — the
+    // recent-charts and backup lists show a folder name or a timestamp, and the
+    // path they stand for is too wide to be a menu row.
+    property string tooltip: ""
+    // Dynamic menus own their rows directly, rather than wrapping them in an
+    // Action. Keep their shortcut spelling on the visual item so Qt can both
+    // insert it into Menu and render the binding.
+    property string shortcutText: ""
     readonly property real textWidth: label.contentWidth
     readonly property real chromeWidth: leftPadding + rightPadding
                                         + (checkable ? 12 + row.spacing : 0)
@@ -25,6 +33,11 @@ MenuItem {
         if (root.highlighted || root.checked)
             return Theme.colors.text.active
         return Theme.colors.text.secondary
+    }
+
+    Tooltip {
+        visible: root.tooltip.length > 0 && root.hovered
+        text: root.tooltip
     }
 
     contentItem: RowLayout {
@@ -48,10 +61,13 @@ MenuItem {
         }
 
         Text {
-            // MenuItem itself has no shortcut property; the spelling comes from
-            // the AppMenuAction the row was built from.
+            // Static rows receive their spelling from an Action; dynamic rows
+            // provide shortcutText directly because Repeater must create a
+            // visual MenuItem, not a non-visual Action.
             readonly property string shortcutLabel:
-                root.action && root.action.shortcutText ? root.action.shortcutText : ""
+                root.shortcutText.length > 0
+                    ? root.shortcutText
+                    : (root.action && root.action.shortcutText ? root.action.shortcutText : "")
             visible: shortcutLabel.length > 0
             text: shortcutLabel
             font: root.font

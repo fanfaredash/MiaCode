@@ -17,7 +17,6 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "timeline/TimelineMarkerOffset.h"
 #include "tools/video_export/VideoExportController.h"
-#include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 
 #include <QtCore>
@@ -531,6 +530,18 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     // Set up the negative-time intro region (slider range + default playhead at
     // the intro head) when 添加片头 is on for this difficulty.
     owner_.refreshExportIntroState();
+
+    // The scene is playable, and this is what it was built from. Comparing the
+    // chart text is a truer staleness test than the timeline revision counter
+    // this used to borrow: that counter answers a question about the difficulty
+    // being edited, which on this page is nobody.
+    const QString installedChart = difficulty->chart;
+    owner_.setAuditionSceneReady(
+        [this, difficultyId, installedChart]() {
+            const SimaiDifficultyData* current = owner_.document_.difficulty(difficultyId);
+            return current != nullptr && current->chart == installedChart;
+        },
+        [this, difficultyId]() { installExportPreviewAuditionScene(difficultyId); });
 }
 
 void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
@@ -542,6 +553,7 @@ void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
     owner_.stopQtPreviewPlayback(true);  // stop the real transport if it's running
     owner_.clearExportAuditionClockSchedule();  // drop the count-in for this scene
     owner_.exportPreviewAuditionActive_ = false;
+    owner_.clearAuditionSceneReady();
     // Invalidate the snapshot so the next difficulty switch rebuilds its own
     // preview from scratch (we deliberately don't cache/restore — leaving the
     // page reinstalls the destination field's preview anyway).
@@ -1041,7 +1053,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     const double contentDurationSeconds = request.contentDurationSeconds > 0.0
         ? request.contentDurationSeconds
         : maxDuration;
-    // Mirrors the VideoExportDialog classification: any range starting at
+    // Mirrors the export page's classification: any range starting at
     // chart 0 is treated as full-range (count-down lead-in, no frozen
     // preload / pause glyph), even when it ends before the chart does.
     const bool fullRangeExport = exportStartSeconds <= 1e-6;

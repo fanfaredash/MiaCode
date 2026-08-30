@@ -1,4 +1,5 @@
 #include "MainWindow.WindowSection.h"
+#include "../document/MainWindow.DocumentSection.h"
 
 #include "common/DebugOptions.h"
 
@@ -39,9 +40,14 @@ void MainWindow::cancelChartAudioDrop()
     windowSection_->cancelChartAudioDrop();
 }
 
-bool MainWindow::confirmShellClose()
+void MainWindow::requestShellClose(std::function<void(bool)> onDecided)
 {
-    return windowSection_->confirmShellClose();
+    windowSection_->requestShellClose(std::move(onDecided));
+}
+
+void MainWindow::requestLeaveDocument(std::function<void(bool)> onDecided)
+{
+    documentSection_->requestLeaveDocument(std::move(onDecided));
 }
 
 void MainWindow::toggleShellPreviewPlayback()
@@ -214,6 +220,20 @@ double MainWindow::shellPreviewPositionSeconds() const
     return windowSection_->shellPreviewPositionSeconds();
 }
 
+void MainWindow::setPreviewPlayingFlag(bool playing)
+{
+    if (state_.qtPreviewPlaying_ == playing) {
+        return;
+    }
+    state_.qtPreviewPlaying_ = playing;
+    // Announce after the caller has finished its transition, not from the
+    // middle of it: several of these sites write the pause second on the line
+    // after the flag, and a listener that read between the two would take a
+    // position the app had already moved past.
+    QMetaObject::invokeMethod(
+        this, [this]() { emit shellPresentationChanged(); }, Qt::QueuedConnection);
+}
+
 double MainWindow::shellPreviewDurationSeconds() const
 {
     return windowSection_->shellPreviewDurationSeconds();
@@ -223,14 +243,6 @@ double MainWindow::shellPreviewLowerBoundSeconds() const
 {
     // Negative-time intro region: the QML transport's slider `from` binds here.
     return exportIntroLowerBoundSeconds();
-}
-
-double MainWindow::shellVideoExportProgressSeconds() const
-{
-    // Export progress no longer rides the preview transport (2026-06-13): it is
-    // status-bar only, so the quick-shell preview slider stays the user's during
-    // an export. Returning -1 disables the QuickShellPreviewTransport override.
-    return -1.0;
 }
 
 QStringList MainWindow::shellPreviewStatsTexts() const

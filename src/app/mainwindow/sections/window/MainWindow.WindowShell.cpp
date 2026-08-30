@@ -17,13 +17,6 @@
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "extensions/ExtensionManager.h"
-#include "tools/export_page/ExportLauncherPage.h"
-#include "tools/latency/LatencyDetectionPage.h"
-#include "tools/net/NetBatchUploadDialog.h"
-#include "tools/media/PvBatchCompressionDialog.h"
-#include "tools/video_export/VideoExportDialog.h"
-#include "tools/video_export/BatchExportPanel.h"
-#include "app/ui/AppBackgroundPainter.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -296,32 +289,26 @@ QRect MainWindow::WindowSection::quickShellRootWindowFrameGeometry() const
     return owner_.quickShellRootWindowFrameGeometry_;
 }
 
-bool MainWindow::WindowSection::confirmShellClose()
+void MainWindow::WindowSection::requestShellClose(std::function<void(bool)> onDecided)
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
 
-    QElapsedTimer maybeSaveTimer;
-    maybeSaveTimer.start();
-    const bool canClose = owner_.maybeSaveBeforeContinue();
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/window"),
-        QStringLiteral("maybe_save_before_continue"),
-        maybeSaveTimer.elapsed(),
-        QStringLiteral("result=%1").arg(canClose ? QStringLiteral("continue") : QStringLiteral("cancel"))
-    );
-    if (!canClose) {
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/window"),
-            QStringLiteral("confirm_shell_close"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=cancelled_before_close")
-        );
-        return false;
-    }
+    // The prompt is a QML dialog, so the answer arrives later. Everything below
+    // the question moved into the continuation unchanged — including the
+    // ordering rule it depends on: a cancelled close must leave the world
+    // untouched.
+    owner_.requestLeaveDocument(
+        [this, onDecided = std::move(onDecided), totalTimer](bool canClose) mutable {
+            const bool confirmed = canClose && finishShellClose(totalTimer);
+            if (onDecided) {
+                onDecided(confirmed);
+            }
+        });
+}
 
+bool MainWindow::WindowSection::finishShellClose(QElapsedTimer totalTimer)
+{
     // Close is confirmed. Only NOW cascade-close popup chains (Preferences,
     // Keyboard Shortcuts, etc.). Running this after the unsaved-changes
     // prompt is accepted means a cancelled close leaves every sibling
@@ -970,16 +957,7 @@ void MainWindow::WindowSection::applyUiTheme()
         UiTheme::applyApplicationTheme(*app);
     }
 
-    if (owner_.editorWidget_ != nullptr) {
-        owner_.editorWidget_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
-        if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_)) {
-            if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
-                vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
-            }
-            if (QScrollBar* hbar = scrollArea->horizontalScrollBar()) {
-                hbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
-            }
-        }
+    if (owner_.outlineList_ != nullptr) {
     }
     if (owner_.editorFindBar_ != nullptr) {
         owner_.editorFindBar_->setStyleSheet(UiTheme::editorFindBarStyleSheet());
@@ -998,31 +976,6 @@ void MainWindow::WindowSection::applyUiTheme()
     }
     if (owner_.metadataPage_ != nullptr) {
         owner_.metadataPage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
-    }
-    if (owner_.latencyDetectionPage_ != nullptr) {
-        // Theme-aware card/label colors are frozen at construction otherwise —
-        // re-apply so the BPM & latency page follows light/dark switches too.
-        owner_.latencyDetectionPage_->applyThemeStyles();
-    }
-    if (owner_.exportPage_ != nullptr) {
-        owner_.exportPage_->applyThemeStyles();
-    }
-    if (!owner_.embeddedVideoExportPanel_.isNull()) {
-        // The export hub's embedded video panel bakes its stylesheets/icons at
-        // construction; re-theme it in place so a switch while the 视频导出
-        // sub-page is showing follows light/dark. (The page now paints its own
-        // dark canvas, so the panel's reparented root is backstopped even if its
-        // own background rule is slow to repaint; this re-themes its children.)
-        owner_.embeddedVideoExportPanel_->applyThemeStyles();
-    }
-    if (!owner_.embeddedBatchExportPanel_.isNull()) {
-        owner_.embeddedBatchExportPanel_->applyThemeStyles();
-    }
-    if (!owner_.netBatchUploadDialog_.isNull()) {
-        static_cast<miacode::net::NetBatchUploadDialog*>(owner_.netBatchUploadDialog_.data())->applyThemeStyles();
-    }
-    if (!owner_.pvBatchCompressionDialog_.isNull()) {
-        static_cast<miacode::media::PvBatchCompressionDialog*>(owner_.pvBatchCompressionDialog_.data())->applyThemeStyles();
     }
     if (owner_.metadataEmptyHintLabel_ != nullptr) {
         owner_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
@@ -1057,9 +1010,6 @@ void MainWindow::WindowSection::applyUiTheme()
         }
     }
     this->updateBottomTabsDeviceHeight();
-    if (owner_.chartBracketHighlighter_ != nullptr) {
-        owner_.chartBracketHighlighter_->rehighlight();
-    }
     if (owner_.metadataBracketHighlighter_ != nullptr) {
         owner_.metadataBracketHighlighter_->rehighlight();
     }
@@ -1067,24 +1017,6 @@ void MainWindow::WindowSection::applyUiTheme()
         editorShell->setStyleSheet(UiTheme::editorShellStyleSheet());
     }
     const UiTheme::Colors& themeColors = UiTheme::colors();
-    const bool appBackgroundActive = miacode::ui::appBackgroundIsActiveForTheme();
-    const auto backgroundSurfaceColor = [appBackgroundActive](const QColor& color, int alpha) {
-        return appBackgroundActive
-            ? QStringLiteral("rgba(%1, %2, %3, %4)")
-                .arg(color.red())
-                .arg(color.green())
-                .arg(color.blue())
-                .arg(alpha)
-            : color.name(QColor::HexRgb);
-    };
-    const auto backgroundActiveSurfaceColor = [
-        appBackgroundActive,
-        backgroundSurfaceColor
-    ](const QColor& activeColor, const QColor& inactiveColor, int alpha) {
-        return appBackgroundActive
-            ? backgroundSurfaceColor(activeColor, alpha)
-            : inactiveColor.name(QColor::HexRgb);
-    };
     if (owner_.editorHeaderWidget_ != nullptr) {
         owner_.editorHeaderWidget_->setAttribute(Qt::WA_StyledBackground, true);
         owner_.editorHeaderWidget_->setStyleSheet(
@@ -1097,16 +1029,11 @@ void MainWindow::WindowSection::applyUiTheme()
                 "QWidget#EditorDifficultyControls QLineEdit { background: %5; color: %3; border: 1px solid %6; border-radius: 6px; padding: 4px 6px; selection-background-color: %7; selection-color: %8; }"
                 "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %9; }"
             )
-                .arg(backgroundActiveSurfaceColor(
-                    themeColors.toolbarBg,
-                    themeColors.cardBg,
-                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::EditorHeader, themeColors.dark)))
+                .arg(themeColors.cardBg.name(QColor::HexRgb))
                 .arg(themeColors.border.name(QColor::HexRgb))
                 .arg(themeColors.textPrimary.name(QColor::HexRgb))
                 .arg(themeColors.textSecondary.name(QColor::HexRgb))
-                .arg(backgroundSurfaceColor(
-                    themeColors.inputBg,
-                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::Input, themeColors.dark)))
+                .arg(themeColors.inputBg.name(QColor::HexRgb))
                 .arg(themeColors.borderSoft.name(QColor::HexRgb))
                 .arg(themeColors.selection.name(QColor::HexRgb))
                 .arg(themeColors.selectionText.name(QColor::HexRgb))

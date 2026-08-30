@@ -58,9 +58,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   pattern as `deleteDifficultyButton_`; spinner `isActive()` guards re-entrancy. Stopped in the
   same deferred lambda once the build returns.
 - Default UI (v2): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
-  `MiaCode.UI`). Shares hidden `MainWindow` + `QuickShellController` (no shell-wide
-  NativeSurfaceHost). Export uses `QmlExportSession` + `ExportVideoPage.qml`;
-  `QmlEditorPageHost` embeds Latency only. `QmlDocumentModel` submits body, metadata, difficulty and
+  `MiaCode.UI`). It still owns a hidden `MainWindow` compatibility backend; the
+  `QuickShellController` is deleted. Export uses `QmlExportSession` + `ExportVideoPage.qml`;
+  `QmlEditorPageHost` routes export/latency and leave transitions, but those transitions still call
+  `DocumentSection::switchTo*Field()` and therefore remain coupled to hidden `editorStack_` state.
+  `QmlDocumentModel` submits body, metadata, difficulty and
   file transactions to `app/v2/ChartWorkspace` / `ChartWorkspaceFileService`; the public
   `MainWindow.DocumentBridge.cpp` entry is now a monotonic committed-value adapter. `QmlDocumentModel`
   and `QmlAnalysisModel` read `AnalysisService` directly; both reject a snapshot whose
@@ -86,8 +88,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   aligned validation/marker/Muri values from the same revision. `EditorSyncController` owns editor
   navigation, follow, caret and authoring synchronization. Checklist:
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
-- QuickShell compatibility: only `src/app/quick_shell/QuickShellController.*` and preview surface
-  policy helpers remain for v2. Stage 0a deleted the v1 bootstrap, native surface host, style bridge,
+- QuickShell compatibility: only preview-surface policy helpers remain under `src/app/quick_shell/`.
+  `QuickShellController` is deleted, as are the v1 bootstrap, native surface host, style bridge,
   QML shell, `--ui=v1`, and `MIACODE_UI_SKIN`.
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
@@ -471,10 +473,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - UI-independent settings contract: `VideoExportSettings.{h,cpp}` owns the resolution/FPS/audio
   option sets, preference token parsing/writing, range timestamp parsing, the zero-start full-range
   predicate, and the user-setting merge used when a UI re-seeds another difficulty.
-- UI hosts stay separate: v1 uses `VideoExportDialog.{h,cpp}` plus `BatchExportPanel.{h,cpp}` /
-  `BatchExportSelectionState.cpp`; v2 uses `app/qml_ui/export/ExportVideoPage.qml` plus
-  `QmlExportSession`. Both adapt to `VideoExportSettings` and `ExportSection`; do not move layout or
-  presentation policy into the shared backend. In v2, single and batch modes use one settings-tab
+- UI host: v2 uses `app/qml_ui/export/ExportVideoPage.qml` plus `QmlExportSession`, adapting to
+  `VideoExportSettings` and `ExportSection`; do not move layout or presentation policy into the shared
+  backend. The QML session owns the shared portable `FontLibrary` entry point: its Intro tab persists
+  display/body card-font paths and refreshes the audition. The export page's `皮肤` tab and
+  `preview/PreviewSettingsDialog.qml` both expose global skin, judge-line, and per-area HUD font
+  settings through the same owner-live state. Each writes a selected `PreviewHudFontArea` through
+  `setPreviewHudCustomFontPath` and must call `PreviewRuntime::update()` so the visible preview
+  rebuilds its font metrics immediately. Both import flows use `UiRequestService`; do not recreate a
+  Widgets picker or a deleted dialog. In v2, single and batch modes use one settings-tab
   layout: batch-only difficulty/output-directory/chart-directory inputs sit above it, while the
   single-file output path and range tab remain single-export-only. Never replace those batch
   settings with instructional text that sends the user to the other mode. The former

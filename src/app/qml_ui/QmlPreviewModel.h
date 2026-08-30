@@ -1,16 +1,25 @@
 #pragma once
 
 #include <QObject>
+#include <QString>
 #include <QStringList>
 #include <QVariantList>
 
 #include "common/MuriRenderOptions.h"
 
 class MainWindow;
-class QuickShellController;
 
-// Real-time preview state exposed to the pure-QML UI. Playback and
-// rendering remain owned by MiaCode's preview runtime.
+// Real-time preview state exposed to the pure-QML UI. Playback and rendering
+// remain owned by MiaCode's preview runtime.
+//
+// This reads MainWindow directly. It used to read QuickShellController, which
+// polled ~25 unrelated values off MainWindow on a timer that ran whether or not
+// anything was playing. Everything is pushed now: shellPresentationChanged for
+// discrete shell state, shellPreviewPlayheadChanged from the one function that
+// moves the playhead. The playhead briefly went through a sampling timer
+// instead, which is worse in both directions — it aliased the clock during
+// playback, and it never started at all when playback began somewhere that did
+// not announce itself.
 class QmlPreviewModel final : public QObject
 {
     Q_OBJECT
@@ -26,9 +35,11 @@ class QmlPreviewModel final : public QObject
     Q_PROPERTY(QVariantList statistics READ statistics NOTIFY statisticsChanged)
     Q_PROPERTY(QObject* runtime READ runtime CONSTANT)
     Q_PROPERTY(QObject* mediaHost READ mediaHost CONSTANT)
+    // Aspect of the preview canvas, used by the split view to size the pane.
+    Q_PROPERTY(double canvasAspectRatio READ canvasAspectRatio NOTIFY presentationChanged)
 
 public:
-    QmlPreviewModel(MainWindow& backend, QuickShellController& controller, QObject* parent = nullptr);
+    explicit QmlPreviewModel(MainWindow& backend, QObject* parent = nullptr);
 
     double positionSeconds() const;
     double durationSeconds() const;
@@ -43,6 +54,7 @@ public:
     QString currentSkinDirectory() const;
     QObject* runtime() const;
     QObject* mediaHost() const;
+    double canvasAspectRatio() const;
 
     void setPositionSeconds(double value);
     void setRate(double value);
@@ -51,6 +63,11 @@ public:
     Q_INVOKABLE void setMuriCheckEnabled(bool enabled);
     Q_INVOKABLE void setSmoothStarErase(bool enabled);
     Q_INVOKABLE void stop();
+    Q_INVOKABLE void togglePlayback();
+    // Step the rate one stop (-1 slower / +1 faster) along the menu's ladder.
+    Q_INVOKABLE void adjustRate(int direction);
+    // Debug hook the preview surface calls on pointer interaction.
+    Q_INVOKABLE void logPreviewInteraction(const QString& action, const QString& payload = QString());
     Q_INVOKABLE void beginScrub();
     Q_INVOKABLE void updateScrub(double second);
     Q_INVOKABLE void endScrub(double second);
@@ -61,9 +78,10 @@ signals:
     void playingChanged();
     void renderModeChanged();
     void statisticsChanged();
+    void presentationChanged();
 
 private:
-    void refreshFromController(bool force = false);
+    void refreshFromBackend(bool force = false);
     void rebuildStatistics();
     void refreshSkinDirectory();
     void updateV2UiProbePlaybackState();
@@ -71,7 +89,6 @@ private:
     void appendV2UiProbeSummary() const;
 
     MainWindow* backend_ = nullptr;
-    QuickShellController* controller_ = nullptr;
     double positionSeconds_ = 0.0;
     double durationSeconds_ = 0.0;
     double lowerBoundSeconds_ = 0.0;

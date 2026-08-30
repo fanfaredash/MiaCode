@@ -404,6 +404,14 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
 
+Global preview skin, judge-line variant, judge effect, and per-area HUD font are deliberately exposed
+from two v2 entry points: `ExportVideoPage.qml` → `QmlExportSession` and
+`PreviewSettingsDialog.qml` → `QmlPreviewSettingsModel`. Both write the same `MainWindow` owner-live
+state; HUD font paths are stored by `preview::scene::PreviewHudFontArea` and **each setter must call
+`previewCanvas_->update()`** after `setPreviewHudCustomFontPath`. Do not make either page forward to a
+Widget dialog, and do not leave one path without the redraw or the right-hand preview will retain stale
+font metrics.
+
 ## 10. Parser output feeds Muri on both paths
 
 Live: `requestTimelineSlowRefresh` → `parseForTimeline` → analysis refresh. Export:

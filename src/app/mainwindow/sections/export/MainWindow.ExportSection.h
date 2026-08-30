@@ -33,26 +33,13 @@ public:
     // seeds the dialog's default difficulty token.
     void onBatchExportPreviewVideo(int difficultyId = 0);
     void onPackAsZip();
-    void onNetBatchDownload();
-    void onNetBatchUpload();
-    // ---- E-C embedded video panel (hosted by the Export hub page) ----
-    // Builds a VideoExportDialog in embedded panel mode seeded with the given
-    // difficulty, begins the export-preview session (exportPreviewActive_,
-    // debug-HUD suppression, chart-info HUD), and wires exportConfirmed to a
-    // snapshot + worker launch with the normal progress popup.
-    // Returns nullptr when the difficulty/preview isn't
-    // available. The host inserts the widget into its layout; ownership stays
-    // with this section (destroyEmbeddedVideoExportPanel deletes it).
-    QWidget* createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent);
-    // Finalizes the embedded panel session (range-preview stop + live-preview
-    // restore + export-preview session end) and deletes the panel. Idempotent;
-    // a running worker is NOT cancelled.
-    void destroyEmbeddedVideoExportPanel();
-    QWidget* createEmbeddedBatchExportPanel(int difficultyId, QWidget* parent);
-    void updateEmbeddedBatchExportPreviewDifficulty(int difficultyId);
-    void destroyEmbeddedBatchExportPanel();
-
-    // ---- QML export shell (v2; does not create VideoExportDialog) ----
+    // Continuation of onPackAsZip once the shell has answered the save picker.
+    // An empty path means the pick was cancelled.
+    void packChartToZipAtPath(const QString& chartText,
+                              const QString& chartPath,
+                              const QString& dialogTitle,
+                              const QString& pickedPath);
+    // ---- QML export shell (v2) ----
     VideoExportTask buildVideoExportSeedTaskPublic(int difficultyId = 0);
     bool startQmlExportAudition(int difficultyId, const VideoExportTask& visualTask);
     void stopQmlExportAudition();
@@ -89,7 +76,6 @@ public:
     );
     bool runVideoExportWorkerSync(
         const VideoExportSnapshot& snapshot,
-        QProgressDialog* progressDialog,
         bool* canceledByUser,
         QString* errorMessage,
         const std::function<void(int percent, const QString& rawMessage)>& progressCallback = {},
@@ -127,14 +113,9 @@ private:
     // (buildVideoExportTaskFromSnapshot). Empty when the difficulty has no
     // parseable chart body.
     QVector<TimelineNoteMarker> buildParsedMarkersForDifficulty(int difficultyId) const;
-    // Constructs a VideoExportDialog wired with the full set of live-preview
-    // callbacks + the owner-wired Gameplay injection. Shared by the modal
-    // (Tools menu) path and the embedded panel; caller owns the returned
-    // dialog.
-    VideoExportDialog* buildConfiguredVideoExportDialog(const VideoExportTask& task, QWidget* parent);
-    // The preview-state bracket both paths wrap around the dialog/panel
-    // lifetime: exportPreviewActive_ + debug-HUD suppression + chart-info
-    // HUD on begin; full restore + aspect reset on end.
+    // The preview-state bracket the export page wraps around its session:
+    // exportPreviewActive_ + debug-HUD suppression + chart-info HUD on begin;
+    // full restore + aspect reset on end.
     void beginExportPreviewSession(const VideoExportTask& task);
     void endExportPreviewSession();
     // Pushes the seed task's per-difficulty metadata into the preview canvas'
@@ -149,8 +130,6 @@ private:
     // and invalidates the snapshot so the next difficulty switch rebuilds.
     void installExportPreviewAuditionScene(int difficultyId);
     void teardownExportPreviewAuditionScene();
-    void handleEmbeddedExportConfirmed();
-    void handleBatchExportConfirmed();
     bool runBatchExport(
         const VideoExportTask& templateTask,
         const QStringList& chartDirectories,
@@ -160,11 +139,10 @@ private:
         const BatchExportCallbacks& callbacks,
         QString* errorMessage);
     // ---- Inline export progress on the preview transport (A3 amended) ----
-    void beginInlineExportProgress();
+    void reportExportProgress(int percent, const QString& label);
     // percent < 0 keeps the current percent (label-only update); an empty
     // label keeps the current label.
-    void updateInlineExportProgress(int percent, const QString& label);
-    void endInlineExportProgress();
+    void endExportProgress();
 
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;

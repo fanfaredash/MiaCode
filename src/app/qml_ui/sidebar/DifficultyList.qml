@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import MiaCode.UI
 
 Column {
@@ -17,20 +18,20 @@ Column {
         width: root.width
         height: 30
 
-        AbstractButton {
+        ChromeRow {
             id: sectionButton
             anchors.left: parent.left
             anchors.right: actions.left
             anchors.verticalCenter: parent.verticalCenter
             height: parent.height
-            hoverEnabled: true
+            leftPadding: 8
+            tone: "hover"
             onClicked: {
                 root.viewState.difficultySectionExpanded
                     = !root.viewState.difficultySectionExpanded
             }
 
             contentItem: Text {
-                leftPadding: 8
                 text: (root.viewState.difficultySectionExpanded ? "▾  " : "▸  ")
                     + qsTr("难度")
                 color: Theme.colors.text.secondary
@@ -38,11 +39,6 @@ Column {
                 font.pixelSize: Theme.secondaryFontSize
                 font.bold: true
                 verticalAlignment: Text.AlignVCenter
-            }
-
-            background: HoverChrome {
-                hovered: sectionButton.hovered
-                tone: "hover"
             }
 
             Tooltip {
@@ -84,33 +80,103 @@ Column {
             // currentDifficultyId 负责正文数据源，不参与导航选中状态。
             readonly property bool activeEditor: root.viewState.activeEditorKey
                 === root.viewState.difficultyEditorKey(modelData.id)
+            // `bookmarkGeneration` is an explicit QML binding dependency;
+            // invokable return values alone cannot observe document edits.
+            readonly property var bookmarks: {
+                const generation = root.documentSession.bookmarkGeneration
+                return root.documentSession.bookmarksForDifficulty(modelData.id)
+            }
+            // Only the current difficulty shows its bookmarks. The row is the
+            // fold control now, and a row that is not current switches instead
+            // of folding — so an expanded state left behind on some other
+            // difficulty would be showing a list nothing on screen can close.
+            readonly property bool bookmarksExpanded: activeEditor
+                && root.viewState.bookmarkGroupExpanded(modelData.id)
+            // What a click on this row means: fold when it is already the one
+            // being edited and it has bookmarks, switch to it otherwise.
+            readonly property bool foldsBookmarks: activeEditor && bookmarks.length > 0
 
             width: root.width
             visible: root.viewState.difficultySectionExpanded
 
-            NavRow {
-                id: difficultyButton
+            Item {
                 width: parent.width
                 height: root.viewState.difficultySectionExpanded ? 30 : 0
-                text: difficultyGroup.modelData.label
-                selected: difficultyGroup.activeEditor
-                onClicked: root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+
+                // The row IS the fold control: clicking a difficulty that is not
+                // the one being edited switches to it, exactly as before, and
+                // clicking the one already being edited folds its bookmarks.
+                // A separate chevron button on the right was the first attempt
+                // and read backwards — the thing being folded is below and to
+                // the left of what you press.
+                NavRow {
+                    id: difficultyButton
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: parent.height
+                    textLeftPadding: 38
+                    text: difficultyGroup.modelData.label
+                    selected: difficultyGroup.activeEditor
+                    onClicked: {
+                        if (difficultyGroup.foldsBookmarks)
+                            root.viewState.setBookmarkGroupExpanded(
+                                difficultyGroup.modelData.id,
+                                !difficultyGroup.bookmarksExpanded)
+                        else
+                            root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+                    }
+
+                    // Fold indicator, left of the colour block and aligned with
+                    // the 难度 section header's own chevron. The slot is always
+                    // reserved so every colour block lines up; only the glyph is
+                    // conditional.
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: difficultyGroup.bookmarks.length > 0
+                        text: difficultyGroup.bookmarksExpanded ? "▾" : "▸"
+                        color: difficultyGroup.activeEditor
+                               ? Theme.colors.text.active
+                               : Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
+                    }
+
+                    // Difficulty colour block, same palette as v1's badge icon.
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 22
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 10
+                        height: 10
+                        radius: 3
+                        color: Theme.difficultyColor(difficultyGroup.modelData.id)
+                    }
+
+                    Tooltip {
+                        visible: difficultyButton.hovered
+                        text: difficultyGroup.foldsBookmarks
+                            ? (difficultyGroup.bookmarksExpanded
+                               ? qsTr("折叠书签") : qsTr("展开书签"))
+                            : difficultyGroup.modelData.label
+                    }
+                }
             }
 
             Repeater {
-                // `bookmarkGeneration` is an explicit QML binding dependency;
-                // invokable return values alone cannot observe document edits.
-                model: {
-                    const generation = root.documentSession.bookmarkGeneration
-                    return root.documentSession.bookmarksForDifficulty(
-                        difficultyGroup.modelData.id)
-                }
+                model: difficultyGroup.bookmarksExpanded ? difficultyGroup.bookmarks : []
 
                 delegate: NavRow {
                     required property var modelData
                     width: parent.width
                     height: root.viewState.difficultySectionExpanded ? 26 : 0
-                    textLeftPadding: 24
+                    // Past the difficulty label's own 38, so a bookmark reads as
+                    // belonging to the row above it rather than sitting level
+                    // with it.
+                    textLeftPadding: 44
                     text: qsTr("书签 %1：%2").arg(modelData.line).arg(modelData.title)
                     Accessible.name: qsTr("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
                     onClicked: {
@@ -146,7 +212,12 @@ Column {
         anchors.centerIn: parent
         modal: true
         title: qsTr("删除当前难度")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: removeDifficultyDialog.accept()
+            onRejected: removeDifficultyDialog.reject()
+        }
         onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
 
         Label {

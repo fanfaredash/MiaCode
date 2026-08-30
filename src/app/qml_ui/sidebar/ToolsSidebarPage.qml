@@ -63,24 +63,6 @@ Rectangle {
                     root.pages.openNormalizeWholeChart()
                 }
             }
-            NavRow {
-                width: parent.width
-                text: qsTr("Net 批量下载")
-                selected: root.selectedAction === "net-download"
-                onClicked: {
-                    root.selectedAction = "net-download"
-                    root.pages.openNetBatchDownload()
-                }
-            }
-            NavRow {
-                width: parent.width
-                text: qsTr("Net 批量上传")
-                selected: root.selectedAction === "net-upload"
-                onClicked: {
-                    root.selectedAction = "net-upload"
-                    root.pages.openNetBatchUpload()
-                }
-            }
         }
 
         ScrollBar.vertical: ScrollBar {}

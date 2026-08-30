@@ -19,6 +19,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 2. Main Window And Screen-Level Orchestration
 
+- QML editor-tab workspace state:
+  - Files: `src/app/qml_ui/ViewState.qml`, `src/app/qml_ui/editor/EditorTabBar.qml`
+  - Owns: session-local open-editor tab ordering, MRU history, and active selection. Dragging exchanges any two open editor tabs, including metadata; the chart's difficulty order or serialized content is not changed.
+
 - Main window surface and shared state:
   - Files: `src/app/mainwindow/MainWindow.h`, `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp`
   - Class: `MainWindow`
@@ -152,14 +156,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 8. Video Export UI, Snapshot Boundary, And Encoder Pipeline
 
-- Export dialog:
-  - Files: `src/tools/video_export/VideoExportDialog.h`, `src/tools/video_export/VideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`, `src/tools/video_export/HudFontSettings.{h,cpp}`
-  - Class: `VideoExportDialog`
-  - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, the export-dialog live preview controls that reuse `MainWindow` preview transport callbacks so pause/seek behavior stays aligned with the main preview route, and the owner-wired settings injection points for the Gameplay and Skin tabs. Skin / judge-line / HUD-font controls are supplied by `DialogsSection::buildSkinSettings(...)`; the old standalone export Font tab and modal HUD-font settings dialog were removed in favor of `miacode::video_export::createHudFontSettingsWidget(...)`.
-- Batch export dialog:
-  - Files: `src/tools/video_export/BatchVideoExportDialog.h`, `src/tools/video_export/BatchVideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
-  - Class: `BatchVideoExportDialog`
-  - Owns: chart-folder batch export setup, shared export settings UI, and application-scoped export preset / resolution / FPS persistence for batch runs
+- QML export settings and range selection:
+  - Files: `src/app/qml_ui/export/QmlExportSession.*`, `src/app/qml_ui/export/ExportVideoPage.qml`, `src/app/qml_ui/export/ExportRangeSelector.qml`, `src/app/qml_ui/layout/MainSplitView.qml`, `src/app/qml_ui/QmlPreviewModel.*`
+  - Class: `QmlExportSession`
+  - Owns: v2 single/batch export settings, difficulty reseeding, and the single-export range. `QmlExportSession::setExportRangeSeconds(start, end)` is the atomic owner of the `min(5s, chart duration)` floor because the task stores start plus duration; its exposed `minimumExportRangeSeconds` is the selector's sole policy input. `ExportRangeSelector` reads the canonical QML preview playhead: a grip moves only its endpoint, the highlighted body shifts both endpoints, and each uses the right-side preview's scrub lifecycle without creating another time source or changing worker task serialization. Hover/drag timestamp is an overlay in a static band; Start/End number fields remain the keyboard precision path and refresh from `rangeChanged` when unfocused.
 - Export task and controller:
   - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/VideoExportAudioRenderPlan.h`, `src/tools/video_export/VideoExportAudioRenderPlan.cpp`, `src/tools/video_export/VideoExportAudioBackend.h`, `src/tools/video_export/LegacyExportAudioBackend.h`, `src/tools/video_export/LegacyExportAudioBackend.cpp`, `src/tools/video_export/BassExportAudioBackend.h`, `src/tools/video_export/BassExportAudioBackend.cpp`, `src/tools/video_export/VideoExportQuickRenderBackend.h`, `src/tools/video_export/VideoExportQuickRenderBackend.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
   - Classes: `VideoExportController`, `VideoExportQuickRenderBackend`, `LegacyExportAudioBackend`, `BassExportAudioBackend`
@@ -169,10 +169,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Struct: `VideoExportSnapshot`
   - Key functions: `toJson`, `fromJson`, `buildVideoExportTaskFromSnapshot`
 - Main window export ownership:
-  - Files: `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`, `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/tools/export_page/ExportLauncherPage.*`, `src/app/qml_ui/export/QmlExportSession.*`, `src/app/qml_ui/export/ExportVideoPage.qml`, `src/app/qml_ui/sidebar/ExportSidebarPage.qml`, `src/app/qml_ui/QmlEditorPageHost.*`
-  - Classes: `ExportLauncherPage` (v1 Widgets hub), `QmlExportSession` (v2 pure-QML settings session)
+  - Files: `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`, `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/app/qml_ui/export/QmlExportSession.*`, `src/app/qml_ui/export/ExportVideoPage.qml`, `src/app/qml_ui/sidebar/ExportSidebarPage.qml`, `src/app/qml_ui/QmlEditorPageHost.*`
+  - Class: `QmlExportSession` (v2 pure-QML settings session)
   - Key functions: `onExportCover`, `onBatchExportPreviewVideo`, `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `startQmlExportAudition`, `launchQmlVideoExport`, `handleVideoExportWorkerEvent`
-  - Owns: toolbar/menu entry points; v1 hub still embeds `VideoExportDialog`; v2 QML shell drives the same ExportSection audition/worker path without hosting Widgets export dialogs. Both expose intro-sound selection/import plus its independent 0..2 volume; v2 updates `preview_sfx` immediately and preserves the values across difficulty reseeding before the shared snapshot/worker path.
+  - Owns: toolbar/menu entry points and the v2 QML shell's ExportSection audition/worker path without hosting Widgets export dialogs. It exposes intro-sound selection/import plus its independent 0..2 volume, updates `preview_sfx` immediately, and preserves values across difficulty reseeding before the shared snapshot/worker path.
 - Cover export studio:
   - Files: `src/tools/cover_export/CoverStudioWindow.*`, `CoverStudioPanel.*`, `CoverLayerListPanel.*`, `CoverLayerListModel.*`, `CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverComposerView.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
   - Classes: `CoverStudioWindow`, `CoverStudioPanel`, `CoverLayerListPanel`, `CoverLayerListModel`, `CoverLayoutModel`, `CoverCompositionState`, `CoverComposerView`, `SceneFrameRenderer`

@@ -2,6 +2,7 @@
 
 #include "editor/SimaiTextEditPolicy.h"
 
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
@@ -102,7 +103,21 @@ public:
     Q_INVOKABLE QVariantMap touchPadAuthoringForQml(const QString& text, int anchor,
                                                     int position, const QString& pad,
                                                     bool useBacktickSeparator) const;
-    Q_INVOKABLE void resetQmlHistory(const QString& text, int anchor, int position);
+    // Undo history belongs to a view, not to the document.
+    //
+    // It used to be one stack that was cleared whenever the editor's identity
+    // changed, so switching difficulty threw the history away in both
+    // directions — and made correctness depend on remembering to clear at the
+    // right moment. Now each view keeps its own, the active one is named
+    // rather than reconstructed, and nothing has to be cleared on a switch
+    // because nothing is shared.
+    //
+    // scopeId is the editor tab's key: "difficulty:3", "metadata".
+    Q_INVOKABLE void setHistoryScope(const QString& scopeId);
+    // A different chart is a different history. Every scope goes.
+    Q_INVOKABLE void clearAllHistory();
+    // A closed tab takes its history with it.
+    Q_INVOKABLE void dropHistoryScope(const QString& scopeId);
     Q_INVOKABLE void recordQmlTransaction(const QString& before, const QString& after,
                                           int beforeAnchor, int beforePosition,
                                           int afterAnchor, int afterPosition);
@@ -127,7 +142,8 @@ private:
     QVariantMap toQmlTransaction(const miacode::editor::SimaiTextEditResult& result) const;
     // One undo/redo step, expressed as the minimal replacement that turns the
     // document the editor currently holds into the one the step restores.
-    QVariantMap restoreTransaction(const QString& current, const QString& restored) const;
+    QVariantMap restoreTransaction(int start, const QString& replaced,
+                                   const QString& replacement) const;
 
     bool halfWidthInputEnabled_ = true;
     bool overwriteMode_ = false;
@@ -141,16 +157,33 @@ private:
     bool canRedo_ = false;
     int activeDifficultyId_ = -1;
     quint64 documentRevision_ = 0;
+    // One step, stored as what changed rather than as two whole documents.
+    //
+    // Keeping `before` and `after` in full meant a single typed character cost
+    // twice the chart's size, so a few hundred keystrokes across a few open
+    // difficulties ran into tens of megabytes and the step limit had to be
+    // small to compensate. Undo already reduced the pair to this same span the
+    // moment it was applied; recording it directly makes a step cost the size
+    // of the edit, and lets the limit be a usability number instead of a memory
+    // one.
     struct QmlUndoEntry {
-        QString before;
-        QString after;
+        int start = 0;
+        QString removed;
+        QString inserted;
         int beforeAnchor = 0;
         int beforePosition = 0;
         int afterAnchor = 0;
         int afterPosition = 0;
     };
-    QVector<QmlUndoEntry> qmlUndo_;
-    QVector<QmlUndoEntry> qmlRedo_;
+    struct QmlHistory {
+        QVector<QmlUndoEntry> undo;
+        QVector<QmlUndoEntry> redo;
+    };
+    QmlHistory& activeHistory();
+    void publishAvailabilityForActiveScope();
+
+    QString historyScopeId_;
+    QHash<QString, QmlHistory> histories_;
 };
 
 } // namespace miacode::qml_ui

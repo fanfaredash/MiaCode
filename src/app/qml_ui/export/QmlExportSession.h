@@ -6,16 +6,19 @@
 #include <QStringList>
 #include <QVariantList>
 
+#include "app/v2/UiRequestService.h"
 #include "tools/video_export/VideoExportController.h"
 
 class MainWindow;
 
-// Pure-QML export settings session for the v2 shell. Does not host or modify
-// VideoExportDialog / ExportLauncherPage. Drives audition + worker launch via
-// MainWindow::ExportSection.
+// Pure-QML export settings session for the v2 shell. The only export UI there
+// is; it drives audition + worker launch via MainWindow::ExportSection.
 class QmlExportSession final : public QObject
 {
     Q_OBJECT
+    // File picking and messaging happen through this boundary so the session
+    // itself never constructs a Widgets dialog.
+    Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
     Q_PROPERTY(bool pageSessionActive READ pageSessionActive NOTIFY pageSessionActiveChanged)
     Q_PROPERTY(int selectedDifficultyId READ selectedDifficultyId NOTIFY selectedDifficultyIdChanged)
     Q_PROPERTY(QString activeTab READ activeTab WRITE setActiveTab NOTIFY activeTabChanged)
@@ -56,13 +59,23 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(double tapFlowSpeed READ tapFlowSpeed WRITE setTapFlowSpeed NOTIFY gameplayChanged)
     Q_PROPERTY(double touchFlowSpeed READ touchFlowSpeed WRITE setTouchFlowSpeed NOTIFY gameplayChanged)
 
-    // Skin / outline (owner-live preview settings)
+    // Shared portable font library for the intro difficulty card. File selection
+    // remains QML-native through UiRequestService; no Widgets surface is used.
+    Q_PROPERTY(QVariantList fontLibraryOptions READ fontLibraryOptions NOTIFY fontLibraryChanged)
+
+    // The export page deliberately mirrors the global preview skin/HUD controls
+    // from PreviewSettingsDialog. Both v2 entry points write the same owner-live
+    // preview state; neither routes through a legacy dialog.
     Q_PROPERTY(QVariantList skinOptions READ skinOptions NOTIFY skinChanged)
     Q_PROPERTY(int skinIndex READ skinIndex WRITE setSkinIndex NOTIFY skinChanged)
-    Q_PROPERTY(QVariantList judgeEffectOptions READ judgeEffectOptions CONSTANT)
-    Q_PROPERTY(int judgeEffectIndex READ judgeEffectIndex WRITE setJudgeEffectIndex NOTIFY skinChanged)
+    Q_PROPERTY(QVariantList skinJudgeEffectOptions READ skinJudgeEffectOptions CONSTANT)
+    Q_PROPERTY(int skinJudgeEffectIndex READ skinJudgeEffectIndex WRITE setSkinJudgeEffectIndex NOTIFY skinChanged)
     Q_PROPERTY(QVariantList outlineOptions READ outlineOptions CONSTANT)
     Q_PROPERTY(int outlineIndex READ outlineIndex WRITE setOutlineIndex NOTIFY skinChanged)
+    Q_PROPERTY(QVariantList hudFontAreaOptions READ hudFontAreaOptions CONSTANT)
+    Q_PROPERTY(int hudFontAreaIndex READ hudFontAreaIndex WRITE setHudFontAreaIndex NOTIFY hudFontChanged)
+    Q_PROPERTY(QString hudFontPath READ hudFontPath WRITE setHudFontPath NOTIFY hudFontChanged)
+    Q_PROPERTY(QString hudFontSample READ hudFontSample NOTIFY hudFontChanged)
 
     // Intro
     Q_PROPERTY(bool introEnabled READ introEnabled WRITE setIntroEnabled NOTIFY introChanged)
@@ -72,6 +85,8 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(int introModeIndex READ introModeIndex WRITE setIntroModeIndex NOTIFY introChanged)
     Q_PROPERTY(bool introCardShadow READ introCardShadow WRITE setIntroCardShadow NOTIFY introChanged)
     Q_PROPERTY(bool introLevelTextRender READ introLevelTextRender WRITE setIntroLevelTextRender NOTIFY introChanged)
+    Q_PROPERTY(QString introFontDisplayPath READ introFontDisplayPath WRITE setIntroFontDisplayPath NOTIFY introChanged)
+    Q_PROPERTY(QString introFontBodyPath READ introFontBodyPath WRITE setIntroFontBodyPath NOTIFY introChanged)
     Q_PROPERTY(QVariantList introSoundOptions READ introSoundOptions NOTIFY introSoundOptionsChanged)
     Q_PROPERTY(int introSoundIndex READ introSoundIndex WRITE setIntroSoundIndex NOTIFY introChanged)
     Q_PROPERTY(QString introSoundFileName READ introSoundFileName WRITE setIntroSoundFileName NOTIFY introChanged)
@@ -84,6 +99,7 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(double exportStartSeconds READ exportStartSeconds WRITE setExportStartSeconds NOTIFY rangeChanged)
     Q_PROPERTY(double exportEndSeconds READ exportEndSeconds WRITE setExportEndSeconds NOTIFY rangeChanged)
     Q_PROPERTY(double contentDurationSeconds READ contentDurationSeconds NOTIFY rangeChanged)
+    Q_PROPERTY(double minimumExportRangeSeconds READ minimumExportRangeSeconds NOTIFY rangeChanged)
     Q_PROPERTY(bool fullRangeExport READ fullRangeExport NOTIFY rangeChanged)
 
     // Batch
@@ -92,8 +108,11 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(QString batchOutputDirectory READ batchOutputDirectory WRITE setBatchOutputDirectory NOTIFY batchChanged)
 
 public:
-    explicit QmlExportSession(MainWindow& backend, QObject* parent = nullptr);
+    QmlExportSession(MainWindow& backend,
+                     miacode::v2::UiRequestService& uiRequests,
+                     QObject* parent = nullptr);
 
+    QObject* uiRequests() { return uiRequests_; }
     bool pageSessionActive() const { return pageSessionActive_; }
     int selectedDifficultyId() const { return selectedDifficultyId_; }
     QString activeTab() const;
@@ -131,12 +150,17 @@ public:
     double tapFlowSpeed() const { return task_.tapFlowSpeed; }
     double touchFlowSpeed() const { return task_.touchFlowSpeed; }
 
+    QVariantList fontLibraryOptions() const;
     QVariantList skinOptions() const;
     int skinIndex() const;
-    QVariantList judgeEffectOptions() const;
-    int judgeEffectIndex() const;
+    QVariantList skinJudgeEffectOptions() const;
+    int skinJudgeEffectIndex() const;
     QVariantList outlineOptions() const;
     int outlineIndex() const;
+    QVariantList hudFontAreaOptions() const;
+    int hudFontAreaIndex() const { return hudFontAreaIndex_; }
+    QString hudFontPath() const;
+    QString hudFontSample() const;
 
     bool introEnabled() const { return task_.intro.enabled; }
     int introBackgroundModeIndex() const;
@@ -145,6 +169,8 @@ public:
     int introModeIndex() const;
     bool introCardShadow() const { return task_.intro.cardShadow; }
     bool introLevelTextRender() const;
+    QString introFontDisplayPath() const { return task_.intro.fontDisplayPath; }
+    QString introFontBodyPath() const { return task_.intro.fontBodyPath; }
     QVariantList introSoundOptions() const;
     int introSoundIndex() const;
     QString introSoundFileName() const { return task_.introSoundFileName; }
@@ -157,6 +183,7 @@ public:
     double exportStartSeconds() const { return task_.exportStartSeconds; }
     double exportEndSeconds() const;
     double contentDurationSeconds() const { return chartDurationSeconds_; }
+    double minimumExportRangeSeconds() const;
     bool fullRangeExport() const { return task_.fullRangeExport; }
 
     QStringList chartDirectories() const { return chartDirectories_; }
@@ -173,6 +200,12 @@ public:
     Q_INVOKABLE void browseOutputPath();
     Q_INVOKABLE void browseIntroBackground();
     Q_INVOKABLE void importIntroSound();
+    Q_INVOKABLE void importIntroFont();
+    Q_INVOKABLE void resetIntroFonts();
+    Q_INVOKABLE void openSkinDirectory();
+    Q_INVOKABLE void openJudgeLineDirectory();
+    Q_INVOKABLE void importHudFont();
+    Q_INVOKABLE void resetHudFont();
     Q_INVOKABLE void browseBatchOutputDirectory();
     Q_INVOKABLE void addChartDirectories();
     Q_INVOKABLE void removeChartDirectory(int index);
@@ -180,6 +213,7 @@ public:
     Q_INVOKABLE void setBatchDifficultyChecked(int difficultyId, bool checked);
     Q_INVOKABLE void setExportStartToCurrentPreview();
     Q_INVOKABLE void setExportEndToCurrentPreview();
+    Q_INVOKABLE void setExportRangeSeconds(double start, double end);
     Q_INVOKABLE QString setExportStartText(const QString& text);
     Q_INVOKABLE QString setExportEndText(const QString& text);
     Q_INVOKABLE void startExport();
@@ -204,10 +238,10 @@ public:
     void setTapFlowSpeed(double value);
     void setTouchFlowSpeed(double value);
     void setSkinIndex(int index);
-    void setJudgeEffectIndex(int index);
+    void setSkinJudgeEffectIndex(int index);
     void setOutlineIndex(int index);
-    Q_INVOKABLE void openSkinDirectory();
-    Q_INVOKABLE void openJudgeLineDirectory();
+    void setHudFontAreaIndex(int index);
+    void setHudFontPath(const QString& path);
     void setIntroEnabled(bool value);
     void setIntroBackgroundModeIndex(int index);
     void setIntroCustomBackgroundPath(const QString& path);
@@ -215,6 +249,8 @@ public:
     void setIntroModeIndex(int index);
     void setIntroCardShadow(bool value);
     void setIntroLevelTextRender(bool value);
+    void setIntroFontDisplayPath(const QString& path);
+    void setIntroFontBodyPath(const QString& path);
     void setIntroSoundIndex(int index);
     void setIntroSoundFileName(const QString& fileName);
     void setIntroSoundVolume(double value);
@@ -233,7 +269,9 @@ signals:
     void outputChanged();
     void videoChanged();
     void gameplayChanged();
+    void fontLibraryChanged();
     void skinChanged();
+    void hudFontChanged();
     void introChanged();
     void introSoundOptionsChanged();
     void rangeChanged();
@@ -253,7 +291,12 @@ private:
     int resolveDefaultDifficultyId(int previousActiveDifficultyId) const;
     VideoExportTask buildRequestedTask() const;
     void applyOwnerLiveFields(VideoExportTask* task) const;
+    void applyIntroSoundImport(const QString& selectedPath);
+    void applyFontImport(const QString& selectedPath);
+    void applyHudFontImport(const QString& selectedPath);
+    void addChartDirectory(const QString& path);
 
+    miacode::v2::UiRequestService* uiRequests_ = nullptr;
     MainWindow* backend_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;
@@ -268,6 +311,7 @@ private:
     VideoExportTask task_;
     double chartDurationSeconds_ = 0.0;
     int resolutionIndex_ = 1;
+    int hudFontAreaIndex_ = 0;
     QStringList chartDirectories_;
     QList<int> batchSelectedDifficultyIds_;
     QString batchOutputDirectory_;

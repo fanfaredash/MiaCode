@@ -8,7 +8,7 @@ Rectangle {
 
     required property var documentSession
     required property var analysisSession
-    required property var shellController
+    required property var timelineSession
 
     implicitHeight: 28
     color: Theme.colors.background.surface
@@ -20,27 +20,27 @@ Rectangle {
         AppTab {
             Layout.fillHeight: true
             panelTab: true
-            visible: root.shellController.timelineTabVisible
-            text: root.shellController.timelineTabLabel
-            active: root.shellController.bottomTabsCurrentTabId === "timeline"
-            onClicked: root.shellController.setBottomTabsCurrentTabId("timeline")
+            visible: root.timelineSession.timelineTabVisible
+            text: root.timelineSession.timelineTabLabel
+            active: root.timelineSession.currentTabId === "timeline"
+            onClicked: root.timelineSession.setCurrentTabId("timeline")
         }
         AppTab {
             Layout.fillHeight: true
             panelTab: true
-            visible: root.shellController.validationTabVisible
-            text: root.shellController.validationTabLabel
+            visible: root.timelineSession.validationTabVisible
+            text: root.timelineSession.validationTabLabel
             count: root.analysisSession.validationRows.length
-            active: root.shellController.bottomTabsCurrentTabId === "validation"
-            onClicked: root.shellController.setBottomTabsCurrentTabId("validation")
+            active: root.timelineSession.currentTabId === "validation"
+            onClicked: root.timelineSession.setCurrentTabId("validation")
         }
         AppTab {
             Layout.fillHeight: true
             panelTab: true
             text: qsTr("Muri")
             count: root.analysisSession.muriRows.length
-            active: root.shellController.bottomTabsCurrentTabId === "muri"
-            onClicked: root.shellController.setBottomTabsCurrentTabId("muri")
+            active: root.timelineSession.currentTabId === "muri"
+            onClicked: root.timelineSession.setCurrentTabId("muri")
         }
 
         Item { Layout.fillWidth: true }
@@ -50,13 +50,13 @@ Rectangle {
 
             Layout.alignment: Qt.AlignVCenter
             Layout.rightMargin: 8
-            visible: root.shellController.bottomTabsCurrentTabId === "timeline"
-            text: root.shellController.timelineFollowCodeLabel
-            checked: root.shellController.timelineStateBridge
-                ? root.shellController.timelineStateBridge.followPreviewEnabled
+            visible: root.timelineSession.currentTabId === "timeline"
+            text: root.timelineSession.followCodeLabel
+            checked: root.timelineSession.stateBridge
+                ? root.timelineSession.stateBridge.followPreviewEnabled
                 : false
             Accessible.description: qsTr("跟随当前谱面代码位置")
-            onClicked: root.shellController.timelineFollowPreviewToggled(checked)
+            onClicked: root.timelineSession.followPreviewToggled(checked)
         }
     }
 }

@@ -4,10 +4,12 @@
 #include <QObject>
 #include <QSettings>
 #include <QString>
+#include <QVariantMap>
 
 // 桌面工作台的持久化边界。QML 在拖动期间维护临时几何，只在用户完成
 // 操作后写入这里，从而避免分隔线移动时连续刷新配置文件。
-// Appearance / audio / preview prefs live in MainWindow::onPreferences().
+// QML preference models own interaction; MainWindow only persists and applies
+// their backend-neutral values for preview/runtime consumers.
 class QmlUiSettings final : public QObject
 {
     Q_OBJECT
@@ -19,7 +21,6 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(double bottomPanelHeightRatio READ bottomPanelHeightRatio WRITE setBottomPanelHeightRatio NOTIFY bottomPanelHeightRatioChanged)
     Q_PROPERTY(double bottomPanelMinimumHeightRatio READ bottomPanelMinimumHeightRatio CONSTANT)
     Q_PROPERTY(double bottomPanelMaximumHeightRatio READ bottomPanelMaximumHeightRatio CONSTANT)
-    Q_PROPERTY(bool previewVisible READ previewVisible WRITE setPreviewVisible NOTIFY previewVisibleChanged)
     Q_PROPERTY(double previewWidthRatio READ previewWidthRatio WRITE setPreviewWidthRatio NOTIFY previewWidthRatioChanged)
     Q_PROPERTY(double previewMinimumWidthRatio READ previewMinimumWidthRatio CONSTANT)
     Q_PROPERTY(double previewMaximumWidthRatio READ previewMaximumWidthRatio CONSTANT)
@@ -33,6 +34,11 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(bool editorImeInputDisabled READ editorImeInputDisabled NOTIFY editorSettingsChanged)
 
 public:
+    // Localized lookup for QML that holds a UiText key rather than a string.
+    Q_INVOKABLE QString localizedText(const QString& key) const;
+    // What 关于 MiaCode shows: version, platform triple and build type. Read
+    // from the build's own macros so the page cannot drift from the binary.
+    Q_INVOKABLE QVariantMap aboutInfo() const;
     explicit QmlUiSettings(QObject* parent = nullptr);
 
     bool sidebarVisible() const;
@@ -43,7 +49,6 @@ public:
     double bottomPanelHeightRatio() const;
     double bottomPanelMinimumHeightRatio() const;
     double bottomPanelMaximumHeightRatio() const;
-    bool previewVisible() const;
     double previewWidthRatio() const;
     double previewMinimumWidthRatio() const;
     double previewMaximumWidthRatio() const;
@@ -60,17 +65,16 @@ public:
     void setSidebarWidth(int value);
     void setBottomPanelVisible(bool value);
     void setBottomPanelHeightRatio(double value);
-    void setPreviewVisible(bool value);
     void setPreviewWidthRatio(double value);
     void setFontSize(int value);
     void reloadEditorSettings();
+    void setEditorAppearance(int pointSize, double lineSpacingFactor);
 
 signals:
     void sidebarVisibleChanged();
     void sidebarWidthChanged();
     void bottomPanelVisibleChanged();
     void bottomPanelHeightRatioChanged();
-    void previewVisibleChanged();
     void previewWidthRatioChanged();
     void fontSizeChanged();
     void editorSettingsChanged();
@@ -88,7 +92,6 @@ private:
     int sidebarWidth_ = 190;
     bool bottomPanelVisible_ = true;
     double bottomPanelHeightRatio_ = 0.35;
-    bool previewVisible_ = true;
     double previewWidthRatio_ = 0.5;
     QString uiFontFamily_;
     QFont codeFont_;

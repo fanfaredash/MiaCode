@@ -49,7 +49,7 @@ Popup {
         width: root.rowWidth
         spacing: 0
 
-        component ModeRow: AbstractButton {
+        component ModeRow: ChromeRow {
             id: modeRow
 
             required property string label
@@ -59,7 +59,7 @@ Popup {
             implicitWidth: 12 + 10 + modeLabel.implicitWidth + leftPadding + rightPadding
             leftPadding: 12
             rightPadding: 16
-            hoverEnabled: true
+            selected: modeRow.active
             Accessible.name: modeRow.label
             Accessible.checkable: true
             Accessible.checked: modeRow.active
@@ -91,12 +91,6 @@ Popup {
                 }
             }
 
-            background: HoverChrome {
-                selected: modeRow.active
-                hovered: modeRow.hovered
-                pressed: modeRow.down
-                tone: "nav"
-            }
         }
 
         ModeRow {

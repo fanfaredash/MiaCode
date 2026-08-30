@@ -19,12 +19,10 @@
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
-#include "tools/export_page/ExportLauncherPage.h"
+#include "app/qml_ui/export/QmlExportSession.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
-#include "tools/video_export/BatchExportPanel.h"
 #include "tools/video_export/VideoExportController.h"
-#include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
 #include <QtCore>
@@ -45,27 +43,6 @@ QString exportFlowWidgetSummary(QWidget* widget)
         .arg(widget->width())
         .arg(widget->height())
         .arg(widget->isVisible() ? 1 : 0);
-}
-
-void appendEmbeddedExportPanelDiag(
-    const QString& action,
-    qint64 elapsedMs,
-    const QString& detail = QString(),
-    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
-{
-    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
-        return;
-    }
-    QString payload = QStringLiteral("action=%1 elapsed_ms=%2").arg(action).arg(elapsedMs);
-    if (!detail.trimmed().isEmpty()) {
-        payload += QStringLiteral(" %1").arg(detail.trimmed());
-    }
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("export_page/embedded_video_panel"),
-        payload,
-        /*force=*/false,
-        level);
 }
 
 QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLiteral("out"))
@@ -513,291 +490,6 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     return task;
 }
 
-// MODAL twin of the embedded export panel. Since 2026-06-12 no UI entrance
-// reaches it (the Tools-menu 「导出谱面」 jumps to the Export page; spec
-// decision D6 overturned) — kept because it exercises the same
-// VideoExportDialog in window form and may be rewired later.
-void MainWindow::ExportSection::onExportPreviewVideo(int difficultyId)
-{
-    MC_OP("MainWindow::ExportSection::onExportPreviewVideo");
-    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
-        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
-        _mc_op_.fail(QStringLiteral("no target difficulty"));
-        owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
-        return;
-    }
-    if (owner_.previewCanvas_ == nullptr) {
-        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
-        owner_.statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
-        return;
-    }
-    if (owner_.qtPreviewPlaying_) {
-        owner_.onTogglePreviewPause();
-    }
-
-    VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
-
-    VideoExportDialog* dialog =
-        buildConfiguredVideoExportDialog(task, UiDialogs::effectiveParentWidget(&owner_));
-    UiDialogs::prepareDialogWindow(
-        dialog,
-        &owner_,
-        true,
-        UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls
-    );
-
-    dialog->adjustSize();
-    // Center the export dialog on the program window EXCLUDING the preview
-    // area, so the live preview stays visible beside it. The preview panel sits
-    // on the right, so the non-preview region is the main window rect trimmed
-    // to the left of the preview panel.
-    QRect anchorRect(owner_.mapToGlobal(QPoint(0, 0)), owner_.size());
-    if (owner_.previewPanel_ != nullptr && owner_.previewPanel_->isVisible()) {
-        const int previewLeftGlobalX = owner_.previewPanel_->mapToGlobal(QPoint(0, 0)).x();
-        const int nonPreviewWidth = previewLeftGlobalX - anchorRect.left();
-        if (nonPreviewWidth > dialog->width() / 2) {
-            anchorRect.setWidth(nonPreviewWidth);
-        }
-    }
-    QPoint targetTopLeft(
-        anchorRect.center().x() - dialog->width() / 2,
-        anchorRect.center().y() - dialog->height() / 2
-    );
-    QScreen* targetScreen = QGuiApplication::screenAt(anchorRect.center());
-    if (targetScreen == nullptr && owner_.windowHandle() != nullptr) {
-        targetScreen = owner_.windowHandle()->screen();
-    }
-    if (targetScreen != nullptr) {
-        const QRect avail = targetScreen->availableGeometry();
-        targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog->width() + 1));
-        targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog->height() + 1));
-    }
-    dialog->move(targetTopLeft);
-    owner_.windowSection_->applySystemWindowBackdrop(dialog);
-    beginExportPreviewSession(task);
-    dialog->exec();
-    endExportPreviewSession();
-    const bool exportWasRequested = dialog->exportRequested();
-    VideoExportTask requestedTask = dialog->requestedExportTask();
-    delete dialog;
-    dialog = nullptr;
-    if (exportWasRequested) {
-        // The injected Gameplay/Video-extra controls drive owner_ live rather
-        // than baking into the dialog's task, so re-source those fields from
-        // owner_ here — the dialog's task snapshot predates the user's edits.
-        requestedTask.outlineVariant = owner_.previewOutlineVariant_;
-        requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
-        requestedTask.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
-        requestedTask.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
-        requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
-        requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
-        this->applySharedExportTaskSettings(requestedTask);
-        VideoExportSnapshot snapshot;
-        QString launchError;
-        // Menu-launched exports keep the QProgressDialog (the inline
-        // preview-transport progress belongs to the embedded panel path).
-        owner_.videoExportUseInlineProgress_ = false;
-        if (!this->buildVideoExportSnapshot(requestedTask, &snapshot, &launchError, resolvedDifficultyId)
-            || !this->launchVideoExportWorker(snapshot, &launchError)) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Critical,
-                &owner_,
-                UiText::text(QStringLiteral("dialog.video_export.title")),
-                launchError.isEmpty()
-                    ? UiText::text(QStringLiteral("dialog.video_export.error.launch_failed"))
-                    : launchError
-            );
-        }
-    }
-}
-
-VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
-    const VideoExportTask& task,
-    QWidget* parent)
-{
-    const auto currentPreviewSecond = [this]() -> double {
-        return qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
-    };
-    auto* dialog = new VideoExportDialog(
-        task,
-        [this](double second) {
-            owner_.seekPreviewToSecond(second, false);
-        },
-        [this](double second) {
-            if (second <= 0.0005
-                && state_.exportPreviewAuditionActive_
-                && owner_.currentExportIntroLeadInSpec(nullptr)) {
-                owner_.refreshExportIntroState();
-                owner_.onTogglePreviewPause();
-                owner_.updatePauseButtonAppearance();
-                return;
-            }
-            owner_.startQtPreviewPlayback(second, true);
-            owner_.updatePauseButtonAppearance();
-        },
-        [this]() {
-            if (owner_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_) {
-                owner_.onTogglePreviewPause();
-                owner_.updatePauseButtonAppearance();
-            }
-        },
-        [this]() -> bool {
-            return owner_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_;
-        },
-        currentPreviewSecond,
-        [this](bool showTimestamp) {
-            owner_.previewShowTimestamp_ = showTimestamp;
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
-            }
-            owner_.savePortableState();
-        },
-        [this](bool showObjectStatsHud) {
-            owner_.previewShowObjectStatsHud_ = showObjectStatsHud;
-            owner_.exportShowObjectStatsHud_ = showObjectStatsHud;
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
-                owner_.previewCanvas_->setCenterDisplayMode(owner_.previewCenterDisplayMode_);
-            }
-            owner_.savePortableState();
-        },
-        [this](bool showChartInfoHud) {
-            owner_.previewShowChartInfoHud_ = showChartInfoHud;
-            owner_.exportShowChartInfoHud_ = showChartInfoHud;
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
-            }
-            owner_.savePortableState();
-        },
-        [this](bool enabled) {
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setFixHudTextLayout(enabled);
-            }
-        },
-        [this](double ratio) {
-            owner_.setPreviewCanvasAspectRatio(ratio, false);
-        },
-        [this](double outer, double inner) {
-            owner_.previewBackgroundBrightnessOuter_ = qBound(0.0, outer, 1.0);
-            owner_.previewBackgroundBrightnessInner_ = qBound(0.0, inner, 1.0);
-            owner_.applyPreviewStageMediaRouteVisualSettings();
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setBackgroundBrightnessOuter(owner_.previewBackgroundBrightnessOuter_);
-                owner_.previewCanvas_->setBackgroundBrightnessInner(owner_.previewBackgroundBrightnessInner_);
-            }
-            owner_.savePortableState();
-        },
-        [this](double scale) {
-            owner_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(scale);
-            owner_.applyPreviewStageMediaRouteVisualSettings();
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
-            }
-            owner_.savePortableState();
-        },
-        [this](bool smooth) {
-            owner_.previewSmoothBrightness_ = smooth;
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setSmoothBrightness(owner_.previewSmoothBrightness_);
-            }
-            owner_.savePortableState();
-        },
-        [this](PreviewBackgroundScaleMode mode) {
-            owner_.previewBackgroundScaleMode_ = mode;
-            owner_.applyPreviewStageMediaRouteVisualSettings();
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setBackgroundScaleMode(owner_.previewBackgroundScaleMode_);
-            }
-            owner_.savePortableState();
-        },
-        [this](double flowSpeed) {
-            owner_.previewTapFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setTapFlowSpeed(owner_.previewTapFlowSpeed_);
-            }
-            owner_.savePortableState();
-        },
-        [this](double flowSpeed) {
-            owner_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setTouchFlowSpeed(owner_.previewTouchFlowSpeed_);
-            }
-            owner_.savePortableState();
-        },
-        [this, task]() {
-            VideoExportTask shared = task;
-            shared.showTimestamp = owner_.previewShowTimestamp_;
-            shared.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
-            shared.showChartInfoHud = owner_.exportShowChartInfoHud_;
-            shared.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
-            shared.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
-            shared.layoutSquareScale = owner_.previewLayoutSquareScale_;
-            shared.smoothBrightness = owner_.previewSmoothBrightness_;
-            shared.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
-            shared.tapFlowSpeed = owner_.previewTapFlowSpeed_;
-            shared.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
-            shared.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
-            shared.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
-            return shared;
-        },
-        parent
-    );
-    // Inject the owner-wired Gameplay controls (skin / judge line / judge
-    // effect / slide stack order / center display), built by the DialogsSection
-    // so they can reach MainWindow-side data the decoupled dialog can't. They
-    // mutate owner_ live; their values are re-sourced into the task when the
-    // export is confirmed.
-    QWidget* injectedGameplay = nullptr;
-    QWidget* injectedSkin = nullptr;
-    if (owner_.dialogsSection_ != nullptr) {
-        std::function<void()> refreshInjectedGameplay;
-        std::function<void()> refreshInjectedSkin;
-        owner_.dialogsSection_->buildExportInjectedSettings(dialog, &injectedGameplay, &refreshInjectedGameplay);
-        // Skin tab shares the same owner-wired panel as the main-window skin popup,
-        // including the compact same-row directory actions.
-        owner_.dialogsSection_->buildSkinSettings(
-            dialog,
-            &injectedSkin,
-            /*includeFolderButtons=*/true,
-            &refreshInjectedSkin);
-        dialog->injectOwnerWiredSettings(
-            nullptr,
-            injectedGameplay,
-            injectedSkin,
-            [refreshInjectedGameplay, refreshInjectedSkin]() {
-                if (refreshInjectedGameplay) {
-                    refreshInjectedGameplay();
-                }
-                if (refreshInjectedSkin) {
-                    refreshInjectedSkin();
-                }
-            });
-    }
-    connect(dialog, &VideoExportDialog::introSoundFileNameChanged, &owner_, [this](const QString& fileName) {
-        owner_.previewIntroSoundFileName_ =
-            miacode::preview_sfx::normalizeIntroSoundFileName(fileName);
-        miacode::preview_sfx::setSelectedIntroSoundFileName(owner_.previewIntroSoundFileName_);
-        if (owner_.previewSfxRuntime_ != nullptr
-            && owner_.previewSfxRuntime_->audioEngineInitialized()) {
-            owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
-        }
-        owner_.savePortableState();
-    });
-    connect(dialog, &VideoExportDialog::introSoundVolumeChanged, &owner_, [this](double volume) {
-        miacode::preview_sfx::setSelectedIntroSoundVolume(volume);
-        if (owner_.previewSfxRuntime_ != nullptr
-            && owner_.previewSfxRuntime_->audioEngineInitialized()) {
-            owner_.previewSfxRuntime_->applyLevels(owner_.previewAudioSettings_);
-        }
-    });
-    if (owner_.previewSfxRuntime_ != nullptr
-        && owner_.previewSfxRuntime_->audioEngineInitialized()) {
-        owner_.previewSfxRuntime_->applyLevels(owner_.previewAudioSettings_);
-    }
-    return dialog;
-}
-
 void MainWindow::ExportSection::beginExportPreviewSession(const VideoExportTask& task)
 {
     ++owner_.previewPaneRestoreGeneration_;
@@ -851,325 +543,10 @@ void MainWindow::ExportSection::endExportPreviewSession()
     owner_.restoreSquareAfterVideoExport_ = false;
 }
 
-QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent)
-{
-    MC_OP("MainWindow::ExportSection::createEmbeddedVideoExportPanel");
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-    MIACODE_HANG_PHASE(
-        "ExportSection::createEmbeddedVideoExportPanel",
-        QStringLiteral("difficulty=%1 parent=%2")
-            .arg(difficultyId)
-            .arg(exportFlowWidgetSummary(parent)));
-    destroyEmbeddedVideoExportPanel();
-    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
-        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr
-        || owner_.previewCanvas_ == nullptr) {
-        return nullptr;
-    }
-    if (owner_.qtPreviewPlaying_) {
-        owner_.onTogglePreviewPause();
-    }
-
-    VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
-    owner_.tickOutlineBusySpinner();
-    QElapsedTimer buildDialogTimer;
-    buildDialogTimer.start();
-    VideoExportDialog* panel = nullptr;
-    {
-        MIACODE_HANG_PHASE(
-            "ExportSection::createEmbeddedVideoExportPanel.buildConfiguredVideoExportDialog",
-            QStringLiteral("difficulty=%1 parent=%2")
-                .arg(resolvedDifficultyId)
-                .arg(exportFlowWidgetSummary(parent)));
-        panel = buildConfiguredVideoExportDialog(task, parent);
-    }
-    appendEmbeddedExportPanelDiag(
-        QStringLiteral("build_configured_dialog_complete"),
-        buildDialogTimer.elapsed(),
-        QStringLiteral("difficulty=%1 panel=%2")
-            .arg(resolvedDifficultyId)
-            .arg(exportFlowWidgetSummary(panel)),
-        buildDialogTimer.elapsed() >= 80
-            ? miacode::debug_log::Level::Warn
-            : miacode::debug_log::Level::Info);
-    owner_.tickOutlineBusySpinner();
-    QElapsedTimer embeddedModeTimer;
-    embeddedModeTimer.start();
-    {
-        MIACODE_HANG_PHASE(
-            "ExportSection::createEmbeddedVideoExportPanel.setEmbeddedPanelMode",
-            exportFlowWidgetSummary(panel));
-        panel->setEmbeddedPanelMode(true);
-    }
-    appendEmbeddedExportPanelDiag(
-        QStringLiteral("set_embedded_panel_mode_complete"),
-        embeddedModeTimer.elapsed(),
-        QStringLiteral("difficulty=%1 panel=%2")
-            .arg(resolvedDifficultyId)
-            .arg(exportFlowWidgetSummary(panel)),
-        embeddedModeTimer.elapsed() >= 80
-            ? miacode::debug_log::Level::Warn
-            : miacode::debug_log::Level::Info);
-    owner_.embeddedVideoExportPanel_ = panel;
-    owner_.embeddedVideoExportDifficultyId_ = resolvedDifficultyId;
-    connect(panel, &VideoExportDialog::exportConfirmed, &owner_, [this]() {
-        this->handleEmbeddedExportConfirmed();
-    });
-    connect(panel, &VideoExportDialog::exportCancelRequested, &owner_, [this]() {
-        this->cancelVideoExportWorker();
-    });
-    connect(panel, &VideoExportDialog::clockCountEnabledChanged, &owner_, [this](bool enabled) {
-        // WYSIWYG: re-seed the audition count-in to match the export setting. The
-        // VALUE / BPM still come from the chart; disabled → 0 ticks. The document's
-        // &clock_count= is never touched.
-        const SimaiDifficultyData* difficulty =
-            owner_.document_.difficulty(owner_.embeddedVideoExportDifficultyId_);
-        if (difficulty == nullptr) {
-            return;
-        }
-        owner_.setExportAuditionClockSchedule(
-            enabled ? miacode::chart_clock::clockCountFromDocument(owner_.document_) : 0,
-            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
-    });
-    connect(panel, &VideoExportDialog::introPreviewSettingsChanged, &owner_, [this]() {
-        owner_.refreshExportIntroState();
-    });
-    {
-        QElapsedTimer previewSessionTimer;
-        previewSessionTimer.start();
-        MIACODE_HANG_PHASE(
-            "ExportSection::createEmbeddedVideoExportPanel.beginExportPreviewSession",
-            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId));
-        beginExportPreviewSession(task);
-        appendEmbeddedExportPanelDiag(
-            QStringLiteral("begin_export_preview_session_complete"),
-            previewSessionTimer.elapsed(),
-            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId),
-            previewSessionTimer.elapsed() >= 80
-                ? miacode::debug_log::Level::Warn
-                : miacode::debug_log::Level::Info);
-    }
-    owner_.tickOutlineBusySpinner();
-    // Install the badge-selected difficulty as a playable preview audition so
-    // the right-side transport plays/seeks it like the editor (所见即所导). This
-    // also covers badge switches — syncEmbeddedVideoPanel recreates the panel,
-    // which re-installs the newly-selected difficulty.
-    {
-        QElapsedTimer auditionTimer;
-        auditionTimer.start();
-        MIACODE_HANG_PHASE(
-            "ExportSection::createEmbeddedVideoExportPanel.installExportPreviewAuditionScene",
-            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId));
-        installExportPreviewAuditionScene(resolvedDifficultyId);
-        if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(resolvedDifficultyId);
-            difficulty != nullptr) {
-            owner_.setExportAuditionClockSchedule(
-                panel->isClockCountEnabledForPreview()
-                    ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
-                    : 0,
-                miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
-        }
-        appendEmbeddedExportPanelDiag(
-            QStringLiteral("install_export_preview_audition_scene_complete"),
-            auditionTimer.elapsed(),
-            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId),
-            auditionTimer.elapsed() >= 80
-                ? miacode::debug_log::Level::Warn
-                : miacode::debug_log::Level::Info);
-    }
-    owner_.tickOutlineBusySpinner();
-    // Re-entering the video sub-page while an export is still rendering:
-    // re-arm the cancel affordance on the fresh panel.
-    if (owner_.videoExportWorkerProcess_ != nullptr
-        && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
-        panel->setEmbeddedExportRunning(true);
-    }
-    appendEmbeddedExportPanelDiag(
-        totalTimer.elapsed() >= 120
-            ? QStringLiteral("create_embedded_video_panel_slow")
-            : QStringLiteral("create_embedded_video_panel_complete"),
-        totalTimer.elapsed(),
-        QStringLiteral("difficulty=%1 panel=%2")
-            .arg(resolvedDifficultyId)
-            .arg(exportFlowWidgetSummary(panel)),
-        totalTimer.elapsed() >= 120
-            ? miacode::debug_log::Level::Warn
-            : miacode::debug_log::Level::Info);
-    return panel;
-}
-
-void MainWindow::ExportSection::destroyEmbeddedVideoExportPanel()
-{
-    if (owner_.embeddedVideoExportPanel_.isNull()) {
-        return;
-    }
-    VideoExportDialog* panel = owner_.embeddedVideoExportPanel_;
-    owner_.embeddedVideoExportPanel_.clear();
-    owner_.embeddedVideoExportDifficultyId_ = 0;
-    panel->finalizeEmbeddedSession();
-    panel->hide();
-    // deleteLater: this may run from inside the panel's own signal handlers.
-    panel->deleteLater();
-    endExportPreviewSession();
-}
-
-QWidget* MainWindow::ExportSection::createEmbeddedBatchExportPanel(int difficultyId, QWidget* parent)
-{
-    destroyEmbeddedBatchExportPanel();
-    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
-        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr
-        || owner_.previewCanvas_ == nullptr) {
-        return nullptr;
-    }
-    if (owner_.qtPreviewPlaying_) {
-        owner_.onTogglePreviewPause();
-    }
-
-    const VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
-    QList<int> difficultyIds;
-    for (int difficultyIdValue = 1; difficultyIdValue <= 7; ++difficultyIdValue) {
-        difficultyIds.append(difficultyIdValue);
-    }
-    auto* panel = new miacode::video_export::BatchExportPanel(
-        task, difficultyIds, resolvedDifficultyId, parent);
-    VideoExportDialog* sharedSettings = buildConfiguredVideoExportDialog(task, panel);
-    panel->installSharedSettingsPanel(sharedSettings);
-    owner_.embeddedBatchExportPanel_ = panel;
-
-    connect(panel, &miacode::video_export::BatchExportPanel::batchExportConfirmed, &owner_, [this]() {
-        handleBatchExportConfirmed();
-    });
-    connect(panel, &miacode::video_export::BatchExportPanel::clockCountEnabledChanged,
-            &owner_, [this](bool enabled) {
-                auto* batchPanel = owner_.embeddedBatchExportPanel_.data();
-                if (batchPanel == nullptr) {
-                    return;
-                }
-                const int previewDifficultyId = batchPanel->previewDifficultyId();
-                const SimaiDifficultyData* difficulty = owner_.document_.difficulty(previewDifficultyId);
-                if (difficulty == nullptr) {
-                    return;
-                }
-                owner_.setExportAuditionClockSchedule(
-                    enabled ? miacode::chart_clock::clockCountFromDocument(owner_.document_) : 0,
-                    miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
-            });
-    connect(panel, &miacode::video_export::BatchExportPanel::introPreviewSettingsChanged,
-            &owner_, [this]() { owner_.refreshExportIntroState(); });
-
-    beginExportPreviewSession(task);
-    installExportPreviewAuditionScene(resolvedDifficultyId);
-    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(resolvedDifficultyId);
-        difficulty != nullptr) {
-        owner_.setExportAuditionClockSchedule(
-            panel->isClockCountEnabledForPreview()
-                ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
-                : 0,
-            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
-    }
-    return panel;
-}
-
-void MainWindow::ExportSection::updateEmbeddedBatchExportPreviewDifficulty(int difficultyId)
-{
-    auto* panel = owner_.embeddedBatchExportPanel_.data();
-    if (panel == nullptr || !SimaiDocument::isDifficultyId(difficultyId)
-        || owner_.document_.difficulty(difficultyId) == nullptr) {
-        return;
-    }
-    // The batch panel survives a badge switch (its queue/settings are the user's
-    // work), so nothing rebuilds the difficulty-derived chart payload the way
-    // createEmbeddedVideoExportPanel does on the 视频导出 sub-page. Re-seed it
-    // here from the newly-selected difficulty, otherwise the preview keeps the
-    // panel's opening difficulty in the chart-info HUD and — visibly — in the
-    // 片头 banner (难度 / LV / 谱师 / 曲绘) while the note field switches.
-    const VideoExportTask retargetedTask = buildVideoExportSeedTask(difficultyId);
-    panel->updatePreviewDifficulty(difficultyId, retargetedTask);
-    applyExportPreviewChartInfo(retargetedTask);
-    teardownExportPreviewAuditionScene();
-    // Re-runs refreshExportIntroState() at its tail, which now reads the
-    // retargeted 片头 spec.
-    installExportPreviewAuditionScene(difficultyId);
-    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
-        difficulty != nullptr) {
-        owner_.setExportAuditionClockSchedule(
-            panel->isClockCountEnabledForPreview()
-                ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
-                : 0,
-            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
-    }
-}
-
-void MainWindow::ExportSection::destroyEmbeddedBatchExportPanel()
-{
-    if (owner_.embeddedBatchExportPanel_.isNull()) {
-        return;
-    }
-    auto* panel = owner_.embeddedBatchExportPanel_.data();
-    owner_.embeddedBatchExportPanel_.clear();
-    panel->hide();
-    panel->deleteLater();
-    endExportPreviewSession();
-}
-
-void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
-{
-    VideoExportDialog* panel = owner_.embeddedVideoExportPanel_;
-    if (panel == nullptr) {
-        return;
-    }
-    VideoExportTask requestedTask = panel->requestedExportTask();
-    // Same re-source as the modal path: the injected Gameplay/Video-extra
-    // controls drive owner_ live rather than baking into the panel's task.
-    requestedTask.outlineVariant = owner_.previewOutlineVariant_;
-    requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
-    requestedTask.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
-    requestedTask.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
-    requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
-    requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
-    this->applySharedExportTaskSettings(requestedTask);
-    VideoExportSnapshot snapshot;
-    QString launchError;
-    // Panel-launched exports use the same progress popup as the modal path.
-    owner_.videoExportUseInlineProgress_ = false;
-    if (!this->buildVideoExportSnapshot(
-            requestedTask, &snapshot, &launchError, owner_.embeddedVideoExportDifficultyId_)
-        || !this->launchVideoExportWorker(snapshot, &launchError)) {
-        owner_.videoExportUseInlineProgress_ = false;
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.video_export.title")),
-            launchError.isEmpty()
-                ? UiText::text(QStringLiteral("dialog.video_export.error.launch_failed"))
-                : launchError
-        );
-        return;
-    }
-    panel->setEmbeddedExportRunning(true);
-}
-
 bool MainWindow::currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const
 {
-    // The active embedded panel owns the shared 片头 settings. The audition
-    // reads them at play time so both single and batch preview stay WYSIWYG.
-    if (!embeddedVideoExportPanel_.isNull()
-        && embeddedVideoExportPanel_->isAddIntroActiveForPreview()) {
-        if (outSpec != nullptr) {
-            *outSpec = embeddedVideoExportPanel_->previewIntroSpec();
-        }
-        return true;
-    }
-    if (!embeddedBatchExportPanel_.isNull()
-        && embeddedBatchExportPanel_->isAddIntroActiveForPreview()) {
-        if (outSpec != nullptr) {
-            *outSpec = embeddedBatchExportPanel_->previewIntroSpec();
-        }
-        return true;
-    }
+    // The export session owns the shared 片头 settings. The audition reads them
+    // at play time so both single and batch preview stay WYSIWYG.
     if (qmlExportSession_ != nullptr
         && qmlExportSession_->pageSessionActive()
         && qmlExportSession_->previewIntroSpec().enabled) {
@@ -1223,17 +600,47 @@ void MainWindow::ExportSection::onExportCover(int difficultyId)
     window->show();
 }
 
+// Opens the pure-QML export centre on its single-export tab. Extensions reach
+// this through "export.video.start" / "export/startVideoExport"; there is no
+// modal export dialog behind it any more.
+void MainWindow::ExportSection::onExportPreviewVideo(int difficultyId)
+{
+    MC_OP("MainWindow::ExportSection::onExportPreviewVideo");
+    // Select the tab BEFORE switching: switchToExportField defers the page
+    // build one event-loop tick, so a tab set afterwards would race it.
+    if (owner_.qmlExportSession_ != nullptr) {
+        owner_.qmlExportSession_->setActiveTab(QStringLiteral("export"));
+    }
+    if (owner_.documentSection_ == nullptr || !owner_.documentSection_->switchToExportField()) {
+        _mc_op_.fail(QStringLiteral("export field unavailable"));
+        return;
+    }
+    // The page seeds itself from the difficulty that was active on entry, which
+    // is what the caller resolved in every reachable case. Honour an explicit
+    // request anyway, queued behind the deferred page build.
+    if (!SimaiDocument::isDifficultyId(difficultyId)) {
+        return;
+    }
+    QTimer::singleShot(0, &owner_, [this, difficultyId]() {
+        if (owner_.qmlExportSession_ != nullptr) {
+            owner_.qmlExportSession_->selectDifficulty(difficultyId);
+        }
+    });
+}
+
 void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
 {
     MC_OP("MainWindow::ExportSection::onBatchExportPreviewVideo");
     Q_UNUSED(difficultyId);
     // The Tools menu follows the same embedded page route as clicking the
     // Batch Export sub-nav. It deliberately never constructs a modal dialog.
-    if (owner_.documentSection_ != nullptr && owner_.documentSection_->switchToExportField()) {
-        if (owner_.exportPage_ != nullptr) {
-            owner_.exportPage_->openBatchExportSubPage();
-        }
-        return;
+    // Select the tab BEFORE switching: switchToExportField defers the page
+    // build one event-loop tick, so a tab set afterwards would race it.
+    if (owner_.qmlExportSession_ != nullptr) {
+        owner_.qmlExportSession_->setActiveTab(QStringLiteral("batch"));
+    }
+    if (owner_.documentSection_ != nullptr) {
+        owner_.documentSection_->switchToExportField();
     }
 }
 
@@ -1372,7 +779,6 @@ bool MainWindow::ExportSection::runBatchExport(
         };
         if (!runVideoExportWorkerSync(
                 snapshot,
-                nullptr,
                 &canceledThisItem,
                 &failureText,
                 updateBatchProgress,
@@ -1392,144 +798,6 @@ bool MainWindow::ExportSection::runBatchExport(
         callbacks.progressChanged(100, QString());
     }
     return true;
-}
-
-void MainWindow::ExportSection::handleBatchExportConfirmed()
-{
-    QPointer<miacode::video_export::BatchExportPanel> panel = owner_.embeddedBatchExportPanel_;
-    if (panel.isNull()) {
-        return;
-    }
-    const QStringList chartDirectories = panel->chartDirectories();
-    const QList<int> selectedDifficultyIds = panel->selectedDifficultyIds();
-    const QString outputDirectory = panel->outputDirectory();
-    VideoExportTask requestedTask = panel->requestedTaskTemplate();
-    // The injected Gameplay/Video-extra widgets mutate the live preview
-    // owner. Re-source those fields just as the embedded single-export path
-    // does, so confirming a batch never restores its stale opening seed.
-    requestedTask.outlineVariant = owner_.previewOutlineVariant_;
-    requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
-    requestedTask.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
-    requestedTask.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
-    requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
-    requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
-    this->applySharedExportTaskSettings(requestedTask);
-
-    if (chartDirectories.isEmpty() || selectedDifficultyIds.isEmpty() || outputDirectory.trimmed().isEmpty()) {
-        return;
-    }
-    panel->setBatchExportRunning(true);
-    if (!QDir().mkpath(outputDirectory)) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.batch_export.error.output_dir_create_failed"))
-                + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory));
-        if (!panel.isNull()) {
-            panel->setBatchExportRunning(false);
-        }
-        return;
-    }
-
-    QProgressDialog progress(
-        UiText::text(QStringLiteral("dialog.batch_export.progress.preparing")),
-        systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
-        0,
-        100,
-#ifdef Q_OS_MACOS
-        UiDialogs::effectiveParentWidget(&owner_)
-#else
-        &owner_
-#endif
-    );
-    progress.setWindowTitle(UiText::text(QStringLiteral("dialog.batch_export.title")));
-    progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    // Non-minimizable: a minimized, parentless progress popup over the
-    // WA_DontShowOnScreen quick-shell host can never be re-raised and deadlocks
-    // the app while it stays application-modal.
-    progress.setWindowFlag(Qt::WindowMinimizeButtonHint, false);
-    progress.setWindowModality(Qt::WindowModal);
-#ifdef Q_OS_MACOS
-    UiDialogs::applyDetachedParentBehavior(&progress, &owner_);
-#endif
-    progress.setMinimumDuration(0);
-    progress.setAutoClose(false);
-    progress.setAutoReset(false);
-    UiDialogs::configureDialogPreviewShortcuts(&progress);
-    owner_.windowSection_->applySystemWindowBackdrop(&progress);
-
-    BatchExportResult result;
-    QString launchError;
-    BatchExportCallbacks callbacks;
-    callbacks.progressChanged = [&progress](int percent, const QString& label) {
-        if (!progress.isVisible()) {
-            progress.show();
-        }
-        progress.setValue(percent);
-        if (!label.isEmpty()) {
-            progress.setLabelText(label);
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    };
-    callbacks.cancellationRequested = [&progress]() {
-        return progress.wasCanceled();
-    };
-    callbacks.retrying = [&progress]() {
-        progress.setRange(0, 100);
-        progress.setValue(0);
-        progress.setLabelText(UiText::text(QStringLiteral("dialog.video_export.progress.retrying_safe_mode")));
-    };
-    const bool launched = runBatchExport(
-        requestedTask,
-        chartDirectories,
-        selectedDifficultyIds,
-        outputDirectory,
-        &result,
-        callbacks,
-        &launchError);
-    progress.hide();
-    if (!panel.isNull()) {
-        panel->setBatchExportRunning(false);
-    }
-
-    if (!launched) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
-            launchError.isEmpty()
-                ? UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"))
-                : launchError);
-        return;
-    }
-
-    if (result.canceled) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Information, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.batch_export.message.canceled")));
-        return;
-    }
-    const auto shortenDetails = [](QString details) {
-        return details.size() > 3000 ? details.left(3000) + QStringLiteral("\n...") : details;
-    };
-    const QString successDetails = shortenDetails(result.exportedFiles.join(QLatin1Char('\n')));
-    if (result.failedCharts.isEmpty()) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Information, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(result.successCount)
-                + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails));
-        return;
-    }
-    UiDialogs::showMessageBox(
-        QMessageBox::Warning, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
-        UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
-            .arg(result.successCount).arg(result.failedCharts.size())
-            + (successDetails.isEmpty() ? QString()
-                : QStringLiteral("\n\n")
-                    + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
-                    + QStringLiteral("\n") + successDetails)
-            + QStringLiteral("\n\n") + shortenDetails(result.failedCharts.join(QLatin1Char('\n'))));
 }
 
 VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTaskPublic(int difficultyId)
@@ -1594,10 +862,8 @@ bool MainWindow::ExportSection::launchQmlVideoExport(
     VideoExportTask task = requestedTask;
     applySharedExportTaskSettings(task);
     VideoExportSnapshot snapshot;
-    owner_.videoExportUseInlineProgress_ = false;
     if (!buildVideoExportSnapshot(task, &snapshot, errorMessage, difficultyId)
         || !launchVideoExportWorker(snapshot, errorMessage)) {
-        owner_.videoExportUseInlineProgress_ = false;
         return false;
     }
     return true;

@@ -5,7 +5,6 @@
 #include "BracketScopeHighlighter.h"
 #include "BusySpinner.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -21,9 +20,7 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
-#include "tools/export_page/ExportLauncherPage.h"
 #include "app/qml_ui/export/QmlExportSession.h"
-#include "tools/latency/LatencyDetectionPage.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -107,47 +104,8 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
     if (ui_.stopPreviewAction_ != nullptr) {
         ui_.stopPreviewAction_->setEnabled(playbackEnabled);
     }
-    if (ui_.transformMirrorLeftRightAction_ != nullptr) {
-        ui_.transformMirrorLeftRightAction_->setEnabled(enabled);
-    }
-    if (ui_.transformMirrorUpDownAction_ != nullptr) {
-        ui_.transformMirrorUpDownAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRotate180Action_ != nullptr) {
-        ui_.transformRotate180Action_->setEnabled(enabled);
-    }
-    if (ui_.transformRotate45CounterClockwiseAction_ != nullptr) {
-        ui_.transformRotate45CounterClockwiseAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRotate45ClockwiseAction_ != nullptr) {
-        ui_.transformRotate45ClockwiseAction_->setEnabled(enabled);
-    }
     if (ui_.normalizeWholeChartAction_ != nullptr) {
         ui_.normalizeWholeChartAction_->setEnabled(enabled);
-    }
-    if (ui_.transformToggleBreakAction_ != nullptr) {
-        ui_.transformToggleBreakAction_->setEnabled(enabled);
-    }
-    if (ui_.transformToggleExAction_ != nullptr) {
-        ui_.transformToggleExAction_->setEnabled(enabled);
-    }
-    if (ui_.transformToggleFireworkAction_ != nullptr) {
-        ui_.transformToggleFireworkAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRandomRotateAction_ != nullptr) {
-        ui_.transformRandomRotateAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRaiseSubdivisionAction_ != nullptr) {
-        ui_.transformRaiseSubdivisionAction_->setEnabled(enabled);
-    }
-    if (ui_.transformLowerSubdivisionAction_ != nullptr) {
-        ui_.transformLowerSubdivisionAction_->setEnabled(enabled);
-    }
-    if (ui_.transformRaiseSubdivisionHalfStepAction_ != nullptr) {
-        ui_.transformRaiseSubdivisionHalfStepAction_->setEnabled(enabled);
-    }
-    if (ui_.transformLowerSubdivisionHalfStepAction_ != nullptr) {
-        ui_.transformLowerSubdivisionHalfStepAction_->setEnabled(enabled);
     }
     if (ui_.stopPreviewButton_ != nullptr) {
         ui_.stopPreviewButton_->setEnabled(playbackEnabled);
@@ -243,7 +201,10 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
         ui_.editorValidationSummaryWidget_->adjustSize();
     }
 
-    const auto [line, col] = currentCursorLineCol();
+    // The caret label belongs to the hidden header; the QML status bar shows
+    // the real one. Nothing here can read the QML caret, so it stays at 1:1.
+    const int line = 1;
+    const int col = 1;
     const QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
     ui_.editorCursorLabel_->setText(cursorText);
     ui_.editorCursorLabel_->setFixedWidth(QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText) + 10);
@@ -296,8 +257,8 @@ void MainWindow::DocumentSection::syncEditorHeaderMinimumWidth()
                 return 0;
             }
             int difficultyId = state_.activeDifficultyId_;
-            if (!SimaiDocument::isDifficultyId(difficultyId) && ui_.exportPage_ != nullptr) {
-                difficultyId = ui_.exportPage_->selectedDifficultyId();
+            if (!SimaiDocument::isDifficultyId(difficultyId) && ui_.qmlExportSession_ != nullptr) {
+                difficultyId = ui_.qmlExportSession_->selectedDifficultyId();
             }
             const QString labelText = SimaiDocument::isDifficultyId(difficultyId)
                 ? SimaiDocument::difficultyShortName(difficultyId)
@@ -386,7 +347,7 @@ void MainWindow::DocumentSection::updateMetadataPageMode()
     ui_.metadataEmptyHintLabel_->hide();
 }
 
-bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
+bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId, bool alreadyConfirmed)
 {
     const SimaiDifficultyData* difficultyData = state_.document_.difficulty(difficultyId);
     if (!SimaiDocument::isDifficultyId(difficultyId) || difficultyData == nullptr) {
@@ -410,7 +371,7 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
         && currentDesigner.trimmed().isEmpty()
         && currentChart.trimmed().isEmpty();
 
-    if (!emptyDifficulty) {
+    if (!emptyDifficulty && !alreadyConfirmed) {
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Question,
             &owner_,
@@ -745,9 +706,6 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     // The export page derives its difficulty badges + card availability from
     // the same document state this sidebar reflects — refresh it on the same
     // triggers (document load, difficulty add/delete, page switches). Cheap.
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->refreshFromDocument();
-    }
 }
 
 void MainWindow::DocumentSection::populateMetadataPage()
@@ -823,7 +781,6 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
         ui_.difficultyDesignerEdit_->setText(difficultyData->designer);
         ui_.difficultyDesignerEdit_->setModified(false);
     }
-    setEditorText(difficultyData->chart);
     updateEditorHeader();
     updateEditorEmptyState();
     updateEditorStatus();
@@ -851,22 +808,6 @@ void MainWindow::DocumentSection::syncHeaderDesignerEditFromModel()
     ui_.difficultyDesignerEdit_->setModified(false);
 }
 
-void MainWindow::DocumentSection::applyDifficultySwitchEditorScrollRestore(
-    int verticalScrollValue,
-    int horizontalScrollValue)
-{
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr) {
-        return;
-    }
-    if (QScrollBar* vertical = editor->verticalScrollBar(); vertical != nullptr) {
-        vertical->setValue(qBound(vertical->minimum(), verticalScrollValue, vertical->maximum()));
-    }
-    if (QScrollBar* horizontal = editor->horizontalScrollBar(); horizontal != nullptr) {
-        horizontal->setValue(qBound(horizontal->minimum(), horizontalScrollValue, horizontal->maximum()));
-    }
-}
-
 void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
 {
     owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, enabled);
@@ -892,16 +833,13 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
-    if (ui_.latencyDetectionPage_ == nullptr || ui_.editorStack_ == nullptr) {
+    if (ui_.latencyPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return false;
     }
     // Leaving the export page (possibly) — tear down its embedded video
     // panel unconditionally (idempotent), same pattern as the latency
     // onPageLeft calls in the other switch functions.
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -923,7 +861,7 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
     populateMetadataPage();  // keeps document fields in sync for sidebar use
-    ui_.editorStack_->setCurrentWidget(ui_.latencyDetectionPage_);
+    ui_.editorStack_->setCurrentWidget(ui_.latencyPlaceholderPage_);
     // Bottom timeline + bottom tabs remain visible: the sandbox audition
     // drives them with the synthesized test chart, so the user can watch
     // the taps scroll past the judge line in sync with the song.
@@ -935,7 +873,6 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    ui_.latencyDetectionPage_->onPageEntered();
     owner_.refreshLayoutAfterPageSwitch();
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     return true;
@@ -946,7 +883,7 @@ bool MainWindow::DocumentSection::switchToExportField()
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
-    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr) {
+    if (ui_.exportPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return false;
     }
     // The export page is noticeably slow to switch to — building its embedded
@@ -1022,7 +959,7 @@ void MainWindow::tickOutlineBusySpinner()
 
 void MainWindow::DocumentSection::performSwitchToExportField()
 {
-    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr) {
+    if (ui_.exportPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return;
     }
     // Captured BEFORE the reset below: seeds the page's difficulty badge
@@ -1037,7 +974,7 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // it stopped playback with keepPosition=true, so qtPreviewPauseSecond_ still
     // holds the last position — carry it into the export page too. Source detected
     // from the stack (currentWidget is still the page we're LEAVING; the switch to
-    // exportPage_ happens later), because activeOutlineKey_ was already overwritten
+    // the export field happens later), because activeOutlineKey_ was already overwritten
     // with the destination by the sidebar handler. A stale cross-file value is
     // guarded by loadDocument resetting qtPreviewPauseSecond_ to 0.
     const bool leavingMetadataPage = ui_.editorStack_ != nullptr
@@ -1058,15 +995,9 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1080,7 +1011,7 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     state_.activeOutlineKey_ = "export";
     owner_.tickOutlineBusySpinner();
     populateMetadataPage();  // keeps document fields in sync for sidebar use
-    ui_.editorStack_->setCurrentWidget(ui_.exportPage_);
+    ui_.editorStack_->setCurrentWidget(ui_.exportPlaceholderPage_);
     setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
@@ -1093,12 +1024,8 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // The expensive part — building the embedded video panel — happens inside
     // onPageEntered. It ticks the spinner at its own sub-step boundaries so the
     // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
-    // QmlUi v2 owns a pure-QML export center; classic / QuickShell still enter
-    // ExportLauncherPage so the Widgets hub panels stay intact.
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->enter(previousActiveDifficultyId);
-    } else if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
     }
     owner_.tickOutlineBusySpinner();
     // Entering the export page changes the preview aspect (square → export video
@@ -1122,15 +1049,9 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1179,15 +1100,9 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1258,18 +1173,6 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
               ? owner_.currentPreviewAuthoritativeAudioClockSecond()
               : state_.qtPreviewPauseSecond_)
         : 0.0;
-    int restoreVerticalScrollValue = 0;
-    int restoreHorizontalScrollValue = 0;
-    if (restoreSwitchView) {
-        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-            if (QScrollBar* vertical = editor->verticalScrollBar(); vertical != nullptr) {
-                restoreVerticalScrollValue = vertical->value();
-            }
-            if (QScrollBar* horizontal = editor->horizontalScrollBar(); horizontal != nullptr) {
-                restoreHorizontalScrollValue = horizontal->value();
-            }
-        }
-    }
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
@@ -1279,15 +1182,9 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     // that key with the destination BEFORE calling this switch, so the old guard
     // was always false and teardown (audio-level restore + flag clear) was silently
     // skipped — the root cause of the SFX-volume leak into the normal preview.
-    if (ui_.latencyDetectionPage_ != nullptr) {
-        ui_.latencyDetectionPage_->onPageLeft();
-    }
     // Same contract for the export page: every leave path tears down its
     // embedded video panel (idempotent; a running export keeps rendering).
-    if (ui_.exportPage_ != nullptr) {
-        ui_.exportPage_->onPageLeft();
-    }
-    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+    if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1312,15 +1209,6 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     populateDifficultyPage(difficultyId);
     if (owner_.editorSection_ != nullptr) {
         owner_.editorSection_->syncBookmarksFromEditorText();
-    }
-    if (restoreSwitchView) {
-        applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
-        QTimer::singleShot(0, &owner_, [this, difficultyId, restoreVerticalScrollValue, restoreHorizontalScrollValue]() {
-            if (state_.activeDifficultyId_ != difficultyId || !owner_.hasActiveDifficulty()) {
-                return;
-            }
-            applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
-        });
     }
     const double previousPreviewTrackDurationSeconds = state_.previewTrackDurationSeconds_;
     const std::shared_ptr<const miacode::waveform::WaveformData> previousWaveformData =

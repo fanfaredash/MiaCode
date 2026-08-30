@@ -1,4 +1,6 @@
     bool maybeSaveBeforeContinue();
+    // A warning for the viewer, through the shell rather than a Widgets box.
+    void postShellNotice(const QString& title, const QString& text);
     void configureRuntimeDebugOutput();
     PreviewStageMediaRoute previewStageMediaRoute() const;
     bool previewUsesStageMediaHostRoute() const;
@@ -74,11 +76,6 @@
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void resetAutosaveState(const QString& referenceText);
-    bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
-    bool applySelectionBatchTransform(const QString& opName, const BatchTransform& transform);
-    std::pair<int, int> currentCursorLineCol() const;
-    std::pair<int, int> currentSelectionOrCursorLineCol() const;
-    bool currentSelectionRange(int* startPos, int* endPos) const;
     void setEditorText(const QString& text);
     void setMetadataExtraText(const QString& text);
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
@@ -98,7 +95,6 @@
     void updateCurrentFileLabel();
     void updatePauseButtonAppearance();
     void updateDirtyState();
-    bool currentFieldHasUndoChanges() const;
     void refreshCurrentFieldDirtyState();
     void markCurrentFieldDirty();
     bool undoDeletedDifficultyField();
@@ -151,15 +147,11 @@
     double parsedWholeBpm(bool* ok = nullptr) const;
     int parsedClockCount() const;
     QString parsedLatencyMeterId() const;
-    void applyLatencyDetectorOffset(double seconds);
-    void applyLatencyDetectorBpm(double bpm);
-    void applyLatencyDetectorClockCount(int clockCount);
     void resetPreviewTrackTimelineOffsets();
     miacode::waveform::WaveformCacheService* ensureWaveformCacheService();
     void applyWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
     void refreshWaveformCache();
     void refreshWaveformCache(double knownDurationSeconds);
-    void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
     void applyLatestTimelinePreviewStateToPausedPreview();
     void scheduleTimelineRefresh();
@@ -176,7 +168,6 @@
     const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
     void applyAlignedMuriAnalysisReportToViews();
     double currentPreviewAuthoritativeAudioClockSecond() const;
-    void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
     void deferTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredEditorUiUpdate(
@@ -208,6 +199,13 @@
     void pauseQtPreviewPlaybackExact();
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
+    // Single writer for qtPreviewPlaying_. The flag has never travelled alone —
+    // every site that flips it also tells EditorSyncController — and the QML
+    // shell needs it too: its play/pause control reads it, and for a while
+    // nothing announced the flip at all, which is how the transport ended up
+    // frozen while the timeline followed along fine. Assign through here, never
+    // directly.
+    void setPreviewPlayingFlag(bool playing);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
     void onTimelineRenderCadenceTick();
@@ -251,7 +249,6 @@
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     void updatePreviewWorkspaceLayout();
     void updatePreviewPanelLayout(int panelWidthOverride = -1, int panelHeightOverride = -1);
-    void setWorkspacePanelsSwapped(bool swapped, bool persistState);
     void applyWorkspacePanelArrangement();
     void cacheWorkspaceLayoutSizes();
     void restoreWorkspaceLayoutSizes();

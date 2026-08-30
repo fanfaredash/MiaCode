@@ -49,7 +49,7 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     std::function<void()>* refreshOut)
 {
     // ---- Gameplay page: skin / judge line / judge effect / slide stack /
-    //      center display. The VideoExportDialog owns the Tap/Touch flow-speed
+    //      center display. The export page owns the Tap/Touch flow-speed
     //      row above this injected MainWindow-wired grid. ----
     auto* gameplay = new QWidget(parent);
     auto* gameplayLayout = new QGridLayout(gameplay);

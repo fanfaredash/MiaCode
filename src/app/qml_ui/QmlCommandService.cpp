@@ -14,7 +14,50 @@ QmlCommandService::QmlCommandService(
 {
 }
 
-bool QmlCommandService::openDocument(const QUrl& fileUrl) { return document_->openFile(fileUrl); }
+void QmlCommandService::whenDocumentMayBeLeft(std::function<void()> proceed)
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    backend_->requestLeaveDocument([proceed = std::move(proceed)](bool mayLeave) {
+        if (mayLeave && proceed) {
+            proceed();
+        }
+    });
+}
+
+void QmlCommandService::openDocument(const QUrl& fileUrl)
+{
+    whenDocumentMayBeLeft([this, fileUrl]() { document_->openFile(fileUrl); });
+}
+
+void QmlCommandService::openRecentDocument(const QString& path)
+{
+    if (path.trimmed().isEmpty()) {
+        return;
+    }
+    whenDocumentMayBeLeft(
+        [this, path]() { document_->openFile(QUrl::fromLocalFile(path)); });
+}
+
+void QmlCommandService::newDocument()
+{
+    whenDocumentMayBeLeft([this]() { document_->createDocumentFromPickedAudio(); });
+}
+
+void QmlCommandService::restoreBackupDocument(const QString& path)
+{
+    if (path.trimmed().isEmpty()) {
+        return;
+    }
+    whenDocumentMayBeLeft([this, path]() { document_->restoreBackup(path); });
+}
+
+void QmlCommandService::closeDocument()
+{
+    whenDocumentMayBeLeft([this]() { document_->closeDocument(); });
+}
+
 bool QmlCommandService::saveDocument() { return document_->save(); }
 bool QmlCommandService::saveDocumentAs(const QUrl& fileUrl) { return document_->saveAs(fileUrl); }
 void QmlCommandService::discardDocumentChanges() { document_->discardChanges(); }
@@ -32,20 +75,11 @@ void QmlCommandService::openPreferences()
     }
 }
 
-void QmlCommandService::adjustEditorFontSize(int delta)
-{
-    if (backend_ == nullptr || delta == 0) return;
-    backend_->applyEditorTextFontSize(backend_->editorTextFontPointSize_ + delta, true);
-}
-
-bool QmlCommandService::triggerShortcutCommand(const QString& id)
-{
-    return backend_ != nullptr && backend_->triggerShortcutCommand(id);
-}
-
 QStringList QmlCommandService::shortcutCommandIds() const
 {
-    // Chart transforms only. Preview commands are bound in QML straight to
-    // QuickShellController, which already exposes them.
+    // Chart transforms only, and the shell binds them to the editor rather than
+    // back to MainWindow: a transform acts on the editor's selection, which is
+    // the one thing this side does not have. Preview commands bind straight to
+    // the preview session instead of coming through here.
     return miacode::qml_ui::qmlShortcutCommandIds();
 }

@@ -49,8 +49,13 @@ src/
     video/                   # Shared preview/video render settings
       PreviewRenderSettings.h
 
-  editor/                    # In-app text editor for chart files
-    PlainCodeEditor.*
+  editor/                    # Chart text editing, widget-free. The editor itself
+                             # is QML (app/qml_ui/editor); what lives here is the
+                             # text policy and syntax it shares.
+    SimaiTextEditPolicy.*
+    SimaiCompletionCatalog.*
+    BookmarkCommentSyntax.*
+    TouchPadAuthoringEdit.*
     BracketScopeHighlighter.*
 
   extensions/                # Local extension host, Open Bridge registry,

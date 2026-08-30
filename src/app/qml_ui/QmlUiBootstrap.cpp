@@ -6,7 +6,6 @@
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
 #include "mainwindow/MainWindow.h"
-#include "QuickShellController.h"
 #include "UiNativeWindowTheme.h"
 #include "ui/ChartDropOverlay.h"
 #include "common/DebugLog.h"
@@ -65,7 +64,6 @@ QmlUiBootstrap::~QmlUiBootstrap()
     engine_.reset();
     windowChrome_.reset();
     applicationContext_.reset();
-    controller_.reset();
     backend_.reset();
 }
 
@@ -76,23 +74,18 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
 
     backend_ = std::make_unique<MainWindow>();
     backend_->setQuickShellBackendActive(true);
-    backend_->setQmlExportCenterActive(true);
     backend_->hide();
     backend_->setVisible(false);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
-    controller_ = std::make_unique<QuickShellController>(
-        backend_.get(), backend_.get(), this);
+    applicationContext_ = std::make_unique<QmlApplicationContext>(*backend_, this);
     QObject::connect(
-        controller_.get(),
-        &QuickShellController::rootCloseAccepted,
+        static_cast<miacode::qml_ui::QmlShellLifecycle*>(applicationContext_->shell()),
+        &miacode::qml_ui::QmlShellLifecycle::rootCloseAccepted,
         this,
         [this](const QString& source) {
             beginAcceptedRootWindowShutdown(source);
         });
-
-    applicationContext_ = std::make_unique<QmlApplicationContext>(
-        *backend_, *controller_, this);
     engine_ = std::make_unique<QQmlApplicationEngine>(this);
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
     registerQmlNoteImageProvider(
@@ -123,12 +116,6 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             QTextStream(stderr).flush();
         });
 
-    qmlRegisterUncreatableType<QuickShellController>(
-        "MiaCode.QuickShell",
-        1,
-        0,
-        "QuickShellController",
-        "Quick shell controller is provided by bootstrap.");
 
     engine_->setInitialProperties({
         {QStringLiteral("applicationContext"),
@@ -147,8 +134,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         releaseRootWindowResources();
         engine_.reset();
         applicationContext_.reset();
-        controller_.reset();
-        backend_.reset();
+            backend_.reset();
         return false;
     }
 
@@ -304,7 +290,6 @@ void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& so
     engine_.reset();
     windowChrome_.reset();
     applicationContext_.reset();
-    controller_.reset();
     backend_.reset();
 
     if (qApp != nullptr) {

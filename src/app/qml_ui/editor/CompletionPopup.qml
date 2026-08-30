@@ -122,7 +122,7 @@ Popup {
             font: Theme.codeFont
         }
 
-        delegate: ItemDelegate {
+        delegate: ChromeRow {
             id: candidateRow
 
             // Declaring modelData as a required property switches the whole
@@ -135,24 +135,9 @@ Popup {
 
             width: candidateList.width
             implicitHeight: 26
-            hoverEnabled: true
             highlighted: candidateRow.index === root.controller.completionIndex
-
-            contentItem: Text {
-                text: candidateRow.modelData
-                color: candidateRow.highlighted
-                    ? Theme.colors.text.active
-                    : Theme.colors.text.secondary
-                font: Theme.codeFont
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-
-            background: HoverChrome {
-                selected: candidateRow.highlighted
-                hovered: candidateRow.hovered
-                tone: "nav"
-            }
+            text: candidateRow.modelData
+            labelFont: Theme.codeFont
 
             onClicked: {
                 root.controller.selectCompletionIndex(candidateRow.index)

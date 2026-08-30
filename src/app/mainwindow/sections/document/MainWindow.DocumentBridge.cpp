@@ -169,7 +169,6 @@ bool MainWindow::DocumentSection::updateActiveChartText(const QString& value)
         return false;
     }
     difficulty->chart = value;
-    setEditorText(value);
     state_.documentDirty_ = true;
     markCurrentFieldDirty();
     updateDirtyState();
@@ -335,7 +334,9 @@ bool MainWindow::addDocumentDifficulty(int difficultyId)
 
 bool MainWindow::removeDocumentDifficulty(int difficultyId)
 {
-    return documentSection_->deleteDifficultyField(difficultyId);
+    // The shell asked before calling: DifficultyList.qml's own confirm dialog
+    // is the question, and this used to raise a second one behind it.
+    return documentSection_->deleteDifficultyField(difficultyId, /*alreadyConfirmed=*/true);
 }
 
 void MainWindow::enableUnifiedDocumentDesigner(const QString& canonicalName)
@@ -435,6 +436,17 @@ bool MainWindow::DocumentSection::applyCommittedQmlDocument(
     state_.currentFieldDirty_ = false;
     anchorCurrentFieldCleanState();
     updateDirtyState();
+    // An edit landed: source text moved and the document is not at its save
+    // point. Opening and saving both reach here too, and neither is an edit —
+    // the first leaves the source unchanged relative to what was just loaded,
+    // and both leave the document clean.
+    //
+    // updateDirtyState() runs first because it is what starts the routine
+    // autosave timer; this adds the per-edit half back, which left with the
+    // hidden chart editor that used to drive it.
+    if (sourceChanged && dirty) {
+        noteDocumentEditedForAutosave();
+    }
     owner_.updateWindowTitle();
     return true;
 }
@@ -449,8 +461,28 @@ bool MainWindow::applyCommittedQmlDocument(
         usedSystemEncoding);
 }
 
+void MainWindow::setQmlChartTextHandler(std::function<bool(const QString&)> handler)
+{
+    qmlChartTextHandler_ = std::move(handler);
+}
+
+bool MainWindow::applyChartTextThroughWorkspace(const QString& text)
+{
+    // No handler means no QML document owner is attached, which in v2 only
+    // happens before bootstrap finishes. Refuse rather than fall back to the
+    // local copy: a write that does not reach the workspace is lost on the
+    // next commit, which is worse than a reported failure.
+    return qmlChartTextHandler_ ? qmlChartTextHandler_(text) : false;
+}
+
 void MainWindow::setQmlDocumentSaveHandler(
     std::function<bool(const QString&)> handler)
 {
     qmlDocumentSaveHandler_ = std::move(handler);
+}
+
+void MainWindow::setQmlLeaveDocumentHandler(
+    std::function<void(std::function<void(bool)>)> handler)
+{
+    qmlLeaveDocumentHandler_ = std::move(handler);
 }

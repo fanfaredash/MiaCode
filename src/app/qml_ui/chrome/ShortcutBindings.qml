@@ -18,10 +18,17 @@ Item {
 
     required property var shortcuts
     required property var commands
-    required property var shellController
+    required property var previewSession
+    required property var preferencesModel
     required property bool sourceEditorFocused
     // Transforms edit the chart, so they are inert without one.
     property bool chartCommandsEnabled: true
+
+    // A transform acts on the editor's selection, which only the editor knows.
+    // Routing it through the backend meant reading a hidden widget's cursor
+    // that nothing ever synced from here, so every transform found an empty
+    // selection and silently did nothing.
+    signal chartTransformRequested(string opId)
 
     Instantiator {
         model: root.commands.shortcutCommandIds()
@@ -33,20 +40,20 @@ Item {
                 : ""
             enabled: root.chartCommandsEnabled && sequence !== ""
             context: Qt.WindowShortcut
-            onActivated: root.commands.triggerShortcutCommand(modelData)
+            onActivated: root.chartTransformRequested(modelData)
         }
     }
 
-    // Preview commands already have a QML-facing surface on the shell
-    // controller, so they bind straight to it instead of going through the
-    // backend command table.
+    // Preview commands bind straight to the preview session instead of going
+    // through the backend command table.
     Shortcut {
         sequence: root.shortcuts.revision >= 0
             ? root.shortcuts.sequence("editor.font_decrease", "Ctrl+Alt+-")
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.commands.adjustEditorFontSize(-1)
+        onActivated: root.preferencesModel.setEditorFontSize(
+                         root.preferencesModel.editorFontSize - 1)
     }
 
     Shortcut {
@@ -55,7 +62,8 @@ Item {
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.commands.adjustEditorFontSize(1)
+        onActivated: root.preferencesModel.setEditorFontSize(
+                         root.preferencesModel.editorFontSize + 1)
     }
 
     Shortcut {
@@ -64,7 +72,7 @@ Item {
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.shellController.stopPreview()
+        onActivated: root.previewSession.stop()
     }
 
     Shortcut {
@@ -73,7 +81,7 @@ Item {
             : ""
         enabled: sequence !== "" && !root.sourceEditorFocused
         context: Qt.ApplicationShortcut
-        onActivated: root.shellController.togglePreviewPlayback()
+        onActivated: root.previewSession.togglePlayback()
     }
 
     Shortcut {
@@ -82,7 +90,7 @@ Item {
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.shellController.adjustPreviewSpeed(-1)
+        onActivated: root.previewSession.adjustRate(-1)
     }
 
     Shortcut {
@@ -91,6 +99,6 @@ Item {
             : ""
         enabled: sequence !== ""
         context: Qt.WindowShortcut
-        onActivated: root.shellController.adjustPreviewSpeed(1)
+        onActivated: root.previewSession.adjustRate(1)
     }
 }

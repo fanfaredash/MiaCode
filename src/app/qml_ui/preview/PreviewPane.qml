@@ -7,7 +7,8 @@ Rectangle {
     id: root
 
     required property var previewSession
-    required property var shellController
+    // See PreviewTransport: the fullscreen button hides on the export page.
+    property bool exportPageActive: false
     // MainSplitView keeps the transport chrome mounted for layout stability, but
     // exactly one PreviewSurface may subscribe to the runtime at a time. The
     // compact and fullscreen owners use the same rule.
@@ -18,8 +19,8 @@ Rectangle {
     // Mirror QuickShellMain: backend aspect is authoritative (export page
     // widens the canvas; chart/latency stay 1:1). Prefer width/height >= 1.
     readonly property real canvasAspectRatio: {
-        const ratio = root.shellController && root.shellController.previewCanvasAspectRatio !== undefined
-                      ? root.shellController.previewCanvasAspectRatio
+        const ratio = root.previewSession && root.previewSession.canvasAspectRatio !== undefined
+                      ? root.previewSession.canvasAspectRatio
                       : 1.0
         return Math.max(1.0, ratio)
     }
@@ -45,10 +46,10 @@ Rectangle {
         anchors.top: parent.top
         title: qsTr("预览")
 
-        AbstractButton {
+        ChromeRow {
             id: renderModeButton
-            implicitWidth: renderModeLabelText.implicitWidth + 16
-            hoverEnabled: true
+            implicitWidth: renderModeLabelText.implicitWidth + leftPadding + rightPadding
+            tone: "icon"
             focusPolicy: Qt.TabFocus
             Accessible.name: root.previewSession.renderModeLabel
             Accessible.description: qsTr("打开预览渲染模式菜单")
@@ -74,11 +75,6 @@ Rectangle {
                 verticalAlignment: Text.AlignVCenter
             }
 
-            background: HoverChrome {
-                hovered: renderModeButton.hovered
-                pressed: renderModeButton.down
-                tone: "icon"
-            }
         }
     }
 
@@ -109,7 +105,7 @@ Rectangle {
                 anchors.fill: parent
                 runtime: root.previewSession.runtime
                 mediaHost: root.previewSession.mediaHost
-                logger: root.shellController
+                logger: root.previewSession
                 surfaceRole: "workspace"
             }
         }
@@ -121,7 +117,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: statistics.top
         previewSession: root.previewSession
-        shellController: root.shellController
+        exportPageActive: root.exportPageActive
         onFullscreenRequested: root.fullscreenRequested()
     }
 

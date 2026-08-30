@@ -9,6 +9,16 @@ public:
     DocumentSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
 
     bool maybeSaveBeforeContinue();
+    // The same decision, asked without blocking. The v2 shell has no place to
+    // run a nested event loop from — a window's close handler least of all — so
+    // the answer arrives as a continuation and the prompt itself is a QML
+    // dialog. `onDecided(true)` means "the document may be left behind".
+    //
+    // A clean document decides immediately, in this call; only a prompt defers.
+    void requestLeaveDocument(std::function<void(bool)> onDecided);
+    // Everything that happens once the choice is in, shared by both forms so
+    // they cannot drift.
+    bool applyUnsavedChangesChoice(const QString& choiceId, const QString& logContext);
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     QString documentField(MainWindow::DocumentField field) const;
@@ -39,6 +49,8 @@ public:
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
     void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
+    // Continuation of restoreBackupFilePath once the confirm is answered.
+    void applyBackupFile(const QString& normalizedPath, const QString& title);
     bool restoreLastSessionFile();
     void scheduleStartupRestoreLastSessionFile();
     void cancelPendingStartupRestore();
@@ -57,26 +69,32 @@ public:
     // file that would prompt "recover unsaved changes?" on next open.
     void cleanupCrashRecoveryForCleanExit();
     QString resolveAutosaveDirectoryPath() const;
+    // The 恢复备份 list as values, so a QML menu can show it. Same entries and
+    // same labels as the Widgets menu built, including its collision rule.
+    QVariantList backupDocumentEntries();
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void runAutosaveCheck(bool allowHistory = true);
     bool onSaveFile();
     bool onSaveFileAs();
     bool saveToPath(const QString& path);
-    bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
-    bool applySelectionBatchTransform(const QString& opName, const BatchTransform& transform);
-    bool applySelectionBatchTransform(const QString& opName, const SelectionContextBatchTransform& transform);
-    std::pair<int, int> currentCursorLineCol() const;
-    std::pair<int, int> currentSelectionOrCursorLineCol() const;
-    bool currentSelectionRange(int* startPos, int* endPos) const;
     void setMetadataExtraText(const QString& text);
-    void setEditorText(const QString& text);
     void updatePauseButtonAppearance();
     void updateDirtyState();
     bool currentFieldHasUndoChanges() const;
     void anchorCurrentFieldCleanState();
     void refreshCurrentFieldDirtyState();
     void markCurrentFieldDirty();
+    // The per-edit autosave safety net: restart the 2s debounce that writes
+    // latest.bak, and push the document into the crash handler's snapshot
+    // mailbox so an abnormal exit in the next moments still leaves something
+    // recoverable.
+    //
+    // Its driver used to be the hidden chart editor's textChanged, and it went
+    // out with that editor — leaving v2 with only the 2-minute routine snapshot
+    // and, worse, with nothing at all in the crash mailbox. The v2 commit path
+    // calls it now, which is where an edit actually lands.
+    void noteDocumentEditedForAutosave();
     void clearDeletedDifficultyUndoState();
     bool undoDeletedDifficultyField();
     void clearChartSelectionTransformUndoEntries();
@@ -95,23 +113,19 @@ public:
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
-    bool createChartsFromAudioDrop(const QStringList& audioPaths);
-    QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
-    void onMirrorLeftRight();
-    void onMirrorUpDown();
-    void onRotate180();
-    void onRotate45CounterClockwise();
-    void onRotate45Clockwise();
+    // One dropped audio file and where its chart folder will go. Named here
+    // rather than in the .cpp because the drop is now two prompts long: the
+    // candidates have to survive from the first answer to the last.
+    struct DroppedChartCandidate {
+        QString sourcePath;
+        QString sourceDirectory;
+        QString extension;
+        QString targetDirectory;
+    };
+    void createChartsFromAudioDrop(const QStringList& audioPaths);
+    void finishChartsFromAudioDrop(
+        const QList<DroppedChartCandidate>& candidates, QElapsedTimer dropTimer);
     void onNormalizeWholeChart();
-    void onToggleBreakSelection();
-    void onToggleExSelection();
-    void onToggleFireworkSelection();
-    void onRandomRotateSelection();
-    void onClearCompleteElementsSelection();
-    void onRaiseSubdivisionSelection();
-    void onLowerSubdivisionSelection();
-    void onRaiseSubdivisionHalfStepSelection();
-    void onLowerSubdivisionHalfStepSelection();
     void updateEditorHeader();
     void updateDifficultyScopedActionStates();
     void updateEditorHeaderLayoutMode();
@@ -119,7 +133,10 @@ public:
     void updateEditorStatus();
     void updateEditorEmptyState();
     void updateMetadataPageMode();
-    bool deleteDifficultyField(int difficultyId);
+    // `alreadyConfirmed` is what the v2 shell passes: DifficultyList.qml puts
+    // the question up itself, and asking again here was a second dialog on top
+    // of an answered one.
+    bool deleteDifficultyField(int difficultyId, bool alreadyConfirmed = false);
     void rebuildFieldSidebar();
     // Sidebar bookmark-group fold state. Only explicit toggles are recorded;
     // an untouched difficulty defaults to expanded when active, collapsed
@@ -150,7 +167,6 @@ public:
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();
-    void applyDifficultySwitchEditorScrollRestore(int verticalScrollValue, int horizontalScrollValue);
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:

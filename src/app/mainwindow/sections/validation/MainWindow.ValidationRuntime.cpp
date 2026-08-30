@@ -5,7 +5,6 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -707,7 +706,6 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelectionsForReason(QStringLiteral("validation_refresh"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
 }
@@ -901,7 +899,6 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelectionsForReason(QStringLiteral("explicit_validate"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
     if (focusFirstIssue && !entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {

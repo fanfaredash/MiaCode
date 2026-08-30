@@ -138,6 +138,14 @@ void MainWindow::TimelineSection::updatePreviewSliderRange()
 
 void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
 {
+    // The v2 transport's twin of the slider below, and announced before the
+    // guards rather than after: the guards are about a v1 widget that may not
+    // exist and about a v1 drag, neither of which is a reason to leave the QML
+    // transport behind. This is the one place the playhead is published from,
+    // which is why the export intro — whose lead-in moves the playhead without
+    // ever reaching applyQtPreviewPosition — is now visible to the shell at
+    // all. Before this, the intro played while the QML thumb sat at 0.
+    emit owner_.shellPreviewPlayheadChanged();
     if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
         return;
     }
@@ -484,7 +492,7 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
         ui_.editorStack_->updateGeometry();
         // updateGeometry() alone only marks the stack's size hint dirty — it does
         // NOT re-lay-out the current page. The export page inserts a heavy embedded
-        // VideoExportDialog panel on entry, so its (and any freshly-shown page's)
+        // export page on entry, so its (and any freshly-shown page's)
         // internal layout must be invalidated + activated here, or its children
         // keep the geometry they were first built with. invalidate() clears cached
         // sizeHints so the just-inserted panel is measured fresh; activate() does a

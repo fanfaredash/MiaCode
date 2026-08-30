@@ -6,6 +6,19 @@
 
 namespace miacode::v2 {
 
+// The QML editor's live selection, as last reported through setEditorContext.
+// `valid` means an editor is showing a chart and its identity is known; a
+// caller that needs to act on the selection must still stamp its own request
+// with the same (difficultyId, revision) so the gate can refuse a stale one.
+struct EditorSelectionState {
+    int difficultyId = -1;
+    quint64 revision = 0;
+    int anchor = 0;
+    int position = 0;
+    bool focused = false;
+    bool valid = false;
+};
+
 struct EditorFollowState {
     int difficultyId = -1;
     quint64 revision = 0;
@@ -47,6 +60,7 @@ public:
                                              int start, int end, bool focus, bool reveal);
     bool requestTouchPadAuthoring(const QString& pad, bool useBacktickSeparator);
     bool editorContextActive() const;
+    EditorSelectionState editorSelection() const;
 
     Q_INVOKABLE void setEditorReadiness(int difficultyId, qulonglong revision,
                                         bool visible, bool metadataMode);

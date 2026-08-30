@@ -23,12 +23,20 @@ public:
     explicit ChartWorkspaceFileService(ChartWorkspace& workspace);
 
     ChartWorkspaceFileResult open(const QString& path) const;
-    ChartWorkspaceFileResult save() const;
-    ChartWorkspaceFileResult saveAs(const QString& path) const;
+    // Write an empty chart at `path`, creating its folder if needed. The
+    // workspace is untouched — the caller opens the file afterwards, so a new
+    // document arrives through the same door as any other and starts on a real
+    // save point rather than dirty-on-arrival.
+    ChartWorkspaceFileResult createEmptyDocument(const QString& path) const;
+    // Saves one section — the difficulty being worked in — leaving every other
+    // difficulty on disk exactly as it was. difficultyId 0 saves the whole
+    // document, which is what the whole-source view means by its section.
+    ChartWorkspaceFileResult save(int difficultyId) const;
+    ChartWorkspaceFileResult saveAs(const QString& path, int difficultyId) const;
 
 private:
     static QString decodeDocumentText(const QByteArray& bytes, bool* usedSystemEncoding);
-    ChartWorkspaceFileResult writeToPath(const QString& path) const;
+    ChartWorkspaceFileResult writeToPath(const QString& path, int difficultyId) const;
 
     ChartWorkspace* workspace_ = nullptr;
 };

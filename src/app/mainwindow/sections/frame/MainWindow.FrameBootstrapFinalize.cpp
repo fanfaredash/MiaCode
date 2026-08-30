@@ -13,7 +13,6 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
@@ -568,10 +567,6 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     if (workspaceContentWidget_ != nullptr) {
         workspaceContentWidget_->installEventFilter(this);
     }
-    editorViewport_ = qobject_cast<PlainCodeEditor*>(editorWidget_)->viewport();
-    if (editorViewport_ != nullptr) {
-        editorViewport_->installEventFilter(this);
-    }
     if (editorFindEdit_ != nullptr) {
         editorFindEdit_->installEventFilter(this);
         connect(editorFindEdit_, &QLineEdit::returnPressed, this, &MainWindow::onFindNext);
@@ -643,10 +638,9 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     connect(fontIncreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
         applyEditorFontDelta(1);
     });
-    statusBar()->showMessage("PlainCodeEditor ready.");
+    statusBar()->showMessage("Editor ready.");
 
     loadPortableState();
-    applyAppBackgroundSettings(appBackgroundSettings_, false);
     applyWorkspacePanelArrangement();
     windowSection_->setOutlineDockCollapsed(outlineDockCollapsed_);
     logStartupStage("portable_state_loaded");

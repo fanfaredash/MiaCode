@@ -44,3 +44,60 @@ void QmlShortcutModel::reload()
 }
 
 } // namespace miacode::qml_ui
+
+namespace miacode::qml_ui {
+
+QVariantList QmlShortcutModel::editableShortcuts() const
+{
+    QVariantList rows;
+    ShortcutRegistry& registry = ShortcutRegistry::instance();
+    for (const ShortcutRegistry::ShortcutDefinition& definition : registry.editableShortcuts()) {
+        const QStringList current = registry.shortcutTexts(definition.id);
+        const QStringList defaults = registry.defaultShortcutTexts(definition.id);
+        QVariantMap row;
+        row.insert(QStringLiteral("id"), definition.id);
+        // Labels stay raw here. Resolving them would pull UiText — and with it
+        // the extension manifest loader — into this model and every spec that
+        // links it; the shell resolves labelKey through its own preferences
+        // object instead, falling back to labelEn and then the id.
+        row.insert(QStringLiteral("labelKey"), definition.labelKey);
+        row.insert(
+            QStringLiteral("labelFallback"),
+            definition.labelEn.isEmpty() ? definition.id : definition.labelEn);
+        row.insert(QStringLiteral("shortcutText"), current.join(QStringLiteral(", ")));
+        row.insert(QStringLiteral("defaultText"), defaults.join(QStringLiteral(", ")));
+        row.insert(QStringLiteral("isDefault"), current == defaults);
+        rows.append(row);
+    }
+    return rows;
+}
+
+bool QmlShortcutModel::setShortcutText(const QString& id, const QString& shortcutText)
+{
+    if (!ShortcutRegistry::instance().setUserShortcutText(id, shortcutText)) {
+        return false;
+    }
+    reload();
+    return true;
+}
+
+void QmlShortcutModel::resetShortcut(const QString& id)
+{
+    if (ShortcutRegistry::instance().resetUserShortcut(id)) {
+        reload();
+    }
+}
+
+QString QmlShortcutModel::keyName(int key) const
+{
+    return QKeySequence(key).toString(QKeySequence::PortableText);
+}
+
+void QmlShortcutModel::resetAllShortcuts()
+{
+    if (ShortcutRegistry::instance().resetEditableShortcuts()) {
+        reload();
+    }
+}
+
+}  // namespace miacode::qml_ui

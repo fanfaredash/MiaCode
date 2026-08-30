@@ -102,21 +102,32 @@ Rectangle {
         root.scheduleEditorContext(false)
     }
 
-    // The QML undo stack belongs to one difficulty's source. It is reset when
-    // the editor actually changes documents — not on every controller-sourced
-    // text sync, which is what silently emptied the user's history whenever the
-    // backend pushed normalized text back.
-    property int historyDifficultyId: -1
-    property bool historyMetadataMode: false
-    property bool historyIdentityValid: false
+    // Which view's undo history the editor is looking at. The controller keeps
+    // one per view, so switching difficulty changes the name and disturbs
+    // nothing — a history is only discarded when its tab closes or the whole
+    // document is replaced.
+    //
+    // A function, not a bound property, and this is the whole point. The
+    // session updates its state and then emits, in order: chartTextChanged
+    // first, currentDifficultyChanged after. A binding on currentDifficultyId
+    // is therefore still holding the OUTGOING difficulty at the moment the
+    // incoming text arrives — so naming the scope from a binding named the
+    // difficulty being left, and every edit typed afterwards was recorded into
+    // its history. Ctrl+Z in one difficulty then replayed another's edits.
+    // Reading the property directly gets the value that is already correct.
+    function currentHistoryScopeId() {
+        return root.metadataMode
+            ? "metadata"
+            : "difficulty:" + root.documentSession.currentDifficultyId
+    }
 
     function syncTextFromController() {
         const controllerText = root.metadataMode
             ? root.documentSession.metadataSourceText
             : root.documentSession.chartText
-        const identityChanged = !root.historyIdentityValid
-            || root.historyDifficultyId !== root.documentSession.currentDifficultyId
-            || root.historyMetadataMode !== root.metadataMode
+        // Named before the text moves: the swap below must not be able to land
+        // a recording in the outgoing view's history.
+        root.editorController.setHistoryScope(root.currentHistoryScopeId())
         if (sourceArea.text !== controllerText) {
             root.editorController.closeCompletion()
             root.beginProgrammaticSelection()
@@ -129,13 +140,6 @@ Rectangle {
             sourceArea.historyPosition = sourceArea.selectionEnd
             updateCursorPosition()
         }
-        if (!identityChanged)
-            return
-        root.historyDifficultyId = root.documentSession.currentDifficultyId
-        root.historyMetadataMode = root.metadataMode
-        root.historyIdentityValid = true
-        root.editorController.resetQmlHistory(controllerText, sourceArea.historyAnchor,
-                                              sourceArea.historyPosition)
     }
     readonly property real codeLineHeight: sourceArea.cursorRectangle.height
     // 每个逻辑行顶部在文档坐标系中的 y。自动换行后行高不再固定，
@@ -335,6 +339,36 @@ Rectangle {
         root.viewState.editorCursorColumn = lines[lines.length - 1].length + 1
     }
 
+    // Human-readable summary of what normalize will act on.
+    function selectionDescription() {
+        if (sourceArea.selectionStart === sourceArea.selectionEnd)
+            return qsTr("将规范化整份谱面正文。")
+        const startLine = sourceArea.text.substring(0, sourceArea.selectionStart).split("\n").length
+        const endLine = sourceArea.text.substring(0, sourceArea.selectionEnd).split("\n").length
+        return qsTr("将规范化选中的第 %1 - %2 行。").arg(startLine).arg(endLine)
+    }
+
+    function applyNormalization(options) {
+        const transaction = root.documentSession.normalizeChartSelection(
+            sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd, options)
+        if (!transaction.consumed || !transaction.hasEdit)
+            return false
+        return root.applyEditorTransaction(transaction, false)
+    }
+
+    // 谱面变换 uses the same transaction path as normalization, so a mirror or a
+    // subdivision step lands on the undo stack as one step and the selection
+    // survives it. Returns false when there is nothing selected to act on.
+    function applyChartTransform(opId) {
+        if (root.metadataMode)
+            return false
+        const transaction = root.documentSession.transformChartSelection(
+            sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd, opId)
+        if (!transaction.consumed || !transaction.hasEdit)
+            return false
+        return root.applyEditorTransaction(transaction, false)
+    }
+
     function applyEditorTransaction(transaction, centerCursor) {
         if (!transaction.consumed)
             return false
@@ -399,7 +433,12 @@ Rectangle {
         parent: Overlay.overlay
         modal: true
         title: qsTr("重命名书签")
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        footer: DialogFooter {
+            acceptText: qsTr("确定")
+            cancelText: qsTr("取消")
+            onAccepted: bookmarkTitleDialog.accept()
+            onRejected: bookmarkTitleDialog.reject()
+        }
         onAccepted: root.renameBookmarkAtLine(root.pendingBookmarkLine, bookmarkTitleField.text)
         AppTextField {
             id: bookmarkTitleField
@@ -412,6 +451,12 @@ Rectangle {
         id: editorContextMenu
         objectName: "editorContextMenu"
         parent: Overlay.overlay
+
+        readonly property var transformRows: root.documentSession.chartTransformMenu()
+        // sourceArea keeps its selection while the popup holds focus
+        // (persistentSelection), so this can bind live like 剪切 / 复制 above.
+        readonly property bool hasSelection:
+            sourceArea.selectedText.length > 0 && !root.metadataMode
 
         AppMenuItem {
             text: qsTr("剪切")
@@ -435,6 +480,52 @@ Rectangle {
         AppMenuItem {
             text: qsTr("查找与替换")
             onTriggered: root.openFindReplace()
+        }
+        AppMenuSeparator {}
+
+        // Same rows, labels and grouping as the menubar's 调整 menu — both read
+        // documentSession.chartTransformMenu(). Every one of them edits the
+        // selection, so they are disabled without one.
+        Repeater {
+            model: editorContextMenu.transformRows.filter(row => row.section === 0)
+            delegate: AppMenuItem {
+                required property var modelData
+                text: modelData.label
+                enabled: editorContextMenu.hasSelection
+                onTriggered: root.applyChartTransform(modelData.id)
+            }
+        }
+        AppMenuSeparator {}
+        Repeater {
+            model: editorContextMenu.transformRows.filter(row => row.section === 1)
+            delegate: AppMenuItem {
+                required property var modelData
+                text: modelData.label
+                enabled: editorContextMenu.hasSelection
+                onTriggered: root.applyChartTransform(modelData.id)
+            }
+        }
+        AppMenuSeparator {}
+        Repeater {
+            model: editorContextMenu.transformRows.filter(row => row.section === 2)
+            delegate: AppMenuItem {
+                required property var modelData
+                text: modelData.label
+                enabled: editorContextMenu.hasSelection
+                onTriggered: root.applyChartTransform(modelData.id)
+            }
+        }
+        AppMenu {
+            title: root.documentSession.chartTransformMoreLabel()
+            enabled: editorContextMenu.hasSelection
+            Repeater {
+                model: editorContextMenu.transformRows.filter(row => row.section === 3)
+                delegate: AppMenuItem {
+                    required property var modelData
+                    text: modelData.label
+                    onTriggered: root.applyChartTransform(modelData.id)
+                }
+            }
         }
     }
 
@@ -671,11 +762,15 @@ Rectangle {
                 historyText = text
                 historyAnchor = selectionStart
                 historyPosition = selectionEnd
-                root.editorController.resetQmlHistory(text, historyAnchor, historyPosition)
                 root.editorController.setDocumentContextForQml(
                     root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
                 root.updateCursorPosition()
                 editorScroll.refreshLineTops()
+            }
+
+            EditorTextStyle {
+                textDocument: sourceArea.textDocument
+                blockSpacing: Theme.codeBlockSpacing
             }
 
             SimaiSyntaxHighlighter {
@@ -792,6 +887,11 @@ Rectangle {
     }
 
     Connections {
+        target: root.viewState
+        function onEditorClosed(key) { root.editorController.dropHistoryScope(key) }
+    }
+
+    Connections {
         target: root.documentSession
         function onChartTextChanged() {
             if (!root.metadataMode)
@@ -806,14 +906,18 @@ Rectangle {
         }
         function onDocumentReplaced() {
             // A different chart is a different history, even when it happens to
-            // reuse the outgoing document's active difficulty id.
-            root.historyIdentityValid = false
+            // reuse the outgoing document's difficulty ids.
+            root.editorController.clearAllHistory()
             root.syncTextFromController()
             root.documentSession.logEditorDocumentState(
                 "document_replaced", root.documentSession.currentDifficultyId,
                 root.documentSession.documentRevision, sourceArea.text.length, root.metadataMode)
         }
         function onDocumentStateChanged() {
+            // Every commit re-asserts the scope. syncTextFromController already
+            // names it on the paths that move text; this covers the ones that
+            // change which difficulty is active without changing any text.
+            root.editorController.setHistoryScope(root.currentHistoryScopeId())
             root.editorController.setDocumentContextForQml(
                 root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
             root.publishNavigationReadiness()

@@ -1,5 +1,6 @@
 #include "app/qml_ui/QmlEditorController.h"
 #include "app/qml_ui/QmlEditorInputBridge.h"
+#include "app/qml_ui/EditorTextStyle.h"
 #include "app/qml_ui/SimaiSyntaxHighlighter.h"
 #include "app/v2/ChartWorkspace.h"
 #include "editor/BookmarkCommentSyntax.h"
@@ -247,7 +248,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
     miacode::v2::ChartWorkspace workspace;
     workspace.openSource(source, QStringLiteral("chart.txt"), 5);
 
-    controller.resetQmlHistory(openedChart, 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(
         openedChart, editedChart, 0, 0, editedChart.size(), editedChart.size());
     workspace.replaceActiveDifficultyChart(editedChart);
@@ -261,7 +262,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
     workspace.replaceActiveDifficultyChart(editedChart);
     workspace.markSaved();
     const QString postSaveEdit = QStringLiteral("(120){4}3,");
-    controller.resetQmlHistory(editedChart, 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(
         editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
     workspace.replaceActiveDifficultyChart(postSaveEdit);
@@ -274,7 +275,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
 
     workspace.updateDocumentField(
         ChartWorkspaceDocumentField::Title, QStringLiteral("metadata-dirty"));
-    controller.resetQmlHistory(editedChart, 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(
         editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
     workspace.replaceActiveDifficultyChart(postSaveEdit);
@@ -675,10 +676,9 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
            QStringLiteral("a Ctrl/Command click seeks the preview to the caret it just placed"),
            out, failed);
 
-    // The undo stack must survive a controller-sourced text sync and be reset
-    // only when the editor changes documents. resetQmlHistory used to run on
-    // every sync, so any backend push emptied the user's history.
-    editorItem->setProperty("historyIdentityValid", true);
+    // Undo history belongs to a view. It must survive a controller-sourced text
+    // sync (a backend push is not the user's edit), survive a switch to another
+    // difficulty and back, and go only when the whole document is replaced.
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 30));
     QCoreApplication::processEvents();
     QKeyEvent typed(QEvent::KeyPress, Qt::Key_9, Qt::NoModifier, QStringLiteral("9"));
@@ -699,9 +699,17 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
     session->setProperty("chartText", QStringLiteral("1,1,1,1,"));
     QCoreApplication::processEvents();
     expect(!controller.canUndo(),
-           QStringLiteral("switching to another difficulty resets the undo history"), out, failed);
+           QStringLiteral("another difficulty starts on its own empty history"), out, failed);
     session->setProperty("currentDifficultyId", 3);
+    session->setProperty("chartText", QStringLiteral("1,2,3,4,\n5,6,7,8,\n9,"));
     QCoreApplication::processEvents();
+    // The one that used to fail: switching away and back used to throw the
+    // history out in both directions.
+    expect(controller.canUndo(),
+           QStringLiteral("switching back finds that difficulty's history intact"), out, failed);
+    controller.dropHistoryScope(QStringLiteral("difficulty:3"));
+    expect(!controller.canUndo(),
+           QStringLiteral("closing a tab takes its history with it"), out, failed);
 
     // Rehighlighting is a formatting pass, not an edit. setDiagnostics used to
     // rehighlight synchronously from inside a binding evaluation, and TextEdit
@@ -890,6 +898,99 @@ bool verifyEditorTabsRecoverTheActiveDifficulty(QTextStream& out, int* failed)
                   QStringLiteral("syncing difficulties restores the active difficulty's editor"),
                   out, failed);
 }
+
+bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+        import QtQuick
+        import QtQuick.Controls
+        import MiaCode.UI
+
+        Window {
+            width: 480
+            height: 34
+            visible: true
+
+            QtObject {
+                id: documentSession
+                property var difficulties: [
+                    { id: 5, label: "BASIC", designer: "" },
+                    { id: 6, label: "ADVANCED", designer: "" },
+                    { id: 7, label: "EXPERT", designer: "" }
+                ]
+                property var dirtyEditorKeys: []
+                property string currentFilePath: ""
+                property string currentFileName: ""
+                function saveDifficultySection(difficultyId) { return true }
+                function revertDifficultyChart(difficultyId) { return true }
+            }
+
+            QtObject { id: commands }
+
+            ViewState {
+                id: state
+                objectName: "tabDragViewState"
+                Component.onCompleted: {
+                    openMetadataEditor()
+                    openDifficultyEditor(5)
+                    openDifficultyEditor(6)
+                }
+            }
+
+            EditorTabBar {
+                objectName: "editorTabBar"
+                anchors.fill: parent
+                viewState: state
+                documentSession: documentSession
+                commands: commands
+            }
+        }
+    )QML", QUrl(QStringLiteral("qrc:/EditorTabBarDragSpec.qml")));
+    if (!expect(component.isReady(),
+                QStringLiteral("real EditorTabBar.qml loads in the drag harness"), out, failed)) {
+        for (const QQmlError& error : component.errors()) out << error.toString() << '\n';
+        return false;
+    }
+    std::unique_ptr<QObject> root(component.create());
+    auto* window = qobject_cast<QQuickWindow*>(root.get());
+    if (!expect(window != nullptr,
+                QStringLiteral("editor-tab drag harness creates a window"), out, failed)) {
+        return false;
+    }
+    window->show();
+    Q_UNUSED(QTest::qWaitForWindowExposed(window));
+    QCoreApplication::processEvents();
+
+    QObject* state = window->findChild<QObject*>(QStringLiteral("tabDragViewState"));
+    if (!expect(state != nullptr,
+                QStringLiteral("editor-tab drag harness exposes its real view state"), out, failed)) {
+        return false;
+    }
+    if (!expect(state->property("openEditorTabs").toStringList()
+                    == QStringList{QStringLiteral("metadata"),
+                                   QStringLiteral("difficulty:5"),
+                                   QStringLiteral("difficulty:6")},
+                QStringLiteral("the drag harness starts with metadata and two ordered difficulty tabs"), out, failed)) {
+        return false;
+    }
+
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 17));
+    QTest::mouseMove(window, QPoint(240, 17), 20);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, QPoint(240, 17));
+    QCoreApplication::processEvents();
+
+    return expect(state->property("openEditorTabs").toStringList()
+                      == QStringList{QStringLiteral("difficulty:5"),
+                                     QStringLiteral("metadata"),
+                                     QStringLiteral("difficulty:6")}
+                      && state->property("activeEditorKey").toString()
+                          == QStringLiteral("difficulty:6"),
+                  QStringLiteral("dragging metadata onto a difficulty swaps only their order"),
+                  out, failed);
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -904,6 +1005,7 @@ int main(int argc, char** argv)
     // MiaCode.UI's C++ elements are registered by the app module, which a spec
     // executable does not link; register them for the mirrored import path.
     qmlRegisterType<SimaiSyntaxHighlighter>("MiaCode.UI", 1, 0, "SimaiSyntaxHighlighter");
+    qmlRegisterType<EditorTextStyle>("MiaCode.UI", 1, 0, "EditorTextStyle");
     qmlRegisterType<miacode::qml_ui::QmlEditorInputBridge>(
         "MiaCode.UI", 1, 0, "QmlEditorInputBridge");
     verifyQmlTextAreaKeyRouting(out, &failed);
@@ -913,6 +1015,7 @@ int main(int argc, char** argv)
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
     verifyEditorPointerRoutes(out, &failed);
     verifyEditorTabsRecoverTheActiveDifficulty(out, &failed);
+    verifyEditorTabsCanBeDraggedToSwap(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     verifyWorkspaceSavePointFollowsQmlUndo(controller, out, &failed);
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);
@@ -961,7 +1064,7 @@ int main(int argc, char** argv)
     expect(replaceAll.consumed && replaceAll.transaction.text == QStringLiteral("bar food bar")
                && replaceAll.transaction.undoGroup,
            QStringLiteral("replace all honors whole words in one undo transaction"), out, &failed);
-    controller.resetQmlHistory(QStringLiteral("foo foo"), 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(QStringLiteral("foo foo"), QStringLiteral("bar bar"),
                                     0, 0, 7, 7);
     const auto restored = controller.undoQmlTransaction();
@@ -976,7 +1079,7 @@ int main(int argc, char** argv)
     // that actually differs, and select that region so the user sees what
     // changed. Replaying the whole document left the caret parked at a stale
     // offset with nothing selected.
-    controller.resetQmlHistory(QStringLiteral("1,2,3,4,"), 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(QStringLiteral("1,2,3,4,"), QStringLiteral("1,2,9,4,"), 4, 4, 5, 5);
     const auto narrowUndo = controller.undoQmlTransaction();
     expect(narrowUndo.value(QStringLiteral("replacementStart")).toInt() == 4
@@ -995,7 +1098,7 @@ int main(int argc, char** argv)
 
     // Undoing an insertion restores nothing, so the caret collapses at the
     // point the inserted text used to start rather than selecting a neighbour.
-    controller.resetQmlHistory(QStringLiteral("1,,"), 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(QStringLiteral("1,,"), QStringLiteral("1,A1,"), 2, 2, 4, 4);
     const auto insertionUndo = controller.undoQmlTransaction();
     expect(insertionUndo.value(QStringLiteral("replacementStart")).toInt() == 2
@@ -1032,6 +1135,21 @@ int main(int argc, char** argv)
                       == QStringLiteral("1,2, || [verse]")
                && miacode::editor::removeBookmarkComment(QStringLiteral("1,2, || [intro]")) == QStringLiteral("1,2,"),
            QStringLiteral("bookmark parse and serialization stay in BookmarkCommentSyntax"), out, &failed);
+    const auto meterComment = miacode::editor::parseBookmarkComment(QStringLiteral("1,2, || 4/4"));
+    const auto emptyComment = miacode::editor::parseBookmarkComment(QStringLiteral("1,2, ||"));
+    expect(meterComment.has_value() && meterComment->control
+               && emptyComment.has_value() && emptyComment->control
+               && !miacode::editor::parseBookmarkComment(QStringLiteral("1,2, || [intro]"))->control
+               && !miacode::editor::parseBookmarkComment(QStringLiteral("1,2, ||| block")).has_value(),
+           QStringLiteral("a bare meter or empty comment is control data, and ||| is not a bookmark marker at all"), out, &failed);
+    expect(miacode::editor::parseBookmarkComment(QStringLiteral("1, || intro, 4 measures"))->title
+               == QStringLiteral("intro"),
+           QStringLiteral("an unlabelled comment names its bookmark by its first token, as the Widgets outline did"), out, &failed);
+    const auto filteredBookmarks =
+        controller.bookmarksForQml(QStringLiteral("1,2, || 4/4\n3,4, || [verse]\n5,6, ||"));
+    expect(filteredBookmarks.size() == 1
+               && filteredBookmarks.first().toMap().value(QStringLiteral("line")).toInt() == 2,
+           QStringLiteral("bookmark listings skip control comments instead of showing 拍号 as sections"), out, &failed);
 
     InputMethodReceiver inputTarget;
     miacode::qml_ui::QmlEditorInputBridge inputBridge;
@@ -1087,8 +1205,36 @@ int main(int argc, char** argv)
     const QString sidebarSource = QString::fromUtf8(difficultyList.readAll());
     expect(sidebarSource.contains(QStringLiteral("bookmarkGeneration"))
                && sidebarSource.contains(QStringLiteral("bookmarksForDifficulty"))
-               && sidebarSource.contains(QStringLiteral("navigateToBookmark")),
-           QStringLiteral("bookmarks are grouped under their difficulty in the sidebar instead of overlaying the editor"), out, &failed);
+               && sidebarSource.contains(QStringLiteral("navigateToBookmark"))
+               && sidebarSource.contains(QStringLiteral("Theme.difficultyColor"))
+               && sidebarSource.contains(QStringLiteral("setBookmarkGroupExpanded")),
+           QStringLiteral("bookmarks are grouped under their difficulty in the sidebar, foldable and colour-coded, instead of overlaying the editor"), out, &failed);
+    // The difficulty row is the fold control. A click means fold only when the
+    // row is already the one being edited, which is what `foldsBookmarks`
+    // decides; the earlier design put a separate chevron button on the right
+    // and read backwards, so its return would be a regression, not a variant.
+    // The scope an edit is recorded under must be read, not bound. The session
+    // updates its state and then emits chartTextChanged before
+    // currentDifficultyChanged, so a binding on currentDifficultyId is still
+    // holding the outgoing difficulty when the incoming text arrives — naming
+    // the scope from one recorded every later edit into the difficulty being
+    // left, and Ctrl+Z replayed another difficulty's edits. Only the real
+    // QmlDocumentModel emits in that order, so this pins the call rather than
+    // reproducing the race.
+    QFile sourceEditorFile(QStringLiteral("src/app/qml_ui/editor/SourceEditor.qml"));
+    expect(sourceEditorFile.open(QIODevice::ReadOnly),
+           QStringLiteral("SourceEditor QML is available to the history scope test"), out, &failed);
+    const QString sourceEditorSource = QString::fromUtf8(sourceEditorFile.readAll());
+    expect(sourceEditorSource.contains(QStringLiteral("function currentHistoryScopeId()"))
+               && sourceEditorSource.contains(
+                      QStringLiteral("setHistoryScope(root.currentHistoryScopeId())"))
+               && !sourceEditorSource.contains(QStringLiteral("property string historyScopeId")),
+           QStringLiteral("the undo scope is read when it is needed, never bound"), out, &failed);
+
+    expect(sidebarSource.contains(QStringLiteral("foldsBookmarks"))
+               && sidebarSource.contains(QStringLiteral("readonly property bool foldsBookmarks: activeEditor"))
+               && !sidebarSource.contains(QStringLiteral("id: foldButton")),
+           QStringLiteral("the difficulty row folds its own bookmarks, with no separate fold button"), out, &failed);
     QFile followSyncSource(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
     expect(followSyncSource.open(QIODevice::ReadOnly),
@@ -1096,6 +1242,10 @@ int main(int argc, char** argv)
     const QString followSource = QString::fromUtf8(followSyncSource.readAll());
     expect(followSource.contains(QStringLiteral("EditorFollowState"))
                && followSource.contains(QStringLiteral("publishFollow"))
+               // The follow identity must be the workspace revision the editor
+               // compares against, not the unrelated timeline counter.
+               && followSource.contains(QStringLiteral("appliedQmlWorkspaceRevision_"))
+               && !followSource.contains(QStringLiteral("documentValidationSnapshot()"))
                && source.contains(QStringLiteral("navigationAckTimer"))
                && source.contains(QStringLiteral("decorationCenterTimer")),
            QStringLiteral("editor synchronization uses value projection and item-owned queues"), out, &failed);

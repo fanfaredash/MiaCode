@@ -74,6 +74,7 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     if (!suppressPausedSecondaryUi && !state_.qtPreviewPlaying_) {
         owner_.refreshPreviewStageMediaRouteDebugState(true);
     }
+    // Publishes to the v1 slider and the v2 transport both.
     updatePreviewSliderPosition(second);
     if (!state_.qtPreviewPlaying_ && !suppressPausedSecondaryUi) {
         updatePreviewObjectStats(second);

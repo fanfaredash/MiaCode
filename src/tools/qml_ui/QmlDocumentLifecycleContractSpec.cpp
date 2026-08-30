@@ -139,8 +139,6 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp"));
     const QString followSync = sourceFile(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
-    const QString validationFlow = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp"));
 
     return require(
                applicationContext.contains(QStringLiteral("ChartWorkspace workspace_;"))
@@ -154,8 +152,20 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                        && documentModel.contains(
                            QStringLiteral("workspace_->updateDifficultyField("))
                        && documentModel.contains(QStringLiteral("fileService_->open(path)"))
-                       && documentModel.contains(QStringLiteral("fileService_->save()")),
+                       && documentModel.contains(QStringLiteral("fileService_->save(saveSectionDifficultyId())")),
                    QStringLiteral("production QML body, metadata, difficulty, and file operations submit workspace transactions"), err)
+        && require(documentBridge.contains(QStringLiteral("noteDocumentEditedForAutosave()"))
+                       && documentBridge.contains(QStringLiteral("sourceChanged && dirty")),
+                   QStringLiteral("a v2 edit arms the per-edit autosave and the crash snapshot, "
+                                  "which left with the hidden chart editor that used to drive them"), err)
+        && require(documentModel.contains(
+                       QStringLiteral("void QmlDocumentModel::saveSectionOrAskForPath"))
+                       && documentModel.contains(QStringLiteral("request.saveMode = true"))
+                       && documentModel.contains(
+                           QStringLiteral("saveSectionOrAskForPath(\n                    difficultyId,"))
+                       && documentModel.contains(QStringLiteral("saveSectionOrAskForPath(0,")),
+                   QStringLiteral("saving from the leave flow asks for a path when the document has none, "
+                                  "instead of refusing an empty path in silence"), err)
         && require(!documentModel.contains(QStringLiteral("backend_->isWindowModified()"))
                        && !documentModel.contains(
                            QStringLiteral("backend_->updateActiveChartText(value)"))
@@ -173,10 +183,21 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                                         QStringLiteral("state_.document_ = committedDocument;"),
                                         QStringLiteral("state_.documentDirty_ = dirty;")),
                    QStringLiteral("MainWindow accepts only monotonic committed adapter values and mirrors workspace dirty"), err)
+        // What the gate DOES with the pair is a behaviour regression against the
+        // real object (editor_sync_controller_spec); it used to be an
+        // `appliedQmlWorkspaceRevision_ > 0` scan here, which went red when the
+        // guard moved into EditorSyncController — a scan cannot tell a moved
+        // guard from a deleted one. What stays here is the half a source
+        // contract can actually see: both publishers read the revision
+        // MainWindow last accepted from the workspace. The follow path once
+        // sent the validation snapshot's revision instead — a different counter
+        // that matched only by coincidence, and silently disabled 代码跟随 for
+        // the rest of the session once a difficulty switch separated the two.
         && require(documentModel.contains(
                        QStringLiteral("publishWorkspaceCommit(WorkspaceCommitKind::Incremental);"))
-                       && timelineFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0"))
-                       && validationFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0"))
+                       && timelineFlow.contains(
+                           QStringLiteral("editorSyncController_->requestNavigation("))
+                       && timelineFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_"))
                        && followSync.contains(
                            QStringLiteral("follow.revision = owner_.appliedQmlWorkspaceRevision_"))
                        && !followSync.contains(QStringLiteral("documentValidationSnapshot()")),

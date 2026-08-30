@@ -17,7 +17,7 @@ void MainWindow::onSkinSettings()
 
 void MainWindow::onMediaProcessingTools()
 {
-    dialogsSection_->onMediaProcessingTools();
+    emit mediaToolsRequested();
 }
 
 void MainWindow::onAbout()
@@ -25,14 +25,33 @@ void MainWindow::onAbout()
     dialogsSection_->onAbout();
 }
 
-void MainWindow::onPrependTrackSilence()
+QVariantMap MainWindow::prependMediaBlankContext(bool isTrack)
 {
-    dialogsSection_->onPrependTrackSilence();
+    return dialogsSection_->prependMediaBlankContext(
+        isTrack ? DialogsSection::MediaBlankTarget::Track
+                : DialogsSection::MediaBlankTarget::Pv);
 }
 
-void MainWindow::onPrependPvBlack()
+QVariantMap MainWindow::detectMediaBlankTiming(bool isTrack)
 {
-    dialogsSection_->onPrependPvBlack();
+    return dialogsSection_->detectMediaBlankTiming(
+        isTrack ? DialogsSection::MediaBlankTarget::Track
+                : DialogsSection::MediaBlankTarget::Pv);
+}
+
+void MainWindow::restoreMediaBlankBackup(bool isTrack)
+{
+    dialogsSection_->restoreMediaBlankBackup(
+        isTrack ? DialogsSection::MediaBlankTarget::Track
+                : DialogsSection::MediaBlankTarget::Pv);
+}
+
+void MainWindow::applyMediaBlank(bool isTrack, double beats, double bpm)
+{
+    dialogsSection_->applyMediaBlank(
+        isTrack ? DialogsSection::MediaBlankTarget::Track
+                : DialogsSection::MediaBlankTarget::Pv,
+        beats, bpm);
 }
 
 void MainWindow::onCompressBackgroundVideo()
@@ -44,6 +63,7 @@ void MainWindow::onConvertTrackTo44100Hz()
 {
     dialogsSection_->onConvertTrackTo44100Hz();
 }
+
 
 void MainWindow::onReadTitleFromTrack()
 {

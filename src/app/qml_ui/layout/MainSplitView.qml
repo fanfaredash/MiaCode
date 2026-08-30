@@ -15,17 +15,19 @@ Item {
     required property var preferences
     required property var previewSession
     required property var commands
-    required property var shellController
+    required property var timelineSession
+    required property var preferencesModel
     required property var pages
     required property var editorController
     required property var editorSync
+    required property var latency
     property bool compact: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
     // User preference AND backend chart-bottom-tabs mode (export/metadata
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
-        root.viewState.bottomPanelVisible && root.shellController.bottomTabsVisible
+        root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
     readonly property real previewEditorAvailableWidth:
@@ -58,14 +60,19 @@ Item {
         editorPane.selectCurrentLine()
     }
 
+    function applyChartTransform(opId) {
+        return editorPane.applyChartTransform(opId)
+    }
+
     function validateChart() {
         root.commands.validateDocument()
         root.viewState.bottomPanelVisible = true
-        root.shellController.setBottomTabsCurrentTabId("validation")
+        root.timelineSession.setCurrentTabId("validation")
     }
 
     function showFullscreenPreview() {
-        if (root.shellController.exportPageActive)
+        // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash.
+        if (root.exportVideoActive)
             return
         fullscreenPreview.visible = true
     }
@@ -78,40 +85,41 @@ Item {
 
     function persistPreviewWidthRatio() {
         if (root.compact) return
-        if (root.viewState.previewVisible) {
-            root.preferences.previewWidthRatio = preview.width / root.previewEditorAvailableWidth
-        }
+        root.preferences.previewWidthRatio = preview.width / root.previewEditorAvailableWidth
     }
 
     function syncWorkspacePanelOrder() {
-        const targetPreviewIndex = root.shellController.workspacePanelsSwapped ? 0 : 1
+        const targetPreviewIndex = root.preferencesModel.previewOnLeft ? 0 : 1
         const currentPreviewIndex = workspaceSplit.itemAt(0) === preview ? 0 : 1
         if (currentPreviewIndex !== targetPreviewIndex)
             workspaceSplit.moveItem(currentPreviewIndex, targetPreviewIndex)
     }
 
     function fittedFullscreenWidth(hostWidth, hostHeight) {
-        const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
+        const aspect = Math.max(1.0, root.previewSession.canvasAspectRatio || 1.0)
         const safeWidth = Math.max(1, hostWidth)
         const safeHeight = Math.max(1, hostHeight)
         return Math.max(1, Math.min(safeWidth, safeHeight * aspect))
     }
 
     function fittedFullscreenHeight(hostWidth, hostHeight) {
-        const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
+        const aspect = Math.max(1.0, root.previewSession.canvasAspectRatio || 1.0)
         const frameWidth = fittedFullscreenWidth(hostWidth, hostHeight)
         return Math.max(1, Math.min(hostHeight, frameWidth / aspect))
     }
 
     Connections {
-        target: root.shellController
-        function onWorkspacePanelsSwappedChanged() {
+        target: root.preferencesModel
+        function onInterfaceChanged() {
             root.syncWorkspacePanelOrder()
         }
-        function onShellStateChanged() {
-            if (root.shellController.exportPageActive && fullscreenPreview.visible)
-                fullscreenPreview.visible = false
-        }
+    }
+
+    // Leaving fullscreen on the export page is the same stop-gap as above; the
+    // page identity comes from the QML router rather than from the backend.
+    onExportVideoActiveChanged: {
+        if (root.exportVideoActive && fullscreenPreview.visible)
+            fullscreenPreview.visible = false
     }
 
     SplitView {
@@ -179,6 +187,7 @@ Item {
                         viewState: root.viewState
                         documentSession: root.documentSession
                         commands: root.commands
+                        pages: root.pages
                     }
 
                     // v2 video export center: QML chrome + ExportVideoController panel surface.
@@ -186,22 +195,15 @@ Item {
                         anchors.fill: parent
                         visible: root.exportVideoActive
                         pages: root.pages
+                        previewSession: root.previewSession
                     }
 
-                    // LatencyDetectionPage (and any remaining full-page widget host).
-                    WindowContainer {
-                        id: nativePageHost
+                    LatencyPage {
+                        id: latencyPage
                         anchors.fill: parent
-                        visible: root.pages.activePageId === "latency" && root.pages.pageWindow !== null
-                        window: root.pages.pageWindow
-                        function syncNativeSize() {
-                            if (visible && width > 0 && height > 0)
-                                root.pages.syncPageSize(width, height)
-                        }
-                        onVisibleChanged: syncNativeSize()
-                        onWidthChanged: syncNativeSize()
-                        onHeightChanged: syncNativeSize()
-                        Component.onCompleted: syncNativeSize()
+                        visible: root.pages.activePageId === "latency"
+                        latency: root.latency
+                        pages: root.pages
                     }
                 }
 
@@ -212,7 +214,8 @@ Item {
                     analysisSession: root.analysisSession
                     preferences: root.preferences
                     commands: root.commands
-                    shellController: root.shellController
+                    timelineSession: root.timelineSession
+                    previewSession: root.previewSession
                     SplitView.preferredHeight: root.bottomPanelEffectivelyVisible
                                                ? centerSplit.height * root.preferences.bottomPanelHeightRatio
                                                : 0
@@ -230,12 +233,15 @@ Item {
 
             PreviewPane {
                 id: preview
-                visible: !root.compact && root.viewState.previewVisible
+                // The preview is a fixed part of the v2 workspace. Keeping it
+                // mounted at every width avoids the removed toggle action
+                // tearing down the only live preview surface.
+                visible: true
                 // Fullscreen owns the sole live scene root while its overlay is
                 // active; leave this pane's transport chrome in place underneath.
                 surfaceActive: !fullscreenPreview.visible
                 previewSession: root.previewSession
-                shellController: root.shellController
+                exportPageActive: root.exportVideoActive
                 SplitView.preferredWidth: root.previewEditorAvailableWidth
                                           * root.preferences.previewWidthRatio
                 SplitView.minimumWidth: root.previewEditorAvailableWidth
@@ -264,7 +270,7 @@ Item {
                 anchors.fill: parent
                 runtime: root.previewSession.runtime
                 mediaHost: root.previewSession.mediaHost
-                logger: root.shellController
+                logger: root.previewSession
                 surfaceRole: "fullscreen"
             }
         }

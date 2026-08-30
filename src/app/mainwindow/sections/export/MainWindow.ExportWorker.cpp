@@ -1,4 +1,5 @@
 #include "MainWindow.ExportSection.h"
+#include "app/v2/JobProgressService.h"
 #include "../../MainWindowShared.h"
 #include "../timeline/MainWindow.TimelineSection.h"
 #include "../window/MainWindow.WindowSection.h"
@@ -17,7 +18,6 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportRuntimePolicy.h"
-#include "tools/video_export/VideoExportDialog.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -604,7 +604,6 @@ bool MainWindow::ExportSection::startVideoExportWorkerProcess(
 
 bool MainWindow::ExportSection::runVideoExportWorkerSync(
     const VideoExportSnapshot& snapshot,
-    QProgressDialog* progressDialog,
     bool* canceledByUser,
     QString* errorMessage,
     const std::function<void(int percent, const QString& rawMessage)>& progressCallback,
@@ -676,15 +675,6 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
                     const QString message = object.value(QStringLiteral("message")).toString();
                     if (progressCallback) {
                         progressCallback(percent, message);
-                    } else if (progressDialog != nullptr && !message.trimmed().isEmpty()) {
-                        progressDialog->setLabelText(
-                            buildExportProgressLabelTextForUiLanguage(
-                                message,
-                                qBound(0, percent, 100),
-                                itemElapsed,
-                                &smoothedEtaSeconds
-                            )
-                        );
                     }
                     continue;
                 }
@@ -707,8 +697,7 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
                 process.readAllStandardError(),
                 kVideoExportWorkerStderrBufferMaxBytes);
             parseStdoutLines();
-            if ((progressDialog != nullptr && progressDialog->wasCanceled())
-                || (cancellationRequested && cancellationRequested())) {
+            if (cancellationRequested && cancellationRequested()) {
                 if (canceledByUser != nullptr) {
                     *canceledByUser = true;
                 }
@@ -752,12 +741,6 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
             forceDisableOffscreenPbo = true;
             if (retryingCallback) {
                 retryingCallback();
-            } else if (progressDialog != nullptr) {
-                progressDialog->setRange(0, 100);
-                progressDialog->setValue(0);
-                progressDialog->setLabelText(
-                    UiText::text(QStringLiteral("dialog.video_export.progress.retrying_safe_mode"))
-                );
             }
             continue;
         }
@@ -823,74 +806,15 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
 
     this->clearVideoExportWorkerState();
 
-    // Panel-launched exports currently keep the same progress popup as the
-    // modal path. The embedded panel's main button is still switched to
-    // 取消导出 by the caller and forwards cancellation to this worker.
-    if (!owner_.videoExportUseInlineProgress_) {
-        auto* progress = new QProgressDialog(
-            systemL10n(QStringLiteral("Preparing export..."), QStringLiteral("准备导出...")),
-            systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
-            0,
-            100,
-            UiDialogs::effectiveParentWidget(&owner_)
-        );
-        progress->setWindowTitle(systemL10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")));
-        progress->setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-        // Never allow minimizing: over the WA_DontShowOnScreen quick-shell host
-        // a minimized, parentless progress popup can never be re-raised, which
-        // strands the export flow (and deadlocks the app for the modal
-        // variants). Keep the popup non-minimizable everywhere.
-        progress->setWindowFlag(Qt::WindowMinimizeButtonHint, false);
-        progress->setWindowModality(Qt::NonModal);
-        progress->setAttribute(Qt::WA_ShowWithoutActivating, true);
-        progress->setLabelText(UiText::text(QStringLiteral("dialog.video_export.progress.preparing")));
-        progress->setCancelButtonText(UiText::text(QStringLiteral("dialog.video_export.button.cancel")));
-        progress->setWindowTitle(UiText::text(QStringLiteral("dialog.video_export.title")));
-        progress->setMinimumDuration(0);
-        progress->setAutoClose(false);
-        progress->setAutoReset(false);
-        progress->setMinimumWidth(320);
-        progress->setMaximumWidth(360);
-        progress->setValue(0);
-        UiDialogs::configureDialogPreviewShortcuts(progress);
-        owner_.windowSection_->applySystemWindowBackdrop(progress);
-        if (QLabel* label = progress->findChild<QLabel*>(); label != nullptr) {
-            label->setWordWrap(true);
-        }
-        UiDialogs::centerDialogOnAnchor(progress, &owner_);
-        progress->show();
-        QTimer::singleShot(0, progress, [this, progress]() {
-            if (progress == nullptr) {
-                return;
-            }
-            progress->adjustSize();
-            UiDialogs::centerDialogOnAnchor(progress, &owner_);
-        });
-        QTimer::singleShot(0, &owner_, [this]() {
-#ifdef Q_OS_MACOS
-            // MainWindow is a WA_DontShowOnScreen quick-shell host whose
-            // widgets are rehosted into the QML shell; raise()/activateWindow()
-            // would orderFront the empty white shell window on macOS. Windows
-            // keeps this focus-restore block unchanged.
-            if (owner_.testAttribute(Qt::WA_DontShowOnScreen)) {
-                return;
-            }
-#endif
-            if (!owner_.isVisible() || owner_.windowState().testFlag(Qt::WindowMinimized)) {
-                return;
-            }
-            owner_.raise();
-            owner_.activateWindow();
-            if (QWidget* focusWidget = owner_.focusWidget(); focusWidget != nullptr) {
-                focusWidget->setFocus(Qt::ActiveWindowFocusReason);
-            } else {
-                owner_.setFocus(Qt::ActiveWindowFocusReason);
-            }
-        });
-        owner_.videoExportProgressDialog_ = progress;
-        connect(progress, &QProgressDialog::canceled, &owner_, [this]() {
-            this->cancelVideoExportWorker();
-        });
+    // One progress surface for every job in the shell (JobProgressOverlay).
+    // The worker runs out of process, so cancellation goes through
+    // cancelVideoExportWorker rather than a flag this side polls.
+    if (miacode::v2::JobProgressService* const jobProgress = owner_.jobProgressService();
+        jobProgress != nullptr) {
+        owner_.videoExportJobToken_ = jobProgress->begin(
+            UiText::text(QStringLiteral("dialog.video_export.title")),
+            UiText::text(QStringLiteral("dialog.video_export.progress.preparing")),
+            /*cancellable=*/true);
     }
 
     auto* process = new QProcess(&owner_);
@@ -914,10 +838,6 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
     owner_.videoExportWorkerAttempt_ = 1;
     owner_.videoExportWorkerForceDisablePbo_ = false;
     owner_.videoExportWorkerElapsed_.start();
-
-    if (owner_.videoExportUseInlineProgress_) {
-        this->beginInlineExportProgress();
-    }
 
     connect(process, &QProcess::readyReadStandardOutput, &owner_, [this]() {
         this->handleVideoExportWorkerStdout();
@@ -988,49 +908,15 @@ void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& 
     _mc_op_.note(QStringLiteral("event=%1").arg(eventType));
     const bool suppressProgressUi = owner_.videoExportWorkerCancelRequested_;
     if (eventType == QLatin1String("worker_ready")) {
-        if (!suppressProgressUi && owner_.videoExportProgressDialog_ != nullptr) {
-            owner_.videoExportProgressDialog_->setValue(qMax(owner_.videoExportProgressDialog_->value(), 1));
-            QTimer::singleShot(0, &owner_, [this]() {
-                if (owner_.videoExportProgressDialog_ != nullptr) {
-                    owner_.videoExportProgressDialog_->setLabelText(
-                        UiText::text(QStringLiteral("dialog.video_export.progress.worker_ready"))
-                    );
-                }
-            });
-            owner_.videoExportProgressDialog_->setLabelText(
-                UiText::text(QStringLiteral("dialog.video_export.progress.worker_ready"))
-            );
-            owner_.videoExportProgressDialog_->setLabelText(systemL10n(
-                QStringLiteral("Worker ready..."),
-                QStringLiteral("后台已就绪...")
-            ));
-        }
         if (!suppressProgressUi) {
-            this->updateInlineExportProgress(
+            this->reportExportProgress(
                 1, UiText::text(QStringLiteral("dialog.video_export.progress.worker_ready")));
         }
         return;
     }
     if (eventType == QLatin1String("accepted")) {
-        if (!suppressProgressUi && owner_.videoExportProgressDialog_ != nullptr) {
-            owner_.videoExportProgressDialog_->setValue(qMax(owner_.videoExportProgressDialog_->value(), 2));
-            QTimer::singleShot(0, &owner_, [this]() {
-                if (owner_.videoExportProgressDialog_ != nullptr) {
-                    owner_.videoExportProgressDialog_->setLabelText(
-                        UiText::text(QStringLiteral("dialog.video_export.progress.starting_export"))
-                    );
-                }
-            });
-            owner_.videoExportProgressDialog_->setLabelText(
-                UiText::text(QStringLiteral("dialog.video_export.progress.starting_export"))
-            );
-            owner_.videoExportProgressDialog_->setLabelText(systemL10n(
-                QStringLiteral("Starting export..."),
-                QStringLiteral("开始导出...")
-            ));
-        }
         if (!suppressProgressUi) {
-            this->updateInlineExportProgress(
+            this->reportExportProgress(
                 2, UiText::text(QStringLiteral("dialog.video_export.progress.starting_export")));
         }
         return;
@@ -1055,21 +941,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& 
             owner_.videoExportWorkerElapsed_,
             &owner_.videoExportWorkerLastEtaSeconds_
         );
-        if (owner_.videoExportProgressDialog_ != nullptr) {
-            if (busyStage) {
-                if (owner_.videoExportProgressDialog_->minimum() != 0 || owner_.videoExportProgressDialog_->maximum() != 0) {
-                    owner_.videoExportProgressDialog_->setRange(0, 0);
-                }
-                owner_.videoExportProgressDialog_->setLabelText(progressLabel);
-            } else {
-                if (owner_.videoExportProgressDialog_->minimum() == 0 && owner_.videoExportProgressDialog_->maximum() == 0) {
-                    owner_.videoExportProgressDialog_->setRange(0, 100);
-                }
-                owner_.videoExportProgressDialog_->setValue(owner_.videoExportWorkerLastProgressPercent_);
-                owner_.videoExportProgressDialog_->setLabelText(progressLabel);
-            }
-        }
-        this->updateInlineExportProgress(
+        this->reportExportProgress(
             busyStage ? -1 : owner_.videoExportWorkerLastProgressPercent_, progressLabel);
         return;
     }
@@ -1095,25 +967,8 @@ void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& 
             owner_.videoExportWorkerResultDetails_ =
                 tailLimitedProcessText(details, kVideoExportWorkerDetailsMaxChars);
         }
-        if (!suppressProgressUi && owner_.videoExportProgressDialog_ != nullptr) {
-            if (owner_.videoExportProgressDialog_->minimum() == 0 && owner_.videoExportProgressDialog_->maximum() == 0) {
-                owner_.videoExportProgressDialog_->setRange(0, 100);
-            }
-            owner_.videoExportProgressDialog_->setValue(owner_.videoExportWorkerSuccess_ ? 100 : owner_.videoExportProgressDialog_->value());
-            if (owner_.videoExportWorkerSuccess_) {
-                owner_.videoExportProgressDialog_->setLabelText(systemL10n(
-                    QStringLiteral("Done."),
-                    QStringLiteral("导出完成。")
-                ));
-            }
-        }
-        if (!suppressProgressUi && owner_.videoExportProgressDialog_ != nullptr && owner_.videoExportWorkerSuccess_) {
-            owner_.videoExportProgressDialog_->setLabelText(
-                UiText::text(QStringLiteral("dialog.video_export.progress.done"))
-            );
-        }
         if (!suppressProgressUi && owner_.videoExportWorkerSuccess_) {
-            this->updateInlineExportProgress(
+            this->reportExportProgress(
                 100, UiText::text(QStringLiteral("dialog.video_export.progress.done")));
         }
     }
@@ -1156,10 +1011,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         owner_.videoExportWorkerCancelRequested_
         && (!owner_.videoExportWorkerCompletionReceived_ || !owner_.videoExportWorkerSuccess_);
     if (canceledOutcome) {
-        if (owner_.videoExportProgressDialog_ != nullptr) {
-            owner_.videoExportProgressDialog_->hide();
-        }
-        this->endInlineExportProgress();
+        this->endExportProgress();
         restorePreviewAspectIfNeeded();
         showCenteredLocalizedMessageBox(
             QMessageBox::Information,
@@ -1192,15 +1044,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         owner_.videoExportWorkerLastProgressPercent_ = 0;
         owner_.videoExportWorkerLastEtaSeconds_ = -1;
         owner_.videoExportWorkerElapsed_.start();
-        if (owner_.videoExportProgressDialog_ != nullptr) {
-            owner_.videoExportProgressDialog_->setRange(0, 100);
-            owner_.videoExportProgressDialog_->setValue(0);
-            owner_.videoExportProgressDialog_->setLabelText(
-                UiText::text(QStringLiteral("dialog.video_export.progress.retrying_safe_mode"))
-            );
-            owner_.videoExportProgressDialog_->show();
-        }
-        this->updateInlineExportProgress(
+        this->reportExportProgress(
             0,
             UiText::text(QStringLiteral("dialog.video_export.progress.retrying_safe_mode")));
 
@@ -1218,10 +1062,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         retryRestartError = restartError.trimmed();
     }
 
-    if (owner_.videoExportProgressDialog_ != nullptr) {
-        owner_.videoExportProgressDialog_->hide();
-    }
-    this->endInlineExportProgress();
+    this->endExportProgress();
 
     QString finalAttemptDiagnostics;
     if (retryRestartFailed) {
@@ -1330,23 +1171,9 @@ void MainWindow::ExportSection::cancelVideoExportWorker()
 {
     MC_OP("MainWindow::ExportSection::cancelVideoExportWorker");
     owner_.videoExportWorkerCancelRequested_ = true;
-    if (owner_.videoExportProgressDialog_ != nullptr) {
-        QTimer::singleShot(0, &owner_, [this]() {
-            if (owner_.videoExportProgressDialog_ != nullptr) {
-                owner_.videoExportProgressDialog_->setLabelText(
-                    UiText::text(QStringLiteral("dialog.video_export.progress.canceling"))
-                );
-            }
-        });
-    }
-    if (owner_.videoExportProgressDialog_ != nullptr) {
-        owner_.videoExportProgressDialog_->setLabelText(systemL10n(
-            QStringLiteral("Canceling export..."),
-            QStringLiteral("正在取消导出...")
-        ));
-        owner_.videoExportProgressDialog_->hide();
-    }
-    this->updateInlineExportProgress(
+    // Stay on the surface with a busy indicator: terminating the worker takes a
+    // moment and hiding progress here would look like the export had finished.
+    this->reportExportProgress(
         -1, UiText::text(QStringLiteral("dialog.video_export.progress.canceling")));
     if (owner_.videoExportWorkerProcess_ == nullptr || owner_.videoExportWorkerProcess_->state() == QProcess::NotRunning) {
         return;
@@ -1368,21 +1195,7 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
-    const bool hadProgressDialog = owner_.videoExportProgressDialog_ != nullptr;
     const bool hadWorkerProcess = owner_.videoExportWorkerProcess_ != nullptr;
-    if (owner_.videoExportProgressDialog_ != nullptr) {
-        QElapsedTimer progressDialogTimer;
-        progressDialogTimer.start();
-        owner_.videoExportProgressDialog_->close();
-        owner_.videoExportProgressDialog_->deleteLater();
-        owner_.videoExportProgressDialog_ = nullptr;
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/export_worker"),
-            QStringLiteral("clear_progress_dialog"),
-            progressDialogTimer.elapsed()
-        );
-    }
     if (owner_.videoExportWorkerProcess_ != nullptr) {
         QElapsedTimer processTimer;
         processTimer.start();
@@ -1428,77 +1241,45 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
     owner_.videoExportWorkerLastEtaSeconds_ = -1;
     owner_.videoExportWorkerAttempt_ = 0;
     owner_.videoExportWorkerForceDisablePbo_ = false;
-    this->endInlineExportProgress();
-    owner_.videoExportUseInlineProgress_ = false;
+    this->endExportProgress();
     if (hadWorkerProcess) {
         emit owner_.videoExportWorkerRunningChanged(false);
     }
-    if (hadProgressDialog || hadWorkerProcess) {
+    if (hadWorkerProcess) {
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/export_worker"),
             QStringLiteral("clear_video_export_worker_state"),
             totalTimer.elapsed(),
-            QStringLiteral("had_progress_dialog=%1 had_process=%2")
-                .arg(hadProgressDialog ? 1 : 0)
-                .arg(hadWorkerProcess ? 1 : 0)
+            QStringLiteral("had_process=%1").arg(hadWorkerProcess ? 1 : 0)
         );
     }
 }
 
-// ---- Inline export progress on the preview-area transport (E-C, A3 as
-// amended 2026-06-11): the panel-launched export rides the PLAYBACK slider —
-// the handle advances through chart time (exportStart + percent × duration)
-// exactly like a playback, range untouched, seeking disabled (the
-// TimelineSection position updater is gated on
-// videoExportInlineProgressSecond_ >= 0). Stage/ETA text goes to the status
-// bar (shared by both shells); the quick shell additionally reads the chart
-// time via shellVideoExportProgressSeconds() for its QML transport. ----
-
-void MainWindow::ExportSection::beginInlineExportProgress()
+// The export worker owns the shared progress surface between begin and end.
+// A negative percent means the stage has no measurable progress.
+void MainWindow::ExportSection::reportExportProgress(int percent, const QString& label)
 {
-    // Progress is reported in the STATUS BAR only (2026-06-13): the preview
-    // transport stays entirely the user's — playback and a running export are
-    // NOT mutually exclusive. videoExportInlineProgressSecond_ >= 0 just marks
-    // that an inline (panel-launched) export is in flight (cleared on end).
-    owner_.videoExportInlineProgressSecond_ =
-        qMax(0.0, owner_.videoExportWorkerSnapshot_.exportStartSeconds);
-    owner_.statusBar()->showMessage(
-        UiText::text(QStringLiteral("dialog.video_export.progress.preparing")));
-}
-
-void MainWindow::ExportSection::updateInlineExportProgress(int percent, const QString& label)
-{
-    if (owner_.videoExportInlineProgressSecond_ < 0.0) {
-        return;  // inline progress not active (popup-dialog launch)
-    }
-    // Status-bar only: never drive the preview slider (it belongs to the user
-    // now). Fold the percent into the stage/ETA label.
-    QString message = label;
-    if (percent >= 0) {
-        const QString percentText = QStringLiteral("%1%").arg(qBound(0, percent, 100));
-        message = message.isEmpty()
-            ? percentText
-            : QStringLiteral("%1 · %2").arg(percentText, message);
-    }
-    if (!message.isEmpty()) {
-        owner_.statusBar()->showMessage(message);
-    }
-}
-
-void MainWindow::ExportSection::endInlineExportProgress()
-{
-    const bool inlineProgressActive = owner_.videoExportInlineProgressSecond_ >= 0.0;
-    if (!owner_.embeddedVideoExportPanel_.isNull()) {
-        owner_.embeddedVideoExportPanel_->setEmbeddedExportRunning(false);
-    }
-    if (!inlineProgressActive) {
+    miacode::v2::JobProgressService* const jobProgress = owner_.jobProgressService();
+    if (jobProgress == nullptr || jobProgress->token() != owner_.videoExportJobToken_) {
         return;
     }
-    owner_.videoExportInlineProgressSecond_ = -1.0;
-    owner_.statusBar()->clearMessage();
-    // Hand the slider back to the playback clock.
-    if (owner_.timelineSection_ != nullptr) {
-        owner_.timelineSection_->updatePreviewSliderPosition(owner_.qtPreviewPauseSecond_);
+    if (percent < 0) {
+        jobProgress->reportIndeterminate(label);
+    } else {
+        jobProgress->report(percent, label);
     }
+}
+
+void MainWindow::ExportSection::endExportProgress()
+{
+    miacode::v2::JobProgressService* const jobProgress = owner_.jobProgressService();
+    if (jobProgress == nullptr || owner_.videoExportJobToken_ == 0) {
+        return;
+    }
+    // Only clear our own job: a later job may already own the surface.
+    if (jobProgress->token() == owner_.videoExportJobToken_) {
+        jobProgress->end();
+    }
+    owner_.videoExportJobToken_ = 0;
 }

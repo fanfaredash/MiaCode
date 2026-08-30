@@ -1,5 +1,4 @@
     struct MainWindowUiRefs {
-        QWidget* editorWidget_ = nullptr;
         QPlainTextEdit* outputView_ = nullptr;
         QListWidget* errorList_ = nullptr;
         QListWidget* muriList_ = nullptr;
@@ -13,22 +12,7 @@
         QAction* preferencesAction_ = nullptr;
         QAction* saveAsAction_ = nullptr;
         QAction* packAsZipAction_ = nullptr;
-        QAction* netBatchDownloadAction_ = nullptr;
-        QAction* transformMirrorLeftRightAction_ = nullptr;
-        QAction* transformMirrorUpDownAction_ = nullptr;
-        QAction* transformRotate180Action_ = nullptr;
-        QAction* transformRotate45CounterClockwiseAction_ = nullptr;
-        QAction* transformRotate45ClockwiseAction_ = nullptr;
         QAction* normalizeWholeChartAction_ = nullptr;
-        QAction* transformToggleBreakAction_ = nullptr;
-        QAction* transformToggleExAction_ = nullptr;
-        QAction* transformToggleFireworkAction_ = nullptr;
-        QAction* transformRandomRotateAction_ = nullptr;
-        QAction* transformClearCompleteElementsAction_ = nullptr;
-        QAction* transformRaiseSubdivisionAction_ = nullptr;
-        QAction* transformLowerSubdivisionAction_ = nullptr;
-        QAction* transformRaiseSubdivisionHalfStepAction_ = nullptr;
-        QAction* transformLowerSubdivisionHalfStepAction_ = nullptr;
         QAction* findReplaceAction_ = nullptr;
         QAction* undoAction_ = nullptr;
         QAction* redoAction_ = nullptr;
@@ -54,7 +38,6 @@
         QAction* previewVideoSettingsAction_ = nullptr;
         QAction* skinSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
-        QAction* fullCopyAreaAction_ = nullptr;
         QAction* aboutAction_ = nullptr;
         QAction* fontDecreaseAction_ = nullptr;
         QAction* fontIncreaseAction_ = nullptr;
@@ -68,11 +51,6 @@
         QTimer* timelineAnalysisIdleTimer_ = nullptr;
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QTimer* visualLayoutPersistTimer_ = nullptr;
-        QObject* editorViewport_ = nullptr;
-        QProgressDialog* videoExportProgressDialog_ = nullptr;
-        QPointer<QDialog> netBatchDownloadDialog_;
-        QPointer<QDialog> netBatchUploadDialog_;
-        QPointer<QDialog> pvBatchCompressionDialog_;
         QPointer<QLabel> aboutIconLabel_;
         QWidget* welcomePage_ = nullptr;
         QLabel* welcomeEmptyHintLabel_ = nullptr;
@@ -80,22 +58,21 @@
         QWidget* metadataCard_ = nullptr;
         QLabel* metadataEmptyHintLabel_ = nullptr;
         QWidget* chartPage_ = nullptr;
-        miacode::latency::LatencyDetectionPage* latencyDetectionPage_ = nullptr;
-        miacode::export_page::ExportLauncherPage* exportPage_ = nullptr;
+        // Empty stand-in for the latency field; the page itself is QML now.
+        QWidget* latencyPlaceholderPage_ = nullptr;
+        // Empty stand-in for the export field. The export centre itself is
+        // pure QML; this only keeps the hidden stack's page identity distinct
+        // so "is the chart / metadata field current" stays answerable.
+        QWidget* exportPlaceholderPage_ = nullptr;
         QmlExportSession* qmlExportSession_ = nullptr;
-        // E-C embedded video-export panel: a VideoExportDialog in embedded
-        // panel mode, hosted inside the Export hub page's video sub-page.
-        // Created/destroyed by ExportSection::create/destroyEmbeddedVideoExportPanel.
-        QPointer<VideoExportDialog> embeddedVideoExportPanel_;
-        // Batch counterpart: owns the shared VideoExportDialog settings host
-        // plus the batch-only output-directory and queue controls.
-        QPointer<miacode::video_export::BatchExportPanel> embeddedBatchExportPanel_;
+        // Shared, Widgets-free UI boundary: any flow that needs a file pick,
+        // a message or a progress bar goes through these and the single QML
+        // host renders it.
+        miacode::v2::UiRequestService* uiRequests_ = nullptr;
+        miacode::v2::JobProgressService* jobProgress_ = nullptr;
         // BPM/offset summary on the metadata page's "延迟与偏移校准" entry
         // card (L-A migration); refreshed by populateMetadataPage.
         QLabel* latencyEntrySummaryLabel_ = nullptr;
-        QSplitter* chartCopySplitter_ = nullptr;
-        QWidget* copyAreaPanel_ = nullptr;
-        PlainCodeEditor* copyAreaEditor_ = nullptr;
         QStackedWidget* editorStack_ = nullptr;
         QDockWidget* outlineDock_ = nullptr;
         QListWidget* outlineList_ = nullptr;
@@ -150,7 +127,6 @@
         // Indeterminate spinner floated over the "Export" sidebar row while the
         // (synchronous, ~hundreds-of-ms) export-page build runs.
         miacode::ui::BusySpinner* outlineBusySpinner_ = nullptr;
-        miacode::ui::AppBackgroundPainter* appBackgroundPainter_ = nullptr;
         QSplitter* workspaceSplitter_ = nullptr;
         QWidget* previewPanel_ = nullptr;
         QWidget* previewLeftColumn_ = nullptr;
@@ -195,7 +171,6 @@
         QTimer* previewFullscreenCursorPollTimer_ = nullptr;
         QPropertyAnimation* previewFullscreenControlsAnimation_ = nullptr;
         QPropertyAnimation* previewFullscreenControlsOpacityAnimation_ = nullptr;
-        BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;
         BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
     };
 
@@ -210,7 +185,6 @@
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
         TimelineQuickStateBridge* timelineQuickStateBridge_ = nullptr;
         bool quickShellBackendActive_ = false;
-        bool qmlExportCenterActive_ = false;
         bool quickShellUiFocusBridgeMode_ = false;
         bool quickTimelineSurfaceReady_ = false;
         quint64 deferredTimelineBridgeFlushGeneration_ = 0;
@@ -339,11 +313,8 @@
         bool videoExportWorkerSuccess_ = false;
         bool videoExportWorkerCompletionReceived_ = false;
         bool videoExportWorkerCancelRequested_ = false;
-        // Legacy inline-progress state. The embedded export panel now uses the
-        // normal QProgressDialog path; this state is still cleared defensively
-        // so any stale inline session cannot keep the panel button in cancel mode.
-        bool videoExportUseInlineProgress_ = false;
-        double videoExportInlineProgressSecond_ = -1.0;
+        // Token of the shared progress job this export owns, 0 when none.
+        quint64 videoExportJobToken_ = 0;
         // Difficulty the embedded video panel was seeded with (0 = none).
         int embeddedVideoExportDifficultyId_ = 0;
         // Export-page preview audition (2026-06-13): while the embedded video
@@ -352,6 +323,22 @@
         // transport plays/seeks it even though activeDifficultyId_ == 0 (D4).
         // Cleared on teardown, which forces the next difficulty to rebuild.
         bool exportPreviewAuditionActive_ = false;
+        // Playback readiness for an installed audition scene — deliberately NOT
+        // latestTimelinePreview{SnapshotReady,Revision}_.
+        //
+        // Those two mean "the preview snapshot of the difficulty being edited",
+        // and the export page has no such difficulty (activeDifficultyId_ == 0).
+        // Borrowing them meant anything acting on behalf of a difficulty —
+        // clearTimelineAndPreview() zeroing them, invalidateDocumentValidationRevision()
+        // bumping the counter they are compared against — reached into the export
+        // page's playback and wedged it, with no owner to notice and no path back.
+        //
+        // `stillCurrent` answers whether the installed scene still matches what
+        // it was built from; `reinstall` builds it again. Both are supplied by
+        // whoever installed it, because only they know either answer.
+        bool auditionSceneReady_ = false;
+        std::function<bool()> auditionSceneStillCurrent_;
+        std::function<void()> auditionSceneReinstall_;
         // One-shot preview position carried INTO the export page from the field
         // that was active before entering (difficulty tab / latency page), so the
         // export audition seeds the playhead there instead of snapping to 0 —
@@ -625,7 +612,6 @@
         miacode::preview_gameplay::CenterDisplayMode previewCenterDisplayMode_ =
             miacode::preview_gameplay::kDefaultCenterDisplayMode;
         bool previewShowValidationSummary_ = true;
-        miacode::ui::AppBackgroundSettings appBackgroundSettings_;
         bool ignoreMuriIssuePrompts_ = false;
         bool chartNormalizeStartAtNewMeasure_ = true;
         bool chartNormalizeReduceTo384Grid_ = false;
@@ -680,7 +666,6 @@
         QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
         QHash<QString, QSet<QString>> ignoredHeaderIssueTypesByFile_;
         QVector<ValidationDecoration> validationDecorations_;
-        QHash<QString, QVector<QTextEdit::ExtraSelection>> extensionEditorExtraSelections_;
         QHash<QString, QVector<ExtensionDiagnosticEntry>> extensionDiagnosticsByOwner_;
         QHash<QString, QVector<ExtensionTimelineMarkerEntry>> extensionTimelineMarkersByOwner_;
         QVector<QJsonObject> extensionExportPresets_;
@@ -697,10 +682,6 @@
         QVector<QPointer<QShortcut>> extensionShortcutObjects_;
         QJsonObject extensionProjectData_;
         DeletedDifficultyUndoState deletedDifficultyUndoState_;
-        QByteArray validationExtraSelectionsSignature_;
-        QByteArray lastEditorExtraSelectionsSignature_;
-        QVector<QTextEdit::ExtraSelection> cachedValidationExtraSelections_;
-        QVector<QTextEdit::ExtraSelection> currentEditorExtraSelections_;
         QString activeOutlineKey_ = "metadata";
         int activeDifficultyId_ = 0;
     };
@@ -709,13 +690,11 @@
     MainWindowState state_;
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
     std::unique_ptr<miacode::extensions::ExtensionManager> extensionManager_;
-    QWidget*& editorWidget_ = ui_.editorWidget_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
     QuickShellPreviewCompositeSurface*& quickShellPreviewCompositeSurface_ = state_.quickShellPreviewCompositeSurface_;
     TimelineQuickStateBridge*& timelineQuickStateBridge_ = state_.timelineQuickStateBridge_;
     bool& quickShellBackendActive_ = state_.quickShellBackendActive_;
-    bool& qmlExportCenterActive_ = state_.qmlExportCenterActive_;
     bool& quickShellUiFocusBridgeMode_ = state_.quickShellUiFocusBridgeMode_;
     bool& quickTimelineSurfaceReady_ = state_.quickTimelineSurfaceReady_;
     quint64& deferredTimelineBridgeFlushGeneration_ = state_.deferredTimelineBridgeFlushGeneration_;
@@ -747,22 +726,7 @@
     QAction*& preferencesAction_ = ui_.preferencesAction_;
     QAction*& saveAsAction_ = ui_.saveAsAction_;
     QAction*& packAsZipAction_ = ui_.packAsZipAction_;
-    QAction*& netBatchDownloadAction_ = ui_.netBatchDownloadAction_;
-    QAction*& transformMirrorLeftRightAction_ = ui_.transformMirrorLeftRightAction_;
-    QAction*& transformMirrorUpDownAction_ = ui_.transformMirrorUpDownAction_;
-    QAction*& transformRotate180Action_ = ui_.transformRotate180Action_;
-    QAction*& transformRotate45CounterClockwiseAction_ = ui_.transformRotate45CounterClockwiseAction_;
-    QAction*& transformRotate45ClockwiseAction_ = ui_.transformRotate45ClockwiseAction_;
     QAction*& normalizeWholeChartAction_ = ui_.normalizeWholeChartAction_;
-    QAction*& transformToggleBreakAction_ = ui_.transformToggleBreakAction_;
-    QAction*& transformToggleExAction_ = ui_.transformToggleExAction_;
-    QAction*& transformToggleFireworkAction_ = ui_.transformToggleFireworkAction_;
-    QAction*& transformRandomRotateAction_ = ui_.transformRandomRotateAction_;
-    QAction*& transformClearCompleteElementsAction_ = ui_.transformClearCompleteElementsAction_;
-    QAction*& transformRaiseSubdivisionAction_ = ui_.transformRaiseSubdivisionAction_;
-    QAction*& transformLowerSubdivisionAction_ = ui_.transformLowerSubdivisionAction_;
-    QAction*& transformRaiseSubdivisionHalfStepAction_ = ui_.transformRaiseSubdivisionHalfStepAction_;
-    QAction*& transformLowerSubdivisionHalfStepAction_ = ui_.transformLowerSubdivisionHalfStepAction_;
     QAction*& findReplaceAction_ = ui_.findReplaceAction_;
     QAction*& undoAction_ = ui_.undoAction_;
     QAction*& redoAction_ = ui_.redoAction_;
@@ -788,7 +752,6 @@
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
     QAction*& skinSettingsAction_ = ui_.skinSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
-    QAction*& fullCopyAreaAction_ = ui_.fullCopyAreaAction_;
     QAction*& aboutAction_ = ui_.aboutAction_;
     QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
     QAction*& fontIncreaseAction_ = ui_.fontIncreaseAction_;
@@ -802,12 +765,7 @@
     QTimer*& timelineAnalysisIdleTimer_ = ui_.timelineAnalysisIdleTimer_;
     QTimer*& bottomTabsContentScalePersistTimer_ = ui_.bottomTabsContentScalePersistTimer_;
     QTimer*& visualLayoutPersistTimer_ = ui_.visualLayoutPersistTimer_;
-    QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
-    QProgressDialog*& videoExportProgressDialog_ = ui_.videoExportProgressDialog_;
-    QPointer<QDialog>& netBatchDownloadDialog_ = ui_.netBatchDownloadDialog_;
-    QPointer<QDialog>& netBatchUploadDialog_ = ui_.netBatchUploadDialog_;
-    QPointer<QDialog>& pvBatchCompressionDialog_ = ui_.pvBatchCompressionDialog_;
     QPointer<QLabel>& aboutIconLabel_ = ui_.aboutIconLabel_;
     QSoundEffect*& invalidStarPreviewEnableSound_ = state_.invalidStarPreviewEnableSound_;
     QSoundEffect*& invalidStarPreviewDisableSound_ = state_.invalidStarPreviewDisableSound_;
@@ -905,10 +863,10 @@
     bool& videoExportWorkerSuccess_ = state_.videoExportWorkerSuccess_;
     bool& videoExportWorkerCompletionReceived_ = state_.videoExportWorkerCompletionReceived_;
     bool& videoExportWorkerCancelRequested_ = state_.videoExportWorkerCancelRequested_;
-    bool& videoExportUseInlineProgress_ = state_.videoExportUseInlineProgress_;
-    double& videoExportInlineProgressSecond_ = state_.videoExportInlineProgressSecond_;
+    quint64& videoExportJobToken_ = state_.videoExportJobToken_;
     int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
     bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
+    bool& auditionSceneReady_ = state_.auditionSceneReady_;
     double& exportPreviewEntrySeedSecond_ = state_.exportPreviewEntrySeedSecond_;
     int& lastExportAuditionDifficultyId_ = state_.lastExportAuditionDifficultyId_;
     bool& exportIntroRegionActive_ = state_.exportIntroRegionActive_;
@@ -1071,11 +1029,13 @@
     bool& exportShowChartInfoHud_ = state_.exportShowChartInfoHud_;
     miacode::preview_gameplay::CenterDisplayMode& previewCenterDisplayMode_ = state_.previewCenterDisplayMode_;
     bool& previewShowValidationSummary_ = state_.previewShowValidationSummary_;
-    miacode::ui::AppBackgroundSettings& appBackgroundSettings_ = state_.appBackgroundSettings_;
     bool& ignoreMuriIssuePrompts_ = state_.ignoreMuriIssuePrompts_;
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;
     bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;
     bool& chartNormalizeSplitEveryFourMeasures_ = state_.chartNormalizeSplitEveryFourMeasures_;
+    int& chartNormalizeSectionMeasureCount_ = state_.chartNormalizeSectionMeasureCount_;
+    miacode::chart_transform::ChartNormalizationSyntax& chartNormalizeSyntax_ =
+        state_.chartNormalizeSyntax_;
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;
@@ -1092,18 +1052,15 @@
     QWidget*& welcomePage_ = ui_.welcomePage_;
     QLabel*& welcomeEmptyHintLabel_ = ui_.welcomeEmptyHintLabel_;
     QWidget*& metadataPage_ = ui_.metadataPage_;
-    miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
-    miacode::export_page::ExportLauncherPage*& exportPage_ = ui_.exportPage_;
+    QWidget*& latencyPlaceholderPage_ = ui_.latencyPlaceholderPage_;
+    QWidget*& exportPlaceholderPage_ = ui_.exportPlaceholderPage_;
     QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
-    QPointer<VideoExportDialog>& embeddedVideoExportPanel_ = ui_.embeddedVideoExportPanel_;
-    QPointer<miacode::video_export::BatchExportPanel>& embeddedBatchExportPanel_ = ui_.embeddedBatchExportPanel_;
+    miacode::v2::UiRequestService*& uiRequests_ = ui_.uiRequests_;
+    miacode::v2::JobProgressService*& jobProgress_ = ui_.jobProgress_;
     QLabel*& latencyEntrySummaryLabel_ = ui_.latencyEntrySummaryLabel_;
     QWidget*& metadataCard_ = ui_.metadataCard_;
     QLabel*& metadataEmptyHintLabel_ = ui_.metadataEmptyHintLabel_;
     QWidget*& chartPage_ = ui_.chartPage_;
-    QSplitter*& chartCopySplitter_ = ui_.chartCopySplitter_;
-    QWidget*& copyAreaPanel_ = ui_.copyAreaPanel_;
-    PlainCodeEditor*& copyAreaEditor_ = ui_.copyAreaEditor_;
     QStackedWidget*& editorStack_ = ui_.editorStack_;
     QDockWidget*& outlineDock_ = ui_.outlineDock_;
     QListWidget*& outlineList_ = ui_.outlineList_;
@@ -1147,7 +1104,6 @@
     QLabel*& editorEmptyStateLabel_ = ui_.editorEmptyStateLabel_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
     miacode::ui::BusySpinner*& outlineBusySpinner_ = ui_.outlineBusySpinner_;
-    miacode::ui::AppBackgroundPainter*& appBackgroundPainter_ = ui_.appBackgroundPainter_;
     QSplitter*& workspaceSplitter_ = ui_.workspaceSplitter_;
     QWidget*& previewPanel_ = ui_.previewPanel_;
     QWidget*& previewLeftColumn_ = ui_.previewLeftColumn_;
@@ -1204,15 +1160,10 @@
     bool& chartDropOverlayActive_ = state_.chartDropOverlayActive_;
     bool& quickShellPreviewCompositeSurfaceActive_ = state_.quickShellPreviewCompositeSurfaceActive_;
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache>& previewProgressStatsCache_ = state_.previewProgressStatsCache_;
-    BracketScopeHighlighter*& chartBracketHighlighter_ = ui_.chartBracketHighlighter_;
     BracketScopeHighlighter*& metadataBracketHighlighter_ = ui_.metadataBracketHighlighter_;
     QHash<int, ValidationCacheEntry>& validationCacheByDifficulty_ = state_.validationCacheByDifficulty_;
     QHash<QString, QSet<QString>>& ignoredHeaderIssueTypesByFile_ = state_.ignoredHeaderIssueTypesByFile_;
     QVector<ValidationDecoration>& validationDecorations_ = state_.validationDecorations_;
     DeletedDifficultyUndoState& deletedDifficultyUndoState_ = state_.deletedDifficultyUndoState_;
-    QByteArray& validationExtraSelectionsSignature_ = state_.validationExtraSelectionsSignature_;
-    QByteArray& lastEditorExtraSelectionsSignature_ = state_.lastEditorExtraSelectionsSignature_;
-    QVector<QTextEdit::ExtraSelection>& cachedValidationExtraSelections_ = state_.cachedValidationExtraSelections_;
-    QVector<QTextEdit::ExtraSelection>& currentEditorExtraSelections_ = state_.currentEditorExtraSelections_;
     QString& activeOutlineKey_ = state_.activeOutlineKey_;
     int& activeDifficultyId_ = state_.activeDifficultyId_;

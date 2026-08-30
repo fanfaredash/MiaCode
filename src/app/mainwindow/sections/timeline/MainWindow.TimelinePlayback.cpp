@@ -221,7 +221,7 @@ void MainWindow::TimelineSection::seekPreviewDiscreteToSecond(double second, boo
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    state_.qtPreviewPlaying_ = false;
+    owner_.setPreviewPlayingFlag(false);
     owner_.editorSyncController().setPlaybackActive(false);
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
@@ -765,7 +765,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.qtPreviewPendingTimelineCenterView_ = true;
         state_.qtPreviewTimelineDirty_ = true;
     }
-    state_.qtPreviewPlaying_ = false;
+    owner_.setPreviewPlayingFlag(false);
     owner_.editorSyncController().setPlaybackActive(false);
     if (owner_.extensionManager_ != nullptr && (wasPlaying || hadStartupSync)) {
         owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{

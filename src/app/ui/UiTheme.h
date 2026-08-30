@@ -20,16 +20,6 @@ enum class ResolvedTheme {
     Dark,
 };
 
-enum class AppBackgroundOverlayRole {
-    Toolbar,
-    StatusBar,
-    Panel,
-    Card,
-    EditorHeader,
-    Input,
-    CodeEditor,
-};
-
 struct Colors {
     bool dark = false;
     QColor windowBg;
@@ -85,7 +75,6 @@ struct Colors {
 ResolvedTheme resolvedTheme();
 bool isDarkTheme();
 const Colors& colors();
-int appBackgroundOverlayAlpha(AppBackgroundOverlayRole role, bool darkTheme);
 QPalette applicationPalette();
 void applyApplicationTheme(QApplication& app);
 
@@ -104,7 +93,6 @@ QString editorTextEditStyleSheet();
 QString editorShellStyleSheet();
 QString editorFindBarStyleSheet();
 QString metadataPageStyleSheet();
-QString latencyDetectionPageStyleSheet();
 QString exportLauncherPageStyleSheet();
 // Embedded video-export panel only (export page): flat underline tab bar +
 // transparent per-tab scroll viewports. The modal dialog keeps its default
@@ -112,7 +100,7 @@ QString exportLauncherPageStyleSheet();
 QString embeddedExportTabStyleSheet();
 QString metadataEmptyHintLabelStyleSheet();
 QString outlineListStyleSheet();
-// Compact, rounded row treatment for BatchExportPanel's numbered chart-folder
+// Compact, rounded row treatment for the batch queue's numbered chart-folder
 // list. Kept separate from the editor outline list because the two surfaces
 // have different density and selection semantics.
 QString batchExportChartDirectoryListStyleSheet();

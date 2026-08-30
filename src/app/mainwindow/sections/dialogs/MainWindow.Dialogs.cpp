@@ -1,3 +1,4 @@
+#include "app/v2/UiRequestService.h"
 #include "MainWindow.DialogsSection.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
@@ -250,27 +251,23 @@ void MainWindow::DialogsSection::showMediaOperationCompleteDialog(
     const QString& summary,
     const QString& producedFilePath)
 {
-    const QFileInfo info(producedFilePath);
-    const QString nativePath = QDir::toNativeSeparators(producedFilePath);
-    QMessageBox dialog(
-        QMessageBox::Information,
-        title,
-        QStringLiteral("%1\n\n%2").arg(summary, nativePath),
-        QMessageBox::NoButton,
-        UiDialogs::effectiveParentWidget(&owner_)
-    );
-    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    QPushButton* openButton = dialog.addButton(
-        UiText::text(QStringLiteral("dialogs.open_folder")),
-        QMessageBox::AcceptRole
-    );
-    dialog.addButton(UiText::text(QStringLiteral("action.close")), QMessageBox::RejectRole);
-    dialog.setDefaultButton(openButton);
-    dialog.exec();
-    if (dialog.clickedButton() == openButton) {
-        const QString dir = info.absoluteDir().absolutePath();
-        if (!dir.isEmpty()) {
-            QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
-        }
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        return;
     }
+    requests->requestNoticeAction(
+        miacode::v2::NoticeSeverity::Information,
+        title,
+        summary,
+        QDir::toNativeSeparators(producedFilePath),
+        UiText::text(QStringLiteral("dialogs.open_folder")),
+        [producedFilePath](bool openFolder) {
+            if (!openFolder) {
+                return;
+            }
+            const QString dir = QFileInfo(producedFilePath).absoluteDir().absolutePath();
+            if (!dir.isEmpty()) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+            }
+        });
 }

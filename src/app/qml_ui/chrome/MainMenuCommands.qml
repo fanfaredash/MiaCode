@@ -13,7 +13,6 @@ QtObject {
 
     signal toggleSidebarRequested()
     signal toggleBottomPanelRequested()
-    signal togglePreviewRequested()
     signal openRequested()
     signal saveRequested()
     signal saveAsRequested()
@@ -25,5 +24,14 @@ QtObject {
     signal selectCurrentLineRequested()
     signal validateRequested()
     signal metadataRequested()
+    signal chartTransformRequested(string opId)
+    signal normalizeChartRequested()
+    signal aboutRequested()
+    signal newDocumentRequested()
+    signal openRecentRequested(string path)
+    signal restoreBackupRequested(string path)
+    signal closeDocumentRequested()
+    signal audioSettingsRequested()
+    signal previewSettingsRequested()
     signal unavailableFeatureRequested(string featureName)
 }

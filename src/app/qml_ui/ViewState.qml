@@ -2,6 +2,9 @@ import QtQuick
 
 QtObject {
     signal difficultyEditorActivationRequested(int difficultyId)
+    // A closed tab is a view that no longer exists; whatever it accumulated —
+    // its undo history above all — goes with it.
+    signal editorClosed(string key)
 
     readonly property string metadataEditorKey: "metadata"
     property var openEditorTabs: []
@@ -21,8 +24,10 @@ QtObject {
     // 继续由宿主偏好服务持久化。
     property string activeSidebarView: "chart"
     property bool difficultySectionExpanded: true
+    // 书签分组的展开状态属于当前工作台会话。未被触碰过的分组跟随活动难度：
+    // 当前难度展开，其余折叠——与 v1 的 outlineBookmarkGroupExpanded_ 一致。
+    property var bookmarkGroupsExpanded: ({})
     property bool bottomPanelVisible: true
-    property bool previewVisible: true
     property string compactPanel: ""
 
     // 编辑器标签是当前工作台会话中的视图集合。关闭标签只从集合中移除
@@ -33,6 +38,19 @@ QtObject {
 
     function containsEditor(key) {
         return openEditorTabs.indexOf(key) >= 0
+    }
+
+    function bookmarkGroupExpanded(difficultyId) {
+        const stored = bookmarkGroupsExpanded[difficultyId]
+        return stored === undefined ? difficultyId === activeDifficultyId : stored
+    }
+
+    // Reassignment, not mutation: a QML var property only notifies when it is
+    // assigned, so editing the map in place would leave every binding stale.
+    function setBookmarkGroupExpanded(difficultyId, expanded) {
+        const next = Object.assign({}, bookmarkGroupsExpanded)
+        next[difficultyId] = expanded
+        bookmarkGroupsExpanded = next
     }
 
     function recordEditorUse(key) {
@@ -77,6 +95,24 @@ QtObject {
             openEditor(difficultyEditorKey(id))
     }
 
+    // Tab order is workspace presentation state, not chart structure. Moving
+    // an editor view therefore never changes the document; it only exchanges
+    // two existing editor tabs in this window.
+    function swapEditorTabs(firstKey, secondKey) {
+        if (!firstKey || !secondKey || firstKey === secondKey)
+            return false
+        const firstIndex = openEditorTabs.indexOf(firstKey)
+        const secondIndex = openEditorTabs.indexOf(secondKey)
+        if (firstIndex < 0 || secondIndex < 0)
+            return false
+        const tabs = openEditorTabs.slice()
+        const first = tabs[firstIndex]
+        tabs[firstIndex] = tabs[secondIndex]
+        tabs[secondIndex] = first
+        openEditorTabs = tabs
+        return true
+    }
+
     function closeEditor(key) {
         const closingIndex = openEditorTabs.indexOf(key)
         if (closingIndex < 0)
@@ -86,6 +122,7 @@ QtObject {
         tabs.splice(closingIndex, 1)
         openEditorTabs = tabs
         editorHistory = editorHistory.filter(item => item !== key)
+        editorClosed(key)
 
         if (activeEditorKey !== key)
             return

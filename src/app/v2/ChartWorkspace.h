@@ -35,6 +35,14 @@ struct ChartWorkspaceSnapshot {
     quint64 revision = 0;
     bool dirty = false;
     bool hasDocument = false;
+    // Which difficulties' charts differ from the last save point.
+    //
+    // `dirty` is about the file, which is what gets written; this is about the
+    // sections a person edits one at a time. The shell used to have only the
+    // first and had to draw the second, so it pinned the file's flag on
+    // whichever tab happened to be active — edit Expert, switch to Master, and
+    // the dot moved with you.
+    QVector<int> dirtyDifficultyIds;
 };
 
 struct ChartWorkspaceResult {
@@ -85,6 +93,26 @@ public:
     bool removeDifficulty(int difficultyId);
     bool unifyDesigners(const QString& canonicalName);
     bool markSaved(const QString& filePath = QString());
+    // What a save of one section should put on disk: the last save point with
+    // that one difficulty's chart brought up to date, and nothing else. Saving
+    // is per section because a tab is what a person works in — leaving the
+    // other difficulties at their on-disk text is the difference between
+    // "save what I am doing" and "save everything I have open".
+    //
+    // difficultyId 0 means the whole document (the metadata tab is a view of
+    // the entire file, so its section is the file).
+    QString textForSectionSave(int difficultyId) const;
+    // Advance the save point for that section only. Callers write
+    // textForSectionSave() first; this records that it landed.
+    bool markSectionSaved(int difficultyId, const QString& filePath = QString());
+    // 关闭文档: no document at all, rather than an empty one. A chart with no
+    // difficulties is still a chart; this is the state before any chart.
+    ChartWorkspaceResult closeDocument();
+    // Put one difficulty's chart back to the last save point, leaving every
+    // other difficulty alone. Refused for a difficulty that did not exist at
+    // that save point: there is no earlier text for it, and dropping it
+    // entirely would be a structural edit, not a discard.
+    ChartWorkspaceResult revertDifficultyChart(int difficultyId);
 
     ChartWorkspaceSnapshot snapshot() const;
     const SimaiDocument& document() const;
@@ -101,8 +129,13 @@ private:
     void refreshSourceAndDirty();
 
     SimaiDocument document_;
+    QVector<int> computeDirtyDifficultyIds() const;
+
     QString sourceText_;
     QString savedSourceText_;
+    // The save point as a document, not just as text, so a per-difficulty
+    // comparison is a field lookup rather than a re-parse.
+    SimaiDocument savedDocument_;
     QString filePath_;
     int activeDifficultyId_ = 0;
     quint64 revision_ = 0;

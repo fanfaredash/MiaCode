@@ -8,7 +8,7 @@ ApplicationWindow {
     property bool sourceEditorFocused: false
 
     required property var applicationContext
-    readonly property var shellController: applicationContext.shell
+    readonly property var shellLifecycle: applicationContext.shell
     readonly property var platform: applicationContext.platform
 
     width: 1280
@@ -70,14 +70,30 @@ ApplicationWindow {
         value: window.applicationContext.preferences
     }
 
-    // Same close contract as QuickShell v1: confirm via MainWindow, then notify
-    // bootstrap so preparePreviewForShutdown runs before teardown.
+    // Two-phase close. The unsaved-changes prompt is a QML dialog, so the first
+    // close attempt cannot be answered here — it is refused, the question is
+    // asked, and the window closes itself once the answer comes back. Telling
+    // bootstrap on the way out is what lets preparePreviewForShutdown run
+    // before teardown.
+    property bool closeApproved: false
+
     onClosing: function(close) {
-        const confirmed = window.shellController.confirmClose()
-        if (!confirmed)
-            close.accepted = false
-        if (close.accepted)
-            window.shellController.notifyRootCloseAccepted("qml_ui_root_closing")
+        if (window.closeApproved) {
+            window.shellLifecycle.notifyRootCloseAccepted("qml_ui_root_closing")
+            return
+        }
+        close.accepted = false
+        window.shellLifecycle.requestClose()
+    }
+
+    Connections {
+        target: window.shellLifecycle
+        function onCloseDecided(accepted) {
+            if (!accepted)
+                return
+            window.closeApproved = true
+            window.close()
+        }
     }
 
     MainView {
@@ -92,8 +108,10 @@ ApplicationWindow {
     ShortcutBindings {
         shortcuts: window.applicationContext.shortcuts
         commands: window.applicationContext.commands
-        shellController: window.shellController
+        previewSession: window.applicationContext.preview
+        preferencesModel: window.applicationContext.preferencesModel
         sourceEditorFocused: window.sourceEditorFocused
         chartCommandsEnabled: window.applicationContext.document.currentDifficultyId > 0
+        onChartTransformRequested: opId => mainView.applyChartTransform(opId)
     }
 }

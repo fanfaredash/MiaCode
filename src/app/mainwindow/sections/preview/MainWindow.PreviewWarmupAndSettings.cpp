@@ -3,7 +3,6 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
-#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -480,6 +479,220 @@ void MainWindow::PreviewSection::setTouchPadAuthoringCtrlHoldActive(bool active)
     }
     state_.touchPadAuthoringCtrlHoldActive_ = active;
     applyEffectivePreviewOutlineVariantToCanvas();
+}
+
+PreviewAudioSettings MainWindow::currentPreviewAudioSettings() const
+{
+    return state_.previewAudioSettings_;
+}
+
+void MainWindow::applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings)
+{
+    state_.previewAudioSettings_ = settings;
+    state_.previewAudioSettings_.normalize();
+    // Break-slide tail cheer is an app-scoped sound-design choice, not a
+    // per-chart mix, so the page's value is what the preference becomes.
+    state_.breakSlideTailCheerMutedPreference_ =
+        state_.previewAudioSettings_.breakSlideTailCheerMuted;
+    applyPreviewAudioSettingsToRuntime();
+    // The mixer is project-scoped; savePortableState carries the app-level
+    // companions edited from the same page.
+    saveProjectAudioPreferences();
+    savePortableState();
+}
+
+void MainWindow::savePreviewAudioSettingsAsSoftwareDefault()
+{
+    state_.previewAudioSettings_.normalize();
+    state_.softwarePreviewAudioSettings_ = previewAudioSettingsWithBreakSlideTailCheerPreference(
+        state_.previewAudioSettings_, state_.breakSlideTailCheerMutedPreference_);
+    savePortableState();
+}
+
+void MainWindow::restorePreviewAudioSettingsFromSoftwareDefault()
+{
+    applyPreviewAudioSettingsFromUi(previewAudioSettingsWithBreakSlideTailCheerPreference(
+        state_.softwarePreviewAudioSettings_, state_.breakSlideTailCheerMutedPreference_));
+}
+
+namespace {
+
+// The percent sliders on the 预览设置 page speak whole percent; the members they
+// stand for are 0..1 doubles.
+int percentOf(double unitValue)
+{
+    return qRound(unitValue * 100.0);
+}
+
+double unitOfPercent(const QVariant& percent)
+{
+    return qBound(0.0, percent.toInt() / 100.0, 1.0);
+}
+
+// Flow speed is typed, not dragged, so a value arrives raw and has to be put on
+// the step grid before anything sees it.
+double snappedFlowSpeed(double flowSpeed)
+{
+    using namespace miacode::preview_gameplay;
+    const double steps = qRound((flowSpeed - kPreviewTimingFlowSpeedMin) / kPreviewTimingFlowSpeedStep);
+    return qBound(
+        kPreviewTimingFlowSpeedMin,
+        kPreviewTimingFlowSpeedMin + steps * kPreviewTimingFlowSpeedStep,
+        kPreviewTimingFlowSpeedMax);
+}
+
+}  // namespace
+
+QVariantMap MainWindow::previewRenderSettings() const
+{
+    using namespace miacode::preview_video;
+    using namespace miacode::preview_gameplay;
+    return QVariantMap{
+        // 视频
+        {QStringLiteral("brightnessOuter"), percentOf(state_.previewBackgroundBrightnessOuter_)},
+        {QStringLiteral("brightnessInner"), percentOf(state_.previewBackgroundBrightnessInner_)},
+        {QStringLiteral("layoutSquareScale"), percentOf(state_.previewLayoutSquareScale_)},
+        {QStringLiteral("layoutSquareScaleMin"), percentOf(kLayoutSquareScaleMin)},
+        {QStringLiteral("layoutSquareScaleMax"), percentOf(kLayoutSquareScaleMax)},
+        {QStringLiteral("layoutSquareScaleStep"), percentOf(kLayoutSquareScaleStep)},
+        {QStringLiteral("scaleMode"), static_cast<int>(state_.previewBackgroundScaleMode_)},
+        {QStringLiteral("smoothBrightness"), state_.previewSmoothBrightness_},
+        {QStringLiteral("showTimestamp"), state_.previewShowTimestamp_},
+        {QStringLiteral("touchPadAuthoringShortcut"), state_.previewTouchPadAuthoringShortcutEnabled_},
+        {QStringLiteral("showDebugInfo"), state_.previewShowDebugInfo_},
+        {QStringLiteral("forceLabeledJudgeLineWhenPaused"), state_.previewForceLabeledJudgeLineWhenPaused_},
+        // 玩法
+        {QStringLiteral("tapFlowSpeed"), snappedFlowSpeed(state_.previewTapFlowSpeed_)},
+        {QStringLiteral("touchFlowSpeed"), snappedFlowSpeed(state_.previewTouchFlowSpeed_)},
+        {QStringLiteral("flowSpeedMin"), kPreviewTimingFlowSpeedMin},
+        {QStringLiteral("flowSpeedMax"), kPreviewTimingFlowSpeedMax},
+        {QStringLiteral("flowSpeedStep"), kPreviewTimingFlowSpeedStep},
+        {QStringLiteral("judgeEffectSlide"), state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay},
+        {QStringLiteral("judgeEffectTap"), state_.muriRenderOptions_.showChartReviewTapJudgeOverlay},
+        {QStringLiteral("judgeEffectBreak"), state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay},
+        {QStringLiteral("judgeEffectTouch"), state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay},
+        {QStringLiteral("slideEarlierOnTop"), state_.previewSlideEarlierSecondAndTextOnTop_},
+        {QStringLiteral("centerDisplay"), static_cast<int>(state_.previewCenterDisplayMode_)},
+        {QStringLiteral("tapJudgeTextDistance"), static_cast<int>(state_.previewTapJudgeTextDistance_)},
+    };
+}
+
+void MainWindow::setPreviewRenderSetting(const QString& key, const QVariant& value)
+{
+    PreviewRuntime* canvas = state_.previewCanvas_;
+    // Each branch is the Widgets dialog's own handler for that control: the
+    // member, then whichever apply call actually moves the picture.
+    if (key == QLatin1String("brightnessOuter")) {
+        state_.previewBackgroundBrightnessOuter_ = unitOfPercent(value);
+        applyPreviewStageMediaRouteVisualSettings();
+        if (canvas != nullptr) {
+            canvas->setBackgroundBrightnessOuter(state_.previewBackgroundBrightnessOuter_);
+        }
+    } else if (key == QLatin1String("brightnessInner")) {
+        state_.previewBackgroundBrightnessInner_ = unitOfPercent(value);
+        if (canvas != nullptr) {
+            canvas->setBackgroundBrightnessInner(state_.previewBackgroundBrightnessInner_);
+        }
+    } else if (key == QLatin1String("layoutSquareScale")) {
+        state_.previewLayoutSquareScale_ =
+            miacode::preview_video::normalizedLayoutSquareScale(value.toInt() / 100.0);
+        applyPreviewStageMediaRouteVisualSettings();
+        if (canvas != nullptr) {
+            canvas->setLayoutSquareScale(state_.previewLayoutSquareScale_);
+        }
+    } else if (key == QLatin1String("scaleMode")) {
+        const auto mode = static_cast<PreviewBackgroundScaleMode>(value.toInt());
+        if (state_.previewBackgroundScaleMode_ == mode) {
+            return;
+        }
+        state_.previewBackgroundScaleMode_ = mode;
+        applyPreviewStageMediaRouteVisualSettings();
+        if (canvas != nullptr) {
+            canvas->setBackgroundScaleMode(mode);
+        }
+    } else if (key == QLatin1String("smoothBrightness")) {
+        state_.previewSmoothBrightness_ = value.toBool();
+        if (canvas != nullptr) {
+            canvas->setSmoothBrightness(state_.previewSmoothBrightness_);
+        }
+    } else if (key == QLatin1String("showTimestamp")) {
+        state_.previewShowTimestamp_ = value.toBool();
+        if (canvas != nullptr) {
+            canvas->setShowTimestamp(state_.previewShowTimestamp_);
+        }
+    } else if (key == QLatin1String("touchPadAuthoringShortcut")) {
+        state_.previewTouchPadAuthoringShortcutEnabled_ = value.toBool();
+        applyEffectivePreviewOutlineVariantToCanvas();
+    } else if (key == QLatin1String("showDebugInfo")) {
+        state_.previewShowDebugInfo_ = value.toBool();
+        if (canvas != nullptr) {
+            canvas->setShowDebugInfo(state_.previewShowDebugInfo_);
+        }
+    } else if (key == QLatin1String("forceLabeledJudgeLineWhenPaused")) {
+        state_.previewForceLabeledJudgeLineWhenPaused_ = value.toBool();
+        applyEffectivePreviewOutlineVariantToCanvas();
+        applyPreviewStageMediaRouteVisualSettings();
+    } else if (key == QLatin1String("tapFlowSpeed")) {
+        state_.previewTapFlowSpeed_ = snappedFlowSpeed(value.toDouble());
+        if (canvas != nullptr) {
+            canvas->setTapFlowSpeed(state_.previewTapFlowSpeed_);
+        }
+    } else if (key == QLatin1String("touchFlowSpeed")) {
+        state_.previewTouchFlowSpeed_ = snappedFlowSpeed(value.toDouble());
+        if (canvas != nullptr) {
+            canvas->setTouchFlowSpeed(state_.previewTouchFlowSpeed_);
+        }
+    } else if (key == QLatin1String("judgeEffectSlide")
+               || key == QLatin1String("judgeEffectTap")
+               || key == QLatin1String("judgeEffectBreak")
+               || key == QLatin1String("judgeEffectTouch")) {
+        // The four overlays are one control on the page (a multi-pick), and one
+        // re-apply covers whichever of them moved.
+        bool MuriRenderOptions::*overlay = &MuriRenderOptions::showChartReviewSlideJudgeOverlay;
+        if (key == QLatin1String("judgeEffectTap")) {
+            overlay = &MuriRenderOptions::showChartReviewTapJudgeOverlay;
+        } else if (key == QLatin1String("judgeEffectBreak")) {
+            overlay = &MuriRenderOptions::showChartReviewBreakJudgeOverlay;
+        } else if (key == QLatin1String("judgeEffectTouch")) {
+            overlay = &MuriRenderOptions::showChartReviewTouchJudgeOverlay;
+        }
+        if (state_.muriRenderOptions_.*overlay == value.toBool()) {
+            return;
+        }
+        state_.muriRenderOptions_.*overlay = value.toBool();
+        applyMuriRenderOptions();
+    } else if (key == QLatin1String("slideEarlierOnTop")) {
+        const bool earlierOnTop = value.toBool();
+        if (state_.previewSlideEarlierSecondAndTextOnTop_ == earlierOnTop) {
+            return;
+        }
+        state_.previewSlideEarlierSecondAndTextOnTop_ = earlierOnTop;
+        if (canvas != nullptr) {
+            canvas->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
+        }
+    } else if (key == QLatin1String("centerDisplay")) {
+        const auto mode = static_cast<miacode::preview_gameplay::CenterDisplayMode>(value.toInt());
+        if (state_.previewCenterDisplayMode_ == mode) {
+            return;
+        }
+        state_.previewCenterDisplayMode_ = mode;
+        if (canvas != nullptr) {
+            canvas->setCenterDisplayMode(mode);
+        }
+    } else if (key == QLatin1String("tapJudgeTextDistance")) {
+        const auto distance = static_cast<PreviewTapJudgeTextDistance>(value.toInt());
+        if (state_.previewTapJudgeTextDistance_ == distance) {
+            return;
+        }
+        state_.previewTapJudgeTextDistance_ = distance;
+        if (canvas != nullptr) {
+            canvas->setTapJudgeTextDistance(distance);
+        }
+    } else {
+        // Unknown key: nothing changed, so nothing to persist.
+        return;
+    }
+    savePortableState();
 }
 
 void MainWindow::refreshEditorAuthoringContext()

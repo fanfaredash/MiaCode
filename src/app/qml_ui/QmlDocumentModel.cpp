@@ -1,13 +1,44 @@
+#include "ui/UiText.h"
+#include "ChartTransformCommands.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
 #include "QmlDocumentModel.h"
 
 #include "editor/BookmarkCommentSyntax.h"
 
 #include "app/mainwindow/MainWindow.h"
+#include "app/v2/UiRequestService.h"
+#include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "core/chart/document/SimaiDocument.h"
 
+#include <algorithm>
+#include <functional>
+
 #include <QFileInfo>
 #include <QVariantMap>
+
+namespace {
+
+// 保存 / 放弃 / 取消, in button order. Ids match what the prompts branch on.
+QVariantList unsavedSectionChoices()
+{
+    const auto choice = [](const char* id, const char* labelKey, const char* role) {
+        return QVariantMap{
+            {QStringLiteral("id"), QLatin1String(id)},
+            {QStringLiteral("label"), UiText::text(QLatin1String(labelKey))},
+            {QStringLiteral("role"), QLatin1String(role)},
+        };
+    };
+    return QVariantList{
+        choice("save", "action.save", "accept"),
+        choice("discard", "action.discard", "destructive"),
+        choice("cancel", "action.cancel", "reject"),
+    };
+}
+
+}  // namespace
+
 
 QmlDocumentModel::QmlDocumentModel(
     MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
@@ -26,6 +57,13 @@ QmlDocumentModel::QmlDocumentModel(
     }
     backend_->setQmlDocumentSaveHandler([this](const QString& path) {
         return saveToPath(path);
+    });
+    backend_->setQmlLeaveDocumentHandler(
+        [this](std::function<void(bool)> onDecided) { requestLeaveDocument(std::move(onDecided)); });
+    backend_->setQmlChartTextHandler([this](const QString& text) {
+        if (workspace_ == nullptr) return false;
+        setChartText(text);
+        return chartText() == text;
     });
     // The workspace was seeded from the already-open backend document above.
     // Publish that first committed identity as well so every subsequent
@@ -71,6 +109,7 @@ QmlDocumentModel::~QmlDocumentModel()
 {
     if (backend_ != nullptr) {
         backend_->setQmlDocumentSaveHandler({});
+        backend_->setQmlChartTextHandler({});
     }
 }
 
@@ -345,6 +384,199 @@ QStringList QmlDocumentModel::dirtyEditorKeys() const
 }
 qulonglong QmlDocumentModel::bookmarkGeneration() const { return bookmarkGeneration_; }
 
+QVariantList QmlDocumentModel::recentDocuments()
+{
+    return backend_ != nullptr ? backend_->recentDocumentEntries() : QVariantList{};
+}
+
+QVariantList QmlDocumentModel::backupDocuments()
+{
+    return backend_ != nullptr ? backend_->backupDocumentEntries() : QVariantList{};
+}
+
+void QmlDocumentModel::restoreBackup(const QString& path)
+{
+    if (backend_ != nullptr) {
+        backend_->restoreBackupDocument(path);
+    }
+}
+
+void QmlDocumentModel::createDocumentFromPickedAudio()
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (requests == nullptr || fileService_ == nullptr) {
+        return;
+    }
+    QStringList patterns;
+    for (const QString& extension : miacode::chart_assets::supportedTrackFileExtensions()) {
+        patterns << QStringLiteral("*.%1").arg(extension);
+    }
+    miacode::v2::FileRequest request;
+    request.title = tr("选择音频");
+    request.nameFilters = QStringList{
+        tr("音频文件 (%1)").arg(patterns.join(QLatin1Char(' '))),
+        tr("所有文件 (*)"),
+    };
+    requests->requestFile(request, [this](const QString& audioPath) {
+        if (!audioPath.trimmed().isEmpty()) {
+            createChartBesideAudio(QDir::cleanPath(audioPath));
+        }
+    });
+}
+
+void QmlDocumentModel::createChartBesideAudio(const QString& audioPath)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (requests == nullptr) {
+        return;
+    }
+    // The chart is created where the audio already lives — beside it, not in a
+    // folder made for it. A chart IS its folder, and the audio's folder is
+    // already that folder as far as the user is concerned.
+    const QString targetPath =
+        QFileInfo(audioPath).absoluteDir().filePath(QStringLiteral("maidata.txt"));
+    if (!QFileInfo::exists(targetPath)) {
+        ensureTrackCopyThenCreate(audioPath, targetPath);
+        return;
+    }
+    requests->requestConfirmation(
+        UiText::text(QStringLiteral("document.file_already_exists")),
+        UiText::text(QStringLiteral("document.maidata_txt_already_exists_in")),
+        UiText::text(QStringLiteral("action.yes")),
+        [this, audioPath, targetPath](bool accepted) {
+            if (accepted) {
+                ensureTrackCopyThenCreate(audioPath, targetPath);
+            }
+        });
+}
+
+void QmlDocumentModel::ensureTrackCopyThenCreate(
+    const QString& audioPath, const QString& targetPath)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    const QFileInfo audioInfo(audioPath);
+    const QString extension = audioInfo.suffix().toLower();
+    const QString trackName = QStringLiteral("track.%1").arg(extension);
+
+    // Already named track.<ext>: nothing to copy, and copying would mean
+    // copying a file onto itself.
+    if (audioInfo.fileName().compare(trackName, Qt::CaseInsensitive) == 0) {
+        createEmptyDocumentAt(targetPath);
+        return;
+    }
+
+    const QString trackPath = audioInfo.absoluteDir().filePath(trackName);
+    const auto copyThenCreate = [this, audioPath, trackPath, targetPath, requests]() {
+        if (QFileInfo::exists(trackPath) && !QFile::remove(trackPath)) {
+            if (requests != nullptr) {
+                requests->postNotice(
+                    miacode::v2::NoticeSeverity::Error, tr("新建失败"),
+                    tr("无法替换：\n%1").arg(QDir::toNativeSeparators(trackPath)));
+            }
+            return;
+        }
+        if (!QFile::copy(audioPath, trackPath)) {
+            if (requests != nullptr) {
+                requests->postNotice(
+                    miacode::v2::NoticeSeverity::Error, tr("新建失败"),
+                    tr("无法写入：\n%1").arg(QDir::toNativeSeparators(trackPath)));
+            }
+            return;
+        }
+        // The engine resolves a track by trying track.mp3, .wav, .flac, .ogg in
+        // that order, so a copy landing on a later extension while an earlier
+        // one exists would leave the chart playing the other file. Say so
+        // rather than let it be discovered during playback.
+        const QString resolved = miacode::chart_assets::resolveTrackPathForDirectory(
+            QFileInfo(trackPath).absolutePath());
+        if (requests != nullptr && !resolved.isEmpty()
+            && QFileInfo(resolved) != QFileInfo(trackPath)) {
+            requests->postNotice(
+                miacode::v2::NoticeSeverity::Warning, tr("音轨可能不是刚选的那个"),
+                tr("文件夹里已有 %1，谱面会优先使用它，而不是 %2。")
+                    .arg(QFileInfo(resolved).fileName(), QFileInfo(trackPath).fileName()));
+        }
+        createEmptyDocumentAt(targetPath);
+    };
+
+    if (!QFileInfo::exists(trackPath)) {
+        copyThenCreate();
+        return;
+    }
+    if (requests == nullptr) {
+        return;
+    }
+    requests->requestConfirmation(
+        UiText::text(QStringLiteral("document.file_already_exists")),
+        tr("%1 已存在。用「%2」替换它吗？")
+            .arg(trackName, audioInfo.fileName()),
+        UiText::text(QStringLiteral("action.yes")),
+        [copyThenCreate](bool accepted) {
+            if (accepted) {
+                copyThenCreate();
+            }
+        });
+}
+
+void QmlDocumentModel::createEmptyDocumentAt(const QString& targetPath)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (fileService_ == nullptr) {
+        return;
+    }
+    if (!fileService_->createEmptyDocument(targetPath).accepted) {
+        if (requests != nullptr) {
+            requests->postNotice(
+                miacode::v2::NoticeSeverity::Error,
+                UiText::text(QStringLiteral("document.file_already_exists")),
+                tr("无法写入文件：\n%1").arg(QDir::toNativeSeparators(targetPath)));
+        }
+        return;
+    }
+    // Written, then opened the same way any chart is: the workspace parses it
+    // and takes the fresh file as its save point, so a new document starts
+    // clean rather than dirty-on-arrival.
+    if (!openFile(QUrl::fromLocalFile(targetPath))) {
+        return;
+    }
+    if (backend_ != nullptr) {
+        backend_->noteRecentDocument(targetPath);
+    }
+}
+
+void QmlDocumentModel::closeDocument()
+{
+    if (workspace_ == nullptr) return;
+    if (!workspace_->closeDocument().accepted) return;
+    unifiedDesignerEnabled_ = false;
+    clearMetadataSourceRejection();
+    publishWorkspaceCommit(WorkspaceCommitKind::Open, true);
+}
+
+bool QmlDocumentModel::saveDifficultySection(int difficultyId)
+{
+    if (fileService_ == nullptr) return false;
+    if (!fileService_->save(difficultyId).accepted) return false;
+    publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+    return true;
+}
+
+bool QmlDocumentModel::revertDifficultyChart(int difficultyId)
+{
+    if (workspace_ == nullptr) return false;
+    const miacode::v2::ChartWorkspaceResult result =
+        workspace_->revertDifficultyChart(difficultyId);
+    if (!result.accepted) return false;
+    // A section going back to its saved text is a source replacement as far as
+    // every consumer is concerned: the text they hold is no longer current.
+    publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+    return true;
+}
+
 bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 {
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
@@ -360,10 +592,164 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
         WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
     return true;
 }
+void QmlDocumentModel::requestLeaveDocument(std::function<void(bool)> onDecided)
+{
+    if (workspace_ == nullptr || !workspace_->snapshot().dirty) {
+        if (onDecided) onDecided(true);
+        return;
+    }
+    askNextDirtySection(std::move(onDecided));
+}
+
+void QmlDocumentModel::saveSectionOrAskForPath(
+    int difficultyId, std::function<void(bool)> onSaved)
+{
+    const auto finish = [onSaved = std::move(onSaved)](bool saved) {
+        if (onSaved) onSaved(saved);
+    };
+    if (fileService_ == nullptr || workspace_ == nullptr) {
+        finish(false);
+        return;
+    }
+    if (!workspace_->snapshot().filePath.isEmpty()) {
+        const bool saved = fileService_->save(difficultyId).accepted;
+        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        finish(saved);
+        return;
+    }
+
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (requests == nullptr) {
+        finish(false);
+        return;
+    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("action.save_as"));
+    request.saveMode = true;
+    request.nameFilters = QStringList{tr("Simai 文件 (*.txt *.simai)"), tr("所有文件 (*.*)")};
+    requests->requestFile(request, [this, finish](const QString& path) {
+        if (path.trimmed().isEmpty()) {
+            // Cancelling the pick cancels the save, which cancels whatever the
+            // save was a step of. Nothing was written.
+            finish(false);
+            return;
+        }
+        // A file that does not exist yet has no earlier content for the other
+        // difficulties to be left at, so the first write is the whole document.
+        const bool saved = fileService_->saveAs(path, 0).accepted;
+        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        finish(saved);
+    });
+}
+
+void QmlDocumentModel::requestSaveDifficultySection(int difficultyId)
+{
+    saveSectionOrAskForPath(difficultyId, [this, difficultyId](bool saved) {
+        emit sectionSaveFinished(difficultyId, saved);
+    });
+}
+
+void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
+    if (snapshot.dirtyDifficultyIds.isEmpty() || requests == nullptr) {
+        askAboutRemainingDocument(std::move(onDecided));
+        return;
+    }
+
+    const int difficultyId = snapshot.dirtyDifficultyIds.constFirst();
+    // Show it before asking about it. A prompt naming a difficulty the user
+    // cannot see is a prompt they have to answer from memory.
+    selectDifficulty(difficultyId);
+
+    const QString label = SimaiDocument::difficultyName(difficultyId);
+    requests->requestChoice(
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        tr("「%1」有未保存的更改。").arg(label),
+        unsavedSectionChoices(),
+        QStringLiteral("cancel"),
+        [this, difficultyId, onDecided = std::move(onDecided)](const QString& choiceId) mutable {
+            if (choiceId == QLatin1String("cancel")) {
+                if (onDecided) onDecided(false);
+                return;
+            }
+            if (choiceId == QLatin1String("save")) {
+                saveSectionOrAskForPath(
+                    difficultyId, [this, onDecided = std::move(onDecided)](bool saved) mutable {
+                        if (!saved) {
+                            // Nothing was written, so leaving would lose it.
+                            if (onDecided) onDecided(false);
+                            return;
+                        }
+                        askNextDirtySection(std::move(onDecided));
+                    });
+                return;
+            }
+            workspace_->revertDifficultyChart(difficultyId);
+            publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+            // That difficulty is no longer among the dirty ones, so this walks
+            // the list down rather than around it.
+            askNextDirtySection(std::move(onDecided));
+        });
+}
+
+void QmlDocumentModel::askAboutRemainingDocument(std::function<void(bool)> onDecided)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (!workspace_->snapshot().dirty || requests == nullptr) {
+        if (onDecided) onDecided(true);
+        return;
+    }
+    // What is left is not any one difficulty: metadata, or a difficulty added
+    // or removed. That is a change to the file, so the file is what it asks
+    // about.
+    requests->requestChoice(
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_changes.message")),
+        unsavedSectionChoices(),
+        QStringLiteral("cancel"),
+        [this, onDecided = std::move(onDecided)](const QString& choiceId) {
+            if (choiceId == QLatin1String("cancel")) {
+                if (onDecided) onDecided(false);
+                return;
+            }
+            if (choiceId == QLatin1String("save")) {
+                saveSectionOrAskForPath(0, [onDecided](bool saved) {
+                    if (onDecided) onDecided(saved);
+                });
+                return;
+            }
+            if (!workspace_->snapshot().filePath.isEmpty()) {
+                discardChanges();
+            }
+            if (onDecided) onDecided(true);
+        });
+}
+
+bool QmlDocumentModel::wholeSourceEditorActive() const { return wholeSourceEditorActive_; }
+
+void QmlDocumentModel::setWholeSourceEditorActive(bool active)
+{
+    if (wholeSourceEditorActive_ == active) return;
+    wholeSourceEditorActive_ = active;
+    emit wholeSourceEditorActiveChanged();
+}
+
+int QmlDocumentModel::saveSectionDifficultyId() const
+{
+    if (wholeSourceEditorActive_ || workspace_ == nullptr) return 0;
+    return workspace_->snapshot().activeDifficultyId;
+}
+
 bool QmlDocumentModel::save()
 {
     if (fileService_ == nullptr) return false;
-    const miacode::v2::ChartWorkspaceFileResult result = fileService_->save();
+    const miacode::v2::ChartWorkspaceFileResult result =
+        fileService_->save(saveSectionDifficultyId());
     if (!result.accepted) return false;
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
@@ -461,7 +847,9 @@ QVariantList QmlDocumentModel::bookmarksForDifficulty(int difficultyId) const
     const QStringList lines = difficulty->chart.split(QLatin1Char('\n'));
     for (int index = 0; index < lines.size(); ++index) {
         const auto bookmark = miacode::editor::parseBookmarkComment(lines.at(index));
-        if (!bookmark.has_value()) {
+        // Control comments (a bare 拍号, or an empty `||`) are chart data, not
+        // sections, so the outline skips them the way the Widgets one did.
+        if (!bookmark.has_value() || bookmark->control) {
             continue;
         }
         bookmarks.append(QVariantMap{
@@ -559,6 +947,7 @@ void QmlDocumentModel::refreshDocumentState()
     miacode::qml_ui::DocumentPresentationInput input;
     input.activeDifficultyId = workspaceSnapshot.activeDifficultyId;
     input.dirty = workspaceSnapshot.dirty;
+    input.dirtyDifficultyIds = workspaceSnapshot.dirtyDifficultyIds;
     input.documentRevision = documentRevision_;
     input.validation = validationSnapshot_;
     presentationState_ = miacode::qml_ui::projectDocumentPresentation(input);
@@ -567,7 +956,10 @@ void QmlDocumentModel::refreshDocumentState()
 bool QmlDocumentModel::saveToPath(const QString& path)
 {
     if (fileService_ == nullptr || path.trimmed().isEmpty()) return false;
-    const miacode::v2::ChartWorkspaceFileResult result = fileService_->saveAs(path);
+    // 另存为 writes a whole document deliberately: the new file has no earlier
+    // content for the other difficulties to be left at, so saving one section
+    // there would drop the rest of the chart on the floor.
+    const miacode::v2::ChartWorkspaceFileResult result = fileService_->saveAs(path, 0);
     if (!result.accepted) return false;
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
@@ -656,4 +1048,230 @@ QVariantList QmlDocumentModel::sourceIssuesToVariantList() const
         });
     }
     return result;
+}
+
+namespace {
+
+miacode::chart_transform::ChartNormalizationOptions normalizeOptionsFromVariant(
+    const QVariantMap& options)
+{
+    miacode::chart_transform::ChartNormalizationOptions parsed;
+    parsed.startAtNewMeasure = true;
+    parsed.reduceTo384Grid = options.value(QStringLiteral("reduceTo384Grid"), true).toBool();
+    parsed.sectionMeasureCount = options.value(QStringLiteral("sectionMeasureCount"), 4).toInt();
+    // The Widgets dialog derived this from the sectioning choice rather than
+    // carrying it separately; keeping it derived stops QML producing a
+    // combination the engine never saw from that path.
+    parsed.splitEveryFourMeasures = parsed.sectionMeasureCount == 4;
+    parsed.syntax = options.value(QStringLiteral("syntax")).toString() == QStringLiteral("hinata")
+        ? miacode::chart_transform::ChartNormalizationSyntax::Hinata
+        : miacode::chart_transform::ChartNormalizationSyntax::Fpd;
+    return parsed;
+}
+
+}  // namespace
+
+QStringList QmlDocumentModel::chartTransformIds() const
+{
+    QStringList ids;
+    for (const miacode::qml_ui::ChartTransformSpec& spec : miacode::qml_ui::chartTransformSpecs()) {
+        ids.append(spec.id);
+    }
+    return ids;
+}
+
+QVariantList QmlDocumentModel::chartTransformMenu() const
+{
+    QVariantList rows;
+    for (const miacode::qml_ui::ChartTransformSpec& spec : miacode::qml_ui::chartTransformSpecs()) {
+        rows.append(QVariantMap{
+            {QStringLiteral("id"), spec.id},
+            {QStringLiteral("label"), UiText::text(spec.labelKey)},
+            {QStringLiteral("section"), spec.section},
+        });
+    }
+    return rows;
+}
+
+QString QmlDocumentModel::chartTransformMoreLabel() const
+{
+    return UiText::text(QStringLiteral("action.transform.more"));
+}
+
+QVariantMap QmlDocumentModel::transformChartSelection(
+    const QString& text, int anchor, int position, const QString& opId) const
+{
+    QVariantMap transaction;
+    transaction.insert(QStringLiteral("consumed"), false);
+    transaction.insert(QStringLiteral("hasEdit"), false);
+    transaction.insert(QStringLiteral("undoGroup"), true);
+    transaction.insert(QStringLiteral("changed"), 0);
+
+    const int begin = qBound(0, qMin(anchor, position), text.size());
+    const int end = qBound(begin, qMax(anchor, position), text.size());
+    if (begin >= end) {
+        // Every one of these edits a range, so an empty selection is a
+        // no-target, not a whole-chart shortcut.
+        transaction.insert(QStringLiteral("error"), QStringLiteral("no_selection"));
+        return transaction;
+    }
+
+    const auto specs = miacode::qml_ui::chartTransformSpecs();
+    const auto spec = std::find_if(specs.cbegin(), specs.cend(),
+                                   [&opId](const miacode::qml_ui::ChartTransformSpec& candidate) {
+                                       return candidate.id == opId;
+                                   });
+    if (spec == specs.cend()) {
+        transaction.insert(QStringLiteral("error"), QStringLiteral("unknown_transform"));
+        return transaction;
+    }
+
+    const QString selected = text.mid(begin, end - begin);
+    int changed = 0;
+    QString replacement;
+    if (spec->apply) {
+        replacement = spec->apply(selected, text.mid(end), &changed);
+    } else {
+        const QString transformedFull =
+            miacode::chart_transform::clearCompleteElementsInSelection(text, begin, end, &changed);
+        // The transform rewrites the whole text; the selection's new extent is
+        // whatever is left once the untouched tail is accounted for.
+        const int untouchedSuffix = text.size() - end;
+        replacement = transformedFull.mid(begin, transformedFull.size() - untouchedSuffix - begin);
+    }
+
+    transaction.insert(QStringLiteral("consumed"), true);
+    transaction.insert(QStringLiteral("changed"), changed);
+    if (replacement == selected) {
+        return transaction;
+    }
+
+    const int transformedEnd = begin + replacement.size();
+    const bool forward = position >= anchor;
+    transaction.insert(QStringLiteral("hasEdit"), true);
+    transaction.insert(QStringLiteral("replacementStart"), begin);
+    transaction.insert(QStringLiteral("replacementEnd"), end);
+    transaction.insert(QStringLiteral("replacementText"), replacement);
+    transaction.insert(QStringLiteral("anchor"), forward ? begin : transformedEnd);
+    transaction.insert(QStringLiteral("position"), forward ? transformedEnd : begin);
+    return transaction;
+}
+
+QVariantMap QmlDocumentModel::normalizeChartSelection(
+    const QString& text, int anchor, int position, const QVariantMap& options) const
+{
+    // Shaped as one of SourceEditor's editor transactions so the existing apply
+    // path records it on the undo stack like any other edit.
+    QVariantMap transaction;
+    transaction.insert(QStringLiteral("consumed"), false);
+    transaction.insert(QStringLiteral("hasEdit"), false);
+    transaction.insert(QStringLiteral("undoGroup"), true);
+    if (workspace_ == nullptr) {
+        transaction.insert(QStringLiteral("error"), QStringLiteral("workspace_unavailable"));
+        return transaction;
+    }
+
+    const int begin = qBound(0, qMin(anchor, position), text.size());
+    const int end = qBound(begin, qMax(anchor, position), text.size());
+    // No selection means the whole chart, matching the Widgets entry.
+    const int selectionStart = begin == end ? 0 : begin;
+    const int selectionEnd = begin == end ? text.size() : end;
+
+    const auto normalized = miacode::chart_transform::normalizeChartSelectionText(
+        text,
+        selectionStart,
+        selectionEnd,
+        miacode::simai::buildTimingMetadata(workspace_->document()),
+        normalizeOptionsFromVariant(options));
+    if (!normalized.ok) {
+        transaction.insert(QStringLiteral("error"), normalized.errorMessage);
+        return transaction;
+    }
+
+    const QString replacement = miacode::chart_transform::composeNormalizedSelectionReplacement(
+        text, selectionStart, selectionEnd, normalized.text);
+    transaction.insert(QStringLiteral("consumed"), true);
+    if (replacement == text.mid(selectionStart, selectionEnd - selectionStart)) {
+        // Already normalized: consumed but with no edit, so the caller can say
+        // so instead of recording an undo step that changes nothing.
+        return transaction;
+    }
+
+    const int transformedEnd = selectionStart + replacement.size();
+    const bool forward = position >= anchor;
+    transaction.insert(QStringLiteral("hasEdit"), true);
+    transaction.insert(QStringLiteral("replacementStart"), selectionStart);
+    transaction.insert(QStringLiteral("replacementEnd"), selectionEnd);
+    transaction.insert(QStringLiteral("replacementText"), replacement);
+    transaction.insert(QStringLiteral("anchor"), forward ? selectionStart : transformedEnd);
+    transaction.insert(QStringLiteral("position"), forward ? transformedEnd : selectionStart);
+    return transaction;
+}
+
+QVariantMap QmlDocumentModel::normalizeOptions() const
+{
+    QVariantMap map;
+    if (backend_ == nullptr) {
+        return map;
+    }
+    const auto options = backend_->chartNormalizeOptions();
+    map.insert(QStringLiteral("reduceTo384Grid"), options.reduceTo384Grid);
+    map.insert(QStringLiteral("sectionMeasureCount"), options.sectionMeasureCount);
+    map.insert(
+        QStringLiteral("syntax"),
+        options.syntax == miacode::chart_transform::ChartNormalizationSyntax::Hinata
+            ? QStringLiteral("hinata")
+            : QStringLiteral("fpd"));
+    return map;
+}
+
+void QmlDocumentModel::setNormalizeOptions(const QVariantMap& options)
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    backend_->setChartNormalizeOptions(normalizeOptionsFromVariant(options));
+}
+
+QVariantList QmlDocumentModel::normalizeGridOptions() const
+{
+    const auto row = [](bool on, const char* key) {
+        QVariantMap option;
+        option.insert(QStringLiteral("value"), on);
+        option.insert(QStringLiteral("label"), UiText::text(QString::fromLatin1(key)));
+        return QVariant(option);
+    };
+    return QVariantList{
+        row(true, "preferences.on"),
+        row(false, "preferences.off"),
+    };
+}
+
+QVariantList QmlDocumentModel::normalizeSectionOptions() const
+{
+    const auto row = [](int measures, const char* key) {
+        QVariantMap option;
+        option.insert(QStringLiteral("value"), measures);
+        option.insert(QStringLiteral("label"), UiText::text(QString::fromLatin1(key)));
+        return QVariant(option);
+    };
+    return QVariantList{
+        row(4, "document.chart_section_every_4_measures"),
+        row(2, "document.chart_section_every_2_measures"),
+        row(0, "document.chart_section_none"),
+    };
+}
+
+QVariantList QmlDocumentModel::normalizeSyntaxOptions() const
+{
+    const auto row = [](const QString& token, const QString& label) {
+        QVariantMap option;
+        option.insert(QStringLiteral("value"), token);
+        option.insert(QStringLiteral("label"), label);
+        return QVariant(option);
+    };
+    return QVariantList{
+        row(QStringLiteral("fpd"), QStringLiteral("v1")),
+        row(QStringLiteral("hinata"), QStringLiteral("v2")),
+    };
 }

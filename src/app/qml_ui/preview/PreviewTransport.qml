@@ -7,10 +7,13 @@ Rectangle {
     id: root
 
     required property var previewSession
-    property var shellController
+    // True while the export page is up. The fullscreen button hides there:
+    // entering preview fullscreen on that page crashes the Intel iGPU D3D11
+    // driver with hardware decode. Supplied by the caller, which knows the
+    // active page.
+    property bool exportPageActive: false
     signal fullscreenRequested()
 
-    readonly property bool exportPageActive: !!(root.shellController && root.shellController.exportPageActive)
 
     implicitHeight: 63
     color: Theme.colors.background.surface

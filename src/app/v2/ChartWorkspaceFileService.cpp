@@ -36,15 +36,37 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::open(const QString& path) co
             usedSystemEncoding};
 }
 
-ChartWorkspaceFileResult ChartWorkspaceFileService::save() const
+ChartWorkspaceFileResult ChartWorkspaceFileService::createEmptyDocument(const QString& path) const
 {
-    if (workspace_ == nullptr) return {false, 0, QStringLiteral("workspace_unavailable"), {}};
-    return writeToPath(workspace_->snapshot().filePath);
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty()) return {false, 0, QStringLiteral("path_empty"), {}};
+    const QDir parent = QFileInfo(normalizedPath).absoluteDir();
+    if (!parent.exists() && !QDir().mkpath(parent.absolutePath())) {
+        return {false, 0, QStringLiteral("mkpath_failed"), {}};
+    }
+    const QByteArray payload =
+        QStringEncoder(QStringConverter::Utf8).encode(SimaiDocument::createEmpty().toText());
+    QSaveFile file(normalizedPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return {false, 0, QStringLiteral("open_failed"), {}};
+    }
+    if (file.write(payload) != payload.size()) {
+        file.cancelWriting();
+        return {false, 0, QStringLiteral("write_failed"), {}};
+    }
+    if (!file.commit()) return {false, 0, QStringLiteral("commit_failed"), {}};
+    return {true, 0, QString(), {}};
 }
 
-ChartWorkspaceFileResult ChartWorkspaceFileService::saveAs(const QString& path) const
+ChartWorkspaceFileResult ChartWorkspaceFileService::save(int difficultyId) const
 {
-    return writeToPath(path);
+    if (workspace_ == nullptr) return {false, 0, QStringLiteral("workspace_unavailable"), {}};
+    return writeToPath(workspace_->snapshot().filePath, difficultyId);
+}
+
+ChartWorkspaceFileResult ChartWorkspaceFileService::saveAs(const QString& path, int difficultyId) const
+{
+    return writeToPath(path, difficultyId);
 }
 
 QString ChartWorkspaceFileService::decodeDocumentText(
@@ -62,7 +84,8 @@ QString ChartWorkspaceFileService::decodeDocumentText(
     return systemDecoder.decode(bytes);
 }
 
-ChartWorkspaceFileResult ChartWorkspaceFileService::writeToPath(const QString& path) const
+ChartWorkspaceFileResult ChartWorkspaceFileService::writeToPath(
+    const QString& path, int difficultyId) const
 {
     if (workspace_ == nullptr) return {false, 0, QStringLiteral("workspace_unavailable"), {}};
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
@@ -70,7 +93,10 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::writeToPath(const QString& p
     if (!before.hasDocument) return {false, before.revision, QStringLiteral("document_unavailable"), {}};
     if (normalizedPath.isEmpty()) return {false, before.revision, QStringLiteral("path_empty"), {}};
 
-    const QByteArray payload = QStringEncoder(QStringConverter::Utf8).encode(workspace_->document().toText());
+    // Not document().toText(): that is everything open, and a section save is
+    // the last save point with this one difficulty brought up to date.
+    const QByteArray payload = QStringEncoder(QStringConverter::Utf8)
+                                   .encode(workspace_->textForSectionSave(difficultyId));
     QSaveFile file(normalizedPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         return {false, before.revision, QStringLiteral("open_failed"), {}};
@@ -81,7 +107,7 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::writeToPath(const QString& p
     }
     if (!file.commit()) return {false, before.revision, QStringLiteral("commit_failed"), {}};
 
-    workspace_->markSaved(normalizedPath);
+    workspace_->markSectionSaved(difficultyId, normalizedPath);
     return {true, workspace_->snapshot().revision, QString(), {}};
 }
 

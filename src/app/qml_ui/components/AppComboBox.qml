@@ -56,34 +56,23 @@ ComboBox {
         radius: Theme.controlRadius
         color: root.enabled ? Theme.colors.background.editor : Theme.colors.background.elevated
         border.width: Theme.controlBorderWidth
+        // visualFocus, not activeFocus: a ComboBox takes focus on click and keeps
+        // it, so an accent border tied to activeFocus stayed lit long after the
+        // press and came back lit when the dialog reopened and restored focus.
+        // visualFocus is true only when focus arrived by keyboard, which is the
+        // one case that still needs an indicator.
         border.color: !root.enabled ? Theme.colors.border.normal
-                     : (root.activeFocus || root.hovered || root.down) ? Theme.colors.accent.primary
+                     : (root.visualFocus || root.hovered || root.down) ? Theme.colors.accent.primary
                      : Theme.colors.border.control
     }
 
-    delegate: ItemDelegate {
+    delegate: ChromeRow {
         id: itemDelegate
         width: ListView.view ? ListView.view.width : root.width
         height: 28
         highlighted: root.highlightedIndex === index
-        hoverEnabled: true
-
-        contentItem: Text {
-            text: root.textAt(index)
-            font: root.font
-            color: itemDelegate.highlighted || itemDelegate.hovered
-                   ? Theme.colors.text.active
-                   : Theme.colors.text.secondary
-            elide: Text.ElideRight
-            verticalAlignment: Text.AlignVCenter
-            leftPadding: 10
-            rightPadding: 10
-        }
-
-        background: HoverChrome {
-            selected: itemDelegate.highlighted || itemDelegate.hovered
-            tone: "nav"
-        }
+        text: root.textAt(index)
+        labelFont: root.font
     }
 
     popup: Popup {

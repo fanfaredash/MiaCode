@@ -165,7 +165,6 @@ QVector<ExtensionOpenBridgeObject> extensionOpenBridgeObjects()
                    method(QStringLiteral("paste"), QStringLiteral("editor.paste"), QStringLiteral("editor.edit"), QStringLiteral("Paste into the active editor.")),
                    method(QStringLiteral("selectAll"), QStringLiteral("editor.selectAll"), QStringLiteral("editor.edit"), QStringLiteral("Select all active editor text.")),
                    method(QStringLiteral("getText"), QStringLiteral("editor/getText"), QStringLiteral("editor.read"), QStringLiteral("Read active editor text.")),
-                   method(QStringLiteral("getVisibleRange"), QStringLiteral("editor/getVisibleRange"), QStringLiteral("editor.read"), QStringLiteral("Read visible editor range.")),
                    method(QStringLiteral("revealRange"), QStringLiteral("editor/revealRange"), QStringLiteral("editor.edit"), QStringLiteral("Reveal an editor range.")),
                    method(QStringLiteral("getParsedSnapshot"), QStringLiteral("editor/getParsedSnapshot"), QStringLiteral("editor.read"), QStringLiteral("Read editor/parsed marker summary.")),
                    method(QStringLiteral("showCompletions"), QStringLiteral("editor/showCompletions"), QStringLiteral("providers.read"), QStringLiteral("Show completions in host UI.")),

@@ -1,9 +1,12 @@
 #include "QmlUiSettings.h"
 
 #include "mainwindow/MainWindowShared.h"
+#include "AppVersion.h"
 #include "ui/UiText.h"
 
+#include <QCoreApplication>
 #include <QGuiApplication>
+#include <QSysInfo>
 #include <QtGlobal>
 
 namespace {
@@ -11,7 +14,6 @@ constexpr auto kSidebarVisible = "ui/sidebarVisible";
 constexpr auto kSidebarWidth = "ui/sidebarWidth";
 constexpr auto kBottomPanelVisible = "ui/bottomPanelVisible";
 constexpr auto kBottomPanelHeightRatio = "ui/bottomPanelHeightRatio";
-constexpr auto kPreviewVisible = "ui/previewVisible";
 constexpr auto kPreviewWidthRatio = "ui/previewWidthRatio";
 constexpr auto kFontSize = "appearance/fontSize";
 }
@@ -30,12 +32,47 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
     bottomPanelHeightRatio_ = qBound(kBottomPanelMinimumHeightRatio,
                                      settings_.value(kBottomPanelHeightRatio, 0.35).toDouble(),
                                      kBottomPanelMaximumHeightRatio);
-    previewVisible_ = settings_.value(kPreviewVisible, true).toBool();
     previewWidthRatio_ = qBound(kPreviewMinimumWidthRatio,
                                 settings_.value(kPreviewWidthRatio, 0.5).toDouble(),
                                 kPreviewMaximumWidthRatio);
     fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
     reloadEditorSettings();
+}
+
+QVariantMap QmlUiSettings::aboutInfo() const
+{
+    QString version = QString::fromLatin1(MIACODE_DISPLAY_VERSION_STRING).trimmed();
+    if (version.isEmpty()) {
+        version = QCoreApplication::applicationVersion().trimmed();
+    }
+    if (version.isEmpty()) {
+        version = QStringLiteral("0.0.0");
+    }
+    return QVariantMap{
+        {QStringLiteral("version"), version},
+        {QStringLiteral("platform"), QStringLiteral("%1 / %2 / %3")
+                                         .arg(QSysInfo::productType())
+                                         .arg(QSysInfo::currentCpuArchitecture())
+                                         .arg(QSysInfo::buildAbi())},
+        {QStringLiteral("buildType"),
+#ifdef NDEBUG
+         QStringLiteral("Release")
+#else
+         QStringLiteral("Debug")
+#endif
+        },
+        {QStringLiteral("platformLabel"), UiText::text(QStringLiteral("about.platform"))},
+        {QStringLiteral("buildTypeLabel"), UiText::text(QStringLiteral("about.build_type"))},
+        {QStringLiteral("title"), UiText::text(QStringLiteral("action.about"))},
+    };
+}
+
+QString QmlUiSettings::localizedText(const QString& key) const
+{
+    const QString value = UiText::text(key);
+    // UiText echoes the key back when a translation is missing; report that as
+    // empty so callers can fall through to their own fallback.
+    return value == key ? QString() : value;
 }
 
 bool QmlUiSettings::sidebarVisible() const { return sidebarVisible_; }
@@ -46,7 +83,6 @@ bool QmlUiSettings::bottomPanelVisible() const { return bottomPanelVisible_; }
 double QmlUiSettings::bottomPanelHeightRatio() const { return bottomPanelHeightRatio_; }
 double QmlUiSettings::bottomPanelMinimumHeightRatio() const { return kBottomPanelMinimumHeightRatio; }
 double QmlUiSettings::bottomPanelMaximumHeightRatio() const { return kBottomPanelMaximumHeightRatio; }
-bool QmlUiSettings::previewVisible() const { return previewVisible_; }
 double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
 double QmlUiSettings::previewMinimumWidthRatio() const { return kPreviewMinimumWidthRatio; }
 double QmlUiSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
@@ -128,14 +164,6 @@ void QmlUiSettings::setBottomPanelHeightRatio(double value)
     emit bottomPanelHeightRatioChanged();
 }
 
-void QmlUiSettings::setPreviewVisible(bool value)
-{
-    if (previewVisible_ == value) return;
-    previewVisible_ = value;
-    settings_.setValue(kPreviewVisible, value);
-    emit previewVisibleChanged();
-}
-
 void QmlUiSettings::setPreviewWidthRatio(double value)
 {
     value = qBound(kPreviewMinimumWidthRatio, value, kPreviewMaximumWidthRatio);
@@ -143,6 +171,19 @@ void QmlUiSettings::setPreviewWidthRatio(double value)
     previewWidthRatio_ = value;
     settings_.setValue(kPreviewWidthRatio, value);
     emit previewWidthRatioChanged();
+}
+
+void QmlUiSettings::setEditorAppearance(int pointSize, double lineSpacingFactor)
+{
+    const QFont font = miacode::mainwindow::shared::editorFont(pointSize);
+    const int blockSpacing =
+        miacode::mainwindow::shared::blockSpacingPixelsForPointSize(pointSize, lineSpacingFactor);
+    if (codeFont_ == font && editorBlockSpacing_ == blockSpacing) {
+        return;
+    }
+    codeFont_ = font;
+    editorBlockSpacing_ = blockSpacing;
+    emit editorSettingsChanged();
 }
 
 void QmlUiSettings::setFontSize(int value)

@@ -26,9 +26,35 @@ void MainWindow::setQuickShellBackendActive(bool active)
     }
 }
 
-void MainWindow::setQmlExportCenterActive(bool active)
+miacode::chart_transform::ChartNormalizationOptions MainWindow::chartNormalizeOptions() const
 {
-    qmlExportCenterActive_ = active;
+    return miacode::chart_transform::ChartNormalizationOptions{
+        true,
+        chartNormalizeReduceTo384Grid_,
+        chartNormalizeSplitEveryFourMeasures_,
+        chartNormalizeSyntax_,
+        chartNormalizeSectionMeasureCount_};
+}
+
+void MainWindow::setChartNormalizeOptions(
+    const miacode::chart_transform::ChartNormalizationOptions& options)
+{
+    chartNormalizeStartAtNewMeasure_ = true;
+    chartNormalizeReduceTo384Grid_ = options.reduceTo384Grid;
+    chartNormalizeSplitEveryFourMeasures_ = options.splitEveryFourMeasures;
+    chartNormalizeSectionMeasureCount_ = options.sectionMeasureCount;
+    chartNormalizeSyntax_ = options.syntax;
+    savePortableState();
+}
+
+miacode::v2::UiRequestService* MainWindow::uiRequestService() const
+{
+    return uiRequests_;
+}
+
+miacode::v2::JobProgressService* MainWindow::jobProgressService() const
+{
+    return jobProgress_;
 }
 
 bool MainWindow::shellTimelineSurfaceReady() const
@@ -315,6 +341,9 @@ void MainWindow::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
     }
+    if (previousTabId != tabId) {
+        emit shellPresentationChanged();
+    }
 }
 
 void MainWindow::setCurrentBottomTabsTabId(const QString& tabId)
@@ -332,6 +361,7 @@ void MainWindow::setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible)
         if (!visible && currentBottomTabsTabId() == tabId) {
             restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId::Validation);
         }
+        emit shellPresentationChanged();
         return;
     }
     QTabWidget* container = bottomTabsContainerForTab(tabId);
@@ -346,6 +376,7 @@ void MainWindow::setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible)
     if (!visible && currentBottomTabsTabId() == tabId) {
         restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId::Timeline);
     }
+    emit shellPresentationChanged();
 }
 
 void MainWindow::restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId preferredTabId)
