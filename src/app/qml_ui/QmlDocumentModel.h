@@ -150,10 +150,16 @@ public:
     // source. The guard that asks about unsaved work lives at the command
     // boundary, not here.
     Q_INVOKABLE void closeDocument();
-    // 打开最近, newest first, already pruned of files that are gone. A read of
-    // document history, which is why it sits here; opening one is a command and
-    // sits behind the unsaved-changes guard.
-    Q_INVOKABLE QStringList recentDocuments();
+    // 打开最近 / 恢复备份, newest first, each entry { path, label }. Reads of
+    // document history, which is why they sit here; acting on one is a command
+    // and sits behind the unsaved-changes guard.
+    Q_INVOKABLE QVariantList recentDocuments();
+    Q_INVOKABLE QVariantList backupDocuments();
+    // Restore an autosave snapshot. Confirms first, through the shell.
+    Q_INVOKABLE void restoreBackup(const QString& path);
+    // 新建: pick a chart folder, write an empty maidata.txt into it, open it.
+    // The unsaved-changes guard belongs to the caller in QmlCommandService.
+    Q_INVOKABLE void createDocumentInPickedFolder();
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);
@@ -263,6 +269,7 @@ private:
     // makes it a continuation like the rest of this flow. Without this, 保存 on
     // a never-saved chart wrote nothing and said nothing: the file service
     // refused an empty path and the prompt just went away.
+    void createEmptyDocumentAt(const QString& targetPath);
     void saveSectionOrAskForPath(int difficultyId, std::function<void(bool)> onSaved);
     void askNextDirtySection(std::function<void(bool)> onDecided);
     void askAboutRemainingDocument(std::function<void(bool)> onDecided);

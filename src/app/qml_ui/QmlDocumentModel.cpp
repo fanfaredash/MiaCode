@@ -373,9 +373,82 @@ QStringList QmlDocumentModel::dirtyEditorKeys() const
 }
 qulonglong QmlDocumentModel::bookmarkGeneration() const { return bookmarkGeneration_; }
 
-QStringList QmlDocumentModel::recentDocuments()
+QVariantList QmlDocumentModel::recentDocuments()
 {
-    return backend_ != nullptr ? backend_->recentDocumentPaths() : QStringList{};
+    return backend_ != nullptr ? backend_->recentDocumentEntries() : QVariantList{};
+}
+
+QVariantList QmlDocumentModel::backupDocuments()
+{
+    return backend_ != nullptr ? backend_->backupDocumentEntries() : QVariantList{};
+}
+
+void QmlDocumentModel::restoreBackup(const QString& path)
+{
+    if (backend_ != nullptr) {
+        backend_->restoreBackupDocument(path);
+    }
+}
+
+void QmlDocumentModel::createDocumentInPickedFolder()
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (requests == nullptr || fileService_ == nullptr) {
+        return;
+    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("document.select_chart_folder"));
+    request.selectFolder = true;
+    requests->requestFile(request, [this, requests](const QString& directory) {
+        if (directory.trimmed().isEmpty()) {
+            return;
+        }
+        // A chart is a folder holding maidata.txt; picking the folder is what
+        // 新建 asks for, and the file name is not the user's to choose.
+        const QString targetPath =
+            QDir(QDir::cleanPath(directory)).filePath(QStringLiteral("maidata.txt"));
+        if (!QFileInfo::exists(targetPath)) {
+            createEmptyDocumentAt(targetPath);
+            return;
+        }
+        requests->requestConfirmation(
+            UiText::text(QStringLiteral("document.file_already_exists")),
+            UiText::text(QStringLiteral("document.maidata_txt_already_exists_in")),
+            UiText::text(QStringLiteral("action.yes")),
+            [this, targetPath](bool accepted) {
+                if (accepted) {
+                    createEmptyDocumentAt(targetPath);
+                }
+            });
+    });
+}
+
+void QmlDocumentModel::createEmptyDocumentAt(const QString& targetPath)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (fileService_ == nullptr) {
+        return;
+    }
+    if (!fileService_->createEmptyDocument(targetPath).accepted) {
+        if (requests != nullptr) {
+            requests->postNotice(
+                miacode::v2::NoticeSeverity::Error,
+                UiText::text(QStringLiteral("document.file_already_exists")),
+                tr("无法写入文件：\n%1").arg(QDir::toNativeSeparators(targetPath)));
+        }
+        return;
+    }
+    // Written, then opened the same way any chart is: the workspace parses it
+    // and takes the fresh file as its save point, so a new document starts
+    // clean rather than dirty-on-arrival.
+    if (!openFile(QUrl::fromLocalFile(targetPath))) {
+        return;
+    }
+    if (backend_ != nullptr) {
+        backend_->noteRecentDocument(targetPath);
+    }
 }
 
 void QmlDocumentModel::closeDocument()

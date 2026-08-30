@@ -40,6 +40,19 @@ void QmlCommandService::openRecentDocument(const QString& path)
         [this, path]() { document_->openFile(QUrl::fromLocalFile(path)); });
 }
 
+void QmlCommandService::newDocument()
+{
+    whenDocumentMayBeLeft([this]() { document_->createDocumentInPickedFolder(); });
+}
+
+void QmlCommandService::restoreBackupDocument(const QString& path)
+{
+    if (path.trimmed().isEmpty()) {
+        return;
+    }
+    whenDocumentMayBeLeft([this, path]() { document_->restoreBackup(path); });
+}
+
 void QmlCommandService::closeDocument()
 {
     whenDocumentMayBeLeft([this]() { document_->closeDocument(); });

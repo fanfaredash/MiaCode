@@ -15,6 +15,10 @@ MenuItem {
     bottomPadding: 3
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
+    // Where the full identity goes when the label is deliberately short — the
+    // recent-charts and backup lists show a folder name or a timestamp, and the
+    // path they stand for is too wide to be a menu row.
+    property string tooltip: ""
     readonly property real textWidth: label.contentWidth
     readonly property real chromeWidth: leftPadding + rightPadding
                                         + (checkable ? 12 + row.spacing : 0)
@@ -25,6 +29,11 @@ MenuItem {
         if (root.highlighted || root.checked)
             return Theme.colors.text.active
         return Theme.colors.text.secondary
+    }
+
+    Tooltip {
+        visible: root.tooltip.length > 0 && root.hovered
+        text: root.tooltip
     }
 
     contentItem: RowLayout {

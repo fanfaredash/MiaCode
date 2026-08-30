@@ -215,6 +215,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
 4. ~~**关闭标签的守卫**（3.2）~~ —— **已完成（2026-08-30）**。
 5. ~~**打开最近 / 关闭文档**~~ —— **已完成（2026-08-30）**。**新建仍缺失**：
    v1 的 `onNewFile` 要先选目录再建文件，是一条独立的流程，且所有者未报告，另行安排。
+6.5. **打开最近的标签**（2026-08-30 修复）。原先整条路径当菜单文字，宽度不够就显示不全；
+   改为 v1 的规则——**显示所在文件夹名**（对谱面而言就是曲名，因为文件永远叫 maidata.txt），
+   完整路径移到 tooltip。`AppMenuItem` 因此新增 `tooltip` 槽位，恢复备份沿用同一形态。
+
 6. ~~**两套三选一收敛成一套**~~ —— **已完成（2026-08-30）**。`MainView` 那份
    `unsavedChangesDialog` 已删除，打开 / 打开最近 / 关闭文档 / 关窗 / 音频拖放建谱
    全部走 `MainWindow::requestLeaveDocument`。
@@ -250,8 +254,15 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       关标签的保存同样改为异步（`requestSaveDifficultySection` + `sectionSaveFinished`），
       **只有真的写进去了才关标签**。
       漂移守卫：`qml_document_lifecycle_contract_spec`。
-- [ ] **新建文档**在 v2 仍无入口（见上）。
-- [ ] **自动保存的「恢复备份」在 v2 没有入口**（2026-08-30 查证）。自动保存本身**是在跑的**：
+- [x] **新建文档**（2026-08-30 补完）。`文件 → 新建`（Ctrl+N），过同一条离开守卫，
+      然后选文件夹（`UiRequestService` 的 folder 请求）→ 在其中写入 `maidata.txt` →
+      **按打开一份普通谱面的方式打开它**，所以新文档从一个真实的 save point 开始，
+      而不是一到手就是脏的。已存在时先确认覆盖。写入落在
+      `ChartWorkspaceFileService::createEmptyDocument()`——文件边界的活，不该由 QML 层做。
+- [x] **自动保存的「恢复备份」在 v2 没有入口**（2026-08-30 查证并补完）。
+      `文件 → 恢复备份` 列出快照（时间戳标签，重名时附文件名，与 Widgets 菜单同规则），
+      选中后走既有的 `restoreBackupFilePath()` 确认流程；因为恢复会替换文档，
+      入口本身也过离开守卫。原查证结论（自动保存本身在跑）见下：自动保存本身**是在跑的**：
       `updateDirtyState()` 在每次 v2 提交经 `applyCommittedQmlDocument` 时启动计时器，
       快照文本取自镜像文档（`editorText()` 现在读的是文档而不是已删除的隐藏编辑器），
       所以内容正确。异常退出后的自动询问也已于 2026-08-29 改走 `UiRequestService`。

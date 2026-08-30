@@ -135,6 +135,28 @@ QString MainWindow::DocumentSection::resolveAutosaveDirectoryPath() const
     return autosaveEntryDirectoryPathForFile(state_.currentFilePath_);
 }
 
+QVariantList MainWindow::DocumentSection::backupDocumentEntries()
+{
+    QVariantList rows;
+    const QList<BackupRestoreEntry> entries =
+        backupRestoreEntriesForAutosaveDirectory(resolveAutosaveDirectoryPath());
+    QSet<QString> usedLabels;
+    for (const BackupRestoreEntry& entry : entries) {
+        QString label = backupRestoreEntryLabel(entry);
+        // Two snapshots can share a timestamp label; the file name breaks the
+        // tie, exactly as the Widgets menu did.
+        if (usedLabels.contains(label)) {
+            label = QStringLiteral("%1  %2").arg(label, QFileInfo(entry.filePath).fileName());
+        }
+        usedLabels.insert(label);
+        rows.append(QVariantMap{
+            {QStringLiteral("path"), entry.filePath},
+            {QStringLiteral("label"), label},
+        });
+    }
+    return rows;
+}
+
 void MainWindow::DocumentSection::refreshRestoreBackupMenu(QMenu* restoreBackupMenu)
 {
     if (restoreBackupMenu == nullptr) {

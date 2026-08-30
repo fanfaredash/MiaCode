@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+
+#include <QVariantList>
 #include <memory>
 #include <utility>
 
@@ -367,7 +369,18 @@ public:
     // its only reader was the hidden MainWindow's own File menu, so under v2
     // nothing could see it. Entries that no longer exist on disk are dropped
     // as they are read, which is what the Widgets menu did when it rebuilt.
-    QStringList recentDocumentPaths();
+    // Each entry is { path, label }. The label is the containing folder's name,
+    // which for a chart is the song — v1's rule, and the reason its menu was
+    // readable: a full path is both too wide for a menu and mostly the same
+    // prefix repeated. The path rides along for the tooltip.
+    QVariantList recentDocumentEntries();
+    // Autosave snapshots for the open chart, newest first, as { path, label }.
+    // Same shape and the same reason.
+    QVariantList backupDocumentEntries();
+    // Restore one of them. Confirms through the shell before overwriting.
+    void restoreBackupDocument(const QString& path);
+    // Remember a chart the shell just created or opened.
+    void noteRecentDocument(const QString& path);
     void toggleShellPreviewPlayback();
     void stopShellPreview();
     void seekShellPreview(double second);

@@ -69,6 +69,9 @@ public:
     // file that would prompt "recover unsaved changes?" on next open.
     void cleanupCrashRecoveryForCleanExit();
     QString resolveAutosaveDirectoryPath() const;
+    // The 恢复备份 list as values, so a QML menu can show it. Same entries and
+    // same labels as the Widgets menu built, including its collision rule.
+    QVariantList backupDocumentEntries();
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void runAutosaveCheck(bool allowHistory = true);

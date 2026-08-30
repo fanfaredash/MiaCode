@@ -20,6 +20,7 @@ Item {
     // changes when a document is opened, and a menu nobody is looking at has no
     // reason to hold a copy.
     property var recentDocuments: []
+    property var backupDocuments: []
     property real availableWidth: Number.POSITIVE_INFINITY
 
     readonly property int overflowButtonWidth: 30
@@ -218,6 +219,13 @@ Item {
             id: fileMenu
             title: qsTr("文件(&F)")
             AppMenuAction {
+                text: qsTr("新建")
+                shortcut: StandardKey.New
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.New)
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.newDocumentRequested()
+            }
+            AppMenuAction {
                 text: qsTr("打开")
                 shortcut: StandardKey.Open
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Open)
@@ -233,15 +241,40 @@ Item {
                 Repeater {
                     model: root.recentDocuments
                     delegate: AppMenuItem {
-                        required property string modelData
-                        text: modelData
-                        onTriggered: root.commands.openRecentRequested(modelData)
+                        required property var modelData
+                        // The chart's folder name, not its path: every path here
+                        // shares a long prefix and ends in the same file name, so
+                        // the full one is both unreadable and too wide for a menu.
+                        text: modelData.label
+                        tooltip: modelData.path
+                        onTriggered: root.commands.openRecentRequested(modelData.path)
                     }
                 }
                 AppMenuItem {
                     visible: root.recentDocuments.length === 0
                     enabled: false
                     text: qsTr("暂无最近文档")
+                }
+            }
+            AppMenu {
+                id: restoreBackupMenu
+                title: qsTr("恢复备份")
+                enabled: root.commandsEnabled
+                onAboutToShow: root.backupDocuments = root.documentSession.backupDocuments()
+
+                Repeater {
+                    model: root.backupDocuments
+                    delegate: AppMenuItem {
+                        required property var modelData
+                        text: modelData.label
+                        tooltip: modelData.path
+                        onTriggered: root.commands.restoreBackupRequested(modelData.path)
+                    }
+                }
+                AppMenuItem {
+                    visible: root.backupDocuments.length === 0
+                    enabled: false
+                    text: qsTr("暂无备份")
                 }
             }
             AppMenuAction {

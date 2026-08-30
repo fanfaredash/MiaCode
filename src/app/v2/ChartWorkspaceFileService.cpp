@@ -36,6 +36,28 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::open(const QString& path) co
             usedSystemEncoding};
 }
 
+ChartWorkspaceFileResult ChartWorkspaceFileService::createEmptyDocument(const QString& path) const
+{
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty()) return {false, 0, QStringLiteral("path_empty"), {}};
+    const QDir parent = QFileInfo(normalizedPath).absoluteDir();
+    if (!parent.exists() && !QDir().mkpath(parent.absolutePath())) {
+        return {false, 0, QStringLiteral("mkpath_failed"), {}};
+    }
+    const QByteArray payload =
+        QStringEncoder(QStringConverter::Utf8).encode(SimaiDocument::createEmpty().toText());
+    QSaveFile file(normalizedPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return {false, 0, QStringLiteral("open_failed"), {}};
+    }
+    if (file.write(payload) != payload.size()) {
+        file.cancelWriting();
+        return {false, 0, QStringLiteral("write_failed"), {}};
+    }
+    if (!file.commit()) return {false, 0, QStringLiteral("commit_failed"), {}};
+    return {true, 0, QString(), {}};
+}
+
 ChartWorkspaceFileResult ChartWorkspaceFileService::save(int difficultyId) const
 {
     if (workspace_ == nullptr) return {false, 0, QStringLiteral("workspace_unavailable"), {}};

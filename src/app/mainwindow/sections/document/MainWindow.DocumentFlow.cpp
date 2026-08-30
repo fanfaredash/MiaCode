@@ -302,20 +302,52 @@ void MainWindow::addRecentFilePath(const QString& path)
     savePortableState();
 }
 
-QStringList MainWindow::recentDocumentPaths()
+QVariantList MainWindow::recentDocumentEntries()
 {
     QStringList existing;
+    QSet<QString> seen;
+    QVariantList entries;
     for (const QString& path : recentFilePaths_) {
-        const QFileInfo info(path);
-        if (info.exists() && info.isFile()) {
-            existing.append(path);
+        const QString normalized = path.isEmpty() ? QString() : QDir::cleanPath(path);
+        if (normalized.isEmpty() || seen.contains(normalized)) {
+            continue;
         }
+        const QFileInfo info(normalized);
+        if (!info.exists() || !info.isFile()) {
+            continue;
+        }
+        seen.insert(normalized);
+        existing.append(normalized);
+        // The folder is the song; the file inside it is always maidata.txt, so
+        // the folder name is the only part that tells entries apart.
+        const QString folderName = info.absoluteDir().dirName().trimmed();
+        entries.append(QVariantMap{
+            {QStringLiteral("path"), normalized},
+            {QStringLiteral("label"), folderName.isEmpty()
+                 ? QDir::toNativeSeparators(info.absoluteFilePath())
+                 : folderName},
+        });
     }
     if (existing != recentFilePaths_) {
         recentFilePaths_ = existing;
         savePortableState();
     }
-    return existing;
+    return entries;
+}
+
+void MainWindow::restoreBackupDocument(const QString& path)
+{
+    restoreBackupFilePath(path);
+}
+
+void MainWindow::noteRecentDocument(const QString& path)
+{
+    addRecentFilePath(path);
+}
+
+QVariantList MainWindow::backupDocumentEntries()
+{
+    return documentSection_->backupDocumentEntries();
 }
 
 void MainWindow::openRecentFilePath(const QString& path)

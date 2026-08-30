@@ -25,6 +25,11 @@ public:
     Q_INVOKABLE void openDocument(const QUrl& fileUrl);
     Q_INVOKABLE void openRecentDocument(const QString& path);
     Q_INVOKABLE void closeDocument();
+    // 新建: guarded like every other way of leaving the open document, then a
+    // folder pick and an empty maidata.txt inside it.
+    Q_INVOKABLE void newDocument();
+    // 恢复备份: restoring replaces the document, so it is guarded too.
+    Q_INVOKABLE void restoreBackupDocument(const QString& path);
     Q_INVOKABLE bool saveDocument();
     Q_INVOKABLE bool saveDocumentAs(const QUrl& fileUrl);
     Q_INVOKABLE void discardDocumentChanges();
