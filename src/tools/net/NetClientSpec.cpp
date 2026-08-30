@@ -60,6 +60,41 @@ int main(int argc, char** argv)
     using namespace miacode::net;
 
     bool ok = true;
+    ok &= check(
+        miacode::media::kPvCompressionHardLimitBytes == 20'000'000LL,
+        "PV compression uses the decimal 20 MB hard limit");
+    ok &= check(
+        miacode::media::kPvCompressionWorkingTargetBytes
+            < miacode::media::kPvCompressionHardLimitBytes,
+        "PV compression reserves space below the hard limit");
+    const miacode::media::PvCompressionPlan compressionPlan =
+        miacode::media::makePvCompressionPlan(180.0);
+    ok &= check(compressionPlan.videoBitrateKbps == 866, "PV bitrate plan uses the working target");
+    const QStringList compressionArgs = miacode::media::makePvCompressionPassArguments(
+        QStringLiteral("input.mp4"),
+        QStringLiteral("output.mp4"),
+        QStringLiteral("passlog"),
+        compressionPlan,
+        2);
+    ok &= check(compressionArgs.contains(QStringLiteral("-an")), "PV compression removes audio");
+    const int fpsModeIndex = compressionArgs.indexOf(QStringLiteral("-fps_mode"));
+    ok &= check(
+        fpsModeIndex >= 0
+            && compressionArgs.value(fpsModeIndex + 1) == QStringLiteral("passthrough"),
+        "PV compression preserves source frame timestamps");
+    ok &= check(!compressionArgs.contains(QStringLiteral("-r")), "PV compression never overrides frame rate");
+    ok &= check(!compressionArgs.contains(QStringLiteral("-c:a")), "PV compression does not encode audio");
+    ok &= check(
+        miacode::media::isAcceptablePvCompressionOutput(30'000'000LL, 19'999'999LL),
+        "PV output immediately below 20 MB is accepted");
+    ok &= check(
+        !miacode::media::isAcceptablePvCompressionOutput(30'000'000LL, 20'000'000LL),
+        "PV output exactly at 20 MB is rejected");
+    const miacode::media::PvCompressionPlan retryPlan =
+        miacode::media::adjustedPvCompressionPlan(compressionPlan, 20'500'000LL);
+    ok &= check(
+        retryPlan.videoBitrateKbps < compressionPlan.videoBitrateKbps,
+        "PV oversize retry lowers the video bitrate");
     ok &= check(netDownloadLengthIsComplete(12, 12), "download length accepts a complete response");
     ok &= check(!netDownloadLengthIsComplete(12, 7), "download length rejects a truncated response");
     ok &= check(!netDownloadLengthIsComplete(12, 0), "download length rejects an empty response");

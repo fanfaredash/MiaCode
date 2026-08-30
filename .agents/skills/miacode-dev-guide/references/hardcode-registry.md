@@ -90,6 +90,12 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   mapping (`Fast`/`High Quality`), application of the runtime size policy, and ffmpeg fallback.
 - `src/tools/video_export/RawVideoPipeTransport.cpp` — pipe queue depth / buffer sizing
   (`maxBufferedFrames` derived from frame size, ×2; `requestedBufferBytes` `2 * max(frameBytes,1MiB)`).
+- `src/tools/media/PvCompressionPolicy.{h,cpp}` — shared current-chart and batch-PV compression
+  policy. The hard limit is decimal `20,000,000` bytes and the two-pass x264 working target is
+  `19,500,000` bytes; an oversized first result gets one measured-size bitrate correction with a
+  `0.98` safety ratio. Output is video-only (`-an`), keeps source frame timestamps/frame rate via
+  `-fps_mode passthrough`, and never adds `-r` or a frame-rate filter. Keep these contracts shared
+  between `MainWindow.Dialogs.MediaTools.cpp` and `PvBatchCompressionWorker.cpp`.
 - `src/app/mainwindow/MainWindow.cpp` + `sections/window/*.cpp` — preview panel spacing, fullscreen
   overlay timing/opacity/reveal geometry, bottom-tab resize bounds (hot zone `8 px`, content scale
   `kBottomTabsContentScaleMin/Max = 0.5..4.0` in `MainWindow.WindowShell.cpp`), fixed `30 Hz`

@@ -370,6 +370,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/net/NetBatchUploadDialog.cpp
     src/tools/media/PvBatchCompressionScanner.h
     src/tools/media/PvBatchCompressionScanner.cpp
+    src/tools/media/PvCompressionPolicy.h
+    src/tools/media/PvCompressionPolicy.cpp
     src/tools/media/PvBatchCompressionWorker.h
     src/tools/media/PvBatchCompressionWorker.cpp
     src/tools/media/PvBatchCompressionDialog.h
@@ -1962,6 +1964,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/net/NetUploadDiagnostics.cpp
             src/tools/media/PvBatchCompressionScanner.h
             src/tools/media/PvBatchCompressionScanner.cpp
+            src/tools/media/PvCompressionPolicy.h
+            src/tools/media/PvCompressionPolicy.cpp
             src/tools/zip_export/ChartZipPackager.h
             src/tools/zip_export/ChartZipPackager.cpp
             src/common/ChartAssetPaths.h

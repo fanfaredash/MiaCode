@@ -1153,7 +1153,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 12. Toolbox media utilities
 
-- `sections/dialogs/MainWindow.Dialogs.cpp` + `MainWindow.DialogsSection.cpp` — prepend
+- `sections/dialogs/MainWindow.Dialogs.MediaTools.cpp` + `MainWindow.DialogsSection.cpp` — prepend
   silence/black, compress bg video, convert track to 44100 Hz (`onPrependTrackSilence`,
   `onPrependPvBlack`, `onCompressBackgroundVideo`, `onConvertTrackTo44100Hz`). These four open
   from a single popup, `onMediaProcessingTools()` (one button + one-line description each),
@@ -1161,6 +1161,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   The shared `runFfmpegBlocking(... totalDurationSeconds, error)` helper drives a determinate
   progress bar by parsing ffmpeg `-progress pipe:1` `out_time_us=` against the expected output
   duration (falls back to an indeterminate bar when duration is unknown).
+- `src/tools/media/PvCompressionPolicy.{h,cpp}` is the shared single-file/batch compression
+  contract. It plans x264 two-pass bitrate against a `19,500,000`-byte working target, rejects
+  output at or above the decimal `20,000,000`-byte hard limit, removes audio, and uses ffmpeg
+  timestamp passthrough without `-r` or a frame-rate filter so source frame rate is preserved.
+  `PvBatchCompressionWorker.cpp` and `MainWindow.Dialogs.MediaTools.cpp` both use this policy and
+  retry once with a measured-size bitrate correction when the first output reaches the hard limit.
 - Toolbox menu itself is built in `sections/frame/MainWindow.FrameBootstrap.cpp` (`toolboxMenu_`).
   BPM & Latency was dropped from the toolbox (still in the top Tools menu via
   `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`

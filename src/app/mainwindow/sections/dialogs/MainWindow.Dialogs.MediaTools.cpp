@@ -9,6 +9,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "tools/media/PvBatchCompressionDialog.h"
+#include "tools/media/PvCompressionPolicy.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/Id3TagReader.h"
@@ -27,7 +28,6 @@
 #include <QtWidgets>
 
 #include <algorithm>
-#include <cmath>
 
 #include "common/DebugLog.h"
 
@@ -436,9 +436,7 @@ bool probeMediaDurationSeconds(const QString& ffmpegPath, const QString& mediaPa
 {
     QStringList args;
     args << QStringLiteral("-hide_banner")
-         << QStringLiteral("-i") << mediaPath
-         << QStringLiteral("-f") << QStringLiteral("null")
-         << QStringLiteral("-");
+         << QStringLiteral("-i") << mediaPath;
 
     QProcess process;
     process.setProcessChannelMode(QProcess::MergedChannels);
@@ -497,12 +495,10 @@ bool compressVideoUnder20Mb(
     if (preservedCompressed != nullptr) {
         *preservedCompressed = false;
     }
-    constexpr qint64 kTargetBytes = miacode::media::kPvCompressionTargetBytes;
-    constexpr int kAudioBitrateKbps = miacode::media::kPvCompressionAudioBitrateKbps;
-    constexpr int kMinVideoBitrateKbps = miacode::media::kPvCompressionMinVideoBitrateKbps;
+    constexpr qint64 kTargetBytes = miacode::media::kPvCompressionHardLimitBytes;
     const QFileInfo videoInfo(videoPath);
     const qint64 originalBytes = videoInfo.size();
-    if (originalBytes > 0 && originalBytes <= kTargetBytes) {
+    if (originalBytes > 0 && originalBytes < kTargetBytes) {
         if (error != nullptr) {
             *error = UiText::text(QStringLiteral("media_tools.the_current_video_is_already"));
         }
@@ -522,50 +518,62 @@ bool compressVideoUnder20Mb(
         return false;
     }
 
-    const qint64 outputTargetBytes = originalBytes > 0
-        ? std::min(kTargetBytes, static_cast<qint64>(std::floor(
-              static_cast<double>(originalBytes) * miacode::media::kPvCompressionShrinkRatio)))
-        : kTargetBytes;
-    const double targetBits = static_cast<double>(outputTargetBytes) * 8.0
-        * miacode::media::kPvCompressionMuxSafetyRatio;
-    int totalBitrateKbps = static_cast<int>(std::floor(targetBits / durationSeconds / 1000.0));
-    int videoBitrateKbps = std::max(kMinVideoBitrateKbps, totalBitrateKbps - kAudioBitrateKbps);
-
-    QStringList args;
-    args << QStringLiteral("-hide_banner")
-         << QStringLiteral("-y")
-         << QStringLiteral("-i") << backupPath
-         << QStringLiteral("-map") << QStringLiteral("0:v:0")
-         << QStringLiteral("-map") << QStringLiteral("0:a?")
-         << QStringLiteral("-c:v") << QStringLiteral("libx264")
-         << QStringLiteral("-preset") << QStringLiteral("slow")
-         << QStringLiteral("-b:v") << QStringLiteral("%1k").arg(videoBitrateKbps)
-         << QStringLiteral("-maxrate") << QStringLiteral("%1k").arg(videoBitrateKbps)
-         << QStringLiteral("-bufsize") << QStringLiteral("%1k").arg(videoBitrateKbps * 2)
-         << QStringLiteral("-vf") << QStringLiteral("scale='min(1280,iw)':-2")
-         << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p")
-         << QStringLiteral("-c:a") << QStringLiteral("aac")
-         << QStringLiteral("-b:a") << QStringLiteral("%1k").arg(kAudioBitrateKbps)
-         << QStringLiteral("-movflags") << QStringLiteral("+faststart")
-         << tempPath;
-    if (!runFfmpegBlocking(
-            ffmpegPath,
-            args,
-            parent,
-            UiText::text(QStringLiteral("media_tools.compressing_video")),
-            durationSeconds,
-            error,
-            cancelled)) {
-        QFile::remove(tempPath);
+    QTemporaryDir passLogDirectory;
+    if (!passLogDirectory.isValid()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Could not create the two-pass log directory.");
+        }
         return false;
     }
 
-    const qint64 compressedBytes = QFileInfo(tempPath).size();
-    if (compressedBytes <= 0 || compressedBytes > kTargetBytes || (originalBytes > 0 && compressedBytes >= originalBytes)) {
+    miacode::media::PvCompressionPlan plan = miacode::media::makePvCompressionPlan(durationSeconds);
+    qint64 compressedBytes = 0;
+    bool encoded = false;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        QFile::remove(tempPath);
+        const QString passLogPath = QDir(passLogDirectory.path()).filePath(
+            QStringLiteral("x264-attempt-%1").arg(attempt));
+        const QStringList firstPass = miacode::media::makePvCompressionPassArguments(
+            backupPath, tempPath, passLogPath, plan, 1);
+        const QStringList secondPass = miacode::media::makePvCompressionPassArguments(
+            backupPath, tempPath, passLogPath, plan, 2);
+        if (!runFfmpegBlocking(
+                ffmpegPath,
+                firstPass,
+                parent,
+                UiText::text(QStringLiteral("media_tools.compressing_video")),
+                durationSeconds,
+                error,
+                cancelled)
+            || !runFfmpegBlocking(
+                ffmpegPath,
+                secondPass,
+                parent,
+                UiText::text(QStringLiteral("media_tools.compressing_video")),
+                durationSeconds,
+                error,
+                cancelled)) {
+            QFile::remove(tempPath);
+            return false;
+        }
+
+        compressedBytes = QFileInfo(tempPath).size();
+        if (miacode::media::isAcceptablePvCompressionOutput(originalBytes, compressedBytes)) {
+            encoded = true;
+            break;
+        }
+        if (attempt == 0 && compressedBytes >= kTargetBytes) {
+            plan = miacode::media::adjustedPvCompressionPlan(plan, compressedBytes);
+        } else {
+            break;
+        }
+    }
+
+    if (!encoded) {
         QFile::remove(tempPath);
         if (error != nullptr) {
-            *error = compressedBytes > kTargetBytes
-                ? QStringLiteral("Compressed video is still larger than 20 MiB.")
+            *error = compressedBytes >= kTargetBytes
+                ? QStringLiteral("Compressed video is still 20 MB or larger.")
                 : QStringLiteral("Compressed video was not smaller than the original file.");
         }
         return false;
@@ -787,12 +795,12 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     }
 
     const QFileInfo videoInfo(videoPath);
-    // Size gate up-front: if the video is already under 20 MiB there is nothing
+    // Size gate up-front: if the video is already under 20 MB there is nothing
     // to compress, so say so immediately instead of making the user confirm
     // first and only then discovering there's no work to do.
     constexpr qint64 kCompressTargetBytes = miacode::media::kPvCompressionTargetBytes;
     const qint64 videoSizeBytes = videoInfo.size();
-    if (videoSizeBytes > 0 && videoSizeBytes <= kCompressTargetBytes) {
+    if (videoSizeBytes > 0 && videoSizeBytes < kCompressTargetBytes) {
         QMessageBox::information(
             UiDialogs::effectiveParentWidget(&owner_),
             title,

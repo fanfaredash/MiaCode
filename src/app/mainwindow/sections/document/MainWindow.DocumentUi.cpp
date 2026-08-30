@@ -999,6 +999,11 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_populate_metadata_begin"));
     populateMetadataPage();  // keeps document fields in sync for sidebar use
     miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_populate_metadata_complete"));
+    // Showing the bottom timeline changes the QuickShell workspace height. Arm
+    // before changing either surface so synchronous and deferred resize events
+    // both finalize the latency page at its destination geometry, instead of
+    // briefly compositing the previous metadata frame into the shorter area.
+    owner_.armWorkspaceSurfaceSettleRelayout();
     miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_editor_stack_begin"));
     ui_.editorStack_->setCurrentWidget(ui_.latencyDetectionPage_);
     miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_editor_stack_complete"));
