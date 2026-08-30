@@ -191,6 +191,22 @@ Rectangle {
 
     property string closingKey: ""
     property int closingDifficultyId: 0
+    property string pendingSaveCloseKey: ""
+    property int pendingSaveCloseDifficultyId: 0
+
+    Connections {
+        target: root.documentSession
+        function onSectionSaveFinished(difficultyId, saved) {
+            if (root.pendingSaveCloseKey.length === 0
+                    || difficultyId !== root.pendingSaveCloseDifficultyId)
+                return
+            const key = root.pendingSaveCloseKey
+            root.pendingSaveCloseKey = ""
+            root.pendingSaveCloseDifficultyId = 0
+            if (saved)
+                root.viewState.closeEditor(key)
+        }
+    }
     property string draggingEditorKey: ""
 
     // 保存 stores the whole file, because the file is what gets written — the
@@ -217,10 +233,15 @@ Rectangle {
                 return
             if (choiceId === "save") {
                 // Saves this difficulty, because that is the thing being
-                // closed. A failed save keeps the tab: the edits are still only
-                // in memory, and closing would be the one thing that loses them.
-                if (!root.documentSession.saveDifficultySection(difficultyId))
-                    return
+                // closed. A never-saved chart has no path yet, so the save may
+                // have to ask for one — the answer arrives on
+                // sectionSaveFinished, and only a save that landed closes the
+                // tab. A failed or cancelled one keeps it: the edits are still
+                // only in memory, and closing is the one thing that loses them.
+                root.pendingSaveCloseKey = key
+                root.pendingSaveCloseDifficultyId = difficultyId
+                root.documentSession.requestSaveDifficultySection(difficultyId)
+                return
             } else {
                 root.documentSession.revertDifficultyChart(difficultyId)
             }

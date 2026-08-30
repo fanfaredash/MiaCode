@@ -431,6 +431,55 @@ void QmlDocumentModel::requestLeaveDocument(std::function<void(bool)> onDecided)
     askNextDirtySection(std::move(onDecided));
 }
 
+void QmlDocumentModel::saveSectionOrAskForPath(
+    int difficultyId, std::function<void(bool)> onSaved)
+{
+    const auto finish = [onSaved = std::move(onSaved)](bool saved) {
+        if (onSaved) onSaved(saved);
+    };
+    if (fileService_ == nullptr || workspace_ == nullptr) {
+        finish(false);
+        return;
+    }
+    if (!workspace_->snapshot().filePath.isEmpty()) {
+        const bool saved = fileService_->save(difficultyId).accepted;
+        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        finish(saved);
+        return;
+    }
+
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (requests == nullptr) {
+        finish(false);
+        return;
+    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("action.save_as"));
+    request.saveMode = true;
+    request.nameFilters = QStringList{tr("Simai 文件 (*.txt *.simai)"), tr("所有文件 (*.*)")};
+    requests->requestFile(request, [this, finish](const QString& path) {
+        if (path.trimmed().isEmpty()) {
+            // Cancelling the pick cancels the save, which cancels whatever the
+            // save was a step of. Nothing was written.
+            finish(false);
+            return;
+        }
+        // A file that does not exist yet has no earlier content for the other
+        // difficulties to be left at, so the first write is the whole document.
+        const bool saved = fileService_->saveAs(path, 0).accepted;
+        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        finish(saved);
+    });
+}
+
+void QmlDocumentModel::requestSaveDifficultySection(int difficultyId)
+{
+    saveSectionOrAskForPath(difficultyId, [this, difficultyId](bool saved) {
+        emit sectionSaveFinished(difficultyId, saved);
+    });
+}
+
 void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
 {
     miacode::v2::UiRequestService* const requests =
@@ -458,19 +507,21 @@ void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
                 return;
             }
             if (choiceId == QLatin1String("save")) {
-                if (fileService_ == nullptr
-                    || !fileService_->save(difficultyId).accepted) {
-                    // Nothing was written, so leaving would lose it.
-                    if (onDecided) onDecided(false);
-                    return;
-                }
-                publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
-            } else {
-                workspace_->revertDifficultyChart(difficultyId);
-                publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+                saveSectionOrAskForPath(
+                    difficultyId, [this, onDecided = std::move(onDecided)](bool saved) mutable {
+                        if (!saved) {
+                            // Nothing was written, so leaving would lose it.
+                            if (onDecided) onDecided(false);
+                            return;
+                        }
+                        askNextDirtySection(std::move(onDecided));
+                    });
+                return;
             }
-            // Whatever happened, that difficulty is no longer among the dirty
-            // ones, so this walks the list down rather than around it.
+            workspace_->revertDifficultyChart(difficultyId);
+            publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+            // That difficulty is no longer among the dirty ones, so this walks
+            // the list down rather than around it.
             askNextDirtySection(std::move(onDecided));
         });
 }
@@ -497,12 +548,12 @@ void QmlDocumentModel::askAboutRemainingDocument(std::function<void(bool)> onDec
                 return;
             }
             if (choiceId == QLatin1String("save")) {
-                if (fileService_ == nullptr || !fileService_->save(0).accepted) {
-                    if (onDecided) onDecided(false);
-                    return;
-                }
-                publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
-            } else if (!workspace_->snapshot().filePath.isEmpty()) {
+                saveSectionOrAskForPath(0, [onDecided](bool saved) {
+                    if (onDecided) onDecided(saved);
+                });
+                return;
+            }
+            if (!workspace_->snapshot().filePath.isEmpty()) {
                 discardChanges();
             }
             if (onDecided) onDecided(true);

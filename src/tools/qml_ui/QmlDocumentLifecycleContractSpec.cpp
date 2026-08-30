@@ -154,6 +154,14 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                        && documentModel.contains(QStringLiteral("fileService_->open(path)"))
                        && documentModel.contains(QStringLiteral("fileService_->save(saveSectionDifficultyId())")),
                    QStringLiteral("production QML body, metadata, difficulty, and file operations submit workspace transactions"), err)
+        && require(documentModel.contains(
+                       QStringLiteral("void QmlDocumentModel::saveSectionOrAskForPath"))
+                       && documentModel.contains(QStringLiteral("request.saveMode = true"))
+                       && documentModel.contains(
+                           QStringLiteral("saveSectionOrAskForPath(\n                    difficultyId,"))
+                       && documentModel.contains(QStringLiteral("saveSectionOrAskForPath(0,")),
+                   QStringLiteral("saving from the leave flow asks for a path when the document has none, "
+                                  "instead of refusing an empty path in silence"), err)
         && require(!documentModel.contains(QStringLiteral("backend_->isWindowModified()"))
                        && !documentModel.contains(
                            QStringLiteral("backend_->updateActiveChartText(value)"))

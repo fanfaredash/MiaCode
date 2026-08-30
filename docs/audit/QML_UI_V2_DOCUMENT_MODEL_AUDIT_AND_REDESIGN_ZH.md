@@ -239,14 +239,17 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
 
 ## 7. 本轮新发现，尚未处理
 
-- [ ] **未命名文档选「保存」会掉进 Widgets 的 `QFileDialog`**（2026-08-30 发现）。
-      `requestLeaveDocument` 的 save 分支走 `onSaveFile()`，而它在
-      `currentFilePath_` 为空时转 `onSaveFileAs()`——那是
-      `QFileDialog::getSaveFileName`，挂在隐藏的 `MainWindow` 上。
-      这条自 `ab5e5715` 起就是 v2 关窗流程的一部分，只是当时没被看见。
-      修法：save 分支在无路径时改走 `UiRequestService::requestFile`，
-      这会把 `applyUnsavedChangesChoice` 从「返回 bool」改成续延式，
-      连带 `maybeSaveBeforeContinue` 的同步版也要重新安排。**这是下一项。**
+- [x] **未命名文档选「保存」没有路径可写**（2026-08-30 修复）。原记为"掉进 Widgets 的
+      `QFileDialog`"；Save 改为逐 section 之后，v2 的离开流程已不再走 `onSaveFile()`，
+      所以实际症状变成了**更糟的一种**：`fileService_->save()` 以空路径被拒，
+      提示直接消失，什么都没写、也什么都没说——一个死按钮。
+      现在保存在没有路径时先**要一个路径**：走 `UiRequestService::requestFile`
+      （QML 的 FileDialog，不是 Widgets），拿到路径后以**整份文档**写入
+      （新文件没有"其他难度的旧内容"可保留），再继续原来的续延；
+      取消选择＝取消保存＝取消这一步所属的整个动作，因为什么都没写进去。
+      关标签的保存同样改为异步（`requestSaveDifficultySection` + `sectionSaveFinished`），
+      **只有真的写进去了才关标签**。
+      漂移守卫：`qml_document_lifecycle_contract_spec`。
 - [ ] **新建文档**在 v2 仍无入口（见上）。
 - [ ] **自动保存的「恢复备份」在 v2 没有入口**（2026-08-30 查证）。自动保存本身**是在跑的**：
       `updateDirtyState()` 在每次 v2 提交经 `applyCommittedQmlDocument` 时启动计时器，

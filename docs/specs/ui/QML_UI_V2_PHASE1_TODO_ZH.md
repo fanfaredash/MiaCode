@@ -91,6 +91,22 @@
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
 
+- [ ] **字体功能整体缺失**（2026-08-30 所有者指出）。引擎侧全在、UI 侧全无——
+      任务字段 `intro.fontDisplayPath` / `intro.fontBodyPath` 仍被持久化
+      （`VideoExportSettings.cpp:118-152`）、写进 snapshot、并在**预览与导出两条**渲染路径上
+      经 `applyBannerFontOverride` 生效；HUD 字体经
+      `preview::scene::setPreviewHudCustomFontPath` 生效并由该 setter 自己持久化。
+      **但 `src/app/qml_ui` 全目录没有任何地方读或写它们**，所以 v2 用户改不了任何字体，
+      只能沿用上一次在 v1 里选过的值。缺的三块：
+      1. **片头难度卡字体**（display / body 两个）——原在已删除的 `VideoExportDialog` 片头页签。
+      2. **HUD 字体**（分区域）——原为 `createHudFontSettingsWidget()`，按其注释宿主是
+         「皮肤弹窗 / 导出皮肤页签」；v2 导出页的 皮肤 页签只有一个皮肤下拉，没有字体位。
+      3. **字体库本身**（`FontLibrary`，`<preferences dir>/fonts`）——导入 / 重置 / 预览样张
+         全部没有入口。
+      `FontLibrary` / `HudFontSettings` / `CardFontSettings` 三组仍留在
+      `src/tools/video_export/`（cover_export 在用，未随 `VideoExportDialog` 组删除），
+      重建 QML 入口时可直接复用其数据层。
+
 - [x] **音频设置的试听**（2026-08-30 记录，同日补齐）。`QmlAudioSettingsModel` 自带一个
       `QtPreviewSfxRuntime`：首次试听时才创建（构造会起一条音频工作线程，多数会话根本不开
       这个页面），页面关闭时 `releaseAudition()` 释放，与 v1 对话框本地运行时同一生命周期。

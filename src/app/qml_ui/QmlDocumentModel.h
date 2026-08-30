@@ -121,6 +121,9 @@ public:
     // Write one difficulty to the file, leaving the others at their on-disk
     // text. Used where the thing being saved is named rather than implied.
     Q_INVOKABLE bool saveDifficultySection(int difficultyId);
+    // The same save, allowed to ask for a path. The answer arrives on
+    // sectionSaveFinished because a file pick cannot be waited for.
+    Q_INVOKABLE void requestSaveDifficultySection(int difficultyId);
     // The unsaved-changes flow, asked one section at a time.
     //
     // 保存 writes one difficulty, so a single question about "the document"
@@ -212,6 +215,7 @@ signals:
     void currentDifficultyFieldsChanged();
     void syntaxIssuesChanged();
     void dirtyChanged();
+    void sectionSaveFinished(int difficultyId, bool saved);
     void wholeSourceEditorActiveChanged();
     void dirtyEditorKeysChanged();
     void documentStateChanged();
@@ -254,6 +258,12 @@ private:
     qulonglong bookmarkGeneration_ = 0;
     bool unifiedDesignerEnabled_ = false;
     bool wholeSourceEditorActive_ = false;
+    // Saving needs a path. A document that has never been written has none, so
+    // the save asks for one first — through the shell's file request, which
+    // makes it a continuation like the rest of this flow. Without this, 保存 on
+    // a never-saved chart wrote nothing and said nothing: the file service
+    // refused an empty path and the prompt just went away.
+    void saveSectionOrAskForPath(int difficultyId, std::function<void(bool)> onSaved);
     void askNextDirtySection(std::function<void(bool)> onDecided);
     void askAboutRemainingDocument(std::function<void(bool)> onDecided);
 };
