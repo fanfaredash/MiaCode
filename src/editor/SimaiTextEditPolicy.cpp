@@ -43,6 +43,25 @@ bool hasCommandModifier(Qt::KeyboardModifiers modifiers)
     return modifiers & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
 }
 
+// What Qt's own text controls would accept as typed text — the same rule as
+// QInputControl::isAcceptableInput. The policy's fallback inserts `input`
+// under the claim that Qt would have inserted it anyway, and that claim is only
+// true for text this returns true for.
+//
+// Escape is why this exists. Its key text is U+001B: non-empty, unmodified, and
+// not something Qt would ever put in a document — but the fallback's only gate
+// was "is there text", so pressing Escape typed a control character into the
+// chart. Every non-printable key with a non-empty text() had the same hole.
+bool isInsertableText(const QString& input)
+{
+    if (input.isEmpty()) return false;
+    const QChar first = input.at(0);
+    // Zero-width joiners and friends carry no glyph but are real content.
+    if (first.category() == QChar::Other_Format) return true;
+    if (first == QLatin1Char('\t')) return true;
+    return first.isPrint();
+}
+
 // Alt/Option is a legitimate composition modifier (Option+o types "ø" on
 // macOS), and Ctrl-modified characters are already dropped by Qt's text
 // controls. Only a Meta/Super modifier reaches their raw insertion fallback.
@@ -50,9 +69,7 @@ bool wouldInsertLiteralCommandText(const SimaiTextEditRequest& request)
 {
     if (!(request.modifiers & Qt::MetaModifier)) return false;
     if (request.modifiers & Qt::ControlModifier) return false;
-    if (request.input.isEmpty()) return false;
-    const QChar first = request.input.at(0);
-    return first.isPrint() || first == QLatin1Char('\t');
+    return isInsertableText(request.input);
 }
 
 SimaiTextEditResult untouched(const SimaiTextEditRequest& request)
@@ -141,7 +158,10 @@ SimaiTextEditResult applySimaiTextEditPolicy(const SimaiTextEditRequest& request
     // must not consume the event or synthesize a regular insertion here.
     if (request.overwriteMode) return result;
 
-    const bool canHandleInput = !input.isEmpty() && !hasCommandModifier(request.modifiers);
+    // Declining leaves the key to Qt, which applies the same rule and declines
+    // it too — which is the point: a key neither of them will type is a key
+    // that types nothing.
+    const bool canHandleInput = isInsertableText(input) && !hasCommandModifier(request.modifiers);
     if (!canHandleInput) return result;
 
     if (smartEnabled && input.size() == 1) {

@@ -231,6 +231,62 @@ int main(int argc, char** argv)
         if (!ok) ++failed;
     }
 
+    // Keys whose text() is a control character. The policy's insert fallback
+    // used to gate on "is there text", so Escape typed U+001B into the chart —
+    // a character Qt's own controls would have refused. Declining leaves the
+    // key to Qt, which refuses it too.
+    struct NonTextKeyCase {
+        QString label;
+        QString input;
+        int key;
+    };
+    const NonTextKeyCase nonTextCases[] = {
+        {QStringLiteral("Escape types nothing"), QStringLiteral("\u001B"), Qt::Key_Escape},
+        {QStringLiteral("Backspace types nothing"), QStringLiteral("\b"), Qt::Key_Backspace},
+        {QStringLiteral("Delete types nothing"), QStringLiteral("\u007F"), Qt::Key_Delete},
+        {QStringLiteral("Cancel types nothing"), QStringLiteral("\u0018"), Qt::Key_Cancel},
+    };
+    for (const NonTextKeyCase& nonTextCase : nonTextCases) {
+        miacode::editor::SimaiTextEditRequest request;
+        request.text = QStringLiteral("abc");
+        request.anchor = request.position = 3;
+        request.input = nonTextCase.input;
+        request.key = nonTextCase.key;
+        const auto result = miacode::editor::applySimaiTextEditPolicy(request);
+        const bool ok = !result.consumed && !result.transaction.hasEdit
+            && result.transaction.text == QStringLiteral("abc");
+        out << (ok ? "[PASS] " : "[FAIL] ") << nonTextCase.label << '\n';
+        if (!ok) ++failed;
+    }
+
+    // The other half of the same rule: real text still gets typed, including a
+    // tab and a zero-width joiner, which are not printable but are content.
+    struct TextKeyCase {
+        QString label;
+        QString input;
+        int key;
+        QString expected;
+    };
+    const TextKeyCase textCases[] = {
+        {QStringLiteral("a letter still types"), QStringLiteral("d"), Qt::Key_D,
+         QStringLiteral("abcd")},
+        {QStringLiteral("a tab still types"), QStringLiteral("\t"), Qt::Key_Tab,
+         QStringLiteral("abc\t")},
+        {QStringLiteral("a zero-width joiner still types"), QStringLiteral("\u200D"), 0,
+         QStringLiteral("abc\u200D")},
+    };
+    for (const TextKeyCase& textCase : textCases) {
+        miacode::editor::SimaiTextEditRequest request;
+        request.text = QStringLiteral("abc");
+        request.anchor = request.position = 3;
+        request.input = textCase.input;
+        request.key = textCase.key;
+        const auto result = miacode::editor::applySimaiTextEditPolicy(request);
+        const bool ok = result.consumed && result.transaction.text == textCase.expected;
+        out << (ok ? "[PASS] " : "[FAIL] ") << textCase.label << '\n';
+        if (!ok) ++failed;
+    }
+
     if (failed != 0) {
         out << "SimaiTextEditPolicy spec failed: " << failed << '\n';
         return 1;
