@@ -33,6 +33,45 @@ return false;
 **试听分支没有这一行。** 失配即 `return false`，没有任何东西会去重新生成快照或重新对齐 revision。
 按下播放没有反应，且一直没有反应。
 
+## 名词：什么是「试听分支」
+
+**试听（audition）** 是这份代码里的既有说法：导出页与延迟检测页都需要让预览**播放一份
+不是"正在被编辑的那个难度"的谱面**。它们没有另造一个播放器，而是把那份谱面**同步安装**
+成常规预览的场景，然后用**同一套**走带（播放/暂停/定位）驱动它——
+`installExportPreviewAuditionScene()` / `installSandboxScene()`，
+对应两个标志 `exportPreviewAuditionActive_` / `latencySandboxAuditionActive_`。
+导出页的试听还额外套上导出的 WYSIWYG 强制项，所以听到看到的就是成片的样子。
+
+**分支** 就是字面意义上的分支：`preparePreviewStartState()`——**每一次播放都要过的那道门**
+——开头的第一个 `if`。这道门有两条路：
+
+| | 试听分支 | 常规难度分支 |
+|---|---|---|
+| 前提 | 场景由页面**同步装好**了 | 正文由用户在编辑 |
+| 做的事 | 只回答"快照就绪吗" | 提交脏字段 → 查 `hasActiveDifficulty()` → 查快照 |
+| 失配时 | **直接 `return false`** | `requestTimelineSlowRefresh()` 去重建 |
+
+分支存在的理由是正当的：常规分支那些检查（字段脏就先提交、必须有活动难度、否则请求慢刷新）
+问的全是"**正在被编辑的那个难度**"的事，而试听场景压根不是被编辑出来的，它是被页面装上去的。
+
+## 代价：它没有恢复路径，而且是**两条**都没有
+
+常规播放其实有**两层**兜底：
+
+1. `preparePreviewStartState()` 内部的 `requestTimelineSlowRefresh()`——去重建快照。
+2. 调用方 `startQtPreviewPlayback()`（`TimelinePlayback.cpp:482-488`）在被拒绝时记下
+   `pendingPreviewPlaybackStart_`，等慢刷新完成后**自动补一次播放**
+   （`PreviewTimelineFlow.cpp:1035-1042`）。
+
+导出页**两条都没有**：
+
+- 第 1 条被跳过了（试听分支直接 return）。
+- 第 2 条被写死成假：`state_.pendingPreviewPlaybackStart_ = hasActiveDifficulty();`
+  ——导出页上 `hasActiveDifficulty()` 为假，**所以连"待播放"都不会被记下**。
+  就算记下了也没用：慢刷新本身在导出页上也不会运行。
+
+所以按下播放没有反应之后，**没有任何机制会再试一次**。这就是"卡住之后只能刷新难度"的全部原因。
+
 ## 谁会让它失配
 
 `latestTimelinePreviewRevision_` 只在 `installExportPreviewAuditionScene()`
