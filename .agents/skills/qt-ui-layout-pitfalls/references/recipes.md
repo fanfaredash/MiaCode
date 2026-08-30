@@ -356,6 +356,24 @@ screen, scale factor, or workspace geometry changes.
 bound bridge surface. The macOS build additionally proves that `QuickShellNativeSurfaceHost`
 binds the workspace surface and the completion popup uses the shared mapper.
 
+### Z8. Windows-native file-picker buttons need repeated clicks
+
+**Symptom:** the Windows file picker is visible, but Select/Open/Save/Cancel only takes effect
+after repeated clicks when QuickShell is active.
+
+**Root cause:** QuickShell's visible top level is a `QQuickWindow`, while `MainWindow` is a
+hidden QWidget backend. The shared stacking recovery sees the `QFileDialog` wrapper as a
+blocking dialog and schedules `raise()`/`activateWindow()` for it or for its outer modal. The
+actual interactive window is the system file-picker HWND, so that recovery can steal its
+activation between mouse-down and mouse-up.
+
+**Recipe:** keep the existing native `QFileDialog` call path. Classify a Windows-native
+`QFileDialog` by its `DontUseNativeDialog` option and exclude it from transient-parent binding,
+show-time activation, and modal stacking recovery while it is open. Continue binding and
+recovering ordinary ownerless application dialogs, preserving visible owners for nested
+dialogs. Do not replace the native picker with a Qt widget dialog and do not use
+`Qt::WindowStaysOnTopHint`.
+
 ---
 
 ## Sync-pair constants to keep aligned (UI-layout-relevant)

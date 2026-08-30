@@ -599,6 +599,7 @@ void MainWindow::WindowSection::restoreFocusedTextEditStateAttempt(
 void MainWindow::WindowSection::setQuickShellRootWindow(QWindow* window)
 {
     state_.quickShellRootWindow_ = window;
+    UiDialogs::setApplicationDialogTransientParent(window);
 }
 
 void MainWindow::WindowSection::cancelChartAudioDrop()

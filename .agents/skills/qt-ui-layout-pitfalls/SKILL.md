@@ -55,6 +55,7 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | 文本溢出卡槽 (text overflows a fixed slot) | No overflow mode; ellipsis loses data; headless can't animate | Q5 |
 | 字符间隙/挤压 (glyph gaps or squash from an atlas) | Monospaced atlas cells + AA tails | Q6 |
 | 层叠关系错误 (element above/below the wrong thing) | QML: declaration order = paint order; widget: `paintEvent` draw order | Z1 |
+| Windows 原生文件选择器按钮需多次点击 (native file-picker buttons need repeated clicks) | QuickShell stacking recovery reactivates the Qt wrapper while the real system HWND owns input | Z8 |
 | 点击区域错位 (hit area ≠ visual) | Hit geometry and visuals derived from different sources | Z2 |
 | 平台蓝色填充闪现 (platform blue-fill flashes) | Viewport default paint path fires on style/palette events | Z3 |
 | 取消关闭但弹窗已没了 (cancel close, popups already gone) | Side-effect sweep ran BEFORE the cancellable prompt | Z4 |
@@ -116,6 +117,12 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
 - **Z7**: bind the bridge surface to its adopted `QWindow`, convert child-local coordinates
   to bridge-surface coordinates in the QWidget hierarchy, then call the adopted window's
   `mapToGlobal()`; never compensate with a fixed x/y offset.
+- **Z8**: bind ownerless/hidden-owner top-level dialogs' native `QWindow::transientParent`
+  to the visible QuickShell root and re-raise only blocking modals on app/root activation.
+  Preserve visible owners for nested dialogs and never force-activate non-modal dialogs. A
+  Windows-native `QFileDialog` is a system HWND behind a Qt wrapper: do not bind, raise, or
+  include it in stacking recovery while it is open. Never use `WindowStaysOnTopHint`, which
+  would incorrectly place dialogs above other applications.
 
 ## Known rejected approaches — do not retry
 

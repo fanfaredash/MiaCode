@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFileDialog>
 #include <QEvent>
 #include <QEventLoop>
 #include <QGuiApplication>
@@ -97,6 +98,26 @@ inline bool hasVisibleProtectedPreviewDialog()
     return false;
 }
 
+inline bool isWindowsNativeFileDialog(const QDialog* dialog)
+{
+#ifdef Q_OS_WIN
+    const auto* fileDialog = qobject_cast<const QFileDialog*>(dialog);
+    return fileDialog != nullptr && !fileDialog->testOption(QFileDialog::DontUseNativeDialog);
+#else
+    Q_UNUSED(dialog);
+    return false;
+#endif
+}
+
+inline bool isVisibleWindowsNativeFileDialog(const QWidget* widget)
+{
+    const auto* dialog = qobject_cast<const QDialog*>(widget);
+    return dialog != nullptr
+        && isWindowsNativeFileDialog(dialog)
+        && dialog->isVisible()
+        && !dialog->windowState().testFlag(Qt::WindowMinimized);
+}
+
 inline bool isVisibleBlockingModalDialog(const QWidget* widget)
 {
     const auto* dialog = qobject_cast<const QDialog*>(widget);
@@ -104,6 +125,26 @@ inline bool isVisibleBlockingModalDialog(const QWidget* widget)
         && dialog->isModal()
         && dialog->isVisible()
         && !dialog->windowState().testFlag(Qt::WindowMinimized);
+}
+
+inline bool hasVisibleWindowsNativeFileDialog()
+{
+    const auto topLevelWidgets = QApplication::topLevelWidgets();
+    for (QWidget* widget : topLevelWidgets) {
+        if (isVisibleWindowsNativeFileDialog(widget)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool hasOpenWindowsNativeFileDialog()
+{
+    if (hasVisibleWindowsNativeFileDialog()) {
+        return true;
+    }
+    const auto* activeModal = qobject_cast<const QDialog*>(QApplication::activeModalWidget());
+    return isWindowsNativeFileDialog(activeModal);
 }
 
 inline QList<QPointer<QDialog>> visibleBlockingModalDialogs()
@@ -228,6 +269,134 @@ inline void configureDialogPreviewShortcuts(
 inline bool shouldUseDetachedParent(QWidget* parent)
 {
     return parent != nullptr && parent->property("miacode.dialog_parentless").toBool();
+}
+
+inline QPointer<QWindow>& applicationDialogTransientParentStorage()
+{
+    static QPointer<QWindow> window;
+    return window;
+}
+
+inline QWindow* applicationDialogTransientParent()
+{
+    return applicationDialogTransientParentStorage().data();
+}
+
+inline void bindDialogToApplicationTransientParent(QDialog* dialog)
+{
+    QWindow* transientParent = applicationDialogTransientParent();
+    if (dialog == nullptr || transientParent == nullptr || isWindowsNativeFileDialog(dialog)) {
+        return;
+    }
+    dialog->winId();
+    QWindow* dialogWindow = dialog->windowHandle();
+    if (dialogWindow == nullptr || dialogWindow == transientParent) {
+        return;
+    }
+    QWindow* currentParent = dialogWindow->transientParent();
+    // Preserve nested-dialog ownership whenever the existing native parent is
+    // visible. Only detached dialogs (or dialogs owned by the hidden QWidget
+    // backend) need to be rebound to the visible QuickShell root.
+    if (currentParent != nullptr && currentParent->isVisible()) {
+        return;
+    }
+    if (currentParent != transientParent) {
+        dialogWindow->setTransientParent(transientParent);
+    }
+}
+
+class DialogStackingGuard final : public QObject
+{
+public:
+    explicit DialogStackingGuard(QApplication* app)
+        : QObject(app)
+    {
+        app->installEventFilter(this);
+        QObject::connect(app, &QGuiApplication::applicationStateChanged, this,
+            [this](Qt::ApplicationState state) {
+                if (state == Qt::ApplicationActive && !hasOpenWindowsNativeFileDialog()) {
+                    restoreBlockingModalDialog();
+                }
+            });
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        QWindow* transientParent = applicationDialogTransientParent();
+        if (event == nullptr || transientParent == nullptr) {
+            return QObject::eventFilter(watched, event);
+        }
+        if (auto* dialog = qobject_cast<QDialog*>(watched);
+            dialog != nullptr
+            && !isWindowsNativeFileDialog(dialog)
+            && dialog->isWindow()
+            && event->type() == QEvent::Show) {
+            QPointer<QDialog> dialogGuard(dialog);
+            QTimer::singleShot(0, dialog, [dialogGuard]() {
+                if (dialogGuard.isNull() || !dialogGuard->isVisible()) {
+                    return;
+                }
+                bindDialogToApplicationTransientParent(dialogGuard);
+                if (!isVisibleBlockingModalDialog(dialogGuard)) {
+                    return;
+                }
+                dialogGuard->raise();
+                dialogGuard->activateWindow();
+            });
+        } else if (watched == transientParent
+            && event->type() == QEvent::WindowActivate
+            && !hasOpenWindowsNativeFileDialog()) {
+            restoreBlockingModalDialog();
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    void restoreBlockingModalDialog()
+    {
+        QTimer::singleShot(0, this, []() {
+            if (hasOpenWindowsNativeFileDialog()) {
+                return;
+            }
+            const QList<QPointer<QDialog>> dialogs = visibleBlockingModalDialogs();
+            if (dialogs.isEmpty() || dialogs.constFirst().isNull()) {
+                return;
+            }
+            QDialog* dialog = dialogs.constFirst().data();
+            bindDialogToApplicationTransientParent(dialog);
+            dialog->raise();
+            dialog->activateWindow();
+        });
+    }
+};
+
+inline QPointer<DialogStackingGuard>& applicationDialogStackingGuardStorage();
+
+inline DialogStackingGuard* installApplicationDialogStackingGuard()
+{
+    auto* app = qobject_cast<QApplication*>(QCoreApplication::instance());
+    if (app == nullptr) {
+        return nullptr;
+    }
+    QPointer<DialogStackingGuard>& guard = applicationDialogStackingGuardStorage();
+    if (!guard.isNull()) {
+        return guard.data();
+    }
+    guard = new DialogStackingGuard(app);
+    return guard.data();
+}
+
+inline QPointer<DialogStackingGuard>& applicationDialogStackingGuardStorage()
+{
+    static QPointer<DialogStackingGuard> guard;
+    return guard;
+}
+
+inline void setApplicationDialogTransientParent(QWindow* window)
+{
+    applicationDialogTransientParentStorage() = window;
+    installApplicationDialogStackingGuard();
 }
 
 inline QWidget* effectiveParentWidget(QWidget* parent)
@@ -365,6 +534,7 @@ inline void prepareDialogWindow(
     }
     configureDialogPreviewShortcuts(dialog, policy);
     applyDetachedParentBehavior(dialog, parent);
+    bindDialogToApplicationTransientParent(dialog);
     centerDialogOnAnchor(dialog, parent);
     if (!activate) {
         return;
