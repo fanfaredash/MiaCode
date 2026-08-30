@@ -290,6 +290,19 @@ public:
         const QString& sourceText, const QString& filePath, int activeDifficultyId,
         bool dirty, quint64 revision, QmlDocumentCommitKind kind,
         bool usedSystemEncoding = false);
+    // An audition scene — the export page's or the latency page's — is
+    // installed and playable. Called by whoever installed it, with the two
+    // things only that installer can answer: whether the scene still matches
+    // its source, and how to build it again.
+    void setAuditionSceneReady(std::function<bool()> stillCurrent,
+                               std::function<void()> reinstall);
+    void clearAuditionSceneReady();
+    // True when an audition scene can be played right now. Rebuilds it once if
+    // it has gone stale — the readiness gate for these pages had no recovery at
+    // all, so a Play that was refused stayed refused until the page happened to
+    // reinstall for some other reason.
+    bool ensureAuditionSceneReady();
+
     void setQmlDocumentSaveHandler(std::function<bool(const QString&)> handler);
     // The v2 shell answers the unsaved-changes question itself, because only it
     // can see which difficulties changed — MainWindow mirrors one flag for the

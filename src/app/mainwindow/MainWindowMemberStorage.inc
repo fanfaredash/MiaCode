@@ -325,6 +325,22 @@
         // transport plays/seeks it even though activeDifficultyId_ == 0 (D4).
         // Cleared on teardown, which forces the next difficulty to rebuild.
         bool exportPreviewAuditionActive_ = false;
+        // Playback readiness for an installed audition scene — deliberately NOT
+        // latestTimelinePreview{SnapshotReady,Revision}_.
+        //
+        // Those two mean "the preview snapshot of the difficulty being edited",
+        // and the export page has no such difficulty (activeDifficultyId_ == 0).
+        // Borrowing them meant anything acting on behalf of a difficulty —
+        // clearTimelineAndPreview() zeroing them, invalidateDocumentValidationRevision()
+        // bumping the counter they are compared against — reached into the export
+        // page's playback and wedged it, with no owner to notice and no path back.
+        //
+        // `stillCurrent` answers whether the installed scene still matches what
+        // it was built from; `reinstall` builds it again. Both are supplied by
+        // whoever installed it, because only they know either answer.
+        bool auditionSceneReady_ = false;
+        std::function<bool()> auditionSceneStillCurrent_;
+        std::function<void()> auditionSceneReinstall_;
         // One-shot preview position carried INTO the export page from the field
         // that was active before entering (difficulty tab / latency page), so the
         // export audition seeds the playhead there instead of snapping to 0 —
@@ -856,6 +872,7 @@
     quint64& videoExportJobToken_ = state_.videoExportJobToken_;
     int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
     bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
+    bool& auditionSceneReady_ = state_.auditionSceneReady_;
     double& exportPreviewEntrySeedSecond_ = state_.exportPreviewEntrySeedSecond_;
     int& lastExportAuditionDifficultyId_ = state_.lastExportAuditionDifficultyId_;
     bool& exportIntroRegionActive_ = state_.exportIntroRegionActive_;

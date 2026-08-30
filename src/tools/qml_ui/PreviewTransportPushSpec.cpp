@@ -9,6 +9,11 @@
 // The invariant now: the playhead is announced by the one function that moves
 // it, the playing flag by the one function that writes it, and the model
 // samples nothing.
+//
+// The same file also pins who OWNS the export/latency audition's playback
+// readiness, because that was the same mistake in another form: the audition
+// borrowed the edited difficulty's snapshot fields, so difficulty bookkeeping
+// silently wedged a page that has no difficulty.
 
 #include <QCoreApplication>
 #include <QDirIterator>
@@ -163,6 +168,43 @@ int main(int argc, char** argv)
     expect(!modelHeader.contains(QStringLiteral("QTimer"))
                && !modelSource.contains(QStringLiteral("QTimer")),
            QStringLiteral("QmlPreviewModel polls nothing"), out, &failed);
+
+    // 6. 试听场景的播放就绪是它自己的，且失配时能自愈。
+    const QString playbackGlue = readSource(
+        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackGlue.cpp"));
+    const int gateAt = playbackGlue.indexOf(
+        QStringLiteral("bool MainWindow::TimelineSection::preparePreviewStartState"));
+    expect(gateAt >= 0, QStringLiteral("preparePreviewStartState exists"), out, &failed);
+    if (gateAt >= 0) {
+        const QString gateBody = playbackGlue.mid(gateAt);
+        const int auditionAt = gateBody.indexOf(QStringLiteral("exportPreviewAuditionActive_"));
+        const int ordinaryAt = gateBody.indexOf(QStringLiteral("hasActiveDifficulty()"));
+        const QString auditionBranch = (auditionAt >= 0 && ordinaryAt > auditionAt)
+            ? gateBody.mid(auditionAt, ordinaryAt - auditionAt)
+            : QString();
+        expect(auditionBranch.contains(QStringLiteral("ensureAuditionSceneReady()")),
+               QStringLiteral("the audition branch asks its own readiness"), out, &failed);
+        // The pair below belongs to the difficulty being edited. On the export
+        // page there is none, which is exactly why reading it here wedged.
+        expect(!auditionBranch.contains(QStringLiteral("latestTimelinePreviewSnapshotReady_"))
+                   && !auditionBranch.contains(QStringLiteral("timelineRevision_")),
+               QStringLiteral("it no longer borrows the edited difficulty's snapshot"), out, &failed);
+    }
+    expect(playbackGlue.contains(QStringLiteral("bool MainWindow::ensureAuditionSceneReady"))
+               && playbackGlue.contains(QStringLiteral("reinstall()")),
+           QStringLiteral("a stale audition scene rebuilds instead of refusing forever"), out, &failed);
+
+    // 7. 两个安装方都登记，两个拆除方都清除。
+    const QString exportSnapshot = readSource(
+        QStringLiteral("src/app/mainwindow/sections/export/MainWindow.ExportSnapshot.cpp"));
+    expect(exportSnapshot.contains(QStringLiteral("setAuditionSceneReady("))
+               && exportSnapshot.contains(QStringLiteral("clearAuditionSceneReady()")),
+           QStringLiteral("the export audition registers and releases its scene"), out, &failed);
+    const QString latencySandbox = readSource(
+        QStringLiteral("src/tools/latency/LatencySandboxController.cpp"));
+    expect(latencySandbox.contains(QStringLiteral("setAuditionSceneReady("))
+               && latencySandbox.contains(QStringLiteral("clearAuditionSceneReady()")),
+           QStringLiteral("the latency sandbox registers and releases its scene"), out, &failed);
 
     out << (failed == 0 ? "ALL PASS" : QStringLiteral("%1 FAILED").arg(failed)) << '\n';
     return failed == 0 ? 0 : 1;

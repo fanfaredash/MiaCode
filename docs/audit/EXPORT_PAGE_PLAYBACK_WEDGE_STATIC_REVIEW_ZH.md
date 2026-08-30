@@ -181,7 +181,7 @@ ui_.qmlExportSession_->enter(previousActiveDifficultyId);
 导出页是把这个合并暴露出来的那个用例。所以下面的方向 3 才是根因修法，
 而它的第一步不是"改 `activeDifficultyId_`"，是**把这两个问题拆开**。
 
-## 修复方向（尚未执行，供决策）
+## 修复方向（方向 3 已于 2026-08-30 执行，见文末）
 
 三个层次，从窄到宽：
 
@@ -203,3 +203,37 @@ ui_.qmlExportSession_->enter(previousActiveDifficultyId);
 `preparePreviewStartState()` 的试听分支同时跳过了 `currentFieldDirty_` /
 `applyCurrentFieldToDocument()` 那一步（注释说明是有意的）。v2 下 `currentFieldDirty_`
 恒为 false（`applyCommittedQmlDocument` 无条件写 false），所以这条跳过在 v2 上没有影响。
+
+---
+
+## 已执行：方向 3（2026-08-30）
+
+**做了什么**：试听场景不再借用被编辑难度的就绪字段，改为持有自己的身份，并获得一条恢复路径。
+
+- 新状态 `auditionSceneReady_` + 两个由**安装方**提供的回调：
+  `auditionSceneStillCurrent_`（这套场景还对得上它的来源吗）与 `auditionSceneReinstall_`（重建）。
+  只有安装方知道这两个答案，所以由它给。
+- `MainWindow::setAuditionSceneReady()` / `clearAuditionSceneReady()` / `ensureAuditionSceneReady()`。
+- `preparePreviewStartState()` 的试听分支改为 `return owner_.ensureAuditionSceneReady();`，
+  **不再读** `latestTimelinePreviewSnapshotReady_` / `timelineRevision_`。
+- 导出侧的 `stillCurrent` 比较的是**安装时那份正文文本**——这比原先借来的 revision 计数器
+  更贴近真相：那个计数器回答的是"正在被编辑的难度"的问题，而这一页没有那个难度。
+- 延迟检测页的测试谱面是当场合成的、不会在场景底下改变，所以它的 `stillCurrent` 为空
+  （视为始终当前），重建只作安全网。
+- 两个拆除路径都调 `clearAuditionSceneReady()`。
+
+**为什么这样就修好了**：`clearTimelineAndPreview()` 与 `invalidateDocumentValidationRevision()`
+动的仍然是那对旧字段——但播放已经不看它们了，所以够不到导出页。
+而万一还有没找到的破坏路径，`ensureAuditionSceneReady()` 会重建一次而不是永远拒绝：
+这一页原本**两层兜底都没有**（慢刷新被 `hasActiveDifficulty()` 挡住，
+`pendingPreviewPlaybackStart_` 被写成同一个假值），现在它有自己的一层。
+
+**没有做的**：没有去改 `activeDifficultyId_` 的值，也没有去拆 `hasActiveDifficulty()` 的
+73 个使用点。那个谓词的含义仍然是"有没有正文在被编辑"，导出页的答案仍然是"没有"——
+这是对的。被拆开的是**播放就绪的所有权**，那才是真正被混用的东西。
+
+**漂移守卫**：`preview_transport_push_spec` 新增五条断言，包括
+「试听分支不得再出现 `latestTimelinePreviewSnapshotReady_` / `timelineRevision_`」。
+
+**仍需原生桌面验收**：进入导出页 → 切难度 → 播放；以及此前会卡住的路径
+（进入导出页后再在顶部切难度，然后播放）。

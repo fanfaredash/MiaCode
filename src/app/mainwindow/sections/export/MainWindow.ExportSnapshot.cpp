@@ -530,6 +530,18 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     // Set up the negative-time intro region (slider range + default playhead at
     // the intro head) when 添加片头 is on for this difficulty.
     owner_.refreshExportIntroState();
+
+    // The scene is playable, and this is what it was built from. Comparing the
+    // chart text is a truer staleness test than the timeline revision counter
+    // this used to borrow: that counter answers a question about the difficulty
+    // being edited, which on this page is nobody.
+    const QString installedChart = difficulty->chart;
+    owner_.setAuditionSceneReady(
+        [this, difficultyId, installedChart]() {
+            const SimaiDifficultyData* current = owner_.document_.difficulty(difficultyId);
+            return current != nullptr && current->chart == installedChart;
+        },
+        [this, difficultyId]() { installExportPreviewAuditionScene(difficultyId); });
 }
 
 void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
@@ -541,6 +553,7 @@ void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
     owner_.stopQtPreviewPlayback(true);  // stop the real transport if it's running
     owner_.clearExportAuditionClockSchedule();  // drop the count-in for this scene
     owner_.exportPreviewAuditionActive_ = false;
+    owner_.clearAuditionSceneReady();
     // Invalidate the snapshot so the next difficulty switch rebuilds its own
     // preview from scratch (we deliberately don't cache/restore — leaving the
     // page reinstalls the destination field's preview anyway).

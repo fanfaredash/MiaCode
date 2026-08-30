@@ -26,17 +26,56 @@ void appendPreviewInteractionLog(const QString& action, const QString& payload =
 
 }  // namespace
 
+void MainWindow::setAuditionSceneReady(std::function<bool()> stillCurrent,
+                                       std::function<void()> reinstall)
+{
+    state_.auditionSceneStillCurrent_ = std::move(stillCurrent);
+    state_.auditionSceneReinstall_ = std::move(reinstall);
+    state_.auditionSceneReady_ = true;
+}
+
+void MainWindow::clearAuditionSceneReady()
+{
+    state_.auditionSceneReady_ = false;
+    state_.auditionSceneStillCurrent_ = {};
+    state_.auditionSceneReinstall_ = {};
+}
+
+bool MainWindow::ensureAuditionSceneReady()
+{
+    const bool current = state_.auditionSceneReady_
+        && (!state_.auditionSceneStillCurrent_ || state_.auditionSceneStillCurrent_());
+    if (current) {
+        return true;
+    }
+    if (!state_.auditionSceneReinstall_) {
+        return false;
+    }
+    // Rebuilding is the recovery, and it is the only one available here: the
+    // ordinary path's two fallbacks — the slow refresh it requests, and the
+    // deferred replay its caller records — are both gated on
+    // hasActiveDifficulty(), which is false on the export page by design.
+    // Take the callback out first so a reinstall that fails cannot be retried
+    // forever from inside itself.
+    const std::function<void()> reinstall = state_.auditionSceneReinstall_;
+    clearAuditionSceneReady();
+    reinstall();
+    return state_.auditionSceneReady_;
+}
+
 bool MainWindow::TimelineSection::preparePreviewStartState()
 {
     // Latency sandbox + export-page audition: the controller/section populated
     // the preview state synchronously (installSandboxScene /
     // installExportPreviewAuditionScene), so skip the editor-dirty / difficulty
-    // checks and the slow-refresh round trip — just report whether that state is
-    // ready. This lets the audition reuse the exact same playback transport as a
-    // difficulty even though activeDifficultyId_ == 0 on the export page (D4).
+    // checks and the slow-refresh round trip. This lets the audition reuse the
+    // exact same playback transport as a difficulty even though
+    // activeDifficultyId_ == 0 on the export page (D4).
+    //
+    // Readiness is the scene's own, not the edited difficulty's snapshot: see
+    // auditionSceneReady_ for why borrowing that pair wedged this page.
     if (state_.latencySandboxAuditionActive_ || state_.exportPreviewAuditionActive_) {
-        return state_.latestTimelinePreviewSnapshotReady_
-            && state_.latestTimelinePreviewRevision_ == state_.timelineRevision_;
+        return owner_.ensureAuditionSceneReady();
     }
 
     const bool chartFieldVisible = ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.chartPage_;

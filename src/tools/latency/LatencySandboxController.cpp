@@ -188,6 +188,7 @@ void LatencySandboxController::teardownSandboxScene()
     if (!owner_.isNull()) {
         owner_->stopQtPreviewPlayback(true);  // stop the real transport if it's running
         owner_->state_.latencySandboxAuditionActive_ = false;
+        owner_->clearAuditionSceneReady();
         // Don't let a later difficulty reuse the sandbox's "ready" snapshot.
         owner_->state_.latestTimelinePreviewSnapshotReady_ = false;
     }
@@ -303,6 +304,13 @@ void LatencySandboxController::setupSandboxPreviewState()
     owner_->state_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
     owner_->state_.latestTimelinePreviewRevision_ = owner_->state_.timelineRevision_;
     owner_->state_.latestTimelinePreviewSnapshotReady_ = true;
+    // The sandbox's test chart is synthesized here and cannot change underneath
+    // the scene, so it is always current; the rebuild is only a safety net.
+    owner_->setAuditionSceneReady({}, [this]() {
+        if (!owner_.isNull()) {
+            installSandboxScene();
+        }
+    });
     if (owner_->state_.previewCanvas_ != nullptr) {
         owner_->state_.previewCanvas_->setNoteMarkers(previewState.shiftedNoteMarkers);
     }
