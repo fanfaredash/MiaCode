@@ -436,6 +436,17 @@ bool MainWindow::DocumentSection::applyCommittedQmlDocument(
     state_.currentFieldDirty_ = false;
     anchorCurrentFieldCleanState();
     updateDirtyState();
+    // An edit landed: source text moved and the document is not at its save
+    // point. Opening and saving both reach here too, and neither is an edit —
+    // the first leaves the source unchanged relative to what was just loaded,
+    // and both leave the document clean.
+    //
+    // updateDirtyState() runs first because it is what starts the routine
+    // autosave timer; this adds the per-edit half back, which left with the
+    // hidden chart editor that used to drive it.
+    if (sourceChanged && dirty) {
+        noteDocumentEditedForAutosave();
+    }
     owner_.updateWindowTitle();
     return true;
 }

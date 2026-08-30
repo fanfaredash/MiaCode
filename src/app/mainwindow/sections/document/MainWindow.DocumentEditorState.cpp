@@ -200,7 +200,7 @@ void MainWindow::DocumentSection::refreshCurrentFieldDirtyState()
     updateDirtyState();
 }
 
-void MainWindow::DocumentSection::markCurrentFieldDirty()
+void MainWindow::DocumentSection::noteDocumentEditedForAutosave()
 {
     if (ui_.autosaveIdleTimer_ != nullptr) {
         ui_.autosaveIdleTimer_->start();
@@ -209,13 +209,18 @@ void MainWindow::DocumentSection::markCurrentFieldDirty()
     // crash-handler's snapshot mailbox so an abnormal exit (segfault,
     // abort, std::terminate) within the next ~milliseconds still
     // produces a recovery file. Cheap: bounded memcpy + atomic store,
-    // no disk I/O. The 2-second debounced .bak write below is for
+    // no disk I/O. The 2-second debounced .bak write above is for
     // routine autosave; this is the per-edit safety net.
     if (!state_.currentFilePath_.isEmpty()) {
         miacode::crash_recovery::updateSnapshot(
             state_.currentFilePath_,
             currentDocumentTextForAutosave());
     }
+}
+
+void MainWindow::DocumentSection::markCurrentFieldDirty()
+{
+    noteDocumentEditedForAutosave();
     refreshCurrentFieldDirtyState();
 }
 

@@ -154,6 +154,10 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                        && documentModel.contains(QStringLiteral("fileService_->open(path)"))
                        && documentModel.contains(QStringLiteral("fileService_->save(saveSectionDifficultyId())")),
                    QStringLiteral("production QML body, metadata, difficulty, and file operations submit workspace transactions"), err)
+        && require(documentBridge.contains(QStringLiteral("noteDocumentEditedForAutosave()"))
+                       && documentBridge.contains(QStringLiteral("sourceChanged && dirty")),
+                   QStringLiteral("a v2 edit arms the per-edit autosave and the crash snapshot, "
+                                  "which left with the hidden chart editor that used to drive them"), err)
         && require(documentModel.contains(
                        QStringLiteral("void QmlDocumentModel::saveSectionOrAskForPath"))
                        && documentModel.contains(QStringLiteral("request.saveMode = true"))

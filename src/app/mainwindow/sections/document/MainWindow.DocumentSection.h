@@ -85,6 +85,16 @@ public:
     void anchorCurrentFieldCleanState();
     void refreshCurrentFieldDirtyState();
     void markCurrentFieldDirty();
+    // The per-edit autosave safety net: restart the 2s debounce that writes
+    // latest.bak, and push the document into the crash handler's snapshot
+    // mailbox so an abnormal exit in the next moments still leaves something
+    // recoverable.
+    //
+    // Its driver used to be the hidden chart editor's textChanged, and it went
+    // out with that editor — leaving v2 with only the 2-minute routine snapshot
+    // and, worse, with nothing at all in the crash mailbox. The v2 commit path
+    // calls it now, which is where an edit actually lands.
+    void noteDocumentEditedForAutosave();
     void clearDeletedDifficultyUndoState();
     bool undoDeletedDifficultyField();
     void clearChartSelectionTransformUndoEntries();
