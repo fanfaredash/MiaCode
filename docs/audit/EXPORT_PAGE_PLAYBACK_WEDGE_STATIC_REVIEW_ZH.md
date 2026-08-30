@@ -79,6 +79,69 @@ state_.latestTimelinePreviewSnapshotReady_ = false;
 所有者的复现路径里"顶部难度选择"既能**造成**失配也能**修复**失配，取决于导出页是否随之重装场景，
 这正是它看起来随机的原因。
 
+## 追问：导出页的 `activeDifficultyId_ == 0` 本身是不是问题？
+
+（所有者 2026-08-30 追问："导出页的难度应该继承进入时的难度"。）
+
+### 难度**确实**继承了——只是继承到了另一个所有者
+
+`performSwitchToExportField()`（`DocumentUi.cpp:964-1033`）的顺序是：
+
+```cpp
+const int previousActiveDifficultyId = state_.activeDifficultyId_;  // 归零之前先取
+...
+state_.activeDifficultyId_ = 0;
+...
+ui_.qmlExportSession_->enter(previousActiveDifficultyId);
+```
+
+`enter()` 把它交给 `resolveDefaultDifficultyId()`，回退链是：
+进入时的难度 → 上次在导出页选过的 → 工程的 last-opened → 文档第一个难度。
+
+所以树上有**两个**"当前难度"：
+
+| | 含义 | 导出页上的值 |
+|---|---|---|
+| `MainWindow::activeDifficultyId_` | **哪个难度的正文字段正在被编辑** | 0（导出页不是难度编辑器） |
+| `QmlExportSession::selectedDifficultyId_` | **这个页面是关于哪个难度的** | 进入时的难度（D4） |
+
+归零是 `716c36d4` 引入的，和 元数据页 / 欢迎页 同一套做法：导出页是 `editorStack_` 里的一页，
+把 `activeDifficultyId_` 置 0 就一次性关掉整条难度编辑链（校验装饰、字段脏、底栏页签、
+时间轴刷新）。**意图是对的**：那时候确实没有任何难度字段在被编辑。
+
+### 它和本 bug 的联系：是**成因**，不是巧合
+
+归零带来三个连锁后果，本 bug 正是第三个：
+
+1. `hasActiveDifficulty()` 为假 ⇒ `scheduleTimelineRefresh()` 开头就 return。
+   **导出页上，常规的重建路径是死的。**
+2. 正因为 (1)，`preparePreviewStartState()` 才需要一条**试听专用分支**——而它恰恰是那条
+   没有恢复路径的分支。它**不能**调 `requestTimelineSlowRefresh()`，因为那条同样被
+   `hasActiveDifficulty()` 挡住。
+3. 但试听场景**仍然借用**普通难度那组就绪字段
+   （`latestTimelinePreviewSnapshotReady_` / `latestTimelinePreviewRevision_` / `timelineRevision_`）。
+   这组字段的含义是"**正在被编辑的那个难度**的预览快照"——而导出页上那个难度是**不存在的**。
+   于是任何代表某个难度去动这组字段的代码（`selectDocumentDifficulty` →
+   `clearTimelineAndPreview` + `++timelineRevision_`）都会直接伸进导出页试听的状态里，
+   而没有任何所有者会察觉。
+
+**一句话**：导出页在 `MainWindow` 眼里没有难度，它的播放就绪却存放在"有难度时才有意义"的字段里。
+
+### 那"让 `activeDifficultyId_` 继承进入时的难度"能修好吗
+
+能修好 (1) 和 (2)，但会**打开 73 个门**。`hasActiveDifficulty()` 全树 73 个使用点，
+抽样看压倒性地是"**有没有一份正文可读/可编辑**"——扩展的 `editor/*` API、`editorText()`、
+`selectionOffsets()`、字段脏、校验装饰。导出页并没有显示正文编辑器，让这些全部变成真，
+是用一个更大的问题换掉一个小的。
+
+真正的结论是：**`hasActiveDifficulty()` 把两个问题合并成了一个**——
+
+- 「有没有难度**被选中**」（导出页：有，就是进入时那个）
+- 「有没有难度的正文**正在被编辑**」（导出页：没有）
+
+导出页是把这个合并暴露出来的那个用例。所以下面的方向 3 才是根因修法，
+而它的第一步不是"改 `activeDifficultyId_`"，是**把这两个问题拆开**。
+
 ## 修复方向（尚未执行，供决策）
 
 三个层次，从窄到宽：
@@ -88,10 +151,10 @@ state_.latestTimelinePreviewSnapshotReady_ = false;
    而不是 `requestTimelineSlowRefresh()`（那条依赖 `hasActiveDifficulty()`，在导出页上是假）。
 2. **让 `clearTimelineAndPreview()` 认识试听场景**：`exportPreviewAuditionActive_` 为真时不清
    ready/revision，或清完后立即重装。这修的是"破坏"这一半。
-3. **让试听场景不共用普通难度的就绪字段**。根因是导出页试听借用了
-   `latestTimelinePreview*` 这组为"当前难度"设计的状态，而导出页根本没有当前难度
-   （`activeDifficultyId_ == 0`）。给试听自己的就绪标识，`clearTimelineAndPreview()`
-   就打不到它，第 2 项也不必存在。
+3. **把「有难度被选中」和「有难度正文在被编辑」拆成两个问题**，让试听场景不再共用
+   普通难度的就绪字段。给试听自己的就绪标识，`clearTimelineAndPreview()` 就打不到它，
+   第 2 项也不必存在；`preparePreviewStartState()` 的试听分支也就能有自己的恢复动作
+   （重装场景），不必去借那条被 `hasActiveDifficulty()` 挡住的慢刷新。
 
 **建议 3**（其余两项是对症）。但它动的是播放就绪的所有权，属于结构性改动，
 应当与文档机制那批一起排期，而不是塞进导出区间这一轮。
