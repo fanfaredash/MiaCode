@@ -42,7 +42,7 @@ void QmlCommandService::openRecentDocument(const QString& path)
 
 void QmlCommandService::newDocument()
 {
-    whenDocumentMayBeLeft([this]() { document_->createDocumentInPickedFolder(); });
+    whenDocumentMayBeLeft([this]() { document_->createDocumentFromPickedAudio(); });
 }
 
 void QmlCommandService::restoreBackupDocument(const QString& path)

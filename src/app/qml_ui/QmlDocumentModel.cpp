@@ -8,6 +8,7 @@
 
 #include "app/mainwindow/MainWindow.h"
 #include "app/v2/UiRequestService.h"
+#include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "core/chart/document/SimaiDocument.h"
 
@@ -390,38 +391,124 @@ void QmlDocumentModel::restoreBackup(const QString& path)
     }
 }
 
-void QmlDocumentModel::createDocumentInPickedFolder()
+void QmlDocumentModel::createDocumentFromPickedAudio()
 {
     miacode::v2::UiRequestService* const requests =
         backend_ != nullptr ? backend_->uiRequestService() : nullptr;
     if (requests == nullptr || fileService_ == nullptr) {
         return;
     }
+    QStringList patterns;
+    for (const QString& extension : miacode::chart_assets::supportedTrackFileExtensions()) {
+        patterns << QStringLiteral("*.%1").arg(extension);
+    }
     miacode::v2::FileRequest request;
-    request.title = UiText::text(QStringLiteral("document.select_chart_folder"));
-    request.selectFolder = true;
-    requests->requestFile(request, [this, requests](const QString& directory) {
-        if (directory.trimmed().isEmpty()) {
-            return;
+    request.title = tr("选择音频");
+    request.nameFilters = QStringList{
+        tr("音频文件 (%1)").arg(patterns.join(QLatin1Char(' '))),
+        tr("所有文件 (*)"),
+    };
+    requests->requestFile(request, [this](const QString& audioPath) {
+        if (!audioPath.trimmed().isEmpty()) {
+            createChartBesideAudio(QDir::cleanPath(audioPath));
         }
-        // A chart is a folder holding maidata.txt; picking the folder is what
-        // 新建 asks for, and the file name is not the user's to choose.
-        const QString targetPath =
-            QDir(QDir::cleanPath(directory)).filePath(QStringLiteral("maidata.txt"));
-        if (!QFileInfo::exists(targetPath)) {
-            createEmptyDocumentAt(targetPath);
-            return;
-        }
-        requests->requestConfirmation(
-            UiText::text(QStringLiteral("document.file_already_exists")),
-            UiText::text(QStringLiteral("document.maidata_txt_already_exists_in")),
-            UiText::text(QStringLiteral("action.yes")),
-            [this, targetPath](bool accepted) {
-                if (accepted) {
-                    createEmptyDocumentAt(targetPath);
-                }
-            });
     });
+}
+
+void QmlDocumentModel::createChartBesideAudio(const QString& audioPath)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (requests == nullptr) {
+        return;
+    }
+    // The chart is created where the audio already lives — beside it, not in a
+    // folder made for it. A chart IS its folder, and the audio's folder is
+    // already that folder as far as the user is concerned.
+    const QString targetPath =
+        QFileInfo(audioPath).absoluteDir().filePath(QStringLiteral("maidata.txt"));
+    if (!QFileInfo::exists(targetPath)) {
+        ensureTrackCopyThenCreate(audioPath, targetPath);
+        return;
+    }
+    requests->requestConfirmation(
+        UiText::text(QStringLiteral("document.file_already_exists")),
+        UiText::text(QStringLiteral("document.maidata_txt_already_exists_in")),
+        UiText::text(QStringLiteral("action.yes")),
+        [this, audioPath, targetPath](bool accepted) {
+            if (accepted) {
+                ensureTrackCopyThenCreate(audioPath, targetPath);
+            }
+        });
+}
+
+void QmlDocumentModel::ensureTrackCopyThenCreate(
+    const QString& audioPath, const QString& targetPath)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    const QFileInfo audioInfo(audioPath);
+    const QString extension = audioInfo.suffix().toLower();
+    const QString trackName = QStringLiteral("track.%1").arg(extension);
+
+    // Already named track.<ext>: nothing to copy, and copying would mean
+    // copying a file onto itself.
+    if (audioInfo.fileName().compare(trackName, Qt::CaseInsensitive) == 0) {
+        createEmptyDocumentAt(targetPath);
+        return;
+    }
+
+    const QString trackPath = audioInfo.absoluteDir().filePath(trackName);
+    const auto copyThenCreate = [this, audioPath, trackPath, targetPath, requests]() {
+        if (QFileInfo::exists(trackPath) && !QFile::remove(trackPath)) {
+            if (requests != nullptr) {
+                requests->postNotice(
+                    miacode::v2::NoticeSeverity::Error, tr("新建失败"),
+                    tr("无法替换：\n%1").arg(QDir::toNativeSeparators(trackPath)));
+            }
+            return;
+        }
+        if (!QFile::copy(audioPath, trackPath)) {
+            if (requests != nullptr) {
+                requests->postNotice(
+                    miacode::v2::NoticeSeverity::Error, tr("新建失败"),
+                    tr("无法写入：\n%1").arg(QDir::toNativeSeparators(trackPath)));
+            }
+            return;
+        }
+        // The engine resolves a track by trying track.mp3, .wav, .flac, .ogg in
+        // that order, so a copy landing on a later extension while an earlier
+        // one exists would leave the chart playing the other file. Say so
+        // rather than let it be discovered during playback.
+        const QString resolved = miacode::chart_assets::resolveTrackPathForDirectory(
+            QFileInfo(trackPath).absolutePath());
+        if (requests != nullptr && !resolved.isEmpty()
+            && QFileInfo(resolved) != QFileInfo(trackPath)) {
+            requests->postNotice(
+                miacode::v2::NoticeSeverity::Warning, tr("音轨可能不是刚选的那个"),
+                tr("文件夹里已有 %1，谱面会优先使用它，而不是 %2。")
+                    .arg(QFileInfo(resolved).fileName(), QFileInfo(trackPath).fileName()));
+        }
+        createEmptyDocumentAt(targetPath);
+    };
+
+    if (!QFileInfo::exists(trackPath)) {
+        copyThenCreate();
+        return;
+    }
+    if (requests == nullptr) {
+        return;
+    }
+    requests->requestConfirmation(
+        UiText::text(QStringLiteral("document.file_already_exists")),
+        tr("%1 已存在。用「%2」替换它吗？")
+            .arg(trackName, audioInfo.fileName()),
+        UiText::text(QStringLiteral("action.yes")),
+        [copyThenCreate](bool accepted) {
+            if (accepted) {
+                copyThenCreate();
+            }
+        });
 }
 
 void QmlDocumentModel::createEmptyDocumentAt(const QString& targetPath)

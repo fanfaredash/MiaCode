@@ -91,22 +91,22 @@
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
 
-- [ ] **新建谱面时一并落实音轨**（2026-08-30 所有者提出，已判定可行，未实现）。
-      **约束先说清**：`maidata.txt` **不引用**任意音频文件——引擎按名字找，
-      `resolveTrackPathForDirectory()` 只认文件夹里的 `track.mp3 / .wav / .flac / .ogg`
-      （`ChartAssetPaths.h:25-48`）。所以"选择文件夹内的 track.mp3"不是一次「用哪个音频」的
-      选择，真正的要求是**这个文件夹最后必须有一个 `track.<ext>`**。
-      由此得出的无感设计（三种情况，只有第三种需要问）：
-      1. 选中的文件夹里**已有** `track.*` → 什么都不问，直接建 `maidata.txt`。这就是"无感"，
-         而且现在就是免费的（`resolveTrackPathForDirectory()` 已经在了）。
-      2. 文件夹里**有音频但不叫** `track.*`（如 `song.mp3`）→ 提示"要用它作为音轨吗"，
-         同意则复制/改名为 `track.<ext>`。多个候选时才列出来让用户挑——
-         **这正是"选择文件夹内的 track.mp3"字面成立的那种情况**。
-      3. 文件夹里**没有任何音频** → 才弹一次文件选择，选中后同样复制进去。
-      **复用现成机制**：音频拖放建谱（`createChartsFromAudioDrop` /
-      `finishChartsFromAudioDrop`）已经做完全相同的事——暂存目录 → 复制成
-      `track.<ext>` → 写 `maidata.txt` → 原子 rename 就位（`DocumentFileFlow.cpp:418-437`）。
-      新建只需要把它的"从音频出发"倒过来变成"从文件夹出发"，落点完全一样。
+- [x] **新建 = 打开任意音频并原地建谱**（2026-08-30 所有者定型，同日实现）。
+      先说清为什么不能是"一个能同时选文件夹和文件的窗口"：Qt 给不出。
+      `QtQuick.Dialogs.FileDialog` 的 `FileMode` 只有 `OpenFile / OpenFiles / SaveFile`，
+      `FolderDialog` 是另一个类型；两者都没有任何自定义挂点
+      （FileDialog 全部成员只有 `fileMode` / `selectedFile(s)` / `currentFile(s)` /
+      `currentFolder` / `options` / `nameFilters` / `selectedNameFilter`），
+      Widgets 的 `QFileDialog` 也只有 `setSidebarUrls`（仅非原生生效）。
+      平台层的 `NSOpenPanel.accessoryView` / `IFileDialogCustomize` 存在但 Qt 不暴露。
+      **所以选择只能落在一种资源上**，所有者定为音频。
+      现在的行为：`文件 → 新建`（Ctrl+N）→ 过离开守卫 → 选音频 →
+      **在音频所在目录原地建 `maidata.txt`**（不是子文件夹）→
+      把音频复制一份为 `track.<原扩展名>`；**本来就叫 `track.*` 就不复制**。
+      `maidata.txt` 或 `track.*` 已存在时各确认一次。
+      还有一条不能沉默的情形：引擎按 `track.mp3 → .wav → .flac → .ogg` 的顺序找音轨，
+      所以复制落在靠后的扩展名、而靠前的已存在时，谱面会用另一个文件——
+      这时会明确提示是哪个，而不是留到播放时才发现。
 - [ ] **字体功能整体缺失**（2026-08-30 所有者指出）。引擎侧全在、UI 侧全无——
       任务字段 `intro.fontDisplayPath` / `intro.fontBodyPath` 仍被持久化
       （`VideoExportSettings.cpp:118-152`）、写进 snapshot、并在**预览与导出两条**渲染路径上

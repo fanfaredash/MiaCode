@@ -157,9 +157,12 @@ public:
     Q_INVOKABLE QVariantList backupDocuments();
     // Restore an autosave snapshot. Confirms first, through the shell.
     Q_INVOKABLE void restoreBackup(const QString& path);
-    // 新建: pick a chart folder, write an empty maidata.txt into it, open it.
+    // 新建: pick an audio file; the chart is created beside it, in that same
+    // folder rather than in a new one. A chart's track is found by name — only
+    // track.mp3/.wav/.flac/.ogg count — so the picked file is copied to that
+    // name unless it already has it.
     // The unsaved-changes guard belongs to the caller in QmlCommandService.
-    Q_INVOKABLE void createDocumentInPickedFolder();
+    Q_INVOKABLE void createDocumentFromPickedAudio();
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);
@@ -269,6 +272,8 @@ private:
     // makes it a continuation like the rest of this flow. Without this, 保存 on
     // a never-saved chart wrote nothing and said nothing: the file service
     // refused an empty path and the prompt just went away.
+    void createChartBesideAudio(const QString& audioPath);
+    void ensureTrackCopyThenCreate(const QString& audioPath, const QString& targetPath);
     void createEmptyDocumentAt(const QString& targetPath);
     void saveSectionOrAskForPath(int difficultyId, std::function<void(bool)> onSaved);
     void askNextDirtySection(std::function<void(bool)> onDecided);
