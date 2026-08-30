@@ -21,7 +21,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 - QML editor-tab workspace state:
   - Files: `src/app/qml_ui/ViewState.qml`, `src/app/qml_ui/editor/EditorTabBar.qml`
-  - Owns: session-local open-editor tab ordering, MRU history, and active selection. Dragging exchanges two open difficulty tabs only; the metadata tab is never a drag participant, and the chart's difficulty order or serialized content is not changed.
+  - Owns: session-local open-editor tab ordering, MRU history, and active selection. Dragging exchanges any two open editor tabs, including metadata; the chart's difficulty order or serialized content is not changed.
 
 - Main window surface and shared state:
   - Files: `src/app/mainwindow/MainWindow.h`, `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp`

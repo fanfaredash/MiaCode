@@ -899,7 +899,7 @@ bool verifyEditorTabsRecoverTheActiveDifficulty(QTextStream& out, int* failed)
                   out, failed);
 }
 
-bool verifyDifficultyTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
+bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
 {
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
@@ -934,9 +934,9 @@ bool verifyDifficultyTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
                 id: state
                 objectName: "tabDragViewState"
                 Component.onCompleted: {
+                    openMetadataEditor()
                     openDifficultyEditor(5)
                     openDifficultyEditor(6)
-                    openDifficultyEditor(7)
                 }
             }
 
@@ -970,10 +970,10 @@ bool verifyDifficultyTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
         return false;
     }
     if (!expect(state->property("openEditorTabs").toStringList()
-                    == QStringList{QStringLiteral("difficulty:5"),
-                                   QStringLiteral("difficulty:6"),
-                                   QStringLiteral("difficulty:7")},
-                QStringLiteral("the drag harness starts with three ordered difficulty tabs"), out, failed)) {
+                    == QStringList{QStringLiteral("metadata"),
+                                   QStringLiteral("difficulty:5"),
+                                   QStringLiteral("difficulty:6")},
+                QStringLiteral("the drag harness starts with metadata and two ordered difficulty tabs"), out, failed)) {
         return false;
     }
 
@@ -983,12 +983,12 @@ bool verifyDifficultyTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
     QCoreApplication::processEvents();
 
     return expect(state->property("openEditorTabs").toStringList()
-                      == QStringList{QStringLiteral("difficulty:6"),
-                                     QStringLiteral("difficulty:5"),
-                                     QStringLiteral("difficulty:7")}
+                      == QStringList{QStringLiteral("difficulty:5"),
+                                     QStringLiteral("metadata"),
+                                     QStringLiteral("difficulty:6")}
                       && state->property("activeEditorKey").toString()
-                          == QStringLiteral("difficulty:7"),
-                  QStringLiteral("dragging one difficulty tab onto another swaps only their order"),
+                          == QStringLiteral("difficulty:6"),
+                  QStringLiteral("dragging metadata onto a difficulty swaps only their order"),
                   out, failed);
 }
 } // namespace
@@ -1015,7 +1015,7 @@ int main(int argc, char** argv)
     verifyCompletionPopupPresentsTheSelectedCandidate(out, &failed);
     verifyEditorPointerRoutes(out, &failed);
     verifyEditorTabsRecoverTheActiveDifficulty(out, &failed);
-    verifyDifficultyTabsCanBeDraggedToSwap(out, &failed);
+    verifyEditorTabsCanBeDraggedToSwap(out, &failed);
     miacode::qml_ui::QmlEditorController controller;
     verifyWorkspaceSavePointFollowsQmlUndo(controller, out, &failed);
     const auto opening = controller.processKey(QString(), 0, 0, QStringLiteral("["), Qt::Key_BracketLeft, Qt::NoModifier);

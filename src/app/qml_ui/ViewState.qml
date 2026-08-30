@@ -97,11 +97,10 @@ QtObject {
     }
 
     // Tab order is workspace presentation state, not chart structure. Moving
-    // a difficulty view therefore never renumbers difficulties or changes the
-    // document; it only exchanges two existing difficulty tabs in this window.
-    function swapDifficultyEditors(firstKey, secondKey) {
-        if (!firstKey.startsWith("difficulty:") || !secondKey.startsWith("difficulty:")
-                || firstKey === secondKey)
+    // an editor view therefore never changes the document; it only exchanges
+    // two existing editor tabs in this window.
+    function swapEditorTabs(firstKey, secondKey) {
+        if (!firstKey || !secondKey || firstKey === secondKey)
             return false
         const firstIndex = openEditorTabs.indexOf(firstKey)
         const secondIndex = openEditorTabs.indexOf(secondKey)
