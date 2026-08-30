@@ -1,15 +1,10 @@
 #include "QmlEditorPageHost.h"
 
 #include "mainwindow/MainWindow.h"
-#include "UiTheme.h"
-#include "common/AdoptedWidgetCoordinates.h"
 #include "common/DebugLog.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 
-#include <QBoxLayout>
-#include <QStackedWidget>
 #include <QTimer>
-#include <QWindow>
 
 namespace {
 

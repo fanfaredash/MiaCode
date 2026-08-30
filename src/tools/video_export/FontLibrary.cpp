@@ -116,6 +116,29 @@ QString uniqueFontLibraryPath(const QFileInfo& sourceInfo)
 
 }  // namespace
 
+FontImportResult importFontFileIntoLibrary(const QString& sourcePath)
+{
+    const QFileInfo sourceInfo(sourcePath);
+    const QString suffix = sourceInfo.suffix().toLower();
+    if (!sourceInfo.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
+        return {{}, FontImportFailure::NotFontFile};
+    }
+    if (fontFamilyForFile(sourceInfo.absoluteFilePath()).isEmpty()) {
+        return {{}, FontImportFailure::InvalidFont};
+    }
+
+    const QDir libraryDir(fontLibraryDirPath());
+    if (sourceInfo.absoluteDir() == libraryDir) {
+        return {sourceInfo.absoluteFilePath(), FontImportFailure::None};
+    }
+
+    const QString targetPath = uniqueFontLibraryPath(sourceInfo);
+    if (!QFile::copy(sourceInfo.absoluteFilePath(), targetPath)) {
+        return {{}, FontImportFailure::CopyFailed};
+    }
+    return {targetPath, FontImportFailure::None};
+}
+
 QString importFontIntoLibrary(QWidget* parent)
 {
     const QString title = UiText::text(QStringLiteral("card_font.import"));
@@ -128,25 +151,15 @@ QString importFontIntoLibrary(QWidget* parent)
     if (selected.isEmpty()) {
         return QString();
     }
-    const QFileInfo info(selected);
-    const QString suffix = info.suffix().toLower();
-    if (!info.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
-        QMessageBox::warning(parent, title, UiText::text(QStringLiteral("card_font.invalid_font")));
+    const FontImportResult result = importFontFileIntoLibrary(selected);
+    if (result.path.isEmpty()) {
+        const QString message = result.failure == FontImportFailure::CopyFailed
+            ? UiText::text(QStringLiteral("card_font.copy_failed"))
+            : UiText::text(QStringLiteral("card_font.invalid_font"));
+        QMessageBox::warning(parent, title, message);
         return QString();
     }
-    // Validate it actually loads / carries a family before copying.
-    const int fontId = QFontDatabase::addApplicationFont(info.absoluteFilePath());
-    const QStringList families = fontId >= 0 ? QFontDatabase::applicationFontFamilies(fontId) : QStringList();
-    if (families.isEmpty()) {
-        QMessageBox::warning(parent, title, UiText::text(QStringLiteral("card_font.invalid_font")));
-        return QString();
-    }
-    const QString targetPath = uniqueFontLibraryPath(info);
-    if (!QFile::copy(info.absoluteFilePath(), targetPath)) {
-        QMessageBox::warning(parent, title, UiText::text(QStringLiteral("card_font.copy_failed")));
-        return QString();
-    }
-    return targetPath;
+    return result.path;
 }
 
 void populateFontCombo(QComboBox* combo,

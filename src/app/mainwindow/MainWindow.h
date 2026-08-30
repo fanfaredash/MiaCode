@@ -55,6 +55,9 @@ namespace miacode::v2 {
 class UiRequestService;
 class JobProgressService;
 }
+namespace miacode::qml_ui {
+class QmlPreviewSettingsModel;
+}
 class QmlUiBootstrap;
 class QFrame;
 class QGraphicsOpacityEffect;
@@ -136,6 +139,7 @@ class MainWindow : public QMainWindow
     friend class QmlEditorPageHost;
     friend class QmlExportSession;
     friend class QmlPreviewModel;
+    friend class miacode::qml_ui::QmlPreviewSettingsModel;
 
 public:
     // Phase 4c — non-owning accessor for the preview stage-media host

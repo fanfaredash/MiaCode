@@ -8,6 +8,35 @@
 > 上一版基线是 `117a76a1`（2026-08-29）；阶段 1、阶段 2 与三个「暂未更新支持」入口
 > 都在这两个基线之间落地，第 2 章的实测表已按新基线整体重测。
 
+## 0. 2026-08-30 反馈闭环与接线复核
+
+- [x] **调整菜单动态项丢失**：`MainMenu.qml` 的 `Repeater` 曾创建非视觉的
+      `AppMenuAction`，Qt Quick `Menu` 不会把它插入菜单，因而顶部只剩分隔线、`更多…`
+      为空。现改为 `AppMenuItem`，快捷键文本由该视觉行直接承载；`Ctrl+J` 等全部谱面变换
+      仍只来自 `ChartTransformCommands` + `ShortcutRegistry` 的同一张表。`qml_main_menu_spec`
+      守住四个视觉 delegate、快捷键行与 `Ctrl+J` 的表项契约。
+- [x] **移除「预览 → 切换实时预览」**：已移除菜单、工具栏、命令总线、持久化开关和隐藏预览
+      分支。预览区常驻，避免销毁唯一 live `PreviewSurface` 后无入口恢复。
+- [x] **字体/皮肤入口一致**：导出页的“皮肤”页签与“预览设置 → 皮肤”并存；二者都走 v2 的
+      owner-live 预览状态和 `UiRequestService`，HUD 字体变更均调用 `PreviewRuntime::update()`
+      立即刷新右侧预览，不恢复任何 v1 控件接线。
+- [ ] **隐藏 v1/Widgets 接线复核（证据见下，旧有“仅封面导出”结论作废）**：
+      1. `QmlUiBootstrap` 仍创建并隐藏 `MainWindow`；所有 QML 模型经它取得大量状态与命令。
+      2. `QmlEditorPageHost` 的导出/延迟/离开页面路径仍调用
+         `switchToExportField` / `switchToLatencyField` / `switchToDifficultyField` /
+         `switchToMetadataField`。这些 `DocumentSection` 方法仍依赖 `editorStack_`、占位页、旧预览
+         控件和侧栏 spinner；这是功能可用性会受隐藏 Widgets 状态影响的活跃接线。
+      3. `QmlUiBootstrap` 仍创建 `ChartDropOverlay(QWidget)` 作为 root 拖放原生覆盖层。
+      4. `openCoverExport()` → `ExportSection::onExportCover()` 仍创建 `CoverStudioWindow`；这是
+         唯一已登记的完整 Widget 功能面。
+      5. 本次已删除 `QmlEditorPageHost.cpp` 中遗留的 `QBoxLayout` / `QStackedWidget` /
+         `QWindow` / `AdoptedWidgetCoordinates` 等**未使用** include；它们不是活跃调用，但此前使
+         “`src/app/qml_ui` 无 Widgets”这一表述不可靠。
+
+      已核对的非误报项：ZIP 打包使用 `UiRequestService`，偏好设置只转发
+      `preferencesRequested` 给 QML，音视频工具也经 QML 请求边界；这些不是 v1 UI 回接。
+      后续拆除必须先为页面切换、拖放和封面导出建立 v2 所有者，不能再把 v1 控件重新接回 QML。
+
 ## 1. 目标边界
 
 只有三件事在范围内：
@@ -41,7 +70,7 @@
 | 位置 | 内容 |
 |---|---|
 | ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**。`src/app/qml_ui` 全目录现已无 Widgets 对话框 |
-| ~~`src/app/qml_ui/QmlEditorPageHost.*`~~ | ~~`QWidget` 宿主表面 + `WindowContainer`~~ —— **宿主机制已删除（2026-08-29）**。文件仍在（231 行），但只记录「当前显示哪一页」，不再收养任何 `QWidget`；`src/app/qml_ui` 全目录无 `QWidget` |
+| `src/app/qml_ui/QmlEditorPageHost.*` | 已不再收养 `QWidget`，但仍通过隐藏 `MainWindow::DocumentSection` 切页；该路径会操作 `editorStack_` / 占位页等 Widgets，不能记作“仅页面记账”（详见 §0） |
 | `src/app/ui/ChartDropOverlay.h:7` | `class ChartDropOverlay final : public QWidget`，被 v2 root window 拖放路径使用 |
 
 `MainView.qml` 的对话框已是 `QtQuick.Dialogs`（非 Widgets），这条不用改。
@@ -60,7 +89,7 @@
 |---|---|
 | ~~关于 MiaCode~~ | **已完成（2026-08-30）**：`components/AboutDialog.qml`，事实来自 `QmlUiSettings::aboutInfo()`（版本宏 + `QSysInfo` + UiText）。v1 的图标彩蛋（连点三次）未搬。 |
 | ~~音频设置~~ | **已完成（2026-08-30）**：`preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel`。10 条通道（音量 + 静音）与 Break 星星尾判音开关，写入即应用到运行中的预览并持久化；「设为/恢复本地默认」两个预设按钮保留。**试听已于同日补齐**：模型自带 `QtPreviewSfxRuntime`（首次试听时才创建，页面关闭时释放），220 ms 静默去抖，拖动中不响、松手才响，预览正在播放时不试听。顺带修好两处：主静音会带着其余通道一起变（v1 行为），以及行不再随每次改动整体重建（原先会在拖动中把滑块本身销毁）。 |
-| ~~预览设置~~ | **已完成（2026-08-30）**：`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel`，视频 / 玩法 两个页签。值住在 `MainWindow::previewRenderSettings()` / `setPreviewRenderSetting()`（每个键各自的 canvas setter / 舞台媒体重路由 / 轮廓重算 / muri 重应用，写入即持久化）；文案全部取自 `dialog.render_settings.*` 的 UiText 键，与 v1 同源。v1 的第三个页签 **性能** 只有「预览刷新率」一项，v2 已在 偏好设置 → 性能 里，未在此重复。判定效果显示由 v1 的下拉勾选改为四个并排复选框（四个状态同时可见）。 |
+| ~~预览设置~~ | **已完成（2026-08-30）**：`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel`，视频 / 玩法 / 皮肤三个页签。值住在 `MainWindow::previewRenderSettings()` / `setPreviewRenderSetting()`（每个键各自的 canvas setter / 舞台媒体重路由 / 轮廓重算 / muri 重应用，写入即持久化）；皮肤页另承载全局皮肤、判定效果、判定线，以及分区域 HUD 字体的选择、导入、重置和样张。HUD 字体变更后直接请求运行中的 `PreviewRuntime` 重绘。文案全部取自 `dialog.render_settings.*` 的 UiText 键，与 v1 同源。v1 的第三个页签 **性能** 只有「预览刷新率」一项，v2 已在 偏好设置 → 性能 里，未在此重复。判定效果显示由 v1 的下拉勾选改为四个并排复选框（四个状态同时可见）。 |
 
 ### B. 有入口，但落到 Widget 对话框/页面（8 项中剩 1 项：封面导出）
 
@@ -107,21 +136,12 @@
       还有一条不能沉默的情形：引擎按 `track.mp3 → .wav → .flac → .ogg` 的顺序找音轨，
       所以复制落在靠后的扩展名、而靠前的已存在时，谱面会用另一个文件——
       这时会明确提示是哪个，而不是留到播放时才发现。
-- [ ] **字体功能整体缺失**（2026-08-30 所有者指出）。引擎侧全在、UI 侧全无——
-      任务字段 `intro.fontDisplayPath` / `intro.fontBodyPath` 仍被持久化
-      （`VideoExportSettings.cpp:118-152`）、写进 snapshot、并在**预览与导出两条**渲染路径上
-      经 `applyBannerFontOverride` 生效；HUD 字体经
-      `preview::scene::setPreviewHudCustomFontPath` 生效并由该 setter 自己持久化。
-      **但 `src/app/qml_ui` 全目录没有任何地方读或写它们**，所以 v2 用户改不了任何字体，
-      只能沿用上一次在 v1 里选过的值。缺的三块：
-      1. **片头难度卡字体**（display / body 两个）——原在已删除的 `VideoExportDialog` 片头页签。
-      2. **HUD 字体**（分区域）——原为 `createHudFontSettingsWidget()`，按其注释宿主是
-         「皮肤弹窗 / 导出皮肤页签」；v2 导出页的 皮肤 页签只有一个皮肤下拉，没有字体位。
-      3. **字体库本身**（`FontLibrary`，`<preferences dir>/fonts`）——导入 / 重置 / 预览样张
-         全部没有入口。
-      `FontLibrary` / `HudFontSettings` / `CardFontSettings` 三组仍留在
-      `src/tools/video_export/`（cover_export 在用，未随 `VideoExportDialog` 组删除），
-      重建 QML 入口时可直接复用其数据层。
+- [x] **恢复 v2 字体功能**（2026-08-30）。`QmlExportSession` 以 QML 原生文件请求边界复用
+      `FontLibrary` 的导入/校验/便携复制数据层：导出页的片头页可独立选择、导入、重置难度卡
+      display/body 字体，并即时刷新试听；导出页的 `皮肤` 页签**和**`预览设置 → 皮肤` 都可按区域
+      选择、导入、重置 HUD 字体，且会立即重绘右侧预览。片头字段仍由 `VideoExportSettings` 持久化并流入试听/导出快照；
+      HUD 继续经 `preview::scene::setPreviewHudCustomFontPath` 分区持久化。未恢复任何 v1 窗口或
+      Widgets 接线。
 
 - [x] **音频设置的试听**（2026-08-30 记录，同日补齐）。`QmlAudioSettingsModel` 自带一个
       `QtPreviewSfxRuntime`：首次试听时才创建（构造会起一条音频工作线程，多数会话根本不开
@@ -602,7 +622,7 @@ dirty 真相已迁到 `ChartWorkspace` 的完整文档 save point，`Ctrl+Z` / `
 | 编辑器 | `src/app/qml_ui/QmlEditorController.*`、`QmlEditorInputBridge.*`、`editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
 | 快捷键 | `src/app/qml_ui/QmlShortcutModel.*` ← `src/app/ui/ShortcutRegistry.*` |
 | 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`export/ExportVideoPage.qml` |
-| 页面宿主（待删） | `src/app/qml_ui/QmlEditorPageHost.*`（已不收养 `QWidget`，只剩页面记账） |
+| 页面宿主（待删） | `src/app/qml_ui/QmlEditorPageHost.*`（不再收养 `QWidget`，但切页仍依赖隐藏 `DocumentSection` 的 Widgets 状态；见 §0） |
 | 主壳 | `src/app/qml_ui/Main.qml`、`layout/MainView.qml` |
 | 设置页 | `preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel.*`、`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel.*`、`preferences/PreferencesDialog.qml` + `QmlPreferencesModel.*` |
 | 表单控件 | `components/LabeledCombo.qml`、`LabeledSlider.qml`、`EditableValue.qml`、`DialogDrag.qml` |

@@ -16,6 +16,21 @@ Rectangle {
                                                   && (root.session.activeTab === "batch"
                                                       || root.session.fullRangeExport)
 
+    function fontIndexForPath(options, path) {
+        if (!options)
+            return 0
+        for (let index = 0; index < options.length; ++index) {
+            if (options[index].path === path)
+                return index
+        }
+        return 0
+    }
+
+    function fontFamilyForPath(options, path) {
+        const index = fontIndexForPath(options, path)
+        return options && options.length > index ? options[index].family : ""
+    }
+
     color: Theme.colors.background.surface
     clip: true
 
@@ -466,12 +481,16 @@ Rectangle {
                         }
                     }
 
-                    // Skin (owner-live preview settings)
+                    // Global preview skin/HUD font controls are also available
+                    // from PreviewSettingsDialog. Both paths use the same v2
+                    // owner-live preview state so export reflects the change.
                     ColumnLayout {
                         visible: root.session && root.session.settingsTab === "skin"
                         spacing: 10
                         Layout.fillWidth: true
+
                         RowLayout {
+                            Layout.fillWidth: true
                             Text {
                                 text: qsTr("皮肤")
                                 color: Theme.colors.text.secondary
@@ -479,10 +498,13 @@ Rectangle {
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
+                                id: exportSkinCombo
+                                objectName: "exportSkinCombo"
                                 Layout.fillWidth: true
                                 model: root.session ? root.session.skinOptions : []
                                 textRole: "label"
                                 currentIndex: root.session ? root.session.skinIndex : -1
+                                Accessible.name: qsTr("皮肤")
                                 onActivated: if (root.session) root.session.skinIndex = currentIndex
                             }
                             AppButton {
@@ -490,7 +512,9 @@ Rectangle {
                                 onClicked: if (root.session) root.session.openSkinDirectory()
                             }
                         }
+
                         RowLayout {
+                            Layout.fillWidth: true
                             Text {
                                 text: qsTr("判定效果")
                                 color: Theme.colors.text.secondary
@@ -498,13 +522,18 @@ Rectangle {
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
+                                id: exportSkinJudgeEffectCombo
+                                objectName: "exportSkinJudgeEffectCombo"
                                 Layout.fillWidth: true
-                                model: root.session ? root.session.judgeEffectOptions : []
-                                currentIndex: root.session ? root.session.judgeEffectIndex : 0
-                                onActivated: if (root.session) root.session.judgeEffectIndex = currentIndex
+                                model: root.session ? root.session.skinJudgeEffectOptions : []
+                                currentIndex: root.session ? root.session.skinJudgeEffectIndex : 0
+                                Accessible.name: qsTr("判定效果")
+                                onActivated: if (root.session) root.session.skinJudgeEffectIndex = currentIndex
                             }
                         }
+
                         RowLayout {
+                            Layout.fillWidth: true
                             Text {
                                 text: qsTr("判定线")
                                 color: Theme.colors.text.secondary
@@ -512,15 +541,116 @@ Rectangle {
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
+                                id: exportOutlineCombo
+                                objectName: "exportOutlineCombo"
                                 Layout.fillWidth: true
                                 model: root.session ? root.session.outlineOptions : []
                                 currentIndex: root.session ? root.session.outlineIndex : 1
+                                Accessible.name: qsTr("判定线")
                                 onActivated: if (root.session) root.session.outlineIndex = currentIndex
                             }
                             AppButton {
                                 text: qsTr("打开目录")
                                 onClicked: if (root.session) root.session.openJudgeLineDirectory()
                             }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            height: 1
+                            color: Theme.colors.border.normal
+                        }
+
+                        Text {
+                            text: qsTr("HUD 字体")
+                            color: Theme.colors.text.active
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.uiFontSize
+                            font.bold: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("区域")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 120
+                            }
+                            AppComboBox {
+                                id: hudFontAreaCombo
+                                objectName: "hudFontAreaCombo"
+                                Layout.fillWidth: true
+                                model: root.session ? root.session.hudFontAreaOptions : []
+                                textRole: "label"
+                                currentIndex: root.session ? root.session.hudFontAreaIndex : 0
+                                Accessible.name: qsTr("HUD 字体区域")
+                                onActivated: if (root.session) root.session.hudFontAreaIndex = currentIndex
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("字体")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 120
+                            }
+                            AppComboBox {
+                                id: hudFontCombo
+                                objectName: "hudFontCombo"
+                                Layout.fillWidth: true
+                                model: root.session ? root.session.fontLibraryOptions : []
+                                textRole: "label"
+                                currentIndex: root.fontIndexForPath(model,
+                                                                   root.session ? root.session.hudFontPath : "")
+                                Accessible.name: qsTr("HUD 字体")
+                                onActivated: if (root.session) root.session.hudFontPath = model[currentIndex].path
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: hudFontSample.implicitHeight + 20
+                            radius: Theme.controlRadius
+                            color: Theme.colors.background.editor
+                            border.width: Theme.controlBorderWidth
+                            border.color: Theme.colors.border.control
+                            Text {
+                                id: hudFontSample
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                text: root.session ? root.session.hudFontSample : ""
+                                color: Theme.colors.text.primary
+                                font.family: root.fontFamilyForPath(
+                                                 root.session ? root.session.fontLibraryOptions : [],
+                                                 root.session ? root.session.hudFontPath : "") || Theme.uiFont
+                                font.pixelSize: Theme.uiFontSize
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            AppButton {
+                                id: hudFontImportButton
+                                objectName: "hudFontImportButton"
+                                text: qsTr("导入字体…")
+                                Accessible.name: qsTr("导入 HUD 字体")
+                                onClicked: if (root.session) root.session.importHudFont()
+                            }
+                            AppButton {
+                                id: hudFontResetButton
+                                objectName: "hudFontResetButton"
+                                text: qsTr("还原")
+                                Accessible.name: qsTr("还原 HUD 字体")
+                                onClicked: if (root.session) root.session.resetHudFont()
+                            }
+                            Item { Layout.fillWidth: true }
                         }
                     }
 
@@ -661,6 +791,118 @@ Rectangle {
                             text: qsTr("等级文本渲染")
                             checked: root.session ? root.session.introLevelTextRender : false
                             onToggled: if (root.session) root.session.introLevelTextRender = checked
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            height: 1
+                            color: Theme.colors.border.normal
+                        }
+                        Text {
+                            text: qsTr("难度卡字体")
+                            color: Theme.colors.text.active
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.uiFontSize
+                            font.bold: true
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            enabled: root.introSettingsEnabled
+                            Text {
+                                text: qsTr("标题字体")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 120
+                            }
+                            AppComboBox {
+                                id: introDisplayFontCombo
+                                objectName: "introDisplayFontCombo"
+                                Layout.fillWidth: true
+                                model: root.session ? root.session.fontLibraryOptions : []
+                                textRole: "label"
+                                currentIndex: root.fontIndexForPath(
+                                                  model, root.session ? root.session.introFontDisplayPath : "")
+                                Accessible.name: qsTr("片头标题字体")
+                                onActivated: if (root.session)
+                                    root.session.introFontDisplayPath = model[currentIndex].path
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            enabled: root.introSettingsEnabled
+                            Text {
+                                text: qsTr("正文字体")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 120
+                            }
+                            AppComboBox {
+                                id: introBodyFontCombo
+                                objectName: "introBodyFontCombo"
+                                Layout.fillWidth: true
+                                model: root.session ? root.session.fontLibraryOptions : []
+                                textRole: "label"
+                                currentIndex: root.fontIndexForPath(
+                                                  model, root.session ? root.session.introFontBodyPath : "")
+                                Accessible.name: qsTr("片头正文字体")
+                                onActivated: if (root.session)
+                                    root.session.introFontBodyPath = model[currentIndex].path
+                            }
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: introFontPreviewColumn.implicitHeight + 20
+                            radius: Theme.controlRadius
+                            color: Theme.colors.background.editor
+                            border.width: Theme.controlBorderWidth
+                            border.color: Theme.colors.border.control
+                            Column {
+                                id: introFontPreviewColumn
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 3
+                                Text {
+                                    id: introFontSample
+                                    width: parent.width
+                                    text: qsTr("标题字体预览")
+                                    color: Theme.colors.text.primary
+                                    font.family: root.fontFamilyForPath(
+                                                     root.session ? root.session.fontLibraryOptions : [],
+                                                     root.session ? root.session.introFontDisplayPath : "") || Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: qsTr("正文字体预览")
+                                    color: Theme.colors.text.secondary
+                                    font.family: root.fontFamilyForPath(
+                                                     root.session ? root.session.fontLibraryOptions : [],
+                                                     root.session ? root.session.introFontBodyPath : "") || Theme.uiFont
+                                    font.pixelSize: Theme.secondaryFontSize
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            enabled: root.introSettingsEnabled
+                            AppButton {
+                                id: introFontImportButton
+                                objectName: "introFontImportButton"
+                                text: qsTr("导入字体…")
+                                Accessible.name: qsTr("导入片头难度卡字体")
+                                onClicked: if (root.session) root.session.importIntroFont()
+                            }
+                            AppButton {
+                                id: introFontResetButton
+                                objectName: "introFontResetButton"
+                                text: qsTr("重置")
+                                Accessible.name: qsTr("重置片头难度卡字体")
+                                onClicked: if (root.session) root.session.resetIntroFonts()
+                            }
+                            Item { Layout.fillWidth: true }
                         }
                     }
 

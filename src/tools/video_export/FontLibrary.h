@@ -23,6 +23,21 @@ struct FontLibraryEntry {
     QString family;  // resolved font family; empty for the default entry.
 };
 
+// Result of importing one file into the portable font library.  The QML shell
+// owns user interaction, so this data-layer operation deliberately has no
+// dialog or message-box dependency.
+enum class FontImportFailure {
+    None,
+    NotFontFile,
+    InvalidFont,
+    CopyFailed,
+};
+
+struct FontImportResult {
+    QString path;
+    FontImportFailure failure = FontImportFailure::None;
+};
+
 // Every .ttf/.otf in the library, family-resolved (unreadable files skipped),
 // sorted by filename. When `includeDefault` is set a leading
 // {defaultLabel, "", ""} entry is prepended (the "use the bundled default"
@@ -33,6 +48,11 @@ QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault = false,
 // Register `path` with the application font database and return its first font
 // family (empty on failure). Registration is idempotent for the same file.
 QString fontFamilyForFile(const QString& path);
+
+// Validate a local .ttf/.otf and copy it into the portable library.  A file
+// already in that library is returned unchanged.  Callers present any error
+// through their own UI boundary.
+FontImportResult importFontFileIntoLibrary(const QString& sourcePath);
 
 // Prompt for a .ttf/.otf, validate it, and copy it into the library. Returns the
 // resulting library path (empty on cancel or error; an error shows a warning box

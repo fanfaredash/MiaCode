@@ -370,6 +370,7 @@ Item {
 
         AppMenu {
             id: adjustMenu
+            objectName: "adjustMenu"
             title: qsTr("调整(&M)")
 
             // Rows, labels and grouping come from the shared transform table,
@@ -379,8 +380,9 @@ Item {
 
             Repeater {
                 model: adjustMenu.transformRows.filter(row => row.section === 0)
-                delegate: AppMenuAction {
+                delegate: AppMenuItem {
                     required property var modelData
+                    objectName: "adjustTransform_" + modelData.id
                     text: modelData.label
                     shortcutText: root.shortcuts.displayText(modelData.id)
                     enabled: root.commandsEnabled
@@ -390,8 +392,9 @@ Item {
             AppMenuSeparator {}
             Repeater {
                 model: adjustMenu.transformRows.filter(row => row.section === 1)
-                delegate: AppMenuAction {
+                delegate: AppMenuItem {
                     required property var modelData
+                    objectName: "adjustTransform_" + modelData.id
                     text: modelData.label
                     shortcutText: root.shortcuts.displayText(modelData.id)
                     enabled: root.commandsEnabled
@@ -401,8 +404,9 @@ Item {
             AppMenuSeparator {}
             Repeater {
                 model: adjustMenu.transformRows.filter(row => row.section === 2)
-                delegate: AppMenuAction {
+                delegate: AppMenuItem {
                     required property var modelData
+                    objectName: "adjustTransform_" + modelData.id
                     text: modelData.label
                     shortcutText: root.shortcuts.displayText(modelData.id)
                     enabled: root.commandsEnabled
@@ -416,11 +420,14 @@ Item {
             }
 
             AppMenu {
+                id: adjustMoreMenu
+                objectName: "adjustMoreMenu"
                 title: root.documentSession.chartTransformMoreLabel()
                 Repeater {
                     model: adjustMenu.transformRows.filter(row => row.section === 3)
-                    delegate: AppMenuAction {
+                    delegate: AppMenuItem {
                         required property var modelData
+                        objectName: "adjustTransform_" + modelData.id
                         text: modelData.label
                         shortcutText: root.shortcuts.displayText(modelData.id)
                         enabled: root.commandsEnabled
@@ -447,12 +454,6 @@ Item {
         AppMenu {
             id: previewMenu
             title: qsTr("预览(&P)")
-            AppMenuAction {
-                text: qsTr("切换实时预览")
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.togglePreviewRequested()
-            }
-            AppMenuSeparator {}
             AppMenuAction {
                 text: qsTr("音频设置")
                 enabled: root.commandsEnabled

@@ -85,9 +85,7 @@ Item {
 
     function persistPreviewWidthRatio() {
         if (root.compact) return
-        if (root.viewState.previewVisible) {
-            root.preferences.previewWidthRatio = preview.width / root.previewEditorAvailableWidth
-        }
+        root.preferences.previewWidthRatio = preview.width / root.previewEditorAvailableWidth
     }
 
     function syncWorkspacePanelOrder() {
@@ -235,7 +233,10 @@ Item {
 
             PreviewPane {
                 id: preview
-                visible: !root.compact && root.viewState.previewVisible
+                // The preview is a fixed part of the v2 workspace. Keeping it
+                // mounted at every width avoids the removed toggle action
+                // tearing down the only live preview surface.
+                visible: true
                 // Fullscreen owns the sole live scene root while its overlay is
                 // active; leave this pane's transport chrome in place underneath.
                 surfaceActive: !fullscreenPreview.visible

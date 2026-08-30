@@ -46,7 +46,6 @@ Item {
             state.bottomPanelVisible = !state.bottomPanelVisible
             root.preferences.bottomPanelVisible = state.bottomPanelVisible
         }
-        onTogglePreviewRequested: root.togglePreview()
         onExitRequested: root.requestClose()
         onUndoRequested: root.undo()
         onRedoRequested: root.redo()
@@ -81,19 +80,6 @@ Item {
         }
         state.sidebarVisible = !state.sidebarVisible
         root.preferences.sidebarVisible = state.sidebarVisible
-    }
-
-    function togglePreview() {
-        if (root.compact) {
-            if (!state.previewVisible) {
-                state.previewVisible = true
-                root.preferences.previewVisible = true
-            }
-            state.compactPanel = state.compactPanel === "preview" ? "" : "preview"
-            return
-        }
-        state.previewVisible = !state.previewVisible
-        root.preferences.previewVisible = state.previewVisible
     }
 
     function undo() {
@@ -145,7 +131,6 @@ Item {
     Component.onCompleted: {
         state.sidebarVisible = root.preferences.sidebarVisible
         state.bottomPanelVisible = root.preferences.bottomPanelVisible
-        state.previewVisible = root.preferences.previewVisible
         state.resetEditorTabs(root.documentSession.currentDifficultyId)
     }
 
@@ -195,9 +180,6 @@ Item {
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible
             bottomActive: state.bottomPanelVisible && root.timelineSession.panelVisible
-            previewActive: root.compact
-                           ? state.compactPanel === "preview"
-                           : state.previewVisible
             canUndo: splitView.canUndo
             canRedo: splitView.canRedo
             onToggleSidebarRequested: root.toggleSidebar()
@@ -205,7 +187,6 @@ Item {
                 state.bottomPanelVisible = !state.bottomPanelVisible
                 root.preferences.bottomPanelVisible = state.bottomPanelVisible
             }
-            onTogglePreviewRequested: root.togglePreview()
             onUndoRequested: root.undo()
             onRedoRequested: root.redo()
             onOpenRequested: openFileDialog.open()
@@ -245,15 +226,10 @@ Item {
                 viewState: state
                 documentSession: root.documentSession
                 preferences: root.preferences
-                previewSession: root.previewSession
                 commands: root.commands
                 pages: root.pages
                 compact: root.compact
                 onSettingsRequested: root.commands.openPreferences()
-                onFullscreenRequested: {
-                    state.compactPanel = ""
-                    splitView.showFullscreenPreview()
-                }
             }
         }
 

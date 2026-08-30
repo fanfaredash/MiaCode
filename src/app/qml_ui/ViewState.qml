@@ -28,7 +28,6 @@ QtObject {
     // 当前难度展开，其余折叠——与 v1 的 outlineBookmarkGroupExpanded_ 一致。
     property var bookmarkGroupsExpanded: ({})
     property bool bottomPanelVisible: true
-    property bool previewVisible: true
     property string compactPanel: ""
 
     // 编辑器标签是当前工作台会话中的视图集合。关闭标签只从集合中移除

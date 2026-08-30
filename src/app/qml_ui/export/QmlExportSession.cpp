@@ -7,14 +7,16 @@
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "core/scene/PreviewHudState.h"
 #include "core/video/PreviewRenderSettings.h"
-#include "audio/QtPreviewSfxRuntime.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "audio/QtPreviewSfxRuntime.h"
 #include "tools/video_export/VideoExportPreferences.h"
 #include "tools/video_export/VideoExportSettings.h"
+#include "tools/video_export/FontLibrary.h"
 
-#include <QDesktopServices>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -214,6 +216,129 @@ int QmlExportSession::introSoundIndex() const
     return 0;
 }
 
+QVariantList QmlExportSession::fontLibraryOptions() const
+{
+    QVariantList list;
+    const QVector<miacode::video_export::FontLibraryEntry> entries =
+        miacode::video_export::fontLibraryEntries(
+            true, UiText::text(QStringLiteral("card_font.default")));
+    for (const miacode::video_export::FontLibraryEntry& entry : entries) {
+        list.append(QVariantMap{
+            {QStringLiteral("label"), entry.label},
+            {QStringLiteral("path"), entry.path},
+            {QStringLiteral("family"), entry.family},
+        });
+    }
+    return list;
+}
+
+QVariantList QmlExportSession::skinOptions() const
+{
+    QVariantList list;
+    if (backend_ == nullptr) {
+        return list;
+    }
+    for (const QString& name : backend_->availablePreviewSkinDirectoryNames()) {
+        list.append(QVariantMap{
+            {QStringLiteral("id"), name},
+            {QStringLiteral("label"), backend_->previewSkinDisplayName(name)},
+        });
+    }
+    return list;
+}
+
+int QmlExportSession::skinIndex() const
+{
+    if (backend_ == nullptr) {
+        return -1;
+    }
+    const QStringList names = backend_->availablePreviewSkinDirectoryNames();
+    for (int i = 0; i < names.size(); ++i) {
+        if (names.at(i).compare(backend_->previewSkinDirectoryName_, Qt::CaseInsensitive) == 0) {
+            return i;
+        }
+    }
+    return names.isEmpty() ? -1 : 0;
+}
+
+QVariantList QmlExportSession::skinJudgeEffectOptions() const
+{
+    return QVariantList{
+        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.standard")),
+        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.starry")),
+    };
+}
+
+int QmlExportSession::skinJudgeEffectIndex() const
+{
+    return backend_ != nullptr && backend_->previewJudgeEffectStyle_ == PreviewJudgeEffectStyle::Starry
+        ? 1
+        : 0;
+}
+
+QVariantList QmlExportSession::outlineOptions() const
+{
+    return QVariantList{
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.point")),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.line")),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area")),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area_labeled")),
+    };
+}
+
+int QmlExportSession::outlineIndex() const
+{
+    if (backend_ == nullptr) {
+        return 1;
+    }
+    switch (backend_->previewOutlineVariant_) {
+    case PreviewOutlineVariant::Point:
+        return 0;
+    case PreviewOutlineVariant::JudgeArea:
+        return 2;
+    case PreviewOutlineVariant::JudgeAreaLabeled:
+        return 3;
+    case PreviewOutlineVariant::Line:
+    default:
+        return 1;
+    }
+}
+
+QVariantList QmlExportSession::hudFontAreaOptions() const
+{
+    return QVariantList{
+        QVariantMap{
+            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.chart_info"))},
+            {QStringLiteral("sample"), QStringLiteral("Title / Artist / MASTER 13+ / Designer")},
+        },
+        QVariantMap{
+            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.timestamp"))},
+            {QStringLiteral("sample"), QStringLiteral("12:34:567")},
+        },
+        QVariantMap{
+            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.object_stats"))},
+            {QStringLiteral("sample"), QStringLiteral("DELUXE Rate: 101.0000%  TAP: 128/128")},
+        },
+        QVariantMap{
+            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.debug"))},
+            {QStringLiteral("sample"), QStringLiteral("Present: 60.0 FPS  max=17ms")},
+        },
+    };
+}
+
+QString QmlExportSession::hudFontPath() const
+{
+    return miacode::preview::scene::previewHudCustomFontPath(
+        static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_));
+}
+
+QString QmlExportSession::hudFontSample() const
+{
+    const QVariantList areas = hudFontAreaOptions();
+    return areas.at(qBound(0, hudFontAreaIndex_, static_cast<int>(areas.size()) - 1))
+        .toMap().value(QStringLiteral("sample")).toString();
+}
+
 QString QmlExportSession::introSoundLabel() const
 {
     return UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound"));
@@ -312,7 +437,9 @@ void QmlExportSession::enter(int previousActiveDifficultyId)
     }
     selectDifficulty(resolveDefaultDifficultyId(previousActiveDifficultyId));
     refreshFromDocument();
+    emit fontLibraryChanged();
     emit skinChanged();
+    emit hudFontChanged();
 }
 
 void QmlExportSession::leave()
@@ -698,6 +825,102 @@ void QmlExportSession::importIntroSound()
     });
 }
 
+void QmlExportSession::importIntroFont()
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("card_font.import"));
+    request.nameFilters = QStringList{QStringLiteral("Font Files (*.ttf *.otf)")};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        applyFontImport(path);
+    });
+}
+
+void QmlExportSession::applyFontImport(const QString& selectedPath)
+{
+    if (selectedPath.isEmpty()) {
+        return;
+    }
+    const miacode::video_export::FontImportResult result =
+        miacode::video_export::importFontFileIntoLibrary(selectedPath);
+    if (result.path.isEmpty()) {
+        const QString text = result.failure == miacode::video_export::FontImportFailure::CopyFailed
+            ? UiText::text(QStringLiteral("card_font.copy_failed"))
+            : UiText::text(QStringLiteral("card_font.invalid_font"));
+        uiRequests_->postNotice(miacode::v2::NoticeSeverity::Warning,
+                                UiText::text(QStringLiteral("card_font.import")), text);
+        return;
+    }
+
+    emit fontLibraryChanged();
+    // Match the established card-font picker: an imported font becomes the
+    // title/display choice while the body selection remains independent.
+    setIntroFontDisplayPath(result.path);
+}
+
+void QmlExportSession::importHudFont()
+{
+    if (uiRequests_ == nullptr) {
+        return;
+    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font"));
+    request.nameFilters = QStringList{QStringLiteral("Font Files (*.ttf *.otf)")};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        applyHudFontImport(path);
+    });
+}
+
+void QmlExportSession::applyHudFontImport(const QString& selectedPath)
+{
+    if (selectedPath.isEmpty()) {
+        return;
+    }
+    const miacode::video_export::FontImportResult result =
+        miacode::video_export::importFontFileIntoLibrary(selectedPath);
+    if (result.path.isEmpty()) {
+        if (uiRequests_ != nullptr) {
+            uiRequests_->postNotice(
+                miacode::v2::NoticeSeverity::Warning,
+                UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
+                result.failure == miacode::video_export::FontImportFailure::CopyFailed
+                    ? UiText::text(QStringLiteral("card_font.copy_failed"))
+                    : UiText::text(QStringLiteral("card_font.invalid_font")));
+        }
+        return;
+    }
+    emit fontLibraryChanged();
+    setHudFontPath(result.path);
+}
+
+void QmlExportSession::resetHudFont()
+{
+    setHudFontPath(QString());
+}
+
+void QmlExportSession::openSkinDirectory()
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    const QString skinRoot = backend_->resolvePreviewSkinRootDir();
+    if (!skinRoot.isEmpty()) {
+        QDir().mkpath(skinRoot);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
+    }
+}
+
+void QmlExportSession::openJudgeLineDirectory()
+{
+    if (backend_ == nullptr) {
+        return;
+    }
+    const QString outlineDir = backend_->resolvePreviewCustomOutlineDir();
+    if (!outlineDir.isEmpty()) {
+        QDir().mkpath(outlineDir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
+    }
+}
+
 void QmlExportSession::applyIntroSoundImport(const QString& selectedPath)
 {
     if (selectedPath.isEmpty()) {
@@ -1045,79 +1268,6 @@ void QmlExportSession::setTouchFlowSpeed(double value)
     applyLivePreviewSettings();
 }
 
-QVariantList QmlExportSession::skinOptions() const
-{
-    QVariantList list;
-    if (backend_ == nullptr) {
-        return list;
-    }
-    for (const QString& name : backend_->availablePreviewSkinDirectoryNames()) {
-        QVariantMap row;
-        row.insert(QStringLiteral("id"), name);
-        row.insert(QStringLiteral("label"), backend_->previewSkinDisplayName(name));
-        list.append(row);
-    }
-    return list;
-}
-
-int QmlExportSession::skinIndex() const
-{
-    if (backend_ == nullptr) {
-        return -1;
-    }
-    const QStringList names = backend_->availablePreviewSkinDirectoryNames();
-    for (int i = 0; i < names.size(); ++i) {
-        if (names.at(i).compare(backend_->previewSkinDirectoryName_, Qt::CaseInsensitive) == 0) {
-            return i;
-        }
-    }
-    return names.isEmpty() ? -1 : 0;
-}
-
-QVariantList QmlExportSession::judgeEffectOptions() const
-{
-    return QVariantList{
-        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.standard")),
-        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.starry")),
-    };
-}
-
-int QmlExportSession::judgeEffectIndex() const
-{
-    if (backend_ == nullptr) {
-        return 0;
-    }
-    return backend_->previewJudgeEffectStyle_ == PreviewJudgeEffectStyle::Starry ? 1 : 0;
-}
-
-QVariantList QmlExportSession::outlineOptions() const
-{
-    return QVariantList{
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.point")),
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.line")),
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area")),
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area_labeled")),
-    };
-}
-
-int QmlExportSession::outlineIndex() const
-{
-    if (backend_ == nullptr) {
-        return 1;
-    }
-    switch (backend_->previewOutlineVariant_) {
-    case PreviewOutlineVariant::Point:
-        return 0;
-    case PreviewOutlineVariant::JudgeArea:
-        return 2;
-    case PreviewOutlineVariant::JudgeAreaLabeled:
-        return 3;
-    case PreviewOutlineVariant::Line:
-    default:
-        return 1;
-    }
-}
-
 void QmlExportSession::setSkinIndex(int index)
 {
     if (backend_ == nullptr) {
@@ -1141,7 +1291,7 @@ void QmlExportSession::setSkinIndex(int index)
     emit skinChanged();
 }
 
-void QmlExportSession::setJudgeEffectIndex(int index)
+void QmlExportSession::setSkinJudgeEffectIndex(int index)
 {
     if (backend_ == nullptr) {
         return;
@@ -1176,37 +1326,33 @@ void QmlExportSession::setOutlineIndex(int index)
         break;
     case 1:
     default:
-        variant = PreviewOutlineVariant::Line;
         break;
     }
     backend_->applyPreviewOutlineVariant(variant, /*useAutoSelection=*/false, /*persistState=*/true);
     emit skinChanged();
 }
 
-void QmlExportSession::openSkinDirectory()
+void QmlExportSession::setHudFontAreaIndex(int index)
 {
-    if (backend_ == nullptr) {
+    const int normalized = qBound(0, index, 3);
+    if (hudFontAreaIndex_ == normalized) {
         return;
     }
-    const QString skinRoot = backend_->resolvePreviewSkinRootDir();
-    if (skinRoot.isEmpty()) {
-        return;
-    }
-    QDir().mkpath(skinRoot);
-    QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
+    hudFontAreaIndex_ = normalized;
+    emit hudFontChanged();
 }
 
-void QmlExportSession::openJudgeLineDirectory()
+void QmlExportSession::setHudFontPath(const QString& path)
 {
-    if (backend_ == nullptr) {
+    const auto area = static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_);
+    if (miacode::preview::scene::previewHudCustomFontPath(area) == path) {
         return;
     }
-    const QString outlineDir = backend_->resolvePreviewCustomOutlineDir();
-    if (outlineDir.isEmpty()) {
-        return;
+    miacode::preview::scene::setPreviewHudCustomFontPath(area, path);
+    if (backend_ != nullptr && backend_->previewCanvas_ != nullptr) {
+        backend_->previewCanvas_->update();
     }
-    QDir().mkpath(outlineDir);
-    QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
+    emit hudFontChanged();
 }
 
 void QmlExportSession::setIntroEnabled(bool value)
@@ -1278,6 +1424,47 @@ void QmlExportSession::setIntroCardShadow(bool value)
 void QmlExportSession::setIntroLevelTextRender(bool value)
 {
     task_.intro.lvRenderMode = value ? QStringLiteral("text") : QStringLiteral("atlas");
+    emit introChanged();
+    savePreferences();
+    if (backend_ != nullptr) {
+        backend_->refreshExportIntroState();
+    }
+}
+
+void QmlExportSession::setIntroFontDisplayPath(const QString& path)
+{
+    if (task_.intro.fontDisplayPath == path) {
+        return;
+    }
+    task_.intro.fontDisplayPath = path;
+    emit introChanged();
+    savePreferences();
+    if (backend_ != nullptr) {
+        backend_->refreshExportIntroState();
+    }
+}
+
+void QmlExportSession::setIntroFontBodyPath(const QString& path)
+{
+    if (task_.intro.fontBodyPath == path) {
+        return;
+    }
+    task_.intro.fontBodyPath = path;
+    emit introChanged();
+    savePreferences();
+    if (backend_ != nullptr) {
+        backend_->refreshExportIntroState();
+    }
+}
+
+void QmlExportSession::resetIntroFonts()
+{
+    const bool changed = !task_.intro.fontDisplayPath.isEmpty() || !task_.intro.fontBodyPath.isEmpty();
+    task_.intro.fontDisplayPath.clear();
+    task_.intro.fontBodyPath.clear();
+    if (!changed) {
+        return;
+    }
     emit introChanged();
     savePreferences();
     if (backend_ != nullptr) {

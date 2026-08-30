@@ -20,7 +20,6 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(double bottomPanelHeightRatio READ bottomPanelHeightRatio WRITE setBottomPanelHeightRatio NOTIFY bottomPanelHeightRatioChanged)
     Q_PROPERTY(double bottomPanelMinimumHeightRatio READ bottomPanelMinimumHeightRatio CONSTANT)
     Q_PROPERTY(double bottomPanelMaximumHeightRatio READ bottomPanelMaximumHeightRatio CONSTANT)
-    Q_PROPERTY(bool previewVisible READ previewVisible WRITE setPreviewVisible NOTIFY previewVisibleChanged)
     Q_PROPERTY(double previewWidthRatio READ previewWidthRatio WRITE setPreviewWidthRatio NOTIFY previewWidthRatioChanged)
     Q_PROPERTY(double previewMinimumWidthRatio READ previewMinimumWidthRatio CONSTANT)
     Q_PROPERTY(double previewMaximumWidthRatio READ previewMaximumWidthRatio CONSTANT)
@@ -50,7 +49,6 @@ public:
     double bottomPanelHeightRatio() const;
     double bottomPanelMinimumHeightRatio() const;
     double bottomPanelMaximumHeightRatio() const;
-    bool previewVisible() const;
     double previewWidthRatio() const;
     double previewMinimumWidthRatio() const;
     double previewMaximumWidthRatio() const;
@@ -66,7 +64,6 @@ public:
     void setSidebarWidth(int value);
     void setBottomPanelVisible(bool value);
     void setBottomPanelHeightRatio(double value);
-    void setPreviewVisible(bool value);
     void setPreviewWidthRatio(double value);
     void setFontSize(int value);
     // Pushed by QmlApplicationContext whenever 偏好设置 changes the editor's
@@ -78,7 +75,6 @@ signals:
     void sidebarWidthChanged();
     void bottomPanelVisibleChanged();
     void bottomPanelHeightRatioChanged();
-    void previewVisibleChanged();
     void previewWidthRatioChanged();
     void fontSizeChanged();
     void editorAppearanceChanged();
@@ -96,7 +92,6 @@ private:
     int sidebarWidth_ = 190;
     bool bottomPanelVisible_ = true;
     double bottomPanelHeightRatio_ = 0.35;
-    bool previewVisible_ = true;
     double previewWidthRatio_ = 0.5;
     QString uiFontFamily_;
     QFont codeFont_;

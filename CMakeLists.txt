@@ -1739,6 +1739,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(qml_export_intro_sound_contract_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    miacode_add_dev_tool(qml_export_font_contract_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlExportFontContractSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(qml_export_font_contract_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     miacode_add_dev_tool(qml_export_video_page_spec TEST
         SOURCES
             src/tools/qml_ui/QmlExportVideoPageSpec.cpp
@@ -1747,6 +1756,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_compile_definitions(qml_export_video_page_spec PRIVATE
         "MIACODE_QML_SPEC_IMPORT_ROOT=\"${MIACODE_QML_SPEC_IMPORT_ROOT}\"")
+
+    miacode_add_dev_tool(qml_main_menu_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlMainMenuSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(qml_main_menu_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(qml_document_replacement_sequence_spec TEST
         SOURCES

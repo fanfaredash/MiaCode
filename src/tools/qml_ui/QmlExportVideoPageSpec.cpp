@@ -93,12 +93,24 @@ ApplicationWindow {
         property bool clockCountEnabled: false
         property real tapFlowSpeed: 7.5
         property real touchFlowSpeed: 7.5
-        property var skinOptions: []
-        property int skinIndex: -1
-        property var judgeEffectOptions: []
-        property int judgeEffectIndex: 0
-        property var outlineOptions: []
+        property var fontLibraryOptions: [
+            { label: "Default font", path: "", family: "" },
+            { label: "Example Font (example.ttf)", path: "/fonts/example.ttf", family: "Example Font" }
+        ]
+        property var skinOptions: [{ id: "skin", label: "Standard" }, { id: "skinDX", label: "DX" }]
+        property int skinIndex: 0
+        property var skinJudgeEffectOptions: ["Standard", "Starry"]
+        property int skinJudgeEffectIndex: 0
+        property var outlineOptions: ["Point", "Line", "Area", "Labeled area"]
         property int outlineIndex: 1
+        property var hudFontAreaOptions: [
+            { label: "Chart info", sample: "Title / Artist" },
+            { label: "Timestamp", sample: "12:34:567" }
+        ]
+        property int hudFontAreaIndex: 0
+        property string hudFontPath: ""
+        property string hudFontSample: "Title / Artist"
+        property int hudFontImportRequests: 0
         property bool introEnabled: true
         property int introBackgroundModeIndex: 0
         property string introCustomBackgroundPath: ""
@@ -106,6 +118,9 @@ ApplicationWindow {
         property int introModeIndex: 0
         property bool introCardShadow: false
         property bool introLevelTextRender: false
+        property string introFontDisplayPath: ""
+        property string introFontBodyPath: ""
+        property int introFontImportRequests: 0
         property var introSoundOptions: [
             { label: "Default intro sound", fileName: "" },
             { label: "custom.wav", fileName: "custom.wav" }
@@ -152,10 +167,17 @@ ApplicationWindow {
         function removeChartDirectory(index) {}
         function setBatchDifficultyChecked(id, checked) {}
         function browseOutputPath() {}
-        function openSkinDirectory() {}
-        function openJudgeLineDirectory() {}
         function browseIntroBackground() {}
         function importIntroSound() { importRequests += 1 }
+        function importIntroFont() { introFontImportRequests += 1 }
+        function resetIntroFonts() {
+            introFontDisplayPath = ""
+            introFontBodyPath = ""
+        }
+        function openSkinDirectory() {}
+        function openJudgeLineDirectory() {}
+        function importHudFont() { hudFontImportRequests += 1 }
+        function resetHudFont() { hudFontPath = "" }
         function setExportStartToCurrentPreview() {}
         function setExportEndToCurrentPreview() {}
         function setExportRangeSeconds(start, end) {
@@ -314,9 +336,22 @@ bool verifyRealExportPageControls(QTextStream& err)
     QObject* combo = root->findChild<QObject*>(QStringLiteral("introSoundCombo"));
     QObject* importButton = root->findChild<QObject*>(QStringLiteral("introSoundImportButton"));
     QObject* volumeSlider = root->findChild<QObject*>(QStringLiteral("introSoundVolumeSlider"));
+    QObject* displayFontCombo = root->findChild<QObject*>(QStringLiteral("introDisplayFontCombo"));
+    QObject* bodyFontCombo = root->findChild<QObject*>(QStringLiteral("introBodyFontCombo"));
+    QObject* introFontImportButton = root->findChild<QObject*>(QStringLiteral("introFontImportButton"));
+    QObject* introFontResetButton = root->findChild<QObject*>(QStringLiteral("introFontResetButton"));
+    QObject* skinCombo = root->findChild<QObject*>(QStringLiteral("exportSkinCombo"));
+    QObject* hudAreaCombo = root->findChild<QObject*>(QStringLiteral("hudFontAreaCombo"));
+    QObject* hudFontCombo = root->findChild<QObject*>(QStringLiteral("hudFontCombo"));
+    QObject* hudFontImportButton = root->findChild<QObject*>(QStringLiteral("hudFontImportButton"));
+    QObject* hudFontResetButton = root->findChild<QObject*>(QStringLiteral("hudFontResetButton"));
     bool ok = require(
-        session != nullptr && combo != nullptr && importButton != nullptr && volumeSlider != nullptr,
-        QStringLiteral("the real ExportVideoPage creates all three intro-sound controls"),
+        session != nullptr && combo != nullptr && importButton != nullptr && volumeSlider != nullptr
+            && displayFontCombo != nullptr && bodyFontCombo != nullptr
+            && introFontImportButton != nullptr && introFontResetButton != nullptr
+            && skinCombo != nullptr && hudAreaCombo != nullptr && hudFontCombo != nullptr
+            && hudFontImportButton != nullptr && hudFontResetButton != nullptr,
+        QStringLiteral("the real ExportVideoPage creates the font, skin and HUD controls"),
         err);
     if (!ok) {
         return false;
@@ -360,6 +395,48 @@ bool verifyRealExportPageControls(QTextStream& err)
         QStringLiteral("moving the real slider writes the independent 0..2 volume multiplier"),
         err);
 
+    displayFontCombo->setProperty("currentIndex", 1);
+    QMetaObject::invokeMethod(displayFontCombo, "activated", Q_ARG(int, 1));
+    bodyFontCombo->setProperty("currentIndex", 1);
+    QMetaObject::invokeMethod(bodyFontCombo, "activated", Q_ARG(int, 1));
+    ok &= require(
+        session->property("introFontDisplayPath").toString() == QStringLiteral("/fonts/example.ttf")
+            && session->property("introFontBodyPath").toString() == QStringLiteral("/fonts/example.ttf"),
+        QStringLiteral("the title and body card-font selectors write independently to the session"),
+        err);
+
+    QMetaObject::invokeMethod(introFontImportButton, "clicked");
+    ok &= require(
+        session->property("introFontImportRequests").toInt() == 1,
+        QStringLiteral("the card-font import button uses the v2 export session action"), err);
+    QMetaObject::invokeMethod(introFontResetButton, "clicked");
+    ok &= require(
+        session->property("introFontDisplayPath").toString().isEmpty()
+            && session->property("introFontBodyPath").toString().isEmpty(),
+        QStringLiteral("the card-font reset action restores both bundled defaults"), err);
+
+    session->setProperty("settingsTab", QStringLiteral("skin"));
+    QCoreApplication::processEvents();
+    skinCombo->setProperty("currentIndex", 1);
+    QMetaObject::invokeMethod(skinCombo, "activated", Q_ARG(int, 1));
+    hudAreaCombo->setProperty("currentIndex", 1);
+    QMetaObject::invokeMethod(hudAreaCombo, "activated", Q_ARG(int, 1));
+    hudFontCombo->setProperty("currentIndex", 1);
+    QMetaObject::invokeMethod(hudFontCombo, "activated", Q_ARG(int, 1));
+    ok &= require(
+        session->property("skinIndex").toInt() == 1
+            && session->property("hudFontAreaIndex").toInt() == 1
+            && session->property("hudFontPath").toString() == QStringLiteral("/fonts/example.ttf"),
+        QStringLiteral("the export skin tab writes the shared preview skin and HUD font state"), err);
+    QMetaObject::invokeMethod(hudFontImportButton, "clicked");
+    ok &= require(
+        session->property("hudFontImportRequests").toInt() == 1,
+        QStringLiteral("the export HUD import button uses the v2 export session action"), err);
+    QMetaObject::invokeMethod(hudFontResetButton, "clicked");
+    ok &= require(
+        session->property("hudFontPath").toString().isEmpty(),
+        QStringLiteral("the export HUD reset action restores the default font"), err);
+
     session->setProperty("introEnabled", false);
     QCoreApplication::processEvents();
     ok &= require(
@@ -385,6 +462,7 @@ bool verifyRealExportPageControls(QTextStream& err)
             && volumeSlider->property("enabled").toBool(),
         QStringLiteral("batch export keeps intro sound settings available regardless of the single range"),
         err);
+
     return ok;
 }
 

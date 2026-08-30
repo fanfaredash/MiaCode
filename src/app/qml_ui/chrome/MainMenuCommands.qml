@@ -13,7 +13,6 @@ QtObject {
 
     signal toggleSidebarRequested()
     signal toggleBottomPanelRequested()
-    signal togglePreviewRequested()
     signal openRequested()
     signal saveRequested()
     signal saveAsRequested()

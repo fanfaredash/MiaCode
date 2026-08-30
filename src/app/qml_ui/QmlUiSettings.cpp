@@ -14,7 +14,6 @@ constexpr auto kSidebarVisible = "ui/sidebarVisible";
 constexpr auto kSidebarWidth = "ui/sidebarWidth";
 constexpr auto kBottomPanelVisible = "ui/bottomPanelVisible";
 constexpr auto kBottomPanelHeightRatio = "ui/bottomPanelHeightRatio";
-constexpr auto kPreviewVisible = "ui/previewVisible";
 constexpr auto kPreviewWidthRatio = "ui/previewWidthRatio";
 constexpr auto kFontSize = "appearance/fontSize";
 }
@@ -37,7 +36,6 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
     bottomPanelHeightRatio_ = qBound(kBottomPanelMinimumHeightRatio,
                                      settings_.value(kBottomPanelHeightRatio, 0.35).toDouble(),
                                      kBottomPanelMaximumHeightRatio);
-    previewVisible_ = settings_.value(kPreviewVisible, true).toBool();
     previewWidthRatio_ = qBound(kPreviewMinimumWidthRatio,
                                 settings_.value(kPreviewWidthRatio, 0.5).toDouble(),
                                 kPreviewMaximumWidthRatio);
@@ -93,7 +91,6 @@ bool QmlUiSettings::bottomPanelVisible() const { return bottomPanelVisible_; }
 double QmlUiSettings::bottomPanelHeightRatio() const { return bottomPanelHeightRatio_; }
 double QmlUiSettings::bottomPanelMinimumHeightRatio() const { return kBottomPanelMinimumHeightRatio; }
 double QmlUiSettings::bottomPanelMaximumHeightRatio() const { return kBottomPanelMaximumHeightRatio; }
-bool QmlUiSettings::previewVisible() const { return previewVisible_; }
 double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
 double QmlUiSettings::previewMinimumWidthRatio() const { return kPreviewMinimumWidthRatio; }
 double QmlUiSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
@@ -137,14 +134,6 @@ void QmlUiSettings::setBottomPanelHeightRatio(double value)
     bottomPanelHeightRatio_ = value;
     settings_.setValue(kBottomPanelHeightRatio, value);
     emit bottomPanelHeightRatioChanged();
-}
-
-void QmlUiSettings::setPreviewVisible(bool value)
-{
-    if (previewVisible_ == value) return;
-    previewVisible_ = value;
-    settings_.setValue(kPreviewVisible, value);
-    emit previewVisibleChanged();
 }
 
 void QmlUiSettings::setPreviewWidthRatio(double value)

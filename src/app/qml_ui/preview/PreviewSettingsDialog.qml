@@ -6,9 +6,8 @@ import MiaCode.UI
 // 预览设置. Like 音频设置 and 偏好设置, every control writes straight through and
 // persists on the spot — there is no OK/Apply.
 //
-// Two tabs, 视频 and 玩法, matching the Widgets dialog. Its third tab (性能) held
-// only 预览刷新率, and that control already lives in 偏好设置 → 性能 under v2;
-// repeating it here would give one setting two homes.
+// 视频、玩法和皮肤 all describe the running preview. 性能只含预览刷新率，仍放在
+// 偏好设置 → 性能，避免同一设置有两个入口。
 Dialog {
     id: root
 
@@ -34,6 +33,28 @@ Dialog {
 
     function put(key, value) { root.previewSettings.setValue(key, value) }
 
+    function fontIndexForPath(options, path) {
+        const target = path || ""
+        if (!options)
+            return 0
+        for (let index = 0; index < options.length; ++index) {
+            if ((options[index].path || "") === target)
+                return index
+        }
+        return 0
+    }
+
+    function fontFamilyForPath(options, path) {
+        const target = path || ""
+        if (!options)
+            return ""
+        for (let index = 0; index < options.length; ++index) {
+            if ((options[index].path || "") === target)
+                return options[index].family || ""
+        }
+        return ""
+    }
+
     // 1.0 / 1.25 / 1.5 — one decimal where that is the whole number, two where
     // the quarter step needs it. Same rule the Widgets dialog used.
     function flowSpeedLabel(speed) {
@@ -48,7 +69,8 @@ Dialog {
             spacing: 4
             Repeater {
                 model: [root.previewSettings.videoGroupLabel,
-                        root.previewSettings.gameplayGroupLabel]
+                        root.previewSettings.gameplayGroupLabel,
+                        root.previewSettings.skinGroupLabel]
                 delegate: AppTab {
                     required property int index
                     required property string modelData
@@ -216,5 +238,176 @@ Dialog {
                 Item { Layout.fillWidth: true }
             }
         }
+
+        // ---- 皮肤 ----
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: root.activePage === 2
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("皮肤")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    Layout.preferredWidth: 120
+                }
+                AppComboBox {
+                    id: previewSkinCombo
+                    objectName: "previewSkinCombo"
+                    Layout.fillWidth: true
+                    model: root.previewSettings.skinOptions
+                    textRole: "label"
+                    currentIndex: root.previewSettings.skinIndex
+                    Accessible.name: qsTr("皮肤")
+                    onActivated: root.previewSettings.skinIndex = currentIndex
+                }
+                AppButton {
+                    text: qsTr("打开目录")
+                    onClicked: root.previewSettings.openSkinDirectory()
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("判定效果")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    Layout.preferredWidth: 120
+                }
+                AppComboBox {
+                    id: previewSkinJudgeEffectCombo
+                    objectName: "previewSkinJudgeEffectCombo"
+                    Layout.fillWidth: true
+                    model: root.previewSettings.skinJudgeEffectOptions
+                    currentIndex: root.previewSettings.skinJudgeEffectIndex
+                    Accessible.name: qsTr("判定效果")
+                    onActivated: root.previewSettings.skinJudgeEffectIndex = currentIndex
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("判定线")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    Layout.preferredWidth: 120
+                }
+                AppComboBox {
+                    id: previewOutlineCombo
+                    objectName: "previewOutlineCombo"
+                    Layout.fillWidth: true
+                    model: root.previewSettings.outlineOptions
+                    currentIndex: root.previewSettings.outlineIndex
+                    Accessible.name: qsTr("判定线")
+                    onActivated: root.previewSettings.outlineIndex = currentIndex
+                }
+                AppButton {
+                    text: qsTr("打开目录")
+                    onClicked: root.previewSettings.openJudgeLineDirectory()
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                height: 1
+                color: Theme.colors.border.normal
+            }
+
+            Text {
+                text: qsTr("HUD 字体")
+                color: Theme.colors.text.active
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                font.bold: true
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("区域")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    Layout.preferredWidth: 120
+                }
+                AppComboBox {
+                    id: previewHudFontAreaCombo
+                    objectName: "previewHudFontAreaCombo"
+                    Layout.fillWidth: true
+                    model: root.previewSettings.hudFontAreaOptions
+                    textRole: "label"
+                    currentIndex: root.previewSettings.hudFontAreaIndex
+                    Accessible.name: qsTr("HUD 字体区域")
+                    onActivated: root.previewSettings.hudFontAreaIndex = currentIndex
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("字体")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    Layout.preferredWidth: 120
+                }
+                AppComboBox {
+                    id: previewHudFontCombo
+                    objectName: "previewHudFontCombo"
+                    Layout.fillWidth: true
+                    model: root.previewSettings.fontLibraryOptions
+                    textRole: "label"
+                    currentIndex: root.fontIndexForPath(model, root.previewSettings.hudFontPath)
+                    Accessible.name: qsTr("HUD 字体")
+                    onActivated: root.previewSettings.hudFontPath = model[currentIndex].path
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: previewHudFontSample.implicitHeight + 20
+                radius: Theme.controlRadius
+                color: Theme.colors.background.editor
+                border.width: Theme.controlBorderWidth
+                border.color: Theme.colors.border.control
+                Text {
+                    id: previewHudFontSample
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    text: root.previewSettings.hudFontSample
+                    color: Theme.colors.text.primary
+                    font.family: root.fontFamilyForPath(root.previewSettings.fontLibraryOptions,
+                                                        root.previewSettings.hudFontPath) || Theme.uiFont
+                    font.pixelSize: Theme.uiFontSize
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                AppButton {
+                    id: previewHudFontImportButton
+                    objectName: "previewHudFontImportButton"
+                    text: qsTr("导入字体…")
+                    Accessible.name: qsTr("导入 HUD 字体")
+                    onClicked: root.previewSettings.importHudFont()
+                }
+                AppButton {
+                    id: previewHudFontResetButton
+                    objectName: "previewHudFontResetButton"
+                    text: qsTr("还原")
+                    Accessible.name: qsTr("还原 HUD 字体")
+                    onClicked: root.previewSettings.resetHudFont()
+                }
+                Item { Layout.fillWidth: true }
+            }
+        }
     }
+
+    onOpened: root.previewSettings.refreshFontLibrary()
 }

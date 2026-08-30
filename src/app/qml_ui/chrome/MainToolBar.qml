@@ -7,7 +7,6 @@ Rectangle {
 
     signal toggleSidebarRequested()
     signal toggleBottomRequested()
-    signal togglePreviewRequested()
     signal openRequested()
     signal saveRequested()
     signal undoRequested()
@@ -18,7 +17,6 @@ Rectangle {
 
     property bool sidebarActive: false
     property bool bottomActive: false
-    property bool previewActive: false
     property bool canUndo: false
     property bool canRedo: false
 
@@ -83,12 +81,6 @@ Rectangle {
             tooltip: qsTr("切换底部面板")
             active: root.bottomActive
             onClicked: root.toggleBottomRequested()
-        }
-        IconButton {
-            iconSource: Qt.resolvedUrl("icons/panel-right.svg")
-            tooltip: qsTr("切换预览区")
-            active: root.previewActive
-            onClicked: root.togglePreviewRequested()
         }
     }
 
