@@ -173,6 +173,61 @@ Item {
     return object;
 }
 
+std::unique_ptr<QObject> createChoiceSequenceHarness(QQmlEngine& engine, QTextStream& err)
+{
+    QQmlComponent component(&engine);
+    component.setData(R"QML(
+import QtQuick
+import QtQuick.Controls
+import MiaCode.UI
+
+ApplicationWindow {
+    visible: true
+    width: 480
+    height: 320
+
+    QtObject {
+        id: fakeRequests
+        objectName: "choiceSequenceRequests"
+        signal choiceRequested(string requestId, var request)
+        property string resolvedId: ""
+        property string resolvedAnswer: ""
+
+        function submitChoiceResult(requestId, choiceId) {
+            resolvedId = requestId
+            resolvedAnswer = choiceId
+            if (requestId === "choice-1") {
+                choiceRequested("choice-2", {
+                    title: "Second unsaved difficulty",
+                    text: "Discard this difficulty?",
+                    choices: [{ id: "discard", label: "Discard", role: "destructive" }],
+                    dismissChoiceId: "cancel"
+                })
+            }
+        }
+    }
+
+    UiRequestHost {
+        objectName: "choiceSequenceHost"
+        requests: fakeRequests
+    }
+}
+)QML", QUrl(QStringLiteral("qrc:/ChoiceSequenceHarness.qml")));
+    if (component.status() == QQmlComponent::Error) {
+        for (const QQmlError& error : component.errors()) {
+            err << "FAIL: choice sequence harness load: " << error.toString() << Qt::endl;
+        }
+        return {};
+    }
+    std::unique_ptr<QObject> object(component.create());
+    if (!object) {
+        for (const QQmlError& error : component.errors()) {
+            err << "FAIL: choice sequence harness create: " << error.toString() << Qt::endl;
+        }
+    }
+    return object;
+}
+
 bool verifyRealExportPageControls(QTextStream& err)
 {
     QQmlEngine engine;
@@ -369,6 +424,59 @@ bool verifyRequestHostLoop(QTextStream& err)
     return ok;
 }
 
+bool verifySynchronousChoiceSequenceKeepsTheNextDialogOpen(QTextStream& err)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    const std::unique_ptr<QObject> root = createChoiceSequenceHarness(engine, err);
+    if (!root) {
+        return false;
+    }
+    QCoreApplication::processEvents();
+
+    QObject* requests = root->findChild<QObject*>(QStringLiteral("choiceSequenceRequests"));
+    QObject* host = root->findChild<QObject*>(QStringLiteral("choiceSequenceHost"));
+    QObject* choiceDialog = root->findChild<QObject*>(QStringLiteral("uiRequestChoiceDialog"));
+    bool ok = require(requests != nullptr && host != nullptr && choiceDialog != nullptr,
+                      QStringLiteral("the choice-sequence harness creates the real request host and dialog"),
+                      err);
+    if (!ok) {
+        return false;
+    }
+
+    QVariantMap firstChoice;
+    firstChoice.insert(QStringLiteral("title"), QStringLiteral("First unsaved difficulty"));
+    firstChoice.insert(QStringLiteral("text"), QStringLiteral("Discard this difficulty?"));
+    firstChoice.insert(QStringLiteral("choices"), QVariantList{
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("discard")},
+                    {QStringLiteral("label"), QStringLiteral("Discard")},
+                    {QStringLiteral("role"), QStringLiteral("destructive")}},
+    });
+    firstChoice.insert(QStringLiteral("dismissChoiceId"), QStringLiteral("cancel"));
+    QMetaObject::invokeMethod(requests, "choiceRequested",
+                              Q_ARG(QString, QStringLiteral("choice-1")),
+                              Q_ARG(QVariant, QVariant(firstChoice)));
+    QCoreApplication::processEvents();
+    ok &= require(host->property("activeChoiceId").toString() == QStringLiteral("choice-1")
+                      && choiceDialog->property("visible").toBool(),
+                  QStringLiteral("the first choice request opens the real choice dialog"), err);
+
+    QMetaObject::invokeMethod(choiceDialog, "resolve",
+                              Q_ARG(QVariant, QVariant(QStringLiteral("discard"))));
+    QCoreApplication::processEvents();
+    ok &= require(requests->property("resolvedId").toString() == QStringLiteral("choice-1")
+                      && requests->property("resolvedAnswer").toString()
+                          == QStringLiteral("discard")
+                      && host->property("activeChoiceId").toString()
+                          == QStringLiteral("choice-2")
+                      && choiceDialog->property("visible").toBool()
+                      && choiceDialog->property("title").toString()
+                          == QStringLiteral("Second unsaved difficulty"),
+                  QStringLiteral("a synchronous next choice remains open after the previous choice closes"),
+                  err);
+    return ok;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -384,7 +492,8 @@ int main(int argc, char** argv)
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QGuiApplication app(argc, argv);
     QTextStream err(stderr);
-    const bool ok = verifyRealExportPageControls(err) && verifyRequestHostLoop(err);
+    const bool ok = verifyRealExportPageControls(err) && verifyRequestHostLoop(err)
+        && verifySynchronousChoiceSequenceKeepsTheNextDialogOpen(err);
     if (ok) {
         QTextStream out(stdout);
         out << "qml_export_video_page_spec ok" << Qt::endl;

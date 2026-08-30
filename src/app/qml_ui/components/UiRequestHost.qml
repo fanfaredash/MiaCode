@@ -191,8 +191,15 @@ Item {
         onChosen: function(choiceId) {
             const requestId = root.activeChoiceId
             root.activeChoiceId = ""
-            if (requestId.length > 0 && root.requests)
-                root.requests.submitChoiceResult(requestId, choiceId)
+            // ChoiceDialog emits chosen before its resolve() call closes the
+            // popup. The continuation can synchronously ask the next question;
+            // submitting now would open it, then let the old popup's close()
+            // immediately hide it. Let that close finish before advancing the
+            // request queue.
+            Qt.callLater(function() {
+                if (requestId.length > 0 && root.requests)
+                    root.requests.submitChoiceResult(requestId, choiceId)
+            })
         }
     }
 }
