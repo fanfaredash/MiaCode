@@ -9,6 +9,7 @@ Rectangle {
     id: root
 
     required property var pages
+    required property var previewSession
     readonly property var session: pages && pages.exportSession ? pages.exportSession : null
     readonly property bool introSettingsEnabled: !!root.session
                                                   && root.session.introEnabled
@@ -669,6 +670,12 @@ Rectangle {
                                  && root.session.settingsTab === "range"
                         spacing: 10
                         Layout.fillWidth: true
+                        ExportRangeSelector {
+                            objectName: "exportRangeSelector"
+                            Layout.fillWidth: true
+                            exportSession: root.session
+                            previewSession: root.previewSession
+                        }
                         RowLayout {
                             Text {
                                 text: qsTr("开始")
@@ -677,13 +684,10 @@ Rectangle {
                                 Layout.preferredWidth: 80
                             }
                             AppTextField {
+                                objectName: "exportRangeStartField"
                                 Layout.preferredWidth: 100
                                 text: root.session ? root.session.exportStartSeconds.toFixed(3) : "0"
                                 onEditingFinished: if (root.session) text = root.session.setExportStartText(text)
-                            }
-                            AppButton {
-                                text: qsTr("设为当前")
-                                onClicked: if (root.session) root.session.setExportStartToCurrentPreview()
                             }
                         }
                         RowLayout {
@@ -694,13 +698,10 @@ Rectangle {
                                 Layout.preferredWidth: 80
                             }
                             AppTextField {
+                                objectName: "exportRangeEndField"
                                 Layout.preferredWidth: 100
                                 text: root.session ? root.session.exportEndSeconds.toFixed(3) : "0"
                                 onEditingFinished: if (root.session) text = root.session.setExportEndText(text)
-                            }
-                            AppButton {
-                                text: qsTr("设为当前")
-                                onClicked: if (root.session) root.session.setExportEndToCurrentPreview()
                             }
                         }
                         Text {

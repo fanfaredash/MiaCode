@@ -197,6 +197,7 @@ Item {
                         anchors.fill: parent
                         visible: root.exportVideoActive
                         pages: root.pages
+                        previewSession: root.previewSession
                     }
 
                     LatencyPage {

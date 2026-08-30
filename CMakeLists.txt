@@ -679,6 +679,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/sidebar/DifficultyList.qml
     src/app/qml_ui/sidebar/ExportSidebarPage.qml
     src/app/qml_ui/sidebar/ToolsSidebarPage.qml
+    src/app/qml_ui/export/ExportRangeSelector.qml
     src/app/qml_ui/export/ExportVideoPage.qml
     src/app/qml_ui/editor/EditorPane.qml
     src/app/qml_ui/editor/EditorTabBar.qml
@@ -1741,7 +1742,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(qml_export_video_page_spec TEST
         SOURCES
             src/tools/qml_ui/QmlExportVideoPageSpec.cpp
-        LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+        LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Test
         INCLUDES src
     )
     target_compile_definitions(qml_export_video_page_spec PRIVATE

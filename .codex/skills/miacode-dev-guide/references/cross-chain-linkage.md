@@ -236,6 +236,10 @@ Implication:
   `preview_sfx` selected basename/independent 0..2 volume, `VideoExportSettings` preserves the volume
   preference and both values during difficulty reseeding, and `intro.sound_file` /
   `intro.sound_volume` must survive snapshot parsing and worker-task reconstruction.
+- The v2 `ExportRangeSelector` is intentionally outside the snapshot contract: it reads/writes the
+  existing `QmlExportSession` range fields and calls the canonical `QmlPreviewModel` scrub lifecycle
+  so its playhead stays equal to `PreviewTransport`'s. Do not add a second timer, playhead cache, or
+  range-specific seek path.
 - Worker protocol changes must be reflected in both `main.cpp` and MainWindow worker-event handling.
 - `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
 - Static Muri thresholds that affect analyzer timing, such as the tap-on-slide threshold, must also cross this boundary; otherwise preview-time diagnostics and export-time overlays will drift.

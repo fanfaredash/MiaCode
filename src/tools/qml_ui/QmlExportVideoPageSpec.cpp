@@ -3,8 +3,11 @@
 #include <QQmlComponent>
 #include <QVariantMap>
 #include <QQmlEngine>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QQuickStyle>
 #include <QTextStream>
+#include <QtTest/QTest>
 
 #include <memory>
 
@@ -26,10 +29,12 @@ std::unique_ptr<QObject> createHarness(QQmlEngine& engine, QTextStream& err)
 {
     QQmlComponent component(&engine);
     component.setData(R"QML(
-import QtQuick
-import MiaCode.UI
+        import QtQuick
+        import QtQuick.Controls
+        import MiaCode.UI
 
-Item {
+ApplicationWindow {
+    visible: true
     width: 900
     height: 700
 
@@ -111,9 +116,9 @@ Item {
         property string introSoundLabel: "Intro sound"
         property string introSoundVolumeLabel: "Intro sound volume"
         property string introSoundImportLabel: "Import"
-        property real exportStartSeconds: 0.0
-        property real exportEndSeconds: 1.0
-        property real contentDurationSeconds: 1.0
+        property real exportStartSeconds: 60.0
+        property real exportEndSeconds: 180.0
+        property real contentDurationSeconds: 240.0
         property bool fullRangeExport: true
         property var chartDirectories: []
         property var batchDifficultyChecks: []
@@ -133,10 +138,38 @@ Item {
         function importIntroSound() { importRequests += 1 }
         function setExportStartToCurrentPreview() {}
         function setExportEndToCurrentPreview() {}
-        function setExportStartText(text) { return text }
-        function setExportEndText(text) { return text }
+        function setExportStartText(text) {
+            const value = Number(text)
+            if (!isNaN(value)) exportStartSeconds = value
+            return exportStartSeconds.toFixed(3)
+        }
+        function setExportEndText(text) {
+            const value = Number(text)
+            if (!isNaN(value)) exportEndSeconds = value
+            return exportEndSeconds.toFixed(3)
+        }
         function startExport() {}
         function cancelExport() {}
+    }
+
+    QtObject {
+        id: previewSession
+        objectName: "fakePreviewSession"
+        property real positionSeconds: 120.0
+        property bool playing: true
+        property var scrubCalls: []
+        function beginScrub() {
+            playing = false
+            scrubCalls = scrubCalls.concat(["begin"])
+        }
+        function updateScrub(second) {
+            positionSeconds = second
+            scrubCalls = scrubCalls.concat(["update"])
+        }
+        function endScrub(second) {
+            positionSeconds = second
+            scrubCalls = scrubCalls.concat(["end"])
+        }
     }
 
     QtObject {
@@ -147,6 +180,7 @@ Item {
     ExportVideoPage {
         anchors.fill: parent
         pages: pages
+        previewSession: previewSession
     }
 
     // The shell hosts one of these for every page; instantiate it directly so
@@ -313,6 +347,92 @@ bool verifyRealExportPageControls(QTextStream& err)
             && volumeSlider->property("enabled").toBool(),
         QStringLiteral("batch export keeps intro sound settings available regardless of the single range"),
         err);
+    return ok;
+}
+
+bool verifyVisualRangeSelectorDragsTheSharedPreview(QTextStream& err)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    const std::unique_ptr<QObject> root = createHarness(engine, err);
+    auto* window = root ? qobject_cast<QQuickWindow*>(root.get()) : nullptr;
+    if (!require(window != nullptr,
+                 QStringLiteral("the export range harness creates a real QML window"), err)) {
+        return false;
+    }
+    window->show();
+    Q_UNUSED(QTest::qWaitForWindowExposed(window));
+    QCoreApplication::processEvents();
+
+    QObject* session = root->findChild<QObject*>(QStringLiteral("fakeExportSession"));
+    QObject* preview = root->findChild<QObject*>(QStringLiteral("fakePreviewSession"));
+    if (!require(session != nullptr && preview != nullptr,
+                 QStringLiteral("the export range harness exposes its export and preview sessions"), err)) {
+        return false;
+    }
+    session->setProperty("settingsTab", QStringLiteral("range"));
+    QCoreApplication::processEvents();
+
+    auto* selector = root->findChild<QQuickItem*>(QStringLiteral("exportRangeSelector"));
+    auto* lane = root->findChild<QQuickItem*>(QStringLiteral("exportRangeLane"));
+    auto* startHandle = root->findChild<QQuickItem*>(QStringLiteral("exportRangeStartHandle"));
+    auto* endHandle = root->findChild<QQuickItem*>(QStringLiteral("exportRangeEndHandle"));
+    QObject* startField = root->findChild<QObject*>(QStringLiteral("exportRangeStartField"));
+    if (!require(selector != nullptr && lane != nullptr && startHandle != nullptr && endHandle != nullptr
+                     && startField != nullptr,
+                 QStringLiteral("the real export page creates both visual range handles and the numeric start field"), err)) {
+        return false;
+    }
+
+    const QPoint pressPoint = startHandle->mapToScene(
+        QPointF(startHandle->width() * 0.5, startHandle->height() * 0.5)).toPoint();
+    const QPoint dragPoint = lane->mapToScene(
+        QPointF(lane->width() * 0.4, lane->height() * 0.5)).toPoint();
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, pressPoint);
+    QTest::mouseMove(window, dragPoint, 20);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, dragPoint);
+    QCoreApplication::processEvents();
+
+    const QStringList scrubCalls = preview->property("scrubCalls").toStringList();
+    bool ok = require(session->property("exportStartSeconds").toDouble() > 90.0
+                          && session->property("exportStartSeconds").toDouble()
+                              < session->property("exportEndSeconds").toDouble(),
+                      QStringLiteral("dragging the start handle changes only the clamped export start"), err);
+    ok &= require(!preview->property("playing").toBool()
+                      && scrubCalls.size() >= 3
+                      && scrubCalls.first() == QStringLiteral("begin")
+                      && scrubCalls.last() == QStringLiteral("end")
+                      && qAbs(preview->property("positionSeconds").toDouble()
+                              - session->property("exportStartSeconds").toDouble()) < 0.001,
+                  QStringLiteral("a range drag pauses and scrubs the same preview time source"), err);
+
+    preview->setProperty("scrubCalls", QStringList());
+    const QPoint endPressPoint = endHandle->mapToScene(
+        QPointF(endHandle->width() * 0.5, endHandle->height() * 0.5)).toPoint();
+    const QPoint endDragPoint = lane->mapToScene(
+        QPointF(lane->width() * 0.7, lane->height() * 0.5)).toPoint();
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, endPressPoint);
+    QTest::mouseMove(window, endDragPoint, 20);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, endDragPoint);
+    QCoreApplication::processEvents();
+
+    const QStringList endScrubCalls = preview->property("scrubCalls").toStringList();
+    ok &= require(session->property("exportEndSeconds").toDouble()
+                          > session->property("exportStartSeconds").toDouble()
+                      && session->property("exportEndSeconds").toDouble() < 180.0,
+                  QStringLiteral("dragging the end handle changes only the clamped export end"), err);
+    ok &= require(endScrubCalls.size() >= 3
+                      && endScrubCalls.first() == QStringLiteral("begin")
+                      && endScrubCalls.last() == QStringLiteral("end")
+                      && qAbs(preview->property("positionSeconds").toDouble()
+                              - session->property("exportEndSeconds").toDouble()) < 0.001,
+                  QStringLiteral("the end handle uses the same paused preview scrub lifecycle"), err);
+
+    startField->setProperty("text", QStringLiteral("30"));
+    QMetaObject::invokeMethod(startField, "editingFinished");
+    QCoreApplication::processEvents();
+    ok &= require(qAbs(session->property("exportStartSeconds").toDouble() - 30.0) < 0.001,
+                  QStringLiteral("the retained numeric start field updates the visual range source of truth"), err);
     return ok;
 }
 
@@ -492,7 +612,8 @@ int main(int argc, char** argv)
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QGuiApplication app(argc, argv);
     QTextStream err(stderr);
-    const bool ok = verifyRealExportPageControls(err) && verifyRequestHostLoop(err)
+    const bool ok = verifyRealExportPageControls(err) && verifyVisualRangeSelectorDragsTheSharedPreview(err)
+        && verifyRequestHostLoop(err)
         && verifySynchronousChoiceSequenceKeepsTheNextDialogOpen(err);
     if (ok) {
         QTextStream out(stdout);
