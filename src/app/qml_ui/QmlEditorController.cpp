@@ -12,6 +12,11 @@
 namespace miacode::qml_ui {
 namespace {
 
+// Per view. Each step holds the source before and after it, so this is a memory
+// bound as much as a usability one.
+constexpr int kMaxHistorySteps = 200;
+
+
 miacode::editor::SimaiTextEditResult untouched(const QString& text, int anchor, int position)
 {
     miacode::editor::SimaiTextEditResult result;
@@ -468,14 +473,44 @@ QVariantMap QmlEditorController::touchPadAuthoringForQml(
     transaction.insert(QStringLiteral("touchTokenStart"), plan.tokenStart);
     return transaction;
 }
-void QmlEditorController::resetQmlHistory(const QString& text, int anchor, int position)
+QmlEditorController::QmlHistory& QmlEditorController::activeHistory()
 {
-    Q_UNUSED(text);
-    Q_UNUSED(anchor);
-    Q_UNUSED(position);
-    qmlUndo_.clear();
-    qmlRedo_.clear();
+    return histories_[historyScopeId_];
+}
+
+void QmlEditorController::publishAvailabilityForActiveScope()
+{
+    const auto found = histories_.constFind(historyScopeId_);
+    if (found == histories_.constEnd()) {
+        setUndoAvailability(false, false);
+        return;
+    }
+    setUndoAvailability(!found->undo.isEmpty(), !found->redo.isEmpty());
+}
+
+void QmlEditorController::setHistoryScope(const QString& scopeId)
+{
+    if (historyScopeId_ == scopeId) {
+        return;
+    }
+    historyScopeId_ = scopeId;
+    // Switching views does not disturb any history; it only changes which one
+    // the undo action is looking at.
+    publishAvailabilityForActiveScope();
+}
+
+void QmlEditorController::clearAllHistory()
+{
+    histories_.clear();
     setUndoAvailability(false, false);
+}
+
+void QmlEditorController::dropHistoryScope(const QString& scopeId)
+{
+    histories_.remove(scopeId);
+    if (scopeId == historyScopeId_) {
+        publishAvailabilityForActiveScope();
+    }
 }
 
 void QmlEditorController::recordQmlTransaction(const QString& before, const QString& after,
@@ -483,8 +518,15 @@ void QmlEditorController::recordQmlTransaction(const QString& before, const QStr
                                                int afterAnchor, int afterPosition)
 {
     if (before == after) return;
-    qmlUndo_.append({before, after, beforeAnchor, beforePosition, afterAnchor, afterPosition});
-    qmlRedo_.clear();
+    QmlHistory& history = activeHistory();
+    history.undo.append({before, after, beforeAnchor, beforePosition, afterAnchor, afterPosition});
+    // Every step keeps two full copies of the source, so an unbounded stack is
+    // an unbounded leak over a long session. The oldest step is the one the
+    // user is least likely to reach for.
+    if (history.undo.size() > kMaxHistorySteps) {
+        history.undo.remove(0, history.undo.size() - kMaxHistorySteps);
+    }
+    history.redo.clear();
     setUndoAvailability(true, false);
 }
 QVariantMap QmlEditorController::restoreTransaction(const QString& current, const QString& restored) const
@@ -504,16 +546,20 @@ QVariantMap QmlEditorController::restoreTransaction(const QString& current, cons
 }
 QVariantMap QmlEditorController::undoQmlTransaction()
 {
-    if (qmlUndo_.isEmpty()) return {};
-    const auto entry = qmlUndo_.takeLast(); qmlRedo_.append(entry);
-    setUndoAvailability(!qmlUndo_.isEmpty(), true);
+    QmlHistory& history = activeHistory();
+    if (history.undo.isEmpty()) return {};
+    const auto entry = history.undo.takeLast();
+    history.redo.append(entry);
+    setUndoAvailability(!history.undo.isEmpty(), true);
     return restoreTransaction(entry.after, entry.before);
 }
 QVariantMap QmlEditorController::redoQmlTransaction()
 {
-    if (qmlRedo_.isEmpty()) return {};
-    const auto entry = qmlRedo_.takeLast(); qmlUndo_.append(entry);
-    setUndoAvailability(true, !qmlRedo_.isEmpty());
+    QmlHistory& history = activeHistory();
+    if (history.redo.isEmpty()) return {};
+    const auto entry = history.redo.takeLast();
+    history.undo.append(entry);
+    setUndoAvailability(true, !history.redo.isEmpty());
     return restoreTransaction(entry.before, entry.after);
 }
 

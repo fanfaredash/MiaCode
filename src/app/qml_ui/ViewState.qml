@@ -2,6 +2,9 @@ import QtQuick
 
 QtObject {
     signal difficultyEditorActivationRequested(int difficultyId)
+    // A closed tab is a view that no longer exists; whatever it accumulated —
+    // its undo history above all — goes with it.
+    signal editorClosed(string key)
 
     readonly property string metadataEditorKey: "metadata"
     property var openEditorTabs: []
@@ -102,6 +105,7 @@ QtObject {
         tabs.splice(closingIndex, 1)
         openEditorTabs = tabs
         editorHistory = editorHistory.filter(item => item !== key)
+        editorClosed(key)
 
         if (activeEditorKey !== key)
             return

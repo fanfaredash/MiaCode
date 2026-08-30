@@ -100,21 +100,22 @@ Rectangle {
         root.scheduleEditorContext(false)
     }
 
-    // The QML undo stack belongs to one difficulty's source. It is reset when
-    // the editor actually changes documents — not on every controller-sourced
-    // text sync, which is what silently emptied the user's history whenever the
-    // backend pushed normalized text back.
-    property int historyDifficultyId: -1
-    property bool historyMetadataMode: false
-    property bool historyIdentityValid: false
+    // Which view's undo history the editor is looking at. The controller keeps
+    // one per view, so switching difficulty changes the name and disturbs
+    // nothing — a history is only discarded when its tab closes or the whole
+    // document is replaced.
+    readonly property string historyScopeId: root.metadataMode
+        ? "metadata"
+        : "difficulty:" + root.documentSession.currentDifficultyId
 
     function syncTextFromController() {
         const controllerText = root.metadataMode
             ? root.documentSession.metadataSourceText
             : root.documentSession.chartText
-        const identityChanged = !root.historyIdentityValid
-            || root.historyDifficultyId !== root.documentSession.currentDifficultyId
-            || root.historyMetadataMode !== root.metadataMode
+        // Named before the text moves, and read straight off the session rather
+        // than waiting for a signal: the swap below must not be able to land a
+        // recording in the outgoing view's history.
+        root.editorController.setHistoryScope(root.historyScopeId)
         if (sourceArea.text !== controllerText) {
             root.beginProgrammaticSelection()
             sourceArea.syncingFromController = true
@@ -126,13 +127,6 @@ Rectangle {
             sourceArea.historyPosition = sourceArea.selectionEnd
             updateCursorPosition()
         }
-        if (!identityChanged)
-            return
-        root.historyDifficultyId = root.documentSession.currentDifficultyId
-        root.historyMetadataMode = root.metadataMode
-        root.historyIdentityValid = true
-        root.editorController.resetQmlHistory(controllerText, sourceArea.historyAnchor,
-                                              sourceArea.historyPosition)
     }
     readonly property real codeLineHeight: sourceArea.cursorRectangle.height > 0
                                                ? sourceArea.cursorRectangle.height
@@ -754,7 +748,6 @@ Rectangle {
                 historyText = text
                 historyAnchor = selectionStart
                 historyPosition = selectionEnd
-                root.editorController.resetQmlHistory(text, historyAnchor, historyPosition)
                 root.editorController.setDocumentContextForQml(
                     root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
                 root.updateCursorPosition()
@@ -873,6 +866,11 @@ Rectangle {
     }
 
     Connections {
+        target: root.viewState
+        function onEditorClosed(key) { root.editorController.dropHistoryScope(key) }
+    }
+
+    Connections {
         target: root.documentSession
         function onChartTextChanged() {
             if (!root.metadataMode)
@@ -887,8 +885,8 @@ Rectangle {
         }
         function onDocumentReplaced() {
             // A different chart is a different history, even when it happens to
-            // reuse the outgoing document's active difficulty id.
-            root.historyIdentityValid = false
+            // reuse the outgoing document's difficulty ids.
+            root.editorController.clearAllHistory()
             root.syncTextFromController()
             root.documentSession.logEditorDocumentState(
                 "document_replaced", root.documentSession.currentDifficultyId,

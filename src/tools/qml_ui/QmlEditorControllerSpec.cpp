@@ -248,7 +248,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
     miacode::v2::ChartWorkspace workspace;
     workspace.openSource(source, QStringLiteral("chart.txt"), 5);
 
-    controller.resetQmlHistory(openedChart, 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(
         openedChart, editedChart, 0, 0, editedChart.size(), editedChart.size());
     workspace.replaceActiveDifficultyChart(editedChart);
@@ -262,7 +262,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
     workspace.replaceActiveDifficultyChart(editedChart);
     workspace.markSaved();
     const QString postSaveEdit = QStringLiteral("(120){4}3,");
-    controller.resetQmlHistory(editedChart, 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(
         editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
     workspace.replaceActiveDifficultyChart(postSaveEdit);
@@ -275,7 +275,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
 
     workspace.updateDocumentField(
         ChartWorkspaceDocumentField::Title, QStringLiteral("metadata-dirty"));
-    controller.resetQmlHistory(editedChart, 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(
         editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
     workspace.replaceActiveDifficultyChart(postSaveEdit);
@@ -676,10 +676,9 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
            QStringLiteral("a Ctrl/Command click seeks the preview to the caret it just placed"),
            out, failed);
 
-    // The undo stack must survive a controller-sourced text sync and be reset
-    // only when the editor changes documents. resetQmlHistory used to run on
-    // every sync, so any backend push emptied the user's history.
-    editorItem->setProperty("historyIdentityValid", true);
+    // Undo history belongs to a view. It must survive a controller-sourced text
+    // sync (a backend push is not the user's edit), survive a switch to another
+    // difficulty and back, and go only when the whole document is replaced.
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 30));
     QCoreApplication::processEvents();
     QKeyEvent typed(QEvent::KeyPress, Qt::Key_9, Qt::NoModifier, QStringLiteral("9"));
@@ -700,9 +699,17 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
     session->setProperty("chartText", QStringLiteral("1,1,1,1,"));
     QCoreApplication::processEvents();
     expect(!controller.canUndo(),
-           QStringLiteral("switching to another difficulty resets the undo history"), out, failed);
+           QStringLiteral("another difficulty starts on its own empty history"), out, failed);
     session->setProperty("currentDifficultyId", 3);
+    session->setProperty("chartText", QStringLiteral("1,2,3,4,\n5,6,7,8,\n9,"));
     QCoreApplication::processEvents();
+    // The one that used to fail: switching away and back used to throw the
+    // history out in both directions.
+    expect(controller.canUndo(),
+           QStringLiteral("switching back finds that difficulty's history intact"), out, failed);
+    controller.dropHistoryScope(QStringLiteral("difficulty:3"));
+    expect(!controller.canUndo(),
+           QStringLiteral("closing a tab takes its history with it"), out, failed);
 
     // Rehighlighting is a formatting pass, not an edit. setDiagnostics used to
     // rehighlight synchronously from inside a binding evaluation, and TextEdit
@@ -963,7 +970,7 @@ int main(int argc, char** argv)
     expect(replaceAll.consumed && replaceAll.transaction.text == QStringLiteral("bar food bar")
                && replaceAll.transaction.undoGroup,
            QStringLiteral("replace all honors whole words in one undo transaction"), out, &failed);
-    controller.resetQmlHistory(QStringLiteral("foo foo"), 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(QStringLiteral("foo foo"), QStringLiteral("bar bar"),
                                     0, 0, 7, 7);
     const auto restored = controller.undoQmlTransaction();
@@ -978,7 +985,7 @@ int main(int argc, char** argv)
     // that actually differs, and select that region so the user sees what
     // changed. Replaying the whole document left the caret parked at a stale
     // offset with nothing selected.
-    controller.resetQmlHistory(QStringLiteral("1,2,3,4,"), 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(QStringLiteral("1,2,3,4,"), QStringLiteral("1,2,9,4,"), 4, 4, 5, 5);
     const auto narrowUndo = controller.undoQmlTransaction();
     expect(narrowUndo.value(QStringLiteral("replacementStart")).toInt() == 4
@@ -997,7 +1004,7 @@ int main(int argc, char** argv)
 
     // Undoing an insertion restores nothing, so the caret collapses at the
     // point the inserted text used to start rather than selecting a neighbour.
-    controller.resetQmlHistory(QStringLiteral("1,,"), 0, 0);
+    controller.clearAllHistory();
     controller.recordQmlTransaction(QStringLiteral("1,,"), QStringLiteral("1,A1,"), 2, 2, 4, 4);
     const auto insertionUndo = controller.undoQmlTransaction();
     expect(insertionUndo.value(QStringLiteral("replacementStart")).toInt() == 2

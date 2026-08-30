@@ -149,6 +149,15 @@ v2 的 文件 菜单只有 打开 / 保存 / 另存为 / 退出。**没有 新�
 这去掉了 2.3 的整类问题：不再有"身份变了要记得清"的时序依赖，
 **因为再也不需要清**——取历史时就是按当前视图的 key 取。
 
+**已完成（2026-08-30）**：`QmlEditorController` 的 `qmlUndo_/qmlRedo_` 换成
+`QHash<QString, QmlHistory>` + `historyScopeId_`；`setHistoryScope` / `clearAllHistory` /
+`dropHistoryScope` 三个入口。`SourceEditor.syncTextFromController()` 在**动文本之前**
+直接从会话读出 scope 并命名（不等信号，避免顺序依赖）；`onDocumentReplaced` 全清；
+`ViewState.closeEditor` 新增 `editorClosed(key)` 信号，编辑器据此丢弃那一份历史。
+每份历史上限 200 步（每步存改动前后两份全文，无上限即无上限增长）。
+`qml_editor_controller_spec` 新增三条断言，其中「切走再切回，那个难度的历史仍在」
+正是所有者报告的那一条。
+
 ### 3.4 Esc 与所有非文本键
 
 策略的兜底改成只覆盖**Qt 真的会插入的文本**，与 `QInputControl::isAcceptableInput` 对齐：
@@ -197,7 +206,7 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
 ## 5. 落地顺序（建议，每项一个提交）
 
 1. ~~**Esc / 非文本键**（2.1）~~ —— **已完成（2026-08-30）**。
-2. **每视图撤销历史**（3.3）——独立于脏的改造。
+2. ~~**每视图撤销历史**（3.3）~~ —— **已完成（2026-08-30）**。
 3. **section 级脏**（3.1）——`ChartWorkspace` + 投影 + 标签栏脏点。
 4. **关闭标签的守卫**（3.2）——依赖 3。
 5. **新建 / 打开最近 / 关闭文档**（3.5）——依赖统一的 `requestLeaveDocument`。
@@ -215,7 +224,9 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
 **B. 「关闭文档」之后落到哪里？**
 
 - B1：空文档（`SimaiDocument::createEmpty()`），编辑器可直接开始写。
-- **B2 ✅ 选定**：欢迎页 / 空状态，没有可编辑的正文。v2 目前**没有**这个页面，需要一并补。
+- **B2 ✅ 选定**：空状态，没有可编辑的正文。
+  **补充决定（2026-08-30）：暂不做欢迎页，留空即可。** 关闭文档后没有打开的标签、没有正文；
+  欢迎页作为独立的产品项另行安排。
 
 **C. 每视图撤销历史在「打开别的文件」后是否保留？**
 
