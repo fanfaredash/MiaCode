@@ -1167,6 +1167,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   timestamp passthrough without `-r` or a frame-rate filter so source frame rate is preserved.
   `PvBatchCompressionWorker.cpp` and `MainWindow.Dialogs.MediaTools.cpp` both use this policy and
   retry once with a measured-size bitrate correction when the first output reaches the hard limit.
+- The metadata page's PV row (`MainWindow.FrameBootstrap.cpp`) provides import and delete actions.
+  `DialogsSection::onDeleteBackgroundVideo` releases the preview decoder synchronously, removes
+  local `bg.mp4`/`pv.mp4` candidates, clears an explicit `&video=` field, and reloads the preview.
 - Toolbox menu itself is built in `sections/frame/MainWindow.FrameBootstrap.cpp` (`toolboxMenu_`).
   BPM & Latency was dropped from the toolbox (still in the top Tools menu via
   `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`

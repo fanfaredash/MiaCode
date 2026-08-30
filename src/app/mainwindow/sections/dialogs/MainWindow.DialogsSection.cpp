@@ -69,3 +69,8 @@ void MainWindow::onImportBackgroundVideo()
 {
     dialogsSection_->onImportBackgroundVideo();
 }
+
+void MainWindow::onDeleteBackgroundVideo()
+{
+    dialogsSection_->onDeleteBackgroundVideo();
+}

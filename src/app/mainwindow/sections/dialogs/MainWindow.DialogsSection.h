@@ -23,6 +23,7 @@ public:
     void onExtractBackgroundFromTrack();
     void onImportBackgroundImage();
     void onImportBackgroundVideo();
+    void onDeleteBackgroundVideo();
 
 private:
     enum class MediaBlankTarget {

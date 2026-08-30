@@ -798,13 +798,19 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     importVideoButton->setToolTip(UiText::text(QStringLiteral("metadata.choose_video_and_copy")));
     connect(importVideoButton, &QToolButton::clicked, this, &MainWindow::onImportBackgroundVideo);
     videoWrapLayout->addWidget(importVideoButton, 0, Qt::AlignLeft);
+    auto* deleteVideoButton = new QToolButton(metadataPage_);
+    deleteVideoButton->setText(UiText::text(QStringLiteral("metadata.delete_pv")));
+    deleteVideoButton->setToolTip(UiText::text(QStringLiteral("metadata.delete_pv_tooltip")));
+    connect(deleteVideoButton, &QToolButton::clicked, this, &MainWindow::onDeleteBackgroundVideo);
+    videoWrapLayout->addWidget(deleteVideoButton, 0, Qt::AlignLeft);
     videoWrapLayout->addStretch(1);
 
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.title"))), titleWrap);
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.artist"))), artistWrap);
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.des"))), designerWrap);
     metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.cover"))), coverWrap);
-    metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.background_video"))), videoWrap);
+    metadataForm->addRow(
+        makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.background_video"))), videoWrap);
     metadataCardLayout->addLayout(metadataForm);
 
     auto* extraMetadataLabel = new QLabel(UiText::text(QStringLiteral("metadata.other_fields")), metadataPage_);

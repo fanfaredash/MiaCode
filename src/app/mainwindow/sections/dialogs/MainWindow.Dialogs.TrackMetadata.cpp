@@ -346,6 +346,85 @@ void MainWindow::DialogsSection::onImportBackgroundVideo()
     importBackgroundMedia(true);
 }
 
+void MainWindow::DialogsSection::onDeleteBackgroundVideo()
+{
+    MC_OP("MainWindow::DialogsSection::onDeleteBackgroundVideo");
+    const QString chartDirPath = resolveCurrentChartDirectory();
+    QWidget* parent = UiDialogs::effectiveParentWidget(&owner_);
+    const QString title = UiText::text(QStringLiteral("metadata.delete_pv"));
+    if (chartDirPath.isEmpty()) {
+        QMessageBox::warning(
+            parent,
+            title,
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart")));
+        return;
+    }
+
+    const QString resolvedPath = miacode::chart_assets::resolveChartVideoPath(
+        owner_.currentFilePath_, state_.document_.videoPath);
+    QStringList videoPaths = miacode::chart_media_import::existingCandidatePaths(
+        chartDirPath, miacode::chart_media_import::Kind::Video);
+    if (!resolvedPath.isEmpty()
+        && QFileInfo(resolvedPath).absolutePath().compare(chartDirPath, Qt::CaseInsensitive) == 0
+        && !videoPaths.contains(resolvedPath, Qt::CaseInsensitive)) {
+        videoPaths.append(resolvedPath);
+    }
+    if (videoPaths.isEmpty()) {
+        QMessageBox::information(
+            parent,
+            title,
+            UiText::text(QStringLiteral("metadata.no_pv_to_delete")));
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        parent,
+        title,
+        UiText::text(QStringLiteral("metadata.delete_pv_confirm")),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+
+    releasePreviewMediaForFileOperation();
+    QStringList failedPaths;
+    for (const QString& path : videoPaths) {
+        bool removed = !QFileInfo::exists(path);
+        for (int attempt = 0; !removed && attempt < 40; ++attempt) {
+            removed = QFile::remove(path);
+            if (!removed) {
+                QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+                QThread::msleep(50);
+            }
+        }
+        if (!removed) {
+            failedPaths.append(path);
+        }
+    }
+
+    if (!failedPaths.isEmpty()) {
+        reloadPreviewMediaAfterFileOperation(false);
+        QMessageBox::critical(
+            parent,
+            title,
+            UiText::text(QStringLiteral("metadata.delete_pv_failed"))
+                .arg(failedPaths.join(QStringLiteral("\n"))));
+        return;
+    }
+
+    if (!state_.document_.videoPath.isEmpty()) {
+        state_.document_.videoPath.clear();
+        state_.documentDirty_ = true;
+        owner_.updateDirtyState();
+    }
+    reloadPreviewMediaAfterFileOperation(false);
+    owner_.rebuildFieldSidebar();
+    owner_.statusBar()->showMessage(
+        UiText::text(QStringLiteral("metadata.deleted_pv")),
+        6000);
+}
+
 void MainWindow::DialogsSection::importBackgroundMedia(bool video)
 {
     MC_OP("MainWindow::DialogsSection::importBackgroundMedia");
