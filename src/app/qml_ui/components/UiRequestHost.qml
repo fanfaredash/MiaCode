@@ -20,6 +20,7 @@ Item {
     property string activeFileRequestId: ""
     property string activeFolderRequestId: ""
     property string activeNoticeId: ""
+    property string activeChoiceId: ""
 
     visible: false
     width: 0
@@ -63,6 +64,14 @@ Item {
     Connections {
         target: root.requests
         function onFileRequested(requestId, request) { root.openRequest(requestId, request) }
+        function onChoiceRequested(requestId, request) {
+            root.activeChoiceId = requestId
+            choiceDialog.title = request.title
+            choiceDialog.message = request.text
+            choiceDialog.choices = request.choices || []
+            choiceDialog.dismissChoiceId = request.dismissChoiceId || ""
+            choiceDialog.open()
+        }
         function onNoticeRequested(requestId, notice) {
             root.activeNoticeId = requestId
             noticeDialog.title = notice.title
@@ -171,6 +180,19 @@ Item {
                 wrapMode: Text.WordWrap
                 elide: Text.ElideRight
             }
+        }
+    }
+
+    // Questions with more than two answers — 保存 / 放弃 / 取消.
+    ChoiceDialog {
+        id: choiceDialog
+        objectName: "uiRequestChoiceDialog"
+
+        onChosen: function(choiceId) {
+            const requestId = root.activeChoiceId
+            root.activeChoiceId = ""
+            if (requestId.length > 0 && root.requests)
+                root.requests.submitChoiceResult(requestId, choiceId)
         }
     }
 }

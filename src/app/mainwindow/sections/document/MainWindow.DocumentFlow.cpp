@@ -1,4 +1,5 @@
 ﻿#include "MainWindow.DocumentSection.h"
+#include "app/v2/UiRequestService.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
 
@@ -379,6 +380,15 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
     return documentSection_->openFileAtPath(path, showStatusMessage, showErrors);
 }
 
+// openStartupTarget runs at launch and from the chart-drop switch prompt, both
+// of which the v2 shell reaches, so what it has to say goes to the shell.
+void MainWindow::postShellNotice(const QString& title, const QString& text)
+{
+    if (miacode::v2::UiRequestService* const requests = uiRequestService()) {
+        requests->postNotice(miacode::v2::NoticeSeverity::Warning, title, text);
+    }
+}
+
 bool MainWindow::openStartupTarget(const QString& path)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
@@ -395,9 +405,7 @@ bool MainWindow::openStartupTarget(const QString& path)
 
         setCurrentFilePath(QString(), true);
         loadDocument(SimaiDocument::createEmpty());
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            this,
+        postShellNotice(
             UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.title")),
             UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.message"))
                 .arg(QDir::toNativeSeparators(info.absoluteFilePath()))
@@ -409,9 +417,7 @@ bool MainWindow::openStartupTarget(const QString& path)
         return openFileAtPath(info.absoluteFilePath(), true, true);
     }
 
-    UiDialogs::showMessageBox(
-        QMessageBox::Warning,
-        this,
+    postShellNotice(
         UiText::text(QStringLiteral("dialog.open_startup_target.missing.title")),
         UiText::text(QStringLiteral("dialog.open_startup_target.missing.message"))
             .arg(QDir::toNativeSeparators(normalizedPath))

@@ -14,6 +14,11 @@ namespace miacode::qml_ui {
 // bootstrap run preparePreviewForShutdown before teardown. Kept as its own
 // object rather than folded into the preview or timeline session, because it is
 // neither: it is the window's lifecycle.
+//
+// The question is asked, not answered on the spot. The unsaved-changes prompt
+// is a QML dialog now, so a close handler cannot get a verdict without running
+// a nested event loop over its own window — the window refuses the first close,
+// waits for closeDecided, and closes itself again if the answer was yes.
 class QmlShellLifecycle final : public QObject
 {
     Q_OBJECT
@@ -21,16 +26,20 @@ class QmlShellLifecycle final : public QObject
 public:
     explicit QmlShellLifecycle(MainWindow& backend, QObject* parent = nullptr);
 
-    // Runs the backend's unsaved-changes flow. False means the user cancelled
-    // and the window must stay open.
-    Q_INVOKABLE bool confirmClose();
+    // Starts the backend's unsaved-changes flow. The verdict arrives on
+    // closeDecided; false means the user cancelled and the window stays open.
+    // A second call while one is already in flight is ignored rather than
+    // stacking a second prompt on the first.
+    Q_INVOKABLE void requestClose();
     Q_INVOKABLE void notifyRootCloseAccepted(const QString& source);
 
 signals:
+    void closeDecided(bool accepted);
     void rootCloseAccepted(const QString& source);
 
 private:
     MainWindow* backend_ = nullptr;
+    bool closeRequestInFlight_ = false;
 };
 
 }  // namespace miacode::qml_ui

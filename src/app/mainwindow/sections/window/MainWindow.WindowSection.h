@@ -15,7 +15,10 @@ public:
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellRootWindow(QWindow* window);
     void cancelChartAudioDrop();
-    bool confirmShellClose();
+    void requestShellClose(std::function<void(bool)> onDecided);
+    // Everything that happens once the unsaved-changes prompt has said yes.
+    // Separate only because it now runs from a continuation.
+    bool finishShellClose(QElapsedTimer totalTimer);
     void toggleShellPreviewPlayback();
     void stopShellPreview();
     void seekShellPreview(double second);

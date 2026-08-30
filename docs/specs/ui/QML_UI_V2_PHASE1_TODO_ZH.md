@@ -122,17 +122,26 @@
 - [x] **启动崩溃恢复弹窗仍是 Widgets**（2026-08-29 已修）：`MainWindow.DocumentAutosaveFlow.cpp`
       的三处 `UiDialogs::showMessageBox` 已改走 `UiRequestService`；
       `restoreBackupFilePath` 在确认处切开为 `restoreBackupFilePath` + `applyBackupFile` 续延。
-- [ ] **保存 / 退出确认弹窗仍是 Widgets**（2026-08-29 记录，用户报告；已定位）。
-      `MainWindow.DocumentFlow.Internal.h:55` 的 `showUnsavedChangesDialog()` 是一个
-      `QMessageBox::exec()`（保存 / 放弃 / 取消三按钮），被 `maybeSaveBeforeContinue()` 与
-      `maybeSaveCurrentFieldChanges()` 使用。
-      **这条比其他弹窗贵**：它是同步的，返回值一路喂给 `closeEvent()`——而 `closeEvent` 必须
-      当场给出"关不关"的答复，`UiRequestService` 的续延模型给不出。要迁移就得把关闭流程本身
-      改成两段式（先 `event->ignore()`，确认返回后再自行关闭），沿用 §7 的顺序契约：
-      破坏性清理只能发生在确认返回 true 之后。剩余 `UiDialogs::showMessageBox` 调用点还有
-      `DocumentFileFlow`（新建覆盖确认、拖入谱面后的切换确认、打开失败）、`DocumentFlow`
-      （启动路径缺失）、`DocumentUi:416`（删除难度确认）、`DocumentAutosaveFlow`（保存失败）、
-      `FrameBootstrap:260`（扩展 showMessage）。
+- [x] **保存 / 退出确认弹窗仍是 Widgets**（2026-08-29 记录，用户报告；2026-08-30 已修）。
+      关闭流程改为两段式：`Main.qml` 的 `onClosing` 一律先拒绝，再问
+      `QmlShellLifecycle::requestClose()`，答案经 `closeDecided` 回来后窗口自己再关一次。
+      C++ 侧 `confirmShellClose()` 换成 `requestShellClose(continuation)`，问句之下的所有清理
+      原样搬进续延（**顺序契约不变**：破坏性清理只在确认为 true 之后）。提示本体是
+      `UiRequestService::requestChoice`——新增的三选一请求，未列出的答案一律解析为 dismissal，
+      所以「关掉窗口」永远不会被当成保存或放弃。
+      同一轮里另外三处 v2 能走到的 Widgets 弹窗一并处理：**音频拖放建谱**（预览确认 + 未保存
+      决策 + 三个结果提示）、**保存失败**的三条、**启动目标缺失**的两条。
+      还顺带修了一个双弹窗缺陷：删除难度时 `DifficultyList.qml` 已经问过一次，
+      `deleteDifficultyField` 又在后面弹了一个 Widgets 确认——现在 v2 桥接传
+      `alreadyConfirmed=true`。以及删掉了没有任何调用方的 `confirmDeleteBookmark`。
+      **留在树上的 `showMessageBox`**：`onNewFile` / `onOpenFile` / `openRecentFile` /
+      `switchToWelcomePage` / 扩展 `showMessage` / 删除难度的 v1 与扩展路径——全部只挂在隐藏
+      `MainWindow` 自己的 File 菜单 `QAction` 或扩展宿主上，QML 外壳没有任何入口能走到，
+      随阶段 4 一起消失。同理 `showUnsavedChangesDialog` 与 `maybeSaveBeforeContinue()` 同步版。
+- [x] **打开文件的未保存提示是平台原生弹窗**（2026-08-30 记录并修复）。`MainView.qml` 的三个
+      `QtQuick.Dialogs.MessageDialog` 在 macOS 上渲染成 NSAlert——不是 Widgets，但同样不是
+      应用自己的界面。现在都是 `components/ChoiceDialog.qml`，`src/app/qml_ui` 已无
+      `MessageDialog`。
 - [x] **控件高亮有记忆**（2026-08-29 报告，同日修复）。所有者已确认所指即 `AppComboBox`。
       成因是 `background.border.color` 读 `activeFocus`：ComboBox 点击即取焦点并保持，
       重开弹窗时焦点被恢复，边框继续是重音色。改用 `visualFocus`——只有键盘到达的焦点才画指示。
@@ -174,7 +183,11 @@
    槽位恒占位所以各行色块仍然对齐。**只有当前难度显示书签**——行既然是折叠控件，
    非当前行按下去是切换而不是折叠，留在别的难度上的展开态就会是一个屏幕上没有东西能收起的列表。
    漂移守卫：`qml_editor_controller_spec` 新增一条断言（`foldsBookmarks` 存在、`foldButton` 不存在）。
-4. **保存 / 退出确认弹窗改为 QML**（下一项，连带 §3.C 列出的其余 `showMessageBox` 调用点）。
+4. ~~保存 / 退出确认弹窗改为 QML~~ —— **已完成（2026-08-30）**。关闭流程改为两段式，
+   未保存提示走 `UiRequestService::requestChoice`（新增的三选一请求）+ `ChoiceDialog.qml`；
+   §3.C 列出的调用点里**所有 v2 能走到的**都已迁移，v1 菜单专属的那些留给阶段 4。
+
+**本批四项全部完成。** 下一轮见下。
 
 **批次中途插入并已完成（2026-08-30，用户报告 / 要求）**：预览走带时间条停在 0（回归，见 §3.C）、
 数值读数双击输入、设置弹窗可拖动。
@@ -396,8 +409,13 @@
 - [ ] **弹窗拖动**：音频设置 / 预览设置 / 偏好设置拖标题栏；关掉再开是否保留位置；
       窗口缩小后是否仍被钳制在窗口内。
 - [ ] **谱面变换的菜单与右键菜单入口**（2026-08-29 落地，走查在其之前，未覆盖）。
-- [ ] **侧边栏书签折叠**：点击非当前难度是否照旧切换；点击当前难度是否展开 / 收起书签；
-      指示器是否在左、各行色块是否仍对齐；无书签的难度点击是否照旧切换（不出现死点击）。
+- [x] **侧边栏书签折叠**（2026-08-30 所有者验收通过）。
+- [ ] **关闭确认**：脏文档关窗 → 保存 / 放弃 / 取消三条路径；取消后窗口与所有面板是否完好
+      （破坏性清理必须只在确认之后发生）；Escape 与标题栏关闭按钮是否都等于取消。
+- [ ] **打开文件的未保存提示**：三条路径 + 未命名文档选「保存」是否转到另存为。
+- [ ] **音频拖放建谱**：预览确认 → 未保存决策 → 结果提示（失败 / 单个成功后询问切换 / 部分失败）。
+- [ ] **删除难度只弹一次**（此前会连弹两个，第二个是 Widgets）。
+- [ ] **保存失败 / 启动目标缺失**的提示是否为应用自己的弹窗。
 
 ### 7.3 二阶段五项桌面验收已因同步链重写而失效
 

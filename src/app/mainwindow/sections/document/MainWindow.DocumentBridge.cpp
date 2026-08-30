@@ -334,7 +334,9 @@ bool MainWindow::addDocumentDifficulty(int difficultyId)
 
 bool MainWindow::removeDocumentDifficulty(int difficultyId)
 {
-    return documentSection_->deleteDifficultyField(difficultyId);
+    // The shell asked before calling: DifficultyList.qml's own confirm dialog
+    // is the question, and this used to raise a second one behind it.
+    return documentSection_->deleteDifficultyField(difficultyId, /*alreadyConfirmed=*/true);
 }
 
 void MainWindow::enableUnifiedDocumentDesigner(const QString& canonicalName)

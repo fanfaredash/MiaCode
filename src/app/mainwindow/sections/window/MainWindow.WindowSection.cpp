@@ -1,4 +1,5 @@
 #include "MainWindow.WindowSection.h"
+#include "../document/MainWindow.DocumentSection.h"
 
 #include "common/DebugOptions.h"
 
@@ -39,9 +40,14 @@ void MainWindow::cancelChartAudioDrop()
     windowSection_->cancelChartAudioDrop();
 }
 
-bool MainWindow::confirmShellClose()
+void MainWindow::requestShellClose(std::function<void(bool)> onDecided)
 {
-    return windowSection_->confirmShellClose();
+    windowSection_->requestShellClose(std::move(onDecided));
+}
+
+void MainWindow::requestLeaveDocument(std::function<void(bool)> onDecided)
+{
+    documentSection_->requestLeaveDocument(std::move(onDecided));
 }
 
 void MainWindow::toggleShellPreviewPlayback()

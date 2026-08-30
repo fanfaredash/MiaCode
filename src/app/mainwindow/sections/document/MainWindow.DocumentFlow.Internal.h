@@ -52,6 +52,24 @@ struct BackupRestoreEntry {
     int priority = 0;
 };
 
+// The three answers as the QML shell shows them, in button order. Ids match
+// unsavedChangesChoiceName() so both prompts resolve into the same handler.
+inline QVariantList unsavedChangesChoices()
+{
+    const auto choice = [](const char* id, const char* labelKey, const char* role) {
+        return QVariantMap{
+            {QStringLiteral("id"), QLatin1String(id)},
+            {QStringLiteral("label"), UiText::text(QLatin1String(labelKey))},
+            {QStringLiteral("role"), QLatin1String(role)},
+        };
+    };
+    return QVariantList{
+        choice("save", "action.save", "accept"),
+        choice("discard", "action.discard", "destructive"),
+        choice("cancel", "action.cancel", "reject"),
+    };
+}
+
 inline UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& title, const QString& text)
 {
     QMessageBox dialog(

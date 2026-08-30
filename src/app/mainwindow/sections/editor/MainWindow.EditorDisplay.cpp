@@ -192,21 +192,6 @@ QVector<BookmarkCommentCandidate> collectBookmarkCommentCandidates(const QString
     return candidates;
 }
 
-bool confirmDeleteBookmark(QWidget* parent, const MainWindow::EditorBookmark& bookmark)
-{
-    const QString title = UiText::text(QStringLiteral("editor.delete_bookmark"));
-    const QString name = bookmark.title.trimmed().isEmpty()
-        ? UiText::text(QStringLiteral("editor.untitled_bookmark"))
-        : bookmark.title.trimmed();
-    const QString message = UiText::text(QStringLiteral("editor.delete_bookmark_1_this_will")).arg(name);
-    return UiDialogs::showMessageBox(
-        QMessageBox::Question,
-        parent,
-        title,
-        message,
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No) == QMessageBox::Yes;
-}
 
 template <typename Bookmark>
 void sortBookmarks(QVector<Bookmark>& bookmarks)

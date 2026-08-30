@@ -248,6 +248,58 @@ bool verifyConfirmations(QTextStream& err)
     return ok;
 }
 
+bool verifyChoices(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy requests(&service, &miacode::v2::UiRequestService::choiceRequested);
+
+    const QVariantList choices{
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("save")},
+                    {QStringLiteral("label"), QStringLiteral("Save")},
+                    {QStringLiteral("role"), QStringLiteral("accept")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("discard")},
+                    {QStringLiteral("label"), QStringLiteral("Discard")},
+                    {QStringLiteral("role"), QStringLiteral("destructive")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("cancel")},
+                    {QStringLiteral("label"), QStringLiteral("Cancel")},
+                    {QStringLiteral("role"), QStringLiteral("reject")}},
+    };
+
+    QStringList answers;
+    const QString id = service.requestChoice(
+        QStringLiteral("Unsaved changes"), QStringLiteral("The chart has unsaved changes."),
+        choices, QStringLiteral("cancel"),
+        [&answers](const QString& choiceId) { answers.append(choiceId); });
+
+    bool ok = require(requests.count() == 1 && service.pendingChoiceCount() == 1,
+                      QStringLiteral("a choice is published and stays pending"), err);
+    if (!ok) {
+        return false;
+    }
+    ok &= require(requests.at(0).at(1).toMap().value(QStringLiteral("choices")).toList().size() == 3,
+                  QStringLiteral("the shell is handed every answer to draw"), err);
+
+    service.submitChoiceResult(id, QStringLiteral("discard"));
+    ok &= require(answers == QStringList{QStringLiteral("discard")}
+                      && service.pendingChoiceCount() == 0,
+                  QStringLiteral("the chosen id reaches the caller once"), err);
+
+    service.submitChoiceResult(id, QStringLiteral("save"));
+    ok &= require(answers.size() == 1, QStringLiteral("a second answer cannot re-run it"), err);
+
+    // The one that matters for a three-way question: a shell that answers with
+    // something the request never offered must still land on a listed decision,
+    // and that decision is the dismissal — never Save, never Discard.
+    QStringList strayAnswers;
+    const QString second = service.requestChoice(
+        QStringLiteral("t"), QStringLiteral("x"), choices, QStringLiteral("cancel"),
+        [&strayAnswers](const QString& choiceId) { strayAnswers.append(choiceId); });
+    service.submitChoiceResult(second, QStringLiteral("something-else"));
+    ok &= require(strayAnswers == QStringList{QStringLiteral("cancel")},
+                  QStringLiteral("an unoffered answer resolves as the dismissal"), err);
+    return ok;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -255,7 +307,8 @@ int main(int argc, char** argv)
     QCoreApplication app(argc, argv);
     QTextStream err(stderr);
     const bool ok = verifyFileRequestRoundTrip(err) && verifyCancellationAndUnknownIds(err)
-        && verifyNotices(err) && verifyActionableNotices(err) && verifyConfirmations(err);
+        && verifyNotices(err) && verifyActionableNotices(err) && verifyConfirmations(err)
+        && verifyChoices(err);
     if (ok) {
         QTextStream out(stdout);
         out << "ui_request_service_spec ok" << Qt::endl;

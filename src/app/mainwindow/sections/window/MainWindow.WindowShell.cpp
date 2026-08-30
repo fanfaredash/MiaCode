@@ -289,32 +289,26 @@ QRect MainWindow::WindowSection::quickShellRootWindowFrameGeometry() const
     return owner_.quickShellRootWindowFrameGeometry_;
 }
 
-bool MainWindow::WindowSection::confirmShellClose()
+void MainWindow::WindowSection::requestShellClose(std::function<void(bool)> onDecided)
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
 
-    QElapsedTimer maybeSaveTimer;
-    maybeSaveTimer.start();
-    const bool canClose = owner_.maybeSaveBeforeContinue();
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/window"),
-        QStringLiteral("maybe_save_before_continue"),
-        maybeSaveTimer.elapsed(),
-        QStringLiteral("result=%1").arg(canClose ? QStringLiteral("continue") : QStringLiteral("cancel"))
-    );
-    if (!canClose) {
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/window"),
-            QStringLiteral("confirm_shell_close"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=cancelled_before_close")
-        );
-        return false;
-    }
+    // The prompt is a QML dialog, so the answer arrives later. Everything below
+    // the question moved into the continuation unchanged — including the
+    // ordering rule it depends on: a cancelled close must leave the world
+    // untouched.
+    owner_.requestLeaveDocument(
+        [this, onDecided = std::move(onDecided), totalTimer](bool canClose) mutable {
+            const bool confirmed = canClose && finishShellClose(totalTimer);
+            if (onDecided) {
+                onDecided(confirmed);
+            }
+        });
+}
 
+bool MainWindow::WindowSection::finishShellClose(QElapsedTimer totalTimer)
+{
     // Close is confirmed. Only NOW cascade-close popup chains (Preferences,
     // Keyboard Shortcuts, etc.). Running this after the unsaved-changes
     // prompt is accepted means a cancelled close leaves every sibling

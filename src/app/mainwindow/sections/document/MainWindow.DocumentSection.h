@@ -9,6 +9,16 @@ public:
     DocumentSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
 
     bool maybeSaveBeforeContinue();
+    // The same decision, asked without blocking. The v2 shell has no place to
+    // run a nested event loop from — a window's close handler least of all — so
+    // the answer arrives as a continuation and the prompt itself is a QML
+    // dialog. `onDecided(true)` means "the document may be left behind".
+    //
+    // A clean document decides immediately, in this call; only a prompt defers.
+    void requestLeaveDocument(std::function<void(bool)> onDecided);
+    // Everything that happens once the choice is in, shared by both forms so
+    // they cannot drift.
+    bool applyUnsavedChangesChoice(const QString& choiceId, const QString& logContext);
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     QString documentField(MainWindow::DocumentField field) const;
@@ -90,7 +100,18 @@ public:
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
-    bool createChartsFromAudioDrop(const QStringList& audioPaths);
+    // One dropped audio file and where its chart folder will go. Named here
+    // rather than in the .cpp because the drop is now two prompts long: the
+    // candidates have to survive from the first answer to the last.
+    struct DroppedChartCandidate {
+        QString sourcePath;
+        QString sourceDirectory;
+        QString extension;
+        QString targetDirectory;
+    };
+    void createChartsFromAudioDrop(const QStringList& audioPaths);
+    void finishChartsFromAudioDrop(
+        const QList<DroppedChartCandidate>& candidates, QElapsedTimer dropTimer);
     void onNormalizeWholeChart();
     void updateEditorHeader();
     void updateDifficultyScopedActionStates();
@@ -99,7 +120,10 @@ public:
     void updateEditorStatus();
     void updateEditorEmptyState();
     void updateMetadataPageMode();
-    bool deleteDifficultyField(int difficultyId);
+    // `alreadyConfirmed` is what the v2 shell passes: DifficultyList.qml puts
+    // the question up itself, and asking again here was a second dialog on top
+    // of an answered one.
+    bool deleteDifficultyField(int difficultyId, bool alreadyConfirmed = false);
     void rebuildFieldSidebar();
     // Sidebar bookmark-group fold state. Only explicit toggles are recorded;
     // an untouched difficulty defaults to expanded when active, collapsed

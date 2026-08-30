@@ -523,6 +523,20 @@ bool MainWindow::DocumentSection::onSaveFileAs()
     return saveToPath(path);
 }
 
+namespace {
+
+// Saving is on the v2 path (MainWindow::saveDocument / saveDocumentAs), so its
+// failures have to reach the QML shell rather than a Widgets box.
+void postSaveFailureThrough(miacode::v2::UiRequestService* requests, const QString& text)
+{
+    if (requests != nullptr) {
+        requests->postNotice(miacode::v2::NoticeSeverity::Error,
+                             QStringLiteral("Save Failed"), text);
+    }
+}
+
+}  // namespace
+
 bool MainWindow::DocumentSection::saveToPath(const QString& path)
 {
     if (owner_.qmlDocumentSaveHandler_) {
@@ -561,7 +575,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     (void)owner_.parsedFirstSeconds(&firstOk);
     if (!firstOk) {
         _mc_op_.fail(QStringLiteral("invalid_first"));
-        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "&first must be a valid number of seconds.");
+        postSaveFailureThrough(owner_.uiRequestService(), QStringLiteral("&first must be a valid number of seconds."));
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
@@ -574,7 +588,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         _mc_op_.fail(QStringLiteral("QSaveFile::open: %1").arg(file.errorString()));
-        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Cannot write file:\n" + path);
+        postSaveFailureThrough(owner_.uiRequestService(), QStringLiteral("Cannot write file:\n") + path);
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
@@ -595,7 +609,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     }
     if (file.write(data) != data.size() || !file.commit()) {
         _mc_op_.fail(QStringLiteral("write_or_commit_failed err=%1").arg(file.errorString()));
-        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Write failed:\n" + path);
+        postSaveFailureThrough(owner_.uiRequestService(), QStringLiteral("Write failed:\n") + path);
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),

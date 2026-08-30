@@ -59,6 +59,50 @@ QString UiRequestService::requestConfirmation(const QString& title,
     return requestId;
 }
 
+QString UiRequestService::requestChoice(const QString& title,
+                                       const QString& text,
+                                       const QVariantList& choices,
+                                       const QString& dismissChoiceId,
+                                       ChoiceCallback onResolved)
+{
+    const QString requestId = QStringLiteral("choice-%1").arg(nextRequestSerial_++);
+
+    PendingChoice pending;
+    pending.callback = std::move(onResolved);
+    pending.dismissChoiceId = dismissChoiceId;
+    for (const QVariant& choice : choices) {
+        const QString id = choice.toMap().value(QStringLiteral("id")).toString();
+        if (!id.isEmpty()) {
+            pending.offeredIds.append(id);
+        }
+    }
+    pendingChoices_.insert(requestId, std::move(pending));
+
+    QVariantMap payload;
+    payload.insert(QStringLiteral("title"), title);
+    payload.insert(QStringLiteral("text"), text);
+    payload.insert(QStringLiteral("choices"), choices);
+    payload.insert(QStringLiteral("dismissChoiceId"), dismissChoiceId);
+    emit choiceRequested(requestId, payload);
+    return requestId;
+}
+
+void UiRequestService::submitChoiceResult(const QString& requestId, const QString& choiceId)
+{
+    const auto pending = pendingChoices_.find(requestId);
+    if (pending == pendingChoices_.end()) {
+        return;
+    }
+    // Take the continuation out before running it: a callback that asks the
+    // next question must not observe its own entry.
+    const PendingChoice resolved = std::move(pending.value());
+    pendingChoices_.erase(pending);
+    if (!resolved.callback) {
+        return;
+    }
+    resolved.callback(resolved.offeredIds.contains(choiceId) ? choiceId : resolved.dismissChoiceId);
+}
+
 QString UiRequestService::requestNoticeAction(NoticeSeverity severity,
                                               const QString& title,
                                               const QString& text,

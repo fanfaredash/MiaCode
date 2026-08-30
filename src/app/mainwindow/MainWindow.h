@@ -338,7 +338,13 @@ public:
     void preparePreviewForShutdown();
     bool shellTimelineSurfaceReady() const;
     void noteQuickTimelineSurfaceReady();
-    bool confirmShellClose();
+    // Asks whether the window may close, answering through the continuation.
+    // It cannot be a return value: the unsaved-changes prompt is a QML dialog
+    // now, and the only way to get an answer out of one synchronously would be
+    // a nested event loop inside a window's close handler.
+    void requestShellClose(std::function<void(bool)> onDecided);
+    // The same question about the document alone, for flows that replace it.
+    void requestLeaveDocument(std::function<void(bool)> onDecided);
     void toggleShellPreviewPlayback();
     void stopShellPreview();
     void seekShellPreview(double second);

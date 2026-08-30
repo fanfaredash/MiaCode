@@ -22,12 +22,26 @@ QmlShellLifecycle::QmlShellLifecycle(MainWindow& backend, QObject* parent)
 {
 }
 
-bool QmlShellLifecycle::confirmClose()
+void QmlShellLifecycle::requestClose()
 {
-    const bool confirmed = backend_ != nullptr && backend_->confirmShellClose();
-    appendLifecycleLog(QStringLiteral("confirm_close"),
-                       QStringLiteral("result=%1").arg(confirmed ? "accepted" : "cancelled"));
-    return confirmed;
+    if (closeRequestInFlight_) {
+        // Escape, the title-bar button and ⌘Q can all arrive while the prompt
+        // is up. One question is enough.
+        appendLifecycleLog(QStringLiteral("confirm_close"), QStringLiteral("result=already_asking"));
+        return;
+    }
+    if (backend_ == nullptr) {
+        appendLifecycleLog(QStringLiteral("confirm_close"), QStringLiteral("result=no_backend"));
+        emit closeDecided(true);
+        return;
+    }
+    closeRequestInFlight_ = true;
+    backend_->requestShellClose([this](bool confirmed) {
+        closeRequestInFlight_ = false;
+        appendLifecycleLog(QStringLiteral("confirm_close"),
+                           QStringLiteral("result=%1").arg(confirmed ? "accepted" : "cancelled"));
+        emit closeDecided(confirmed);
+    });
 }
 
 void QmlShellLifecycle::notifyRootCloseAccepted(const QString& source)

@@ -1,4 +1,6 @@
     bool maybeSaveBeforeContinue();
+    // A warning for the viewer, through the shell rather than a Widgets box.
+    void postShellNotice(const QString& title, const QString& text);
     void configureRuntimeDebugOutput();
     PreviewStageMediaRoute previewStageMediaRoute() const;
     bool previewUsesStageMediaHostRoute() const;

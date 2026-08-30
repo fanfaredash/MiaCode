@@ -1,4 +1,5 @@
 ﻿#include "MainWindow.DocumentSection.h"
+#include "app/v2/UiRequestService.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
 
@@ -140,69 +141,26 @@ bool writeDocumentFileAtomically(
 
 }  // namespace
 
-bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
+bool MainWindow::DocumentSection::applyUnsavedChangesChoice(
+    const QString& choiceId, const QString& logContext)
 {
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-
-    QElapsedTimer autosaveTimer;
-    autosaveTimer.start();
-    runAutosaveCheck(false);
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/document"),
-        QStringLiteral("autosave_check"),
-        autosaveTimer.elapsed(),
-        QStringLiteral("trigger=maybe_save_before_continue allow_history=0")
-    );
-
-    if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("maybe_save_before_continue"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=clean_document")
-        );
-        return true;
-    }
-
-    QElapsedTimer dialogTimer;
-    dialogTimer.start();
-    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
-        &owner_,
-        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
-        UiText::text(QStringLiteral("dialog.unsaved_changes.message"))
-    );
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/document"),
-        QStringLiteral("unsaved_document_dialog"),
-        dialogTimer.elapsed(),
-        QStringLiteral("choice=%1").arg(unsavedChangesChoiceName(choice))
-    );
-    if (choice == UnsavedChangesChoice::Save) {
+    if (choiceId == QLatin1String("save")) {
         QElapsedTimer saveTimer;
         saveTimer.start();
+        // "Save" must have the same durable meaning everywhere: onSaveFile()
+        // commits the current field first and then atomically writes it.
         const bool saved = onSaveFile();
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
             QStringLiteral("on_save_file"),
             saveTimer.elapsed(),
-            QStringLiteral("trigger=maybe_save_before_continue result=%1")
-                .arg(saved ? QStringLiteral("saved") : QStringLiteral("failed"))
-        );
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("maybe_save_before_continue"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=%1").arg(saved ? QStringLiteral("saved") : QStringLiteral("save_failed"))
+            QStringLiteral("trigger=%1 result=%2")
+                .arg(logContext, saved ? QStringLiteral("saved") : QStringLiteral("failed"))
         );
         return saved;
     }
-    const bool shouldContinue = choice == UnsavedChangesChoice::Discard;
+    const bool shouldContinue = choiceId == QLatin1String("discard");
     if (shouldContinue) {
         anchorCurrentFieldCleanState();
         state_.documentDirty_ = false;
@@ -210,14 +168,64 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
         updateDirtyState();
         owner_.updateWindowTitle();
     }
-    miacode::debug_log::appendTimingLine(
+    miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("close_timing/document"),
-        QStringLiteral("maybe_save_before_continue"),
-        totalTimer.elapsed(),
-        QStringLiteral("result=%1").arg(shouldContinue ? QStringLiteral("discard") : QStringLiteral("cancel"))
+        QStringLiteral("%1 result=%2").arg(logContext, choiceId)
     );
     return shouldContinue;
+}
+
+bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
+{
+    runAutosaveCheck(false);
+    if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
+        return true;
+    }
+    // Still the Widgets prompt, and deliberately so: the callers left on this
+    // overload are the hidden MainWindow's own File-menu actions, which the QML
+    // shell has no way to reach. Everything the v2 shell can actually run goes
+    // through requestLeaveDocument below. This overload dies with
+    // src/app/mainwindow/ in stage 4.
+    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
+        &owner_,
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_changes.message"))
+    );
+    return applyUnsavedChangesChoice(
+        unsavedChangesChoiceName(choice), QStringLiteral("maybe_save_before_continue"));
+}
+
+void MainWindow::DocumentSection::requestLeaveDocument(std::function<void(bool)> onDecided)
+{
+    const auto decide = [onDecided = std::move(onDecided)](bool leave) {
+        if (onDecided) {
+            onDecided(leave);
+        }
+    };
+
+    runAutosaveCheck(false);
+    if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
+        decide(true);
+        return;
+    }
+
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        // No shell to ask. Refusing to leave is the answer that cannot lose
+        // work.
+        decide(false);
+        return;
+    }
+
+    requests->requestChoice(
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_changes.message")),
+        unsavedChangesChoices(),
+        QStringLiteral("cancel"),
+        [this, decide](const QString& choiceId) {
+            decide(applyUnsavedChangesChoice(choiceId, QStringLiteral("request_leave_document")));
+        });
 }
 
 void MainWindow::DocumentSection::onNewFile()
@@ -295,19 +303,12 @@ QString cleanDropFolderName(QString name)
     return name;
 }
 
-struct DroppedChartCandidate {
-    QString sourcePath;
-    QString sourceDirectory;
-    QString extension;
-    QString targetDirectory;
-};
-
 } // namespace
 
-bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& audioPaths)
+void MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& audioPaths)
 {
     if (audioPaths.isEmpty()) {
-        return false;
+        return;
     }
     QElapsedTimer dropTimer;
     dropTimer.start();
@@ -315,7 +316,7 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
         QStringLiteral("ui/chart_drop"),
         QStringLiteral("drop_received count=%1").arg(audioPaths.size()));
     const QStringList supported = miacode::chart_assets::supportedTrackFileExtensions();
-    QList<DroppedChartCandidate> candidates;
+    QList<DocumentSection::DroppedChartCandidate> candidates;
     for (const QString& path : audioPaths) {
         const QFileInfo info(path);
         const QString extension = info.suffix().toLower();
@@ -343,7 +344,7 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
             QStringLiteral("supported_file_counted format=%1").arg(extension));
     }
     if (candidates.isEmpty()) {
-        return false;
+        return;
     }
 
     QHash<QString, QSet<QString>> reserved;
@@ -361,26 +362,42 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
         preview << QDir::toNativeSeparators(target);
     }
 
-    QMessageBox dialog(
-        QMessageBox::Question,
-        UiText::text(QStringLiteral("drop_chart.preview.title")),
-        UiText::text(QStringLiteral("drop_chart.preview.message"))
-            .arg(candidates.size()) + preview.join(QLatin1Char('\n')),
-        QMessageBox::Yes | QMessageBox::No,
-        UiDialogs::effectiveParentWidget(&owner_));
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests == nullptr) {
+        return;
+    }
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/chart_drop"),
         QStringLiteral("preview_shown count=%1").arg(candidates.size()));
-    dialog.setButtonText(QMessageBox::Yes,
-        UiText::text(QStringLiteral("drop_chart.preview.create")).arg(candidates.size()));
-    dialog.setButtonText(QMessageBox::No, UiText::text(QStringLiteral("action.cancel")));
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
-    UiDialogs::localizeMessageBox(&dialog);
-    if (dialog.exec() != QMessageBox::Yes || !maybeSaveBeforeContinue()) {
-        miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-            QStringLiteral("ui/chart_drop"), QStringLiteral("create_cancelled"));
-        return false;
-    }
+    // Two questions, asked one after the other rather than in one nested loop:
+    // first whether to create these charts, then — only if yes — whether the
+    // current document may be left behind. The second half runs from the first
+    // one's continuation, so nothing here blocks the shell.
+    requests->requestConfirmation(
+        UiText::text(QStringLiteral("drop_chart.preview.title")),
+        UiText::text(QStringLiteral("drop_chart.preview.message"))
+            .arg(candidates.size()) + preview.join(QLatin1Char('\n')),
+        UiText::text(QStringLiteral("drop_chart.preview.create")).arg(candidates.size()),
+        [this, candidates, dropTimer](bool accepted) mutable {
+            if (!accepted) {
+                miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+                    QStringLiteral("ui/chart_drop"), QStringLiteral("create_cancelled"));
+                return;
+            }
+            requestLeaveDocument([this, candidates, dropTimer](bool mayLeave) mutable {
+                if (!mayLeave) {
+                    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+                        QStringLiteral("ui/chart_drop"), QStringLiteral("create_cancelled"));
+                    return;
+                }
+                finishChartsFromAudioDrop(candidates, dropTimer);
+            });
+        });
+}
+
+void MainWindow::DocumentSection::finishChartsFromAudioDrop(
+    const QList<DroppedChartCandidate>& candidates, QElapsedTimer dropTimer)
+{
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/chart_drop"),
         QStringLiteral("create_confirmed count=%1").arg(candidates.size()));
@@ -427,37 +444,41 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
             QStringLiteral("chart_create_succeeded format=%1").arg(candidate.extension));
     }
 
-    if (created == 0) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_,
-            UiText::text(QStringLiteral("drop_chart.error.title")),
-            UiText::text(QStringLiteral("drop_chart.create_failed")));
-    } else if (candidates.size() == 1 && created == 1) {
-        miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-            QStringLiteral("ui/chart_drop"), QStringLiteral("switch_prompt_shown"));
-        const QMessageBox::StandardButton switchChoice = UiDialogs::showMessageBox(
-            QMessageBox::Question, &owner_, UiText::text(QStringLiteral("drop_chart.created_title")),
-            UiText::text(QStringLiteral("drop_chart.confirm_switch")).arg(created),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-        if (switchChoice == QMessageBox::Yes) {
+    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+    if (requests != nullptr) {
+        if (created == 0) {
+            requests->postNotice(miacode::v2::NoticeSeverity::Error,
+                UiText::text(QStringLiteral("drop_chart.error.title")),
+                UiText::text(QStringLiteral("drop_chart.create_failed")));
+        } else if (candidates.size() == 1 && created == 1) {
             miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-                QStringLiteral("ui/chart_drop"), QStringLiteral("switch_confirmed"));
-            owner_.openStartupTarget(candidates.first().targetDirectory);
-        } else {
-            miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-                QStringLiteral("ui/chart_drop"), QStringLiteral("switch_declined"));
+                QStringLiteral("ui/chart_drop"), QStringLiteral("switch_prompt_shown"));
+            const QString target = candidates.first().targetDirectory;
+            requests->requestConfirmation(
+                UiText::text(QStringLiteral("drop_chart.created_title")),
+                UiText::text(QStringLiteral("drop_chart.confirm_switch")).arg(created),
+                UiText::text(QStringLiteral("action.open")),
+                [this, target](bool accepted) {
+                    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+                        QStringLiteral("ui/chart_drop"),
+                        accepted ? QStringLiteral("switch_confirmed")
+                                 : QStringLiteral("switch_declined"));
+                    if (accepted) {
+                        owner_.openStartupTarget(target);
+                    }
+                });
+        } else if (failed > 0) {
+            requests->postNotice(miacode::v2::NoticeSeverity::Warning,
+                UiText::text(QStringLiteral("drop_chart.created_title")),
+                UiText::text(QStringLiteral("drop_chart.created_with_failures"))
+                    .arg(created).arg(failed));
         }
-    } else if (failed > 0) {
-        UiDialogs::showMessageBox(QMessageBox::Warning, &owner_,
-            UiText::text(QStringLiteral("drop_chart.created_title")),
-            UiText::text(QStringLiteral("drop_chart.created_with_failures"))
-                .arg(created).arg(failed));
     }
     owner_.statusBar()->showMessage(UiText::text(QStringLiteral("drop_chart.created_chart")).arg(created));
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/chart_drop"),
         QStringLiteral("batch_create_finished count=%1 elapsed_ms=%2")
             .arg(created).arg(dropTimer.elapsed()));
-    return created > 0;
 }
 
 void MainWindow::DocumentSection::onOpenFile()

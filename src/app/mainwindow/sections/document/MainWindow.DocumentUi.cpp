@@ -351,7 +351,7 @@ void MainWindow::DocumentSection::updateMetadataPageMode()
     ui_.metadataEmptyHintLabel_->hide();
 }
 
-bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
+bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId, bool alreadyConfirmed)
 {
     const SimaiDifficultyData* difficultyData = state_.document_.difficulty(difficultyId);
     if (!SimaiDocument::isDifficultyId(difficultyId) || difficultyData == nullptr) {
@@ -375,7 +375,7 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
         && currentDesigner.trimmed().isEmpty()
         && currentChart.trimmed().isEmpty();
 
-    if (!emptyDifficulty) {
+    if (!emptyDifficulty && !alreadyConfirmed) {
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Question,
             &owner_,

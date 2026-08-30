@@ -312,32 +312,45 @@ Item {
         }
     }
 
-    MessageDialog {
+    ChoiceDialog {
         id: fileErrorDialog
-        buttons: MessageDialog.Ok
+        objectName: "shellFileErrorDialog"
+        choices: [{ id: "ok", label: qsTr("确定"), role: "accept" }]
+        dismissChoiceId: "ok"
     }
 
     // These actions remain discoverable while their dedicated QML pages and
     // business APIs are pending. Keeping the explanation in the visible root
     // window gives keyboard and pointer users the same immediate feedback.
-    MessageDialog {
+    ChoiceDialog {
         id: unavailableFeatureDialog
+        objectName: "shellUnavailableFeatureDialog"
         property string featureName: ""
         title: qsTr("暂未更新支持")
-        text: qsTr("%1 尚未更新到 QML 界面。").arg(featureName)
-        informativeText: qsTr("入口会保留，功能完成后将在此处提供。")
-        buttons: MessageDialog.Ok
+        message: qsTr("%1 尚未更新到 QML 界面。").arg(featureName)
+        details: qsTr("入口会保留，功能完成后将在此处提供。")
+        choices: [{ id: "ok", label: qsTr("确定"), role: "accept" }]
+        dismissChoiceId: "ok"
     }
 
-    MessageDialog {
+    // The 打开文件 half of the unsaved-changes question. The window-close half
+    // asks the same three things through UiRequestService, because there the
+    // decision has to reach C++; here the whole flow is already QML-side.
+    ChoiceDialog {
         id: unsavedChangesDialog
+        objectName: "shellUnsavedChangesDialog"
         title: qsTr("未保存的更改")
-        text: qsTr("当前谱面有未保存的更改。")
-        informativeText: qsTr("保存更改后继续，或丢弃本次编辑。")
-        buttons: MessageDialog.Save | MessageDialog.Discard | MessageDialog.Cancel
+        message: qsTr("当前谱面有未保存的更改。")
+        details: qsTr("保存更改后继续，或丢弃本次编辑。")
+        choices: [
+            { id: "save", label: qsTr("保存"), role: "accept" },
+            { id: "discard", label: qsTr("放弃"), role: "destructive" },
+            { id: "cancel", label: qsTr("取消"), role: "reject" }
+        ]
+        dismissChoiceId: "cancel"
 
-        onButtonClicked: function(button, role) {
-            if (button === MessageDialog.Save) {
+        onChosen: function(choiceId) {
+            if (choiceId === "save") {
                 if (root.documentSession.currentFilePath.length === 0) {
                     root.continueAfterSaveAs = true
                     saveFileDialog.open()
@@ -349,7 +362,7 @@ Item {
                 }
                 return
             }
-            if (button === MessageDialog.Discard) {
+            if (choiceId === "discard") {
                 root.commands.discardDocumentChanges()
                 root.continuePendingAction()
                 return
@@ -382,7 +395,7 @@ Item {
 
         function onOperationFailed(title, message) {
             fileErrorDialog.title = title
-            fileErrorDialog.text = message
+            fileErrorDialog.message = message
             fileErrorDialog.open()
         }
     }
