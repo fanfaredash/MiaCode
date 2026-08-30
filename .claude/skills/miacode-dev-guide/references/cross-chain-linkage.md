@@ -368,6 +368,17 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
   `switchTo{Difficulty,Metadata,Welcome}Field` functions therefore call `onPageLeft()` UNCONDITIONALLY
   (it is idempotent — `setOnPage(false)` no-ops when not on the page). The old `== "latency"` guard
   silently skipped teardown on every sidebar exit — the historical SFX-volume leak (fixed 2026-06-01).
+- **QML `leaveOverlayPage` does not pre-write the destination key.** Widgets outline sets
+  `activeOutlineKey_ = "chart"` before `switchToDifficultyField`; QML resumes the chart through
+  that same function with the overlay key (`export` / `latency`) still set.
+  `switchToDifficultyField` remaps leftover overlay keys to `chart`. Without that remap,
+  `shellExportPageActive()` stays true after returning to the editor, so the fullscreen
+  button (and anything else bound to it) stays gated.
+- **Do not `QmlExportSession::leave()` before `switchToDifficultyField`.** That function
+  reads `exportPreviewAuditionActive_` (and the leftover overlay key) to restore playhead
+  and re-publish 代码跟随 after the timeline rebuild. `leave()` clears the audition flag;
+  calling it first made `restoreSwitchView` false, so the follow decoration never came
+  back. `leave()` runs after resume (and is idempotent if the field switch already ran it).
 - Review together on change: `src/audio/PreviewAudioSettings.*` (`makePreviewLatencyAuditionLevels`),
   `sections/preview/MainWindow.PreviewWarmupAndSettings.cpp` (`applyPreviewAudioSettingsToRuntime`),
   `src/tools/latency/LatencySandboxController.*`,
@@ -603,8 +614,11 @@ Two related rules:
 - The v2 decoration is read-only. It must never move the caret or selection, and its
   ensure-visible scroll must not either — that is the whole difference between it and the playing
   caret-move path.
-- Both routes are gated on the same difficulty + `documentRevision` identity as the document
-  projection, and both are refused on a hidden or metadata-mode editor.
+- Both routes are gated on the same difficulty + workspace `documentRevision`
+  (`appliedQmlWorkspaceRevision_`) as the document projection. Do not publish follow against
+  `timelineRevision_` / the validation snapshot revision: leaving the editor for export (or any
+  other field switch that rebuilds the timeline) advances that counter without a workspace
+  commit, and SourceEditor then drops every follow update for the rest of the session.
 
 An editor Ctrl/Command click is the mirror image: v1 resolves it in an event filter on the widget
 viewport (`MainWindow.WindowInteraction.cpp`), v2 in `SourceEditor.qml`'s `PointHandler` →

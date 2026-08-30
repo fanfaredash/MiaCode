@@ -1032,6 +1032,15 @@ void MainWindow::TimelineSection::dispatchTimelineSlowRefresh()
                     guard->seekPreviewDiscreteToSecond(restoreSecond, false);
                     guard->deferTimelineCursorBridgeUpdate(restoreSecond, false);
                 }
+                if (guard->state_.previewFollowEnabled_ && guard->hasActiveDifficulty()) {
+                    const double followSecond = guard->state_.qtPreviewPlaying_
+                        ? guard->currentPreviewAuthoritativeAudioClockSecond()
+                        : guard->state_.qtPreviewPauseSecond_;
+                    guard->syncEditorCursorToPreviewSecond(
+                        qMax(0.0, followSecond),
+                        true,
+                        !guard->state_.qtPreviewPlaying_);
+                }
                 guard->scheduleTimelineAnalysisRefresh(request, parseResult, previewState);
                 if (guard->state_.pendingPreviewPlaybackStart_
                     && !guard->state_.qtPreviewPlaying_

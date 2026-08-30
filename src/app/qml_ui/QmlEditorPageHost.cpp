@@ -317,9 +317,6 @@ bool QmlEditorPageHost::leaveOverlayPage()
 
     const bool leavingExport = activePageId_ == QLatin1String("export");
     if (leavingExport) {
-        if (backend_->qmlExportSession_ != nullptr) {
-            backend_->qmlExportSession_->leave();
-        }
         if (!activePageId_.isEmpty()) {
             activePageId_.clear();
             emit activePageIdChanged();
@@ -327,7 +324,14 @@ bool QmlEditorPageHost::leaveOverlayPage()
     } else {
         detachCurrentPage(true);
     }
-    return resumeChartOrMetadata();
+    // switchToDifficultyField captures exportPreviewAuditionActive_ to restore
+    // playhead and 代码跟随. leave() tears that flag down, so it runs after
+    // resume — and again here if resume never reached a field switch.
+    const bool resumed = resumeChartOrMetadata();
+    if (leavingExport && backend_->qmlExportSession_ != nullptr) {
+        backend_->qmlExportSession_->leave();
+    }
+    return resumed;
 }
 
 void QmlEditorPageHost::openMediaProcessingTools()

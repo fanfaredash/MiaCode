@@ -36,6 +36,7 @@ Rectangle {
     onNavigationVisibleChanged: {
         publishNavigationReadiness()
         scheduleEditorContext(false)
+        applyFollowProjection()
     }
 
     function publishNavigationReadiness() {
@@ -201,7 +202,7 @@ Rectangle {
         onTriggered: {
             if (!root.documentSession || root.metadataMode || !sourceArea)
                 return
-            const flickable = editorScroll.contentItem
+            const flickable = editorScroll
             if (!flickable)
                 return
             const target = sourceArea.y + sourceArea.cursorRectangle.y
@@ -290,7 +291,7 @@ Rectangle {
         onTriggered: {
             if (!root.followDecorationActive || !sourceArea)
                 return
-            const flickable = editorScroll.contentItem
+            const flickable = editorScroll
             if (!flickable)
                 return
             const rect = sourceArea.positionToRectangle(root.followDecorationCursor)
@@ -383,7 +384,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         lineCount: sourceArea.lineCount
         activeLine: root.activeLine
-        contentY: editorScroll.contentItem.contentY
+        contentY: editorScroll.contentY
         lineTops: root.lineTops
         rowHeight: root.codeLineHeight
         bookmarkedLines: root.bookmarks
@@ -462,7 +463,7 @@ Rectangle {
         controller: root.editorController
     }
 
-    ScrollView {
+    Flickable {
         id: editorScroll
         anchors.left: parent.left
         anchors.leftMargin: lineNumberGutter.width
@@ -470,6 +471,8 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         clip: true
+        flickableDirection: Flickable.VerticalFlick
+        ScrollBar.vertical: ScrollBar {}
         // TextEdit 与 QSyntaxHighlighter 组合在布局尺寸变化后存在不重绘的
         // 已知问题（QTBUG-58092 一类），窗口缩放后内容要等交互才刷新。
         // 视口尺寸变化时重新应用高亮，强制文本布局重绘。
@@ -484,14 +487,8 @@ Rectangle {
             refreshLineTops()
         }
         onHeightChanged: refreshHighlight()
-        ScrollBar.horizontal: ScrollBar {
-            policy: ScrollBar.AsNeeded
-        }
-        ScrollBar.vertical: ScrollBar {
-            policy: ScrollBar.AsNeeded
-        }
 
-        TextArea {
+        TextArea.flickable: TextArea {
             id: sourceArea
             objectName: "sourceArea"
             property bool syncingFromController: false
@@ -500,24 +497,40 @@ Rectangle {
             property int historyAnchor: 0
             property int historyPosition: 0
 
-            // 自动换行后内容宽度受视口宽度约束，若再用 contentWidth 参与
-            // 宽度绑定会形成 width -> contentWidth -> width 的循环。
-            width: editorScroll.availableWidth
-            height: Math.max(editorScroll.availableHeight, contentHeight + topPadding + bottomPadding)
+            wrapMode: TextArea.Wrap
             padding: 12
             color: Theme.colors.text.editor
             selectedTextColor: Theme.colors.text.editor
             selectionColor: Theme.colors.state.textSelection
-            // 自动换行：超宽行在视口内折行显示，避免依赖水平滚动查看长句。
-            wrapMode: TextEdit.Wrap
             inputMethodHints: root.editorController.halfWidthInputEnabled
                 ? Qt.ImhLatinOnly : Qt.ImhNone
             persistentSelection: true
             selectByMouse: true
             font: Theme.codeFont
 
-            background: Rectangle {
-                color: Theme.colors.background.editor
+            background: Item {
+                Rectangle {
+                    anchors.fill: parent
+                    color: Theme.colors.background.editor
+                }
+                // Preview follow decoration: the playhead's token span. Drawn in
+                // the background so it sits under the glyphs and never competes
+                // with the real selection.
+                Rectangle {
+                    readonly property rect startRect: sourceArea.positionToRectangle(root.followDecorationStart)
+                    readonly property rect endRect: sourceArea.positionToRectangle(root.followDecorationEnd)
+                    visible: root.followDecorationActive && root.followDecorationEnd > root.followDecorationStart
+                    x: startRect.x
+                    y: startRect.y - editorScroll.contentY
+                    // A span that wraps or crosses lines falls back to the rest of
+                    // the first line rather than painting a misleading rectangle.
+                    width: endRect.y > startRect.y
+                        ? Math.max(0, sourceArea.width - sourceArea.rightPadding - startRect.x)
+                        : Math.max(0, endRect.x - startRect.x)
+                    height: Math.max(startRect.height, root.codeLineHeight)
+                    color: Theme.colors.state.textSelection
+                    opacity: 0.45
+                }
             }
 
             Rectangle {
@@ -526,26 +539,6 @@ Rectangle {
                 width: sourceArea.width - sourceArea.leftPadding - sourceArea.rightPadding
                 height: root.codeLineHeight
                 color: Theme.colors.state.lineHighlight
-                z: -1
-            }
-
-            // Preview follow decoration: the playhead's token span. Drawn under
-            // the text like the current-line highlight so it never competes
-            // with the real selection.
-            Rectangle {
-                readonly property rect startRect: sourceArea.positionToRectangle(root.followDecorationStart)
-                readonly property rect endRect: sourceArea.positionToRectangle(root.followDecorationEnd)
-                visible: root.followDecorationActive && root.followDecorationEnd > root.followDecorationStart
-                x: startRect.x
-                y: startRect.y
-                // A span that wraps or crosses lines falls back to the rest of
-                // the first line rather than painting a misleading rectangle.
-                width: endRect.y > startRect.y
-                    ? Math.max(0, sourceArea.width - sourceArea.rightPadding - startRect.x)
-                    : Math.max(0, endRect.x - startRect.x)
-                height: Math.max(startRect.height, root.codeLineHeight)
-                color: Theme.colors.state.textSelection
-                opacity: 0.45
                 z: -1
             }
 
@@ -735,7 +728,7 @@ Rectangle {
                 controller: root.editorController
                 // The popup lives in the window overlay, so it cannot observe
                 // the editor scrolling underneath it on its own.
-                editorScrollY: editorScroll.contentItem.contentY
+                editorScrollY: editorScroll.contentY
             }
 
             QmlEditorInputBridge {
@@ -856,12 +849,6 @@ Rectangle {
                     sourceArea.text, tx.touchTokenStart)
             }
         }
-    }
-
-    Binding {
-        target: editorScroll.contentItem
-        property: "boundsBehavior"
-        value: Flickable.StopAtBounds
     }
 
     Component.onCompleted: {

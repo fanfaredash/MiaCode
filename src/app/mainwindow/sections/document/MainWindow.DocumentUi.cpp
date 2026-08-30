@@ -1238,17 +1238,21 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     // for it stops playback with keepPosition=true, so qtPreviewPauseSecond_ still
     // holds the last position — carry it back too. Detect the source page from the
     // stack (currentWidget is still the page we're LEAVING — this function switches
-    // it to chartPage_ later): activeOutlineKey_ is useless here because the sidebar
-    // click handler already overwrote it with the destination ("chart") before
-    // calling us. A stale cross-file value is guarded against by loadDocument
-    // resetting qtPreviewPauseSecond_ to 0.
+    // it to chartPage_ later). Widgets outline writes the destination key before
+    // calling us; QML leaveOverlayPage does not, so activeOutlineKey_ can still be
+    // "export" or "latency" here and cannot be used as the source. A stale
+    // cross-file value is guarded against by loadDocument resetting
+    // qtPreviewPauseSecond_ to 0.
     const bool leavingMetadataPage = ui_.editorStack_ != nullptr
         && ui_.metadataPage_ != nullptr
         && ui_.editorStack_->currentWidget() == ui_.metadataPage_;
+    const bool leavingOverlayField = state_.activeOutlineKey_ == QLatin1String("export")
+        || state_.activeOutlineKey_ == QLatin1String("latency");
     const bool restoreSwitchView = owner_.hasActiveDifficulty()
         || state_.latencySandboxAuditionActive_
         || state_.exportPreviewAuditionActive_
-        || leavingMetadataPage;
+        || leavingMetadataPage
+        || leavingOverlayField;
     const double restorePreviewSecond = restoreSwitchView
         ? qMax(0.0, state_.qtPreviewPlaying_
               ? owner_.currentPreviewAuthoritativeAudioClockSecond()
@@ -1295,8 +1299,15 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     state_.pendingPreviewPlaybackSecond_ = 0.0;
     state_.activeDifficultyId_ = difficultyId;
     state_.projectLastOpenedDifficultyId_ = difficultyId;
-    if (state_.activeOutlineKey_.isEmpty() || state_.activeOutlineKey_ == "metadata" || state_.activeOutlineKey_ == "welcome") {
-        state_.activeOutlineKey_ = "chart";
+    // Widgets outline already wrote "chart". QML leaveOverlayPage resumes through
+    // this function with the overlay key still set, and shellExportPageActive()
+    // is that key — leftover "export" keeps the fullscreen button hidden.
+    if (state_.activeOutlineKey_.isEmpty()
+        || state_.activeOutlineKey_ == QLatin1String("metadata")
+        || state_.activeOutlineKey_ == QLatin1String("welcome")
+        || state_.activeOutlineKey_ == QLatin1String("export")
+        || state_.activeOutlineKey_ == QLatin1String("latency")) {
+        state_.activeOutlineKey_ = QStringLiteral("chart");
     }
     populateDifficultyPage(difficultyId);
     if (owner_.editorSection_ != nullptr) {
@@ -1360,6 +1371,9 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }
     setChartBottomTabsMode(true);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+    }
     // Entering a difficulty re-asserts the correct preview levels. With the latency
     // audition torn down above (onPageLeft), the mode is Normal, so the single
     // mode-aware dispatch entry pushes the user's real mix (see

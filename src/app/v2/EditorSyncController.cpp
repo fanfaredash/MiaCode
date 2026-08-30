@@ -125,6 +125,9 @@ void EditorSyncController::setEditorReadiness(
     }
     if (changed) {
         scheduleEditorContextDelivery();
+        if (editorVisible_ && !metadataMode_) {
+            scheduleFollowDelivery();
+        }
     }
 }
 

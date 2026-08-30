@@ -137,6 +137,8 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
         QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp"));
     const QString timelineFlow = sourceFile(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp"));
+    const QString followSync = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
     const QString validationFlow = sourceFile(
         QStringLiteral("src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp"));
 
@@ -174,7 +176,10 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
         && require(documentModel.contains(
                        QStringLiteral("publishWorkspaceCommit(WorkspaceCommitKind::Incremental);"))
                        && timelineFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0"))
-                       && validationFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0")),
+                       && validationFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ > 0"))
+                       && followSync.contains(
+                           QStringLiteral("follow.revision = owner_.appliedQmlWorkspaceRevision_"))
+                       && !followSync.contains(QStringLiteral("documentValidationSnapshot()")),
                    QStringLiteral("initial, navigation, and follow identities stay on the committed workspace revision"), err)
         && require(fileFlow.contains(QStringLiteral("owner_.qmlDocumentSaveHandler_(path)")),
                    QStringLiteral("legacy close-save routing delegates durable writes to the workspace file service"), err);

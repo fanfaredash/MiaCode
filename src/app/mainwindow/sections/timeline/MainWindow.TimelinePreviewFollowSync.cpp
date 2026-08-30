@@ -73,10 +73,14 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
 
     QElapsedTimer timer;
     timer.start();
-    const DocumentValidationSnapshot snapshot = owner_.documentValidationSnapshot();
     miacode::v2::EditorFollowState follow;
     follow.difficultyId = owner_.activeDifficultyId();
-    follow.revision = snapshot.revision;
+    // Same identity requestEditorNavigation publishes, and the one SourceEditor
+    // compares against. The validation snapshot revision is timelineRevision_,
+    // a different counter: switching away and back (export page) advances it
+    // without a matching workspace commit, after which applyFollowProjection
+    // drops every follow update for the rest of the session.
+    follow.revision = owner_.appliedQmlWorkspaceRevision_;
     follow.start = binding.span.startPosition;
     follow.end = binding.span.endPositionExclusive;
     follow.caret = binding.span.cursorPosition;
