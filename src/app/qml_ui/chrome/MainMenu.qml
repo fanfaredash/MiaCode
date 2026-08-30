@@ -238,8 +238,15 @@ Item {
                 enabled: root.commandsEnabled
                 onAboutToShow: root.recentDocuments = root.documentSession.recentDocuments()
 
+                // The empty-state row is a model entry, not a hidden sibling.
+                // A Menu lays out its statically declared children before a
+                // Repeater's, so a placeholder that merely set visible:false
+                // still held a row — at the TOP of the list, above the first
+                // real chart.
                 Repeater {
-                    model: root.recentDocuments
+                    model: root.recentDocuments.length > 0
+                           ? root.recentDocuments
+                           : [{ label: qsTr("暂无最近文档"), path: "" }]
                     delegate: AppMenuItem {
                         required property var modelData
                         // The chart's folder name, not its path: every path here
@@ -247,13 +254,12 @@ Item {
                         // the full one is both unreadable and too wide for a menu.
                         text: modelData.label
                         tooltip: modelData.path
-                        onTriggered: root.commands.openRecentRequested(modelData.path)
+                        enabled: modelData.path.length > 0
+                        onTriggered: {
+                            if (modelData.path.length > 0)
+                                root.commands.openRecentRequested(modelData.path)
+                        }
                     }
-                }
-                AppMenuItem {
-                    visible: root.recentDocuments.length === 0
-                    enabled: false
-                    text: qsTr("暂无最近文档")
                 }
             }
             AppMenu {
@@ -263,18 +269,19 @@ Item {
                 onAboutToShow: root.backupDocuments = root.documentSession.backupDocuments()
 
                 Repeater {
-                    model: root.backupDocuments
+                    model: root.backupDocuments.length > 0
+                           ? root.backupDocuments
+                           : [{ label: qsTr("暂无备份"), path: "" }]
                     delegate: AppMenuItem {
                         required property var modelData
                         text: modelData.label
                         tooltip: modelData.path
-                        onTriggered: root.commands.restoreBackupRequested(modelData.path)
+                        enabled: modelData.path.length > 0
+                        onTriggered: {
+                            if (modelData.path.length > 0)
+                                root.commands.restoreBackupRequested(modelData.path)
+                        }
                     }
-                }
-                AppMenuItem {
-                    visible: root.backupDocuments.length === 0
-                    enabled: false
-                    text: qsTr("暂无备份")
                 }
             }
             AppMenuAction {
