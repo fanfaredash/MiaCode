@@ -266,7 +266,11 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       `updateDirtyState()` 在每次 v2 提交经 `applyCommittedQmlDocument` 时启动计时器，
       快照文本取自镜像文档（`editorText()` 现在读的是文档而不是已删除的隐藏编辑器），
       所以内容正确。异常退出后的自动询问也已于 2026-08-29 改走 `UiRequestService`。
-      **缺的是手动那一半**：v1 的 `refreshRestoreBackupMenu()` 是挂在隐藏 `MainWindow` 上的
+      **更正（2026-08-30，所有者报告后复核）**：这条只对了一半。2 分钟的例行快照确实在跑，
+      但 **2 秒防抖的 `autosaveIdleTimer_` 与崩溃快照投递都挂在 `markCurrentFieldDirty()` 上，
+      而它的调用方全是隐藏 v1 输入框的 `textChanged`，v2 从不触发**——
+      所以"每次编辑的安全网"在 v2 上不存在。详见 TODO §7.-2。
+      **缺的还有手动那一半**：v1 的 `refreshRestoreBackupMenu()` 是挂在隐藏 `MainWindow` 上的
       `QMenu`，v2 没有任何地方能列出并选择历史备份。
 
 ## 6. 所有者已拍板（2026-08-30）
