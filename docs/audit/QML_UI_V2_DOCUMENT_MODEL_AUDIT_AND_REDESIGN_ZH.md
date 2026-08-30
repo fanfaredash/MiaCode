@@ -144,7 +144,11 @@ v2 的 文件 菜单只有 打开 / 保存 / 另存为 / 退出。**没有 新�
 - 切换难度：**不再清空**，只是换一条历史。切回来撤销仍然可用。
 - 文档被替换（打开别的文件、恢复备份）：**全部清空**——那是另一份文档的历史。
 - 关闭标签：连同它的历史一起丢弃。
-- 每条历史设上限（建议 200 步），避免长会话无限增长。
+- 每条历史设上限。**步的存储形式决定了这个上限该是多少**：最初每步存改动前后**两份全文**，
+  于是敲一个字符就要两倍谱面大小，几个难度开着就是几十 MB，上限只能压到 200。
+  改成只存**这一次改动本身**（`start` + 被替换文本 + 新文本）后，一步的代价等于这次编辑的大小，
+  上限因此可以是一个「谁会往回翻这么多」的数字而不是内存天花板——现在是 **5000**。
+  撤销本来就在应用时把那一对全文归约成同一个 span，直接记录它并没有丢任何信息。
 
 这去掉了 2.3 的整类问题：不再有"身份变了要记得清"的时序依赖，
 **因为再也不需要清**——取历史时就是按当前视图的 key 取。
@@ -215,6 +219,24 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
    `unsavedChangesDialog` 已删除，打开 / 打开最近 / 关闭文档 / 关窗 / 音频拖放建谱
    全部走 `MainWindow::requestLeaveDocument`。
 
+### 3.3.1 已修：scope 不能来自绑定（2026-08-30 用户报告）
+
+每视图历史落地后仍出现「在某难度的修改能在另一个难度 Ctrl+Z」。原因是命名 scope 的方式：
+
+`QmlDocumentModel::emitDocumentStateChanged()` 先更新内部状态，然后**依次**发出
+`chartTextChanged` → `currentDifficultyChanged`。SourceEditor 原本用一个绑定属性
+（`readonly property string historyScopeId: ... currentDifficultyId`）来命名 scope，
+而绑定要等 `currentDifficultyChanged` 才更新——所以**新难度的正文到达时，scope 名还是旧难度**，
+之后每一次输入都记进了被离开的那个难度的历史里，Ctrl+Z 于是重放了另一个难度的编辑。
+
+改为在需要时**直接读属性**（`currentHistoryScopeId()`）：getter 读的是已经更新过的状态，
+不受信号顺序影响。另外 `onDocumentStateChanged` 也会重申一次 scope，覆盖那些
+「切了难度但没有文本变化」的路径。
+
+**测试覆盖的诚实说明**：spec 里的假会话是普通 QML 属性，赋值即通知，
+无法复现「状态已新、通知未到」这个真实顺序——只有真正的 `QmlDocumentModel` 会那样发信号。
+因此这一条钉的是**调用形式**（必须是函数读取，不得是绑定属性），不是竞态本身。
+
 ## 7. 本轮新发现，尚未处理
 
 - [ ] **未命名文档选「保存」会掉进 Widgets 的 `QFileDialog`**（2026-08-30 发现）。
@@ -226,6 +248,12 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       这会把 `applyUnsavedChangesChoice` 从「返回 bool」改成续延式，
       连带 `maybeSaveBeforeContinue` 的同步版也要重新安排。**这是下一项。**
 - [ ] **新建文档**在 v2 仍无入口（见上）。
+- [ ] **自动保存的「恢复备份」在 v2 没有入口**（2026-08-30 查证）。自动保存本身**是在跑的**：
+      `updateDirtyState()` 在每次 v2 提交经 `applyCommittedQmlDocument` 时启动计时器，
+      快照文本取自镜像文档（`editorText()` 现在读的是文档而不是已删除的隐藏编辑器），
+      所以内容正确。异常退出后的自动询问也已于 2026-08-29 改走 `UiRequestService`。
+      **缺的是手动那一半**：v1 的 `refreshRestoreBackupMenu()` 是挂在隐藏 `MainWindow` 上的
+      `QMenu`，v2 没有任何地方能列出并选择历史备份。
 
 ## 6. 所有者已拍板（2026-08-30）
 

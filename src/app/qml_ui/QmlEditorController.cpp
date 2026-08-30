@@ -12,9 +12,10 @@
 namespace miacode::qml_ui {
 namespace {
 
-// Per view. Each step holds the source before and after it, so this is a memory
-// bound as much as a usability one.
-constexpr int kMaxHistorySteps = 200;
+// Per view. A step now costs the size of the edit that made it, not two copies
+// of the chart, so this is a "how far back would anyone reach" number rather
+// than a memory ceiling.
+constexpr int kMaxHistorySteps = 5000;
 
 
 miacode::editor::SimaiTextEditResult untouched(const QString& text, int anchor, int position)
@@ -518,8 +519,12 @@ void QmlEditorController::recordQmlTransaction(const QString& before, const QStr
                                                int afterAnchor, int afterPosition)
 {
     if (before == after) return;
+    const TextDelta delta = computeTextDelta(before, after);
     QmlHistory& history = activeHistory();
-    history.undo.append({before, after, beforeAnchor, beforePosition, afterAnchor, afterPosition});
+    history.undo.append({delta.start,
+                         before.mid(delta.start, delta.fromEnd - delta.start),
+                         after.mid(delta.start, delta.toEnd - delta.start),
+                         beforeAnchor, beforePosition, afterAnchor, afterPosition});
     // Every step keeps two full copies of the source, so an unbounded stack is
     // an unbounded leak over a long session. The oldest step is the one the
     // user is least likely to reach for.
@@ -529,20 +534,19 @@ void QmlEditorController::recordQmlTransaction(const QString& before, const QStr
     history.redo.clear();
     setUndoAvailability(true, false);
 }
-QVariantMap QmlEditorController::restoreTransaction(const QString& current, const QString& restored) const
+QVariantMap QmlEditorController::restoreTransaction(
+    int start, const QString& replaced, const QString& replacement) const
 {
-    const TextDelta delta = computeTextDelta(current, restored);
-    const QString replacement = restored.mid(delta.start, delta.toEnd - delta.start);
     // The caret lands on the restored text and selects it, so the step is
     // visible. Undoing an insertion restores nothing, which collapses the
     // selection at the point the inserted text used to begin.
     return {{QStringLiteral("consumed"), true},
             {QStringLiteral("hasEdit"), true},
-            {QStringLiteral("replacementStart"), delta.start},
-            {QStringLiteral("replacementEnd"), delta.fromEnd},
+            {QStringLiteral("replacementStart"), start},
+            {QStringLiteral("replacementEnd"), start + replaced.size()},
             {QStringLiteral("replacementText"), replacement},
-            {QStringLiteral("anchor"), delta.start},
-            {QStringLiteral("position"), delta.start + replacement.size()}};
+            {QStringLiteral("anchor"), start},
+            {QStringLiteral("position"), start + replacement.size()}};
 }
 QVariantMap QmlEditorController::undoQmlTransaction()
 {
@@ -551,7 +555,7 @@ QVariantMap QmlEditorController::undoQmlTransaction()
     const auto entry = history.undo.takeLast();
     history.redo.append(entry);
     setUndoAvailability(!history.undo.isEmpty(), true);
-    return restoreTransaction(entry.after, entry.before);
+    return restoreTransaction(entry.start, entry.inserted, entry.removed);
 }
 QVariantMap QmlEditorController::redoQmlTransaction()
 {
@@ -560,7 +564,7 @@ QVariantMap QmlEditorController::redoQmlTransaction()
     const auto entry = history.redo.takeLast();
     history.undo.append(entry);
     setUndoAvailability(true, !history.redo.isEmpty());
-    return restoreTransaction(entry.before, entry.after);
+    return restoreTransaction(entry.start, entry.removed, entry.inserted);
 }
 
 } // namespace miacode::qml_ui

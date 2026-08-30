@@ -104,18 +104,28 @@ Rectangle {
     // one per view, so switching difficulty changes the name and disturbs
     // nothing — a history is only discarded when its tab closes or the whole
     // document is replaced.
-    readonly property string historyScopeId: root.metadataMode
-        ? "metadata"
-        : "difficulty:" + root.documentSession.currentDifficultyId
+    //
+    // A function, not a bound property, and this is the whole point. The
+    // session updates its state and then emits, in order: chartTextChanged
+    // first, currentDifficultyChanged after. A binding on currentDifficultyId
+    // is therefore still holding the OUTGOING difficulty at the moment the
+    // incoming text arrives — so naming the scope from a binding named the
+    // difficulty being left, and every edit typed afterwards was recorded into
+    // its history. Ctrl+Z in one difficulty then replayed another's edits.
+    // Reading the property directly gets the value that is already correct.
+    function currentHistoryScopeId() {
+        return root.metadataMode
+            ? "metadata"
+            : "difficulty:" + root.documentSession.currentDifficultyId
+    }
 
     function syncTextFromController() {
         const controllerText = root.metadataMode
             ? root.documentSession.metadataSourceText
             : root.documentSession.chartText
-        // Named before the text moves, and read straight off the session rather
-        // than waiting for a signal: the swap below must not be able to land a
-        // recording in the outgoing view's history.
-        root.editorController.setHistoryScope(root.historyScopeId)
+        // Named before the text moves: the swap below must not be able to land
+        // a recording in the outgoing view's history.
+        root.editorController.setHistoryScope(root.currentHistoryScopeId())
         if (sourceArea.text !== controllerText) {
             root.beginProgrammaticSelection()
             sourceArea.syncingFromController = true
@@ -893,6 +903,10 @@ Rectangle {
                 root.documentSession.documentRevision, sourceArea.text.length, root.metadataMode)
         }
         function onDocumentStateChanged() {
+            // Every commit re-asserts the scope. syncTextFromController already
+            // names it on the paths that move text; this covers the ones that
+            // change which difficulty is active without changing any text.
+            root.editorController.setHistoryScope(root.currentHistoryScopeId())
             root.editorController.setDocumentContextForQml(
                 root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
             root.publishNavigationReadiness()

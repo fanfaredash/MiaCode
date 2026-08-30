@@ -1119,6 +1119,24 @@ int main(int argc, char** argv)
     // row is already the one being edited, which is what `foldsBookmarks`
     // decides; the earlier design put a separate chevron button on the right
     // and read backwards, so its return would be a regression, not a variant.
+    // The scope an edit is recorded under must be read, not bound. The session
+    // updates its state and then emits chartTextChanged before
+    // currentDifficultyChanged, so a binding on currentDifficultyId is still
+    // holding the outgoing difficulty when the incoming text arrives — naming
+    // the scope from one recorded every later edit into the difficulty being
+    // left, and Ctrl+Z replayed another difficulty's edits. Only the real
+    // QmlDocumentModel emits in that order, so this pins the call rather than
+    // reproducing the race.
+    QFile sourceEditorFile(QStringLiteral("src/app/qml_ui/editor/SourceEditor.qml"));
+    expect(sourceEditorFile.open(QIODevice::ReadOnly),
+           QStringLiteral("SourceEditor QML is available to the history scope test"), out, &failed);
+    const QString sourceEditorSource = QString::fromUtf8(sourceEditorFile.readAll());
+    expect(sourceEditorSource.contains(QStringLiteral("function currentHistoryScopeId()"))
+               && sourceEditorSource.contains(
+                      QStringLiteral("setHistoryScope(root.currentHistoryScopeId())"))
+               && !sourceEditorSource.contains(QStringLiteral("property string historyScopeId")),
+           QStringLiteral("the undo scope is read when it is needed, never bound"), out, &failed);
+
     expect(sidebarSource.contains(QStringLiteral("foldsBookmarks"))
                && sidebarSource.contains(QStringLiteral("readonly property bool foldsBookmarks: activeEditor"))
                && !sidebarSource.contains(QStringLiteral("id: foldButton")),
