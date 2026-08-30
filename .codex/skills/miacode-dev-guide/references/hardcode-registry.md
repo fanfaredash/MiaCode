@@ -117,6 +117,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: v1/v2 shared video-export resolution presets, audio-bitrate options, selectable FPS values, and the `0.01s` zero-start full-range epsilon
   - Current tuning note: FPS exposes `30`, `60`, and `120`; audio bitrate exposes `128`, `160`, `192`, `256`, and `320` kbps. Stored/custom FPS snaps to the nearest option with halfway values choosing the higher option; audio bitrate snaps to the nearest option with the earlier/lower option winning ties.
   - Rule: keep these in the UI-independent settings contract because both export UIs and persisted preference migration must agree
+- `src/app/qml_ui/export/QmlExportSession.cpp`
+  - Owns: v2 single-export's `5.0s` minimum range duration policy.
+  - Current tuning note: the effective minimum is `min(5.0s, chart duration)`, so a shorter chart may only select its full range. `QmlExportSession::minimumExportRangeSeconds` exposes this policy to QML; do not repeat the literal in `ExportRangeSelector`.
+  - Rule: keep this v2 interaction floor with the range owner unless v1 is explicitly brought under the same constraint; range changes must use the session's atomic start/end setter.
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: v1-only export-dialog sizing and preview control constants
   - Rule: keep presentation constants local to v1; do not move them into the shared settings backend

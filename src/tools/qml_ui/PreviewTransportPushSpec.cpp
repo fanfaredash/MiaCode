@@ -98,18 +98,57 @@ int main(int argc, char** argv)
                QStringLiteral("setPreviewPlayingFlag announces the flip"), out, &failed);
     }
 
-    // 3. 移动播放头的那个函数会广播出去。
-    const QString previewTick = readSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTick.cpp"));
-    const int applyAt = previewTick.indexOf(
-        QStringLiteral("void MainWindow::TimelineSection::applyQtPreviewPosition"));
-    expect(applyAt >= 0, QStringLiteral("applyQtPreviewPosition exists"), out, &failed);
-    if (applyAt >= 0) {
-        const int nextFunctionAt = previewTick.indexOf(QStringLiteral("\nvoid MainWindow::"), applyAt + 1);
-        const QString applyBody = previewTick.mid(
-            applyAt, nextFunctionAt > applyAt ? nextFunctionAt - applyAt : -1);
-        expect(applyBody.contains(QStringLiteral("emit owner_.shellPreviewPlayheadChanged()")),
-               QStringLiteral("applyQtPreviewPosition announces the playhead"), out, &failed);
+    // 3. 发布播放头的那**一个**地方会广播出去。
+    //
+    // 它是 updatePreviewSliderPosition 而不是 applyQtPreviewPosition：后者只是
+    // 众多调用方之一，而导出片头的 lead-in 会移动播放头却从不经过它——那正是
+    // 「片头在放、QML 滑块停在 0」的成因。
+    const QString layoutUi = readSource(
+        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelineLayoutUI.cpp"));
+    const int publishAt = layoutUi.indexOf(
+        QStringLiteral("void MainWindow::TimelineSection::updatePreviewSliderPosition"));
+    expect(publishAt >= 0, QStringLiteral("updatePreviewSliderPosition exists"), out, &failed);
+    if (publishAt >= 0) {
+        const int nextFunctionAt = layoutUi.indexOf(QStringLiteral("\nvoid MainWindow::"), publishAt + 1);
+        const QString publishBody = layoutUi.mid(
+            publishAt, nextFunctionAt > publishAt ? nextFunctionAt - publishAt : -1);
+        const int emitAt = publishBody.indexOf(
+            QStringLiteral("emit owner_.shellPreviewPlayheadChanged()"));
+        const int guardAt = publishBody.indexOf(QStringLiteral("ui_.previewSlider_ == nullptr"));
+        expect(emitAt >= 0, QStringLiteral("updatePreviewSliderPosition announces the playhead"),
+               out, &failed);
+        // Before the guard: the guard is about a v1 widget that may be gone.
+        expect(emitAt >= 0 && guardAt > emitAt,
+               QStringLiteral("it announces before the v1 widget guard"), out, &failed);
+    }
+
+    // 4. 片头 lead-in 走的是同一个发布点。
+    const QString introRegion = readSource(
+        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewIntroRegion.cpp"));
+    const int tickAt = introRegion.indexOf(
+        QStringLiteral("void MainWindow::TimelineSection::tickExportIntroLeadIn"));
+    expect(tickAt >= 0, QStringLiteral("tickExportIntroLeadIn exists"), out, &failed);
+    if (tickAt >= 0) {
+        const int nextFunctionAt = introRegion.indexOf(QStringLiteral("\nbool MainWindow::"), tickAt + 1);
+        const QString tickBody = introRegion.mid(
+            tickAt, nextFunctionAt > tickAt ? nextFunctionAt - tickAt : -1);
+        expect(tickBody.contains(QStringLiteral("updatePreviewSliderPosition(")),
+               QStringLiteral("the export intro publishes its playhead the same way"), out, &failed);
+    }
+
+    // 5. 播放/暂停呈现也会广播——片头 lead-in 不写 qtPreviewPlaying_，所以单一写入者
+    //    那条播报覆盖不到它。
+    const QString editorState = readSource(
+        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentEditorState.cpp"));
+    const int pauseAt = editorState.indexOf(
+        QStringLiteral("void MainWindow::DocumentSection::updatePauseButtonAppearance"));
+    expect(pauseAt >= 0, QStringLiteral("updatePauseButtonAppearance exists"), out, &failed);
+    if (pauseAt >= 0) {
+        const int nextFunctionAt = editorState.indexOf(QStringLiteral("\nvoid MainWindow::"), pauseAt + 1);
+        const QString pauseBody = editorState.mid(
+            pauseAt, nextFunctionAt > pauseAt ? nextFunctionAt - pauseAt : -1);
+        expect(pauseBody.contains(QStringLiteral("shellPresentationChanged()")),
+               QStringLiteral("the play/pause presentation announces itself"), out, &failed);
     }
 
     // 4. QML 侧接收推送，且不再自己采样。

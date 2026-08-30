@@ -31,6 +31,12 @@ inline constexpr auto& kResolutionPresets = miacode::video_export::kVideoExportR
 inline constexpr auto& kFpsOptions = miacode::video_export::kVideoExportFpsOptions;
 inline constexpr auto& kAudioBitrateOptions =
     miacode::video_export::kVideoExportAudioBitrateOptionsKbps;
+constexpr double kMinimumExportRangeSeconds = 5.0;
+
+double minimumExportRangeSecondsForChart(double chartDurationSeconds)
+{
+    return qMin(kMinimumExportRangeSeconds, qMax(0.0, chartDurationSeconds));
+}
 
 }  // namespace
 
@@ -226,6 +232,11 @@ QString QmlExportSession::introSoundImportLabel() const
 double QmlExportSession::exportEndSeconds() const
 {
     return task_.exportStartSeconds + qMax(0.0, task_.contentDurationSeconds);
+}
+
+double QmlExportSession::minimumExportRangeSeconds() const
+{
+    return minimumExportRangeSecondsForChart(chartDurationSeconds_);
 }
 
 IntroBannerSpec QmlExportSession::previewIntroSpec() const
@@ -802,6 +813,21 @@ void QmlExportSession::setExportEndToCurrentPreview()
     setExportEndSeconds(backend_->currentPreviewAuthoritativeAudioClockSecond());
 }
 
+void QmlExportSession::setExportRangeSeconds(double start, double end)
+{
+    if (!qIsFinite(start) || !qIsFinite(end)) {
+        return;
+    }
+    const double minimumDuration = minimumExportRangeSeconds();
+    const double boundedStart = qBound(0.0, start, qMax(0.0, chartDurationSeconds_ - minimumDuration));
+    const double boundedEnd = qBound(boundedStart + minimumDuration, end, chartDurationSeconds_);
+    task_.exportStartSeconds = boundedStart;
+    task_.contentDurationSeconds = qMax(0.0, boundedEnd - boundedStart);
+    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
+    emit rangeChanged();
+    emit introChanged();
+}
+
 QString QmlExportSession::setExportStartText(const QString& text)
 {
     double seconds = 0.0;
@@ -1313,14 +1339,9 @@ void QmlExportSession::setExportStartSeconds(double value)
     if (!qIsFinite(value)) {
         return;
     }
-    const double clamped = qBound(0.0, value, chartDurationSeconds_);
-    task_.exportStartSeconds = clamped;
-    if (task_.exportStartSeconds + task_.contentDurationSeconds > chartDurationSeconds_) {
-        task_.contentDurationSeconds = qMax(0.0, chartDurationSeconds_ - task_.exportStartSeconds);
-    }
-    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
-    emit rangeChanged();
-    emit introChanged();
+    const double end = exportEndSeconds();
+    const double maximumStart = qMax(0.0, end - minimumExportRangeSeconds());
+    setExportRangeSeconds(qBound(0.0, value, maximumStart), end);
 }
 
 void QmlExportSession::setExportEndSeconds(double value)
@@ -1328,10 +1349,9 @@ void QmlExportSession::setExportEndSeconds(double value)
     if (!qIsFinite(value)) {
         return;
     }
-    const double end = qBound(task_.exportStartSeconds, value, chartDurationSeconds_);
-    task_.contentDurationSeconds = qMax(0.0, end - task_.exportStartSeconds);
-    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
-    emit rangeChanged();
+    const double start = task_.exportStartSeconds;
+    const double minimumEnd = start + minimumExportRangeSeconds();
+    setExportRangeSeconds(start, qBound(minimumEnd, value, chartDurationSeconds_));
 }
 
 void QmlExportSession::setBatchOutputDirectory(const QString& path)

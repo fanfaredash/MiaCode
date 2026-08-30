@@ -68,6 +68,16 @@ void MainWindow::DocumentSection::setMetadataExtraText(const QString& text)
 
 void MainWindow::DocumentSection::updatePauseButtonAppearance()
 {
+    // The play/pause presentation changed, and the QML transport's button reads
+    // the same condition this one does — qtPreviewPlaying_ OR the export
+    // intro's lead-in. setPreviewPlayingFlag announces the first; nothing
+    // announced the second, so the intro played with the transport still
+    // showing a play button. Announced before the widget guard, because a v1
+    // action that no longer exists is not a reason to leave the shell stale,
+    // and queued for the same reason that writer is: callers reach here from
+    // the middle of a transition.
+    QMetaObject::invokeMethod(
+        &owner_, [this]() { emit owner_.shellPresentationChanged(); }, Qt::QueuedConnection);
     if (ui_.pausePreviewAction_ == nullptr) {
         return;
     }

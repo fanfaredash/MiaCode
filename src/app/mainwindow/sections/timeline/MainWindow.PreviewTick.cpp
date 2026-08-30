@@ -74,11 +74,8 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     if (!suppressPausedSecondaryUi && !state_.qtPreviewPlaying_) {
         owner_.refreshPreviewStageMediaRouteDebugState(true);
     }
+    // Publishes to the v1 slider and the v2 transport both.
     updatePreviewSliderPosition(second);
-    // The v2 transport's twin of the line above. Its thumb used to be sampled
-    // on a timer; telling it here means it is exact, and that a seek while
-    // paused moves it too.
-    emit owner_.shellPreviewPlayheadChanged();
     if (!state_.qtPreviewPlaying_ && !suppressPausedSecondaryUi) {
         updatePreviewObjectStats(second);
     }

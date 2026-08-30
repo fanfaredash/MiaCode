@@ -87,6 +87,7 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(double exportStartSeconds READ exportStartSeconds WRITE setExportStartSeconds NOTIFY rangeChanged)
     Q_PROPERTY(double exportEndSeconds READ exportEndSeconds WRITE setExportEndSeconds NOTIFY rangeChanged)
     Q_PROPERTY(double contentDurationSeconds READ contentDurationSeconds NOTIFY rangeChanged)
+    Q_PROPERTY(double minimumExportRangeSeconds READ minimumExportRangeSeconds NOTIFY rangeChanged)
     Q_PROPERTY(bool fullRangeExport READ fullRangeExport NOTIFY rangeChanged)
 
     // Batch
@@ -163,6 +164,7 @@ public:
     double exportStartSeconds() const { return task_.exportStartSeconds; }
     double exportEndSeconds() const;
     double contentDurationSeconds() const { return chartDurationSeconds_; }
+    double minimumExportRangeSeconds() const;
     bool fullRangeExport() const { return task_.fullRangeExport; }
 
     QStringList chartDirectories() const { return chartDirectories_; }
@@ -186,6 +188,7 @@ public:
     Q_INVOKABLE void setBatchDifficultyChecked(int difficultyId, bool checked);
     Q_INVOKABLE void setExportStartToCurrentPreview();
     Q_INVOKABLE void setExportEndToCurrentPreview();
+    Q_INVOKABLE void setExportRangeSeconds(double start, double end);
     Q_INVOKABLE QString setExportStartText(const QString& text);
     Q_INVOKABLE QString setExportEndText(const QString& text);
     Q_INVOKABLE void startExport();

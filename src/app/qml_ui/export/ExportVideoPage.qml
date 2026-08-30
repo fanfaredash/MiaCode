@@ -684,6 +684,8 @@ Rectangle {
                                 Layout.preferredWidth: 80
                             }
                             AppTextField {
+                                id: exportRangeStartField
+
                                 objectName: "exportRangeStartField"
                                 Layout.preferredWidth: 100
                                 text: root.session ? root.session.exportStartSeconds.toFixed(3) : "0"
@@ -698,6 +700,8 @@ Rectangle {
                                 Layout.preferredWidth: 80
                             }
                             AppTextField {
+                                id: exportRangeEndField
+
                                 objectName: "exportRangeEndField"
                                 Layout.preferredWidth: 100
                                 text: root.session ? root.session.exportEndSeconds.toFixed(3) : "0"
@@ -733,5 +737,16 @@ Rectangle {
             }
         }
 
+    }
+
+    Connections {
+        target: root.session
+
+        function onRangeChanged() {
+            if (!exportRangeStartField.activeFocus)
+                exportRangeStartField.text = root.session.exportStartSeconds.toFixed(3)
+            if (!exportRangeEndField.activeFocus)
+                exportRangeEndField.text = root.session.exportEndSeconds.toFixed(3)
+        }
     }
 }

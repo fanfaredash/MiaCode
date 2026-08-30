@@ -8,23 +8,33 @@ Item {
     required property var exportSession
     required property var previewSession
 
-    property string draggingEndpoint: ""
+    property string draggingTarget: ""
+    property real dragStartSeconds: 0
+    property real dragEndSeconds: 0
+    property real dragPressSecond: 0
+    property real dragPreviewSecond: 0
+    property real hoverSecond: 0
 
     readonly property real totalSeconds: Math.max(0, Number(exportSession.contentDurationSeconds) || 0)
+    readonly property real minimumRangeSeconds: Math.max(0,
+                                                         Number(exportSession.minimumExportRangeSeconds) || 0)
     readonly property real startSeconds: Math.max(0, Math.min(totalSeconds,
                                                                Number(exportSession.exportStartSeconds) || 0))
-    readonly property real endSeconds: Math.max(startSeconds, Math.min(totalSeconds,
-                                                                         Number(exportSession.exportEndSeconds) || 0))
+    readonly property real endSeconds: Math.max(startSeconds + minimumRangeSeconds,
+                                                 Math.min(totalSeconds,
+                                                          Number(exportSession.exportEndSeconds) || 0))
     readonly property real playheadSeconds: Math.max(0, Math.min(totalSeconds,
                                                                   Number(previewSession.positionSeconds) || 0))
-    readonly property bool labelsOverlap: Math.abs(lane.xForSecond(startSeconds)
-                                                    - lane.xForSecond(endSeconds))
-                                        < startLabel.width + endLabel.width + 8
-    readonly property real labelRowsHeight: labelsOverlap
-                                             ? startLabel.implicitHeight * 2 + 6
-                                             : startLabel.implicitHeight
+    readonly property real timestampBandHeight: 20
+    // What the overlay reads out. Hovering asks "what is under my pointer";
+    // dragging asks "where is the thing I am moving", and those are not the
+    // same second — grabbing the middle of the range and pushing it left put
+    // the readout wherever the grab happened to land, which is a point with no
+    // meaning to anyone.
+    readonly property real displaySecond: draggingTarget.length > 0 ? dragPreviewSecond
+                                                                    : hoverSecond
 
-    implicitHeight: labelRowsHeight + lane.height + 22
+    implicitHeight: timestampBandHeight + lane.height + 22
     Layout.fillWidth: true
 
     function formatSecond(second) {
@@ -37,53 +47,73 @@ Item {
             + String(millis).padStart(3, "0")
     }
 
-    function beginEndpointDrag(endpoint) {
-        draggingEndpoint = endpoint
+    function beginDrag(target, second) {
+        draggingTarget = target
+        dragStartSeconds = startSeconds
+        dragEndSeconds = endSeconds
+        dragPressSecond = second
+        // A body drag reads out its start: that is the edge the range is being
+        // placed by, and it is the one the label can sit against while both
+        // ends move together.
+        dragPreviewSecond = target === "end" ? endSeconds : startSeconds
         previewSession.beginScrub()
     }
 
-    function updateEndpointDrag(second) {
-        if (draggingEndpoint === "start") {
-            const value = Math.min(second, endSeconds)
-            exportSession.exportStartSeconds = value
-            previewSession.updateScrub(value)
-        } else if (draggingEndpoint === "end") {
-            const value = Math.max(second, startSeconds)
-            exportSession.exportEndSeconds = value
-            previewSession.updateScrub(value)
-        }
-    }
-
-    function endEndpointDrag() {
-        if (draggingEndpoint.length === 0)
+    function updateDrag(second) {
+        const delta = second - dragPressSecond
+        if (draggingTarget === "start") {
+            const nextStart = Math.max(0, Math.min(dragEndSeconds - minimumRangeSeconds,
+                                                    dragStartSeconds + delta))
+            exportSession.setExportRangeSeconds(nextStart, dragEndSeconds)
+            dragPreviewSecond = nextStart
+        } else if (draggingTarget === "end") {
+            const nextEnd = Math.max(dragStartSeconds + minimumRangeSeconds,
+                                     Math.min(totalSeconds, dragEndSeconds + delta))
+            exportSession.setExportRangeSeconds(dragStartSeconds, nextEnd)
+            dragPreviewSecond = nextEnd
+        } else if (draggingTarget === "range") {
+            const boundedDelta = Math.max(-dragStartSeconds,
+                                          Math.min(totalSeconds - dragEndSeconds, delta))
+            const nextStart = dragStartSeconds + boundedDelta
+            const nextEnd = dragEndSeconds + boundedDelta
+            exportSession.setExportRangeSeconds(nextStart, nextEnd)
+            dragPreviewSecond = nextStart
+        } else {
             return
-        const value = draggingEndpoint === "start" ? startSeconds : endSeconds
-        previewSession.endScrub(value)
-        draggingEndpoint = ""
+        }
+        previewSession.updateScrub(dragPreviewSecond)
+    }
+
+    function endDrag() {
+        if (draggingTarget.length === 0)
+            return
+        previewSession.endScrub(dragPreviewSecond)
+        draggingTarget = ""
     }
 
     Text {
-        id: startLabel
+        id: timestamp
 
-        objectName: "exportRangeStartLabel"
-        x: Math.max(0, Math.min(root.width - width, lane.xForSecond(root.startSeconds) - width * 0.5))
+        objectName: "exportRangeTimestamp"
+        x: Math.max(0, Math.min(root.width - width,
+                                lane.xForSecond(root.displaySecond) - width * 0.5))
         y: 0
-        text: qsTr("开始 %1").arg(root.formatSecond(root.startSeconds))
-        color: Theme.colors.text.secondary
+        visible: mouseArea.containsMouse || root.draggingTarget.length > 0
+        text: root.formatSecond(root.displaySecond)
+        color: Theme.colors.text.primary
         font.family: Theme.uiFont
         font.pixelSize: Theme.captionFontSize
-    }
+        z: 1
 
-    Text {
-        id: endLabel
-
-        objectName: "exportRangeEndLabel"
-        x: Math.max(0, Math.min(root.width - width, lane.xForSecond(root.endSeconds) - width * 0.5))
-        y: root.labelsOverlap ? startLabel.implicitHeight + 6 : 0
-        text: qsTr("结束 %1").arg(root.formatSecond(root.endSeconds))
-        color: Theme.colors.text.secondary
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.captionFontSize
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -4
+            radius: 3
+            color: Theme.colors.background.elevated
+            border.width: 1
+            border.color: Theme.colors.border.control
+            z: -1
+        }
     }
 
     Item {
@@ -92,7 +122,7 @@ Item {
         objectName: "exportRangeLane"
         anchors.left: parent.left
         anchors.right: parent.right
-        y: root.labelRowsHeight + 4
+        y: root.timestampBandHeight
         height: 24
 
         readonly property real sideInset: 10
@@ -100,7 +130,19 @@ Item {
         readonly property real trackHeight: 6
         readonly property real handleWidth: 12
         readonly property real handleHeight: 22
-        readonly property real handleGrabRadius: 11
+        readonly property real handleHitRadius: handleWidth * 0.5 + 3
+        readonly property real minimumVisualSelectionWidth: handleWidth * 3
+        readonly property real actualStartX: xForSecond(root.startSeconds)
+        readonly property real actualEndX: xForSecond(root.endSeconds)
+        readonly property real availableTrackWidth: Math.max(1, width - sideInset * 2)
+        readonly property real visualSelectionWidth: Math.min(availableTrackWidth,
+                                                               Math.max(minimumVisualSelectionWidth,
+                                                                        actualEndX - actualStartX))
+        readonly property real visualStartX: Math.max(sideInset,
+                                                       Math.min(width - sideInset - visualSelectionWidth,
+                                                                (actualStartX + actualEndX - visualSelectionWidth) * 0.5))
+        readonly property real visualEndX: visualStartX + visualSelectionWidth
+        readonly property bool rangeCanShift: root.totalSeconds > root.endSeconds - root.startSeconds
 
         function xForSecond(second) {
             const availableWidth = Math.max(1, width - sideInset * 2)
@@ -114,28 +156,35 @@ Item {
             return Math.max(0, Math.min(1, (x - sideInset) / availableWidth)) * root.totalSeconds
         }
 
-        function endpointAt(x) {
-            const startDistance = Math.abs(x - xForSecond(root.startSeconds))
-            const endDistance = Math.abs(x - xForSecond(root.endSeconds))
-            if (startDistance > handleGrabRadius && endDistance > handleGrabRadius)
-                return ""
-            return endDistance < startDistance ? "end" : "start"
+        function targetAt(x, y) {
+            if (Math.abs(x - visualStartX) <= handleHitRadius)
+                return "start"
+            if (Math.abs(x - visualEndX) <= handleHitRadius)
+                return "end"
+            const inSelectedBody = x > visualStartX + handleHitRadius
+                                && x < visualEndX - handleHitRadius
+                                && y >= trackY && y <= trackY + trackHeight
+            return inSelectedBody && rangeCanShift ? "range" : ""
         }
 
         Rectangle {
             x: lane.sideInset
             y: lane.trackY
-            width: Math.max(1, lane.width - lane.sideInset * 2)
+            width: lane.availableTrackWidth
             height: lane.trackHeight
             radius: height * 0.5
             color: Theme.colors.border.control
         }
 
         Rectangle {
-            x: lane.xForSecond(root.startSeconds)
+            id: rangeBody
+
+            objectName: "exportRangeSelectedBody"
+            x: lane.visualStartX
             y: lane.trackY
-            width: Math.max(1, lane.xForSecond(root.endSeconds) - x)
+            width: Math.max(1, lane.visualEndX - x)
             height: lane.trackHeight
+            radius: height * 0.5
             color: Theme.colors.accent.focus
         }
 
@@ -161,7 +210,7 @@ Item {
             id: startHandle
 
             objectName: "exportRangeStartHandle"
-            x: lane.xForSecond(root.startSeconds) - width * 0.5
+            x: lane.visualStartX - width * 0.5
             y: (lane.height - height) * 0.5
             width: lane.handleWidth
             height: lane.handleHeight
@@ -170,8 +219,17 @@ Item {
                 anchors.fill: parent
                 radius: 3
                 color: Theme.colors.accent.primary
-                border.width: root.draggingEndpoint === "start" ? 2 : 0
+                border.width: root.draggingTarget === "start" ? 2 : 0
                 border.color: Theme.colors.accent.soft
+            }
+
+            Rectangle {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 3
+                height: parent.height - 8
+                radius: 1
+                color: Theme.colors.accent.soft
             }
         }
 
@@ -179,7 +237,7 @@ Item {
             id: endHandle
 
             objectName: "exportRangeEndHandle"
-            x: lane.xForSecond(root.endSeconds) - width * 0.5
+            x: lane.visualEndX - width * 0.5
             y: (lane.height - height) * 0.5
             width: lane.handleWidth
             height: lane.handleHeight
@@ -188,29 +246,45 @@ Item {
                 anchors.fill: parent
                 radius: 3
                 color: Theme.colors.accent.primary
-                border.width: root.draggingEndpoint === "end" ? 2 : 0
+                border.width: root.draggingTarget === "end" ? 2 : 0
                 border.color: Theme.colors.accent.soft
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 3
+                height: parent.height - 8
+                radius: 1
+                color: Theme.colors.accent.soft
             }
         }
 
         MouseArea {
+            id: mouseArea
+
             anchors.fill: parent
             hoverEnabled: true
             preventStealing: true
-            cursorShape: root.draggingEndpoint.length > 0 || lane.endpointAt(mouseX).length > 0
-                         ? Qt.SizeHorCursor : Qt.ArrowCursor
+            cursorShape: root.draggingTarget === "range" ? Qt.ClosedHandCursor
+                        : root.draggingTarget.length > 0 ? Qt.SizeHorCursor
+                        : lane.targetAt(mouseX, mouseY) === "range" ? Qt.OpenHandCursor
+                        : lane.targetAt(mouseX, mouseY).length > 0 ? Qt.SizeHorCursor
+                        : Qt.ArrowCursor
 
-            onPressed: {
-                const endpoint = lane.endpointAt(mouse.x)
-                if (endpoint.length > 0)
-                    root.beginEndpointDrag(endpoint)
+            onPressed: function(mouse) {
+                root.hoverSecond = lane.secondForX(mouse.x)
+                const target = lane.targetAt(mouse.x, mouse.y)
+                if (target.length > 0)
+                    root.beginDrag(target, root.hoverSecond)
             }
-            onPositionChanged: {
-                if (pressed && root.draggingEndpoint.length > 0)
-                    root.updateEndpointDrag(lane.secondForX(mouse.x))
+            onPositionChanged: function(mouse) {
+                root.hoverSecond = lane.secondForX(mouse.x)
+                if (pressed && root.draggingTarget.length > 0)
+                    root.updateDrag(root.hoverSecond)
             }
-            onReleased: root.endEndpointDrag()
-            onCanceled: root.endEndpointDrag()
+            onReleased: root.endDrag()
+            onCanceled: root.endDrag()
         }
     }
 

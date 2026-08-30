@@ -138,6 +138,14 @@ void MainWindow::TimelineSection::updatePreviewSliderRange()
 
 void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
 {
+    // The v2 transport's twin of the slider below, and announced before the
+    // guards rather than after: the guards are about a v1 widget that may not
+    // exist and about a v1 drag, neither of which is a reason to leave the QML
+    // transport behind. This is the one place the playhead is published from,
+    // which is why the export intro — whose lead-in moves the playhead without
+    // ever reaching applyQtPreviewPosition — is now visible to the shell at
+    // all. Before this, the intro played while the QML thumb sat at 0.
+    emit owner_.shellPreviewPlayheadChanged();
     if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
         return;
     }

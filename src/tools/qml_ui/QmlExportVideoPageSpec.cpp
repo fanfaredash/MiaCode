@@ -118,12 +118,32 @@ ApplicationWindow {
         property string introSoundImportLabel: "Import"
         property real exportStartSeconds: 60.0
         property real exportEndSeconds: 180.0
+        property real retainedExportDurationSeconds: 120.0
         property real contentDurationSeconds: 240.0
+        property real minimumExportRangeSeconds: Math.min(5.0, contentDurationSeconds)
         property bool fullRangeExport: true
         property var chartDirectories: []
         property var batchDifficultyChecks: []
         property string batchOutputDirectory: ""
         property int importRequests: 0
+        property int atomicRangeWrites: 0
+        property bool applyingAtomicRange: false
+
+        signal rangeChanged()
+
+        onExportStartSecondsChanged: {
+            if (applyingAtomicRange)
+                return
+            applyingAtomicRange = true
+            exportEndSeconds = Math.min(contentDurationSeconds,
+                                        exportStartSeconds + retainedExportDurationSeconds)
+            retainedExportDurationSeconds = exportEndSeconds - exportStartSeconds
+            applyingAtomicRange = false
+        }
+        onExportEndSecondsChanged: {
+            if (!applyingAtomicRange)
+                retainedExportDurationSeconds = Math.max(0, exportEndSeconds - exportStartSeconds)
+        }
 
         function selectDifficulty(id) {}
         function browseBatchOutputDirectory() {}
@@ -138,14 +158,32 @@ ApplicationWindow {
         function importIntroSound() { importRequests += 1 }
         function setExportStartToCurrentPreview() {}
         function setExportEndToCurrentPreview() {}
+        function setExportRangeSeconds(start, end) {
+            const minimumDuration = minimumExportRangeSeconds
+            const boundedStart = Math.max(0, Math.min(start, contentDurationSeconds - minimumDuration))
+            const boundedEnd = Math.max(boundedStart + minimumDuration,
+                                        Math.min(end, contentDurationSeconds))
+            applyingAtomicRange = true
+            exportStartSeconds = boundedStart
+            exportEndSeconds = boundedEnd
+            retainedExportDurationSeconds = boundedEnd - boundedStart
+            applyingAtomicRange = false
+            atomicRangeWrites += 1
+            rangeChanged()
+        }
+        function resetRange() {
+            setExportRangeSeconds(60.0, 180.0)
+            atomicRangeWrites = 0
+        }
+        function setMinimumRange() { setExportRangeSeconds(60.0, 65.0) }
         function setExportStartText(text) {
             const value = Number(text)
-            if (!isNaN(value)) exportStartSeconds = value
+            if (!isNaN(value)) setExportRangeSeconds(value, exportEndSeconds)
             return exportStartSeconds.toFixed(3)
         }
         function setExportEndText(text) {
             const value = Number(text)
-            if (!isNaN(value)) exportEndSeconds = value
+            if (!isNaN(value)) setExportRangeSeconds(exportStartSeconds, value)
             return exportEndSeconds.toFixed(3)
         }
         function startExport() {}
@@ -397,7 +435,13 @@ bool verifyVisualRangeSelectorDragsTheSharedPreview(QTextStream& err)
     bool ok = require(session->property("exportStartSeconds").toDouble() > 90.0
                           && session->property("exportStartSeconds").toDouble()
                               < session->property("exportEndSeconds").toDouble(),
-                      QStringLiteral("dragging the start handle changes only the clamped export start"), err);
+                      QStringLiteral("dragging the start handle changes only the clamped export start "
+                                     "(start=%1 end=%2)")
+                          .arg(session->property("exportStartSeconds").toDouble(), 0, 'f', 3)
+                          .arg(session->property("exportEndSeconds").toDouble(), 0, 'f', 3), err);
+    ok &= require(qAbs(session->property("exportEndSeconds").toDouble() - 180.0) < 0.001
+                      && session->property("atomicRangeWrites").toInt() > 0,
+                  QStringLiteral("dragging the start handle preserves the end through one atomic range write"), err);
     ok &= require(!preview->property("playing").toBool()
                       && scrubCalls.size() >= 3
                       && scrubCalls.first() == QStringLiteral("begin")
@@ -406,21 +450,23 @@ bool verifyVisualRangeSelectorDragsTheSharedPreview(QTextStream& err)
                               - session->property("exportStartSeconds").toDouble()) < 0.001,
                   QStringLiteral("a range drag pauses and scrubs the same preview time source"), err);
 
+    QMetaObject::invokeMethod(session, "resetRange");
+    QCoreApplication::processEvents();
     preview->setProperty("scrubCalls", QStringList());
-    const QPoint endPressPoint = endHandle->mapToScene(
+    const QPoint minimumEndPressPoint = endHandle->mapToScene(
         QPointF(endHandle->width() * 0.5, endHandle->height() * 0.5)).toPoint();
-    const QPoint endDragPoint = lane->mapToScene(
-        QPointF(lane->width() * 0.7, lane->height() * 0.5)).toPoint();
-    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, endPressPoint);
-    QTest::mouseMove(window, endDragPoint, 20);
-    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, endDragPoint);
+    const QPoint minimumEndDragPoint = lane->mapToScene(
+        QPointF(lane->width() * 0.255, lane->height() * 0.5)).toPoint();
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, minimumEndPressPoint);
+    QTest::mouseMove(window, minimumEndDragPoint, 20);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, minimumEndDragPoint);
     QCoreApplication::processEvents();
 
     const QStringList endScrubCalls = preview->property("scrubCalls").toStringList();
-    ok &= require(session->property("exportEndSeconds").toDouble()
-                          > session->property("exportStartSeconds").toDouble()
-                      && session->property("exportEndSeconds").toDouble() < 180.0,
-                  QStringLiteral("dragging the end handle changes only the clamped export end"), err);
+    ok &= require(qAbs(session->property("exportStartSeconds").toDouble() - 60.0) < 0.001
+                      && session->property("exportEndSeconds").toDouble()
+                          >= session->property("exportStartSeconds").toDouble() + 5.0 - 0.001,
+                  QStringLiteral("dragging the end handle preserves the start and clamps to the five-second minimum"), err);
     ok &= require(endScrubCalls.size() >= 3
                       && endScrubCalls.first() == QStringLiteral("begin")
                       && endScrubCalls.last() == QStringLiteral("end")
@@ -433,6 +479,107 @@ bool verifyVisualRangeSelectorDragsTheSharedPreview(QTextStream& err)
     QCoreApplication::processEvents();
     ok &= require(qAbs(session->property("exportStartSeconds").toDouble() - 30.0) < 0.001,
                   QStringLiteral("the retained numeric start field updates the visual range source of truth"), err);
+
+    QMetaObject::invokeMethod(session, "resetRange");
+    QCoreApplication::processEvents();
+    ok &= require(startField->property("text").toString() == QStringLiteral("60.000"),
+                  QStringLiteral("the numeric start field refreshes after a later range change"), err);
+    return ok;
+}
+
+bool verifyVisualRangeSelectorSeparatesPointerTargetsAndLayout(QTextStream& err)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    const std::unique_ptr<QObject> root = createHarness(engine, err);
+    auto* window = root ? qobject_cast<QQuickWindow*>(root.get()) : nullptr;
+    if (!require(window != nullptr,
+                 QStringLiteral("the pointer-target harness creates a real QML window"), err)) {
+        return false;
+    }
+    window->show();
+    Q_UNUSED(QTest::qWaitForWindowExposed(window));
+    QCoreApplication::processEvents();
+
+    QObject* session = root->findChild<QObject*>(QStringLiteral("fakeExportSession"));
+    QObject* preview = root->findChild<QObject*>(QStringLiteral("fakePreviewSession"));
+    if (!require(session != nullptr && preview != nullptr,
+                 QStringLiteral("the pointer-target harness exposes its export and preview sessions"), err)) {
+        return false;
+    }
+    session->setProperty("settingsTab", QStringLiteral("range"));
+    QCoreApplication::processEvents();
+
+    auto* selector = root->findChild<QQuickItem*>(QStringLiteral("exportRangeSelector"));
+    auto* lane = root->findChild<QQuickItem*>(QStringLiteral("exportRangeLane"));
+    auto* startHandle = root->findChild<QQuickItem*>(QStringLiteral("exportRangeStartHandle"));
+    auto* endHandle = root->findChild<QQuickItem*>(QStringLiteral("exportRangeEndHandle"));
+    auto* rangeBody = root->findChild<QQuickItem*>(QStringLiteral("exportRangeSelectedBody"));
+    auto* timestamp = root->findChild<QQuickItem*>(QStringLiteral("exportRangeTimestamp"));
+    if (!require(selector != nullptr && lane != nullptr && startHandle != nullptr && endHandle != nullptr
+                     && rangeBody != nullptr
+                     && timestamp != nullptr,
+                 QStringLiteral("the selector exposes separate grips, selected body, and timestamp overlay"), err)) {
+        return false;
+    }
+    if (!require(root->findChild<QObject*>(QStringLiteral("exportRangeStartLabel")) == nullptr
+                     && root->findChild<QObject*>(QStringLiteral("exportRangeEndLabel")) == nullptr,
+                 QStringLiteral("the selector has no moving start or end labels"), err)) {
+        return false;
+    }
+
+    const qreal heightBeforeMinimumRange = selector->implicitHeight();
+    QMetaObject::invokeMethod(session, "setMinimumRange");
+    QCoreApplication::processEvents();
+    const qreal minimumGripDistance = qAbs(endHandle->x() - startHandle->x());
+    bool ok = require(qAbs(selector->implicitHeight() - heightBeforeMinimumRange) < 0.001,
+                      QStringLiteral("short ranges never add a second layout row"), err);
+    ok &= require(minimumGripDistance >= startHandle->width() * 3.0 - 0.001,
+                  QStringLiteral("a five-second range renders grips with a distinct body target between them"), err);
+
+    QMetaObject::invokeMethod(session, "resetRange");
+    QCoreApplication::processEvents();
+    const QPoint bodyPressPoint = rangeBody->mapToScene(
+        QPointF(rangeBody->width() * 0.5, rangeBody->height() * 0.5)).toPoint();
+    const QPoint bodyDragPoint = lane->mapToScene(
+        QPointF(lane->width() * 0.6, lane->height() * 0.5)).toPoint();
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, bodyPressPoint);
+    QTest::mouseMove(window, bodyDragPoint, 20);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, bodyDragPoint);
+    QCoreApplication::processEvents();
+
+    const double shiftedStart = session->property("exportStartSeconds").toDouble();
+    const double shiftedEnd = session->property("exportEndSeconds").toDouble();
+    ok &= require(shiftedStart > 60.0 && shiftedEnd > 180.0
+                      && qAbs((shiftedEnd - shiftedStart) - 120.0) < 0.001,
+                  QStringLiteral("dragging the selected body shifts both endpoints without changing its duration "
+                                 "(start=%1 end=%2)")
+                      .arg(shiftedStart, 0, 'f', 3)
+                      .arg(shiftedEnd, 0, 'f', 3), err);
+    // The readout follows the range's start, not the point that was grabbed.
+    // Grabbing the middle and pushing left used to leave the timestamp on an
+    // interior second that means nothing to anyone — the start is the edge the
+    // range is being placed by.
+    ok &= require(qAbs(preview->property("positionSeconds").toDouble() - shiftedStart) < 0.001,
+                  QStringLiteral("body dragging reads out the range start "
+                                 "(preview=%1 start=%2)")
+                      .arg(preview->property("positionSeconds").toDouble(), 0, 'f', 3)
+                      .arg(shiftedStart, 0, 'f', 3), err);
+    ok &= require(qAbs(selector->property("displaySecond").toDouble() - shiftedStart) < 0.001
+                      || selector->property("draggingTarget").toString().isEmpty(),
+                  QStringLiteral("the overlay and the scrub read the same second"), err);
+
+    const QPoint hoverPoint = lane->mapToScene(
+        QPointF(lane->width() * 0.2, lane->height() * 0.5)).toPoint();
+    QTest::mouseMove(window, hoverPoint, 20);
+    QCoreApplication::processEvents();
+    ok &= require(timestamp->isVisible()
+                      && timestamp->property("text").toString().contains(QLatin1Char(':')),
+                  QStringLiteral("hovering the lane reveals one timestamp without start or end wording "
+                                 "(visible=%1 text=%2 hover=%3)")
+                      .arg(timestamp->isVisible())
+                      .arg(timestamp->property("text").toString())
+                      .arg(selector->property("hoverSecond").toDouble(), 0, 'f', 3), err);
     return ok;
 }
 
@@ -613,6 +760,7 @@ int main(int argc, char** argv)
     QGuiApplication app(argc, argv);
     QTextStream err(stderr);
     const bool ok = verifyRealExportPageControls(err) && verifyVisualRangeSelectorDragsTheSharedPreview(err)
+        && verifyVisualRangeSelectorSeparatesPointerTargetsAndLayout(err)
         && verifyRequestHostLoop(err)
         && verifySynchronousChoiceSequenceKeepsTheNextDialogOpen(err);
     if (ok) {
