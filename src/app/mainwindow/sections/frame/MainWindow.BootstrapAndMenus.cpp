@@ -544,7 +544,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         owner_.stopOrPlayPreviewShortcutAction_,
         QStringLiteral("preview.stop_or_play"),
         QKeySequence(QStringLiteral("Ctrl+Shift+C")));
-    owner_.stopOrPlayPreviewShortcutAction_->setShortcutContext(Qt::ApplicationShortcut);
+    owner_.stopOrPlayPreviewShortcutAction_->setShortcutContext(Qt::WindowShortcut);
     owner_.addAction(owner_.stopOrPlayPreviewShortcutAction_);
     connect(owner_.stopOrPlayPreviewShortcutAction_, &QAction::triggered, &owner_, [this]() {
         if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
@@ -558,7 +558,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         owner_.playPausePreviewShortcutAction_,
         QStringLiteral("preview.play_pause_global"),
         QKeySequence(QStringLiteral("Ctrl+Shift+X")));
-    owner_.playPausePreviewShortcutAction_->setShortcutContext(Qt::ApplicationShortcut);
+    owner_.playPausePreviewShortcutAction_->setShortcutContext(Qt::WindowShortcut);
     owner_.addAction(owner_.playPausePreviewShortcutAction_);
     connect(owner_.playPausePreviewShortcutAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
 

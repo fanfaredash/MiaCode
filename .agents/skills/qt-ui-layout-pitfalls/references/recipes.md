@@ -253,6 +253,21 @@ center-offset calibrated against a reference image. **Build measurement tools**
 (`measure_lv_alignment.py`, `render-lv-samples.ps1`) — alignment converged in 2 rounds
 WITH tools vs. blind guessing. Commits: d3392de, 9466496.
 
+### Q7. Canvas line numbers sit above or below TextEdit glyphs
+
+Canvas `middle` centers glyphs within the requested row box, while `QTextLayout` places text
+from an alphabetic baseline derived from the font ascent. Extra block spacing makes the two
+positions diverge further. Set the Canvas baseline to `alphabetic` and draw at
+`lineTop + FontMetrics.ascent`, using the same font as the editor.
+
+### Q8. Editor scroll is slow, scrollbar disappears, or cursor stays an arrow
+
+A full-area context-menu `MouseArea` sits above the `TextArea`. Pass trackpad gestures
+through with `scrollGestureEnabled: false`, leave its wheel event unhandled so the surrounding
+`ScrollView` receives physical-wheel input, and set `cursorShape: Qt.IBeamCursor`.
+The Basic style fades an idle scrollbar handle, so editor scrollbars that must remain
+discoverable use the same native `ScrollBar.vertical: ScrollBar {}` setup as other QML lists.
+
 ---
 
 ## Z — stacking, paint order, windows, events

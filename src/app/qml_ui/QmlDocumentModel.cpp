@@ -95,6 +95,16 @@ QString QmlDocumentModel::metadataFirst() const { return documentField(miacode::
 QString QmlDocumentModel::metadataDesigner() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::Designer); }
 QString QmlDocumentModel::metadataVideoPath() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::VideoPath); }
 QString QmlDocumentModel::metadataExtraText() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::ExtraText); }
+QString QmlDocumentModel::wholeBpm() const
+{
+    if (workspace_ == nullptr) return {};
+    for (const SimaiRawField& field : workspace_->document().extraFields) {
+        if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) == 0) {
+            return field.value.trimmed();
+        }
+    }
+    return {};
+}
 QString QmlDocumentModel::metadataSourceText() const
 {
     return metadataSourceError_.isEmpty()

@@ -1176,7 +1176,9 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         || watched == owner_.previewFullscreenHost_
         || watched == owner_.previewFullscreenControlsWindow_
         || watched == owner_.previewFullscreenButton_
-        || watched == previewVisibleWindow;
+        || (watched == previewVisibleWindow
+            && (previewVisibleWindow != state_.quickShellRootWindow_
+                || !state_.quickShellRootWindow_->property("sourceEditorFocused").toBool()));
     const bool previewMouseFocusScope =
         watched == owner_.previewCanvasContainer_
         || watched == owner_.previewCanvasFrame_

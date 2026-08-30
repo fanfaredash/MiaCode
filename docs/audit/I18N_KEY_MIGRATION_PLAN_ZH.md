@@ -651,7 +651,6 @@ struct MuriDetailArgs {            // 只放已算好的原子字段，不含成
 | `preferences.ignore_muri_issue_prompts` | Ignore muri issue prompts | 忽略无理报错提示 | 無理の警告表示を無視 | MainWindow.PreferencesDialog.cpp |
 | `preferences.off` | Off | 关闭 | オフ | MainWindow.PreferencesDialog.cpp |
 | `preferences.on` | On | 开启 | オン | MainWindow.PreferencesDialog.cpp |
-| `preferences.the_field_next_to_lv` | The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer. | 谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。 | 譜面編集ページ上部の Lv の横に表示するフィールド：オフセット（&first）または現在の難易度の作者（&des_N）。 | MainWindow.PreferencesDialog.cpp |
 
 ### `shell` (3)
 

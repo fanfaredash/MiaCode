@@ -330,4 +330,10 @@ void MainWindow::saveProjectValidationPreferences(const QString& chartFilePath) 
 void MainWindow::applyIgnoreMuriIssuePrompts(bool enabled, bool persistPreference)
 {
     validationSection_->applyIgnoreMuriIssuePrompts(enabled, persistPreference);
+    if (persistPreference) emit muriPromptPreferenceChanged();
+}
+
+bool MainWindow::ignoreMuriIssuePrompts() const
+{
+    return state_.ignoreMuriIssuePrompts_;
 }

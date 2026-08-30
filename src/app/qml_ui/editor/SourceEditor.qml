@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import MiaCode.UI
 
 Rectangle {
@@ -116,6 +117,7 @@ Rectangle {
             || root.historyDifficultyId !== root.documentSession.currentDifficultyId
             || root.historyMetadataMode !== root.metadataMode
         if (sourceArea.text !== controllerText) {
+            root.editorController.closeCompletion()
             root.beginProgrammaticSelection()
             sourceArea.syncingFromController = true
             sourceArea.text = controllerText
@@ -134,9 +136,7 @@ Rectangle {
         root.editorController.resetQmlHistory(controllerText, sourceArea.historyAnchor,
                                               sourceArea.historyPosition)
     }
-    readonly property real codeLineHeight: sourceArea.cursorRectangle.height > 0
-                                               ? sourceArea.cursorRectangle.height
-                                               : 20
+    readonly property real codeLineHeight: sourceArea.cursorRectangle.height
     // 每个逻辑行顶部在文档坐标系中的 y。自动换行后行高不再固定，
     // 当前行号与行号 gutter 都按真实行顶坐标定位。
     property var lineTops: []
@@ -377,6 +377,7 @@ Rectangle {
     }
 
     LineNumberGutter {
+        id: lineNumberGutter
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -464,7 +465,7 @@ Rectangle {
     ScrollView {
         id: editorScroll
         anchors.left: parent.left
-        anchors.leftMargin: 46
+        anchors.leftMargin: lineNumberGutter.width
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -487,7 +488,6 @@ Rectangle {
             policy: ScrollBar.AsNeeded
         }
         ScrollBar.vertical: ScrollBar {
-            id: verticalScrollBar
             policy: ScrollBar.AsNeeded
         }
 
@@ -510,9 +510,12 @@ Rectangle {
             selectionColor: Theme.colors.state.textSelection
             // 自动换行：超宽行在视口内折行显示，避免依赖水平滚动查看长句。
             wrapMode: TextEdit.Wrap
+            inputMethodHints: root.editorController.halfWidthInputEnabled
+                ? Qt.ImhLatinOnly : Qt.ImhNone
             persistentSelection: true
             selectByMouse: true
             font: Theme.codeFont
+
             background: Rectangle {
                 color: Theme.colors.background.editor
             }
@@ -559,6 +562,7 @@ Rectangle {
                 color: Theme.colors.accent.primary
             }
             onTextChanged: {
+                editorInputBridge.applyBlockSpacing()
                 // Rehighlighting is a formatting pass over the same characters,
                 // but TextEdit still reports it as textChanged. Writing that
                 // back would push an identical document through the backend on
@@ -582,8 +586,15 @@ Rectangle {
             onCursorPositionChanged: {
                 root.updateCursorPosition()
                 root.scheduleEditorContext(root.programmaticSelectionDepth === 0)
+                if (!syncingFromController)
+                    root.editorController.updateCompletionForQml(text, cursorPosition)
             }
-            onActiveFocusChanged: root.scheduleEditorContext(false)
+            onActiveFocusChanged: {
+                root.scheduleEditorContext(false)
+                root.Window.window.sourceEditorFocused = activeFocus
+                if (!activeFocus && !completionPopup.pointerInside)
+                    root.editorController.closeCompletion()
+            }
             function applyEditorTransaction(transaction) {
                 return root.applyEditorTransaction(transaction)
             }
@@ -719,6 +730,7 @@ Rectangle {
             }
 
             CompletionPopup {
+                id: completionPopup
                 editor: sourceArea
                 controller: root.editorController
                 // The popup lives in the window overlay, so it cannot observe
@@ -727,7 +739,11 @@ Rectangle {
             }
 
             QmlEditorInputBridge {
+                id: editorInputBridge
                 target: sourceArea
+                imeInputDisabled: root.editorController.imeInputDisabled
+                textDocument: sourceArea.textDocument
+                blockSpacing: Theme.codeBlockSpacing
                 onImeComposingChanged: root.imeComposing = composing
                 onImeCommitted: function(text) {
                     root.applyImeCommittedText(text)
@@ -775,6 +791,8 @@ Rectangle {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.RightButton
+                scrollGestureEnabled: false
+                cursorShape: Qt.IBeamCursor
                 onClicked: mouse => root.openContextMenuAt(mouse.x, mouse.y)
             }
         }

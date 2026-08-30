@@ -32,6 +32,12 @@ void QmlCommandService::openPreferences()
     }
 }
 
+void QmlCommandService::adjustEditorFontSize(int delta)
+{
+    if (backend_ == nullptr || delta == 0) return;
+    backend_->applyEditorTextFontSize(backend_->editorTextFontPointSize_ + delta, true);
+}
+
 bool QmlCommandService::triggerShortcutCommand(const QString& id)
 {
     return backend_ != nullptr && backend_->triggerShortcutCommand(id);

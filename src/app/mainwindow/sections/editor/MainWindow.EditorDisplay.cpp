@@ -344,8 +344,6 @@ void MainWindow::EditorSection::loadPortableState()
         kEditorTextFontSizeMax
     );
 
-    state_.editorHeaderTopDisplay_ = EditorHeaderTopDisplay::Offset;
-
     const QJsonObject root = UiText::loadPreferencesObject();
     const QJsonObject ui = root.value("ui").toObject();
     const QJsonObject app = root.value("app").toObject();
@@ -372,12 +370,6 @@ void MainWindow::EditorSection::loadPortableState()
     // key (the primary of the three) so existing users keep their setting.
     state_.editorAutoCompletionEnabled_ = ui.value("editor_auto_completion").toBool(
         ui.value("editor_auto_close_brackets").toBool(true));
-    // 顶部显示 — which field pair the difficulty header shows ("offset" default,
-    // "designer" for the per-difficulty &des_N edit).
-    state_.editorHeaderTopDisplay_ =
-        ui.value("editor_header_top_display").toString() == QLatin1String("designer")
-            ? EditorHeaderTopDisplay::Designer
-            : EditorHeaderTopDisplay::Offset;
     bool importedLegacyBottomPanelHeight = false;
     int legacyBottomPanelHeight = 0;
     QSettings legacySettings;
@@ -425,7 +417,6 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
     applyEditorAutoCompletionEnabled(state_.editorAutoCompletionEnabled_, false);
-    applyEditorHeaderTopDisplay(state_.editorHeaderTopDisplay_, false);
     applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
@@ -823,12 +814,6 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
-    ui.insert(
-        "editor_header_top_display",
-        state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
-            ? QStringLiteral("designer")
-            : QStringLiteral("offset")
-    );
     // Bottom-tabs (timeline/validation/muri) divider height, persisted as a
     // content-scale ratio rather than pixels (see loadPortableState()).
     ui.insert("bottom_tabs_content_scale", state_.bottomTabsContentScale_);
@@ -986,12 +971,6 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
-    ui.insert(
-        "editor_header_top_display",
-        state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
-            ? QStringLiteral("designer")
-            : QStringLiteral("offset")
-    );
     ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
     root.insert("ui", ui);
     UiText::savePreferencesObject(root);
@@ -1084,21 +1063,6 @@ void MainWindow::EditorSection::applyEditorAutoCompletionEnabled(bool enabled, b
     }
     if (ui_.copyAreaEditor_ != nullptr) {
         ui_.copyAreaEditor_->setAutoCompletionEnabled(enabled);
-    }
-    if (persistPreference) {
-        persistEditorTextFontPreference();
-    }
-}
-
-void MainWindow::EditorSection::applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference)
-{
-    state_.editorHeaderTopDisplay_ = mode;
-    if (owner_.documentSection_ != nullptr) {
-        // Refresh the header designer edit from the model before unhiding it
-        // (covers a mode flip that races a pending designer rewrite), then let
-        // the layout-mode pass apply the offset/designer pair visibility.
-        owner_.documentSection_->syncHeaderDesignerEditFromModel();
-        owner_.documentSection_->updateEditorHeaderLayoutMode();
     }
     if (persistPreference) {
         persistEditorTextFontPreference();
@@ -1438,36 +1402,37 @@ void MainWindow::persistEditorTextFontPreference() const
 void MainWindow::applyEditorTextFontSize(int pointSize, bool persistPreference)
 {
     editorSection_->applyEditorTextFontSize(pointSize, persistPreference);
+    if (persistPreference) emit editorPreferencesChanged();
 }
 
 void MainWindow::applyEditorLineSpacingFactor(double factor, bool persistPreference)
 {
     editorSection_->applyEditorLineSpacingFactor(factor, persistPreference);
+    if (persistPreference) emit editorPreferencesChanged();
 }
 
 void MainWindow::applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorHalfWidthInputEnabled(enabled, persistPreference);
+    if (persistPreference) emit editorPreferencesChanged();
 }
 
 void MainWindow::applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorOverwriteModeEnabled(enabled, persistPreference);
+    if (persistPreference) emit editorPreferencesChanged();
 }
 
 void MainWindow::applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorAutoCompletionEnabled(enabled, persistPreference);
+    if (persistPreference) emit editorPreferencesChanged();
 }
 
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
 {
     editorSection_->applyEditorImeInputDisabled(disabled, persistPreference);
-}
-
-void MainWindow::applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference)
-{
-    editorSection_->applyEditorHeaderTopDisplay(mode, persistPreference);
+    if (persistPreference) emit editorPreferencesChanged();
 }
 
 void MainWindow::activateBookmarkAtLine(int line)

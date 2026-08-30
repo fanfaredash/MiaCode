@@ -18,6 +18,7 @@ class QmlEditorController final : public QObject
     Q_PROPERTY(bool halfWidthInputEnabled READ halfWidthInputEnabled NOTIFY settingsChanged)
     Q_PROPERTY(bool overwriteMode READ overwriteMode NOTIFY settingsChanged)
     Q_PROPERTY(bool autoCompletionEnabled READ autoCompletionEnabled NOTIFY settingsChanged)
+    Q_PROPERTY(bool imeInputDisabled READ imeInputDisabled NOTIFY settingsChanged)
     Q_PROPERTY(QString wholeBpm READ wholeBpm NOTIFY settingsChanged)
     Q_PROPERTY(bool completionActive READ completionActive NOTIFY completionChanged)
     Q_PROPERTY(QStringList completionCandidates READ completionCandidates NOTIFY completionChanged)
@@ -36,6 +37,7 @@ public:
     bool halfWidthInputEnabled() const;
     bool overwriteMode() const;
     bool autoCompletionEnabled() const;
+    bool imeInputDisabled() const;
     QString wholeBpm() const;
     bool completionActive() const;
     QStringList completionCandidates() const;
@@ -46,6 +48,7 @@ public:
     void setHalfWidthInputEnabled(bool enabled);
     void setOverwriteMode(bool enabled);
     void setAutoCompletionEnabled(bool enabled);
+    void setImeInputDisabled(bool disabled);
     void setWholeBpm(const QString& bpm);
 
     miacode::editor::SimaiTextEditResult processKey(
@@ -105,6 +108,7 @@ public:
                                           int afterAnchor, int afterPosition);
     Q_INVOKABLE QVariantMap undoQmlTransaction();
     Q_INVOKABLE QVariantMap redoQmlTransaction();
+    Q_INVOKABLE void updateCompletionForQml(const QString& text, int position);
     Q_INVOKABLE void moveCompletionSelection(int delta);
     Q_INVOKABLE void selectCompletionIndex(int index);
     Q_INVOKABLE void closeCompletion();
@@ -128,6 +132,7 @@ private:
     bool halfWidthInputEnabled_ = true;
     bool overwriteMode_ = false;
     bool autoCompletionEnabled_ = true;
+    bool imeInputDisabled_ = true;
     QString wholeBpm_;
     miacode::editor::SimaiCompletionSession completion_;
     QStringList visibleCandidates_;

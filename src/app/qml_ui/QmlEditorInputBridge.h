@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QQuickTextDocument>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 namespace miacode::qml_ui {
@@ -14,14 +15,27 @@ class QmlEditorInputBridge : public QObject
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(QObject* target READ target WRITE setTarget NOTIFY targetChanged)
+    Q_PROPERTY(bool imeInputDisabled READ imeInputDisabled WRITE setImeInputDisabled NOTIFY imeInputDisabledChanged)
+    Q_PROPERTY(QQuickTextDocument* textDocument READ textDocument WRITE setTextDocument NOTIFY textDocumentChanged)
+    Q_PROPERTY(int blockSpacing READ blockSpacing WRITE setBlockSpacing NOTIFY blockSpacingChanged)
 
 public:
     explicit QmlEditorInputBridge(QObject* parent = nullptr);
     QObject* target() const;
     void setTarget(QObject* target);
+    bool imeInputDisabled() const;
+    void setImeInputDisabled(bool disabled);
+    QQuickTextDocument* textDocument() const;
+    void setTextDocument(QQuickTextDocument* document);
+    int blockSpacing() const;
+    void setBlockSpacing(int spacing);
+    Q_INVOKABLE void applyBlockSpacing();
 
 signals:
     void targetChanged();
+    void imeInputDisabledChanged();
+    void textDocumentChanged();
+    void blockSpacingChanged();
     void imeCommitted(const QString& text);
     void imeComposingChanged(bool composing);
 
@@ -29,7 +43,12 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    void applyInputMethodState();
+
     QPointer<QObject> target_;
+    QPointer<QQuickTextDocument> textDocument_;
+    bool imeInputDisabled_ = true;
+    int blockSpacing_ = 0;
     bool imeComposing_ = false;
     // The desktop acceptance run reported a committed IME character being
     // inserted many times over, which no synthetic QInputMethodEvent sequence

@@ -24,9 +24,22 @@ QmlApplicationContext::QmlApplicationContext(
     , platform_(this)
     , shell_(&shell)
 {
-    editor_.setHalfWidthInputEnabled(preferences_.editorHalfWidthInputEnabled());
-    editor_.setOverwriteMode(preferences_.editorOverwriteModeEnabled());
-    editor_.setAutoCompletionEnabled(preferences_.editorAutoCompletionEnabled());
+    const auto applyEditorSettings = [this] {
+        editor_.setHalfWidthInputEnabled(preferences_.editorHalfWidthInputEnabled());
+        editor_.setOverwriteMode(preferences_.editorOverwriteModeEnabled());
+        editor_.setAutoCompletionEnabled(preferences_.editorAutoCompletionEnabled());
+        editor_.setImeInputDisabled(preferences_.editorImeInputDisabled());
+    };
+    connect(&preferences_, &QmlUiSettings::editorSettingsChanged,
+            this, applyEditorSettings);
+    connect(&backend_, &MainWindow::editorPreferencesChanged,
+            &preferences_, &QmlUiSettings::reloadEditorSettings);
+    connect(&backend_, &MainWindow::muriPromptPreferenceChanged,
+            &analysis_, &QmlAnalysisModel::refreshPreferences);
+    connect(&document_, &QmlDocumentModel::metadataChanged,
+            this, [this] { editor_.setWholeBpm(document_.wholeBpm()); });
+    applyEditorSettings();
+    editor_.setWholeBpm(document_.wholeBpm());
 }
 
 QObject* QmlApplicationContext::document() { return &document_; }

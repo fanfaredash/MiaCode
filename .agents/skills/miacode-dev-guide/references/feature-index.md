@@ -235,26 +235,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   Popup anchors use `common/AdoptedWidgetCoordinates`: in ordinary QWidget windows this falls
   back to `mapToGlobal`; in the macOS QuickShell workspace it maps the caret through the bound
   bridge surface and adopted `QWindow`, avoiding the stale orphan-NSPanel coordinate origin.
-- **Offset (`&first`) field location:** the chart-wide timing offset is edited from the
-  **difficulty-page header** (`firstEdit_`, label `difficultyFirstLabel_`, built in
-  `MainWindow.FrameBootstrap.cpp` next to `&lv_N`), NOT the metadata page (the metadata `first`
-  row was removed). One source of truth = `document_.first`, shared with the latency page. While a
-  difficulty is active, `TimelineSection::parsedRawFirstSeconds` reads the live field text (so an
-  uncommitted edit reflows the timeline; `editingFinished` triggers `refreshTimelineMetadata`);
-  it commits to `document_.first` in `applyCurrentFieldToDocument`'s difficulty branch (sets
-  `metadataTimingChanged`).
-- **Header 顶部显示 preference (offset vs designer):** the header field pair next to Lv is
-  switchable — `MainWindow::EditorHeaderTopDisplay` (`Offset` default / `Designer`), state
-  `editorHeaderTopDisplay_`, persisted as `ui.editor_header_top_display` (`"offset"`/`"designer"`),
-  preference row at the top of Preferences → 编辑器. In Designer mode the header shows
-  `difficultyDesignerLabel_` + `difficultyDesignerEdit_` (`&des_N` of the active difficulty,
-  re-added in `MainWindow.FrameBootstrap.cpp`); visibility is applied by
-  `updateEditorHeaderLayoutMode`, apply chain `MainWindow::applyEditorHeaderTopDisplay` →
-  `EditorSection::applyEditorHeaderTopDisplay`. The hidden pair's edit is still populated
-  (`populateDifficultyPage`) and recaptured on commit/autosave, so reads are unconditional; any
-  code that rewrites designers behind the header's back must call
-  `DocumentSection::syncHeaderDesignerEditFromModel` (designer dialog commit, unified reconcile,
-  unified broadcast, preference flip all do).
+- **Offset (`&first`) field location:** UIv2 edits the chart-wide timing offset from the metadata
+  form's `metadataFirst` field in `EditorPane.qml`. The difficulty header displays the active
+  difficulty's designer. One source of truth remains `document_.first`, shared with the latency
+  page and committed through `QmlDocumentModel` / `ChartWorkspace`.
 - **Per-difficulty designers + unified designer:** managed from a modal dialog, NOT a persistent
   checkbox. The metadata designer row has a "管理多个难度名义" button →
   `MainWindow::onManagePerDifficultyDesigners` → `DocumentSection::openPerDifficultyDesignerDialog`
@@ -271,7 +255,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     no sidebar entry). The dialog writes chart-less names via `setDesignerForSlot`.
   **Unified sync invariant — every designer-touching path must preserve it** (sync set): edit-time
   broadcast `applyCurrentFieldToDocument` (both the metadata top-`&des` branch AND the difficulty
-  branch's header `difficultyDesignerEdit_` — see the 顶部显示 preference above); apply
+  branch's fixed header `difficultyDesignerEdit_`); apply
   `applyUnifiedDesignerName`; load reconcile
   `refreshUnifiedDesignerStateForLoadedDocument`; new-difficulty seed
   (`MainWindow.FrameBootstrap.cpp`); undo-delete restore re-seed

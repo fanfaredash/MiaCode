@@ -2,8 +2,16 @@
 
 #include "common/DebugLog.h"
 
+#include <QGuiApplication>
+#include <QInputMethod>
 #include <QInputMethodEvent>
+#include <QQuickItem>
+#include <QQuickTextDocument>
 #include <QStringList>
+#include <QTextBlock>
+#include <QTextBlockFormat>
+#include <QTextCursor>
+#include <QTextDocument>
 
 namespace miacode::qml_ui {
 namespace {
@@ -36,6 +44,9 @@ QString describeAttributes(const QInputMethodEvent& event)
 QmlEditorInputBridge::QmlEditorInputBridge(QObject* parent) : QObject(parent) {}
 
 QObject* QmlEditorInputBridge::target() const { return target_; }
+bool QmlEditorInputBridge::imeInputDisabled() const { return imeInputDisabled_; }
+QQuickTextDocument* QmlEditorInputBridge::textDocument() const { return textDocument_; }
+int QmlEditorInputBridge::blockSpacing() const { return blockSpacing_; }
 
 void QmlEditorInputBridge::setTarget(QObject* target)
 {
@@ -43,7 +54,56 @@ void QmlEditorInputBridge::setTarget(QObject* target)
     if (target_ != nullptr) target_->removeEventFilter(this);
     target_ = target;
     if (target_ != nullptr) target_->installEventFilter(this);
+    applyInputMethodState();
     emit targetChanged();
+}
+
+void QmlEditorInputBridge::setImeInputDisabled(bool disabled)
+{
+    if (imeInputDisabled_ == disabled) return;
+    imeInputDisabled_ = disabled;
+    applyInputMethodState();
+    emit imeInputDisabledChanged();
+}
+
+void QmlEditorInputBridge::setTextDocument(QQuickTextDocument* document)
+{
+    if (textDocument_ == document) return;
+    textDocument_ = document;
+    applyBlockSpacing();
+    emit textDocumentChanged();
+}
+
+void QmlEditorInputBridge::setBlockSpacing(int spacing)
+{
+    const int normalized = qMax(0, spacing);
+    if (blockSpacing_ == normalized) return;
+    blockSpacing_ = normalized;
+    applyBlockSpacing();
+    emit blockSpacingChanged();
+}
+
+void QmlEditorInputBridge::applyBlockSpacing()
+{
+    QTextDocument* document = textDocument_ != nullptr ? textDocument_->textDocument() : nullptr;
+    if (document == nullptr || document->firstBlock().blockFormat().bottomMargin() == blockSpacing_) return;
+    QTextCursor cursor(document);
+    cursor.beginEditBlock();
+    cursor.select(QTextCursor::Document);
+    QTextBlockFormat format;
+    format.setBottomMargin(blockSpacing_);
+    cursor.mergeBlockFormat(format);
+    cursor.endEditBlock();
+}
+
+void QmlEditorInputBridge::applyInputMethodState()
+{
+    if (auto* item = qobject_cast<QQuickItem*>(target_.data()); item != nullptr) {
+        item->setFlag(QQuickItem::ItemAcceptsInputMethod, !imeInputDisabled_);
+    }
+    if (QInputMethod* inputMethod = QGuiApplication::inputMethod(); inputMethod != nullptr) {
+        inputMethod->update(Qt::ImEnabled);
+    }
 }
 
 bool QmlEditorInputBridge::eventFilter(QObject* watched, QEvent* event)

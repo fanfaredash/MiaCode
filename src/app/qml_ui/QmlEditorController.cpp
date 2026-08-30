@@ -68,6 +68,7 @@ QmlEditorController::QmlEditorController(QObject* parent) : QObject(parent) {}
 bool QmlEditorController::halfWidthInputEnabled() const { return halfWidthInputEnabled_; }
 bool QmlEditorController::overwriteMode() const { return overwriteMode_; }
 bool QmlEditorController::autoCompletionEnabled() const { return autoCompletionEnabled_; }
+bool QmlEditorController::imeInputDisabled() const { return imeInputDisabled_; }
 QString QmlEditorController::wholeBpm() const { return wholeBpm_; }
 bool QmlEditorController::completionActive() const { return completion_.active; }
 QStringList QmlEditorController::completionCandidates() const { return visibleCandidates_; }
@@ -85,6 +86,7 @@ void QmlEditorController::setOverwriteMode(bool enabled)
 {
     if (overwriteMode_ == enabled) return;
     overwriteMode_ = enabled;
+    closeCompletion();
     emit settingsChanged();
 }
 void QmlEditorController::setAutoCompletionEnabled(bool enabled)
@@ -92,6 +94,12 @@ void QmlEditorController::setAutoCompletionEnabled(bool enabled)
     if (autoCompletionEnabled_ == enabled) return;
     autoCompletionEnabled_ = enabled;
     if (!enabled) closeCompletion();
+    emit settingsChanged();
+}
+void QmlEditorController::setImeInputDisabled(bool disabled)
+{
+    if (imeInputDisabled_ == disabled) return;
+    imeInputDisabled_ = disabled;
     emit settingsChanged();
 }
 void QmlEditorController::setWholeBpm(const QString& bpm)
@@ -174,6 +182,7 @@ miacode::editor::SimaiTextEditResult QmlEditorController::process(const miacode:
 miacode::editor::SimaiTextEditResult QmlEditorController::acceptCompletion(const QString& text, int anchor, int position)
 {
     auto result = untouched(text, anchor, position);
+    updateCompletionForQml(text, position);
     if (!completion_.active || completionIndex_ < 0 || completionIndex_ >= visibleCandidates_.size()) return result;
     const int start = qBound(0, completion_.startPosition, text.size());
     int end = qBound(start, position, text.size());
@@ -271,6 +280,7 @@ miacode::editor::SimaiTextEditResult QmlEditorController::replaceAll(
 
 void QmlEditorController::setDocumentContext(int difficultyId, quint64 revision)
 {
+    if (activeDifficultyId_ != difficultyId) closeCompletion();
     activeDifficultyId_ = difficultyId;
     documentRevision_ = revision;
 }
@@ -302,20 +312,29 @@ void QmlEditorController::filterCompletion(const QString& text, int position)
     const QChar closing = miacode::editor::closingBracketFor(completion_.opening);
     if (prefix.contains(QLatin1Char('\n')) || (!closing.isNull() && prefix.contains(closing))) { closeCompletion(); return; }
     QStringList candidates;
+    const QString selected = completionIndex_ >= 0 && completionIndex_ < visibleCandidates_.size()
+        ? visibleCandidates_.at(completionIndex_) : QString();
     for (const QString& candidate : completion_.candidates) {
-        if (candidate.startsWith(prefix, Qt::CaseInsensitive)) candidates.append(candidate);
+        if (candidate.startsWith(prefix)) candidates.append(candidate);
     }
+    if (candidates.isEmpty()) { closeCompletion(); return; }
     visibleCandidates_ = candidates;
-    completionIndex_ = candidates.isEmpty() ? -1 : qBound(0, completionIndex_, candidates.size() - 1);
-    if (candidates.isEmpty()) completion_.active = false;
+    const int selectedIndex = candidates.indexOf(selected);
+    completionIndex_ = selectedIndex >= 0 ? selectedIndex : 0;
     emit completionChanged();
+}
+
+void QmlEditorController::updateCompletionForQml(const QString& text, int position)
+{
+    if (completion_.active) filterCompletion(text, position);
 }
 
 void QmlEditorController::moveCompletionSelection(int delta)
 {
     if (!completion_.active || visibleCandidates_.isEmpty()) return;
-    completionIndex_ = (completionIndex_ + delta) % visibleCandidates_.size();
-    if (completionIndex_ < 0) completionIndex_ += visibleCandidates_.size();
+    const int next = qBound(0, completionIndex_ + delta, visibleCandidates_.size() - 1);
+    if (next == completionIndex_) return;
+    completionIndex_ = next;
     emit completionChanged();
 }
 
@@ -473,6 +492,7 @@ void QmlEditorController::resetQmlHistory(const QString& text, int anchor, int p
     Q_UNUSED(text);
     Q_UNUSED(anchor);
     Q_UNUSED(position);
+    closeCompletion();
     qmlUndo_.clear();
     qmlRedo_.clear();
     setUndoAvailability(false, false);
@@ -505,6 +525,7 @@ QVariantMap QmlEditorController::restoreTransaction(const QString& current, cons
 QVariantMap QmlEditorController::undoQmlTransaction()
 {
     if (qmlUndo_.isEmpty()) return {};
+    closeCompletion();
     const auto entry = qmlUndo_.takeLast(); qmlRedo_.append(entry);
     setUndoAvailability(!qmlUndo_.isEmpty(), true);
     return restoreTransaction(entry.after, entry.before);
@@ -512,6 +533,7 @@ QVariantMap QmlEditorController::undoQmlTransaction()
 QVariantMap QmlEditorController::redoQmlTransaction()
 {
     if (qmlRedo_.isEmpty()) return {};
+    closeCompletion();
     const auto entry = qmlRedo_.takeLast(); qmlUndo_.append(entry);
     setUndoAvailability(true, !qmlRedo_.isEmpty());
     return restoreTransaction(entry.before, entry.after);

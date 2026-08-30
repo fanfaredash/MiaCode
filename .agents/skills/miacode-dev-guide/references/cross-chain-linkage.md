@@ -187,11 +187,9 @@ Implications:
 
 - `SimaiDocument` stores raw `first`; `MainWindow::parsedFirstSeconds` is the getter; preview/export
   use the finite parsed raw `&first` directly (no inverted "effectiveFirst").
-- **Edited from the difficulty-page header** (`firstEdit_`), not the metadata page. While a
-  difficulty is active `parsedRawFirstSeconds` reads the live field text (uncommitted edits reflow
-  the timeline; `editingFinished` → `refreshTimelineMetadata`); the commit to `document_.first`
-  happens in `applyCurrentFieldToDocument`'s difficulty branch. The latency page still writes
-  `document_.first` via `applyLatencyDetectorOffset` — same single source of truth.
+- **Edited from UIv2's metadata form** (`EditorPane.qml` → `metadataFirst`). The difficulty header
+  displays the active difficulty designer. The latency page still writes `document_.first` via
+  `applyLatencyDetectorOffset` — same single source of truth.
 - `TimelineQuickModel` receives `first` on every rebuild; `buildTimelineSlowRefreshResult` shifts
   markers by `first`; `MainWindow::applyLatencyDetectorOffset` writes raw `first` back.
 - **Serialization compat contract (`SimaiDocument::toText`):** we read an empty/missing `&first`

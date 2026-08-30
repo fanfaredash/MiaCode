@@ -21,10 +21,6 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
 {
     uiFontFamily_ = QGuiApplication::font().family();
 
-    // Match v1 editorFont() platform defaults: Consolas 10 pt on Windows,
-    // SF Mono / Menlo 13 pt on macOS (see MainWindowShared.cpp).
-    codeFont_ = miacode::mainwindow::shared::editorFont();
-
     // 启动时读取并约束到界面可接受范围。
     sidebarVisible_ = settings_.value(kSidebarVisible, true).toBool();
     sidebarWidth_ = qBound(kSidebarMinimumContentWidth,
@@ -39,11 +35,7 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
                                 settings_.value(kPreviewWidthRatio, 0.5).toDouble(),
                                 kPreviewMaximumWidthRatio);
     fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
-    const QJsonObject editorUi = UiText::loadPreferencesObject().value(QStringLiteral("ui")).toObject();
-    editorHalfWidthInputEnabled_ = editorUi.value(QStringLiteral("editor_half_width_input")).toBool(true);
-    editorOverwriteModeEnabled_ = editorUi.value(QStringLiteral("editor_overwrite_mode")).toBool(false);
-    editorAutoCompletionEnabled_ = editorUi.value(QStringLiteral("editor_auto_completion")).toBool(
-        editorUi.value(QStringLiteral("editor_auto_close_brackets")).toBool(true));
+    reloadEditorSettings();
 }
 
 bool QmlUiSettings::sidebarVisible() const { return sidebarVisible_; }
@@ -60,10 +52,47 @@ double QmlUiSettings::previewMinimumWidthRatio() const { return kPreviewMinimumW
 double QmlUiSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
 QString QmlUiSettings::uiFontFamily() const { return uiFontFamily_; }
 QFont QmlUiSettings::codeFont() const { return codeFont_; }
+int QmlUiSettings::editorBlockSpacing() const { return editorBlockSpacing_; }
 int QmlUiSettings::fontSize() const { return fontSize_; }
 bool QmlUiSettings::editorHalfWidthInputEnabled() const { return editorHalfWidthInputEnabled_; }
 bool QmlUiSettings::editorOverwriteModeEnabled() const { return editorOverwriteModeEnabled_; }
 bool QmlUiSettings::editorAutoCompletionEnabled() const { return editorAutoCompletionEnabled_; }
+bool QmlUiSettings::editorImeInputDisabled() const { return editorImeInputDisabled_; }
+
+void QmlUiSettings::reloadEditorSettings()
+{
+    const QJsonObject editorUi = UiText::loadPreferencesObject().value(QStringLiteral("ui")).toObject();
+    const int fontPointSize = qBound(
+        miacode::mainwindow::shared::kEditorTextFontSizeMin,
+        editorUi.value(QStringLiteral("editor_text_font_size")).toInt(
+            miacode::mainwindow::shared::editorFont().pointSize()),
+        miacode::mainwindow::shared::kEditorTextFontSizeMax);
+    const double lineSpacingFactor = miacode::mainwindow::shared::normalizeEditorLineSpacingFactor(
+        editorUi.value(QStringLiteral("editor_line_spacing_factor")).toDouble(
+            miacode::mainwindow::shared::kEditorLineSpacingFactorDefault));
+    const QFont codeFont = miacode::mainwindow::shared::editorFont(fontPointSize);
+    const int blockSpacing = miacode::mainwindow::shared::blockSpacingPixelsForPointSize(
+        fontPointSize, lineSpacingFactor);
+    const bool halfWidth = editorUi.value(QStringLiteral("editor_half_width_input")).toBool(true);
+    const bool overwrite = editorUi.value(QStringLiteral("editor_overwrite_mode")).toBool(false);
+    const bool autoCompletion = editorUi.value(QStringLiteral("editor_auto_completion")).toBool(true);
+    const bool imeDisabled = editorUi.value(QStringLiteral("editor_ime_input_disabled")).toBool(true);
+    if (codeFont_ == codeFont
+        && editorBlockSpacing_ == blockSpacing
+        && editorHalfWidthInputEnabled_ == halfWidth
+        && editorOverwriteModeEnabled_ == overwrite
+        && editorAutoCompletionEnabled_ == autoCompletion
+        && editorImeInputDisabled_ == imeDisabled) {
+        return;
+    }
+    codeFont_ = codeFont;
+    editorBlockSpacing_ = blockSpacing;
+    editorHalfWidthInputEnabled_ = halfWidth;
+    editorOverwriteModeEnabled_ = overwrite;
+    editorAutoCompletionEnabled_ = autoCompletion;
+    editorImeInputDisabled_ = imeDisabled;
+    emit editorSettingsChanged();
+}
 
 void QmlUiSettings::setSidebarVisible(bool value)
 {

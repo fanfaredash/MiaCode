@@ -5,6 +5,8 @@ import MiaCode.UI
 ApplicationWindow {
     id: window
 
+    property bool sourceEditorFocused: false
+
     required property var applicationContext
     readonly property var shellController: applicationContext.shell
     readonly property var platform: applicationContext.platform
@@ -91,6 +93,7 @@ ApplicationWindow {
         shortcuts: window.applicationContext.shortcuts
         commands: window.applicationContext.commands
         shellController: window.shellController
+        sourceEditorFocused: window.sourceEditorFocused
         chartCommandsEnabled: window.applicationContext.document.currentDifficultyId > 0
     }
 }

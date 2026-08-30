@@ -201,23 +201,19 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
         ui_.difficultyLevelEdit_->setFixedWidth(48);
         ui_.difficultyLevelEdit_->setVisible(true);
     }
-    // The 顶部显示 preference decides which field pair sits next to Lv: the
-    // chart-wide offset (default) or the active difficulty's designer.
-    const bool headerShowsDesigner =
-        state_.editorHeaderTopDisplay_ == MainWindow::EditorHeaderTopDisplay::Designer;
     if (ui_.difficultyFirstLabel_ != nullptr) {
-        ui_.difficultyFirstLabel_->setVisible(!headerShowsDesigner);
+        ui_.difficultyFirstLabel_->setVisible(false);
     }
     if (ui_.firstEdit_ != nullptr) {
         ui_.firstEdit_->setFixedWidth(64);
-        ui_.firstEdit_->setVisible(!headerShowsDesigner);
+        ui_.firstEdit_->setVisible(false);
     }
     if (ui_.difficultyDesignerLabel_ != nullptr) {
-        ui_.difficultyDesignerLabel_->setVisible(headerShowsDesigner);
+        ui_.difficultyDesignerLabel_->setVisible(true);
     }
     if (ui_.difficultyDesignerEdit_ != nullptr) {
         ui_.difficultyDesignerEdit_->setFixedWidth(96);
-        ui_.difficultyDesignerEdit_->setVisible(headerShowsDesigner);
+        ui_.difficultyDesignerEdit_->setVisible(true);
     }
     if (ui_.editorDifficultyControls_ != nullptr) {
         ui_.editorDifficultyControls_->setVisible(true);

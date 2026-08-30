@@ -25,6 +25,7 @@ public:
     Q_INVOKABLE void disableUnifiedDesigner();
     // Reuses MainWindow::onPreferences() — same dialog as v1 Tools/Preferences.
     Q_INVOKABLE void openPreferences();
+    Q_INVOKABLE void adjustEditorFontSize(int delta);
     // Chart-transform commands reach the backend by their ShortcutRegistry id;
     // see MainWindow::triggerShortcutCommand for why v2 needs this at all.
     Q_INVOKABLE bool triggerShortcutCommand(const QString& id);

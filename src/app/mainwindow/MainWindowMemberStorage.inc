@@ -115,10 +115,8 @@
         QLabel* difficultyLevelLabel_ = nullptr;
         QLineEdit* difficultyLevelEdit_ = nullptr;
         QLabel* difficultyFirstLabel_ = nullptr;
-        // Per-difficulty designer (`&des_N`) header pair. Shown instead of the
-        // offset pair when the 顶部显示 preference is set to 谱师
-        // (MainWindowState::editorHeaderTopDisplay_); hidden in the default
-        // offset mode. Distinct from the metadata page's designerEdit_ (&des).
+        // Per-difficulty designer (`&des_N`) header pair. Distinct from the
+        // metadata page's designerEdit_ (&des).
         QLabel* difficultyDesignerLabel_ = nullptr;
         QLineEdit* difficultyDesignerEdit_ = nullptr;
         QWidget* editorHeaderWidget_ = nullptr;
@@ -655,10 +653,6 @@
         // empty-pair backspace, the bracket suggestion popup, and the 'h' hold-
         // duration suggestions. Was three separate toggles before they merged.
         bool editorAutoCompletionEnabled_ = true;
-        // 顶部显示 preference: which field pair the difficulty header shows next
-        // to Lv — the chart-wide offset (default) or the per-difficulty
-        // designer. Persisted as ui.editor_header_top_display.
-        EditorHeaderTopDisplay editorHeaderTopDisplay_ = EditorHeaderTopDisplay::Offset;
         // beta51+ — "禁止中文輸入法輸入" preference. On by default (user-voted
         // default): the editor is for chart notation, so blocking the IME
         // candidate window avoids accidental CJK composition on first launch.

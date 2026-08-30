@@ -70,6 +70,7 @@ public:
     QString metadataDesigner() const;
     QString metadataVideoPath() const;
     QString metadataExtraText() const;
+    QString wholeBpm() const;
     QString metadataSourceText() const;
     QString metadataSourceError() const;
     QVariantList metadataSourceIssues() const;

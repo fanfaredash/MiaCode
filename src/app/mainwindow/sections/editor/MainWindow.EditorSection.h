@@ -17,7 +17,6 @@ public:
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
-    void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
     // Jump to the bookmark's line without leaving a persistent sidebar marker.
     void activateBookmarkAtLine(int line);
     void deleteBookmarkAtLineWithConfirmation(int line);

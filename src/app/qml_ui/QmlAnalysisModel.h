@@ -32,6 +32,7 @@ public:
     int difficultyId() const;
     qulonglong revision() const;
     int markerCount() const;
+    void refreshPreferences();
     Q_INVOKABLE void activateRow(const QVariantMap& row);
     Q_INVOKABLE void completeRowActivation(
         int difficultyId, qulonglong revision, int line, int column, int endColumn, double second);

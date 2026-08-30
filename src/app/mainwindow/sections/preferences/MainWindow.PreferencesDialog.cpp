@@ -878,12 +878,12 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         owner_.stopOrPlayPreviewShortcutAction_,
         QStringLiteral("preview.stop_or_play"),
         QKeySequence(QStringLiteral("Ctrl+Shift+C")),
-        Qt::ApplicationShortcut);
+        Qt::WindowShortcut);
     applyConfiguredShortcut(
         owner_.playPausePreviewShortcutAction_,
         QStringLiteral("preview.play_pause_global"),
         QKeySequence(QStringLiteral("Ctrl+Shift+X")),
-        Qt::ApplicationShortcut);
+        Qt::WindowShortcut);
     applyConfiguredShortcut(
         owner_.previewSlowerAction_,
         QStringLiteral("preview.speed_down"),
@@ -1790,7 +1790,7 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
     // Row order (top to bottom): font size, line spacing, auto-completion,
-    // header display, IME block, and ignore muri issue prompts.
+    // IME block, and ignore muri issue prompts.
     // out, so it trails the prioritised rows.
     auto* editorFontSizeLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_font_size")), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -1923,44 +1923,6 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     editorLayout->addRow(autoCompletionLabel, autoCompletionCombo);
-
-    // Header display controls what the difficulty-page header edits next to Lv:
-    // the chart-wide offset (default) or the per-difficulty designer.
-    const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
-        return mode == EditorHeaderTopDisplay::Designer
-            ? UiText::text(QStringLiteral("dialog.preferences.editor_top_display.designer"))
-            : UiText::text(QStringLiteral("dialog.preferences.editor_top_display.latency"));
-    };
-    auto* headerTopDisplayLabelWidget =
-        new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_top_display")), editorGroup);
-    // Plain combo box, same idiom as the 行距 row above — the two-option
-    // pick doesn't warrant the styled PreferenceMenuButton treatment.
-    auto* headerTopDisplayCombo = new QComboBox(editorGroup);
-    const QList<EditorHeaderTopDisplay> headerTopDisplayOptions{
-        EditorHeaderTopDisplay::Offset,
-        EditorHeaderTopDisplay::Designer,
-    };
-    for (EditorHeaderTopDisplay mode : headerTopDisplayOptions) {
-        headerTopDisplayCombo->addItem(headerTopDisplayLabel(mode), static_cast<int>(mode));
-    }
-    const int headerTopDisplayIndex =
-        headerTopDisplayCombo->findData(static_cast<int>(state_.editorHeaderTopDisplay_));
-    headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
-    styleRegisteredDialogCombo(headerTopDisplayCombo, 12);
-    headerTopDisplayCombo->setToolTip(
-        UiText::text(QStringLiteral("preferences.the_field_next_to_lv"))
-    );
-    connect(headerTopDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
-            [&, headerTopDisplayCombo](int index) {
-        if (index < 0) {
-            return;
-        }
-        const auto mode =
-            static_cast<EditorHeaderTopDisplay>(headerTopDisplayCombo->itemData(index).toInt());
-        owner_.applyEditorHeaderTopDisplay(mode, true);
-        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
-    });
-    editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayCombo);
 
     auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
         UiText::text(QStringLiteral("preferences.ignore_muri_issue_prompts")),

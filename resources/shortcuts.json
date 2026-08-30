@@ -130,7 +130,7 @@
       "label_zh": "停止或播放预览",
       "label_en": "Stop or Play Preview",
       "default": "Ctrl+Shift+C",
-      "context": "application",
+      "context": "window",
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "preview.play_pause_global": {
@@ -138,7 +138,7 @@
       "label_zh": "播放/暂停预览",
       "label_en": "Play/Pause Preview",
       "default": "Ctrl+Shift+X",
-      "context": "application",
+      "context": "window",
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "preview.speed_down": {

@@ -54,6 +54,8 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | 素材对不齐/凸起 (sprite misaligned, bump pokes out) | Baked transparent padding in prefab sprites | Q4 |
 | 文本溢出卡槽 (text overflows a fixed slot) | No overflow mode; ellipsis loses data; headless can't animate | Q5 |
 | 字符间隙/挤压 (glyph gaps or squash from an atlas) | Monospaced atlas cells + AA tails | Q6 |
+| Canvas 行号与 TextEdit 文字高低错位 | Canvas `middle` baseline differs from QTextLayout baseline | Q7 |
+| 编辑器滚动迟缓、滚动条消失、光标为箭头 | Full-area `MouseArea` consumes wheel/trackpad input and supplies its default cursor; Basic scrollbar fades while idle | Q8 |
 | 层叠关系错误 (element above/below the wrong thing) | QML: declaration order = paint order; widget: `paintEvent` draw order | Z1 |
 | 模态弹窗藏到主窗口下方 / clicks only play the task-dialog warning sound | QuickShell uses a hidden QWidget backend, so parentless application-modal dialogs lack a native owner and can fall behind the visible QQuickWindow | Z8 |
 | 点击区域错位 (hit area ≠ visual) | Hit geometry and visuals derived from different sources | Z2 |
@@ -98,6 +100,10 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   marquee (two-copy wrap, `(frame - begin) * pxPerFrame % period`), tunables in template.
 - **Q6**: per-glyph alpha bounds table + `sourceClipRect` + small negative `Row.spacing`
   (−1/−2) to close AA tails; calibrate offsets with a measurement script.
+- **Q7**: Canvas uses `alphabetic` baseline at `lineTop + FontMetrics.ascent`; TextEdit and
+  Canvas must read the same font.
+- **Q8**: Context-menu overlays pass gestures to the `ScrollView`, set an I-beam cursor,
+  and leave wheel events unhandled so the native scrollbar and scrolling path stay intact.
 - **Z1**: QML stacking = declaration order (document the intended order in a comment);
   widget stacking = `paintEvent` draw order (background → grid → content → overlays).
   When a new layer must sit between existing ones, move the draw call, don't add `z` hacks.

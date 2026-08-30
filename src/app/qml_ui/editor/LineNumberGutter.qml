@@ -29,9 +29,14 @@ Rectangle {
     activeFocusOnTab: true
     focus: false
 
-    width: 46
+    width: 36
     color: Theme.colors.background.editor
     clip: true
+
+    FontMetrics {
+        id: codeFontMetrics
+        font: Theme.codeFont
+    }
 
     // 行号用 Canvas 只绘制可见行，避免大谱面下为每一行常驻一个 Text
     // 组件导致滚动和光标移动时全量重新布局。
@@ -56,7 +61,7 @@ Rectangle {
                 const font = Theme.codeFont
                 ctx.font = font.pixelSize + "px \"" + font.family + "\""
                 ctx.textAlign = "right"
-                ctx.textBaseline = "middle"
+                ctx.textBaseline = "alphabetic"
                 const firstLine = Math.max(0, Math.floor((root.contentY - root.topPadding) / root.rowHeight))
                 const lastLine = Math.min(
                     root.lineCount - 1,
@@ -68,7 +73,8 @@ Rectangle {
                     ctx.fillText(
                         String(line + 1),
                         width - 6,
-                        root.topPadding + line * root.rowHeight - root.contentY + root.rowHeight / 2)
+                        root.topPadding + line * root.rowHeight - root.contentY
+                            + codeFontMetrics.ascent)
                     if (root.bookmarkedLines.some(item => item.line === line + 1)) {
                         ctx.fillStyle = Theme.colors.accent.primary
                         ctx.fillRect(3, root.topPadding + line * root.rowHeight - root.contentY + 5,
@@ -108,7 +114,7 @@ Rectangle {
             const font = Theme.codeFont
             ctx.font = font.pixelSize + "px \"" + font.family + "\""
             ctx.textAlign = "right"
-            ctx.textBaseline = "middle"
+            ctx.textBaseline = "alphabetic"
 
             for (let line = firstLine; line <= lastLine; ++line) {
                 const lineTop = tops.length > 0 ? tops[line] : line * root.rowHeight
@@ -118,7 +124,7 @@ Rectangle {
                 ctx.fillText(
                     String(line + 1),
                     width - 6,
-                    root.topPadding + lineTop - root.contentY + root.rowHeight / 2)
+                    root.topPadding + lineTop - root.contentY + codeFontMetrics.ascent)
                 if (root.bookmarkedLines.some(item => item.line === line + 1)) {
                     ctx.fillStyle = Theme.colors.accent.primary
                     ctx.fillRect(3, root.topPadding + lineTop - root.contentY + 5,

@@ -16,6 +16,7 @@ Popup {
     // scroll offset in and the anchor is recomputed for every input that can
     // move the caret on screen.
     property real editorScrollY: 0
+    readonly property bool pointerInside: popupHover.hovered
 
     parent: Overlay.overlay
     modal: false
@@ -111,6 +112,10 @@ Popup {
         clip: true
         interactive: contentHeight > height
         boundsBehavior: Flickable.StopAtBounds
+
+        HoverHandler {
+            id: popupHover
+        }
 
         TextMetrics {
             id: candidateMetrics

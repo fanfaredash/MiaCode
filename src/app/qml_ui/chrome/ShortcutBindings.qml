@@ -19,6 +19,7 @@ Item {
     required property var shortcuts
     required property var commands
     required property var shellController
+    required property bool sourceEditorFocused
     // Transforms edit the chart, so they are inert without one.
     property bool chartCommandsEnabled: true
 
@@ -41,6 +42,24 @@ Item {
     // backend command table.
     Shortcut {
         sequence: root.shortcuts.revision >= 0
+            ? root.shortcuts.sequence("editor.font_decrease", "Ctrl+Alt+-")
+            : ""
+        enabled: sequence !== ""
+        context: Qt.WindowShortcut
+        onActivated: root.commands.adjustEditorFontSize(-1)
+    }
+
+    Shortcut {
+        sequence: root.shortcuts.revision >= 0
+            ? root.shortcuts.sequence("editor.font_increase", "Ctrl+Alt+=")
+            : ""
+        enabled: sequence !== ""
+        context: Qt.WindowShortcut
+        onActivated: root.commands.adjustEditorFontSize(1)
+    }
+
+    Shortcut {
+        sequence: root.shortcuts.revision >= 0
             ? root.shortcuts.sequence("preview.stop_or_play", "Ctrl+X")
             : ""
         enabled: sequence !== ""
@@ -52,7 +71,7 @@ Item {
         sequence: root.shortcuts.revision >= 0
             ? root.shortcuts.sequence("preview.play_pause_global", "Ctrl+Shift+X")
             : ""
-        enabled: sequence !== ""
+        enabled: sequence !== "" && !root.sourceEditorFocused
         context: Qt.ApplicationShortcut
         onActivated: root.shellController.togglePreviewPlayback()
     }

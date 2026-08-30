@@ -69,6 +69,12 @@ int QmlAnalysisModel::difficultyId() const { return projection_.difficultyId; }
 qulonglong QmlAnalysisModel::revision() const { return projection_.revision; }
 int QmlAnalysisModel::markerCount() const { return projection_.noteMarkers.size(); }
 
+void QmlAnalysisModel::refreshPreferences()
+{
+    refresh();
+    emit changed();
+}
+
 void QmlAnalysisModel::activateRow(const QVariantMap& row)
 {
     refresh();
@@ -138,7 +144,8 @@ void QmlAnalysisModel::refresh()
         && analysisSnapshot.revision == workspaceSnapshot.revision;
     projection_ = miacode::qml_ui::projectAnalysis(
         analysisSnapshot, workspaceSnapshot.activeDifficultyId, workspaceSnapshot.revision,
-        current ? muriRowsForSnapshot(analysisSnapshot)
+        current && backend_ != nullptr && !backend_->ignoreMuriIssuePrompts()
+            ? muriRowsForSnapshot(analysisSnapshot)
                 : QVector<miacode::qml_ui::AnalysisRow>());
     if (activationState_.hasPending() && !miacode::qml_ui::analysisRowCanActivate(
             projection_, activationState_.pending(), workspaceSnapshot.activeDifficultyId)) {

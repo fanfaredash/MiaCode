@@ -54,6 +54,7 @@ QtObject {
 
     readonly property string uiFont: preferences ? preferences.uiFontFamily : ""
     readonly property font codeFont: preferences ? preferences.codeFont : Qt.font({})
+    readonly property int codeBlockSpacing: preferences ? preferences.editorBlockSpacing : 0
     readonly property int uiFontSize: preferences ? preferences.fontSize : 13
     readonly property int secondaryFontSize: uiFontSize - 1
     readonly property int captionFontSize: uiFontSize - 3
@@ -68,4 +69,3 @@ QtObject {
     readonly property int chromeInsetX: 3
     readonly property int chromeInsetY: 2
 }
-
