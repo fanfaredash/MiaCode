@@ -653,6 +653,7 @@
         // VS Code-style editor.scrollBeyondLastLine behavior. Virtual viewport
         // space only; it never changes the chart text or saved document.
         bool editorScrollBeyondLastLineEnabled_ = true;
+        bool editorSelectionBeatDisplayEnabled_ = true;
         // 顶部显示 preference: which field pair the difficulty header shows next
         // to Lv — the chart-wide offset (default) or the per-difficulty
         // designer. Persisted as ui.editor_header_top_display.

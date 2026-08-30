@@ -340,6 +340,7 @@ void MainWindow::EditorSection::loadPortableState()
     state_.editorOverwriteModeEnabled_ = false;
     state_.editorAutoCompletionEnabled_ = true;
     state_.editorScrollBeyondLastLineEnabled_ = true;
+    state_.editorSelectionBeatDisplayEnabled_ = true;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -376,6 +377,8 @@ void MainWindow::EditorSection::loadPortableState()
         ui.value("editor_auto_close_brackets").toBool(true));
     state_.editorScrollBeyondLastLineEnabled_ =
         ui.value("editor_scroll_beyond_last_line").toBool(true);
+    state_.editorSelectionBeatDisplayEnabled_ =
+        ui.value("editor_selection_beat_display").toBool(true);
     // 顶部显示 — which field pair the difficulty header shows ("offset" default,
     // "designer" for the per-difficulty &des_N edit).
     state_.editorHeaderTopDisplay_ =
@@ -409,6 +412,7 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
     applyEditorAutoCompletionEnabled(state_.editorAutoCompletionEnabled_, false);
     applyEditorScrollBeyondLastLineEnabled(state_.editorScrollBeyondLastLineEnabled_, false);
+    applyEditorSelectionBeatDisplayEnabled(state_.editorSelectionBeatDisplayEnabled_, false);
     applyEditorHeaderTopDisplay(state_.editorHeaderTopDisplay_, false);
     applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
@@ -805,6 +809,7 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
     ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
+    ui.insert("editor_selection_beat_display", state_.editorSelectionBeatDisplayEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -969,6 +974,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
     ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
+    ui.insert("editor_selection_beat_display", state_.editorSelectionBeatDisplayEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -1460,9 +1466,25 @@ void MainWindow::applyEditorAutoCompletionEnabled(bool enabled, bool persistPref
     editorSection_->applyEditorAutoCompletionEnabled(enabled, persistPreference);
 }
 
+void MainWindow::EditorSection::applyEditorSelectionBeatDisplayEnabled(bool enabled, bool persistPreference)
+{
+    state_.editorSelectionBeatDisplayEnabled_ = enabled;
+    if (owner_.documentSection_ != nullptr) {
+        owner_.documentSection_->updateEditorStatus();
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
 void MainWindow::applyEditorScrollBeyondLastLineEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorScrollBeyondLastLineEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorSelectionBeatDisplayEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorSelectionBeatDisplayEnabled(enabled, persistPreference);
 }
 
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)

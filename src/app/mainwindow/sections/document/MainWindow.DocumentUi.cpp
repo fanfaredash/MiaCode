@@ -250,15 +250,71 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
     }
 
     const auto [line, col] = currentCursorLineCol();
-    const QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
+    QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
+    QString cursorToolTip;
+    if (state_.editorSelectionBeatDisplayEnabled_) {
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+            const QTextCursor selection = editor->textCursor();
+            if (selection.hasSelection()) {
+                const QString selected = selection.selectedText();
+                const int commaCount = selected.count(QLatin1Char(','));
+                const QString documentText = editor->toPlainText();
+                const int selectionStart = selection.selectionStart();
+                const int selectionEnd = selection.selectionEnd();
+                QString denominator = QStringLiteral("4");
+                QStringList parts;
+                QStringList denominators;
+                QHash<QString, int> counts;
+                const QRegularExpression declarationRe(QStringLiteral("\\{(\\d+)\\}"));
+                int cursor = 0;
+                while (cursor < selectionEnd && cursor < documentText.size()) {
+                    const QRegularExpressionMatch match = declarationRe.match(documentText, cursor);
+                    const int next = match.hasMatch() ? match.capturedStart() : documentText.size();
+                    const int commaFrom = qMax(selectionStart, cursor);
+                    const int commaTo = qMin(selectionEnd, next);
+                    if (commaTo > commaFrom) {
+                        const int count = documentText.mid(commaFrom, commaTo - commaFrom).count(QLatin1Char(','));
+                        if (count > 0) {
+                            if (!denominators.contains(denominator)) {
+                                denominators.append(denominator);
+                            }
+                            counts[denominator] += count;
+                        }
+                    }
+                    if (!match.hasMatch()) {
+                        break;
+                    }
+                    denominator = match.captured(1);
+                    cursor = match.capturedEnd();
+                }
+                for (const QString& value : denominators) {
+                    parts.append(QStringLiteral("%1/%2").arg(counts.value(value)).arg(value));
+                }
+                if (parts.size() == 1) {
+                    cursorText = UiText::text(QStringLiteral("document.selection_beats_single"))
+                        .arg(parts.first());
+                    cursorToolTip = cursorText;
+                } else if (parts.size() > 1) {
+                    cursorText = UiText::text(QStringLiteral("document.selection_beats_mixed"))
+                        .arg(commaCount);
+                    cursorToolTip = UiText::text(QStringLiteral("document.selection_beats_mixed_tooltip"))
+                        .arg(parts.join(QStringLiteral(" + ")));
+                } else if (commaCount > 0) {
+                    cursorText = UiText::text(QStringLiteral("document.selection_beats_single"))
+                        .arg(QStringLiteral("%1/%2").arg(commaCount).arg(denominator));
+                    cursorToolTip = cursorText;
+                }
+            }
+        }
+    }
     ui_.editorCursorLabel_->setText(cursorText);
-    ui_.editorCursorLabel_->setFixedWidth(QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText) + 10);
+    ui_.editorCursorLabel_->setToolTip(cursorToolTip);
     ui_.editorCursorLabel_->setVisible(true);
-    const QString correctedCursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
     const QString correctedCursorWidthTemplate = UiText::text(QStringLiteral("document.ln_9999_col_9999"));
-    ui_.editorCursorLabel_->setText(correctedCursorText);
     ui_.editorCursorLabel_->setFixedWidth(
-        QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(correctedCursorWidthTemplate) + 10);
+        qMax(
+            QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(correctedCursorWidthTemplate),
+            QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText)) + 10);
 
     if (QLayout* headerLayout = ui_.editorHeaderWidget_->layout(); headerLayout != nullptr) {
         headerLayout->activate();

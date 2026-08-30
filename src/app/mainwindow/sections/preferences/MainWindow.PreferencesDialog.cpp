@@ -1793,6 +1793,7 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
     bool selectedAutoCompletionEnabled = state_.editorAutoCompletionEnabled_;
     bool selectedScrollBeyondLastLineEnabled = state_.editorScrollBeyondLastLineEnabled_;
+    bool selectedEditorSelectionBeatDisplayEnabled = state_.editorSelectionBeatDisplayEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
@@ -1956,6 +1957,26 @@ void MainWindow::PreferencesSection::onPreferences()
             UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     editorLayout->addRow(scrollBeyondLastLineLabel, scrollBeyondLastLineCombo);
+
+    auto* selectionBeatDisplayLabel = new QLabel(
+        UiText::text(QStringLiteral("preferences.editor_selection_beat_display")), editorGroup);
+    auto* selectionBeatDisplayCombo = new QComboBox(editorGroup);
+    selectionBeatDisplayCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
+    selectionBeatDisplayCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
+    selectionBeatDisplayCombo->setCurrentIndex(selectedEditorSelectionBeatDisplayEnabled ? 1 : 0);
+    styleRegisteredDialogCombo(selectionBeatDisplayCombo, 12);
+    selectionBeatDisplayCombo->setToolTip(
+        UiText::text(QStringLiteral("preferences.editor_selection_beat_display_hint")));
+    connect(selectionBeatDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedEditorSelectionBeatDisplayEnabled = (index == 1);
+        owner_.applyEditorSelectionBeatDisplayEnabled(selectedEditorSelectionBeatDisplayEnabled, true);
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
+    });
+    editorLayout->addRow(selectionBeatDisplayLabel, selectionBeatDisplayCombo);
 
     // Header display controls what the difficulty-page header edits next to Lv:
     // the chart-wide offset (default) or the per-difficulty designer.

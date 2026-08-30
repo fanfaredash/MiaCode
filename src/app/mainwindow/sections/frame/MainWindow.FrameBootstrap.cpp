@@ -608,6 +608,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         UiText::text(QStringLiteral("metadata.ln_1_col_1")),
         editorHeaderTrailingWidget);
     editorCursorLabel_->setObjectName("EditorMeta");
+    editorCursorLabel_->setProperty("miacodeAllowTooltip", true);
     editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     editorCursorLabel_->setFixedWidth(
         QFontMetrics(uiMonoFont(10)).horizontalAdvance(
