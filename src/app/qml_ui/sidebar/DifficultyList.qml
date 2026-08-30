@@ -86,8 +86,15 @@ Column {
                 const generation = root.documentSession.bookmarkGeneration
                 return root.documentSession.bookmarksForDifficulty(modelData.id)
             }
-            readonly property bool bookmarksExpanded:
-                root.viewState.bookmarkGroupExpanded(modelData.id)
+            // Only the current difficulty shows its bookmarks. The row is the
+            // fold control now, and a row that is not current switches instead
+            // of folding — so an expanded state left behind on some other
+            // difficulty would be showing a list nothing on screen can close.
+            readonly property bool bookmarksExpanded: activeEditor
+                && root.viewState.bookmarkGroupExpanded(modelData.id)
+            // What a click on this row means: fold when it is already the one
+            // being edited and it has bookmarks, switch to it otherwise.
+            readonly property bool foldsBookmarks: activeEditor && bookmarks.length > 0
 
             width: root.width
             visible: root.viewState.difficultySectionExpanded
@@ -96,43 +103,66 @@ Column {
                 width: parent.width
                 height: root.viewState.difficultySectionExpanded ? 30 : 0
 
-                // The fold control sits BESIDE the navigation row, never inside
-                // its contentItem: the row's highlight spans the whole row and
-                // would otherwise run underneath the chevron.
+                // The row IS the fold control: clicking a difficulty that is not
+                // the one being edited switches to it, exactly as before, and
+                // clicking the one already being edited folds its bookmarks.
+                // A separate chevron button on the right was the first attempt
+                // and read backwards — the thing being folded is below and to
+                // the left of what you press.
                 NavRow {
                     id: difficultyButton
                     anchors.left: parent.left
-                    anchors.right: foldButton.visible ? foldButton.left : parent.right
+                    anchors.right: parent.right
                     height: parent.height
-                    textLeftPadding: 26
+                    textLeftPadding: 38
                     text: difficultyGroup.modelData.label
                     selected: difficultyGroup.activeEditor
-                    onClicked: root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+                    onClicked: {
+                        if (difficultyGroup.foldsBookmarks)
+                            root.viewState.setBookmarkGroupExpanded(
+                                difficultyGroup.modelData.id,
+                                !difficultyGroup.bookmarksExpanded)
+                        else
+                            root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
+                    }
+
+                    // Fold indicator, left of the colour block and aligned with
+                    // the 难度 section header's own chevron. The slot is always
+                    // reserved so every colour block lines up; only the glyph is
+                    // conditional.
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: difficultyGroup.bookmarks.length > 0
+                        text: difficultyGroup.bookmarksExpanded ? "▾" : "▸"
+                        color: difficultyGroup.activeEditor
+                               ? Theme.colors.text.active
+                               : Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
+                    }
 
                     // Difficulty colour block, same palette as v1's badge icon.
                     Rectangle {
                         anchors.left: parent.left
-                        anchors.leftMargin: 10
+                        anchors.leftMargin: 22
                         anchors.verticalCenter: parent.verticalCenter
                         width: 10
                         height: 10
                         radius: 3
                         color: Theme.difficultyColor(difficultyGroup.modelData.id)
                     }
-                }
 
-                IconButton {
-                    id: foldButton
-                    anchors.right: parent.right
-                    anchors.rightMargin: 4
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: difficultyGroup.bookmarks.length > 0
-                             && root.viewState.difficultySectionExpanded
-                    glyph: difficultyGroup.bookmarksExpanded ? "▾" : "▸"
-                    tooltip: difficultyGroup.bookmarksExpanded
-                        ? qsTr("折叠书签") : qsTr("展开书签")
-                    onClicked: root.viewState.setBookmarkGroupExpanded(
-                        difficultyGroup.modelData.id, !difficultyGroup.bookmarksExpanded)
+                    Tooltip {
+                        visible: difficultyButton.hovered
+                        text: difficultyGroup.foldsBookmarks
+                            ? (difficultyGroup.bookmarksExpanded
+                               ? qsTr("折叠书签") : qsTr("展开书签"))
+                            : difficultyGroup.modelData.label
+                    }
                 }
             }
 
@@ -143,7 +173,10 @@ Column {
                     required property var modelData
                     width: parent.width
                     height: root.viewState.difficultySectionExpanded ? 26 : 0
-                    textLeftPadding: 30
+                    // Past the difficulty label's own 38, so a bookmark reads as
+                    // belonging to the row above it rather than sitting level
+                    // with it.
+                    textLeftPadding: 44
                     text: qsTr("书签 %1：%2").arg(modelData.line).arg(modelData.title)
                     Accessible.name: qsTr("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
                     onClicked: {

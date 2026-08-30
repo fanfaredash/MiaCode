@@ -1108,6 +1108,14 @@ int main(int argc, char** argv)
                && sidebarSource.contains(QStringLiteral("Theme.difficultyColor"))
                && sidebarSource.contains(QStringLiteral("setBookmarkGroupExpanded")),
            QStringLiteral("bookmarks are grouped under their difficulty in the sidebar, foldable and colour-coded, instead of overlaying the editor"), out, &failed);
+    // The difficulty row is the fold control. A click means fold only when the
+    // row is already the one being edited, which is what `foldsBookmarks`
+    // decides; the earlier design put a separate chevron button on the right
+    // and read backwards, so its return would be a regression, not a variant.
+    expect(sidebarSource.contains(QStringLiteral("foldsBookmarks"))
+               && sidebarSource.contains(QStringLiteral("readonly property bool foldsBookmarks: activeEditor"))
+               && !sidebarSource.contains(QStringLiteral("id: foldButton")),
+           QStringLiteral("the difficulty row folds its own bookmarks, with no separate fold button"), out, &failed);
     QFile followSyncSource(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
     expect(followSyncSource.open(QIODevice::ReadOnly),
