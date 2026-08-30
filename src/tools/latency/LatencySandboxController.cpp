@@ -11,6 +11,10 @@
 #include "timeline/TimelineSlowRefresh.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
+#include "common/DebugLog.h"
+#include "common/OperationLog.h"
+#include "common/ProcessDiagnostics.h"
+
 #include <QTimer>
 #include <QtMath>
 
@@ -22,6 +26,33 @@ constexpr int kPollIntervalMs = 33;  // ~30Hz UI poll for the page's own widgets
 constexpr double kFallbackAudioDurationSeconds = 180.0;
 
 }  // namespace
+
+void appendLatencyDiagnosticPhase(const QString& action, const QString& detail)
+{
+    const qint64 privateBytes = miacode::diag::processPrivateBytes();
+    const qint64 privateMb = privateBytes >= 0 ? privateBytes / (1024 * 1024) : -1;
+    QString payload = QStringLiteral("action=%1 private_mb=%2")
+                          .arg(action, QString::number(privateMb));
+    if (!detail.trimmed().isEmpty()) {
+        payload += QLatin1Char(' ');
+        payload += detail.trimmed();
+    }
+
+    // Force this sparse, user-triggered diagnostic even without --debug. The
+    // normal runtime line is easy to aggregate; the startup beacon below is
+    // the durable source of truth when the process dies before the async log
+    // writer or the OS file cache can settle.
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("latency/entry"),
+        payload,
+        /*force=*/true);
+    miacode::debug_log::flushAsyncLogWriter(500);
+
+    const QByteArray beaconLine =
+        QStringLiteral("latency/entry %1").arg(payload).toUtf8();
+    miacode::oplog::appendStartupBeaconLine(beaconLine.constData());
+}
 
 LatencySandboxController::LatencySandboxController(MainWindow* owner, QObject* parent)
     : QObject(parent)
@@ -41,7 +72,17 @@ LatencySandboxController::~LatencySandboxController()
 
 void LatencySandboxController::setOnPage(bool onPage)
 {
+    MC_OP("LatencySandboxController::setOnPage");
+    _mc_op_.note(QStringLiteral("requested=%1 current=%2")
+                     .arg(onPage ? 1 : 0)
+                     .arg(onPage_ ? 1 : 0));
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("sandbox_set_on_page_begin"),
+        QStringLiteral("requested=%1 current=%2")
+            .arg(onPage ? 1 : 0)
+            .arg(onPage_ ? 1 : 0));
     if (onPage_ == onPage) {
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_set_on_page_noop"));
         return;
     }
     onPage_ = onPage;
@@ -50,6 +91,9 @@ void LatencySandboxController::setOnPage(bool onPage)
     } else {
         teardownSandboxScene();
     }
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("sandbox_set_on_page_complete"),
+        QStringLiteral("on_page=%1").arg(onPage_ ? 1 : 0));
 }
 
 double LatencySandboxController::playheadSeconds() const
@@ -124,18 +168,40 @@ void LatencySandboxController::setSfxVolumePercent(int percent)
 
 void LatencySandboxController::installSandboxScene()
 {
+    MC_OP("LatencySandboxController::installSandboxScene");
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("sandbox_install_begin"),
+        QStringLiteral("bpm=%1 offset=%2 subdivision=%3 track_duration=%4 cached_markers=%5")
+            .arg(bpm_, 0, 'f', 3)
+            .arg(offsetSeconds_, 0, 'f', 6)
+            .arg(subdivision_)
+            .arg(owner_.isNull() ? -1.0 : owner_->state_.previewTrackDurationSeconds_, 0, 'f', 6)
+            .arg(owner_.isNull() ? -1 : owner_->state_.latestTimelineNoteMarkers_.size()));
     if (owner_.isNull()) {
+        _mc_op_.fail(QStringLiteral("owner_null"));
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_abort_owner_null"));
         return;
     }
     // Make sure the SFX engine + assets are loaded (the page may be opened
     // before any difficulty was previewed). Mirrors startQtPreviewPlayback().
-    owner_->ensurePreviewSfxRuntimePrepared();
+    {
+        miacode::oplog::Scope phaseOp("LatencySandboxController::install.ensurePreviewSfxRuntimePrepared");
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_sfx_prepare_begin"));
+        owner_->ensurePreviewSfxRuntimePrepared();
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("sandbox_install_sfx_prepare_complete"),
+            QStringLiteral("runtime=%1 prepared=%2 preparation_sequence=%3")
+                .arg(owner_->state_.previewSfxRuntime_ != nullptr ? 1 : 0)
+                .arg(owner_->state_.previewSfxRuntimePrepared_ ? 1 : 0)
+                .arg(owner_->state_.previewSfxRuntimePreparationSequence_));
+    }
 
     // Cache the pre-sandbox timeline state so we can roll back cleanly when the
     // user leaves the page. Audio levels are NOT snapshotted: they are re-derived
     // from the current mode by MainWindow::applyPreviewAudioSettingsToRuntime, so
     // entering the page dispatches the audition mix and leaving it re-dispatches
     // the user's normal mix (see the dispatch calls in install/teardown below).
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_cache_timeline_begin"));
     cachedNoteMarkers_ = owner_->state_.latestTimelineNoteMarkers_;
     cachedNoteMarkerSignature_ = owner_->state_.latestTimelineNoteMarkerSignature_;
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
@@ -144,13 +210,20 @@ void LatencySandboxController::installSandboxScene()
         cachedSnapshot_ = TimelineRenderSnapshot();
     }
     hasCachedTimeline_ = true;
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("sandbox_install_cache_timeline_complete"),
+        QStringLiteral("cached_markers=%1 snapshot_lines=%2")
+            .arg(cachedNoteMarkers_.size())
+            .arg(cachedSnapshot_.lines.size()));
 
     // Drop any retained pause transaction a previously-paused difficulty left
     // behind, so the first audition Play starts cleanly from 0 instead of
     // resuming that difficulty's transaction.
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_retained_audio_clear_begin"));
         owner_->state_.previewSfxRuntime_->stopAll();
         owner_->state_.previewSfxRuntime_->clearRetainedPreviewPlaybackTransaction();
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_retained_audio_clear_complete"));
     }
 
     auditionRunning_ = false;
@@ -169,15 +242,22 @@ void LatencySandboxController::installSandboxScene()
     // Install the test chart as the preview source + dispatch the per-page
     // audition mix. onPage_ is already true (setOnPage flips it before calling
     // this), so the single mode-aware dispatch resolves to LatencyAudition levels.
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_audio_levels_begin"));
     owner_->applyPreviewAudioSettingsToRuntime();
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_audio_levels_complete"));
     setupSandboxPreviewState();
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("sandbox_install_apply_playhead_begin"),
+        QStringLiteral("second=%1").arg(restoreSecond, 0, 'f', 6));
     applyPlayheadToScene(restoreSecond);
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_apply_playhead_complete"));
 
     if (tickTimer_ != nullptr) {
         tickTimer_->start();
     }
     emit auditionStateChanged(false);
     emit playheadAdvanced(restoreSecond);
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_install_complete"));
 }
 
 void LatencySandboxController::teardownSandboxScene()
@@ -287,14 +367,61 @@ void LatencySandboxController::applyPlayheadToScene(double seconds)
 
 void LatencySandboxController::setupSandboxPreviewState()
 {
+    MC_OP("LatencySandboxController::setupSandboxPreviewState");
     if (owner_.isNull()) {
+        _mc_op_.fail(QStringLiteral("owner_null"));
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_abort_owner_null"));
         return;
     }
     const double duration = resolveAudioDurationSeconds();
-    const QString chartText = buildTestChartText(bpm_, subdivision_, duration);
-    const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(chartText);
-    const TimelinePreviewRefreshState previewState =
-        buildTimelinePreviewRefreshState(parseResult, offsetSeconds_);
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("sandbox_setup_begin"),
+        QStringLiteral("bpm=%1 offset=%2 subdivision=%3 duration=%4")
+            .arg(bpm_, 0, 'f', 3)
+            .arg(offsetSeconds_, 0, 'f', 6)
+            .arg(subdivision_)
+            .arg(duration, 0, 'f', 6));
+
+    QString chartText;
+    {
+        miacode::oplog::Scope phaseOp("LatencySandboxController::setup.buildTestChartText");
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_chart_build_begin"));
+        chartText = buildTestChartText(bpm_, subdivision_, duration);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("sandbox_setup_chart_build_complete"),
+            QStringLiteral("chart_chars=%1 estimated_notes=%2")
+                .arg(chartText.size())
+                .arg(qMax(0, chartText.count(QStringLiteral("1,")))));
+    }
+
+    SimaiNativeParseResult parseResult;
+    {
+        miacode::oplog::Scope phaseOp("LatencySandboxController::setup.parseForTimeline");
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_parse_begin"));
+        parseResult = SimaiNativeParser::parseForTimeline(chartText);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("sandbox_setup_parse_complete"),
+            QStringLiteral("ok=%1 notes=%2 beats=%3 measures=%4 errors=%5 warnings=%6 duration=%7")
+                .arg(parseResult.ok ? 1 : 0)
+                .arg(parseResult.noteMarkers.size())
+                .arg(parseResult.beatMarkers.size())
+                .arg(parseResult.measureLineSeconds.size())
+                .arg(parseResult.errors.size())
+                .arg(parseResult.warnings.size())
+                .arg(parseResult.durationSeconds, 0, 'f', 6));
+    }
+
+    TimelinePreviewRefreshState previewState;
+    {
+        miacode::oplog::Scope phaseOp("LatencySandboxController::setup.buildPreviewRefreshState");
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_preview_state_build_begin"));
+        previewState = buildTimelinePreviewRefreshState(parseResult, offsetSeconds_);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("sandbox_setup_preview_state_build_complete"),
+            QStringLiteral("shifted_notes=%1 signature_bytes=%2")
+                .arg(previewState.shiftedNoteMarkers.size())
+                .arg(previewState.noteMarkerSignature.size()));
+    }
 
     // Preview note markers + "snapshot ready" flags — the same state a
     // slow-refresh publishes for a real difficulty, so preparePreviewStartState
@@ -304,20 +431,37 @@ void LatencySandboxController::setupSandboxPreviewState()
     owner_->state_.latestTimelinePreviewRevision_ = owner_->state_.timelineRevision_;
     owner_->state_.latestTimelinePreviewSnapshotReady_ = true;
     if (owner_->state_.previewCanvas_ != nullptr) {
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_preview_markers_publish_begin"));
         owner_->state_.previewCanvas_->setNoteMarkers(previewState.shiftedNoteMarkers);
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_preview_markers_publish_complete"));
     }
 
     // Bottom timeline — reuse the real timeline model so the test chart's notes
     // (and beat/measure grid) render exactly like a difficulty's timeline.
-    owner_->state_.timelineQuickModel_.rebuildFromText(chartText, offsetSeconds_);
+    {
+        miacode::oplog::Scope phaseOp("LatencySandboxController::setup.timelineQuickModelRebuild");
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_timeline_model_rebuild_begin"));
+        owner_->state_.timelineQuickModel_.rebuildFromText(chartText, offsetSeconds_);
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_timeline_model_rebuild_complete"));
+    }
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_timeline_bridge_publish_begin"));
         owner_->state_.timelineQuickStateBridge_->setTimelineData(
             owner_->state_.timelineQuickModel_.snapshot());
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_timeline_bridge_publish_complete"));
     }
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_slider_range_begin"));
     owner_->updatePreviewSliderRange();
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_slider_range_complete"));
 
     // SFX timeline for the test taps.
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("sandbox_setup_sfx_timeline_begin"),
+            QStringLiteral("notes=%1 playing=%2 rate=%3")
+                .arg(previewState.shiftedNoteMarkers.size())
+                .arg(owner_->state_.qtPreviewPlaying_ ? 1 : 0)
+                .arg(owner_->state_.previewPlaybackRate_, 0, 'f', 3));
         owner_->state_.previewSfxRuntime_->configureTimeline(
             previewState.shiftedNoteMarkers,
             owner_->state_.previewPlaybackRate_ > 0.0 ? owner_->state_.previewPlaybackRate_ : 1.0,
@@ -333,7 +477,9 @@ void LatencySandboxController::setupSandboxPreviewState()
             owner_->state_.previewSfxRuntime_->resetCursor(
                 owner_->currentPreviewAuthoritativeAudioClockSecond(), false);
         }
+        appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_sfx_timeline_complete"));
     }
+    appendLatencyDiagnosticPhase(QStringLiteral("sandbox_setup_complete"));
 }
 
 void LatencySandboxController::restoreOriginalTimeline()

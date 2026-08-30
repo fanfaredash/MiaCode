@@ -11,12 +11,14 @@
 #include "UiTheme.h"
 
 #include "common/ChartClockCount.h"
+#include "common/OperationLog.h"
 
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCursor>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -174,11 +176,23 @@ void LatencyDetectionPage::applyThemeStyles()
 void LatencyDetectionPage::refreshFromDocument()
 {
     if (owner_.isNull() || suppressDocumentRefresh_) {
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("page_refresh_document_skip"),
+            QStringLiteral("owner=%1 suppressed=%2")
+                .arg(owner_.isNull() ? 0 : 1)
+                .arg(suppressDocumentRefresh_ ? 1 : 0));
         return;
     }
     const double bpm = documentWholeBpm();
     const double offset = documentOffsetSeconds();
     const int clockCount = documentClockCount();
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("page_refresh_document_values"),
+        QStringLiteral("bpm=%1 offset=%2 clock_count=%3 sandbox=%4")
+            .arg(bpm, 0, 'f', 6)
+            .arg(offset, 0, 'f', 6)
+            .arg(clockCount)
+            .arg(sandbox_.isNull() ? 0 : 1));
     if (bpmEdit_ != nullptr) {
         QSignalBlocker blocker(bpmEdit_);
         bpmEdit_->setValue(bpm > 0.0 ? bpm : 120.0);
@@ -198,19 +212,33 @@ void LatencyDetectionPage::refreshFromDocument()
         sandbox_->setOffsetSeconds(offset);
     }
     updateAutoDetectAvailability();
+    appendLatencyDiagnosticPhase(QStringLiteral("page_refresh_document_complete"));
 }
 
 void LatencyDetectionPage::onPageEntered()
 {
+    MC_OP("LatencyDetectionPage::onPageEntered");
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("page_enter_begin"),
+        QStringLiteral("owner=%1 sandbox=%2 track_present=%3")
+            .arg(owner_.isNull() ? 0 : 1)
+            .arg(sandbox_.isNull() ? 0 : 1)
+            .arg(currentTrackPath().isEmpty() ? 0 : 1));
     // Sync BPM/Offset into the sandbox first so the test chart it installs on
     // entry is built from the document's values rather than stale defaults.
+    appendLatencyDiagnosticPhase(QStringLiteral("page_enter_refresh_document_begin"));
     refreshFromDocument();
+    appendLatencyDiagnosticPhase(QStringLiteral("page_enter_refresh_document_complete"));
     if (!sandbox_.isNull()) {
+        appendLatencyDiagnosticPhase(QStringLiteral("page_enter_sandbox_begin"));
         sandbox_->setOnPage(true);
+        appendLatencyDiagnosticPhase(QStringLiteral("page_enter_sandbox_complete"));
     }
     // Take focus so the page-local Save/Undo/Redo shortcuts are live
     // immediately (otherwise the sidebar list keeps focus on entry).
+    appendLatencyDiagnosticPhase(QStringLiteral("page_enter_focus_begin"));
     setFocus(Qt::OtherFocusReason);
+    appendLatencyDiagnosticPhase(QStringLiteral("page_enter_complete"));
 }
 
 void LatencyDetectionPage::onPageLeft()
@@ -321,8 +349,9 @@ void LatencyDetectionPage::buildUi()
     bpmEdit_->setSingleStep(0.5);
     bpmEdit_->setValue(120.0);
     bpmEdit_->setMinimumWidth(110);
+    bpmEdit_->setButtonSymbols(QAbstractSpinBox::NoButtons);
     // keyboardTracking off: valueChanged fires only on a settled value (Enter /
-    // focus-out / step button), so a half-typed value (e.g. "8" while typing
+    // focus-out / arrow key), so a half-typed value (e.g. "8" while typing
     // "0.893") is never applied to the document or preview.
     bpmEdit_->setKeyboardTracking(false);
     bpmEdit_->setAccelerated(true);
@@ -350,6 +379,7 @@ void LatencyDetectionPage::buildUi()
     offsetEdit_->setSingleStep(0.010);
     offsetEdit_->setValue(0.0);
     offsetEdit_->setMinimumWidth(110);
+    offsetEdit_->setButtonSymbols(QAbstractSpinBox::NoButtons);
     // keyboardTracking off: see the BPM field above — avoids applying an
     // intermediate value such as "893" while the user is typing "0.893".
     offsetEdit_->setKeyboardTracking(false);
@@ -637,11 +667,16 @@ void LatencyDetectionPage::onAuditionButtonClicked()
 
 void LatencyDetectionPage::onDetectBpmClicked()
 {
+    MC_OP("LatencyDetectionPage::onDetectBpmClicked");
+    appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_click"));
     if (owner_.isNull()) {
+        _mc_op_.fail(QStringLiteral("owner_null"));
+        appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_abort_owner_null"));
         return;
     }
     const QString trackPath = currentTrackPath();
     if (trackPath.isEmpty()) {
+        appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_abort_track_missing"));
         if (bpmDetectResultLabel_ != nullptr) {
             bpmDetectResultLabel_->setText(
                 UiText::text(QStringLiteral("latency.track_audio_missing")));
@@ -649,17 +684,39 @@ void LatencyDetectionPage::onDetectBpmClicked()
         return;
     }
     QApplication::setOverrideCursor(Qt::WaitCursor);
+    appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_envelope_begin"));
     if (!ensureAudioEnvelopeReady()) {
         QApplication::restoreOverrideCursor();
+        appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_abort_envelope_failed"));
         if (bpmDetectResultLabel_ != nullptr) {
             bpmDetectResultLabel_->setText(
                 UiText::text(QStringLiteral("latency.audio_decode_failed")));
         }
         return;
     }
-    const auto result = latency_analysis::detectBpm(cachedOnsetEnvelope_);
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("bpm_detect_envelope_complete"),
+        QStringLiteral("duration=%1 onset_values=%2 transient_values=%3")
+            .arg(cachedAudioDurationSeconds_, 0, 'f', 6)
+            .arg(cachedOnsetEnvelope_.values.size())
+            .arg(cachedTransientEnvelope_.values.size()));
+    latency_analysis::BpmDetectionResult result;
+    {
+        miacode::oplog::Scope phaseOp("LatencyDetectionPage::detectBpm.algorithm");
+        appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_algorithm_begin"));
+        result = latency_analysis::detectBpm(cachedOnsetEnvelope_);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("bpm_detect_algorithm_complete"),
+            QStringLiteral("bpm=%1 meter=%2 phase=%3 phase_valid=%4 candidates=%5")
+                .arg(result.bpm, 0, 'f', 6)
+                .arg(result.meterId)
+                .arg(result.meterPhaseSeconds, 0, 'f', 6)
+                .arg(result.meterPhaseValid ? 1 : 0)
+                .arg(result.candidates.size()));
+    }
     QApplication::restoreOverrideCursor();
     if (!(result.bpm > 0.0)) {
+        appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_not_found"));
         if (bpmDetectResultLabel_ != nullptr) {
             bpmDetectResultLabel_->setText(
                 UiText::text(QStringLiteral("latency.bpm_not_detected")));
@@ -678,15 +735,21 @@ void LatencyDetectionPage::onDetectBpmClicked()
         bpmDetectResultLabel_->setText(
             UiText::text(QStringLiteral("latency.detected_1")).arg(result.bpm, 0, 'f', kDecimalsBpm));
     }
+    appendLatencyDiagnosticPhase(QStringLiteral("bpm_detect_complete"));
 }
 
 void LatencyDetectionPage::onDetectOffsetClicked()
 {
+    MC_OP("LatencyDetectionPage::onDetectOffsetClicked");
+    appendLatencyDiagnosticPhase(QStringLiteral("offset_detect_click"));
     if (owner_.isNull()) {
+        _mc_op_.fail(QStringLiteral("owner_null"));
+        appendLatencyDiagnosticPhase(QStringLiteral("offset_detect_abort_owner_null"));
         return;
     }
     const QString trackPath = currentTrackPath();
     if (trackPath.isEmpty()) {
+        appendLatencyDiagnosticPhase(QStringLiteral("offset_detect_abort_track_missing"));
         if (offsetDetectResultLabel_ != nullptr) {
             offsetDetectResultLabel_->setText(
                 UiText::text(QStringLiteral("latency.track_audio_missing")));
@@ -695,6 +758,7 @@ void LatencyDetectionPage::onDetectOffsetClicked()
     }
     const double bpm = bpmEdit_ != nullptr ? bpmEdit_->value() : 0.0;
     if (!(bpm > 0.0)) {
+        appendLatencyDiagnosticPhase(QStringLiteral("offset_detect_abort_bpm_missing"));
         if (offsetDetectResultLabel_ != nullptr) {
             offsetDetectResultLabel_->setText(
                 UiText::text(QStringLiteral("latency.set_or_detect_bpm_first")));
@@ -702,8 +766,10 @@ void LatencyDetectionPage::onDetectOffsetClicked()
         return;
     }
     QApplication::setOverrideCursor(Qt::WaitCursor);
+    appendLatencyDiagnosticPhase(QStringLiteral("offset_detect_envelope_begin"));
     if (!ensureAudioEnvelopeReady()) {
         QApplication::restoreOverrideCursor();
+        appendLatencyDiagnosticPhase(QStringLiteral("offset_detect_abort_envelope_failed"));
         if (offsetDetectResultLabel_ != nullptr) {
             offsetDetectResultLabel_->setText(
                 UiText::text(QStringLiteral("latency.audio_decode_failed")));
@@ -719,8 +785,22 @@ void LatencyDetectionPage::onDetectOffsetClicked()
     inputs.lastDetectedMeterPhase = lastDetectedMeterPhase_;
     inputs.hasLastDetectedMeterPhase = hasLastDetectedMeterPhase_;
     inputs.lastDetectedMeterId = lastDetectedMeterId_;
-    const double offset = latency_analysis::detectOffset(
-        cachedOnsetEnvelope_, cachedTransientEnvelope_, inputs);
+    double offset = 0.0;
+    {
+        miacode::oplog::Scope phaseOp("LatencyDetectionPage::detectOffset.algorithm");
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("offset_detect_algorithm_begin"),
+            QStringLiteral("bpm=%1 duration=%2 onset_values=%3 transient_values=%4")
+                .arg(bpm, 0, 'f', 6)
+                .arg(cachedAudioDurationSeconds_, 0, 'f', 6)
+                .arg(cachedOnsetEnvelope_.values.size())
+                .arg(cachedTransientEnvelope_.values.size()));
+        offset = latency_analysis::detectOffset(
+            cachedOnsetEnvelope_, cachedTransientEnvelope_, inputs);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("offset_detect_algorithm_complete"),
+            QStringLiteral("offset=%1").arg(offset, 0, 'f', 6));
+    }
     QApplication::restoreOverrideCursor();
     if (offsetEdit_ != nullptr) {
         QSignalBlocker blocker(offsetEdit_);
@@ -731,6 +811,7 @@ void LatencyDetectionPage::onDetectOffsetClicked()
         offsetDetectResultLabel_->setText(
             UiText::text(QStringLiteral("latency.detected_1_s")).arg(offset, 0, 'f', kDecimalsOffset));
     }
+    appendLatencyDiagnosticPhase(QStringLiteral("offset_detect_complete"));
 }
 
 void LatencyDetectionPage::onAuditionStateChanged(bool running)
@@ -791,25 +872,68 @@ bool LatencyDetectionPage::ensureAudioEnvelopeReady()
 {
     const QString trackPath = currentTrackPath();
     if (trackPath.isEmpty()) {
+        appendLatencyDiagnosticPhase(QStringLiteral("audio_envelope_track_missing"));
         clearAudioEnvelopeCache();
         return false;
     }
     if (trackPath == cachedAudioPath_
         && !cachedOnsetEnvelope_.isEmpty()
         && !cachedTransientEnvelope_.isEmpty()) {
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("audio_envelope_cache_hit"),
+            QStringLiteral("duration=%1 onset_values=%2 transient_values=%3")
+                .arg(cachedAudioDurationSeconds_, 0, 'f', 6)
+                .arg(cachedOnsetEnvelope_.values.size())
+                .arg(cachedTransientEnvelope_.values.size()));
         return true;
     }
-    const auto decoded = latency_analysis::decodeMonoTrack(
-        trackPath, latency_analysis::kAnalysisSampleRate, selectedAudioDecodeBackend());
+    const auto backend = selectedAudioDecodeBackend();
+    latency_analysis::DecodedAudio decoded;
+    {
+        miacode::oplog::Scope phaseOp("LatencyDetectionPage::ensureAudioEnvelopeReady.decodeMonoTrack");
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("audio_decode_begin"),
+            QStringLiteral("backend=%1 target_rate=%2 suffix=%3")
+                .arg(static_cast<int>(backend))
+                .arg(latency_analysis::kAnalysisSampleRate)
+                .arg(QFileInfo(trackPath).suffix().toLower()));
+        decoded = latency_analysis::decodeMonoTrack(
+            trackPath, latency_analysis::kAnalysisSampleRate, backend);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("audio_decode_complete"),
+            QStringLiteral("samples=%1 sample_rate=%2 duration=%3")
+                .arg(decoded.samples.size())
+                .arg(decoded.sampleRate)
+                .arg(decoded.durationSeconds, 0, 'f', 6));
+    }
     if (decoded.samples.isEmpty() || decoded.sampleRate <= 0) {
+        appendLatencyDiagnosticPhase(QStringLiteral("audio_decode_invalid_result"));
         clearAudioEnvelopeCache();
         return false;
     }
     cachedAudioPath_ = trackPath;
     cachedAudioDurationSeconds_ = decoded.durationSeconds;
-    cachedOnsetEnvelope_ = latency_analysis::buildOnsetEnvelope(decoded.samples, decoded.sampleRate);
-    cachedTransientEnvelope_ = latency_analysis::buildTransientEnvelope(decoded.samples, decoded.sampleRate);
-    return !cachedOnsetEnvelope_.isEmpty() && !cachedTransientEnvelope_.isEmpty();
+    {
+        miacode::oplog::Scope phaseOp("LatencyDetectionPage::ensureAudioEnvelopeReady.buildEnvelopes");
+        appendLatencyDiagnosticPhase(QStringLiteral("audio_envelope_build_begin"));
+        cachedOnsetEnvelope_ = latency_analysis::buildOnsetEnvelope(decoded.samples, decoded.sampleRate);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("audio_onset_envelope_complete"),
+            QStringLiteral("values=%1 step=%2")
+                .arg(cachedOnsetEnvelope_.values.size())
+                .arg(cachedOnsetEnvelope_.stepSeconds, 0, 'f', 9));
+        cachedTransientEnvelope_ = latency_analysis::buildTransientEnvelope(decoded.samples, decoded.sampleRate);
+        appendLatencyDiagnosticPhase(
+            QStringLiteral("audio_transient_envelope_complete"),
+            QStringLiteral("values=%1 step=%2")
+                .arg(cachedTransientEnvelope_.values.size())
+                .arg(cachedTransientEnvelope_.stepSeconds, 0, 'f', 9));
+    }
+    const bool ready = !cachedOnsetEnvelope_.isEmpty() && !cachedTransientEnvelope_.isEmpty();
+    appendLatencyDiagnosticPhase(
+        QStringLiteral("audio_envelope_ready"),
+        QStringLiteral("ready=%1").arg(ready ? 1 : 0));
+    return ready;
 }
 
 miacode::audio_decode::BackendPreference LatencyDetectionPage::selectedAudioDecodeBackend() const

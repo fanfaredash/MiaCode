@@ -16,6 +16,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -24,6 +25,7 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
+#include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -933,19 +935,46 @@ void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
 
 bool MainWindow::DocumentSection::switchToLatencyField()
 {
+    MC_OP("MainWindow::DocumentSection::switchToLatencyField");
+    _mc_op_.note(QStringLiteral("active_outline=%1 difficulty=%2 dirty=%3")
+                     .arg(state_.activeOutlineKey_)
+                     .arg(state_.activeDifficultyId_)
+                     .arg(state_.currentFieldDirty_ ? 1 : 0));
+    miacode::latency::appendLatencyDiagnosticPhase(
+        QStringLiteral("switch_request"),
+        QStringLiteral("active_outline=%1 difficulty=%2 dirty=%3 playing=%4 pause_second=%5 track_duration=%6")
+            .arg(state_.activeOutlineKey_)
+            .arg(state_.activeDifficultyId_)
+            .arg(state_.currentFieldDirty_ ? 1 : 0)
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(state_.previewTrackDurationSeconds_, 0, 'f', 6));
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_maybe_save_begin"));
     if (!maybeSaveCurrentFieldChanges()) {
+        miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_cancelled_by_save_prompt"));
         return false;
     }
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_maybe_save_complete"));
     if (ui_.latencyDetectionPage_ == nullptr || ui_.editorStack_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("missing_page_or_editor_stack"));
+        miacode::latency::appendLatencyDiagnosticPhase(
+            QStringLiteral("switch_abort_missing_ui"),
+            QStringLiteral("page=%1 editor_stack=%2")
+                .arg(ui_.latencyDetectionPage_ != nullptr ? 1 : 0)
+                .arg(ui_.editorStack_ != nullptr ? 1 : 0));
         return false;
     }
     // Leaving the export page (possibly) — tear down its embedded video
     // panel unconditionally (idempotent), same pattern as the latency
     // onPageLeft calls in the other switch functions.
     if (ui_.exportPage_ != nullptr) {
+        miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_export_page_leave_begin"));
         ui_.exportPage_->onPageLeft();
+        miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_export_page_leave_complete"));
     }
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_cache_layout_begin"));
     owner_.cacheWorkspaceLayoutSizes();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_cache_layout_complete"));
     // Preserve the current preview position across the switch, just like
     // switchToDifficultyField does, so entering the latency page keeps the
     // playhead instead of snapping to 0. installSandboxScene() consumes
@@ -953,7 +982,11 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     const double restorePreviewSecond = qMax(0.0, state_.qtPreviewPlaying_
         ? owner_.currentPreviewAuthoritativeAudioClockSecond()
         : state_.qtPreviewPauseSecond_);
+    miacode::latency::appendLatencyDiagnosticPhase(
+        QStringLiteral("switch_stop_preview_begin"),
+        QStringLiteral("restore_second=%1").arg(restorePreviewSecond, 0, 'f', 6));
     owner_.stopQtPreviewPlayback(true);
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_stop_preview_complete"));
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;
@@ -963,22 +996,35 @@ bool MainWindow::DocumentSection::switchToLatencyField()
         state_.qtPreviewPauseSecond_, restorePreviewSecond, state_.qtPreviewPlaying_, "switch_to_latency_field");
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_populate_metadata_begin"));
     populateMetadataPage();  // keeps document fields in sync for sidebar use
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_populate_metadata_complete"));
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_editor_stack_begin"));
     ui_.editorStack_->setCurrentWidget(ui_.latencyDetectionPage_);
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_editor_stack_complete"));
     // Bottom timeline + bottom tabs remain visible: the sandbox audition
     // drives them with the synthesized test chart, so the user can watch
     // the taps scroll past the judge line in sync with the song.
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_bottom_tabs_begin"));
     setChartBottomTabsMode(true);
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_bottom_tabs_complete"));
     owner_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_sidebar_rebuild_begin"));
     rebuildFieldSidebar();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_sidebar_rebuild_complete"));
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_page_enter_begin"));
     ui_.latencyDetectionPage_->onPageEntered();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_page_enter_complete"));
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_layout_refresh_begin"));
     owner_.refreshLayoutAfterPageSwitch();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_layout_refresh_complete"));
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_complete"));
     return true;
 }
 

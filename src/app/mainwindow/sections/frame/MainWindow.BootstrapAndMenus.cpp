@@ -31,6 +31,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -366,6 +367,9 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         UiText::text(QStringLiteral("menu.bpm_latency")),
         &owner_);
     connect(owner_.latencyDetectorAction_, &QAction::triggered, &owner_, [this]() {
+        miacode::latency::appendLatencyDiagnosticPhase(
+            QStringLiteral("action_triggered"),
+            QStringLiteral("source=tools_menu"));
         owner_.switchToLatencyField();
     });
     editMenu->addAction(owner_.latencyDetectorAction_);

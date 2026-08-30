@@ -885,6 +885,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     openLatencyPageButton->setText(UiText::text(QStringLiteral("metadata.latency_card.open")));
     openLatencyPageButton->setToolTip(UiText::text(QStringLiteral("metadata.open_the_latency_settings_page")));
     connect(openLatencyPageButton, &QToolButton::clicked, this, [this]() {
+        miacode::latency::appendLatencyDiagnosticPhase(
+            QStringLiteral("action_triggered"),
+            QStringLiteral("source=metadata_card"));
         switchToLatencyField();
     });
     latencyEntryRow->addWidget(openLatencyPageButton, 0, Qt::AlignRight);
