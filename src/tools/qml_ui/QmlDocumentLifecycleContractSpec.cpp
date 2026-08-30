@@ -152,7 +152,7 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                        && documentModel.contains(
                            QStringLiteral("workspace_->updateDifficultyField("))
                        && documentModel.contains(QStringLiteral("fileService_->open(path)"))
-                       && documentModel.contains(QStringLiteral("fileService_->save()")),
+                       && documentModel.contains(QStringLiteral("fileService_->save(saveSectionDifficultyId())")),
                    QStringLiteral("production QML body, metadata, difficulty, and file operations submit workspace transactions"), err)
         && require(!documentModel.contains(QStringLiteral("backend_->isWindowModified()"))
                        && !documentModel.contains(

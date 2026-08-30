@@ -317,6 +317,38 @@ QVector<int> ChartWorkspace::computeDirtyDifficultyIds() const
     return ids;
 }
 
+QString ChartWorkspace::textForSectionSave(int difficultyId) const
+{
+    if (!hasDocument_) return QString();
+    if (difficultyId <= 0) return sourceText_;
+    const SimaiDifficultyData* current = document_.difficulty(difficultyId);
+    if (current == nullptr) return savedSourceText_;
+    SimaiDocument merged = savedDocument_;
+    // ensureDifficulty, not difficulty(): a difficulty created since the save
+    // point has nothing on disk yet, and saving it must add it rather than
+    // silently drop the work.
+    merged.ensureDifficulty(difficultyId) = *current;
+    return merged.toText();
+}
+
+bool ChartWorkspace::markSectionSaved(int difficultyId, const QString& filePath)
+{
+    if (!hasDocument_) return false;
+    const QString nextFilePath = filePath.isEmpty() ? filePath_ : filePath;
+    if (difficultyId <= 0) return markSaved(nextFilePath);
+
+    const SimaiDifficultyData* current = document_.difficulty(difficultyId);
+    if (current == nullptr) return false;
+    savedDocument_.ensureDifficulty(difficultyId) = *current;
+    savedSourceText_ = savedDocument_.toText();
+    filePath_ = nextFilePath;
+    // The document as a whole can still differ: other sections keep whatever
+    // they had, saved or not.
+    dirty_ = sourceText_ != savedSourceText_;
+    commit();
+    return true;
+}
+
 ChartWorkspaceSnapshot ChartWorkspace::snapshot() const
 {
     return {sourceText_, filePath_, activeDifficultyId_, revision_, dirty_, hasDocument_,

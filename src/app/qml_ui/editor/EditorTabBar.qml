@@ -156,7 +156,7 @@ Rectangle {
     ChoiceDialog {
         id: closeTabDialog
         objectName: "editorTabCloseDialog"
-        details: qsTr("保存会写入整个谱面文件，包括其他难度的改动；放弃只把这个难度还原到上次保存时的内容。")
+        details: qsTr("保存只写入这个难度，其他难度在文件里保持原样；放弃把这个难度还原到上次保存时的内容。")
         choices: [
             { id: "save", label: qsTr("保存"), role: "accept" },
             { id: "discard", label: qsTr("放弃"), role: "destructive" },
@@ -172,9 +172,10 @@ Rectangle {
             if (choiceId === "cancel" || key.length === 0)
                 return
             if (choiceId === "save") {
-                // A failed save keeps the tab: the edits are still only in
-                // memory, and closing would be the one thing that loses them.
-                if (!root.commands.saveDocument())
+                // Saves this difficulty, because that is the thing being
+                // closed. A failed save keeps the tab: the edits are still only
+                // in memory, and closing would be the one thing that loses them.
+                if (!root.documentSession.saveDifficultySection(difficultyId))
                     return
             } else {
                 root.documentSession.revertDifficultyChart(difficultyId)

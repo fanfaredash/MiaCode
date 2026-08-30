@@ -93,6 +93,18 @@ public:
     bool removeDifficulty(int difficultyId);
     bool unifyDesigners(const QString& canonicalName);
     bool markSaved(const QString& filePath = QString());
+    // What a save of one section should put on disk: the last save point with
+    // that one difficulty's chart brought up to date, and nothing else. Saving
+    // is per section because a tab is what a person works in — leaving the
+    // other difficulties at their on-disk text is the difference between
+    // "save what I am doing" and "save everything I have open".
+    //
+    // difficultyId 0 means the whole document (the metadata tab is a view of
+    // the entire file, so its section is the file).
+    QString textForSectionSave(int difficultyId) const;
+    // Advance the save point for that section only. Callers write
+    // textForSectionSave() first; this records that it landed.
+    bool markSectionSaved(int difficultyId, const QString& filePath = QString());
     // 关闭文档: no document at all, rather than an empty one. A chart with no
     // difficulties is still a chart; this is the state before any chart.
     ChartWorkspaceResult closeDocument();

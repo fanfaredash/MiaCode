@@ -469,3 +469,9 @@ void MainWindow::setQmlDocumentSaveHandler(
 {
     qmlDocumentSaveHandler_ = std::move(handler);
 }
+
+void MainWindow::setQmlLeaveDocumentHandler(
+    std::function<void(std::function<void(bool)>)> handler)
+{
+    qmlLeaveDocumentHandler_ = std::move(handler);
+}

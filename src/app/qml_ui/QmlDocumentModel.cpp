@@ -7,6 +7,7 @@
 #include "editor/BookmarkCommentSyntax.h"
 
 #include "app/mainwindow/MainWindow.h"
+#include "app/v2/UiRequestService.h"
 #include "common/DebugLog.h"
 #include "core/chart/document/SimaiDocument.h"
 
@@ -15,6 +16,28 @@
 
 #include <QFileInfo>
 #include <QVariantMap>
+
+namespace {
+
+// 保存 / 放弃 / 取消, in button order. Ids match what the prompts branch on.
+QVariantList unsavedSectionChoices()
+{
+    const auto choice = [](const char* id, const char* labelKey, const char* role) {
+        return QVariantMap{
+            {QStringLiteral("id"), QLatin1String(id)},
+            {QStringLiteral("label"), UiText::text(QLatin1String(labelKey))},
+            {QStringLiteral("role"), QLatin1String(role)},
+        };
+    };
+    return QVariantList{
+        choice("save", "action.save", "accept"),
+        choice("discard", "action.discard", "destructive"),
+        choice("cancel", "action.cancel", "reject"),
+    };
+}
+
+}  // namespace
+
 
 QmlDocumentModel::QmlDocumentModel(
     MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
@@ -34,6 +57,8 @@ QmlDocumentModel::QmlDocumentModel(
     backend_->setQmlDocumentSaveHandler([this](const QString& path) {
         return saveToPath(path);
     });
+    backend_->setQmlLeaveDocumentHandler(
+        [this](std::function<void(bool)> onDecided) { requestLeaveDocument(std::move(onDecided)); });
     backend_->setQmlChartTextHandler([this](const QString& text) {
         if (workspace_ == nullptr) return false;
         setChartText(text);
@@ -362,6 +387,14 @@ void QmlDocumentModel::closeDocument()
     publishWorkspaceCommit(WorkspaceCommitKind::Open, true);
 }
 
+bool QmlDocumentModel::saveDifficultySection(int difficultyId)
+{
+    if (fileService_ == nullptr) return false;
+    if (!fileService_->save(difficultyId).accepted) return false;
+    publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+    return true;
+}
+
 bool QmlDocumentModel::revertDifficultyChart(int difficultyId)
 {
     if (workspace_ == nullptr) return false;
@@ -389,10 +422,113 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
         WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
     return true;
 }
+void QmlDocumentModel::requestLeaveDocument(std::function<void(bool)> onDecided)
+{
+    if (workspace_ == nullptr || !workspace_->snapshot().dirty) {
+        if (onDecided) onDecided(true);
+        return;
+    }
+    askNextDirtySection(std::move(onDecided));
+}
+
+void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
+    if (snapshot.dirtyDifficultyIds.isEmpty() || requests == nullptr) {
+        askAboutRemainingDocument(std::move(onDecided));
+        return;
+    }
+
+    const int difficultyId = snapshot.dirtyDifficultyIds.constFirst();
+    // Show it before asking about it. A prompt naming a difficulty the user
+    // cannot see is a prompt they have to answer from memory.
+    selectDifficulty(difficultyId);
+
+    const QString label = SimaiDocument::difficultyName(difficultyId);
+    requests->requestChoice(
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        tr("「%1」有未保存的更改。").arg(label),
+        unsavedSectionChoices(),
+        QStringLiteral("cancel"),
+        [this, difficultyId, onDecided = std::move(onDecided)](const QString& choiceId) mutable {
+            if (choiceId == QLatin1String("cancel")) {
+                if (onDecided) onDecided(false);
+                return;
+            }
+            if (choiceId == QLatin1String("save")) {
+                if (fileService_ == nullptr
+                    || !fileService_->save(difficultyId).accepted) {
+                    // Nothing was written, so leaving would lose it.
+                    if (onDecided) onDecided(false);
+                    return;
+                }
+                publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+            } else {
+                workspace_->revertDifficultyChart(difficultyId);
+                publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+            }
+            // Whatever happened, that difficulty is no longer among the dirty
+            // ones, so this walks the list down rather than around it.
+            askNextDirtySection(std::move(onDecided));
+        });
+}
+
+void QmlDocumentModel::askAboutRemainingDocument(std::function<void(bool)> onDecided)
+{
+    miacode::v2::UiRequestService* const requests =
+        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    if (!workspace_->snapshot().dirty || requests == nullptr) {
+        if (onDecided) onDecided(true);
+        return;
+    }
+    // What is left is not any one difficulty: metadata, or a difficulty added
+    // or removed. That is a change to the file, so the file is what it asks
+    // about.
+    requests->requestChoice(
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_changes.message")),
+        unsavedSectionChoices(),
+        QStringLiteral("cancel"),
+        [this, onDecided = std::move(onDecided)](const QString& choiceId) {
+            if (choiceId == QLatin1String("cancel")) {
+                if (onDecided) onDecided(false);
+                return;
+            }
+            if (choiceId == QLatin1String("save")) {
+                if (fileService_ == nullptr || !fileService_->save(0).accepted) {
+                    if (onDecided) onDecided(false);
+                    return;
+                }
+                publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+            } else if (!workspace_->snapshot().filePath.isEmpty()) {
+                discardChanges();
+            }
+            if (onDecided) onDecided(true);
+        });
+}
+
+bool QmlDocumentModel::wholeSourceEditorActive() const { return wholeSourceEditorActive_; }
+
+void QmlDocumentModel::setWholeSourceEditorActive(bool active)
+{
+    if (wholeSourceEditorActive_ == active) return;
+    wholeSourceEditorActive_ = active;
+    emit wholeSourceEditorActiveChanged();
+}
+
+int QmlDocumentModel::saveSectionDifficultyId() const
+{
+    if (wholeSourceEditorActive_ || workspace_ == nullptr) return 0;
+    return workspace_->snapshot().activeDifficultyId;
+}
+
 bool QmlDocumentModel::save()
 {
     if (fileService_ == nullptr) return false;
-    const miacode::v2::ChartWorkspaceFileResult result = fileService_->save();
+    const miacode::v2::ChartWorkspaceFileResult result =
+        fileService_->save(saveSectionDifficultyId());
     if (!result.accepted) return false;
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
@@ -599,7 +735,10 @@ void QmlDocumentModel::refreshDocumentState()
 bool QmlDocumentModel::saveToPath(const QString& path)
 {
     if (fileService_ == nullptr || path.trimmed().isEmpty()) return false;
-    const miacode::v2::ChartWorkspaceFileResult result = fileService_->saveAs(path);
+    // 另存为 writes a whole document deliberately: the new file has no earlier
+    // content for the other difficulties to be left at, so saving one section
+    // there would drop the rest of the chart on the floor.
+    const miacode::v2::ChartWorkspaceFileResult result = fileService_->saveAs(path, 0);
     if (!result.accepted) return false;
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;

@@ -210,6 +210,14 @@ void MainWindow::DocumentSection::requestLeaveDocument(std::function<void(bool)>
         return;
     }
 
+    // The shell knows which difficulties changed; this object knows only that
+    // the file did. Saving is per section now, so a single question here could
+    // save at most one of them and would leave with the rest.
+    if (owner_.qmlLeaveDocumentHandler_) {
+        owner_.qmlLeaveDocumentHandler_([decide](bool mayLeave) { decide(mayLeave); });
+        return;
+    }
+
     miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
     if (requests == nullptr) {
         // No shell to ask. Refusing to leave is the answer that cannot lose

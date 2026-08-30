@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QObject>
+
+#include <functional>
 #include <QStringList>
 #include <QUrl>
 #include <QVariantList>
@@ -51,6 +53,12 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(bool validationPending READ validationPending NOTIFY documentStateChanged)
     Q_PROPERTY(bool validationAvailable READ validationAvailable NOTIFY documentStateChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
+    // Which section a save writes. A tab is what a person works in, so 保存
+    // means "save what I am doing" — the active difficulty, leaving the other
+    // difficulties on disk as they are. The whole-source view's section is the
+    // whole file, which is why the shell has to say when that view is in front.
+    Q_PROPERTY(bool wholeSourceEditorActive READ wholeSourceEditorActive
+                   WRITE setWholeSourceEditorActive NOTIFY wholeSourceEditorActiveChanged)
     Q_PROPERTY(QStringList dirtyEditorKeys READ dirtyEditorKeys NOTIFY dirtyEditorKeysChanged)
     Q_PROPERTY(qulonglong bookmarkGeneration READ bookmarkGeneration NOTIFY bookmarksChanged)
 
@@ -110,6 +118,24 @@ public:
     // of the document alone. This is what "放弃" means when the thing being
     // closed is one tab rather than the file.
     Q_INVOKABLE bool revertDifficultyChart(int difficultyId);
+    // Write one difficulty to the file, leaving the others at their on-disk
+    // text. Used where the thing being saved is named rather than implied.
+    Q_INVOKABLE bool saveDifficultySection(int difficultyId);
+    // The unsaved-changes flow, asked one section at a time.
+    //
+    // 保存 writes one difficulty, so a single question about "the document"
+    // could only ever save one of them and would drop the rest on the way out.
+    // Each changed difficulty is therefore asked about in turn, with the editor
+    // switched to it first so the question is about something visible; whatever
+    // is left over (metadata, added or removed difficulties) is asked about
+    // last, as the file.
+    //
+    // onDecided(false) means the user cancelled and nothing should continue.
+    void requestLeaveDocument(std::function<void(bool)> onDecided);
+
+    bool wholeSourceEditorActive() const;
+    void setWholeSourceEditorActive(bool active);
+    int saveSectionDifficultyId() const;
     QStringList dirtyEditorKeys() const;
     qulonglong bookmarkGeneration() const;
 
@@ -186,6 +212,7 @@ signals:
     void currentDifficultyFieldsChanged();
     void syntaxIssuesChanged();
     void dirtyChanged();
+    void wholeSourceEditorActiveChanged();
     void dirtyEditorKeysChanged();
     void documentStateChanged();
     void documentReplaced();
@@ -226,4 +253,7 @@ private:
     quint64 documentRevision_ = 0;
     qulonglong bookmarkGeneration_ = 0;
     bool unifiedDesignerEnabled_ = false;
+    bool wholeSourceEditorActive_ = false;
+    void askNextDirtySection(std::function<void(bool)> onDecided);
+    void askAboutRemainingDocument(std::function<void(bool)> onDecided);
 };

@@ -291,6 +291,11 @@ public:
         bool dirty, quint64 revision, QmlDocumentCommitKind kind,
         bool usedSystemEncoding = false);
     void setQmlDocumentSaveHandler(std::function<bool(const QString&)> handler);
+    // The v2 shell answers the unsaved-changes question itself, because only it
+    // can see which difficulties changed — MainWindow mirrors one flag for the
+    // whole file. Without a handler installed the Widgets prompt still runs,
+    // which is what the hidden window's own File menu still needs.
+    void setQmlLeaveDocumentHandler(std::function<void(std::function<void(bool)>)> handler);
     // Write-back into the workspace for the few callers that still edit the
     // active chart from the MainWindow side (the extension host). Without it
     // they would be writing into a document copy the QML editor overwrites on
@@ -494,6 +499,7 @@ public:
     };
 private:
     std::function<bool(const QString&)> qmlDocumentSaveHandler_;
+    std::function<void(std::function<void(bool)>)> qmlLeaveDocumentHandler_;
     std::function<bool(const QString&)> qmlChartTextHandler_;
     quint64 appliedQmlWorkspaceRevision_ = 0;
     std::unique_ptr<miacode::v2::EditorSyncController> editorSyncController_;

@@ -28,6 +28,15 @@ Item {
 
     ViewState { id: state }
 
+    // 保存 means "save what I am working in", so the document model has to know
+    // whether the view in front is one difficulty or the whole source.
+    Binding {
+        target: root.documentSession
+        property: "wholeSourceEditorActive"
+        value: state.metadataEditorActive
+        restoreMode: Binding.RestoreNone
+    }
+
     MainMenuCommands {
         id: menuCommands
         canUndo: splitView.canUndo
