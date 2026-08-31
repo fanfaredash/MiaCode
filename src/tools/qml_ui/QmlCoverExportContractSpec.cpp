@@ -154,6 +154,24 @@ int main(int argc, char** argv)
                && cmake.contains(QStringLiteral("CoverFrameExportPlan")),
            QStringLiteral("the build contains the cover transport, binder and export plan"), out, &failed);
 
+    expect(page.contains(QStringLiteral("property: \"chartSceneBinder\"; value: root.session;"))
+               && page.contains(QStringLiteral("liveChartSceneBound")),
+           QStringLiteral("the composer receives the complete cover session binding facade"), out, &failed);
+    expect(composer.contains(QStringLiteral("syncLiveChartBinding"))
+               && composer.contains(QStringLiteral("boundBinder"))
+               && composer.contains(QStringLiteral("onChartSceneBinderChanged"))
+               && composer.contains(QStringLiteral("onItemChanged")),
+           QStringLiteral("the live chart loader synchronizes binder and item lifetimes"), out, &failed);
+    expect(!page.contains(QStringLiteral("text: UiText.text(\"cover.difficulty_card\")"))
+               && page.contains(QStringLiteral("id: cardSettings"))
+               && page.contains(QStringLiteral("visible: root.inspectorTab === \"layer\""))
+               && page.contains(QStringLiteral("root.inspectorTab = \"layer\"")),
+           QStringLiteral("difficulty-card settings live below the layer inspector and layer selection opens it"),
+           out, &failed);
+    expect(session.contains(QStringLiteral("QString::fromUtf8(preset.label)"))
+               && !session.contains(QStringLiteral("QString::fromLatin1(preset.label)")),
+           QStringLiteral("cover resolution labels decode UTF-8 without mojibake"), out, &failed);
+
     const QStringList removedFiles{
         QStringLiteral("src/tools/cover_export/CoverComposerView.cpp"),
         QStringLiteral("src/tools/cover_export/CoverComposerView.h"),
