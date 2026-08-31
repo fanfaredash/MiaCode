@@ -12,7 +12,7 @@
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
 > **计数（2026-09-01）**：方法 **124**，直接读取的 `MainWindow` 私有成员 **1**，
-> friend 授权 **5** 个 QML 类型。
+> friend 授权 **2** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
 > 没进展：耦合从「没有接口」降级成窄接口时，用到的名字要么本来就在清单里，要么一进一出。
@@ -34,6 +34,7 @@
 | 2026-09-01 | `QmlEditorPageHost` 的两处私有成员换成等价公有访问器 | 120 | 15 |
 | 2026-09-01 | 预览外观八个值搬进 `miacode::v2::PreviewAppearanceState` | 120 | 4 |
 | 2026-09-01 | 剩下三个可直接换掉的私有成员改走窄访问器 | 124 | 1 |
+| 2026-09-01 | 公开 8 个 QML 页面本就在调用的方法，删掉 3 个 friend 授权（5 → 2） | 124 | 1 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -57,11 +58,16 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 
 | friend | 当前用途 | 去处 |
 | --- | --- | --- |
-| `QmlCommandService` | 命令总线调用窗口私有槽 | 命令改由 service/session 承接 |
-| `QmlEditorPageHost` | `activeDifficultyId_`、`qmlExportSession_` | 页面路由改由 QML 宿主拥有 |
-| `QmlExportSession` | 15 个预览/导出私有成员 | `ExportSession` + `PreviewSession` |
-| `QmlPreviewModel` | 预览运行时私有状态 | `PreviewSession` |
-| `miacode::qml_ui::QmlPreviewSettingsModel` | 5 个预览外观私有成员 | `PreviewSession` |
+| `QmlEditorPageHost` | 四个 `switchTo*Field` 加 `hasActiveDifficulty` / `onPackAsZip` | 页面路由改由 QML 宿主拥有（第 3 项）。这几个入口驱动隐藏 widget 栈，公开它们等于把一件本该消失的事写进正式接口 |
+| `QmlExportSession` | `exportSection_`（全仓库仅剩的一处私有成员直读），以及 `currentPreviewAuthoritativeAudioClockSecond` / `refreshExportIntroState` | `ExportSession`。导出引擎本身要搬走，不能用访问器糊过去 |
+
+**已删除（2026-09-01）**：`QmlCommandService`、`QmlPreviewModel`、
+`miacode::qml_ui::QmlPreviewSettingsModel`。做法是把这三个页面**本来就在调用**的 8 个方法
+从私有改为公有，并集中成 `MainWindow.h` 里一个具名的「QML 页面的有界入口」块：
+5 个皮肤/判定线目录查询（纯路径解析与目录枚举，本来就是查询形状）、
+`applyPreviewOutlineVariant` 与 `setMuriRenderMode`（两个都早就带 `persist` 参数，
+与既有的偏好设置公有面同形）、`onPreferences`。
+**清单计数一个都没动**——这 8 个名字本来就在清单里；变的是访问权从「无边界」变成「这 8 个」。
 
 > `miacode::latency::LatencySandboxController` 也是 friend，但它是 widget 侧组件，不属于本清册；
 > 它随阶段 4 的 `MainWindow` 一并处理。
@@ -72,9 +78,7 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 
 预览运行时、播放传输、皮肤/判定外观、音频设置。外观八个值已搬到
 `miacode::v2::PreviewAppearanceState`；这里剩下的是运行时与传输控制。
-`QmlPreviewModel` 与 `QmlPreviewSettingsModel` 仍是 `MainWindow` 的 friend——
-`QmlPreviewSettingsModel` 现在只因为 `previewRenderSettings` / `setPreviewRenderSetting` /
-`resolvePreview*Dir` 这几个私有方法而需要它。
+这两个模型的 `friend` 授权已于 2026-09-01 删除：它们调用的方法改为公有。
 
 **`src/app/qml_ui/QmlPreviewModel.cpp`** — 方法 21，私有成员 0
 

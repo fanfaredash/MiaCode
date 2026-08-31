@@ -136,11 +136,8 @@ class MainWindow : public QMainWindow
     // with an explicitly selected difficulty and reads document/difficulty
     // state for its badge row — same narrow-feature rationale as the
     // latency page above.
-    friend class QmlCommandService;
     friend class QmlEditorPageHost;
     friend class QmlExportSession;
-    friend class QmlPreviewModel;
-    friend class miacode::qml_ui::QmlPreviewSettingsModel;
 
 public:
     // Phase 4c — non-owning accessor for the preview stage-media host
@@ -530,7 +527,6 @@ private slots:
     // plus the "all difficulties share one designer" toggle). See
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
     void onManagePerDifficultyDesigners();
-    void onPreferences();
     void onAbout();
     void onToggleFindReplace();
     void onFindNext();
@@ -646,15 +642,11 @@ private:
     PreviewOutlineVariant autoPreviewOutlineVariantForChart(const QString& chartPath) const;
     PreviewOutlineVariant effectivePreviewOutlineVariant() const;
     void applyEffectivePreviewOutlineVariantToCanvas();
-    void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
-    QString resolvePreviewCustomOutlineDir() const;
     QString resolvePreviewCustomOutlinePath() const;
     QStringList availablePreviewCustomOutlineFileNames() const;
     void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState);
     PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
     QString previewSkinVariantStorageValue() const;
-    QStringList availablePreviewSkinDirectoryNames() const;
-    QString previewSkinDisplayName(const QString& directoryName) const;
     void refreshPreviewFrameRateTimers();
     void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
     double timelineSecondForCursor(int line, int col) const;
@@ -662,8 +654,6 @@ private:
     void jumpToLocation(int line, int col);
     QString editorText() const;
     QString resolveDefaultTrackPath() const;
-    QString resolvePreviewSkinDir() const;
-    QString resolvePreviewSkinRootDir() const;
     void applyPreviewSkinDirectoryToSurfaces();
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
@@ -673,6 +663,28 @@ private:
     void savePortableState() const;
 
 public:
+    // The QML pages' bounded reach into the window.
+    //
+    // These were private, which meant QmlCommandService, QmlPreviewModel and
+    // QmlPreviewSettingsModel each needed `friend class` — and a friend grant is
+    // unbounded: it lets any later edit reach any member, forever. Publishing
+    // exactly what those pages call replaced three blanket grants with this
+    // list, at no cost to the recorded surface (docs/specs/ui/
+    // QML_UI_V2_BACKEND_SURFACE_ZH.md already counted every name here).
+    //
+    // The skin/outline entries are catalog queries — path resolution and
+    // directory listing, no state of their own. The two setters already took a
+    // "persist" flag, so they match the preference surface below.
+    QStringList availablePreviewSkinDirectoryNames() const;
+    QString previewSkinDisplayName(const QString& directoryName) const;
+    QString resolvePreviewSkinDir() const;
+    QString resolvePreviewSkinRootDir() const;
+    QString resolvePreviewCustomOutlineDir() const;
+    void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
+                                    bool persistState);
+    void setMuriRenderMode(RenderMode mode, bool persistState = true);
+    void onPreferences();
+
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push
     // them into the objects only this window holds, so the QML pages no longer
@@ -782,7 +794,6 @@ private:
     bool bottomTabsTabVisible(BottomTabsTabId tabId) const;
     void restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId preferredTabId);
     void applyMuriRenderOptions();
-    void setMuriRenderMode(RenderMode mode, bool persistState = true);
     struct ValidationCachedIssue {
         int line = 1;
         int col = 1;

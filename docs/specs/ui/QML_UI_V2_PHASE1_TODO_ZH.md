@@ -544,6 +544,16 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          后端替换文档（启动 / 根窗口拖放 / 原生打开 / 崩溃恢复）之后存在一个窗口期，
          此时改读工作区会让导出页列出**旧的**难度列表。要动它得先处理那条延迟同步。
          细节已写进 [QML_UI_V2_BACKEND_SURFACE_ZH.md](QML_UI_V2_BACKEND_SURFACE_ZH.md)。
+      8. **friend 授权 5 → 2**。把 `QmlCommandService` / `QmlPreviewModel` /
+         `QmlPreviewSettingsModel` **本来就在调用**的 8 个方法从私有改为公有，集中成
+         `MainWindow.h` 里一个具名的「QML 页面的有界入口」块，然后删掉这三条 `friend`。
+         8 个方法是：5 个皮肤/判定线目录查询（纯路径解析与目录枚举）、`applyPreviewOutlineVariant`
+         与 `setMuriRenderMode`（两者早就带 `persist` 参数，与既有偏好设置公有面同形）、
+         `onPreferences`。**清单计数一个都没动**——这些名字本来就在清单里；变的是访问权从
+         「无边界，任何后续改动都能拿到任何东西」变成「就这 8 个」。
+         剩下两条 friend 都有明确理由不能现在删：`QmlEditorPageHost` 的四个 `switchTo*Field`
+         驱动隐藏 widget 栈，公开它们等于把一件本该消失的事写进正式接口（随第 3 项消失）；
+         `QmlExportSession` 还直读 `exportSection_`，那是导出引擎本身，必须随 `ExportSession` 搬走。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
       *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。
