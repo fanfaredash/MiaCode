@@ -184,7 +184,10 @@ int main(int argc, char** argv)
            QStringLiteral("cover session uses the QML request boundary and pure renderer"), out, &failed);
     expect(pageHost.contains(QStringLiteral("coverPageRequested"))
                && pageHost.contains(QStringLiteral("activePageId_ = QStringLiteral(\"cover\")"))
-               && pageHost.contains(QStringLiteral("backend_->qmlExportSession_->leave()"))
+               // The page host reads the export session through MainWindow's
+               // public read-only hand-off now, not its private member; the
+               // release contract is unchanged.
+               && pageHost.contains(QStringLiteral("backend_->qmlExportSession()->leave()"))
                && !pageHost.contains(QStringLiteral("onExportCover()")),
            QStringLiteral("cover export routes into the QML page and releases a prior video session"), out, &failed);
     expect(mainWindow.contains(QStringLiteral("emit coverExportRequested"))

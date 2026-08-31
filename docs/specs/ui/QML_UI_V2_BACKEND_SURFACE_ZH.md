@@ -11,8 +11,12 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **120**，直接读取的 `MainWindow` 私有成员 **17**，
+> **计数（2026-09-01）**：方法 **120**，直接读取的 `MainWindow` 私有成员 **15**，
 > friend 授权 **5** 个 QML 类型。
+>
+> 计数按**去重后的名字**算，不是调用点数。`QmlEditorPageHost` 那两处私有成员换成公有访问器后，
+> 方法数没有变——`documentActiveDifficultyId` 和 `qmlExportSession` 本来就已经被别的文件用到、
+> 已经在清单里了。这正是想要的：耦合从「没有接口」降级成「已有的窄接口」，总面积不增。
 
 ## 为什么私有成员和 friend 单独记
 
@@ -148,16 +152,22 @@
 - `previewTapJudgeTextDistance_` *(私有成员)*
 - `projectLastOpenedDifficultyId_` *(私有成员)*
 
-**`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 6，私有成员 2
+**`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 8，私有成员 0
 
+- `documentActiveDifficultyId`
 - `hasActiveDifficulty`
 - `onPackAsZip`
+- `qmlExportSession`
 - `switchToDifficultyField`
 - `switchToExportField`
 - `switchToLatencyField`
 - `switchToMetadataField`
-- `activeDifficultyId_` *(私有成员)*
-- `qmlExportSession_` *(私有成员)*
+
+> 2026-09-01：两处私有成员读取（`activeDifficultyId_`、`qmlExportSession_`）已换成等价的公有
+> 访问器——`documentActiveDifficultyId()` 就是返回该成员，`qmlExportSession()` 本来就是头文件里
+> 写明的「唯一导出会话的只读交接口」。`friend class QmlEditorPageHost` **暂时保留**：四个
+> `switchTo*Field` 声明在 `MainWindowPrivateMethodsA.inc` 里，把它们改成公有等于把接口做宽而不是
+> 做窄。它们随阶段 3.5 第 3 项（页面路由归 QML 宿主）一起消失，friend 授权届时才能删。
 
 ### 文档（→ `ChartWorkspace` / `DocumentService`）
 

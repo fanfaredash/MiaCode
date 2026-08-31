@@ -47,7 +47,7 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
 
 QObject* QmlEditorPageHost::exportSession() const
 {
-    return backend_ != nullptr ? static_cast<QObject*>(backend_->qmlExportSession_) : nullptr;
+    return backend_ != nullptr ? static_cast<QObject*>(backend_->qmlExportSession()) : nullptr;
 }
 
 void QmlEditorPageHost::markExportPageActive()
@@ -64,8 +64,8 @@ void QmlEditorPageHost::rememberResumeDifficulty()
     if (backend_ == nullptr) {
         return;
     }
-    if (backend_->hasActiveDifficulty() && backend_->activeDifficultyId_ > 0) {
-        resumeDifficultyId_ = backend_->activeDifficultyId_;
+    if (backend_->hasActiveDifficulty() && backend_->documentActiveDifficultyId() > 0) {
+        resumeDifficultyId_ = backend_->documentActiveDifficultyId();
     }
 }
 
@@ -82,14 +82,14 @@ bool QmlEditorPageHost::resumeChartOrMetadata()
 
 bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
 {
-    if (backend_ == nullptr || backend_->qmlExportSession_ == nullptr) {
+    if (backend_ == nullptr || backend_->qmlExportSession() == nullptr) {
         return false;
     }
     rememberResumeDifficulty();
     if (tab == QLatin1String("batch")) {
-        backend_->qmlExportSession_->setActiveTab(QStringLiteral("batch"));
+        backend_->qmlExportSession()->setActiveTab(QStringLiteral("batch"));
     } else {
-        backend_->qmlExportSession_->setActiveTab(QStringLiteral("export"));
+        backend_->qmlExportSession()->setActiveTab(QStringLiteral("export"));
     }
     if (!backend_->switchToExportField()) {
         return false;
@@ -132,8 +132,8 @@ bool QmlEditorPageHost::leaveOverlayPage()
         return true;
     }
 
-    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession_ != nullptr) {
-        backend_->qmlExportSession_->leave();
+    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession() != nullptr) {
+        backend_->qmlExportSession()->leave();
     }
     activePageId_.clear();
     emit activePageIdChanged();
@@ -170,8 +170,8 @@ bool QmlEditorPageHost::openCoverExport(int difficultyId)
     // session before cover becomes the owner of the Tools-menu difficulty.
     // Going through leaveOverlayPage already does this; sidebar and menu routes
     // intentionally do not, so make the transition explicit here.
-    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession_ != nullptr) {
-        backend_->qmlExportSession_->leave();
+    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession() != nullptr) {
+        backend_->qmlExportSession()->leave();
     }
     rememberResumeDifficulty();
     const int selectedDifficultyId = difficultyId > 0 ? difficultyId : resumeDifficultyId_;
