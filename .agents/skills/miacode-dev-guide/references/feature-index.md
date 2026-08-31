@@ -334,7 +334,20 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 ## 5. Timeline, cursor mapping, preview sync
 
 - Quick model: `src/timeline/TimelineQuickModel.{h,cpp}` (lightweight parse, cursor anchors,
-  preview-follow buckets, incremental edit apply; owns comma-only `C` anchor lookup).
+  preview-follow buckets, incremental edit apply; owns comma-only `C` anchor lookup and chart-editor
+  selection range export resolution. The selection export action is available only for a non-empty
+  chart-editor selection and opens the existing export dialog's 导出区间 page with calculated values.
+  Its resolver supports tap/touch, hold, slide/wifi, touch hold, firework touch effects, comma timing,
+  multi-line and mixed-subdivision selections, chained slide expressions, and incremental `<HS*N>`
+  state. Selection edges snap to complete comma-delimited objects and complete segment expressions;
+  the range includes preview lead-in, object body, judge/effect tail, and at most one second of trailing
+  empty comma time subject to the next visible object. The action applies the in-memory chart to export
+  without silently writing it, and restores the originating selection without taking editor focus.
+  The entry wiring is in `src/editor/PlainCodeEditor.{h,Input.cpp}` and
+  `src/app/mainwindow/sections/{frame/MainWindow.FrameBootstrap.cpp,export/MainWindow.ExportFlow.cpp}`;
+  export-page integration is in `src/tools/export_page/ExportLauncherPage.{h,cpp}` and
+  `src/tools/video_export/VideoExportDialog.{h,cpp}`. No separate logging scope is introduced;
+  existing document/export/status and diagnostic channels are reused.
 - Widget timeline: `src/timeline/TimelineView.{h,cpp}` + `.Core/.Interaction/.Paint.cpp`
   (include-split). Visible-range paint, playhead/cursor, waveform, follow-preview.
 - Scene-state + Quick surface: `src/timeline/TimelineSceneState*`, `TimelineSceneStateBuilder.*`,

@@ -5,6 +5,7 @@
 #include "../window/MainWindow.WindowSection.h"
 
 #include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
@@ -387,7 +388,8 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
 // outline assets + chart metadata + the banner-card payload. Callers must
 // have validated the target difficulty / previewCanvas_ and paused playback
 // first. difficultyId 0 = active difficulty (the pre-export-page behavior).
-VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficultyId)
+VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(
+    int difficultyId, double rangeStart, double rangeEnd)
 {
     const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
     // The live timeline markers / muri report belong to the ACTIVE difficulty.
@@ -458,6 +460,11 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = unifiedExportEndSecond;
     task.fullRangeExport = true;
+    // Keep the complete chart duration here. The embedded dialog uses this
+    // value to scale its range timeline; the selected interval is applied to
+    // the range controls after the dialog has been constructed.
+    Q_UNUSED(rangeStart);
+    Q_UNUSED(rangeEnd);
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
@@ -511,6 +518,66 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     // chart's value; the checkbox then gates whether it reaches the export.
     task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
     return task;
+}
+
+void MainWindow::ExportSection::onExportSelectedRange(int selectionStart, int selectionEnd)
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_);
+    if (selectionEnd <= selectionStart || !owner_.hasActiveDifficulty()
+        || editor == nullptr || editor->document() == nullptr
+        || owner_.editorStack_ == nullptr || owner_.editorStack_->currentWidget() != owner_.chartPage_) {
+        return;
+    }
+
+    const TimelineExportRange range = state_.timelineQuickModel_.resolveExportRangeForSelection(
+        editor->document(),
+        selectionStart,
+        selectionEnd,
+        owner_.previewTapFlowSpeed_,
+        owner_.previewTouchFlowSpeed_);
+    if (!range.resolved) {
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("video_export.export_selection_invalid")));
+        return;
+    }
+
+    const bool preserveCurrentFieldDirty = state_.currentFieldDirty_;
+    const bool preserveDocumentDirty = state_.documentDirty_;
+    const SimaiDocument exportOriginDocumentSnapshot = state_.document_;
+    // Apply the live editor field to the in-memory document only. This is
+    // intentionally not maybeSaveCurrentFieldChanges()/onSaveFile(): the
+    // selection export must not prompt or write the chart to disk.
+    if (owner_.documentSection_ == nullptr || !owner_.documentSection_->applyCurrentFieldToDocument()) {
+        return;
+    }
+    // Applying the live field is required for the export snapshot, but it must
+    // not turn a previously unsaved edit into a clean field. Keep the original
+    // field state and retain any document-dirty state discovered by the apply.
+    state_.currentFieldDirty_ = preserveCurrentFieldDirty;
+    state_.documentDirty_ = preserveDocumentDirty || state_.documentDirty_;
+    owner_.updateWindowTitle();
+    owner_.rebuildFieldSidebar();
+    state_.pendingSelectionExport_ = true;
+    state_.pendingSelectionExportDifficultyId_ = owner_.activeDifficultyId_;
+    state_.pendingSelectionExportStartSecond_ = range.startSecond;
+    state_.pendingSelectionExportEndSecond_ = range.endSecond;
+    state_.pendingSelectionExportDocumentRevision_ = editor->document()->revision();
+    state_.exportSelectionContextActive_ = true;
+    state_.exportSelectionContextDifficultyId_ = owner_.activeDifficultyId_;
+    state_.exportSelectionContextStartPosition_ = selectionStart;
+    state_.exportSelectionContextEndPosition_ = selectionEnd;
+    state_.exportSelectionContextDocumentRevision_ = editor->document()->revision();
+    state_.exportSelectionContextChartText_ = editor->toPlainText();
+    state_.exportOriginDocumentSnapshot_ = exportOriginDocumentSnapshot;
+    state_.exportOriginDocumentSnapshotValid_ = true;
+    state_.exportOriginDifficultyId_ = owner_.activeDifficultyId_;
+    state_.exportOriginFieldDirty_ = preserveCurrentFieldDirty;
+    state_.exportOriginDocumentDirty_ = preserveDocumentDirty;
+    if (!owner_.documentSection_->switchToExportFieldWithoutSave(
+            owner_.activeDifficultyId_, range.startSecond, range.endSecond,
+            state_.pendingSelectionExportDocumentRevision_)) {
+        state_.pendingSelectionExport_ = false;
+        owner_.documentSection_->clearExportSelectionContext();
+    }
 }
 
 // MODAL twin of the embedded export panel. Since 2026-06-12 no UI entrance
@@ -851,7 +918,8 @@ void MainWindow::ExportSection::endExportPreviewSession()
     owner_.restoreSquareAfterVideoExport_ = false;
 }
 
-QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent)
+QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(
+    int difficultyId, QWidget* parent, double rangeStart, double rangeEnd)
 {
     MC_OP("MainWindow::ExportSection::createEmbeddedVideoExportPanel");
     QElapsedTimer totalTimer;
@@ -872,7 +940,7 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
         owner_.onTogglePreviewPause();
     }
 
-    VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
+    VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId, rangeStart, rangeEnd);
     owner_.tickOutlineBusySpinner();
     QElapsedTimer buildDialogTimer;
     buildDialogTimer.start();
@@ -884,6 +952,10 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
                 .arg(resolvedDifficultyId)
                 .arg(exportFlowWidgetSummary(parent)));
         panel = buildConfiguredVideoExportDialog(task, parent);
+    }
+    if (panel != nullptr && rangeStart >= 0.0 && rangeEnd > rangeStart) {
+        panel->setInitialExportRange(rangeStart, rangeEnd);
+        panel->showExportRangePage();
     }
     appendEmbeddedExportPanelDiag(
         QStringLiteral("build_configured_dialog_complete"),

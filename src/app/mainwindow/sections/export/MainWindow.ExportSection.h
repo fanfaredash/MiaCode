@@ -13,6 +13,7 @@ public:
     // selected badge — its stack page keeps activeDifficultyId_ == 0, so an
     // explicit id is the only way to target a difficulty from there.
     void onExportPreviewVideo(int difficultyId = 0);
+    void onExportSelectedRange(int selectionStart, int selectionEnd);
     // Export-page card / Tools menu → 导出封面: opens the cover composer
     // directly (no video-export dialog in between).
     void onExportCover(int difficultyId = 0);
@@ -30,7 +31,8 @@ public:
     // Returns nullptr when the difficulty/preview isn't
     // available. The host inserts the widget into its layout; ownership stays
     // with this section (destroyEmbeddedVideoExportPanel deletes it).
-    QWidget* createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent);
+    QWidget* createEmbeddedVideoExportPanel(
+        int difficultyId, QWidget* parent, double rangeStart = -1.0, double rangeEnd = -1.0);
     // Finalizes the embedded panel session (range-preview stop + live-preview
     // restore + export-preview session end) and deletes the panel. Idempotent;
     // a running worker is NOT cancelled.
@@ -91,7 +93,8 @@ private:
     // that difficulty's chart directly (the live timeline belongs to the
     // active one). Callers validate the difficulty/previewCanvas_ and pause
     // playback first.
-    VideoExportTask buildVideoExportSeedTask(int difficultyId = 0);
+    VideoExportTask buildVideoExportSeedTask(
+        int difficultyId = 0, double rangeStart = -1.0, double rangeEnd = -1.0);
     // Parse + &first-shift note markers for an arbitrary difficulty of the
     // LIVE document, mirroring the worker-side snapshot rebuild
     // (buildVideoExportTaskFromSnapshot). Empty when the difficulty has no

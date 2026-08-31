@@ -624,7 +624,8 @@ VideoExportDialog::VideoExportDialog(
     skinPageLayout_->setContentsMargins(4, 6, 4, 6);
     skinPageLayout_->setSpacing(8);
 
-    auto* rangePage = new QWidget(settingsTabs_);
+    rangePage_ = new QWidget(settingsTabs_);
+    auto* rangePage = rangePage_;
     auto* rangePageLayout = new QVBoxLayout(rangePage);
     rangePageLayout->setContentsMargins(4, 6, 4, 6);
     rangePageLayout->setSpacing(8);
@@ -2025,6 +2026,38 @@ void VideoExportDialog::syncRangeUi()
     }
 
     syncingRangeUi_ = false;
+}
+
+void VideoExportDialog::setInitialExportRange(double startSecond, double endSecond)
+{
+    if (startSecondSpin_ == nullptr || endSecondSpin_ == nullptr
+        || endSecond <= startSecond || totalDurationSeconds_ <= 0.0) {
+        return;
+    }
+    const double start = qBound(0.0, startSecond, totalDurationSeconds_);
+    const double end = qBound(start, endSecond, totalDurationSeconds_);
+    if (end <= start) {
+        return;
+    }
+    {
+        const QSignalBlocker startBlocker(*startSecondSpin_);
+        const QSignalBlocker endBlocker(*endSecondSpin_);
+        startSecondSpin_->setValue(start);
+        endSecondSpin_->setValue(end);
+    }
+    syncRangeUi();
+    refreshAddIntroEnabledState();
+}
+
+void VideoExportDialog::showExportRangePage()
+{
+    if (settingsTabs_ == nullptr || rangePage_ == nullptr) {
+        return;
+    }
+    const int rangePageIndex = settingsTabs_->indexOf(rangePage_);
+    if (rangePageIndex >= 0) {
+        settingsTabs_->setCurrentIndex(rangePageIndex);
+    }
 }
 
 void VideoExportDialog::refreshRangeSummaryLabel()
