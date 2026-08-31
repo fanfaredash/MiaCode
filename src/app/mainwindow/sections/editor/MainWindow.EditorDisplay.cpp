@@ -1105,6 +1105,43 @@ bool MainWindow::currentEditorImeInputDisabled() const
     return editorImeInputDisabled_;
 }
 
+// ---- miacode::v2::PreferencesStore ----
+// Thin forwarders onto the current*/apply* names the widget side uses.
+
+int MainWindow::editorTextFontSize() const { return currentEditorTextFontSize(); }
+double MainWindow::editorLineSpacingFactor() const { return currentEditorLineSpacingFactor(); }
+
+bool MainWindow::editorHalfWidthInputEnabled() const
+{
+    return currentEditorHalfWidthInputEnabled();
+}
+
+bool MainWindow::editorAutoCompletionEnabled() const
+{
+    return currentEditorAutoCompletionEnabled();
+}
+
+bool MainWindow::editorImeInputDisabled() const { return currentEditorImeInputDisabled(); }
+
+PreviewCanvasFrameRateMode MainWindow::previewCanvasFrameRateMode() const
+{
+    return currentPreviewCanvasFrameRateMode();
+}
+
+PreviewCanvasFrameRateMode MainWindow::previewStageMediaFrameRateMode() const
+{
+    return currentPreviewStageMediaFrameRateMode();
+}
+
+PreviewCanvasFrameRateMode MainWindow::timelineFrameRateMode() const
+{
+    return currentTimelineFrameRateMode();
+}
+
+double MainWindow::previewCanvasRefreshRate() const { return currentPreviewCanvasRefreshRate(); }
+bool MainWindow::videoDecodePrefersSoftware() const { return currentVideoDecodePrefersSoftware(); }
+bool MainWindow::workspacePanelsSwapped() const { return currentWorkspacePanelsSwapped(); }
+
 bool MainWindow::currentWorkspacePanelsSwapped() const
 {
     return workspacePanelsSwapped_;

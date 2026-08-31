@@ -4,7 +4,8 @@
 #include <QString>
 #include <QVariantList>
 
-class MainWindow;
+#include "app/v2/PreferencesStore.h"
+
 class QmlUiSettings;
 
 namespace miacode::qml_ui {
@@ -50,7 +51,10 @@ class QmlPreferencesModel final : public QObject
     Q_PROPERTY(bool restartRequired READ restartRequired NOTIFY interfaceChanged)
 
 public:
-    explicit QmlPreferencesModel(MainWindow& backend, QmlUiSettings& settings, QObject* parent = nullptr);
+    // No MainWindow: every value the page shows or writes goes through the
+    // preferences store.
+    explicit QmlPreferencesModel(miacode::v2::PreferencesStore*& storeSlot,
+                                 QmlUiSettings& settings, QObject* parent = nullptr);
 
     QVariantList languageOptions() const;
     QString languageToken() const;
@@ -100,7 +104,12 @@ private:
 
     QVariantList frameRateOptions(bool includeDisplayRefresh) const;
 
-    MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::PreferencesStore** storeSlot_ = nullptr;
+    miacode::v2::PreferencesStore* store() const
+    {
+        return storeSlot_ != nullptr ? *storeSlot_ : nullptr;
+    }
     QmlUiSettings* settings_ = nullptr;
     bool restartRequired_ = false;
 };

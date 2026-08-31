@@ -41,6 +41,7 @@
 #include "app/v2/EditorPageRouter.h"
 #include "app/v2/LatencyEngine.h"
 #include "app/v2/MediaToolsEngine.h"
+#include "app/v2/PreferencesStore.h"
 #include "app/v2/PreviewSurface.h"
 #include "app/v2/TimelineSurface.h"
 #include "app/v2/EditorSyncController.h"
@@ -133,7 +134,8 @@ class MainWindow : public QMainWindow,
                    public miacode::v2::MediaToolsEngine,
                    public miacode::v2::LatencyEngine,
                    public miacode::v2::TimelineSurface,
-                   public miacode::v2::PreviewSurface
+                   public miacode::v2::PreviewSurface,
+                   public miacode::v2::PreferencesStore
 {
     Q_OBJECT
 
@@ -544,12 +546,9 @@ public:
     // can read the cached mode. Exposing the enum doesn't widen any
     // mutation surface (the setter setPreviewCanvasFrameRateMode
     // remains internal); only the value type is visible.
-    enum class PreviewCanvasFrameRateMode {
-        Fps30,
-        Fps60,
-        Fps120,
-        DisplayRefresh,
-    };
+    // Moved to core/video/PreviewRenderSettings.h; the alias keeps the
+    // MainWindow::PreviewCanvasFrameRateMode spelling valid.
+    using PreviewCanvasFrameRateMode = ::PreviewCanvasFrameRateMode;
 private:
     std::function<bool(const QString&)> qmlDocumentSaveHandler_;
     std::function<void(std::function<void(bool)>)> qmlLeaveDocumentHandler_;
@@ -781,6 +780,29 @@ public:
     void saveAudioSettingsAsSoftwareDefault() override;
     void restoreAudioSettingsFromSoftwareDefault() override;
 
+    // ---- miacode::v2::PreferencesStore ----
+    int editorTextFontSize() const override;
+    double editorLineSpacingFactor() const override;
+    bool editorHalfWidthInputEnabled() const override;
+    bool editorAutoCompletionEnabled() const override;
+    bool editorImeInputDisabled() const override;
+    void applyEditorTextFontSize(int pointSize, bool persist) override;
+    void applyEditorLineSpacingFactor(double factor, bool persist) override;
+    void applyEditorHalfWidthInputEnabled(bool enabled, bool persist) override;
+    void applyEditorAutoCompletionEnabled(bool enabled, bool persist) override;
+    void applyEditorImeInputDisabled(bool disabled, bool persist) override;
+    PreviewCanvasFrameRateMode previewCanvasFrameRateMode() const override;
+    PreviewCanvasFrameRateMode previewStageMediaFrameRateMode() const override;
+    PreviewCanvasFrameRateMode timelineFrameRateMode() const override;
+    double previewCanvasRefreshRate() const override;
+    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persist) override;
+    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persist) override;
+    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persist) override;
+    bool videoDecodePrefersSoftware() const override;
+    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persist) override;
+    bool workspacePanelsSwapped() const override;
+    void setWorkspacePanelsSwapped(bool swapped, bool persist) override;
+
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push
     // them into the objects only this window holds, so the QML pages no longer
@@ -792,14 +814,9 @@ public:
     void applyPreviewSfxLevels(bool reloadAssets = false);
     void refreshPreviewSurfaces();
 
-    // 偏好设置's narrow surface for the QML page. Every setter already took a
-    // "persist" flag, so the QML model is a projection rather than new policy.
-    void applyEditorTextFontSize(int pointSize, bool persistPreference);
-    void applyEditorLineSpacingFactor(double factor, bool persistPreference);
-    void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
+    // The five applyEditor* entry points are PreferencesStore overrides declared
+    // above; only the overwrite-mode one is outside that interface.
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
-    void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
-    void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     // 延迟校准's narrow surface for the QML page. Reads mirror what the
     // Widgets page derived from the document; writes are the existing
     // applyLatencyDetector* transactions.
@@ -812,12 +829,8 @@ public:
     void applyLatencyDetectorClockCount(int clockCount);
     // Re-applies shortcut bindings to the live QActions after an edit.
     void applyConfiguredShortcuts();
-    // Performance + workspace settings the QML preferences page drives.
-    void setWorkspacePanelsSwapped(bool swapped, bool persistState);
-    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
-    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
-    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
-    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    // The five performance/workspace setters are the PreferencesStore overrides
+    // declared above; they are not repeated here.
     double currentPreviewCanvasRefreshRate() const;
     int currentEditorTextFontSize() const;
     double currentEditorLineSpacingFactor() const;

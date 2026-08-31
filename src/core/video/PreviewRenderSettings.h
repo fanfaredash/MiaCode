@@ -6,6 +6,15 @@
 // inside MainWindow as a nested enum, which meant every preview-appearance
 // consumer had to include the widget header to name a render setting. It is a
 // render setting, so it belongs here with the rest of them.
+// How often a surface repaints. Like PreviewSkinVariant this lived inside
+// MainWindow, so naming a pacing setting meant including the widget header.
+enum class PreviewCanvasFrameRateMode {
+    Fps30,
+    Fps60,
+    Fps120,
+    DisplayRefresh,
+};
+
 enum class PreviewSkinVariant {
     Standard,
     Dx,

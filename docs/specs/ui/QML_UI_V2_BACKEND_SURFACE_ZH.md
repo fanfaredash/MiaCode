@@ -11,7 +11,7 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **61**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **40**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
@@ -41,6 +41,7 @@
 | 2026-09-01 | 延迟检测改由 `miacode::v2::LatencyEngine` 接口承接，`QmlLatencyModel` **完全不再认识 `MainWindow`** | **104** | 0 |
 | 2026-09-01 | 时间轴与底栏页签改由 `miacode::v2::TimelineSurface` 接口承接（含分析页的两处） | **88** | 0 |
 | 2026-09-01 | 预览（传输 / 运行时对象 / 皮肤目录 / 渲染设置 / 音频混音）改由 `miacode::v2::PreviewSurface` 接口承接 | **61** | 0 |
+| 2026-09-01 | 偏好设置改由 `miacode::v2::PreferencesStore` 接口承接 | **40** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -195,37 +196,19 @@ QML 绑定的运行时对象、皮肤/判定线目录、渲染设置、音频混
 
 ### 偏好设置（→ `PreferencesService`）
 
-这些 setter 不是纯设置：它们经 `editorSection_` / `timelineSection_` 把变化应用到隐藏 widget
-布局和预览，拆分要连同应用侧一起搬。
+已改由 `miacode::v2::PreferencesStore` 承接（2026-09-01）。这些 setter 确实不是纯设置——
+它们同时把变化**应用**出去（字号与行距重排文本视图、三个帧率模式重新定速、交换工作区面板
+重排布局），所以留在窗口实现的接口后面，而不是变成一个值对象。
+每个 setter 都带 `persist`：同一批入口既服务用户编辑（要写盘）也服务从盘恢复（不能写盘），
+去掉这个参数会让「读设置」变成「重写设置」。
+`QmlPreferencesModel` 现在**完全不认识 `MainWindow`**。
 
-**`src/app/qml_ui/preferences/QmlPreferencesModel.cpp`** — 方法 21，私有成员 0
+**`src/app/qml_ui/preferences/QmlPreferencesModel.cpp`** — 方法 0，私有成员 0
 
-- `applyEditorAutoCompletionEnabled`
-- `applyEditorHalfWidthInputEnabled`
-- `applyEditorImeInputDisabled`
-- `applyEditorLineSpacingFactor`
-- `applyEditorTextFontSize`
-- `currentEditorAutoCompletionEnabled`
-- `currentEditorHalfWidthInputEnabled`
-- `currentEditorImeInputDisabled`
-- `currentEditorLineSpacingFactor`
-- `currentEditorTextFontSize`
-- `currentPreviewCanvasFrameRateMode`
-- `currentPreviewCanvasRefreshRate`
-- `currentPreviewStageMediaFrameRateMode`
-- `currentTimelineFrameRateMode`
-- `currentVideoDecodePrefersSoftware`
-- `currentWorkspacePanelsSwapped`
-- `setPreviewCanvasFrameRateMode`
-- `setPreviewStageMediaFrameRateMode`
-- `setTimelineFrameRateMode`
-- `setVideoDecodePrefersSoftware`
-- `setWorkspacePanelsSwapped`
+- *（已清空：本文件不再触达 `MainWindow`）*
 
-**`src/app/qml_ui/QmlApplicationContext.cpp`** — 方法 3，私有成员 0
+**`src/app/qml_ui/QmlApplicationContext.cpp`** — 方法 1，私有成员 0
 
-- `currentEditorLineSpacingFactor`
-- `currentEditorTextFontSize`
 - `qmlExportSession`
 
 ### 延迟检测（→ `LatencyService`）

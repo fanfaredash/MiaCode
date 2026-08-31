@@ -24,7 +24,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , platform_(this)
     , mediaTools_(backend, services.uiRequests(), services.jobProgress(),
                   services.mediaToolsEngineSlot(), this)
-    , preferencesModel_(backend, preferences_, this)
+    , preferencesModel_(services.preferencesStoreSlot(), preferences_, this)
     , audioSettings_(services.previewSurfaceSlot(), this)
     , previewSettings_(services.uiRequests(), services.previewAppearance(),
                        services.previewSurfaceSlot(), this)
@@ -34,8 +34,12 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     // Keep the QML text controller in lockstep with the persisted settings.
     // Settings are the v2 boundary; MainWindow only owns their durable values.
     const auto syncEditorAppearance = [this]() {
-        preferences_.setEditorAppearance(backend_.currentEditorTextFontSize(),
-                                         backend_.currentEditorLineSpacingFactor());
+        miacode::v2::PreferencesStore* const store = services_.preferencesStore();
+        if (store == nullptr) {
+            return;
+        }
+        preferences_.setEditorAppearance(store->editorTextFontSize(),
+                                         store->editorLineSpacingFactor());
     };
     syncEditorAppearance();
     connect(&preferencesModel_, &miacode::qml_ui::QmlPreferencesModel::editorChanged,

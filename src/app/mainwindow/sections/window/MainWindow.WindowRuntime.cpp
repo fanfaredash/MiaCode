@@ -324,6 +324,7 @@ MainWindow::~MainWindow()
     applicationServices_.setLatencyEngine(nullptr);
     applicationServices_.setTimelineSurface(nullptr);
     applicationServices_.setPreviewSurface(nullptr);
+    applicationServices_.setPreferencesStore(nullptr);
 
     // Original diagnostic with member-touching .arg() chain — kept for
     // completeness but now safe because the bare marker above already

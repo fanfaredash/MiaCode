@@ -21,6 +21,7 @@ class MediaToolsEngine;
 class LatencyEngine;
 class TimelineSurface;
 class PreviewSurface;
+class PreferencesStore;
 
 // The parser validation locale matching the session UI language.
 //
@@ -113,6 +114,10 @@ public:
     PreviewSurface* previewSurface() const { return previewSurface_; }
     void setPreviewSurface(PreviewSurface* surface) { previewSurface_ = surface; }
 
+    PreferencesStore*& preferencesStoreSlot() { return preferencesStore_; }
+    PreferencesStore* preferencesStore() const { return preferencesStore_; }
+    void setPreferencesStore(PreferencesStore* store) { preferencesStore_ = store; }
+
     SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
 
 private:
@@ -133,6 +138,7 @@ private:
     LatencyEngine* latencyEngine_ = nullptr;
     TimelineSurface* timelineSurface_ = nullptr;
     PreviewSurface* previewSurface_ = nullptr;
+    PreferencesStore* preferencesStore_ = nullptr;
 };
 
 }  // namespace miacode::v2

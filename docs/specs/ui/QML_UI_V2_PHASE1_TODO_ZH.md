@@ -611,6 +611,15 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          过程中去掉了 `setMuriRenderMode(mode, bool persistState = true)` 的默认实参——
          接口的单参重载会让所有单参调用变歧义。
 
+     17. **偏好设置改由 `miacode::v2::PreferencesStore` 承接（方法 61 → 40）**。
+         21 个入口：编辑器字号/行距/半角输入/自动补全/IME、三个帧率模式与屏幕刷新率、
+         软件解码偏好、工作区面板交换。上一轮记的「这些 setter 不是纯设置」成立，所以它们
+         留在窗口实现的接口后面而不是变成值对象；`persist` 参数保留，因为同一批入口既服务
+         用户编辑也服务从盘恢复，去掉它会让「读设置」变成「重写设置」。
+         `QmlPreferencesModel` 至此**完全不认识 `MainWindow`**。
+         顺带把 `PreviewCanvasFrameRateMode` 从 `MainWindow` 的嵌套枚举移到
+         `core/video/PreviewRenderSettings.h`（与更早的 `PreviewSkinVariant` 同一处理）。
+
      12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
          它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
          先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets

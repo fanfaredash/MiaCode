@@ -1,6 +1,5 @@
 #include "QmlPreferencesModel.h"
 
-#include "mainwindow/MainWindow.h"
 #include "../QmlUiSettings.h"
 #include "ui/UiText.h"
 
@@ -20,9 +19,10 @@ QVariantMap option(const QVariant& value, const QString& label)
 
 }  // namespace
 
-QmlPreferencesModel::QmlPreferencesModel(MainWindow& backend, QmlUiSettings& settings, QObject* parent)
+QmlPreferencesModel::QmlPreferencesModel(miacode::v2::PreferencesStore*& storeSlot,
+                                         QmlUiSettings& settings, QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , storeSlot_(&storeSlot)
     , settings_(&settings)
 {
 }
@@ -80,33 +80,33 @@ void QmlPreferencesModel::setThemeToken(const QString& token)
 
 bool QmlPreferencesModel::previewOnLeft() const
 {
-    return backend_ != nullptr && backend_->currentWorkspacePanelsSwapped();
+    return store() != nullptr && store()->workspacePanelsSwapped();
 }
 
 void QmlPreferencesModel::setPreviewOnLeft(bool onLeft)
 {
-    if (backend_ == nullptr || onLeft == previewOnLeft()) {
+    if (store() == nullptr || onLeft == previewOnLeft()) {
         return;
     }
-    backend_->setWorkspacePanelsSwapped(onLeft, true);
+    store()->setWorkspacePanelsSwapped(onLeft, true);
     emit interfaceChanged();
 }
 
 int QmlPreferencesModel::editorFontSize() const
 {
-    return backend_ != nullptr ? backend_->currentEditorTextFontSize() : 0;
+    return store() != nullptr ? store()->editorTextFontSize() : 0;
 }
 
 void QmlPreferencesModel::setEditorFontSize(int pointSize)
 {
-    if (backend_ == nullptr) {
+    if (store() == nullptr) {
         return;
     }
     const int clamped = qBound(kEditorFontSizeMinimum, pointSize, kEditorFontSizeMaximum);
     if (clamped == editorFontSize()) {
         return;
     }
-    backend_->applyEditorTextFontSize(clamped, true);
+    store()->applyEditorTextFontSize(clamped, true);
     emit editorChanged();
 }
 
@@ -121,77 +121,77 @@ QVariantList QmlPreferencesModel::lineSpacingOptions() const
 
 double QmlPreferencesModel::editorLineSpacing() const
 {
-    return backend_ != nullptr ? backend_->currentEditorLineSpacingFactor() : 1.5;
+    return store() != nullptr ? store()->editorLineSpacingFactor() : 1.5;
 }
 
 void QmlPreferencesModel::setEditorLineSpacing(double factor)
 {
-    if (backend_ == nullptr || qFuzzyCompare(factor, editorLineSpacing())) {
+    if (store() == nullptr || qFuzzyCompare(factor, editorLineSpacing())) {
         return;
     }
-    backend_->applyEditorLineSpacingFactor(factor, true);
+    store()->applyEditorLineSpacingFactor(factor, true);
     emit editorChanged();
 }
 
 bool QmlPreferencesModel::editorAutoCompletion() const
 {
-    return backend_ != nullptr && backend_->currentEditorAutoCompletionEnabled();
+    return store() != nullptr && store()->editorAutoCompletionEnabled();
 }
 
 void QmlPreferencesModel::setEditorAutoCompletion(bool enabled)
 {
-    if (backend_ == nullptr || enabled == editorAutoCompletion()) {
+    if (store() == nullptr || enabled == editorAutoCompletion()) {
         return;
     }
-    backend_->applyEditorAutoCompletionEnabled(enabled, true);
+    store()->applyEditorAutoCompletionEnabled(enabled, true);
     emit editorChanged();
 }
 
 bool QmlPreferencesModel::editorHalfWidthInput() const
 {
-    return backend_ != nullptr && backend_->currentEditorHalfWidthInputEnabled();
+    return store() != nullptr && store()->editorHalfWidthInputEnabled();
 }
 
 void QmlPreferencesModel::setEditorHalfWidthInput(bool enabled)
 {
-    if (backend_ == nullptr || enabled == editorHalfWidthInput()) {
+    if (store() == nullptr || enabled == editorHalfWidthInput()) {
         return;
     }
-    backend_->applyEditorHalfWidthInputEnabled(enabled, true);
+    store()->applyEditorHalfWidthInputEnabled(enabled, true);
     emit editorChanged();
 }
 
 bool QmlPreferencesModel::editorImeDisabled() const
 {
-    return backend_ != nullptr && backend_->currentEditorImeInputDisabled();
+    return store() != nullptr && store()->editorImeInputDisabled();
 }
 
 void QmlPreferencesModel::setEditorImeDisabled(bool disabled)
 {
-    if (backend_ == nullptr || disabled == editorImeDisabled()) {
+    if (store() == nullptr || disabled == editorImeDisabled()) {
         return;
     }
-    backend_->applyEditorImeInputDisabled(disabled, true);
+    store()->applyEditorImeInputDisabled(disabled, true);
     emit editorChanged();
 }
 
 bool QmlPreferencesModel::videoDecodePrefersSoftware() const
 {
-    return backend_ != nullptr && backend_->currentVideoDecodePrefersSoftware();
+    return store() != nullptr && store()->videoDecodePrefersSoftware();
 }
 
 void QmlPreferencesModel::setVideoDecodePrefersSoftware(bool preferSoftware)
 {
-    if (backend_ == nullptr || preferSoftware == videoDecodePrefersSoftware()) {
+    if (store() == nullptr || preferSoftware == videoDecodePrefersSoftware()) {
         return;
     }
-    backend_->setVideoDecodePrefersSoftware(preferSoftware, true);
+    store()->setVideoDecodePrefersSoftware(preferSoftware, true);
     emit performanceChanged();
 }
 
 double QmlPreferencesModel::displayRefreshRate() const
 {
-    return backend_ != nullptr ? backend_->currentPreviewCanvasRefreshRate() : 0.0;
+    return store() != nullptr ? store()->previewCanvasRefreshRate() : 0.0;
 }
 
 QVariantList QmlPreferencesModel::frameRateOptions(bool includeDisplayRefresh) const
@@ -200,7 +200,7 @@ QVariantList QmlPreferencesModel::frameRateOptions(bool includeDisplayRefresh) c
     if (includeDisplayRefresh) {
         const double refresh = displayRefreshRate();
         rows.append(option(
-            static_cast<int>(MainWindow::PreviewCanvasFrameRateMode::DisplayRefresh),
+            static_cast<int>(PreviewCanvasFrameRateMode::DisplayRefresh),
             refresh > 0.0
                 ? QStringLiteral("%1 (%2 Hz)")
                       .arg(UiText::text(
@@ -210,13 +210,13 @@ QVariantList QmlPreferencesModel::frameRateOptions(bool includeDisplayRefresh) c
                       QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.display"))));
     }
     rows.append(option(
-        static_cast<int>(MainWindow::PreviewCanvasFrameRateMode::Fps30),
+        static_cast<int>(PreviewCanvasFrameRateMode::Fps30),
         UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.30"))));
     rows.append(option(
-        static_cast<int>(MainWindow::PreviewCanvasFrameRateMode::Fps60),
+        static_cast<int>(PreviewCanvasFrameRateMode::Fps60),
         UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.60"))));
     rows.append(option(
-        static_cast<int>(MainWindow::PreviewCanvasFrameRateMode::Fps120),
+        static_cast<int>(PreviewCanvasFrameRateMode::Fps120),
         UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120"))));
     return rows;
 }
@@ -233,48 +233,48 @@ QVariantList QmlPreferencesModel::appFrameRateOptions() const
 
 int QmlPreferencesModel::canvasFrameRateMode() const
 {
-    return backend_ != nullptr ? static_cast<int>(backend_->currentPreviewCanvasFrameRateMode()) : 0;
+    return store() != nullptr ? static_cast<int>(store()->previewCanvasFrameRateMode()) : 0;
 }
 
 void QmlPreferencesModel::setCanvasFrameRateMode(int mode)
 {
-    if (backend_ == nullptr || mode == canvasFrameRateMode()) {
+    if (store() == nullptr || mode == canvasFrameRateMode()) {
         return;
     }
-    backend_->setPreviewCanvasFrameRateMode(
-        static_cast<MainWindow::PreviewCanvasFrameRateMode>(mode), true);
+    store()->setPreviewCanvasFrameRateMode(
+        static_cast<PreviewCanvasFrameRateMode>(mode), true);
     emit performanceChanged();
 }
 
 int QmlPreferencesModel::stageMediaFrameRateMode() const
 {
-    return backend_ != nullptr
-        ? static_cast<int>(backend_->currentPreviewStageMediaFrameRateMode())
+    return store() != nullptr
+        ? static_cast<int>(store()->previewStageMediaFrameRateMode())
         : 0;
 }
 
 void QmlPreferencesModel::setStageMediaFrameRateMode(int mode)
 {
-    if (backend_ == nullptr || mode == stageMediaFrameRateMode()) {
+    if (store() == nullptr || mode == stageMediaFrameRateMode()) {
         return;
     }
-    backend_->setPreviewStageMediaFrameRateMode(
-        static_cast<MainWindow::PreviewCanvasFrameRateMode>(mode), true);
+    store()->setPreviewStageMediaFrameRateMode(
+        static_cast<PreviewCanvasFrameRateMode>(mode), true);
     emit performanceChanged();
 }
 
 int QmlPreferencesModel::timelineFrameRateMode() const
 {
-    return backend_ != nullptr ? static_cast<int>(backend_->currentTimelineFrameRateMode()) : 0;
+    return store() != nullptr ? static_cast<int>(store()->timelineFrameRateMode()) : 0;
 }
 
 void QmlPreferencesModel::setTimelineFrameRateMode(int mode)
 {
-    if (backend_ == nullptr || mode == timelineFrameRateMode()) {
+    if (store() == nullptr || mode == timelineFrameRateMode()) {
         return;
     }
-    backend_->setTimelineFrameRateMode(
-        static_cast<MainWindow::PreviewCanvasFrameRateMode>(mode), true);
+    store()->setTimelineFrameRateMode(
+        static_cast<PreviewCanvasFrameRateMode>(mode), true);
     emit performanceChanged();
 }
 
