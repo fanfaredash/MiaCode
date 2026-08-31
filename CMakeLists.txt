@@ -98,7 +98,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Multimedia Quick Qml QuickControls2 ShaderTools Svg)
 
 qt_policy(SET QTP0001 NEW)
 
@@ -343,16 +343,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportSnapshot.cpp
     src/tools/zip_export/ChartZipPackager.h
     src/tools/zip_export/ChartZipPackager.cpp
-    src/tools/net/NetClient.h
-    src/tools/net/NetClient.cpp
-    src/tools/net/NetBatchDownloadWorker.h
-    src/tools/net/NetBatchDownloadWorker.cpp
-    src/tools/net/NetBatchUploadWorker.h
-    src/tools/net/NetBatchUploadScanner.h
-    src/tools/net/NetBatchUploadScanner.cpp
-    src/tools/net/NetUploadDiagnostics.h
-    src/tools/net/NetUploadDiagnostics.cpp
-    src/tools/net/NetBatchUploadWorker.cpp
     src/tools/media/PvBatchCompressionScanner.h
     src/tools/media/PvBatchCompressionScanner.cpp
     src/tools/media/PvBatchCompressionWorker.h
@@ -836,7 +826,6 @@ target_link_libraries(MiaCode PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Widgets
-    Qt6::Network
     soundtouch
     miniz
 )
@@ -861,7 +850,6 @@ target_include_directories(MiaCode PRIVATE
     src/timeline
     src/tools/latency
     src/tools/video_export
-    src/tools/net
 )
 
 target_sources(MiaCode PRIVATE
@@ -1209,7 +1197,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     # Qt Test is a dev-tools-only dependency: QML input regressions need a
     # supported way to deliver real mouse/key events into a QQuickWindow.
-    find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+    #
+    # Qt Network is dev-tools-only for the same reason: the Net page was removed
+    # from the v2 product runtime, so its engine lives on in net_client_spec
+    # alone. See docs/ops/DEPENDENCY_ALLOWLIST.md — linking it into MiaCode is a
+    # spec failure, not a style preference.
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network)
 
     # MiaCode.UI is compiled into the app target, so a spec executable cannot
     # import it. Mirror the module into a plain file-system import directory so
@@ -2428,6 +2421,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/tools
     )
 
+    # The Net engine's only build home. The Net page was removed from the v2
+    # product runtime, so src/tools/net/ is compiled here and nowhere else —
+    # that is what keeps Qt6::Network out of MiaCode (docs/ops/DEPENDENCY_ALLOWLIST.md).
+    # The two batch workers carry no assertions yet; they are listed so the
+    # engine keeps compiling instead of rotting while it waits for the page.
     miacode_add_dev_tool(net_client_spec TEST
         SOURCES
             src/tools/net/NetClientSpec.cpp
@@ -2437,13 +2435,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/net/NetBatchUploadScanner.cpp
             src/tools/net/NetUploadDiagnostics.h
             src/tools/net/NetUploadDiagnostics.cpp
+            src/tools/net/NetBatchDownloadWorker.h
+            src/tools/net/NetBatchDownloadWorker.cpp
+            src/tools/net/NetBatchUploadWorker.h
+            src/tools/net/NetBatchUploadWorker.cpp
             src/tools/media/PvBatchCompressionScanner.h
             src/tools/media/PvBatchCompressionScanner.cpp
             src/tools/zip_export/ChartZipPackager.h
             src/tools/zip_export/ChartZipPackager.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
             src/common/ChartAssetPaths.h
         LIBS Qt6::Core Qt6::Network miniz
-        INCLUDES src src/common src/tools
+        INCLUDES src src/common src/tools src/app/ui
     )
 
     # Drift guard: every MIACODE_* env flag read in src/ must be documented in
@@ -2456,6 +2460,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
     )
     target_compile_definitions(debug_flag_index_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    # Drift guard for docs/ops/DEPENDENCY_ALLOWLIST.md (stage 3.5, item 4).
+    # Parses every target_link_libraries(MiaCode …) call plus the doc's
+    # allow/forbid/media-adapter tables, so an undocumented dependency, a stale
+    # doc row, a forbidden link (Qt6::Network today, Qt6::Widgets after stage 4),
+    # an unpinned Qt version, or QtAVPlayer headers leaking outside the media
+    # adapter layer all fail the build's test suite.
+    miacode_add_dev_tool(dependency_allowlist_spec TEST
+        SOURCES
+            src/tools/deps/DependencyAllowlistSpec.cpp
+        LIBS Qt6::Core
+    )
+    target_compile_definitions(dependency_allowlist_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     # Drift guard for the UiText localization tables: built-in en/zh/ja key parity plus

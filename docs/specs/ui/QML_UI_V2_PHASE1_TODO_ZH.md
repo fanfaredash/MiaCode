@@ -479,12 +479,29 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       services / sessions，不能再经隐藏窗口取得状态、命令或页面切换。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
-- [ ] 为 `MiaCode` 建立 Qt 与第三方依赖 allowlist：基础 QML 宿主、媒体、渲染、导出、可选 Net
-      分层记录；每个模块注明直接使用点、平台条件和加载时机。
-- [ ] `src/tools/net` 不再因“功能暂时移除”而无条件把 `Qt6::Network` 带进主程序；要么恢复
-      Net 页面并承认其为产品依赖，要么移到插件/独立目标。
-- [ ] `Qt6::MultimediaQuickPrivate` 若暂时保留，必须集中在媒体适配层并锁定 Qt 版本；建立
-      改用公共 Multimedia/VideoOutput API 的后续项。
+- [x] 为 `MiaCode` 建立 Qt 与第三方依赖 allowlist（2026-09-01）。
+      [docs/ops/DEPENDENCY_ALLOWLIST.md](../../ops/DEPENDENCY_ALLOWLIST.md) 按宿主 / 渲染 /
+      媒体 / 导出 / 平台 / 遗留六层登记 `MiaCode` 链接的每一个库，逐条写明平台条件、直接使用点、
+      加载时机和验证方式。守卫 `dependency_allowlist_spec` 解析全部
+      `target_link_libraries(MiaCode …)` 与文档三张表比对，五个漂移方向都有反向验证：
+      新增依赖漏登记、文档留着已删依赖、禁止表里的库被链接、Qt 版本不一致、QtAVPlayer 头文件
+      泄漏出适配层。
+      顺带清掉一条假依赖：`OpenGL` 曾被写成 `REQUIRED` 组件却没有任何 target 链接
+      `Qt6::OpenGL`；守卫新增「REQUIRED 组件必须被链接或声明为构建期组件」这一条后它无法再回来。
+- [x] `src/tools/net` 移出主程序（2026-09-01）。Net 页面已从 v2 产品运行时移除，所以
+      `src/tools/net/` 现在只在 `net_client_spec` 里编译（`MIACODE_BUILD_DEV_TOOLS=ON` 才构建），
+      `Qt6::Network` 从 `MiaCode` 的链接行和产品作用域 `find_package` 一并删除，改到 dev-tools
+      分支。两个此前无人断言的批量 worker 也搬进该 target，否则它们会变成谁都不编译的死代码。
+      **诚实记录**：`QtNetwork` 框架仍会被加载——它是 `Qt6::Qml` 的传递依赖。本项改变的是
+      「产品是否自己使用网络」，不是部署包里少一个框架；allowlist 的「传递依赖」一节写明了这点
+      和复核命令，不允许把它说成依赖数量减少。
+- [x] `Qt6::MultimediaQuickPrivate` 锁定并收口（2026-09-01）。它在 `src/` 里**没有任何直接
+      使用点**，存在的唯一理由是 `third_party/QtAVPlayer` 的 `QT_AVPLAYER_MULTIMEDIA` 帧桥；
+      allowlist 列出**允许 `#include <QtAVPlayer/…>` 的 7 个文件**（`PreviewStageMediaHost*` 六个
+      TU 加 `PreviewSharedD3D11Device.cpp`），守卫扫描整棵 `src/` 树，多一个文件就失败。
+      版本锁由守卫要求 `CMakeLists.txt` 每一处 `find_package(Qt6 <ver> …)` 与文档写死的 `6.8`
+      一致来保证。改用公共 Multimedia/VideoOutput API 的后续项已写在 allowlist 末尾（阶段 4 之后，
+      未排期，前置条件是帧桥不再需要 `qsgvideonode` 私有头）。
 
 ### 阶段 4 —— 删除 `MainWindow`，收口为 Qt Quick/QML 宿主
 
