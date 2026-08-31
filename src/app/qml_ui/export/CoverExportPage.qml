@@ -5,8 +5,19 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-// Full v2 cover compositor. The only scene it embeds is CoverComposer.qml; all
-// controls, file requests, persistence and output stay in the QML surface.
+// v2 封面合成器。三栏工作区：左图层、中同源 CoverComposer 预览、右检查器。
+//
+// 版式与 v2 其余表面同构，不再自成一套：
+//   * 工作区照抄 MainSplitView —— 面板是平的 surface + PanelHeader，彼此只靠
+//     SplitHandle 的 1px 线分隔，没有圆角卡片边框；
+//   * 表单行一律走 LabeledCombo / LabeledSlider，标签列因此对齐，滑杆也拿到了
+//     读数和双击输入（直接给 AppSlider 绑 value 会在第一次拖动后把绑定打断，
+//     LabeledSlider 的 `Binding ... when: !pressed` 就是为这个存在的）；
+//   * 右栏按 画板 / 难度卡 / 图层 / 预设 分成 panelTab，和 导出中心、预览设置
+//     一样，而不是一条五段的长滚动。
+//
+// 图层行只读地表达状态。ChromeRow 的高亮铺满整行，交互子项放进 contentItem 会被
+// 它从底下穿过去，所以显示/锁定的开关留在右栏「图层」页，行里不放按钮。
 Rectangle {
     id: root
 
@@ -14,14 +25,25 @@ Rectangle {
     required property var coverSession
     readonly property var session: root.coverSession
 
-    function fontIndex(path) {
-        if (!session || !session.fontLibraryOptions)
-            return 0
-        for (let index = 0; index < session.fontLibraryOptions.length; ++index) {
-            if (session.fontLibraryOptions[index].path === path)
-                return index
-        }
-        return 0
+    // 右栏分组。图层页在选中图层变化时不自动切走：拖动画布选中另一个图层时
+    // 跳页会把正在调的滑杆从手底下抽掉。
+    property string inspectorTab: "canvas"
+
+    readonly property var activeLayer: root.session ? root.session.activeLayer : null
+    readonly property string activeLayerKind: root.activeLayer ? root.activeLayer.kind : ""
+
+    // LabeledCombo 吃 { value, label }；字体库给的是 { path, label, family }。
+    readonly property var fontOptions: {
+        const source = root.session ? root.session.fontLibraryOptions : []
+        const options = []
+        for (let index = 0; index < source.length; ++index)
+            options.push({ value: source[index].path, label: source[index].label })
+        return options
+    }
+
+    function baseName(path) {
+        const parts = String(path).split(/[\\/]/)
+        return parts[parts.length - 1] || path
     }
 
     color: Theme.colors.background.surface
@@ -29,42 +51,84 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
+        anchors.margins: 16
         spacing: 8
 
         RowLayout {
             Layout.fillWidth: true
-
-            AppButton {
-                text: UiText.text("cover.close")
-                onClicked: root.pages.leaveOverlayPage()
-            }
+            spacing: 8
 
             Text {
-                Layout.fillWidth: true
                 text: UiText.text("cover.export_cover")
                 color: Theme.colors.text.active
                 font.family: Theme.uiFont
-                font.pixelSize: Theme.headerFontSize
+                font.pixelSize: Theme.uiFontSize
                 font.bold: true
                 elide: Text.ElideRight
             }
 
+            Item { Layout.fillWidth: true }
+
             AppButton {
-                text: UiText.text("cover.import_layout")
+                id: layoutMenuButton
+                objectName: "coverLayoutMenuButton"
+                text: UiText.text("cover.layout")
                 enabled: !!root.session && !root.session.busy
-                onClicked: root.session.importLayout()
+                onClicked: layoutMenu.visible ? layoutMenu.close() : layoutMenu.openAt(layoutMenuButton)
             }
             AppButton {
-                text: UiText.text("cover.save_layout")
-                enabled: !!root.session && !root.session.busy
-                onClicked: root.session.saveLayout()
-            }
-            AppButton {
+                objectName: "coverExportButton"
                 text: UiText.text("cover.export")
                 emphasized: true
                 enabled: !!root.session && !root.session.busy
                 onClicked: root.session.exportCover()
+            }
+            AppButton {
+                objectName: "coverCloseButton"
+                text: UiText.text("cover.close")
+                onClicked: root.pages.leaveOverlayPage()
+            }
+        }
+
+        // 布局 ▾ —— v1 同名菜单的四项：重置 / 保存 / 导入 / 最近。
+        AppMenu {
+            id: layoutMenu
+            openRightAligned: true
+            hugContent: true
+
+            AppMenuItem {
+                objectName: "coverResetLayoutItem"
+                text: UiText.text("cover.reset_to_default")
+                onTriggered: root.session.resetLayout()
+            }
+            AppMenuItem {
+                text: UiText.text("cover.save_layout_to_file")
+                onTriggered: root.session.saveLayout()
+            }
+            AppMenuItem {
+                text: UiText.text("cover.import_layout_file")
+                onTriggered: root.session.importLayout()
+            }
+            AppMenuSeparator {}
+            AppMenuItem {
+                text: UiText.text("cover.no_recent_files")
+                enabled: false
+                height: visible ? implicitHeight : 0
+                visible: !root.session || root.session.recentLayoutFiles.length === 0
+            }
+            Repeater {
+                model: root.session ? root.session.recentLayoutFiles : []
+                delegate: AppMenuItem {
+                    required property string modelData
+                    text: root.baseName(modelData)
+                    onTriggered: root.session.openRecentLayout(modelData)
+                }
+            }
+            AppMenuSeparator {}
+            AppMenuItem {
+                text: UiText.text("cover.clear_recent")
+                enabled: !!root.session && root.session.recentLayoutFiles.length > 0
+                onTriggered: root.session.clearRecentLayouts()
             }
         }
 
@@ -74,25 +138,32 @@ Rectangle {
             Repeater {
                 model: root.session ? root.session.difficulties : []
                 delegate: ChromeRow {
+                    id: badge
                     required property var modelData
                     implicitHeight: 28
-                    implicitWidth: label.implicitWidth + leftPadding + rightPadding
+                    implicitWidth: badgeLabel.implicitWidth + leftPadding + rightPadding
                     checkable: true
                     checked: root.session && root.session.selectedDifficultyId === modelData.id
-                    selected: checked
+                    selected: badge.checked
                     onClicked: if (root.session) root.session.selectDifficulty(modelData.id)
                     contentItem: Text {
-                        id: label
-                        text: modelData.name
-                        color: parent.checked ? Theme.colors.text.active : Theme.colors.text.secondary
+                        id: badgeLabel
+                        text: badge.modelData.name
+                        color: badge.checked ? Theme.colors.text.active : Theme.colors.text.secondary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.secondaryFontSize
                         font.bold: true
-                        verticalAlignment: Text.AlignVCenter
                         horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
             }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: Theme.colors.border.normal
         }
 
         SplitView {
@@ -100,90 +171,180 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             orientation: Qt.Horizontal
+            handle: SplitHandle {}
 
+            // ---- 图层 ----
             Rectangle {
                 id: layerPane
-                SplitView.minimumWidth: 160
-                SplitView.preferredWidth: 220
-                SplitView.maximumWidth: 340
-                color: Theme.colors.background.elevated
-                radius: Theme.controlRadius
-                border.width: Theme.controlBorderWidth
-                border.color: Theme.colors.border.normal
+                SplitView.minimumWidth: 190
+                SplitView.preferredWidth: 240
+                SplitView.maximumWidth: 360
+                color: Theme.colors.background.surface
+                clip: true
+
+                PanelHeader {
+                    id: layerHeading
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    title: UiText.text("cover.layers")
+
+                    ChromeRow {
+                        id: addLayerButton
+                        objectName: "coverAddLayerButton"
+                        implicitWidth: addLayerLabel.implicitWidth + leftPadding + rightPadding
+                        tone: "icon"
+                        focusPolicy: Qt.TabFocus
+                        enabled: !!root.session && !root.session.busy
+                        Accessible.name: UiText.text("cover.add_layer")
+                        onClicked: addLayerMenu.visible ? addLayerMenu.close()
+                                                        : addLayerMenu.openAt(addLayerButton)
+                        contentItem: Text {
+                            id: addLayerLabel
+                            text: UiText.text("cover.add_layer")
+                            color: !addLayerButton.enabled ? Theme.colors.text.disabled
+                                 : (addLayerButton.hovered || addLayerButton.down)
+                                   ? Theme.colors.text.active : Theme.colors.text.secondary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.uiFontSize
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+
+                AppMenu {
+                    id: addLayerMenu
+                    openRightAligned: true
+                    hugContent: true
+
+                    AppMenuItem {
+                        objectName: "coverAddChartFrameItem"
+                        text: UiText.text("cover.add_chart_frame")
+                        // 没有可渲染音符的难度加不了谱面帧；session 会解释原因，
+                        // 但先在这里禁用，免得让人点了才知道。
+                        enabled: !!root.session && root.session.chartFrameAvailable
+                        onTriggered: root.session.addChartFrameLayer()
+                    }
+                    AppMenuItem {
+                        text: UiText.text("cover.add_image")
+                        onTriggered: root.session.addImageLayer()
+                    }
+                    AppMenuItem {
+                        text: UiText.text("cover.add_text")
+                        onTriggered: root.session.addTextLayer()
+                    }
+                }
+
+                ListView {
+                    id: layers
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: layerHeading.bottom
+                    anchors.bottom: layerActions.top
+                    anchors.margins: 6
+                    clip: true
+                    spacing: 2
+                    model: root.session ? root.session.layoutModel.layers : []
+                    ScrollBar.vertical: ScrollBar {}
+
+                    // 状态写在行里，但不放交互子项：ChromeRow 的高亮铺满整行，
+                    // 会从任何按钮底下穿过去（见 ChromeRow 的说明）。显示/锁定的
+                    // 开关因此留在右栏「图层」页，这里只读地表达状态 —— 隐藏用
+                    // disabled 灰，锁定用一个词，而不是彩色 emoji（emoji 在
+                    // Windows 上按彩字渲染，拿不到主题色）。
+                    delegate: ChromeRow {
+                        id: layerRow
+                        required property var modelData
+                        width: ListView.view.width
+                        implicitHeight: 30
+                        selected: root.session && root.session.activeLayerKey === layerRow.modelData.key
+                        onClicked: if (root.session) root.session.selectLayerKey(layerRow.modelData.key)
+
+                        readonly property color labelColor:
+                            !layerRow.modelData.visible ? Theme.colors.text.disabled
+                          : layerRow.selected ? Theme.colors.text.active
+                          : Theme.colors.text.secondary
+
+                        contentItem: RowLayout {
+                            spacing: 6
+                            Text {
+                                Layout.fillWidth: true
+                                text: layerRow.modelData.label
+                                color: layerRow.labelColor
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.uiFontSize
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                visible: layerRow.modelData.locked
+                                text: UiText.text("cover.lock")
+                                color: Theme.colors.text.disabled
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.captionFontSize
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
 
                 ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 8
+                    id: layerActions
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 6
+                    spacing: 4
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: UiText.text("cover.layers")
-                        color: Theme.colors.text.active
-                        font.family: Theme.uiFont
-                        font.bold: true
-                    }
+                    readonly property bool cardSelected: !root.session
+                                                         || root.session.activeLayerKey === "card"
+                    readonly property bool actionable: !!root.session && !root.session.busy
+                                                       && !layerActions.cardSelected
 
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: 4
                         AppButton {
                             Layout.fillWidth: true
-                            text: UiText.text("cover.add_chart_frame")
-                            enabled: root.session && root.session.chartFrameAvailable && !root.session.busy
-                            onClicked: root.session.addChartFrameLayer()
+                            text: UiText.text("cover.move_up")
+                            enabled: layerActions.actionable
+                            onClicked: root.session.raiseActiveLayer()
+                        }
+                        AppButton {
+                            Layout.fillWidth: true
+                            text: UiText.text("cover.move_down")
+                            enabled: layerActions.actionable
+                            onClicked: root.session.lowerActiveLayer()
                         }
                     }
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: 4
                         AppButton {
                             Layout.fillWidth: true
-                            text: UiText.text("cover.add_image")
-                            enabled: root.session && !root.session.busy
-                            onClicked: root.session.addImageLayer()
+                            objectName: "coverDuplicateLayerButton"
+                            text: UiText.text("cover.duplicate_layer")
+                            enabled: layerActions.actionable
+                            onClicked: root.session.duplicateActiveLayer()
                         }
                         AppButton {
                             Layout.fillWidth: true
-                            text: UiText.text("cover.add_text")
-                            enabled: root.session && !root.session.busy
-                            onClicked: root.session.addTextLayer()
+                            text: UiText.text("cover.delete_the_selected_layer_delete")
+                            enabled: layerActions.actionable
+                            onClicked: root.session.removeActiveLayer()
                         }
-                    }
-
-                    ListView {
-                        id: layers
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        spacing: 3
-                        model: root.session ? root.session.layoutModel.layers : []
-                        ScrollBar.vertical: ScrollBar {}
-                        delegate: ChromeRow {
-                            required property var modelData
-                            width: ListView.view.width
-                            selected: root.session && root.session.activeLayerKey === modelData.key
-                            enabled: modelData.visible
-                            text: modelData.label + (modelData.locked ? " · 🔒" : "")
-                            onClicked: if (root.session) root.session.selectLayerKey(modelData.key)
-                        }
-                    }
-
-                    AppButton {
-                        Layout.fillWidth: true
-                        text: UiText.text("cover.delete_the_selected_layer_delete")
-                        enabled: root.session && root.session.activeLayerKey !== "card" && !root.session.busy
-                        onClicked: root.session.removeActiveLayer()
                     }
                 }
             }
 
+            // ---- 画布 ----
             Rectangle {
                 id: canvasPane
                 SplitView.fillWidth: true
                 SplitView.minimumWidth: 280
                 color: Theme.colors.background.editor
-                radius: Theme.controlRadius
-                border.width: Theme.controlBorderWidth
-                border.color: Theme.colors.border.normal
+                clip: true
 
                 Item {
                     id: canvasFrame
@@ -225,171 +386,536 @@ Rectangle {
                 }
             }
 
+            // ---- 检查器 ----
             Rectangle {
                 id: inspectorPane
-                SplitView.minimumWidth: 240
-                SplitView.preferredWidth: 310
-                SplitView.maximumWidth: 430
-                color: Theme.colors.background.elevated
-                radius: Theme.controlRadius
-                border.width: Theme.controlBorderWidth
-                border.color: Theme.colors.border.normal
+                SplitView.minimumWidth: 280
+                SplitView.preferredWidth: 330
+                SplitView.maximumWidth: 460
+                color: Theme.colors.background.surface
+                clip: true
 
-                Flickable {
+                ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 10
-                    clip: true
-                    contentWidth: width
-                    contentHeight: inspector.implicitHeight
-                    boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.vertical: ScrollBar {}
+                    spacing: 8
 
-                    ColumnLayout {
-                        id: inspector
-                        width: parent.width
-                        spacing: 10
-
-                        Text {
-                            Layout.fillWidth: true
+                    Row {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        AppTab {
+                            panelTab: true
                             text: UiText.text("cover.canvas")
-                            color: Theme.colors.text.active
-                            font.family: Theme.uiFont
-                            font.bold: true
+                            active: root.inspectorTab === "canvas"
+                            onClicked: root.inspectorTab = "canvas"
                         }
-
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: 2
-                            columnSpacing: 8
-                            rowSpacing: 8
-                            Text { text: UiText.text("cover.size"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                            AppComboBox {
-                                Layout.fillWidth: true
-                                model: root.session ? root.session.resolutionOptions : []
-                                textRole: "label"
-                                currentIndex: root.session ? root.session.resolutionIndex : 0
-                                onActivated: if (root.session) root.session.resolutionIndex = currentIndex
-                            }
-                            Text { text: UiText.text("输出文件夹"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                AppTextField { Layout.fillWidth: true; text: root.session ? root.session.outputDirectory : ""; onEditingFinished: if (root.session) root.session.outputDirectory = text }
-                                AppButton { text: UiText.text("cover.browse"); onClicked: if (root.session) root.session.browseOutputDirectory() }
-                            }
+                        AppTab {
+                            panelTab: true
+                            text: UiText.text("cover.difficulty_card")
+                            active: root.inspectorTab === "card"
+                            onClicked: root.inspectorTab = "card"
                         }
-
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.colors.border.normal }
-
-                        Text { Layout.fillWidth: true; text: UiText.text("cover.background"); color: Theme.colors.text.active; font.family: Theme.uiFont; font.bold: true }
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: 2
-                            columnSpacing: 8
-                            rowSpacing: 8
-                            Text { text: UiText.text("cover.background"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                            AppComboBox {
-                                Layout.fillWidth: true
-                                model: [UiText.text("cover.jacket"), UiText.text("cover.custom_image"), UiText.text("cover.transparent")]
-                                currentIndex: root.session ? root.session.backgroundMode : 0
-                                onActivated: if (root.session) root.session.backgroundMode = currentIndex
-                            }
-                            Item { Layout.columnSpan: 2; Layout.fillWidth: true; implicitHeight: backgroundControls.implicitHeight
-                                ColumnLayout { id: backgroundControls; width: parent.width
-                                    AppButton { text: UiText.text("cover.choose_background_image"); enabled: root.session && root.session.backgroundMode === 1; onClicked: root.session.browseBackgroundImage() }
-                                    AppSwitch { text: UiText.text("cover.blur_background"); checked: root.session ? root.session.blurBackground : false; enabled: root.session && root.session.backgroundMode !== 2; onToggled: if (root.session) root.session.blurBackground = checked }
-                                    RowLayout { Layout.fillWidth: true
-                                        Text { text: UiText.text("cover.backdrop_brightness"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                        AppSlider { Layout.fillWidth: true; from: 0; to: 1; value: root.session ? root.session.backgroundBrightness : 0.45; enabled: root.session && root.session.backgroundMode !== 2; onMoved: if (root.session) root.session.backgroundBrightness = value }
-                                    }
-                                }
-                            }
+                        AppTab {
+                            objectName: "coverLayerTab"
+                            panelTab: true
+                            text: UiText.text("cover.layer")
+                            active: root.inspectorTab === "layer"
+                            onClicked: root.inspectorTab = "layer"
                         }
-
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.colors.border.normal }
-
-                        Text { Layout.fillWidth: true; text: UiText.text("cover.difficulty_card_options"); color: Theme.colors.text.active; font.family: Theme.uiFont; font.bold: true }
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: 2
-                            columnSpacing: 8
-                            rowSpacing: 8
-                            Text { text: UiText.text("cover.chart_type"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                            AppComboBox { Layout.fillWidth: true; model: ["auto", "DX", "Standard"]; currentIndex: root.session && root.session.cardMode === "DX" ? 1 : root.session && root.session.cardMode === "Standard" ? 2 : 0; onActivated: if (root.session) root.session.cardMode = model[currentIndex] }
-                            Item { Layout.columnSpan: 2; Layout.fillWidth: true; implicitHeight: cardControls.implicitHeight
-                                ColumnLayout { id: cardControls; width: parent.width
-                                    AppSwitch { text: UiText.text("cover.card_drop_shadow"); checked: root.session ? root.session.cardShadow : false; onToggled: if (root.session) root.session.cardShadow = checked }
-                                    AppSwitch { text: UiText.text("cover.render_level_as_text"); checked: root.session ? root.session.levelTextRender : false; onToggled: if (root.session) root.session.levelTextRender = checked }
-                                    Text { text: UiText.text("card_font.title"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                    RowLayout { Layout.fillWidth: true
-                                        AppComboBox { Layout.fillWidth: true; model: root.session ? root.session.fontLibraryOptions : []; textRole: "label"; currentIndex: root.fontIndex(root.session ? root.session.cardFontDisplayPath : ""); onActivated: if (root.session) root.session.cardFontDisplayPath = model[currentIndex].path }
-                                        AppButton { text: UiText.text("card_font.import"); onClicked: if (root.session) root.session.importCardDisplayFont() }
-                                    }
-                                    Text { text: UiText.text("card_font.body"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                    RowLayout { Layout.fillWidth: true
-                                        AppComboBox { Layout.fillWidth: true; model: root.session ? root.session.fontLibraryOptions : []; textRole: "label"; currentIndex: root.fontIndex(root.session ? root.session.cardFontBodyPath : ""); onActivated: if (root.session) root.session.cardFontBodyPath = model[currentIndex].path }
-                                        AppButton { text: UiText.text("card_font.import"); onClicked: if (root.session) root.session.importCardBodyFont() }
-                                    }
-                                }
-                            }
+                        AppTab {
+                            panelTab: true
+                            text: UiText.text("cover.manage_presets")
+                            active: root.inspectorTab === "preset"
+                            onClicked: root.inspectorTab = "preset"
                         }
+                    }
 
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.colors.border.normal }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: Theme.colors.border.normal
+                    }
 
-                        Text { Layout.fillWidth: true; text: UiText.text("cover.layer") + (root.session && root.session.activeLayer ? " · " + root.session.activeLayer.label : ""); color: Theme.colors.text.active; font.family: Theme.uiFont; font.bold: true }
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        contentWidth: width
+                        contentHeight: inspector.implicitHeight
+                        boundsBehavior: Flickable.StopAtBounds
+                        ScrollBar.vertical: ScrollBar {}
+
                         ColumnLayout {
-                            Layout.fillWidth: true
-                            visible: root.session && root.session.activeLayer
-                            spacing: 8
-                            RowLayout {
-                                Layout.fillWidth: true
-                                AppSwitch { Layout.fillWidth: true; text: UiText.text("cover.visible"); checked: root.session && root.session.activeLayer ? root.session.activeLayer.visible : false; onToggled: if (root.session) root.session.setActiveLayerVisible(checked) }
-                                AppSwitch { Layout.fillWidth: true; text: UiText.text("cover.lock"); checked: root.session && root.session.activeLayer ? root.session.activeLayer.locked : false; onToggled: if (root.session) root.session.setActiveLayerLocked(checked) }
-                            }
-                            RowLayout { Layout.fillWidth: true
-                                Text { text: UiText.text("cover.opacity"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                AppSlider { Layout.fillWidth: true; from: 0; to: 1; value: root.session && root.session.activeLayer ? root.session.activeLayer.opacity : 1; onMoved: if (root.session) root.session.setActiveLayerOpacity(value) }
-                            }
-                            RowLayout { Layout.fillWidth: true
-                                Text { text: UiText.text("cover.layer_size"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                AppSlider { Layout.fillWidth: true; from: 0.05; to: 1.5; value: root.session && root.session.activeLayer ? root.session.activeLayer.sizeFraction : 0.85; onMoved: if (root.session) root.session.setActiveLayerSizeFraction(value) }
-                            }
-                            RowLayout { Layout.fillWidth: true
-                                AppButton { Layout.fillWidth: true; text: UiText.text("cover.send_to_back"); onClicked: root.session.sendActiveLayerToBack() }
-                                AppButton { Layout.fillWidth: true; text: UiText.text("cover.bring_to_front"); onClicked: root.session.bringActiveLayerToFront() }
-                            }
-                            ColumnLayout { Layout.fillWidth: true; visible: root.session && root.session.activeLayer && root.session.activeLayer.kind === "image"
-                                AppButton { text: UiText.text("cover.choose_image"); onClicked: root.session.browseActiveLayerImage() }
-                            }
-                            ColumnLayout { Layout.fillWidth: true; visible: root.session && root.session.activeLayer && root.session.activeLayer.kind === "text"
-                                Text { text: UiText.text("cover.text_content"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                AppTextField { Layout.fillWidth: true; text: root.session && root.session.activeLayer ? root.session.activeLayer.text : ""; onEditingFinished: if (root.session) root.session.setActiveLayerText(text) }
-                                Text { text: UiText.text("cover.text_color"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                AppTextField { Layout.fillWidth: true; text: root.session && root.session.activeLayer ? root.session.activeLayer.textColor : "#FFFFFF"; onEditingFinished: if (root.session) root.session.setActiveLayerTextColor(text) }
-                                AppSwitch { text: UiText.text("cover.bold"); checked: root.session && root.session.activeLayer ? root.session.activeLayer.textBold : false; onToggled: if (root.session) root.session.setActiveLayerTextBold(checked) }
-                                AppButton { text: UiText.text("card_font.import"); onClicked: root.session.importActiveLayerFont() }
-                            }
-                            ColumnLayout { Layout.fillWidth: true; visible: root.session && root.session.activeLayer && root.session.activeLayer.kind === "chartFrame"
-                                Text { text: UiText.text("cover.frame_time"); color: Theme.colors.text.secondary; font.family: Theme.uiFont }
-                                AppSlider { Layout.fillWidth: true; from: 0; to: root.session ? root.session.chartFrameDuration : 0; value: root.session && root.session.activeLayer ? root.session.activeLayer.frameSeconds : 0; onMoved: if (root.session) root.session.setActiveLayerFrameSeconds(value) }
-                                AppComboBox { Layout.fillWidth: true; model: [UiText.text("cover.inner_bg"), UiText.text("cover.transparent")]; currentIndex: root.session && root.session.activeLayer && root.session.activeLayer.frameBgMode === "transparent" ? 1 : 0; onActivated: if (root.session) root.session.setActiveLayerFrameBackgroundMode(currentIndex === 1 ? "transparent" : "image") }
-                            }
-                        }
+                            id: inspector
+                            width: parent.width
+                            spacing: 10
 
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.colors.border.normal }
-
-                        Text { Layout.fillWidth: true; text: UiText.text("cover.manage_presets_2"); color: Theme.colors.text.active; font.family: Theme.uiFont; font.bold: true }
-                        RowLayout { Layout.fillWidth: true
-                            AppTextField { id: presetName; Layout.fillWidth: true; placeholderText: UiText.text("cover.preset_name") }
-                            AppButton { text: UiText.text("cover.save_preset"); onClicked: if (root.session) { root.session.savePreset(presetName.text); presetName.clear() } }
-                        }
-                        Repeater {
-                            model: root.session ? root.session.presets : []
-                            delegate: RowLayout {
-                                required property var modelData
+                            // ---- 画板 ----
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                Text { Layout.fillWidth: true; text: modelData.name; color: Theme.colors.text.secondary; font.family: Theme.uiFont; elide: Text.ElideRight }
-                                AppButton { text: UiText.text("cover.apply_preset"); onClicked: root.session.applyPreset(modelData.name) }
-                                AppButton { text: UiText.text("cover.delete_preset"); onClicked: root.session.removePreset(modelData.name) }
+                                visible: root.inspectorTab === "canvas"
+                                spacing: 10
+
+                                LabeledCombo {
+                                    objectName: "coverResolutionCombo"
+                                    label: UiText.text("cover.size")
+                                    labelWidth: 96
+                                    options: {
+                                        const source = root.session ? root.session.resolutionOptions : []
+                                        const options = []
+                                        for (let index = 0; index < source.length; ++index)
+                                            options.push({ value: index, label: source[index].label })
+                                        return options
+                                    }
+                                    currentValue: root.session ? root.session.resolutionIndex : 0
+                                    onPicked: function(value) { if (root.session) root.session.resolutionIndex = value }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        Layout.preferredWidth: 96
+                                        text: UiText.text("输出文件夹")
+                                        color: Theme.colors.text.secondary
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.uiFontSize
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    AppTextField {
+                                        objectName: "coverOutputDirectoryField"
+                                        Layout.fillWidth: true
+                                        text: root.session ? root.session.outputDirectory : ""
+                                        onEditingFinished: if (root.session) root.session.outputDirectory = text
+                                    }
+                                    AppButton {
+                                        text: UiText.text("cover.browse")
+                                        onClicked: if (root.session) root.session.browseOutputDirectory()
+                                    }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.colors.border.normal }
+
+                                Text {
+                                    text: UiText.text("cover.background")
+                                    color: Theme.colors.text.active
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                    font.bold: true
+                                }
+
+                                LabeledCombo {
+                                    objectName: "coverBackgroundModeCombo"
+                                    label: UiText.text("cover.background")
+                                    labelWidth: 96
+                                    options: [
+                                        { value: 0, label: UiText.text("cover.jacket") },
+                                        { value: 1, label: UiText.text("cover.custom_image") },
+                                        { value: 2, label: UiText.text("cover.transparent") }
+                                    ]
+                                    currentValue: root.session ? root.session.backgroundMode : 0
+                                    onPicked: function(value) { if (root.session) root.session.backgroundMode = value }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    AppButton {
+                                        text: UiText.text("cover.choose_background_image")
+                                        enabled: root.session && root.session.backgroundMode === 1
+                                        onClicked: root.session.browseBackgroundImage()
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                                AppSwitch {
+                                    text: UiText.text("cover.blur_background")
+                                    checked: root.session ? root.session.blurBackground : false
+                                    enabled: root.session && root.session.backgroundMode !== 2
+                                    onToggled: if (root.session) root.session.blurBackground = checked
+                                }
+                                LabeledSlider {
+                                    label: UiText.text("cover.backdrop_brightness")
+                                    labelWidth: 96
+                                    from: 0
+                                    to: 1
+                                    stepSize: 0.01
+                                    decimals: 0
+                                    suffix: "%"
+                                    readout: Math.round((root.session ? root.session.backgroundBrightness : 0.45) * 100) + "%"
+                                    value: root.session ? root.session.backgroundBrightness : 0.45
+                                    enabled: root.session && root.session.backgroundMode !== 2
+                                    onMoved: function(value) { if (root.session) root.session.backgroundBrightness = value }
+                                }
+                            }
+
+                            // ---- 难度卡 ----
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: root.inspectorTab === "card"
+                                spacing: 10
+
+                                LabeledCombo {
+                                    objectName: "coverCardModeCombo"
+                                    label: UiText.text("cover.chart_type")
+                                    labelWidth: 96
+                                    options: [
+                                        { value: "auto", label: UiText.text("自动") },
+                                        { value: "DX", label: "DX" },
+                                        { value: "Standard", label: "Standard" }
+                                    ]
+                                    currentValue: root.session ? root.session.cardMode : "auto"
+                                    onPicked: function(value) { if (root.session) root.session.cardMode = value }
+                                }
+                                AppSwitch {
+                                    text: UiText.text("cover.card_drop_shadow")
+                                    checked: root.session ? root.session.cardShadow : false
+                                    onToggled: if (root.session) root.session.cardShadow = checked
+                                }
+                                AppSwitch {
+                                    text: UiText.text("cover.render_level_as_text")
+                                    checked: root.session ? root.session.levelTextRender : false
+                                    onToggled: if (root.session) root.session.levelTextRender = checked
+                                }
+                                LabeledCombo {
+                                    objectName: "coverLongTextCombo"
+                                    label: UiText.text("cover.long_text")
+                                    labelWidth: 96
+                                    options: [
+                                        { value: "shrink", label: UiText.text("cover.shrink_to_fit") },
+                                        { value: "ellipsis", label: UiText.text("cover.keep_size_ellipsis") }
+                                    ]
+                                    currentValue: root.session ? root.session.longTextMode : "shrink"
+                                    onPicked: function(value) { if (root.session) root.session.longTextMode = value }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.colors.border.normal }
+
+                                Text {
+                                    text: UiText.text("cover.font")
+                                    color: Theme.colors.text.active
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                    font.bold: true
+                                }
+                                LabeledCombo {
+                                    objectName: "coverCardDisplayFontCombo"
+                                    label: UiText.text("card_font.title")
+                                    labelWidth: 96
+                                    options: root.fontOptions
+                                    currentValue: root.session ? root.session.cardFontDisplayPath : ""
+                                    onPicked: function(value) { if (root.session) root.session.cardFontDisplayPath = value }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    AppButton {
+                                        text: UiText.text("card_font.import")
+                                        onClicked: if (root.session) root.session.importCardDisplayFont()
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                                LabeledCombo {
+                                    objectName: "coverCardBodyFontCombo"
+                                    label: UiText.text("card_font.body")
+                                    labelWidth: 96
+                                    options: root.fontOptions
+                                    currentValue: root.session ? root.session.cardFontBodyPath : ""
+                                    onPicked: function(value) { if (root.session) root.session.cardFontBodyPath = value }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    AppButton {
+                                        text: UiText.text("card_font.import")
+                                        onClicked: if (root.session) root.session.importCardBodyFont()
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                            }
+
+                            // ---- 图层 ----
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: root.inspectorTab === "layer"
+                                spacing: 10
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: !root.activeLayer
+                                    text: UiText.text("cover.select_a_chart_frame_layer")
+                                    color: Theme.colors.text.secondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    visible: !!root.activeLayer
+                                    spacing: 10
+
+                                    Text {
+                                        text: root.activeLayer ? root.activeLayer.label : ""
+                                        color: Theme.colors.text.active
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.uiFontSize
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        AppSwitch {
+                                            Layout.fillWidth: true
+                                            text: UiText.text("cover.visible")
+                                            checked: root.activeLayer ? root.activeLayer.visible : false
+                                            onToggled: if (root.session) root.session.setActiveLayerVisible(checked)
+                                        }
+                                        AppSwitch {
+                                            Layout.fillWidth: true
+                                            text: UiText.text("cover.lock")
+                                            checked: root.activeLayer ? root.activeLayer.locked : false
+                                            onToggled: if (root.session) root.session.setActiveLayerLocked(checked)
+                                        }
+                                    }
+                                    LabeledSlider {
+                                        label: UiText.text("cover.opacity")
+                                        labelWidth: 96
+                                        from: 0
+                                        to: 1
+                                        stepSize: 0.01
+                                        readout: Math.round((root.activeLayer ? root.activeLayer.opacity : 1) * 100) + "%"
+                                        value: root.activeLayer ? root.activeLayer.opacity : 1
+                                        onMoved: function(value) { if (root.session) root.session.setActiveLayerOpacity(value) }
+                                    }
+                                    LabeledSlider {
+                                        label: UiText.text("cover.layer_size")
+                                        labelWidth: 96
+                                        from: 0.05
+                                        to: 1.5
+                                        stepSize: 0.01
+                                        readout: Math.round((root.activeLayer ? root.activeLayer.sizeFraction : 0.85) * 100) + "%"
+                                        value: root.activeLayer ? root.activeLayer.sizeFraction : 0.85
+                                        onMoved: function(value) { if (root.session) root.session.setActiveLayerSizeFraction(value) }
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        AppButton {
+                                            Layout.fillWidth: true
+                                            text: UiText.text("cover.send_to_back")
+                                            onClicked: root.session.sendActiveLayerToBack()
+                                        }
+                                        AppButton {
+                                            Layout.fillWidth: true
+                                            text: UiText.text("cover.bring_to_front")
+                                            onClicked: root.session.bringActiveLayerToFront()
+                                        }
+                                    }
+
+                                    // ---- 图片选项 ----
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: root.activeLayerKind === "image"
+                                        spacing: 10
+                                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.colors.border.normal }
+                                        Text {
+                                            text: UiText.text("cover.image_options")
+                                            color: Theme.colors.text.active
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.uiFontSize
+                                            font.bold: true
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            AppButton {
+                                                text: UiText.text("cover.choose_image")
+                                                onClicked: root.session.browseActiveLayerImage()
+                                            }
+                                            Item { Layout.fillWidth: true }
+                                        }
+                                    }
+
+                                    // ---- 文字选项 ----
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: root.activeLayerKind === "text"
+                                        spacing: 10
+                                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.colors.border.normal }
+                                        Text {
+                                            text: UiText.text("cover.text_options")
+                                            color: Theme.colors.text.active
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.uiFontSize
+                                            font.bold: true
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            Text {
+                                                Layout.preferredWidth: 96
+                                                text: UiText.text("cover.text_content")
+                                                color: Theme.colors.text.secondary
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.uiFontSize
+                                            }
+                                            AppTextField {
+                                                Layout.fillWidth: true
+                                                text: root.activeLayer ? root.activeLayer.text : ""
+                                                onEditingFinished: if (root.session) root.session.setActiveLayerText(text)
+                                            }
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            Text {
+                                                Layout.preferredWidth: 96
+                                                text: UiText.text("cover.text_color")
+                                                color: Theme.colors.text.secondary
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.uiFontSize
+                                            }
+                                            AppTextField {
+                                                Layout.fillWidth: true
+                                                text: root.activeLayer ? root.activeLayer.textColor : "#FFFFFF"
+                                                onEditingFinished: if (root.session) root.session.setActiveLayerTextColor(text)
+                                            }
+                                            // 色值是文本输入，一个小色板比读十六进制快。
+                                            Rectangle {
+                                                implicitWidth: 22
+                                                implicitHeight: 22
+                                                radius: Theme.controlRadius
+                                                color: root.activeLayer ? root.activeLayer.textColor : "#FFFFFF"
+                                                border.width: Theme.controlBorderWidth
+                                                border.color: Theme.colors.border.control
+                                            }
+                                        }
+                                        AppSwitch {
+                                            text: UiText.text("cover.bold")
+                                            checked: root.activeLayer ? root.activeLayer.textBold : false
+                                            onToggled: if (root.session) root.session.setActiveLayerTextBold(checked)
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            AppButton {
+                                                text: UiText.text("card_font.import")
+                                                onClicked: root.session.importActiveLayerFont()
+                                            }
+                                            Item { Layout.fillWidth: true }
+                                        }
+                                    }
+
+                                    // ---- 谱面帧选项 ----
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: root.activeLayerKind === "chartFrame"
+                                        spacing: 10
+                                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.colors.border.normal }
+                                        Text {
+                                            text: UiText.text("cover.chart_frame_options")
+                                            color: Theme.colors.text.active
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.uiFontSize
+                                            font.bold: true
+                                        }
+                                        LabeledSlider {
+                                            objectName: "coverFrameTimeSlider"
+                                            label: UiText.text("cover.frame_time_for_the_selected")
+                                            labelWidth: 96
+                                            from: 0
+                                            to: root.session ? root.session.chartFrameDuration : 0
+                                            stepSize: 0.01
+                                            decimals: 2
+                                            suffix: " s"
+                                            value: root.activeLayer ? root.activeLayer.frameSeconds : 0
+                                            onMoved: function(value) { if (root.session) root.session.setActiveLayerFrameSeconds(value) }
+                                        }
+                                        LabeledCombo {
+                                            label: UiText.text("cover.chart_frame_inner_background")
+                                            labelWidth: 96
+                                            options: [
+                                                { value: "image", label: UiText.text("cover.inner_bg") },
+                                                { value: "transparent", label: UiText.text("cover.transparent") }
+                                            ]
+                                            currentValue: root.activeLayer ? root.activeLayer.frameBgMode : "image"
+                                            onPicked: function(value) { if (root.session) root.session.setActiveLayerFrameBackgroundMode(value) }
+                                        }
+                                        LabeledSlider {
+                                            label: UiText.text("cover.chart_frame_background_brightness")
+                                            labelWidth: 96
+                                            from: 0
+                                            to: 1
+                                            stepSize: 0.01
+                                            enabled: root.activeLayer && root.activeLayer.frameBgMode === "image"
+                                            readout: Math.round((root.activeLayer ? root.activeLayer.frameBgBrightness : 0.8) * 100) + "%"
+                                            value: root.activeLayer ? root.activeLayer.frameBgBrightness : 0.8
+                                            onMoved: function(value) { if (root.session) root.session.setActiveLayerFrameBackgroundBrightness(value) }
+                                        }
+                                        LabeledSlider {
+                                            label: UiText.text("cover.chart_frame_background_transparency")
+                                            labelWidth: 96
+                                            from: 0
+                                            to: 1
+                                            stepSize: 0.01
+                                            enabled: root.activeLayer && root.activeLayer.frameBgMode === "image"
+                                            readout: Math.round((root.activeLayer ? root.activeLayer.frameBgTransparency : 0.5) * 100) + "%"
+                                            value: root.activeLayer ? root.activeLayer.frameBgTransparency : 0.5
+                                            onMoved: function(value) { if (root.session) root.session.setActiveLayerFrameBackgroundTransparency(value) }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---- 预设 ----
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: root.inspectorTab === "preset"
+                                spacing: 10
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    AppTextField {
+                                        id: presetName
+                                        objectName: "coverPresetNameField"
+                                        Layout.fillWidth: true
+                                        placeholderText: UiText.text("cover.preset_name")
+                                    }
+                                    AppButton {
+                                        text: UiText.text("cover.save_preset")
+                                        enabled: presetName.text.trim().length > 0
+                                        onClicked: {
+                                            root.session.savePreset(presetName.text)
+                                            presetName.clear()
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: !root.session || root.session.presets.length === 0
+                                    text: UiText.text("cover.no_presets")
+                                    color: Theme.colors.text.secondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                }
+
+                                Repeater {
+                                    model: root.session ? root.session.presets : []
+                                    delegate: RowLayout {
+                                        id: presetRow
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 4
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: presetRow.modelData.name
+                                            color: Theme.colors.text.secondary
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.uiFontSize
+                                            elide: Text.ElideRight
+                                        }
+                                        AppButton {
+                                            text: UiText.text("cover.apply_preset")
+                                            onClicked: root.session.applyPreset(presetRow.modelData.name)
+                                        }
+                                        AppButton {
+                                            text: UiText.text("cover.delete_preset")
+                                            onClicked: root.session.removePreset(presetRow.modelData.name)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

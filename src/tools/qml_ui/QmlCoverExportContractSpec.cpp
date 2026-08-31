@@ -58,6 +58,38 @@ int main(int argc, char** argv)
                && page.contains(QStringLiteral("exportCover()"))
                && !page.contains(QStringLiteral("qsTr(")),
            QStringLiteral("the QML page owns composer interaction, export and localization"), out, &failed);
+    // The session used to export nine invokables the page never called, so the
+    // features read as missing while the API looked complete. Each one now has
+    // a control; this list is what stops that drifting apart again.
+    QStringList unreachable;
+    for (const QString& call : {
+             QStringLiteral("resetLayout()"),
+             QStringLiteral("openRecentLayout("),
+             QStringLiteral("clearRecentLayouts()"),
+             QStringLiteral("duplicateActiveLayer()"),
+             QStringLiteral("raiseActiveLayer()"),
+             QStringLiteral("lowerActiveLayer()"),
+             QStringLiteral("setActiveLayerFrameBackgroundBrightness("),
+             QStringLiteral("setActiveLayerFrameBackgroundTransparency("),
+             QStringLiteral("longTextMode"),
+         }) {
+        if (!page.contains(call)) unreachable.append(call);
+    }
+    expect(unreachable.isEmpty(),
+           QStringLiteral("every cover session capability has a control: %1")
+               .arg(unreachable.isEmpty() ? QStringLiteral("all reachable")
+                                          : unreachable.join(QStringLiteral(", "))),
+           out, &failed);
+    // Layout chrome, not decoration: these are the shared v2 types. Hand-rolled
+    // label+slider rows lose the read-out and, worse, a direct `value:` binding
+    // on AppSlider dies on the first drag.
+    expect(page.contains(QStringLiteral("LabeledSlider"))
+               && page.contains(QStringLiteral("LabeledCombo"))
+               && page.contains(QStringLiteral("PanelHeader"))
+               && page.contains(QStringLiteral("SplitHandle"))
+               && page.contains(QStringLiteral("panelTab: true"))
+               && !page.contains(QStringLiteral("AppSlider {")),
+           QStringLiteral("the page is built from the shared v2 chrome"), out, &failed);
     for (const QString& contract : {
              QStringLiteral("Q_INVOKABLE void addChartFrameLayer()"),
              QStringLiteral("Q_INVOKABLE void browseActiveLayerImage()"),

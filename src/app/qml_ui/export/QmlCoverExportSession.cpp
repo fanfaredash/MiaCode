@@ -580,11 +580,27 @@ void QmlCoverExportSession::browseBackgroundImage()
 
 void QmlCoverExportSession::resetLayout()
 {
-    if (layout_ == nullptr) return;
-    layout_->resetLayout();
-    activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
-    emit activeLayerChanged();
-    persistComposition();
+    if (layout_ == nullptr || uiRequests_ == nullptr) return;
+    // Reset throws away every layer and every position, so it asks first — the
+    // same question v1's 布局 ▾ menu asked before it.
+    uiRequests_->requestConfirmation(
+        UiText::text(QStringLiteral("cover.reset_layout")),
+        UiText::text(QStringLiteral("cover.reset_discards_all_current_layers")),
+        UiText::text(QStringLiteral("cover.reset_layout")),
+        [this](bool accepted) {
+            if (!accepted || layout_ == nullptr) return;
+            layout_->resetLayout();
+            // The default layout carries a chart frame; a difficulty with no
+            // renderable notes must not get it back through the reset.
+            if (!chartFrameAvailable_) {
+                for (auto* layer : layout_->chartFrameLayers()) {
+                    layer->setVisible(false);
+                }
+            }
+            activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
+            emit activeLayerChanged();
+            persistComposition();
+        });
 }
 
 QJsonObject QmlCoverExportSession::compositionJson() const

@@ -75,6 +75,17 @@
       注册，spec 增加断言钉住。
       注意「菜单」指隐藏 MainWindow 的工具菜单与扩展命令：v2 可见菜单栏 `MainMenu.qml`
       本来就没有任何导出类条目（视频/封面/批量/ZIP 都没有），可见入口只有侧栏。
+- [x] **封面页版式并入 v2（2026-08-31）**：页面此前虽然用了 `Theme` 和 `App*` 控件，版式却还是
+      v1 的——每行手写 `Text + 控件`（标签列不对齐、滑杆没有读数也没有双击输入）、面板是圆角
+      描边卡片、右栏是一条五段长滚动、图层行挂 `🔒` emoji、标题绑了 `Theme` 里并不存在的
+      `headerFontSize`。现在：工作区照抄 `MainSplitView`（平面板 + `PanelHeader` + `SplitHandle`
+      1px 分隔），表单行一律 `LabeledCombo` / `LabeledSlider`，右栏按 画板 / 难度卡 / 图层 / 预设
+      分成 `panelTab`（与 导出中心、预览设置 同构）。
+      顺带修掉一个真 bug：给 `AppSlider` 直接绑 `value` 会在第一次拖动后把绑定打断，四个滑杆
+      从此不再跟随模型；`LabeledSlider` 的 `Binding … when: !pressed` 正是为此存在。
+      emoji 依 `qt-ui-layout-pitfalls` 的既有结论去掉（Windows 按彩字渲染，拿不到主题色），
+      图层行改为隐藏用 disabled 灰、锁定用一个词表达。
+      `qmllint` 干净（同时发现并修掉 7 处 `height:` 写在 Layout 管理的子项上）。
 
 ## 1. 目标边界
 
@@ -158,17 +169,17 @@
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
 
-- [ ] **封面页未接线的 v1 功能（2026-08-31 复核发现）**。`QmlCoverExportSession` 已经实现并
-      导出了这些 API，但 `CoverExportPage.qml` 上没有任何入口，所以功能等同于缺失：
-      `resetLayout`（重置布局）、`openRecentLayout` / `clearRecentLayouts` / `recentLayoutFiles`
-      （最近布局列表）、`duplicateActiveLayer`（复制图层）、`raiseActiveLayer` / `lowerActiveLayer`
-      （上移 / 下移，页面只有置顶 / 置底）、`setActiveLayerFrameBackgroundBrightness` /
-      `...Transparency`（谱面帧背景亮度 / 透明度）、`longTextMode`（文字超长：缩小字体 / 省略号）。
-      对照词典，`cover.*` 有 89 个 v1 键现在全树无引用（还包括画布缩放 `Ctrl+0/+/-`、
-      预设重命名、四个内置预设名）。要么补入口，要么把 API 和词条一起删掉——现在这种
-      「有 API 无入口」会让后来的人误判功能已具备。
-      `setActiveLayerCenter` 是纯死代码：拖动由 `CoverComposer.qml` 直接改模型，不走 session。
-- [ ] **封面页两处交互缺口（2026-08-31 复核发现）**。`busy` 从头到尾在同一次同步调用里
+- [x] **封面页未接线的 v1 功能（2026-08-31 发现，同日随 UI 改版接线）**。`QmlCoverExportSession`
+      早已实现并导出了这些 API，但页面上没有入口，功能等同于缺失。现在都有控件了：
+      重置布局 / 保存布局到文件 / 导入布局文件 / 打开最近 / 清除最近 进标题栏的「布局 ▾」菜单，
+      复制图层 与 上移 / 下移 进左栏图层操作区，谱面帧背景亮度 / 透明度 与 文字超长策略
+      进右栏检查器。重置是破坏性的，改为经 `UiRequestService` 先问一次（v1 同款问法）。
+      `qml_cover_export_contract_spec` 现在逐个断言这九个能力在页面里有调用点，避免再次
+      「有 API 无入口」。
+      仍未接线、留待定夺的只剩：画布缩放（`Ctrl+0/+/-`）、预设重命名（`renameUserPreset`）、
+      四个 v1 内置预设名。`setActiveLayerCenter` 是纯死代码：拖动由 `CoverComposer.qml`
+      直接改模型，不走 session，可以删。
+- [ ] **封面页两处交互缺口（2026-08-31 复核发现，未修）**。`busy` 从头到尾在同一次同步调用里
       置真又置假，中间不回事件循环，所以 `BusyIndicator` 一帧都渲染不到——全分辨率合成期间
       界面直接卡住且无反馈；`exportCover()` 在输出目录为空时静默 return。另外 v1 的
       `onExportCover` 会在没有选中难度时提示「当前未选中难度，无法导出封面。」并暂停正在
