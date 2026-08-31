@@ -8,6 +8,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QPair>
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
@@ -4299,4 +4300,266 @@ QString UiText::text(const QString& key)
         return english;
     }
     return key;
+}
+
+QString UiText::textForQmlSource(const QString& source)
+{
+    if (source.isEmpty()) {
+        return source;
+    }
+
+    // A Chinese source is not itself a semantic key: the v1 catalog contains
+    // several deliberate homographs (notably “关闭” = Close / Off). Resolve
+    // the handful v2 uses before the reverse lookup so a QHash iteration can
+    // never select an unrelated legacy meaning.
+    static const QHash<QString, QPair<QString, QString>> qmlHomographs{
+        {QStringLiteral("偏移"), {QStringLiteral("Offset"), QStringLiteral("オフセット")}},
+        {QStringLiteral("停止"), {QStringLiteral("Stop"), QStringLiteral("停止")}},
+        {QStringLiteral("关闭"), {QStringLiteral("Close"), QStringLiteral("閉じる")}},
+        {QStringLiteral("删除书签"), {QStringLiteral("Delete bookmark"), QStringLiteral("ブックマークを削除")}},
+        {QStringLiteral("取消"), {QStringLiteral("Cancel"), QStringLiteral("キャンセル")}},
+        {QStringLiteral("取消导出"), {QStringLiteral("Cancel export"), QStringLiteral("出力をキャンセル")}},
+        {QStringLiteral("字体"), {QStringLiteral("Font"), QStringLiteral("フォント")}},
+        {QStringLiteral("导出"), {QStringLiteral("Export"), QStringLiteral("出力")}},
+        {QStringLiteral("导出区间"), {QStringLiteral("Export range"), QStringLiteral("出力範囲")}},
+        {QStringLiteral("平滑亮度"), {QStringLiteral("Smooth brightness"), QStringLiteral("明るさを滑らかに")}},
+        {QStringLiteral("开始"), {QStringLiteral("Start"), QStringLiteral("開始")}},
+        {QStringLiteral("开始导出"), {QStringLiteral("Start export"), QStringLiteral("出力を開始")}},
+        {QStringLiteral("性能"), {QStringLiteral("Performance"), QStringLiteral("パフォーマンス")}},
+        {QStringLiteral("打开"), {QStringLiteral("Open"), QStringLiteral("開く")}},
+        {QStringLiteral("批量导出"), {QStringLiteral("Batch export"), QStringLiteral("一括出力")}},
+        {QStringLiteral("播放"), {QStringLiteral("Play"), QStringLiteral("再生")}},
+        {QStringLiteral("显示左下角时间戳"), {QStringLiteral("Show bottom-left timestamp"), QStringLiteral("左下のタイムスタンプを表示")}},
+        {QStringLiteral("暂停"), {QStringLiteral("Pause"), QStringLiteral("一時停止")}},
+        {QStringLiteral("曲绘"), {QStringLiteral("Jacket"), QStringLiteral("ジャケット")}},
+        {QStringLiteral("标题"), {QStringLiteral("Title"), QStringLiteral("タイトル")}},
+        {QStringLiteral("浏览..."), {QStringLiteral("Browse…"), QStringLiteral("参照…")}},
+        {QStringLiteral("清空队列"), {QStringLiteral("Clear queue"), QStringLiteral("キューを空にする")}},
+        {QStringLiteral("游戏"), {QStringLiteral("Gameplay"), QStringLiteral("ゲームプレイ")}},
+        {QStringLiteral("片头"), {QStringLiteral("Intro"), QStringLiteral("イントロ")}},
+        {QStringLiteral("皮肤"), {QStringLiteral("Skin"), QStringLiteral("スキン")}},
+        {QStringLiteral("结束"), {QStringLiteral("End"), QStringLiteral("終了")}},
+        {QStringLiteral("编辑器"), {QStringLiteral("Editor"), QStringLiteral("エディター")}},
+        {QStringLiteral("背景"), {QStringLiteral("Background"), QStringLiteral("背景")}},
+        {QStringLiteral("自动检测"), {QStringLiteral("Auto-detect"), QStringLiteral("自動検出")}},
+        {QStringLiteral("视频"), {QStringLiteral("Video"), QStringLiteral("動画")}},
+        {QStringLiteral("谱师"), {QStringLiteral("Chart designer"), QStringLiteral("譜面制作者")}},
+        {QStringLiteral("谱面文件夹"), {QStringLiteral("Chart folders"), QStringLiteral("譜面フォルダー")}},
+        {QStringLiteral("输出"), {QStringLiteral("Output"), QStringLiteral("出力")}},
+        {QStringLiteral("还原"), {QStringLiteral("Reset"), QStringLiteral("リセット")}},
+        {QStringLiteral("重命名书签"), {QStringLiteral("Rename bookmark"), QStringLiteral("ブックマーク名を変更")}},
+        {QStringLiteral("音频设置"), {QStringLiteral("Audio settings"), QStringLiteral("音声設定")}},
+        {QStringLiteral("预览设置"), {QStringLiteral("Preview settings"), QStringLiteral("プレビュー設定")}},
+    };
+    const auto localizedQmlEntry = [](const QPair<QString, QString>& entry, const QString& chineseSource) {
+        switch (resolvedLanguagePreference()) {
+        case UiText::LanguagePreference::Japanese:
+            return entry.second;
+        case UiText::LanguagePreference::Chinese:
+            return chineseSource;
+        case UiText::LanguagePreference::English:
+        case UiText::LanguagePreference::System:
+        default:
+            return entry.first;
+        }
+    };
+    if (const auto homograph = qmlHomographs.constFind(source); homograph != qmlHomographs.constEnd()) {
+        return localizedQmlEntry(homograph.value(), source);
+    }
+
+    // All authored UIv2 strings are Simplified Chinese. The v1 catalog is the
+    // product's canonical wording, so use its Chinese table as a reverse index
+    // rather than duplicating those 172 already-translated strings in QML.
+    // Duplicate Chinese strings are deliberately harmless here: their current
+    // English/Japanese wording is the same product label in every existing case.
+    const auto& chinese = zhMap();
+    for (auto it = chinese.constBegin(); it != chinese.constEnd(); ++it) {
+        if (it.value() == source) {
+            return text(it.key());
+        }
+    }
+
+    // UIv2-only strings that did not exist in the v1 catalog. Keep their three
+    // language forms next to the canonical catalog rather than leaving them in
+    // QML (where `qsTr` had no installed translator at all).
+    static const QHash<QString, QPair<QString, QString>> qmlOnly{
+        {QStringLiteral(" · 谱师：%1"), {QStringLiteral(" · Chart Designer: %1"), QStringLiteral(" ・譜面制作者：%1")}},
+        {QStringLiteral("%1 个错误，%2 个警告"), {QStringLiteral("%1 errors, %2 warnings"), QStringLiteral("エラー %1 件、警告 %2 件")}},
+        {QStringLiteral("%1 尚未更新到 QML 界面。"), {QStringLiteral("%1 has not yet been migrated to the QML interface."), QStringLiteral("%1 はまだ QML インターフェースに移行されていません。")}},
+        {QStringLiteral("%1%"), {QStringLiteral("%1%"), QStringLiteral("%1%")}},
+        {QStringLiteral("%1x"), {QStringLiteral("%1x"), QStringLiteral("%1倍")}},
+        {QStringLiteral("%1，第 %2 行"), {QStringLiteral("%1, line %2"), QStringLiteral("%1、%2 行目")}},
+        {QStringLiteral("A / B / C / D / E 各区半径不同，暂不可调。"), {QStringLiteral("The A / B / C / D / E areas use different radii and cannot be adjusted yet."), QStringLiteral("A / B / C / D / E の各エリアは半径が異なるため、現在は調整できません。")}},
+        {QStringLiteral("BPM"), {QStringLiteral("BPM"), QStringLiteral("BPM")}},
+        {QStringLiteral("Enter 跳转；Ctrl+Shift+B 创建；Delete 删除；F2 重命名；右键打开书签菜单"), {QStringLiteral("Enter to jump; Ctrl+Shift+B to create; Delete to remove; F2 to rename; right-click for the bookmark menu"), QStringLiteral("Enter で移動、Ctrl+Shift+B で作成、Delete で削除、F2 で名前変更、右クリックでブックマークメニュー")}},
+        {QStringLiteral("HUD 字体区域"), {QStringLiteral("HUD font area"), QStringLiteral("HUD フォント領域")}},
+        {QStringLiteral("Layout 整图大小"), {QStringLiteral("Layout canvas scale"), QStringLiteral("レイアウト全体の大きさ")}},
+        {QStringLiteral("Muri"), {QStringLiteral("Muri"), QStringLiteral("無理")}},
+        {QStringLiteral("PV 前置黑屏"), {QStringLiteral("Prepend black screen to PV"), QStringLiteral("PV の先頭に黒画面を追加")}},
+        {QStringLiteral("PV 帧率"), {QStringLiteral("PV frame rate"), QStringLiteral("PV フレームレート")}},
+        {QStringLiteral("Simai 文件 (*.txt *.simai)"), {QStringLiteral("Simai files (*.txt *.simai)"), QStringLiteral("Simai ファイル (*.txt *.simai)")}},
+        {QStringLiteral("Tap 流速"), {QStringLiteral("Tap flow speed"), QStringLiteral("Tap 流速")}},
+        {QStringLiteral("Touch 流速"), {QStringLiteral("Touch flow speed"), QStringLiteral("Touch 流速")}},
+        {QStringLiteral("「%1」有未保存的更改。"), {QStringLiteral("\"%1\" has unsaved changes."), QStringLiteral("「%1」には未保存の変更があります。")}},
+        {QStringLiteral("上一个"), {QStringLiteral("Previous"), QStringLiteral("前へ")}},
+        {QStringLiteral("下一个"), {QStringLiteral("Next"), QStringLiteral("次へ")}},
+        {QStringLiteral("书签"), {QStringLiteral("Bookmarks"), QStringLiteral("ブックマーク")}},
+        {QStringLiteral("书签 %1：%2"), {QStringLiteral("Bookmark %1: %2"), QStringLiteral("ブックマーク %1：%2")}},
+        {QStringLiteral("书签与行号：第 %1 行无书签"), {QStringLiteral("Bookmarks and line numbers: no bookmark on line %1"), QStringLiteral("ブックマークと行番号：%1 行目にブックマークはありません")}},
+        {QStringLiteral("书签与行号：第 %1 行有书签"), {QStringLiteral("Bookmarks and line numbers: line %1 has a bookmark"), QStringLiteral("ブックマークと行番号：%1 行目にブックマークがあります")}},
+        {QStringLiteral("书签名称"), {QStringLiteral("Bookmark name"), QStringLiteral("ブックマーク名")}},
+        {QStringLiteral("从左侧打开元数据或难度"), {QStringLiteral("Open metadata or a difficulty from the sidebar"), QStringLiteral("サイドバーからメタデータまたは難易度を開いてください")}},
+        {QStringLiteral("保存 simai 文件"), {QStringLiteral("Save Simai file"), QStringLiteral("Simai ファイルを保存")}},
+        {QStringLiteral("保存只写入这个难度，其他难度在文件里保持原样；放弃把这个难度还原到上次保存时的内容。"), {QStringLiteral("Save writes only this difficulty and leaves the others unchanged; discard restores this difficulty to its last saved content."), QStringLiteral("保存はこの難易度だけを書き込み、他の難易度は変更しません。破棄するとこの難易度を前回保存時の内容に戻します。")}},
+        {QStringLiteral("修正 HUD 文本布局"), {QStringLiteral("Fix HUD text layout"), QStringLiteral("HUD テキスト配置を補正")}},
+        {QStringLiteral("偏好设置"), {QStringLiteral("Preferences"), QStringLiteral("環境設定")}},
+        {QStringLiteral("元数据"), {QStringLiteral("Metadata"), QStringLiteral("メタデータ")}},
+        {QStringLiteral("入口会保留，功能完成后将在此处提供。"), {QStringLiteral("This entry will remain here and become available when the feature is complete."), QStringLiteral("この入口は残し、機能の完成後にここで提供します。")}},
+        {QStringLiteral("全词"), {QStringLiteral("Whole words"), QStringLiteral("単語全体")}},
+        {QStringLiteral("全部恢复默认"), {QStringLiteral("Restore all defaults"), QStringLiteral("すべて既定値に戻す")}},
+        {QStringLiteral("关于 MiaCode"), {QStringLiteral("About MiaCode"), QStringLiteral("MiaCode について")}},
+        {QStringLiteral("关闭 %1"), {QStringLiteral("Close %1"), QStringLiteral("%1 を閉じる")}},
+        {QStringLiteral("关闭 (Ctrl+W)"), {QStringLiteral("Close (Ctrl+W)"), QStringLiteral("閉じる (Ctrl+W)")}},
+        {QStringLiteral("关闭「%1」"), {QStringLiteral("Close \"%1\""), QStringLiteral("「%1」を閉じる")}},
+        {QStringLiteral("关闭文档"), {QStringLiteral("Close document"), QStringLiteral("ドキュメントを閉じる")}},
+        {QStringLiteral("其他字段"), {QStringLiteral("Other fields"), QStringLiteral("その他のフィールド")}},
+        {QStringLiteral("内圈亮度"), {QStringLiteral("Inner brightness"), QStringLiteral("内側の明るさ")}},
+        {QStringLiteral("切换侧栏"), {QStringLiteral("Toggle sidebar"), QStringLiteral("サイドバーを切り替え")}},
+        {QStringLiteral("切换侧栏 (Ctrl+B)"), {QStringLiteral("Toggle sidebar (Ctrl+B)"), QStringLiteral("サイドバーを切り替え (Ctrl+B)")}},
+        {QStringLiteral("切换底部面板"), {QStringLiteral("Toggle bottom panel"), QStringLiteral("下部パネルを切り替え")}},
+        {QStringLiteral("切换时间轴"), {QStringLiteral("Toggle timeline"), QStringLiteral("タイムラインを切り替え")}},
+        {QStringLiteral("创建书签"), {QStringLiteral("Create bookmark"), QStringLiteral("ブックマークを作成")}},
+        {QStringLiteral("初始偏移"), {QStringLiteral("Initial offset"), QStringLiteral("初期オフセット")}},
+        {QStringLiteral("删除当前难度"), {QStringLiteral("Delete current difficulty"), QStringLiteral("現在の難易度を削除")}},
+        {QStringLiteral("区分大小写"), {QStringLiteral("Match case"), QStringLiteral("大文字と小文字を区別")}},
+        {QStringLiteral("半角输入转换"), {QStringLiteral("Convert half-width input"), QStringLiteral("半角入力を変換")}},
+        {QStringLiteral("取消静音"), {QStringLiteral("Unmute"), QStringLiteral("ミュート解除")}},
+        {QStringLiteral("右侧"), {QStringLiteral("Right"), QStringLiteral("右側")}},
+        {QStringLiteral("启用 clock_count"), {QStringLiteral("Enable clock_count"), QStringLiteral("clock_count を有効化")}},
+        {QStringLiteral("在 %1 开头插入 %2 拍（BPM %3）静音，约 %4 秒。"), {QStringLiteral("Insert %2 beats of silence (BPM %3, about %4 seconds) at the beginning of %1."), QStringLiteral("%1 の先頭に %2 拍（BPM %3、約 %4 秒）の無音を挿入します。")}},
+        {QStringLiteral("在 %1 开头插入 %2 拍（BPM %3）黑屏，约 %4 秒。"), {QStringLiteral("Insert %2 beats of black screen (BPM %3, about %4 seconds) at the beginning of %1."), QStringLiteral("%1 の先頭に %2 拍（BPM %3、約 %4 秒）の黒画面を挿入します。")}},
+        {QStringLiteral("在 track.mp3 开头插入一段静音。"), {QStringLiteral("Insert silence at the start of track.mp3."), QStringLiteral("track.mp3 の先頭に無音を挿入します。")}},
+        {QStringLiteral("在背景视频开头插入一段黑屏。"), {QStringLiteral("Insert black screen at the start of the background video."), QStringLiteral("背景動画の先頭に黒画面を挿入します。")}},
+        {QStringLiteral("外圈亮度"), {QStringLiteral("Outer brightness"), QStringLiteral("外側の明るさ")}},
+        {QStringLiteral("字段源码"), {QStringLiteral("Field source"), QStringLiteral("フィールドのソース")}},
+        {QStringLiteral("对齐到 384 分网格"), {QStringLiteral("Align to the 1/384 grid"), QStringLiteral("384 分グリッドに整列")}},
+        {QStringLiteral("导入 HUD 字体"), {QStringLiteral("Import HUD font"), QStringLiteral("HUD フォントを読み込む")}},
+        {QStringLiteral("导入片头难度卡字体"), {QStringLiteral("Import intro difficulty-card fonts"), QStringLiteral("イントロ難度カードのフォントを読み込む")}},
+        {QStringLiteral("将规范化整份谱面正文。"), {QStringLiteral("Normalize the entire chart source."), QStringLiteral("譜面ソース全体を正規化します。")}},
+        {QStringLiteral("将规范化选中的第 %1 - %2 行。"), {QStringLiteral("Normalize selected lines %1–%2."), QStringLiteral("選択した %1～%2 行を正規化します。")}},
+        {QStringLiteral("展开书签"), {QStringLiteral("Expand bookmarks"), QStringLiteral("ブックマークを展開")}},
+        {QStringLiteral("展开难度"), {QStringLiteral("Expand difficulties"), QStringLiteral("難易度を展開")}},
+        {QStringLiteral("工具"), {QStringLiteral("Tools"), QStringLiteral("ツール")}},
+        {QStringLiteral("左侧"), {QStringLiteral("Left"), QStringLiteral("左側")}},
+        {QStringLiteral("常规渲染"), {QStringLiteral("Normal rendering"), QStringLiteral("通常レンダリング")}},
+        {QStringLiteral("平滑星星消去动画"), {QStringLiteral("Smooth star-clear animation"), QStringLiteral("星消去アニメーションを滑らかにする")}},
+        {QStringLiteral("延迟校准"), {QStringLiteral("Latency calibration"), QStringLiteral("レイテンシー調整")}},
+        {QStringLiteral("开始压缩"), {QStringLiteral("Start compression"), QStringLiteral("圧縮を開始")}},
+        {QStringLiteral("开始试听"), {QStringLiteral("Start audition"), QStringLiteral("試聴を開始")}},
+        {QStringLiteral("当前存在多个谱师名义，请选择要统一使用的值。"), {QStringLiteral("Multiple chart-designer names exist. Choose the value to use everywhere."), QStringLiteral("複数の譜面制作者名があります。統一して使用する値を選択してください。")}},
+        {QStringLiteral("当前难度及其正文将从文档中删除。"), {QStringLiteral("The current difficulty and its source will be removed from the document."), QStringLiteral("現在の難易度とその本文をドキュメントから削除します。")}},
+        {QStringLiteral("录制中…"), {QStringLiteral("Recording…"), QStringLiteral("記録中…")}},
+        {QStringLiteral("总时长 %1 s"), {QStringLiteral("Total duration: %1 s"), QStringLiteral("合計時間：%1 秒")}},
+        {QStringLiteral("恢复备份"), {QStringLiteral("Restore backup"), QStringLiteral("バックアップを復元")}},
+        {QStringLiteral("恢复备份 (%1)"), {QStringLiteral("Restore backup (%1)"), QStringLiteral("バックアップを復元 (%1)")}},
+        {QStringLiteral("恢复本地默认"), {QStringLiteral("Restore local defaults"), QStringLiteral("ローカル既定値に戻す")}},
+        {QStringLiteral("恢复默认"), {QStringLiteral("Restore defaults"), QStringLiteral("既定値に戻す")}},
+        {QStringLiteral("所有文件 (*)"), {QStringLiteral("All files (*)"), QStringLiteral("すべてのファイル (*)")}},
+        {QStringLiteral("所有文件 (*.*)"), {QStringLiteral("All files (*.*)"), QStringLiteral("すべてのファイル (*.*)")}},
+        {QStringLiteral("打开 simai 文件"), {QStringLiteral("Open Simai file"), QStringLiteral("Simai ファイルを開く")}},
+        {QStringLiteral("打开播放速度预设"), {QStringLiteral("Open playback-speed presets"), QStringLiteral("再生速度プリセットを開く")}},
+        {QStringLiteral("打开时间轴缩放预设"), {QStringLiteral("Open timeline zoom presets"), QStringLiteral("タイムライン拡大率プリセットを開く")}},
+        {QStringLiteral("打开波形和小节线亮度设置"), {QStringLiteral("Open waveform and beat-line brightness settings"), QStringLiteral("波形と拍線の明るさ設定を開く")}},
+        {QStringLiteral("打开预览渲染模式菜单"), {QStringLiteral("Open preview rendering-mode menu"), QStringLiteral("プレビューレンダリングモードメニューを開く")}},
+        {QStringLiteral("扫描一个目录，批量压缩其中的背景视频。"), {QStringLiteral("Scan a folder and batch-compress its background videos."), QStringLiteral("フォルダーをスキャンして背景動画を一括圧縮します。")}},
+        {QStringLiteral("批量压缩 PV"), {QStringLiteral("Batch-compress PVs"), QStringLiteral("PV を一括圧縮")}},
+        {QStringLiteral("把 track.mp3 转换为 44100 Hz。"), {QStringLiteral("Convert track.mp3 to 44100 Hz."), QStringLiteral("track.mp3 を 44100 Hz に変換します。")}},
+        {QStringLiteral("把背景视频压缩到 20 MiB 以内。"), {QStringLiteral("Compress the background video to 20 MiB or less."), QStringLiteral("背景動画を 20 MiB 以下に圧縮します。")}},
+        {QStringLiteral("折叠书签"), {QStringLiteral("Collapse bookmarks"), QStringLiteral("ブックマークを折りたたむ")}},
+        {QStringLiteral("折叠难度"), {QStringLiteral("Collapse difficulties"), QStringLiteral("難易度を折りたたむ")}},
+        {QStringLiteral("按下新的快捷键，Esc 取消。"), {QStringLiteral("Press a new shortcut; Esc cancels."), QStringLiteral("新しいショートカットを押してください。Esc でキャンセルします。")}},
+        {QStringLiteral("撤销"), {QStringLiteral("Undo"), QStringLiteral("元に戻す")}},
+        {QStringLiteral("播放速度"), {QStringLiteral("Playback speed"), QStringLiteral("再生速度")}},
+        {QStringLiteral("整理语法"), {QStringLiteral("Format syntax"), QStringLiteral("構文を整形")}},
+        {QStringLiteral("整谱规范化"), {QStringLiteral("Normalize whole chart"), QStringLiteral("譜面全体を正規化")}},
+        {QStringLiteral("无理判定半径"), {QStringLiteral("Muri judgement radius"), QStringLiteral("無理判定半径")}},
+        {QStringLiteral("无理检测"), {QStringLiteral("Muri analysis"), QStringLiteral("無理検出")}},
+        {QStringLiteral("时间轴亮度"), {QStringLiteral("Timeline brightness"), QStringLiteral("タイムラインの明るさ")}},
+        {QStringLiteral("时间轴帧率"), {QStringLiteral("Timeline frame rate"), QStringLiteral("タイムラインのフレームレート")}},
+        {QStringLiteral("时间轴缩放"), {QStringLiteral("Timeline zoom"), QStringLiteral("タイムラインの拡大率")}},
+        {QStringLiteral("显示所有已打开的编辑器"), {QStringLiteral("Show all open editors"), QStringLiteral("開いているすべてのエディターを表示")}},
+        {QStringLiteral("显示谱面信息"), {QStringLiteral("Show chart information"), QStringLiteral("譜面情報を表示")}},
+        {QStringLiteral("暂无备份"), {QStringLiteral("No backups"), QStringLiteral("バックアップはありません")}},
+        {QStringLiteral("暂无最近文档"), {QStringLiteral("No recent documents"), QStringLiteral("最近のドキュメントはありません")}},
+        {QStringLiteral("暂未更新支持"), {QStringLiteral("Not yet available in QML"), QStringLiteral("QML 版ではまだ利用できません")}},
+        {QStringLiteral("更多"), {QStringLiteral("More"), QStringLiteral("その他")}},
+        {QStringLiteral("最大化"), {QStringLiteral("Maximize"), QStringLiteral("最大化")}},
+        {QStringLiteral("最小化"), {QStringLiteral("Minimize"), QStringLiteral("最小化")}},
+        {QStringLiteral("未发现 Muri 问题"), {QStringLiteral("No Muri issues found"), QStringLiteral("無理の問題は見つかりませんでした")}},
+        {QStringLiteral("未发现验证问题"), {QStringLiteral("No validation issues found"), QStringLiteral("検証上の問題は見つかりませんでした")}},
+        {QStringLiteral("查找与替换"), {QStringLiteral("Find and replace"), QStringLiteral("検索と置換")}},
+        {QStringLiteral("标题字体预览"), {QStringLiteral("Title-font preview"), QStringLiteral("タイトルフォントのプレビュー")}},
+        {QStringLiteral("检查谱面"), {QStringLiteral("Validate chart"), QStringLiteral("譜面を検証")}},
+        {QStringLiteral("检测"), {QStringLiteral("Detect"), QStringLiteral("検出")}},
+        {QStringLiteral("正在分析…"), {QStringLiteral("Analyzing…"), QStringLiteral("解析中…")}},
+        {QStringLiteral("正在取消…"), {QStringLiteral("Cancelling…"), QStringLiteral("キャンセル中…")}},
+        {QStringLiteral("正文字体预览"), {QStringLiteral("Body-font preview"), QStringLiteral("本文フォントのプレビュー")}},
+        {QStringLiteral("每行一个 &字段=值"), {QStringLiteral("One &field=value per line"), QStringLiteral("1 行に 1 つの &フィールド=値")}},
+        {QStringLiteral("添加"), {QStringLiteral("Add"), QStringLiteral("追加")}},
+        {QStringLiteral("点击一行以录制新的快捷键。"), {QStringLiteral("Click a row to record a new shortcut."), QStringLiteral("行をクリックして新しいショートカットを記録します。")}},
+        {QStringLiteral("片头标题字体"), {QStringLiteral("Intro title font"), QStringLiteral("イントロタイトルフォント")}},
+        {QStringLiteral("片头正文字体"), {QStringLiteral("Intro body font"), QStringLiteral("イントロ本文フォント")}},
+        {QStringLiteral("画布帧率"), {QStringLiteral("Canvas frame rate"), QStringLiteral("キャンバスのフレームレート")}},
+        {QStringLiteral("界面"), {QStringLiteral("Interface"), QStringLiteral("インターフェース")}},
+        {QStringLiteral("硬件解码"), {QStringLiteral("Hardware decoding"), QStringLiteral("ハードウェアデコード")}},
+        {QStringLiteral("禁用输入法"), {QStringLiteral("Disable IME"), QStringLiteral("IME を無効化")}},
+        {QStringLiteral("移除"), {QStringLiteral("Remove"), QStringLiteral("削除")}},
+        {QStringLiteral("第 %1 行：%2"), {QStringLiteral("Line %1: %2"), QStringLiteral("%1 行目：%2")}},
+        {QStringLiteral("等级文本渲染"), {QStringLiteral("Render level as text"), QStringLiteral("レベルをテキストで描画")}},
+        {QStringLiteral("细分"), {QStringLiteral("Subdivision"), QStringLiteral("細分")}},
+        {QStringLiteral("统一谱师"), {QStringLiteral("Unify chart designer"), QStringLiteral("譜面制作者を統一")}},
+        {QStringLiteral("背景缩放"), {QStringLiteral("Background scaling"), QStringLiteral("背景の拡大縮小")}},
+        {QStringLiteral("自动"), {QStringLiteral("Automatic"), QStringLiteral("自動")}},
+        {QStringLiteral("自定义"), {QStringLiteral("Custom"), QStringLiteral("カスタム")}},
+        {QStringLiteral("艺术家"), {QStringLiteral("Artist"), QStringLiteral("アーティスト")}},
+        {QStringLiteral("行 %1，列 %2"), {QStringLiteral("Line %1, column %2"), QStringLiteral("%1 行、%2 列")}},
+        {QStringLiteral("表单"), {QStringLiteral("Form"), QStringLiteral("フォーム")}},
+        {QStringLiteral("视图设置"), {QStringLiteral("View settings"), QStringLiteral("表示設定")}},
+        {QStringLiteral("视频解码"), {QStringLiteral("Video decoding"), QStringLiteral("動画デコード")}},
+        {QStringLiteral("视频路径"), {QStringLiteral("Video path"), QStringLiteral("動画パス")}},
+        {QStringLiteral("解码器"), {QStringLiteral("Decoder"), QStringLiteral("デコーダー")}},
+        {QStringLiteral("警报"), {QStringLiteral("Alerts"), QStringLiteral("警告")}},
+        {QStringLiteral("计数拍"), {QStringLiteral("Count-in beats"), QStringLiteral("カウントイン拍")}},
+        {QStringLiteral("设为本地默认"), {QStringLiteral("Set as local default"), QStringLiteral("ローカル既定値に設定")}},
+        {QStringLiteral("语言与主题的更改将在重启后生效。"), {QStringLiteral("Language and theme changes take effect after restarting."), QStringLiteral("言語とテーマの変更は再起動後に反映されます。")}},
+        {QStringLiteral("谱面"), {QStringLiteral("Chart"), QStringLiteral("譜面")}},
+        {QStringLiteral("跟随当前谱面代码位置"), {QStringLiteral("Follow current chart-source position"), QStringLiteral("現在の譜面ソース位置に追従")}},
+        {QStringLiteral("跳转到此行"), {QStringLiteral("Jump to this line"), QStringLiteral("この行へ移動")}},
+        {QStringLiteral("软件解码"), {QStringLiteral("Software decoding"), QStringLiteral("ソフトウェアデコード")}},
+        {QStringLiteral("输出文件夹"), {QStringLiteral("Output folder"), QStringLiteral("出力フォルダー")}},
+        {QStringLiteral("还原 HUD 字体"), {QStringLiteral("Reset HUD font"), QStringLiteral("HUD フォントをリセット")}},
+        {QStringLiteral("退出全屏预览"), {QStringLiteral("Exit fullscreen preview"), QStringLiteral("全画面プレビューを終了")}},
+        {QStringLiteral("选择当前行"), {QStringLiteral("Select current line"), QStringLiteral("現在の行を選択")}},
+        {QStringLiteral("选择统一谱师"), {QStringLiteral("Choose unified chart designer"), QStringLiteral("統一する譜面制作者を選択")}},
+        {QStringLiteral("选择要扫描的目录"), {QStringLiteral("Choose a folder to scan"), QStringLiteral("スキャンするフォルダーを選択")}},
+        {QStringLiteral("采样率"), {QStringLiteral("Sample rate"), QStringLiteral("サンプリングレート")}},
+        {QStringLiteral("重新检查"), {QStringLiteral("Recheck"), QStringLiteral("再チェック")}},
+        {QStringLiteral("重置片头难度卡字体"), {QStringLiteral("Reset intro difficulty-card fonts"), QStringLiteral("イントロ難度カードのフォントをリセット")}},
+        {QStringLiteral("错误"), {QStringLiteral("Errors"), QStringLiteral("エラー")}},
+        {QStringLiteral("难度卡字体"), {QStringLiteral("Difficulty-card fonts"), QStringLiteral("難度カードのフォント")}},
+        {QStringLiteral("静音"), {QStringLiteral("Mute"), QStringLiteral("ミュート")}},
+        {QStringLiteral("静音 Break 星星尾判音"), {QStringLiteral("Mute Break star-tail judgement sound"), QStringLiteral("Break 星の終端判定音をミュート")}},
+        {QStringLiteral("音效音量"), {QStringLiteral("Sound-effect volume"), QStringLiteral("効果音の音量")}},
+        {QStringLiteral("音视频处理"), {QStringLiteral("Audio and video processing"), QStringLiteral("音声・動画処理")}},
+        {QStringLiteral("音轨前置静音"), {QStringLiteral("Prepend silence to audio track"), QStringLiteral("音声トラックの先頭に無音を追加")}},
+    };
+    if (const auto qmlOnlyIt = qmlOnly.constFind(source); qmlOnlyIt != qmlOnly.constEnd()) {
+        return localizedQmlEntry(qmlOnlyIt.value(), source);
+    }
+
+    // This is deliberately visible rather than returning an opaque key. The
+    // source remains usable while a new QML-only label is promoted into the
+    // three-language catalog, and the static QML localization spec prevents a
+    // missed source from becoming silent permanent debt.
+    return source;
 }

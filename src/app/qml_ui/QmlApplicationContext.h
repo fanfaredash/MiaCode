@@ -15,6 +15,7 @@
 #include "preferences/QmlPreferencesModel.h"
 #include "preview/QmlAudioSettingsModel.h"
 #include "preview/QmlPreviewSettingsModel.h"
+#include "export/QmlCoverExportSession.h"
 #include "latency/QmlLatencyModel.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
@@ -52,6 +53,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* audioSettings READ audioSettings CONSTANT)
     Q_PROPERTY(QObject* previewSettings READ previewSettings CONSTANT)
     Q_PROPERTY(QObject* latency READ latency CONSTANT)
+    Q_PROPERTY(QObject* coverExport READ coverExport CONSTANT)
 
 public:
     explicit QmlApplicationContext(MainWindow& backend, QObject* parent = nullptr);
@@ -76,6 +78,7 @@ public:
     QObject* audioSettings();
     QObject* previewSettings();
     QObject* latency();
+    QObject* coverExport();
     void setWindowChrome(QObject* chrome);
 
 private:
@@ -90,6 +93,7 @@ private:
     miacode::qml_ui::QmlTimelineModel timeline_;
     QmlCommandService commands_;
     QmlEditorPageHost pages_;
+    QmlCoverExportSession coverExport_;
     miacode::qml_ui::QmlEditorController editor_;
     miacode::qml_ui::QmlShortcutModel shortcuts_;
     QmlUiPlatformChrome platform_;

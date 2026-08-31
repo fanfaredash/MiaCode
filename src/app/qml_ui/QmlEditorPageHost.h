@@ -31,7 +31,7 @@ public:
     // EditorPane owns the options dialog and the transform.
     Q_INVOKABLE void openNormalizeWholeChart();
     Q_INVOKABLE void openBatchExport();
-    Q_INVOKABLE void openCoverExport();
+    Q_INVOKABLE bool openCoverExport(int difficultyId = 0);
     Q_INVOKABLE void packAsZip();
 
 signals:
@@ -39,6 +39,7 @@ signals:
     void mediaToolsRequested();
     void preferencesRequested();
     void activePageIdChanged();
+    void coverPageRequested(int difficultyId);
 
 private:
     void rememberResumeDifficulty();

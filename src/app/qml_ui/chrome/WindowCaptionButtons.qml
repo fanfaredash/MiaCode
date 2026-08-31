@@ -13,14 +13,14 @@ Row {
 
     CaptionButton {
         glyph: "\uE921"
-        accessibleName: qsTr("最小化")
+        accessibleName: UiText.text("最小化")
         onClicked: root.hostWindow.showMinimized()
     }
 
     CaptionButton {
         glyph: root.hostWindow.visibility === Window.Maximized ? "\uE923" : "\uE922"
         accessibleName: root.hostWindow.visibility === Window.Maximized
-                        ? qsTr("还原") : qsTr("最大化")
+                        ? UiText.text("还原") : UiText.text("最大化")
         onClicked: {
             if (root.hostWindow.visibility === Window.Maximized)
                 root.hostWindow.showNormal()
@@ -31,7 +31,7 @@ Row {
 
     CaptionButton {
         glyph: "\uE8BB"
-        accessibleName: qsTr("关闭")
+        accessibleName: UiText.text("关闭")
         closeButton: true
         onClicked: root.hostWindow.close()
     }

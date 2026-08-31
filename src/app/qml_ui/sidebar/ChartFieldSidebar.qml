@@ -18,7 +18,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: qsTr("谱面")
+        title: UiText.text("谱面")
         showMore: false
     }
 
@@ -39,7 +39,7 @@ Rectangle {
 
             NavRow {
                 width: parent.width
-                text: qsTr("元数据")
+                text: UiText.text("元数据")
                 selected: root.viewState.metadataEditorActive
                 onClicked: {
                     if (root.pages && root.pages.overlayActive)

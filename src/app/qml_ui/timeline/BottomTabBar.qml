@@ -37,7 +37,7 @@ Rectangle {
         AppTab {
             Layout.fillHeight: true
             panelTab: true
-            text: qsTr("Muri")
+            text: UiText.text("Muri")
             count: root.analysisSession.muriRows.length
             active: root.timelineSession.currentTabId === "muri"
             onClicked: root.timelineSession.setCurrentTabId("muri")
@@ -55,7 +55,7 @@ Rectangle {
             checked: root.timelineSession.stateBridge
                 ? root.timelineSession.stateBridge.followPreviewEnabled
                 : false
-            Accessible.description: qsTr("跟随当前谱面代码位置")
+            Accessible.description: UiText.text("跟随当前谱面代码位置")
             onClicked: root.timelineSession.followPreviewToggled(checked)
         }
     }

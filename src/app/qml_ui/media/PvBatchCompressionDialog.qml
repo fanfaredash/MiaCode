@@ -11,13 +11,13 @@ Dialog {
 
     required property var mediaTools
 
-    title: qsTr("批量压缩 PV")
+    title: UiText.text("批量压缩 PV")
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(680, Overlay.overlay ? Overlay.overlay.width - 48 : 680)
     height: Math.min(520, Overlay.overlay ? Overlay.overlay.height - 48 : 520)
     footer: DialogFooter {
-        cancelText: qsTr("关闭")
+        cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
     closePolicy: Popup.CloseOnEscape
@@ -34,17 +34,17 @@ Dialog {
                 Layout.fillWidth: true
                 readOnly: true
                 text: root.mediaTools ? root.mediaTools.batchDirectory : ""
-                placeholderText: qsTr("选择要扫描的目录")
+                placeholderText: UiText.text("选择要扫描的目录")
             }
             AppButton {
                 objectName: "pvBatchBrowseButton"
-                text: qsTr("浏览...")
+                text: UiText.text("浏览...")
                 enabled: !root.busy
                 onClicked: root.mediaTools.chooseBatchDirectory()
             }
             AppButton {
                 objectName: "pvBatchAddButton"
-                text: qsTr("添加")
+                text: UiText.text("添加")
                 enabled: !root.busy && !!root.mediaTools
                          && root.mediaTools.batchDirectory.length > 0
                 onClicked: root.mediaTools.addBatchFolder()
@@ -85,7 +85,7 @@ Dialog {
                     }
                 }
                 AppButton {
-                    text: qsTr("移除")
+                    text: UiText.text("移除")
                     enabled: !root.busy
                     onClicked: root.mediaTools.removeBatchJob(index)
                 }
@@ -104,14 +104,14 @@ Dialog {
         RowLayout {
             Layout.fillWidth: true
             AppButton {
-                text: qsTr("清空队列")
+                text: UiText.text("清空队列")
                 enabled: !root.busy
                 onClicked: root.mediaTools.clearBatchQueue()
             }
             Item { Layout.fillWidth: true }
             AppButton {
                 objectName: "pvBatchStartButton"
-                text: qsTr("开始压缩")
+                text: UiText.text("开始压缩")
                 emphasized: true
                 enabled: !root.busy && !!root.mediaTools
                          && root.mediaTools.batchJobs.length > 0

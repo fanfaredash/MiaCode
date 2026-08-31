@@ -33,13 +33,13 @@ Dialog {
         return 0
     }
 
-    title: qsTr("整谱规范化")
+    title: UiText.text("整谱规范化")
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(420, Overlay.overlay ? Overlay.overlay.width - 48 : 420)
     footer: DialogFooter {
-        acceptText: qsTr("确定")
-        cancelText: qsTr("取消")
+        acceptText: UiText.text("确定")
+        cancelText: UiText.text("取消")
         onAccepted: root.accept()
         onRejected: root.reject()
     }
@@ -72,7 +72,7 @@ Dialog {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: qsTr("对齐到 384 分网格")
+                text: UiText.text("对齐到 384 分网格")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
             }
@@ -88,7 +88,7 @@ Dialog {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: qsTr("谱面分段")
+                text: UiText.text("谱面分段")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
             }
@@ -104,7 +104,7 @@ Dialog {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: qsTr("整理语法")
+                text: UiText.text("整理语法")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
             }

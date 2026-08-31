@@ -14,14 +14,14 @@ struct VideoExportTask;
 namespace miacode::cover_export {
 
 // In-process, offscreen renderer of a SINGLE chart frame at an arbitrary time T,
-// for the cover composer's "chart frame" layer. Mirrors CoverComposerView's
+// for the QML cover composer's "chart frame" layer. Mirrors the composite
 // in-process capture rule: a bare QQuickWindow hosting a PreviewQuickSceneRoot
 // (the SAME C++ chart scene the live preview + video export use), shown off-
 // screen at opacity 0, captured with grabWindow() on the process RHI (D3D11 on
 // Windows). It is NOT the export worker (that forces OpenGL globally + is a whole
 // subprocess — using it to grab one frame for a GUI scrubber would be absurd).
 //
-//   ⚠ Same two hard constraints as CoverComposerView (each cost a crash to
+//   ⚠ Same two hard constraints as the composite renderer (each cost a crash to
 //   learn — keep both): NO QQuickView (re-registers QtQuick modules → crash in
 //   the packaged layout), NO forced OpenGL / manual QRhi (in-process the app's
 //   RHI is D3D11; forcing OpenGL hard-crashes). PreviewQuickSceneRoot is a plain

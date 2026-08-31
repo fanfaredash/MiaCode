@@ -1,0 +1,815 @@
+#include "QmlCoverExportSession.h"
+
+#include "QmlExportSession.h"
+#include "UiText.h"
+#include "tools/cover_export/CoverCompositionState.h"
+#include "tools/cover_export/CoverLayoutModel.h"
+#include "tools/cover_export/SceneFrameRenderer.h"
+#include "tools/video_export/FontLibrary.h"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QUrl>
+
+#include <iterator>
+
+namespace {
+
+struct CoverResolutionPreset {
+    int width;
+    int height;
+    const char* label;
+};
+
+constexpr CoverResolutionPreset kCoverResolutionPresets[] = {
+    {720, 720, "720×720 (1:1)"}, {1024, 1024, "1024×1024 (1:1)"},
+    {960, 720, "960×720 (4:3)"}, {1280, 720, "1280×720 (16:9)"},
+    {1080, 1080, "1080×1080 (1:1)"}, {1440, 1080, "1440×1080 (4:3)"},
+    {1920, 1080, "1920×1080 (16:9)"}, {1440, 1440, "1440×1440 (1:1)"},
+    {1920, 1440, "1920×1440 (4:3)"}, {2560, 1440, "2560×1440 (16:9)"},
+};
+
+QVariantMap loadBannerTemplate()
+{
+    QFile file(QStringLiteral(":/intro/templates/maimai_banner.json"));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    return document.isObject() ? document.object().toVariantMap() : QVariantMap{};
+}
+
+QString normalisedCoverOutputDirectory(const QString& chartPath)
+{
+    const QFileInfo chartInfo(chartPath);
+    const QDir directory = chartInfo.absoluteDir();
+    return directory.exists() ? directory.absolutePath() : QDir::currentPath();
+}
+
+}  // namespace
+
+QmlCoverExportSession::QmlCoverExportSession(QmlExportSession& exportSession,
+                                             miacode::v2::UiRequestService& uiRequests,
+                                             QObject* parent)
+    : QObject(parent)
+    , exportSession_(&exportSession)
+    , uiRequests_(&uiRequests)
+    , layout_(std::make_unique<miacode::cover_export::CoverLayoutModel>())
+    , bannerTemplate_(loadBannerTemplate())
+{
+    layout_->ensureDefaultLayers();
+    activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
+    connect(&exportSession, &QmlExportSession::difficultiesChanged,
+            this, &QmlCoverExportSession::rebuildFromExportSession);
+}
+
+QmlCoverExportSession::~QmlCoverExportSession() = default;
+
+QObject* QmlCoverExportSession::uiRequests() const { return uiRequests_; }
+QObject* QmlCoverExportSession::layoutModel() const { return layout_.get(); }
+QObject* QmlCoverExportSession::activeLayer() const { return activeCoverLayer(); }
+
+QVariantMap QmlCoverExportSession::templateMap() const
+{
+    QVariantMap result = bannerTemplate_;
+    miacode::video_export::applyBannerFontOverride(result, cardFontDisplayPath_, cardFontBodyPath_);
+    return result;
+}
+
+QVariantMap QmlCoverExportSession::trackOverrides() const
+{
+    QVariantMap track;
+    const IntroBannerSpec& banner = task_.intro;
+    track.insert(QStringLiteral("title"), banner.title);
+    track.insert(QStringLiteral("artist"), banner.artist);
+    track.insert(QStringLiteral("designer"), banner.designer);
+    track.insert(QStringLiteral("level"), banner.level);
+    track.insert(QStringLiteral("difficulty"), banner.difficulty);
+    track.insert(QStringLiteral("bpm"), banner.bpm);
+    track.insert(QStringLiteral("mode"), isAutoIntroBannerMode(cardMode_)
+        ? normalizedIntroBannerMode(banner.mode)
+        : normalizedIntroBannerMode(cardMode_));
+    track.insert(QStringLiteral("lvRenderMode"), levelTextRender_ ? QStringLiteral("text")
+                                                                     : QStringLiteral("atlas"));
+    track.insert(QStringLiteral("stillTextMode"), longTextMode_);
+    return track;
+}
+
+QUrl QmlCoverExportSession::jacketImage() const
+{
+    return task_.intro.jacketPath.trimmed().isEmpty() ? QUrl() : QUrl::fromLocalFile(task_.intro.jacketPath);
+}
+
+QUrl QmlCoverExportSession::backgroundImage() const
+{
+    return backgroundPath_.trimmed().isEmpty() ? QUrl() : QUrl::fromLocalFile(backgroundPath_);
+}
+
+int QmlCoverExportSession::backgroundMode() const { return static_cast<int>(backgroundMode_); }
+
+QVariantList QmlCoverExportSession::fontLibraryOptions() const
+{
+    QVariantList output;
+    const auto entries = miacode::video_export::fontLibraryEntries(
+        true, UiText::text(QStringLiteral("card_font.default")));
+    for (const auto& entry : entries) {
+        output.append(QVariantMap{{QStringLiteral("label"), entry.label},
+                                  {QStringLiteral("path"), entry.path},
+                                  {QStringLiteral("family"), entry.family}});
+    }
+    return output;
+}
+
+QVariantList QmlCoverExportSession::resolutionOptions() const
+{
+    QVariantList output;
+    for (const auto& preset : kCoverResolutionPresets) {
+        output.append(QVariantMap{{QStringLiteral("label"), QString::fromLatin1(preset.label)},
+                                  {QStringLiteral("width"), preset.width},
+                                  {QStringLiteral("height"), preset.height}});
+    }
+    return output;
+}
+
+int QmlCoverExportSession::outputWidth() const { return kCoverResolutionPresets[resolutionIndex_].width; }
+int QmlCoverExportSession::outputHeight() const { return kCoverResolutionPresets[resolutionIndex_].height; }
+
+void QmlCoverExportSession::enter(int preferredDifficultyId)
+{
+    if (!pageSessionActive_) {
+        pageSessionActive_ = true;
+        emit pageSessionActiveChanged();
+    }
+    if (exportSession_ != nullptr) {
+        exportSession_->refreshFromDocument();
+    }
+    rebuildFromExportSession();
+    selectDifficulty(defaultDifficultyId(preferredDifficultyId));
+    refreshSavedLists();
+    emit fontLibraryChanged();
+}
+
+void QmlCoverExportSession::leave()
+{
+    if (!pageSessionActive_) {
+        return;
+    }
+    persistComposition();
+    pageSessionActive_ = false;
+    emit pageSessionActiveChanged();
+}
+
+double QmlCoverExportSession::chartFrameDiskDiameter() const
+{
+    return chartFrameAvailable_ && frameRenderer_ != nullptr
+        ? frameRenderer_->playfieldDiskDiameterFraction() : 0.0;
+}
+
+bool QmlCoverExportSession::containsDifficulty(int difficultyId) const
+{
+    for (const QVariant& row : difficulties_) {
+        if (row.toMap().value(QStringLiteral("id")).toInt() == difficultyId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int QmlCoverExportSession::defaultDifficultyId(int preferredDifficultyId) const
+{
+    if (containsDifficulty(preferredDifficultyId)) {
+        return preferredDifficultyId;
+    }
+    if (containsDifficulty(selectedDifficultyId_)) {
+        return selectedDifficultyId_;
+    }
+    return difficulties_.isEmpty() ? 0 : difficulties_.constFirst().toMap().value(QStringLiteral("id")).toInt();
+}
+
+void QmlCoverExportSession::rebuildFromExportSession()
+{
+    const QVariantList next = exportSession_ != nullptr ? exportSession_->difficulties() : QVariantList{};
+    if (difficulties_ != next) {
+        difficulties_ = next;
+        emit difficultiesChanged();
+    }
+}
+
+void QmlCoverExportSession::selectDifficulty(int difficultyId)
+{
+    const int next = containsDifficulty(difficultyId) ? difficultyId : 0;
+    if (selectedDifficultyId_ != next) {
+        selectedDifficultyId_ = next;
+        emit selectedDifficultyIdChanged();
+    }
+    if (pageSessionActive_ && next > 0) {
+        seedFromDifficulty(next);
+    }
+}
+
+void QmlCoverExportSession::seedFromDifficulty(int difficultyId)
+{
+    if (exportSession_ == nullptr) {
+        return;
+    }
+    setBusy(true);
+    task_ = exportSession_->coverTaskForDifficulty(difficultyId);
+    outputDirectory_ = normalisedCoverOutputDirectory(task_.chartPath);
+    int matchingResolution = resolutionIndex_;
+    for (int index = 0; index < std::size(kCoverResolutionPresets); ++index) {
+        const auto& preset = kCoverResolutionPresets[index];
+        if (preset.width == task_.outputWidth && preset.height == task_.outputHeight) {
+            matchingResolution = index;
+            break;
+        }
+    }
+    resolutionIndex_ = matchingResolution;
+    frameRenderer_ = std::make_unique<miacode::cover_export::SceneFrameRenderer>();
+    chartFrameAvailable_ = !task_.noteMarkers.isEmpty() && frameRenderer_->bootstrap(task_);
+    chartFrameDuration_ = chartFrameAvailable_ ? frameRenderer_->contentDurationSeconds() : 0.0;
+
+    if (!hasLoadedPreferences_) {
+        const QJsonObject saved = miacode::cover_export::CoverCompositionState::loadPreferences();
+        if (!saved.isEmpty()) {
+            applyCompositionJson(saved, false);
+        }
+        hasLoadedPreferences_ = true;
+    }
+    if (!chartFrameAvailable_) {
+        for (auto* layer : layout_->chartFrameLayers()) {
+            layer->setVisible(false);
+        }
+    }
+    if (activeCoverLayer() == nullptr) {
+        activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
+        emit activeLayerChanged();
+    }
+    emit outputChanged();
+    emit chartFrameAvailabilityChanged();
+    emit inputsChanged();
+    setBusy(false);
+}
+
+miacode::cover_export::CoverLayer* QmlCoverExportSession::activeCoverLayer() const
+{
+    return layout_ != nullptr ? layout_->layer(activeLayerKey_) : nullptr;
+}
+
+void QmlCoverExportSession::selectLayerKey(const QString& key)
+{
+    if (layout_ == nullptr || layout_->layer(key) == nullptr || activeLayerKey_ == key) {
+        return;
+    }
+    activeLayerKey_ = key;
+    emit activeLayerChanged();
+    emit inputsChanged();
+}
+
+void QmlCoverExportSession::renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx)
+{
+    if (layer == nullptr || layer->kind() != QStringLiteral("chartFrame")
+        || !chartFrameAvailable_ || frameRenderer_ == nullptr) {
+        return;
+    }
+    const int side = sidePx > 0 ? sidePx : qBound(512, qMax(outputWidth(), outputHeight()), 2048);
+    QString error;
+    const QImage image = frameRenderer_->renderAt(layer->frameSeconds(), side, &error);
+    if (image.isNull()) {
+        notifyError(UiText::text(QStringLiteral("cover.chart_frame")),
+                    UiText::text(QStringLiteral("cover.could_not_render_the_chart")), error);
+        return;
+    }
+    layout_->setLayerImage(layer->key(), image);
+}
+
+void QmlCoverExportSession::addChartFrameLayer()
+{
+    if (!chartFrameAvailable_ || layout_ == nullptr) {
+        notifyError(UiText::text(QStringLiteral("cover.chart_frame")),
+                    UiText::text(QStringLiteral("cover.this_difficulty_has_no_chart")));
+        return;
+    }
+    auto* layer = layout_->addChartFrameLayer(frameRenderer_ != nullptr ? frameRenderer_->playheadSeconds() : 0.0);
+    if (layer == nullptr) {
+        return;
+    }
+    selectLayerKey(layer->key());
+    renderChartFrame(layer);
+    persistComposition();
+}
+
+void QmlCoverExportSession::addImageLayer()
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("cover.choose_image"));
+    request.nameFilters = {UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp"))};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        if (path.isEmpty() || layout_ == nullptr) return;
+        if (auto* layer = layout_->addImageLayer(path)) {
+            selectLayerKey(layer->key());
+            persistComposition();
+        }
+    });
+}
+
+void QmlCoverExportSession::addTextLayer()
+{
+    if (layout_ == nullptr) return;
+    if (auto* layer = layout_->addTextLayer(UiText::text(QStringLiteral("cover.text_layer_default")))) {
+        selectLayerKey(layer->key());
+        persistComposition();
+    }
+}
+
+void QmlCoverExportSession::duplicateActiveLayer()
+{
+    if (layout_ == nullptr) return;
+    if (auto* layer = layout_->duplicateLayer(activeLayerKey_)) {
+        selectLayerKey(layer->key());
+        if (layer->kind() == QStringLiteral("chartFrame")) renderChartFrame(layer);
+        persistComposition();
+    }
+}
+
+void QmlCoverExportSession::removeActiveLayer()
+{
+    if (layout_ == nullptr || activeLayerKey_ == miacode::cover_export::CoverLayoutModel::cardKey()) return;
+    const QString next = layout_->selectionAfterRemoval(activeLayerKey_);
+    if (layout_->removeLayer(activeLayerKey_)) {
+        activeLayerKey_ = layout_->layer(next) != nullptr ? next : miacode::cover_export::CoverLayoutModel::cardKey();
+        emit activeLayerChanged();
+        persistComposition();
+    }
+}
+
+void QmlCoverExportSession::bringActiveLayerToFront()
+{
+    if (layout_ == nullptr) return;
+    layout_->bringToFront(layout_->indexOfKey(activeLayerKey_));
+    persistComposition();
+}
+
+void QmlCoverExportSession::sendActiveLayerToBack()
+{
+    if (layout_ == nullptr) return;
+    layout_->sendToBack(layout_->indexOfKey(activeLayerKey_));
+    persistComposition();
+}
+
+void QmlCoverExportSession::raiseActiveLayer()
+{
+    if (layout_ == nullptr) return;
+    layout_->raiseLayer(layout_->indexOfKey(activeLayerKey_));
+    persistComposition();
+}
+
+void QmlCoverExportSession::lowerActiveLayer()
+{
+    if (layout_ == nullptr) return;
+    layout_->lowerLayer(layout_->indexOfKey(activeLayerKey_));
+    persistComposition();
+}
+
+void QmlCoverExportSession::browseActiveLayerImage()
+{
+    auto* layer = activeCoverLayer();
+    if (layer == nullptr || layer->kind() != QStringLiteral("image")) return;
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("cover.choose_image"));
+    request.startPath = QFileInfo(layer->imagePath()).absolutePath();
+    request.nameFilters = {UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp"))};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        if (path.isEmpty()) return;
+        if (auto* active = activeCoverLayer(); active != nullptr && active->kind() == QStringLiteral("image")) {
+            active->setImagePath(path);
+            persistComposition();
+        }
+    });
+}
+
+void QmlCoverExportSession::requestFont(bool displayFont, bool textLayerFont)
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("card_font.import"));
+    request.nameFilters = {QStringLiteral("Font files (*.ttf *.otf)")};
+    uiRequests_->requestFile(request, [this, displayFont, textLayerFont](const QString& path) {
+        if (path.isEmpty()) return;
+        const auto result = miacode::video_export::importFontFileIntoLibrary(path);
+        if (result.path.isEmpty()) {
+            notifyError(UiText::text(QStringLiteral("card_font.import")),
+                        UiText::text(result.failure == miacode::video_export::FontImportFailure::CopyFailed
+                                         ? QStringLiteral("card_font.copy_failed")
+                                         : QStringLiteral("card_font.invalid_font")));
+            return;
+        }
+        if (textLayerFont) {
+            if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("text")) {
+                layer->setFontPath(result.path);
+                persistComposition();
+            }
+        } else if (displayFont) {
+            setCardFontDisplayPath(result.path);
+        } else {
+            setCardFontBodyPath(result.path);
+        }
+        emit fontLibraryChanged();
+    });
+}
+
+void QmlCoverExportSession::importActiveLayerFont() { requestFont(false, true); }
+void QmlCoverExportSession::importCardDisplayFont() { requestFont(true, false); }
+void QmlCoverExportSession::importCardBodyFont() { requestFont(false, false); }
+
+void QmlCoverExportSession::setActiveLayerVisible(bool visible)
+{
+    if (auto* layer = activeCoverLayer()) { layer->setVisible(visible); persistComposition(); }
+}
+void QmlCoverExportSession::setActiveLayerLocked(bool locked)
+{
+    if (auto* layer = activeCoverLayer()) { layer->setLocked(locked); persistComposition(); }
+}
+void QmlCoverExportSession::setActiveLayerOpacity(double opacity)
+{
+    if (auto* layer = activeCoverLayer()) { layer->setOpacity(qBound(0.0, opacity, 1.0)); persistComposition(); }
+}
+void QmlCoverExportSession::setActiveLayerSizeFraction(double sizeFraction)
+{
+    if (auto* layer = activeCoverLayer()) { layer->setSizeFraction(qBound(0.05, sizeFraction, 2.0)); persistComposition(); }
+}
+void QmlCoverExportSession::setActiveLayerCenter(double nx, double ny)
+{
+    if (auto* layer = activeCoverLayer()) {
+        layer->setNx(qBound(0.0, nx, 1.0));
+        layer->setNy(qBound(0.0, ny, 1.0));
+        persistComposition();
+    }
+}
+void QmlCoverExportSession::setActiveLayerText(const QString& text)
+{
+    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("text")) {
+        layer->setText(text); persistComposition();
+    }
+}
+void QmlCoverExportSession::setActiveLayerTextColor(const QString& color)
+{
+    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("text")) {
+        layer->setTextColor(color); persistComposition();
+    }
+}
+void QmlCoverExportSession::setActiveLayerTextBold(bool bold)
+{
+    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("text")) {
+        layer->setTextBold(bold); persistComposition();
+    }
+}
+void QmlCoverExportSession::setActiveLayerFrameSeconds(double seconds)
+{
+    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
+        layer->setFrameSeconds(qBound(0.0, seconds, chartFrameDuration_));
+        renderChartFrame(layer);
+        persistComposition();
+    }
+}
+void QmlCoverExportSession::setActiveLayerFrameBackgroundMode(const QString& mode)
+{
+    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
+        layer->setFrameBgMode(mode == QStringLiteral("transparent") ? mode : QStringLiteral("image"));
+        persistComposition();
+    }
+}
+void QmlCoverExportSession::setActiveLayerFrameBackgroundBrightness(double brightness)
+{
+    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
+        layer->setFrameBgBrightness(qBound(0.0, brightness, 1.0)); persistComposition();
+    }
+}
+void QmlCoverExportSession::setActiveLayerFrameBackgroundTransparency(double transparency)
+{
+    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
+        layer->setFrameBgTransparency(qBound(0.0, transparency, 1.0)); persistComposition();
+    }
+}
+
+void QmlCoverExportSession::setBackgroundMode(int mode)
+{
+    const auto next = static_cast<miacode::cover_export::CoverBackgroundMode>(qBound(0, mode, 2));
+    if (backgroundMode_ == next) return;
+    backgroundMode_ = next; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setBlurBackground(bool enabled)
+{
+    if (blurBackground_ == enabled) return;
+    blurBackground_ = enabled; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setBackgroundBrightness(double value)
+{
+    const double next = qBound(0.0, value, 1.0);
+    if (qFuzzyCompare(backgroundBrightness_, next)) return;
+    backgroundBrightness_ = next; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setCardShadow(bool enabled)
+{
+    if (cardShadow_ == enabled) return;
+    cardShadow_ = enabled; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setCardMode(const QString& mode)
+{
+    const QString next = isAutoIntroBannerMode(mode)
+        ? QStringLiteral("auto") : normalizedIntroBannerMode(mode);
+    if (cardMode_ == next) return;
+    cardMode_ = next; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setLevelTextRender(bool enabled)
+{
+    if (levelTextRender_ == enabled) return;
+    levelTextRender_ = enabled; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setLongTextMode(const QString& mode)
+{
+    const QString next = mode == QStringLiteral("ellipsis") ? mode : QStringLiteral("shrink");
+    if (longTextMode_ == next) return;
+    longTextMode_ = next; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setCardFontDisplayPath(const QString& path)
+{
+    if (cardFontDisplayPath_ == path) return;
+    cardFontDisplayPath_ = path; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setCardFontBodyPath(const QString& path)
+{
+    if (cardFontBodyPath_ == path) return;
+    cardFontBodyPath_ = path; emit inputsChanged(); persistComposition();
+}
+void QmlCoverExportSession::setResolutionIndex(int index)
+{
+    const int next = qBound(0, index, static_cast<int>(std::size(kCoverResolutionPresets)) - 1);
+    if (resolutionIndex_ == next) return;
+    resolutionIndex_ = next; emit outputChanged();
+}
+void QmlCoverExportSession::setOutputDirectory(const QString& path)
+{
+    const QString next = QDir::cleanPath(path.trimmed());
+    if (next.isEmpty() || outputDirectory_ == next) return;
+    outputDirectory_ = next; emit outputChanged();
+}
+
+void QmlCoverExportSession::browseBackgroundImage()
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("cover.choose_background_image"));
+    request.startPath = QFileInfo(backgroundPath_).absolutePath();
+    request.nameFilters = {UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp"))};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        if (path.isEmpty()) return;
+        backgroundPath_ = path;
+        backgroundMode_ = miacode::cover_export::CoverBackgroundMode::Custom;
+        emit inputsChanged();
+        persistComposition();
+    });
+}
+
+void QmlCoverExportSession::resetLayout()
+{
+    if (layout_ == nullptr) return;
+    layout_->resetLayout();
+    activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
+    emit activeLayerChanged();
+    persistComposition();
+}
+
+QJsonObject QmlCoverExportSession::compositionJson() const
+{
+    miacode::cover_export::CoverCompositionState state;
+    state.size = QSize(outputWidth(), outputHeight());
+    state.background = {{QStringLiteral("mode"), backgroundMode_ == miacode::cover_export::CoverBackgroundMode::Custom ? QStringLiteral("custom")
+                          : backgroundMode_ == miacode::cover_export::CoverBackgroundMode::Transparent ? QStringLiteral("transparent")
+                                                                                                           : QStringLiteral("jacket")},
+                        {QStringLiteral("customPath"), backgroundPath_},
+                        {QStringLiteral("blur"), blurBackground_},
+                        {QStringLiteral("brightness"), backgroundBrightness_}};
+    state.card = {{QStringLiteral("mode"), cardMode_},
+                  {QStringLiteral("shadow"), cardShadow_},
+                  {QStringLiteral("levelTextRender"), levelTextRender_},
+                  {QStringLiteral("longText"), longTextMode_},
+                  {QStringLiteral("fontDisplay"), cardFontDisplayPath_},
+                  {QStringLiteral("fontBody"), cardFontBodyPath_}};
+    state.layout = layout_ != nullptr ? layout_->toJson() : QJsonObject{};
+    return state.toJson();
+}
+
+QJsonObject QmlCoverExportSession::presetCompositionJson() const
+{
+    QJsonObject root = compositionJson();
+    root.remove(QStringLiteral("size"));
+    return root;
+}
+
+bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool reportErrors)
+{
+    miacode::cover_export::CoverCompositionState state;
+    QString error;
+    if (!miacode::cover_export::CoverCompositionState::fromJson(root, &state, &error)) {
+        if (reportErrors) notifyError(UiText::text(QStringLiteral("cover.import_layout_2")),
+                                      UiText::text(QStringLiteral("cover.the_layout_file_is_not")), error);
+        return false;
+    }
+    const QSize size = state.size;
+    for (int index = 0; index < std::size(kCoverResolutionPresets); ++index) {
+        if (QSize(kCoverResolutionPresets[index].width, kCoverResolutionPresets[index].height) == size) {
+            resolutionIndex_ = index;
+            break;
+        }
+    }
+    const QJsonObject background = state.background;
+    const QString mode = background.value(QStringLiteral("mode")).toString(QStringLiteral("jacket"));
+    backgroundMode_ = mode == QStringLiteral("custom") ? miacode::cover_export::CoverBackgroundMode::Custom
+                    : mode == QStringLiteral("transparent") ? miacode::cover_export::CoverBackgroundMode::Transparent
+                                                              : miacode::cover_export::CoverBackgroundMode::Jacket;
+    backgroundPath_ = background.value(QStringLiteral("customPath")).toString();
+    if (backgroundMode_ == miacode::cover_export::CoverBackgroundMode::Custom
+        && !QFileInfo::exists(backgroundPath_)) {
+        backgroundMode_ = miacode::cover_export::CoverBackgroundMode::Jacket;
+        if (reportErrors) {
+            notifyError(UiText::text(QStringLiteral("cover.background")),
+                        UiText::text(QStringLiteral("cover.the_custom_background_image_was")));
+        }
+    }
+    blurBackground_ = background.value(QStringLiteral("blur")).toBool(true);
+    backgroundBrightness_ = qBound(0.0, background.value(QStringLiteral("brightness")).toDouble(0.45), 1.0);
+    const QJsonObject card = state.card;
+    cardMode_ = card.value(QStringLiteral("mode")).toString(QStringLiteral("auto"));
+    cardShadow_ = card.value(QStringLiteral("shadow")).toBool(false);
+    levelTextRender_ = card.value(QStringLiteral("levelTextRender")).toBool(false);
+    longTextMode_ = card.value(QStringLiteral("longText")).toString(QStringLiteral("shrink"));
+    cardFontDisplayPath_ = card.value(QStringLiteral("fontDisplay")).toString();
+    cardFontBodyPath_ = card.value(QStringLiteral("fontBody")).toString();
+    if (layout_ != nullptr) layout_->fromJson(state.layout);
+    activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
+    emit activeLayerChanged();
+    emit inputsChanged();
+    emit outputChanged();
+    return true;
+}
+
+void QmlCoverExportSession::persistComposition()
+{
+    miacode::cover_export::CoverCompositionState::savePreferences(compositionJson());
+}
+
+void QmlCoverExportSession::saveLayout()
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("cover.save_cover_layout"));
+    request.startPath = QStringLiteral("cover-layout.miacover");
+    request.nameFilters = {UiText::text(QStringLiteral("cover.cover_layout_miacover"))};
+    request.saveMode = true;
+    uiRequests_->requestFile(request, [this](QString path) {
+        if (path.isEmpty()) return;
+        if (!path.endsWith(QStringLiteral(".miacover"), Qt::CaseInsensitive)) path += QStringLiteral(".miacover");
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+            || file.write(QJsonDocument(compositionJson()).toJson(QJsonDocument::Indented)) < 0) {
+            notifyError(UiText::text(QStringLiteral("cover.save_layout_2")),
+                        UiText::text(QStringLiteral("cover.could_not_write_the_layout")), path);
+            return;
+        }
+        miacode::cover_export::CoverCompositionState::pushRecentFile(path);
+        refreshSavedLists();
+    });
+}
+
+void QmlCoverExportSession::importLayout()
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("cover.import_cover_layout"));
+    request.nameFilters = {UiText::text(QStringLiteral("cover.cover_layout_miacover_legacy_json"))};
+    uiRequests_->requestFile(request, [this](const QString& path) { openRecentLayout(path); });
+}
+
+void QmlCoverExportSession::openRecentLayout(const QString& path)
+{
+    if (path.isEmpty()) return;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        notifyError(UiText::text(QStringLiteral("cover.import_layout_2")),
+                    UiText::text(QStringLiteral("cover.could_not_read_the_layout")), path);
+        return;
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    if (!document.isObject() || document.object().value(QStringLiteral("kind")).toString()
+                                    != QStringLiteral("miacode-cover-composition")) {
+        notifyError(UiText::text(QStringLiteral("cover.import_layout_2")),
+                    UiText::text(QStringLiteral("cover.this_file_is_not_a")), path);
+        return;
+    }
+    if (applyCompositionJson(document.object(), true)) {
+        miacode::cover_export::CoverCompositionState::pushRecentFile(path);
+        persistComposition();
+        refreshSavedLists();
+    }
+}
+
+void QmlCoverExportSession::refreshSavedLists()
+{
+    recentLayoutFiles_ = miacode::cover_export::CoverCompositionState::loadRecentFiles();
+    presets_.clear();
+    for (const auto& preset : miacode::cover_export::CoverCompositionState::loadUserPresets()) {
+        presets_.append(QVariantMap{{QStringLiteral("name"), preset.name}});
+    }
+    emit recentLayoutFilesChanged();
+    emit presetsChanged();
+}
+
+void QmlCoverExportSession::clearRecentLayouts()
+{
+    miacode::cover_export::CoverCompositionState::clearRecentFiles();
+    refreshSavedLists();
+}
+void QmlCoverExportSession::savePreset(const QString& name)
+{
+    miacode::cover_export::CoverCompositionState::saveUserPreset(name, presetCompositionJson());
+    refreshSavedLists();
+}
+void QmlCoverExportSession::applyPreset(const QString& name)
+{
+    for (const auto& preset : miacode::cover_export::CoverCompositionState::loadUserPresets()) {
+        if (preset.name == name && applyCompositionJson(preset.composition, true)) {
+            persistComposition();
+            return;
+        }
+    }
+}
+void QmlCoverExportSession::removePreset(const QString& name)
+{
+    miacode::cover_export::CoverCompositionState::removeUserPreset(name);
+    refreshSavedLists();
+}
+
+void QmlCoverExportSession::browseOutputDirectory()
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("net.choose_output_directory"));
+    request.startPath = outputDirectory_;
+    request.selectFolder = true;
+    uiRequests_->requestFile(request, [this](const QString& path) { setOutputDirectory(path); });
+}
+
+miacode::cover_export::CoverComposerInputs QmlCoverExportSession::buildInputs() const
+{
+    miacode::cover_export::CoverComposerInputs inputs;
+    inputs.templateMap = templateMap();
+    inputs.trackOverrides = trackOverrides();
+    inputs.jacketPath = task_.intro.jacketPath;
+    inputs.backgroundPath = backgroundPath_;
+    inputs.backgroundMode = backgroundMode_;
+    inputs.blurBackground = blurBackground_;
+    inputs.coverBgBrightness = backgroundBrightness_;
+    inputs.cardShadow = cardShadow_;
+    if (const auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
+        inputs.chartFrameBackground = layer->frameBgMode() == QStringLiteral("image");
+        inputs.chartFrameBgBrightness = layer->frameBgBrightness();
+        inputs.chartFrameBgTransparency = layer->frameBgTransparency();
+    }
+    inputs.chartFrameDiskDiameter = chartFrameDiskDiameter();
+    return inputs;
+}
+
+void QmlCoverExportSession::exportCover()
+{
+    if (layout_ == nullptr || outputDirectory_.isEmpty()) return;
+    setBusy(true);
+    if (chartFrameAvailable_) {
+        const int frameSide = qBound(512, qMax(outputWidth(), outputHeight()), 4096);
+        for (auto* layer : layout_->visibleChartFrameLayers()) renderChartFrame(layer, frameSide);
+    }
+    persistComposition();
+    const auto result = miacode::cover_export::exportCoverComposite(
+        layout_.get(), buildInputs(), QSize(outputWidth(), outputHeight()), outputDirectory_);
+    setBusy(false);
+    if (!result.success) {
+        notifyError(UiText::text(QStringLiteral("cover.export_cover")),
+                    UiText::text(QStringLiteral("cover.cover_export_failed_1")).arg(result.errorMessage),
+                    result.errorMessage);
+        return;
+    }
+    uiRequests_->postNotice(miacode::v2::NoticeSeverity::Information,
+                            UiText::text(QStringLiteral("cover.export_cover")),
+                            UiText::text(QStringLiteral("cover.cover_export_completed")),
+                            result.outputPath);
+}
+
+void QmlCoverExportSession::setBusy(bool busy)
+{
+    if (busy_ == busy) return;
+    busy_ = busy;
+    emit busyChanged();
+}
+
+void QmlCoverExportSession::notifyError(const QString& title, const QString& text, const QString& details) const
+{
+    if (uiRequests_ != nullptr) {
+        uiRequests_->postNotice(miacode::v2::NoticeSeverity::Error, title, text, details);
+    }
+}

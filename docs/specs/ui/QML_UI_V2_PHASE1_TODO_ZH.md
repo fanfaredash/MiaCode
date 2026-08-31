@@ -27,15 +27,24 @@
          `switchToMetadataField`。这些 `DocumentSection` 方法仍依赖 `editorStack_`、占位页、旧预览
          控件和侧栏 spinner；这是功能可用性会受隐藏 Widgets 状态影响的活跃接线。
       3. `QmlUiBootstrap` 仍创建 `ChartDropOverlay(QWidget)` 作为 root 拖放原生覆盖层。
-      4. `openCoverExport()` → `ExportSection::onExportCover()` 仍创建 `CoverStudioWindow`；这是
-         唯一已登记的完整 Widget 功能面。
-      5. 本次已删除 `QmlEditorPageHost.cpp` 中遗留的 `QBoxLayout` / `QStackedWidget` /
+      4. 本次已删除 `QmlEditorPageHost.cpp` 中遗留的 `QBoxLayout` / `QStackedWidget` /
          `QWindow` / `AdoptedWidgetCoordinates` 等**未使用** include；它们不是活跃调用，但此前使
          “`src/app/qml_ui` 无 Widgets”这一表述不可靠。
 
       已核对的非误报项：ZIP 打包使用 `UiRequestService`，偏好设置只转发
       `preferencesRequested` 给 QML，音视频工具也经 QML 请求边界；这些不是 v1 UI 回接。
-      后续拆除必须先为页面切换、拖放和封面导出建立 v2 所有者，不能再把 v1 控件重新接回 QML。
+      封面导出已于 2026-08-31 建立 v2 所有者并脱离此清单；后续拆除必须先为页面切换、拖放
+      建立 v2 所有者，不能再把 v1 控件重新接回 QML。
+
+- [x] **v2-v1 本地化对齐（2026-08-31）**：QML 全部可见文案改经 `UiText.qml` 单例进入既有
+      en/zh/ja 词典。QML 源字符串先反向匹配同源 `UiText` 条目，少量只出现在 v2 的字符串以明确
+      覆盖表补全；不引入 `qsTr`/独立翻译目录。`ui_text_locale_spec` 现扫描每个 v2 QML 文件，
+      拒绝重新引入 `qsTr(`。
+- [x] **封面导出 QML 原生化（2026-08-31）**：菜单、扩展命令与侧栏均进入
+      `CoverExportPage.qml`；`QmlCoverExportSession` 持有布局/持久化/文件请求，复用纯数据模型、
+      `SceneFrameRenderer` 与同一份 `CoverComposer.qml` 离屏 Quick 渲染。原
+      CoverStudio Widgets 工作台及 `CardFontSettings` 已删除。`qml_cover_export_contract_spec`
+      钉住页面路由、无 Widgets 请求边界及删除面，避免回接旧窗口。
 
 ## 1. 目标边界
 
@@ -63,7 +72,7 @@
 | ~~隐藏 `PlainCodeEditor`~~ | **已删除（2026-08-30）**。树上只剩三处提到这个名字：两条注释与 `ExtensionOpenBridge.cpp:337` 的 lint 规则名 | — |
 | ~~`QuickShellController`~~ | **已退役（2026-08-30）**。`src/app/quick_shell/` 只剩 **246 行**预览合成表面管道（`QuickShellPreviewCompositeSurface.*` + 三个策略头），与外壳控制器无关 | — |
 | QML 仍消费的 controller 属性/方法 | **0 个**（`shellController` 在 `*.qml` 里零命中） | — |
-| Widget UI 代码量 | cover_export **8,587 行 / 25 文件**，其中 CoverStudio 组 **5,925**<br>*（2026-08-29–30 已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479、`PvBatchCompressionDialog` 393、`PlainCodeEditor` 组 2,272、`QuickShellController` 组 993）* | `src/tools/cover_export` |
+| Widget UI 代码量 | `cover_export` 现为 **2,640 行 / 11 文件**的纯布局、持久化、谱面帧与 Quick 离屏渲染；**0 个 Widget UI 文件**（2026-08-31 删除原 CoverStudio 工作台）<br>*（此前已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479、`PvBatchCompressionDialog` 393、`PlainCodeEditor` 组 2,272、`QuickShellController` 组 993）* | `src/tools/cover_export` |
 
 ### v2 自身新代码里的 Widgets 泄漏（优先清）
 
@@ -91,7 +100,7 @@
 | ~~音频设置~~ | **已完成（2026-08-30）**：`preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel`。10 条通道（音量 + 静音）与 Break 星星尾判音开关，写入即应用到运行中的预览并持久化；「设为/恢复本地默认」两个预设按钮保留。**试听已于同日补齐**：模型自带 `QtPreviewSfxRuntime`（首次试听时才创建，页面关闭时释放），220 ms 静默去抖，拖动中不响、松手才响，预览正在播放时不试听。顺带修好两处：主静音会带着其余通道一起变（v1 行为），以及行不再随每次改动整体重建（原先会在拖动中把滑块本身销毁）。 |
 | ~~预览设置~~ | **已完成（2026-08-30）**：`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel`，视频 / 玩法 / 皮肤三个页签。值住在 `MainWindow::previewRenderSettings()` / `setPreviewRenderSetting()`（每个键各自的 canvas setter / 舞台媒体重路由 / 轮廓重算 / muri 重应用，写入即持久化）；皮肤页另承载全局皮肤、判定效果、判定线，以及分区域 HUD 字体的选择、导入、重置和样张。HUD 字体变更后直接请求运行中的 `PreviewRuntime` 重绘。文案全部取自 `dialog.render_settings.*` 的 UiText 键，与 v1 同源。v1 的第三个页签 **性能** 只有「预览刷新率」一项，v2 已在 偏好设置 → 性能 里，未在此重复。判定效果显示由 v1 的下拉勾选改为四个并排复选框（四个状态同时可见）。 |
 
-### B. 有入口，但落到 Widget 对话框/页面（8 项中剩 1 项：封面导出）
+### B. 有入口，但落到 Widget 对话框/页面（8 项已清空）
 
 | 功能 | v2 入口 | 落点 |
 |---|---|---|
@@ -99,7 +108,7 @@
 | ~~音视频处理~~ | → `openMediaProcessingTools()` | **已完成（2026-08-29）**：`MediaToolsDialog.qml` 启动页 + `PrependBlankDialog.qml` + `PvBatchCompressionDialog.qml`（QML），`QmlMediaToolsModel` 承接；`src/tools/media` 已无 Widgets |
 | ~~整谱规范化~~ | → `openNormalizeWholeChart()` | **已完成（2026-08-29）**：`NormalizeOptionsDialog.qml` + `QmlDocumentModel::normalizeChartSelection`，结果作为编辑器事务应用（undo 覆盖）；Widget 对话框与 `DocumentSection::onNormalizeWholeChart` 已删除 |
 | ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
-| 封面导出 | → `openCoverExport()` | `CoverStudioWindow` 全家（组内 5,925 行；`src/tools/cover_export` 全目录 8,587 行 / 25 文件）。**本批最末一项，所有者决定放到最后做** |
+| ~~封面导出~~ | `openCoverExport()` / 菜单 / 扩展导出命令 | **已完成（2026-08-31）**：`CoverExportPage.qml` + `QmlCoverExportSession`。左图层 / 中央同源 `CoverComposer` 预览 / 右检查器，布局导入导出与预设、背景、卡片字体、图层图片/文字、谱面帧和输出目录均由 QML 页面完成；`CoverCompositeRenderer` 用该同一 QML 场景离屏输出。旧 CoverStudio/CoverComposerView/面板/对话框整组删除。 |
 | ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
 | ~~偏好设置~~ | `QmlCommandService::openPreferences()` | **已完成（2026-08-29）**：`PreferencesDialog.qml`（界面/编辑器/性能/快捷键四页签，快捷键录制内置为页签而非二级弹窗），`QmlPreferencesModel` 承接；扩展页签与背景功能已删除 |
 | ~~批量导出~~ | `openBatchExport()` | **已完成（2026-08-29）**：QML `ExportVideoPage` 的 batch 页是唯一批量界面，`BatchExportPanel` 组已删除 |
@@ -112,11 +121,10 @@
 >
 > **排期决定（2026-08-29 所有者）：**
 > - **Net：功能暂时移除。** 入口与两个 Widget 对话框已删除；`src/tools/net` 的引擎部分保留。
-> - **封面导出：放到最后做**（本批最末一项，不是取消）。
+> - ~~**封面导出：放到最后做**~~ —— **已完成（2026-08-31）。**
 >
-> `Qt6::Widgets` 的最终摘除在 B 类里只剩**封面导出**一项挡着（音视频处理 / 偏好设置 /
-> 延迟校准三项已于 2026-08-29 补成 QML）。B 类之外还有 §3.C 的保存/退出确认弹窗、
-> `ChartDropOverlay`，以及阶段 4 的 `MainWindow` 与 `src/app/ui/` 辅助件。
+> B 类已不再阻挡 `Qt6::Widgets` 的最终摘除；剩余阻碍是 `ChartDropOverlay`，以及阶段 4 的
+> `MainWindow` 与 `src/app/ui/` 辅助件。
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
 
@@ -252,11 +260,8 @@
 含三个待拍板的产品决定。落地顺序见该文第 5 章：
 Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签守卫 → 新建/打开最近/关闭文档 → 两套三选一收敛。
 
-**下一轮**（难度更高，文档机制重做之后才开始）：
-
-1. **v1 / v2 文案逐项比对**。v1 文案经过多轮迭代，v2 重构时出现大量偏差，
-   怀疑多语言模块（`UiText`）没有完整搬迁。若属实需要重建，并尽可能恢复原文案。
-2. 封面导出功能重构。
+**后续优先级**：本轮已完成 v1/v2 文案对齐与封面导出重构；下一块是阶段 4 的
+`ChartDropOverlay` 和 `MainWindow` 所有权脱离，而不是回接任何已删 Widgets 表面。
 
 
 ### 阶段 1（收尾）—— 文档域单一所有者
@@ -327,14 +332,15 @@ Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签�
       `ui_request_service_spec` 只链 `Qt6::Core` + `Qt6::Test`，所以任何把 Widgets 对话框放回这条边界的
       改动都会**链接失败**，不依赖字符串扫描；`qml_export_video_page_spec` 驱动真实 `FileDialog` /
       `FolderDialog` / `MessageDialog` 走完请求—应答回环。仍需原生桌面确认实际弹窗外观与取消语义。
-- [ ] 封面导出（暂缓）、Net 上传/下载、ZIP、整谱规范化重建为 QML 页面 + 无 Widgets 作业 API。
-- [ ] 删除 `CoverStudioWindow` 组、`NetBatch*Dialog`。
-      *（`ExportLauncherPage`、`BatchExportPanel` 组、`VideoExportDialog` 组已于 2026-08-29 删除。）*
+- [x] **封面导出重建为 QML 页面 + 无 Widgets 作业 API（2026-08-31）**：由
+      `QmlCoverExportSession` + `CoverCompositeRenderer` 完成，见 §0 / §3.B。
+- [x] **删除 CoverStudio 组（2026-08-31）**。`NetBatch*Dialog` 已在更早批次删除；
+      `ExportLauncherPage`、`BatchExportPanel` 组、`VideoExportDialog` 组亦已删除。
 - [x] **废弃 `VideoExportDialog` 的扩展 API 形态**（2026-08-29）。扩展命令 `export.video.start`
       与方法 `export/startVideoExport` 原本打开模态导出对话框，现在改为打开 QML 导出中心的单个导出页
       （`onExportPreviewVideo()` 保留同名但换成 QML 路由）。扩展面能力未削减，Widgets 对话框消失。
-      `FontLibrary`、`HudFontSettings`、`CardFontSettings` 被 cover_export 与 MainWindow 对话框复用，
-      **未随组删除**。
+      `FontLibrary` 作为无 UI 的字体数据服务保留；`CardFontSettings` 已随原封面 Widgets
+      工作台删除，`HudFontSettings` 仍属于阶段 4 的隐藏 MainWindow 遗留。
 - [ ] `ChartDropOverlay` 改为 QML 覆盖层。
 - **完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui` 为空。
 
@@ -379,7 +385,9 @@ Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签�
   让设置弹窗可以拖开，且不改变任何外观。
 - 推送而非轮询（2026-08-30）：`shellPresentationChanged`（离散壳状态）与
   `shellPreviewPlayheadChanged`（播放头）取代了 `QuickShellController` 的轮询定时器，
-  `QmlPreviewModel` 不再采样任何东西；`preview_transport_push_spec` 钉住这条契约。
+      `QmlPreviewModel` 不再采样任何东西；`preview_transport_push_spec` 钉住这条契约。
+- 本地化与封面（2026-08-31）：`UiText.qml` 成为 v2 QML 唯一可见文案通道；封面导出成为
+  `CoverExportPage.qml` 的三栏合成器，并以同源 Quick 场景输出，不再创建任何 Widget 工作台。
 
 ## 6. 验收规则
 

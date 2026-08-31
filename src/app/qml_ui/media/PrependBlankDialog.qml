@@ -24,8 +24,8 @@ Dialog {
     anchors.centerIn: Overlay.overlay
     width: Math.min(440, Overlay.overlay ? Overlay.overlay.width - 48 : 440)
     footer: DialogFooter {
-        acceptText: qsTr("确定")
-        cancelText: qsTr("取消")
+        acceptText: UiText.text("确定")
+        cancelText: UiText.text("取消")
         onAccepted: root.accept()
         onRejected: root.reject()
     }
@@ -54,12 +54,12 @@ Dialog {
             objectName: "prependBlankSummary"
             Layout.fillWidth: true
             text: root.isTrack
-                  ? qsTr("在 %1 开头插入 %2 拍（BPM %3）静音，约 %4 秒。")
+                  ? UiText.text("在 %1 开头插入 %2 拍（BPM %3）静音，约 %4 秒。")
                         .arg(root.inputName)
                         .arg(root.formatNumber(root.beats))
                         .arg(root.formatNumber(root.bpm))
                         .arg(root.formatNumber(root.blankSeconds))
-                  : qsTr("在 %1 开头插入 %2 拍（BPM %3）黑屏，约 %4 秒。")
+                  : UiText.text("在 %1 开头插入 %2 拍（BPM %3）黑屏，约 %4 秒。")
                         .arg(root.inputName)
                         .arg(root.formatNumber(root.beats))
                         .arg(root.formatNumber(root.bpm))
@@ -101,7 +101,7 @@ Dialog {
                 }
             }
             AppButton {
-                text: qsTr("检测")
+                text: UiText.text("检测")
                 onClicked: {
                     const detected = root.mediaTools.detectPrependTiming(root.isTrack)
                     numberRow.detected(detected)
@@ -113,7 +113,7 @@ Dialog {
         NumberRow {
             id: beatsField
             objectName: "prependBlankBeatsRow"
-            label: qsTr("拍数")
+            label: UiText.text("拍数")
             minimum: 0.125
             maximum: 512
             value: 4
@@ -140,7 +140,7 @@ Dialog {
             objectName: "prependBlankRestoreButton"
             Layout.alignment: Qt.AlignLeft
             visible: root.hasBackup
-            text: qsTr("恢复备份 (%1)").arg(root.backupName)
+            text: UiText.text("恢复备份 (%1)").arg(root.backupName)
             onClicked: {
                 root.close()
                 root.mediaTools.restorePrependBackup(root.isTrack)

@@ -158,6 +158,8 @@ signals:
     void normalizeWholeChartRequested();
     void mediaToolsRequested();
     void preferencesRequested();
+    // Routed by QmlEditorPageHost to the v2 cover page.
+    void coverExportRequested(int difficultyId);
     void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
@@ -360,6 +362,9 @@ public:
     // savePortableState() remains the only writer of the stored copy.
     miacode::chart_transform::ChartNormalizationOptions chartNormalizeOptions() const;
     void setChartNormalizeOptions(const miacode::chart_transform::ChartNormalizationOptions& options);
+    // Read-only hand-off to the single export-session owner. QML page services
+    // may compose on top of this session, but never construct another one.
+    QmlExportSession* qmlExportSession() const { return qmlExportSession_; }
     miacode::v2::UiRequestService* uiRequestService() const;
     miacode::v2::JobProgressService* jobProgressService() const;
     void preparePreviewForShutdown();

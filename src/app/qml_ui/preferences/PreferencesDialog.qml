@@ -18,13 +18,13 @@ Dialog {
     required property var shortcuts
     required property var preferences
 
-    title: qsTr("偏好设置")
+    title: UiText.text("偏好设置")
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(700, Overlay.overlay ? Overlay.overlay.width - 48 : 700)
     height: Math.min(560, Overlay.overlay ? Overlay.overlay.height - 48 : 560)
     footer: DialogFooter {
-        cancelText: qsTr("关闭")
+        cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
     closePolicy: Popup.CloseOnEscape
@@ -74,7 +74,7 @@ Dialog {
         Row {
             spacing: 4
             Repeater {
-                model: [qsTr("界面"), qsTr("编辑器"), qsTr("性能"), qsTr("快捷键")]
+                model: [UiText.text("界面"), UiText.text("编辑器"), UiText.text("性能"), UiText.text("快捷键")]
                 delegate: AppTab {
                     required property int index
                     required property string modelData
@@ -100,22 +100,22 @@ Dialog {
 
             LabeledCombo {
                 objectName: "preferencesLanguageCombo"
-                label: qsTr("语言")
+                label: UiText.text("语言")
                 options: root.preferencesModel.languageOptions
                 currentValue: root.preferencesModel.languageToken
                 onPicked: function(value) { root.preferencesModel.languageToken = value }
             }
             LabeledCombo {
                 objectName: "preferencesThemeCombo"
-                label: qsTr("主题")
+                label: UiText.text("主题")
                 options: root.preferencesModel.themeOptions
                 currentValue: root.preferencesModel.themeToken
                 onPicked: function(value) { root.preferencesModel.themeToken = value }
             }
             LabeledCombo {
                 objectName: "preferencesPreviewSideCombo"
-                label: qsTr("预览位置")
-                options: [{ value: false, label: qsTr("右侧") }, { value: true, label: qsTr("左侧") }]
+                label: UiText.text("预览位置")
+                options: [{ value: false, label: UiText.text("右侧") }, { value: true, label: UiText.text("左侧") }]
                 currentValue: root.preferencesModel.previewOnLeft
                 onPicked: function(value) { root.preferencesModel.previewOnLeft = value }
             }
@@ -123,7 +123,7 @@ Dialog {
                 objectName: "preferencesRestartHint"
                 Layout.fillWidth: true
                 visible: root.preferencesModel.restartRequired
-                text: qsTr("语言与主题的更改将在重启后生效。")
+                text: UiText.text("语言与主题的更改将在重启后生效。")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 wrapMode: Text.WordWrap
@@ -138,7 +138,7 @@ Dialog {
 
             LabeledSlider {
                 objectName: "preferencesFontSizeSlider"
-                label: qsTr("字号")
+                label: UiText.text("字号")
                 from: root.preferencesModel.editorFontSizeMinimum
                 to: root.preferencesModel.editorFontSizeMaximum
                 value: root.preferencesModel.editorFontSize
@@ -147,26 +147,26 @@ Dialog {
             }
             LabeledCombo {
                 objectName: "preferencesLineSpacingCombo"
-                label: qsTr("行距")
+                label: UiText.text("行距")
                 options: root.preferencesModel.lineSpacingOptions
                 currentValue: root.preferencesModel.editorLineSpacing
                 onPicked: function(value) { root.preferencesModel.editorLineSpacing = value }
             }
             AppSwitch {
                 objectName: "preferencesAutoCompletionSwitch"
-                text: qsTr("自动补全")
+                text: UiText.text("自动补全")
                 checked: root.preferencesModel.editorAutoCompletion
                 onToggled: root.preferencesModel.editorAutoCompletion = checked
             }
             AppSwitch {
                 objectName: "preferencesHalfWidthSwitch"
-                text: qsTr("半角输入转换")
+                text: UiText.text("半角输入转换")
                 checked: root.preferencesModel.editorHalfWidthInput
                 onToggled: root.preferencesModel.editorHalfWidthInput = checked
             }
             AppSwitch {
                 objectName: "preferencesImeSwitch"
-                text: qsTr("禁用输入法")
+                text: UiText.text("禁用输入法")
                 checked: root.preferencesModel.editorImeDisabled
                 onToggled: root.preferencesModel.editorImeDisabled = checked
             }
@@ -180,28 +180,28 @@ Dialog {
 
             LabeledCombo {
                 objectName: "preferencesVideoDecodeCombo"
-                label: qsTr("视频解码")
-                options: [{ value: false, label: qsTr("硬件解码") }, { value: true, label: qsTr("软件解码") }]
+                label: UiText.text("视频解码")
+                options: [{ value: false, label: UiText.text("硬件解码") }, { value: true, label: UiText.text("软件解码") }]
                 currentValue: root.preferencesModel.videoDecodePrefersSoftware
                 onPicked: function(value) { root.preferencesModel.videoDecodePrefersSoftware = value }
             }
             LabeledCombo {
                 objectName: "preferencesCanvasFrameRateCombo"
-                label: qsTr("画布帧率")
+                label: UiText.text("画布帧率")
                 options: root.preferencesModel.canvasFrameRateOptions
                 currentValue: root.preferencesModel.canvasFrameRateMode
                 onPicked: function(value) { root.preferencesModel.canvasFrameRateMode = value }
             }
             LabeledCombo {
                 objectName: "preferencesPvFrameRateCombo"
-                label: qsTr("PV 帧率")
+                label: UiText.text("PV 帧率")
                 options: root.preferencesModel.appFrameRateOptions
                 currentValue: root.preferencesModel.stageMediaFrameRateMode
                 onPicked: function(value) { root.preferencesModel.stageMediaFrameRateMode = value }
             }
             LabeledCombo {
                 objectName: "preferencesTimelineFrameRateCombo"
-                label: qsTr("时间轴帧率")
+                label: UiText.text("时间轴帧率")
                 options: root.preferencesModel.appFrameRateOptions
                 currentValue: root.preferencesModel.timelineFrameRateMode
                 onPicked: function(value) { root.preferencesModel.timelineFrameRateMode = value }
@@ -222,8 +222,8 @@ Dialog {
             Text {
                 Layout.fillWidth: true
                 text: root.capturingId.length > 0
-                      ? qsTr("按下新的快捷键，Esc 取消。")
-                      : qsTr("点击一行以录制新的快捷键。")
+                      ? UiText.text("按下新的快捷键，Esc 取消。")
+                      : UiText.text("点击一行以录制新的快捷键。")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
             }
@@ -286,7 +286,7 @@ Dialog {
                             Text {
                                 Layout.preferredWidth: 170
                                 text: root.capturingId === shortcutRow.modelData.id
-                                      ? qsTr("录制中…")
+                                      ? UiText.text("录制中…")
                                       : shortcutRow.modelData.shortcutText
                                 color: shortcutRow.modelData.isDefault
                                        ? Theme.colors.text.secondary
@@ -298,7 +298,7 @@ Dialog {
                     }
 
                     AppButton {
-                        text: qsTr("恢复默认")
+                        text: UiText.text("恢复默认")
                         enabled: !shortcutRow.modelData.isDefault
                         onClicked: {
                             root.shortcuts.resetShortcut(shortcutRow.modelData.id)
@@ -311,7 +311,7 @@ Dialog {
             AppButton {
                 objectName: "preferencesResetShortcutsButton"
                 Layout.alignment: Qt.AlignLeft
-                text: qsTr("全部恢复默认")
+                text: UiText.text("全部恢复默认")
                 onClicked: {
                     root.shortcuts.resetAllShortcuts()
                     root.refreshShortcuts()

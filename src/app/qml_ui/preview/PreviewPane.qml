@@ -44,7 +44,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: qsTr("预览")
+        title: UiText.text("预览")
 
         ChromeRow {
             id: renderModeButton
@@ -52,7 +52,7 @@ Rectangle {
             tone: "icon"
             focusPolicy: Qt.TabFocus
             Accessible.name: root.previewSession.renderModeLabel
-            Accessible.description: qsTr("打开预览渲染模式菜单")
+            Accessible.description: UiText.text("打开预览渲染模式菜单")
             onClicked: {
                 if (renderModeMenu.visible) {
                     renderModeMenu.close()

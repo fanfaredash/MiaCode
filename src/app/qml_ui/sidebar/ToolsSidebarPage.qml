@@ -16,7 +16,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: qsTr("工具")
+        title: UiText.text("工具")
         showMore: false
     }
 
@@ -38,7 +38,7 @@ Rectangle {
 
             NavRow {
                 width: parent.width
-                text: qsTr("延迟校准")
+                text: UiText.text("延迟校准")
                 selected: root.pages.activePageId === "latency"
                 onClicked: {
                     root.selectedAction = "latency"
@@ -47,7 +47,7 @@ Rectangle {
             }
             NavRow {
                 width: parent.width
-                text: qsTr("音视频处理")
+                text: UiText.text("音视频处理")
                 selected: root.selectedAction === "media"
                 onClicked: {
                     root.selectedAction = "media"
@@ -56,7 +56,7 @@ Rectangle {
             }
             NavRow {
                 width: parent.width
-                text: qsTr("整谱规范化")
+                text: UiText.text("整谱规范化")
                 selected: root.selectedAction === "normalize"
                 onClicked: {
                     root.selectedAction = "normalize"

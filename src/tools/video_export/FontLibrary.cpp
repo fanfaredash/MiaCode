@@ -2,17 +2,12 @@
 
 #include "UiText.h"
 
-#include <QComboBox>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QHash>
-#include <QMessageBox>
-#include <QSizePolicy>
-#include <QSignalBlocker>
 #include <QUrl>
 
 namespace miacode::video_export {
@@ -137,68 +132,6 @@ FontImportResult importFontFileIntoLibrary(const QString& sourcePath)
         return {{}, FontImportFailure::CopyFailed};
     }
     return {targetPath, FontImportFailure::None};
-}
-
-QString importFontIntoLibrary(QWidget* parent)
-{
-    const QString title = UiText::text(QStringLiteral("card_font.import"));
-    const QString selected = QFileDialog::getOpenFileName(
-        parent,
-        title,
-        QString(),
-        QStringLiteral("Font Files (*.ttf *.otf)")
-    );
-    if (selected.isEmpty()) {
-        return QString();
-    }
-    const FontImportResult result = importFontFileIntoLibrary(selected);
-    if (result.path.isEmpty()) {
-        const QString message = result.failure == FontImportFailure::CopyFailed
-            ? UiText::text(QStringLiteral("card_font.copy_failed"))
-            : UiText::text(QStringLiteral("card_font.invalid_font"));
-        QMessageBox::warning(parent, title, message);
-        return QString();
-    }
-    return result.path;
-}
-
-void populateFontCombo(QComboBox* combo,
-                       const QString& selectedPath,
-                       bool includeDefault,
-                       const QString& defaultLabel)
-{
-    if (combo == nullptr) {
-        return;
-    }
-    const QSignalBlocker blocker(combo);
-    combo->clear();
-    const QVector<FontLibraryEntry> entries = fontLibraryEntries(includeDefault, defaultLabel);
-    const QString normalizedSelected = selectedPath.isEmpty()
-        ? QString()
-        : QFileInfo(selectedPath).absoluteFilePath();
-    int selectedIndex = 0;
-    for (int i = 0; i < entries.size(); ++i) {
-        combo->addItem(entries[i].label, entries[i].path);
-        if (!normalizedSelected.isEmpty()
-            && QFileInfo(entries[i].path).absoluteFilePath() == normalizedSelected) {
-            selectedIndex = i;
-        }
-    }
-    if (combo->count() > 0) {
-        combo->setCurrentIndex(selectedIndex);
-    }
-}
-
-void configureFontComboWidth(QComboBox* combo, FontComboWidthMode mode)
-{
-    if (combo == nullptr) {
-        return;
-    }
-    combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    combo->setMinimumContentsLength(
-        mode == FontComboWidthMode::NarrowInspector ? 8 : 18);
-    combo->setMinimumWidth(0);
-    combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 }
 
 void applyBannerFontOverride(QVariantMap& templateMap,

@@ -15,7 +15,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: qsTr("导出")
+        title: UiText.text("导出")
         showMore: false
     }
 
@@ -37,18 +37,19 @@ Rectangle {
 
             NavRow {
                 width: parent.width
-                text: qsTr("视频导出")
+                text: UiText.text("视频导出")
                 selected: root.pages.activePageId === "export"
                 onClicked: root.pages.openVideoExportPage()
             }
             NavRow {
                 width: parent.width
-                text: qsTr("封面导出")
+                text: UiText.text("封面导出")
+                selected: root.pages.activePageId === "cover"
                 onClicked: root.pages.openCoverExport()
             }
             NavRow {
                 width: parent.width
-                text: qsTr("打包 ZIP")
+                text: UiText.text("打包 ZIP")
                 onClicked: root.pages.packAsZip()
             }
         }

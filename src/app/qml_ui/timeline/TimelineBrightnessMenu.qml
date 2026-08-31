@@ -79,7 +79,7 @@ Popup {
                 }
 
                 Text {
-                    text: qsTr("%1%").arg(Math.round(row.brightness * 100))
+                    text: UiText.text("%1%").arg(Math.round(row.brightness * 100))
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.uiFontSize
@@ -115,14 +115,14 @@ Popup {
 
         BrightnessRow {
             Layout.fillWidth: true
-            title: qsTr("波形图亮度")
+            title: UiText.text("波形图亮度")
             brightness: root.stateBridge ? root.stateBridge.waveformBrightness : 0.5
             onBrightnessEdited: value => root.stateBridge.waveformBrightness = value
         }
 
         BrightnessRow {
             Layout.fillWidth: true
-            title: qsTr("网格线亮度")
+            title: UiText.text("网格线亮度")
             brightness: root.stateBridge ? root.stateBridge.measureLineBrightness : 1.0
             onBrightnessEdited: value => root.stateBridge.measureLineBrightness = value
         }

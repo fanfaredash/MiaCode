@@ -39,7 +39,7 @@ Item {
         fileDialog.title = request.title
         fileDialog.nameFilters = request.nameFilters && request.nameFilters.length > 0
                                  ? request.nameFilters
-                                 : [qsTr("所有文件 (*)")]
+                                 : [UiText.text("所有文件 (*)")]
         fileDialog.fileMode = request.saveMode ? FileDialog.SaveFile : FileDialog.OpenFile
         if (request.startPath) {
             fileDialog.currentFolder = root.toFolderUrl(root.parentPath(request.startPath))
@@ -144,11 +144,11 @@ Item {
 
         footer: DialogFooter {
             acceptText: noticeDialog.confirmation
-                        ? qsTr("是")
+                        ? UiText.text("是")
                         : (noticeDialog.actionLabel.length > 0 ? noticeDialog.actionLabel : "")
             cancelText: noticeDialog.confirmation
-                        ? qsTr("否")
-                        : (noticeDialog.actionLabel.length > 0 ? qsTr("关闭") : qsTr("确定"))
+                        ? UiText.text("否")
+                        : (noticeDialog.actionLabel.length > 0 ? UiText.text("关闭") : UiText.text("确定"))
             onAccepted: {
                 noticeDialog.resolve(true)
                 noticeDialog.close()

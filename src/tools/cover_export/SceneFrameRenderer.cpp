@@ -25,7 +25,7 @@ namespace {
 // scene-graph build settle before the offscreen grab. cold = a fresh window
 // (textures still uploading) — settle generously; warm = a later grab where
 // grabWindow()'s own synchronous polish+render already suffices. Mirrors
-// CoverComposerView::settleEvents.
+// CoverCompositeRenderer's settleEvents.
 void settleEvents(bool cold)
 {
     if (cold) {

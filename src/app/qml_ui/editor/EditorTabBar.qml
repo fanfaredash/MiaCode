@@ -42,8 +42,8 @@ Rectangle {
         }
         root.closingKey = key
         root.closingDifficultyId = difficultyId
-        closeTabDialog.title = qsTr("关闭「%1」").arg(root.titleForKey(key))
-        closeTabDialog.message = qsTr("「%1」有未保存的更改。").arg(root.titleForKey(key))
+        closeTabDialog.title = UiText.text("关闭「%1」").arg(root.titleForKey(key))
+        closeTabDialog.message = UiText.text("「%1」有未保存的更改。").arg(root.titleForKey(key))
         closeTabDialog.open()
     }
 
@@ -55,9 +55,9 @@ Rectangle {
 
     function titleForKey(key) {
         if (key === viewState.metadataEditorKey)
-            return qsTr("元数据")
+            return UiText.text("元数据")
         const difficulty = difficultyData(difficultyIdForKey(key))
-        return difficulty ? difficulty.label : qsTr("难度")
+        return difficulty ? difficulty.label : UiText.text("难度")
     }
 
     function displayTitleForKey(key) {
@@ -76,7 +76,7 @@ Rectangle {
             : root.documentSession.currentFileName
         let result = fileIdentity + "\n" + difficulty.label
         if (difficulty.designer.length > 0)
-            result += qsTr(" · 谱师：%1").arg(difficulty.designer)
+            result += UiText.text(" · 谱师：%1").arg(difficulty.designer)
         return result
     }
 
@@ -216,11 +216,11 @@ Rectangle {
     ChoiceDialog {
         id: closeTabDialog
         objectName: "editorTabCloseDialog"
-        details: qsTr("保存只写入这个难度，其他难度在文件里保持原样；放弃把这个难度还原到上次保存时的内容。")
+        details: UiText.text("保存只写入这个难度，其他难度在文件里保持原样；放弃把这个难度还原到上次保存时的内容。")
         choices: [
-            { id: "save", label: qsTr("保存"), role: "accept" },
-            { id: "discard", label: qsTr("放弃"), role: "destructive" },
-            { id: "cancel", label: qsTr("取消"), role: "reject" }
+            { id: "save", label: UiText.text("保存"), role: "accept" },
+            { id: "discard", label: UiText.text("放弃"), role: "destructive" },
+            { id: "cancel", label: UiText.text("取消"), role: "reject" }
         ]
         dismissChoiceId: "cancel"
 
@@ -258,7 +258,7 @@ Rectangle {
         height: parent.height
         visible: root.tabsOverflow
         iconSource: Qt.resolvedUrl("icons/more.svg")
-        tooltip: qsTr("显示所有已打开的编辑器")
+        tooltip: UiText.text("显示所有已打开的编辑器")
         onClicked: overflowMenu.open()
 
         AppMenu {

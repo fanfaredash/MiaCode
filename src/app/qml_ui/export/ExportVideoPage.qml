@@ -71,13 +71,13 @@ Rectangle {
             spacing: 4
             AppTab {
                 panelTab: true
-                text: qsTr("导出")
+                text: UiText.text("导出")
                 active: root.session && root.session.activeTab === "export"
                 onClicked: if (root.session) root.session.activeTab = "export"
             }
             AppTab {
                 panelTab: true
-                text: qsTr("批量导出")
+                text: UiText.text("批量导出")
                 active: root.session && root.session.activeTab === "batch"
                 onClicked: if (root.session) root.session.activeTab = "batch"
             }
@@ -114,7 +114,7 @@ Rectangle {
                 spacing: 10
 
                 Text {
-                    text: qsTr("难度")
+                    text: UiText.text("难度")
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                 }
@@ -133,7 +133,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: qsTr("输出文件夹")
+                    text: UiText.text("输出文件夹")
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                 }
@@ -145,7 +145,7 @@ Rectangle {
                         onEditingFinished: if (root.session) root.session.batchOutputDirectory = text
                     }
                     AppButton {
-                        text: qsTr("浏览...")
+                        text: UiText.text("浏览...")
                         onClicked: if (root.session) root.session.browseBatchOutputDirectory()
                     }
                 }
@@ -153,17 +153,17 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: qsTr("谱面文件夹")
+                        text: UiText.text("谱面文件夹")
                         color: Theme.colors.text.secondary
                         font.family: Theme.uiFont
                         Layout.fillWidth: true
                     }
                     AppButton {
-                        text: qsTr("添加")
+                        text: UiText.text("添加")
                         onClicked: if (root.session) root.session.addChartDirectories()
                     }
                     AppButton {
-                        text: qsTr("清空")
+                        text: UiText.text("清空")
                         onClicked: if (root.session) root.session.clearChartDirectories()
                     }
                 }
@@ -185,7 +185,7 @@ Rectangle {
                             font.family: Theme.uiFont
                         }
                         AppButton {
-                            text: qsTr("移除")
+                            text: UiText.text("移除")
                             onClicked: if (root.session) root.session.removeChartDirectory(index)
                         }
                     }
@@ -197,14 +197,14 @@ Rectangle {
                 Repeater {
                     model: {
                         const tabs = [
-                            { id: "output", label: qsTr("输出") },
-                            { id: "video", label: qsTr("视频") },
-                            { id: "gameplay", label: qsTr("游戏") },
-                            { id: "skin", label: qsTr("皮肤") },
-                            { id: "intro", label: qsTr("片头") }
+                            { id: "output", label: UiText.text("输出") },
+                            { id: "video", label: UiText.text("视频") },
+                            { id: "gameplay", label: UiText.text("游戏") },
+                            { id: "skin", label: UiText.text("皮肤") },
+                            { id: "intro", label: UiText.text("片头") }
                         ]
                         if (root.session && root.session.activeTab === "export")
-                            tabs.push({ id: "range", label: qsTr("导出区间") })
+                            tabs.push({ id: "range", label: UiText.text("导出区间") })
                         return tabs
                     }
                     delegate: AppTab {
@@ -240,7 +240,7 @@ Rectangle {
 
                         Text {
                             visible: root.session && root.session.activeTab === "export"
-                            text: qsTr("输出")
+                            text: UiText.text("输出")
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -254,13 +254,13 @@ Rectangle {
                                 onEditingFinished: if (root.session) root.session.outputPath = text
                             }
                             AppButton {
-                                text: qsTr("浏览...")
+                                text: UiText.text("浏览...")
                                 onClicked: if (root.session) root.session.browseOutputPath()
                             }
                         }
 
                         Text {
-                            text: qsTr("分辨率")
+                            text: UiText.text("分辨率")
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -274,7 +274,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: qsTr("帧率")
+                            text: UiText.text("帧率")
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -294,7 +294,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: qsTr("音频码率")
+                            text: UiText.text("音频码率")
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -314,7 +314,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: qsTr("导出质量")
+                            text: UiText.text("导出质量")
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -327,7 +327,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: qsTr("文件体积")
+                            text: UiText.text("文件体积")
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -348,7 +348,7 @@ Rectangle {
 
                         RowLayout {
                             Text {
-                                text: qsTr("外圈亮度")
+                                text: UiText.text("外圈亮度")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -363,7 +363,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: qsTr("内圈亮度")
+                                text: UiText.text("内圈亮度")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -378,7 +378,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: qsTr("Layout 整图大小")
+                                text: UiText.text("Layout 整图大小")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -394,7 +394,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: qsTr("背景缩放")
+                                text: UiText.text("背景缩放")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -407,32 +407,32 @@ Rectangle {
                             }
                         }
                         AppSwitch {
-                            text: qsTr("平滑亮度")
+                            text: UiText.text("平滑亮度")
                             checked: root.session ? root.session.smoothBrightness : false
                             onToggled: if (root.session) root.session.smoothBrightness = checked
                         }
                         AppSwitch {
-                            text: qsTr("显示左下角时间戳")
+                            text: UiText.text("显示左下角时间戳")
                             checked: root.session ? root.session.showTimestamp : true
                             onToggled: if (root.session) root.session.showTimestamp = checked
                         }
                         AppSwitch {
-                            text: qsTr("显示物量统计")
+                            text: UiText.text("显示物量统计")
                             checked: root.session ? root.session.showObjectStatsHud : false
                             onToggled: if (root.session) root.session.showObjectStatsHud = checked
                         }
                         AppSwitch {
-                            text: qsTr("显示谱面信息")
+                            text: UiText.text("显示谱面信息")
                             checked: root.session ? root.session.showChartInfoHud : false
                             onToggled: if (root.session) root.session.showChartInfoHud = checked
                         }
                         AppSwitch {
-                            text: qsTr("修正 HUD 文本布局")
+                            text: UiText.text("修正 HUD 文本布局")
                             checked: root.session ? root.session.fixHudTextLayout : false
                             onToggled: if (root.session) root.session.fixHudTextLayout = checked
                         }
                         AppSwitch {
-                            text: qsTr("启用 clock_count")
+                            text: UiText.text("启用 clock_count")
                             checked: root.session ? root.session.clockCountEnabled : false
                             onToggled: if (root.session) root.session.clockCountEnabled = checked
                         }
@@ -445,7 +445,7 @@ Rectangle {
                         Layout.fillWidth: true
                         RowLayout {
                             Text {
-                                text: qsTr("Tap 流速")
+                                text: UiText.text("Tap 流速")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -463,7 +463,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: qsTr("Touch 流速")
+                                text: UiText.text("Touch 流速")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -492,7 +492,7 @@ Rectangle {
                         RowLayout {
                             Layout.fillWidth: true
                             Text {
-                                text: qsTr("皮肤")
+                                text: UiText.text("皮肤")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -504,11 +504,11 @@ Rectangle {
                                 model: root.session ? root.session.skinOptions : []
                                 textRole: "label"
                                 currentIndex: root.session ? root.session.skinIndex : -1
-                                Accessible.name: qsTr("皮肤")
+                                Accessible.name: UiText.text("皮肤")
                                 onActivated: if (root.session) root.session.skinIndex = currentIndex
                             }
                             AppButton {
-                                text: qsTr("打开目录")
+                                text: UiText.text("打开目录")
                                 onClicked: if (root.session) root.session.openSkinDirectory()
                             }
                         }
@@ -516,7 +516,7 @@ Rectangle {
                         RowLayout {
                             Layout.fillWidth: true
                             Text {
-                                text: qsTr("判定效果")
+                                text: UiText.text("判定效果")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -527,7 +527,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 model: root.session ? root.session.skinJudgeEffectOptions : []
                                 currentIndex: root.session ? root.session.skinJudgeEffectIndex : 0
-                                Accessible.name: qsTr("判定效果")
+                                Accessible.name: UiText.text("判定效果")
                                 onActivated: if (root.session) root.session.skinJudgeEffectIndex = currentIndex
                             }
                         }
@@ -535,7 +535,7 @@ Rectangle {
                         RowLayout {
                             Layout.fillWidth: true
                             Text {
-                                text: qsTr("判定线")
+                                text: UiText.text("判定线")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -546,11 +546,11 @@ Rectangle {
                                 Layout.fillWidth: true
                                 model: root.session ? root.session.outlineOptions : []
                                 currentIndex: root.session ? root.session.outlineIndex : 1
-                                Accessible.name: qsTr("判定线")
+                                Accessible.name: UiText.text("判定线")
                                 onActivated: if (root.session) root.session.outlineIndex = currentIndex
                             }
                             AppButton {
-                                text: qsTr("打开目录")
+                                text: UiText.text("打开目录")
                                 onClicked: if (root.session) root.session.openJudgeLineDirectory()
                             }
                         }
@@ -563,7 +563,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: qsTr("HUD 字体")
+                            text: UiText.text("HUD 字体")
                             color: Theme.colors.text.active
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -573,7 +573,7 @@ Rectangle {
                         RowLayout {
                             Layout.fillWidth: true
                             Text {
-                                text: qsTr("区域")
+                                text: UiText.text("区域")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -585,7 +585,7 @@ Rectangle {
                                 model: root.session ? root.session.hudFontAreaOptions : []
                                 textRole: "label"
                                 currentIndex: root.session ? root.session.hudFontAreaIndex : 0
-                                Accessible.name: qsTr("HUD 字体区域")
+                                Accessible.name: UiText.text("HUD 字体区域")
                                 onActivated: if (root.session) root.session.hudFontAreaIndex = currentIndex
                             }
                         }
@@ -593,7 +593,7 @@ Rectangle {
                         RowLayout {
                             Layout.fillWidth: true
                             Text {
-                                text: qsTr("字体")
+                                text: UiText.text("字体")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -606,7 +606,7 @@ Rectangle {
                                 textRole: "label"
                                 currentIndex: root.fontIndexForPath(model,
                                                                    root.session ? root.session.hudFontPath : "")
-                                Accessible.name: qsTr("HUD 字体")
+                                Accessible.name: UiText.text("HUD 字体")
                                 onActivated: if (root.session) root.session.hudFontPath = model[currentIndex].path
                             }
                         }
@@ -639,15 +639,15 @@ Rectangle {
                             AppButton {
                                 id: hudFontImportButton
                                 objectName: "hudFontImportButton"
-                                text: qsTr("导入字体…")
-                                Accessible.name: qsTr("导入 HUD 字体")
+                                text: UiText.text("导入字体…")
+                                Accessible.name: UiText.text("导入 HUD 字体")
                                 onClicked: if (root.session) root.session.importHudFont()
                             }
                             AppButton {
                                 id: hudFontResetButton
                                 objectName: "hudFontResetButton"
-                                text: qsTr("还原")
-                                Accessible.name: qsTr("还原 HUD 字体")
+                                text: UiText.text("还原")
+                                Accessible.name: UiText.text("还原 HUD 字体")
                                 onClicked: if (root.session) root.session.resetHudFont()
                             }
                             Item { Layout.fillWidth: true }
@@ -660,7 +660,7 @@ Rectangle {
                         spacing: 10
                         Layout.fillWidth: true
                         AppSwitch {
-                            text: qsTr("添加片头")
+                            text: UiText.text("添加片头")
                             checked: root.session ? root.session.introEnabled : false
                             enabled: root.session
                                      ? root.session.activeTab === "batch" || root.session.fullRangeExport
@@ -734,14 +734,14 @@ Rectangle {
                         RowLayout {
                             enabled: root.introSettingsEnabled
                             Text {
-                                text: qsTr("背景")
+                                text: UiText.text("背景")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
                                 Layout.fillWidth: true
-                                model: [qsTr("曲绘"), qsTr("自定义")]
+                                model: [UiText.text("曲绘"), UiText.text("自定义")]
                                 currentIndex: root.session ? root.session.introBackgroundModeIndex : 0
                                 onActivated: if (root.session) root.session.introBackgroundModeIndex = currentIndex
                             }
@@ -755,40 +755,40 @@ Rectangle {
                                 onEditingFinished: if (root.session) root.session.introCustomBackgroundPath = text
                             }
                             AppButton {
-                                text: qsTr("浏览...")
+                                text: UiText.text("浏览...")
                                 onClicked: if (root.session) root.session.browseIntroBackground()
                             }
                         }
                         AppSwitch {
                             enabled: root.introSettingsEnabled
-                            text: qsTr("背景虚化")
+                            text: UiText.text("背景虚化")
                             checked: root.session ? root.session.introBlurBackground : true
                             onToggled: if (root.session) root.session.introBlurBackground = checked
                         }
                         RowLayout {
                             enabled: root.introSettingsEnabled
                             Text {
-                                text: qsTr("谱面类型")
+                                text: UiText.text("谱面类型")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
                                 Layout.fillWidth: true
-                                model: [qsTr("自动"), "DX", "SD"]
+                                model: [UiText.text("自动"), "DX", "SD"]
                                 currentIndex: root.session ? root.session.introModeIndex : 0
                                 onActivated: if (root.session) root.session.introModeIndex = currentIndex
                             }
                         }
                         AppSwitch {
                             enabled: root.introSettingsEnabled
-                            text: qsTr("难度卡阴影")
+                            text: UiText.text("难度卡阴影")
                             checked: root.session ? root.session.introCardShadow : false
                             onToggled: if (root.session) root.session.introCardShadow = checked
                         }
                         AppSwitch {
                             enabled: root.introSettingsEnabled
-                            text: qsTr("等级文本渲染")
+                            text: UiText.text("等级文本渲染")
                             checked: root.session ? root.session.introLevelTextRender : false
                             onToggled: if (root.session) root.session.introLevelTextRender = checked
                         }
@@ -799,7 +799,7 @@ Rectangle {
                             color: Theme.colors.border.normal
                         }
                         Text {
-                            text: qsTr("难度卡字体")
+                            text: UiText.text("难度卡字体")
                             color: Theme.colors.text.active
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -809,7 +809,7 @@ Rectangle {
                             Layout.fillWidth: true
                             enabled: root.introSettingsEnabled
                             Text {
-                                text: qsTr("标题字体")
+                                text: UiText.text("标题字体")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -822,7 +822,7 @@ Rectangle {
                                 textRole: "label"
                                 currentIndex: root.fontIndexForPath(
                                                   model, root.session ? root.session.introFontDisplayPath : "")
-                                Accessible.name: qsTr("片头标题字体")
+                                Accessible.name: UiText.text("片头标题字体")
                                 onActivated: if (root.session)
                                     root.session.introFontDisplayPath = model[currentIndex].path
                             }
@@ -831,7 +831,7 @@ Rectangle {
                             Layout.fillWidth: true
                             enabled: root.introSettingsEnabled
                             Text {
-                                text: qsTr("正文字体")
+                                text: UiText.text("正文字体")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
@@ -844,7 +844,7 @@ Rectangle {
                                 textRole: "label"
                                 currentIndex: root.fontIndexForPath(
                                                   model, root.session ? root.session.introFontBodyPath : "")
-                                Accessible.name: qsTr("片头正文字体")
+                                Accessible.name: UiText.text("片头正文字体")
                                 onActivated: if (root.session)
                                     root.session.introFontBodyPath = model[currentIndex].path
                             }
@@ -864,7 +864,7 @@ Rectangle {
                                 Text {
                                     id: introFontSample
                                     width: parent.width
-                                    text: qsTr("标题字体预览")
+                                    text: UiText.text("标题字体预览")
                                     color: Theme.colors.text.primary
                                     font.family: root.fontFamilyForPath(
                                                      root.session ? root.session.fontLibraryOptions : [],
@@ -875,7 +875,7 @@ Rectangle {
                                 }
                                 Text {
                                     width: parent.width
-                                    text: qsTr("正文字体预览")
+                                    text: UiText.text("正文字体预览")
                                     color: Theme.colors.text.secondary
                                     font.family: root.fontFamilyForPath(
                                                      root.session ? root.session.fontLibraryOptions : [],
@@ -891,15 +891,15 @@ Rectangle {
                             AppButton {
                                 id: introFontImportButton
                                 objectName: "introFontImportButton"
-                                text: qsTr("导入字体…")
-                                Accessible.name: qsTr("导入片头难度卡字体")
+                                text: UiText.text("导入字体…")
+                                Accessible.name: UiText.text("导入片头难度卡字体")
                                 onClicked: if (root.session) root.session.importIntroFont()
                             }
                             AppButton {
                                 id: introFontResetButton
                                 objectName: "introFontResetButton"
-                                text: qsTr("重置")
-                                Accessible.name: qsTr("重置片头难度卡字体")
+                                text: UiText.text("重置")
+                                Accessible.name: UiText.text("重置片头难度卡字体")
                                 onClicked: if (root.session) root.session.resetIntroFonts()
                             }
                             Item { Layout.fillWidth: true }
@@ -920,7 +920,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: qsTr("开始")
+                                text: UiText.text("开始")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 80
@@ -936,7 +936,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: qsTr("结束")
+                                text: UiText.text("结束")
                                 color: Theme.colors.text.secondary
                                 font.family: Theme.uiFont
                                 Layout.preferredWidth: 80
@@ -952,7 +952,7 @@ Rectangle {
                         }
                         Text {
                             text: root.session
-                                  ? qsTr("总时长 %1 s").arg(root.session.contentDurationSeconds.toFixed(3))
+                                  ? UiText.text("总时长 %1 s").arg(root.session.contentDurationSeconds.toFixed(3))
                                   : ""
                             color: Theme.colors.text.secondary
                             font.family: Theme.uiFont
@@ -966,7 +966,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 AppButton {
-                    text: root.session && root.session.exportRunning ? qsTr("取消导出") : qsTr("开始导出")
+                    text: root.session && root.session.exportRunning ? UiText.text("取消导出") : UiText.text("开始导出")
                     emphasized: !(root.session && root.session.exportRunning)
                     onClicked: {
                         if (!root.session) return

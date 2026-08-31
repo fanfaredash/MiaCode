@@ -47,12 +47,16 @@ Item {
     property string activeChartFrameKey: ""      // only this chart frame hosts the live scene
     // §4 — which layer wears the selection chrome (any kind, incl. the card). Driven
     // two-way: C++ pushes it (list / inspector selection → blue box moves), and a
-    // canvas tap / drag pushes it back via chartSceneBinder.selectLayerKey. The
+    // canvas tap / drag pushes it back via selectionBinder.selectLayerKey. The
     // editor's selectedIndex is DERIVED from this (key-based → reorder/add/remove safe).
     property string selectedKey: ""
     property bool editable: true            // false in the export render (no chrome/handlers)
-    // A2 — the CoverComposerView (live path only) sets this so the chart-frame
-    // layer can host a LIVE PreviewQuickSceneRoot instead of the static grab Image:
+    // The v2 page only needs layer selection; it deliberately leaves
+    // chartSceneBinder null so chart frames are shown via the shared still-image
+    // provider instead of creating a native embedded preview surface.
+    property var selectionBinder: null
+    // A2 — a live-only consumer can set this so the chart-frame layer hosts a
+    // PreviewQuickSceneRoot instead of the static grab Image:
     // scrubbing/playback then only moves the shared playhead (zero readback). Stays
     // null in the export render, where the static grab Image is used instead.
     property var chartSceneBinder: null
@@ -274,7 +278,9 @@ Item {
         enabled: canvas.editable
         gesturePolicy: TapHandler.WithinBounds
         onTapped: {
-            if (canvas.chartSceneBinder)
+            if (canvas.selectionBinder)
+                canvas.selectionBinder.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
+            else if (canvas.chartSceneBinder)
                 canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
         }
     }
@@ -304,7 +310,9 @@ Item {
                     dragLayer = null
                     return
                 }
-                if (canvas.chartSceneBinder)
+                if (canvas.selectionBinder)
+                    canvas.selectionBinder.selectLayerKey(dragLayer.key)
+                else if (canvas.chartSceneBinder)
                     canvas.chartSceneBinder.selectLayerKey(dragLayer.key)
                 startNx = dragLayer.nx
                 startNy = dragLayer.ny
@@ -634,9 +642,10 @@ Item {
             TapHandler {
                 enabled: canvas.editable
                 onTapped: {
-                    if (canvas.chartSceneBinder) {
+                    if (canvas.selectionBinder || canvas.chartSceneBinder) {
                         var p = layerItem.mapToItem(canvas, point.position.x, point.position.y)
-                        canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(p.x, p.y))
+                        var binder = canvas.selectionBinder || canvas.chartSceneBinder
+                        binder.selectLayerKey(canvas.hitKeyAt(p.x, p.y))
                     }
                 }
             }
@@ -658,7 +667,7 @@ Item {
 
     // Live chart-frame scene (edit mode, A2). A bare PreviewQuickSceneRoot whose
     // layer flags / shared frame state are wired in C++ by
-    // CoverComposerView::bindLiveChartScene (overlay layers only over transparent).
+    // A live scene binding (overlay layers only over transparent).
     // anchors.fill tracks the layer's drag/scale.
     Component {
         id: liveChartComponent

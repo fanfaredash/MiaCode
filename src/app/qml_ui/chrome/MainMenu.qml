@@ -204,7 +204,7 @@ Item {
             iconSource: Qt.resolvedUrl("icons/more.svg")
             iconWidth: 16
             iconHeight: 16
-            tooltip: qsTr("更多")
+            tooltip: UiText.text("更多")
             onClicked: root.openAnchoredMenu(overflowMenu, moreButton)
         }
     }
@@ -217,16 +217,16 @@ Item {
 
         AppMenu {
             id: fileMenu
-            title: qsTr("文件(&F)")
+            title: UiText.text("文件(&F)")
             AppMenuAction {
-                text: qsTr("新建")
+                text: UiText.text("新建")
                 shortcut: StandardKey.New
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.New)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.newDocumentRequested()
             }
             AppMenuAction {
-                text: qsTr("打开")
+                text: UiText.text("打开")
                 shortcut: StandardKey.Open
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Open)
                 enabled: root.commandsEnabled
@@ -234,7 +234,7 @@ Item {
             }
             AppMenu {
                 id: recentMenu
-                title: qsTr("打开最近")
+                title: UiText.text("打开最近")
                 enabled: root.commandsEnabled
                 onAboutToShow: root.recentDocuments = root.documentSession.recentDocuments()
 
@@ -246,7 +246,7 @@ Item {
                 Repeater {
                     model: root.recentDocuments.length > 0
                            ? root.recentDocuments
-                           : [{ label: qsTr("暂无最近文档"), path: "" }]
+                           : [{ label: UiText.text("暂无最近文档"), path: "" }]
                     delegate: AppMenuItem {
                         required property var modelData
                         // The chart's folder name, not its path: every path here
@@ -264,14 +264,14 @@ Item {
             }
             AppMenu {
                 id: restoreBackupMenu
-                title: qsTr("恢复备份")
+                title: UiText.text("恢复备份")
                 enabled: root.commandsEnabled
                 onAboutToShow: root.backupDocuments = root.documentSession.backupDocuments()
 
                 Repeater {
                     model: root.backupDocuments.length > 0
                            ? root.backupDocuments
-                           : [{ label: qsTr("暂无备份"), path: "" }]
+                           : [{ label: UiText.text("暂无备份"), path: "" }]
                     delegate: AppMenuItem {
                         required property var modelData
                         text: modelData.label
@@ -285,20 +285,20 @@ Item {
                 }
             }
             AppMenuAction {
-                text: qsTr("关闭文档")
+                text: UiText.text("关闭文档")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.closeDocumentRequested()
             }
             AppMenuSeparator {}
             AppMenuAction {
-                text: qsTr("保存")
+                text: UiText.text("保存")
                 shortcut: StandardKey.Save
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Save)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.saveRequested()
             }
             AppMenuAction {
-                text: qsTr("另存为")
+                text: UiText.text("另存为")
                 shortcut: StandardKey.SaveAs
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.SaveAs)
                 enabled: root.commandsEnabled
@@ -306,7 +306,7 @@ Item {
             }
             AppMenuSeparator {}
             AppMenuAction {
-                text: qsTr("退出")
+                text: UiText.text("退出")
                 shortcut: StandardKey.Quit
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Quit)
                 enabled: root.commandsEnabled
@@ -316,23 +316,23 @@ Item {
 
         AppMenu {
             id: editMenu
-            title: qsTr("编辑(&E)")
+            title: UiText.text("编辑(&E)")
             AppMenuAction {
-                text: qsTr("撤销")
+                text: UiText.text("撤销")
                 shortcut: StandardKey.Undo
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Undo)
                 enabled: root.commandsEnabled && root.commands.canUndo
                 onTriggered: root.commands.undoRequested()
             }
             AppMenuAction {
-                text: qsTr("重做")
+                text: UiText.text("重做")
                 shortcut: StandardKey.Redo
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Redo)
                 enabled: root.commandsEnabled && root.commands.canRedo
                 onTriggered: root.commands.redoRequested()
             }
             AppMenuAction {
-                text: qsTr("查找")
+                text: UiText.text("查找")
                 shortcut: StandardKey.Find
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Find)
                 enabled: root.commandsEnabled
@@ -340,14 +340,14 @@ Item {
             }
             AppMenuSeparator {}
             AppMenuAction {
-                text: qsTr("全选")
+                text: UiText.text("全选")
                 shortcut: StandardKey.SelectAll
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.SelectAll)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.selectAllRequested()
             }
             AppMenuAction {
-                text: qsTr("选择当前行")
+                text: UiText.text("选择当前行")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.selectCurrentLineRequested()
             }
@@ -355,14 +355,14 @@ Item {
 
         AppMenu {
             id: toolsMenu
-            title: qsTr("工具(&T)")
+            title: UiText.text("工具(&T)")
             AppMenuAction {
-                text: qsTr("元数据")
+                text: UiText.text("元数据")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.metadataRequested()
             }
             AppMenuAction {
-                text: qsTr("检查谱面")
+                text: UiText.text("检查谱面")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.validateRequested()
             }
@@ -371,7 +371,7 @@ Item {
         AppMenu {
             id: adjustMenu
             objectName: "adjustMenu"
-            title: qsTr("调整(&M)")
+            title: UiText.text("调整(&M)")
 
             // Rows, labels and grouping come from the shared transform table,
             // so this menu cannot drift from the shortcut editor or the
@@ -414,7 +414,7 @@ Item {
                 }
             }
             AppMenuAction {
-                text: qsTr("整谱规范化")
+                text: UiText.text("整谱规范化")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.normalizeChartRequested()
             }
@@ -438,14 +438,14 @@ Item {
 
             AppMenuSeparator {}
             AppMenuAction {
-                text: qsTr("切换侧栏")
+                text: UiText.text("切换侧栏")
                 shortcut: root.shortcuts.sequence("view.toggle_sidebar", "Ctrl+B")
                 shortcutText: root.shortcuts.displayText("view.toggle_sidebar", "Ctrl+B")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.toggleSidebarRequested()
             }
             AppMenuAction {
-                text: qsTr("切换时间轴")
+                text: UiText.text("切换时间轴")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.toggleBottomPanelRequested()
             }
@@ -453,14 +453,14 @@ Item {
 
         AppMenu {
             id: previewMenu
-            title: qsTr("预览(&P)")
+            title: UiText.text("预览(&P)")
             AppMenuAction {
-                text: qsTr("音频设置")
+                text: UiText.text("音频设置")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.audioSettingsRequested()
             }
             AppMenuAction {
-                text: qsTr("预览设置")
+                text: UiText.text("预览设置")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.previewSettingsRequested()
             }
@@ -468,9 +468,9 @@ Item {
 
         AppMenu {
             id: helpMenu
-            title: qsTr("帮助(&H)")
+            title: UiText.text("帮助(&H)")
             AppMenuAction {
-                text: qsTr("关于 MiaCode")
+                text: UiText.text("关于 MiaCode")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.aboutRequested()
             }

@@ -20,19 +20,19 @@ Rectangle {
 
         ActivityButton {
             iconSource: Qt.resolvedUrl("icons/chart.svg")
-            tooltip: qsTr("谱面")
+            tooltip: UiText.text("谱面")
             selected: root.activeView === "chart"
             onClicked: root.viewRequested("chart")
         }
         ActivityButton {
             iconSource: Qt.resolvedUrl("icons/export.svg")
-            tooltip: qsTr("导出")
+            tooltip: UiText.text("导出")
             selected: root.activeView === "export"
             onClicked: root.viewRequested("export")
         }
         ActivityButton {
             iconSource: Qt.resolvedUrl("icons/tools.svg")
-            tooltip: qsTr("工具")
+            tooltip: UiText.text("工具")
             selected: root.activeView === "tools"
             onClicked: root.viewRequested("tools")
         }
@@ -43,7 +43,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         iconSource: Qt.resolvedUrl("icons/settings.svg")
-        tooltip: qsTr("视图设置")
+        tooltip: UiText.text("视图设置")
         onClicked: root.settingsRequested()
     }
 

@@ -18,6 +18,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* paren
     , timeline_(backend, this)
     , commands_(backend, document_, this)
     , pages_(backend, this)
+    , coverExport_(*backend.qmlExportSession(), *backend.uiRequestService(), this)
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)
@@ -50,6 +51,13 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* paren
             &preferences_, &QmlUiSettings::reloadEditorSettings);
     connect(&backend_, &MainWindow::muriPromptPreferenceChanged,
             &analysis_, &QmlAnalysisModel::refreshPreferences);
+    connect(&pages_, &QmlEditorPageHost::coverPageRequested,
+            &coverExport_, &QmlCoverExportSession::enter);
+    connect(&pages_, &QmlEditorPageHost::activePageIdChanged, this, [this] {
+        if (pages_.activePageId() != QLatin1String("cover")) {
+            coverExport_.leave();
+        }
+    });
     connect(&document_, &QmlDocumentModel::metadataChanged,
             this, [this] { editor_.setWholeBpm(document_.wholeBpm()); });
     applyEditorSettings();
@@ -84,6 +92,7 @@ QObject* QmlApplicationContext::audioSettings() { return &audioSettings_; }
 QObject* QmlApplicationContext::previewSettings() { return &previewSettings_; }
 
 QObject* QmlApplicationContext::latency() { return &latency_; }
+QObject* QmlApplicationContext::coverExport() { return &coverExport_; }
 
 void QmlApplicationContext::setWindowChrome(QObject* chrome)
 {

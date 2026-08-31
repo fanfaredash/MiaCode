@@ -67,13 +67,13 @@ Rectangle {
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         height: Math.min(implicitHeight, Math.max(1, timelineItem.timelineTop))
         visible: timelineItem.visible
-        text: qsTr("%1%").arg(Math.round(root.timelineSession.stateBridge
+        text: UiText.text("%1%").arg(Math.round(root.timelineSession.stateBridge
             ? root.timelineSession.stateBridge.zoomScale * 100
             : 50))
         sizeToLabels: zoomMenu.zoomLabels
-        tooltip: qsTr("时间轴缩放")
+        tooltip: UiText.text("时间轴缩放")
         expanded: zoomMenu.visible
-        Accessible.description: qsTr("打开时间轴缩放预设")
+        Accessible.description: UiText.text("打开时间轴缩放预设")
         onClicked: {
             if (zoomMenu.visible) {
                 zoomMenu.close()
@@ -96,9 +96,9 @@ Rectangle {
         iconSource: Qt.resolvedUrl("icons/settings.svg")
         iconWidth: Math.max(16, Math.round(16 * timelineItem.headerScale))
         iconHeight: iconWidth
-        tooltip: qsTr("时间轴亮度")
+        tooltip: UiText.text("时间轴亮度")
         active: brightnessMenu.visible
-        Accessible.description: qsTr("打开波形和小节线亮度设置")
+        Accessible.description: UiText.text("打开波形和小节线亮度设置")
         onClicked: {
             if (brightnessMenu.visible) {
                 brightnessMenu.close()
@@ -141,8 +141,8 @@ Rectangle {
             Label {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.analysisSession.pending
-                    ? qsTr("正在分析…")
-                    : qsTr("%1 个错误，%2 个警告")
+                    ? UiText.text("正在分析…")
+                    : UiText.text("%1 个错误，%2 个警告")
                         .arg(root.documentSession.syntaxErrorCount)
                         .arg(root.documentSession.syntaxWarningCount)
                 color: Theme.colors.text.secondary
@@ -151,7 +151,7 @@ Rectangle {
             }
 
             AppButton {
-                text: qsTr("重新检查")
+                text: UiText.text("重新检查")
                 onClicked: root.commands.validateDocument()
             }
         }
@@ -183,7 +183,7 @@ Rectangle {
                         id: issueLocation
                         Layout.preferredWidth: Math.max(implicitWidth, 100)
                         text: "%1 · L%2:C%3".arg(issueDelegate.modelData.severity === "error"
-                            ? qsTr("错误") : qsTr("警告"))
+                            ? UiText.text("错误") : UiText.text("警告"))
                             .arg(issueDelegate.modelData.line).arg(issueDelegate.modelData.column)
                         color: issueDelegate.modelData.severity === "error"
                                ? Theme.colors.syntax.error
@@ -209,7 +209,7 @@ Rectangle {
         Label {
             anchors.centerIn: parent
             visible: root.analysisSession.validationRows.length === 0
-            text: root.analysisSession.pending ? qsTr("正在分析…") : qsTr("未发现验证问题")
+            text: root.analysisSession.pending ? UiText.text("正在分析…") : UiText.text("未发现验证问题")
             color: Theme.colors.text.secondary
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
@@ -242,7 +242,7 @@ Rectangle {
                     Label {
                         Layout.fillWidth: true
                         text: "[%1] %2 · L%3:C%4".arg(muriDelegate.modelData.alert === "warning"
-                            ? qsTr("警告") : qsTr("警报"))
+                            ? UiText.text("警告") : UiText.text("警报"))
                             .arg(muriDelegate.modelData.title)
                             .arg(muriDelegate.modelData.line).arg(muriDelegate.modelData.column)
                         color: muriDelegate.modelData.severity === "warning"
@@ -266,7 +266,7 @@ Rectangle {
         Label {
             anchors.centerIn: parent
             visible: root.analysisSession.muriRows.length === 0
-            text: root.analysisSession.pending ? qsTr("正在分析…") : qsTr("未发现 Muri 问题")
+            text: root.analysisSession.pending ? UiText.text("正在分析…") : UiText.text("未发现 Muri 问题")
             color: Theme.colors.text.secondary
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize

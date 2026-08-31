@@ -27,8 +27,7 @@ int MainWindow::resolveToolsMenuExportDifficultyId() const
 
 void MainWindow::onExportCover()
 {
-    const int difficultyId = resolveToolsMenuExportDifficultyId();
-    exportSection_->onExportCover(difficultyId);
+    emit coverExportRequested(resolveToolsMenuExportDifficultyId());
 }
 
 void MainWindow::onBatchExportPreviewVideo()

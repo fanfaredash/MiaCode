@@ -31,8 +31,10 @@ same change.
 - Main window orchestration: `src/app/mainwindow/` (+ `sections/<feature>/`)
 - Default UI (**v2**): `src/app/qml_ui/` (`QmlUiBootstrap`, phase-1 checklist:
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`). Export uses `QmlExportSession` +
-  `ExportVideoPage.qml`; `QmlEditorPageHost` embeds Latency only. Workspace mode follows
-  `QuickShellController`. `QmlDocumentModel` submits body, metadata, difficulty and file operations
+  `ExportVideoPage.qml`; cover export uses `export/QmlCoverExportSession` +
+  `CoverExportPage.qml` and the pure `tools/cover_export/CoverCompositeRenderer`. `QmlEditorPageHost`
+  routes both pages; `QuickShellController` is deleted. `UiText.qml` is QML's sole visible-string
+  entry and must be used instead of `qsTr`. `QmlDocumentModel` submits body, metadata, difficulty and file operations
   to the v2 workspace; QML validation/Muri reads the workspace analysis service. Windows title
   bar: `QmlUiWindowChrome`.
 - Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` is UIv2's Widgets-free sole document,

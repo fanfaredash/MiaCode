@@ -68,25 +68,25 @@ Rectangle {
         AppTextField {
             id: queryField
             Layout.preferredWidth: 150
-            placeholderText: qsTr("查找")
+            placeholderText: UiText.text("查找")
             text: root.query
             onTextEdited: root.query = text
             Keys.onReturnPressed: event => root.find((event.modifiers & Qt.ShiftModifier) !== 0)
         }
         AppTextField {
             Layout.preferredWidth: 130
-            placeholderText: qsTr("替换")
+            placeholderText: UiText.text("替换")
             text: root.replacement
             onTextEdited: root.replacement = text
             Keys.onReturnPressed: root.replaceOne()
         }
-        AppSwitch { text: qsTr("区分大小写"); checked: root.caseSensitive; onToggled: root.caseSensitive = checked }
-        AppSwitch { text: qsTr("全词"); checked: root.wholeWord; onToggled: root.wholeWord = checked }
-        AppButton { text: qsTr("上一个"); onClicked: root.find(true) }
-        AppButton { text: qsTr("下一个"); onClicked: root.find(false) }
-        AppButton { text: qsTr("替换"); onClicked: root.replaceOne() }
-        AppButton { text: qsTr("全部替换"); onClicked: root.replaceEverything() }
+        AppSwitch { text: UiText.text("区分大小写"); checked: root.caseSensitive; onToggled: root.caseSensitive = checked }
+        AppSwitch { text: UiText.text("全词"); checked: root.wholeWord; onToggled: root.wholeWord = checked }
+        AppButton { text: UiText.text("上一个"); onClicked: root.find(true) }
+        AppButton { text: UiText.text("下一个"); onClicked: root.find(false) }
+        AppButton { text: UiText.text("替换"); onClicked: root.replaceOne() }
+        AppButton { text: UiText.text("全部替换"); onClicked: root.replaceEverything() }
         Item { Layout.fillWidth: true }
-        AppButton { text: qsTr("关闭"); onClicked: root.dismiss() }
+        AppButton { text: UiText.text("关闭"); onClicked: root.dismiss() }
     }
 }

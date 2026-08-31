@@ -13,7 +13,7 @@ AppMenu {
     readonly property var rateLabels: {
         const labels = []
         for (let i = 0; i < rates.length; i++)
-            labels.push(qsTr("%1x").arg(rates[i]))
+            labels.push(UiText.text("%1x").arg(rates[i]))
         return labels
     }
 
@@ -23,7 +23,7 @@ AppMenu {
         delegate: AppMenuItem {
             required property var modelData
 
-            text: qsTr("%1x").arg(modelData)
+            text: UiText.text("%1x").arg(modelData)
             checkable: true
             checked: root.previewSession
                      && Math.abs(root.previewSession.rate - modelData) <= 1e-6

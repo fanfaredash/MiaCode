@@ -72,6 +72,8 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   deliberately not Widgets), `qml_document_projection_spec`, `qml_analysis_model_spec`,
   `qml_document_lifecycle_contract_spec`, `qml_export_intro_sound_contract_spec`,
   `qml_export_font_contract_spec` (guards the shared portable-font contracts on both QML-native export and preview-settings entry points),
+  `qml_cover_export_contract_spec` (guards the QML cover page route, no-Widgets request boundary,
+  pure Quick compositor and deletion of the former cover workbench),
   `qml_export_video_page_spec` (instantiates the real `ExportVideoPage.qml` with its App* controls),
   `qml_main_menu_spec` (source-level drift guard: dynamic 调整 / 更多 transform rows must be visual items with their shortcut labels),
   `video_export_intro_sound_spec` (preferences, difficulty reseed and snapshot→worker round-trip),
@@ -85,8 +87,9 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   sample contract), `pv_memory_diagnostics_spec` (pure PV source/clear-epoch accounting), and
   `pv_memory_host_contract_spec` (source-level guard that host instrumentation stays debug-gated
   and reuses the single existing `toImage()` conversion),
-  `ui_text_locale_spec` (i18n drift guard — see the localization note in
-  `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define),
+  `ui_text_locale_spec` (i18n drift guard for map parity, native call-sites and every v2 QML
+  `UiText` route — see the localization note in `architecture-and-layout.md`; also uses the
+  `MIACODE_SOURCE_ROOT` compile define),
   `ui_text_preferences_spec` (canonical preference normalization/migration and unknown-key
   preservation guard)
 

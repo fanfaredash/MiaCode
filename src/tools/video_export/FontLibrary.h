@@ -4,15 +4,11 @@
 #include <QVariantMap>
 #include <QVector>
 
-class QComboBox;
-class QWidget;
-
 namespace miacode::video_export {
 
 // Portable user font library — the `<preferences dir>/fonts` directory that
-// holds imported .ttf/.otf files. Shared by the HUD font picker
-// (HudFontSettings) and the difficulty-card font selectors (CardFontSettings),
-// so a font imported for one surface is immediately offered to the others.
+// holds imported .ttf/.otf files. Its API is UI-neutral so every QML surface
+// can expose the same entries without a QWidget adapter.
 
 // Absolute path to the font-library directory (not created here).
 QString fontLibraryDirPath();
@@ -53,30 +49,6 @@ QString fontFamilyForFile(const QString& path);
 // already in that library is returned unchanged.  Callers present any error
 // through their own UI boundary.
 FontImportResult importFontFileIntoLibrary(const QString& sourcePath);
-
-// Prompt for a .ttf/.otf, validate it, and copy it into the library. Returns the
-// resulting library path (empty on cancel or error; an error shows a warning box
-// parented to `parent`).
-QString importFontIntoLibrary(QWidget* parent);
-
-// Populate `combo` with the library entries (data = each entry's absolute path),
-// selecting the row whose path matches `selectedPath` (else the first row).
-// Signals are blocked during the repopulate.
-void populateFontCombo(QComboBox* combo,
-                       const QString& selectedPath,
-                       bool includeDefault = true,
-                       const QString& defaultLabel = QString());
-
-enum class FontComboWidthMode {
-    StandardForm,
-    NarrowInspector,
-};
-
-// Keeps the shared font selector visually themed while tuning only its layout
-// budget for the host. Long names elide in the closed field; popup entries stay
-// complete. Every mode remains horizontally expanding so a layout cannot
-// collapse the visible control.
-void configureFontComboWidth(QComboBox* combo, FontComboWidthMode mode);
 
 // Overlay the user's difficulty-card font choice onto a parsed banner template's
 // `fonts` block (keys `display` / `body`). An absolute path is injected as a

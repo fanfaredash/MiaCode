@@ -33,7 +33,7 @@ Column {
 
             contentItem: Text {
                 text: (root.viewState.difficultySectionExpanded ? "▾  " : "▸  ")
-                    + qsTr("难度")
+                    + UiText.text("难度")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize
@@ -44,7 +44,7 @@ Column {
             Tooltip {
                 visible: sectionButton.hovered
                 text: root.viewState.difficultySectionExpanded
-                    ? qsTr("折叠难度") : qsTr("展开难度")
+                    ? UiText.text("折叠难度") : UiText.text("展开难度")
             }
         }
 
@@ -57,13 +57,13 @@ Column {
 
             IconButton {
                 glyph: "+"
-                tooltip: qsTr("添加难度")
+                tooltip: UiText.text("添加难度")
                 enabled: root.documentSession.availableDifficulties.length > 0
                 onClicked: addDifficultyMenu.open()
             }
             IconButton {
                 glyph: "−"
-                tooltip: qsTr("删除当前难度")
+                tooltip: UiText.text("删除当前难度")
                 enabled: root.documentSession.currentDifficultyId > 0
                 onClicked: removeDifficultyDialog.open()
             }
@@ -160,7 +160,7 @@ Column {
                         visible: difficultyButton.hovered
                         text: difficultyGroup.foldsBookmarks
                             ? (difficultyGroup.bookmarksExpanded
-                               ? qsTr("折叠书签") : qsTr("展开书签"))
+                               ? UiText.text("折叠书签") : UiText.text("展开书签"))
                             : difficultyGroup.modelData.label
                     }
                 }
@@ -177,8 +177,8 @@ Column {
                     // belonging to the row above it rather than sitting level
                     // with it.
                     textLeftPadding: 44
-                    text: qsTr("书签 %1：%2").arg(modelData.line).arg(modelData.title)
-                    Accessible.name: qsTr("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
+                    text: UiText.text("书签 %1：%2").arg(modelData.line).arg(modelData.title)
+                    Accessible.name: UiText.text("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
                     onClicked: {
                         root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
                         root.documentSession.navigateToBookmark(
@@ -211,17 +211,17 @@ Column {
         parent: Overlay.overlay
         anchors.centerIn: parent
         modal: true
-        title: qsTr("删除当前难度")
+        title: UiText.text("删除当前难度")
         footer: DialogFooter {
-            acceptText: qsTr("确定")
-            cancelText: qsTr("取消")
+            acceptText: UiText.text("确定")
+            cancelText: UiText.text("取消")
             onAccepted: removeDifficultyDialog.accept()
             onRejected: removeDifficultyDialog.reject()
         }
         onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
 
         Label {
-            text: qsTr("当前难度及其正文将从文档中删除。")
+            text: UiText.text("当前难度及其正文将从文档中删除。")
             color: Theme.colors.text.primary
         }
     }

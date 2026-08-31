@@ -31,35 +31,35 @@ Rectangle {
 
         IconButton {
             iconSource: Qt.resolvedUrl("icons/folder-open.svg")
-            tooltip: qsTr("打开")
+            tooltip: UiText.text("打开")
             onClicked: root.openRequested()
         }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/save.svg")
-            tooltip: qsTr("保存")
+            tooltip: UiText.text("保存")
             onClicked: root.saveRequested()
         }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/undo.svg")
-            tooltip: qsTr("撤销")
+            tooltip: UiText.text("撤销")
             enabled: root.canUndo
             onClicked: root.undoRequested()
         }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/redo.svg")
-            tooltip: qsTr("重做")
+            tooltip: UiText.text("重做")
             enabled: root.canRedo
             onClicked: root.redoRequested()
         }
         ToolSeparator {}
         IconButton {
             iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
-            tooltip: qsTr("音频设置")
+            tooltip: UiText.text("音频设置")
             onClicked: root.audioSettingsRequested()
         }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
-            tooltip: qsTr("预览设置")
+            tooltip: UiText.text("预览设置")
             onClicked: root.previewSettingsRequested()
         }
     }
@@ -72,13 +72,13 @@ Rectangle {
 
         IconButton {
             iconSource: Qt.resolvedUrl("icons/panel-left.svg")
-            tooltip: qsTr("切换侧栏 (Ctrl+B)")
+            tooltip: UiText.text("切换侧栏 (Ctrl+B)")
             active: root.sidebarActive
             onClicked: root.toggleSidebarRequested()
         }
         IconButton {
             iconSource: Qt.resolvedUrl("icons/panel-bottom.svg")
-            tooltip: qsTr("切换底部面板")
+            tooltip: UiText.text("切换底部面板")
             active: root.bottomActive
             onClicked: root.toggleBottomRequested()
         }

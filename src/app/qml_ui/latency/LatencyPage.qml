@@ -63,7 +63,7 @@ Rectangle {
 
             Card {
                 objectName: "latencyBpmCard"
-                title: qsTr("BPM")
+                title: UiText.text("BPM")
                 RowLayout {
                     Layout.fillWidth: true
                     AppTextField {
@@ -79,7 +79,7 @@ Rectangle {
                     }
                     AppButton {
                         objectName: "latencyDetectBpmButton"
-                        text: qsTr("自动检测")
+                        text: UiText.text("自动检测")
                         enabled: root.latency.trackAvailable
                         onClicked: root.latency.detectBpm()
                     }
@@ -94,7 +94,7 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: qsTr("计数拍")
+                        text: UiText.text("计数拍")
                         color: Theme.colors.text.secondary
                         font.family: Theme.uiFont
                     }
@@ -110,7 +110,7 @@ Rectangle {
                         }
                     }
                     Text {
-                        text: qsTr("解码器")
+                        text: UiText.text("解码器")
                         color: Theme.colors.text.secondary
                         font.family: Theme.uiFont
                     }
@@ -130,7 +130,7 @@ Rectangle {
 
             Card {
                 objectName: "latencyOffsetCard"
-                title: qsTr("偏移")
+                title: UiText.text("偏移")
                 RowLayout {
                     Layout.fillWidth: true
                     AppTextField {
@@ -146,7 +146,7 @@ Rectangle {
                     }
                     AppButton {
                         objectName: "latencyDetectOffsetButton"
-                        text: qsTr("自动检测")
+                        text: UiText.text("自动检测")
                         enabled: root.latency.trackAvailable
                         onClicked: root.latency.detectOffset()
                     }
@@ -162,13 +162,13 @@ Rectangle {
 
             Card {
                 objectName: "latencyAuditionCard"
-                title: qsTr("试听")
+                title: UiText.text("试听")
                 RowLayout {
                     Layout.fillWidth: true
                     AppButton {
                         objectName: "latencyAuditionButton"
                         emphasized: !root.latency.auditionRunning
-                        text: root.latency.auditionRunning ? qsTr("暂停") : qsTr("开始试听")
+                        text: root.latency.auditionRunning ? UiText.text("暂停") : UiText.text("开始试听")
                         onClicked: root.latency.toggleAudition()
                     }
                     Text {
@@ -179,7 +179,7 @@ Rectangle {
                     }
                     Item { Layout.fillWidth: true }
                     Text {
-                        text: qsTr("细分")
+                        text: UiText.text("细分")
                         color: Theme.colors.text.secondary
                         font.family: Theme.uiFont
                     }
@@ -199,7 +199,7 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: qsTr("音效音量")
+                        text: UiText.text("音效音量")
                         color: Theme.colors.text.secondary
                         font.family: Theme.uiFont
                     }

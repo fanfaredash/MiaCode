@@ -141,8 +141,10 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
   - Parser validation messages: `SimaiNativeValidationLocale` (English/Chinese/Japanese); derive
     it from `UiText::resolvedLanguage()` via `miacode::mainwindow::shared::uiValidationLocale()`.
     The zh/ja maps live in `SimaiNativeParser.Driver.cpp`.
-  - QML: the palette bridge exports `uiLanguage` ("en"/"zh"/"ja"); QML uses a local
-    `localized(en, zh, ja)` helper (see `BottomTabsQuickHost.qml`). No `qsTr` (no `.ts` shipped).
+  - QML: `src/app/qml_ui/UiText.qml` is the singleton visible-string entry. Every QML string uses
+    `UiText.text(source)`; `QmlUiSettings::localizedText` resolves it through the canonical maps
+    (including explicit v2-only source mappings). No `qsTr` or per-page localization helper is
+    allowed; `ui_text_locale_spec` scans every v2 QML file for this.
   - CJK UI font candidates per language live in `MainWindowShared.cpp` (`uiFont`/`uiAccentFont`)
     and `main.cpp`; add families when adding a language.
   - `ui_text_locale_spec` (CTest) enforces zhMap/jaMap key parity AND that every inline

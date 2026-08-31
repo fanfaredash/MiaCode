@@ -31,6 +31,7 @@ Item {
     readonly property var mediaTools: applicationContext.mediaTools
     readonly property var preferencesModel: applicationContext.preferencesModel
     readonly property var latency: applicationContext.latency
+    readonly property var coverExport: applicationContext.coverExport
     readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
@@ -226,6 +227,7 @@ Item {
                 editorController: root.editorController
                 editorSync: root.editorSync
                 latency: root.latency
+                coverSession: root.coverExport
                 compact: root.compact
                 onSettingsRequested: root.commands.openPreferences()
             }
@@ -267,25 +269,25 @@ Item {
 
     FileDialog {
         id: openFileDialog
-        title: qsTr("打开 simai 文件")
+        title: UiText.text("打开 simai 文件")
         fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Simai 文件 (*.txt *.simai)"), qsTr("所有文件 (*.*)")]
+        nameFilters: [UiText.text("Simai 文件 (*.txt *.simai)"), UiText.text("所有文件 (*.*)")]
         onAccepted: root.requestOpenFile(selectedFile)
     }
 
     FileDialog {
         id: saveFileDialog
-        title: qsTr("保存 simai 文件")
+        title: UiText.text("保存 simai 文件")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "txt"
-        nameFilters: [qsTr("Simai 文件 (*.txt *.simai)"), qsTr("所有文件 (*.*)")]
+        nameFilters: [UiText.text("Simai 文件 (*.txt *.simai)"), UiText.text("所有文件 (*.*)")]
         onAccepted: root.commands.saveDocumentAs(selectedFile)
     }
 
     ChoiceDialog {
         id: fileErrorDialog
         objectName: "shellFileErrorDialog"
-        choices: [{ id: "ok", label: qsTr("确定"), role: "accept" }]
+        choices: [{ id: "ok", label: UiText.text("确定"), role: "accept" }]
         dismissChoiceId: "ok"
     }
 
@@ -296,10 +298,10 @@ Item {
         id: unavailableFeatureDialog
         objectName: "shellUnavailableFeatureDialog"
         property string featureName: ""
-        title: qsTr("暂未更新支持")
-        message: qsTr("%1 尚未更新到 QML 界面。").arg(featureName)
-        details: qsTr("入口会保留，功能完成后将在此处提供。")
-        choices: [{ id: "ok", label: qsTr("确定"), role: "accept" }]
+        title: UiText.text("暂未更新支持")
+        message: UiText.text("%1 尚未更新到 QML 界面。").arg(featureName)
+        details: UiText.text("入口会保留，功能完成后将在此处提供。")
+        choices: [{ id: "ok", label: UiText.text("确定"), role: "accept" }]
         dismissChoiceId: "ok"
     }
 

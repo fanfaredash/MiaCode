@@ -41,7 +41,7 @@ Rectangle {
         Item { Layout.fillWidth: root.documentName.length === 0 }
 
         StatusText {
-            text: qsTr("行 %1，列 %2").arg(root.cursorLine).arg(root.cursorColumn)
+            text: UiText.text("行 %1，列 %2").arg(root.cursorLine).arg(root.cursorColumn)
             Layout.preferredWidth: implicitWidth
         }
         StatusText {

@@ -40,6 +40,9 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
         }
         emit preferencesRequested();
     });
+    connect(&backend, &MainWindow::coverExportRequested, this, [this](int difficultyId) {
+        openCoverExport(difficultyId);
+    });
 }
 
 QObject* QmlEditorPageHost::exportSession() const
@@ -158,12 +161,26 @@ void QmlEditorPageHost::openBatchExport()
     openVideoExportPage(QStringLiteral("batch"));
 }
 
-void QmlEditorPageHost::openCoverExport()
+bool QmlEditorPageHost::openCoverExport(int difficultyId)
 {
     if (backend_ == nullptr) {
-        return;
+        return false;
     }
-    backend_->onExportCover();
+    // A direct export-page → cover-page navigation must release the video
+    // session before cover becomes the owner of the Tools-menu difficulty.
+    // Going through leaveOverlayPage already does this; sidebar and menu routes
+    // intentionally do not, so make the transition explicit here.
+    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession_ != nullptr) {
+        backend_->qmlExportSession_->leave();
+    }
+    rememberResumeDifficulty();
+    const int selectedDifficultyId = difficultyId > 0 ? difficultyId : resumeDifficultyId_;
+    if (activePageId_ != QLatin1String("cover")) {
+        activePageId_ = QStringLiteral("cover");
+        emit activePageIdChanged();
+    }
+    emit coverPageRequested(selectedDifficultyId);
+    return true;
 }
 
 void QmlEditorPageHost::packAsZip()

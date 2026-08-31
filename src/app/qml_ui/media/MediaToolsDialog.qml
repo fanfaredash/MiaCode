@@ -11,12 +11,12 @@ Dialog {
 
     required property var mediaTools
 
-    title: qsTr("音视频处理")
+    title: UiText.text("音视频处理")
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(560, Overlay.overlay ? Overlay.overlay.width - 48 : 560)
     footer: DialogFooter {
-        cancelText: qsTr("关闭")
+        cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
     closePolicy: Popup.CloseOnEscape
@@ -57,8 +57,8 @@ Dialog {
 
         ToolRow {
             objectName: "mediaToolSampleRate"
-            label: qsTr("采样率")
-            description: qsTr("把 track.mp3 转换为 44100 Hz。")
+            label: UiText.text("采样率")
+            description: UiText.text("把 track.mp3 转换为 44100 Hz。")
             onClicked: {
                 root.close()
                 root.mediaTools.convertTrackTo44100Hz()
@@ -66,8 +66,8 @@ Dialog {
         }
         ToolRow {
             objectName: "mediaToolCompressVideo"
-            label: qsTr("压缩视频")
-            description: qsTr("把背景视频压缩到 20 MiB 以内。")
+            label: UiText.text("压缩视频")
+            description: UiText.text("把背景视频压缩到 20 MiB 以内。")
             onClicked: {
                 root.close()
                 root.mediaTools.compressBackgroundVideo()
@@ -75,8 +75,8 @@ Dialog {
         }
         ToolRow {
             objectName: "mediaToolBatchPv"
-            label: qsTr("批量压缩 PV")
-            description: qsTr("扫描一个目录，批量压缩其中的背景视频。")
+            label: UiText.text("批量压缩 PV")
+            description: UiText.text("扫描一个目录，批量压缩其中的背景视频。")
             onClicked: {
                 root.close()
                 batchPage.open()
@@ -84,8 +84,8 @@ Dialog {
         }
         ToolRow {
             objectName: "mediaToolPrependTrack"
-            label: qsTr("音轨前置静音")
-            description: qsTr("在 track.mp3 开头插入一段静音。")
+            label: UiText.text("音轨前置静音")
+            description: UiText.text("在 track.mp3 开头插入一段静音。")
             onClicked: {
                 root.close()
                 root.prependRequested(true)
@@ -93,8 +93,8 @@ Dialog {
         }
         ToolRow {
             objectName: "mediaToolPrependPv"
-            label: qsTr("PV 前置黑屏")
-            description: qsTr("在背景视频开头插入一段黑屏。")
+            label: UiText.text("PV 前置黑屏")
+            description: UiText.text("在背景视频开头插入一段黑屏。")
             onClicked: {
                 root.close()
                 root.prependRequested(false)

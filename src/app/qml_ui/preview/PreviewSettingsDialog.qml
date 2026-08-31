@@ -18,12 +18,12 @@ Dialog {
 
     property int activePage: 0
 
-    title: qsTr("预览设置")
+    title: UiText.text("预览设置")
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(640, Overlay.overlay ? Overlay.overlay.width - 48 : 640)
     footer: DialogFooter {
-        cancelText: qsTr("关闭")
+        cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
     closePolicy: Popup.CloseOnEscape
@@ -248,7 +248,7 @@ Dialog {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: qsTr("皮肤")
+                    text: UiText.text("皮肤")
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     Layout.preferredWidth: 120
@@ -260,11 +260,11 @@ Dialog {
                     model: root.previewSettings.skinOptions
                     textRole: "label"
                     currentIndex: root.previewSettings.skinIndex
-                    Accessible.name: qsTr("皮肤")
+                    Accessible.name: UiText.text("皮肤")
                     onActivated: root.previewSettings.skinIndex = currentIndex
                 }
                 AppButton {
-                    text: qsTr("打开目录")
+                    text: UiText.text("打开目录")
                     onClicked: root.previewSettings.openSkinDirectory()
                 }
             }
@@ -272,7 +272,7 @@ Dialog {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: qsTr("判定效果")
+                    text: UiText.text("判定效果")
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     Layout.preferredWidth: 120
@@ -283,7 +283,7 @@ Dialog {
                     Layout.fillWidth: true
                     model: root.previewSettings.skinJudgeEffectOptions
                     currentIndex: root.previewSettings.skinJudgeEffectIndex
-                    Accessible.name: qsTr("判定效果")
+                    Accessible.name: UiText.text("判定效果")
                     onActivated: root.previewSettings.skinJudgeEffectIndex = currentIndex
                 }
             }
@@ -291,7 +291,7 @@ Dialog {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: qsTr("判定线")
+                    text: UiText.text("判定线")
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     Layout.preferredWidth: 120
@@ -302,11 +302,11 @@ Dialog {
                     Layout.fillWidth: true
                     model: root.previewSettings.outlineOptions
                     currentIndex: root.previewSettings.outlineIndex
-                    Accessible.name: qsTr("判定线")
+                    Accessible.name: UiText.text("判定线")
                     onActivated: root.previewSettings.outlineIndex = currentIndex
                 }
                 AppButton {
-                    text: qsTr("打开目录")
+                    text: UiText.text("打开目录")
                     onClicked: root.previewSettings.openJudgeLineDirectory()
                 }
             }
@@ -319,7 +319,7 @@ Dialog {
             }
 
             Text {
-                text: qsTr("HUD 字体")
+                text: UiText.text("HUD 字体")
                 color: Theme.colors.text.active
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize
@@ -329,7 +329,7 @@ Dialog {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: qsTr("区域")
+                    text: UiText.text("区域")
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     Layout.preferredWidth: 120
@@ -341,7 +341,7 @@ Dialog {
                     model: root.previewSettings.hudFontAreaOptions
                     textRole: "label"
                     currentIndex: root.previewSettings.hudFontAreaIndex
-                    Accessible.name: qsTr("HUD 字体区域")
+                    Accessible.name: UiText.text("HUD 字体区域")
                     onActivated: root.previewSettings.hudFontAreaIndex = currentIndex
                 }
             }
@@ -349,7 +349,7 @@ Dialog {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: qsTr("字体")
+                    text: UiText.text("字体")
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     Layout.preferredWidth: 120
@@ -361,7 +361,7 @@ Dialog {
                     model: root.previewSettings.fontLibraryOptions
                     textRole: "label"
                     currentIndex: root.fontIndexForPath(model, root.previewSettings.hudFontPath)
-                    Accessible.name: qsTr("HUD 字体")
+                    Accessible.name: UiText.text("HUD 字体")
                     onActivated: root.previewSettings.hudFontPath = model[currentIndex].path
                 }
             }
@@ -393,15 +393,15 @@ Dialog {
                 AppButton {
                     id: previewHudFontImportButton
                     objectName: "previewHudFontImportButton"
-                    text: qsTr("导入字体…")
-                    Accessible.name: qsTr("导入 HUD 字体")
+                    text: UiText.text("导入字体…")
+                    Accessible.name: UiText.text("导入 HUD 字体")
                     onClicked: root.previewSettings.importHudFont()
                 }
                 AppButton {
                     id: previewHudFontResetButton
                     objectName: "previewHudFontResetButton"
-                    text: qsTr("还原")
-                    Accessible.name: qsTr("还原 HUD 字体")
+                    text: UiText.text("还原")
+                    Accessible.name: UiText.text("还原 HUD 字体")
                     onClicked: root.previewSettings.resetHudFont()
                 }
                 Item { Layout.fillWidth: true }

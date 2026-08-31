@@ -70,9 +70,13 @@ QVariantMap QmlUiSettings::aboutInfo() const
 QString QmlUiSettings::localizedText(const QString& key) const
 {
     const QString value = UiText::text(key);
-    // UiText echoes the key back when a translation is missing; report that as
-    // empty so callers can fall through to their own fallback.
-    return value == key ? QString() : value;
+    if (value != key) {
+        return value;
+    }
+    // QML originally supplied Chinese source strings rather than keys. Resolve
+    // them through the same canonical three-language catalog; no QTranslator or
+    // Qt Widgets UI path participates in this boundary.
+    return UiText::textForQmlSource(key);
 }
 
 bool QmlUiSettings::sidebarVisible() const { return sidebarVisible_; }

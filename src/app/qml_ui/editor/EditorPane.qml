@@ -159,7 +159,7 @@ Rectangle {
 
             AppTextField {
                 Layout.preferredWidth: 90
-                placeholderText: qsTr("等级")
+                placeholderText: UiText.text("等级")
                 text: root.documentSession.currentDifficultyLevel
                 onEditingFinished: root.documentSession.currentDifficultyLevel = text
             }
@@ -169,7 +169,7 @@ Rectangle {
                 property bool userEdited: false
 
                 Layout.fillWidth: true
-                placeholderText: qsTr("谱师")
+                placeholderText: UiText.text("谱师")
                 text: root.documentSession.currentDifficultyDesigner
                 // 文档打开、难度切换和焦点转移都可能结束编辑状态。只有收到
                 // TextInput 的真实编辑信号后，才把显示值提交给文档模型。
@@ -182,7 +182,7 @@ Rectangle {
             }
 
             AppButton {
-                text: qsTr("删除难度")
+                text: UiText.text("删除难度")
                 enabled: root.documentSession.currentDifficultyId > 0
                 onClicked: removeDifficultyDialog.open()
             }
@@ -203,8 +203,8 @@ Rectangle {
             anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             text: root.viewState.metadataEditorMode === 0
-                ? qsTr("字段源码")
-                : qsTr("表单")
+                ? UiText.text("字段源码")
+                : UiText.text("表单")
             onClicked: root.viewState.metadataEditorMode
                 = root.viewState.metadataEditorMode === 0 ? 1 : 0
         }
@@ -214,7 +214,7 @@ Rectangle {
             anchors.right: parent.right
             anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("统一谱师")
+            text: UiText.text("统一谱师")
 
             onToggled: {
                 if (checked === root.documentSession.unifiedDesignerEnabled)
@@ -299,7 +299,7 @@ Rectangle {
             spacing: 12
 
             Label {
-                text: qsTr("元数据")
+                text: UiText.text("元数据")
                 color: Theme.colors.text.primary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize + 2
@@ -307,37 +307,37 @@ Rectangle {
 
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("标题")
+                label: UiText.text("标题")
                 value: root.documentSession.metadataTitle
                 onCommitted: value => root.documentSession.metadataTitle = value
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("艺术家")
+                label: UiText.text("艺术家")
                 value: root.documentSession.metadataArtist
                 onCommitted: value => root.documentSession.metadataArtist = value
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("谱师")
+                label: UiText.text("谱师")
                 value: root.documentSession.metadataDesigner
                 onCommitted: value => root.documentSession.metadataDesigner = value
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("初始偏移")
+                label: UiText.text("初始偏移")
                 value: root.documentSession.metadataFirst
                 onCommitted: value => root.documentSession.metadataFirst = value
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("视频路径")
+                label: UiText.text("视频路径")
                 value: root.documentSession.metadataVideoPath
                 onCommitted: value => root.documentSession.metadataVideoPath = value
             }
 
             Label {
-                text: qsTr("其他字段")
+                text: UiText.text("其他字段")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize
@@ -346,7 +346,7 @@ Rectangle {
                 width: metadataColumn.width
                 height: 150
                 text: root.documentSession.metadataExtraText
-                placeholderText: qsTr("每行一个 &字段=值")
+                placeholderText: UiText.text("每行一个 &字段=值")
                 onActiveFocusChanged: {
                     if (!activeFocus)
                         root.documentSession.metadataExtraText = text
@@ -358,7 +358,7 @@ Rectangle {
     Label {
         anchors.centerIn: parent
         visible: !root.viewState.hasActiveEditor
-        text: qsTr("从左侧打开元数据或难度")
+        text: UiText.text("从左侧打开元数据或难度")
         color: Theme.colors.text.secondary
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
@@ -370,10 +370,10 @@ Rectangle {
 
         anchors.centerIn: parent
         modal: true
-        title: qsTr("选择统一谱师")
+        title: UiText.text("选择统一谱师")
         footer: DialogFooter {
-            acceptText: qsTr("确定")
-            cancelText: qsTr("取消")
+            acceptText: UiText.text("确定")
+            cancelText: UiText.text("取消")
             onAccepted: canonicalDesignerDialog.accept()
             onRejected: canonicalDesignerDialog.reject()
         }
@@ -384,7 +384,7 @@ Rectangle {
             spacing: 8
 
             Label {
-                text: qsTr("当前存在多个谱师名义，请选择要统一使用的值。")
+                text: UiText.text("当前存在多个谱师名义，请选择要统一使用的值。")
                 color: Theme.colors.text.primary
             }
             AppComboBox {
@@ -399,17 +399,17 @@ Rectangle {
         id: removeDifficultyDialog
         anchors.centerIn: parent
         modal: true
-        title: qsTr("删除当前难度")
+        title: UiText.text("删除当前难度")
         footer: DialogFooter {
-            acceptText: qsTr("确定")
-            cancelText: qsTr("取消")
+            acceptText: UiText.text("确定")
+            cancelText: UiText.text("取消")
             onAccepted: removeDifficultyDialog.accept()
             onRejected: removeDifficultyDialog.reject()
         }
         onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
 
         Label {
-            text: qsTr("当前难度及其正文将从文档中删除。")
+            text: UiText.text("当前难度及其正文将从文档中删除。")
             color: Theme.colors.text.primary
         }
     }

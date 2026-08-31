@@ -23,9 +23,9 @@ Rectangle {
 
     Accessible.role: Accessible.List
     Accessible.name: bookmarked(activeLine)
-        ? qsTr("书签与行号：第 %1 行有书签").arg(activeLine)
-        : qsTr("书签与行号：第 %1 行无书签").arg(activeLine)
-    Accessible.description: qsTr("Enter 跳转；Ctrl+Shift+B 创建；Delete 删除；F2 重命名；右键打开书签菜单")
+        ? UiText.text("书签与行号：第 %1 行有书签").arg(activeLine)
+        : UiText.text("书签与行号：第 %1 行无书签").arg(activeLine)
+    Accessible.description: UiText.text("Enter 跳转；Ctrl+Shift+B 创建；Delete 删除；F2 重命名；右键打开书签菜单")
     activeFocusOnTab: true
     focus: false
 
@@ -181,17 +181,17 @@ Rectangle {
         id: bookmarkMenu
         property int line: 1
         MenuItem {
-            text: qsTr("跳转到此行")
+            text: UiText.text("跳转到此行")
             onTriggered: root.jumpRequested(bookmarkMenu.line)
         }
         MenuItem {
-            text: root.bookmarked(bookmarkMenu.line) ? qsTr("删除书签") : qsTr("创建书签")
+            text: root.bookmarked(bookmarkMenu.line) ? UiText.text("删除书签") : UiText.text("创建书签")
             onTriggered: root.bookmarked(bookmarkMenu.line)
                          ? root.deleteRequested(bookmarkMenu.line)
                          : root.createRequested(bookmarkMenu.line)
         }
         MenuItem {
-            text: qsTr("重命名书签")
+            text: UiText.text("重命名书签")
             enabled: root.bookmarked(bookmarkMenu.line)
             onTriggered: root.renameRequested(bookmarkMenu.line)
         }

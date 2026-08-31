@@ -221,6 +221,29 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    // QML has one application-owned localization route: the UiText singleton.
+    // `qsTr` would create an unmanaged second catalog and silently return source
+    // Chinese in English/Japanese sessions. Keep the scan deliberately broad so
+    // a new v2 page cannot opt out by accident.
+    int qmlScanned = 0;
+    QStringList qmlTrLeftovers;
+    QDirIterator qmlIt(root + QStringLiteral("/src/app/qml_ui"),
+                       {QStringLiteral("*.qml")}, QDir::Files,
+                       QDirIterator::Subdirectories);
+    while (qmlIt.hasNext()) {
+        const QString path = qmlIt.next();
+        ++qmlScanned;
+        if (readFile(path).contains(QStringLiteral("qsTr("))) {
+            qmlTrLeftovers.append(QDir(root).relativeFilePath(path));
+        }
+    }
+    if (qmlScanned == 0 || !qmlTrLeftovers.isEmpty()) {
+        ok = false;
+        err << "ui_text_locale_spec: QML must use UiText.text rather than qsTr; "
+            << "scanned " << qmlScanned << ", leftovers: "
+            << qmlTrLeftovers.join(QStringLiteral(", ")) << Qt::endl;
+    }
+
     if (!missingKeys.isEmpty()) {
         ok = false;
         QStringList sorted(missingKeys.begin(), missingKeys.end());
@@ -254,6 +277,6 @@ int main(int argc, char* argv[])
 
     out << "ui_text_locale_spec ok (" << literalKeys.size()
         << " literal key lookup(s) checked across " << scanned
-        << " source files plus shortcuts.json)" << Qt::endl;
+        << " source files, " << qmlScanned << " QML files, plus shortcuts.json)" << Qt::endl;
     return 0;
 }

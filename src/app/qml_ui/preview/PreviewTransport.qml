@@ -118,14 +118,14 @@ Rectangle {
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl("icons/stop.svg")
-            tooltip: qsTr("停止")
+            tooltip: UiText.text("停止")
             onClicked: root.previewSession.stop()
         }
         IconButton {
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl(root.previewSession.playing ? "icons/pause.svg" : "icons/play.svg")
-            tooltip: root.previewSession.playing ? qsTr("暂停") : qsTr("播放")
+            tooltip: root.previewSession.playing ? UiText.text("暂停") : UiText.text("播放")
             onClicked: root.previewSession.playing = !root.previewSession.playing
         }
 
@@ -149,11 +149,11 @@ Rectangle {
             id: rateButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
-            text: qsTr("%1x").arg(root.previewSession.rate)
+            text: UiText.text("%1x").arg(root.previewSession.rate)
             sizeToLabels: rateMenu.rateLabels
-            tooltip: qsTr("播放速度")
+            tooltip: UiText.text("播放速度")
             expanded: rateMenu.visible
-            Accessible.description: qsTr("打开播放速度预设")
+            Accessible.description: UiText.text("打开播放速度预设")
             onClicked: {
                 if (rateMenu.visible) {
                     rateMenu.close()
@@ -170,7 +170,7 @@ Rectangle {
             Layout.preferredHeight: implicitHeight
             visible: !root.exportPageActive
             iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
-            tooltip: qsTr("全屏预览")
+            tooltip: UiText.text("全屏预览")
             onClicked: root.fullscreenRequested()
         }
     }

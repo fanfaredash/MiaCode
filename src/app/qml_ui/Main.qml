@@ -70,6 +70,8 @@ ApplicationWindow {
         value: window.applicationContext.preferences
     }
 
+    Component.onCompleted: UiText.provider = window.applicationContext.preferences
+
     // Two-phase close. The unsaved-changes prompt is a QML dialog, so the first
     // close attempt cannot be answered here — it is refused, the question is
     // asked, and the window closes itself once the answer comes back. Telling

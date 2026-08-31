@@ -19,7 +19,7 @@ ListView {
     delegate: ItemDelegate {
         required property var modelData
         width: ListView.view.width
-        text: qsTr("第 %1 行：%2").arg(modelData.line).arg(modelData.title)
+        text: UiText.text("第 %1 行：%2").arg(modelData.line).arg(modelData.title)
         onClicked: editor.jumpToLine(modelData.line)
         Accessible.name: text
         Accessible.role: Accessible.ListItem

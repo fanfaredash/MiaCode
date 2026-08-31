@@ -321,8 +321,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/HudFontSettings.cpp
     src/tools/video_export/FontLibrary.h
     src/tools/video_export/FontLibrary.cpp
-    src/tools/video_export/CardFontSettings.h
-    src/tools/video_export/CardFontSettings.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
     src/tools/video_export/VideoExportEncoder.cpp
@@ -360,26 +358,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverCompositionState.h
     src/tools/cover_export/CoverCompositionState.cpp
-    src/tools/cover_export/CoverCompositionPersistenceGuard.h
-    src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
-    src/tools/cover_export/CoverLayerListModel.h
-    src/tools/cover_export/CoverLayerListModel.cpp
-    src/tools/cover_export/CoverLayerListPanel.h
-    src/tools/cover_export/CoverLayerListPanel.cpp
-    src/tools/cover_export/CoverInspectorPanel.h
-    src/tools/cover_export/CoverInspectorPanel.cpp
-    src/tools/cover_export/CoverFramePickerPanel.h
-    src/tools/cover_export/CoverFramePickerPanel.cpp
-    src/tools/cover_export/CoverStudioPanel.h
-    src/tools/cover_export/CoverStudioPanel.cpp
-    src/tools/cover_export/CoverStudioWindow.h
-    src/tools/cover_export/CoverStudioWindow.cpp
-    src/tools/cover_export/CoverComposerView.h
-    src/tools/cover_export/CoverComposerView.cpp
+    src/tools/cover_export/CoverCompositeRenderer.h
+    src/tools/cover_export/CoverCompositeRenderer.cpp
     src/tools/cover_export/SceneFrameRenderer.h
     src/tools/cover_export/SceneFrameRenderer.cpp
-    src/tools/cover_export/ExportCoverDialog.h
-    src/tools/cover_export/ExportCoverDialog.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewQuickD3D11ExportSession.h
@@ -632,6 +614,7 @@ endif()
 # QTP0001 NEW embeds this module at :/qt/qml/MiaCode/UI/.
 set(MIACODE_UI_QML_FILES
     src/app/qml_ui/Main.qml
+    src/app/qml_ui/UiText.qml
     src/app/qml_ui/ViewState.qml
     src/app/qml_ui/theme/Theme.qml
     src/app/qml_ui/components/IconButton.qml
@@ -681,6 +664,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/sidebar/ToolsSidebarPage.qml
     src/app/qml_ui/export/ExportRangeSelector.qml
     src/app/qml_ui/export/ExportVideoPage.qml
+    src/app/qml_ui/export/CoverExportPage.qml
     src/app/qml_ui/editor/EditorPane.qml
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
@@ -712,6 +696,7 @@ foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
 endforeach()
 set_source_files_properties(
     src/app/qml_ui/theme/Theme.qml
+    src/app/qml_ui/UiText.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -788,6 +773,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlEditorInputBridge.h
         src/app/qml_ui/export/QmlExportSession.cpp
         src/app/qml_ui/export/QmlExportSession.h
+        src/app/qml_ui/export/QmlCoverExportSession.cpp
+        src/app/qml_ui/export/QmlCoverExportSession.h
         src/app/qml_ui/QmlUiWindowChrome.cpp
         src/app/qml_ui/QmlUiWindowChrome.h
         src/app/qml_ui/QmlUiBootstrap.cpp
@@ -1231,7 +1218,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
     foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
         get_filename_component(_qml_name "${qml_file}" NAME)
         get_filename_component(_qml_type "${qml_file}" NAME_WE)
-        if (_qml_name STREQUAL "Theme.qml")
+        if (_qml_name STREQUAL "Theme.qml" OR _qml_name STREQUAL "UiText.qml")
             string(APPEND _miacode_qml_spec_qmldir "singleton ${_qml_type} 1.0 ${_qml_name}\n")
         else()
             string(APPEND _miacode_qml_spec_qmldir "${_qml_type} 1.0 ${_qml_name}\n")
@@ -1497,19 +1484,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/app/ui src/extensions
     )
 
-    miacode_add_dev_tool(font_combo_width_spec TEST
-        SOURCES
-            src/tools/video_export/FontComboWidthSpec.cpp
-            src/tools/video_export/FontLibrary.h
-            src/tools/video_export/FontLibrary.cpp
-            src/app/ui/UiText.h
-            src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/extensions
-    )
-
     miacode_add_dev_tool(muri_spec TEST
         SOURCES
             src/tools/muri/MuriSpec.cpp
@@ -1746,6 +1720,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src
     )
     target_compile_definitions(qml_export_font_contract_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(qml_cover_export_contract_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlCoverExportContractSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(qml_cover_export_contract_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(qml_export_video_page_spec TEST

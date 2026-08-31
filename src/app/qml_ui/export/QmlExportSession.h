@@ -190,6 +190,11 @@ public:
     QVariantList batchDifficultyChecks() const;
     QString batchOutputDirectory() const { return batchOutputDirectory_; }
 
+    // Non-visual seed used by the QML cover composer. Keeping this on the
+    // existing export service prevents the new cover page from reaching into
+    // MainWindow or recreating a hidden Widgets dialog path.
+    VideoExportTask coverTaskForDifficulty(int difficultyId) const;
+
     void enter(int previousActiveDifficultyId);
     void leave();
 

@@ -18,7 +18,6 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "tools/cover_export/CoverStudioWindow.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
@@ -556,48 +555,6 @@ bool MainWindow::currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const
         return true;
     }
     return false;
-}
-
-void MainWindow::ExportSection::onExportCover(int difficultyId)
-{
-    MC_OP("MainWindow::ExportSection::onExportCover");
-    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
-        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
-        _mc_op_.fail(QStringLiteral("no target difficulty"));
-        owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出封面。"));
-        return;
-    }
-    if (owner_.previewCanvas_ == nullptr) {
-        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
-        owner_.statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出封面。"));
-        return;
-    }
-    if (owner_.qtPreviewPlaying_) {
-        owner_.onTogglePreviewPause();
-    }
-
-    const VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
-
-    // Seed size: the video-export dialog's persisted resolution (the cover
-    // dialog's own app preferences override it when present).
-    const QJsonObject videoPrefs = miacode::video_export::loadDialogPreferences();
-    QSize seedSize(videoPrefs.value(QStringLiteral("resolution_width")).toInt(1024),
-                   videoPrefs.value(QStringLiteral("resolution_height")).toInt(1024));
-    if (seedSize.width() <= 0 || seedSize.height() <= 0) {
-        seedSize = QSize(1024, 1024);
-    }
-
-    // The cover lands next to the chart (the same base the video export resolves
-    // relative output paths against).
-    const QFileInfo chartInfo(task.chartPath);
-    const QString outputDirectory = !chartInfo.absoluteDir().path().isEmpty()
-        ? chartInfo.absoluteDir().absolutePath()
-        : QDir::currentPath();
-    auto* window = new miacode::cover_export::CoverStudioWindow(
-        task, seedSize, outputDirectory, UiDialogs::effectiveParentWidget(&owner_));
-    window->setAttribute(Qt::WA_DeleteOnClose, true);
-    window->show();
 }
 
 // Opens the pure-QML export centre on its single-export tab. Extensions reach

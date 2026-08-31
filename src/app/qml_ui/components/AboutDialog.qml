@@ -17,7 +17,7 @@ Dialog {
     anchors.centerIn: Overlay.overlay
     width: Math.min(420, Overlay.overlay ? Overlay.overlay.width - 48 : 420)
     footer: DialogFooter {
-        acceptText: qsTr("确定")
+        acceptText: UiText.text("确定")
         acceptEmphasized: true
         onAccepted: root.accept()
     }

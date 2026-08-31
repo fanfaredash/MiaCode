@@ -21,6 +21,7 @@ Item {
     required property var editorController
     required property var editorSync
     required property var latency
+    required property var coverSession
     property bool compact: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
@@ -30,6 +31,8 @@ Item {
         root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
+    readonly property bool coverExportActive:
+        root.pages.activePageId === "cover"
     readonly property real previewEditorAvailableWidth:
         Math.max(1, workspaceSplit.width - (preview.visible ? 4 : 0))
     signal settingsRequested()
@@ -198,6 +201,13 @@ Item {
                         previewSession: root.previewSession
                     }
 
+                    CoverExportPage {
+                        anchors.fill: parent
+                        visible: root.coverExportActive
+                        pages: root.pages
+                        coverSession: root.coverSession
+                    }
+
                     LatencyPage {
                         id: latencyPage
                         anchors.fill: parent
@@ -280,7 +290,7 @@ Item {
             anchors.top: parent.top
             anchors.margins: 12
             iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
-            tooltip: qsTr("退出全屏预览")
+            tooltip: UiText.text("退出全屏预览")
             onClicked: fullscreenPreview.visible = false
         }
     }

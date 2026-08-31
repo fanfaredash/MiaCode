@@ -12,7 +12,7 @@ AppMenu {
         const values = stateBridge ? stateBridge.zoomPresetValues : []
         const labels = []
         for (let i = 0; i < values.length; i++)
-            labels.push(qsTr("%1%").arg(Math.round(values[i] * 100)))
+            labels.push(UiText.text("%1%").arg(Math.round(values[i] * 100)))
         return labels
     }
 
@@ -22,7 +22,7 @@ AppMenu {
         delegate: AppMenuItem {
             required property var modelData
 
-            text: qsTr("%1%").arg(Math.round(modelData * 100))
+            text: UiText.text("%1%").arg(Math.round(modelData * 100))
             checkable: true
             checked: root.stateBridge
                      && Math.abs(root.stateBridge.zoomScale - modelData) <= 1e-6

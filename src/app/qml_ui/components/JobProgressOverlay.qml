@@ -86,8 +86,8 @@ Item {
                     visible: !!root.progress && root.progress.cancellable
                     enabled: !!root.progress && !root.progress.cancelRequested
                     text: root.progress && root.progress.cancelRequested
-                          ? qsTr("正在取消…")
-                          : qsTr("取消")
+                          ? UiText.text("正在取消…")
+                          : UiText.text("取消")
                     onClicked: if (root.progress) root.progress.requestCancel()
                 }
             }

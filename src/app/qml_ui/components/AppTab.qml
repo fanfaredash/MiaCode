@@ -113,7 +113,7 @@ Item {
                     enabled: opacity > 0
                     hoverEnabled: true
                     focusPolicy: Qt.TabFocus
-                    Accessible.name: qsTr("关闭 %1").arg(root.text)
+                    Accessible.name: UiText.text("关闭 %1").arg(root.text)
                     onClicked: root.closeRequested()
 
                     contentItem: ControlsImpl.IconImage {
@@ -131,7 +131,7 @@ Item {
                     }
                     Tooltip {
                         visible: closeButton.hovered
-                        text: qsTr("关闭 (Ctrl+W)")
+                        text: UiText.text("关闭 (Ctrl+W)")
                     }
                 }
             }

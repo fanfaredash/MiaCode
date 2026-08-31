@@ -241,7 +241,7 @@ Rectangle {
 
     function createBookmarkAtLine(line) {
         return applyEditorTransaction(editorController.createBookmarkForQml(
-            sourceArea.text, line, qsTr("书签")))
+            sourceArea.text, line, UiText.text("书签")))
     }
     function createBookmarkAtCurrentLine() {
         return createBookmarkAtLine(activeLine)
@@ -342,10 +342,10 @@ Rectangle {
     // Human-readable summary of what normalize will act on.
     function selectionDescription() {
         if (sourceArea.selectionStart === sourceArea.selectionEnd)
-            return qsTr("将规范化整份谱面正文。")
+            return UiText.text("将规范化整份谱面正文。")
         const startLine = sourceArea.text.substring(0, sourceArea.selectionStart).split("\n").length
         const endLine = sourceArea.text.substring(0, sourceArea.selectionEnd).split("\n").length
-        return qsTr("将规范化选中的第 %1 - %2 行。").arg(startLine).arg(endLine)
+        return UiText.text("将规范化选中的第 %1 - %2 行。").arg(startLine).arg(endLine)
     }
 
     function applyNormalization(options) {
@@ -432,10 +432,10 @@ Rectangle {
         id: bookmarkTitleDialog
         parent: Overlay.overlay
         modal: true
-        title: qsTr("重命名书签")
+        title: UiText.text("重命名书签")
         footer: DialogFooter {
-            acceptText: qsTr("确定")
-            cancelText: qsTr("取消")
+            acceptText: UiText.text("确定")
+            cancelText: UiText.text("取消")
             onAccepted: bookmarkTitleDialog.accept()
             onRejected: bookmarkTitleDialog.reject()
         }
@@ -443,7 +443,7 @@ Rectangle {
         AppTextField {
             id: bookmarkTitleField
             width: 260
-            Accessible.name: qsTr("书签名称")
+            Accessible.name: UiText.text("书签名称")
         }
     }
 
@@ -459,26 +459,26 @@ Rectangle {
             sourceArea.selectedText.length > 0 && !root.metadataMode
 
         AppMenuItem {
-            text: qsTr("剪切")
+            text: UiText.text("剪切")
             enabled: sourceArea.selectedText.length > 0
             onTriggered: sourceArea.cut()
         }
         AppMenuItem {
-            text: qsTr("复制")
+            text: UiText.text("复制")
             enabled: sourceArea.selectedText.length > 0
             onTriggered: sourceArea.copy()
         }
         AppMenuItem {
-            text: qsTr("粘贴")
+            text: UiText.text("粘贴")
             onTriggered: root.applyPastePayload(root.editorController.clipboardText())
         }
         AppMenuSeparator {}
         AppMenuItem {
-            text: qsTr("全选")
+            text: UiText.text("全选")
             onTriggered: root.selectAll()
         }
         AppMenuItem {
-            text: qsTr("查找与替换")
+            text: UiText.text("查找与替换")
             onTriggered: root.openFindReplace()
         }
         AppMenuSeparator {}

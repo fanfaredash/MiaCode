@@ -26,9 +26,6 @@ public:
     // selected badge — its stack page keeps activeDifficultyId_ == 0, so an
     // explicit id is the only way to target a difficulty from there.
     void onExportPreviewVideo(int difficultyId = 0);
-    // Export-page card / Tools menu → 导出封面: opens the cover composer
-    // directly (no video-export dialog in between).
-    void onExportCover(int difficultyId = 0);
     // Batch export is inherently multi-difficulty; the explicit id only
     // seeds the dialog's default difficulty token.
     void onBatchExportPreviewVideo(int difficultyId = 0);

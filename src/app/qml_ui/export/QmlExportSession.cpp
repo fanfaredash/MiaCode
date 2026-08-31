@@ -122,6 +122,14 @@ QVariantList QmlExportSession::backgroundScaleModeOptions() const
     };
 }
 
+VideoExportTask QmlExportSession::coverTaskForDifficulty(int difficultyId) const
+{
+    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+        return VideoExportTask{};
+    }
+    return backend_->exportSection_->buildVideoExportSeedTaskPublic(difficultyId);
+}
+
 int QmlExportSession::presetIndex() const
 {
     return task_.preset == VideoExportPreset::Fast ? 0 : 1;

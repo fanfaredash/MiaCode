@@ -96,7 +96,7 @@ Popup {
         ModeRow {
             id: regularRow
             width: body.width
-            label: qsTr("常规渲染")
+            label: UiText.text("常规渲染")
             active: !root.previewSession.muriCheckEnabled
             onClicked: root.previewSession.setMuriCheckEnabled(false)
         }
@@ -104,7 +104,7 @@ Popup {
         ModeRow {
             id: muriRow
             width: body.width
-            label: qsTr("无理检测")
+            label: UiText.text("无理检测")
             active: root.previewSession.muriCheckEnabled
             onClicked: root.previewSession.setMuriCheckEnabled(true)
         }
@@ -130,7 +130,7 @@ Popup {
             width: body.width
             leftPadding: 12
             rightPadding: 16
-            text: qsTr("平滑星星消去动画")
+            text: UiText.text("平滑星星消去动画")
             checked: root.previewSession.smoothStarErase
             onToggled: {
                 if (checked === root.previewSession.smoothStarErase)
@@ -158,7 +158,7 @@ Popup {
 
             Text {
                 width: parent.width - parent.leftPadding - parent.rightPadding
-                text: qsTr("无理判定半径")
+                text: UiText.text("无理判定半径")
                 color: Theme.colors.text.primary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize
@@ -167,7 +167,7 @@ Popup {
             Text {
                 width: parent.width - parent.leftPadding - parent.rightPadding
                 wrapMode: Text.Wrap
-                text: qsTr("A / B / C / D / E 各区半径不同，暂不可调。")
+                text: UiText.text("A / B / C / D / E 各区半径不同，暂不可调。")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize

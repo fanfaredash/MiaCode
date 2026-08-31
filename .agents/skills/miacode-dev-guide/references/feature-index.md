@@ -59,8 +59,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   same deferred lambda once the build returns.
 - Default UI (v2): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
   `MiaCode.UI`). It still owns a hidden `MainWindow` compatibility backend; the
-  `QuickShellController` is deleted. Export uses `QmlExportSession` + `ExportVideoPage.qml`;
-  `QmlEditorPageHost` routes export/latency and leave transitions, but those transitions still call
+  `QuickShellController` is deleted. Video export uses `QmlExportSession` + `ExportVideoPage.qml`;
+  cover export uses `export/QmlCoverExportSession` + `CoverExportPage.qml` and a pure Quick
+  off-screen compositor (`tools/cover_export/CoverCompositeRenderer`). `QmlEditorPageHost` routes
+  export/cover/latency and leave transitions, but those transitions still call
   `DocumentSection::switchTo*Field()` and therefore remain coupled to hidden `editorStack_` state.
   `QmlDocumentModel` submits body, metadata, difficulty and
   file transactions to `app/v2/ChartWorkspace` / `ChartWorkspaceFileService`; the public
@@ -721,6 +723,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the Export hub page's 打包ZIP card (§8) — same slot, in-page entry (2026-06-11)**.
 
 ## 8c. Cover (difficulty-card) export — `src/tools/cover_export/`
+
+> **Current implementation (2026-08-31; supersedes the historical Widget-host details below):**
+> `CoverExportPage.qml` is the only interactive cover surface. `QmlEditorPageHost::openCoverExport`
+> selects its `cover` page and `MainWindow::onExportCover` only emits `coverExportRequested`; neither
+> creates a window. `QmlCoverExportSession` owns the page-scoped layout model, composition/preset
+> persistence, selected difficulty, font/image/folder requests through `UiRequestService`, and chart
+> frame generation through `SceneFrameRenderer`. `CoverCompositeRenderer` registers the
+> `coverchart` image provider and grabs the same `CoverComposer.qml` in an in-process plain
+> `QQuickWindow`; it must remain QWidget-free. The deleted Widget workbench types
+> (`CoverComposerView`, `CoverStudioPanel`, `CoverStudioWindow`, `ExportCoverDialog`) must never
+> be reintroduced. `qml_cover_export_contract_spec` guards this boundary. `CoverComposer.qml` still
+> owns normalized layer geometry and needs `resources/intro.qrc` refreshed after source edits.
 
 - Renders the maimai difficulty banner card (`src/intro/qml/MaimaiBannerCard.qml`,
   the same card the intro pre-roll composites) to a single still image — the
