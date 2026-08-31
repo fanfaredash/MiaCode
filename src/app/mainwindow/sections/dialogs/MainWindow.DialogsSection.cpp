@@ -25,6 +25,23 @@ void MainWindow::onAbout()
     dialogsSection_->onAbout();
 }
 
+// ---- miacode::v2::MediaToolsEngine ----
+// The two menu-action names stay: BootstrapAndMenus connects QActions to them.
+void MainWindow::convertTrackTo44100Hz()
+{
+    onConvertTrackTo44100Hz();
+}
+
+void MainWindow::compressBackgroundVideo()
+{
+    onCompressBackgroundVideo();
+}
+
+QVariantMap MainWindow::mediaBlankContext(bool isTrack)
+{
+    return prependMediaBlankContext(isTrack);
+}
+
 QVariantMap MainWindow::prependMediaBlankContext(bool isTrack)
 {
     return dialogsSection_->prependMediaBlankContext(

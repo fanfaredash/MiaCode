@@ -579,6 +579,14 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          至此 `MainWindow.h` 对 QML 类型的 friend 授权全部为 0，只剩 widget 侧的
          `LatencySandboxController`（随阶段 4 处理）。
          槽位纪律与导出引擎一致：装配对象持槽，窗口在 `~MainWindow` 最开头撤销。
+     13. **音视频处理改由 `miacode::v2::MediaToolsEngine` 承接（方法 118 → 112）**。
+         六个入口（两个转换 + 前置空白的上下文/检测/还原/应用）改成接口，`MainWindow` 实现。
+         `isTrack` 一个参数区分音轨与背景视频，两条流程本来就同形，不再翻倍接口面。
+         PV 批量队列仍归 `QmlMediaToolsModel` 自己——它是唯一有跨次开启状态的部分。
+         过程中撞到一个真实的名字遮蔽：`MainWindow.Dialogs.MediaTools.cpp` 里有一个同名的
+         文件内 ffmpeg 辅助函数 `convertTrackTo44100Hz(...)`，新增的成员函数会在嵌套 section
+         类里把它遮住，已加 `::` 限定并注明原因。
+
      12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
          它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
          先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets
@@ -755,9 +763,13 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - [x] **预览外观与持久化**：皮肤、判定特效、判定线，预览设置与导出页共用同一份状态，重启后保留。
 - [x] **页面切换**：导出页进/出/再进；未保存改动时选「取消」不再错误地显示导出页。
 - [x] **导出运行与取消**、**HUD 字体**、**关闭流程**、**校验语言**、**文件对话框与进度**。
-- [ ] **片头音**（换文件后试听、音量、重启后保留）—— **未验收**，本轮唯一没有确认的一项。
-      它是本轮唯一改了「谁负责重载音色库」的路径（`setIntroSoundFileName` 只发布，
-      窗口响应 `introSoundChanged` 调 `applyPreviewSfxLevels(reloadAssets=true)`）。
+- [ ] **片头音**（换文件后试听、音量、重启后保留）—— **尚未开始测试**（所有者 2026-09-01 澄清：
+      是没测，不是测出问题）。它是本轮唯一改了「谁负责重载音色库」的路径
+      （`setIntroSoundFileName` 只发布，窗口响应 `introSoundChanged` 调
+      `applyPreviewSfxLevels(reloadAssets=true)`），所以值得单独走一遍。
+      静态复核结论：`task_.introSoundFileName` 由 `ExportFlow.cpp` 的 seed task 从外观状态取，
+      `applyVideoExportPreferences` 不会从 JSON 覆盖它，所以任务副本与外观状态不会分叉，
+      新旧两条 guard 等价；重载的 runtime、调用顺序、同步性也都与改动前一致。
 
 **所有者同时报告：「导出已取消」仍是 Qt 风格弹窗。已定位并修复，见 §7.-4。**
 

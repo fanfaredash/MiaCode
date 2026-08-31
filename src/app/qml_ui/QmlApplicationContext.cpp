@@ -21,7 +21,8 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)
-    , mediaTools_(backend, services.uiRequests(), services.jobProgress(), this)
+    , mediaTools_(backend, services.uiRequests(), services.jobProgress(),
+                  services.mediaToolsEngineSlot(), this)
     , preferencesModel_(backend, preferences_, this)
     , audioSettings_(backend, this)
     , previewSettings_(backend, services.uiRequests(), services.previewAppearance(), this)

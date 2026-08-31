@@ -18,11 +18,13 @@ namespace miacode::qml_ui {
 QmlMediaToolsModel::QmlMediaToolsModel(MainWindow& backend,
                                        miacode::v2::UiRequestService& uiRequests,
                                        miacode::v2::JobProgressService& jobProgress,
+                                       miacode::v2::MediaToolsEngine*& engineSlot,
                                        QObject* parent)
     : QObject(parent)
     , backend_(&backend)
     , uiRequests_(&uiRequests)
     , jobProgress_(&jobProgress)
+    , engineSlot_(&engineSlot)
 {
     batchSummary_ = UiText::text(QStringLiteral("media_tools.batch_pv_empty"));
 }
@@ -58,39 +60,39 @@ QVariantList QmlMediaToolsModel::batchJobs() const
 
 void QmlMediaToolsModel::convertTrackTo44100Hz()
 {
-    if (backend_ != nullptr) {
-        backend_->onConvertTrackTo44100Hz();
+    if (engine() != nullptr) {
+        engine()->convertTrackTo44100Hz();
     }
 }
 
 void QmlMediaToolsModel::compressBackgroundVideo()
 {
-    if (backend_ != nullptr) {
-        backend_->onCompressBackgroundVideo();
+    if (engine() != nullptr) {
+        engine()->compressBackgroundVideo();
     }
 }
 
 QVariantMap QmlMediaToolsModel::prependContext(bool isTrack)
 {
-    return backend_ != nullptr ? backend_->prependMediaBlankContext(isTrack) : QVariantMap();
+    return engine() != nullptr ? engine()->mediaBlankContext(isTrack) : QVariantMap();
 }
 
 QVariantMap QmlMediaToolsModel::detectPrependTiming(bool isTrack)
 {
-    return backend_ != nullptr ? backend_->detectMediaBlankTiming(isTrack) : QVariantMap();
+    return engine() != nullptr ? engine()->detectMediaBlankTiming(isTrack) : QVariantMap();
 }
 
 void QmlMediaToolsModel::restorePrependBackup(bool isTrack)
 {
-    if (backend_ != nullptr) {
-        backend_->restoreMediaBlankBackup(isTrack);
+    if (engine() != nullptr) {
+        engine()->restoreMediaBlankBackup(isTrack);
     }
 }
 
 void QmlMediaToolsModel::applyPrepend(bool isTrack, double beats, double bpm)
 {
-    if (backend_ != nullptr) {
-        backend_->applyMediaBlank(isTrack, beats, bpm);
+    if (engine() != nullptr) {
+        engine()->applyMediaBlank(isTrack, beats, bpm);
     }
 }
 

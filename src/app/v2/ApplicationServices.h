@@ -17,6 +17,7 @@ namespace miacode::v2 {
 // VideoExportTask definition into every consumer of the assembly.
 class ExportEngine;
 class EditorPageRouter;
+class MediaToolsEngine;
 
 // The parser validation locale matching the session UI language.
 //
@@ -93,6 +94,10 @@ public:
     EditorPageRouter* editorPageRouter() const { return editorPageRouter_; }
     void setEditorPageRouter(EditorPageRouter* router) { editorPageRouter_ = router; }
 
+    MediaToolsEngine*& mediaToolsEngineSlot() { return mediaToolsEngine_; }
+    MediaToolsEngine* mediaToolsEngine() const { return mediaToolsEngine_; }
+    void setMediaToolsEngine(MediaToolsEngine* engine) { mediaToolsEngine_ = engine; }
+
     SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
 
 private:
@@ -109,6 +114,7 @@ private:
     PreviewAppearanceState previewAppearance_;
     ExportEngine* exportEngine_ = nullptr;
     EditorPageRouter* editorPageRouter_ = nullptr;
+    MediaToolsEngine* mediaToolsEngine_ = nullptr;
 };
 
 }  // namespace miacode::v2

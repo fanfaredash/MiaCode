@@ -320,6 +320,7 @@ MainWindow::~MainWindow()
     // reaching a destroyed section.
     applicationServices_.setExportEngine(nullptr);
     applicationServices_.setEditorPageRouter(nullptr);
+    applicationServices_.setMediaToolsEngine(nullptr);
 
     // Original diagnostic with member-touching .arg() chain — kept for
     // completeness but now safe because the bare marker above already

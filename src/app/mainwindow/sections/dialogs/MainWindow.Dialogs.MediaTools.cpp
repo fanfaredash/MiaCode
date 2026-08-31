@@ -905,7 +905,10 @@ void MainWindow::DialogsSection::runConvertTrackTo44100Hz(
 
     QString error;
     bool cancelled = false;
-    if (!convertTrackTo44100Hz(ffmpegPath, trackPath, owner_.jobProgressService(), &error, &cancelled)) {
+    // Qualified: MainWindow now also has a convertTrackTo44100Hz() — the
+    // MediaToolsEngine entry point — which would otherwise shadow this
+    // file-local ffmpeg helper from inside the nested section class.
+    if (!::convertTrackTo44100Hz(ffmpegPath, trackPath, owner_.jobProgressService(), &error, &cancelled)) {
         requests->postNotice(
             cancelled ? miacode::v2::NoticeSeverity::Information
                       : miacode::v2::NoticeSeverity::Error,

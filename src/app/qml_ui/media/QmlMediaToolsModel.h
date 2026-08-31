@@ -15,6 +15,7 @@ class QThread;
 namespace miacode::v2 {
 class UiRequestService;
 class JobProgressService;
+class MediaToolsEngine;
 }
 
 namespace miacode::qml_ui {
@@ -34,6 +35,7 @@ public:
     explicit QmlMediaToolsModel(MainWindow& backend,
                                miacode::v2::UiRequestService& uiRequests,
                                miacode::v2::JobProgressService& jobProgress,
+                               miacode::v2::MediaToolsEngine*& engineSlot,
                                QObject* parent = nullptr);
     ~QmlMediaToolsModel() override;
 
@@ -76,6 +78,12 @@ private:
     // From the application assembly, not from the hidden window.
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
     miacode::v2::JobProgressService* jobProgress_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::MediaToolsEngine** engineSlot_ = nullptr;
+    miacode::v2::MediaToolsEngine* engine() const
+    {
+        return engineSlot_ != nullptr ? *engineSlot_ : nullptr;
+    }
     QString batchDirectory_;
     QString batchSummary_;
     QList<miacode::media::PvCompressionJob> jobs_;

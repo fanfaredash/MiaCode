@@ -39,6 +39,7 @@
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/ApplicationServices.h"
 #include "app/v2/EditorPageRouter.h"
+#include "app/v2/MediaToolsEngine.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -124,7 +125,9 @@ class PreviewProgressStatsCache;
 // Implements miacode::v2::EditorPageRouter so the QML page host can switch
 // pages without naming this class. The router half is the part that survives
 // stage 4; the hidden QStackedWidget the switches also drive is not.
-class MainWindow : public QMainWindow, public miacode::v2::EditorPageRouter
+class MainWindow : public QMainWindow,
+                   public miacode::v2::EditorPageRouter,
+                   public miacode::v2::MediaToolsEngine
 {
     Q_OBJECT
 
@@ -509,17 +512,12 @@ private slots:
     // Asks the QML shell to show the media tools page. Kept as a slot because
     // the latency page and the tools menu both still trigger it.
     void onMediaProcessingTools();
-
-public:
-    // 音视频处理's narrow surface for the QML page. Public rather than another
-    // friend declaration: the QML layer reaches these through the context.
+    // Menu-action slots and the pre-rename context builder. The QML page
+    // reaches the same work through miacode::v2::MediaToolsEngine, so
+    // these stay private.
     void onCompressBackgroundVideo();
     void onConvertTrackTo44100Hz();
-    // Prepend-blank, split around the QML dialog.
     QVariantMap prependMediaBlankContext(bool isTrack);
-    QVariantMap detectMediaBlankTiming(bool isTrack);
-    void restoreMediaBlankBackup(bool isTrack);
-    void applyMediaBlank(bool isTrack, double beats, double bpm);
 
 private slots:
     void onReadTitleFromTrack();
@@ -703,6 +701,14 @@ public:
     bool enterLatencyPage() override;
     bool enterExportPage() override;
     void packChartAsZip() override;
+
+    // ---- miacode::v2::MediaToolsEngine ----
+    void convertTrackTo44100Hz() override;
+    void compressBackgroundVideo() override;
+    QVariantMap mediaBlankContext(bool isTrack) override;
+    QVariantMap detectMediaBlankTiming(bool isTrack) override;
+    void restoreMediaBlankBackup(bool isTrack) override;
+    void applyMediaBlank(bool isTrack, double beats, double bpm) override;
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push

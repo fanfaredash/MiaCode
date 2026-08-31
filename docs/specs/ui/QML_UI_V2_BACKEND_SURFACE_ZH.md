@@ -11,7 +11,7 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **118**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **112**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
@@ -37,6 +37,7 @@
 | 2026-09-01 | 公开 8 个 QML 页面本就在调用的方法，删掉 3 个 friend 授权（5 → 2） | 124 | 1 |
 | 2026-09-01 | 导出引擎改由 `miacode::v2::ExportEngine` 接口承接，`QmlExportSession` friend 授权删除（2 → 1） | 124 | **0** |
 | 2026-09-01 | 页面路由改由 `miacode::v2::EditorPageRouter` 接口承接，最后一条 friend 授权删除（1 → **0**） | **118** | **0** |
+| 2026-09-01 | 音视频处理改由 `miacode::v2::MediaToolsEngine` 接口承接 | **112** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -278,16 +279,12 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 
 ### 媒体工具（→ `MediaToolsService`）
 
-ffmpeg 单文件流程的入口；UI 请求与作业进度已改走装配对象。
+ffmpeg 单文件流程的入口。已改由 `miacode::v2::MediaToolsEngine` 承接（2026-09-01）；
+PV 批量队列本来就归模型自己（唯一有跨次开启状态的部分）。UI 请求与作业进度走装配对象。
 
-**`src/app/qml_ui/media/QmlMediaToolsModel.cpp`** — 方法 6，私有成员 0
+**`src/app/qml_ui/media/QmlMediaToolsModel.cpp`** — 方法 0，私有成员 0
 
-- `applyMediaBlank`
-- `detectMediaBlankTiming`
-- `onCompressBackgroundVideo`
-- `onConvertTrackTo44100Hz`
-- `prependMediaBlankContext`
-- `restoreMediaBlankBackup`
+
 
 ### 外壳宿主（→ QML 宿主自身，阶段 3.5 第 3 项）
 
