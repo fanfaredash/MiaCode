@@ -748,6 +748,47 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   ② §7.10 的「Windows 侧整体从未验证」同样不变。
   这两条继续按原状挂着，不得由本条推断为通过。
 
+### 7.-3 2026-09-01 所有者验收（本轮改动）
+
+所有者在 macOS 上走查了本轮（服务装配 / 预览外观 / 导出引擎 / 页面路由）引入的 GUI 面：
+
+- [x] **预览外观与持久化**：皮肤、判定特效、判定线，预览设置与导出页共用同一份状态，重启后保留。
+- [x] **页面切换**：导出页进/出/再进；未保存改动时选「取消」不再错误地显示导出页。
+- [x] **导出运行与取消**、**HUD 字体**、**关闭流程**、**校验语言**、**文件对话框与进度**。
+- [ ] **片头音**（换文件后试听、音量、重启后保留）—— **未验收**，本轮唯一没有确认的一项。
+      它是本轮唯一改了「谁负责重载音色库」的路径（`setIntroSoundFileName` 只发布，
+      窗口响应 `introSoundChanged` 调 `applyPreviewSfxLevels(reloadAssets=true)`）。
+
+**所有者同时报告：「导出已取消」仍是 Qt 风格弹窗。已定位并修复，见 §7.-4。**
+
+### 7.-4 阶段 3 的「Widget 对话框归零」有一个判定盲区（2026-09-01 发现并修复）
+
+阶段 3 的完成标志是
+`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui`
+——**只扫这两处**。于是任何住在 `src/app/mainwindow` 却能被 v2 用户操作走到的 Widgets 弹窗，
+都能原样通过这条检查。导出 worker 就是这样漏掉的：
+
+- `MainWindow.ExportWorker.cpp` 的完成处理里有**三个** `QMessageBox`——取消、成功（打开/关闭）、
+  失败（打开文件夹/确定）。它们全都在 v2 的主路径上：导出页 → 开始导出 → worker 结束。
+- 后果所有者直接看见了：**取消单个导出弹 Qt 风格框，取消批量导出弹应用自己的通知**——
+  同一个动作两种弹窗。批量那条早就走 `uiRequests_->postNotice`，单个这条没跟上。
+
+**已修（2026-09-01）**：三个出口全部改走 `UiRequestService`——取消与无文件时的失败用
+`postNotice`，成功与「有谱面文件的失败」用 `requestNoticeAction`（分别带「打开」「打开文件夹」
+动作按钮，行为与原按钮一致；原「打开」按钮打开的一直是所在文件夹）。
+`showCenteredLocalizedMessageBox` 辅助函数随之删除。
+
+**守卫**：`export_engine_spec` 新增一条扫描——`src/app/mainwindow/sections/export/` 下不得出现
+任何 `QMessageBox` / `QFileDialog` / `QInputDialog` / `QProgressDialog` 构造。整个导出域现在
+只由 v2 走到，所以它可以拿到阶段 3 的 grep 给不了的那条检查。反向验证过。
+
+**顺带查清、未修**：`src/app/mainwindow` 剩下约 28 处 Widgets 弹窗调用点
+（`Dialogs.TrackMetadata.cpp` 11、`DocumentFileFlow.cpp` 10、`DocumentUi.cpp` 5、
+`DocumentFlow.cpp` 1、`DocumentAutosaveFlow.cpp` 1）。逐一核对入口后判断它们**都在隐藏菜单路径上**：
+`onNewFile` / `onSaveFileAs` / `openRecentFilePath` 都不被 `src/app/qml_ui` 调用（v2 走
+`QmlDocumentModel` 的 `uiRequests_` 路径），删除难度那条被 `alreadyConfirmed` 挡掉。
+**这是逐个入口核对的结论，不是全调用图证明**——若再出现「Qt 风格弹窗」报告，先查这份名单。
+
 ### 7.-0 2026-08-30 之后新增，全部**未验收**
 
 §7.-1 的走查发生在 2026-08-29。此后落地的东西没有任何一项被在原生桌面上看过，

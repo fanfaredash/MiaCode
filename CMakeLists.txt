@@ -1772,6 +1772,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui Qt6::Test
         INCLUDES src src/app/ui src/audio src/common src/core/chart src/core/chart/parser src/core/video src/timeline src/tools
     )
+    target_compile_definitions(export_engine_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     # Stage 3.5 item 2: the preview appearance settings must have an owner that
     # is not a window. Core+Gui+Test only — a QtWidgets or Qt Quick include

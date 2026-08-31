@@ -19,7 +19,14 @@
 #include "app/v2/ExportEngine.h"
 
 #include <QCoreApplication>
+#include <QDirIterator>
+#include <QFile>
+#include <QStringList>
 #include <QTextStream>
+
+#ifndef MIACODE_SOURCE_ROOT
+#error "MIACODE_SOURCE_ROOT must be defined (repo root absolute path)"
+#endif
 
 namespace {
 
@@ -202,6 +209,61 @@ bool verifyTheSlotIsTheSingleSourceOfTruth(QTextStream& err)
     return ok;
 }
 
+// Stage 3 declared "Widget 对话框归零" while checking only src/tools and
+// src/app/qml_ui — so three QMessageBoxes survived in the export WORKER, which
+// lives in src/app/mainwindow. They were not dead code: finishing, failing or
+// cancelling a v2 export all ran through them, which is why cancelling a single
+// export showed a Qt-styled box while cancelling a batch export showed the
+// app's own notice. The whole export section is reachable only from v2 now, so
+// it gets the check stage 3's grep could not give it.
+bool verifyTheExportSectionShowsNoWidgetDialogs(QTextStream& err)
+{
+    static const QStringList forbidden = {
+        QStringLiteral("QMessageBox "),
+        QStringLiteral("QMessageBox("),
+        QStringLiteral("QMessageBox::"),
+        QStringLiteral("QFileDialog::"),
+        QStringLiteral("QInputDialog::"),
+        QStringLiteral("QProgressDialog"),
+    };
+
+    bool ok = true;
+    int scanned = 0;
+    QDirIterator walk(QStringLiteral(MIACODE_SOURCE_ROOT)
+                          + QStringLiteral("/src/app/mainwindow/sections/export"),
+                      QStringList{QStringLiteral("*.cpp"), QStringLiteral("*.h")},
+                      QDir::Files, QDirIterator::Subdirectories);
+    while (walk.hasNext()) {
+        const QString path = walk.next();
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            continue;
+        }
+        ++scanned;
+        const QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
+        for (qsizetype i = 0; i < lines.size(); ++i) {
+            const QString line = lines.at(i);
+            // Comments may name these types; the guard is about code.
+            if (line.trimmed().startsWith(QStringLiteral("//"))) {
+                continue;
+            }
+            for (const QString& token : forbidden) {
+                if (line.contains(token)) {
+                    ok = require(false,
+                                 QStringLiteral("%1:%2 shows a Widgets dialog from the export "
+                                                "section — route it through UiRequestService")
+                                     .arg(QString(path).remove(
+                                              0, QStringLiteral(MIACODE_SOURCE_ROOT).size() + 1))
+                                     .arg(i + 1),
+                                 err);
+                }
+            }
+        }
+    }
+    ok &= require(scanned > 0, QStringLiteral("the export section scan found files"), err);
+    return ok;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -214,6 +276,7 @@ int main(int argc, char** argv)
     ok &= verifyFailedLaunchReportsItsReason(err);
     ok &= verifyBatchReportsThroughItsCallbacks(err);
     ok &= verifyTheSlotIsTheSingleSourceOfTruth(err);
+    ok &= verifyTheExportSectionShowsNoWidgetDialogs(err);
 
     if (ok) {
         QTextStream(stdout) << "export_engine_spec: OK" << Qt::endl;

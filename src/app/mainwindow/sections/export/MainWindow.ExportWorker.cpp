@@ -352,29 +352,6 @@ QString systemL10n(const QString& en, const QString& zh)
     return systemLanguagePrefersChinese() ? zh : en;
 }
 
-QMessageBox::StandardButton showCenteredLocalizedMessageBox(
-    QMessageBox::Icon icon,
-    QWidget* parent,
-    const QString& title,
-    const QString& message,
-    QMessageBox::StandardButtons buttons = QMessageBox::Ok,
-    QMessageBox::StandardButton defaultButton = QMessageBox::NoButton
-)
-{
-    QMessageBox dialog(icon, title, message, QMessageBox::NoButton, UiDialogs::effectiveParentWidget(parent));
-    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    dialog.setStandardButtons(buttons);
-    if (defaultButton != QMessageBox::NoButton) {
-        dialog.setDefaultButton(defaultButton);
-    }
-    UiDialogs::prepareDialogWindow(&dialog, parent);
-    UiDialogs::localizeMessageBox(&dialog);
-    centerDialogOnAnchor(&dialog, parent);
-
-    dialog.exec();
-    return dialog.standardButton(dialog.clickedButton());
-}
-
 QString formatExportRemainingDuration(qint64 seconds)
 {
     seconds = qMax<qint64>(0, seconds);
@@ -1013,12 +990,15 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
     if (canceledOutcome) {
         this->endExportProgress();
         restorePreviewAspectIfNeeded();
-        showCenteredLocalizedMessageBox(
-            QMessageBox::Information,
-            &owner_,
+        // Through the QML request boundary, like every other export outcome.
+        // This one used to be a QMessageBox parented to the hidden window, so a
+        // v2 user cancelling a single export got a Qt-styled box while
+        // cancelling a BATCH export got the app's own notice — same action, two
+        // different dialogs.
+        owner_.applicationServices_.uiRequests().postNotice(
+            miacode::v2::NoticeSeverity::Information,
             UiText::text(QStringLiteral("dialog.video_export.title")),
-            UiText::text(QStringLiteral("dialog.video_export.message.canceled"))
-        );
+            UiText::text(QStringLiteral("dialog.video_export.message.canceled")));
         this->clearVideoExportWorkerState();
         return;
     }
@@ -1106,60 +1086,44 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         const QString resolvedOutputName = resolvedOutputInfo.fileName().trimmed().isEmpty()
             ? QDir::toNativeSeparators(owner_.videoExportWorkerOutputPath_)
             : resolvedOutputInfo.fileName();
-        QMessageBox dialog(
-            QMessageBox::Information,
+        // 打开 opens the containing folder, which is what the Widgets button
+        // did — the label says 打开 but it has always been the folder.
+        const QString outputPath = owner_.videoExportWorkerOutputPath_;
+        owner_.applicationServices_.uiRequests().requestNoticeAction(
+            miacode::v2::NoticeSeverity::Information,
             UiText::text(QStringLiteral("dialog.video_export.title")),
             QStringLiteral("%1\n\n%2")
                 .arg(UiText::text(QStringLiteral("dialog.video_export.message.completed")))
                 .arg(resolvedOutputName),
-            QMessageBox::NoButton,
-            UiDialogs::effectiveParentWidget(&owner_)
-        );
-        dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-        UiDialogs::configureDialogPreviewShortcuts(&dialog);
-        UiDialogs::applyDetachedParentBehavior(&dialog, &owner_);
-        QPushButton* openButton = dialog.addButton(
+            QString(),
             UiText::text(QStringLiteral("action.open")),
-            QMessageBox::AcceptRole
-        );
-        dialog.addButton(
-            UiText::text(QStringLiteral("action.close")),
-            QMessageBox::RejectRole
-        );
-        dialog.setDefaultButton(openButton);
-        centerDialogOnAnchor(&dialog, &owner_);
-        dialog.exec();
-        if (dialog.clickedButton() == openButton) {
-            const QFileInfo outputInfo(owner_.videoExportWorkerOutputPath_);
-            const QString outputDir = outputInfo.absoluteDir().absolutePath();
-            if (!outputDir.isEmpty()) {
-                QDesktopServices::openUrl(QUrl::fromLocalFile(outputDir));
-            }
-        }
+            [outputPath](bool actionChosen) {
+                if (!actionChosen) {
+                    return;
+                }
+                const QString outputDir = QFileInfo(outputPath).absoluteDir().absolutePath();
+                if (!outputDir.isEmpty()) {
+                    QDesktopServices::openUrl(QUrl::fromLocalFile(outputDir));
+                }
+            });
     } else {
         const QString details = owner_.videoExportWorkerResultDetails_.trimmed();
-        QMessageBox dialog(
-            QMessageBox::Critical,
-            UiText::text(QStringLiteral("dialog.video_export.error.failed_title")),
-            details.isEmpty()
-                ? owner_.videoExportWorkerResultMessage_
-                : QStringLiteral("%1\n\n%2").arg(owner_.videoExportWorkerResultMessage_, details),
-            QMessageBox::NoButton,
-            UiDialogs::effectiveParentWidget(&owner_)
-        );
-        dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-        UiDialogs::configureDialogPreviewShortcuts(&dialog);
-        UiDialogs::applyDetachedParentBehavior(&dialog, &owner_);
-        QPushButton* openFolderButton = nullptr;
-        if (!owner_.currentFilePath_.isEmpty()) {
-            openFolderButton = dialog.addButton(UiText::text(QStringLiteral("action.open_folder")), QMessageBox::ActionRole);
-        }
-        QPushButton* okButton = dialog.addButton(UiText::text(QStringLiteral("action.ok")), QMessageBox::AcceptRole);
-        dialog.setDefaultButton(okButton);
-        centerDialogOnAnchor(&dialog, &owner_);
-        dialog.exec();
-        if (openFolderButton != nullptr && dialog.clickedButton() == openFolderButton) {
-            owner_.onOpenCurrentFolder();
+        const QString failureTitle =
+            UiText::text(QStringLiteral("dialog.video_export.error.failed_title"));
+        const QString failureText = owner_.videoExportWorkerResultMessage_;
+        if (owner_.currentFilePath_.isEmpty()) {
+            // No chart on disk, so there is no folder to offer.
+            owner_.applicationServices_.uiRequests().postNotice(
+                miacode::v2::NoticeSeverity::Error, failureTitle, failureText, details);
+        } else {
+            owner_.applicationServices_.uiRequests().requestNoticeAction(
+                miacode::v2::NoticeSeverity::Error, failureTitle, failureText, details,
+                UiText::text(QStringLiteral("action.open_folder")),
+                [this](bool actionChosen) {
+                    if (actionChosen) {
+                        owner_.onOpenCurrentFolder();
+                    }
+                });
         }
     }
 
