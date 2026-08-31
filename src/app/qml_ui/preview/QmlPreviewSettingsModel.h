@@ -9,7 +9,8 @@
 #include "app/v2/PreviewAppearanceState.h"
 #include "app/v2/UiRequestService.h"
 
-class MainWindow;
+#include "app/v2/PreviewSurface.h"
+
 
 namespace miacode::qml_ui {
 
@@ -57,9 +58,11 @@ class QmlPreviewSettingsModel final : public QObject
     Q_PROPERTY(QString hudFontSample READ hudFontSample NOTIFY hudFontChanged)
 
 public:
-    explicit QmlPreviewSettingsModel(MainWindow& backend,
-                                    miacode::v2::UiRequestService& uiRequests,
+    // No MainWindow: the settings page reaches the live preview through the
+    // surface and the stored values through PreviewAppearanceState.
+    explicit QmlPreviewSettingsModel(miacode::v2::UiRequestService& uiRequests,
                                     miacode::v2::PreviewAppearanceState& appearance,
+                                    miacode::v2::PreviewSurface*& surfaceSlot,
                                     QObject* parent = nullptr);
 
     Q_INVOKABLE void setValue(const QString& key, const QVariant& value);
@@ -111,7 +114,12 @@ private:
     // The appearance values' owner; this model reads and writes them here, not
     // through the window's private members.
     miacode::v2::PreviewAppearanceState* appearance_ = nullptr;
-    MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::PreviewSurface** surfaceSlot_ = nullptr;
+    miacode::v2::PreviewSurface* surface() const
+    {
+        return surfaceSlot_ != nullptr ? *surfaceSlot_ : nullptr;
+    }
     int hudFontAreaIndex_ = 0;
 };
 

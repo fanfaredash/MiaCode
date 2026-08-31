@@ -11,7 +11,7 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **88**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **61**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
@@ -40,6 +40,7 @@
 | 2026-09-01 | 音视频处理改由 `miacode::v2::MediaToolsEngine` 接口承接 | **112** | 0 |
 | 2026-09-01 | 延迟检测改由 `miacode::v2::LatencyEngine` 接口承接，`QmlLatencyModel` **完全不再认识 `MainWindow`** | **104** | 0 |
 | 2026-09-01 | 时间轴与底栏页签改由 `miacode::v2::TimelineSurface` 接口承接（含分析页的两处） | **88** | 0 |
+| 2026-09-01 | 预览（传输 / 运行时对象 / 皮肤目录 / 渲染设置 / 音频混音）改由 `miacode::v2::PreviewSurface` 接口承接 | **61** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -91,53 +92,26 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 
 ### 预览（→ `PreviewSession`）
 
-预览运行时、播放传输、皮肤/判定外观、音频设置。外观八个值已搬到
-`miacode::v2::PreviewAppearanceState`；这里剩下的是运行时与传输控制。
-`QmlPreviewModel` 与 `QmlPreviewSettingsModel` 的 `friend` 授权已于 2026-09-01 删除：
-它们调用的方法改为公有。
+已改由 `miacode::v2::PreviewSurface` 承接（2026-09-01）：播放传输、scrub 手势、倍速、
+QML 绑定的运行时对象、皮肤/判定线目录、渲染设置、音频混音。外观那八个**值**更早就搬到了
+`miacode::v2::PreviewAppearanceState`——这里剩的是需要「正在跑的预览」的部分。
 
-**`src/app/qml_ui/QmlPreviewModel.cpp`** — 方法 21，私有成员 0
+`QmlAudioSettingsModel` 与 `QmlPreviewSettingsModel` 现在**完全不认识 `MainWindow`**。
+`QmlPreviewModel` 还留着 `MainWindow&`，但只用于连三个推送信号
+（`shellPresentationChanged` / `shellPreviewPlayheadChanged` / `previewSkinDirectoryChanged`），
+不再调用任何方法。
 
-- `beginShellPreviewScrub`
-- `endShellPreviewScrub`
-- `muriRenderMode`
-- `nudgeShellPreviewRate`
-- `resolvePreviewSkinDir`
-- `seekShellPreview`
-- `setMuriRenderMode`
-- `setShellPreviewRate`
-- `shellPreviewCanvasAspectRatio`
-- `shellPreviewDurationSeconds`
-- `shellPreviewLowerBoundSeconds`
-- `shellPreviewPlaying`
-- `shellPreviewPositionSeconds`
-- `shellPreviewRuntimeObject`
-- `shellPreviewSpeedLabel`
-- `shellPreviewStageMediaHostObject`
-- `shellPreviewStatsTexts`
-- `stopShellPreview`
-- `toggleShellMuriRenderMode`
-- `toggleShellPreviewPlayback`
-- `updateShellPreviewScrub`
+**`src/app/qml_ui/QmlPreviewModel.cpp`** — 方法 0，私有成员 0
 
-**`src/app/qml_ui/preview/QmlAudioSettingsModel.cpp`** — 方法 5，私有成员 0
+- *（已清空：本文件不再触达 `MainWindow`）*
 
-- `applyPreviewAudioSettingsFromUi`
-- `currentPreviewAudioSettings`
-- `restorePreviewAudioSettingsFromSoftwareDefault`
-- `savePreviewAudioSettingsAsSoftwareDefault`
-- `shellPreviewPlaying`
+**`src/app/qml_ui/preview/QmlAudioSettingsModel.cpp`** — 方法 0，私有成员 0
 
-**`src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp`** — 方法 8，私有成员 0
+- *（已清空：本文件不再触达 `MainWindow`）*
 
-- `applyPreviewOutlineVariant`
-- `availablePreviewSkinDirectoryNames`
-- `previewRenderSettings`
-- `previewSkinDisplayName`
-- `refreshPreviewSurfaces`
-- `resolvePreviewCustomOutlineDir`
-- `resolvePreviewSkinRootDir`
-- `setPreviewRenderSetting`
+**`src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp`** — 方法 0，私有成员 0
+
+- *（已清空：本文件不再触达 `MainWindow`）*
 
 ### 时间轴与分析（→ `TimelineSession`）
 

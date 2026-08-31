@@ -7,6 +7,8 @@
 
 #include "common/MuriRenderOptions.h"
 
+#include "app/v2/PreviewSurface.h"
+
 class MainWindow;
 
 // Real-time preview state exposed to the pure-QML UI. Playback and rendering
@@ -39,7 +41,9 @@ class QmlPreviewModel final : public QObject
     Q_PROPERTY(double canvasAspectRatio READ canvasAspectRatio NOTIFY presentationChanged)
 
 public:
-    explicit QmlPreviewModel(MainWindow& backend, QObject* parent = nullptr);
+    explicit QmlPreviewModel(MainWindow& backend,
+                             miacode::v2::PreviewSurface*& surfaceSlot,
+                             QObject* parent = nullptr);
 
     double positionSeconds() const;
     double durationSeconds() const;
@@ -89,6 +93,12 @@ private:
     void appendV2UiProbeSummary() const;
 
     MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::PreviewSurface** surfaceSlot_ = nullptr;
+    miacode::v2::PreviewSurface* surface() const
+    {
+        return surfaceSlot_ != nullptr ? *surfaceSlot_ : nullptr;
+    }
     double positionSeconds_ = 0.0;
     double durationSeconds_ = 0.0;
     double lowerBoundSeconds_ = 0.0;

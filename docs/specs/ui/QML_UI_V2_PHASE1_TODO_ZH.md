@@ -602,6 +602,15 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          `QmlTimelineModel` 仍持有 `MainWindow&`，但只用于连 `shellPresentationChanged`
          一个推送信号，不再调用任何方法。
 
+     16. **预览改由 `miacode::v2::PreviewSurface` 承接（方法 88 → 61）**。
+         33 个入口：播放传输、scrub 手势（刻意与 seek 分开——手势要成对括起来才能挂起跟随行为）、
+         倍速、QML 绑定的两个运行时对象、无理渲染模式、皮肤/判定线目录、渲染设置、音频混音。
+         外观那八个**值**更早就搬到 `PreviewAppearanceState` 了，这里剩的是需要「正在跑的预览」的部分。
+         `QmlAudioSettingsModel` 与 `QmlPreviewSettingsModel` 至此**完全不认识 `MainWindow`**；
+         `QmlPreviewModel` 只剩三个推送信号的连接。
+         过程中去掉了 `setMuriRenderMode(mode, bool persistState = true)` 的默认实参——
+         接口的单参重载会让所有单参调用变歧义。
+
      12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
          它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
          先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets

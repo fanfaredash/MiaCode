@@ -41,6 +41,7 @@
 #include "app/v2/EditorPageRouter.h"
 #include "app/v2/LatencyEngine.h"
 #include "app/v2/MediaToolsEngine.h"
+#include "app/v2/PreviewSurface.h"
 #include "app/v2/TimelineSurface.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
@@ -131,7 +132,8 @@ class MainWindow : public QMainWindow,
                    public miacode::v2::EditorPageRouter,
                    public miacode::v2::MediaToolsEngine,
                    public miacode::v2::LatencyEngine,
-                   public miacode::v2::TimelineSurface
+                   public miacode::v2::TimelineSurface,
+                   public miacode::v2::PreviewSurface
 {
     Q_OBJECT
 
@@ -421,7 +423,6 @@ public:
     void endShellPreviewScrub(double second, bool centerView);
     void setShellPreviewRate(double rate);
     void toggleShellMuriRenderMode();
-    RenderMode muriRenderMode() const;
     void nudgeShellPreviewRate(int direction);
     bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView);
     void beginShellPreviewHeldSeek(int direction, int key);
@@ -685,7 +686,10 @@ public:
     QString resolvePreviewCustomOutlineDir() const;
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                     bool persistState);
-    void setMuriRenderMode(RenderMode mode, bool persistState = true);
+    // No default on persistState: the PreviewSurface override is
+    // setMuriRenderMode(RenderMode), and a defaulted second argument here
+    // would make every one-argument call ambiguous.
+    void setMuriRenderMode(RenderMode mode, bool persistState);
     void onPreferences();
     // The export page's two remaining reads: where the live playhead is (it
     // seeds the export range from the current position) and a nudge to
@@ -740,6 +744,42 @@ public:
     bool muriTabVisible() const override;
     bool validationTabVisible() const override;
     bool ignoreMuriIssuePrompts() const override;
+
+    // ---- miacode::v2::PreviewSurface ----
+    bool playing() const override;
+    double positionSeconds() const override;
+    double durationSeconds() const override;
+    double lowerBoundSeconds() const override;
+    void togglePlayback() override;
+    void stop() override;
+    void seek(double second) override;
+    void beginScrub() override;
+    void updateScrub(double second, bool centerView) override;
+    void endScrub(double second, bool centerView) override;
+    void setPlaybackRate(double rate) override;
+    void nudgePlaybackRate(int direction) override;
+    QString playbackRateLabel() const override;
+    QObject* previewRuntimeObject() const override;
+    QObject* stageMediaHostObject() const override;
+    double canvasAspectRatio() const override;
+    QStringList statsTexts() const override;
+    RenderMode muriRenderMode() const override;
+    void setMuriRenderMode(RenderMode mode) override;
+    void toggleMuriRenderMode() override;
+    QStringList availableSkinDirectoryNames() const override;
+    QString skinDisplayName(const QString& directoryName) const override;
+    QString resolveSkinDir() const override;
+    QString resolveSkinRootDir() const override;
+    QString resolveCustomOutlineDir() const override;
+    void applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
+                             bool persistState) override;
+    QVariantMap renderSettings() const override;
+    void setRenderSetting(const QString& key, const QVariant& value) override;
+    void refreshSurfaces() override;
+    PreviewAudioSettings audioSettings() const override;
+    void applyAudioSettings(const PreviewAudioSettings& settings) override;
+    void saveAudioSettingsAsSoftwareDefault() override;
+    void restoreAudioSettingsFromSoftwareDefault() override;
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push

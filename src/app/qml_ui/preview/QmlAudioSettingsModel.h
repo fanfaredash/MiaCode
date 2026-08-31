@@ -4,7 +4,8 @@
 #include <QString>
 #include <QVariantList>
 
-class MainWindow;
+#include "app/v2/PreviewSurface.h"
+
 class QTimer;
 class QtPreviewSfxRuntime;
 
@@ -25,7 +26,9 @@ class QmlAudioSettingsModel final : public QObject
                    WRITE setBreakSlideTailCheerMuted NOTIFY changed)
 
 public:
-    explicit QmlAudioSettingsModel(MainWindow& backend, QObject* parent = nullptr);
+    // No MainWindow: the mixer reaches everything through the preview surface.
+    explicit QmlAudioSettingsModel(miacode::v2::PreviewSurface*& surfaceSlot,
+                                   QObject* parent = nullptr);
     ~QmlAudioSettingsModel() override;
 
     // [{ key, label, percent, muted }] in the order the page shows them.
@@ -61,7 +64,12 @@ private:
     void flushAudition();
     bool playAudition(const QString& kind);
 
-    MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::PreviewSurface** surfaceSlot_ = nullptr;
+    miacode::v2::PreviewSurface* surface() const
+    {
+        return surfaceSlot_ != nullptr ? *surfaceSlot_ : nullptr;
+    }
     // Both are created on the first audition rather than with the model: the
     // runtime spins up an audio worker thread, and most sessions never open
     // this page.

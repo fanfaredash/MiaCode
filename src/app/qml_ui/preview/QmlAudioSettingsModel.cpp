@@ -5,7 +5,6 @@
 #include "audio/QtPreviewSfxRuntime.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxSemantics.h"
-#include "mainwindow/MainWindow.h"
 #include "ui/UiText.h"
 
 #include <QDir>
@@ -91,9 +90,10 @@ const ChannelSpec* specForKey(const QString& key)
 
 }  // namespace
 
-QmlAudioSettingsModel::QmlAudioSettingsModel(MainWindow& backend, QObject* parent)
+QmlAudioSettingsModel::QmlAudioSettingsModel(miacode::v2::PreviewSurface*& surfaceSlot,
+                                             QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , surfaceSlot_(&surfaceSlot)
 {
 }
 
@@ -102,10 +102,10 @@ QmlAudioSettingsModel::~QmlAudioSettingsModel() = default;
 QVariantList QmlAudioSettingsModel::channels() const
 {
     QVariantList rows;
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return rows;
     }
-    const PreviewAudioSettings settings = backend_->currentPreviewAudioSettings();
+    const PreviewAudioSettings settings = surface()->audioSettings();
     for (const ChannelSpec& spec : channelSpecs()) {
         rows.append(QVariantMap{
             {QStringLiteral("key"), QLatin1String(spec.key)},
@@ -120,15 +120,15 @@ QVariantList QmlAudioSettingsModel::channels() const
 void QmlAudioSettingsModel::setChannelPercent(const QString& key, int percent)
 {
     const ChannelSpec* spec = specForKey(key);
-    if (backend_ == nullptr || spec == nullptr) {
+    if (surface() == nullptr || spec == nullptr) {
         return;
     }
-    PreviewAudioSettings settings = backend_->currentPreviewAudioSettings();
+    PreviewAudioSettings settings = surface()->audioSettings();
     if ((settings.*(spec->percent))() == percent) {
         return;
     }
     (settings.*(spec->setPercent))(percent);
-    backend_->applyPreviewAudioSettingsFromUi(settings);
+    surface()->applyAudioSettings(settings);
     queueAudition(QLatin1String(spec->audition));
     emit changed();
 }
@@ -136,10 +136,10 @@ void QmlAudioSettingsModel::setChannelPercent(const QString& key, int percent)
 void QmlAudioSettingsModel::toggleChannelMuted(const QString& key)
 {
     const ChannelSpec* spec = specForKey(key);
-    if (backend_ == nullptr || spec == nullptr) {
+    if (surface() == nullptr || spec == nullptr) {
         return;
     }
-    PreviewAudioSettings settings = backend_->currentPreviewAudioSettings();
+    PreviewAudioSettings settings = surface()->audioSettings();
     // The value type owns the restore-level bookkeeping; the row only asks it
     // to flip, which is what keeps unmute returning to the previous level.
     (settings.*(spec->toggleMuted))();
@@ -158,7 +158,7 @@ void QmlAudioSettingsModel::toggleChannelMuted(const QString& key)
             }
         }
     }
-    backend_->applyPreviewAudioSettingsFromUi(settings);
+    surface()->applyAudioSettings(settings);
     // Nothing to demonstrate about a channel that was just silenced.
     queueAudition(mutedNow ? QString() : QLatin1String(spec->audition));
     emit changed();
@@ -166,15 +166,15 @@ void QmlAudioSettingsModel::toggleChannelMuted(const QString& key)
 
 void QmlAudioSettingsModel::saveAsSoftwareDefault()
 {
-    if (backend_ != nullptr) {
-        backend_->savePreviewAudioSettingsAsSoftwareDefault();
+    if (surface() != nullptr) {
+        surface()->saveAudioSettingsAsSoftwareDefault();
     }
 }
 
 void QmlAudioSettingsModel::restoreSoftwareDefault()
 {
-    if (backend_ != nullptr) {
-        backend_->restorePreviewAudioSettingsFromSoftwareDefault();
+    if (surface() != nullptr) {
+        surface()->restoreAudioSettingsFromSoftwareDefault();
         // The restored mix is not any one channel's edit, so there is no
         // channel to audition — drop whatever the last edit had queued.
         queueAudition(QString());
@@ -243,13 +243,13 @@ void QmlAudioSettingsModel::flushAudition()
 
 bool QmlAudioSettingsModel::playAudition(const QString& kind)
 {
-    if (backend_ == nullptr || kind.isEmpty()) {
+    if (surface() == nullptr || kind.isEmpty()) {
         return false;
     }
     // Don't audition over a running preview: the user already hears the real
     // SFX from live playback, so a second runtime playing the same sample just
     // doubles it. Audition is only meaningful when the preview is idle.
-    if (backend_->shellPreviewPlaying()) {
+    if (surface()->playing()) {
         return false;
     }
     const QString sfxDir = miacode::preview_sfx::resolveSfxDirectory();
@@ -279,10 +279,10 @@ bool QmlAudioSettingsModel::playAudition(const QString& kind)
                     auditionReloadSequence_ = 0;
                     const QString kindNow = std::exchange(auditionKindAwaitingAssets_, QString());
                     if (!completion.success || kindNow.isEmpty()
-                        || backend_ == nullptr || backend_->shellPreviewPlaying()) {
+                        || surface() == nullptr || surface()->playing()) {
                         return;
                     }
-                    auditionRuntime_->applyLevels(backend_->currentPreviewAudioSettings());
+                    auditionRuntime_->applyLevels(surface()->audioSettings());
                     auditionRuntime_->stopAll();
                     auditionRuntime_->audition(kindNow);
                 });
@@ -294,7 +294,7 @@ bool QmlAudioSettingsModel::playAudition(const QString& kind)
         // kind we were asked for; this call is the one that goes silent.
         const QtPreviewSfxRuntime::AssetSubmission reload =
             auditionRuntime_->reloadAssetsForChartWithWarmupPaths(
-                QString(), QString(), resolvedSfxDir, backend_->currentPreviewAudioSettings());
+                QString(), QString(), resolvedSfxDir, surface()->audioSettings());
         auditionSfxDir_ = resolvedSfxDir;
         auditionKindAwaitingAssets_ = resolvedKind;
         auditionReloadAssetGeneration_ = reload.post.accepted ? reload.identity.assetGeneration : 0;
@@ -302,24 +302,24 @@ bool QmlAudioSettingsModel::playAudition(const QString& kind)
         return false;
     }
 
-    auditionRuntime_->applyLevels(backend_->currentPreviewAudioSettings());
+    auditionRuntime_->applyLevels(surface()->audioSettings());
     auditionRuntime_->stopAll();
     return auditionRuntime_->audition(resolvedKind);
 }
 
 bool QmlAudioSettingsModel::breakSlideTailCheerMuted() const
 {
-    return backend_ != nullptr && backend_->currentPreviewAudioSettings().breakSlideTailCheerMuted;
+    return surface() != nullptr && surface()->audioSettings().breakSlideTailCheerMuted;
 }
 
 void QmlAudioSettingsModel::setBreakSlideTailCheerMuted(bool muted)
 {
-    if (backend_ == nullptr || muted == breakSlideTailCheerMuted()) {
+    if (surface() == nullptr || muted == breakSlideTailCheerMuted()) {
         return;
     }
-    PreviewAudioSettings settings = backend_->currentPreviewAudioSettings();
+    PreviewAudioSettings settings = surface()->audioSettings();
     settings.breakSlideTailCheerMuted = muted;
-    backend_->applyPreviewAudioSettingsFromUi(settings);
+    surface()->applyAudioSettings(settings);
     emit changed();
 }
 

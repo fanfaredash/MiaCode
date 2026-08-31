@@ -57,6 +57,88 @@ miacode::v2::JobProgressService* MainWindow::jobProgressService() const
     return jobProgress_;
 }
 
+// ---- miacode::v2::PreviewSurface ----
+// Thin forwarders. The shell* names on the window are v1 QuickShell history;
+// the appearance VALUES already live in miacode::v2::PreviewAppearanceState, so
+// what forwards here is everything that needs the running preview.
+
+bool MainWindow::playing() const { return shellPreviewPlaying(); }
+double MainWindow::positionSeconds() const { return shellPreviewPositionSeconds(); }
+double MainWindow::durationSeconds() const { return shellPreviewDurationSeconds(); }
+double MainWindow::lowerBoundSeconds() const { return shellPreviewLowerBoundSeconds(); }
+void MainWindow::togglePlayback() { toggleShellPreviewPlayback(); }
+void MainWindow::stop() { stopShellPreview(); }
+void MainWindow::seek(double second) { seekShellPreview(second); }
+void MainWindow::beginScrub() { beginShellPreviewScrub(); }
+
+void MainWindow::updateScrub(double second, bool centerView)
+{
+    updateShellPreviewScrub(second, centerView);
+}
+
+void MainWindow::endScrub(double second, bool centerView)
+{
+    endShellPreviewScrub(second, centerView);
+}
+
+void MainWindow::setPlaybackRate(double rate) { setShellPreviewRate(rate); }
+void MainWindow::nudgePlaybackRate(int direction) { nudgeShellPreviewRate(direction); }
+QString MainWindow::playbackRateLabel() const { return shellPreviewSpeedLabel(); }
+
+QObject* MainWindow::previewRuntimeObject() const { return shellPreviewRuntimeObject(); }
+QObject* MainWindow::stageMediaHostObject() const { return shellPreviewStageMediaHostObject(); }
+double MainWindow::canvasAspectRatio() const { return shellPreviewCanvasAspectRatio(); }
+QStringList MainWindow::statsTexts() const { return shellPreviewStatsTexts(); }
+
+void MainWindow::setMuriRenderMode(RenderMode mode) { setMuriRenderMode(mode, true); }
+void MainWindow::toggleMuriRenderMode() { toggleShellMuriRenderMode(); }
+
+QStringList MainWindow::availableSkinDirectoryNames() const
+{
+    return availablePreviewSkinDirectoryNames();
+}
+
+QString MainWindow::skinDisplayName(const QString& directoryName) const
+{
+    return previewSkinDisplayName(directoryName);
+}
+
+QString MainWindow::resolveSkinDir() const { return resolvePreviewSkinDir(); }
+QString MainWindow::resolveSkinRootDir() const { return resolvePreviewSkinRootDir(); }
+QString MainWindow::resolveCustomOutlineDir() const { return resolvePreviewCustomOutlineDir(); }
+
+void MainWindow::applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
+                                     bool persistState)
+{
+    applyPreviewOutlineVariant(variant, useAutoSelection, persistState);
+}
+
+QVariantMap MainWindow::renderSettings() const { return previewRenderSettings(); }
+
+void MainWindow::setRenderSetting(const QString& key, const QVariant& value)
+{
+    setPreviewRenderSetting(key, value);
+}
+
+void MainWindow::refreshSurfaces() { refreshPreviewSurfaces(); }
+
+PreviewAudioSettings MainWindow::audioSettings() const { return currentPreviewAudioSettings(); }
+
+void MainWindow::applyAudioSettings(const PreviewAudioSettings& settings)
+{
+    applyPreviewAudioSettingsFromUi(settings);
+}
+
+void MainWindow::saveAudioSettingsAsSoftwareDefault()
+{
+    savePreviewAudioSettingsAsSoftwareDefault();
+}
+
+void MainWindow::restoreAudioSettingsFromSoftwareDefault()
+{
+    restorePreviewAudioSettingsFromSoftwareDefault();
+}
+
 // ---- miacode::v2::TimelineSurface ----
 // Thin forwarders. The shell* names on the window date from the v1 QuickShell
 // controller; the interface does not carry that history forward.

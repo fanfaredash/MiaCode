@@ -14,7 +14,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
                 services.uiRequests(), this)
     , analysis_(backend, services.workspace(), services.analysis(),
                 services.timelineSurfaceSlot(), this)
-    , preview_(backend, this)
+    , preview_(backend, services.previewSurfaceSlot(), this)
     , timeline_(backend, services.timelineSurfaceSlot(), this)
     , commands_(backend, document_, this)
     , pages_(backend, services.editorPageRouterSlot(), this)
@@ -25,8 +25,9 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , mediaTools_(backend, services.uiRequests(), services.jobProgress(),
                   services.mediaToolsEngineSlot(), this)
     , preferencesModel_(backend, preferences_, this)
-    , audioSettings_(backend, this)
-    , previewSettings_(backend, services.uiRequests(), services.previewAppearance(), this)
+    , audioSettings_(services.previewSurfaceSlot(), this)
+    , previewSettings_(services.uiRequests(), services.previewAppearance(),
+                       services.previewSurfaceSlot(), this)
     , latency_(services.latencyEngineSlot(), this)
     , lifecycle_(backend, this)
 {

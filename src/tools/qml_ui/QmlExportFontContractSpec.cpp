@@ -120,8 +120,10 @@ bool verifyQmlFontContract(QTextStream& err)
     ok &= require(
         previewSettingsImplementation.contains(
             QStringLiteral("setPreviewHudCustomFontPath(area, path)"))
+            // The preview settings page reaches the live surfaces through
+            // miacode::v2::PreviewSurface now; it no longer knows MainWindow.
             && previewSettingsImplementation.contains(
-                QStringLiteral("backend_->refreshPreviewSurfaces()"))
+                QStringLiteral("surface()->refreshSurfaces()"))
             && previewSettingsImplementation.contains(QStringLiteral("uiRequests_->requestFile")),
         QStringLiteral("HUD font updates use the QML request boundary and redraw the live preview"), err);
     for (const QString& control : {

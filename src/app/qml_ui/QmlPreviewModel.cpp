@@ -28,9 +28,12 @@ constexpr std::array<StatisticDescriptor, 6> kStatisticDescriptors{{
 
 } // namespace
 
-QmlPreviewModel::QmlPreviewModel(MainWindow& backend, QObject* parent)
+QmlPreviewModel::QmlPreviewModel(MainWindow& backend,
+                                 miacode::v2::PreviewSurface*& surfaceSlot,
+                                 QObject* parent)
     : QObject(parent)
     , backend_(&backend)
+    , surfaceSlot_(&surfaceSlot)
 {
     v2UiProbeEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
     connect(backend_, &MainWindow::shellPresentationChanged, this, [this]() {
@@ -90,7 +93,7 @@ void QmlPreviewModel::refreshSkinDirectory()
     if (probeThisResolve) {
         skinTimer.start();
     }
-    skinDirectory_ = backend_ != nullptr ? backend_->resolvePreviewSkinDir() : QString();
+    skinDirectory_ = surface() != nullptr ? surface()->resolveSkinDir() : QString();
     if (probeThisResolve) {
         const qint64 skinElapsedNs = skinTimer.nsecsElapsed();
         v2UiProbeSkinResolveNs_ += skinElapsedNs;
@@ -141,18 +144,18 @@ void QmlPreviewModel::rebuildStatistics()
 
 void QmlPreviewModel::refreshFromBackend(bool force)
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
-    const double nextPosition = backend_->shellPreviewPositionSeconds();
-    const double nextDuration = backend_->shellPreviewDurationSeconds();
-    const double nextLowerBound = backend_->shellPreviewLowerBoundSeconds();
-    QString nextRateLabel = backend_->shellPreviewSpeedLabel().trimmed();
+    const double nextPosition = surface()->positionSeconds();
+    const double nextDuration = surface()->durationSeconds();
+    const double nextLowerBound = surface()->lowerBoundSeconds();
+    QString nextRateLabel = surface()->playbackRateLabel().trimmed();
     nextRateLabel.remove(QLatin1Char('x'), Qt::CaseInsensitive);
     bool rateOk = false;
     const double nextRate = nextRateLabel.toDouble(&rateOk);
-    const bool nextPlaying = backend_->shellPreviewPlaying();
-    const RenderMode nextRenderModeValue = backend_->muriRenderMode();
+    const bool nextPlaying = surface()->playing();
+    const RenderMode nextRenderModeValue = surface()->muriRenderMode();
     const QString nextRenderMode = muriRenderModeToken(nextRenderModeValue);
     if (nextRenderModeValue == RenderMode::Native
         || nextRenderModeValue == RenderMode::EraseByArea) {
@@ -163,7 +166,7 @@ void QmlPreviewModel::refreshFromBackend(bool force)
     const QString nextRenderModeLabel = nextMuriCheckEnabled
         ? tr("无理检测")
         : tr("常规渲染");
-    const QStringList nextStatisticsTexts = backend_->shellPreviewStatsTexts();
+    const QStringList nextStatisticsTexts = surface()->statsTexts();
 
     const bool positionChangedValue = force || nextPosition != positionSeconds_;
     const bool transportChangedValue = force
@@ -212,10 +215,10 @@ void QmlPreviewModel::refreshFromBackend(bool force)
 
 void QmlPreviewModel::updateV2UiProbePlaybackState()
 {
-    if (!v2UiProbeEnabled_ || backend_ == nullptr) {
+    if (!v2UiProbeEnabled_ || surface() == nullptr) {
         return;
     }
-    const bool playingNow = backend_->shellPreviewPlaying();
+    const bool playingNow = surface()->playing();
     if (playingNow && !v2UiProbePlaybackActive_) {
         resetV2UiProbe();
     } else if (!playingNow && v2UiProbePlaybackActive_) {
@@ -243,64 +246,64 @@ QString QmlPreviewModel::currentSkinDirectory() const
     return skinDirectory_;
 }
 
-QObject* QmlPreviewModel::runtime() const { return backend_->shellPreviewRuntimeObject(); }
-QObject* QmlPreviewModel::mediaHost() const { return backend_->shellPreviewStageMediaHostObject(); }
+QObject* QmlPreviewModel::runtime() const { return surface()->previewRuntimeObject(); }
+QObject* QmlPreviewModel::mediaHost() const { return surface()->stageMediaHostObject(); }
 
 double QmlPreviewModel::canvasAspectRatio() const
 {
-    return backend_ != nullptr ? backend_->shellPreviewCanvasAspectRatio() : 1.0;
+    return surface() != nullptr ? surface()->canvasAspectRatio() : 1.0;
 }
 
-void QmlPreviewModel::setPositionSeconds(double value) { backend_->seekShellPreview(value); }
-void QmlPreviewModel::setRate(double value) { backend_->setShellPreviewRate(value); }
+void QmlPreviewModel::setPositionSeconds(double value) { surface()->seek(value); }
+void QmlPreviewModel::setRate(double value) { surface()->setPlaybackRate(value); }
 void QmlPreviewModel::setPlaying(bool value)
 {
-    if (value != playing()) backend_->toggleShellPreviewPlayback();
+    if (value != playing()) surface()->togglePlayback();
 }
 
 void QmlPreviewModel::toggleRenderMode()
 {
-    backend_->toggleShellMuriRenderMode();
+    surface()->toggleMuriRenderMode();
     refreshFromBackend();
 }
 
 void QmlPreviewModel::setMuriCheckEnabled(bool enabled)
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
-    const RenderMode current = backend_->muriRenderMode();
+    const RenderMode current = surface()->muriRenderMode();
     if (enabled) {
         if (current == RenderMode::MaimuriDxStyle) {
             return;
         }
-        backend_->setMuriRenderMode(RenderMode::MaimuriDxStyle);
+        surface()->setMuriRenderMode(RenderMode::MaimuriDxStyle);
     } else {
         if (current != RenderMode::MaimuriDxStyle) {
             return;
         }
-        backend_->setMuriRenderMode(lastRegularMode_);
+        surface()->setMuriRenderMode(lastRegularMode_);
     }
     refreshFromBackend();
 }
 
 void QmlPreviewModel::setSmoothStarErase(bool enabled)
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
     lastRegularMode_ = enabled ? RenderMode::Native : RenderMode::EraseByArea;
-    if (backend_->muriRenderMode() != RenderMode::MaimuriDxStyle) {
-        backend_->setMuriRenderMode(lastRegularMode_);
+    if (surface()->muriRenderMode() != RenderMode::MaimuriDxStyle) {
+        surface()->setMuriRenderMode(lastRegularMode_);
     }
     refreshFromBackend();
 }
 
-void QmlPreviewModel::stop() { backend_->stopShellPreview(); }
+void QmlPreviewModel::stop() { surface()->stop(); }
 
-void QmlPreviewModel::togglePlayback() { backend_->toggleShellPreviewPlayback(); }
+void QmlPreviewModel::togglePlayback() { surface()->togglePlayback(); }
 
-void QmlPreviewModel::adjustRate(int direction) { backend_->nudgeShellPreviewRate(direction); }
+void QmlPreviewModel::adjustRate(int direction) { surface()->nudgePlaybackRate(direction); }
 
 void QmlPreviewModel::logPreviewInteraction(const QString& action, const QString& payload)
 {
@@ -313,8 +316,8 @@ void QmlPreviewModel::logPreviewInteraction(const QString& action, const QString
         true);
 }
 
-void QmlPreviewModel::beginScrub() { backend_->beginShellPreviewScrub(); }
+void QmlPreviewModel::beginScrub() { surface()->beginScrub(); }
 
-void QmlPreviewModel::updateScrub(double second) { backend_->updateShellPreviewScrub(second, true); }
+void QmlPreviewModel::updateScrub(double second) { surface()->updateScrub(second, true); }
 
-void QmlPreviewModel::endScrub(double second) { backend_->endShellPreviewScrub(second, true); }
+void QmlPreviewModel::endScrub(double second) { surface()->endScrub(second, true); }

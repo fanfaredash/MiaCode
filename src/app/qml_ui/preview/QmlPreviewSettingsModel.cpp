@@ -3,7 +3,6 @@
 #include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewHudState.h"
 #include "core/video/PreviewRenderSettings.h"
-#include "mainwindow/MainWindow.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/FontLibrary.h"
 #include "ui/UiText.h"
@@ -32,29 +31,29 @@ QVariantMap option(const QVariant& value, const char* labelKey)
 
 }  // namespace
 
-QmlPreviewSettingsModel::QmlPreviewSettingsModel(MainWindow& backend,
-                                                 miacode::v2::UiRequestService& uiRequests,
+QmlPreviewSettingsModel::QmlPreviewSettingsModel(miacode::v2::UiRequestService& uiRequests,
                                                  miacode::v2::PreviewAppearanceState& appearance,
+                                                 miacode::v2::PreviewSurface*& surfaceSlot,
                                                  QObject* parent)
     : QObject(parent)
     // From the application assembly, not from the hidden window.
     , uiRequests_(&uiRequests)
     , appearance_(&appearance)
-    , backend_(&backend)
+    , surfaceSlot_(&surfaceSlot)
 {
 }
 
 QVariantMap QmlPreviewSettingsModel::values() const
 {
-    return backend_ != nullptr ? backend_->previewRenderSettings() : QVariantMap{};
+    return surface() != nullptr ? surface()->renderSettings() : QVariantMap{};
 }
 
 void QmlPreviewSettingsModel::setValue(const QString& key, const QVariant& value)
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
-    backend_->setPreviewRenderSetting(key, value);
+    surface()->setRenderSetting(key, value);
     emit changed();
 }
 
@@ -173,13 +172,13 @@ QVariantList QmlPreviewSettingsModel::judgeEffectOptions() const
 QVariantList QmlPreviewSettingsModel::skinOptions() const
 {
     QVariantList list;
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return list;
     }
-    for (const QString& name : backend_->availablePreviewSkinDirectoryNames()) {
+    for (const QString& name : surface()->availableSkinDirectoryNames()) {
         list.append(QVariantMap{
             {QStringLiteral("id"), name},
-            {QStringLiteral("label"), backend_->previewSkinDisplayName(name)},
+            {QStringLiteral("label"), surface()->skinDisplayName(name)},
         });
     }
     return list;
@@ -187,10 +186,10 @@ QVariantList QmlPreviewSettingsModel::skinOptions() const
 
 int QmlPreviewSettingsModel::skinIndex() const
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return -1;
     }
-    const QStringList names = backend_->availablePreviewSkinDirectoryNames();
+    const QStringList names = surface()->availableSkinDirectoryNames();
     for (int i = 0; i < names.size(); ++i) {
         if (names.at(i).compare(appearance_->skinDirectoryName(), Qt::CaseInsensitive) == 0) {
             return i;
@@ -224,7 +223,7 @@ QVariantList QmlPreviewSettingsModel::outlineOptions() const
 
 int QmlPreviewSettingsModel::outlineIndex() const
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return 1;
     }
     switch (appearance_->outlineVariant()) {
@@ -293,10 +292,10 @@ QString QmlPreviewSettingsModel::hudFontSample() const
 
 void QmlPreviewSettingsModel::setSkinIndex(int index)
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
-    const QStringList names = backend_->availablePreviewSkinDirectoryNames();
+    const QStringList names = surface()->availableSkinDirectoryNames();
     if (index < 0 || index >= names.size()) {
         return;
     }
@@ -311,7 +310,7 @@ void QmlPreviewSettingsModel::setSkinIndex(int index)
 
 void QmlPreviewSettingsModel::setSkinJudgeEffectIndex(int index)
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
     const auto style = index == 1 ? PreviewJudgeEffectStyle::Starry : PreviewJudgeEffectStyle::Standard;
@@ -323,7 +322,7 @@ void QmlPreviewSettingsModel::setSkinJudgeEffectIndex(int index)
 
 void QmlPreviewSettingsModel::setOutlineIndex(int index)
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
     PreviewOutlineVariant variant = PreviewOutlineVariant::Line;
@@ -341,7 +340,7 @@ void QmlPreviewSettingsModel::setOutlineIndex(int index)
     default:
         break;
     }
-    backend_->applyPreviewOutlineVariant(variant, /*useAutoSelection=*/false, /*persistState=*/true);
+    surface()->applyOutlineVariant(variant, /*useAutoSelection=*/false, /*persistState=*/true);
     emit skinChanged();
 }
 
@@ -362,18 +361,18 @@ void QmlPreviewSettingsModel::setHudFontPath(const QString& path)
         return;
     }
     miacode::preview::scene::setPreviewHudCustomFontPath(area, path);
-    if (backend_ != nullptr) {
-        backend_->refreshPreviewSurfaces();
+    if (surface() != nullptr) {
+        surface()->refreshSurfaces();
     }
     emit hudFontChanged();
 }
 
 void QmlPreviewSettingsModel::openSkinDirectory()
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
-    const QString skinRoot = backend_->resolvePreviewSkinRootDir();
+    const QString skinRoot = surface()->resolveSkinRootDir();
     if (!skinRoot.isEmpty()) {
         QDir().mkpath(skinRoot);
         QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
@@ -382,10 +381,10 @@ void QmlPreviewSettingsModel::openSkinDirectory()
 
 void QmlPreviewSettingsModel::openJudgeLineDirectory()
 {
-    if (backend_ == nullptr) {
+    if (surface() == nullptr) {
         return;
     }
-    const QString outlineDir = backend_->resolvePreviewCustomOutlineDir();
+    const QString outlineDir = surface()->resolveCustomOutlineDir();
     if (!outlineDir.isEmpty()) {
         QDir().mkpath(outlineDir);
         QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
