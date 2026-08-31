@@ -27,6 +27,7 @@ Rectangle {
     property int followDecorationStart: 0
     property int followDecorationEnd: 0
     property int followDecorationCursor: 0
+    property int followLayoutTick: 0
     onMetadataModeChanged: {
         syncTextFromController()
         publishNavigationReadiness()
@@ -286,8 +287,11 @@ Rectangle {
         return true
     }
 
-    // Scrolls the decoration into view without touching the caret or selection,
-    // which is what separates paused follow from the playing caret-move path.
+    function bumpFollowLayout() {
+        root.followLayoutTick++
+    }
+
+    // Scrolls the decoration into view without touching the caret or selection.
     Timer {
         id: decorationCenterTimer
         interval: 0
@@ -608,9 +612,18 @@ Rectangle {
                 // the background so it sits under the glyphs and never competes
                 // with the real selection.
                 Rectangle {
-                    readonly property rect startRect: sourceArea.positionToRectangle(root.followDecorationStart)
-                    readonly property rect endRect: sourceArea.positionToRectangle(root.followDecorationEnd)
-                    visible: root.followDecorationActive && root.followDecorationEnd > root.followDecorationStart
+                    readonly property rect startRect: {
+                        root.followLayoutTick
+                        return sourceArea.positionToRectangle(root.followDecorationStart)
+                    }
+                    readonly property rect endRect: {
+                        root.followLayoutTick
+                        return sourceArea.positionToRectangle(root.followDecorationEnd)
+                    }
+                    visible: root.followDecorationActive
+                        && root.followDecorationEnd > root.followDecorationStart
+                        && startRect.height > 0
+                        && startRect.y + 0.5 >= sourceArea.topPadding
                     x: startRect.x
                     y: startRect.y - editorScroll.contentY
                     // A span that wraps or crosses lines falls back to the rest of
@@ -645,8 +658,10 @@ Rectangle {
                 height: Math.max(caretRect.height, root.codeLineHeight)
                 color: Theme.colors.accent.primary
             }
+            onContentHeightChanged: root.bumpFollowLayout()
             onTextChanged: {
                 editorInputBridge.applyBlockSpacing()
+                root.bumpFollowLayout()
                 // Rehighlighting is a formatting pass over the same characters,
                 // but TextEdit still reports it as textChanged. Writing that
                 // back would push an identical document through the backend on
@@ -959,6 +974,7 @@ Rectangle {
         publishNavigationReadiness()
         scheduleEditorContext(false)
         applyFollowProjection()
+        Qt.callLater(root.bumpFollowLayout)
     }
     Component.onDestruction: {
         if (root.syncController)

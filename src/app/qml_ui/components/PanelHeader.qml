@@ -6,19 +6,41 @@ Rectangle {
 
     property string title
     property bool showMore: false
+    property bool sidebarTitle: false
     default property alias trailing: trailingRow.data
 
-    implicitHeight: 34
+    readonly property real titleInkTop: {
+        const sample = root.title.length > 0 ? root.title : "汉"
+        const rect = titleMetrics.tightBoundingRect(sample)
+        return Math.max(0, titleMetrics.ascent + rect.y)
+    }
+
+    implicitHeight: root.sidebarTitle
+                    ? Math.ceil(titleLabel.y + titleLabel.implicitHeight + Theme.chromeInsetY)
+                    : 34
     color: Theme.surfaceColor("panel", Theme.colors.background.surface)
 
+    FontMetrics {
+        id: titleMetrics
+        font: titleLabel.font
+    }
+
     Text {
+        id: titleLabel
+
         anchors.left: parent.left
         anchors.leftMargin: 10
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.top: root.sidebarTitle ? parent.top : undefined
+        anchors.topMargin: root.sidebarTitle
+                           ? Math.max(0, Theme.activityIconTop - root.titleInkTop)
+                           : 0
+        anchors.verticalCenter: root.sidebarTitle ? undefined : parent.verticalCenter
         text: root.title
-        color: Theme.colors.text.primary
+        color: root.sidebarTitle ? Theme.colors.text.heading : Theme.colors.text.primary
         font.family: Theme.uiFont
-        font.pixelSize: Theme.uiFontSize
+        font.pixelSize: root.sidebarTitle ? Theme.headingFontSize : Theme.uiFontSize
+        font.weight: root.sidebarTitle ? Font.DemiBold : Font.Normal
+        verticalAlignment: Text.AlignTop
     }
 
     Row {

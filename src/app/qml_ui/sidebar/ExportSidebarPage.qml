@@ -16,6 +16,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         title: UiText.text("导出")
+        sidebarTitle: true
         showMore: false
     }
 

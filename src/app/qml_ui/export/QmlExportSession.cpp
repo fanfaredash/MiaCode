@@ -488,9 +488,6 @@ void QmlExportSession::setActiveTab(const QString& tabId)
     }
     activeTab_ = next;
     emit activeTabChanged();
-    if (activeTab_ == QLatin1String("batch") && settingsTab_ == QLatin1String("range")) {
-        setSettingsTab(QStringLiteral("output"));
-    }
     if (pageSessionActive_) {
         syncAudition();
     }
@@ -498,10 +495,13 @@ void QmlExportSession::setActiveTab(const QString& tabId)
 
 void QmlExportSession::setSettingsTab(const QString& tabId)
 {
-    if (settingsTab_ == tabId) {
+    const QString next = tabId == QLatin1String("range")
+        ? QStringLiteral("output")
+        : tabId;
+    if (settingsTab_ == next) {
         return;
     }
-    settingsTab_ = tabId;
+    settingsTab_ = next;
     emit settingsTabChanged();
 }
 
