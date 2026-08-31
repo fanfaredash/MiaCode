@@ -150,6 +150,10 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
     documentSection_ = std::make_unique<DocumentSection>(*this, ui_, state_);
     dialogsSection_ = std::make_unique<DialogsSection>(*this, ui_, state_);
     exportSection_ = std::make_unique<ExportSection>(*this, ui_, state_);
+    // The export page reaches the engine through the assembly's slot, never
+    // through this window's member. Cleared at the top of ~MainWindow so the
+    // page cannot call into a half-destroyed section.
+    applicationServices_.setExportEngine(exportSection_.get());
     preferencesSection_ = std::make_unique<PreferencesSection>(*this, ui_, state_);
     previewSection_ = std::make_unique<PreviewSection>(*this, ui_, state_);
     validationSection_ = std::make_unique<ValidationSection>(*this, ui_, state_);
@@ -748,7 +752,7 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
             });
     ui_.qmlExportSession_ = new QmlExportSession(
         *this, applicationServices_.uiRequests(), applicationServices_.jobProgress(),
-        applicationServices_.previewAppearance(), this);
+        applicationServices_.previewAppearance(), applicationServices_.exportEngineSlot(), this);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
     if (editorFindBar_ != nullptr) {

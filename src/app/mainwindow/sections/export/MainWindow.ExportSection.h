@@ -2,22 +2,35 @@
 
 #include "../../MainWindow.h"
 
-class MainWindow::ExportSection {
-public:
-    struct BatchExportResult {
-        bool canceled = false;
-        int successCount = 0;
-        QStringList failedCharts;
-        QStringList exportedFiles;
-    };
+#include "app/v2/ExportEngine.h"
 
-    struct BatchExportCallbacks {
-        std::function<void(int percent, const QString& label)> progressChanged;
-        std::function<bool()> cancellationRequested;
-        std::function<void()> retrying;
-    };
+// Implements the export page's engine contract. The QML page names
+// miacode::v2::ExportEngine, never this class — which is what lets the
+// implementation move out of MainWindow in stage 4 without the page noticing.
+class MainWindow::ExportSection final : public miacode::v2::ExportEngine {
+public:
+    // The batch types are the interface's; these aliases keep the ~20 existing
+    // widget-side call sites spelled as they were.
+    using BatchExportResult = miacode::v2::ExportEngine::BatchResult;
+    using BatchExportCallbacks = miacode::v2::ExportEngine::BatchCallbacks;
 
     ExportSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
+
+    // ---- miacode::v2::ExportEngine ----
+    VideoExportTask buildSeedTask(int difficultyId) override;
+    void applySharedTaskSettings(const VideoExportTask& task) override;
+    bool startAudition(int difficultyId, const VideoExportTask& visualTask) override;
+    void stopAudition() override;
+    bool launchVideoExport(const VideoExportTask& requestedTask, int difficultyId,
+                           QString* errorMessage) override;
+    bool launchBatchExport(const VideoExportTask& templateTask,
+                           const QStringList& chartDirectories,
+                           const QList<int>& selectedDifficultyIds,
+                           const QString& outputDirectory,
+                           BatchResult* result,
+                           const BatchCallbacks& callbacks,
+                           QString* errorMessage) override;
+    void cancelVideoExport() override;
 
     void applySharedExportTaskSettings(const VideoExportTask& task);
     // The three dialog entry slots take an explicit difficulty id; the

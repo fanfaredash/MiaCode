@@ -21,6 +21,11 @@ src/
                     destroyed after it. Nothing else in src/app may construct
                     one of these — application_services_spec scans the tree and
                     fails if it does.
+                    ExportEngine is the export page's contract; the assembly
+                    holds only the SLOT because the implementation is still
+                    MainWindow::ExportSection. The window installs itself and
+                    withdraws at the top of ~MainWindow, and consumers bind to
+                    exportEngineSlot() rather than snapshotting the pointer.
                     PreviewAppearanceState holds the eight values that decide
                     how BOTH the live preview and the exported video are drawn
                     (skin dir/variant, judge effect, outline, slide-earlier, tap

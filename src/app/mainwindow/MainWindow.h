@@ -137,7 +137,6 @@ class MainWindow : public QMainWindow
     // state for its badge row — same narrow-feature rationale as the
     // latency page above.
     friend class QmlEditorPageHost;
-    friend class QmlExportSession;
 
 public:
     // Phase 4c — non-owning accessor for the preview stage-media host
@@ -684,6 +683,11 @@ public:
                                     bool persistState);
     void setMuriRenderMode(RenderMode mode, bool persistState = true);
     void onPreferences();
+    // The export page's two remaining reads: where the live playhead is (it
+    // seeds the export range from the current position) and a nudge to
+    // re-derive the negative-time intro region after an intro edit.
+    double currentPreviewAuthoritativeAudioClockSecond() const;
+    void refreshExportIntroState();
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push

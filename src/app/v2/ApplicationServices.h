@@ -13,6 +13,10 @@
 
 namespace miacode::v2 {
 
+// Only the slot lives here; including ExportEngine.h would drag the whole
+// VideoExportTask definition into every consumer of the assembly.
+class ExportEngine;
+
 // The parser validation locale matching the session UI language.
 //
 // This used to live in MainWindowShared, a QtWidgets translation unit, so
@@ -69,6 +73,18 @@ public:
     PreviewAppearanceState& previewAppearance() { return previewAppearance_; }
     const PreviewAppearanceState& previewAppearance() const { return previewAppearance_; }
 
+    // The export engine is the one service the assembly does not own yet: its
+    // implementation is still a MainWindow section, 3,600 lines deep in the
+    // widget layer. So the assembly holds the slot and the window installs
+    // itself into it, then clears it before it starts tearing down.
+    //
+    // Consumers bind to the SLOT (`exportEngineSlot()`), not to a snapshot of
+    // the pointer, so the clear is visible to them immediately rather than
+    // leaving each holder with its own dangling copy.
+    ExportEngine*& exportEngineSlot() { return exportEngine_; }
+    ExportEngine* exportEngine() const { return exportEngine_; }
+    void setExportEngine(ExportEngine* engine) { exportEngine_ = engine; }
+
     SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
 
 private:
@@ -83,6 +99,7 @@ private:
     UiRequestService uiRequests_;
     JobProgressService jobProgress_;
     PreviewAppearanceState previewAppearance_;
+    ExportEngine* exportEngine_ = nullptr;
 };
 
 }  // namespace miacode::v2

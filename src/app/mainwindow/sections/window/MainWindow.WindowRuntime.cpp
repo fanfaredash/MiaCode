@@ -314,6 +314,12 @@ MainWindow::~MainWindow()
         QStringLiteral("step=destructor_body_entered"),
         /*force=*/true);
 
+    // Withdraw the export engine before anything starts being torn down. The
+    // assembly outlives this window, and the export page is a QObject child so
+    // it dies AFTER exportSection_ — this is what stops a late call from
+    // reaching a destroyed section.
+    applicationServices_.setExportEngine(nullptr);
+
     // Original diagnostic with member-touching .arg() chain — kept for
     // completeness but now safe because the bare marker above already
     // proved the destructor entered. force=true so it lands even when

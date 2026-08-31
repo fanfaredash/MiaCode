@@ -8,6 +8,7 @@
 
 #include "app/v2/UiRequestService.h"
 #include "app/v2/JobProgressService.h"
+#include "app/v2/ExportEngine.h"
 #include "app/v2/PreviewAppearanceState.h"
 #include "tools/video_export/VideoExportController.h"
 
@@ -114,6 +115,7 @@ public:
                      miacode::v2::UiRequestService& uiRequests,
                      miacode::v2::JobProgressService& jobProgress,
                      miacode::v2::PreviewAppearanceState& appearance,
+                     miacode::v2::ExportEngine*& engineSlot,
                      QObject* parent = nullptr);
 
     QObject* uiRequests() { return uiRequests_; }
@@ -310,6 +312,14 @@ private:
     // The appearance values' owner. The export page and the preview settings
     // page render the same skin, so they must read and write one copy.
     miacode::v2::PreviewAppearanceState* appearance_ = nullptr;
+    // Bound to the assembly's slot rather than to a snapshot of the pointer, so
+    // the window withdrawing the engine during teardown is visible here at
+    // once instead of leaving a dangling copy behind.
+    miacode::v2::ExportEngine** engineSlot_ = nullptr;
+    miacode::v2::ExportEngine* engine() const
+    {
+        return engineSlot_ != nullptr ? *engineSlot_ : nullptr;
+    }
     MainWindow* backend_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;

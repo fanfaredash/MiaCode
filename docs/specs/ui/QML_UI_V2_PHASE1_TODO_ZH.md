@@ -551,9 +551,25 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          与 `setMuriRenderMode`（两者早就带 `persist` 参数，与既有偏好设置公有面同形）、
          `onPreferences`。**清单计数一个都没动**——这些名字本来就在清单里；变的是访问权从
          「无边界，任何后续改动都能拿到任何东西」变成「就这 8 个」。
-         剩下两条 friend 都有明确理由不能现在删：`QmlEditorPageHost` 的四个 `switchTo*Field`
-         驱动隐藏 widget 栈，公开它们等于把一件本该消失的事写进正式接口（随第 3 项消失）；
-         `QmlExportSession` 还直读 `exportSection_`，那是导出引擎本身，必须随 `ExportSession` 搬走。
+      9. **导出引擎接缝立起来，私有成员直读归零，friend 授权 2 → 1**。
+         `exportSection_` 是全仓库最后一处私有成员直读，也是唯一一处加访问器只会让问题
+         **更正式**的耦合——页面依赖的不是一个值，而是窗口内部的一整块引擎。
+         做法是先立接口：`miacode::v2::ExportEngine`（七个操作：seed task、apply live settings、
+         start/stop audition、launch video/batch export、cancel），`MainWindow::ExportSection`
+         实现它并把自己装进 `ApplicationServices` 的槽位，`QmlExportSession` 只认接口。
+         那 3,600 行实现**没有搬**——搬它是阶段 4 的事；变的是方向：实现真的搬出窗口时，
+         只有实现侧要改，页面一行不动。
+         槽位而不是快照：消费方绑定 `exportEngineSlot()`，窗口在 `~MainWindow` 最开头撤销引擎，
+         所以撤销对每个持有者立刻可见——导出页是 QObject child，会比 `exportSection_` 活得久，
+         这正是防止它调进一个已析构 section 的机制。
+         剩下的 `currentPreviewAuthoritativeAudioClockSecond` / `refreshExportIntroState`
+         按第 8 条的办法公开，`QmlExportSession` 的 friend 授权随之删除。
+         守卫 `export_engine_spec` 只链 Core+Gui+Test，证明这个契约不需要窗口就能实现，
+         并守住槽位纪律与「用户取消是结果不是失败」。
+         **只剩 `QmlEditorPageHost` 一条 friend**：四个 `switchTo*Field` 驱动隐藏 widget 栈，
+         公开它们等于把一件本该消失的事写进正式接口，随第 3 项一起消失。
+     10. 顺带修好上一轮的一处文档损坏：清册的按文件分块在正则重生成时丢了换行，
+         把小标题粘到了上一条 bullet 后面（15 块显示成 8 块）。本次整节按结构重新生成。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
       *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。

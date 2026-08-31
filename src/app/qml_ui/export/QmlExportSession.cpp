@@ -46,12 +46,14 @@ QmlExportSession::QmlExportSession(MainWindow& backend,
                                    miacode::v2::UiRequestService& uiRequests,
                                    miacode::v2::JobProgressService& jobProgress,
                                    miacode::v2::PreviewAppearanceState& appearance,
+                                   miacode::v2::ExportEngine*& engineSlot,
                                    QObject* parent)
     : QObject(parent)
     , uiRequests_(&uiRequests)
     // From the application assembly, not from the hidden window.
     , jobProgress_(&jobProgress)
     , appearance_(&appearance)
+    , engineSlot_(&engineSlot)
     , backend_(&backend)
 {
     connect(&backend, &MainWindow::videoExportWorkerRunningChanged, this, [this](bool running) {
@@ -129,10 +131,10 @@ QVariantList QmlExportSession::backgroundScaleModeOptions() const
 
 VideoExportTask QmlExportSession::coverTaskForDifficulty(int difficultyId) const
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return VideoExportTask{};
     }
-    return backend_->exportSection_->buildVideoExportSeedTaskPublic(difficultyId);
+    return engine()->buildSeedTask(difficultyId);
 }
 
 int QmlExportSession::presetIndex() const
@@ -575,7 +577,7 @@ void QmlExportSession::savePreferences() const
 
 void QmlExportSession::seedFromDifficulty(int difficultyId)
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr || !difficultyHasChartBody(difficultyId)) {
+    if (engine() == nullptr || !difficultyHasChartBody(difficultyId)) {
         setUnavailableReason(
             difficultyExists(difficultyId)
                 ? UiText::text(QStringLiteral("export_page.the_selected_difficulty_has_no"))
@@ -583,7 +585,7 @@ void QmlExportSession::seedFromDifficulty(int difficultyId)
         return;
     }
     setUnavailableReason(QString());
-    VideoExportTask seededTask = backend_->exportSection_->buildVideoExportSeedTaskPublic(difficultyId);
+    VideoExportTask seededTask = engine()->buildSeedTask(difficultyId);
     if (hasSeededTask_) {
         miacode::video_export::copyVideoExportUserSettings(task_, &seededTask);
     }
@@ -613,33 +615,33 @@ void QmlExportSession::seedFromDifficulty(int difficultyId)
 
 void QmlExportSession::syncAudition()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr || !pageSessionActive_) {
+    if (engine() == nullptr || !pageSessionActive_) {
         return;
     }
     if (!difficultyHasChartBody(selectedDifficultyId_)) {
         stopAudition();
         return;
     }
-    backend_->exportSection_->startQmlExportAudition(selectedDifficultyId_, task_);
+    engine()->startAudition(selectedDifficultyId_, task_);
 }
 
 void QmlExportSession::applyLivePreviewSettings()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     VideoExportTask liveTask = task_;
     applyOwnerLiveFields(&liveTask);
-    backend_->exportSection_->applySharedExportTaskSettings(liveTask);
+    engine()->applySharedTaskSettings(liveTask);
     syncAudition();
 }
 
 void QmlExportSession::stopAudition()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
-    backend_->exportSection_->stopQmlExportAudition();
+    engine()->stopAudition();
 }
 
 void QmlExportSession::applyOwnerLiveFields(VideoExportTask* task) const
@@ -668,7 +670,7 @@ VideoExportTask QmlExportSession::buildRequestedTask() const
 
 void QmlExportSession::startExport()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     if (activeTab_ == QLatin1String("batch")) {
@@ -677,8 +679,8 @@ void QmlExportSession::startExport()
         batchExportRunning_ = true;
         exportRunning_ = true;
         emit exportRunningChanged();
-        MainWindow::ExportSection::BatchExportResult result;
-        MainWindow::ExportSection::BatchExportCallbacks callbacks;
+        miacode::v2::ExportEngine::BatchResult result;
+        miacode::v2::ExportEngine::BatchCallbacks callbacks;
         // Batch runs synchronously on the UI thread, so it reports onto the same
         // shell overlay every other job uses. Before this the callback pumped
         // events and threw the percentage away, leaving batch with no progress
@@ -710,7 +712,7 @@ void QmlExportSession::startExport()
         // if the single-export range currently starts after chart zero.
         batchTask.intro.enabled = task_.intro.enabled;
         QString error;
-        const bool launched = backend_->exportSection_->launchQmlBatchExport(
+        const bool launched = engine()->launchBatchExport(
             batchTask,
             chartDirectories_,
             batchSelectedDifficultyIds_,
@@ -772,7 +774,7 @@ void QmlExportSession::startExport()
     QString error;
     exportRunning_ = true;
     emit exportRunningChanged();
-    if (!backend_->exportSection_->launchQmlVideoExport(
+    if (!engine()->launchVideoExport(
             buildRequestedTask(), selectedDifficultyId_, &error)) {
         exportRunning_ = false;
         emit exportRunningChanged();
@@ -788,14 +790,14 @@ void QmlExportSession::startExport()
 
 void QmlExportSession::cancelExport()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     if (batchExportRunning_) {
         batchCancellationRequested_ = true;
         return;
     }
-    backend_->exportSection_->cancelVideoExportWorker();
+    engine()->cancelVideoExport();
 }
 
 void QmlExportSession::browseOutputPath()
