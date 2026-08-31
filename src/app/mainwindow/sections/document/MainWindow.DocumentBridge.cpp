@@ -248,6 +248,16 @@ QVector<int> MainWindow::documentDifficultyIds() const
     return document_.difficultyIds();
 }
 
+int MainWindow::projectLastOpenedDifficultyId() const
+{
+    return projectLastOpenedDifficultyId_;
+}
+
+const MuriRenderOptions& MainWindow::muriRenderOptions() const
+{
+    return muriRenderOptions_;
+}
+
 QString MainWindow::documentSourceText() const
 {
     return document_.toText();

@@ -264,6 +264,13 @@ public:
     QString documentField(DocumentField field) const;
     QString difficultyField(int difficultyId, DifficultyField field) const;
     QVector<int> documentDifficultyIds() const;
+    // Which difficulty this project was last opened on. Persisted per project
+    // and read by the export page to pick its default; an accessor rather than
+    // a private member reach so the export page's coupling is bounded.
+    int projectLastOpenedDifficultyId() const;
+    // The Muri overlay render options the export task is seeded from. Owned by
+    // the window for now — the Muri render settings domain has not moved yet.
+    const MuriRenderOptions& muriRenderOptions() const;
     QString documentSourceText() const;
     QString activeDocumentChartText() const;
     QString documentDifficultyChartText(int difficultyId) const;

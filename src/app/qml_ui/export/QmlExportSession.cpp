@@ -406,9 +406,11 @@ void QmlExportSession::setUnavailableReason(const QString& reason)
 
 bool QmlExportSession::difficultyExists(int difficultyId) const
 {
+    // documentDifficultyIds() lists exactly the difficulties the document
+    // holds, so membership is the same question as difficulty(id) != nullptr.
     return backend_ != nullptr
         && SimaiDocument::isDifficultyId(difficultyId)
-        && backend_->document_.difficulty(difficultyId) != nullptr;
+        && backend_->documentDifficultyIds().contains(difficultyId);
 }
 
 bool QmlExportSession::difficultyHasChartBody(int difficultyId) const
@@ -416,8 +418,7 @@ bool QmlExportSession::difficultyHasChartBody(int difficultyId) const
     if (!difficultyExists(difficultyId)) {
         return false;
     }
-    const SimaiDifficultyData* difficulty = backend_->document_.difficulty(difficultyId);
-    return difficulty != nullptr && !difficulty->chart.trimmed().isEmpty();
+    return !backend_->documentDifficultyChartText(difficultyId).trimmed().isEmpty();
 }
 
 int QmlExportSession::resolveDefaultDifficultyId(int previousActiveDifficultyId) const
@@ -428,11 +429,11 @@ int QmlExportSession::resolveDefaultDifficultyId(int previousActiveDifficultyId)
     if (difficultyExists(selectedDifficultyId_)) {
         return selectedDifficultyId_;
     }
-    if (backend_ != nullptr && difficultyExists(backend_->projectLastOpenedDifficultyId_)) {
-        return backend_->projectLastOpenedDifficultyId_;
+    if (backend_ != nullptr && difficultyExists(backend_->projectLastOpenedDifficultyId())) {
+        return backend_->projectLastOpenedDifficultyId();
     }
     if (backend_ != nullptr) {
-        const QVector<int> ids = backend_->document_.difficultyIds();
+        const QVector<int> ids = backend_->documentDifficultyIds();
         if (!ids.isEmpty()) {
             return ids.constFirst();
         }
@@ -512,7 +513,7 @@ void QmlExportSession::rebuildDifficultyList()
 {
     QVariantList next;
     if (backend_ != nullptr) {
-        for (int id : backend_->document_.difficultyIds()) {
+        for (int id : backend_->documentDifficultyIds()) {
             QVariantMap row;
             row.insert(QStringLiteral("id"), id);
             row.insert(QStringLiteral("name"), SimaiDocument::difficultyShortName(id));
@@ -651,7 +652,7 @@ void QmlExportSession::applyOwnerLiveFields(VideoExportTask* task) const
     task->tapJudgeTextDistance = appearance_->tapJudgeTextDistance();
     task->judgeEffectStyle = appearance_->judgeEffectStyle();
     task->centerDisplayMode = appearance_->centerDisplayMode();
-    task->muriRenderOptions = backend_->muriRenderOptions_;
+    task->muriRenderOptions = backend_->muriRenderOptions();
 }
 
 VideoExportTask QmlExportSession::buildRequestedTask() const

@@ -11,7 +11,7 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **120**，直接读取的 `MainWindow` 私有成员 **4**，
+> **计数（2026-09-01）**：方法 **124**，直接读取的 `MainWindow` 私有成员 **1**，
 > friend 授权 **5** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
@@ -33,6 +33,14 @@
 | 2026-09-01 | 起点 | 120 | 17 |
 | 2026-09-01 | `QmlEditorPageHost` 的两处私有成员换成等价公有访问器 | 120 | 15 |
 | 2026-09-01 | 预览外观八个值搬进 `miacode::v2::PreviewAppearanceState` | 120 | 4 |
+| 2026-09-01 | 剩下三个可直接换掉的私有成员改走窄访问器 | 124 | 1 |
+
+第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
+`documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
+就是那张表的键），`projectLastOpenedDifficultyId_` 和 `muriRenderOptions_` 各加一个窄访问器。
+方法数上升是**预期内的**：`friend` 给出的是无边界的访问权，任何后续改动都能顺着它拿到任何东西；
+换成具名访问器后，这份耦合第一次是可枚举、可逐条搬走的。现在 `QmlExportSession` 只剩
+`exportSection_` 一处无边界访问。
 
 第二次削减去掉了 11 个私有成员，方法数却不变，因为同时**去掉**了
 `savePortableState` 和 `applyPreviewSkinDirectoryToSurfaces`（改由窗口响应
@@ -90,15 +98,13 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `stopShellPreview`
 - `toggleShellMuriRenderMode`
 - `toggleShellPreviewPlayback`
-- `updateShellPreviewScrub`
-**`src/app/qml_ui/preview/QmlAudioSettingsModel.cpp`** — 方法 5，私有成员 0
+- `updateShellPreviewScrub`**`src/app/qml_ui/preview/QmlAudioSettingsModel.cpp`** — 方法 5，私有成员 0
 
 - `applyPreviewAudioSettingsFromUi`
 - `currentPreviewAudioSettings`
 - `restorePreviewAudioSettingsFromSoftwareDefault`
 - `savePreviewAudioSettingsAsSoftwareDefault`
-- `shellPreviewPlaying`
-**`src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp`** — 方法 8，私有成员 0
+- `shellPreviewPlaying`**`src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp`** — 方法 8，私有成员 0
 
 - `applyPreviewOutlineVariant`
 - `availablePreviewSkinDirectoryNames`
@@ -107,8 +113,7 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `refreshPreviewSurfaces`
 - `resolvePreviewCustomOutlineDir`
 - `resolvePreviewSkinRootDir`
-- `setPreviewRenderSetting`
-### 时间轴与分析（→ `TimelineSession`）
+- `setPreviewRenderSetting`### 时间轴与分析（→ `TimelineSession`）
 
 走带导航、底栏页签可见性、拖拽状态、Muri 提示偏好。
 
@@ -128,34 +133,40 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `shellTimelineTabVisible`
 - `shellTimelineUserInteractionStarted`
 - `shellValidationTabVisible`
-- `wheelShellTimelineNavigate`
-**`src/app/qml_ui/QmlAnalysisModel.cpp`** — 方法 2，私有成员 0
+- `wheelShellTimelineNavigate`**`src/app/qml_ui/QmlAnalysisModel.cpp`** — 方法 2，私有成员 0
 
 - `ignoreMuriIssuePrompts`
-- `navigateShellTimelineToSecond`
-### 导出与页面切换（→ `ExportSession`）
+- `navigateShellTimelineToSecond`### 导出与页面切换（→ `ExportSession`）
 
-剩下的四个私有成员全在这里：`document_`、`exportSection_`、`muriRenderOptions_`、
-`projectLastOpenedDifficultyId_`。前者应改读 `ChartWorkspace`（文档真相已经在那里），
-`exportSection_` 是真正的导出引擎、要随 `ExportSession` 一起搬。页面切换仍走隐藏
-`DocumentSection` 的 `switchTo*Field`，随第 3 项消失。
+全仓库仅剩的一处私有成员直读就在这里：`exportSection_`——它是真正的导出引擎，要随
+`ExportSession` 一起搬，不能用访问器糊过去。页面切换仍走隐藏 `DocumentSection` 的
+`switchTo*Field`，随第 3 项消失。
 
-**`src/app/qml_ui/export/QmlExportSession.cpp`** — 方法 9，私有成员 4
+**下一步的已知陷阱（`document_` 读取已改走公有访问器，但源头问题仍在）**：
+`documentDifficultyIds()` / `documentDifficultyChartText()` 读的仍是 `MainWindow` 的文档副本，
+不是 `ChartWorkspace`。看起来应该顺手改成读工作区，但**不要盲改**：
+`MainWindow` → 工作区这个方向是**延迟**同步的（`documentReplaced` 经
+`QMetaObject::invokeMethod` 排队后才 `adoptBackendDocumentReplacement()`），所以文档被后端替换
+（启动、根窗口拖放、原生「打开」、崩溃恢复）之后存在一个窗口期：`MainWindow` 已是新谱面，
+工作区还是旧的。此时改读工作区会让导出页列出**旧的**难度列表。要动这一处，得先把那条延迟同步
+处理掉，或者确认导出页不会在该窗口期内重建列表。
+
+**`src/app/qml_ui/export/QmlExportSession.cpp`** — 方法 13，私有成员 1
 
 - `applyPreviewOutlineVariant`
 - `applyPreviewSfxLevels`
 - `availablePreviewSkinDirectoryNames`
 - `currentPreviewAuthoritativeAudioClockSecond`
+- `documentDifficultyChartText`
+- `documentDifficultyIds`
+- `muriRenderOptions`
 - `previewSkinDisplayName`
+- `projectLastOpenedDifficultyId`
 - `refreshExportIntroState`
 - `refreshPreviewSurfaces`
 - `resolvePreviewCustomOutlineDir`
 - `resolvePreviewSkinRootDir`
-- `document_` *(私有成员)*
-- `exportSection_` *(私有成员)*
-- `muriRenderOptions_` *(私有成员)*
-- `projectLastOpenedDifficultyId_` *(私有成员)*
-**`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 8，私有成员 0
+- `exportSection_` *(私有成员)***`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 8，私有成员 0
 
 - `documentActiveDifficultyId`
 - `hasActiveDifficulty`
@@ -164,8 +175,7 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `switchToDifficultyField`
 - `switchToExportField`
 - `switchToLatencyField`
-- `switchToMetadataField`
-> 2026-09-01：两处私有成员读取（`activeDifficultyId_`、`qmlExportSession_`）已换成等价的公有
+- `switchToMetadataField`> 2026-09-01：两处私有成员读取（`activeDifficultyId_`、`qmlExportSession_`）已换成等价的公有
 > 访问器——`documentActiveDifficultyId()` 就是返回该成员，`qmlExportSession()` 本来就是头文件里
 > 写明的「唯一导出会话的只读交接口」。`friend class QmlEditorPageHost` **暂时保留**：四个
 > `switchTo*Field` 声明在 `MainWindowPrivateMethodsA.inc` 里，把它们改成公有等于把接口做宽而不是
@@ -190,8 +200,7 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `setChartNormalizeOptions`
 - `setQmlChartTextHandler`
 - `setQmlDocumentSaveHandler`
-- `setQmlLeaveDocumentHandler`
-### 偏好设置（→ `PreferencesService`）
+- `setQmlLeaveDocumentHandler`### 偏好设置（→ `PreferencesService`）
 
 这些 setter 不是纯设置：它们经 `editorSection_` / `timelineSection_` 把变化应用到隐藏 widget 布局和预览，拆分要连同应用侧一起搬。
 
@@ -217,13 +226,11 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `setPreviewStageMediaFrameRateMode`
 - `setTimelineFrameRateMode`
 - `setVideoDecodePrefersSoftware`
-- `setWorkspacePanelsSwapped`
-**`src/app/qml_ui/QmlApplicationContext.cpp`** — 方法 3，私有成员 0
+- `setWorkspacePanelsSwapped`**`src/app/qml_ui/QmlApplicationContext.cpp`** — 方法 3，私有成员 0
 
 - `currentEditorLineSpacingFactor`
 - `currentEditorTextFontSize`
-- `qmlExportSession`
-### 延迟检测（→ `LatencyService`）
+- `qmlExportSession`### 延迟检测（→ `LatencyService`）
 
 读侧（bpm/offset/clock）现在可以直接读 `ChartWorkspace`；写侧仍经 `timelineSection_`。
 
@@ -236,8 +243,7 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `latencyDocumentOffsetSeconds`
 - `latencyDocumentWholeBpm`
 - `latencySandboxController`
-- `latencyTrackPath`
-### 媒体工具（→ `MediaToolsService`）
+- `latencyTrackPath`### 媒体工具（→ `MediaToolsService`）
 
 ffmpeg 单文件流程的入口；UI 请求与作业进度已改走装配对象。
 
@@ -248,8 +254,7 @@ ffmpeg 单文件流程的入口；UI 请求与作业进度已改走装配对象�
 - `onCompressBackgroundVideo`
 - `onConvertTrackTo44100Hz`
 - `prependMediaBlankContext`
-- `restoreMediaBlankBackup`
-### 外壳宿主（→ QML 宿主自身，阶段 3.5 第 3 项）
+- `restoreMediaBlankBackup`### 外壳宿主（→ QML 宿主自身，阶段 3.5 第 3 项）
 
 根窗口、拖放、关闭与偏好设置入口。这一组消失就等于隐藏 `MainWindow` 消失。
 
@@ -263,11 +268,9 @@ ffmpeg 单文件流程的入口；UI 请求与作业进度已改走装配对象�
 - `setQuickShellRootWindow`
 - `setVisible`
 - `shellNoteQuickUiReady`
-- `shellSetRootWindowFrameGeometry`
-**`src/app/qml_ui/QmlShellLifecycle.cpp`** — 方法 1，私有成员 0
+- `shellSetRootWindowFrameGeometry`**`src/app/qml_ui/QmlShellLifecycle.cpp`** — 方法 1，私有成员 0
 
-- `requestShellClose`
-**`src/app/qml_ui/QmlCommandService.cpp`** — 方法 2，私有成员 0
+- `requestShellClose`**`src/app/qml_ui/QmlCommandService.cpp`** — 方法 2，私有成员 0
 
 - `onPreferences`
 - `requestLeaveDocument`

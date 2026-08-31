@@ -528,6 +528,22 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          `setSkinDirectory()` 根本不接受不一致的组合，`preview_appearance_state_spec` 守住这条。
          顺带把 `PreviewSkinVariant` 从 `MainWindow` 的嵌套枚举移到
          `core/video/PreviewRenderSettings.h`——它是渲染设置，不该逼每个消费方包含窗口头文件。
+      6. **剩下三个可直接换掉的私有成员改走窄访问器（私有成员 4 → 1，方法 120 → 124）**。
+         `document_` 的四处读取改走本来就公有的 `documentDifficultyIds()` /
+         `documentDifficultyChartText()`（语义完全等价：`difficultyIds()` 就是难度表的键集，
+         所以 `contains(id)` 与 `difficulty(id) != nullptr` 是同一个问题）；
+         `projectLastOpenedDifficultyId_` 与 `muriRenderOptions_` 各加一个具名访问器。
+         方法数上升是预期内的：`friend` 给出的是**无边界**访问权，换成具名访问器后这份耦合
+         第一次变成可枚举、可逐条搬走的东西。
+         **全仓库现在只剩 `QmlExportSession` 的 `exportSection_` 一处私有成员直读**，
+         它是真正的导出引擎，必须随 `ExportSession` 一起搬，不能用访问器糊过去。
+      7. **记录一个下一步的陷阱**：`document_` 的读取虽然改走了公有访问器，但读的仍是
+         `MainWindow` 的文档副本而不是 `ChartWorkspace`。看似应该顺手改读工作区，但
+         `MainWindow` → 工作区是**延迟**同步的（`documentReplaced` 经
+         `QMetaObject::invokeMethod` 排队后才 `adoptBackendDocumentReplacement()`），
+         后端替换文档（启动 / 根窗口拖放 / 原生打开 / 崩溃恢复）之后存在一个窗口期，
+         此时改读工作区会让导出页列出**旧的**难度列表。要动它得先处理那条延迟同步。
+         细节已写进 [QML_UI_V2_BACKEND_SURFACE_ZH.md](QML_UI_V2_BACKEND_SURFACE_ZH.md)。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
       *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。
