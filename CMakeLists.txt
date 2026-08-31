@@ -1484,6 +1484,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/app/ui src/extensions
     )
 
+    miacode_add_dev_tool(cover_frame_playback_controller_spec TEST
+        SOURCES
+            src/tools/cover_export/CoverFramePlaybackControllerSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
     miacode_add_dev_tool(muri_spec TEST
         SOURCES
             src/tools/muri/MuriSpec.cpp
