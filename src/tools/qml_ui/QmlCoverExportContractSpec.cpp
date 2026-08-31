@@ -47,17 +47,23 @@ int main(int argc, char** argv)
         QStringLiteral("src/tools/cover_export/CoverCompositeRenderer.cpp"));
     const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));
     const QString composer = readSource(QStringLiteral("src/intro/qml/CoverComposer.qml"));
+    const QString mainSplitView = readSource(QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
+    const QString labeledSlider = readSource(QStringLiteral("src/app/qml_ui/components/LabeledSlider.qml"));
     const QString cmake = readSource(QStringLiteral("CMakeLists.txt"));
 
     expect(!page.isEmpty() && !sessionHeader.isEmpty() && !session.isEmpty()
                && !pageHost.isEmpty() && !mainWindow.isEmpty() && !renderer.isEmpty()
-               && !bootstrap.isEmpty() && !composer.isEmpty(),
+               && !bootstrap.isEmpty() && !composer.isEmpty() && !mainSplitView.isEmpty()
+               && !labeledSlider.isEmpty(),
            QStringLiteral("v2 cover page, session and renderer sources are readable"), out, &failed);
     expect(page.contains(QStringLiteral("CoverComposer.qml"))
                && page.contains(QStringLiteral("selectionBinder"))
+               && page.contains(QStringLiteral("activeChartFrameKey"))
+               && page.contains(QStringLiteral("chartSceneBinder"))
+               && page.contains(QStringLiteral("toggleActiveLayerPlayback"))
                && page.contains(QStringLiteral("exportCover()"))
                && !page.contains(QStringLiteral("qsTr(")),
-           QStringLiteral("the QML page owns composer interaction, export and localization"), out, &failed);
+           QStringLiteral("the QML page owns composer interaction, chart playback, export and localization"), out, &failed);
     // The session used to export nine invokables the page never called, so the
     // features read as missing while the API looked complete. Each one now has
     // a control; this list is what stops that drifting apart again.
@@ -96,6 +102,14 @@ int main(int argc, char** argv)
              QStringLiteral("Q_INVOKABLE void saveLayout()"),
              QStringLiteral("Q_INVOKABLE void exportCover()"),
              QStringLiteral("Q_PROPERTY(double chartFrameDiskDiameter"),
+             QStringLiteral("Q_PROPERTY(bool chartFramePlaying"),
+             QStringLiteral("Q_PROPERTY(bool liveChartSceneBound"),
+             QStringLiteral("Q_PROPERTY(double activeChartFrameSeconds"),
+             QStringLiteral("Q_INVOKABLE void previewActiveLayerFrameSeconds("),
+             QStringLiteral("Q_INVOKABLE void commitActiveLayerFrameSeconds()"),
+             QStringLiteral("Q_INVOKABLE void beginActiveLayerKeySeek("),
+             QStringLiteral("Q_INVOKABLE void endActiveLayerKeySeek()"),
+             QStringLiteral("Q_INVOKABLE void bindLiveChartScene("),
          }) {
         expect(sessionHeader.contains(contract),
                QStringLiteral("cover session exposes %1").arg(contract), out, &failed);
@@ -118,15 +132,27 @@ int main(int argc, char** argv)
                && !renderer.contains(QStringLiteral("QWidget"))
                && !renderer.contains(QStringLiteral("createWindowContainer")),
            QStringLiteral("cover composition stays in an in-process Quick scene"), out, &failed);
-    // The page leaves chartSceneBinder null on purpose, so the chart-frame layer
-    // is drawn only by CoverComposer.qml's image://coverchart still. The export
-    // renderer registers that provider on its own private engine; the live page
-    // needs the same registration on the application engine or every chart frame
-    // renders blank on the canvas while the exported PNG still contains it.
     expect(composer.contains(QStringLiteral("image://coverchart/"))
+               && composer.contains(QStringLiteral("liveChartSceneBound"))
+               && composer.contains(QStringLiteral("centroid.position"))
+               && !composer.contains(QStringLiteral("centroid.scenePressPosition"))
                && bootstrap.contains(QStringLiteral("registerCoverChartImageProvider")),
-           QStringLiteral("the application QML engine serves the chart-frame image provider"),
+           QStringLiteral("the application QML engine serves chart stills and the composer uses local live state"),
            out, &failed);
+    expect(labeledSlider.contains(QStringLiteral("signal released"))
+               && labeledSlider.contains(QStringLiteral("onReleased")),
+           QStringLiteral("the shared slider exposes a release boundary for hot scrubbing"), out, &failed);
+    expect(mainSplitView.contains(QStringLiteral("visible: !root.coverExportActive"))
+               && mainSplitView.contains(QStringLiteral("surfaceActive: !root.coverExportActive && !fullscreenPreview.visible"))
+               && mainSplitView.contains(QStringLiteral("if (root.coverExportActive)"))
+               && mainSplitView.contains(QStringLiteral("onCoverExportActiveChanged")),
+           QStringLiteral("cover export hides the editor preview and blocks fullscreen preview"), out, &failed);
+    expect(session.contains(QStringLiteral("CoverFrameSceneBinder"))
+               && session.contains(QStringLiteral("renderVisibleChartFramesForExport"))
+               && cmake.contains(QStringLiteral("CoverFramePlaybackController"))
+               && cmake.contains(QStringLiteral("CoverFrameSceneBinder"))
+               && cmake.contains(QStringLiteral("CoverFrameExportPlan")),
+           QStringLiteral("the build contains the cover transport, binder and export plan"), out, &failed);
 
     const QStringList removedFiles{
         QStringLiteral("src/tools/cover_export/CoverComposerView.cpp"),
