@@ -6,6 +6,7 @@
 #include "ChartWorkspaceFileService.h"
 #include "EditorSyncController.h"
 #include "JobProgressService.h"
+#include "PreviewAppearanceState.h"
 #include "UiRequestService.h"
 
 #include <QObject>
@@ -65,6 +66,9 @@ public:
     JobProgressService& jobProgress() { return jobProgress_; }
     const JobProgressService& jobProgress() const { return jobProgress_; }
 
+    PreviewAppearanceState& previewAppearance() { return previewAppearance_; }
+    const PreviewAppearanceState& previewAppearance() const { return previewAppearance_; }
+
     SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
 
 private:
@@ -78,6 +82,7 @@ private:
     ChartDropImportService chartDropImport_;
     UiRequestService uiRequests_;
     JobProgressService jobProgress_;
+    PreviewAppearanceState previewAppearance_;
 };
 
 }  // namespace miacode::v2

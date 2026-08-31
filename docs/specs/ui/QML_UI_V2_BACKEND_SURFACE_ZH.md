@@ -11,12 +11,12 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **120**，直接读取的 `MainWindow` 私有成员 **15**，
+> **计数（2026-09-01）**：方法 **120**，直接读取的 `MainWindow` 私有成员 **4**，
 > friend 授权 **5** 个 QML 类型。
 >
-> 计数按**去重后的名字**算，不是调用点数。`QmlEditorPageHost` 那两处私有成员换成公有访问器后，
-> 方法数没有变——`documentActiveDifficultyId` 和 `qmlExportSession` 本来就已经被别的文件用到、
-> 已经在清单里了。这正是想要的：耦合从「没有接口」降级成「已有的窄接口」，总面积不增。
+> 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
+> 没进展：耦合从「没有接口」降级成窄接口时，用到的名字要么本来就在清单里，要么一进一出。
+> 详见「已完成的削减」。
 
 ## 为什么私有成员和 friend 单独记
 
@@ -25,6 +25,25 @@
 「QML 通过**窄 QObject 门面**访问 services / sessions」正相反：friend 不是窄接口，是没有接口。
 所以清零顺序是——**先消除私有成员读取和 friend 授权，再削减公有方法**，否则把公有方法搬走
 只会让剩下的耦合更隐蔽。
+
+## 已完成的削减
+
+| 日期 | 动作 | 方法 | 私有成员 |
+| --- | --- | --- | --- |
+| 2026-09-01 | 起点 | 120 | 17 |
+| 2026-09-01 | `QmlEditorPageHost` 的两处私有成员换成等价公有访问器 | 120 | 15 |
+| 2026-09-01 | 预览外观八个值搬进 `miacode::v2::PreviewAppearanceState` | 120 | 4 |
+
+第二次削减去掉了 11 个私有成员，方法数却不变，因为同时**去掉**了
+`savePortableState` 和 `applyPreviewSkinDirectoryToSurfaces`（改由窗口响应
+`PreviewAppearanceState` 的信号来应用与持久化），又**加上**了两个窄方法
+`applyPreviewSfxLevels` / `refreshPreviewSurfaces`（把 `previewCanvas_`、
+`previewSfxRuntime_`、`previewAudioSettings_` 这三个私有成员换成一次调用）。
+
+同一次改动还消掉了一处真实缺陷来源：皮肤选择的「比较目录名 → 赋值 → 推导 variant → 应用 → 持久化」
+这段逻辑原本有**三份拷贝**（QML 导出页、QML 预览设置页、Widgets 导出设置对话框），三份各自推导
+variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Standard」的状态。现在 variant 由
+`PreviewAppearanceState::variantForDirectory()` 单点推导，`setSkinDirectory()` 不接受不一致的组合。
 
 ## friend 授权（必须清零）
 
@@ -43,7 +62,11 @@
 
 ### 预览（→ `PreviewSession`）
 
-预览运行时、播放传输、皮肤/判定外观、音频设置。`QmlPreviewModel` 与 `QmlPreviewSettingsModel` 还是 `MainWindow` 的 friend。
+预览运行时、播放传输、皮肤/判定外观、音频设置。外观八个值已搬到
+`miacode::v2::PreviewAppearanceState`；这里剩下的是运行时与传输控制。
+`QmlPreviewModel` 与 `QmlPreviewSettingsModel` 仍是 `MainWindow` 的 friend——
+`QmlPreviewSettingsModel` 现在只因为 `previewRenderSettings` / `setPreviewRenderSetting` /
+`resolvePreview*Dir` 这几个私有方法而需要它。
 
 **`src/app/qml_ui/QmlPreviewModel.cpp`** — 方法 21，私有成员 0
 
@@ -68,7 +91,6 @@
 - `toggleShellMuriRenderMode`
 - `toggleShellPreviewPlayback`
 - `updateShellPreviewScrub`
-
 **`src/app/qml_ui/preview/QmlAudioSettingsModel.cpp`** — 方法 5，私有成员 0
 
 - `applyPreviewAudioSettingsFromUi`
@@ -76,24 +98,16 @@
 - `restorePreviewAudioSettingsFromSoftwareDefault`
 - `savePreviewAudioSettingsAsSoftwareDefault`
 - `shellPreviewPlaying`
-
-**`src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp`** — 方法 9，私有成员 5
+**`src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp`** — 方法 8，私有成员 0
 
 - `applyPreviewOutlineVariant`
-- `applyPreviewSkinDirectoryToSurfaces`
 - `availablePreviewSkinDirectoryNames`
 - `previewRenderSettings`
 - `previewSkinDisplayName`
+- `refreshPreviewSurfaces`
 - `resolvePreviewCustomOutlineDir`
 - `resolvePreviewSkinRootDir`
-- `savePortableState`
 - `setPreviewRenderSetting`
-- `previewCanvas_` *(私有成员)*
-- `previewJudgeEffectStyle_` *(私有成员)*
-- `previewOutlineVariant_` *(私有成员)*
-- `previewSkinDirectoryName_` *(私有成员)*
-- `previewSkinVariant_` *(私有成员)*
-
 ### 时间轴与分析（→ `TimelineSession`）
 
 走带导航、底栏页签可见性、拖拽状态、Muri 提示偏好。
@@ -115,43 +129,32 @@
 - `shellTimelineUserInteractionStarted`
 - `shellValidationTabVisible`
 - `wheelShellTimelineNavigate`
-
 **`src/app/qml_ui/QmlAnalysisModel.cpp`** — 方法 2，私有成员 0
 
 - `ignoreMuriIssuePrompts`
 - `navigateShellTimelineToSecond`
-
 ### 导出与页面切换（→ `ExportSession`）
 
-这是耦合最深的一块：`QmlExportSession` 直接读 `MainWindow` 的 15 个私有成员，页面切换仍走隐藏 `DocumentSection` 的 `switchTo*Field`。
+剩下的四个私有成员全在这里：`document_`、`exportSection_`、`muriRenderOptions_`、
+`projectLastOpenedDifficultyId_`。前者应改读 `ChartWorkspace`（文档真相已经在那里），
+`exportSection_` 是真正的导出引擎、要随 `ExportSession` 一起搬。页面切换仍走隐藏
+`DocumentSection` 的 `switchTo*Field`，随第 3 项消失。
 
-**`src/app/qml_ui/export/QmlExportSession.cpp`** — 方法 9，私有成员 15
+**`src/app/qml_ui/export/QmlExportSession.cpp`** — 方法 9，私有成员 4
 
 - `applyPreviewOutlineVariant`
-- `applyPreviewSkinDirectoryToSurfaces`
+- `applyPreviewSfxLevels`
 - `availablePreviewSkinDirectoryNames`
 - `currentPreviewAuthoritativeAudioClockSecond`
 - `previewSkinDisplayName`
 - `refreshExportIntroState`
+- `refreshPreviewSurfaces`
 - `resolvePreviewCustomOutlineDir`
 - `resolvePreviewSkinRootDir`
-- `savePortableState`
 - `document_` *(私有成员)*
 - `exportSection_` *(私有成员)*
 - `muriRenderOptions_` *(私有成员)*
-- `previewAudioSettings_` *(私有成员)*
-- `previewCanvas_` *(私有成员)*
-- `previewCenterDisplayMode_` *(私有成员)*
-- `previewIntroSoundFileName_` *(私有成员)*
-- `previewJudgeEffectStyle_` *(私有成员)*
-- `previewOutlineVariant_` *(私有成员)*
-- `previewSfxRuntime_` *(私有成员)*
-- `previewSkinDirectoryName_` *(私有成员)*
-- `previewSkinVariant_` *(私有成员)*
-- `previewSlideEarlierSecondAndTextOnTop_` *(私有成员)*
-- `previewTapJudgeTextDistance_` *(私有成员)*
 - `projectLastOpenedDifficultyId_` *(私有成员)*
-
 **`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 8，私有成员 0
 
 - `documentActiveDifficultyId`
@@ -162,7 +165,6 @@
 - `switchToExportField`
 - `switchToLatencyField`
 - `switchToMetadataField`
-
 > 2026-09-01：两处私有成员读取（`activeDifficultyId_`、`qmlExportSession_`）已换成等价的公有
 > 访问器——`documentActiveDifficultyId()` 就是返回该成员，`qmlExportSession()` 本来就是头文件里
 > 写明的「唯一导出会话的只读交接口」。`friend class QmlEditorPageHost` **暂时保留**：四个
@@ -189,7 +191,6 @@
 - `setQmlChartTextHandler`
 - `setQmlDocumentSaveHandler`
 - `setQmlLeaveDocumentHandler`
-
 ### 偏好设置（→ `PreferencesService`）
 
 这些 setter 不是纯设置：它们经 `editorSection_` / `timelineSection_` 把变化应用到隐藏 widget 布局和预览，拆分要连同应用侧一起搬。
@@ -217,13 +218,11 @@
 - `setTimelineFrameRateMode`
 - `setVideoDecodePrefersSoftware`
 - `setWorkspacePanelsSwapped`
-
 **`src/app/qml_ui/QmlApplicationContext.cpp`** — 方法 3，私有成员 0
 
 - `currentEditorLineSpacingFactor`
 - `currentEditorTextFontSize`
 - `qmlExportSession`
-
 ### 延迟检测（→ `LatencyService`）
 
 读侧（bpm/offset/clock）现在可以直接读 `ChartWorkspace`；写侧仍经 `timelineSection_`。
@@ -238,7 +237,6 @@
 - `latencyDocumentWholeBpm`
 - `latencySandboxController`
 - `latencyTrackPath`
-
 ### 媒体工具（→ `MediaToolsService`）
 
 ffmpeg 单文件流程的入口；UI 请求与作业进度已改走装配对象。
@@ -251,7 +249,6 @@ ffmpeg 单文件流程的入口；UI 请求与作业进度已改走装配对象�
 - `onConvertTrackTo44100Hz`
 - `prependMediaBlankContext`
 - `restoreMediaBlankBackup`
-
 ### 外壳宿主（→ QML 宿主自身，阶段 3.5 第 3 项）
 
 根窗口、拖放、关闭与偏好设置入口。这一组消失就等于隐藏 `MainWindow` 消失。
@@ -267,16 +264,13 @@ ffmpeg 单文件流程的入口；UI 请求与作业进度已改走装配对象�
 - `setVisible`
 - `shellNoteQuickUiReady`
 - `shellSetRootWindowFrameGeometry`
-
 **`src/app/qml_ui/QmlShellLifecycle.cpp`** — 方法 1，私有成员 0
 
 - `requestShellClose`
-
 **`src/app/qml_ui/QmlCommandService.cpp`** — 方法 2，私有成员 0
 
 - `onPreferences`
 - `requestLeaveDocument`
-
 ## 更新规则
 
 - 从 QML 层搬走一个名字 → **同一次提交**删掉本文对应行。守卫会因为「清单里有、代码里没有」而失败，

@@ -8,6 +8,7 @@
 
 #include "app/v2/UiRequestService.h"
 #include "app/v2/JobProgressService.h"
+#include "app/v2/PreviewAppearanceState.h"
 #include "tools/video_export/VideoExportController.h"
 
 class MainWindow;
@@ -112,6 +113,7 @@ public:
     QmlExportSession(MainWindow& backend,
                      miacode::v2::UiRequestService& uiRequests,
                      miacode::v2::JobProgressService& jobProgress,
+                     miacode::v2::PreviewAppearanceState& appearance,
                      QObject* parent = nullptr);
 
     QObject* uiRequests() { return uiRequests_; }
@@ -305,6 +307,9 @@ private:
 
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
     miacode::v2::JobProgressService* jobProgress_ = nullptr;
+    // The appearance values' owner. The export page and the preview settings
+    // page render the same skin, so they must read and write one copy.
+    miacode::v2::PreviewAppearanceState* appearance_ = nullptr;
     MainWindow* backend_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;

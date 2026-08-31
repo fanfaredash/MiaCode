@@ -48,12 +48,25 @@ bool verifySessionContract(QTextStream& err)
         header.contains(QStringLiteral("Q_INVOKABLE void importIntroSound()")),
         QStringLiteral("QmlExportSession exposes the intro-sound import action"),
         err);
+    // The reload-vs-levels split still exists, it just spans the appearance
+    // seam now: the session publishes the new intro sound and asks for a level
+    // push, and the window turns those into reloadAssets / applyLevels. Both
+    // halves are pinned so the distinction cannot quietly collapse into one.
+    const QString frameBootstrap = readSource(
+        QStringLiteral("src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp"));
+    const QString previewSettings = readSource(
+        QStringLiteral("src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp"));
     ok &= require(
         implementation.contains(QStringLiteral("normalizeIntroSoundFileName(fileName)"))
             && implementation.contains(QStringLiteral("setSelectedIntroSoundFileName(normalized)"))
-            && implementation.contains(QStringLiteral("previewSfxRuntime_->reloadAssets"))
+            && implementation.contains(
+                QStringLiteral("appearance_->setIntroSoundFileName(normalized)"))
             && implementation.contains(QStringLiteral("setSelectedIntroSoundVolume(normalized)"))
-            && implementation.contains(QStringLiteral("previewSfxRuntime_->applyLevels")),
+            && implementation.contains(QStringLiteral("backend_->applyPreviewSfxLevels()"))
+            && frameBootstrap.contains(QStringLiteral("PreviewAppearanceState::introSoundChanged"))
+            && frameBootstrap.contains(QStringLiteral("applyPreviewSfxLevels(/*reloadAssets=*/true)"))
+            && previewSettings.contains(QStringLiteral("previewSfxRuntime_->reloadAssets"))
+            && previewSettings.contains(QStringLiteral("previewSfxRuntime_->applyLevels")),
         QStringLiteral("the QML session mirrors Widgets preview_sfx reload and level-update semantics"),
         err);
     ok &= require(

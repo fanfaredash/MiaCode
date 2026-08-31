@@ -413,16 +413,9 @@ void MainWindow::DialogsSection::buildSkinSettings(
             return;
         }
         const QString skinDirectoryName = skinCombo->itemData(index).toString();
-        if (owner_.previewSkinDirectoryName_.compare(skinDirectoryName, Qt::CaseInsensitive) == 0) {
-            return;
-        }
-        owner_.previewSkinDirectoryName_ = skinDirectoryName;
-        owner_.previewSkinVariant_ =
-            skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
-                ? PreviewSkinVariant::Dx
-                : PreviewSkinVariant::Standard;
-        owner_.applyPreviewSkinDirectoryToSurfaces();
-        owner_.savePortableState();
+        // One owner decides, one reaction applies and persists — the same path
+        // the QML export and preview settings pages take.
+        owner_.applicationServices_.previewAppearance().setSkinDirectory(skinDirectoryName);
     });
     skinForm->addRow(
         UiText::text(QStringLiteral("dialog.render_settings.video.skin")),

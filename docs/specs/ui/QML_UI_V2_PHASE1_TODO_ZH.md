@@ -510,6 +510,24 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          （私有成员 17 → 15，方法数不变，因为这两个名字本来就在清单里被别的文件用着）。
          它的 `friend` 授权仍保留——四个 `switchTo*Field` 声明在私有 `.inc` 里，把它们改成公有
          等于把接口做宽；它们随第 3 项（页面路由归 QML 宿主）一起消失。
+      5. **预览外观八个值搬进 `miacode::v2::PreviewAppearanceState`（私有成员 15 → 4）**。
+         皮肤目录/variant、判定特效、判定线外观、slide 提前、tap 判定文字距离、中央显示模式、
+         开场音——这八个值决定屏幕预览和导出视频**两边**怎么画，所以三个调用方都要用它们。
+         它们现在由装配对象持有；`MainWindow` 把同名成员按引用绑到这一份上（`MainWindowState`
+         里的声明删除，`state_.x` 与别名一起改指），所以读写它们的约 26 个文件一行没动。
+         窗口改为**响应** `skinChanged` / `judgeEffectStyleChanged` / `introSoundChanged`
+         去应用到实时表面并持久化——三个信号分开是因为代价不同，合成一个会让每次切判定特效
+         都重载整套皮肤。`previewCanvas_` / `previewSfxRuntime_` / `previewAudioSettings_` 三个
+         私有成员换成两个窄方法 `refreshPreviewSurfaces()` / `applyPreviewSfxLevels()`。
+         结果：`savePortableState` 和 `applyPreviewSkinDirectoryToSurfaces` 从 QML 面上**消失**
+         （持久化归值的所有者，不归调用方），方法数仍是 120（去二进二）。
+         **同时消掉一处真实缺陷来源**：皮肤选择的「比较目录名 → 赋值 → 推导 variant → 应用 →
+         持久化」原本有**三份拷贝**（QML 导出页、QML 预览设置页、Widgets 导出设置对话框），
+         各自推导 variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Standard」。
+         现在 variant 由 `PreviewAppearanceState::variantForDirectory()` 单点推导，
+         `setSkinDirectory()` 根本不接受不一致的组合，`preview_appearance_state_spec` 守住这条。
+         顺带把 `PreviewSkinVariant` 从 `MainWindow` 的嵌套枚举移到
+         `core/video/PreviewRenderSettings.h`——它是渲染设置，不该逼每个消费方包含窗口头文件。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
       *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。

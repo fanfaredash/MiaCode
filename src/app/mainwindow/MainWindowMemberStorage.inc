@@ -559,18 +559,15 @@
         double previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
         double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
         bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
-        PreviewOutlineVariant previewOutlineVariant_ = PreviewOutlineVariant::Line;
+        // The preview appearance values that used to live here now belong to
+        // miacode::v2::PreviewAppearanceState (owned by ApplicationServices).
+        // MainWindow keeps its same-named members as references into that one
+        // copy — see the alias block below.
         bool previewOutlineVariantUsesAutoSelection_ = true;
         QString previewCustomOutlineFileName_;
         PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
         double previewTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         double previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
-        bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
-        PreviewTapJudgeTextDistance previewTapJudgeTextDistance_ = PreviewTapJudgeTextDistance::Inner;
-        PreviewJudgeEffectStyle previewJudgeEffectStyle_ = PreviewJudgeEffectStyle::Standard;
-        PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
-        QString previewSkinDirectoryName_ = QStringLiteral("skinSD");
-        QString previewIntroSoundFileName_;
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         PreviewCanvasFrameRateMode previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
         // Preview video decode mode preference: false = hardware (default), true =
@@ -609,8 +606,6 @@
         bool exportShowObjectStatsHud_ = false;
         bool previewShowChartInfoHud_ = false;
         bool exportShowChartInfoHud_ = false;
-        miacode::preview_gameplay::CenterDisplayMode previewCenterDisplayMode_ =
-            miacode::preview_gameplay::kDefaultCenterDisplayMode;
         bool previewShowValidationSummary_ = true;
         bool ignoreMuriIssuePrompts_ = false;
         bool chartNormalizeStartAtNewMeasure_ = true;
@@ -671,6 +666,14 @@
 
     MainWindowUiRefs ui_;
     MainWindowState state_;
+    // The preview appearance settings live in the application assembly, not in
+    // this window. Binding the members below to that one copy is what lets the
+    // ~26 files that read them stay exactly as they are while the owner moves.
+    // Writes through here are deliberately silent — restoring settings must not
+    // look like a user edit; anything outside the window uses the typed setters
+    // on PreviewAppearanceState, which publish.
+    miacode::v2::PreviewAppearanceState::Values& previewAppearanceValues_ =
+        applicationServices_.previewAppearance().values();
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
@@ -985,18 +988,20 @@
     double& previewBackgroundBrightnessInner_ = state_.previewBackgroundBrightnessInner_;
     double& previewLayoutSquareScale_ = state_.previewLayoutSquareScale_;
     bool& previewSmoothBrightness_ = state_.previewSmoothBrightness_;
-    PreviewOutlineVariant& previewOutlineVariant_ = state_.previewOutlineVariant_;
+    PreviewOutlineVariant& previewOutlineVariant_ = previewAppearanceValues_.outlineVariant;
     bool& previewOutlineVariantUsesAutoSelection_ = state_.previewOutlineVariantUsesAutoSelection_;
     QString& previewCustomOutlineFileName_ = state_.previewCustomOutlineFileName_;
     PreviewBackgroundScaleMode& previewBackgroundScaleMode_ = state_.previewBackgroundScaleMode_;
     double& previewTapFlowSpeed_ = state_.previewTapFlowSpeed_;
     double& previewTouchFlowSpeed_ = state_.previewTouchFlowSpeed_;
-    bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
-    PreviewTapJudgeTextDistance& previewTapJudgeTextDistance_ = state_.previewTapJudgeTextDistance_;
-    PreviewJudgeEffectStyle& previewJudgeEffectStyle_ = state_.previewJudgeEffectStyle_;
-    PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
-    QString& previewSkinDirectoryName_ = state_.previewSkinDirectoryName_;
-    QString& previewIntroSoundFileName_ = state_.previewIntroSoundFileName_;
+    bool& previewSlideEarlierSecondAndTextOnTop_ =
+        previewAppearanceValues_.slideEarlierSecondAndTextOnTop;
+    PreviewTapJudgeTextDistance& previewTapJudgeTextDistance_ =
+        previewAppearanceValues_.tapJudgeTextDistance;
+    PreviewJudgeEffectStyle& previewJudgeEffectStyle_ = previewAppearanceValues_.judgeEffectStyle;
+    PreviewSkinVariant& previewSkinVariant_ = previewAppearanceValues_.skinVariant;
+    QString& previewSkinDirectoryName_ = previewAppearanceValues_.skinDirectoryName;
+    QString& previewIntroSoundFileName_ = previewAppearanceValues_.introSoundFileName;
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;
@@ -1009,7 +1014,8 @@
     bool& exportShowObjectStatsHud_ = state_.exportShowObjectStatsHud_;
     bool& previewShowChartInfoHud_ = state_.previewShowChartInfoHud_;
     bool& exportShowChartInfoHud_ = state_.exportShowChartInfoHud_;
-    miacode::preview_gameplay::CenterDisplayMode& previewCenterDisplayMode_ = state_.previewCenterDisplayMode_;
+    miacode::preview_gameplay::CenterDisplayMode& previewCenterDisplayMode_ =
+        previewAppearanceValues_.centerDisplayMode;
     bool& previewShowValidationSummary_ = state_.previewShowValidationSummary_;
     bool& ignoreMuriIssuePrompts_ = state_.ignoreMuriIssuePrompts_;
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;

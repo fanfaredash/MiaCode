@@ -124,6 +124,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/v2/ApplicationServices.cpp
     src/app/v2/ApplicationServices.h
+    src/app/v2/PreviewAppearanceState.cpp
+    src/app/v2/PreviewAppearanceState.h
     src/app/v2/ChartWorkspace.cpp
     src/app/v2/ChartWorkspace.h
     src/app/v2/ChartWorkspaceFileService.cpp
@@ -1691,6 +1693,18 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
     )
 
+    # Stage 3.5 item 2: the preview appearance settings must have an owner that
+    # is not a window. Core+Gui+Test only — a QtWidgets or Qt Quick include
+    # reaching this state fails to link here.
+    miacode_add_dev_tool(preview_appearance_state_spec TEST
+        SOURCES
+            src/tools/v2/PreviewAppearanceStateSpec.cpp
+            src/app/v2/PreviewAppearanceState.h
+            src/app/v2/PreviewAppearanceState.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Test
+        INCLUDES src src/common src/core/video
+    )
+
     # Stage 3.5 item 1: the application service assembly must stand up with no
     # window and no QApplication. Linking Qt6::Core + Qt6::Gui only is the
     # guarantee — a QtWidgets include reaching ApplicationServices fails to link
@@ -1719,12 +1733,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/EditorSyncController.cpp
             src/app/v2/JobProgressService.h
             src/app/v2/JobProgressService.cpp
+            src/app/v2/PreviewAppearanceState.h
+            src/app/v2/PreviewAppearanceState.cpp
             src/app/v2/UiRequestService.h
             src/app/v2/UiRequestService.cpp
             resources/fonts.qrc
             resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Test
-        INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
+        INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/core/video src/timeline src/tools
     )
     target_compile_definitions(application_services_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")

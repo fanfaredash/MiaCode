@@ -309,6 +309,7 @@ MainWindow::EditorSection::EditorSection(
     : owner_(owner)
     , ui_(ui)
     , state_(state)
+    , previewAppearanceValues_(owner.previewAppearanceValues_)
 {}
 
 void MainWindow::EditorSection::loadPortableState()
@@ -493,14 +494,14 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     state_.previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     state_.previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
-    state_.previewOutlineVariant_ = PreviewOutlineVariant::Line;
+    previewAppearanceValues_.outlineVariant = PreviewOutlineVariant::Line;
     state_.previewOutlineVariantUsesAutoSelection_ = true;
     state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     state_.previewTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     state_.previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
-    state_.previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
-    state_.previewTapJudgeTextDistance_ = PreviewTapJudgeTextDistance::Inner;
-    state_.previewSkinVariant_ = PreviewSkinVariant::Standard;
+    previewAppearanceValues_.slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
+    previewAppearanceValues_.tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
+    previewAppearanceValues_.skinVariant = PreviewSkinVariant::Standard;
     state_.previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     state_.previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
     state_.videoDecodePrefersSoftware_ = false;
@@ -576,7 +577,7 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("outline_variant").isString()) {
         const QString outlineVariant = preview.value("outline_variant").toString().trimmed();
         if (!outlineVariant.isEmpty()) {
-            state_.previewOutlineVariant_ = owner_.previewOutlineVariantFromStorageValue(outlineVariant);
+            previewAppearanceValues_.outlineVariant = owner_.previewOutlineVariantFromStorageValue(outlineVariant);
             state_.previewOutlineVariantUsesAutoSelection_ = false;
         }
     }
@@ -650,22 +651,22 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         state_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(legacyFlowSpeed);
     }
     if (preview.value("slide_earlier_second_and_text_on_top").isBool()) {
-        state_.previewSlideEarlierSecondAndTextOnTop_ =
+        previewAppearanceValues_.slideEarlierSecondAndTextOnTop =
             preview.value("slide_earlier_second_and_text_on_top")
-                .toBool(state_.previewSlideEarlierSecondAndTextOnTop_);
+                .toBool(previewAppearanceValues_.slideEarlierSecondAndTextOnTop);
     }
-    state_.previewTapJudgeTextDistance_ = tapJudgeTextDistanceFromToken(
+    previewAppearanceValues_.tapJudgeTextDistance = tapJudgeTextDistanceFromToken(
         preview.value(QStringLiteral("tap_judge_text_distance")).toString(
-            QString::fromLatin1(tapJudgeTextDistanceToken(state_.previewTapJudgeTextDistance_))));
-    state_.previewJudgeEffectStyle_ = judgeEffectStyleFromToken(
+            QString::fromLatin1(tapJudgeTextDistanceToken(previewAppearanceValues_.tapJudgeTextDistance))));
+    previewAppearanceValues_.judgeEffectStyle = judgeEffectStyleFromToken(
         preview.value(QStringLiteral("judge_effect_style")).toString(
-            QString::fromLatin1(judgeEffectStyleToken(state_.previewJudgeEffectStyle_))));
+            QString::fromLatin1(judgeEffectStyleToken(previewAppearanceValues_.judgeEffectStyle))));
     if (preview.value("skin_variant").isString()) {
         const QString skinValue = preview.value("skin_variant").toString().trimmed();
         const QString normalizedSkinValue = skinValue.toLower();
-        state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(skinValue);
-        state_.previewSkinDirectoryName_ =
-            state_.previewSkinVariant_ == PreviewSkinVariant::Dx ? QStringLiteral("skinDX") : QStringLiteral("skinSD");
+        previewAppearanceValues_.skinVariant = owner_.previewSkinVariantFromStorageValue(skinValue);
+        previewAppearanceValues_.skinDirectoryName =
+            previewAppearanceValues_.skinVariant == PreviewSkinVariant::Dx ? QStringLiteral("skinDX") : QStringLiteral("skinSD");
         if (!skinValue.isEmpty()
             && normalizedSkinValue != QLatin1String("standard")
             && normalizedSkinValue != QLatin1String("std")
@@ -675,14 +676,14 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             && normalizedSkinValue != QLatin1String("dx")
             && normalizedSkinValue != QLatin1String("skin_dx")
             && normalizedSkinValue != QLatin1String("skindx")) {
-            state_.previewSkinDirectoryName_ = skinValue;
+            previewAppearanceValues_.skinDirectoryName = skinValue;
         }
     }
     if (preview.value("intro_sound_file").isString()) {
-        state_.previewIntroSoundFileName_ =
+        previewAppearanceValues_.introSoundFileName =
             miacode::preview_sfx::normalizeIntroSoundFileName(preview.value("intro_sound_file").toString());
     }
-    miacode::preview_sfx::setSelectedIntroSoundFileName(state_.previewIntroSoundFileName_);
+    miacode::preview_sfx::setSelectedIntroSoundFileName(previewAppearanceValues_.introSoundFileName);
     if (preview.value("canvas_frame_rate_mode").isString()) {
         state_.previewCanvasFrameRateMode_ =
             owner_.previewCanvasFrameRateModeFromStorageValue(preview.value("canvas_frame_rate_mode").toString());
@@ -729,9 +730,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("show_object_stats_export").isBool()) {
         state_.exportShowObjectStatsHud_ = preview.value("show_object_stats_export").toBool(false);
     }
-    state_.previewCenterDisplayMode_ = miacode::preview_gameplay::centerDisplayModeFromToken(
+    previewAppearanceValues_.centerDisplayMode = miacode::preview_gameplay::centerDisplayModeFromToken(
         preview.value(QStringLiteral("center_display_mode")).toString(
-            QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(state_.previewCenterDisplayMode_))));
+            QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(previewAppearanceValues_.centerDisplayMode))));
     const bool unifiedObjectStatsHud = state_.previewShowObjectStatsHud_ || state_.exportShowObjectStatsHud_;
     state_.previewShowObjectStatsHud_ = unifiedObjectStatsHud;
     state_.exportShowObjectStatsHud_ = unifiedObjectStatsHud;
@@ -861,20 +862,20 @@ void MainWindow::EditorSection::savePortableState() const
     );
     preview.insert("tap_flow_speed", state_.previewTapFlowSpeed_);
     preview.insert("touch_flow_speed", state_.previewTouchFlowSpeed_);
-    preview.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
+    preview.insert("slide_earlier_second_and_text_on_top", previewAppearanceValues_.slideEarlierSecondAndTextOnTop);
     preview.insert(
         "tap_judge_text_distance",
-        QString::fromLatin1(tapJudgeTextDistanceToken(state_.previewTapJudgeTextDistance_))
+        QString::fromLatin1(tapJudgeTextDistanceToken(previewAppearanceValues_.tapJudgeTextDistance))
     );
     preview.insert(
         "judge_effect_style",
-        QString::fromLatin1(judgeEffectStyleToken(state_.previewJudgeEffectStyle_))
+        QString::fromLatin1(judgeEffectStyleToken(previewAppearanceValues_.judgeEffectStyle))
     );
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
-    if (state_.previewIntroSoundFileName_.trimmed().isEmpty()) {
+    if (previewAppearanceValues_.introSoundFileName.trimmed().isEmpty()) {
         preview.remove("intro_sound_file");
     } else {
-        preview.insert("intro_sound_file", state_.previewIntroSoundFileName_);
+        preview.insert("intro_sound_file", previewAppearanceValues_.introSoundFileName);
     }
     preview.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
     preview.insert("pv_frame_rate_mode", owner_.previewStageMediaFrameRateModeStorageValue());
@@ -896,7 +897,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_chart_info_export", state_.exportShowChartInfoHud_);
     preview.insert(
         "center_display_mode",
-        QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(state_.previewCenterDisplayMode_))
+        QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(previewAppearanceValues_.centerDisplayMode))
     );
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
     preview.insert("follow_preview", state_.previewFollowEnabled_);

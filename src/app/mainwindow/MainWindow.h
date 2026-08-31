@@ -561,10 +561,9 @@ private:
         Rotate45CounterClockwise,
         Rotate45Clockwise,
     };
-    enum class PreviewSkinVariant {
-        Standard,
-        Dx,
-    };
+    // Moved to core/video/PreviewRenderSettings.h. The alias keeps the
+    // MainWindow::PreviewSkinVariant spelling valid at existing call sites.
+    using PreviewSkinVariant = ::PreviewSkinVariant;
     enum class PreviewStageMediaRoute {
         QuickShellStageHost,
     };
@@ -667,6 +666,17 @@ private:
     void savePortableState() const;
 
 public:
+    // The live-surface half of the preview appearance settings. The values
+    // themselves belong to miacode::v2::PreviewAppearanceState; these two push
+    // them into the objects only this window holds, so the QML pages no longer
+    // need `friend` access to previewCanvas_ / previewSfxRuntime_ to make an
+    // appearance change take effect.
+    // Pushes the current mixer levels into the live SFX runtime, reloading the
+    // sound bank first when the selected intro sound changed. A no-op until the
+    // audio engine is up, which is the guard every caller used to repeat.
+    void applyPreviewSfxLevels(bool reloadAssets = false);
+    void refreshPreviewSurfaces();
+
     // 偏好设置's narrow surface for the QML page. Every setter already took a
     // "persist" flag, so the QML model is a projection rather than new policy.
     void applyEditorTextFontSize(int pointSize, bool persistPreference);

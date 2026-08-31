@@ -97,4 +97,7 @@ private:
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;
+    // The preview appearance settings are owned by the application assembly,
+    // not by the window; this is the same single copy MainWindow binds to.
+    miacode::v2::PreviewAppearanceState::Values& previewAppearanceValues_;
 };

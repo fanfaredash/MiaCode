@@ -66,12 +66,19 @@ bool verifyQmlFontContract(QTextStream& err)
                       QStringLiteral("QmlExportSession exposes %1").arg(contract), err);
     }
 
+    // The live redraw goes through MainWindow's narrow surface method now — the
+    // QML layer no longer reaches previewCanvas_ directly — so both ends are
+    // pinned: the session asks, and the window still calls update().
+    const QString previewWarmup = readSource(
+        QStringLiteral("src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp"));
     ok &= require(
         implementation.contains(QStringLiteral("fontLibraryEntries("))
             && implementation.contains(QStringLiteral("importFontFileIntoLibrary(selectedPath)"))
             && implementation.contains(QStringLiteral("refreshExportIntroState()"))
             && implementation.contains(QStringLiteral("setPreviewHudCustomFontPath(area, path)"))
-            && implementation.contains(QStringLiteral("backend_->previewCanvas_->update()")),
+            && implementation.contains(QStringLiteral("backend_->refreshPreviewSurfaces()"))
+            && previewWarmup.contains(QStringLiteral("void MainWindow::refreshPreviewSurfaces()"))
+            && previewWarmup.contains(QStringLiteral("previewCanvas_->update()")),
         QStringLiteral("the export session uses the shared library and redraws the live preview"),
         err);
     ok &= require(
@@ -114,7 +121,7 @@ bool verifyQmlFontContract(QTextStream& err)
         previewSettingsImplementation.contains(
             QStringLiteral("setPreviewHudCustomFontPath(area, path)"))
             && previewSettingsImplementation.contains(
-                QStringLiteral("backend_->previewCanvas_->update()"))
+                QStringLiteral("backend_->refreshPreviewSurfaces()"))
             && previewSettingsImplementation.contains(QStringLiteral("uiRequests_->requestFile")),
         QStringLiteral("HUD font updates use the QML request boundary and redraw the live preview"), err);
     for (const QString& control : {

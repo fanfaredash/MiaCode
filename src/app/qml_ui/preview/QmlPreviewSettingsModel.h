@@ -6,6 +6,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include "app/v2/PreviewAppearanceState.h"
 #include "app/v2/UiRequestService.h"
 
 class MainWindow;
@@ -58,6 +59,7 @@ class QmlPreviewSettingsModel final : public QObject
 public:
     explicit QmlPreviewSettingsModel(MainWindow& backend,
                                     miacode::v2::UiRequestService& uiRequests,
+                                    miacode::v2::PreviewAppearanceState& appearance,
                                     QObject* parent = nullptr);
 
     Q_INVOKABLE void setValue(const QString& key, const QVariant& value);
@@ -106,6 +108,9 @@ private:
     void applyHudFontImport(const QString& selectedPath);
 
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
+    // The appearance values' owner; this model reads and writes them here, not
+    // through the window's private members.
+    miacode::v2::PreviewAppearanceState* appearance_ = nullptr;
     MainWindow* backend_ = nullptr;
     int hudFontAreaIndex_ = 0;
 };

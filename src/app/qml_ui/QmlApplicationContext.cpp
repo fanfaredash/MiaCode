@@ -24,7 +24,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , mediaTools_(backend, services.uiRequests(), services.jobProgress(), this)
     , preferencesModel_(backend, preferences_, this)
     , audioSettings_(backend, this)
-    , previewSettings_(backend, services.uiRequests(), this)
+    , previewSettings_(backend, services.uiRequests(), services.previewAppearance(), this)
     , latency_(backend, this)
     , lifecycle_(backend, this)
 {

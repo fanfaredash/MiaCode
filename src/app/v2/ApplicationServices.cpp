@@ -26,6 +26,7 @@ ApplicationServices::ApplicationServices(QObject* parent)
     , chartDropImport_(this)
     , uiRequests_(this)
     , jobProgress_(this)
+    , previewAppearance_(this)
 {
 }
 

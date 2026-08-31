@@ -1,13 +1,14 @@
 // Contract regression for the non-Widget application service assembly.
 //
-// Stage 3.5 item 1 of docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md: the document,
-// analysis, editor-sync, chart-drop, UI-request and job-progress services must
-// have an owner that is not a QWidget and does not need one to exist. Before
-// ApplicationServices they were split between MainWindow (UiRequestService,
-// JobProgressService, EditorSyncController, ChartDropImportService) and
-// QmlApplicationContext (ChartWorkspace, ChartWorkspaceFileService,
-// AnalysisService), so "who owns the document domain" had two answers and both
-// of them were UI objects.
+// Stage 3.5 items 1-2 of docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md: the
+// document, analysis, editor-sync, chart-drop, UI-request, job-progress and
+// preview-appearance services must have an owner that is not a QWidget and does
+// not need one to exist. Before ApplicationServices they were split between
+// MainWindow (UiRequestService, JobProgressService, EditorSyncController,
+// ChartDropImportService, and the preview appearance members reached through
+// friend access) and QmlApplicationContext (ChartWorkspace,
+// ChartWorkspaceFileService, AnalysisService), so "who owns the document
+// domain" had two answers and both of them were UI objects.
 //
 // This target links Qt6::Core / Qt6::Gui only. If ApplicationServices ever
 // reaches for QtWidgets — directly or through a header it includes — the spec
@@ -52,7 +53,8 @@ bool verifyConstructsWithoutAnyWidgetHost(QTextStream& err)
                       && services.editorSync().parent() == &services
                       && services.chartDropImport().parent() == &services
                       && services.uiRequests().parent() == &services
-                      && services.jobProgress().parent() == &services,
+                      && services.jobProgress().parent() == &services
+                      && services.previewAppearance().parent() == &services,
                   QStringLiteral("every QObject service is parented to the assembly"), err);
     return ok;
 }
@@ -68,7 +70,8 @@ bool verifySingleInstancePerService(QTextStream& err)
                           && &services.editorSync() == &services.editorSync()
                           && &services.chartDropImport() == &services.chartDropImport()
                           && &services.uiRequests() == &services.uiRequests()
-                          && &services.jobProgress() == &services.jobProgress(),
+                          && &services.jobProgress() == &services.jobProgress()
+                          && &services.previewAppearance() == &services.previewAppearance(),
                       QStringLiteral("each accessor returns the same instance every call"), err);
 
     const miacode::v2::ApplicationServices& constView = services;
@@ -181,6 +184,7 @@ bool verifyNothingElseInTheProductConstructsTheServices(QTextStream& err)
         QStringLiteral("ChartDropImportService"),
         QStringLiteral("UiRequestService"),
         QStringLiteral("JobProgressService"),
+        QStringLiteral("PreviewAppearanceState"),
     };
 
     const QString root = QStringLiteral(MIACODE_SOURCE_ROOT) + QStringLiteral("/src/app");

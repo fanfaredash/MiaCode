@@ -2,6 +2,15 @@
 
 #include <QString>
 
+// Which skin family the preview and the export renderer draw with. It lived
+// inside MainWindow as a nested enum, which meant every preview-appearance
+// consumer had to include the widget header to name a render setting. It is a
+// render setting, so it belongs here with the rest of them.
+enum class PreviewSkinVariant {
+    Standard,
+    Dx,
+};
+
 enum class PreviewOutlineVariant {
     Point = 0,
     Line = 1,

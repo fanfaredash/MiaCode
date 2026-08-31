@@ -99,6 +99,31 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
     connect(editorSyncController_, &miacode::v2::EditorSyncController::previewSeekPublished,
             this, &MainWindow::seekPreviewToEditorLocation);
 
+    // The preview appearance values live in the application assembly; this
+    // window owns the live surfaces and the settings file, so it is what reacts
+    // when one of them moves. Restore paths write through
+    // PreviewAppearanceState::values() instead, which stays silent — reloading
+    // a document must not look like a user edit and must not rewrite settings.
+    miacode::v2::PreviewAppearanceState& previewAppearance =
+        applicationServices_.previewAppearance();
+    connect(&previewAppearance, &miacode::v2::PreviewAppearanceState::skinChanged,
+            this, [this] {
+                applyPreviewSkinDirectoryToSurfaces();
+                savePortableState();
+            });
+    connect(&previewAppearance, &miacode::v2::PreviewAppearanceState::judgeEffectStyleChanged,
+            this, [this, &previewAppearance] {
+                if (previewCanvas_ != nullptr) {
+                    previewCanvas_->setJudgeEffectStyle(previewAppearance.judgeEffectStyle());
+                }
+                savePortableState();
+            });
+    connect(&previewAppearance, &miacode::v2::PreviewAppearanceState::introSoundChanged,
+            this, [this] {
+                applyPreviewSfxLevels(/*reloadAssets=*/true);
+                savePortableState();
+            });
+
     QElapsedTimer startupStageTimer;
     startupStageTimer.start();
     qint64 startupLastMs = 0;
@@ -722,7 +747,8 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
                 }
             });
     ui_.qmlExportSession_ = new QmlExportSession(
-        *this, applicationServices_.uiRequests(), applicationServices_.jobProgress(), this);
+        *this, applicationServices_.uiRequests(), applicationServices_.jobProgress(),
+        applicationServices_.previewAppearance(), this);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
     if (editorFindBar_ != nullptr) {

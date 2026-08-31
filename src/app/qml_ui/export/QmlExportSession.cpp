@@ -45,11 +45,13 @@ double minimumExportRangeSecondsForChart(double chartDurationSeconds)
 QmlExportSession::QmlExportSession(MainWindow& backend,
                                    miacode::v2::UiRequestService& uiRequests,
                                    miacode::v2::JobProgressService& jobProgress,
+                                   miacode::v2::PreviewAppearanceState& appearance,
                                    QObject* parent)
     : QObject(parent)
     , uiRequests_(&uiRequests)
     // From the application assembly, not from the hidden window.
     , jobProgress_(&jobProgress)
+    , appearance_(&appearance)
     , backend_(&backend)
 {
     connect(&backend, &MainWindow::videoExportWorkerRunningChanged, this, [this](bool running) {
@@ -265,7 +267,7 @@ int QmlExportSession::skinIndex() const
     }
     const QStringList names = backend_->availablePreviewSkinDirectoryNames();
     for (int i = 0; i < names.size(); ++i) {
-        if (names.at(i).compare(backend_->previewSkinDirectoryName_, Qt::CaseInsensitive) == 0) {
+        if (names.at(i).compare(appearance_->skinDirectoryName(), Qt::CaseInsensitive) == 0) {
             return i;
         }
     }
@@ -282,9 +284,7 @@ QVariantList QmlExportSession::skinJudgeEffectOptions() const
 
 int QmlExportSession::skinJudgeEffectIndex() const
 {
-    return backend_ != nullptr && backend_->previewJudgeEffectStyle_ == PreviewJudgeEffectStyle::Starry
-        ? 1
-        : 0;
+    return appearance_->judgeEffectStyle() == PreviewJudgeEffectStyle::Starry ? 1 : 0;
 }
 
 QVariantList QmlExportSession::outlineOptions() const
@@ -302,7 +302,7 @@ int QmlExportSession::outlineIndex() const
     if (backend_ == nullptr) {
         return 1;
     }
-    switch (backend_->previewOutlineVariant_) {
+    switch (appearance_->outlineVariant()) {
     case PreviewOutlineVariant::Point:
         return 0;
     case PreviewOutlineVariant::JudgeArea:
@@ -549,10 +549,8 @@ void QmlExportSession::applyPreferences()
     task_.intro.lvRenderMode = QStringLiteral("atlas");
     miacode::video_export::applyVideoExportPreferences(settings, &task_);
     miacode::preview_sfx::setSelectedIntroSoundVolume(task_.introSoundVolume);
-    if (backend_ != nullptr
-        && backend_->previewSfxRuntime_ != nullptr
-        && backend_->previewSfxRuntime_->audioEngineInitialized()) {
-        backend_->previewSfxRuntime_->applyLevels(backend_->previewAudioSettings_);
+    if (backend_ != nullptr) {
+        backend_->applyPreviewSfxLevels();
     }
     const int savedWidth = task_.outputWidth;
     const int savedHeight = task_.outputHeight;
@@ -648,11 +646,11 @@ void QmlExportSession::applyOwnerLiveFields(VideoExportTask* task) const
     if (task == nullptr || backend_ == nullptr) {
         return;
     }
-    task->outlineVariant = backend_->previewOutlineVariant_;
-    task->slideEarlierSecondAndTextOnTop = backend_->previewSlideEarlierSecondAndTextOnTop_;
-    task->tapJudgeTextDistance = backend_->previewTapJudgeTextDistance_;
-    task->judgeEffectStyle = backend_->previewJudgeEffectStyle_;
-    task->centerDisplayMode = backend_->previewCenterDisplayMode_;
+    task->outlineVariant = appearance_->outlineVariant();
+    task->slideEarlierSecondAndTextOnTop = appearance_->slideEarlierSecondAndTextOnTop();
+    task->tapJudgeTextDistance = appearance_->tapJudgeTextDistance();
+    task->judgeEffectStyle = appearance_->judgeEffectStyle();
+    task->centerDisplayMode = appearance_->centerDisplayMode();
     task->muriRenderOptions = backend_->muriRenderOptions_;
 }
 
@@ -1289,16 +1287,11 @@ void QmlExportSession::setSkinIndex(int index)
         return;
     }
     const QString skinDirectoryName = names.at(index);
-    if (backend_->previewSkinDirectoryName_.compare(skinDirectoryName, Qt::CaseInsensitive) == 0) {
+    // The owner decides whether this is a real change; the window reacts by
+    // re-applying the skin to every surface and persisting it.
+    if (!appearance_->setSkinDirectory(skinDirectoryName)) {
         return;
     }
-    backend_->previewSkinDirectoryName_ = skinDirectoryName;
-    backend_->previewSkinVariant_ =
-        skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
-            ? MainWindow::PreviewSkinVariant::Dx
-            : MainWindow::PreviewSkinVariant::Standard;
-    backend_->applyPreviewSkinDirectoryToSurfaces();
-    backend_->savePortableState();
     emit skinChanged();
 }
 
@@ -1308,14 +1301,9 @@ void QmlExportSession::setSkinJudgeEffectIndex(int index)
         return;
     }
     const auto style = index == 1 ? PreviewJudgeEffectStyle::Starry : PreviewJudgeEffectStyle::Standard;
-    if (backend_->previewJudgeEffectStyle_ == style) {
+    if (!appearance_->setJudgeEffectStyle(style)) {
         return;
     }
-    backend_->previewJudgeEffectStyle_ = style;
-    if (backend_->previewCanvas_ != nullptr) {
-        backend_->previewCanvas_->setJudgeEffectStyle(style);
-    }
-    backend_->savePortableState();
     emit skinChanged();
 }
 
@@ -1360,8 +1348,8 @@ void QmlExportSession::setHudFontPath(const QString& path)
         return;
     }
     miacode::preview::scene::setPreviewHudCustomFontPath(area, path);
-    if (backend_ != nullptr && backend_->previewCanvas_ != nullptr) {
-        backend_->previewCanvas_->update();
+    if (backend_ != nullptr) {
+        backend_->refreshPreviewSurfaces();
     }
     emit hudFontChanged();
 }
@@ -1501,14 +1489,8 @@ void QmlExportSession::setIntroSoundFileName(const QString& fileName)
     }
     task_.introSoundFileName = normalized;
     miacode::preview_sfx::setSelectedIntroSoundFileName(normalized);
-    if (backend_ != nullptr) {
-        backend_->previewIntroSoundFileName_ = normalized;
-        if (backend_->previewSfxRuntime_ != nullptr
-            && backend_->previewSfxRuntime_->audioEngineInitialized()) {
-            backend_->previewSfxRuntime_->reloadAssets(backend_->previewAudioSettings_);
-        }
-        backend_->savePortableState();
-    }
+    // The window reloads the SFX bank and persists in reaction to this.
+    appearance_->setIntroSoundFileName(normalized);
     emit introChanged();
 }
 
@@ -1523,10 +1505,8 @@ void QmlExportSession::setIntroSoundVolume(double value)
     }
     task_.introSoundVolume = normalized;
     miacode::preview_sfx::setSelectedIntroSoundVolume(normalized);
-    if (backend_ != nullptr
-        && backend_->previewSfxRuntime_ != nullptr
-        && backend_->previewSfxRuntime_->audioEngineInitialized()) {
-        backend_->previewSfxRuntime_->applyLevels(backend_->previewAudioSettings_);
+    if (backend_ != nullptr) {
+        backend_->applyPreviewSfxLevels();
     }
     emit introChanged();
     savePreferences();

@@ -38,6 +38,7 @@ MainWindow::PreviewSection::PreviewSection(
     : owner_(owner)
     , ui_(ui)
     , state_(state)
+    , previewAppearanceValues_(owner.previewAppearanceValues_)
 {}
 
 void MainWindow::PreviewSection::applyPreviewStageMediaRouteVisualSettings()

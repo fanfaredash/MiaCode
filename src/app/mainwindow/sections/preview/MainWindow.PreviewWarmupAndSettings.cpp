@@ -410,7 +410,7 @@ PreviewOutlineVariant MainWindow::PreviewSection::previewOutlineVariantFromStora
 
 QString MainWindow::PreviewSection::previewOutlineVariantStorageValue() const
 {
-    switch (state_.previewOutlineVariant_) {
+    switch (previewAppearanceValues_.outlineVariant) {
     case PreviewOutlineVariant::Point:
         return QStringLiteral("point");
     case PreviewOutlineVariant::JudgeArea:
@@ -451,7 +451,7 @@ PreviewOutlineVariant MainWindow::PreviewSection::effectivePreviewOutlineVariant
         && !state_.exportPreviewActive_) {
         return PreviewOutlineVariant::JudgeAreaLabeled;
     }
-    return state_.previewOutlineVariant_;
+    return previewAppearanceValues_.outlineVariant;
 }
 
 void MainWindow::PreviewSection::setPauseDisplayAltHoldActive(bool active)
@@ -571,9 +571,9 @@ QVariantMap MainWindow::previewRenderSettings() const
         {QStringLiteral("judgeEffectTap"), state_.muriRenderOptions_.showChartReviewTapJudgeOverlay},
         {QStringLiteral("judgeEffectBreak"), state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay},
         {QStringLiteral("judgeEffectTouch"), state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay},
-        {QStringLiteral("slideEarlierOnTop"), state_.previewSlideEarlierSecondAndTextOnTop_},
-        {QStringLiteral("centerDisplay"), static_cast<int>(state_.previewCenterDisplayMode_)},
-        {QStringLiteral("tapJudgeTextDistance"), static_cast<int>(state_.previewTapJudgeTextDistance_)},
+        {QStringLiteral("slideEarlierOnTop"), previewAppearanceValues_.slideEarlierSecondAndTextOnTop},
+        {QStringLiteral("centerDisplay"), static_cast<int>(previewAppearanceValues_.centerDisplayMode)},
+        {QStringLiteral("tapJudgeTextDistance"), static_cast<int>(previewAppearanceValues_.tapJudgeTextDistance)},
     };
 }
 
@@ -663,28 +663,28 @@ void MainWindow::setPreviewRenderSetting(const QString& key, const QVariant& val
         applyMuriRenderOptions();
     } else if (key == QLatin1String("slideEarlierOnTop")) {
         const bool earlierOnTop = value.toBool();
-        if (state_.previewSlideEarlierSecondAndTextOnTop_ == earlierOnTop) {
+        if (previewAppearanceValues_.slideEarlierSecondAndTextOnTop == earlierOnTop) {
             return;
         }
-        state_.previewSlideEarlierSecondAndTextOnTop_ = earlierOnTop;
+        previewAppearanceValues_.slideEarlierSecondAndTextOnTop = earlierOnTop;
         if (canvas != nullptr) {
             canvas->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
         }
     } else if (key == QLatin1String("centerDisplay")) {
         const auto mode = static_cast<miacode::preview_gameplay::CenterDisplayMode>(value.toInt());
-        if (state_.previewCenterDisplayMode_ == mode) {
+        if (previewAppearanceValues_.centerDisplayMode == mode) {
             return;
         }
-        state_.previewCenterDisplayMode_ = mode;
+        previewAppearanceValues_.centerDisplayMode = mode;
         if (canvas != nullptr) {
             canvas->setCenterDisplayMode(mode);
         }
     } else if (key == QLatin1String("tapJudgeTextDistance")) {
         const auto distance = static_cast<PreviewTapJudgeTextDistance>(value.toInt());
-        if (state_.previewTapJudgeTextDistance_ == distance) {
+        if (previewAppearanceValues_.tapJudgeTextDistance == distance) {
             return;
         }
-        state_.previewTapJudgeTextDistance_ = distance;
+        previewAppearanceValues_.tapJudgeTextDistance = distance;
         if (canvas != nullptr) {
             canvas->setTapJudgeTextDistance(distance);
         }
@@ -744,7 +744,7 @@ void MainWindow::PreviewSection::applyPreviewOutlineVariant(
     bool useAutoSelection,
     bool persistState)
 {
-    state_.previewOutlineVariant_ = variant;
+    previewAppearanceValues_.outlineVariant = variant;
     state_.previewOutlineVariantUsesAutoSelection_ = useAutoSelection;
     state_.previewCustomOutlineFileName_.clear();
     applyEffectivePreviewOutlineVariantToCanvas();
@@ -807,7 +807,7 @@ MainWindow::PreviewSkinVariant MainWindow::PreviewSection::previewSkinVariantFro
 
 QString MainWindow::PreviewSection::previewSkinVariantStorageValue() const
 {
-    const QString normalized = normalizePreviewSkinDirectoryName(state_.previewSkinDirectoryName_);
+    const QString normalized = normalizePreviewSkinDirectoryName(previewAppearanceValues_.skinDirectoryName);
     return normalized.isEmpty()
         ? standardPreviewSkinDirectoryName()
         : normalized;
@@ -873,7 +873,7 @@ QString MainWindow::PreviewSection::resolvePreviewSkinDir() const
         return QString();
     }
 
-    const QString normalizedSelected = normalizePreviewSkinDirectoryName(state_.previewSkinDirectoryName_);
+    const QString normalizedSelected = normalizePreviewSkinDirectoryName(previewAppearanceValues_.skinDirectoryName);
     const QString selected = normalizedSelected.isEmpty()
         ? standardPreviewSkinDirectoryName()
         : normalizedSelected;
@@ -1149,6 +1149,25 @@ QString MainWindow::resolvePreviewSkinDir() const
 QString MainWindow::resolvePreviewSkinRootDir() const
 {
     return previewSection_->resolvePreviewSkinRootDir();
+}
+
+void MainWindow::applyPreviewSfxLevels(bool reloadAssets)
+{
+    if (previewSfxRuntime_ == nullptr || !previewSfxRuntime_->audioEngineInitialized()) {
+        return;
+    }
+    if (reloadAssets) {
+        previewSfxRuntime_->reloadAssets(previewAudioSettings_);
+        return;
+    }
+    previewSfxRuntime_->applyLevels(previewAudioSettings_);
+}
+
+void MainWindow::refreshPreviewSurfaces()
+{
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->update();
+    }
 }
 
 void MainWindow::applyPreviewSkinDirectoryToSurfaces()

@@ -34,10 +34,12 @@ QVariantMap option(const QVariant& value, const char* labelKey)
 
 QmlPreviewSettingsModel::QmlPreviewSettingsModel(MainWindow& backend,
                                                  miacode::v2::UiRequestService& uiRequests,
+                                                 miacode::v2::PreviewAppearanceState& appearance,
                                                  QObject* parent)
     : QObject(parent)
     // From the application assembly, not from the hidden window.
     , uiRequests_(&uiRequests)
+    , appearance_(&appearance)
     , backend_(&backend)
 {
 }
@@ -190,7 +192,7 @@ int QmlPreviewSettingsModel::skinIndex() const
     }
     const QStringList names = backend_->availablePreviewSkinDirectoryNames();
     for (int i = 0; i < names.size(); ++i) {
-        if (names.at(i).compare(backend_->previewSkinDirectoryName_, Qt::CaseInsensitive) == 0) {
+        if (names.at(i).compare(appearance_->skinDirectoryName(), Qt::CaseInsensitive) == 0) {
             return i;
         }
     }
@@ -207,9 +209,7 @@ QVariantList QmlPreviewSettingsModel::skinJudgeEffectOptions() const
 
 int QmlPreviewSettingsModel::skinJudgeEffectIndex() const
 {
-    return backend_ != nullptr && backend_->previewJudgeEffectStyle_ == PreviewJudgeEffectStyle::Starry
-        ? 1
-        : 0;
+    return appearance_->judgeEffectStyle() == PreviewJudgeEffectStyle::Starry ? 1 : 0;
 }
 
 QVariantList QmlPreviewSettingsModel::outlineOptions() const
@@ -227,7 +227,7 @@ int QmlPreviewSettingsModel::outlineIndex() const
     if (backend_ == nullptr) {
         return 1;
     }
-    switch (backend_->previewOutlineVariant_) {
+    switch (appearance_->outlineVariant()) {
     case PreviewOutlineVariant::Point:
         return 0;
     case PreviewOutlineVariant::JudgeArea:
@@ -301,16 +301,11 @@ void QmlPreviewSettingsModel::setSkinIndex(int index)
         return;
     }
     const QString skinDirectoryName = names.at(index);
-    if (backend_->previewSkinDirectoryName_.compare(skinDirectoryName, Qt::CaseInsensitive) == 0) {
+    // The owner decides whether this is a real change, and applying it to the
+    // live surfaces plus persisting it are the window's reaction to that.
+    if (!appearance_->setSkinDirectory(skinDirectoryName)) {
         return;
     }
-    backend_->previewSkinDirectoryName_ = skinDirectoryName;
-    backend_->previewSkinVariant_ =
-        skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
-            ? MainWindow::PreviewSkinVariant::Dx
-            : MainWindow::PreviewSkinVariant::Standard;
-    backend_->applyPreviewSkinDirectoryToSurfaces();
-    backend_->savePortableState();
     emit skinChanged();
 }
 
@@ -320,14 +315,9 @@ void QmlPreviewSettingsModel::setSkinJudgeEffectIndex(int index)
         return;
     }
     const auto style = index == 1 ? PreviewJudgeEffectStyle::Starry : PreviewJudgeEffectStyle::Standard;
-    if (backend_->previewJudgeEffectStyle_ == style) {
+    if (!appearance_->setJudgeEffectStyle(style)) {
         return;
     }
-    backend_->previewJudgeEffectStyle_ = style;
-    if (backend_->previewCanvas_ != nullptr) {
-        backend_->previewCanvas_->setJudgeEffectStyle(style);
-    }
-    backend_->savePortableState();
     emit skinChanged();
 }
 
@@ -372,8 +362,8 @@ void QmlPreviewSettingsModel::setHudFontPath(const QString& path)
         return;
     }
     miacode::preview::scene::setPreviewHudCustomFontPath(area, path);
-    if (backend_ != nullptr && backend_->previewCanvas_ != nullptr) {
-        backend_->previewCanvas_->update();
+    if (backend_ != nullptr) {
+        backend_->refreshPreviewSurfaces();
     }
     emit hudFontChanged();
 }
