@@ -1,5 +1,7 @@
 #include "MainWindowShared.h"
 
+#include "app/v2/ApplicationServices.h"
+
 #include "MainWindow.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -239,14 +241,11 @@ double steppedPreviewPlaybackRate(double rate, int direction)
 
 SimaiNativeValidationLocale uiValidationLocale()
 {
-    const QString token = UiText::resolvedLanguageToken();
-    if (token.startsWith(QStringLiteral("zh"))) {
-        return SimaiNativeValidationLocale::Chinese;
-    }
-    if (token.startsWith(QStringLiteral("ja"))) {
-        return SimaiNativeValidationLocale::Japanese;
-    }
-    return SimaiNativeValidationLocale::English;
+    // One implementation, owned by the non-Widget application layer. This name
+    // stays because the widget-side call sites already use it, but the mapping
+    // itself must not live in a QtWidgets translation unit — asking "which
+    // locale does the parser validate in" should not require the widget layer.
+    return miacode::v2::uiValidationLocale();
 }
 
 QByteArray autosaveContentSignature(const QString& text)

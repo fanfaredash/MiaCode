@@ -1,6 +1,7 @@
 #include "MainEntrypoints.h"
 
 #include "mainwindow/MainWindow.h"
+#include "app/v2/ApplicationServices.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -343,7 +344,11 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.touchFlowSpeed = request.noteFlowSpeed;
     request.skinLoadWaitMs = skinWaitMs;
 
-    MainWindow window;
+    // The CLI export path builds the same application services the shell does:
+    // they own the document domain and the job/UI boundaries, and the window
+    // only borrows them (stage 3.5 item 1).
+    miacode::v2::ApplicationServices applicationServices;
+    MainWindow window(applicationServices);
     QString resolvedOutputPath;
     QString exportError;
     QString exportDetails;

@@ -82,7 +82,9 @@ bool verifyNewDocumentPublishesFinalFileIdentity(QTextStream& err)
 bool verifyV2AnalysisUsesWorkspaceSnapshot(QTextStream& err)
 {
     const QString applicationContext = sourceFile(
-        QStringLiteral("src/app/qml_ui/QmlApplicationContext.h"));
+        QStringLiteral("src/app/qml_ui/QmlApplicationContext.cpp"));
+    const QString applicationServices = sourceFile(
+        QStringLiteral("src/app/v2/ApplicationServices.h"));
     const QString analysisServiceHeader = sourceFile(
         QStringLiteral("src/app/v2/AnalysisService.h"));
     const QString analysisService = sourceFile(
@@ -92,9 +94,19 @@ bool verifyV2AnalysisUsesWorkspaceSnapshot(QTextStream& err)
     const QString analysisModel = sourceFile(
         QStringLiteral("src/app/qml_ui/QmlAnalysisModel.cpp"));
 
-    return require(applicationContext.contains(
-                       QStringLiteral("AnalysisService analysisService_;")),
-                   QStringLiteral("the production QML context owns one workspace analysis service"), err)
+    // Stage 3.5 item 1 moved the single analysis service from the QML context to
+    // miacode::v2::ApplicationServices. The contract is unchanged in substance —
+    // one workspace, one analysis service, both reached by reference — but the
+    // owner is now a non-Widget assembly rather than the QML context, so the
+    // context must take them from `services` instead of declaring its own.
+    return require(applicationServices.contains(QStringLiteral("AnalysisService analysis_;"))
+                       && applicationServices.contains(QStringLiteral("ChartWorkspace workspace_;")),
+                   QStringLiteral("the application assembly owns one workspace analysis service"), err)
+        && require(applicationContext.contains(
+                       QStringLiteral("services.workspace(), services.analysis()"))
+                       && !applicationContext.contains(QStringLiteral("analysisService_(")),
+                   QStringLiteral("the production QML context reaches the assembly's single "
+                                  "workspace and analysis service instead of building its own"), err)
         && require(analysisServiceHeader.contains(QStringLiteral("bool pending = false;"))
                        && analysisServiceHeader.contains(QStringLiteral("SimaiNativeValidationReport validation;"))
                        && analysisServiceHeader.contains(QStringLiteral("QVector<TimelineNoteMarker> noteMarkers;"))
@@ -126,7 +138,9 @@ bool verifyV2AnalysisUsesWorkspaceSnapshot(QTextStream& err)
 bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
 {
     const QString applicationContext = sourceFile(
-        QStringLiteral("src/app/qml_ui/QmlApplicationContext.h"));
+        QStringLiteral("src/app/qml_ui/QmlApplicationContext.cpp"));
+    const QString applicationServices = sourceFile(
+        QStringLiteral("src/app/v2/ApplicationServices.h"));
     const QString documentModel = sourceFile(
         QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
     const QString mainWindow = sourceFile(
@@ -140,11 +154,16 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
     const QString followSync = sourceFile(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
 
+    // The owner moved to the non-Widget assembly in stage 3.5 item 1; the count
+    // is what matters and it is still one apiece, reached by reference.
     return require(
-               applicationContext.contains(QStringLiteral("ChartWorkspace workspace_;"))
+               applicationServices.contains(QStringLiteral("ChartWorkspace workspace_;"))
+                   && applicationServices.contains(
+                       QStringLiteral("ChartWorkspaceFileService files_;"))
                    && applicationContext.contains(
-                       QStringLiteral("ChartWorkspaceFileService fileService_;")),
-               QStringLiteral("QmlApplicationContext owns one workspace and its file boundary"), err)
+                       QStringLiteral("services.workspace(), services.files()")),
+               QStringLiteral("one workspace and one file boundary, owned by the application "
+                              "assembly and reached by the QML context"), err)
         && require(documentModel.contains(
                        QStringLiteral("workspace_->replaceActiveDifficultyChart(value)"))
                        && documentModel.contains(

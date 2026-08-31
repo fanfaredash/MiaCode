@@ -7,6 +7,7 @@
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
 #include "mainwindow/MainWindow.h"
+#include "app/v2/ApplicationServices.h"
 #include "UiNativeWindowTheme.h"
 #include "drop/QmlChartDropBridge.h"
 #include "common/DebugLog.h"
@@ -67,6 +68,8 @@ QmlUiBootstrap::~QmlUiBootstrap()
     windowChrome_.reset();
     applicationContext_.reset();
     backend_.reset();
+    // Last: the services outlive everything that borrows them.
+    applicationServices_.reset();
 }
 
 bool QmlUiBootstrap::start(const QString& startupOpenTarget)
@@ -74,13 +77,15 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     miacode::oplog::appendStartupBeaconLine("qml_ui/start_enter");
     appendQmlUiRuntimeLog(QStringLiteral("start_enter"));
 
-    backend_ = std::make_unique<MainWindow>();
+    applicationServices_ = std::make_unique<miacode::v2::ApplicationServices>();
+    backend_ = std::make_unique<MainWindow>(*applicationServices_);
     backend_->setQuickShellBackendActive(true);
     backend_->hide();
     backend_->setVisible(false);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
-    applicationContext_ = std::make_unique<QmlApplicationContext>(*backend_, this);
+    applicationContext_ =
+        std::make_unique<QmlApplicationContext>(*backend_, *applicationServices_, this);
     QObject::connect(
         static_cast<miacode::qml_ui::QmlShellLifecycle*>(applicationContext_->shell()),
         &miacode::qml_ui::QmlShellLifecycle::rootCloseAccepted,
@@ -291,6 +296,8 @@ void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& so
     windowChrome_.reset();
     applicationContext_.reset();
     backend_.reset();
+    // Last: the services outlive everything that borrows them.
+    applicationServices_.reset();
 
     if (qApp != nullptr) {
         qApp->quit();

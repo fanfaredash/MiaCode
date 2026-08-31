@@ -22,6 +22,11 @@ class ChartWorkspaceFileService final
 public:
     explicit ChartWorkspaceFileService(ChartWorkspace& workspace);
 
+    // The workspace this service writes for. There is exactly one per
+    // application assembly; a second workspace behind the file boundary is how
+    // "save" and "what is on screen" drift apart.
+    ChartWorkspace& workspace() const { return *workspace_; }
+
     ChartWorkspaceFileResult open(const QString& path) const;
     // Write an empty chart at `path`, creating its folder if needed. The
     // workspace is untouched — the caller opens the file afterwards, so a new

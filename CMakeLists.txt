@@ -122,6 +122,8 @@ endif()
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
+    src/app/v2/ApplicationServices.cpp
+    src/app/v2/ApplicationServices.h
     src/app/v2/ChartWorkspace.cpp
     src/app/v2/ChartWorkspace.h
     src/app/v2/ChartWorkspaceFileService.cpp
@@ -1688,6 +1690,44 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
     )
+
+    # Stage 3.5 item 1: the application service assembly must stand up with no
+    # window and no QApplication. Linking Qt6::Core + Qt6::Gui only is the
+    # guarantee — a QtWidgets include reaching ApplicationServices fails to link
+    # here rather than silently re-coupling the document domain to the shell.
+    miacode_add_dev_tool(application_services_spec TEST
+        SOURCES
+            src/tools/v2/ApplicationServicesSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            ${_miacode_muri_analysis_core}
+            src/timeline/TimelineSlowRefresh.h
+            src/timeline/TimelineSlowRefresh.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/app/v2/ApplicationServices.h
+            src/app/v2/ApplicationServices.cpp
+            src/app/v2/AnalysisService.h
+            src/app/v2/AnalysisService.cpp
+            src/app/v2/ChartDropImportService.h
+            src/app/v2/ChartDropImportService.cpp
+            src/app/v2/ChartWorkspace.h
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/ChartWorkspaceFileService.h
+            src/app/v2/ChartWorkspaceFileService.cpp
+            src/app/v2/EditorSyncController.h
+            src/app/v2/EditorSyncController.cpp
+            src/app/v2/JobProgressService.h
+            src/app/v2/JobProgressService.cpp
+            src/app/v2/UiRequestService.h
+            src/app/v2/UiRequestService.cpp
+            resources/fonts.qrc
+            resources/slide_data.qrc
+        LIBS Qt6::Core Qt6::Gui Qt6::Test
+        INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
+    )
+    target_compile_definitions(application_services_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(qml_analysis_model_spec TEST
         SOURCES

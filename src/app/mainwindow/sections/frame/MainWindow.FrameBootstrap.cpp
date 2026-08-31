@@ -73,26 +73,30 @@ void appendPreviewFramePacingDiagLog(const QString& action, const QString& paylo
 
 }  // namespace
 
-MainWindow::MainWindow(QWidget* parent)
+MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* parent)
     : QMainWindow(parent)
+    , applicationServices_(services)
 {
-    editorSyncController_ = std::make_unique<miacode::v2::EditorSyncController>(this);
-    chartDropImportService_ = std::make_unique<miacode::v2::ChartDropImportService>(this);
-    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::editorContextChanged,
+    // Borrowed, not created: these services outlive the window and are owned by
+    // the non-Widget assembly (stage 3.5 item 1). The window only connects to
+    // them.
+    editorSyncController_ = &applicationServices_.editorSync();
+    chartDropImportService_ = &applicationServices_.chartDropImport();
+    connect(editorSyncController_, &miacode::v2::EditorSyncController::editorContextChanged,
             this, &MainWindow::refreshEditorAuthoringContext);
-    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::caretLocationPublished,
+    connect(editorSyncController_, &miacode::v2::EditorSyncController::caretLocationPublished,
             this, [this](int difficultyId, qulonglong, int line, int column) {
                 if (difficultyId == activeDifficultyId_) {
                     publishEditorCaret(difficultyId, line, column);
                 }
             });
-    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::pointerInteractionStarted,
+    connect(editorSyncController_, &miacode::v2::EditorSyncController::pointerInteractionStarted,
             this, &MainWindow::handleEditorPointerInteraction);
-    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::touchPadControlHoldChanged,
+    connect(editorSyncController_, &miacode::v2::EditorSyncController::touchPadControlHoldChanged,
             this, &MainWindow::setTouchPadAuthoringCtrlHold);
-    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::touchPadPreviewAnchorPublished,
+    connect(editorSyncController_, &miacode::v2::EditorSyncController::touchPadPreviewAnchorPublished,
             this, &MainWindow::applyTouchPadAuthoringPreviewAnchor);
-    connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::previewSeekPublished,
+    connect(editorSyncController_, &miacode::v2::EditorSyncController::previewSeekPublished,
             this, &MainWindow::seekPreviewToEditorLocation);
 
     QElapsedTimer startupStageTimer;
@@ -703,8 +707,10 @@ MainWindow::MainWindow(QWidget* parent)
     editorStack_->addWidget(ui_.latencyPlaceholderPage_);
     ui_.exportPlaceholderPage_ = new QWidget(this);
     editorStack_->addWidget(ui_.exportPlaceholderPage_);
-    ui_.uiRequests_ = new miacode::v2::UiRequestService(this);
-    ui_.jobProgress_ = new miacode::v2::JobProgressService(this);
+    // Borrowed from the application assembly. A second instance here would mean
+    // a second dialog host and a second progress surface.
+    ui_.uiRequests_ = &applicationServices_.uiRequests();
+    ui_.jobProgress_ = &applicationServices_.jobProgress();
     // The export worker runs out of process, so it cannot poll the cancel flag
     // at checkpoints the way an in-process job does. Route the shell's cancel
     // to it, but only while the job on the surface is actually the export's.

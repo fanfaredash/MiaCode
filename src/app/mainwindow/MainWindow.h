@@ -37,6 +37,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
+#include "app/v2/ApplicationServices.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -245,7 +246,13 @@ public:
         int skinLoadWaitMs = 2000;
     };
 
-    explicit MainWindow(QWidget* parent = nullptr);
+    // The application services are constructed before the window and outlive
+    // it: the document domain, the UI-request boundary and the job-progress
+    // surface belong to miacode::v2::ApplicationServices, not to a QWidget.
+    // MainWindow borrows them (stage 3.5 item 1) — it must not own or
+    // re-create any of them.
+    explicit MainWindow(miacode::v2::ApplicationServices& services,
+                        QWidget* parent = nullptr);
     ~MainWindow() override;
     bool exportPreviewVideoFromCli(
         const CliVideoExportRequest& request,
@@ -541,8 +548,10 @@ private:
     std::function<void(std::function<void(bool)>)> qmlLeaveDocumentHandler_;
     std::function<bool(const QString&)> qmlChartTextHandler_;
     quint64 appliedQmlWorkspaceRevision_ = 0;
-    std::unique_ptr<miacode::v2::EditorSyncController> editorSyncController_;
-    std::unique_ptr<miacode::v2::ChartDropImportService> chartDropImportService_;
+    // Borrowed from applicationServices_; never owned here.
+    miacode::v2::ApplicationServices& applicationServices_;
+    miacode::v2::EditorSyncController* editorSyncController_ = nullptr;
+    miacode::v2::ChartDropImportService* chartDropImportService_ = nullptr;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {

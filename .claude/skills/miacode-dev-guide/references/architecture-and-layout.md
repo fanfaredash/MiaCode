@@ -9,12 +9,25 @@ contracts, and the god-file watch-list. Pair with `feature-index.md` (feature �
 src/
   app/            App entry + window orchestration ONLY
     main.cpp        GUI boot, CLI export, export-worker entry, startup timing
-    mainwindow/     MainWindow + sections/<feature>/ (partial-class slices)
-    quick_shell/    QuickShellController + preview-surface/policy headers only (v2 uses
-                    them); the v1 QML shell, native-surface re-hosting, and style bridge
-                    were removed 2026-08-25, and `--ui=v1` no longer exists.
-                    QuickShellController itself retires in a later stage — see
-                    docs/specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md.
+    mainwindow/     MainWindow + sections/<feature>/ (partial-class slices).
+                    Shrinking: it BORROWS the v2 services, never owns them.
+                    Deleted entirely in stage 4 — do not add new state here.
+    v2/             ApplicationServices — the non-Widget owner of the document
+                    domain and the shared UI boundaries: ChartWorkspace,
+                    ChartWorkspaceFileService, AnalysisService,
+                    EditorSyncController, ChartDropImportService,
+                    UiRequestService, JobProgressService. Constructed BEFORE
+                    MainWindow and destroyed after it. Nothing else in src/app
+                    may construct one of these — application_services_spec
+                    scans the tree and fails if it does.
+    qml_ui/         The default (v2) shell: QmlUiBootstrap, QmlApplicationContext,
+                    the Qml*Model façades and the MiaCode.UI QML module.
+    quick_shell/    Preview-surface / popup-position / keyboard-activation policy
+                    headers only. QuickShellController and QuickShellContracts
+                    were deleted 2026-08-30; the v1 QML shell, native-surface
+                    re-hosting and style bridge went 2026-08-25, and `--ui=v1`
+                    no longer exists. What remains is preview-composition
+                    plumbing that leaves with MainWindow in stage 4.
     ui/             UiText, UiTheme, ShortcutRegistry, WindowParityMetrics
   audio/          Audio backends + SFX runtime. Nothing else links BASS/miniaudio.
   common/         Cross-module utilities, debug logging, shared config headers
@@ -54,8 +67,16 @@ Path-translation table for stale docs/comments:
 - `core/chart/` and `core/scene/` are the domain core: no dependency on `app/`, `preview/`,
   or Qt Widgets. `core/scene/` must stay GPU-free (no QSG / D3D11 includes).
 - `app/` (UI) depends on core; core never depends on UI.
+- `app/v2/` must stay **Qt Widgets-free** and must not include `mainwindow/`. The direction is
+  one-way: `mainwindow/` and `qml_ui/` reach into `app/v2/`, never the reverse. This is enforced
+  by linkage, not review — `application_services_spec`, `ui_request_service_spec` and the other
+  v2 specs link `Qt6::Core` (+`Gui`/`Test`) only, so a QtWidgets include fails the build.
 - `audio/` is the only place allowed to link BASS / miniaudio.
 - `tools/*` are standalone (each spec/dump/probe builds against a minimal source subset).
+- **Every library `MiaCode` links is on an allowlist**: `docs/ops/DEPENDENCY_ALLOWLIST.md`, guarded
+  by `dependency_allowlist_spec`. Adding a dependency without a doc row fails the suite, and so
+  does leaving a stale row behind. `src/tools/net` is deliberately NOT in the product target — it
+  compiles only under `net_client_spec`, which is what keeps `Qt6::Network` out of MiaCode.
 
 ## 3. Render-architecture decision (2026-05-29, updated 2026-08-07)
 

@@ -1,0 +1,83 @@
+#pragma once
+
+#include "AnalysisService.h"
+#include "ChartDropImportService.h"
+#include "ChartWorkspace.h"
+#include "ChartWorkspaceFileService.h"
+#include "EditorSyncController.h"
+#include "JobProgressService.h"
+#include "UiRequestService.h"
+
+#include <QObject>
+
+namespace miacode::v2 {
+
+// The parser validation locale matching the session UI language.
+//
+// This used to live in MainWindowShared, a QtWidgets translation unit, so
+// "which locale does the parser validate in" could not be answered without the
+// widget layer. It reads nothing but the resolved UI language token, so it
+// belongs here; MainWindowShared::uiValidationLocale() now forwards to it and
+// stays as the name the widget-side call sites already use.
+SimaiNativeValidationLocale uiValidationLocale();
+
+// The application's service assembly: one non-Widget owner for the document
+// domain and the shared UI boundaries.
+//
+// Before this existed the same services had two owners, both of them UI
+// objects — MainWindow held UiRequestService, JobProgressService,
+// EditorSyncController and ChartDropImportService, while QmlApplicationContext
+// held ChartWorkspace, ChartWorkspaceFileService and AnalysisService. That made
+// "who owns the document" depend on which of the two you asked, and it kept the
+// hidden window on the critical path for services that never needed a window.
+//
+// Construction order is the contract: the workspace exists before anything that
+// reads it, so the file service and the analysis service can bind to it by
+// reference and there is never a second workspace to drift from.
+//
+// Deliberately Qt Widgets-free. `application_services_spec` links Qt6::Core and
+// Qt6::Gui only, so a QtWidgets include reaching this assembly fails to link.
+class ApplicationServices final : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit ApplicationServices(QObject* parent = nullptr);
+
+    ChartWorkspace& workspace() { return workspace_; }
+    const ChartWorkspace& workspace() const { return workspace_; }
+
+    ChartWorkspaceFileService& files() { return files_; }
+    const ChartWorkspaceFileService& files() const { return files_; }
+
+    AnalysisService& analysis() { return analysis_; }
+    const AnalysisService& analysis() const { return analysis_; }
+
+    EditorSyncController& editorSync() { return editorSync_; }
+    const EditorSyncController& editorSync() const { return editorSync_; }
+
+    ChartDropImportService& chartDropImport() { return chartDropImport_; }
+    const ChartDropImportService& chartDropImport() const { return chartDropImport_; }
+
+    UiRequestService& uiRequests() { return uiRequests_; }
+    const UiRequestService& uiRequests() const { return uiRequests_; }
+
+    JobProgressService& jobProgress() { return jobProgress_; }
+    const JobProgressService& jobProgress() const { return jobProgress_; }
+
+    SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
+
+private:
+    // Declaration order is initialization order: workspace_ first, then
+    // everything that binds to it.
+    ChartWorkspace workspace_;
+    ChartWorkspaceFileService files_;
+    SimaiNativeValidationLocale validationLocale_;
+    AnalysisService analysis_;
+    EditorSyncController editorSync_;
+    ChartDropImportService chartDropImport_;
+    UiRequestService uiRequests_;
+    JobProgressService jobProgress_;
+};
+
+}  // namespace miacode::v2

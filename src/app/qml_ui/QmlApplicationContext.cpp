@@ -1,25 +1,22 @@
-#include "app/v2/JobProgressService.h"
-#include "app/v2/UiRequestService.h"
 #include "QmlApplicationContext.h"
 
 #include "mainwindow/MainWindow.h"
-#include "mainwindow/MainWindowShared.h"
 
-QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* parent)
+QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
+                                             miacode::v2::ApplicationServices& services,
+                                             QObject* parent)
     : QObject(parent)
     , backend_(backend)
-    , workspace_()
-    , fileService_(workspace_)
-    , analysisService_(workspace_, miacode::mainwindow::shared::uiValidationLocale())
+    , services_(services)
     , preferences_(this)
-    , appBackground_(backend.uiRequestService(), {}, {}, this)
-    , document_(backend, workspace_, fileService_, analysisService_, this)
-    , analysis_(backend, workspace_, analysisService_, this)
+    , appBackground_(&services.uiRequests(), {}, {}, this)
+    , document_(backend, services.workspace(), services.files(), services.analysis(), this)
+    , analysis_(backend, services.workspace(), services.analysis(), this)
     , preview_(backend, this)
     , timeline_(backend, this)
     , commands_(backend, document_, this)
     , pages_(backend, this)
-    , coverExport_(*backend.qmlExportSession(), *backend.uiRequestService(), this)
+    , coverExport_(*backend.qmlExportSession(), services.uiRequests(), this)
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)
@@ -75,18 +72,18 @@ QObject* QmlApplicationContext::shell() { return &lifecycle_; }
 QObject* QmlApplicationContext::timeline() { return &timeline_; }
 QObject* QmlApplicationContext::pages() { return &pages_; }
 QObject* QmlApplicationContext::editor() { return &editor_; }
-QObject* QmlApplicationContext::editorSync() { return &backend_.editorSyncController(); }
+QObject* QmlApplicationContext::editorSync() { return &services_.editorSync(); }
 QObject* QmlApplicationContext::shortcuts() { return &shortcuts_; }
 QObject* QmlApplicationContext::windowChrome() const { return windowChrome_; }
 QObject* QmlApplicationContext::chartDropBridge() const { return chartDropBridge_; }
 QObject* QmlApplicationContext::platform() { return &platform_; }
 
-// Owned by MainWindow so the export session (built before this context) and the
-// QML shell share one boundary; a second instance would mean a second dialog
-// host and duplicated pickers.
-QObject* QmlApplicationContext::uiRequests() { return backend_.uiRequestService(); }
+// Owned by the application service assembly, which is built before the window,
+// so the export session and the QML shell share one boundary; a second instance
+// would mean a second dialog host and duplicated pickers.
+QObject* QmlApplicationContext::uiRequests() { return &services_.uiRequests(); }
 
-QObject* QmlApplicationContext::jobProgress() { return backend_.jobProgressService(); }
+QObject* QmlApplicationContext::jobProgress() { return &services_.jobProgress(); }
 
 QObject* QmlApplicationContext::mediaTools() { return &mediaTools_; }
 

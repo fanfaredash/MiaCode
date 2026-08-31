@@ -195,6 +195,27 @@ Rules going forward:
   packaging step). So far this is the only `QSvgRenderer` use; keep it that way unless a new
   feature genuinely needs SVG.
 
+## 6b. Dependency allowlist (`docs/ops/DEPENDENCY_ALLOWLIST.md`)
+
+Every library on `MiaCode`'s link line is registered in that doc with its layer, platform
+condition, direct use site, load moment and verification method. **Changing a dependency and
+changing the doc are one commit** — `dependency_allowlist_spec` parses every
+`target_link_libraries(MiaCode …)` call and fails on five drift directions: an undocumented
+dependency, a stale doc row, a link the doc forbids, a `find_package(Qt6 <ver> …)` that does not
+match the pinned version, and a `#include <QtAVPlayer/…>` outside the seven media-adapter files.
+It also rejects a `REQUIRED` Qt component that nothing links (how a dead `OpenGL` component was
+found), unless the doc declares it build-time-only (`ShaderTools`).
+
+Two standing facts the doc records so nobody re-derives them wrong:
+
+- **`Qt6::Network` must not be linked into `MiaCode`.** The Net page left the v2 product
+  runtime, so `src/tools/net/` compiles only inside `net_client_spec`. `QtNetwork` is still
+  *loaded* at runtime — it is a transitive dependency of `Qt6::Qml` — so removing the direct
+  link changed whether the product uses the network, not what ships in the package.
+- **`Qt6::MultimediaQuickPrivate` has no direct use site in `src/`.** It exists only for
+  QtAVPlayer's `QT_AVPLAYER_MULTIMEDIA` frame bridge. Qt is version-pinned across every
+  `find_package` because a private module carries no compatibility promise.
+
 ## 7. Do not commit build artifacts
 
 `.gitignore` blocks `build/`, `.qt/`, `dist/`, `CMakeFiles/`, `*.obj`, `*.log`, `*.pdb`,
@@ -206,5 +227,7 @@ source — not part of the build.
 ## Update this file when
 
 - A target is added/removed/re-gated, or the spec/CTest convention changes.
+- A dependency joins or leaves `MiaCode` — update `docs/ops/DEPENDENCY_ALLOWLIST.md` in the
+  same commit or `dependency_allowlist_spec` fails.
 - A build or packaging script is added, renamed, or changes responsibility.
 - An asset directory, filename convention, or required packaged binary changes.

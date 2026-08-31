@@ -18,9 +18,7 @@
 #include "preview/QmlPreviewSettingsModel.h"
 #include "export/QmlCoverExportSession.h"
 #include "latency/QmlLatencyModel.h"
-#include "app/v2/ChartWorkspace.h"
-#include "app/v2/ChartWorkspaceFileService.h"
-#include "app/v2/AnalysisService.h"
+#include "app/v2/ApplicationServices.h"
 
 #include <QObject>
 
@@ -59,7 +57,13 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* coverExport READ coverExport CONSTANT)
 
 public:
-    explicit QmlApplicationContext(MainWindow& backend, QObject* parent = nullptr);
+    // `services` owns the document domain and the shared UI boundaries; the
+    // window is still the backend for the shell state QML has not taken over
+    // yet (stage 3.5 items 2-3 shrink it to nothing). Nothing reached through
+    // `services` may be re-fetched from the window.
+    explicit QmlApplicationContext(MainWindow& backend,
+                                   miacode::v2::ApplicationServices& services,
+                                   QObject* parent = nullptr);
 
     QObject* document();
     QObject* analysis();
@@ -92,9 +96,7 @@ signals:
 
 private:
     MainWindow& backend_;
-    miacode::v2::ChartWorkspace workspace_;
-    miacode::v2::ChartWorkspaceFileService fileService_;
-    miacode::v2::AnalysisService analysisService_;
+    miacode::v2::ApplicationServices& services_;
     QmlUiSettings preferences_;
     miacode::qml_ui::QmlAppBackgroundModel appBackground_;
     QmlDocumentModel document_;

@@ -101,10 +101,12 @@ QStringList tokenizeArguments(const QString& body)
 }
 
 // Map a raw link token onto the logical name the doc uses.
-//   "${CMAKE_CURRENT_SOURCE_DIR}/…/bass.lib"   -> bass
-//   "${MIACODE_BASS_MACOS_DIR}/libbassmix.dylib" -> bassmix
-//   "-framework AppKit"                         -> -framework AppKit
-//   Qt6::Quick / soundtouch / dwmapi            -> unchanged
+//   "…/third_party/bass/lib/win64/bass.lib"        -> bass
+//   "…/bass/lib/macos/universal/libbassmix.dylib"  -> bassmix
+//   "-framework AppKit"                            -> -framework AppKit
+//   Qt6::Quick / soundtouch / dwmapi               -> unchanged
+// A CMake variable reference that survives as a whole token (a link list held
+// in a variable) is kept verbatim and documented under that name.
 QString normalizeLinkToken(const QString& raw)
 {
     const QString token = raw.trimmed();

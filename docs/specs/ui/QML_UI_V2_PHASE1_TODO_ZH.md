@@ -468,17 +468,38 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 这是删除 `MainWindow` 之前新增的架构关卡，避免把“换应用对象”误当成架构完成：
 
-> **当前未完成（2026-09-01）**：本轮只收口阶段 3 的拖放边界和 0b/背景范围，没有继续删除隐藏
-> `MainWindow`。`QmlApplicationContext` 仍持有 `MainWindow&`，文档切页仍经过隐藏
-> `DocumentSection`/Widgets 状态，因此 `QtWidgets` 仍是当前产品依赖；这些任务保留在本阶段，不能
-> 由本轮的 QML bridge 或定向测试标记完成。
+> **当前状态（2026-09-01 第二轮）**：依赖分层三项（4 / 5 / 6）已完成，服务所有权（第 1 项）已完成。
+> 隐藏 `MainWindow` 仍然存在：`QmlApplicationContext` 仍持有 `MainWindow& backend_`，文档切页仍经过
+> 隐藏 `DocumentSection`/Widgets 状态，因此 `QtWidgets` 仍是当前产品依赖，且在 allowlist 里被明确
+> 标为「遗留 / 阶段 4 退出」。第 2、3 项不能由本轮的服务装配标记完成。
 
-- [ ] 建立 `ApplicationServices`（或等价的应用服务装配对象），让文档、预览、时间轴、导出、
-      UI 请求和作业进度拥有独立的非 Widget owner。
+- [x] `ApplicationServices` 已建立并**成为真正的所有者**（2026-09-01）。
+      `src/app/v2/ApplicationServices.{h,cpp}` 是一个不含 Widgets 的 `QObject`，持有
+      `ChartWorkspace`、`ChartWorkspaceFileService`、`AnalysisService`、`EditorSyncController`、
+      `ChartDropImportService`、`UiRequestService`、`JobProgressService` 七个服务。
+      在此之前这七个服务分属两个 UI 对象：`MainWindow` 持有后四个，`QmlApplicationContext`
+      持有前三个——「文档域归谁」取决于你问哪一个，而两个答案都是 UI 对象。
+      现在 `QmlUiBootstrap` **先**构造 `ApplicationServices`、**再**构造 `MainWindow` 并把它传进去；
+      窗口只借用，`ui_.uiRequests_` / `editorSyncController_` / `chartDropImportService_` 全部改为
+      指向装配对象，`QmlApplicationContext` 的 `uiRequests()` / `jobProgress()` / `editorSync()`
+      也不再经过 `backend_`。销毁顺序写死为「服务最后释放」。
+      CLI 导出路径（`cli_video_export.cpp`）走同一条装配。
+      顺带把 `uiValidationLocale()` 的实现从 `MainWindowShared`（一个 QtWidgets TU）搬到
+      `miacode::v2`，`MainWindowShared` 保留同名函数转发——「解析器用哪个语言校验」不该需要 widget 层。
+      守卫 `application_services_spec` 只链 `Qt6::Core`/`Gui`/`Test`，所以任何 QtWidgets 依赖爬进
+      装配对象都会**链接失败**；它还扫描整个 `src/app`（除装配自身），禁止任何地方再 `new` /
+      `make_unique` / 以值成员形式构造这七个服务——否则装配对象会变成第三个所有者而不是唯一所有者。
+      这条反向验证已实测：在 `MainWindow.h` 里加一个 `UiRequestService` 值成员，守卫立刻失败。
 - [ ] `QmlApplicationContext` 不再持有 `MainWindow& backend_`；QML 通过窄 QObject 门面访问
       services / sessions，不能再经隐藏窗口取得状态、命令或页面切换。
+      *进展（2026-09-01）*：文档域、UI 请求、作业进度、editor-sync 已改为经 `services_` 取得，
+      `backend_` 不再是这四者的来源。剩下的仍然是大头——`Qml*Model` 共约 140 个 `MainWindow`
+      方法调用点（预览、时间轴、导出、偏好设置、延迟检测、媒体工具、页面切换），必须逐域搬到
+      session/service 才能去掉 `backend_`。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
+      *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。
+      但 `QmlUiBootstrap::start()` 仍然 `make_unique<MainWindow>`，本项未完成。
 - [x] 为 `MiaCode` 建立 Qt 与第三方依赖 allowlist（2026-09-01）。
       [docs/ops/DEPENDENCY_ALLOWLIST.md](../../ops/DEPENDENCY_ALLOWLIST.md) 按宿主 / 渲染 /
       媒体 / 导出 / 平台 / 遗留六层登记 `MiaCode` 链接的每一个库，逐条写明平台条件、直接使用点、
