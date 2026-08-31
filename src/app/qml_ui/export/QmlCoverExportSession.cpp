@@ -148,7 +148,7 @@ QVariantList QmlCoverExportSession::resolutionOptions() const
 {
     QVariantList output;
     for (const auto& preset : kCoverResolutionPresets) {
-        output.append(QVariantMap{{QStringLiteral("label"), QString::fromLatin1(preset.label)},
+        output.append(QVariantMap{{QStringLiteral("label"), QString::fromUtf8(preset.label)},
                                   {QStringLiteral("width"), preset.width},
                                   {QStringLiteral("height"), preset.height}});
     }

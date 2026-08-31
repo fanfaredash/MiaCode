@@ -13,8 +13,8 @@ import MiaCode.UI
 //   * 表单行一律走 LabeledCombo / LabeledSlider，标签列因此对齐，滑杆也拿到了
 //     读数和双击输入（直接给 AppSlider 绑 value 会在第一次拖动后把绑定打断，
 //     LabeledSlider 的 `Binding ... when: !pressed` 就是为这个存在的）；
-//   * 右栏按 画板 / 难度卡 / 图层 / 预设 分成 panelTab，和 导出中心、预览设置
-//     一样，而不是一条五段的长滚动。
+//   * 右栏按 画板 / 图层 / 预设 分成 panelTab；难度卡设置并入图层页下半，
+//     和 导出中心、预览设置一样，而不是一条五段的长滚动。
 //
 // 图层行只读地表达状态。ChromeRow 的高亮铺满整行，交互子项放进 contentItem 会被
 // 它从底下穿过去，所以显示/锁定的开关留在右栏「图层」页，行里不放按钮。
@@ -25,8 +25,7 @@ Rectangle {
     required property var coverSession
     readonly property var session: root.coverSession
 
-    // 右栏分组。图层页在选中图层变化时不自动切走：拖动画布选中另一个图层时
-    // 跳页会把正在调的滑杆从手底下抽掉。
+    // 右栏分组。选中任意图层后都回到图层检查器，保证当前选择的属性可见。
     property string inspectorTab: "canvas"
 
     readonly property var activeLayer: root.session ? root.session.activeLayer : null
@@ -264,7 +263,11 @@ Rectangle {
                         width: ListView.view.width
                         implicitHeight: 30
                         selected: root.session && root.session.activeLayerKey === layerRow.modelData.key
-                        onClicked: if (root.session) root.session.selectLayerKey(layerRow.modelData.key)
+                        onClicked: {
+                            root.inspectorTab = "layer"
+                            if (root.session)
+                                root.session.selectLayerKey(layerRow.modelData.key)
+                        }
 
                         readonly property color labelColor:
                             !layerRow.modelData.visible ? Theme.colors.text.disabled
@@ -381,7 +384,13 @@ Rectangle {
                     Binding { target: composer.item; property: "activeChartFrameKey"; value: root.session ? root.session.activeLayerKey : ""; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "selectedKey"; value: root.session ? root.session.activeLayerKey : ""; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "selectionBinder"; value: root.session; when: composer.status === Loader.Ready }
-                    Binding { target: composer.item; property: "chartSceneBinder"; value: root.session ? root.session.chartSceneBinder : null; when: composer.status === Loader.Ready }
+                    Binding { target: composer.item; property: "chartSceneBinder"; value: root.session; when: composer.status === Loader.Ready }
+                    Binding {
+                        target: composer.item
+                        property: "layerSelectionCallback"
+                        value: function(key) { root.inspectorTab = "layer" }
+                        when: composer.status === Loader.Ready
+                    }
                     Binding { target: composer.item; property: "editable"; value: true; when: composer.status === Loader.Ready }
 
                     BusyIndicator {
@@ -415,12 +424,6 @@ Rectangle {
                             text: UiText.text("cover.canvas")
                             active: root.inspectorTab === "canvas"
                             onClicked: root.inspectorTab = "canvas"
-                        }
-                        AppTab {
-                            panelTab: true
-                            text: UiText.text("cover.difficulty_card")
-                            active: root.inspectorTab === "card"
-                            onClicked: root.inspectorTab = "card"
                         }
                         AppTab {
                             objectName: "coverLayerTab"
@@ -549,89 +552,6 @@ Rectangle {
                                     value: root.session ? root.session.backgroundBrightness : 0.45
                                     enabled: root.session && root.session.backgroundMode !== 2
                                     onMoved: function(value) { if (root.session) root.session.backgroundBrightness = value }
-                                }
-                            }
-
-                            // ---- 难度卡 ----
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                visible: root.inspectorTab === "card"
-                                spacing: 10
-
-                                LabeledCombo {
-                                    objectName: "coverCardModeCombo"
-                                    label: UiText.text("cover.chart_type")
-                                    labelWidth: 96
-                                    options: [
-                                        { value: "auto", label: UiText.text("自动") },
-                                        { value: "DX", label: "DX" },
-                                        { value: "Standard", label: "Standard" }
-                                    ]
-                                    currentValue: root.session ? root.session.cardMode : "auto"
-                                    onPicked: function(value) { if (root.session) root.session.cardMode = value }
-                                }
-                                AppSwitch {
-                                    text: UiText.text("cover.card_drop_shadow")
-                                    checked: root.session ? root.session.cardShadow : false
-                                    onToggled: if (root.session) root.session.cardShadow = checked
-                                }
-                                AppSwitch {
-                                    text: UiText.text("cover.render_level_as_text")
-                                    checked: root.session ? root.session.levelTextRender : false
-                                    onToggled: if (root.session) root.session.levelTextRender = checked
-                                }
-                                LabeledCombo {
-                                    objectName: "coverLongTextCombo"
-                                    label: UiText.text("cover.long_text")
-                                    labelWidth: 96
-                                    options: [
-                                        { value: "shrink", label: UiText.text("cover.shrink_to_fit") },
-                                        { value: "ellipsis", label: UiText.text("cover.keep_size_ellipsis") }
-                                    ]
-                                    currentValue: root.session ? root.session.longTextMode : "shrink"
-                                    onPicked: function(value) { if (root.session) root.session.longTextMode = value }
-                                }
-
-                                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.colors.border.normal }
-
-                                Text {
-                                    text: UiText.text("cover.font")
-                                    color: Theme.colors.text.active
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.uiFontSize
-                                    font.bold: true
-                                }
-                                LabeledCombo {
-                                    objectName: "coverCardDisplayFontCombo"
-                                    label: UiText.text("card_font.title")
-                                    labelWidth: 96
-                                    options: root.fontOptions
-                                    currentValue: root.session ? root.session.cardFontDisplayPath : ""
-                                    onPicked: function(value) { if (root.session) root.session.cardFontDisplayPath = value }
-                                }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    AppButton {
-                                        text: UiText.text("card_font.import")
-                                        onClicked: if (root.session) root.session.importCardDisplayFont()
-                                    }
-                                    Item { Layout.fillWidth: true }
-                                }
-                                LabeledCombo {
-                                    objectName: "coverCardBodyFontCombo"
-                                    label: UiText.text("card_font.body")
-                                    labelWidth: 96
-                                    options: root.fontOptions
-                                    currentValue: root.session ? root.session.cardFontBodyPath : ""
-                                    onPicked: function(value) { if (root.session) root.session.cardFontBodyPath = value }
-                                }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    AppButton {
-                                        text: UiText.text("card_font.import")
-                                        onClicked: if (root.session) root.session.importCardBodyFont()
-                                    }
-                                    Item { Layout.fillWidth: true }
                                 }
                             }
 
@@ -945,6 +865,100 @@ Rectangle {
                                             onMoved: function(value) { if (root.session) root.session.setActiveLayerFrameBackgroundTransparency(value) }
                                         }
                                     }
+                                }
+                            }
+
+                            // ---- 难度卡（图层页下半） ----
+                            ColumnLayout {
+                                id: cardSettings
+                                Layout.fillWidth: true
+                                visible: root.inspectorTab === "layer"
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 1
+                                    color: Theme.colors.border.normal
+                                }
+                                Text {
+                                    text: UiText.text("cover.difficulty_card_options")
+                                    color: Theme.colors.text.active
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                    font.bold: true
+                                }
+                                LabeledCombo {
+                                    objectName: "coverCardModeCombo"
+                                    label: UiText.text("cover.chart_type")
+                                    labelWidth: 96
+                                    options: [
+                                        { value: "auto", label: UiText.text("自动") },
+                                        { value: "DX", label: "DX" },
+                                        { value: "Standard", label: "Standard" }
+                                    ]
+                                    currentValue: root.session ? root.session.cardMode : "auto"
+                                    onPicked: function(value) { if (root.session) root.session.cardMode = value }
+                                }
+                                AppSwitch {
+                                    text: UiText.text("cover.card_drop_shadow")
+                                    checked: root.session ? root.session.cardShadow : false
+                                    onToggled: if (root.session) root.session.cardShadow = checked
+                                }
+                                AppSwitch {
+                                    text: UiText.text("cover.render_level_as_text")
+                                    checked: root.session ? root.session.levelTextRender : false
+                                    onToggled: if (root.session) root.session.levelTextRender = checked
+                                }
+                                LabeledCombo {
+                                    objectName: "coverLongTextCombo"
+                                    label: UiText.text("cover.long_text")
+                                    labelWidth: 96
+                                    options: [
+                                        { value: "shrink", label: UiText.text("cover.shrink_to_fit") },
+                                        { value: "ellipsis", label: UiText.text("cover.keep_size_ellipsis") }
+                                    ]
+                                    currentValue: root.session ? root.session.longTextMode : "shrink"
+                                    onPicked: function(value) { if (root.session) root.session.longTextMode = value }
+                                }
+
+                                Text {
+                                    text: UiText.text("cover.font")
+                                    color: Theme.colors.text.active
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                    font.bold: true
+                                }
+                                LabeledCombo {
+                                    objectName: "coverCardDisplayFontCombo"
+                                    label: UiText.text("card_font.title")
+                                    labelWidth: 96
+                                    options: root.fontOptions
+                                    currentValue: root.session ? root.session.cardFontDisplayPath : ""
+                                    onPicked: function(value) { if (root.session) root.session.cardFontDisplayPath = value }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    AppButton {
+                                        text: UiText.text("card_font.import")
+                                        onClicked: if (root.session) root.session.importCardDisplayFont()
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                                LabeledCombo {
+                                    objectName: "coverCardBodyFontCombo"
+                                    label: UiText.text("card_font.body")
+                                    labelWidth: 96
+                                    options: root.fontOptions
+                                    currentValue: root.session ? root.session.cardFontBodyPath : ""
+                                    onPicked: function(value) { if (root.session) root.session.cardFontBodyPath = value }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    AppButton {
+                                        text: UiText.text("card_font.import")
+                                        onClicked: if (root.session) root.session.importCardBodyFont()
+                                    }
+                                    Item { Layout.fillWidth: true }
                                 }
                             }
 

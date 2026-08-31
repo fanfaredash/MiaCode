@@ -51,9 +51,13 @@ Item {
     // editor's selectedIndex is DERIVED from this (key-based → reorder/add/remove safe).
     property string selectedKey: ""
     property bool editable: true            // false in the export render (no chrome/handlers)
-    // The v2 page provides a small binder object for the one active live chart
-    // scene; export rendering leaves it null and uses the cached still image.
+    // The v2 page provides the QML-facing cover session as the binder facade for
+    // the one active live chart scene; export rendering leaves it null and uses
+    // the cached still image.
     property var selectionBinder: null
+    // The page uses this callback to route canvas selection to its inspector tab.
+    // Selection itself remains owned by selectionBinder.
+    property var layerSelectionCallback: null
     // A2 — a live-only consumer can set this so the chart-frame layer hosts a
     // PreviewQuickSceneRoot instead of the static grab Image:
     // scrubbing/playback then only moves the shared playhead (zero readback). Stays
@@ -176,6 +180,17 @@ Item {
         if (s.charAt(0) === "/") return "file://" + encodeURI(s)
         return "file:///" + encodeURI(s)   // Windows drive path (C:/…)
     }
+
+    function selectLayerKey(key) {
+        if (!key)
+            return
+        if (canvas.selectionBinder)
+            canvas.selectionBinder.selectLayerKey(key)
+        else if (canvas.chartSceneBinder)
+            canvas.chartSceneBinder.selectLayerKey(key)
+        if (canvas.layerSelectionCallback)
+            canvas.layerSelectionCallback(key)
+    }
     // Text-layer font: the layer's custom fontPath (absolute) if set, else the
     // bundled Heavy display font.
     function fontSourceUrlForLayer(ld) {
@@ -285,10 +300,7 @@ Item {
         enabled: canvas.editable
         gesturePolicy: TapHandler.WithinBounds
         onTapped: {
-            if (canvas.selectionBinder)
-                canvas.selectionBinder.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
-            else if (canvas.chartSceneBinder)
-                canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
+            canvas.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
         }
     }
 
@@ -317,10 +329,7 @@ Item {
                     dragLayer = null
                     return
                 }
-                if (canvas.selectionBinder)
-                    canvas.selectionBinder.selectLayerKey(dragLayer.key)
-                else if (canvas.chartSceneBinder)
-                    canvas.chartSceneBinder.selectLayerKey(dragLayer.key)
+                canvas.selectLayerKey(dragLayer.key)
                 startNx = dragLayer.nx
                 startNy = dragLayer.ny
                 // Reference the delta from the centroid AT ACTIVATION, not the
@@ -560,13 +569,21 @@ Item {
                             && layerItem.ld && layerItem.ld.visible
                     sourceComponent: liveChartComponent
                     property var boundItem: null
-                    onItemChanged: {
-                        if (canvas.chartSceneBinder && boundItem && boundItem !== item
-                                && canvas.chartSceneBinder.unbindLiveChartScene)
-                            canvas.chartSceneBinder.unbindLiveChartScene(boundItem)
+                    property var boundBinder: null
+                    function syncLiveChartBinding() {
+                        if (boundBinder && boundItem && boundBinder.unbindLiveChartScene)
+                            boundBinder.unbindLiveChartScene(boundItem)
+                        boundBinder = canvas.chartSceneBinder
                         boundItem = item
-                        if (canvas.chartSceneBinder && item)
-                            canvas.chartSceneBinder.bindLiveChartScene(item)
+                        if (boundBinder && boundItem && boundBinder.bindLiveChartScene)
+                            boundBinder.bindLiveChartScene(boundItem)
+                    }
+                    onItemChanged: syncLiveChartBinding()
+                    Connections {
+                        target: canvas
+                        function onChartSceneBinderChanged() {
+                            liveChartLoader.syncLiveChartBinding()
+                        }
                     }
                 }
                 // Static grab still: a square playfield grab served by the
@@ -653,8 +670,7 @@ Item {
                 onTapped: {
                     if (canvas.selectionBinder || canvas.chartSceneBinder) {
                         var p = layerItem.mapToItem(canvas, point.position.x, point.position.y)
-                        var binder = canvas.selectionBinder || canvas.chartSceneBinder
-                        binder.selectLayerKey(canvas.hitKeyAt(p.x, p.y))
+                        canvas.selectLayerKey(canvas.hitKeyAt(p.x, p.y))
                     }
                 }
             }

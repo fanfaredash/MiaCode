@@ -67,6 +67,10 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 - Track path resolution is implemented in multiple places.
 - `&first` and timing offsets affect parser output, preview positioning, export timing, and latency detection.
 - Export uses a snapshot/worker boundary; changes to serialized task shape must be reflected on both sides.
+- Cover export live playback crosses `CoverExportPage.qml`, `CoverComposer.qml`,
+  `QmlCoverExportSession`, and `CoverFrameSceneBinder`: the QML composer receives the
+  session facade so it can configure the live `PreviewQuickSceneRoot` and borrowed
+  `PreviewFrameState`; the internal binder alone is not a complete binding API.
 
 ## References
 
