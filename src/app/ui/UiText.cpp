@@ -1533,6 +1533,7 @@ const QHash<QString, QString>& enMap()
         {"window.replaced_1_occurrence_s", "Replaced %1 occurrence(s)."},
         {"window.syntax", "Syntax"},
         {"window.timeline", "Timeline"},
+        {"window.restore", "Restore"},
 
         {"track_metadata.artist", "artist"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg already exists. Overwrite?"},
@@ -2713,6 +2714,7 @@ const QHash<QString, QString>& zhMap()
         {"window.replaced_1_occurrence_s", "已替换 %1 处。"},
         {"window.syntax", "语法"},
         {"window.timeline", "时间轴"},
+        {"window.restore", "还原"},
 
         {"track_metadata.artist", "曲师"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg 已经存在，是否覆盖？"},
@@ -3862,6 +3864,7 @@ const QHash<QString, QString>& jaMap()
         {"window.replaced_1_occurrence_s", "%1 か所を置換しました。"},
         {"window.syntax", "構文"},
         {"window.timeline", "タイムライン"},
+        {"window.restore", "元のサイズに戻す"},
 
         {"track_metadata.artist", "アーティスト"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg は既に存在します。上書きしますか？"},
@@ -3956,7 +3959,7 @@ const QHash<QString, QString>& jaMap()
         {"net.upload_password", "Password"},
         {"net.upload_path", "Path"},
         {"net.upload_pending", "Pending upload"},
-        {"net.upload_clear_queue", "Clear Queue"},
+        {"net.upload_clear_queue", "キューを空にする"},
         {"net.upload_queue", "Upload Queue"},
         {"net.upload_queue_total_1", "%1 folder(s) in the upload queue."},
         {"net.upload_remove_selected", "Remove Selected"},
@@ -4004,7 +4007,7 @@ const QHash<QString, QString>& jaMap()
         {"media_tools.batch_pv_canceled", "Batch compression canceled."},
         {"media_tools.batch_pv_chart_folder", "Folder"},
         {"media_tools.batch_pv_choose_folder", "Choose a Folder to Scan for Videos"},
-        {"media_tools.batch_pv_clear_queue", "Clear Queue"},
+        {"media_tools.batch_pv_clear_queue", "キューを空にする"},
         {"media_tools.batch_pv_complete_1_2", "Batch compression complete: %1 succeeded, %2 failed."},
         {"media_tools.batch_pv_compressing", "Compressing..."},
         {"media_tools.batch_pv_compressing_1", "Compressing: %1"},
@@ -4302,87 +4305,92 @@ QString UiText::text(const QString& key)
     return key;
 }
 
-QString UiText::textForQmlSource(const QString& source)
+namespace {
+
+// UIv2 QML passes visible Chinese source strings (the cover page passes catalog
+// keys). Several of those Chinese strings are homographs in the v1 catalog —
+// “关闭” is Close / Off / Disabled, “还原” is Reset / restore-window — so a bare
+// reverse lookup could land on an unrelated legacy meaning, and QHash iteration
+// order would make the pick differ between runs. This table names the canonical
+// key for every homograph v2 actually uses.
+//
+// It maps to a KEY, never to a translation: the catalog stays the single source
+// of truth, so a wording fix there reaches QML with no second table to update.
+// A source whose meaning is genuinely split *inside* QML (the caption bar's
+// 还原 = restore window vs. the HUD font's 还原 = reset) cannot be pinned here —
+// that call site passes an explicit key instead.
+const QHash<QString, QString>& qmlSourceKeys()
 {
-    if (source.isEmpty()) {
-        return source;
-    }
-
-    // A Chinese source is not itself a semantic key: the v1 catalog contains
-    // several deliberate homographs (notably “关闭” = Close / Off). Resolve
-    // the handful v2 uses before the reverse lookup so a QHash iteration can
-    // never select an unrelated legacy meaning.
-    static const QHash<QString, QPair<QString, QString>> qmlHomographs{
-        {QStringLiteral("偏移"), {QStringLiteral("Offset"), QStringLiteral("オフセット")}},
-        {QStringLiteral("停止"), {QStringLiteral("Stop"), QStringLiteral("停止")}},
-        {QStringLiteral("关闭"), {QStringLiteral("Close"), QStringLiteral("閉じる")}},
-        {QStringLiteral("删除书签"), {QStringLiteral("Delete bookmark"), QStringLiteral("ブックマークを削除")}},
-        {QStringLiteral("取消"), {QStringLiteral("Cancel"), QStringLiteral("キャンセル")}},
-        {QStringLiteral("取消导出"), {QStringLiteral("Cancel export"), QStringLiteral("出力をキャンセル")}},
-        {QStringLiteral("字体"), {QStringLiteral("Font"), QStringLiteral("フォント")}},
-        {QStringLiteral("导出"), {QStringLiteral("Export"), QStringLiteral("出力")}},
-        {QStringLiteral("导出区间"), {QStringLiteral("Export range"), QStringLiteral("出力範囲")}},
-        {QStringLiteral("平滑亮度"), {QStringLiteral("Smooth brightness"), QStringLiteral("明るさを滑らかに")}},
-        {QStringLiteral("开始"), {QStringLiteral("Start"), QStringLiteral("開始")}},
-        {QStringLiteral("开始导出"), {QStringLiteral("Start export"), QStringLiteral("出力を開始")}},
-        {QStringLiteral("性能"), {QStringLiteral("Performance"), QStringLiteral("パフォーマンス")}},
-        {QStringLiteral("打开"), {QStringLiteral("Open"), QStringLiteral("開く")}},
-        {QStringLiteral("批量导出"), {QStringLiteral("Batch export"), QStringLiteral("一括出力")}},
-        {QStringLiteral("播放"), {QStringLiteral("Play"), QStringLiteral("再生")}},
-        {QStringLiteral("显示左下角时间戳"), {QStringLiteral("Show bottom-left timestamp"), QStringLiteral("左下のタイムスタンプを表示")}},
-        {QStringLiteral("暂停"), {QStringLiteral("Pause"), QStringLiteral("一時停止")}},
-        {QStringLiteral("曲绘"), {QStringLiteral("Jacket"), QStringLiteral("ジャケット")}},
-        {QStringLiteral("标题"), {QStringLiteral("Title"), QStringLiteral("タイトル")}},
-        {QStringLiteral("浏览..."), {QStringLiteral("Browse…"), QStringLiteral("参照…")}},
-        {QStringLiteral("清空队列"), {QStringLiteral("Clear queue"), QStringLiteral("キューを空にする")}},
-        {QStringLiteral("游戏"), {QStringLiteral("Gameplay"), QStringLiteral("ゲームプレイ")}},
-        {QStringLiteral("片头"), {QStringLiteral("Intro"), QStringLiteral("イントロ")}},
-        {QStringLiteral("皮肤"), {QStringLiteral("Skin"), QStringLiteral("スキン")}},
-        {QStringLiteral("结束"), {QStringLiteral("End"), QStringLiteral("終了")}},
-        {QStringLiteral("编辑器"), {QStringLiteral("Editor"), QStringLiteral("エディター")}},
-        {QStringLiteral("背景"), {QStringLiteral("Background"), QStringLiteral("背景")}},
-        {QStringLiteral("自动检测"), {QStringLiteral("Auto-detect"), QStringLiteral("自動検出")}},
-        {QStringLiteral("视频"), {QStringLiteral("Video"), QStringLiteral("動画")}},
-        {QStringLiteral("谱师"), {QStringLiteral("Chart designer"), QStringLiteral("譜面制作者")}},
-        {QStringLiteral("谱面文件夹"), {QStringLiteral("Chart folders"), QStringLiteral("譜面フォルダー")}},
-        {QStringLiteral("输出"), {QStringLiteral("Output"), QStringLiteral("出力")}},
-        {QStringLiteral("还原"), {QStringLiteral("Reset"), QStringLiteral("リセット")}},
-        {QStringLiteral("重命名书签"), {QStringLiteral("Rename bookmark"), QStringLiteral("ブックマーク名を変更")}},
-        {QStringLiteral("音频设置"), {QStringLiteral("Audio settings"), QStringLiteral("音声設定")}},
-        {QStringLiteral("预览设置"), {QStringLiteral("Preview settings"), QStringLiteral("プレビュー設定")}},
+    static const QHash<QString, QString> map{
+        {QStringLiteral("偏移"), QStringLiteral("latency.offset")},
+        {QStringLiteral("停止"), QStringLiteral("dialog.video_export.preview.stop")},
+        {QStringLiteral("关闭"), QStringLiteral("action.close")},
+        {QStringLiteral("删除书签"), QStringLiteral("editor.bookmark.delete")},
+        {QStringLiteral("取消"), QStringLiteral("action.cancel")},
+        {QStringLiteral("取消导出"), QStringLiteral("video_export.cancel_export")},
+        {QStringLiteral("字体"), QStringLiteral("cover.font")},
+        {QStringLiteral("导出"), QStringLiteral("sidebar.export")},
+        {QStringLiteral("导出区间"), QStringLiteral("video_export.export_range")},
+        {QStringLiteral("平滑亮度"), QStringLiteral("video_export.smooth_brightness")},
+        {QStringLiteral("开始"), QStringLiteral("dialog.video_export.range.start")},
+        {QStringLiteral("开始导出"), QStringLiteral("video_export.start_export")},
+        {QStringLiteral("性能"), QStringLiteral("dialog.preferences.performance_group")},
+        {QStringLiteral("打开"), QStringLiteral("action.open")},
+        {QStringLiteral("批量导出"), QStringLiteral("action.batch_export")},
+        {QStringLiteral("播放"), QStringLiteral("preview.play")},
+        {QStringLiteral("显示左下角时间戳"), QStringLiteral("video_export.show_bottom_left_timestamp")},
+        {QStringLiteral("暂停"), QStringLiteral("preview.pause")},
+        {QStringLiteral("曲绘"), QStringLiteral("cover.jacket")},
+        {QStringLiteral("标题"), QStringLiteral("net.title")},
+        {QStringLiteral("浏览..."), QStringLiteral("action.browse")},
+        {QStringLiteral("清空队列"), QStringLiteral("media_tools.batch_pv_clear_queue")},
+        {QStringLiteral("游戏"), QStringLiteral("video_export.gameplay")},
+        {QStringLiteral("片头"), QStringLiteral("video_export.intro")},
+        {QStringLiteral("皮肤"), QStringLiteral("video_export.skin")},
+        {QStringLiteral("结束"), QStringLiteral("dialog.video_export.range.end")},
+        {QStringLiteral("编辑器"), QStringLiteral("dialog.preferences.editor_group")},
+        {QStringLiteral("背景"), QStringLiteral("dialog.preferences.background_group")},
+        {QStringLiteral("自动检测"), QStringLiteral("latency.auto_detect")},
+        {QStringLiteral("视频"), QStringLiteral("video_export.video")},
+        {QStringLiteral("谱师"), QStringLiteral("net.designer")},
+        {QStringLiteral("谱面文件夹"), QStringLiteral("dialog.batch_export.chart_folders")},
+        {QStringLiteral("输出"), QStringLiteral("video_export.output")},
+        {QStringLiteral("还原"), QStringLiteral("action.reset")},
+        {QStringLiteral("重命名书签"), QStringLiteral("editor.bookmark.rename")},
+        {QStringLiteral("音频设置"), QStringLiteral("action.audio_settings")},
+        {QStringLiteral("预览设置"), QStringLiteral("action.video_settings")},
     };
-    const auto localizedQmlEntry = [](const QPair<QString, QString>& entry, const QString& chineseSource) {
-        switch (resolvedLanguagePreference()) {
-        case UiText::LanguagePreference::Japanese:
-            return entry.second;
-        case UiText::LanguagePreference::Chinese:
-            return chineseSource;
-        case UiText::LanguagePreference::English:
-        case UiText::LanguagePreference::System:
-        default:
-            return entry.first;
-        }
-    };
-    if (const auto homograph = qmlHomographs.constFind(source); homograph != qmlHomographs.constEnd()) {
-        return localizedQmlEntry(homograph.value(), source);
-    }
+    return map;
+}
 
-    // All authored UIv2 strings are Simplified Chinese. The v1 catalog is the
-    // product's canonical wording, so use its Chinese table as a reverse index
-    // rather than duplicating those 172 already-translated strings in QML.
-    // Duplicate Chinese strings are deliberately harmless here: their current
-    // English/Japanese wording is the same product label in every existing case.
-    const auto& chinese = zhMap();
-    for (auto it = chinese.constBegin(); it != chinese.constEnd(); ++it) {
-        if (it.value() == source) {
-            return text(it.key());
+// Chinese value -> key, built once. Resolving a source used to iterate the whole
+// catalog on every lookup, i.e. on every QML binding evaluation. Duplicate
+// Chinese values resolve to the lexicographically first key so the choice is
+// stable across runs; every duplicate QML actually uses is pinned by
+// qmlSourceKeys() above, which is consulted first.
+const QHash<QString, QString>& qmlSourceReverseIndex()
+{
+    static const QHash<QString, QString> map = [] {
+        QHash<QString, QString> reverse;
+        const auto& chinese = zhMap();
+        for (auto it = chinese.constBegin(); it != chinese.constEnd(); ++it) {
+            const auto existing = reverse.constFind(it.value());
+            if (existing == reverse.constEnd() || it.key() < existing.value()) {
+                reverse.insert(it.value(), it.key());
+            }
         }
-    }
+        return reverse;
+    }();
+    return map;
+}
 
-    // UIv2-only strings that did not exist in the v1 catalog. Keep their three
-    // language forms next to the canonical catalog rather than leaving them in
-    // QML (where `qsTr` had no installed translator at all).
-    static const QHash<QString, QPair<QString, QString>> qmlOnly{
+// UIv2-only strings that have no v1 catalog entry at all. Their three language
+// forms live next to the canonical catalog rather than in QML (where `qsTr` had
+// no installed translator). Promoting one into the keyed catalog is the
+// preferred fix once v1 grows an equivalent label.
+const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
+{
+    static const QHash<QString, QPair<QString, QString>> map{
         {QStringLiteral(" · 谱师：%1"), {QStringLiteral(" · Chart Designer: %1"), QStringLiteral(" ・譜面制作者：%1")}},
         {QStringLiteral("%1 个错误，%2 个警告"), {QStringLiteral("%1 errors, %2 warnings"), QStringLiteral("エラー %1 件、警告 %2 件")}},
         {QStringLiteral("%1 尚未更新到 QML 界面。"), {QStringLiteral("%1 has not yet been migrated to the QML interface."), QStringLiteral("%1 はまだ QML インターフェースに移行されていません。")}},
@@ -4552,14 +4560,72 @@ QString UiText::textForQmlSource(const QString& source)
         {QStringLiteral("音效音量"), {QStringLiteral("Sound-effect volume"), QStringLiteral("効果音の音量")}},
         {QStringLiteral("音视频处理"), {QStringLiteral("Audio and video processing"), QStringLiteral("音声・動画処理")}},
         {QStringLiteral("音轨前置静音"), {QStringLiteral("Prepend silence to audio track"), QStringLiteral("音声トラックの先頭に無音を追加")}},
+    
     };
-    if (const auto qmlOnlyIt = qmlOnly.constFind(source); qmlOnlyIt != qmlOnly.constEnd()) {
-        return localizedQmlEntry(qmlOnlyIt.value(), source);
+    return map;
+}
+
+QString localizedQmlOnlyEntry(const QPair<QString, QString>& entry, const QString& chineseSource)
+{
+    switch (resolvedLanguagePreference()) {
+    case UiText::LanguagePreference::Japanese:
+        return entry.second;
+    case UiText::LanguagePreference::Chinese:
+        return chineseSource;
+    case UiText::LanguagePreference::English:
+    case UiText::LanguagePreference::System:
+    default:
+        return entry.first;
+    }
+}
+
+}  // namespace
+
+QString UiText::textForQmlSource(const QString& source)
+{
+    if (source.isEmpty()) {
+        return source;
     }
 
-    // This is deliberately visible rather than returning an opaque key. The
-    // source remains usable while a new QML-only label is promoted into the
-    // three-language catalog, and the static QML localization spec prevents a
-    // missed source from becoming silent permanent debt.
+    const auto& pinned = qmlSourceKeys();
+    if (const auto it = pinned.constFind(source); it != pinned.constEnd()) {
+        return text(it.value());
+    }
+
+    // All authored UIv2 strings are Simplified Chinese, and the v1 catalog is the
+    // product's canonical wording, so its Chinese table is the reverse index
+    // rather than a duplicate copy of those already-translated strings in QML.
+    const auto& reverse = qmlSourceReverseIndex();
+    if (const auto it = reverse.constFind(source); it != reverse.constEnd()) {
+        return text(it.value());
+    }
+
+    const auto& only = qmlOnlyEntries();
+    if (const auto it = only.constFind(source); it != only.constEnd()) {
+        return localizedQmlOnlyEntry(it.value(), source);
+    }
+
+    // Deliberately visible rather than an opaque marker, so a new label stays
+    // readable while it is promoted into the catalog. ui_text_locale_spec fails
+    // the build before that can turn into silent debt: it requires every QML
+    // `UiText.text("…")` literal to satisfy hasQmlSourceTranslation() below.
     return source;
+}
+
+bool UiText::hasQmlSourceTranslation(const QString& source)
+{
+    if (source.isEmpty()) {
+        return false;
+    }
+    if (hasTranslationKey(source)) {
+        return true;
+    }
+    // A pinned source has to name a key that really exists: a typo in the table
+    // would otherwise reach the UI as the raw key, which is exactly the failure
+    // this predicate exists to catch.
+    const auto& pinned = qmlSourceKeys();
+    if (const auto it = pinned.constFind(source); it != pinned.constEnd()) {
+        return hasTranslationKey(it.value());
+    }
+    return qmlSourceReverseIndex().contains(source) || qmlOnlyEntries().contains(source);
 }

@@ -71,6 +71,10 @@ public:
     int selectedDifficultyId() const { return selectedDifficultyId_; }
     QVariantList difficulties() const { return difficulties_; }
     QObject* layoutModel() const;
+    // Typed hand-off for the application QML engine's `coverchart` image
+    // provider, which serves the chart-frame stills the page displays. The
+    // QML-facing property above stays QObject* for the page's bindings.
+    miacode::cover_export::CoverLayoutModel* coverLayout() const { return layout_.get(); }
     QObject* activeLayer() const;
     QString activeLayerKey() const { return activeLayerKey_; }
     QVariantMap templateMap() const;
@@ -176,6 +180,7 @@ private:
     void renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx = 0);
     miacode::cover_export::CoverComposerInputs buildInputs() const;
     QJsonObject compositionJson() const;
+    QJsonObject sharedCompositionJson() const;
     QJsonObject presetCompositionJson() const;
     bool applyCompositionJson(const QJsonObject& root, bool reportErrors);
     void persistComposition();

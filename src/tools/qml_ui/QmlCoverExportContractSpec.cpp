@@ -45,10 +45,13 @@ int main(int argc, char** argv)
         QStringLiteral("src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp"));
     const QString renderer = readSource(
         QStringLiteral("src/tools/cover_export/CoverCompositeRenderer.cpp"));
+    const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));
+    const QString composer = readSource(QStringLiteral("src/intro/qml/CoverComposer.qml"));
     const QString cmake = readSource(QStringLiteral("CMakeLists.txt"));
 
     expect(!page.isEmpty() && !sessionHeader.isEmpty() && !session.isEmpty()
-               && !pageHost.isEmpty() && !mainWindow.isEmpty() && !renderer.isEmpty(),
+               && !pageHost.isEmpty() && !mainWindow.isEmpty() && !renderer.isEmpty()
+               && !bootstrap.isEmpty() && !composer.isEmpty(),
            QStringLiteral("v2 cover page, session and renderer sources are readable"), out, &failed);
     expect(page.contains(QStringLiteral("CoverComposer.qml"))
                && page.contains(QStringLiteral("selectionBinder"))
@@ -83,6 +86,15 @@ int main(int argc, char** argv)
                && !renderer.contains(QStringLiteral("QWidget"))
                && !renderer.contains(QStringLiteral("createWindowContainer")),
            QStringLiteral("cover composition stays in an in-process Quick scene"), out, &failed);
+    // The page leaves chartSceneBinder null on purpose, so the chart-frame layer
+    // is drawn only by CoverComposer.qml's image://coverchart still. The export
+    // renderer registers that provider on its own private engine; the live page
+    // needs the same registration on the application engine or every chart frame
+    // renders blank on the canvas while the exported PNG still contains it.
+    expect(composer.contains(QStringLiteral("image://coverchart/"))
+               && bootstrap.contains(QStringLiteral("registerCoverChartImageProvider")),
+           QStringLiteral("the application QML engine serves the chart-frame image provider"),
+           out, &failed);
 
     const QStringList removedFiles{
         QStringLiteral("src/tools/cover_export/CoverComposerView.cpp"),

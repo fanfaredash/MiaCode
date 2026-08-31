@@ -19,8 +19,12 @@ Row {
 
     CaptionButton {
         glyph: root.hostWindow.visibility === Window.Maximized ? "\uE923" : "\uE922"
+        // 还原 here means "restore the window", not the 还原 the HUD-font and
+        // export pages use for "reset". The Chinese source is the same string,
+        // so this one call site passes the key explicitly rather than relying on
+        // the shared source-to-key table.
         accessibleName: root.hostWindow.visibility === Window.Maximized
-                        ? UiText.text("还原") : UiText.text("最大化")
+                        ? UiText.text("window.restore") : UiText.text("最大化")
         onClicked: {
             if (root.hostWindow.visibility === Window.Maximized)
                 root.hostWindow.showNormal()

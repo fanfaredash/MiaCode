@@ -1,6 +1,6 @@
 // Drift guard for the UiText localization tables.
 //
-// Two invariants:
+// Three invariants:
 //
 //   1. Built-in enMap, zhMap, and jaMap in UiText.cpp must have identical key sets.
 //      English is now centralized instead of living only at call-site fallback
@@ -9,6 +9,11 @@
 //   2. Literal key-based lookups in src/ and resources/ must reference keys
 //      present in the tables. This catches typoed `UiText::text(<key>)`
 //      lookups and shortcut registry `label_key` values.
+//
+//   3. v2 QML must localize through the UiText singleton (never `qsTr`), and
+//      every literal it hands to `UiText.text` must resolve to a real entry.
+//      Without that second half, `UiText.text` echoing an unknown argument turns
+//      a mistyped key into a label that reads "cover.add_imag" in every language.
 //
 // The repo root is injected at configure time via MIACODE_SOURCE_ROOT.
 
@@ -225,16 +230,36 @@ int main(int argc, char* argv[])
     // `qsTr` would create an unmanaged second catalog and silently return source
     // Chinese in English/Japanese sessions. Keep the scan deliberately broad so
     // a new v2 page cannot opt out by accident.
+    // The same scan also resolves every literal argument. `UiText.text` falls
+    // back to echoing its argument, which is readable while a label is being
+    // promoted into the catalog but would render a mistyped key ("cover.add_imag")
+    // on screen in all three languages — the cover page passes keys, not Chinese
+    // source. Requiring each literal to resolve is what keeps that fallback from
+    // becoming silent permanent debt.
+    const QRegularExpression qmlSourceRe(QStringLiteral(
+        "UiText\\.text\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\)"));
     int qmlScanned = 0;
+    int qmlSourcesChecked = 0;
     QStringList qmlTrLeftovers;
+    QSet<QString> qmlUnresolvedSources;
     QDirIterator qmlIt(root + QStringLiteral("/src/app/qml_ui"),
                        {QStringLiteral("*.qml")}, QDir::Files,
                        QDirIterator::Subdirectories);
     while (qmlIt.hasNext()) {
         const QString path = qmlIt.next();
+        const QString text = readFile(path);
         ++qmlScanned;
-        if (readFile(path).contains(QStringLiteral("qsTr("))) {
+        if (text.contains(QStringLiteral("qsTr("))) {
             qmlTrLeftovers.append(QDir(root).relativeFilePath(path));
+        }
+        QRegularExpressionMatchIterator mi = qmlSourceRe.globalMatch(text);
+        while (mi.hasNext()) {
+            const QString source = unescapeLiteral(mi.next().captured(1));
+            ++qmlSourcesChecked;
+            if (!UiText::hasQmlSourceTranslation(source)) {
+                qmlUnresolvedSources.insert(
+                    QDir(root).relativeFilePath(path) + QStringLiteral(": ") + source);
+            }
         }
     }
     if (qmlScanned == 0 || !qmlTrLeftovers.isEmpty()) {
@@ -242,6 +267,17 @@ int main(int argc, char* argv[])
         err << "ui_text_locale_spec: QML must use UiText.text rather than qsTr; "
             << "scanned " << qmlScanned << ", leftovers: "
             << qmlTrLeftovers.join(QStringLiteral(", ")) << Qt::endl;
+    }
+    if (!qmlUnresolvedSources.isEmpty()) {
+        ok = false;
+        QStringList sorted(qmlUnresolvedSources.begin(), qmlUnresolvedSources.end());
+        sorted.sort();
+        err << "ui_text_locale_spec: QML UiText.text argument(s) resolve to nothing "
+            << "(add a catalog key, or an entry to the QML-only table in UiText.cpp):"
+            << Qt::endl;
+        for (const QString& entry : sorted) {
+            err << "    " << entry << Qt::endl;
+        }
     }
 
     if (!missingKeys.isEmpty()) {
@@ -277,6 +313,7 @@ int main(int argc, char* argv[])
 
     out << "ui_text_locale_spec ok (" << literalKeys.size()
         << " literal key lookup(s) checked across " << scanned
-        << " source files, " << qmlScanned << " QML files, plus shortcuts.json)" << Qt::endl;
+        << " source files, " << qmlSourcesChecked << " QML lookup(s) across "
+        << qmlScanned << " QML files, plus shortcuts.json)" << Qt::endl;
     return 0;
 }

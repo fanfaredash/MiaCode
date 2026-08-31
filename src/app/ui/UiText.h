@@ -38,6 +38,12 @@ QString text(const QString& key);
 // can therefore remain usable while the catalog is completed without a hidden
 // Qt translator or a Widgets dialog path.
 QString textForQmlSource(const QString& source);
+// Whether a QML `UiText.text(...)` literal resolves to a real catalog entry —
+// as a key, as a pinned homograph, through the Chinese reverse index, or from
+// the QML-only override table. ui_text_locale_spec asserts this over every v2
+// QML file, so a mistyped key (the cover page passes keys, not Chinese source)
+// cannot silently render itself on screen in all three languages.
+bool hasQmlSourceTranslation(const QString& source);
 bool hasTranslationKey(const QString& key);
 bool isChineseUi();
 // Resolved UI language for this session (MIACODE_LANG env > stored preference

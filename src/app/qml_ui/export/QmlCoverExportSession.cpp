@@ -216,16 +216,24 @@ void QmlCoverExportSession::seedFromDifficulty(int difficultyId)
     }
     setBusy(true);
     task_ = exportSession_->coverTaskForDifficulty(difficultyId);
-    outputDirectory_ = normalisedCoverOutputDirectory(task_.chartPath);
-    int matchingResolution = resolutionIndex_;
-    for (int index = 0; index < std::size(kCoverResolutionPresets); ++index) {
-        const auto& preset = kCoverResolutionPresets[index];
-        if (preset.width == task_.outputWidth && preset.height == task_.outputHeight) {
-            matchingResolution = index;
-            break;
+    // Output folder and canvas size are seeded from the chart once. Every later
+    // call re-seeds because the user picked a different DIFFICULTY, and the
+    // difficulty says nothing about where the image goes or how big it is —
+    // re-deriving them there silently discarded whatever the user had chosen.
+    // The saved composition, applied just below on the first seed, wins over
+    // both.
+    if (outputDirectory_.isEmpty()) {
+        outputDirectory_ = normalisedCoverOutputDirectory(task_.chartPath);
+    }
+    if (!hasLoadedPreferences_) {
+        for (int index = 0; index < std::size(kCoverResolutionPresets); ++index) {
+            const auto& preset = kCoverResolutionPresets[index];
+            if (preset.width == task_.outputWidth && preset.height == task_.outputHeight) {
+                resolutionIndex_ = index;
+                break;
+            }
         }
     }
-    resolutionIndex_ = matchingResolution;
     frameRenderer_ = std::make_unique<miacode::cover_export::SceneFrameRenderer>();
     chartFrameAvailable_ = !task_.noteMarkers.isEmpty() && frameRenderer_->bootstrap(task_);
     chartFrameDuration_ = chartFrameAvailable_ ? frameRenderer_->contentDurationSeconds() : 0.0;
@@ -546,13 +554,13 @@ void QmlCoverExportSession::setResolutionIndex(int index)
 {
     const int next = qBound(0, index, static_cast<int>(std::size(kCoverResolutionPresets)) - 1);
     if (resolutionIndex_ == next) return;
-    resolutionIndex_ = next; emit outputChanged();
+    resolutionIndex_ = next; emit outputChanged(); persistComposition();
 }
 void QmlCoverExportSession::setOutputDirectory(const QString& path)
 {
     const QString next = QDir::cleanPath(path.trimmed());
     if (next.isEmpty() || outputDirectory_ == next) return;
-    outputDirectory_ = next; emit outputChanged();
+    outputDirectory_ = next; emit outputChanged(); persistComposition();
 }
 
 void QmlCoverExportSession::browseBackgroundImage()
@@ -596,12 +604,24 @@ QJsonObject QmlCoverExportSession::compositionJson() const
                   {QStringLiteral("fontDisplay"), cardFontDisplayPath_},
                   {QStringLiteral("fontBody"), cardFontBodyPath_}};
     state.layout = layout_ != nullptr ? layout_->toJson() : QJsonObject{};
+    state.outputDirectory = outputDirectory_;
     return state.toJson();
+}
+
+QJsonObject QmlCoverExportSession::sharedCompositionJson() const
+{
+    QJsonObject root = compositionJson();
+    // A saved .miacover travels to other charts and other machines. The output
+    // folder is a property of this installation, not of the look being shared,
+    // so it stays in the local preferences blob and out of the file.
+    root.remove(QStringLiteral("output"));
+    return root;
 }
 
 QJsonObject QmlCoverExportSession::presetCompositionJson() const
 {
-    QJsonObject root = compositionJson();
+    QJsonObject root = sharedCompositionJson();
+    // A preset also keeps the current canvas rather than carrying its own.
     root.remove(QStringLiteral("size"));
     return root;
 }
@@ -645,6 +665,11 @@ bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool r
     longTextMode_ = card.value(QStringLiteral("longText")).toString(QStringLiteral("shrink"));
     cardFontDisplayPath_ = card.value(QStringLiteral("fontDisplay")).toString();
     cardFontBodyPath_ = card.value(QStringLiteral("fontBody")).toString();
+    // Presets and pre-2026-08-31 layouts carry no folder; keep the current one
+    // rather than blanking the field.
+    if (const QString savedOutput = state.outputDirectory.trimmed(); !savedOutput.isEmpty()) {
+        outputDirectory_ = savedOutput;
+    }
     if (layout_ != nullptr) layout_->fromJson(state.layout);
     activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
     emit activeLayerChanged();
@@ -670,7 +695,7 @@ void QmlCoverExportSession::saveLayout()
         if (!path.endsWith(QStringLiteral(".miacover"), Qt::CaseInsensitive)) path += QStringLiteral(".miacover");
         QFile file(path);
         if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
-            || file.write(QJsonDocument(compositionJson()).toJson(QJsonDocument::Indented)) < 0) {
+            || file.write(QJsonDocument(sharedCompositionJson()).toJson(QJsonDocument::Indented)) < 0) {
             notifyError(UiText::text(QStringLiteral("cover.save_layout_2")),
                         UiText::text(QStringLiteral("cover.could_not_write_the_layout")), path);
             return;

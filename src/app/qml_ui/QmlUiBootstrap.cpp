@@ -2,6 +2,7 @@
 
 #include "QmlApplicationContext.h"
 #include "QmlNoteImageProvider.h"
+#include "export/QmlCoverExportSession.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
@@ -13,6 +14,7 @@
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "timeline/quick/TimelineQuickItem.h"
+#include "tools/cover_export/CoverCompositeRenderer.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -90,6 +92,13 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
     registerQmlNoteImageProvider(
         engine_.get(), static_cast<QmlPreviewModel*>(applicationContext_->preview()));
+    // CoverExportPage shows chart-frame layers through image://coverchart/<key>.
+    // The off-screen export renderer registers this provider on its own private
+    // engine; without the same registration here the live page renders every
+    // chart frame blank while the exported image still contains it.
+    miacode::cover_export::registerCoverChartImageProvider(
+        engine_.get(),
+        static_cast<QmlCoverExportSession*>(applicationContext_->coverExport())->coverLayout());
     ensurePreviewQuickTypesRegisteredForQmlUi();
 
     windowChrome_ = std::make_unique<QmlUiWindowChrome>(this);

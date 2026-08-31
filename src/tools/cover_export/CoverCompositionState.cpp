@@ -97,6 +97,9 @@ QJsonObject CoverCompositionState::toJson() const
     root.insert(QStringLiteral("background"), background);
     root.insert(QStringLiteral("card"), card);
     root.insert(QStringLiteral("layout"), layout);
+    if (!outputDirectory.isEmpty()) {
+        root.insert(QStringLiteral("output"), outputDirectory);
+    }
     return root;
 }
 
@@ -117,6 +120,7 @@ bool CoverCompositionState::fromJson(const QJsonObject& root, CoverCompositionSt
         out->background = migrated.value(QStringLiteral("background")).toObject();
         out->card = migrated.value(QStringLiteral("card")).toObject();
         out->layout = migrated.value(QStringLiteral("layout")).toObject();
+        out->outputDirectory = migrated.value(QStringLiteral("output")).toString();
     }
     return true;
 }
