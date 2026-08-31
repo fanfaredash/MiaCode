@@ -35,11 +35,6 @@ void MainWindow::setQuickShellRootWindow(QWindow* window)
     windowSection_->setQuickShellRootWindow(window);
 }
 
-void MainWindow::cancelChartAudioDrop()
-{
-    windowSection_->cancelChartAudioDrop();
-}
-
 void MainWindow::requestShellClose(std::function<void(bool)> onDecided)
 {
     windowSection_->requestShellClose(std::move(onDecided));

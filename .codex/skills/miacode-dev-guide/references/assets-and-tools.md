@@ -31,15 +31,11 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `resources/icons/*`
   - `resources/community/*` for README/community-facing repository images
 - Extension system support files:
-  - `resources/extensions/miacode-extension.schema.json` documents the VSCode-like v1 manifest format
-  - `resources/extensions/README.md` is copied into release packages so users can hand the extension format, contribution-point format, coding notes, and AI prompt template to an assistant when creating local extensions
-  - `src/extensions/EmbeddedExtensionRuntime.*` runs command extensions inside MiaCode with Qt `QJSEngine`; user machines do not need Node.js for command extensions
-  - `src/extensions/ExtensionOpenBridge.*` owns the Open Bridge facade-object registry and the experimental raw target annotations for raw internal objects
-  - Controlled pet overlays registered through `miacode.ui.registerPetOverlay` load `image`, `src`, `resource`, `frames`, and `sprite.frames` only after the host canonicalizes them inside the calling extension directory
-  - `templates/extensions/hello-world` is the local starter extension
-  - `packages/miacode-extension-api` contains the local TypeScript declarations for `global.miacode`
-  - `tools/extensions/validate-extension.mjs` validates local extension manifests against the shared permission enum from `resources/extensions/miacode-extension.schema.json` and checks language-pack translation files from Node
-  - `tools/extensions/check-extension-consistency.mjs` verifies that the extension schema, C++ loader permission list, public registry statuses, blocked API set, README, spec, and TypeScript declarations stay aligned
+  - `resources/extensions/miacode-extension.schema.json` and `resources/extensions/README.md` retain the v1 manifest/authoring contract as an archive; they are not copied into release packages
+  - `src/extensions/ExtensionManifest.*` is the only extension code compiled into the product, and is used for archive/offline manifest validation
+  - `packages/miacode-extension-api` contains the archived TypeScript declarations for `global.miacode`
+  - `templates/extensions/hello-world` remains a historical authoring example
+  - `tools/extensions/validate-extension.mjs` and `tools/extensions/check-extension-consistency.mjs` validate the archived schema, permission enum, registry fixture, docs, and bundled example without starting an in-process extension host
 
 ## 2. Runtime File Conventions Near A Chart
 

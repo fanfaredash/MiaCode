@@ -16,7 +16,7 @@ Slider {
         width: root.availableWidth
         height: 6
         radius: 3
-        color: Theme.colors.border.control
+        color: Theme.surfaceColor("input", Theme.colors.border.control)
 
         Rectangle {
             width: root.visualPosition * parent.width
@@ -34,7 +34,7 @@ Slider {
         width: 14
         height: 14
         radius: 7
-        color: Theme.colors.background.elevated
+        color: Theme.surfaceColor("input", Theme.colors.background.elevated)
         border.width: Theme.controlBorderWidth
         border.color: (root.pressed || root.hovered)
                       ? Theme.colors.accent.primary

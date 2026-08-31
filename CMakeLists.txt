@@ -142,6 +142,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/qml_ui/preview/QmlPreviewSettingsModel.h
     src/app/qml_ui/preferences/QmlPreferencesModel.cpp
     src/app/qml_ui/preferences/QmlPreferencesModel.h
+    src/app/qml_ui/preferences/QmlAppBackgroundModel.cpp
+    src/app/qml_ui/preferences/QmlAppBackgroundModel.h
     src/app/qml_ui/latency/QmlLatencyModel.cpp
     src/app/qml_ui/latency/QmlLatencyModel.h
     src/app/startup_diagnostics_win32.cpp
@@ -188,7 +190,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/export/MainWindow.ExportWorker.cpp
     src/app/mainwindow/sections/export/MainWindow.PackZip.cpp
     src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp
-    src/app/mainwindow/sections/frame/MainWindow.ExtensionHostRequests.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
     src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp
@@ -221,8 +222,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
-    src/app/ui/ChartDropOverlay.h
-    src/app/ui/ChartDropOverlay.cpp
+    src/app/ui/AppBackgroundSettings.h
+    src/app/ui/AppBackgroundSettings.cpp
+    src/app/ui/ThemeVariantResolver.h
+    src/app/ui/ThemeVariantResolver.cpp
     src/app/ui/ShortcutRegistry.h
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h
@@ -563,14 +566,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickNotesLayer.cpp
     src/timeline/quick/TimelineQuickOverlayLayer.h
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
-    src/extensions/ExtensionManifest.h
-    src/extensions/ExtensionManifest.cpp
-    src/extensions/ExtensionOpenBridge.h
-    src/extensions/ExtensionOpenBridge.cpp
-    src/extensions/EmbeddedExtensionRuntime.h
-    src/extensions/EmbeddedExtensionRuntime.cpp
-    src/extensions/ExtensionManager.h
-    src/extensions/ExtensionManager.cpp
+    src/app/qml_ui/drop/QmlChartDropBridge.h
+    src/app/qml_ui/drop/QmlChartDropBridge.cpp
+    src/app/v2/ChartDropImportService.h
+    src/app/v2/ChartDropImportService.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc
@@ -955,6 +954,16 @@ elseif (APPLE)
     )
 endif()
 
+# Extension packages are archive/offline inputs only. Remove any stale
+# install-root payload left by an older build so an incremental build cannot
+# accidentally turn historical extension folders into shipped product data.
+add_custom_command(TARGET MiaCode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "$<TARGET_FILE_DIR:MiaCode>/extensions"
+    COMMENT "Removing archived extension payload from product output"
+    VERBATIM
+)
+
 if (APPLE)
     target_sources(MiaCode PRIVATE
         src/app/ui/UiNativeWindowThemeMac.h
@@ -969,17 +978,6 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 # Qt SVG — renders the Google Material "settings" gear toolbar icon
 # (makeSettingsGearIcon, MainWindowShared.cpp) via QSvgRenderer.
 target_link_libraries(MiaCode PRIVATE Qt6::Svg)
-
-set(MIACODE_BUNDLED_EXTENSIONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/extensions/bundled")
-add_custom_command(TARGET MiaCode POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:MiaCode>/extensions"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${MIACODE_BUNDLED_EXTENSIONS_DIR}"
-        "$<TARGET_FILE_DIR:MiaCode>/extensions"
-    COMMENT "Deploying bundled extensions next to MiaCode.exe"
-    VERBATIM
-)
 
 # ---------------------------------------------------------------------------
 # QtAVPlayer (FFmpeg) — preview background-video decode backend.
@@ -1449,23 +1447,59 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src
     )
 
-    miacode_add_dev_tool(extension_open_bridge_spec TEST
+    miacode_add_dev_tool(app_background_settings_spec TEST
         SOURCES
-            src/tools/extensions/ExtensionOpenBridgeSpec.cpp
-            src/extensions/ExtensionOpenBridge.h
-            src/extensions/ExtensionOpenBridge.cpp
+            src/tools/ui/AppBackgroundSettingsSpec.cpp
+            src/app/ui/AppBackgroundSettings.h
+            src/app/ui/AppBackgroundSettings.cpp
         LIBS Qt6::Core
         INCLUDES src
     )
 
-    miacode_add_dev_tool(extension_runtime_spec TEST
+    miacode_add_dev_tool(theme_variant_resolver_spec TEST
         SOURCES
-            src/tools/extensions/ExtensionRuntimeSpec.cpp
-            src/extensions/EmbeddedExtensionRuntime.h
-            src/extensions/EmbeddedExtensionRuntime.cpp
-        LIBS Qt6::Core Qt6::Qml
+            src/tools/ui/ThemeVariantResolverSpec.cpp
+            src/app/ui/ThemeVariantResolver.h
+            src/app/ui/ThemeVariantResolver.cpp
+            src/app/ui/UiText.h
+        LIBS Qt6::Core Qt6::Gui
         INCLUDES src
     )
+
+    miacode_add_dev_tool(qml_app_background_model_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlAppBackgroundModelSpec.cpp
+            src/app/qml_ui/preferences/QmlAppBackgroundModel.h
+            src/app/qml_ui/preferences/QmlAppBackgroundModel.cpp
+            src/app/ui/AppBackgroundSettings.h
+            src/app/ui/AppBackgroundSettings.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/app/v2/UiRequestService.h
+            src/app/v2/UiRequestService.cpp
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(qml_chart_drop_bridge_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlChartDropBridgeSpec.cpp
+            src/app/qml_ui/drop/QmlChartDropBridge.h
+            src/app/qml_ui/drop/QmlChartDropBridge.cpp
+            src/app/v2/ChartDropImportService.h
+            src/app/v2/ChartDropImportService.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Quick
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(extension_product_boundary_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionProductBoundarySpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(extension_product_boundary_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(simai_document_spec TEST
         SOURCES
@@ -1489,10 +1523,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/extensions
+        INCLUDES src src/app/ui
     )
 
     miacode_add_dev_tool(cover_frame_playback_controller_spec TEST
@@ -2434,10 +2466,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/ui_text/UiTextLocaleSpec.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
         LIBS Qt6::Core
-        INCLUDES src src/app/ui src/extensions
+        INCLUDES src src/app/ui
     )
     target_compile_definitions(ui_text_locale_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
@@ -2456,10 +2486,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/ui_text/UiTextPreferencesSpec.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
         LIBS Qt6::Core
-        INCLUDES src src/app/ui src/extensions
+        INCLUDES src src/app/ui
     )
 
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,

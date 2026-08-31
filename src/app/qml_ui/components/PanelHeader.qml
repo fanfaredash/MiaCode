@@ -9,7 +9,7 @@ Rectangle {
     default property alias trailing: trailingRow.data
 
     implicitHeight: 34
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
 
     Text {
         anchors.left: parent.left
@@ -40,4 +40,3 @@ Rectangle {
         font.pixelSize: Theme.uiFontSize
     }
 }
-

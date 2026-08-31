@@ -8,7 +8,7 @@
 #include "MainEntrypoints.h"
 #include "mainwindow/MainWindow.h"
 #include "UiNativeWindowTheme.h"
-#include "ui/ChartDropOverlay.h"
+#include "drop/QmlChartDropBridge.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
@@ -150,10 +150,8 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst());
         window != nullptr) {
         rootWindow_ = window;
-        // Keep UIv2 on the same drag/drop ownership chain as QuickShell: the
-        // hidden MainWindow owns filtering, supported-audio selection, and the
-        // deferred handleAudioDrop() call. Register before creating the native
-        // overlay so dialog transient-parent selection has a live root.
+        // The QML root owns the visual drop surface. The bridge is only a
+        // window-level event adapter and the sole owner of the OS drag route.
         if (!rootLifecycle_.registerRoot()) {
             releaseRootWindowResources();
             return false;
@@ -162,45 +160,38 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         if (QQuickItem* rootItem = window->contentItem(); rootItem != nullptr) {
             rootItem->setFlag(QQuickItem::ItemAcceptsDrops, true);
         }
-        window->installEventFilter(backend_.get());
         if (!rootLifecycle_.installRootEventFilter()) {
             releaseRootWindowResources();
             return false;
         }
-        chartDropOverlay_ = std::make_unique<ChartDropOverlay>();
-        chartDropOverlay_->installEventFilter(backend_.get());
-        if (!rootLifecycle_.createChartDropOverlay()) {
+        chartDropBridge_ = std::make_unique<miacode::qml_ui::QmlChartDropBridge>(
+            *window,
+            [window]() {
+                if (QQuickItem* contentItem = window->contentItem(); contentItem != nullptr) {
+                    contentItem->setFlag(QQuickItem::ItemAcceptsDrops, true);
+                }
+            },
+            [this](const QStringList& paths, quint64 requestId, quint64 generation,
+                   std::function<void(const miacode::qml_ui::QmlChartDropResult&)> done) {
+                backend_->handleAudioDrop(
+                    paths,
+                    requestId,
+                    generation,
+                    [done = std::move(done)](const miacode::v2::ChartDropImportResult& result) mutable {
+                        if (done) {
+                            done({result.requestId, result.generation, result.accepted,
+                                  result.completed, result.cancelled, result.createdCount,
+                                  result.failedCount, result.targetPath});
+                        }
+                    });
+            },
+            [](const miacode::qml_ui::QmlChartDropResult&) {},
+            this);
+        applicationContext_->setChartDropBridge(chartDropBridge_.get());
+        if (!rootLifecycle_.installDropBridge()) {
             releaseRootWindowResources();
             return false;
         }
-        chartDropOverlayMonitorTimer_ = std::make_unique<QTimer>();
-        chartDropOverlayMonitorTimer_->setInterval(16);
-        chartDropOverlayMonitorTimer_->setTimerType(Qt::PreciseTimer);
-        QObject::connect(chartDropOverlayMonitorTimer_.get(), &QTimer::timeout, this, [this]() {
-            syncChartDropOverlay();
-        });
-        QObject::connect(
-            backend_.get(),
-            &MainWindow::chartDropOverlayVisibleChanged,
-            this,
-            [this](bool visible) {
-                rootLifecycle_.setChartDropOverlayVisible(visible);
-                if (chartDropOverlay_ == nullptr) {
-                    if (chartDropOverlayMonitorTimer_ != nullptr) {
-                        chartDropOverlayMonitorTimer_->stop();
-                    }
-                    return;
-                }
-                if (!rootLifecycle_.shouldMonitorChartDropOverlay()) {
-                    chartDropOverlay_->hideOverlay();
-                    if (chartDropOverlayMonitorTimer_ != nullptr) {
-                        chartDropOverlayMonitorTimer_->stop();
-                    }
-                    return;
-                }
-                syncChartDropOverlay();
-                chartDropOverlayMonitorTimer_->start();
-            });
         QObject::connect(window, &QObject::destroyed, this, [this]() {
             // QObject destruction can arrive outside the accepted-close path;
             // never touch the dying QQuickWindow while releasing its overlay.
@@ -278,7 +269,7 @@ void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
         rootWindow_->hide();
     }
     if (backend_ != nullptr) {
-        backend_->cancelChartAudioDrop();
+        backend_->releaseChartDropImportService();
         backend_->preparePreviewForShutdown();
     }
 
@@ -311,39 +302,18 @@ void QmlUiBootstrap::releaseRootWindowResources()
     if (!rootLifecycle_.beginRelease()) {
         return;
     }
-    if (chartDropOverlayMonitorTimer_ != nullptr) {
-        chartDropOverlayMonitorTimer_->stop();
-    }
     if (backend_ != nullptr) {
-        backend_->cancelChartAudioDrop();
+        backend_->releaseChartDropImportService();
     }
-    if (!rootWindow_.isNull() && backend_ != nullptr) {
-        rootWindow_->removeEventFilter(backend_.get());
-    }
-    if (chartDropOverlay_ != nullptr) {
-        if (backend_ != nullptr) {
-            chartDropOverlay_->removeEventFilter(backend_.get());
-        }
-        chartDropOverlay_->clearTransientParent();
+    if (chartDropBridge_ != nullptr) {
+        chartDropBridge_->release();
     }
     if (backend_ != nullptr) {
         backend_->setQuickShellRootWindow(nullptr);
     }
-    chartDropOverlayMonitorTimer_.reset();
-    chartDropOverlay_.reset();
+    if (applicationContext_ != nullptr) {
+        applicationContext_->setChartDropBridge(nullptr);
+    }
+    chartDropBridge_.reset();
     rootWindow_ = nullptr;
-}
-
-void QmlUiBootstrap::syncChartDropOverlay()
-{
-    if (chartDropOverlay_ == nullptr || rootWindow_.isNull()) {
-        return;
-    }
-    if (backend_ != nullptr) {
-        backend_->shellSetRootWindowFrameGeometry(rootWindow_->frameGeometry());
-    }
-    if (!rootLifecycle_.shouldMonitorChartDropOverlay()) {
-        return;
-    }
-    chartDropOverlay_->showForWindow(rootWindow_);
 }

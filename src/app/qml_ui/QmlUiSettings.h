@@ -25,6 +25,8 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(double previewMinimumWidthRatio READ previewMinimumWidthRatio CONSTANT)
     Q_PROPERTY(double previewMaximumWidthRatio READ previewMaximumWidthRatio CONSTANT)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily CONSTANT)
+    Q_PROPERTY(QString themeToken READ themeToken CONSTANT)
+    Q_PROPERTY(bool darkTheme READ darkTheme NOTIFY themeChanged)
     Q_PROPERTY(QFont codeFont READ codeFont NOTIFY editorSettingsChanged)
     Q_PROPERTY(int editorBlockSpacing READ editorBlockSpacing NOTIFY editorSettingsChanged)
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY fontSizeChanged)
@@ -53,6 +55,8 @@ public:
     double previewMinimumWidthRatio() const;
     double previewMaximumWidthRatio() const;
     QString uiFontFamily() const;
+    QString themeToken() const;
+    bool darkTheme() const;
     QFont codeFont() const;
     int editorBlockSpacing() const;
     int fontSize() const;
@@ -68,6 +72,8 @@ public:
     void setPreviewWidthRatio(double value);
     void setFontSize(int value);
     void reloadEditorSettings();
+    void reloadTheme();
+    void setThemeToken(const QString& token);
     void setEditorAppearance(int pointSize, double lineSpacingFactor);
 
 signals:
@@ -78,6 +84,7 @@ signals:
     void previewWidthRatioChanged();
     void fontSizeChanged();
     void editorSettingsChanged();
+    void themeChanged();
 
 private:
     static constexpr int kSidebarMinimumContentWidth = 120;
@@ -101,4 +108,5 @@ private:
     bool editorOverwriteModeEnabled_ = false;
     bool editorAutoCompletionEnabled_ = true;
     bool editorImeInputDisabled_ = true;
+    bool darkTheme_ = true;
 };

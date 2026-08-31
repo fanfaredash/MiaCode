@@ -248,10 +248,21 @@ Implication:
 Cover export note:
 
 - Cover export is not a video-export worker snapshot path, but its chart-frame stills are rendered from a `VideoExportTask` seed through `SceneFrameRenderer` and `PreviewQuickSceneRoot`. The QML `QmlCoverExportSession` owns a `CoverFramePlaybackController` and `CoverFrameSceneBinder`: hot playback/scrubbing mutates the borrowed `PreviewFrameState`, while `renderAt()` is reserved for commit/export stills.
+- Cover-page entry is self-initializing: `QmlCoverExportSession::seedFromDifficulty()` restores the saved per-layer background controls, clears chart-frame stills from the previous difficulty, promotes the first visible chart frame to the live active layer, and binds it to the shared `PreviewFrameState`; the page must not wait for a still or a later canvas click to show the first frame.
+- `SceneFrameRenderer::renderAt()` is only a secondary still/export path. It may call `QQuickWindow::grabWindow()` only after the transparent capture window is visible/exposed, its scene graph is initialized without error, and its QRhi is live. It must not pump nested application events, and a failed preview still must not erase an existing cached image or block the live page.
 - The QML cover composer must receive `QmlCoverExportSession` itself as the live-scene binding facade. Its `bindLiveChartScene()` configures the visible `PreviewQuickSceneRoot` and the internal `CoverFrameSceneBinder`; passing the internal binder directly leaves `frameState_` null and disables playback. `CoverComposer.qml` must synchronize the binder/item pair on both Loader item changes and binder changes, with identity-safe unbind.
+- The live `PreviewQuickSceneRoot` embedded in an editable cover layer is paint-only (`enabled: false`); otherwise its QQuickItem input grab can swallow the parent canvas' layer selection and drag. Layer selection must route the page inspector before updating the session key. Transport focus is explicitly acquired by the chart-frame `FocusScope`, and slider/button key events forward to that scope while inline numeric editing retains priority.
 - Cover export supports multiple chart-frame layers with only one live `PreviewQuickSceneRoot`: the active visible chart-frame is live, while other visible frames use cached stills. `CoverFrameExportPlan` snapshots each layer's own `frameSeconds`; export temporarily detaches the live root, refreshes all visible stills, then restores the active layer key/time and rebinds the root.
 - `CoverComposer.qml` performs canvas-level hit testing in local coordinates. The visually topmost visible layer owns the hit even when locked (locked layers may be selected but never drag-through); geometry is persisted only at drag/scale commit. The active live root has a static-image fallback until its borrowed-state binding is confirmed.
 - While the cover page is active, `MainSplitView` hides and deactivates `PreviewPane` and closes/blocks fullscreen preview so the cover editor is the sole center-workspace preview surface.
+
+Root chart-drop note:
+
+- QML root drops cross the UI/service boundary through `QmlChartDropBridge` and `ChartDropImportService`: the bridge owns one `QWindow` filter, accepted-path hover state, request/generation identity, busy handling, and release-time invalidation; the service owns validation, confirmation, leave-document, chart creation, final switch, and exactly-once completion. `Main.qml` only renders a non-interactive hint from the bridge state. Do not add a QWidget overlay or let `DocumentSection` retain dropped paths across asynchronous callbacks.
+
+Application-background note:
+
+- Application background preferences cross `QmlAppBackgroundModel` -> `AppBackgroundSettings` -> the `ui.app_background` preference object. The model owns path readability/error semantics and atomic save/merge behavior; `Main.qml` owns image presentation and `Theme.qml` owns light/dark overlay-alpha application. The background layer must remain non-interactive so it cannot steal editor, canvas, or drop input.
 
 ## 9. Shared Render State Flows Through Preview And Export
 

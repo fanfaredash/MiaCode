@@ -19,6 +19,7 @@ Item {
     readonly property var documentSession: applicationContext.document
     readonly property var analysisSession: applicationContext.analysis
     readonly property var preferences: applicationContext.preferences
+    readonly property var appBackground: applicationContext.appBackground
     readonly property var previewSession: applicationContext.preview
     readonly property var commands: applicationContext.commands
     readonly property var timelineSession: applicationContext.timeline
@@ -405,6 +406,7 @@ Item {
         preferencesModel: root.preferencesModel
         shortcuts: root.shortcutModel
         preferences: root.preferences
+        appBackground: root.appBackground
     }
 
     Connections {

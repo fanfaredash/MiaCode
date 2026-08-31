@@ -17,7 +17,7 @@ Rectangle {
     height: open ? implicitHeight : 0
     implicitHeight: 40
     visible: height > 0
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("input", Theme.colors.background.surface)
     border.color: Theme.colors.border.normal
 
     function selectResult(result) {

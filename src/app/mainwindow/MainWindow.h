@@ -35,10 +35,10 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
-#include "extensions/ExtensionManager.h"
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/EditorSyncController.h"
+#include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
@@ -160,7 +160,6 @@ signals:
     void preferencesRequested();
     // Routed by QmlEditorPageHost to the v2 cover page.
     void coverExportRequested(int difficultyId);
-    void chartDropOverlayVisibleChanged(bool visible);
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
     void editorPreferencesChanged();
@@ -320,9 +319,8 @@ public:
     // which is what the hidden window's own File menu still needs.
     void setQmlLeaveDocumentHandler(std::function<void(std::function<void(bool)>)> handler);
     // Write-back into the workspace for the few callers that still edit the
-    // active chart from the MainWindow side (the extension host). Without it
-    // they would be writing into a document copy the QML editor overwrites on
-    // its next commit.
+    // active chart from the MainWindow side. Without it they would be writing
+    // into a document copy the QML editor overwrites on its next commit.
     // 音频设置 page. The mixer is a value type, so the page reads a copy and
     // hands one back; every write lands on the same runtime-apply and persist
     // path the Widgets dialog used, rather than the page poking members.
@@ -348,8 +346,11 @@ public:
     void invalidateDocumentValidationRevision();
     bool validateActiveDocument();
     void setQuickShellRootWindow(QWindow* window);
-    void cancelChartAudioDrop();
-    void handleAudioDrop(const QStringList& audioPaths);
+    void releaseChartDropImportService();
+    void handleAudioDrop(const QStringList& audioPaths,
+                         quint64 requestId,
+                         quint64 generation,
+                         miacode::v2::ChartDropImportService::Completion completion);
     // Shows the first-run welcome / initial-config dialog (preview side +
     // theme). Called from QmlUiBootstrap after the UI is ready.
     void showWelcomeDialog();
@@ -541,6 +542,7 @@ private:
     std::function<bool(const QString&)> qmlChartTextHandler_;
     quint64 appliedQmlWorkspaceRevision_ = 0;
     std::unique_ptr<miacode::v2::EditorSyncController> editorSyncController_;
+    std::unique_ptr<miacode::v2::ChartDropImportService> chartDropImportService_;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {
@@ -737,7 +739,6 @@ private:
     QString currentValidationIgnoreScopeKey() const;
     bool isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const;
     void setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored);
-    QJsonObject handleExtensionHostRequest(const QString& method, const QJsonObject& params);
     void loadProjectValidationPreferences();
     void saveProjectValidationPreferences(const QString& chartFilePath = QString()) const;
     void applyIgnoreMuriIssuePrompts(bool enabled, bool persistPreference);
@@ -788,25 +789,6 @@ private:
         int strictNoteCount = 0;
         int strictErrorCount = 0;
         QVector<ValidationCachedIssue> issues;
-    };
-
-    struct ExtensionDiagnosticEntry {
-        QString ownerId;
-        int line = 1;
-        int col = 1;
-        int endCol = 1;
-        QString message;
-        QString severity;
-        QString source;
-    };
-
-    struct ExtensionTimelineMarkerEntry {
-        QString ownerId;
-        QString id;
-        double second = 0.0;
-        double endSecond = -1.0;
-        QString label;
-        QString color;
     };
 
     struct DeletedDifficultyUndoState {

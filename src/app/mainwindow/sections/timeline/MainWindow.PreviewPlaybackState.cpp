@@ -569,15 +569,6 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
             state_.previewPlaybackRate_,
             state_.activePreviewPlaybackTransactionId_);
     }
-    if (owner_.extensionManager_ != nullptr) {
-        owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("preview")},
-            {QStringLiteral("data"), QJsonObject{
-                {QStringLiteral("state"), QStringLiteral("playing")},
-                {QStringLiteral("second"), effectiveStartSecond},
-            }},
-        });
-    }
     // beta7 leak gauge — anchor private bytes at play start so the pause handler can report the
     // playback-window delta (d_play), the largest previously-unbracketed slice of the cycle.
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
@@ -720,15 +711,6 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     // chart start with playhead off-screen to the right.
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
-    if (owner_.extensionManager_ != nullptr) {
-        owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("preview")},
-            {QStringLiteral("data"), QJsonObject{
-                {QStringLiteral("state"), QStringLiteral("paused")},
-                {QStringLiteral("second"), state_.qtPreviewPauseSecond_},
-            }},
-        });
-    }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
     }

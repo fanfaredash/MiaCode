@@ -1,5 +1,9 @@
 # MiaCode Extensions / MiaCode 扩展
 
+> **归档说明（2026-09-01）**：扩展宿主、嵌入式运行时、Open Bridge、watcher、偏好设置页、
+> 事件/手势接线以及 bundled deployment 已从产品运行时移除。本目录与本文档保留为 v1
+> manifest / schema / SDK / 示例及离线校验的归档契约，不表示当前应用仍会加载或部署扩展。
+
 MiaCode extensions are local folders that add commands, editor tools, UI panels, preview helpers, diagnostics, timeline controls, and optional experimental host access.
 
 MiaCode 扩展是放在本地的功能文件夹，可以为 MiaCode 增加命令、编辑器工具、界面面板、预览辅助、诊断、时间轴控制，以及可选的实验性宿主访问能力。

@@ -123,7 +123,7 @@ Rectangle {
         }
     }
 
-    color: Theme.colors.background.editor
+    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
 
     EditorTabBar {
         id: tabs

@@ -549,10 +549,30 @@ bool MainWindow::saveToPath(const QString& path)
     return documentSection_->saveToPath(path);
 }
 
-void MainWindow::handleAudioDrop(const QStringList& audioPaths)
+void MainWindow::handleAudioDrop(const QStringList& audioPaths,
+                                 quint64 requestId,
+                                 quint64 generation,
+                                 miacode::v2::ChartDropImportService::Completion completion)
 {
-    if (documentSection_ != nullptr) {
-        documentSection_->createChartsFromAudioDrop(audioPaths);
+    if (documentSection_ == nullptr || chartDropImportService_ == nullptr) {
+        if (completion) {
+            completion({requestId, generation, true, true, true, 0,
+                        static_cast<int>(audioPaths.size()), {}});
+        }
+        return;
+    }
+    chartDropImportService_->submit(
+        audioPaths,
+        requestId,
+        generation,
+        documentSection_->chartDropImportAdapter(),
+        std::move(completion));
+}
+
+void MainWindow::releaseChartDropImportService()
+{
+    if (chartDropImportService_ != nullptr) {
+        chartDropImportService_->release();
     }
 }
 

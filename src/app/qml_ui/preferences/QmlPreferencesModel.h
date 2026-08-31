@@ -5,6 +5,7 @@
 #include <QVariantList>
 
 class MainWindow;
+class QmlUiSettings;
 
 namespace miacode::qml_ui {
 
@@ -49,7 +50,7 @@ class QmlPreferencesModel final : public QObject
     Q_PROPERTY(bool restartRequired READ restartRequired NOTIFY interfaceChanged)
 
 public:
-    explicit QmlPreferencesModel(MainWindow& backend, QObject* parent = nullptr);
+    explicit QmlPreferencesModel(MainWindow& backend, QmlUiSettings& settings, QObject* parent = nullptr);
 
     QVariantList languageOptions() const;
     QString languageToken() const;
@@ -100,6 +101,7 @@ private:
     QVariantList frameRateOptions(bool includeDisplayRefresh) const;
 
     MainWindow* backend_ = nullptr;
+    QmlUiSettings* settings_ = nullptr;
     bool restartRequired_ = false;
 };
 

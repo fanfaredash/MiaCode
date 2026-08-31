@@ -199,18 +199,6 @@ void MainWindow::TimelineSection::onQtPreviewTick()
         }
         return;
     }
-    // extensionManager_ is created unconditionally at bootstrap, so without the
-    // subscriber pre-check this built two nested QJsonObjects on every playback
-    // tick (60-180 Hz) for an event that, with no extension subscribed, nothing
-    // ever reads.
-    static const QString kPreviewPositionChangedEvent = QStringLiteral("preview.position.changed");
-    if (owner_.extensionManager_ != nullptr
-        && owner_.extensionManager_->hasEventSubscribers(kPreviewPositionChangedEvent)) {
-        owner_.extensionManager_->publishEvent(kPreviewPositionChangedEvent, QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("preview")},
-            {QStringLiteral("data"), QJsonObject{{QStringLiteral("second"), fallbackSecond}}},
-        }, true);
-    }
     // Live BASS playback owns SFX and pending-BGM timing through the master
     // mixer. The tick remains responsible for visual advancement, health
     // observation, and the non-BASS fallback backend.

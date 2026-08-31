@@ -313,98 +313,109 @@ QString cleanDropFolderName(QString name)
 
 } // namespace
 
-void MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& audioPaths)
+miacode::v2::DocumentImportAdapter MainWindow::DocumentSection::chartDropImportAdapter()
 {
-    if (audioPaths.isEmpty()) {
-        return;
-    }
-    QElapsedTimer dropTimer;
-    dropTimer.start();
-    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-        QStringLiteral("ui/chart_drop"),
-        QStringLiteral("drop_received count=%1").arg(audioPaths.size()));
-    const QStringList supported = miacode::chart_assets::supportedTrackFileExtensions();
-    QList<DocumentSection::DroppedChartCandidate> candidates;
-    for (const QString& path : audioPaths) {
-        const QFileInfo info(path);
-        const QString extension = info.suffix().toLower();
-        if (!info.isFile() || !supported.contains(extension)) {
-            miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-                QStringLiteral("ui/chart_drop"),
-                QStringLiteral("unsupported_file_ignored format=%1").arg(extension));
-            continue;
-        }
-        QString title = info.completeBaseName();
-        if (extension == QStringLiteral("mp3")) {
-            const auto tag = miacode::id3::readTagFromFile(path);
-            if (!tag.title.trimmed().isEmpty()) {
-                title = tag.title.trimmed();
+    miacode::v2::DocumentImportAdapter adapter;
+    adapter.validate = [this](const QStringList& audioPaths, QString* error) {
+        Q_UNUSED(error);
+        const QStringList supported = miacode::chart_assets::supportedTrackFileExtensions();
+        QList<DroppedChartCandidate> candidates;
+        for (const QString& path : audioPaths) {
+            const QFileInfo info(path);
+            const QString extension = info.suffix().toLower();
+            if (!info.isFile() || !supported.contains(extension)) {
+                continue;
             }
-        }
-        QString folder = cleanDropFolderName(title);
-        if (folder.isEmpty()) {
-            folder = QStringLiteral("Untitled");
-        }
-        candidates.append({info.absoluteFilePath(), info.absolutePath(), extension,
-                           QDir(info.absolutePath()).filePath(folder)});
-        miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-            QStringLiteral("ui/chart_drop"),
-            QStringLiteral("supported_file_counted format=%1").arg(extension));
-    }
-    if (candidates.isEmpty()) {
-        return;
-    }
-
-    QHash<QString, QSet<QString>> reserved;
-    QStringList preview;
-    for (DroppedChartCandidate& candidate : candidates) {
-        const QString key = candidate.sourceDirectory.toCaseFolded();
-        QString target = candidate.targetDirectory;
-        int suffix = 2;
-        while (QFileInfo::exists(target) || reserved[key].contains(target.toCaseFolded())) {
-            target = QDir(candidate.sourceDirectory).filePath(
-                QStringLiteral("%1 (%2)").arg(QFileInfo(candidate.targetDirectory).fileName()).arg(suffix++));
-        }
-        candidate.targetDirectory = target;
-        reserved[key].insert(target.toCaseFolded());
-        preview << QDir::toNativeSeparators(target);
-    }
-
-    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
-    if (requests == nullptr) {
-        return;
-    }
-    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-        QStringLiteral("ui/chart_drop"),
-        QStringLiteral("preview_shown count=%1").arg(candidates.size()));
-    // Two questions, asked one after the other rather than in one nested loop:
-    // first whether to create these charts, then — only if yes — whether the
-    // current document may be left behind. The second half runs from the first
-    // one's continuation, so nothing here blocks the shell.
-    requests->requestConfirmation(
-        UiText::text(QStringLiteral("drop_chart.preview.title")),
-        UiText::text(QStringLiteral("drop_chart.preview.message"))
-            .arg(candidates.size()) + preview.join(QLatin1Char('\n')),
-        UiText::text(QStringLiteral("drop_chart.preview.create")).arg(candidates.size()),
-        [this, candidates, dropTimer](bool accepted) mutable {
-            if (!accepted) {
-                miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-                    QStringLiteral("ui/chart_drop"), QStringLiteral("create_cancelled"));
-                return;
-            }
-            requestLeaveDocument([this, candidates, dropTimer](bool mayLeave) mutable {
-                if (!mayLeave) {
-                    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-                        QStringLiteral("ui/chart_drop"), QStringLiteral("create_cancelled"));
-                    return;
+            QString title = info.completeBaseName();
+            if (extension == QStringLiteral("mp3")) {
+                const auto tag = miacode::id3::readTagFromFile(path);
+                if (!tag.title.trimmed().isEmpty()) {
+                    title = tag.title.trimmed();
                 }
-                finishChartsFromAudioDrop(candidates, dropTimer);
+            }
+            QString folder = cleanDropFolderName(title);
+            if (folder.isEmpty()) {
+                folder = QStringLiteral("Untitled");
+            }
+            candidates.append({info.absoluteFilePath(), info.absolutePath(), extension,
+                               QDir(info.absolutePath()).filePath(folder)});
+        }
+
+        QHash<QString, QSet<QString>> reserved;
+        for (DroppedChartCandidate& candidate : candidates) {
+            const QString key = candidate.sourceDirectory.toCaseFolded();
+            QString target = candidate.targetDirectory;
+            int suffix = 2;
+            while (QFileInfo::exists(target) || reserved[key].contains(target.toCaseFolded())) {
+                target = QDir(candidate.sourceDirectory).filePath(
+                    QStringLiteral("%1 (%2)").arg(QFileInfo(candidate.targetDirectory).fileName()).arg(suffix++));
+            }
+            candidate.targetDirectory = target;
+            reserved[key].insert(target.toCaseFolded());
+        }
+        return candidates;
+    };
+    adapter.requestFirstConfirmation = [this](const QList<DroppedChartCandidate>& candidates,
+                                               std::function<void(bool)> onDecided) {
+        miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+        if (requests == nullptr) {
+            if (onDecided) {
+                onDecided(false);
+            }
+            return;
+        }
+        QStringList preview;
+        for (const DroppedChartCandidate& candidate : candidates) {
+            preview << QDir::toNativeSeparators(candidate.targetDirectory);
+        }
+        requests->requestConfirmation(
+            UiText::text(QStringLiteral("drop_chart.preview.title")),
+            UiText::text(QStringLiteral("drop_chart.preview.message"))
+                .arg(candidates.size()) + preview.join(QLatin1Char('\n')),
+            UiText::text(QStringLiteral("drop_chart.preview.create")).arg(candidates.size()),
+            [onDecided = std::move(onDecided)](bool accepted) mutable {
+                if (onDecided) {
+                    onDecided(accepted);
+                }
             });
-        });
+    };
+    adapter.requestLeaveDocument = [this](std::function<void(bool)> onDecided) {
+        owner_.requestLeaveDocument(std::move(onDecided));
+    };
+    adapter.createCharts = [this](const QList<DroppedChartCandidate>& candidates,
+                                  std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished) {
+        QElapsedTimer timer;
+        timer.start();
+        finishChartsFromAudioDrop(candidates, timer, std::move(onFinished));
+    };
+    adapter.requestFinalSwitch = [this](const QString& target, std::function<void(bool)> onDecided) {
+        miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
+        if (requests == nullptr) {
+            if (onDecided) {
+                onDecided(false);
+            }
+            return;
+        }
+        requests->requestConfirmation(
+            UiText::text(QStringLiteral("drop_chart.created_title")),
+            UiText::text(QStringLiteral("drop_chart.confirm_switch")).arg(1),
+            UiText::text(QStringLiteral("action.open")),
+            [this, target, onDecided = std::move(onDecided)](bool accepted) mutable {
+                if (accepted) {
+                    owner_.openStartupTarget(target);
+                }
+                if (onDecided) {
+                    onDecided(accepted);
+                }
+            });
+    };
+    return adapter;
 }
 
 void MainWindow::DocumentSection::finishChartsFromAudioDrop(
-    const QList<DroppedChartCandidate>& candidates, QElapsedTimer dropTimer)
+    const QList<DroppedChartCandidate>& candidates,
+    QElapsedTimer dropTimer,
+    std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished)
 {
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/chart_drop"),
@@ -458,23 +469,6 @@ void MainWindow::DocumentSection::finishChartsFromAudioDrop(
             requests->postNotice(miacode::v2::NoticeSeverity::Error,
                 UiText::text(QStringLiteral("drop_chart.error.title")),
                 UiText::text(QStringLiteral("drop_chart.create_failed")));
-        } else if (candidates.size() == 1 && created == 1) {
-            miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-                QStringLiteral("ui/chart_drop"), QStringLiteral("switch_prompt_shown"));
-            const QString target = candidates.first().targetDirectory;
-            requests->requestConfirmation(
-                UiText::text(QStringLiteral("drop_chart.created_title")),
-                UiText::text(QStringLiteral("drop_chart.confirm_switch")).arg(created),
-                UiText::text(QStringLiteral("action.open")),
-                [this, target](bool accepted) {
-                    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
-                        QStringLiteral("ui/chart_drop"),
-                        accepted ? QStringLiteral("switch_confirmed")
-                                 : QStringLiteral("switch_declined"));
-                    if (accepted) {
-                        owner_.openStartupTarget(target);
-                    }
-                });
         } else if (failed > 0) {
             requests->postNotice(miacode::v2::NoticeSeverity::Warning,
                 UiText::text(QStringLiteral("drop_chart.created_title")),
@@ -487,6 +481,15 @@ void MainWindow::DocumentSection::finishChartsFromAudioDrop(
         QStringLiteral("ui/chart_drop"),
         QStringLiteral("batch_create_finished count=%1 elapsed_ms=%2")
             .arg(created).arg(dropTimer.elapsed()));
+    if (onFinished) {
+        onFinished({
+            created,
+            failed,
+            candidates.size() == 1 && created == 1
+                ? candidates.first().targetDirectory
+                : QString(),
+        });
+    }
 }
 
 void MainWindow::DocumentSection::onOpenFile()

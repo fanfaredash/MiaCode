@@ -32,8 +32,9 @@ Rectangle {
     readonly property string activeLayerKind: root.activeLayer ? root.activeLayer.kind : ""
     readonly property bool chartFrameInteractive:
         !!root.session && root.activeLayerKind === "chartFrame"
+        && root.activeLayer.visible
         && root.session.chartFrameDuration > 0
-        && root.session.liveChartSceneBound
+        && root.session.chartFrameAvailable
         && !root.session.busy
 
     // LabeledCombo 吃 { value, label }；字体库给的是 { path, label, family }。
@@ -50,7 +51,19 @@ Rectangle {
         return parts[parts.length - 1] || path
     }
 
-    color: Theme.colors.background.surface
+    function showLayerInspector(key) {
+        if (key)
+            root.inspectorTab = "layer"
+    }
+
+    function selectLayerFromUi(key) {
+        if (!key || !root.session)
+            return
+        root.showLayerInspector(key)
+        root.session.selectLayerKey(key)
+    }
+
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
     clip: true
 
     ColumnLayout {
@@ -264,9 +277,7 @@ Rectangle {
                         implicitHeight: 30
                         selected: root.session && root.session.activeLayerKey === layerRow.modelData.key
                         onClicked: {
-                            root.inspectorTab = "layer"
-                            if (root.session)
-                                root.session.selectLayerKey(layerRow.modelData.key)
+                            root.selectLayerFromUi(layerRow.modelData.key)
                         }
 
                         readonly property color labelColor:
@@ -369,6 +380,10 @@ Rectangle {
                                                      canvasFrame.width / ((root.session && root.session.outputWidth)
                                                                          ? root.session.outputWidth / root.session.outputHeight : 1)))
                         source: "qrc:/intro/qml/CoverComposer.qml"
+                        onLoaded: {
+                            if (item)
+                                item.layerSelectionCallback = function(key) { root.showLayerInspector(key) }
+                        }
                     }
 
                     Binding { target: composer.item; property: "coverLayout"; value: root.session ? root.session.layoutModel : null; when: composer.status === Loader.Ready }
@@ -385,12 +400,6 @@ Rectangle {
                     Binding { target: composer.item; property: "selectedKey"; value: root.session ? root.session.activeLayerKey : ""; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "selectionBinder"; value: root.session; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "chartSceneBinder"; value: root.session; when: composer.status === Loader.Ready }
-                    Binding {
-                        target: composer.item
-                        property: "layerSelectionCallback"
-                        value: function(key) { root.inspectorTab = "layer" }
-                        when: composer.status === Loader.Ready
-                    }
                     Binding { target: composer.item; property: "editable"; value: true; when: composer.status === Loader.Ready }
 
                     BusyIndicator {
@@ -744,6 +753,21 @@ Rectangle {
                                             activeFocusOnTab: true
                                             readonly property bool inputEnabled: root.chartFrameInteractive
 
+                                            function focusTransport() {
+                                                if (inputEnabled && visible)
+                                                    forceActiveFocus(Qt.OtherFocusReason)
+                                            }
+
+                                            onInputEnabledChanged: {
+                                                if (inputEnabled)
+                                                    Qt.callLater(focusTransport)
+                                            }
+                                            onVisibleChanged: {
+                                                if (visible)
+                                                    Qt.callLater(focusTransport)
+                                            }
+                                            Component.onCompleted: Qt.callLater(focusTransport)
+
                                             function noModifiers(event) {
                                                 return event.modifiers === Qt.NoModifier
                                             }
@@ -751,6 +775,8 @@ Rectangle {
                                             Keys.priority: Keys.BeforeItem
                                             Keys.onPressed: function(event) {
                                                 if (!inputEnabled || !noModifiers(event))
+                                                    return
+                                                if (frameTimeSlider.valueEditing)
                                                     return
                                                 if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
                                                     if (!event.isAutoRepeat)
@@ -805,9 +831,13 @@ Rectangle {
                                                     suffix: " s"
                                                     enabled: frameTimeControls.inputEnabled
                                                     value: root.session ? root.session.activeChartFrameSeconds : 0
+                                                    keyForwardTarget: frameTimeControls
                                                     onPressedChanged: {
-                                                        if (pressed && root.session)
-                                                            root.session.cancelActiveLayerInput()
+                                                        if (pressed) {
+                                                            frameTimeControls.forceActiveFocus(Qt.MouseFocusReason)
+                                                            if (root.session)
+                                                                root.session.cancelActiveLayerInput()
+                                                        }
                                                     }
                                                     onMoved: function(value) {
                                                         if (root.session)
@@ -824,11 +854,15 @@ Rectangle {
                                                     Layout.preferredWidth: implicitWidth
                                                     Layout.preferredHeight: implicitHeight
                                                     enabled: frameTimeControls.inputEnabled
+                                                    keyForwardTarget: frameTimeControls
                                                     iconSource: Qt.resolvedUrl(
                                                         root.session && root.session.chartFramePlaying
                                                             ? "icons/pause.svg" : "icons/play.svg")
                                                     tooltip: UiText.text("cover.play_pause_space")
-                                                    onClicked: root.session.toggleActiveLayerPlayback()
+                                                    onClicked: {
+                                                        frameTimeControls.forceActiveFocus(Qt.MouseFocusReason)
+                                                        root.session.toggleActiveLayerPlayback()
+                                                    }
                                                 }
                                             }
                                         }
@@ -859,7 +893,7 @@ Rectangle {
                                             from: 0
                                             to: 1
                                             stepSize: 0.01
-                                            enabled: root.activeLayer && root.activeLayer.frameBgMode === "image"
+                                            enabled: root.activeLayer && root.activeLayer.frameBgMode === "transparent"
                                             readout: Math.round((root.activeLayer ? root.activeLayer.frameBgTransparency : 0.5) * 100) + "%"
                                             value: root.activeLayer ? root.activeLayer.frameBgTransparency : 0.5
                                             onMoved: function(value) { if (root.session) root.session.setActiveLayerFrameBackgroundTransparency(value) }

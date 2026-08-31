@@ -28,7 +28,7 @@ struct LanguageOption {
 
 // Single key-based lookup for shared UI strings. The resolved language is tried
 // first, then English, then the key itself as the final missing-translation
-// marker. Extension language packs are loaded from enabled extensions.
+// marker. The product catalog contains only the built-in language set.
 QString text(const QString& key);
 // Transitional QML-source bridge. UIv2 was authored with Chinese `qsTr()`
 // literals while the application already owns the canonical three-language
@@ -60,7 +60,6 @@ QString resolvedLanguageToken();
 QVector<LanguageOption> availableLanguageOptions();
 bool isLanguageAvailable(const QString& token);
 bool ensurePreferredLanguageAvailable();
-void reloadExtensionLanguagePacks();
 ThemePreference preferredTheme();
 void setPreferredTheme(ThemePreference preference);
 QString preferencesFilePath();

@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QImage>
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -86,6 +87,15 @@ bool testMultiFrameModel(QTextStream& err)
     if (!require(qAbs(copy->frameBgBrightness() - 0.42) < 0.001, QStringLiteral("duplicate keeps brightness"), err)) return false;
     if (!require(qAbs(copy->frameBgTransparency() - 0.73) < 0.001, QStringLiteral("duplicate keeps transparency"), err)) return false;
     if (!require(qAbs(copy->opacity() - 0.55) < 0.001, QStringLiteral("duplicate keeps opacity"), err)) return false;
+
+    QImage still(2, 2, QImage::Format_ARGB32);
+    still.fill(Qt::white);
+    model.setLayerImage(first->key(), still);
+    if (!require(first->imageRevision() >= 0 && !first->frameImage().isNull(),
+                 QStringLiteral("stores a rendered chart still"), err)) return false;
+    model.clearLayerImage(first->key());
+    if (!require(first->imageRevision() < 0 && first->frameImage().isNull(),
+                 QStringLiteral("clears a stale chart still before a new renderer"), err)) return false;
 
     if (!require(!model.removeLayer(CoverLayoutModel::cardKey()), QStringLiteral("card cannot be removed"), err)) return false;
     if (!require(model.removeLayer(first->key()), QStringLiteral("frame can be removed"), err)) return false;

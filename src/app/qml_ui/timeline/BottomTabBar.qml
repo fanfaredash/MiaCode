@@ -11,7 +11,7 @@ Rectangle {
     required property var timelineSession
 
     implicitHeight: 28
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
 
     RowLayout {
         anchors.fill: parent

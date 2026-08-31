@@ -25,6 +25,8 @@ RowLayout {
     // Held handles matter to some pages (auditioning waits for the release), so
     // the state is published rather than kept inside.
     property alias pressed: slider.pressed
+    property Item keyForwardTarget: null
+    readonly property bool valueEditing: valueEditor.editing
 
     Layout.fillWidth: true
 
@@ -43,6 +45,8 @@ RowLayout {
         stepSize: root.stepSize
         onMoved: root.moved(value)
         onPressedChanged: if (!pressed) root.released()
+        Keys.priority: Keys.BeforeItem
+        Keys.forwardTo: root.keyForwardTarget ? [root.keyForwardTarget] : []
 
         // A drag writes `value` imperatively and would kill a plain binding for
         // good; a Binding re-applies, and stands down while the handle is held
@@ -58,6 +62,7 @@ RowLayout {
     // Double-clicking the read-out types the value. It follows the same hot
     // update path as a drag and then emits the single commit boundary.
     EditableValue {
+        id: valueEditor
         Layout.preferredWidth: 48
         Layout.preferredHeight: 22
         text: root.readout

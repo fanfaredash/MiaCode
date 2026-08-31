@@ -321,15 +321,6 @@ void MainWindow::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
     }
     const BottomTabsTabId previousTabId = currentBottomTabsTabId_;
     currentBottomTabsTabId_ = tabId;
-    if (extensionManager_ != nullptr && previousTabId != tabId) {
-        extensionManager_->publishEvent(QStringLiteral("ui.bottomTab.changed"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("userInterface")},
-            {QStringLiteral("data"), QJsonObject{
-                {QStringLiteral("previous"), bottomTabsTabIdString(previousTabId)},
-                {QStringLiteral("current"), bottomTabsTabIdString(tabId)},
-            }},
-        });
-    }
     syncBottomTabsCurrentTabToContainers();
     if (tabId == BottomTabsTabId::Muri && validationSection_ != nullptr) {
         validationSection_->flushPendingMuriDiagnosticsPanelRefresh();

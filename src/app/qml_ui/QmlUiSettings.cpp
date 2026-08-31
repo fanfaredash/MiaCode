@@ -3,6 +3,7 @@
 #include "mainwindow/MainWindowShared.h"
 #include "AppVersion.h"
 #include "ui/UiText.h"
+#include "ui/ThemeVariantResolver.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -36,6 +37,11 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
                                 settings_.value(kPreviewWidthRatio, 0.5).toDouble(),
                                 kPreviewMaximumWidthRatio);
     fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
+    reloadTheme();
+    if (QGuiApplication::styleHints() != nullptr) {
+        connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
+                this, &QmlUiSettings::reloadTheme);
+    }
     reloadEditorSettings();
 }
 
@@ -91,6 +97,16 @@ double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
 double QmlUiSettings::previewMinimumWidthRatio() const { return kPreviewMinimumWidthRatio; }
 double QmlUiSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
 QString QmlUiSettings::uiFontFamily() const { return uiFontFamily_; }
+QString QmlUiSettings::themeToken() const
+{
+    switch (UiText::preferredTheme()) {
+    case UiText::ThemePreference::Light: return QStringLiteral("light");
+    case UiText::ThemePreference::Dark: return QStringLiteral("dark");
+    case UiText::ThemePreference::System: return QStringLiteral("system");
+    }
+    return QStringLiteral("system");
+}
+bool QmlUiSettings::darkTheme() const { return darkTheme_; }
 QFont QmlUiSettings::codeFont() const { return codeFont_; }
 int QmlUiSettings::editorBlockSpacing() const { return editorBlockSpacing_; }
 int QmlUiSettings::fontSize() const { return fontSize_; }
@@ -132,6 +148,32 @@ void QmlUiSettings::reloadEditorSettings()
     editorAutoCompletionEnabled_ = autoCompletion;
     editorImeInputDisabled_ = imeDisabled;
     emit editorSettingsChanged();
+}
+
+void QmlUiSettings::reloadTheme()
+{
+    const bool next = miacode::ui::ThemeVariantResolver::resolve(UiText::preferredTheme())
+                      == miacode::ui::ThemeVariant::Dark;
+    if (darkTheme_ == next) {
+        return;
+    }
+    darkTheme_ = next;
+    emit themeChanged();
+}
+
+void QmlUiSettings::setThemeToken(const QString& token)
+{
+    const QString normalized = token.trimmed().toLower();
+    UiText::ThemePreference next = UiText::ThemePreference::System;
+    if (normalized == QStringLiteral("light")) {
+        next = UiText::ThemePreference::Light;
+    } else if (normalized == QStringLiteral("dark")) {
+        next = UiText::ThemePreference::Dark;
+    }
+    if (next == UiText::preferredTheme()) {
+        return;
+    }
+    UiText::setPreferredTheme(next);
 }
 
 void QmlUiSettings::setSidebarVisible(bool value)

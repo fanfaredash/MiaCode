@@ -16,7 +16,7 @@ Rectangle {
 
 
     implicitHeight: 63
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
 
     Rectangle {
         anchors.left: parent.left

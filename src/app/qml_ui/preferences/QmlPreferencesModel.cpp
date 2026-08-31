@@ -1,6 +1,7 @@
 #include "QmlPreferencesModel.h"
 
 #include "mainwindow/MainWindow.h"
+#include "../QmlUiSettings.h"
 #include "ui/UiText.h"
 
 #include <QVariantMap>
@@ -8,30 +9,6 @@
 namespace miacode::qml_ui {
 
 namespace {
-
-QString themeToken(UiText::ThemePreference preference)
-{
-    switch (preference) {
-    case UiText::ThemePreference::Light:
-        return QStringLiteral("light");
-    case UiText::ThemePreference::Dark:
-        return QStringLiteral("dark");
-    case UiText::ThemePreference::System:
-        break;
-    }
-    return QStringLiteral("system");
-}
-
-UiText::ThemePreference themePreferenceFromToken(const QString& token)
-{
-    if (token == QStringLiteral("light")) {
-        return UiText::ThemePreference::Light;
-    }
-    if (token == QStringLiteral("dark")) {
-        return UiText::ThemePreference::Dark;
-    }
-    return UiText::ThemePreference::System;
-}
 
 QVariantMap option(const QVariant& value, const QString& label)
 {
@@ -43,9 +20,10 @@ QVariantMap option(const QVariant& value, const QString& label)
 
 }  // namespace
 
-QmlPreferencesModel::QmlPreferencesModel(MainWindow& backend, QObject* parent)
+QmlPreferencesModel::QmlPreferencesModel(MainWindow& backend, QmlUiSettings& settings, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
+    , settings_(&settings)
 {
 }
 
@@ -87,16 +65,15 @@ QVariantList QmlPreferencesModel::themeOptions() const
 
 QString QmlPreferencesModel::themeToken() const
 {
-    return miacode::qml_ui::themeToken(UiText::preferredTheme());
+    return settings_ != nullptr ? settings_->themeToken() : QStringLiteral("system");
 }
 
 void QmlPreferencesModel::setThemeToken(const QString& token)
 {
-    const UiText::ThemePreference next = themePreferenceFromToken(token);
-    if (next == UiText::preferredTheme()) {
+    if (settings_ == nullptr || token.trimmed().toLower() == themeToken()) {
         return;
     }
-    UiText::setPreferredTheme(next);
+    settings_->setThemeToken(token);
     restartRequired_ = true;
     emit interfaceChanged();
 }

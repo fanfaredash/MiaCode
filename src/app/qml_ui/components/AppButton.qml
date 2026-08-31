@@ -47,7 +47,7 @@ Button {
         }
         color: {
             if (!root.enabled)
-                return Theme.colors.background.elevated
+                return Theme.surfaceColor("input", Theme.colors.background.elevated)
             if (root.emphasized) {
                 if (root.down)
                     return Theme.colors.accent.badge
@@ -59,7 +59,7 @@ Button {
                 return Theme.colors.state.pressed
             if (root.hovered)
                 return Theme.colors.state.hover
-            return Theme.colors.background.elevated
+            return Theme.surfaceColor("input", Theme.colors.background.elevated)
         }
     }
 }

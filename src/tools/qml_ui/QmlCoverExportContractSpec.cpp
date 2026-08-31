@@ -97,6 +97,10 @@ int main(int argc, char** argv)
         QStringLiteral("src/app/qml_ui/export/QmlCoverExportSession.h"));
     const QString session = readSource(
         QStringLiteral("src/app/qml_ui/export/QmlCoverExportSession.cpp"));
+    const QString sceneRendererHeader = readSource(
+        QStringLiteral("src/tools/cover_export/SceneFrameRenderer.h"));
+    const QString sceneRenderer = readSource(
+        QStringLiteral("src/tools/cover_export/SceneFrameRenderer.cpp"));
     const QString pageHost = readSource(QStringLiteral("src/app/qml_ui/QmlEditorPageHost.cpp"));
     const QString mainWindow = readSource(
         QStringLiteral("src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp"));
@@ -111,6 +115,7 @@ int main(int argc, char** argv)
     expect(!page.isEmpty() && !sessionHeader.isEmpty() && !session.isEmpty()
                && !pageHost.isEmpty() && !mainWindow.isEmpty() && !renderer.isEmpty()
                && !bootstrap.isEmpty() && !composer.isEmpty() && !mainSplitView.isEmpty()
+               && !sceneRendererHeader.isEmpty() && !sceneRenderer.isEmpty()
                && !labeledSlider.isEmpty(),
            QStringLiteral("v2 cover page, session and renderer sources are readable"), out, &failed);
     expect(page.contains(QStringLiteral("CoverComposer.qml"))
@@ -211,8 +216,103 @@ int main(int argc, char** argv)
                && cmake.contains(QStringLiteral("CoverFrameExportPlan")),
            QStringLiteral("the build contains the cover transport, binder and export plan"), out, &failed);
 
+    // The live chart scene is the entry-time preview path. It must not depend on
+    // an offscreen grab or a retry timer before the page becomes usable.
+    const int seedStart = session.indexOf(
+        QStringLiteral("void QmlCoverExportSession::seedFromDifficulty(int difficultyId)"));
+    const int seedOpen = session.indexOf(QLatin1Char('{'), seedStart);
+    const int seedClose = matchingBrace(session, seedOpen);
+    const QString seedBody = seedOpen >= 0 && seedClose > seedOpen
+                                 ? session.mid(seedOpen, seedClose - seedOpen)
+                                 : QString();
+    expect(!sessionHeader.contains(QStringLiteral("previewFrameRefreshTimer_"))
+               && !sessionHeader.contains(QStringLiteral("scheduleVisibleChartFramePreview"))
+               && !session.contains(QStringLiteral("scheduleVisibleChartFramePreview"))
+               && !session.contains(QStringLiteral("refreshVisibleChartFramePreview"))
+               && !seedBody.contains(QStringLiteral("renderVisibleChartFramesForPreview")),
+           QStringLiteral("cover entry uses the live chart scene instead of an offscreen preview refresh"),
+           out, &failed);
+    const int seedPlaybackSync = seedBody.indexOf(QStringLiteral("syncPlaybackFromActiveLayer();"));
+    const int seedSecondsSignal = seedBody.indexOf(
+        QStringLiteral("emit activeChartFrameSecondsChanged();"), seedPlaybackSync);
+    expect(seedPlaybackSync >= 0 && seedSecondsSignal > seedPlaybackSync,
+           QStringLiteral("cover entry republishes the restored frame time after playback sync"),
+           out, &failed);
+    expect(sceneRendererHeader.contains(QStringLiteral("prepareCaptureWindow"))
+               && sceneRendererHeader.contains(QStringLiteral("captureReady"))
+               && sceneRenderer.contains(QStringLiteral("sceneGraphInitialized"))
+               && sceneRenderer.contains(QStringLiteral("sceneGraphInvalidated"))
+               && sceneRenderer.contains(QStringLiteral("sceneGraphError"))
+               && sceneRenderer.contains(QStringLiteral("isExposed"))
+               && sceneRenderer.contains(QStringLiteral("captureReady()"))
+               && !sceneRenderer.contains(QStringLiteral("setPosition(-32000"))
+               && !sceneRenderer.contains(QStringLiteral("QCoreApplication::processEvents"))
+               && !sceneRenderer.contains(QStringLiteral("QThread::msleep")),
+           QStringLiteral("secondary chart capture uses a usable Quick surface without nested event pumping"),
+           out, &failed);
+
+    const int applyStart = session.indexOf(
+        QStringLiteral("bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool reportErrors)"));
+    const int applyOpen = session.indexOf(QLatin1Char('{'), applyStart);
+    const int applyClose = matchingBrace(session, applyOpen);
+    const QString applyBody = applyOpen >= 0 && applyClose > applyOpen
+                                  ? session.mid(applyOpen, applyClose - applyOpen)
+                                  : QString();
+    expect(applyBody.contains(QStringLiteral("layout_->fromJson(state.layout)"))
+               && applyBody.contains(QStringLiteral("visibleChartFrameLayers()"))
+               && applyBody.contains(QStringLiteral("firstVisibleFrameKey"))
+               && applyBody.contains(QStringLiteral("activeLayerKey_ = firstVisibleFrameKey")),
+           QStringLiteral("layout restore promotes the first visible chart frame to the live active layer"),
+           out, &failed);
+
+    const int renderStart = session.indexOf(
+        QStringLiteral("bool QmlCoverExportSession::renderChartFrame("));
+    const int renderOpen = session.indexOf(QLatin1Char('{'), renderStart);
+    const int renderClose = matchingBrace(session, renderOpen);
+    const QString renderBody = renderOpen >= 0 && renderClose > renderOpen
+                                   ? session.mid(renderOpen, renderClose - renderOpen)
+                                   : QString();
+    expect(seedBody.contains(QStringLiteral("clearLayerImage(layer->key())"))
+               && session.contains(QStringLiteral("renderVisibleChartFramesForExport"))
+               && session.contains(QStringLiteral("layout_->setLayerImage"))
+               && !renderBody.contains(QStringLiteral("clearLayerImage(layer->key())")),
+           QStringLiteral("new chart sessions discard stale stills while failed captures preserve the cache"),
+           out, &failed);
+
+    // Selection must be an explicit UI route rather than an incidental side
+    // effect of the model. This catches regressions where a canvas tap changes
+    // the active layer but leaves the inspector on the canvas tab.
+    expect(page.contains(QStringLiteral("function selectLayerFromUi(key)"))
+               && page.contains(QStringLiteral("root.selectLayerFromUi(layerRow.modelData.key)"))
+               && composer.contains(QStringLiteral("canvas.layerSelectionCallback.call(canvas, key)")),
+           QStringLiteral("all interactive layer selections route to the layer inspector"),
+           out, &failed);
+
+    // A live preview scene is paint-only inside the composer. It must not steal
+    // the click/drag grab from the layer handlers, and unloading an old Repeater
+    // delegate must not detach a newer live scene.
+    expect(composer.contains(QStringLiteral("enabled: false"))
+               && composer.contains(QStringLiteral("if (!item)"))
+               && composer.contains(QStringLiteral("return")),
+           QStringLiteral("live chart scene keeps layer input and binding teardown stable"),
+           out, &failed);
+
+    // Keyboard transport is focus-driven, so the chart controls need an
+    // explicit focus handoff and a way to yield to the inline numeric editor.
+    expect(page.contains(QStringLiteral("forceActiveFocus"))
+               && page.contains(QStringLiteral("valueEditing"))
+               && labeledSlider.contains(QStringLiteral("valueEditing")),
+           QStringLiteral("chart transport acquires focus without stealing numeric text input"),
+           out, &failed);
+    expect(page.contains(QStringLiteral(
+                   "enabled: root.activeLayer && root.activeLayer.frameBgMode === \"image\""))
+               && page.contains(QStringLiteral(
+                   "enabled: root.activeLayer && root.activeLayer.frameBgMode === \"transparent\"")),
+           QStringLiteral("chart-frame brightness and transparency follow their background modes"),
+           out, &failed);
+
     expect(page.contains(QStringLiteral("property: \"chartSceneBinder\"; value: root.session;"))
-               && page.contains(QStringLiteral("liveChartSceneBound")),
+               && page.contains(QStringLiteral("chartFrameAvailable")),
            QStringLiteral("the composer receives the complete cover session binding facade"), out, &failed);
     expect(composer.contains(QStringLiteral("syncLiveChartBinding"))
                && composer.contains(QStringLiteral("boundBinder"))
@@ -244,7 +344,7 @@ int main(int argc, char** argv)
     const int cardSection = page.indexOf(QStringLiteral("id: cardSettings"));
     const int presetSection = page.indexOf(QStringLiteral("// ---- 预设 ----"));
     const int layerRowSelection = page.indexOf(
-        QStringLiteral("root.session.selectLayerKey(layerRow.modelData.key)"));
+        QStringLiteral("root.selectLayerFromUi(layerRow.modelData.key)"));
     const int layerRowTabRoute = page.lastIndexOf(
         QStringLiteral("root.inspectorTab = \"layer\""), layerRowSelection);
     expect(page.count(QStringLiteral("Flickable {")) == 1
@@ -264,11 +364,11 @@ int main(int argc, char** argv)
                                  ? composer.mid(syncOpen, syncClose - syncOpen)
                                  : QString();
     const int unbindCall = syncBody.indexOf(QStringLiteral("boundBinder.unbindLiveChartScene"));
-    const int binderCapture = syncBody.indexOf(QStringLiteral("boundBinder = canvas.chartSceneBinder"));
+    const int binderCapture = syncBody.indexOf(QStringLiteral("var nextBinder = canvas.chartSceneBinder"));
     const int bindCall = syncBody.indexOf(QStringLiteral("boundBinder.bindLiveChartScene"));
-    expect(syncStart >= 0 && syncClose > syncOpen && unbindCall >= 0 && binderCapture > unbindCall
-               && bindCall > binderCapture,
-           QStringLiteral("live chart rebinding unbinds the old identity before capturing and binding the new one"),
+    expect(syncStart >= 0 && syncClose > syncOpen && binderCapture >= 0 && unbindCall > binderCapture
+               && bindCall > unbindCall,
+           QStringLiteral("live chart rebinding captures the new identity before replacing the old binding"),
            out, &failed);
 
     const int bindFacade = session.indexOf(

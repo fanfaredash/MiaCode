@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import MiaCode.UI
 
 ApplicationWindow {
@@ -10,6 +11,7 @@ ApplicationWindow {
     required property var applicationContext
     readonly property var shellLifecycle: applicationContext.shell
     readonly property var platform: applicationContext.platform
+    readonly property var chartDropBridge: applicationContext.chartDropBridge
 
     width: 1280
     height: 720
@@ -70,6 +72,12 @@ ApplicationWindow {
         value: window.applicationContext.preferences
     }
 
+    Binding {
+        target: Theme
+        property: "appBackground"
+        value: window.applicationContext.appBackground
+    }
+
     Component.onCompleted: UiText.provider = window.applicationContext.preferences
 
     // Two-phase close. The unsaved-changes prompt is a QML dialog, so the first
@@ -95,6 +103,81 @@ ApplicationWindow {
                 return
             window.closeApproved = true
             window.close()
+        }
+    }
+
+    Item {
+        id: backgroundLayer
+        anchors.fill: parent
+        z: -1
+        enabled: false
+
+        Image {
+            id: backgroundImage
+            anchors.fill: parent
+            source: window.applicationContext.appBackground.sourceUrl
+            visible: window.applicationContext.appBackground.enabled
+                     && window.applicationContext.appBackground.imageReadable
+            opacity: window.applicationContext.appBackground.opacity
+            asynchronous: false
+            smooth: true
+            fillMode: {
+                switch (window.applicationContext.appBackground.sizeMode) {
+                case "contain": return Image.PreserveAspectFit
+                case "stretch": return Image.Stretch
+                case "center": return Image.Pad
+                case "repeat": return Image.Tile
+                default: return Image.PreserveAspectCrop
+                }
+            }
+            horizontalAlignment: {
+                const value = window.applicationContext.appBackground.position
+                return value.indexOf("left") >= 0 ? Image.AlignLeft
+                     : value.indexOf("right") >= 0 ? Image.AlignRight : Image.AlignHCenter
+            }
+            verticalAlignment: {
+                const value = window.applicationContext.appBackground.position
+                return value.indexOf("top") >= 0 ? Image.AlignTop
+                     : value.indexOf("bottom") >= 0 ? Image.AlignBottom : Image.AlignVCenter
+            }
+            layer.enabled: window.applicationContext.appBackground.blur > 0
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: Math.min(1.0, window.applicationContext.appBackground.blur / 32.0)
+            }
+        }
+    }
+
+    Item {
+        id: chartDropHint
+        anchors.fill: parent
+        z: 100
+        visible: window.chartDropBridge !== null && window.chartDropBridge.dragActive
+        enabled: false
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.colors.state.selected
+            opacity: 0.08
+            border.color: Theme.colors.text.active
+            border.width: 2
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 48, 420)
+            height: 72
+            radius: 8
+            color: Theme.colors.background.elevated
+            border.color: Theme.colors.text.active
+            border.width: 1
+
+            Text {
+                anchors.centerIn: parent
+                color: Theme.colors.text.primary
+                text: UiText.text("drop_chart.preview.title")
+                font.pixelSize: 16
+            }
         }
     }
 

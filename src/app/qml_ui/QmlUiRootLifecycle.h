@@ -2,8 +2,9 @@
 
 namespace miacode::qml_ui {
 
-// Pure state gate for QML root-window ownership. It prevents exposing a root
-// before MainWindow owns the drag route, and makes cleanup single-owner.
+// Pure state gate for QML root-window ownership. The drop bridge is a
+// non-visual QWindow event filter; the visible drag surface belongs to QML and
+// is therefore deliberately not part of this gate.
 class RootLifecycle final
 {
 public:
@@ -25,34 +26,18 @@ public:
         return true;
     }
 
-    bool createChartDropOverlay()
+    bool installDropBridge()
     {
-        if (!rootRegistered_ || !rootEventFilterInstalled_ || releaseStarted_
-            || chartDropOverlayCreated_) {
+        if (!rootRegistered_ || !rootEventFilterInstalled_ || releaseStarted_ || dropBridgeInstalled_) {
             return false;
         }
-        chartDropOverlayCreated_ = true;
+        dropBridgeInstalled_ = true;
         return true;
     }
 
     bool canShowRoot() const
     {
-        return rootRegistered_ && rootEventFilterInstalled_ && chartDropOverlayCreated_
-            && !releaseStarted_;
-    }
-
-    bool setChartDropOverlayVisible(bool visible)
-    {
-        if (!canShowRoot() || chartDropOverlayVisible_ == visible) {
-            return false;
-        }
-        chartDropOverlayVisible_ = visible;
-        return true;
-    }
-
-    bool shouldMonitorChartDropOverlay() const
-    {
-        return canShowRoot() && chartDropOverlayVisible_;
+        return rootRegistered_ && rootEventFilterInstalled_ && dropBridgeInstalled_ && !releaseStarted_;
     }
 
     bool beginRelease()
@@ -62,7 +47,8 @@ public:
         }
         releaseStarted_ = true;
         rootRegistered_ = false;
-        chartDropOverlayVisible_ = false;
+        rootEventFilterInstalled_ = false;
+        dropBridgeInstalled_ = false;
         return true;
     }
 
@@ -71,8 +57,7 @@ public:
 private:
     bool rootRegistered_ = false;
     bool rootEventFilterInstalled_ = false;
-    bool chartDropOverlayCreated_ = false;
-    bool chartDropOverlayVisible_ = false;
+    bool dropBridgeInstalled_ = false;
     bool releaseStarted_ = false;
 };
 

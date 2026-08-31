@@ -9,37 +9,15 @@
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 
 #include <QColor>
-#include <QCoreApplication>
-#include <QEventLoop>
+#include <QGuiApplication>
 #include <QQuickItem>
 #include <QQuickWindow>
-#include <QThread>
+#include <QScreen>
 #include <Qt>
 
 #include <memory>
 
 namespace miacode::cover_export {
-namespace {
-
-// Pump the event loop so the skin/judge sprite textures upload and the first
-// scene-graph build settle before the offscreen grab. cold = a fresh window
-// (textures still uploading) — settle generously; warm = a later grab where
-// grabWindow()'s own synchronous polish+render already suffices. Mirrors
-// CoverCompositeRenderer's settleEvents.
-void settleEvents(bool cold)
-{
-    if (cold) {
-        for (int i = 0; i < 12; ++i) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-            QThread::msleep(3);
-        }
-    } else {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 2);
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 2);
-    }
-}
-
-}  // namespace
 
 SceneFrameRenderer::SceneFrameRenderer() = default;
 
@@ -47,6 +25,9 @@ SceneFrameRenderer::~SceneFrameRenderer()
 {
     // window_ owns its content item, which owns sceneRoot_ (parented in its ctor),
     // so deleting the window tears the whole scene down.
+    QObject::disconnect(sceneGraphInitializedConnection_);
+    QObject::disconnect(sceneGraphInvalidatedConnection_);
+    QObject::disconnect(sceneGraphErrorConnection_);
     sceneRoot_ = nullptr;
     delete window_;
     window_ = nullptr;
@@ -103,12 +84,11 @@ bool SceneFrameRenderer::bootstrap(const VideoExportTask& task, QString* errorMe
 
     contentDurationSeconds_ = qMax(0.0, task.contentDurationSeconds);
 
-    // A new chart's state invalidates the warm scene's prepared cache; the next
-    // renderAt() rebuilds it. If a window already exists, re-point it at the new
-    // state and force a cold settle.
+    // A new chart's state invalidates the scene's prepared cache; the next
+    // capture rebuilds it. If a window already exists, re-point it at the new
+    // state and let the normal readiness gate observe the rebuilt scene graph.
     if (sceneRoot_ != nullptr) {
         sceneRoot_->setFrameState(&frameState_);
-        warmedUp_ = false;
     }
 
     ready_ = true;
@@ -122,13 +102,17 @@ bool SceneFrameRenderer::ensureWindow(QString* errorMessage)
         return true;
     }
 
-    // Bare QQuickWindow parked off-screen at opacity 0 — the only legal in-process
-    // capture (see the header). No QQuickView, no forced OpenGL: in-process D3D11.
+    // Bare QQuickWindow at zero opacity, kept on the primary screen so macOS can
+    // expose and initialize its native surface. It is transparent for input and
+    // never becomes part of the visible cover UI. No QQuickView, no forced
+    // OpenGL: capture stays on the application's in-process RHI.
     window_ = new QQuickWindow();
     window_->setFlags(window_->flags() | Qt::FramelessWindowHint | Qt::Tool
                       | Qt::WindowTransparentForInput | Qt::WindowDoesNotAcceptFocus);
     window_->setColor(QColor(Qt::transparent));
-    window_->setPosition(-32000, -32000);
+    if (const QScreen* screen = QGuiApplication::primaryScreen()) {
+        window_->setPosition(screen->availableGeometry().topLeft());
+    }
     window_->resize(256, 256);
 
     // PreviewQuickSceneRoot is a plain C++ QQuickItem; parenting it into the
@@ -138,23 +122,41 @@ bool SceneFrameRenderer::ensureWindow(QString* errorMessage)
     sceneRoot_->setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);
     sceneRoot_->setFrameState(&frameState_);
 
+    sceneGraphReady_ = false;
+    sceneGraphError_.clear();
+    sceneGraphInitializedConnection_ = QObject::connect(
+        window_, &QQuickWindow::sceneGraphInitialized, window_, [this]() {
+            sceneGraphReady_ = true;
+            sceneGraphError_.clear();
+        });
+    sceneGraphInvalidatedConnection_ = QObject::connect(
+        window_, &QQuickWindow::sceneGraphInvalidated, window_, [this]() {
+            sceneGraphReady_ = false;
+        });
+    sceneGraphErrorConnection_ = QObject::connect(
+        window_, &QQuickWindow::sceneGraphError, window_,
+        [this](QQuickWindow::SceneGraphError, const QString& message) {
+            sceneGraphReady_ = false;
+            sceneGraphError_ = message;
+        });
+
     window_->setOpacity(0.0);
     window_->show();
-    warmedUp_ = false;
     return true;
 }
 
-QImage SceneFrameRenderer::renderAt(double seconds, int sidePx, QString* errorMessage)
+bool SceneFrameRenderer::prepareCaptureWindow(int sidePx, double seconds,
+                                               QString* errorMessage)
 {
     if (!ready_) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("scene frame renderer not bootstrapped");
         }
-        return QImage();
+        return false;
     }
     const int side = qBound(16, sidePx, 4096);
     if (!ensureWindow(errorMessage)) {
-        return QImage();
+        return false;
     }
 
     if (window_->width() != side || window_->height() != side) {
@@ -168,22 +170,64 @@ QImage SceneFrameRenderer::renderAt(double seconds, int sidePx, QString* errorMe
     // Re-point the (unchanged) state pointer so the scene root marks itself dirty
     // and re-runs updatePaintNode against the new playhead on the next render.
     sceneRoot_->setFrameState(&frameState_);
+    window_->update();
+    return true;
+}
 
-    settleEvents(!warmedUp_);
+bool SceneFrameRenderer::captureReady() const
+{
+    return window_ != nullptr && window_->isVisible() && window_->isExposed()
+        && sceneGraphReady_ && window_->isSceneGraphInitialized() && window_->rhi() != nullptr
+        && sceneGraphError_.isEmpty();
+}
 
-    QImage image = window_->grabWindow();
-    if (image.isNull()) {
-        settleEvents(true);
-        image = window_->grabWindow();
+QString SceneFrameRenderer::captureReadinessError() const
+{
+    if (!sceneGraphError_.isEmpty()) {
+        return sceneGraphError_;
     }
+    if (window_ == nullptr) {
+        return QStringLiteral("capture window has not been created");
+    }
+    if (!window_->isVisible()) {
+        return QStringLiteral("capture window is not visible");
+    }
+    if (!window_->isExposed()) {
+        return QStringLiteral("capture window is not exposed");
+    }
+    if (!sceneGraphReady_ || !window_->isSceneGraphInitialized()) {
+        return QStringLiteral("capture scene graph is not initialized");
+    }
+    if (window_->rhi() == nullptr) {
+        return QStringLiteral("capture window has no active QRhi");
+    }
+    return {};
+}
+
+QImage SceneFrameRenderer::renderAt(double seconds, int sidePx, QString* errorMessage)
+{
+    const int side = qBound(16, sidePx, 4096);
+    if (!prepareCaptureWindow(sidePx, seconds, errorMessage)) {
+        return QImage();
+    }
+    if (!captureReady()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = captureReadinessError();
+        }
+        return QImage();
+    }
+
+    // grabWindow() is GUI-thread-only and must not be preceded by nested event
+    // processing: re-entrant events can reset the session or destroy the window
+    // while Qt is preparing the scene graph. The session retries this operation
+    // on a later event-loop turn until the lifecycle checks above pass.
+    QImage image = window_->grabWindow();
     if (image.isNull()) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("grabWindow returned an empty image");
         }
-        return QImage();   // leave warmedUp_ false so the next attempt cold-settles
+        return QImage();
     }
-    warmedUp_ = true;      // latch warm only once a grab actually succeeded
-
     image.setDevicePixelRatio(1.0);
     if (image.width() != side || image.height() != side) {
         image = image.scaled(side, side, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);

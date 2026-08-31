@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QImage>
+#include <QMetaObject>
 #include <QSize>
 #include <QString>
 
@@ -16,9 +17,9 @@ namespace miacode::cover_export {
 // In-process, offscreen renderer of a SINGLE chart frame at an arbitrary time T,
 // for the QML cover composer's "chart frame" layer. Mirrors the composite
 // in-process capture rule: a bare QQuickWindow hosting a PreviewQuickSceneRoot
-// (the SAME C++ chart scene the live preview + video export use), shown off-
-// screen at opacity 0, captured with grabWindow() on the process RHI (D3D11 on
-// Windows). It is NOT the export worker (that forces OpenGL globally + is a whole
+// (the SAME C++ chart scene the live preview + video export use), shown at zero
+// opacity on a transparent input surface, captured with grabWindow() on the
+// process RHI (D3D11 on Windows). It is NOT the export worker (that forces OpenGL globally + is a whole
 // subprocess — using it to grab one frame for a GUI scrubber would be absurd).
 //
 //   ⚠ Same two hard constraints as the composite renderer (each cost a crash to
@@ -59,6 +60,18 @@ public:
     // natural max for a frame-picker slider.
     double contentDurationSeconds() const { return contentDurationSeconds_; }
 
+    // Prepare the transparent Quick capture window and apply the requested frame state.
+    // This does not capture; callers can wait for captureReady() on a later
+    // event-loop turn before calling renderAt().
+    bool prepareCaptureWindow(int sidePx, double seconds = 0.0,
+                              QString* errorMessage = nullptr);
+
+    // Positive readiness requires a visible/exposed native surface, an
+    // initialized scene graph, and a live QRhi. Construction/showing alone is
+    // deliberately not treated as capture readiness.
+    bool captureReady() const;
+    QString captureReadinessError() const;
+
     // Render the chart at playhead `seconds` into a square `sidePx`×`sidePx`
     // ARGB32 image with a transparent background. Returns a null QImage + sets
     // *errorMessage on failure.
@@ -96,8 +109,12 @@ private:
     miacode::preview::scene::PreviewFrameState frameState_;
     QQuickWindow* window_ = nullptr;
     PreviewQuickSceneRoot* sceneRoot_ = nullptr;   // owned by window_'s content item
+    QMetaObject::Connection sceneGraphInitializedConnection_;
+    QMetaObject::Connection sceneGraphInvalidatedConnection_;
+    QMetaObject::Connection sceneGraphErrorConnection_;
+    bool sceneGraphReady_ = false;
+    QString sceneGraphError_;
     bool ready_ = false;
-    bool warmedUp_ = false;
     double contentDurationSeconds_ = 0.0;
     // Monotonic so a re-bootstrap always changes frameState_.sceneContentRevision
     // and the scene root's prepared cache rebuilds (a hardcoded constant would let

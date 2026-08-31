@@ -30,7 +30,7 @@ Rectangle {
     focus: false
 
     width: 36
-    color: Theme.colors.background.editor
+    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
     clip: true
 
     FontMetrics {

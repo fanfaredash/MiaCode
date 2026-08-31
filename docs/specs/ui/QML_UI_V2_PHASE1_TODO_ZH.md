@@ -4,9 +4,14 @@
 > 目标架构与阶段定义见 [QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md)；
 > 本文只登记「还差什么、完成标志是什么、什么待复核」。
 >
-> **基线：`4f30a2d2`（2026-08-30）**。本文所有数字均为该基线上的源码实测，不是估算。
+> **基线：2026-09-01 工作树**。本文所有状态以当前工作树源码和目标测试实测为准。
 > 上一版基线是 `117a76a1`（2026-08-29）；阶段 1、阶段 2 与三个「暂未更新支持」入口
 > 都在这两个基线之间落地，第 2 章的实测表已按新基线整体重测。
+>
+> **目标口径补充（2026-08-31）**：本清单的“轻依赖”不是追求部署包中 DLL 数量的绝对最少，
+> 而是让 UI 进程不再携带无主的 Widgets / v1 宿主依赖，并让 Multimedia、Network、OpenGL、
+> SVG、FFmpeg、BASS 等依赖都能说明其所属功能、加载时机和验证方式。Qt Quick/QML 仍由 C++
+> `QGuiApplication` + `QQmlApplicationEngine` 承载；QML 不能替代应用宿主。
 
 ## 0. 2026-08-30 反馈闭环与接线复核
 
@@ -26,13 +31,17 @@
          `switchToExportField` / `switchToLatencyField` / `switchToDifficultyField` /
          `switchToMetadataField`。这些 `DocumentSection` 方法仍依赖 `editorStack_`、占位页、旧预览
          控件和侧栏 spinner；这是功能可用性会受隐藏 Widgets 状态影响的活跃接线。
-      3. `QmlUiBootstrap` 仍创建 `ChartDropOverlay(QWidget)` 作为 root 拖放原生覆盖层。
+      3. root 拖放已改为 `QmlChartDropBridge`（单一 QWindow event filter）+ `Main.qml` 非拦截
+         QML 提示层；不再创建 `ChartDropOverlay(QWidget)`，也不再依赖 native overlay 生命周期。
       4. 本次已删除 `QmlEditorPageHost.cpp` 中遗留的 `QBoxLayout` / `QStackedWidget` /
          `QWindow` / `AdoptedWidgetCoordinates` 等**未使用** include；它们不是活跃调用，但此前使
          “`src/app/qml_ui` 无 Widgets”这一表述不可靠。
 
       已核对的非误报项：ZIP 打包使用 `UiRequestService`，偏好设置只转发
       `preferencesRequested` 给 QML，音视频工具也经 QML 请求边界；这些不是 v1 UI 回接。
+      `QmlApplicationContext` 当前仍持有 `MainWindow& backend_`，所以“QML 页面无 Widgets”
+      不能等同于“应用宿主已无 Widgets”；需要先抽出独立的 `ApplicationServices` / session
+      所有者，再删除隐藏窗口。
       封面导出已于 2026-08-31 建立 v2 所有者并脱离此清单；后续拆除必须先为页面切换、拖放
       建立 v2 所有者，不能再把 v1 控件重新接回 QML。
 
@@ -89,17 +98,23 @@
 
 ## 1. 目标边界
 
-只有三件事在范围内：
+有四件事在范围内：
 
 1. **功能对齐补完** —— v2 QML 能原生完成 `dev` 上的既有工作流。
 2. **删除 v1** —— 隐藏的 `MainWindow`、隐藏的 `PlainCodeEditor`、`QuickShellController` 兼容层与全部 Widget 页面/对话框。
-3. **从链接中移除 `Qt6::Widgets`** —— `CMakeLists.txt:101` 的 `COMPONENTS` 与 `:844` 的 `target_link_libraries` 都不再出现 `Widgets`，`src/app/main.cpp:436` 由 `QApplication` 改为 `QGuiApplication`。
+3. **建立 Qt Quick/QML 应用宿主** —— 可见 UI 全部由 QML 承载，C++ 只保留
+   `QGuiApplication` + `QQmlApplicationEngine`、服务装配和必要的 Qt Quick 类型注册。
+4. **治理运行时依赖** —— 从链接和部署中移除无主的 Widgets/v1 依赖；其他模块按真实功能保留，
+   并按编辑器、预览、媒体、导出等边界隔离和验证，而不是笼统地删除所有 Qt 模块。
 
-与这三件事无关的重构一律不做（见架构文档第 11 节非目标）。
+与这四件事无关的重构一律不做（见架构文档第 11 节非目标）。
 
 ### 判定规则
 
-- 一个条目只有同时满足「v2 QML 原生可用」**且**「不再需要任何 Widgets 类型」才能勾掉。仅"能通过隐藏 Widget 达成"记为**未完成**。
+- 一个 UI 条目只有同时满足「v2 QML 原生可用」**且**「不再需要任何 Widgets 类型」才能勾掉。仅“能通过隐藏 Widget 达成”记为**未完成**。
+- “轻依赖”条目还必须说明模块的功能归属：`Core/Gui/Qml/Quick/QuickControls2` 是 QML 宿主基础集合；
+  `Multimedia`、`OpenGL`、`Network`、`Svg`、`MultimediaQuickPrivate` 及 FFmpeg/BASS 等，
+  只有在对应能力仍由该目标提供时才保留。Qt Quick 的传递库和 QML import plugin 不因出现在部署包中就视为遗留依赖。
 - 自动 spec 通过 **不等于** 验收。原生桌面验收单独记录在第 6、7 章，构建与 CTest 不能替代。
 - 失败是**值**不是对话框：应用层不得弹窗、不得阻塞（架构文档第 7 节）。新代码引入 `QMessageBox` / `QFileDialog` 视为反向进度。
 
@@ -110,7 +125,7 @@
 | 链接声明 | `COMPONENTS … Widgets …` + `Qt6::Widgets` | `CMakeLists.txt:101`、`:844` |
 | 应用对象 | `QApplication` | `src/app/main.cpp:436` |
 | 隐藏 `MainWindow` | **72 文件 / 42,750 行**（上一基线 73 / 48,732，−5,982） | `src/app/mainwindow/` |
-| ~~隐藏 `PlainCodeEditor`~~ | **已删除（2026-08-30）**。树上只剩三处提到这个名字：两条注释与 `ExtensionOpenBridge.cpp:337` 的 lint 规则名 | — |
+| ~~隐藏 `PlainCodeEditor`~~ | **已删除（2026-08-30）**。树上只剩两条历史注释；扩展相关校验已迁移到归档 API registry 与离线文档 | — |
 | ~~`QuickShellController`~~ | **已退役（2026-08-30）**。`src/app/quick_shell/` 只剩 **246 行**预览合成表面管道（`QuickShellPreviewCompositeSurface.*` + 三个策略头），与外壳控制器无关 | — |
 | QML 仍消费的 controller 属性/方法 | **0 个**（`shellController` 在 `*.qml` 里零命中） | — |
 | Widget UI 代码量 | `cover_export` 现为 **2,640 行 / 11 文件**的纯布局、持久化、谱面帧与 Quick 离屏渲染；**0 个 Widget UI 文件**（其中 `CoverCompositionPersistenceGuard.{h,cpp}` 75 行已不在 app target 里，只剩 `cover_layout_model_spec` 还编译它——是删是接需要定夺，见 §3.C）（2026-08-31 删除原 CoverStudio 工作台）<br>*（此前已删除：export_page 738、BatchExportPanel 组 947、MainWindow 嵌入面板机制 479、`VideoExportDialog` 组 4,691、`NetBatch*Dialog` 1,479、`PvBatchCompressionDialog` 393、`PlainCodeEditor` 组 2,272、`QuickShellController` 组 993）* | `src/tools/cover_export` |
@@ -121,9 +136,32 @@
 |---|---|
 | ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**。`src/app/qml_ui` 全目录现已无 Widgets 对话框 |
 | `src/app/qml_ui/QmlEditorPageHost.*` | 已不再收养 `QWidget`，但仍通过隐藏 `MainWindow::DocumentSection` 切页；该路径会操作 `editorStack_` / 占位页等 Widgets，不能记作“仅页面记账”（详见 §0） |
-| `src/app/ui/ChartDropOverlay.h:7` | `class ChartDropOverlay final : public QWidget`，被 v2 root window 拖放路径使用 |
+| `src/app/qml_ui/drop/QmlChartDropBridge.*` | 仅负责 root `QWindow` 拖放事件、路径筛选、请求代次和 busy/late-callback 保护；视觉提示由 `Main.qml` 承载 |
 
 `MainView.qml` 的对话框已是 `QtQuick.Dialogs`（非 Widgets），这条不用改。
+
+### 2.1 轻依赖目标与当前事实（2026-08-31）
+
+目标依赖分三层：
+
+1. **QML 宿主基础层**：`Qt6::Core`、`Qt6::Gui`、`Qt6::Qml`、`Qt6::Quick`、
+   `Qt6::QuickControls2`，以及 `QtQuick.Controls` / `Layouts` / `Window` / `Dialogs`
+   等实际导入的 QML 模块。这是完整 QML 编辑器的正常基础，不以删除 `Qt6::Gui` 为目标。
+2. **产品能力层**：`Qt6::Multimedia` 支撑音频、SFX、视频和设备枚举；当前导出/渲染代码
+   还实际使用 OpenGL；BASS、FFmpeg、QtAVPlayer、SoundTouch、miniz 是现有媒体和导出能力的
+   外部依赖。它们应保留，但归属到 Preview/Media/Export，而不是算作 UI 遗留。
+3. **可选能力层**：Net 引擎目前仍被加入 `MiaCode` 源码目标并带来 `Qt6::Network`，即使入口
+   暂时移除；需要在“恢复 Net 页面”或“隔离 Net 插件/独立目标”之间作出选择。`Qt6::Svg`、
+   `Qt6::OpenGL`、`Qt6::MultimediaQuickPrivate` 也要分别记录直接使用点和平台条件。
+
+**依赖治理要求**：
+
+- `Qt6::Widgets`、`QApplication`、`QWidget`、`QDialog`、`QStyle` 及隐藏 `MainWindow` 必须归零。
+- `ShaderTools` 若只用于构建期工具，不计入运行时依赖；CMake 不应把它误写成产品 DLL 依赖。
+- `Qt6::MultimediaQuickPrivate` 暂时无法移除时，必须封装在单一媒体适配层并锁定 Qt 版本；
+  长期目标是改用公共 Multimedia/VideoOutput API。
+- 依赖完成不能只靠 `grep` 或 `otool`：要分别记录冷启动、编辑/预览、背景视频、普通导出、
+  封面导出时的实际加载模块，并在 macOS 与 Windows 各自验证。
 
 ## 3. 功能对齐缺口
 
@@ -149,12 +187,12 @@
 | ~~音视频处理~~ | → `openMediaProcessingTools()` | **已完成（2026-08-29）**：`MediaToolsDialog.qml` 启动页 + `PrependBlankDialog.qml` + `PvBatchCompressionDialog.qml`（QML），`QmlMediaToolsModel` 承接；`src/tools/media` 已无 Widgets |
 | ~~整谱规范化~~ | → `openNormalizeWholeChart()` | **已完成（2026-08-29）**：`NormalizeOptionsDialog.qml` + `QmlDocumentModel::normalizeChartSelection`，结果作为编辑器事务应用（undo 覆盖）；Widget 对话框与 `DocumentSection::onNormalizeWholeChart` 已删除 |
 | ~~Net 批量下载 / 上传~~ | —— | **功能已暂时移除（2026-08-29）**：两个对话框与全部入口删除；引擎（`NetClient`、workers、scanner、diagnostics，均无 Widgets）保留在树上，恢复时直接补 QML 页面 |
-| ~~封面导出~~ | `openCoverExport()` / 工具菜单 / 扩展导出命令 / 侧栏 | **已完成（2026-08-31）**：`CoverExportPage.qml` + `QmlCoverExportSession`。左图层 / 中央同源 `CoverComposer` 预览（拖动与点选沿用组件自带 handler）/ 右检查器，布局导入与另存、预设、背景、卡片字体、图层图片/文字、谱面帧和输出目录由 QML 页面完成；`CoverCompositeRenderer` 用该同一 QML 场景离屏输出。旧 CoverStudio/CoverComposerView/面板/对话框整组删除。**尚未接线的 v1 功能见 §3.C。** |
+| ~~封面导出~~ | `openCoverExport()` / 侧栏 | **已完成（2026-08-31）**：`CoverExportPage.qml` + `QmlCoverExportSession`。左图层 / 中央同源 `CoverComposer` 预览（拖动与点选沿用组件自带 handler）/ 右检查器，布局导入与另存、预设、背景、卡片字体、图层图片/文字、谱面帧和输出目录由 QML 页面完成；`CoverCompositeRenderer` 用该同一 QML 场景离屏输出。旧 CoverStudio/CoverComposerView/面板/对话框整组删除。 |
 | ~~打包 ZIP~~ | → `packAsZip()` | **已完成（2026-08-29）**：走 `UiRequestService` 选路径与提示、`JobProgressService` + `JobProgressOverlay.qml` 显示进度与取消 |
-| ~~偏好设置~~ | `QmlCommandService::openPreferences()` | **已完成（2026-08-29）**：`PreferencesDialog.qml`（界面/编辑器/性能/快捷键四页签，快捷键录制内置为页签而非二级弹窗），`QmlPreferencesModel` 承接；扩展页签与背景功能已删除 |
+| ~~偏好设置~~ | `QmlCommandService::openPreferences()` | **已完成（2026-09-01）**：`PreferencesDialog.qml`（界面/背景/编辑器/性能/快捷键五页签，快捷键录制内置为页签而非二级弹窗），`QmlPreferencesModel` + `QmlAppBackgroundModel` 承接；扩展页签仍不恢复 |
 | ~~批量导出~~ | `openBatchExport()` | **已完成（2026-08-29）**：QML `ExportVideoPage` 的 batch 页是唯一批量界面，`BatchExportPanel` 组已删除 |
 
-> 0b（扩展宿主）仍是已延后状态，不得记为"已删除"或"功能不可用"。
+> 0b（扩展宿主）已按 2026-09-01 决策删除产品运行时；v1 manifest/schema/SDK/docs/API registry 仍作为归档与离线校验面保留。
 >
 > **0c 已于 2026-08-29 由所有者重新定向：偏好设置 / 延迟检测 / 音视频处理三页「补成 QML」，不删除。**
 > 这推翻了架构文档第 10 节记录的相反决定（"哪怕功能会缺失也要做"）——那节与第 8 节的 0c ⏸ 行
@@ -164,8 +202,8 @@
 > - **Net：功能暂时移除。** 入口与两个 Widget 对话框已删除；`src/tools/net` 的引擎部分保留。
 > - ~~**封面导出：放到最后做**~~ —— **已完成（2026-08-31）。**
 >
-> B 类已不再阻挡 `Qt6::Widgets` 的最终摘除；剩余阻碍是 `ChartDropOverlay`，以及阶段 4 的
-> `MainWindow` 与 `src/app/ui/` 辅助件。
+> B 类已不再阻挡 `Qt6::Widgets` 的最终摘除；当前阶段仍保留的阻碍是隐藏 `MainWindow` 及
+> `src/app/ui/` 中与其共用的辅助件。拖放 bridge 已不再引入新的 Widgets 依赖。
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
 
@@ -317,9 +355,17 @@
 含三个待拍板的产品决定。落地顺序见该文第 5 章：
 Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签守卫 → 新建/打开最近/关闭文档 → 两套三选一收敛。
 
-**后续优先级**：本轮完成了封面导出重构与 QML 文案单一通道（en/ja 取自词典）。仍欠两块：
-§0 的**中文文案与 v1 逐条比对**，以及 §3.C 里封面页尚未接线的 v1 功能。再往后是阶段 4 的
-`ChartDropOverlay` 和 `MainWindow` 所有权脱离，而不是回接任何已删 Widgets 表面。
+**后续优先级（2026-08-31 调整）**：当前工作分成两条并行但不可混淆的线：
+
+1. **Architecture Complete**：完成隐藏 `MainWindow` / native QWidget 依赖脱钩，
+   抽出独立的应用服务与 session 所有者，最终切换 `QGuiApplication`，并让主程序的直接/递归
+   依赖符合 allowlist。
+2. **Release Complete**：完成中文文案 parity、封面页剩余功能、120 FPS 过滤、原生桌面验收、
+   aggressive-GC 稳定性和跨平台发布检查。
+
+封面谱面帧的首屏加载、正确播放位置、旧难度缓存清理等本轮问题已从功能主线闭环；封面页
+忙碌反馈、导出守卫、缩放/预设等仍按 §3.C 保留。中文文案 parity 和 120 FPS 不再阻塞
+Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任何已删 Widgets 表面。
 
 
 ### 阶段 1（收尾）—— 文档域单一所有者
@@ -399,8 +445,18 @@ Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签�
       （`onExportPreviewVideo()` 保留同名但换成 QML 路由）。扩展面能力未削减，Widgets 对话框消失。
       `FontLibrary` 作为无 UI 的字体数据服务保留；`CardFontSettings` 已随原封面 Widgets
       工作台删除，`HudFontSettings` 仍属于阶段 4 的隐藏 MainWindow 遗留。
-- [ ] `ChartDropOverlay` 改为 QML 覆盖层。
-- **完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui`
+- [x] `ChartDropOverlay` 改为 `QmlChartDropBridge` + `Main.qml` QML 提示层（2026-09-01）。
+- [x] **阶段 3 / 0b 本轮收口记录（2026-09-01）**：扩展宿主、嵌入运行时、Open Bridge、watcher、
+      扩展偏好设置/事件/手势及 bundled deployment 已从产品运行时移除；manifest/schema/SDK/docs/API
+      registry 与离线校验仍保留。背景设置恢复为 `QmlAppBackgroundModel` + `AppBackgroundSettings`，
+      根窗口由 QML 负责背景图和 overlay token。ChartDrop 已由单一 `QmlChartDropBridge` 事件适配器
+      和 `ChartDropImportService` 异步事务服务承接，释放时会使迟到回调失效，QML 只显示非拦截提示层。
+      构建后产物不再保留旧的 `extensions` 目录。
+- **本轮验证记录**：主程序及相关 target 构建通过；新增/定向 CTest 7/7 通过；扩展一致性与 macOS
+      打包契约通过；最新全量 CTest 通过 88/89 项。剩余 `qtavplayer_platform_spec` 的
+      seek-before-start 断言未涉及本轮改动，另行处理。GUI harness
+      按所有者要求跳过，故背景视觉和桌面拖放仍不记为原生 GUI 验收通过。
+- **阶段 3 完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui`
   只剩**扫描这些字符串的 spec 自己**。2026-08-31 复核实测：
   `QmlExportFontContractSpec` / `QmlDocumentLifecycleContractSpec` / `QmlCoverExportContractSpec` /
   `UiRequestServiceSpec` / `UiTextLocaleSpec`（都是断言里写着这些名字），
@@ -408,20 +464,54 @@ Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签�
   `src/tools/video_export/HudFontSettings.cpp`——它只被隐藏 MainWindow 的导出设置对话框调用，
   属于阶段 4 的遗留。原来那条「为空」的写法永远不可能成立，因为 spec 必须提到被禁的名字。
 
-### 阶段 4 —— 删除 `MainWindow`，摘掉 `Qt6::Widgets`
+### 阶段 3.5 —— 应用宿主脱钩与依赖分层
 
-- [ ] 搬迁/删除 `src/app/mainwindow/` 全部 73 文件。
-- [ ] `src/app/ui/` 的 widget 辅助件（`UiComponents`、`EditableValueLabel`、`FlowLayout`、`BusySpinner`、`AppBackgroundPainter`）随之处理。
-- [ ] `main.cpp` 换 `QGuiApplication`；`CMakeLists.txt` 去掉 `Widgets`。
-- **完成标志**：上述两处 CMake 声明不含 `Widgets`，且 Release 构建 + 全量 CTest 通过。
+这是删除 `MainWindow` 之前新增的架构关卡，避免把“换应用对象”误当成架构完成：
 
-### 0b（延后，未取消）/ 0c（已改判并完成）
+> **当前未完成（2026-09-01）**：本轮只收口阶段 3 的拖放边界和 0b/背景范围，没有继续删除隐藏
+> `MainWindow`。`QmlApplicationContext` 仍持有 `MainWindow&`，文档切页仍经过隐藏
+> `DocumentSection`/Widgets 状态，因此 `QtWidgets` 仍是当前产品依赖；这些任务保留在本阶段，不能
+> 由本轮的 QML bridge 或定向测试标记完成。
 
-- [ ] 0b 扩展宿主删除 —— 保持现状。
+- [ ] 建立 `ApplicationServices`（或等价的应用服务装配对象），让文档、预览、时间轴、导出、
+      UI 请求和作业进度拥有独立的非 Widget owner。
+- [ ] `QmlApplicationContext` 不再持有 `MainWindow& backend_`；QML 通过窄 QObject 门面访问
+      services / sessions，不能再经隐藏窗口取得状态、命令或页面切换。
+- [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
+      都由 QML 宿主及应用服务明确拥有。
+- [ ] 为 `MiaCode` 建立 Qt 与第三方依赖 allowlist：基础 QML 宿主、媒体、渲染、导出、可选 Net
+      分层记录；每个模块注明直接使用点、平台条件和加载时机。
+- [ ] `src/tools/net` 不再因“功能暂时移除”而无条件把 `Qt6::Network` 带进主程序；要么恢复
+      Net 页面并承认其为产品依赖，要么移到插件/独立目标。
+- [ ] `Qt6::MultimediaQuickPrivate` 若暂时保留，必须集中在媒体适配层并锁定 Qt 版本；建立
+      改用公共 Multimedia/VideoOutput API 的后续项。
+
+### 阶段 4 —— 删除 `MainWindow`，收口为 Qt Quick/QML 宿主
+
+- [ ] 搬迁/删除 `src/app/mainwindow/` 全部文件；仅保留已抽出的应用服务、预览/媒体/导出和领域能力。
+- [ ] `src/app/ui/` 的 widget 辅助件（`UiComponents`、`EditableValueLabel`、`FlowLayout`、
+      `BusySpinner`）随之删除或改为非 Widget 服务；同时替换
+      `QStyleFactory`、`topLevelWidgets`、native Widget effect 等旧语义。
+- [ ] `main.cpp` 最后换为 `QGuiApplication` + `QQmlApplicationEngine`；不得机械替换后继续
+      依赖 `QApplication` API。
+- [ ] `CMakeLists.txt` 的 Qt components 与 `MiaCode` target 去掉 `Widgets`；生产代码、全部
+      构建 target 和隐藏 fallback 均不得重新引入 QWidget 类型。
+- [ ] `ShaderTools` 若仅为构建期工具，不计入运行时依赖；`Qt6::Svg`、`Qt6::OpenGL`、
+      `Qt6::Network`、`Qt6::MultimediaQuickPrivate` 按实际功能和平台条件单独验收。
+- **Architecture Complete 完成标志**：无隐藏 `MainWindow` / native QWidget 拖放 overlay，
+      主 UI 进程无 `Qt6::Widgets` 和活动 QWidget 依赖；Release 构建、全量 CTest、QML import
+      部署扫描通过，并完成 macOS / Windows 冷启动、编辑预览、媒体、普通导出和封面导出的
+      依赖记录。功能 parity 与人工 GUI 结果另按 Release Complete 判定。
+
+### 0b（已完成，归档保留）/ 0c（已改判并完成）
+
+- [x] 0b 扩展宿主删除（2026-09-01）——产品运行时、宿主、Open Bridge、扩展 UI/事件/手势/
+      watcher 与 bundled deployment 均移除；manifest/schema/SDK/docs/API registry 和离线工具保留。
+      Net 引擎的 `Qt6::Network` 归属仍由阶段 3.5 决定。
 - [x] 0c 偏好设置 / 延迟检测 / 音视频处理页 —— **三页均已补成 QML 原生页（2026-08-29）**。
       ~~架构文档第 8、10 节仍记录着相反的删除决定，需改齐。~~ **已改齐（2026-08-30）**：
       架构文档第 8 节的 0c 行改为 ✅「不删，补成 QML」，阶段 1 / 2 行同步标记完成；
-      第 10 节「范围裁剪的代价」改为记录**实际**删除项（Net 暂移除、应用背景、扩展页签），
+      第 10 节「范围裁剪的代价」改为记录**实际**删除项（Net 暂移除、扩展页签与开发者工具），
       并写明「哪怕功能会缺失也要做」那条授权已被所有者收回。
 
 ## 5. 已完成（事实登记，不再逐条展开）
@@ -466,18 +556,15 @@ Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签�
 
 ## 7. 遗留问题与更新后待复核
 
-### 7.0 应用背景功能已移除（2026-08-29 决定，已执行）
+### 7.0 应用背景功能已恢复（2026-09-01）
 
-- **证据**：`AppBackgroundPainter` 构造在 `MainWindow` 上（`FrameBootstrap.cpp:1873`），而 `MainWindow`
-  在 `FrameBootstrap.cpp:117` 无条件 `setAttribute(Qt::WA_DontShowOnScreen)`。painter 只被
-  `setSettings()` 调用过，画的是 toolbar / statusbar / tabwidget 等 Widget chrome。
-  QML 外壳的配色来自 `theme/Theme.qml` 的硬编码色值；`src/app/qml_ui` 全目录**没有任何**
-  文件引用 app background 设置。
-- **含义**：该页签 410 行 UI 加 14 个 overlay alpha 旋钮，配置的是一个画进不可见窗口的 painter。
-- **处置**：所有者决定一并移除。`AppBackgroundPainter` / `AppBackgroundSettings`、六个
-  `AppBackgroundSurface*` widget 包装、`UiTheme` 的 overlay-alpha 体系与背景页签全部删除
-  （净 −1,711 行）。`PlainCodeEditor` 的三处背景绘制分支随之简化为直接填色。
-  恢复该功能需要在 QML 外壳里重新实现，不是回滚这次删除。
+- **实现**：背景设置由纯数据契约 `AppBackgroundSettings` 和 `QmlAppBackgroundModel`
+  承接；`Main.qml` 以非交互 QML 图层加载背景图，并通过 `Theme.qml` 的 light/dark
+  overlay token 为工具栏、状态栏、面板、编辑器标题、输入框和代码编辑器提供透明度。
+- **状态**：偏好页已恢复为五页签中的“背景”页，路径可读性、清空、选择、透明度、模糊、
+  缩放与位置均走 QML 模型；无效持久化路径不会覆盖当前有效状态，保存失败会保留当前值并返回错误。
+- **契约验证**：`app_background_settings_spec`、`qml_app_background_model_spec` 和
+  `theme_variant_resolver_spec` 已通过；按所有者要求，本轮不执行 GUI harness 视觉验收。
 
 **本章是交接面。** 每条写明：问题是什么、当前状态、以及在 `117a76a1` 之后**必须重新核实什么**。
 未列为"已复核"的条目，一律不得由构建、CTest 或历史记录推断为通过。

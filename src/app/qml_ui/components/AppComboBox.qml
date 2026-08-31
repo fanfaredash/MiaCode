@@ -54,7 +54,9 @@ ComboBox {
     background: Rectangle {
         implicitHeight: root.implicitHeight
         radius: Theme.controlRadius
-        color: root.enabled ? Theme.colors.background.editor : Theme.colors.background.elevated
+        color: root.enabled
+               ? Theme.surfaceColor("input", Theme.colors.background.editor)
+               : Theme.colors.background.elevated
         border.width: Theme.controlBorderWidth
         // visualFocus, not activeFocus: a ComboBox takes focus on click and keeps
         // it, so an accent border tied to activeFocus stayed lit long after the

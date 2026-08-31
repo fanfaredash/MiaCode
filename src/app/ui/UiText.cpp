@@ -10,11 +10,8 @@
 #include <QLocale>
 #include <QPair>
 #include <QSaveFile>
-#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
-
-#include "extensions/ExtensionManifest.h"
 
 namespace {
 
@@ -25,17 +22,8 @@ constexpr auto kPreferencesSchema = "miacode_preferences_v4";
 constexpr auto kUiSectionKey = "ui";
 constexpr auto kAppSectionKey = "app";
 constexpr auto kPreviewSectionKey = "preview";
-constexpr auto kExtensionsSectionKey = "extensions";
-constexpr auto kDisabledExtensionsKey = "disabled";
 constexpr auto kLanguageKey = "language";
 constexpr auto kThemeKey = "theme";
-
-struct ExternalLanguagePack {
-    QString id;
-    QString label;
-    QString ownerExtensionId;
-    QHash<QString, QString> translations;
-};
 
 QString preferencesPath()
 {
@@ -97,7 +85,7 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     QJsonObject normalized = raw;
     normalized.remove(kUiSectionKey);
     normalized.remove(kAppSectionKey);
-    normalized.remove(kExtensionsSectionKey);
+    normalized.remove(QStringLiteral("extensions"));
     normalized.insert("schema", kPreferencesSchema);
 
     QJsonObject ui = raw.value(kUiSectionKey).toObject();
@@ -248,10 +236,6 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     }
     normalized.insert(kAppSectionKey, app);
 
-    const QJsonObject extensions = raw.value(kExtensionsSectionKey).toObject();
-    if (!extensions.isEmpty()) {
-        normalized.insert(kExtensionsSectionKey, extensions);
-    }
     static const char* const legacyKeys[] = {
         "ui_language", "ui_theme", "theme", "last_open_dir", "last_track_path",
         "show_slide_tracks", "show_judge_markers", "show_touch_trail",
@@ -415,12 +399,6 @@ UiText::LanguagePreference resolvedLanguagePreference()
     return UiText::LanguagePreference::English;
 }
 
-QVector<ExternalLanguagePack>& externalLanguagePacksStorage()
-{
-    static QVector<ExternalLanguagePack> packs;
-    return packs;
-}
-
 bool isBuiltInLanguageToken(const QString& raw)
 {
     const QString token = normalizedLanguageToken(raw);
@@ -447,76 +425,6 @@ QString builtInLanguageToken(const QString& raw)
     return QStringLiteral("system");
 }
 
-QJsonObject disabledExtensionsObject()
-{
-    const QJsonObject root = UiText::loadPreferencesObject();
-    return root.value(QString::fromLatin1(kExtensionsSectionKey)).toObject()
-        .value(QString::fromLatin1(kDisabledExtensionsKey)).toObject();
-}
-
-bool isExtensionDisabled(const QString& qualifiedId)
-{
-    return disabledExtensionsObject().value(qualifiedId).toBool(false);
-}
-
-void appendExtensionRootLanguagePacks(const QFileInfo& entry, QVector<ExternalLanguagePack>* packs, QSet<QString>* seenLanguageIds)
-{
-    if (packs == nullptr || seenLanguageIds == nullptr) {
-        return;
-    }
-    const auto parsed = miacode::extensions::loadExtensionManifest(entry.absoluteFilePath());
-    if (!parsed.ok || isExtensionDisabled(parsed.manifest.qualifiedId())) {
-        return;
-    }
-    for (const auto& language : parsed.manifest.languages) {
-        const QString languageId = normalizedLanguageToken(language.id);
-        if (languageId.isEmpty() || isBuiltInLanguageToken(languageId) || seenLanguageIds->contains(languageId)) {
-            continue;
-        }
-        const QString translationsPath = QDir(parsed.manifest.rootPath).absoluteFilePath(language.translations);
-        const QJsonObject translationsObject = loadJsonObjectFromFile(translationsPath);
-        if (translationsObject.isEmpty()) {
-            continue;
-        }
-        ExternalLanguagePack pack;
-        pack.id = languageId;
-        pack.label = language.label;
-        pack.ownerExtensionId = parsed.manifest.qualifiedId();
-        for (auto it = translationsObject.constBegin(); it != translationsObject.constEnd(); ++it) {
-            if (it.value().isString()) {
-                pack.translations.insert(it.key(), it.value().toString());
-            }
-        }
-        if (pack.translations.isEmpty()) {
-            continue;
-        }
-        seenLanguageIds->insert(languageId);
-        packs->append(pack);
-    }
-}
-
-QVector<ExternalLanguagePack> scanExtensionLanguagePacks()
-{
-    QVector<ExternalLanguagePack> packs;
-    QSet<QString> seenLanguageIds;
-    for (const QString& rootPath : miacode::extensions::defaultExtensionSearchPaths()) {
-        QDir root(rootPath);
-        if (!root.exists()) {
-            continue;
-        }
-        if (QFileInfo::exists(root.filePath(QStringLiteral("miacode-extension.json")))
-            || QFileInfo::exists(root.filePath(QStringLiteral("package.json")))) {
-            appendExtensionRootLanguagePacks(QFileInfo(root.absolutePath()), &packs, &seenLanguageIds);
-            continue;
-        }
-        const QFileInfoList entries = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QFileInfo& entry : entries) {
-            appendExtensionRootLanguagePacks(entry, &packs, &seenLanguageIds);
-        }
-    }
-    return packs;
-}
-
 QString resolvedLanguageTokenFromStorage()
 {
     const QByteArray env = qgetenv("MIACODE_LANG").trimmed();
@@ -524,11 +432,6 @@ QString resolvedLanguageTokenFromStorage()
         const QString envToken = normalizedLanguageToken(QString::fromUtf8(env));
         if (isBuiltInLanguageToken(envToken)) {
             return builtInLanguageToken(envToken);
-        }
-        for (const auto& pack : externalLanguagePacksStorage()) {
-            if (pack.id == envToken) {
-                return envToken;
-            }
         }
     }
 
@@ -539,12 +442,6 @@ QString resolvedLanguageTokenFromStorage()
         const QString normalized = builtInLanguageToken(storedToken);
         if (normalized != QStringLiteral("system")) {
             return normalized;
-        }
-    } else {
-        for (const auto& pack : externalLanguagePacksStorage()) {
-            if (pack.id == storedToken) {
-                return storedToken;
-            }
         }
     }
 
@@ -730,6 +627,9 @@ const QHash<QString, QString>& enMap()
         {"dialog.preferences.background.choose", "Choose..."},
         {"dialog.preferences.background.clear", "Clear"},
         {"dialog.preferences.background.image_filter", "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All Files (*)"},
+        {"dialog.preferences.background.image_error", "The selected image cannot be read."},
+        {"dialog.preferences.background.save_error", "Failed to save background settings."},
+        {"dialog.preferences.background.file_picker_unavailable", "The image picker is unavailable."},
         {"dialog.preferences.background.opacity", "Opacity"},
         {"dialog.preferences.background.overlay", "Cover opacity"},
         {"dialog.preferences.background.overlay_button", "Cover opacity..."},
@@ -1881,6 +1781,9 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.background.choose", "选择..."},
         {"dialog.preferences.background.clear", "清除"},
         {"dialog.preferences.background.image_filter", "图片 (*.png *.jpg *.jpeg *.bmp *.webp);;所有文件 (*)"},
+        {"dialog.preferences.background.image_error", "所选图片无法读取。"},
+        {"dialog.preferences.background.save_error", "无法保存背景设置。"},
+        {"dialog.preferences.background.file_picker_unavailable", "图片选择器不可用。"},
         {"dialog.preferences.background.opacity", "不透明度"},
         {"dialog.preferences.background.overlay", "遮盖度"},
         {"dialog.preferences.background.overlay_button", "遮盖度..."},
@@ -3059,6 +2962,9 @@ const QHash<QString, QString>& jaMap()
         {"dialog.preferences.background.choose", "選択..."},
         {"dialog.preferences.background.clear", "クリア"},
         {"dialog.preferences.background.image_filter", "画像 (*.png *.jpg *.jpeg *.bmp *.webp);;すべてのファイル (*)"},
+        {"dialog.preferences.background.image_error", "選択した画像を読み込めません。"},
+        {"dialog.preferences.background.save_error", "背景設定を保存できません。"},
+        {"dialog.preferences.background.file_picker_unavailable", "画像選択を利用できません。"},
         {"dialog.preferences.background.opacity", "不透明度"},
         {"dialog.preferences.background.overlay", "カバー不透明度"},
         {"dialog.preferences.background.overlay_button", "カバー不透明度..."},
@@ -4108,9 +4014,6 @@ QVector<UiText::LanguageOption> UiText::availableLanguageOptions()
             ? QStringLiteral("Japanese")
             : text(QStringLiteral("dialog.preferences.language.japanese")), true},
     };
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        options.append(UiText::LanguageOption{pack.id, pack.label, false});
-    }
     return options;
 }
 
@@ -4119,11 +4022,6 @@ bool UiText::isLanguageAvailable(const QString& token)
     const QString normalized = normalizedLanguageToken(token);
     if (isBuiltInLanguageToken(normalized)) {
         return true;
-    }
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        if (pack.id == normalized) {
-            return true;
-        }
     }
     return false;
 }
@@ -4136,11 +4034,6 @@ bool UiText::ensurePreferredLanguageAvailable()
     }
     setPreferredLanguageToken(QStringLiteral("system"));
     return true;
-}
-
-void UiText::reloadExtensionLanguagePacks()
-{
-    externalLanguagePacksStorage() = scanExtensionLanguagePacks();
 }
 
 UiText::ThemePreference UiText::preferredTheme()
@@ -4196,15 +4089,7 @@ QStringList UiText::translationKeyMismatches()
 
 bool UiText::hasTranslationKey(const QString& key)
 {
-    if (enMap().contains(key) && zhMap().contains(key) && jaMap().contains(key)) {
-        return true;
-    }
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        if (pack.translations.contains(key)) {
-            return true;
-        }
-    }
-    return false;
+    return enMap().contains(key) && zhMap().contains(key) && jaMap().contains(key);
 }
 
 QString UiText::preferencesFilePath()
@@ -4288,18 +4173,6 @@ QString UiText::text(const QString& key)
         preferredMap = &enMap();
         break;
     }
-    const QString language = resolvedLanguageToken();
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        if (pack.id != language) {
-            continue;
-        }
-        const auto it = pack.translations.constFind(key);
-        if (it != pack.translations.constEnd()) {
-            return it.value();
-        }
-        break;
-    }
-
     const QString localized = mapValue(*preferredMap, key);
     if (!localized.isEmpty()) {
         return localized;
@@ -4533,6 +4406,22 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("细分"), {QStringLiteral("Subdivision"), QStringLiteral("細分")}},
         {QStringLiteral("统一谱师"), {QStringLiteral("Unify chart designer"), QStringLiteral("譜面制作者を統一")}},
         {QStringLiteral("背景缩放"), {QStringLiteral("Background scaling"), QStringLiteral("背景の拡大縮小")}},
+        {QStringLiteral("启用应用背景"), {QStringLiteral("Enable application background"), QStringLiteral("アプリ背景を有効にする")}},
+        {QStringLiteral("未选择背景图片"), {QStringLiteral("No background image selected"), QStringLiteral("背景画像が選択されていません")}},
+        {QStringLiteral("背景覆盖层"), {QStringLiteral("Background overlays"), QStringLiteral("背景オーバーレイ")}},
+        {QStringLiteral("缩放模式"), {QStringLiteral("Scale mode"), QStringLiteral("拡大縮小モード")}},
+        {QStringLiteral("工具栏（深色）"), {QStringLiteral("Toolbar (Dark)"), QStringLiteral("ツールバー（ダーク）")}},
+        {QStringLiteral("工具栏（浅色）"), {QStringLiteral("Toolbar (Light)"), QStringLiteral("ツールバー（ライト）")}},
+        {QStringLiteral("状态栏（深色）"), {QStringLiteral("Status bar (Dark)"), QStringLiteral("ステータスバー（ダーク）")}},
+        {QStringLiteral("状态栏（浅色）"), {QStringLiteral("Status bar (Light)"), QStringLiteral("ステータスバー（ライト）")}},
+        {QStringLiteral("面板（深色）"), {QStringLiteral("Panel (Dark)"), QStringLiteral("パネル（ダーク）")}},
+        {QStringLiteral("面板（浅色）"), {QStringLiteral("Panel (Light)"), QStringLiteral("パネル（ライト）")}},
+        {QStringLiteral("编辑器标题（深色）"), {QStringLiteral("Editor header (Dark)"), QStringLiteral("エディターヘッダー（ダーク）")}},
+        {QStringLiteral("编辑器标题（浅色）"), {QStringLiteral("Editor header (Light)"), QStringLiteral("エディターヘッダー（ライト）")}},
+        {QStringLiteral("输入控件（深色）"), {QStringLiteral("Input controls (Dark)"), QStringLiteral("入力コントロール（ダーク）")}},
+        {QStringLiteral("输入控件（浅色）"), {QStringLiteral("Input controls (Light)"), QStringLiteral("入力コントロール（ライト）")}},
+        {QStringLiteral("代码编辑器（深色）"), {QStringLiteral("Code editor (Dark)"), QStringLiteral("コードエディター（ダーク）")}},
+        {QStringLiteral("代码编辑器（浅色）"), {QStringLiteral("Code editor (Light)"), QStringLiteral("コードエディター（ライト）")}},
         {QStringLiteral("自动"), {QStringLiteral("Automatic"), QStringLiteral("自動")}},
         {QStringLiteral("自定义"), {QStringLiteral("Custom"), QStringLiteral("カスタム")}},
         {QStringLiteral("艺术家"), {QStringLiteral("Artist"), QStringLiteral("アーティスト")}},

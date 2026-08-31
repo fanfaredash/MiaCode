@@ -1,5 +1,7 @@
 ﻿#include "UiTheme.h"
 
+#include "ThemeVariantResolver.h"
+
 #include <QApplication>
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -264,32 +266,10 @@ namespace UiTheme {
 
 ResolvedTheme resolvedTheme()
 {
-    switch (UiText::preferredTheme()) {
-    case UiText::ThemePreference::Light:
-        return ResolvedTheme::Light;
-    case UiText::ThemePreference::Dark:
-        return ResolvedTheme::Dark;
-    case UiText::ThemePreference::System:
-    default:
-        break;
-    }
-
-    if (QGuiApplication* app = qobject_cast<QGuiApplication*>(QCoreApplication::instance()); app != nullptr) {
-        if (QStyleHints* hints = app->styleHints(); hints != nullptr) {
-            if (hints->colorScheme() == Qt::ColorScheme::Dark) {
-                return ResolvedTheme::Dark;
-            }
-            if (hints->colorScheme() == Qt::ColorScheme::Light) {
-                return ResolvedTheme::Light;
-            }
-        }
-        const QColor window = app->palette().color(QPalette::Window);
-        if (window.isValid() && window.lightness() < 128) {
-            return ResolvedTheme::Dark;
-        }
-    }
-
-    return ResolvedTheme::Light;
+    return miacode::ui::ThemeVariantResolver::resolve(UiText::preferredTheme())
+        == miacode::ui::ThemeVariant::Dark
+        ? ResolvedTheme::Dark
+        : ResolvedTheme::Light;
 }
 
 bool isDarkTheme()

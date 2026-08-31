@@ -13,6 +13,7 @@
 #include "QmlUiSettings.h"
 #include "media/QmlMediaToolsModel.h"
 #include "preferences/QmlPreferencesModel.h"
+#include "preferences/QmlAppBackgroundModel.h"
 #include "preview/QmlAudioSettingsModel.h"
 #include "preview/QmlPreviewSettingsModel.h"
 #include "export/QmlCoverExportSession.h"
@@ -33,6 +34,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* document READ document CONSTANT)
     Q_PROPERTY(QObject* analysis READ analysis CONSTANT)
     Q_PROPERTY(QObject* preferences READ preferences CONSTANT)
+    Q_PROPERTY(QObject* appBackground READ appBackground CONSTANT)
     Q_PROPERTY(QObject* preview READ preview CONSTANT)
     Q_PROPERTY(QObject* commands READ commands CONSTANT)
     // Root-window close contract; the polling shell controller it replaced
@@ -44,6 +46,7 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* editorSync READ editorSync CONSTANT)
     Q_PROPERTY(QObject* shortcuts READ shortcuts CONSTANT)
     Q_PROPERTY(QObject* windowChrome READ windowChrome CONSTANT)
+    Q_PROPERTY(QObject* chartDropBridge READ chartDropBridge NOTIFY chartDropBridgeChanged)
     Q_PROPERTY(QObject* platform READ platform CONSTANT)
     // Shared Widgets-free UI boundary, hosted once by MainView.qml.
     Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
@@ -61,6 +64,7 @@ public:
     QObject* document();
     QObject* analysis();
     QObject* preferences();
+    QObject* appBackground();
     QObject* preview();
     QObject* commands();
     QObject* shell();
@@ -70,6 +74,7 @@ public:
     QObject* editorSync();
     QObject* shortcuts();
     QObject* windowChrome() const;
+    QObject* chartDropBridge() const;
     QObject* platform();
     QObject* uiRequests();
     QObject* jobProgress();
@@ -80,6 +85,10 @@ public:
     QObject* latency();
     QObject* coverExport();
     void setWindowChrome(QObject* chrome);
+    void setChartDropBridge(QObject* bridge);
+
+signals:
+    void chartDropBridgeChanged();
 
 private:
     MainWindow& backend_;
@@ -87,6 +96,7 @@ private:
     miacode::v2::ChartWorkspaceFileService fileService_;
     miacode::v2::AnalysisService analysisService_;
     QmlUiSettings preferences_;
+    miacode::qml_ui::QmlAppBackgroundModel appBackground_;
     QmlDocumentModel document_;
     QmlAnalysisModel analysis_;
     QmlPreviewModel preview_;
@@ -104,4 +114,5 @@ private:
     miacode::qml_ui::QmlLatencyModel latency_;
     miacode::qml_ui::QmlShellLifecycle lifecycle_;
     QObject* windowChrome_ = nullptr;
+    QObject* chartDropBridge_ = nullptr;
 };

@@ -11,7 +11,7 @@ Rectangle {
     signal settingsRequested()
 
     implicitWidth: 48
-    color: Theme.colors.background.editor
+    color: Theme.surfaceColor("panel", Theme.colors.background.editor)
 
     Column {
         anchors.left: parent.left
@@ -95,4 +95,3 @@ Rectangle {
         }
     }
 }
-

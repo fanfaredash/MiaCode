@@ -767,15 +767,6 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     }
     owner_.setPreviewPlayingFlag(false);
     owner_.editorSyncController().setPlaybackActive(false);
-    if (owner_.extensionManager_ != nullptr && (wasPlaying || hadStartupSync)) {
-        owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("preview")},
-            {QStringLiteral("data"), QJsonObject{
-                {QStringLiteral("state"), QStringLiteral("stopped")},
-                {QStringLiteral("second"), state_.qtPreviewPauseSecond_},
-            }},
-        });
-    }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
     }

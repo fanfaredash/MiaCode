@@ -18,28 +18,20 @@ bool verifyCreationOrdering(QTextStream& err)
     miacode::qml_ui::RootLifecycle lifecycle;
     return require(!lifecycle.installRootEventFilter(),
                    QStringLiteral("event filter cannot precede root registration"), err)
-        && require(!lifecycle.createChartDropOverlay(),
-                   QStringLiteral("overlay cannot precede root registration"), err)
+        && require(!lifecycle.installDropBridge(),
+                   QStringLiteral("drop bridge cannot precede root registration"), err)
         && require(lifecycle.registerRoot(),
                    QStringLiteral("root registers exactly once"), err)
         && require(!lifecycle.canShowRoot(),
-                   QStringLiteral("registered root stays hidden until drag route is complete"), err)
+                   QStringLiteral("registered root stays hidden until the drop bridge is installed"), err)
         && require(lifecycle.installRootEventFilter(),
-                   QStringLiteral("MainWindow event filter follows root registration"), err)
+                   QStringLiteral("root event-filter stage follows root registration"), err)
         && require(!lifecycle.canShowRoot(),
-                   QStringLiteral("root stays hidden until overlay lifecycle is ready"), err)
-        && require(lifecycle.createChartDropOverlay(),
-                   QStringLiteral("overlay follows root filter installation"), err)
+                   QStringLiteral("root stays hidden until the drop bridge is installed"), err)
+        && require(lifecycle.installDropBridge(),
+                   QStringLiteral("drop bridge follows root event-filter installation"), err)
         && require(lifecycle.canShowRoot(),
-                   QStringLiteral("root can show only after its complete drag route is ready"), err)
-        && require(!lifecycle.shouldMonitorChartDropOverlay(),
-                   QStringLiteral("inactive overlay does not keep a geometry monitor running"), err)
-        && require(lifecycle.setChartDropOverlayVisible(true)
-                       && lifecycle.shouldMonitorChartDropOverlay(),
-                   QStringLiteral("visible overlay starts geometry monitoring"), err)
-        && require(lifecycle.setChartDropOverlayVisible(false)
-                       && !lifecycle.shouldMonitorChartDropOverlay(),
-                   QStringLiteral("hidden overlay stops geometry monitoring immediately"), err);
+                   QStringLiteral("root can show with the non-visual drop route ready"), err);
 }
 
 bool verifyRepeatShutdownIsSafe(QTextStream& err)
@@ -47,17 +39,15 @@ bool verifyRepeatShutdownIsSafe(QTextStream& err)
     miacode::qml_ui::RootLifecycle lifecycle;
     lifecycle.registerRoot();
     lifecycle.installRootEventFilter();
-    lifecycle.createChartDropOverlay();
-    lifecycle.setChartDropOverlayVisible(true);
+    lifecycle.installDropBridge();
     return require(lifecycle.beginRelease(),
-                   QStringLiteral("first shutdown owns chart-drop cleanup"), err)
-        && require(!lifecycle.hasRegisteredRoot() && !lifecycle.canShowRoot()
-                       && !lifecycle.shouldMonitorChartDropOverlay(),
-                   QStringLiteral("first shutdown leaves no root or active monitor eligible for use"), err)
+                   QStringLiteral("first shutdown owns root/drop cleanup"), err)
+        && require(!lifecycle.hasRegisteredRoot() && !lifecycle.canShowRoot(),
+                   QStringLiteral("first shutdown leaves no root eligible for use"), err)
         && require(!lifecycle.beginRelease(),
                    QStringLiteral("repeat shutdown performs no second cleanup"), err)
         && require(!lifecycle.registerRoot(),
-                   QStringLiteral("released lifecycle cannot expose a replacement dangling root"), err);
+                   QStringLiteral("released lifecycle cannot expose a replacement root"), err);
 }
 
 } // namespace

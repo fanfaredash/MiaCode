@@ -164,7 +164,7 @@ Rectangle {
         return result + 1
     }
 
-    color: Theme.colors.background.editor
+    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
     clip: true
 
     readonly property bool canUndo: editorController.canUndo
@@ -602,7 +602,7 @@ Rectangle {
             background: Item {
                 Rectangle {
                     anchors.fill: parent
-                    color: Theme.colors.background.editor
+                    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
                 }
                 // Preview follow decoration: the playhead's token span. Drawn in
                 // the background so it sits under the glyphs and never competes

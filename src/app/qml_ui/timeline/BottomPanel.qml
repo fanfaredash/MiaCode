@@ -19,7 +19,7 @@ Rectangle {
     property real brightnessMenuClosedAt: 0
     signal analysisRowActivated(int difficultyId, var revision, int line, int column, int endColumn, double second)
 
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
     clip: true
     readonly property int contentTopMargin: 4
 

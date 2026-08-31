@@ -12,6 +12,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* paren
     , fileService_(workspace_)
     , analysisService_(workspace_, miacode::mainwindow::shared::uiValidationLocale())
     , preferences_(this)
+    , appBackground_(backend.uiRequestService(), {}, {}, this)
     , document_(backend, workspace_, fileService_, analysisService_, this)
     , analysis_(backend, workspace_, analysisService_, this)
     , preview_(backend, this)
@@ -23,7 +24,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* paren
     , shortcuts_(this)
     , platform_(this)
     , mediaTools_(backend, this)
-    , preferencesModel_(backend, this)
+    , preferencesModel_(backend, preferences_, this)
     , audioSettings_(backend, this)
     , previewSettings_(backend, this)
     , latency_(backend, this)
@@ -67,6 +68,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend, QObject* paren
 QObject* QmlApplicationContext::document() { return &document_; }
 QObject* QmlApplicationContext::analysis() { return &analysis_; }
 QObject* QmlApplicationContext::preferences() { return &preferences_; }
+QObject* QmlApplicationContext::appBackground() { return &appBackground_; }
 QObject* QmlApplicationContext::preview() { return &preview_; }
 QObject* QmlApplicationContext::commands() { return &commands_; }
 QObject* QmlApplicationContext::shell() { return &lifecycle_; }
@@ -76,6 +78,7 @@ QObject* QmlApplicationContext::editor() { return &editor_; }
 QObject* QmlApplicationContext::editorSync() { return &backend_.editorSyncController(); }
 QObject* QmlApplicationContext::shortcuts() { return &shortcuts_; }
 QObject* QmlApplicationContext::windowChrome() const { return windowChrome_; }
+QObject* QmlApplicationContext::chartDropBridge() const { return chartDropBridge_; }
 QObject* QmlApplicationContext::platform() { return &platform_; }
 
 // Owned by MainWindow so the export session (built before this context) and the
@@ -97,4 +100,13 @@ QObject* QmlApplicationContext::coverExport() { return &coverExport_; }
 void QmlApplicationContext::setWindowChrome(QObject* chrome)
 {
     windowChrome_ = chrome;
+}
+
+void QmlApplicationContext::setChartDropBridge(QObject* bridge)
+{
+    if (chartDropBridge_ == bridge) {
+        return;
+    }
+    chartDropBridge_ = bridge;
+    emit chartDropBridgeChanged();
 }

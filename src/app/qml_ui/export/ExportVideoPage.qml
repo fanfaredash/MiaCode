@@ -31,7 +31,7 @@ Rectangle {
         return options && options.length > index ? options[index].family : ""
     }
 
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
     clip: true
 
     ColumnLayout {

@@ -29,7 +29,6 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
-#include "extensions/ExtensionManager.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -78,6 +77,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
     editorSyncController_ = std::make_unique<miacode::v2::EditorSyncController>(this);
+    chartDropImportService_ = std::make_unique<miacode::v2::ChartDropImportService>(this);
     connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::editorContextChanged,
             this, &MainWindow::refreshEditorAuthoringContext);
     connect(editorSyncController_.get(), &miacode::v2::EditorSyncController::caretLocationPublished,
@@ -221,60 +221,6 @@ MainWindow::MainWindow(QWidget* parent)
         QAction* exportCoverAction = toolsMenu->addAction(UiText::text(QStringLiteral("action.export_cover")));
         connect(exportCoverAction, &QAction::triggered, this, &MainWindow::onExportCover);
     }
-    extensionManager_ = std::make_unique<miacode::extensions::ExtensionManager>(this);
-    miacode::extensions::ExtensionHostCallbacks extensionCallbacks;
-    extensionCallbacks.activeDocument = [this]() {
-        miacode::extensions::ExtensionDocumentSnapshot snapshot;
-        snapshot.uri = currentFilePath_.isEmpty()
-            ? QStringLiteral("untitled:active")
-            : QUrl::fromLocalFile(currentFilePath_).toString();
-        snapshot.text = hasActiveDifficulty() ? editorText() : QString();
-        snapshot.activeDifficultyId = activeDifficultyId_;
-        snapshot.dirty = currentFieldDirty_;
-        return snapshot;
-    };
-    extensionCallbacks.replaceActiveDocumentText = [this](const QString& text, QString* error) {
-        if (!hasActiveDifficulty()) {
-            if (error != nullptr) {
-                *error = QStringLiteral("No active chart difficulty is open.");
-            }
-            return false;
-        }
-        applyChartTextThroughWorkspace(text);
-        markCurrentFieldDirty();
-        refreshTimelineMetadata();
-        return true;
-    };
-    extensionCallbacks.validateActiveDocument = [this]() {
-        return runValidateSimaiSilently(false);
-    };
-    extensionCallbacks.mainWindowRequest = [this](const QString& method, const QJsonObject& params) -> QJsonObject {
-        return handleExtensionHostRequest(method, params);
-    };
-    extensionCallbacks.showMessage = [this](const QString& severity, const QString& message) {
-        const QMessageBox::Icon icon = severity == QStringLiteral("error")
-            ? QMessageBox::Critical
-            : (severity == QStringLiteral("warning") ? QMessageBox::Warning : QMessageBox::Information);
-        UiDialogs::showMessageBox(
-            icon,
-            this,
-            UiText::isChineseUi() ? QStringLiteral("扩展") : QStringLiteral("Extension"),
-            message
-        );
-    };
-    extensionCallbacks.logMessage = [this](const QString& message) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("extensions"),
-            message
-        );
-        if (statusBar() != nullptr) {
-            statusBar()->showMessage(message, 5000);
-        }
-    };
-    extensionManager_->setCallbacks(std::move(extensionCallbacks));
-    extensionManager_->initialize(
-        menuBar(), fileMenu, editMenu, toolsMenu, transformMenu, previewMenu, helpMenu);
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
         editMenu->removeAction(editActions.constLast());
@@ -1103,9 +1049,6 @@ MainWindow::MainWindow(QWidget* parent)
     QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
         UiText::text(QStringLiteral("menu.official_chart_mirror"))
     );
-    if (extensionManager_ != nullptr) {
-        extensionManager_->setToolboxMenu(toolboxMenu_, toolboxNetGroupEndAction);
-    }
     connect(toolboxOfficialChartMirrorAction, &QAction::triggered, this, [openToolboxUrl]() {
         openToolboxUrl(QStringLiteral("https://www.maiviewer.net/"));
     });
@@ -1561,11 +1504,6 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("workspace_and_central_widget_ready");
 
     finishFrameBootstrap(toolBar, logStartupStage);
-    QTimer::singleShot(0, this, [this]() {
-        if (extensionManager_ != nullptr) {
-            extensionManager_->refreshExtensions();
-        }
-    });
 }
 
 miacode::latency::LatencySandboxController* MainWindow::latencySandboxController() const

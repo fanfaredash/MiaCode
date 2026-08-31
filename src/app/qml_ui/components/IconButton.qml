@@ -13,6 +13,10 @@ AbstractButton {
     property bool active: false
     property int iconWidth: 16
     property int iconHeight: 16
+    property Item keyForwardTarget: null
+
+    Keys.priority: Keys.BeforeItem
+    Keys.forwardTo: root.keyForwardTarget ? [root.keyForwardTarget] : []
 
     implicitWidth: glyph.length > 0 ? 24 : 28
     implicitHeight: glyph.length > 0 ? 24 : 27

@@ -49,6 +49,7 @@ require_text "$PACKAGE_SCRIPT" 'libswresample.5.dylib'
 require_text "$PACKAGE_SCRIPT" 'libswscale.8.dylib'
 require_text "$PACKAGE_SCRIPT" 'libavfilter.10.dylib'
 require_text "$PACKAGE_SCRIPT" 'ZIP-extracted app'
+require_text "$PACKAGE_SCRIPT" 'assert_no_packaged_extensions'
 
 if [[ ! -f "$PROVISION_SCRIPT" ]]; then
   echo "Missing macOS FFmpeg SDK provisioner: $PROVISION_SCRIPT" >&2

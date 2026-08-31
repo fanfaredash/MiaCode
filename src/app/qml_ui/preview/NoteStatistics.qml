@@ -25,7 +25,7 @@ Rectangle {
 
     implicitHeight: wideLayout ? 55 : 96
     height: implicitHeight
-    color: Theme.colors.background.surface
+    color: Theme.colors.background.elevated
 
     Text {
         id: nameWidthProbe

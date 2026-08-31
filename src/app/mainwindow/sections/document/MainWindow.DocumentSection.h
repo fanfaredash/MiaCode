@@ -113,18 +113,12 @@ public:
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
-    // One dropped audio file and where its chart folder will go. Named here
-    // rather than in the .cpp because the drop is now two prompts long: the
-    // candidates have to survive from the first answer to the last.
-    struct DroppedChartCandidate {
-        QString sourcePath;
-        QString sourceDirectory;
-        QString extension;
-        QString targetDirectory;
-    };
-    void createChartsFromAudioDrop(const QStringList& audioPaths);
+    using DroppedChartCandidate = miacode::v2::ChartDropCandidate;
+    miacode::v2::DocumentImportAdapter chartDropImportAdapter();
     void finishChartsFromAudioDrop(
-        const QList<DroppedChartCandidate>& candidates, QElapsedTimer dropTimer);
+        const QList<DroppedChartCandidate>& candidates,
+        QElapsedTimer dropTimer,
+        std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished);
     void onNormalizeWholeChart();
     void updateEditorHeader();
     void updateDifficultyScopedActionStates();

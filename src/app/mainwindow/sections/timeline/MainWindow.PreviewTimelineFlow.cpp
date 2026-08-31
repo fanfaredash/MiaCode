@@ -729,12 +729,6 @@ void MainWindow::TimelineSection::onTimelineHeaderNavigateRequested(double secon
 
 void MainWindow::TimelineSection::onTimelineUserInteractionStarted()
 {
-    if (owner_.extensionManager_ != nullptr) {
-        owner_.extensionManager_->publishEvent(QStringLiteral("timeline.interaction.started"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("pointer")},
-            {QStringLiteral("data"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("timeline")}}},
-        });
-    }
     const bool pauseForViewportLock =
         state_.previewFollowEnabled_ && state_.previewViewportLockEnabled_;
     if (!state_.previewProgressFollowEnabled_ && !pauseForViewportLock) {
@@ -774,12 +768,6 @@ void MainWindow::TimelineSection::onTimelineDragStarted()
 
 void MainWindow::TimelineSection::onTimelineCenterNavigateRequested(double second)
 {
-    if (owner_.extensionManager_ != nullptr) {
-        owner_.extensionManager_->publishEvent(QStringLiteral("timeline.interaction.updated"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("pointer")},
-            {QStringLiteral("data"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("drag")}, {QStringLiteral("second"), second}}},
-        }, true);
-    }
     if (!state_.previewProgressFollowEnabled_) {
         Q_UNUSED(second);
         return;
@@ -802,12 +790,6 @@ void MainWindow::TimelineSection::onTimelineCenterNavigateRequested(double secon
 
 void MainWindow::TimelineSection::onTimelineWheelNavigateRequested(double second)
 {
-    if (owner_.extensionManager_ != nullptr) {
-        owner_.extensionManager_->publishEvent(QStringLiteral("timeline.wheel"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("pointer")},
-            {QStringLiteral("data"), QJsonObject{{QStringLiteral("second"), second}}},
-        }, true);
-    }
     if (!state_.previewProgressFollowEnabled_) {
         Q_UNUSED(second);
         if (ui_.previewSeekDebounceTimer_ != nullptr) {
@@ -824,12 +806,6 @@ void MainWindow::TimelineSection::onTimelineWheelNavigateRequested(double second
 
 void MainWindow::TimelineSection::onTimelineDragFinished(double second)
 {
-    if (owner_.extensionManager_ != nullptr) {
-        owner_.extensionManager_->publishEvent(QStringLiteral("timeline.interaction.finished"), QJsonObject{
-            {QStringLiteral("source"), QStringLiteral("pointer")},
-            {QStringLiteral("data"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("drag")}, {QStringLiteral("second"), second}}},
-        });
-    }
     appendTimelineInteractionLog(
         QStringLiteral("drag_scrub_end"),
         QString("second=%1")

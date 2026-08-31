@@ -144,10 +144,10 @@ Item {
                 anchors.fill: parent
                 color: {
                     if (root.panelTab)
-                        return Theme.colors.background.surface
+                        return Theme.surfaceColor("panel", Theme.colors.background.surface)
                     if (root.active)
-                        return Theme.colors.background.editor
-                    return Theme.colors.background.surface
+                        return Theme.surfaceColor("editorHeader", Theme.colors.background.editor)
+                    return Theme.surfaceColor("editorHeader", Theme.colors.background.surface)
                 }
             }
 
@@ -202,4 +202,3 @@ Item {
         text: root.tooltip
     }
 }
-

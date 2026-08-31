@@ -201,7 +201,8 @@ private:
     void seedFromDifficulty(int difficultyId);
     void rebuildFromExportSession();
     void refreshSavedLists();
-    bool renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx = 0);
+    bool renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx = 0,
+                          bool reportErrors = false);
     void syncPlaybackFromActiveLayer();
     bool renderVisibleChartFramesForExport(int sidePx);
     void onPlaybackSecondsChanged();

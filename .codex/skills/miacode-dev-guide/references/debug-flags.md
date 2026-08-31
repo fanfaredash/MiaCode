@@ -44,10 +44,8 @@ Debug subcategories now default to on inside debug mode and are disabled with:
 - Runtime log:
   - default file: `miacode_runtime_debug.log`
   - main producer: `MainWindow::appendOutput`
-- Extension support log:
-  - default file: `extensions.log` in `ExtensionManager::extensionLogDirectory()` (`MIACODE_LOG_DIR` when set, otherwise app-local `logs/`)
-  - producers: `ExtensionManager`, embedded extension runtime signals, extension `log`/`context.log()` calls, permission denials, manifest diagnostics, failed host API calls, and extension command failures
-  - user-facing access: Preferences > Extensions > Open Logs Folder; DevTools Raw JSON also exposes `logPath`
+- Extension support log: none in the product runtime. Extension manifests and API metadata are archive-only;
+  use `tools/extensions/check-extension-consistency.mjs` and the dev specs for offline diagnostics.
 - Audio log:
   - default file: `miacode_audio_debug.log`
   - producers: `QtPreviewSfxRuntime`, `MiniaudioPreviewAudioBackend`, `BassPreviewAudioBackend`, `PreviewStageMediaHost`, preview startup/playback transaction logs, `soundtouch_probe`

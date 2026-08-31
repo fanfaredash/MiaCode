@@ -108,7 +108,7 @@ Rectangle {
     }
 
     implicitHeight: 34
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("editorHeader", Theme.colors.background.surface)
 
     Flickable {
         id: tabViewport

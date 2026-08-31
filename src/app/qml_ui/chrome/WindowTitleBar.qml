@@ -16,7 +16,7 @@ Rectangle {
     readonly property bool useCaptionButtons: root.platform.captionButtons
 
     implicitHeight: 34
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("editorHeader", Theme.colors.background.surface)
 
     // Title stays window-centered. Menu only yields to the painted glyph width
     // (capped by the max title band), not the whole empty center band.

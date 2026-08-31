@@ -25,7 +25,7 @@ Rectangle {
         return Math.max(1.0, ratio)
     }
 
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
     clip: true
 
     function fittedFrameWidth(hostWidth, hostHeight) {

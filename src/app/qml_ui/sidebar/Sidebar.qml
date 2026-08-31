@@ -15,7 +15,7 @@ Rectangle {
 
     signal settingsRequested()
 
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
     clip: true
 
     // Activity Bar 只负责功能域导航。再次选择当前功能时，桌面端切换

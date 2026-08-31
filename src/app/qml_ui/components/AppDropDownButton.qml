@@ -97,7 +97,7 @@ AbstractButton {
             ? Theme.colors.state.pressed
             : root.hovered
                 ? Theme.colors.state.hover
-                : Theme.colors.background.elevated
+                : Theme.surfaceColor("input", Theme.colors.background.elevated)
         border.width: Theme.controlBorderWidth
         border.color: root.visualFocus || root.expanded || root.hovered
             ? Theme.colors.accent.primary

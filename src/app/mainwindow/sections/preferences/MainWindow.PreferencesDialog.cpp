@@ -19,8 +19,6 @@
 #include "common/DebugOptions.h"
 #include "common/InputShortcutGesture.h"
 #include "common/OperationLog.h"
-#include "extensions/ExtensionManager.h"
-#include "extensions/ExtensionManifest.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -605,19 +603,6 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
             },
         },
     };
-    QStringList extensionIds;
-    for (const ShortcutRegistry::ShortcutDefinition& definition : ShortcutRegistry::instance().editableShortcuts()) {
-        if (definition.id.startsWith(QStringLiteral("extension."))) {
-            extensionIds.append(definition.id);
-        }
-    }
-    if (!extensionIds.isEmpty()) {
-        extensionIds.sort(Qt::CaseInsensitive);
-        groups.append({
-            UiText::isChineseUi() ? QStringLiteral("扩展") : QStringLiteral("Extensions"),
-            extensionIds,
-        });
-    }
     return groups;
 }
 
@@ -700,27 +685,6 @@ QString firstDiagnosticText(const QJsonObject& object)
     return compactJsonText(diagnostics.at(0));
 }
 
-void populateExtensionDetailsTable(QTableWidget* table, const QJsonArray& details)
-{
-    table->setRowCount(details.size());
-    for (int row = 0; row < details.size(); ++row) {
-        const QJsonObject item = details.at(row).toObject();
-        const QString tooltip = compactJsonText(item);
-        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("id")).toString(), tooltip));
-        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("enabled")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"), tooltip));
-        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("valid")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"), tooltip));
-        table->setItem(row, 3, readOnlyTableItem(compactJsonText(item.value(QStringLiteral("permissions"))), tooltip));
-        table->setItem(row, 4, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("uiContributions")), tooltip));
-        table->setItem(row, 5, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("uiViews")), tooltip));
-        table->setItem(row, 6, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("eventCallbacks")), tooltip));
-        table->setItem(row, 7, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("providers")), tooltip));
-        table->setItem(row, 8, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("exportHooks")), tooltip));
-        table->setItem(row, 9, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("experimentalRawCalls")), tooltip));
-        table->setItem(row, 10, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("recentErrors")), tooltip));
-        table->setItem(row, 11, readOnlyTableItem(firstDiagnosticText(item), tooltip));
-    }
-}
-
 void populateJsonArrayList(QListWidget* list, const QJsonArray& values)
 {
     list->clear();
@@ -787,8 +751,8 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
 
 void MainWindow::onPreferences()
 {
-    // The QML shell owns 偏好设置; the menu action, the shortcut and the
-    // extension host all arrive here and are forwarded to it.
+    // The QML shell owns 偏好设置; the menu action and shortcut are forwarded
+    // to it through the same request signal.
     emit preferencesRequested();
 }
 

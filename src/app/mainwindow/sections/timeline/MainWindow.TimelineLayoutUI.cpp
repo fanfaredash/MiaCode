@@ -600,12 +600,6 @@ void MainWindow::TimelineSection::updatePreviewPanelLayout(int panelWidthOverrid
         if (ui_.previewCanvasContainer_ != nullptr && ui_.previewCanvasFrame_ != nullptr) {
             ui_.previewCanvasContainer_->setGeometry(ui_.previewCanvasFrame_->contentsRect());
             ui_.previewCanvasContainer_->show();
-            for (const QPointer<QWidget>& widget : std::as_const(state_.extensionPreviewOverlayWidgets_)) {
-                if (widget != nullptr && widget->parentWidget() == ui_.previewCanvasFrame_) {
-                    widget->setGeometry(ui_.previewCanvasFrame_->contentsRect());
-                    widget->raise();
-                }
-            }
         }
         if (ui_.previewControlCard_ != nullptr) {
             ui_.previewControlCard_->setGeometry(

@@ -4,6 +4,8 @@ import QtQuick
 
 QtObject {
     property var preferences: null
+    property var appBackground: null
+    readonly property bool darkTheme: preferences ? preferences.darkTheme : true
 
     property var colors: ({
         background: {
@@ -59,6 +61,20 @@ QtObject {
     readonly property int uiFontSize: preferences ? preferences.fontSize : 13
     readonly property int secondaryFontSize: uiFontSize - 1
     readonly property int captionFontSize: uiFontSize - 3
+
+    function overlayAlpha(token) {
+        const model = appBackground
+        if (!model || !model.imageReadable || token === "card")
+            return 1.0
+        const value = model[token + "Alpha" + (darkTheme ? "Dark" : "Light")]
+        return Math.max(0, Math.min(255, Number(value))) / 255.0
+    }
+
+    function surfaceColor(token, baseColor) {
+        if (!appBackground || !appBackground.imageReadable || token === "card")
+            return baseColor
+        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, overlayAlpha(token))
+    }
 
     // Geometry aligned with v1 UiTheme dialog* sheets (colors stay local).
     readonly property int controlRadius: 6

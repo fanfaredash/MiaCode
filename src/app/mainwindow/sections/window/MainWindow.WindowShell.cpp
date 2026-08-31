@@ -16,7 +16,6 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
-#include "extensions/ExtensionManager.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -1094,9 +1093,6 @@ void MainWindow::WindowSection::applyUiTheme()
         owner_.previewStatsCard_->setStyleSheet(QString());
     }
     owner_.updateEditorValidationSummary();
-    if (owner_.extensionManager_ != nullptr) {
-        owner_.extensionManager_->refreshMenuSelectionIcons();
-    }
     owner_.updatePauseButtonAppearance();
     owner_.updatePreviewFullscreenButtonAppearance();
     owner_.update();

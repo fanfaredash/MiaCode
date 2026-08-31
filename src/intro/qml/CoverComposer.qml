@@ -184,12 +184,12 @@ Item {
     function selectLayerKey(key) {
         if (!key)
             return
+        if (canvas.layerSelectionCallback)
+            canvas.layerSelectionCallback.call(canvas, key)
         if (canvas.selectionBinder)
             canvas.selectionBinder.selectLayerKey(key)
         else if (canvas.chartSceneBinder)
             canvas.chartSceneBinder.selectLayerKey(key)
-        if (canvas.layerSelectionCallback)
-            canvas.layerSelectionCallback.call(canvas, key)
     }
     // Text-layer font: the layer's custom fontPath (absolute) if set, else the
     // bundled Heavy display font.
@@ -571,9 +571,14 @@ Item {
                     property var boundItem: null
                     property var boundBinder: null
                     function syncLiveChartBinding() {
-                        if (boundBinder && boundItem && boundBinder.unbindLiveChartScene)
+                        var nextBinder = canvas.chartSceneBinder
+                        if (boundBinder && boundItem
+                                && (boundBinder !== nextBinder || boundItem !== item)
+                                && boundBinder.unbindLiveChartScene)
                             boundBinder.unbindLiveChartScene(boundItem)
-                        boundBinder = canvas.chartSceneBinder
+                        if (!item)
+                            return
+                        boundBinder = nextBinder
                         boundItem = item
                         if (boundBinder && boundItem && boundBinder.bindLiveChartScene)
                             boundBinder.bindLiveChartScene(boundItem)
@@ -698,6 +703,11 @@ Item {
         id: liveChartComponent
         PreviewQuickSceneRoot {
             anchors.fill: parent
+            // The scene is a paint-only child of the editable layer. Leaving the
+            // preview root enabled would let its QQuickItem mouse grab swallow
+            // the parent canvas' tap/drag handlers before they can select/move
+            // this layer.
+            enabled: false
             // The export grab clips overlay geometry to its square framebuffer
             // (SceneFrameRenderer renders into a side×side window). Clip the live
             // scene to the same square box so out-of-bounds effects (fireworks /
