@@ -18,6 +18,10 @@ RowLayout {
     property int decimals: 0
     property string readout: root.value.toFixed(root.decimals) + root.suffix
     signal moved(real value)
+    // `released` is the QML-facing onReleased lifecycle boundary; AppSlider
+    // exposes it through its pressed transition so typed and dragged edits use
+    // the same commit point.
+    signal released()
     // Held handles matter to some pages (auditioning waits for the release), so
     // the state is published rather than kept inside.
     property alias pressed: slider.pressed
@@ -38,6 +42,7 @@ RowLayout {
         to: root.to
         stepSize: root.stepSize
         onMoved: root.moved(value)
+        onPressedChanged: if (!pressed) root.released()
 
         // A drag writes `value` imperatively and would kill a plain binding for
         // good; a Binding re-applies, and stands down while the handle is held
@@ -50,8 +55,8 @@ RowLayout {
             restoreMode: Binding.RestoreNone
         }
     }
-    // Double-clicking the read-out types the value. `moved` carries it, so a
-    // typed value reaches the caller by the same route a dragged one does.
+    // Double-clicking the read-out types the value. It follows the same hot
+    // update path as a drag and then emits the single commit boundary.
     EditableValue {
         Layout.preferredWidth: 48
         Layout.preferredHeight: 22
@@ -61,6 +66,6 @@ RowLayout {
         to: root.to
         stepSize: root.stepSize
         decimals: root.decimals
-        onCommitted: function(v) { root.moved(v) }
+        onCommitted: function(v) { root.moved(v); root.released() }
     }
 }

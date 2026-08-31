@@ -247,8 +247,10 @@ Implication:
 
 Cover export note:
 
-- Cover export is not a video-export worker snapshot path, but its chart-frame stills are rendered from a `VideoExportTask` seed through `SceneFrameRenderer` and `PreviewQuickSceneRoot`. If chart-frame render settings or layer flags change, review `SceneFrameRenderer.*`, `CoverComposerView.*`, `CoverComposer.qml`, and video export's Quick render setup together.
-- Cover Studio supports multiple chart-frame layers with only one live `PreviewQuickSceneRoot`: the active chart-frame is live, while other visible frames use cached stills refreshed before final cover export.
+- Cover export is not a video-export worker snapshot path, but its chart-frame stills are rendered from a `VideoExportTask` seed through `SceneFrameRenderer` and `PreviewQuickSceneRoot`. The QML `QmlCoverExportSession` owns a `CoverFramePlaybackController` and `CoverFrameSceneBinder`: hot playback/scrubbing mutates the borrowed `PreviewFrameState`, while `renderAt()` is reserved for commit/export stills.
+- Cover export supports multiple chart-frame layers with only one live `PreviewQuickSceneRoot`: the active visible chart-frame is live, while other visible frames use cached stills. `CoverFrameExportPlan` snapshots each layer's own `frameSeconds`; export temporarily detaches the live root, refreshes all visible stills, then restores the active layer key/time and rebinds the root.
+- `CoverComposer.qml` performs canvas-level hit testing in local coordinates. The visually topmost visible layer owns the hit even when locked (locked layers may be selected but never drag-through); geometry is persisted only at drag/scale commit. The active live root has a static-image fallback until its borrowed-state binding is confirmed.
+- While the cover page is active, `MainSplitView` hides and deactivates `PreviewPane` and closes/blocks fullscreen preview so the cover editor is the sole center-workspace preview surface.
 
 ## 9. Shared Render State Flows Through Preview And Export
 

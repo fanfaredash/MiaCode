@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QPointer>
 
 #include <memory>
 #include <iterator>
@@ -18,6 +19,8 @@ class QmlExportSession;
 namespace miacode::cover_export {
 class CoverLayoutModel;
 class CoverLayer;
+class CoverFramePlaybackController;
+class CoverFrameSceneBinder;
 class SceneFrameRenderer;
 }
 
@@ -56,6 +59,10 @@ class QmlCoverExportSession final : public QObject
     Q_PROPERTY(bool chartFrameAvailable READ chartFrameAvailable NOTIFY chartFrameAvailabilityChanged)
     Q_PROPERTY(double chartFrameDuration READ chartFrameDuration NOTIFY chartFrameAvailabilityChanged)
     Q_PROPERTY(double chartFrameDiskDiameter READ chartFrameDiskDiameter NOTIFY chartFrameAvailabilityChanged)
+    Q_PROPERTY(QObject* chartSceneBinder READ chartSceneBinder CONSTANT)
+    Q_PROPERTY(bool chartFramePlaying READ chartFramePlaying NOTIFY chartFramePlayingChanged)
+    Q_PROPERTY(bool liveChartSceneBound READ liveChartSceneBound NOTIFY liveChartSceneBoundChanged)
+    Q_PROPERTY(double activeChartFrameSeconds READ activeChartFrameSeconds NOTIFY activeChartFrameSecondsChanged)
     Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
     Q_PROPERTY(QStringList recentLayoutFiles READ recentLayoutFiles NOTIFY recentLayoutFilesChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
@@ -99,6 +106,10 @@ public:
     bool chartFrameAvailable() const { return chartFrameAvailable_; }
     double chartFrameDuration() const { return chartFrameDuration_; }
     double chartFrameDiskDiameter() const;
+    QObject* chartSceneBinder() const;
+    bool chartFramePlaying() const;
+    bool liveChartSceneBound() const;
+    double activeChartFrameSeconds() const;
     QVariantList presets() const { return presets_; }
     QStringList recentLayoutFiles() const { return recentLayoutFiles_; }
     bool busy() const { return busy_; }
@@ -128,6 +139,16 @@ public:
     Q_INVOKABLE void setActiveLayerTextColor(const QString& color);
     Q_INVOKABLE void setActiveLayerTextBold(bool bold);
     Q_INVOKABLE void setActiveLayerFrameSeconds(double seconds);
+    Q_INVOKABLE void previewActiveLayerFrameSeconds(double seconds);
+    Q_INVOKABLE void commitActiveLayerFrameSeconds();
+    Q_INVOKABLE void toggleActiveLayerPlayback();
+    Q_INVOKABLE void beginActiveLayerKeySeek(int direction);
+    Q_INVOKABLE void endActiveLayerKeySeek();
+    Q_INVOKABLE void cancelActiveLayerInput();
+    Q_INVOKABLE void commitActiveLayerGeometry();
+    Q_INVOKABLE void commitCompositionChanges();
+    Q_INVOKABLE void bindLiveChartScene(QObject* scene);
+    Q_INVOKABLE void unbindLiveChartScene(QObject* scene);
     Q_INVOKABLE void setActiveLayerFrameBackgroundMode(const QString& mode);
     Q_INVOKABLE void setActiveLayerFrameBackgroundBrightness(double brightness);
     Q_INVOKABLE void setActiveLayerFrameBackgroundTransparency(double transparency);
@@ -166,6 +187,9 @@ signals:
     void fontLibraryChanged();
     void outputChanged();
     void chartFrameAvailabilityChanged();
+    void chartFramePlayingChanged();
+    void liveChartSceneBoundChanged();
+    void activeChartFrameSecondsChanged();
     void presetsChanged();
     void recentLayoutFilesChanged();
     void busyChanged();
@@ -177,7 +201,14 @@ private:
     void seedFromDifficulty(int difficultyId);
     void rebuildFromExportSession();
     void refreshSavedLists();
-    void renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx = 0);
+    bool renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx = 0);
+    void syncPlaybackFromActiveLayer();
+    bool renderVisibleChartFramesForExport(int sidePx);
+    void onPlaybackSecondsChanged();
+    void onPlaybackReachedEnd();
+    void rebindLiveChartScene();
+    void stopAndDetachLiveChartScene();
+    bool isActiveChartFrame(const miacode::cover_export::CoverLayer* layer) const;
     miacode::cover_export::CoverComposerInputs buildInputs() const;
     QJsonObject compositionJson() const;
     QJsonObject sharedCompositionJson() const;
@@ -192,6 +223,9 @@ private:
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
     std::unique_ptr<miacode::cover_export::CoverLayoutModel> layout_;
     std::unique_ptr<miacode::cover_export::SceneFrameRenderer> frameRenderer_;
+    std::unique_ptr<miacode::cover_export::CoverFramePlaybackController> playback_;
+    std::unique_ptr<miacode::cover_export::CoverFrameSceneBinder> sceneBinder_;
+    QPointer<QObject> lastLiveChartScene_;
     VideoExportTask task_;
     QVariantMap bannerTemplate_;
     QVariantList difficulties_;

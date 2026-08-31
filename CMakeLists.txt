@@ -364,6 +364,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/SceneFrameRenderer.cpp
     src/tools/cover_export/CoverFramePlaybackController.h
     src/tools/cover_export/CoverFramePlaybackController.cpp
+    src/tools/cover_export/CoverFrameSceneBinder.h
+    src/tools/cover_export/CoverFrameSceneBinder.cpp
+    src/tools/cover_export/CoverFrameExportPlan.h
+    src/tools/cover_export/CoverFrameExportPlan.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewQuickD3D11ExportSession.h
@@ -1241,6 +1245,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
     function(miacode_add_dev_tool NAME)
         cmake_parse_arguments(DT "TEST" "" "SOURCES;LIBS;INCLUDES" ${ARGN})
         add_executable(${NAME} ${DT_SOURCES})
+        # Keep QObject-based specs self-contained even when a source header is
+        # also part of the main application target.
+        set_target_properties(${NAME} PROPERTIES AUTOMOC ON)
         if (DT_LIBS)
             target_link_libraries(${NAME} PRIVATE ${DT_LIBS})
         endif()
@@ -1474,6 +1481,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverLayoutModelSpec.cpp
             src/tools/cover_export/CoverLayoutModel.h
             src/tools/cover_export/CoverLayoutModel.cpp
+            src/tools/cover_export/CoverFrameExportPlan.h
+            src/tools/cover_export/CoverFrameExportPlan.cpp
             src/tools/cover_export/CoverCompositionState.h
             src/tools/cover_export/CoverCompositionState.cpp
             src/tools/cover_export/CoverCompositionPersistenceGuard.h
@@ -1492,6 +1501,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverFramePlaybackController.h
             src/tools/cover_export/CoverFramePlaybackController.cpp
         LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(cover_frame_scene_binder_spec TEST
+        SOURCES
+            src/tools/cover_export/CoverFrameSceneBinderSpec.cpp
+            src/tools/cover_export/CoverFrameSceneBinder.h
+            src/tools/cover_export/CoverFrameSceneBinder.cpp
+        LIBS Qt6::Core Qt6::Gui
         INCLUDES src
     )
 

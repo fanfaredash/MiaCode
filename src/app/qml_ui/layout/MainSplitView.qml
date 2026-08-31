@@ -75,6 +75,8 @@ Item {
 
     function showFullscreenPreview() {
         // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash.
+        if (root.coverExportActive)
+            return
         if (root.exportVideoActive)
             return
         fullscreenPreview.visible = true
@@ -122,6 +124,10 @@ Item {
     // page identity comes from the QML router rather than from the backend.
     onExportVideoActiveChanged: {
         if (root.exportVideoActive && fullscreenPreview.visible)
+            fullscreenPreview.visible = false
+    }
+    onCoverExportActiveChanged: {
+        if (root.coverExportActive && fullscreenPreview.visible)
             fullscreenPreview.visible = false
     }
 
@@ -243,13 +249,10 @@ Item {
 
             PreviewPane {
                 id: preview
-                // The preview is a fixed part of the v2 workspace. Keeping it
-                // mounted at every width avoids the removed toggle action
-                // tearing down the only live preview surface.
-                visible: true
-                // Fullscreen owns the sole live scene root while its overlay is
-                // active; leave this pane's transport chrome in place underneath.
-                surfaceActive: !fullscreenPreview.visible
+                // Cover export owns the center workspace and must release both
+                // the preview pane and its live surface while that page is open.
+                visible: !root.coverExportActive
+                surfaceActive: !root.coverExportActive && !fullscreenPreview.visible
                 previewSession: root.previewSession
                 exportPageActive: root.exportVideoActive
                 SplitView.preferredWidth: root.previewEditorAvailableWidth

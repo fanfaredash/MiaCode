@@ -3,9 +3,14 @@
 #include "QmlExportSession.h"
 #include "UiText.h"
 #include "tools/cover_export/CoverCompositionState.h"
+#include "tools/cover_export/CoverFramePlaybackController.h"
+#include "tools/cover_export/CoverFrameExportPlan.h"
+#include "tools/cover_export/CoverFrameSceneBinder.h"
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/SceneFrameRenderer.h"
 #include "tools/video_export/FontLibrary.h"
+#include "core/scene/PreviewLayerOrder.h"
+#include "preview/quick_scene/PreviewQuickSceneRoot.h"
 
 #include <QDir>
 #include <QFile>
@@ -57,15 +62,32 @@ QmlCoverExportSession::QmlCoverExportSession(QmlExportSession& exportSession,
     , exportSession_(&exportSession)
     , uiRequests_(&uiRequests)
     , layout_(std::make_unique<miacode::cover_export::CoverLayoutModel>())
+    , playback_(std::make_unique<miacode::cover_export::CoverFramePlaybackController>(this))
+    , sceneBinder_(std::make_unique<miacode::cover_export::CoverFrameSceneBinder>(this))
     , bannerTemplate_(loadBannerTemplate())
 {
     layout_->ensureDefaultLayers();
     activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
+    connect(playback_.get(), &miacode::cover_export::CoverFramePlaybackController::secondsChanged,
+            this, &QmlCoverExportSession::onPlaybackSecondsChanged);
+    connect(playback_.get(), &miacode::cover_export::CoverFramePlaybackController::reachedEnd,
+            this, &QmlCoverExportSession::onPlaybackReachedEnd);
+    connect(playback_.get(), &miacode::cover_export::CoverFramePlaybackController::playingChanged,
+            this, &QmlCoverExportSession::chartFramePlayingChanged);
+    connect(sceneBinder_.get(), &miacode::cover_export::CoverFrameSceneBinder::liveChartSceneBoundChanged,
+            this, &QmlCoverExportSession::liveChartSceneBoundChanged);
     connect(&exportSession, &QmlExportSession::difficultiesChanged,
             this, &QmlCoverExportSession::rebuildFromExportSession);
 }
 
-QmlCoverExportSession::~QmlCoverExportSession() = default;
+QmlCoverExportSession::~QmlCoverExportSession()
+{
+    stopAndDetachLiveChartScene();
+    if (auto* scene = qobject_cast<PreviewQuickSceneRoot*>(lastLiveChartScene_.data())) {
+        scene->setFrameState(nullptr);
+    }
+    lastLiveChartScene_.clear();
+}
 
 QObject* QmlCoverExportSession::uiRequests() const { return uiRequests_; }
 QObject* QmlCoverExportSession::layoutModel() const { return layout_.get(); }
@@ -136,6 +158,28 @@ QVariantList QmlCoverExportSession::resolutionOptions() const
 int QmlCoverExportSession::outputWidth() const { return kCoverResolutionPresets[resolutionIndex_].width; }
 int QmlCoverExportSession::outputHeight() const { return kCoverResolutionPresets[resolutionIndex_].height; }
 
+QObject* QmlCoverExportSession::chartSceneBinder() const
+{
+    return sceneBinder_.get();
+}
+
+bool QmlCoverExportSession::chartFramePlaying() const
+{
+    return playback_ != nullptr && playback_->playing();
+}
+
+bool QmlCoverExportSession::liveChartSceneBound() const
+{
+    return sceneBinder_ != nullptr && sceneBinder_->liveChartSceneBound();
+}
+
+double QmlCoverExportSession::activeChartFrameSeconds() const
+{
+    auto* layer = activeCoverLayer();
+    return layer != nullptr && layer->kind() == QStringLiteral("chartFrame")
+        ? layer->frameSeconds() : 0.0;
+}
+
 void QmlCoverExportSession::enter(int preferredDifficultyId)
 {
     if (!pageSessionActive_) {
@@ -156,6 +200,8 @@ void QmlCoverExportSession::leave()
     if (!pageSessionActive_) {
         return;
     }
+    commitActiveLayerFrameSeconds();
+    stopAndDetachLiveChartScene();
     persistComposition();
     pageSessionActive_ = false;
     emit pageSessionActiveChanged();
@@ -214,6 +260,8 @@ void QmlCoverExportSession::seedFromDifficulty(int difficultyId)
     if (exportSession_ == nullptr) {
         return;
     }
+    commitActiveLayerFrameSeconds();
+    stopAndDetachLiveChartScene();
     setBusy(true);
     task_ = exportSession_->coverTaskForDifficulty(difficultyId);
     // Output folder and canvas size are seeded from the chart once. Every later
@@ -257,6 +305,8 @@ void QmlCoverExportSession::seedFromDifficulty(int difficultyId)
     emit outputChanged();
     emit chartFrameAvailabilityChanged();
     emit inputsChanged();
+    syncPlaybackFromActiveLayer();
+    rebindLiveChartScene();
     setBusy(false);
 }
 
@@ -270,26 +320,141 @@ void QmlCoverExportSession::selectLayerKey(const QString& key)
     if (layout_ == nullptr || layout_->layer(key) == nullptr || activeLayerKey_ == key) {
         return;
     }
+    if (activeCoverLayer() != nullptr && activeCoverLayer()->kind() == QStringLiteral("chartFrame")) {
+        playback_->pause();
+        playback_->cancelInput();
+        commitActiveLayerFrameSeconds();
+    }
     activeLayerKey_ = key;
     emit activeLayerChanged();
+    syncPlaybackFromActiveLayer();
+    rebindLiveChartScene();
+    emit activeChartFrameSecondsChanged();
     emit inputsChanged();
 }
 
-void QmlCoverExportSession::renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx)
+bool QmlCoverExportSession::renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx)
 {
     if (layer == nullptr || layer->kind() != QStringLiteral("chartFrame")
         || !chartFrameAvailable_ || frameRenderer_ == nullptr) {
-        return;
+        return false;
     }
     const int side = sidePx > 0 ? sidePx : qBound(512, qMax(outputWidth(), outputHeight()), 2048);
+    layer->setFrameSeconds(qBound(0.0, layer->frameSeconds(), chartFrameDuration_));
+    const double previousPlayhead = frameRenderer_->playheadSeconds();
     QString error;
     const QImage image = frameRenderer_->renderAt(layer->frameSeconds(), side, &error);
+    frameRenderer_->setPlayheadSeconds(previousPlayhead);
+    if (auto* liveScene = qobject_cast<PreviewQuickSceneRoot*>(sceneBinder_->liveChartScene())) {
+        liveScene->update();
+    }
     if (image.isNull()) {
         notifyError(UiText::text(QStringLiteral("cover.chart_frame")),
                     UiText::text(QStringLiteral("cover.could_not_render_the_chart")), error);
-        return;
+        return false;
     }
     layout_->setLayerImage(layer->key(), image);
+    return true;
+}
+
+void QmlCoverExportSession::syncPlaybackFromActiveLayer()
+{
+    if (playback_ == nullptr) {
+        return;
+    }
+    auto* layer = activeCoverLayer();
+    const bool chartFrame = isActiveChartFrame(layer);
+    playback_->setDuration(chartFrame && chartFrameAvailable_ ? chartFrameDuration_ : 0.0);
+    playback_->setSeconds(chartFrame ? qBound(0.0, layer->frameSeconds(), chartFrameDuration_) : 0.0);
+    if (chartFrame && layer->frameSeconds() != playback_->seconds()) {
+        layer->setFrameSeconds(playback_->seconds());
+    }
+    if (chartFrame && frameRenderer_ != nullptr) {
+        frameRenderer_->setPlayheadSeconds(playback_->seconds());
+    }
+    if (!chartFrame) {
+        playback_->pause();
+        playback_->cancelInput();
+    }
+}
+
+void QmlCoverExportSession::onPlaybackSecondsChanged()
+{
+    auto* layer = activeCoverLayer();
+    if (!isActiveChartFrame(layer) || playback_ == nullptr) {
+        return;
+    }
+    const double seconds = qBound(0.0, playback_->seconds(), chartFrameDuration_);
+    layer->setFrameSeconds(seconds);
+    if (frameRenderer_ != nullptr) {
+        frameRenderer_->setPlayheadSeconds(seconds);
+    }
+    if (auto* liveScene = qobject_cast<PreviewQuickSceneRoot*>(sceneBinder_->liveChartScene())) {
+        liveScene->update();
+    }
+    emit activeChartFrameSecondsChanged();
+}
+
+void QmlCoverExportSession::onPlaybackReachedEnd()
+{
+    commitActiveLayerFrameSeconds();
+}
+
+bool QmlCoverExportSession::renderVisibleChartFramesForExport(int sidePx)
+{
+    if (!chartFrameAvailable_ || layout_ == nullptr) {
+        return true;
+    }
+    const auto plan = miacode::cover_export::CoverFrameExportPlan::fromVisibleLayers(
+        *layout_, activeLayerKey_, activeChartFrameSeconds());
+    for (const auto& frame : plan.frames()) {
+        auto* layer = layout_->layer(frame.key);
+        if (layer == nullptr) {
+            return false;
+        }
+        layer->setFrameSeconds(frame.seconds);
+        if (!renderChartFrame(layer, sidePx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void QmlCoverExportSession::rebindLiveChartScene()
+{
+    if (lastLiveChartScene_.isNull()) {
+        return;
+    }
+    auto* layer = activeCoverLayer();
+    if (!isActiveChartFrame(layer) || !layer->visible() || !chartFrameAvailable_) {
+        if (auto* liveScene = qobject_cast<PreviewQuickSceneRoot*>(sceneBinder_->liveChartScene())) {
+            liveScene->setFrameState(nullptr);
+        }
+        sceneBinder_->detachLiveChartScene();
+        return;
+    }
+    bindLiveChartScene(lastLiveChartScene_.data());
+}
+
+void QmlCoverExportSession::stopAndDetachLiveChartScene()
+{
+    if (playback_ != nullptr) {
+        playback_->pause();
+        playback_->cancelInput();
+    }
+    if (sceneBinder_ != nullptr) {
+        if (auto* liveScene = qobject_cast<PreviewQuickSceneRoot*>(lastLiveChartScene_.data())) {
+            liveScene->setFrameState(nullptr);
+        }
+        sceneBinder_->detachLiveChartScene();
+    }
+}
+
+bool QmlCoverExportSession::isActiveChartFrame(
+    const miacode::cover_export::CoverLayer* layer) const
+{
+    return layer != nullptr && layer->kind() == QStringLiteral("chartFrame")
+        && activeLayerKey_ == layer->key();
 }
 
 void QmlCoverExportSession::addChartFrameLayer()
@@ -344,10 +509,18 @@ void QmlCoverExportSession::duplicateActiveLayer()
 void QmlCoverExportSession::removeActiveLayer()
 {
     if (layout_ == nullptr || activeLayerKey_ == miacode::cover_export::CoverLayoutModel::cardKey()) return;
+    if (isActiveChartFrame(activeCoverLayer())) {
+        playback_->pause();
+        playback_->cancelInput();
+        commitActiveLayerFrameSeconds();
+    }
     const QString next = layout_->selectionAfterRemoval(activeLayerKey_);
     if (layout_->removeLayer(activeLayerKey_)) {
         activeLayerKey_ = layout_->layer(next) != nullptr ? next : miacode::cover_export::CoverLayoutModel::cardKey();
         emit activeLayerChanged();
+        syncPlaybackFromActiveLayer();
+        rebindLiveChartScene();
+        emit activeChartFrameSecondsChanged();
         persistComposition();
     }
 }
@@ -474,10 +647,116 @@ void QmlCoverExportSession::setActiveLayerTextBold(bool bold)
 }
 void QmlCoverExportSession::setActiveLayerFrameSeconds(double seconds)
 {
-    if (auto* layer = activeCoverLayer(); layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
-        layer->setFrameSeconds(qBound(0.0, seconds, chartFrameDuration_));
-        renderChartFrame(layer);
-        persistComposition();
+    previewActiveLayerFrameSeconds(seconds);
+    commitActiveLayerFrameSeconds();
+}
+
+void QmlCoverExportSession::previewActiveLayerFrameSeconds(double seconds)
+{
+    auto* layer = activeCoverLayer();
+    if (!isActiveChartFrame(layer) || playback_ == nullptr) {
+        return;
+    }
+    playback_->setSeconds(qBound(0.0, seconds, chartFrameDuration_));
+    // `setSeconds` emits synchronously when the value changes. Keep this
+    // explicit path for a no-op drag at the same value as well.
+    onPlaybackSecondsChanged();
+}
+
+void QmlCoverExportSession::commitActiveLayerFrameSeconds()
+{
+    auto* layer = activeCoverLayer();
+    if (!isActiveChartFrame(layer)) {
+        return;
+    }
+    layer->setFrameSeconds(qBound(0.0, layer->frameSeconds(), chartFrameDuration_));
+    renderChartFrame(layer);
+    persistComposition();
+    emit activeChartFrameSecondsChanged();
+}
+
+void QmlCoverExportSession::toggleActiveLayerPlayback()
+{
+    if (!isActiveChartFrame(activeCoverLayer()) || playback_ == nullptr || !chartFrameAvailable_) {
+        return;
+    }
+    syncPlaybackFromActiveLayer();
+    playback_->toggle();
+}
+
+void QmlCoverExportSession::beginActiveLayerKeySeek(int direction)
+{
+    if (!isActiveChartFrame(activeCoverLayer()) || playback_ == nullptr || !chartFrameAvailable_) {
+        return;
+    }
+    syncPlaybackFromActiveLayer();
+    playback_->beginKeySeek(direction);
+}
+
+void QmlCoverExportSession::endActiveLayerKeySeek()
+{
+    if (playback_ == nullptr) {
+        return;
+    }
+    playback_->endKeySeek();
+    commitActiveLayerFrameSeconds();
+}
+
+void QmlCoverExportSession::cancelActiveLayerInput()
+{
+    if (playback_ == nullptr) {
+        return;
+    }
+    playback_->pause();
+    playback_->cancelInput();
+}
+
+void QmlCoverExportSession::commitActiveLayerGeometry()
+{
+    persistComposition();
+}
+
+void QmlCoverExportSession::commitCompositionChanges()
+{
+    persistComposition();
+}
+
+void QmlCoverExportSession::bindLiveChartScene(QObject* scene)
+{
+    auto* liveScene = qobject_cast<PreviewQuickSceneRoot*>(scene);
+    if (liveScene == nullptr) {
+        if (scene != nullptr) {
+            return;
+        }
+        if (sceneBinder_ != nullptr) {
+            if (auto* current = qobject_cast<PreviewQuickSceneRoot*>(sceneBinder_->liveChartScene())) {
+                current->setFrameState(nullptr);
+            }
+            sceneBinder_->detachLiveChartScene();
+        }
+        lastLiveChartScene_.clear();
+        return;
+    }
+    lastLiveChartScene_ = liveScene;
+    liveScene->setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);
+    liveScene->setFrameState(
+        frameRenderer_ != nullptr && chartFrameAvailable_ ? frameRenderer_->frameState() : nullptr);
+    sceneBinder_->setFrameState(
+        frameRenderer_ != nullptr && chartFrameAvailable_ ? frameRenderer_->frameState() : nullptr);
+    sceneBinder_->bindLiveChartScene(liveScene);
+}
+
+void QmlCoverExportSession::unbindLiveChartScene(QObject* scene)
+{
+    if (scene == nullptr || sceneBinder_ == nullptr) {
+        return;
+    }
+    if (auto* liveScene = qobject_cast<PreviewQuickSceneRoot*>(scene)) {
+        liveScene->setFrameState(nullptr);
+    }
+    sceneBinder_->unbindLiveChartScene(scene);
+    if (lastLiveChartScene_.data() == scene) {
+        lastLiveChartScene_.clear();
     }
 }
 void QmlCoverExportSession::setActiveLayerFrameBackgroundMode(const QString& mode)
@@ -688,7 +967,14 @@ bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool r
     }
     if (layout_ != nullptr) layout_->fromJson(state.layout);
     activeLayerKey_ = miacode::cover_export::CoverLayoutModel::cardKey();
+    if (playback_ != nullptr) {
+        playback_->pause();
+        playback_->cancelInput();
+    }
     emit activeLayerChanged();
+    syncPlaybackFromActiveLayer();
+    rebindLiveChartScene();
+    emit activeChartFrameSecondsChanged();
     emit inputsChanged();
     emit outputChanged();
     return true;
@@ -821,13 +1107,36 @@ void QmlCoverExportSession::exportCover()
 {
     if (layout_ == nullptr || outputDirectory_.isEmpty()) return;
     setBusy(true);
-    if (chartFrameAvailable_) {
-        const int frameSide = qBound(512, qMax(outputWidth(), outputHeight()), 4096);
-        for (auto* layer : layout_->visibleChartFrameLayers()) renderChartFrame(layer, frameSide);
-    }
+    const auto plan = miacode::cover_export::CoverFrameExportPlan::fromVisibleLayers(
+        *layout_, activeLayerKey_, activeChartFrameSeconds());
+    const bool wasPlaying = chartFramePlaying();
+    const QString savedActiveKey = plan.activeLayerKey();
+    const double savedActiveSeconds = plan.activeLayerSeconds();
+    playback_->pause();
+    playback_->cancelInput();
+    commitActiveLayerFrameSeconds();
+    stopAndDetachLiveChartScene();
+    const int frameSide = qBound(512, qMax(outputWidth(), outputHeight()), 4096);
+    const bool framesReady = renderVisibleChartFramesForExport(frameSide);
     persistComposition();
-    const auto result = miacode::cover_export::exportCoverComposite(
-        layout_.get(), buildInputs(), QSize(outputWidth(), outputHeight()), outputDirectory_);
+    const auto result = framesReady
+        ? miacode::cover_export::exportCoverComposite(
+              layout_.get(), buildInputs(), QSize(outputWidth(), outputHeight()), outputDirectory_)
+        : miacode::cover_export::CoverExportResult{
+              false, QString(), QStringLiteral("could not render one or more chart frames")};
+    if (layout_->layer(savedActiveKey) != nullptr) {
+        activeLayerKey_ = savedActiveKey;
+        emit activeLayerChanged();
+    }
+    if (isActiveChartFrame(activeCoverLayer())) {
+        previewActiveLayerFrameSeconds(savedActiveSeconds);
+        commitActiveLayerFrameSeconds();
+    }
+    syncPlaybackFromActiveLayer();
+    rebindLiveChartScene();
+    if (wasPlaying && isActiveChartFrame(activeCoverLayer())) {
+        playback_->play();
+    }
     setBusy(false);
     if (!result.success) {
         notifyError(UiText::text(QStringLiteral("cover.export_cover")),

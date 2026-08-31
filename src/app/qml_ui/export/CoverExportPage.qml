@@ -31,6 +31,11 @@ Rectangle {
 
     readonly property var activeLayer: root.session ? root.session.activeLayer : null
     readonly property string activeLayerKind: root.activeLayer ? root.activeLayer.kind : ""
+    readonly property bool chartFrameInteractive:
+        !!root.session && root.activeLayerKind === "chartFrame"
+        && root.session.chartFrameDuration > 0
+        && root.session.liveChartSceneBound
+        && !root.session.busy
 
     // LabeledCombo 吃 { value, label }；字体库给的是 { path, label, family }。
     readonly property var fontOptions: {
@@ -373,8 +378,10 @@ Rectangle {
                     Binding { target: composer.item; property: "coverBgBrightness"; value: root.session ? root.session.backgroundBrightness : 0.45; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "cardShadowEnabled"; value: root.session ? root.session.cardShadow : false; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "chartFrameDiskDiameter"; value: root.session ? root.session.chartFrameDiskDiameter : 0; when: composer.status === Loader.Ready }
+                    Binding { target: composer.item; property: "activeChartFrameKey"; value: root.session ? root.session.activeLayerKey : ""; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "selectedKey"; value: root.session ? root.session.activeLayerKey : ""; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "selectionBinder"; value: root.session; when: composer.status === Loader.Ready }
+                    Binding { target: composer.item; property: "chartSceneBinder"; value: root.session ? root.session.chartSceneBinder : null; when: composer.status === Loader.Ready }
                     Binding { target: composer.item; property: "editable"; value: true; when: composer.status === Loader.Ready }
 
                     BusyIndicator {
@@ -810,17 +817,100 @@ Rectangle {
                                             font.pixelSize: Theme.uiFontSize
                                             font.bold: true
                                         }
-                                        LabeledSlider {
-                                            objectName: "coverFrameTimeSlider"
-                                            label: UiText.text("cover.frame_time_for_the_selected")
-                                            labelWidth: 96
-                                            from: 0
-                                            to: root.session ? root.session.chartFrameDuration : 0
-                                            stepSize: 0.01
-                                            decimals: 2
-                                            suffix: " s"
-                                            value: root.activeLayer ? root.activeLayer.frameSeconds : 0
-                                            onMoved: function(value) { if (root.session) root.session.setActiveLayerFrameSeconds(value) }
+                                        FocusScope {
+                                            id: frameTimeControls
+                                            Layout.fillWidth: true
+                                            implicitHeight: frameTimeRow.implicitHeight
+                                            activeFocusOnTab: true
+                                            readonly property bool inputEnabled: root.chartFrameInteractive
+
+                                            function noModifiers(event) {
+                                                return event.modifiers === Qt.NoModifier
+                                            }
+
+                                            Keys.priority: Keys.BeforeItem
+                                            Keys.onPressed: function(event) {
+                                                if (!inputEnabled || !noModifiers(event))
+                                                    return
+                                                if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                                                    if (!event.isAutoRepeat)
+                                                        root.session.beginActiveLayerKeySeek(
+                                                            event.key === Qt.Key_Left ? -1 : 1)
+                                                    event.accepted = true
+                                                } else if (event.key === Qt.Key_Space) {
+                                                    if (!event.isAutoRepeat)
+                                                        root.session.toggleActiveLayerPlayback()
+                                                    event.accepted = true
+                                                } else if (event.key === Qt.Key_Home || event.key === Qt.Key_End) {
+                                                    if (!event.isAutoRepeat) {
+                                                        root.session.cancelActiveLayerInput()
+                                                        root.session.previewActiveLayerFrameSeconds(
+                                                            event.key === Qt.Key_Home ? 0
+                                                                                      : root.session.chartFrameDuration)
+                                                        root.session.commitActiveLayerFrameSeconds()
+                                                    }
+                                                    event.accepted = true
+                                                }
+                                            }
+                                            Keys.onReleased: function(event) {
+                                                if (!inputEnabled || !noModifiers(event))
+                                                    return
+                                                if ((event.key === Qt.Key_Left || event.key === Qt.Key_Right)
+                                                        && !event.isAutoRepeat) {
+                                                    root.session.endActiveLayerKeySeek()
+                                                    event.accepted = true
+                                                }
+                                            }
+                                            onActiveFocusChanged: {
+                                                if (!activeFocus && root.session)
+                                                    root.session.cancelActiveLayerInput()
+                                            }
+
+                                            RowLayout {
+                                                id: frameTimeRow
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                spacing: 4
+
+                                                LabeledSlider {
+                                                    id: frameTimeSlider
+                                                    objectName: "coverFrameTimeSlider"
+                                                    Layout.fillWidth: true
+                                                    label: UiText.text("cover.frame_time_for_the_selected")
+                                                    labelWidth: 96
+                                                    from: 0
+                                                    to: root.session ? root.session.chartFrameDuration : 0
+                                                    stepSize: 0.01
+                                                    decimals: 2
+                                                    suffix: " s"
+                                                    enabled: frameTimeControls.inputEnabled
+                                                    value: root.session ? root.session.activeChartFrameSeconds : 0
+                                                    onPressedChanged: {
+                                                        if (pressed && root.session)
+                                                            root.session.cancelActiveLayerInput()
+                                                    }
+                                                    onMoved: function(value) {
+                                                        if (root.session)
+                                                            root.session.previewActiveLayerFrameSeconds(value)
+                                                    }
+                                                    onReleased: {
+                                                        if (root.session)
+                                                            root.session.commitActiveLayerFrameSeconds()
+                                                    }
+                                                }
+
+                                                IconButton {
+                                                    objectName: "coverFramePlaybackButton"
+                                                    Layout.preferredWidth: implicitWidth
+                                                    Layout.preferredHeight: implicitHeight
+                                                    enabled: frameTimeControls.inputEnabled
+                                                    iconSource: Qt.resolvedUrl(
+                                                        root.session && root.session.chartFramePlaying
+                                                            ? "icons/pause.svg" : "icons/play.svg")
+                                                    tooltip: UiText.text("cover.play_pause_space")
+                                                    onClicked: root.session.toggleActiveLayerPlayback()
+                                                }
+                                            }
                                         }
                                         LabeledCombo {
                                             label: UiText.text("cover.chart_frame_inner_background")

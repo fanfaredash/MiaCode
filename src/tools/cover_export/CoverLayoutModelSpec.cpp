@@ -1,6 +1,7 @@
 #include "tools/cover_export/CoverCompositionState.h"
 #include "tools/cover_export/CoverCompositionPersistenceGuard.h"
 #include "tools/cover_export/CoverLayoutModel.h"
+#include "tools/cover_export/CoverFrameExportPlan.h"
 #include "app/ui/UiText.h"
 
 #include <QCoreApplication>
@@ -13,6 +14,7 @@ using miacode::cover_export::CoverCompositionState;
 using miacode::cover_export::CoverCompositionPersistenceGuard;
 using miacode::cover_export::CoverLayer;
 using miacode::cover_export::CoverLayoutModel;
+using miacode::cover_export::CoverFrameExportPlan;
 
 namespace {
 
@@ -491,6 +493,27 @@ bool testImageAndTextLayers(QTextStream& err)
     return true;
 }
 
+bool testExportPlanPreservesFrameTimes(QTextStream& err)
+{
+    CoverLayoutModel model;
+    CoverLayer* first = model.addChartFrameLayer(12.5);
+    CoverLayer* second = model.addChartFrameLayer(73.25);
+    if (!require(first != nullptr && second != nullptr,
+                 QStringLiteral("export-plan setup creates two frames"), err)) return false;
+
+    const CoverFrameExportPlan plan = CoverFrameExportPlan::fromVisibleLayers(
+        model, second->key(), second->frameSeconds());
+    const auto frames = plan.frames();
+    if (!require(frames.size() == 2, QStringLiteral("export plan includes both visible frames"), err)) return false;
+    if (!require(frames[0].key == first->key() && qAbs(frames[0].seconds - 12.5) < 0.001,
+                 QStringLiteral("export plan keeps the first frame time"), err)) return false;
+    if (!require(frames[1].key == second->key() && qAbs(frames[1].seconds - 73.25) < 0.001,
+                 QStringLiteral("export plan keeps the second frame time"), err)) return false;
+    return require(plan.activeLayerKey() == second->key()
+                       && qAbs(plan.activeLayerSeconds() - second->frameSeconds()) < 0.001,
+                   QStringLiteral("export plan records the shared playhead restore point"), err);
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -512,6 +535,7 @@ int main(int argc, char** argv)
     if (!testBackgroundBrightnessRoundTrip(err)) return 1;
     if (!testMoveByViewRows(err)) return 1;
     if (!testImageAndTextLayers(err)) return 1;
+    if (!testExportPlanPreservesFrameTimes(err)) return 1;
     if (!testCoverPresetPersistence(err)) return 1;
     if (!testOutputDirectoryRoundTrip(err)) return 1;
     QFile::remove(UiText::preferencesFilePath());

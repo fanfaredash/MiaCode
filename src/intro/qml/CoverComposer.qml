@@ -51,15 +51,16 @@ Item {
     // editor's selectedIndex is DERIVED from this (key-based → reorder/add/remove safe).
     property string selectedKey: ""
     property bool editable: true            // false in the export render (no chrome/handlers)
-    // The v2 page only needs layer selection; it deliberately leaves
-    // chartSceneBinder null so chart frames are shown via the shared still-image
-    // provider instead of creating a native embedded preview surface.
+    // The v2 page provides a small binder object for the one active live chart
+    // scene; export rendering leaves it null and uses the cached still image.
     property var selectionBinder: null
     // A2 — a live-only consumer can set this so the chart-frame layer hosts a
     // PreviewQuickSceneRoot instead of the static grab Image:
     // scrubbing/playback then only moves the shared playhead (zero readback). Stays
     // null in the export render, where the static grab Image is used instead.
     property var chartSceneBinder: null
+    readonly property bool liveChartSceneBound:
+        chartSceneBinder !== null && chartSceneBinder.liveChartSceneBound === true
 
     // ---- Editor state ----
     // Derived from selectedKey so reordering / adding / removing layers never points
@@ -231,9 +232,10 @@ Item {
     function dragLayerAt(px, py) {
         if (pointInSelectionScaleHandle(px, py))
             return null
-        if (selectedLayer && !selectedLayer.locked && pointInLayer(selectedLayer, px, py))
-            return selectedLayer
-        return topHitLayerAt(px, py)
+        var layer = topHitLayerAt(px, py)
+        // A locked top layer still owns the hit. It may be selected, but a
+        // drag must not tunnel through it to a visually lower layer.
+        return layer && !layer.locked ? layer : null
     }
     function hitKeyAt(px, py) {
         var l = topHitLayerAt(px, py)
@@ -244,6 +246,11 @@ Item {
             ? coverLayout.layers[selectedIndex] : null
 
     function clearGuides() { guideX = -1; guideY = -1 }
+
+    function commitGeometry() {
+        if (canvas.selectionBinder && canvas.selectionBinder.commitActiveLayerGeometry)
+            canvas.selectionBinder.commitActiveLayerGeometry()
+    }
 
     // Clamp a proposed CENTRE so at least 25% of a `size`-wide layer stays inside
     // [0, span] — a layer can never be dragged fully off the clipped canvas and
@@ -304,8 +311,8 @@ Item {
         onActiveChanged: {
             if (active) {
                 dragLayer = canvas.dragLayerAt(
-                        centroid.scenePressPosition.x,
-                        centroid.scenePressPosition.y)
+                        centroid.position.x,
+                        centroid.position.y)
                 if (!dragLayer) {
                     dragLayer = null
                     return
@@ -319,17 +326,20 @@ Item {
                 // Reference the delta from the centroid AT ACTIVATION, not the
                 // press: a DragHandler only activates AFTER the cursor passes the
                 // drag threshold, so press-referenced movement would jump.
-                grabSceneX = centroid.scenePosition.x
-                grabSceneY = centroid.scenePosition.y
+                grabSceneX = centroid.position.x
+                grabSceneY = centroid.position.y
             } else {
+                var hadDragLayer = dragLayer !== null
                 dragLayer = null
                 canvas.clearGuides()
+                if (hadDragLayer)
+                    canvas.commitGeometry()
             }
         }
         onCentroidChanged: {
             if (!active || !dragLayer) return
-            var dx = centroid.scenePosition.x - grabSceneX
-            var dy = centroid.scenePosition.y - grabSceneY
+            var dx = centroid.position.x - grabSceneX
+            var dy = centroid.position.y - grabSceneY
             var w = canvas.layerContentW(dragLayer)
             var h = canvas.layerContentH(dragLayer)
             var cx = startNx * canvas.width + dx
@@ -549,14 +559,12 @@ Item {
                             && layerItem.isActiveChartFrame
                             && layerItem.ld && layerItem.ld.visible
                     sourceComponent: liveChartComponent
-                    // Only ever BIND (the active frame's loader is the one that has an
-                    // item). Never unbind on item==null: when a second frame is added
-                    // the Repeater rebuilds every delegate, and an old loader's unload
-                    // would otherwise clear the binding the NEW active frame just made
-                    // (order isn't guaranteed) → the active frame renders blank and you
-                    // only see the first frame's still. The bound root is a QPointer, so
-                    // it self-nulls when the loader genuinely unloads it.
+                    property var boundItem: null
                     onItemChanged: {
+                        if (canvas.chartSceneBinder && boundItem && boundItem !== item
+                                && canvas.chartSceneBinder.unbindLiveChartScene)
+                            canvas.chartSceneBinder.unbindLiveChartScene(boundItem)
+                        boundItem = item
                         if (canvas.chartSceneBinder && item)
                             canvas.chartSceneBinder.bindLiveChartScene(item)
                     }
@@ -569,7 +577,8 @@ Item {
                 Image {
                     anchors.fill: parent
                     opacity: layerItem.ld && layerItem.ld.opacity !== undefined ? layerItem.ld.opacity : 1.0
-                    visible: layerItem.isChartFrame && !liveChartLoader.active
+                    visible: layerItem.isChartFrame
+                             && !(layerItem.isActiveChartFrame && canvas.liveChartSceneBound)
                              && layerItem.ld && layerItem.ld.imageRevision >= 0
                     source: (layerItem.isChartFrame && layerItem.ld && layerItem.ld.imageRevision >= 0)
                             ? ("image://coverchart/" + layerItem.ld.key + "?r=" + layerItem.ld.imageRevision)
@@ -737,17 +746,19 @@ Item {
             property real startHeightPx: 0
             onActiveChanged: {
                 if (active && scaleHandle.l) {
-                    grabSceneY = centroid.scenePosition.y
+                    grabSceneY = centroid.position.y
                     startHeightPx = scaleHandle.l.sizeFraction * canvas.height
                 } else {
                     canvas.clearGuides()
+                    if (!active)
+                        canvas.commitGeometry()
                 }
             }
             onCentroidChanged: {
                 if (!active || !scaleHandle.l) return
                 // The layer scales about its centre, so the bottom handle tracks the
                 // cursor 1:1 while the height changes by 2× the cursor's vertical delta.
-                var dy = centroid.scenePosition.y - grabSceneY
+                var dy = centroid.position.y - grabSceneY
                 var newH = Math.max(canvas.height * 0.05, startHeightPx + 2 * dy)
                 scaleHandle.l.sizeFraction = newH / canvas.height
             }
