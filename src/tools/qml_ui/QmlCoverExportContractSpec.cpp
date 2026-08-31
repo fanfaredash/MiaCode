@@ -19,6 +19,63 @@ QString readSource(const QString& relativePath)
     return QString::fromUtf8(file.readAll());
 }
 
+int matchingBrace(const QString& source, int openBrace)
+{
+    if (openBrace < 0 || openBrace >= source.size() || source.at(openBrace) != QLatin1Char('{')) {
+        return -1;
+    }
+    int depth = 0;
+    bool inString = false;
+    bool escaped = false;
+    bool lineComment = false;
+    bool blockComment = false;
+    QChar quote;
+    for (int index = openBrace; index < source.size(); ++index) {
+        const QChar current = source.at(index);
+        const QChar next = index + 1 < source.size() ? source.at(index + 1) : QChar();
+        if (lineComment) {
+            if (current == QLatin1Char('\n')) lineComment = false;
+            continue;
+        }
+        if (blockComment) {
+            if (current == QLatin1Char('*') && next == QLatin1Char('/')) {
+                blockComment = false;
+                ++index;
+            }
+            continue;
+        }
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+            } else if (current == QLatin1Char('\\')) {
+                escaped = true;
+            } else if (current == quote) {
+                inString = false;
+            }
+            continue;
+        }
+        if (current == QLatin1Char('/') && next == QLatin1Char('/')) {
+            lineComment = true;
+            ++index;
+            continue;
+        }
+        if (current == QLatin1Char('/') && next == QLatin1Char('*')) {
+            blockComment = true;
+            ++index;
+            continue;
+        }
+        if (current == QLatin1Char('"') || current == QLatin1Char('\'')) {
+            inString = true;
+            quote = current;
+        } else if (current == QLatin1Char('{')) {
+            ++depth;
+        } else if (current == QLatin1Char('}') && --depth == 0) {
+            return index;
+        }
+    }
+    return -1;
+}
+
 bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
 {
     out << (condition ? "[PASS] " : "[FAIL] ") << message << '\n';
@@ -182,13 +239,18 @@ int main(int argc, char** argv)
            &failed);
 
     const int layerSection = page.indexOf(QStringLiteral("// ---- 图层 ----"));
+    const int inspectorOpen = page.indexOf(QStringLiteral("ColumnLayout {\n                            id: inspector"));
+    const int inspectorClose = matchingBrace(page, page.indexOf(QLatin1Char('{'), inspectorOpen));
     const int cardSection = page.indexOf(QStringLiteral("id: cardSettings"));
+    const int presetSection = page.indexOf(QStringLiteral("// ---- 预设 ----"));
     const int layerRowSelection = page.indexOf(
         QStringLiteral("root.session.selectLayerKey(layerRow.modelData.key)"));
     const int layerRowTabRoute = page.lastIndexOf(
         QStringLiteral("root.inspectorTab = \"layer\""), layerRowSelection);
     expect(page.count(QStringLiteral("Flickable {")) == 1
-               && layerSection >= 0 && cardSection > layerSection
+               && layerSection >= 0 && inspectorOpen >= 0 && inspectorClose > inspectorOpen
+               && cardSection > layerSection && cardSection < inspectorClose
+               && presetSection > cardSection && presetSection < inspectorClose
                && layerRowSelection >= 0 && layerRowTabRoute >= 0
                && layerRowTabRoute < layerRowSelection
                && page.contains(QStringLiteral("contentHeight: inspector.implicitHeight")),
@@ -196,21 +258,33 @@ int main(int argc, char** argv)
            &failed);
 
     const int syncStart = composer.indexOf(QStringLiteral("function syncLiveChartBinding()"));
-    const int unbindCall = composer.indexOf(QStringLiteral("boundBinder.unbindLiveChartScene"), syncStart);
-    const int binderCapture = composer.indexOf(QStringLiteral("boundBinder = canvas.chartSceneBinder"), syncStart);
-    const int bindCall = composer.indexOf(QStringLiteral("boundBinder.bindLiveChartScene"), syncStart);
-    expect(syncStart >= 0 && unbindCall > syncStart && binderCapture > unbindCall && bindCall > binderCapture,
+    const int syncOpen = composer.indexOf(QLatin1Char('{'), syncStart);
+    const int syncClose = matchingBrace(composer, syncOpen);
+    const QString syncBody = syncOpen >= 0 && syncClose > syncOpen
+                                 ? composer.mid(syncOpen, syncClose - syncOpen)
+                                 : QString();
+    const int unbindCall = syncBody.indexOf(QStringLiteral("boundBinder.unbindLiveChartScene"));
+    const int binderCapture = syncBody.indexOf(QStringLiteral("boundBinder = canvas.chartSceneBinder"));
+    const int bindCall = syncBody.indexOf(QStringLiteral("boundBinder.bindLiveChartScene"));
+    expect(syncStart >= 0 && syncClose > syncOpen && unbindCall >= 0 && binderCapture > unbindCall
+               && bindCall > binderCapture,
            QStringLiteral("live chart rebinding unbinds the old identity before capturing and binding the new one"),
            out, &failed);
 
     const int bindFacade = session.indexOf(
         QStringLiteral("void QmlCoverExportSession::bindLiveChartScene(QObject* scene)"));
-    const int setLayerFlags = session.indexOf(QStringLiteral("liveScene->setLayerFlags"), bindFacade);
-    const int setLiveFrameState = session.indexOf(QStringLiteral("liveScene->setFrameState"), bindFacade);
-    const int setBinderFrameState = session.indexOf(QStringLiteral("sceneBinder_->setFrameState"), bindFacade);
-    const int bindFacadeScene = session.indexOf(QStringLiteral("sceneBinder_->bindLiveChartScene"), bindFacade);
-    expect(bindFacade >= 0 && setLayerFlags > bindFacade && setLiveFrameState > setLayerFlags
-               && setBinderFrameState > setLiveFrameState && bindFacadeScene > setBinderFrameState,
+    const int facadeOpen = session.indexOf(QLatin1Char('{'), bindFacade);
+    const int facadeClose = matchingBrace(session, facadeOpen);
+    const QString facadeBody = facadeOpen >= 0 && facadeClose > facadeOpen
+                                   ? session.mid(facadeOpen, facadeClose - facadeOpen)
+                                   : QString();
+    const int setLayerFlags = facadeBody.indexOf(QStringLiteral("liveScene->setLayerFlags"));
+    const int setLiveFrameState = facadeBody.indexOf(QStringLiteral("liveScene->setFrameState"));
+    const int setBinderFrameState = facadeBody.indexOf(QStringLiteral("sceneBinder_->setFrameState"));
+    const int bindFacadeScene = facadeBody.indexOf(QStringLiteral("sceneBinder_->bindLiveChartScene"));
+    expect(bindFacade >= 0 && facadeClose > facadeOpen && setLayerFlags >= 0
+               && setLiveFrameState > setLayerFlags && setBinderFrameState > setLiveFrameState
+               && bindFacadeScene > setBinderFrameState,
            QStringLiteral("the session facade wires overlay layers, shared frame state and scene binding"), out,
            &failed);
 
