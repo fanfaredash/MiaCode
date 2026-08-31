@@ -39,6 +39,7 @@
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/ApplicationServices.h"
 #include "app/v2/EditorPageRouter.h"
+#include "app/v2/LatencyEngine.h"
 #include "app/v2/MediaToolsEngine.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
@@ -127,7 +128,8 @@ class PreviewProgressStatsCache;
 // stage 4; the hidden QStackedWidget the switches also drive is not.
 class MainWindow : public QMainWindow,
                    public miacode::v2::EditorPageRouter,
-                   public miacode::v2::MediaToolsEngine
+                   public miacode::v2::MediaToolsEngine,
+                   public miacode::v2::LatencyEngine
 {
     Q_OBJECT
 
@@ -709,6 +711,16 @@ public:
     QVariantMap detectMediaBlankTiming(bool isTrack) override;
     void restoreMediaBlankBackup(bool isTrack) override;
     void applyMediaBlank(bool isTrack, double beats, double bpm) override;
+
+    // ---- miacode::v2::LatencyEngine ----
+    double documentWholeBpm() const override;
+    double documentOffsetSeconds() const override;
+    int documentClockCount() const override;
+    QString trackPath() const override;
+    void applyDetectorBpm(double bpm) override;
+    void applyDetectorOffset(double seconds) override;
+    void applyDetectorClockCount(int clockCount) override;
+    miacode::latency::LatencySandboxController* sandbox() const override;
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push

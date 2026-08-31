@@ -26,7 +26,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , preferencesModel_(backend, preferences_, this)
     , audioSettings_(backend, this)
     , previewSettings_(backend, services.uiRequests(), services.previewAppearance(), this)
-    , latency_(backend, this)
+    , latency_(services.latencyEngineSlot(), this)
     , lifecycle_(backend, this)
 {
     // Keep the QML text controller in lockstep with the persisted settings.

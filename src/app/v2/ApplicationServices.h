@@ -18,6 +18,7 @@ namespace miacode::v2 {
 class ExportEngine;
 class EditorPageRouter;
 class MediaToolsEngine;
+class LatencyEngine;
 
 // The parser validation locale matching the session UI language.
 //
@@ -98,6 +99,10 @@ public:
     MediaToolsEngine* mediaToolsEngine() const { return mediaToolsEngine_; }
     void setMediaToolsEngine(MediaToolsEngine* engine) { mediaToolsEngine_ = engine; }
 
+    LatencyEngine*& latencyEngineSlot() { return latencyEngine_; }
+    LatencyEngine* latencyEngine() const { return latencyEngine_; }
+    void setLatencyEngine(LatencyEngine* engine) { latencyEngine_ = engine; }
+
     SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
 
 private:
@@ -115,6 +120,7 @@ private:
     ExportEngine* exportEngine_ = nullptr;
     EditorPageRouter* editorPageRouter_ = nullptr;
     MediaToolsEngine* mediaToolsEngine_ = nullptr;
+    LatencyEngine* latencyEngine_ = nullptr;
 };
 
 }  // namespace miacode::v2

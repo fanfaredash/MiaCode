@@ -1,6 +1,5 @@
 #include "QmlLatencyModel.h"
 
-#include "mainwindow/MainWindow.h"
 #include "tools/latency/LatencySandboxController.h"
 #include "ui/UiText.h"
 
@@ -23,9 +22,10 @@ QVariantMap decoderOption(const QString& token, const QString& label)
 
 }  // namespace
 
-QmlLatencyModel::QmlLatencyModel(MainWindow& backend, QObject* parent)
+QmlLatencyModel::QmlLatencyModel(miacode::v2::LatencyEngine*& engineSlot,
+                                 QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , engineSlot_(&engineSlot)
 {
     if (miacode::latency::LatencySandboxController* controller = sandbox()) {
         connect(controller, &miacode::latency::LatencySandboxController::auditionStateChanged, this,
@@ -42,7 +42,7 @@ QmlLatencyModel::QmlLatencyModel(MainWindow& backend, QObject* parent)
 
 miacode::latency::LatencySandboxController* QmlLatencyModel::sandbox() const
 {
-    return backend_ != nullptr ? backend_->latencySandboxController() : nullptr;
+    return engine() != nullptr ? engine()->sandbox() : nullptr;
 }
 
 void QmlLatencyModel::enter()
@@ -62,13 +62,13 @@ void QmlLatencyModel::leave()
 
 void QmlLatencyModel::refreshFromDocument()
 {
-    if (backend_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
-    const double documentBpm = backend_->latencyDocumentWholeBpm();
+    const double documentBpm = engine()->documentWholeBpm();
     bpm_ = documentBpm > 0.0 ? documentBpm : 120.0;
-    offsetSeconds_ = backend_->latencyDocumentOffsetSeconds();
-    clockCount_ = qMax(1, backend_->latencyDocumentClockCount());
+    offsetSeconds_ = engine()->documentOffsetSeconds();
+    clockCount_ = qMax(1, engine()->documentClockCount());
     if (miacode::latency::LatencySandboxController* controller = sandbox()) {
         controller->setBpm(bpm_);
         controller->setOffsetSeconds(offsetSeconds_);
@@ -78,11 +78,11 @@ void QmlLatencyModel::refreshFromDocument()
 
 void QmlLatencyModel::setBpm(double value)
 {
-    if (backend_ == nullptr || !(value > 0.0) || qFuzzyCompare(value, bpm_)) {
+    if (engine() == nullptr || !(value > 0.0) || qFuzzyCompare(value, bpm_)) {
         return;
     }
     bpm_ = value;
-    backend_->applyLatencyDetectorBpm(value);
+    engine()->applyDetectorBpm(value);
     if (miacode::latency::LatencySandboxController* controller = sandbox()) {
         controller->setBpm(value);
     }
@@ -91,11 +91,11 @@ void QmlLatencyModel::setBpm(double value)
 
 void QmlLatencyModel::setOffsetSeconds(double value)
 {
-    if (backend_ == nullptr || qFuzzyCompare(value, offsetSeconds_)) {
+    if (engine() == nullptr || qFuzzyCompare(value, offsetSeconds_)) {
         return;
     }
     offsetSeconds_ = value;
-    backend_->applyLatencyDetectorOffset(value);
+    engine()->applyDetectorOffset(value);
     if (miacode::latency::LatencySandboxController* controller = sandbox()) {
         controller->setOffsetSeconds(value);
     }
@@ -104,11 +104,11 @@ void QmlLatencyModel::setOffsetSeconds(double value)
 
 void QmlLatencyModel::setClockCount(int value)
 {
-    if (backend_ == nullptr || value <= 0 || value == clockCount_) {
+    if (engine() == nullptr || value <= 0 || value == clockCount_) {
         return;
     }
     clockCount_ = value;
-    backend_->applyLatencyDetectorClockCount(value);
+    engine()->applyDetectorClockCount(value);
     emit valuesChanged();
 }
 
@@ -164,7 +164,7 @@ QString QmlLatencyModel::positionText() const
 
 bool QmlLatencyModel::trackAvailable() const
 {
-    return backend_ != nullptr && !backend_->latencyTrackPath().isEmpty();
+    return engine() != nullptr && !engine()->trackPath().isEmpty();
 }
 
 QVariantList QmlLatencyModel::audioDecoderOptions() const
@@ -197,7 +197,7 @@ miacode::audio_decode::BackendPreference QmlLatencyModel::decodeBackend() const
 
 bool QmlLatencyModel::ensureAudioEnvelopeReady()
 {
-    const QString trackPath = backend_ != nullptr ? backend_->latencyTrackPath() : QString();
+    const QString trackPath = engine() != nullptr ? engine()->trackPath() : QString();
     if (trackPath.isEmpty()) {
         clearAudioEnvelopeCache();
         return false;
@@ -231,7 +231,7 @@ void QmlLatencyModel::clearAudioEnvelopeCache()
 
 void QmlLatencyModel::detectBpm()
 {
-    if (backend_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     if (!trackAvailable()) {
@@ -261,7 +261,7 @@ void QmlLatencyModel::detectBpm()
 
 void QmlLatencyModel::detectOffset()
 {
-    if (backend_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     if (!trackAvailable()) {

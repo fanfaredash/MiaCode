@@ -6,7 +6,8 @@
 
 #include "tools/latency/LatencyAnalysis.h"
 
-class MainWindow;
+#include "app/v2/LatencyEngine.h"
+
 
 namespace miacode::latency {
 class LatencySandboxController;
@@ -35,7 +36,11 @@ class QmlLatencyModel final : public QObject
     Q_PROPERTY(QString audioDecoder READ audioDecoder WRITE setAudioDecoder NOTIFY valuesChanged)
 
 public:
-    explicit QmlLatencyModel(MainWindow& backend, QObject* parent = nullptr);
+    // No MainWindow: 延迟检测 reaches everything it needs through the engine
+    // interface, so this page is the first Qml*Model that does not know the
+    // window exists.
+    explicit QmlLatencyModel(miacode::v2::LatencyEngine*& engineSlot,
+                             QObject* parent = nullptr);
 
     double bpm() const { return bpm_; }
     void setBpm(double value);
@@ -77,7 +82,12 @@ private:
     miacode::audio_decode::BackendPreference decodeBackend() const;
     miacode::latency::LatencySandboxController* sandbox() const;
 
-    MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::LatencyEngine** engineSlot_ = nullptr;
+    miacode::v2::LatencyEngine* engine() const
+    {
+        return engineSlot_ != nullptr ? *engineSlot_ : nullptr;
+    }
     double bpm_ = 120.0;
     double offsetSeconds_ = 0.0;
     int clockCount_ = 4;

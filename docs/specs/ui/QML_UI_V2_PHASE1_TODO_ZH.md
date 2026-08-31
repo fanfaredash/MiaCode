@@ -587,6 +587,13 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          文件内 ffmpeg 辅助函数 `convertTrackTo44100Hz(...)`，新增的成员函数会在嵌套 section
          类里把它遮住，已加 `::` 限定并注明原因。
 
+     14. **延迟检测改由 `miacode::v2::LatencyEngine` 承接（方法 112 → 104）**，
+         并且 `QmlLatencyModel` **完全不再认识 `MainWindow`**——连构造参数都去掉了，
+         这是第一个做到这一点的 `Qml*Model`。
+         三个文档读取（bpm / offset / clock）刻意留在接口上而不是改读 `ChartWorkspace`：
+         延迟页没有活动难度，所以「谱面的 bpm」意思是「`&wholebpm`，否则任意非空难度的第一个
+         内联 `(BPM)`」——这条解析规则属于页面所有者，不属于工作区。
+
      12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
          它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
          先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets

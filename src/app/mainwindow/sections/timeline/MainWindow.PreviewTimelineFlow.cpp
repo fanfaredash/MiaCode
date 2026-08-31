@@ -1315,6 +1315,50 @@ void MainWindow::applyLatencyDetectorOffset(double seconds)
     timelineSection_->applyLatencyDetectorOffset(seconds);
 }
 
+// ---- miacode::v2::LatencyEngine ----
+// Thin forwarders; the latency* names stay because the widget-side latency
+// sandbox and its section use them.
+
+double MainWindow::documentWholeBpm() const
+{
+    return latencyDocumentWholeBpm();
+}
+
+double MainWindow::documentOffsetSeconds() const
+{
+    return latencyDocumentOffsetSeconds();
+}
+
+int MainWindow::documentClockCount() const
+{
+    return latencyDocumentClockCount();
+}
+
+QString MainWindow::trackPath() const
+{
+    return latencyTrackPath();
+}
+
+void MainWindow::applyDetectorBpm(double bpm)
+{
+    applyLatencyDetectorBpm(bpm);
+}
+
+void MainWindow::applyDetectorOffset(double seconds)
+{
+    applyLatencyDetectorOffset(seconds);
+}
+
+void MainWindow::applyDetectorClockCount(int clockCount)
+{
+    applyLatencyDetectorClockCount(clockCount);
+}
+
+miacode::latency::LatencySandboxController* MainWindow::sandbox() const
+{
+    return latencySandboxController();
+}
+
 double MainWindow::latencyDocumentWholeBpm() const
 {
     // Same resolution the Widgets page used: prefer &wholebpm, else the first
