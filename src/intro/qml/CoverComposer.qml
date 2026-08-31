@@ -189,7 +189,7 @@ Item {
         else if (canvas.chartSceneBinder)
             canvas.chartSceneBinder.selectLayerKey(key)
         if (canvas.layerSelectionCallback)
-            canvas.layerSelectionCallback(key)
+            canvas.layerSelectionCallback.call(canvas, key)
     }
     // Text-layer font: the layer's custom fontPath (absolute) if set, else the
     // bundled Heavy display font.

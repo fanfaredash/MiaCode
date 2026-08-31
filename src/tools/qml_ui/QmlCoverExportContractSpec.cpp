@@ -172,6 +172,48 @@ int main(int argc, char** argv)
                && !session.contains(QStringLiteral("QString::fromLatin1(preset.label)")),
            QStringLiteral("cover resolution labels decode UTF-8 without mojibake"), out, &failed);
 
+    const int canvasTab = page.indexOf(QStringLiteral("text: UiText.text(\"cover.canvas\")"));
+    const int layerTab = page.indexOf(QStringLiteral("text: UiText.text(\"cover.layer\")"));
+    const int presetTab = page.indexOf(QStringLiteral("text: UiText.text(\"cover.manage_presets\")"));
+    expect(page.count(QStringLiteral("panelTab: true")) == 3
+               && canvasTab >= 0 && canvasTab < layerTab && layerTab < presetTab
+               && !page.contains(QStringLiteral("text: UiText.text(\"cover.difficulty_card\")")),
+           QStringLiteral("the inspector exposes exactly canvas, layer and preset tabs in order"), out,
+           &failed);
+
+    const int layerSection = page.indexOf(QStringLiteral("// ---- 图层 ----"));
+    const int cardSection = page.indexOf(QStringLiteral("id: cardSettings"));
+    const int layerRowSelection = page.indexOf(
+        QStringLiteral("root.session.selectLayerKey(layerRow.modelData.key)"));
+    const int layerRowTabRoute = page.lastIndexOf(
+        QStringLiteral("root.inspectorTab = \"layer\""), layerRowSelection);
+    expect(page.count(QStringLiteral("Flickable {")) == 1
+               && layerSection >= 0 && cardSection > layerSection
+               && layerRowSelection >= 0 && layerRowTabRoute >= 0
+               && layerRowTabRoute < layerRowSelection
+               && page.contains(QStringLiteral("contentHeight: inspector.implicitHeight")),
+           QStringLiteral("layer and difficulty settings share one dynamically sized inspector"), out,
+           &failed);
+
+    const int syncStart = composer.indexOf(QStringLiteral("function syncLiveChartBinding()"));
+    const int unbindCall = composer.indexOf(QStringLiteral("boundBinder.unbindLiveChartScene"), syncStart);
+    const int binderCapture = composer.indexOf(QStringLiteral("boundBinder = canvas.chartSceneBinder"), syncStart);
+    const int bindCall = composer.indexOf(QStringLiteral("boundBinder.bindLiveChartScene"), syncStart);
+    expect(syncStart >= 0 && unbindCall > syncStart && binderCapture > unbindCall && bindCall > binderCapture,
+           QStringLiteral("live chart rebinding unbinds the old identity before capturing and binding the new one"),
+           out, &failed);
+
+    const int bindFacade = session.indexOf(
+        QStringLiteral("void QmlCoverExportSession::bindLiveChartScene(QObject* scene)"));
+    const int setLayerFlags = session.indexOf(QStringLiteral("liveScene->setLayerFlags"), bindFacade);
+    const int setLiveFrameState = session.indexOf(QStringLiteral("liveScene->setFrameState"), bindFacade);
+    const int setBinderFrameState = session.indexOf(QStringLiteral("sceneBinder_->setFrameState"), bindFacade);
+    const int bindFacadeScene = session.indexOf(QStringLiteral("sceneBinder_->bindLiveChartScene"), bindFacade);
+    expect(bindFacade >= 0 && setLayerFlags > bindFacade && setLiveFrameState > setLayerFlags
+               && setBinderFrameState > setLiveFrameState && bindFacadeScene > setBinderFrameState,
+           QStringLiteral("the session facade wires overlay layers, shared frame state and scene binding"), out,
+           &failed);
+
     const QStringList removedFiles{
         QStringLiteral("src/tools/cover_export/CoverComposerView.cpp"),
         QStringLiteral("src/tools/cover_export/CoverComposerView.h"),
