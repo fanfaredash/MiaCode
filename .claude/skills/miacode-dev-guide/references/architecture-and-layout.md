@@ -16,10 +16,21 @@ src/
                     domain and the shared UI boundaries: ChartWorkspace,
                     ChartWorkspaceFileService, AnalysisService,
                     EditorSyncController, ChartDropImportService,
-                    UiRequestService, JobProgressService. Constructed BEFORE
-                    MainWindow and destroyed after it. Nothing else in src/app
-                    may construct one of these — application_services_spec
-                    scans the tree and fails if it does.
+                    UiRequestService, JobProgressService,
+                    PreviewAppearanceState. Constructed BEFORE MainWindow and
+                    destroyed after it. Nothing else in src/app may construct
+                    one of these — application_services_spec scans the tree and
+                    fails if it does.
+                    PreviewAppearanceState holds the eight values that decide
+                    how BOTH the live preview and the exported video are drawn
+                    (skin dir/variant, judge effect, outline, slide-earlier, tap
+                    judge distance, center display, intro sound). It owns values
+                    only — applying them to the live surfaces and persisting
+                    them is MainWindow reacting to skinChanged /
+                    judgeEffectStyleChanged / introSoundChanged. MainWindow
+                    binds its same-named members to values() by reference;
+                    writes through values() are deliberately silent so restore
+                    paths do not look like user edits.
     qml_ui/         The default (v2) shell: QmlUiBootstrap, QmlApplicationContext,
                     the Qml*Model façades and the MiaCode.UI QML module.
     quick_shell/    Preview-surface / popup-position / keyboard-activation policy
@@ -73,6 +84,13 @@ Path-translation table for stale docs/comments:
   v2 specs link `Qt6::Core` (+`Gui`/`Test`) only, so a QtWidgets include fails the build.
 - `audio/` is the only place allowed to link BASS / miniaudio.
 - `tools/*` are standalone (each spec/dump/probe builds against a minimal source subset).
+- **The QML layer's reach into `MainWindow` is a tracked, monotonic number.**
+  `docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md` enumerates every name
+  `src/app/qml_ui/` uses on the hidden window, and `qml_ui_backend_surface_spec` holds code and
+  doc to set equality — new coupling fails, and migrating something without deleting its row
+  fails too. Update the doc in the same commit as the work. Prefer removing a `friend` grant or a
+  private-member read over shaving a method: a friend grant is unbounded access, so trading it
+  for named public calls is progress even when the method count rises.
 - **Every library `MiaCode` links is on an allowlist**: `docs/ops/DEPENDENCY_ALLOWLIST.md`, guarded
   by `dependency_allowlist_spec`. Adding a dependency without a doc row fails the suite, and so
   does leaving a stale row behind. `src/tools/net` is deliberately NOT in the product target — it
