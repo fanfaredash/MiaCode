@@ -75,7 +75,8 @@ QtObject {
     function surfaceColor(token, baseColor) {
         if (!appBackground || !appBackground.imageReadable || token === "card")
             return baseColor
-        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, overlayAlpha(token))
+        const c = Qt.color(baseColor)
+        return Qt.rgba(c.r, c.g, c.b, overlayAlpha(token))
     }
 
     // Geometry aligned with v1 UiTheme dialog* sheets (colors stay local).
