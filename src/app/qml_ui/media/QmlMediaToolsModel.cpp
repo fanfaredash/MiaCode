@@ -15,9 +15,14 @@
 
 namespace miacode::qml_ui {
 
-QmlMediaToolsModel::QmlMediaToolsModel(MainWindow& backend, QObject* parent)
+QmlMediaToolsModel::QmlMediaToolsModel(MainWindow& backend,
+                                       miacode::v2::UiRequestService& uiRequests,
+                                       miacode::v2::JobProgressService& jobProgress,
+                                       QObject* parent)
     : QObject(parent)
     , backend_(&backend)
+    , uiRequests_(&uiRequests)
+    , jobProgress_(&jobProgress)
 {
     batchSummary_ = UiText::text(QStringLiteral("media_tools.batch_pv_empty"));
 }
@@ -91,8 +96,7 @@ void QmlMediaToolsModel::applyPrepend(bool isTrack, double beats, double bpm)
 
 void QmlMediaToolsModel::chooseBatchDirectory()
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     if (requests == nullptr || batchRunning_) {
         return;
     }
@@ -170,10 +174,8 @@ void QmlMediaToolsModel::setRowStatus(int row, const QString& status)
 
 void QmlMediaToolsModel::startBatchCompression()
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
-    miacode::v2::JobProgressService* const jobProgress =
-        backend_ != nullptr ? backend_->jobProgressService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
+    miacode::v2::JobProgressService* const jobProgress = jobProgress_;
     if (requests == nullptr || jobProgress == nullptr || batchRunning_ || jobs_.isEmpty()) {
         return;
     }
@@ -245,8 +247,7 @@ void QmlMediaToolsModel::startBatchCompression()
 void QmlMediaToolsModel::finishBatch(
     int succeeded, int failed, bool canceled, const QString& fatalError)
 {
-    miacode::v2::JobProgressService* const jobProgress =
-        backend_ != nullptr ? backend_->jobProgressService() : nullptr;
+    miacode::v2::JobProgressService* const jobProgress = jobProgress_;
     if (jobProgress != nullptr && jobProgress->token() == batchJobToken_) {
         jobProgress->end();
     }

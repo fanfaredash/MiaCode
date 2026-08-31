@@ -721,7 +721,8 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
                     exportSection_->cancelVideoExportWorker();
                 }
             });
-    ui_.qmlExportSession_ = new QmlExportSession(*this, *ui_.uiRequests_, this);
+    ui_.qmlExportSession_ = new QmlExportSession(
+        *this, applicationServices_.uiRequests(), applicationServices_.jobProgress(), this);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
     if (editorFindBar_ != nullptr) {

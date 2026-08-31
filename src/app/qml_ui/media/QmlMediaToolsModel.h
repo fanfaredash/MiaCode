@@ -12,6 +12,11 @@
 class MainWindow;
 class QThread;
 
+namespace miacode::v2 {
+class UiRequestService;
+class JobProgressService;
+}
+
 namespace miacode::qml_ui {
 
 // QML-facing surface for 音视频处理. The single-file tools forward to
@@ -26,7 +31,10 @@ class QmlMediaToolsModel final : public QObject
     Q_PROPERTY(bool batchRunning READ batchRunning NOTIFY batchRunningChanged)
 
 public:
-    explicit QmlMediaToolsModel(MainWindow& backend, QObject* parent = nullptr);
+    explicit QmlMediaToolsModel(MainWindow& backend,
+                               miacode::v2::UiRequestService& uiRequests,
+                               miacode::v2::JobProgressService& jobProgress,
+                               QObject* parent = nullptr);
     ~QmlMediaToolsModel() override;
 
     QString batchDirectory() const { return batchDirectory_; }
@@ -65,6 +73,9 @@ private:
     void finishBatch(int succeeded, int failed, bool canceled, const QString& fatalError);
 
     MainWindow* backend_ = nullptr;
+    // From the application assembly, not from the hidden window.
+    miacode::v2::UiRequestService* uiRequests_ = nullptr;
+    miacode::v2::JobProgressService* jobProgress_ = nullptr;
     QString batchDirectory_;
     QString batchSummary_;
     QList<miacode::media::PvCompressionJob> jobs_;

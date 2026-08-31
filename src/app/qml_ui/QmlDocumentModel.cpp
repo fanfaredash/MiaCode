@@ -43,12 +43,14 @@ QVariantList unsavedSectionChoices()
 QmlDocumentModel::QmlDocumentModel(
     MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
     miacode::v2::ChartWorkspaceFileService& fileService,
-    miacode::v2::AnalysisService& analysisService, QObject* parent)
+    miacode::v2::AnalysisService& analysisService,
+    miacode::v2::UiRequestService& uiRequests, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
     , workspace_(&workspace)
     , fileService_(&fileService)
     , analysisService_(&analysisService)
+    , uiRequests_(&uiRequests)
 {
     if (!workspace_->snapshot().hasDocument) {
         workspace_->openSource(
@@ -403,8 +405,7 @@ void QmlDocumentModel::restoreBackup(const QString& path)
 
 void QmlDocumentModel::createDocumentFromPickedAudio()
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     if (requests == nullptr || fileService_ == nullptr) {
         return;
     }
@@ -427,8 +428,7 @@ void QmlDocumentModel::createDocumentFromPickedAudio()
 
 void QmlDocumentModel::createChartBesideAudio(const QString& audioPath)
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     if (requests == nullptr) {
         return;
     }
@@ -455,8 +455,7 @@ void QmlDocumentModel::createChartBesideAudio(const QString& audioPath)
 void QmlDocumentModel::ensureTrackCopyThenCreate(
     const QString& audioPath, const QString& targetPath)
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     const QFileInfo audioInfo(audioPath);
     const QString extension = audioInfo.suffix().toLower();
     const QString trackName = QStringLiteral("track.%1").arg(extension);
@@ -523,8 +522,7 @@ void QmlDocumentModel::ensureTrackCopyThenCreate(
 
 void QmlDocumentModel::createEmptyDocumentAt(const QString& targetPath)
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     if (fileService_ == nullptr) {
         return;
     }
@@ -618,8 +616,7 @@ void QmlDocumentModel::saveSectionOrAskForPath(
         return;
     }
 
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     if (requests == nullptr) {
         finish(false);
         return;
@@ -652,8 +649,7 @@ void QmlDocumentModel::requestSaveDifficultySection(int difficultyId)
 
 void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
     if (snapshot.dirtyDifficultyIds.isEmpty() || requests == nullptr) {
         askAboutRemainingDocument(std::move(onDecided));
@@ -698,8 +694,7 @@ void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
 
 void QmlDocumentModel::askAboutRemainingDocument(std::function<void(bool)> onDecided)
 {
-    miacode::v2::UiRequestService* const requests =
-        backend_ != nullptr ? backend_->uiRequestService() : nullptr;
+    miacode::v2::UiRequestService* const requests = uiRequests_;
     if (!workspace_->snapshot().dirty || requests == nullptr) {
         if (onDecided) onDecided(true);
         return;

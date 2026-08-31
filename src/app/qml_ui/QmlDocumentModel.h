@@ -11,6 +11,7 @@
 #include "app/v2/AnalysisService.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
+#include "app/v2/UiRequestService.h"
 
 class MainWindow;
 
@@ -67,6 +68,7 @@ public:
         MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
         miacode::v2::ChartWorkspaceFileService& fileService,
         miacode::v2::AnalysisService& analysisService,
+        miacode::v2::UiRequestService& uiRequests,
         QObject* parent = nullptr);
     ~QmlDocumentModel() override;
 
@@ -259,6 +261,9 @@ private:
     miacode::v2::ChartWorkspace* workspace_ = nullptr;
     miacode::v2::ChartWorkspaceFileService* fileService_ = nullptr;
     miacode::v2::AnalysisService* analysisService_ = nullptr;
+    // From the application assembly, not from the hidden window: the window is
+    // not the owner of this boundary and must not be asked for it.
+    miacode::v2::UiRequestService* uiRequests_ = nullptr;
     QString metadataSourceError_;
     QString metadataSourceAttemptText_;
     QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataSourceIssues_;

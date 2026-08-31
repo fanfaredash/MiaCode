@@ -44,9 +44,12 @@ double minimumExportRangeSecondsForChart(double chartDurationSeconds)
 
 QmlExportSession::QmlExportSession(MainWindow& backend,
                                    miacode::v2::UiRequestService& uiRequests,
+                                   miacode::v2::JobProgressService& jobProgress,
                                    QObject* parent)
     : QObject(parent)
     , uiRequests_(&uiRequests)
+    // From the application assembly, not from the hidden window.
+    , jobProgress_(&jobProgress)
     , backend_(&backend)
 {
     connect(&backend, &MainWindow::videoExportWorkerRunningChanged, this, [this](bool running) {
@@ -682,7 +685,7 @@ void QmlExportSession::startExport()
         // events and threw the percentage away, leaving batch with no progress
         // at all.
         miacode::v2::JobProgressService* const jobProgress =
-            backend_ != nullptr ? backend_->jobProgressService() : nullptr;
+            jobProgress_;
         const QString batchJobTitle = UiText::text(QStringLiteral("dialog.batch_export.title"));
         quint64 batchJobToken = 0;
         if (jobProgress != nullptr) {

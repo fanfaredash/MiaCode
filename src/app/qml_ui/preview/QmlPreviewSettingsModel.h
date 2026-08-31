@@ -56,7 +56,9 @@ class QmlPreviewSettingsModel final : public QObject
     Q_PROPERTY(QString hudFontSample READ hudFontSample NOTIFY hudFontChanged)
 
 public:
-    explicit QmlPreviewSettingsModel(MainWindow& backend, QObject* parent = nullptr);
+    explicit QmlPreviewSettingsModel(MainWindow& backend,
+                                    miacode::v2::UiRequestService& uiRequests,
+                                    QObject* parent = nullptr);
 
     Q_INVOKABLE void setValue(const QString& key, const QVariant& value);
 

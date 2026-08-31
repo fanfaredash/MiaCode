@@ -492,10 +492,20 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       这条反向验证已实测：在 `MainWindow.h` 里加一个 `UiRequestService` 值成员，守卫立刻失败。
 - [ ] `QmlApplicationContext` 不再持有 `MainWindow& backend_`；QML 通过窄 QObject 门面访问
       services / sessions，不能再经隐藏窗口取得状态、命令或页面切换。
-      *进展（2026-09-01）*：文档域、UI 请求、作业进度、editor-sync 已改为经 `services_` 取得，
-      `backend_` 不再是这四者的来源。剩下的仍然是大头——`Qml*Model` 共约 140 个 `MainWindow`
-      方法调用点（预览、时间轴、导出、偏好设置、延迟检测、媒体工具、页面切换），必须逐域搬到
-      session/service 才能去掉 `backend_`。
+      *进展（2026-09-01）*：
+      1. 文档域、UI 请求、作业进度、editor-sync 已改为经 `services_` 取得；`backend_` 不再是这
+         四者的来源。`uiRequestService()` / `jobProgressService()` 这两个方法**已从 QML 层完全消失**
+         （13 处调用点改为构造时注入 `UiRequestService&` / `JobProgressService&`）。
+      2. 剩余耦合已全部登记为可度量清单：
+         [QML_UI_V2_BACKEND_SURFACE_ZH.md](QML_UI_V2_BACKEND_SURFACE_ZH.md) 按未来所有者
+         （PreviewSession / TimelineSession / ExportSession / 文档 / 偏好设置 / 延迟 / 媒体工具 /
+         外壳宿主）分组列出 **120 个方法 + 17 个直接读取的私有成员 + 5 个 friend 授权**。
+         守卫 `qml_ui_backend_surface_spec` 对代码与清单做集合相等比较：新增耦合失败，
+         搬走了却没改清单也失败，文档虚报计数同样失败——四个方向都已反向验证。
+      3. **本轮发现并记录的事实**：`MainWindow.h` 把 5 个 QML 类型声明为 `friend`，它们绕过公有
+         接口直接读写 17 个窗口私有成员（`QmlExportSession` 一个就占 15 个）。这与本项要求的
+         「窄 QObject 门面」正相反，所以清零顺序是**先消 friend 与私有成员读取，再削减公有方法**；
+         先搬公有方法只会让剩下的耦合更隐蔽。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
       *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。

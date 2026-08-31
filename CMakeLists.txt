@@ -2502,6 +2502,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(debug_flag_index_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # Ratchet for docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md (stage 3.5, item 2).
+    # Set-equality between the MainWindow surface src/app/qml_ui actually reaches
+    # and the inventory the doc lists, plus the friend grants and the recorded
+    # counts. New coupling fails; a migration that forgets the doc fails too,
+    # which is what keeps the remaining count honest and monotonic.
+    miacode_add_dev_tool(qml_ui_backend_surface_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlUiBackendSurfaceSpec.cpp
+        LIBS Qt6::Core
+    )
+    target_compile_definitions(qml_ui_backend_surface_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     # Drift guard for docs/ops/DEPENDENCY_ALLOWLIST.md (stage 3.5, item 4).
     # Parses every target_link_libraries(MiaCode …) call plus the doc's
     # allow/forbid/media-adapter tables, so an undocumented dependency, a stale

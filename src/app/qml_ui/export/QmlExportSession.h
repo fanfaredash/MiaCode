@@ -7,6 +7,7 @@
 #include <QVariantList>
 
 #include "app/v2/UiRequestService.h"
+#include "app/v2/JobProgressService.h"
 #include "tools/video_export/VideoExportController.h"
 
 class MainWindow;
@@ -110,6 +111,7 @@ class QmlExportSession final : public QObject
 public:
     QmlExportSession(MainWindow& backend,
                      miacode::v2::UiRequestService& uiRequests,
+                     miacode::v2::JobProgressService& jobProgress,
                      QObject* parent = nullptr);
 
     QObject* uiRequests() { return uiRequests_; }
@@ -302,6 +304,7 @@ private:
     void addChartDirectory(const QString& path);
 
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
+    miacode::v2::JobProgressService* jobProgress_ = nullptr;
     MainWindow* backend_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;

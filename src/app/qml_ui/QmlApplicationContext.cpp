@@ -10,7 +10,8 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , services_(services)
     , preferences_(this)
     , appBackground_(&services.uiRequests(), {}, {}, this)
-    , document_(backend, services.workspace(), services.files(), services.analysis(), this)
+    , document_(backend, services.workspace(), services.files(), services.analysis(),
+                services.uiRequests(), this)
     , analysis_(backend, services.workspace(), services.analysis(), this)
     , preview_(backend, this)
     , timeline_(backend, this)
@@ -20,10 +21,10 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)
-    , mediaTools_(backend, this)
+    , mediaTools_(backend, services.uiRequests(), services.jobProgress(), this)
     , preferencesModel_(backend, preferences_, this)
     , audioSettings_(backend, this)
-    , previewSettings_(backend, this)
+    , previewSettings_(backend, services.uiRequests(), this)
     , latency_(backend, this)
     , lifecycle_(backend, this)
 {

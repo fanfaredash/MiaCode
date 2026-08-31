@@ -32,9 +32,12 @@ QVariantMap option(const QVariant& value, const char* labelKey)
 
 }  // namespace
 
-QmlPreviewSettingsModel::QmlPreviewSettingsModel(MainWindow& backend, QObject* parent)
+QmlPreviewSettingsModel::QmlPreviewSettingsModel(MainWindow& backend,
+                                                 miacode::v2::UiRequestService& uiRequests,
+                                                 QObject* parent)
     : QObject(parent)
-    , uiRequests_(backend.uiRequestService())
+    // From the application assembly, not from the hidden window.
+    , uiRequests_(&uiRequests)
     , backend_(&backend)
 {
 }
