@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QString>
 
+#include "app/v2/TimelineSurface.h"
+
 class MainWindow;
 
 namespace miacode::qml_ui {
@@ -41,7 +43,9 @@ class QmlTimelineModel final : public QObject
     Q_PROPERTY(QString followCodeLabel READ followCodeLabel CONSTANT)
 
 public:
-    explicit QmlTimelineModel(MainWindow& backend, QObject* parent = nullptr);
+    explicit QmlTimelineModel(MainWindow& backend,
+                              miacode::v2::TimelineSurface*& surfaceSlot,
+                              QObject* parent = nullptr);
 
     QObject* stateBridge() const;
     QString currentTabId() const;
@@ -69,6 +73,12 @@ signals:
 
 private:
     MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::TimelineSurface** surfaceSlot_ = nullptr;
+    miacode::v2::TimelineSurface* surface() const
+    {
+        return surfaceSlot_ != nullptr ? *surfaceSlot_ : nullptr;
+    }
 };
 
 }  // namespace miacode::qml_ui

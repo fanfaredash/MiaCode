@@ -12,9 +12,10 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , appBackground_(&services.uiRequests(), {}, {}, this)
     , document_(backend, services.workspace(), services.files(), services.analysis(),
                 services.uiRequests(), this)
-    , analysis_(backend, services.workspace(), services.analysis(), this)
+    , analysis_(backend, services.workspace(), services.analysis(),
+                services.timelineSurfaceSlot(), this)
     , preview_(backend, this)
-    , timeline_(backend, this)
+    , timeline_(backend, services.timelineSurfaceSlot(), this)
     , commands_(backend, document_, this)
     , pages_(backend, services.editorPageRouterSlot(), this)
     , coverExport_(*backend.qmlExportSession(), services.uiRequests(), this)

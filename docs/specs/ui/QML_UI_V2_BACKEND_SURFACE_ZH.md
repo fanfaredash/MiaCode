@@ -11,7 +11,7 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **104**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **88**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
@@ -39,6 +39,7 @@
 | 2026-09-01 | 页面路由改由 `miacode::v2::EditorPageRouter` 接口承接，最后一条 friend 授权删除（1 → **0**） | **118** | **0** |
 | 2026-09-01 | 音视频处理改由 `miacode::v2::MediaToolsEngine` 接口承接 | **112** | 0 |
 | 2026-09-01 | 延迟检测改由 `miacode::v2::LatencyEngine` 接口承接，`QmlLatencyModel` **完全不再认识 `MainWindow`** | **104** | 0 |
+| 2026-09-01 | 时间轴与底栏页签改由 `miacode::v2::TimelineSurface` 接口承接（含分析页的两处） | **88** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -140,30 +141,20 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 
 ### 时间轴与分析（→ `TimelineSession`）
 
-走带导航、底栏页签可见性、拖拽状态、Muri 提示偏好。
+已改由 `miacode::v2::TimelineSurface` 承接（2026-09-01）：走带导航、拖拽生命周期、
+底栏页签可见性与当前页签、无理提示偏好。窗口上那些 `shell*` 前缀是 v1 QuickShell 控制器的
+遗留命名，接口没有把这段历史带过来。
 
-**`src/app/qml_ui/QmlTimelineModel.cpp`** — 方法 15，私有成员 0
+`QmlTimelineModel` 还留着 `MainWindow&`，但**只用于连一个信号**（`shellPresentationChanged`
+的推送），不再调用任何方法——清单计的是方法，信号是另一种（推送式）耦合，随阶段 4 处理。
 
-- `centerShellTimelineNavigate`
-- `navigateShellTimelineToSecond`
-- `setShellBottomTabsCurrentTab`
-- `shellBottomTabsCurrentTabId`
-- `shellBottomTabsVisible`
-- `shellMuriTabVisible`
-- `shellTimelineDragFinished`
-- `shellTimelineDragStarted`
-- `shellTimelineFollowPreviewToggled`
-- `shellTimelineStateBridgeObject`
-- `shellTimelineSurfaceReady`
-- `shellTimelineTabVisible`
-- `shellTimelineUserInteractionStarted`
-- `shellValidationTabVisible`
-- `wheelShellTimelineNavigate`
+**`src/app/qml_ui/QmlTimelineModel.cpp`** — 方法 0，私有成员 0
 
-**`src/app/qml_ui/QmlAnalysisModel.cpp`** — 方法 2，私有成员 0
+- *（已清空：本文件不再触达 `MainWindow`）*
 
-- `ignoreMuriIssuePrompts`
-- `navigateShellTimelineToSecond`
+**`src/app/qml_ui/QmlAnalysisModel.cpp`** — 方法 0，私有成员 0
+
+- *（已清空：本文件不再触达 `MainWindow`）*
 
 ### 导出与页面切换（→ `ExportSession`）
 

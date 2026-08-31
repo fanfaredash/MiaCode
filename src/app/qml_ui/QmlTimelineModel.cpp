@@ -5,9 +5,12 @@
 
 namespace miacode::qml_ui {
 
-QmlTimelineModel::QmlTimelineModel(MainWindow& backend, QObject* parent)
+QmlTimelineModel::QmlTimelineModel(MainWindow& backend,
+                                   miacode::v2::TimelineSurface*& surfaceSlot,
+                                   QObject* parent)
     : QObject(parent)
     , backend_(&backend)
+    , surfaceSlot_(&surfaceSlot)
 {
     // Pushed, not polled: MainWindow says when the panel's presentation
     // changed, and nothing wakes in between.
@@ -17,32 +20,32 @@ QmlTimelineModel::QmlTimelineModel(MainWindow& backend, QObject* parent)
 
 QObject* QmlTimelineModel::stateBridge() const
 {
-    return backend_ != nullptr ? backend_->shellTimelineStateBridgeObject() : nullptr;
+    return surface() != nullptr ? surface()->timelineStateBridge() : nullptr;
 }
 
 QString QmlTimelineModel::currentTabId() const
 {
-    return backend_ != nullptr ? backend_->shellBottomTabsCurrentTabId() : QString();
+    return surface() != nullptr ? surface()->bottomTabsCurrentTabId() : QString();
 }
 
 bool QmlTimelineModel::panelVisible() const
 {
-    return backend_ != nullptr && backend_->shellBottomTabsVisible();
+    return surface() != nullptr && surface()->bottomTabsVisible();
 }
 
 bool QmlTimelineModel::timelineTabVisible() const
 {
-    return backend_ != nullptr && backend_->shellTimelineTabVisible();
+    return surface() != nullptr && surface()->timelineTabVisible();
 }
 
 bool QmlTimelineModel::validationTabVisible() const
 {
-    return backend_ != nullptr && backend_->shellValidationTabVisible();
+    return surface() != nullptr && surface()->validationTabVisible();
 }
 
 bool QmlTimelineModel::muriTabVisible() const
 {
-    return backend_ != nullptr && backend_->shellMuriTabVisible();
+    return surface() != nullptr && surface()->muriTabVisible();
 }
 
 QString QmlTimelineModel::timelineTabLabel() const
@@ -67,50 +70,50 @@ QString QmlTimelineModel::followCodeLabel() const
 
 void QmlTimelineModel::setCurrentTabId(const QString& tabId)
 {
-    if (backend_ == nullptr || tabId.trimmed().isEmpty() || tabId == currentTabId()) {
+    if (surface() == nullptr || tabId.trimmed().isEmpty() || tabId == currentTabId()) {
         return;
     }
-    backend_->setShellBottomTabsCurrentTab(tabId);
+    surface()->setBottomTabsCurrentTabId(tabId);
 }
 
 void QmlTimelineModel::headerNavigate(double second)
 {
-    if (backend_ != nullptr) backend_->navigateShellTimelineToSecond(second);
+    if (surface() != nullptr) surface()->navigateToSecond(second);
 }
 
 void QmlTimelineModel::wheelNavigate(double second)
 {
-    if (backend_ != nullptr) backend_->wheelShellTimelineNavigate(second);
+    if (surface() != nullptr) surface()->wheelNavigateToSecond(second);
 }
 
 void QmlTimelineModel::centerNavigate(double second)
 {
-    if (backend_ != nullptr) backend_->centerShellTimelineNavigate(second);
+    if (surface() != nullptr) surface()->centerOnSecond(second);
 }
 
 void QmlTimelineModel::dragStarted()
 {
-    if (backend_ != nullptr) backend_->shellTimelineDragStarted();
+    if (surface() != nullptr) surface()->timelineDragStarted();
 }
 
 void QmlTimelineModel::dragFinished(double second)
 {
-    if (backend_ != nullptr) backend_->shellTimelineDragFinished(second);
+    if (surface() != nullptr) surface()->timelineDragFinished(second);
 }
 
 void QmlTimelineModel::userInteractionStarted()
 {
-    if (backend_ != nullptr) backend_->shellTimelineUserInteractionStarted();
+    if (surface() != nullptr) surface()->timelineUserInteractionStarted();
 }
 
 void QmlTimelineModel::surfaceReady()
 {
-    if (backend_ != nullptr) backend_->shellTimelineSurfaceReady();
+    if (surface() != nullptr) surface()->timelineSurfaceReady();
 }
 
 void QmlTimelineModel::followPreviewToggled(bool enabled)
 {
-    if (backend_ != nullptr) backend_->shellTimelineFollowPreviewToggled(enabled);
+    if (surface() != nullptr) surface()->setFollowPreviewEnabled(enabled);
 }
 
 }  // namespace miacode::qml_ui

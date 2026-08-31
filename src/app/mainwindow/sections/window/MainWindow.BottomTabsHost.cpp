@@ -57,6 +57,85 @@ miacode::v2::JobProgressService* MainWindow::jobProgressService() const
     return jobProgress_;
 }
 
+// ---- miacode::v2::TimelineSurface ----
+// Thin forwarders. The shell* names on the window date from the v1 QuickShell
+// controller; the interface does not carry that history forward.
+
+QObject* MainWindow::timelineStateBridge() const
+{
+    return shellTimelineStateBridgeObject();
+}
+
+bool MainWindow::timelineSurfaceReady() const
+{
+    return shellTimelineSurfaceReady();
+}
+
+void MainWindow::navigateToSecond(double second)
+{
+    navigateShellTimelineToSecond(second);
+}
+
+void MainWindow::centerOnSecond(double second)
+{
+    centerShellTimelineNavigate(second);
+}
+
+void MainWindow::wheelNavigateToSecond(double second)
+{
+    wheelShellTimelineNavigate(second);
+}
+
+void MainWindow::timelineDragStarted()
+{
+    shellTimelineDragStarted();
+}
+
+void MainWindow::timelineDragFinished(double second)
+{
+    shellTimelineDragFinished(second);
+}
+
+void MainWindow::timelineUserInteractionStarted()
+{
+    shellTimelineUserInteractionStarted();
+}
+
+void MainWindow::setFollowPreviewEnabled(bool enabled)
+{
+    shellTimelineFollowPreviewToggled(enabled);
+}
+
+QString MainWindow::bottomTabsCurrentTabId() const
+{
+    return shellBottomTabsCurrentTabId();
+}
+
+void MainWindow::setBottomTabsCurrentTabId(const QString& tabId)
+{
+    setShellBottomTabsCurrentTab(tabId);
+}
+
+bool MainWindow::bottomTabsVisible() const
+{
+    return shellBottomTabsVisible();
+}
+
+bool MainWindow::timelineTabVisible() const
+{
+    return shellTimelineTabVisible();
+}
+
+bool MainWindow::muriTabVisible() const
+{
+    return shellMuriTabVisible();
+}
+
+bool MainWindow::validationTabVisible() const
+{
+    return shellValidationTabVisible();
+}
+
 bool MainWindow::shellTimelineSurfaceReady() const
 {
     return quickTimelineSurfaceReady_;

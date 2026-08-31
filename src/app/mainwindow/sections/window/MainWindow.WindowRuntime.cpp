@@ -322,6 +322,7 @@ MainWindow::~MainWindow()
     applicationServices_.setEditorPageRouter(nullptr);
     applicationServices_.setMediaToolsEngine(nullptr);
     applicationServices_.setLatencyEngine(nullptr);
+    applicationServices_.setTimelineSurface(nullptr);
 
     // Original diagnostic with member-touching .arg() chain — kept for
     // completeness but now safe because the bare marker above already

@@ -47,9 +47,11 @@ QVector<miacode::qml_ui::AnalysisRow> muriRowsForSnapshot(
 
 QmlAnalysisModel::QmlAnalysisModel(
     MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
-    miacode::v2::AnalysisService& analysisService, QObject* parent)
+    miacode::v2::AnalysisService& analysisService,
+    miacode::v2::TimelineSurface*& surfaceSlot, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
+    , surfaceSlot_(&surfaceSlot)
     , workspace_(&workspace)
     , analysisService_(&analysisService)
 {
@@ -117,7 +119,7 @@ void QmlAnalysisModel::completeRowActivation(
     const miacode::qml_ui::AnalysisProjection current = projection_;
     if (!miacode::qml_ui::analysisRowCanActivate(
             current, pending, current.difficultyId)) return;
-    if (second >= 0.0) backend_->navigateShellTimelineToSecond(second);
+    if (second >= 0.0 && surface() != nullptr) surface()->navigateToSecond(second);
 }
 
 void QmlAnalysisModel::cancelRowActivation(
@@ -144,7 +146,7 @@ void QmlAnalysisModel::refresh()
         && analysisSnapshot.revision == workspaceSnapshot.revision;
     projection_ = miacode::qml_ui::projectAnalysis(
         analysisSnapshot, workspaceSnapshot.activeDifficultyId, workspaceSnapshot.revision,
-        current && backend_ != nullptr && !backend_->ignoreMuriIssuePrompts()
+        current && surface() != nullptr && !surface()->ignoreMuriIssuePrompts()
             ? muriRowsForSnapshot(analysisSnapshot)
                 : QVector<miacode::qml_ui::AnalysisRow>());
     if (activationState_.hasPending() && !miacode::qml_ui::analysisRowCanActivate(

@@ -41,6 +41,7 @@
 #include "app/v2/EditorPageRouter.h"
 #include "app/v2/LatencyEngine.h"
 #include "app/v2/MediaToolsEngine.h"
+#include "app/v2/TimelineSurface.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -129,7 +130,8 @@ class PreviewProgressStatsCache;
 class MainWindow : public QMainWindow,
                    public miacode::v2::EditorPageRouter,
                    public miacode::v2::MediaToolsEngine,
-                   public miacode::v2::LatencyEngine
+                   public miacode::v2::LatencyEngine,
+                   public miacode::v2::TimelineSurface
 {
     Q_OBJECT
 
@@ -360,7 +362,6 @@ public:
     bool applyChartTextThroughWorkspace(const QString& text);
     DocumentValidationSnapshot documentValidationSnapshot() const;
     QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
-    bool ignoreMuriIssuePrompts() const;
     void invalidateDocumentValidationRevision();
     bool validateActiveDocument();
     void setQuickShellRootWindow(QWindow* window);
@@ -721,6 +722,24 @@ public:
     void applyDetectorOffset(double seconds) override;
     void applyDetectorClockCount(int clockCount) override;
     miacode::latency::LatencySandboxController* sandbox() const override;
+
+    // ---- miacode::v2::TimelineSurface ----
+    QObject* timelineStateBridge() const override;
+    bool timelineSurfaceReady() const override;
+    void navigateToSecond(double second) override;
+    void centerOnSecond(double second) override;
+    void wheelNavigateToSecond(double second) override;
+    void timelineDragStarted() override;
+    void timelineDragFinished(double second) override;
+    void timelineUserInteractionStarted() override;
+    void setFollowPreviewEnabled(bool enabled) override;
+    QString bottomTabsCurrentTabId() const override;
+    void setBottomTabsCurrentTabId(const QString& tabId) override;
+    bool bottomTabsVisible() const override;
+    bool timelineTabVisible() const override;
+    bool muriTabVisible() const override;
+    bool validationTabVisible() const override;
+    bool ignoreMuriIssuePrompts() const override;
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push
