@@ -319,6 +319,7 @@ MainWindow::~MainWindow()
     // it dies AFTER exportSection_ — this is what stops a late call from
     // reaching a destroyed section.
     applicationServices_.setExportEngine(nullptr);
+    applicationServices_.setEditorPageRouter(nullptr);
 
     // Original diagnostic with member-touching .arg() chain — kept for
     // completeness but now safe because the bare marker above already

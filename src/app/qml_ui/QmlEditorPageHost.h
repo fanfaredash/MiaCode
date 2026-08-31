@@ -1,5 +1,7 @@
 #pragma once
 
+#include "app/v2/EditorPageRouter.h"
+
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -16,7 +18,12 @@ class QmlEditorPageHost final : public QObject
     Q_PROPERTY(QObject* exportSession READ exportSession CONSTANT)
 
 public:
-    explicit QmlEditorPageHost(MainWindow& backend, QObject* parent = nullptr);
+    // `backend` supplies the menu/shortcut signals and the export session;
+    // every page switch goes through the router slot instead, so this host no
+    // longer needs friend access to the window.
+    explicit QmlEditorPageHost(MainWindow& backend,
+                               miacode::v2::EditorPageRouter*& routerSlot,
+                               QObject* parent = nullptr);
 
     QString activePageId() const { return activePageId_; }
     bool overlayActive() const { return !activePageId_.isEmpty(); }
@@ -47,6 +54,13 @@ private:
     void markExportPageActive();
 
     MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not to a snapshot: the window withdraws the
+    // router before teardown and that has to be visible here at once.
+    miacode::v2::EditorPageRouter** routerSlot_ = nullptr;
+    miacode::v2::EditorPageRouter* router() const
+    {
+        return routerSlot_ != nullptr ? *routerSlot_ : nullptr;
+    }
     QString activePageId_;
     int resumeDifficultyId_ = 0;
 };

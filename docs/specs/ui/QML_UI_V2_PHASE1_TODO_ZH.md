@@ -570,6 +570,27 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          公开它们等于把一件本该消失的事写进正式接口，随第 3 项一起消失。
      10. 顺带修好上一轮的一处文档损坏：清册的按文件分块在正则重生成时丢了换行，
          把小标题粘到了上一条 bullet 后面（15 块显示成 8 块）。本次整节按结构重新生成。
+     11. **页面路由改由 `miacode::v2::EditorPageRouter` 承接，QML 类型的 friend 授权归零，
+         方法 124 → 118**。四个 `switchTo*Field` 声明在私有 `.inc` 里，上一轮判定「公开它们
+         等于把一件本该消失的事写进正式接口」——这个判断成立，所以做法和导出引擎一样是**先立接口**：
+         七个操作（`hasActiveDifficulty` / `activeDifficultyId` / 四个 `enter*Page` /
+         `packChartAsZip`），`MainWindow` 实现，`switchTo*Field` **保持私有**。
+         `QmlEditorPageHost` 现在只认接口，`friend class QmlEditorPageHost` 删除——
+         至此 `MainWindow.h` 对 QML 类型的 friend 授权全部为 0，只剩 widget 侧的
+         `LatencySandboxController`（随阶段 4 处理）。
+         槽位纪律与导出引擎一致：装配对象持槽，窗口在 `~MainWindow` 最开头撤销。
+     12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
+         它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
+         先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets
+         导出对话框一起删了；侧栏是 QML，那个 spinner 建在**隐藏**的 `outlineList_->viewport()` 上，
+         永远到不了屏幕。留下来的只有「报告一个尚未发生的成功」——保存守卫拒绝切换时，
+         QML 页面宿主仍会把导出页显示出来，外壳和文档对「用户在哪一页」的认知就此不一致。
+         现在改为同步执行并返回真实结果（`currentWidget() == exportPlaceholderPage_`），
+         三个 `*OutlineExportBusySpinner` 辅助函数删除。
+         `editor_page_router_spec` 守住这一条，反向验证过：把延迟改回去立刻失败。
+         **未做、已记录**：`outlineBusySpinner_` 本体和 `tickOutlineBusySpinner()`
+         在导出流程里还有 4 处调用，同样画在隐藏 widget 上、同样看不见。整套删除会扩散到
+         导出流程，不属于本项，留作阶段 4 的清理。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
       *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。

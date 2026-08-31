@@ -155,9 +155,6 @@ public:
     // while the (slow) export-page build runs after switchToExportField().
     // Positioning is separate so sidebar rebuilds can re-anchor an active
     // spinner after rows move.
-    bool positionOutlineExportBusySpinner();
-    void showOutlineExportBusySpinner();
-    void hideOutlineExportBusySpinner();
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();

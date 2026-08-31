@@ -692,6 +692,37 @@ bool MainWindow::switchToExportField()
     return documentSection_->switchToExportField();
 }
 
+// ---- miacode::v2::EditorPageRouter ----
+//
+// The QML page host names the router, never these switchTo*Field entry points:
+// they still drive the hidden QStackedWidget, and that half of the work leaves
+// with the window in stage 4.
+
+bool MainWindow::enterDifficultyPage(int difficultyId)
+{
+    return switchToDifficultyField(difficultyId);
+}
+
+bool MainWindow::enterMetadataPage()
+{
+    return switchToMetadataField();
+}
+
+bool MainWindow::enterLatencyPage()
+{
+    return switchToLatencyField();
+}
+
+bool MainWindow::enterExportPage()
+{
+    return switchToExportField();
+}
+
+void MainWindow::packChartAsZip()
+{
+    onPackAsZip();
+}
+
 void MainWindow::activateInitialField()
 {
     documentSection_->activateInitialField();

@@ -154,6 +154,9 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
     // through this window's member. Cleared at the top of ~MainWindow so the
     // page cannot call into a half-destroyed section.
     applicationServices_.setExportEngine(exportSection_.get());
+    // Page routing takes the same door: the QML page host asks the router, not
+    // this window.
+    applicationServices_.setEditorPageRouter(this);
     preferencesSection_ = std::make_unique<PreferencesSection>(*this, ui_, state_);
     previewSection_ = std::make_unique<PreviewSection>(*this, ui_, state_);
     validationSection_ = std::make_unique<ValidationSection>(*this, ui_, state_);

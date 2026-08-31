@@ -38,6 +38,7 @@
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/ApplicationServices.h"
+#include "app/v2/EditorPageRouter.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -120,7 +121,10 @@ class PreviewProgressStatsCache;
 
 // The three QuickShell* abstract bases are gone with the polling controller
 // that needed them: the QML sessions call these methods on MainWindow directly.
-class MainWindow : public QMainWindow
+// Implements miacode::v2::EditorPageRouter so the QML page host can switch
+// pages without naming this class. The router half is the part that survives
+// stage 4; the hidden QStackedWidget the switches also drive is not.
+class MainWindow : public QMainWindow, public miacode::v2::EditorPageRouter
 {
     Q_OBJECT
 
@@ -136,7 +140,6 @@ class MainWindow : public QMainWindow
     // with an explicitly selected difficulty and reads document/difficulty
     // state for its badge row — same narrow-feature rationale as the
     // latency page above.
-    friend class QmlEditorPageHost;
 
 public:
     // Phase 4c — non-owning accessor for the preview stage-media host
@@ -688,6 +691,18 @@ public:
     // re-derive the negative-time intro region after an intro edit.
     double currentPreviewAuthoritativeAudioClockSecond() const;
     void refreshExportIntroState();
+
+    // ---- miacode::v2::EditorPageRouter ----
+    // Thin forwarders onto the existing switchTo*Field entry points, which stay
+    // private: they still drive the hidden widget stack, and that is exactly
+    // what must not become public API.
+    bool hasActiveDifficulty() const override;
+    int activeDifficultyId() const override;
+    bool enterDifficultyPage(int difficultyId) override;
+    bool enterMetadataPage() override;
+    bool enterLatencyPage() override;
+    bool enterExportPage() override;
+    void packChartAsZip() override;
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push

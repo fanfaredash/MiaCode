@@ -124,6 +124,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/v2/ApplicationServices.cpp
     src/app/v2/ApplicationServices.h
+    src/app/v2/EditorPageRouter.h
     src/app/v2/ExportEngine.h
     src/app/v2/PreviewAppearanceState.cpp
     src/app/v2/PreviewAppearanceState.h
@@ -1693,6 +1694,46 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
     )
+
+    # Stage 3.5 items 2-3: the editor page-routing seam. EditorPageRouter is not
+    # even a QObject, so anything Qt-GUI-shaped creeping into the contract fails
+    # to link here.
+    miacode_add_dev_tool(editor_page_router_spec TEST
+        SOURCES
+            src/tools/v2/EditorPageRouterSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            ${_miacode_muri_analysis_core}
+            src/timeline/TimelineSlowRefresh.h
+            src/timeline/TimelineSlowRefresh.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/app/v2/ApplicationServices.h
+            src/app/v2/ApplicationServices.cpp
+            src/app/v2/AnalysisService.h
+            src/app/v2/AnalysisService.cpp
+            src/app/v2/ChartDropImportService.h
+            src/app/v2/ChartDropImportService.cpp
+            src/app/v2/ChartWorkspace.h
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/ChartWorkspaceFileService.h
+            src/app/v2/ChartWorkspaceFileService.cpp
+            src/app/v2/EditorPageRouter.h
+            src/app/v2/EditorSyncController.h
+            src/app/v2/EditorSyncController.cpp
+            src/app/v2/JobProgressService.h
+            src/app/v2/JobProgressService.cpp
+            src/app/v2/PreviewAppearanceState.h
+            src/app/v2/PreviewAppearanceState.cpp
+            src/app/v2/UiRequestService.h
+            src/app/v2/UiRequestService.cpp
+            resources/fonts.qrc
+            resources/slide_data.qrc
+        LIBS Qt6::Core Qt6::Gui Qt6::Test
+        INCLUDES src src/app/ui src/audio src/common src/core/chart src/core/chart/parser src/core/video src/timeline src/tools
+    )
+    target_compile_definitions(editor_page_router_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     # Stage 3.5 item 2: the export page's engine seam. The implementation still
     # lives inside a QMainWindow, so linking Core+Gui+Test only is how a

@@ -11,8 +11,8 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **124**，直接读取的 `MainWindow` 私有成员 **0**，
-> friend 授权 **1** 个 QML 类型。
+> **计数（2026-09-01）**：方法 **118**，直接读取的 `MainWindow` 私有成员 **0**，
+> friend 授权 **0** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
 > 没进展：耦合从「没有接口」降级成窄接口时，用到的名字要么本来就在清单里，要么一进一出。
@@ -36,6 +36,7 @@
 | 2026-09-01 | 剩下三个可直接换掉的私有成员改走窄访问器 | 124 | 1 |
 | 2026-09-01 | 公开 8 个 QML 页面本就在调用的方法，删掉 3 个 friend 授权（5 → 2） | 124 | 1 |
 | 2026-09-01 | 导出引擎改由 `miacode::v2::ExportEngine` 接口承接，`QmlExportSession` friend 授权删除（2 → 1） | 124 | **0** |
+| 2026-09-01 | 页面路由改由 `miacode::v2::EditorPageRouter` 接口承接，最后一条 friend 授权删除（1 → **0**） | **118** | **0** |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -55,14 +56,11 @@
 variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Standard」的状态。现在 variant 由
 `PreviewAppearanceState::variantForDirectory()` 单点推导，`setSkinDirectory()` 不接受不一致的组合。
 
-## friend 授权（必须清零）
+## friend 授权（已清零）
 
-| friend | 当前用途 | 去处 |
-| --- | --- | --- |
-| `QmlEditorPageHost` | 四个 `switchTo*Field` 加 `hasActiveDifficulty` / `onPackAsZip` | 页面路由改由 QML 宿主拥有（第 3 项）。这几个入口驱动隐藏 widget 栈，公开它们等于把一件本该消失的事写进正式接口 |
-
-**已删除（2026-09-01）**：`QmlCommandService`、`QmlPreviewModel`、
-`miacode::qml_ui::QmlPreviewSettingsModel`、`QmlExportSession`。
+**QML 类型对 `MainWindow` 的 friend 授权已全部删除（2026-09-01）**：
+`QmlCommandService`、`QmlPreviewModel`、`miacode::qml_ui::QmlPreviewSettingsModel`、
+`QmlExportSession`、`QmlEditorPageHost`。
 
 前三个的做法是把它们**本来就在调用**的 8 个方法从私有改为公有，并集中成 `MainWindow.h` 里
 一个具名的「QML 页面的有界入口」块：5 个皮肤/判定线目录查询（纯路径解析与目录枚举，
@@ -70,11 +68,18 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 `persist` 参数，与既有的偏好设置公有面同形）、`onPreferences`。
 **清单计数一个都没动**——这 8 个名字本来就在清单里；变的是访问权从「无边界」变成「这 8 个」。
 
-`QmlExportSession` 是第四个，做法不同也必须不同：它要的 `exportSection_` 不是一个值，
-而是窗口内部的一整块引擎，加访问器只会把「页面依赖窗口的内脏」这件事写得更正式。
-所以先立接口（`miacode::v2::ExportEngine`，七个操作），再让 section 实现它。
-剩下的 `currentPreviewAuthoritativeAudioClockSecond` / `refreshExportIntroState`
-是两个查询/通知，按前三个的办法公开。
+后两个做法不同，也必须不同——它们要的不是值，是窗口内部的整块能力，加访问器只会把
+「页面依赖窗口的内脏」写得更正式：
+
+- `QmlExportSession` 要的 `exportSection_` 是导出引擎。先立接口
+  （`miacode::v2::ExportEngine`，七个操作），再让 section 实现它。剩下的
+  `currentPreviewAuthoritativeAudioClockSecond` / `refreshExportIntroState`
+  是两个查询/通知，按前三个的办法公开。
+- `QmlEditorPageHost` 要的四个 `switchTo*Field` 声明在私有 `.inc` 里，而且它们**同时**驱动
+  一个只因为窗口还没删掉才存在的隐藏 `QStackedWidget`——公开它们等于把第 3 项要消灭的东西
+  写进正式接口。所以同样先立接口（`miacode::v2::EditorPageRouter`，七个操作），
+  由 `MainWindow` 实现；`switchTo*Field` 保持私有。等 widget 栈消失时，实现掉一半、
+  留下领域那一半，页面宿主一行不动。
 
 > `miacode::latency::LatencySandboxController` 也是 friend，但它是 widget 侧组件，不属于本清册；
 > 它随阶段 4 的 `MainWindow` 一并处理。
@@ -165,7 +170,11 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 实现仍然是窗口里的那 3,600 行 section，它把自己装进装配对象的槽位；等实现真的搬出窗口时，
 **只有实现侧要改**，页面一行不动。`QmlExportSession` 的 `friend` 授权随之删除。
 
-页面切换仍走隐藏 `DocumentSection` 的 `switchTo*Field`，随第 3 项消失。
+**页面路由的接缝同日立起**：`QmlEditorPageHost` 依赖 `miacode::v2::EditorPageRouter`，
+不再认识 `switchTo*Field`——那四个入口保持私有，因为它们**同时**驱动一个只因为窗口还没删掉
+才存在的隐藏 `QStackedWidget`，公开它们等于把第 3 项要消灭的东西写进正式接口。
+等 widget 栈消失时，实现掉一半、留下领域那一半（保存守卫、播放头保留、难度复位、
+底栏页签模式、校验装饰、窗口标题），页面宿主一行不动。
 
 **下一步的已知陷阱（`document_` 读取已改走公有访问器，但源头问题仍在）**：
 `documentDifficultyIds()` / `documentDifficultyChartText()` 读的仍是 `MainWindow` 的文档副本，
@@ -192,16 +201,9 @@ variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Sta
 - `resolvePreviewCustomOutlineDir`
 - `resolvePreviewSkinRootDir`
 
-**`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 8，私有成员 0
+**`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 1，私有成员 0
 
-- `documentActiveDifficultyId`
-- `hasActiveDifficulty`
-- `onPackAsZip`
 - `qmlExportSession`
-- `switchToDifficultyField`
-- `switchToExportField`
-- `switchToLatencyField`
-- `switchToMetadataField`
 
 ### 文档（→ `ChartWorkspace` / `DocumentService`）
 

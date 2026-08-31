@@ -16,7 +16,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , preview_(backend, this)
     , timeline_(backend, this)
     , commands_(backend, document_, this)
-    , pages_(backend, this)
+    , pages_(backend, services.editorPageRouterSlot(), this)
     , coverExport_(*backend.qmlExportSession(), services.uiRequests(), this)
     , editor_(this)
     , shortcuts_(this)

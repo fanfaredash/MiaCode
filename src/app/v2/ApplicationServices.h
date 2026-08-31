@@ -13,9 +13,10 @@
 
 namespace miacode::v2 {
 
-// Only the slot lives here; including ExportEngine.h would drag the whole
+// Only the slots live here; including ExportEngine.h would drag the whole
 // VideoExportTask definition into every consumer of the assembly.
 class ExportEngine;
+class EditorPageRouter;
 
 // The parser validation locale matching the session UI language.
 //
@@ -85,6 +86,13 @@ public:
     ExportEngine* exportEngine() const { return exportEngine_; }
     void setExportEngine(ExportEngine* engine) { exportEngine_ = engine; }
 
+    // Same arrangement, same reason: switching pages still needs the window's
+    // save guard, playback teardown and title update, so the window installs
+    // itself here and withdraws before it starts tearing down.
+    EditorPageRouter*& editorPageRouterSlot() { return editorPageRouter_; }
+    EditorPageRouter* editorPageRouter() const { return editorPageRouter_; }
+    void setEditorPageRouter(EditorPageRouter* router) { editorPageRouter_ = router; }
+
     SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
 
 private:
@@ -100,6 +108,7 @@ private:
     JobProgressService jobProgress_;
     PreviewAppearanceState previewAppearance_;
     ExportEngine* exportEngine_ = nullptr;
+    EditorPageRouter* editorPageRouter_ = nullptr;
 };
 
 }  // namespace miacode::v2

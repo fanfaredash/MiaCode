@@ -697,12 +697,6 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     if (ui_.outlineList_->verticalScrollBar() != nullptr) {
         ui_.outlineList_->verticalScrollBar()->setValue(restoreScrollValue);
     }
-    // The rebuild can move the Export row (e.g. the previously active
-    // difficulty's auto-expanded bookmark group collapses when the export
-    // page takes over) — re-anchor the busy spinner to the row's new rect.
-    if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
-        positionOutlineExportBusySpinner();
-    }
     // The export page derives its difficulty badges + card availability from
     // the same document state this sidebar reflects — refresh it on the same
     // triggers (document load, difficulty add/delete, page switches). Cheap.
@@ -886,68 +880,16 @@ bool MainWindow::DocumentSection::switchToExportField()
     if (ui_.exportPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return false;
     }
-    // The export page is noticeably slow to switch to — building its embedded
-    // video panel blocks the UI thread for a while. Show a busy spinner over
-    // the "Export" sidebar row and defer the heavy build one event-loop tick so
-    // the spinner paints (and starts spinning) before the thread blocks. The
-    // spinner's own active state guards against a double-trigger landing two
-    // deferred builds in flight.
-    if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
-        return true;
-    }
-    showOutlineExportBusySpinner();
-    QTimer::singleShot(0, &owner_, [this]() {
-        performSwitchToExportField();
-        hideOutlineExportBusySpinner();
-    });
-    return true;
-}
-
-bool MainWindow::DocumentSection::positionOutlineExportBusySpinner()
-{
-    if (ui_.outlineBusySpinner_ == nullptr || ui_.outlineList_ == nullptr) {
-        return false;
-    }
-    QListWidgetItem* exportItem = nullptr;
-    for (int i = 0; i < ui_.outlineList_->count(); ++i) {
-        QListWidgetItem* item = ui_.outlineList_->item(i);
-        if (item != nullptr && item->data(Qt::UserRole).toString() == QLatin1String("export")) {
-            exportItem = item;
-            break;
-        }
-    }
-    if (exportItem == nullptr) {
-        return false;
-    }
-    const QRect rowRect = ui_.outlineList_->visualItemRect(exportItem);
-    if (!rowRect.isValid() || rowRect.isEmpty()) {
-        return false;
-    }
-    auto* spinner = ui_.outlineBusySpinner_;
-    const int x = rowRect.right() - spinner->width() - 8;
-    const int y = rowRect.top() + (rowRect.height() - spinner->height()) / 2;
-    spinner->move(x, y);
-    return true;
-}
-
-void MainWindow::DocumentSection::showOutlineExportBusySpinner()
-{
-    if (!positionOutlineExportBusySpinner()) {
-        return;
-    }
-    auto* spinner = ui_.outlineBusySpinner_;
-    spinner->setColor(UiTheme::colors().iconPrimary);
-    spinner->start();
-    // Paint the first frame synchronously so the spinner is on screen before the
-    // deferred (and UI-thread-blocking) page build begins.
-    spinner->repaint();
-}
-
-void MainWindow::DocumentSection::hideOutlineExportBusySpinner()
-{
-    if (ui_.outlineBusySpinner_ != nullptr) {
-        ui_.outlineBusySpinner_->stop();
-    }
+    // This used to defer the switch one event-loop tick behind a busy spinner
+    // drawn over the "Export" sidebar row, because building the embedded video
+    // panel blocked the UI thread. Both halves of that are gone: the embedded
+    // panel was deleted with the Widgets export dialog, and the sidebar is QML —
+    // the spinner lived on the hidden widget list's viewport, so it could never
+    // reach a screen. What the deferral did keep doing was return true BEFORE
+    // the switch ran, which told the QML page host to show the export page even
+    // on a refused switch. Running it inline reports the real answer.
+    performSwitchToExportField();
+    return ui_.editorStack_->currentWidget() == ui_.exportPlaceholderPage_;
 }
 
 void MainWindow::tickOutlineBusySpinner()

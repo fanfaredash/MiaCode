@@ -21,9 +21,10 @@ src/
                     destroyed after it. Nothing else in src/app may construct
                     one of these — application_services_spec scans the tree and
                     fails if it does.
-                    ExportEngine is the export page's contract; the assembly
-                    holds only the SLOT because the implementation is still
-                    MainWindow::ExportSection. The window installs itself and
+                    ExportEngine (export page) and EditorPageRouter (page
+                    switching) are contracts the QML layer names instead of
+                    MainWindow; the assembly holds only their SLOTS because both
+                    implementations are still the window. The window installs itself and
                     withdraws at the top of ~MainWindow, and consumers bind to
                     exportEngineSlot() rather than snapshotting the pointer.
                     PreviewAppearanceState holds the eight values that decide
@@ -95,7 +96,11 @@ Path-translation table for stale docs/comments:
   doc to set equality — new coupling fails, and migrating something without deleting its row
   fails too. Update the doc in the same commit as the work. Prefer removing a `friend` grant or a
   private-member read over shaving a method: a friend grant is unbounded access, so trading it
-  for named public calls is progress even when the method count rises.
+  for named public calls is progress even when the method count rises. When the thing the QML
+  layer wants is a whole capability rather than a value (the export engine, page switching),
+  declare an interface in `src/app/v2/` and let MainWindow implement it — publishing those
+  entry points would formalize widget-era mechanics that are supposed to disappear. As of
+  2026-09-01 no QML type is a `friend` of MainWindow.
 - **Every library `MiaCode` links is on an allowlist**: `docs/ops/DEPENDENCY_ALLOWLIST.md`, guarded
   by `dependency_allowlist_spec`. Adding a dependency without a doc row fails the suite, and so
   does leaving a stale row behind. `src/tools/net` is deliberately NOT in the product target — it

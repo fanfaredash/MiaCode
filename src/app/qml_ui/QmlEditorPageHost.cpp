@@ -22,9 +22,12 @@ void appendPageHostLog(const QString& action, const QString& detail = QString())
 
 } // namespace
 
-QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
+QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend,
+                                     miacode::v2::EditorPageRouter*& routerSlot,
+                                     QObject* parent)
     : QObject(parent)
     , backend_(&backend)
+    , routerSlot_(&routerSlot)
 {
     // The menu action and the chart.normalize shortcut land on MainWindow;
     // re-emit so the editor sees one request regardless of where it came from.
@@ -61,28 +64,31 @@ void QmlEditorPageHost::markExportPageActive()
 
 void QmlEditorPageHost::rememberResumeDifficulty()
 {
-    if (backend_ == nullptr) {
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr) {
         return;
     }
-    if (backend_->hasActiveDifficulty() && backend_->documentActiveDifficultyId() > 0) {
-        resumeDifficultyId_ = backend_->documentActiveDifficultyId();
+    if (pages->hasActiveDifficulty() && pages->activeDifficultyId() > 0) {
+        resumeDifficultyId_ = pages->activeDifficultyId();
     }
 }
 
 bool QmlEditorPageHost::resumeChartOrMetadata()
 {
-    if (backend_ == nullptr) {
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr) {
         return false;
     }
-    if (resumeDifficultyId_ > 0 && backend_->switchToDifficultyField(resumeDifficultyId_)) {
+    if (resumeDifficultyId_ > 0 && pages->enterDifficultyPage(resumeDifficultyId_)) {
         return true;
     }
-    return backend_->switchToMetadataField();
+    return pages->enterMetadataPage();
 }
 
 bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
 {
-    if (backend_ == nullptr || backend_->qmlExportSession() == nullptr) {
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr || backend_ == nullptr || backend_->qmlExportSession() == nullptr) {
         return false;
     }
     rememberResumeDifficulty();
@@ -91,12 +97,10 @@ bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
     } else {
         backend_->qmlExportSession()->setActiveTab(QStringLiteral("export"));
     }
-    if (!backend_->switchToExportField()) {
+    if (!pages->enterExportPage()) {
         return false;
     }
-    QTimer::singleShot(0, this, [this]() {
-        markExportPageActive();
-    });
+    markExportPageActive();
     return true;
 }
 
@@ -107,11 +111,12 @@ bool QmlEditorPageHost::openExportPage()
 
 bool QmlEditorPageHost::openLatencyPage()
 {
-    if (backend_ == nullptr) {
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr) {
         return false;
     }
     rememberResumeDifficulty();
-    if (!backend_->switchToLatencyField()) {
+    if (!pages->enterLatencyPage()) {
         return false;
     }
     // The page is QML now; only the active id has to change so MainSplitView
@@ -125,7 +130,7 @@ bool QmlEditorPageHost::openLatencyPage()
 
 bool QmlEditorPageHost::leaveOverlayPage()
 {
-    if (backend_ == nullptr) {
+    if (router() == nullptr || backend_ == nullptr) {
         return false;
     }
     if (!overlayActive()) {
@@ -163,7 +168,7 @@ void QmlEditorPageHost::openBatchExport()
 
 bool QmlEditorPageHost::openCoverExport(int difficultyId)
 {
-    if (backend_ == nullptr) {
+    if (router() == nullptr || backend_ == nullptr) {
         return false;
     }
     // A direct export-page → cover-page navigation must release the video
@@ -185,8 +190,7 @@ bool QmlEditorPageHost::openCoverExport(int difficultyId)
 
 void QmlEditorPageHost::packAsZip()
 {
-    if (backend_ == nullptr) {
-        return;
+    if (miacode::v2::EditorPageRouter* const pages = router(); pages != nullptr) {
+        pages->packChartAsZip();
     }
-    backend_->onPackAsZip();
 }

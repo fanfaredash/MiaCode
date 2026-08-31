@@ -137,8 +137,6 @@
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();
-    bool hasActiveDifficulty() const;
-    int activeDifficultyId() const;
     QString activeChartText() const;
     miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;
     double parsedRawFirstSeconds(bool* ok = nullptr) const;
