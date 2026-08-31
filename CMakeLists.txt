@@ -362,6 +362,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/CoverCompositeRenderer.cpp
     src/tools/cover_export/SceneFrameRenderer.h
     src/tools/cover_export/SceneFrameRenderer.cpp
+    src/tools/cover_export/CoverFramePlaybackController.h
+    src/tools/cover_export/CoverFramePlaybackController.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewQuickD3D11ExportSession.h
@@ -1487,6 +1489,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     miacode_add_dev_tool(cover_frame_playback_controller_spec TEST
         SOURCES
             src/tools/cover_export/CoverFramePlaybackControllerSpec.cpp
+            src/tools/cover_export/CoverFramePlaybackController.h
+            src/tools/cover_export/CoverFramePlaybackController.cpp
         LIBS Qt6::Core
         INCLUDES src
     )
