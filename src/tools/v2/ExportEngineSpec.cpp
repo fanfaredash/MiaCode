@@ -1,6 +1,6 @@
 // Contract regression for the export engine seam.
 //
-// Stage 3.5 item 2: QmlExportSession used to reach MainWindow::exportSection_,
+// Stage 3.5 item 2: QmlExportSession used to reach MainWindow::videoExport_,
 // a private member holding a 3,600-line partial-class section — the last direct
 // private-member read anywhere in src/app/qml_ui. An accessor could not honestly
 // fix that: the page was depending on a concrete piece of the window's insides.
@@ -258,7 +258,7 @@ bool verifyTheExportSectionShowsNoWidgetDialogs(QTextStream& err)
     bool ok = true;
     int scanned = 0;
     QDirIterator walk(QStringLiteral(MIACODE_SOURCE_ROOT)
-                          + QStringLiteral("/src/app/mainwindow/sections/export"),
+                          + QStringLiteral("/src/app/runtime/sections/export"),
                       QStringList{QStringLiteral("*.cpp"), QStringLiteral("*.h")},
                       QDir::Files, QDirIterator::Subdirectories);
     while (walk.hasNext()) {

@@ -26,6 +26,9 @@ public:
     // surface exists.
     virtual QObject* timelineStateBridge() const = 0;
     virtual bool timelineSurfaceReady() const = 0;
+    // QML reports that the QSG item is live. Until this runs, deferred cursor
+    // flushes stay queued.
+    virtual void markSurfaceReady() = 0;
 
     // Three navigation entry points rather than one, because they differ in
     // what they do to the view: `navigateToSecond` is a plain jump, `centerOn`

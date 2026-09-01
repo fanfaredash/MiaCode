@@ -1,0 +1,336 @@
+#pragma once
+
+#include "runtime/Session.h"
+
+#include "app/v2/PreviewSurface.h"
+#include "app/v2/TimelineSurface.h"
+#include "audio/PreviewAudioDeviceChangePolicy.h"
+#include "audio/PreviewAudioDeviceCutoff.h"
+
+namespace miacode::preview_audio {
+struct PreviewAudioCompletion;
+}
+
+namespace miacode::runtime {
+
+class PlaybackHost final : public miacode::v2::PreviewSurface,
+                                      public miacode::v2::TimelineSurface {
+public:
+    PlaybackHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+
+    void resetPreviewTrackTimelineOffsets();
+    void applyWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
+    void refreshWaveformCache();
+    void refreshWaveformCache(double knownDurationSeconds);
+    bool hasActiveDifficulty() const;
+    // True when there is a chart the preview transport can play: either a real
+    // active difficulty, or the latency page's synthesized test chart. Playback
+    // gates use this so the latency audition reuses the exact same transport.
+    bool hasPreviewableChart() const;
+    int activeDifficultyId() const;
+    QString activeChartText() const;
+    miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;
+    double parsedRawFirstSeconds(bool* ok = nullptr) const;
+    double parsedFirstSeconds(bool* ok = nullptr) const;
+    double parsedWholeBpm(bool* ok = nullptr) const;
+    int parsedClockCount() const;
+    QString parsedLatencyMeterId() const;
+    void applyLatencyDetectorOffset(double seconds);
+    void applyLatencyDetectorBpm(double bpm);
+    void applyLatencyDetectorClockCount(int clockCount);
+    void setCurrentFilePath(const QString& path, bool suppressImmediateRefresh = false);
+    void updateWindowTitle();
+    void updateCurrentFileLabel();
+    QString editorText() const;
+    void scheduleTimelineRefresh();
+    void refreshTimelineMetadata();
+    void refreshTimelineQuickModelFromCurrentText();
+    bool timelineTabIsForeground() const;
+    bool quickTimelineBridgeReady() const;
+    void flushDeferredTimelineBridgeState();
+    void onTimelineHeaderNavigateRequested(double second);
+    void onTimelineUserInteractionStarted();
+    void onTimelineDragStarted();
+    void onTimelineWheelNavigateRequested(double second);
+    void onTimelineCenterNavigateRequested(double second);
+    void onTimelineDragFinished(double second);
+    void onTimelineFollowPreviewToggled(bool enabled);
+    void onTimelineViewportLockToggled(bool enabled);
+    void onTimelineFollowProgressToggled(bool enabled);
+    void onTimelineSyncToggled(bool enabled);
+    void applyLatestTimelinePreviewStateToPausedPreview();
+    void requestTimelineSlowRefresh();
+    void dispatchTimelineSlowRefresh();
+    void scheduleTimelineAnalysisRefresh(
+        const TimelineSlowRefreshRequest& request,
+        const SimaiNativeParseResult& parseResult,
+        const TimelinePreviewRefreshState& previewState
+    );
+    bool scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs = -1);
+    void requestTimelineAnalysisDispatch(int delayMs = -1);
+    void dispatchTimelineAnalysisRefresh();
+    void rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers);
+    double timelineSecondForCursor(int line, int col) const;
+    bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
+    void updateTimelineCursorFromEditorLocation(int line, int col, bool centerView);
+    void navigateTimelineToSecond(double second, bool focusEditor = true);
+    void deferTimelineCursorBridgeUpdate(double second, bool centerView);
+    bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
+    bool moveEditorCursorToTimelineLocation(
+        int line,
+        int col,
+        bool selectToken,
+        bool focusEditor,
+        bool centerView,
+        bool suppressSignals,
+        qint64* cursorMoveElapsedNs = nullptr,
+        qint64* followOverlayElapsedNs = nullptr
+    );
+    void updatePreviewFollowDecorationForTimelineBlueLine(
+        double second,
+        bool ensureVisible = false,
+        qint64* resolveElapsedNs = nullptr,
+        qint64* followOverlayElapsedNs = nullptr,
+        TimelineQuickModel::PreviewFollowSpan* spanOut = nullptr);
+    void syncEditorCursorToPreviewSecond(
+        double second,
+        bool centerView = true,
+        bool ensureVisibleWhenPaused = false);
+    // See MainWindowMemberStorage.inc `touchPadAuthoringAnchor*`: maps a playhead
+    // parked by a touch-authoring seek back to the token that click wrote to.
+    double touchPadAuthoringAnchoredSecond(double previewSecond) const;
+    void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
+    double previewDurationSeconds() const;
+    double previewPlaybackEndSeconds() const;
+    void updatePreviewSliderRange();
+    void updatePreviewSliderPosition(double second);
+    void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
+    void clearPreviewObjectStats();
+    void emitChartSwitchResourceGauge();
+    int updatePreviewStatsLayoutMode(int hostWidth = -1);
+    int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
+    double normalizedPreviewCanvasAspectRatio(double ratio) const;
+    QString previewFrameRateModeStorageValue(PreviewCanvasFrameRateMode mode) const;
+    QString previewCanvasFrameRateModeStorageValue() const;
+    QString previewStageMediaFrameRateModeStorageValue() const;
+    QString timelineFrameRateModeStorageValue() const;
+    double currentPreviewCanvasRefreshRate() const;
+    PreviewCanvasFrameRateMode currentPreviewStageMediaFrameRateMode() const;
+    bool currentVideoDecodePrefersSoftware() const;
+    PreviewCanvasFrameRateMode currentTimelineFrameRateMode() const;
+    bool previewCanvasUsesFrameSwappedPacing() const;
+    double targetRefreshRateForFrameRateMode(PreviewCanvasFrameRateMode mode) const;
+    qint64 previewCanvasTargetFrameIntervalNs() const;
+    qint64 targetFrameIntervalNsForFrameRateMode(PreviewCanvasFrameRateMode mode) const;
+    qint64 timelineTargetFrameIntervalNs() const;
+    void refreshTimelineWaveformPhaseCompensation();
+    void applyPreviewStageMediaFrameRateMode();
+    void resetQtPreviewFixedFramePacing();
+    void scheduleNextQtPreviewTick();
+    void requestNextDisplayRefreshPreviewFrame();
+    void requestNextFixedIntervalPreviewFrame();
+    void advanceFixedIntervalGateAfterPresent();
+    void requestNextPreviewCanvasFrame();
+    void refreshPreviewFrameRateTimers();
+    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
+    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setPreviewCanvasAspectRatio(double ratio, bool persistState);
+    void togglePreviewFullscreen();
+    void enterPreviewFullscreen();
+    void exitPreviewFullscreen();
+    void updatePreviewFullscreenButtonAppearance();
+    bool shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const;
+    QRect previewFullscreenControlCardRect(bool visible) const;
+    void showPreviewFullscreenControls(bool animate = true);
+    void hidePreviewFullscreenControls(bool animate = true);
+    void schedulePreviewFullscreenControlsAutoHide();
+    void pollPreviewFullscreenCursor();
+    void updatePreviewFullscreenOverlayGeometry();
+    void updatePreviewWorkspaceLayout();
+    void cacheWorkspaceLayoutSizes();
+    void restoreWorkspaceLayoutSizes();
+    void setWorkspacePanelsSwapped(bool swapped, bool persistState);
+    void applyWorkspacePanelArrangement();
+    void refreshLayoutAfterPageSwitch();
+    void updatePreviewPanelLayout(int panelWidthOverride = -1, int panelHeightOverride = -1);
+    void updatePreviewObjectStats(double second);
+    QString formatPreviewTimestamp(double second) const;
+    void showPreviewSliderTimeHint(int sliderValue);
+    void requestPausedPreviewSeek(
+        double second,
+        bool centerView,
+        bool submitMediaImmediately = true,
+        bool logHotPath = true);
+    void applyPausedPreviewVisualSecond(double second, bool centerView);
+    void submitPausedMediaSeek(double second, quint64 generation);
+    void maybeSubmitLatestPausedMediaSeek();
+    void handlePausedPreviewMediaSeekCompleted(double second, quint64 generation);
+    void schedulePreviewSeek(double second, bool centerView);
+    bool stepPreviewBySeconds(double deltaSeconds, bool centerView);
+    bool handlePreviewSeekWheel(QWheelEvent* event);
+    void beginPreviewHeldSeek(int direction, int key);
+    void stopPreviewHeldSeek(int key = 0);
+    void applyPreviewHeldSeekTick();
+    void seekPreviewToSecond(double second, bool centerView);
+    void seekPreviewDiscreteToSecond(double second, bool centerView);
+    void applyPreviewPlaybackRate(double rate);
+    bool preparePreviewStartState();
+    void onStopPreview();
+    void onTogglePreviewPause();
+    // Export-page negative-time intro region: the 片头 occupies [-duration, 0)
+    // on the preview timeline (添加片头 on). Scrub/pause shows a static intro
+    // frame; play advances through it (overlay + opening sfx) and crosses 0 into
+    // the chart audition. handleExportIntroSliderSeek routes a slider seek into
+    // the region (negative) vs the chart (>=0); refreshExportIntroState reacts to
+    // the 添加片头 toggle / install (resizes the slider, enters/leaves the region).
+    bool exportIntroEnabled() const;
+    double exportIntroLowerBoundSeconds() const;
+    void setupExportIntroOverlayData();
+    void renderExportIntroFrame(double positionSeconds);
+    void enterExportIntroRegion(double positionSeconds);
+    void exitExportIntroRegion();
+    bool exportIntroLeadInPlaying() const;
+    void pauseExportIntroAdvance();
+    void startExportIntroAdvance(double fromPositionSeconds);
+    void tickExportIntroLeadIn();
+    void cancelExportIntroLeadIn();
+    bool handleExportIntroSliderSeek(double second);
+    void refreshExportIntroState();
+    // clock_count count-in for the export-page audition (see MemberStorage). Setup
+    // is seeded when the audition scene installs; the cursor resets to skip elapsed
+    // ticks at each playback start; due ticks fire one-shot from the playback tick.
+    void setExportAuditionClockSchedule(int clockCount, double clockBpm);
+    void clearExportAuditionClockSchedule();
+    void resetExportAuditionClockCursor(double startSecond);
+    void maybeFireExportAuditionClockTicks(double second);
+    bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
+    // The wall clock names the pause second in both cases; this only selects whether the
+    // audio position is sampled alongside it and recorded. AudioPosition is the
+    // audio-device auto-pause, the one path where a process stall makes the two diverge
+    // measurably — the divergence is logged as pause_audio_stall_observed and acted on by
+    // nobody, because at a device switch the stalled audio is lost rather than deferred.
+    enum class PauseSecondSource { WallClock, AudioPosition, NativeDeviceCutoff };
+    void pauseQtPreviewPlaybackExact(PauseSecondSource pauseSecondSource = PauseSecondSource::WallClock);
+    void pausePreviewForAudioDeviceChange(miacode::preview_audio::device_change::Change change);
+    void applyPreviewAudioDeviceCutoff(
+        const miacode::preview_audio::PreviewAudioDeviceCutoff& cutoff);
+    void handlePreviewStartupCanvasPresented();
+    void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);
+    void handlePreviewAudioPrepared(const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void handlePreviewRetainedPlaybackCompleted(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
+    void stopQtPreviewPlayback(bool keepPosition = true);
+    void applyQtPreviewPosition(double second, bool centerView);
+    void syncPausedPreviewMediaTimestamps(double second);
+    void flushQtPreviewTimelinePosition();
+    // Phase-locked sampling entry point: driven by TimelineQuickItem's afterAnimating hook
+    // (once per timeline frame, GUI thread, just before that frame's scene-graph sync).
+    void onTimelineRenderCadenceTick();
+    // Fallback entry point for qtPreviewTimelineTimer_, which is now a watchdog: it flushes
+    // only when the render cadence above has gone silent (window hidden, scene graph torn
+    // down, render loop stalled), so a dead cadence can never freeze the playhead.
+    void onTimelineCadenceWatchdogTick();
+    qint64 timelineCadenceWatchdogThresholdMs() const;
+    void onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock);
+    void onQtPreviewTick();
+    double applyVisualClockSmoothing(double audioSecond, double fallbackSecond, bool hasAudioClock);
+    void resetVisualClockSmoothing();
+    void jumpToNearestTimelineNote(double second, int lane);
+
+    bool playing() const override;
+    double positionSeconds() const override;
+    double durationSeconds() const override;
+    double lowerBoundSeconds() const override;
+    void togglePlayback() override;
+    void stop() override;
+    void seek(double second) override;
+    void beginScrub() override;
+    void updateScrub(double second, bool centerView) override;
+    void endScrub(double second, bool centerView) override;
+    void setPlaybackRate(double rate) override;
+    void nudgePlaybackRate(int direction) override;
+    QString playbackRateLabel() const override;
+    QObject* previewRuntimeObject() const override;
+    QObject* stageMediaHostObject() const override;
+    double canvasAspectRatio() const override;
+    QStringList statsTexts() const override;
+    RenderMode muriRenderMode() const override;
+    void setMuriRenderMode(RenderMode mode) override;
+    void toggleMuriRenderMode() override;
+    QStringList availableSkinDirectoryNames() const override;
+    QString skinDisplayName(const QString& directoryName) const override;
+    QString resolveSkinDir() const override;
+    QString resolveSkinRootDir() const override;
+    QString resolveCustomOutlineDir() const override;
+    void applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
+                             bool persistState) override;
+    QVariantMap renderSettings() const override;
+    void setRenderSetting(const QString& key, const QVariant& value) override;
+    void refreshSurfaces() override;
+    void applySfxLevels() override;
+    void prepareForShutdown() override;
+    PreviewAudioSettings audioSettings() const override;
+    void applyAudioSettings(const PreviewAudioSettings& settings) override;
+    void saveAudioSettingsAsSoftwareDefault() override;
+    void restoreAudioSettingsFromSoftwareDefault() override;
+
+    QObject* timelineStateBridge() const override;
+    bool timelineSurfaceReady() const override;
+    void markSurfaceReady() override;
+    void navigateToSecond(double second) override;
+    void centerOnSecond(double second) override;
+    void wheelNavigateToSecond(double second) override;
+    void timelineDragStarted() override;
+    void timelineDragFinished(double second) override;
+    void timelineUserInteractionStarted() override;
+    void setFollowPreviewEnabled(bool enabled) override;
+    QString bottomTabsCurrentTabId() const override;
+    void setBottomTabsCurrentTabId(const QString& tabId) override;
+    bool bottomTabsVisible() const override;
+    bool timelineTabVisible() const override;
+    bool muriTabVisible() const override;
+    bool validationTabVisible() const override;
+    bool ignoreMuriIssuePrompts() const override;
+
+private:
+    void queueTimelineCursorBridgeUpdate(double second, bool centerView);
+    void scheduleDeferredTimelineBridgeFlush();
+    void invalidatePreviewFollowBindingCache();
+    bool cachedPreviewFollowBindingContainsSecond(double second) const;
+    void cachePreviewFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding);
+    void cancelPreviewStartupSync(const char* cause);
+    void clearPreviewPlayingRetainedSeek();
+    void tryCommitPreviewStartupSync();
+    void handlePreviewAudioStartupCompletion(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void handlePreviewPlayingRetainedSeekCompletion(
+        const miacode::preview_audio::PreviewAudioCompletion& completion);
+    void scheduleDeferredPreviewUiTail(
+        bool applyPreviewVisualSettings,
+        bool applyDeferredAnalysis,
+        bool dispatchTimelineAnalysis,
+        bool writeProfilingSummary,
+        bool updatePauseButton,
+        bool updateObjectStats,
+        double objectStatsSecond,
+        bool refreshStageMediaDebugState,
+        bool updatePausedPreviewFollowDecoration);
+    quint64 requestPausedPreviewVisualSeek(
+        double second,
+        bool centerView,
+        int submitNowLogValue,
+        bool logHotPath = true);
+    void pauseQtPreviewPlaybackForReanchor();
+    void stopQtPreviewTimers();
+    void finalizeQtPreviewPlaybackStart(double effectiveStartSecond);
+    void softStopQtPreviewPlaybackToSecond(double second, bool centerView);
+    void anchorQtPreviewPlaybackToSecond(double second, bool centerView);
+    Session& session_;
+    Session::HostUi& ui_;
+    Session::HostState& state_;
+};
+
+}  // namespace miacode::runtime

@@ -1237,7 +1237,7 @@ int main(int argc, char** argv)
                && !sidebarSource.contains(QStringLiteral("id: foldButton")),
            QStringLiteral("the difficulty row folds its own bookmarks, with no separate fold button"), out, &failed);
     QFile followSyncSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
+        QStringLiteral("src/app/runtime/playback/FollowSync.cpp"));
     expect(followSyncSource.open(QIODevice::ReadOnly),
            QStringLiteral("preview follow synchronization source is available"), out, &failed);
     const QString followSource = QString::fromUtf8(followSyncSource.readAll());

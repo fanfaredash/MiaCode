@@ -12,7 +12,7 @@
 class QQmlApplicationEngine;
 class QQuickWindow;
 
-class MainWindow;
+class Session;
 class QmlApplicationContext;
 namespace miacode::v2 {
 class ApplicationServices;
@@ -22,7 +22,7 @@ class QmlChartDropBridge;
 }
 
 // The single UI entry. Builds the non-Widget application services first, then
-// drives a hidden MainWindow as its backend: the widgets layer still owns the
+// drives a hidden Session as its backend: the widgets layer still owns the
 // remaining actions and dialogs while the whole visible shell is QML. The
 // document domain, the UI-request boundary and the job-progress surface are no
 // longer among what it owns — they belong to ApplicationServices, which is
@@ -47,7 +47,7 @@ private:
     // Declared before backend_ so it is destroyed after it: the window's
     // teardown still talks to these services.
     std::unique_ptr<miacode::v2::ApplicationServices> applicationServices_;
-    std::unique_ptr<MainWindow> backend_;
+    std::unique_ptr<Session> backend_;
     std::unique_ptr<QmlApplicationContext> applicationContext_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
     // Owns the native-event filter; must outlive the root window.

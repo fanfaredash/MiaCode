@@ -7,10 +7,11 @@
 #include <QVector>
 
 #include "PreviewAudioSettings.h"
+#include "app/v2/LatencyEngine.h"
 #include "timeline/TimelineData.h"
 #include "timeline/TimelineRenderData.h"
 
-class MainWindow;
+class Session;
 class QTimer;
 
 namespace miacode::latency {
@@ -27,7 +28,7 @@ namespace miacode::latency {
 //     slow-refresh produces for a real difficulty;
 //   * marks `latencySandboxAuditionActive_` so the playback gates treat it as a
 //     previewable chart (see TimelineSection::hasPreviewableChart);
-//   * routes Play/Pause to the real transport (MainWindow::onTogglePreviewPause
+//   * routes Play/Pause to the real transport (Session::onTogglePreviewPause
 //     / startQtPreviewPlayback / pauseQtPreviewPlaybackExact), which then drives
 //     the preview render, bottom timeline, slider, SFX, and song audio
 //     identically to a difficulty;
@@ -37,15 +38,24 @@ namespace miacode::latency {
 // second) onto the latency page's own widgets (audition button + position
 // label) via the signals below.
 //
-// Lives as a member of MainWindow (a friend), so it can reuse MainWindow's
+// Lives as a member of Session (a friend), so it can reuse Session's
 // preview/timeline/transport helpers directly.
-class LatencySandboxController : public QObject
+class LatencySandboxController : public QObject, public miacode::v2::LatencyEngine
 {
     Q_OBJECT
 
 public:
-    explicit LatencySandboxController(MainWindow* owner, QObject* parent = nullptr);
+    explicit LatencySandboxController(Session* owner, QObject* parent = nullptr);
     ~LatencySandboxController() override;
+
+    double documentWholeBpm() const override;
+    double documentOffsetSeconds() const override;
+    int documentClockCount() const override;
+    QString trackPath() const override;
+    void applyDetectorBpm(double bpm) override;
+    void applyDetectorOffset(double seconds) override;
+    void applyDetectorClockCount(int clockCount) override;
+    LatencySandboxController* sandbox() const override;
 
     // Whether the user currently has the latency page selected. Set by the
     // page's enter/exit hooks; installs/restores the test-chart preview source.
@@ -89,11 +99,11 @@ private:
     void restoreOriginalTimeline();
     double resolveAudioDurationSeconds() const;
 
-    QPointer<MainWindow> owner_;
+    QPointer<Session> owner_;
     QTimer* tickTimer_ = nullptr;
 
     bool onPage_ = false;
-    bool auditionRunning_ = false;   // cached mirror of state_.qtPreviewPlaying_
+    bool auditionRunning_ = false;   // cached mirror of state_.playing_
     double lastPolledSecond_ = -1.0;
 
     double bpm_ = 120.0;

@@ -84,9 +84,9 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   preset mapping (`Fast`/`High Quality`/`High Compression`), ffmpeg fallback.
 - `src/tools/video_export/RawVideoPipeTransport.cpp` — pipe queue depth / buffer sizing
   (`maxBufferedFrames` derived from frame size, ×2; `requestedBufferBytes` `2 * max(frameBytes,1MiB)`).
-- `src/app/mainwindow/MainWindow.cpp` + `sections/window/*.cpp` — preview panel spacing, fullscreen
+- `src/app/runtime/Session.cpp` + `src/app/runtime/shell/*.cpp` — preview panel spacing, fullscreen
   overlay timing/opacity/reveal geometry, bottom-tab resize bounds (hot zone `8 px`, content scale
-  `kBottomTabsContentScaleMin/Max = 0.5..4.0` in `MainWindow.WindowShell.cpp`), fixed `30 Hz`
+  `kBottomTabsContentScaleMin/Max = 0.5..4.0` in `Shell.cpp`), fixed `30 Hz`
   timeline UI cadence. The `4.0` max is a SAFETY bound only — the real ceiling above 100% is
   `kBottomTabsMaxWindowHeightFraction = 2/3` of the whole window height. **Two-tier scale above
   100%:** only the note GRID height grows (raw scale); the header ("顶部变换"), note 素材/markers and
@@ -106,11 +106,11 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   At the v2 window floor (`Main.qml` `minimumHeight: 480`) a short left column can make the 65%
   bottom-panel cap unreachable; the editor pixel floor wins. Do not treat this as a layout bug
   to fix unless the product asks to retire that 180 px floor.
-- `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp` — toolbox media-prepend ffmpeg
+- `src/app/runtime/media/MediaJobs.cpp` — toolbox media-prepend ffmpeg
   defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz` libmp3lame `-q:a 2`).
-- `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp` — issue-row padding /
+- `src/app/runtime/validation/ValidationListUi.cpp` — issue-row padding /
   min height / ignored-row opacity.
-- `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp` —
+- `src/app/runtime/playback/TimelineFlow.cpp` —
   `kTimelineAnalysisIdleDelayMs` (`180 ms`).
 - `src/common/PreviewInteractionConfig.h` — shared preview-slider seek (discrete `1/120 s`,
   held ramp `+1.0x/s` to `3.0x`, timer `16 ms`).

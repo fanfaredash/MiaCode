@@ -11,12 +11,12 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **6**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **4**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
-> **剩下的 6 个全部在 `QmlUiBootstrap`，而且全部是纯粹的窗口生命周期**：
-> `setQuickShellBackendActive` / `hide` / `setVisible` / `setQuickShellRootWindow` ×2 /
-> `shellSetRootWindowFrameGeometry` / `shellNoteQuickUiReady`。
+> **剩下的 4 个全部在 `QmlUiBootstrap`，而且全部是纯粹的窗口生命周期**：
+> `setBackendActive` / `attachRootWindow` ×2 /
+> `setRootWindowFrameGeometry` / `noteRootWindowReady`。
 > 原本混在其中的三个**领域**操作已经归位：拖放建谱的两个进了 `DocumentBridge`
 > （它是文档工作，只是 OS 拖放路由恰好落在宿主上），关机前的预览收尾进了 `PreviewSurface`。
 >
@@ -240,14 +240,12 @@ PV 批量队列本来就归模型自己（唯一有跨次开启状态的部分�
 它们和页面切换问的是同一个「未保存改动怎么办」，只是作用域不同。
 `QmlShellLifecycle` 因此**完全不认识 `MainWindow`**。
 
-**`src/app/qml_ui/QmlUiBootstrap.cpp`** — 方法 6，私有成员 0
+**`src/app/qml_ui/QmlUiBootstrap.cpp`** — 方法 4，私有成员 0
 
-- `hide`
-- `setQuickShellBackendActive`
-- `setQuickShellRootWindow`
-- `setVisible`
-- `shellNoteQuickUiReady`
-- `shellSetRootWindowFrameGeometry`
+- `attachRootWindow`
+- `noteRootWindowReady`
+- `setBackendActive`
+- `setRootWindowFrameGeometry`
 
 **`src/app/qml_ui/QmlShellLifecycle.cpp`** — 方法 0，私有成员 0
 

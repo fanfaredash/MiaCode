@@ -32,18 +32,18 @@ bool containsAfter(const QString& source, const QString& first, const QString& s
 
 bool verifyBackendReplacementPublishesOneQmlRefresh(QTextStream& err)
 {
-    const QString mainWindow = sourceFile(QStringLiteral("src/app/mainwindow/MainWindow.h"));
+    const QString mainWindow = sourceFile(QStringLiteral("src/app/runtime/Session.h"));
     const QString documentUi = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp"));
+        QStringLiteral("src/app/runtime/document/DocumentPages.cpp"));
     const QString documentModel = sourceFile(
         QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
     const QString mainView = sourceFile(QStringLiteral("src/app/qml_ui/layout/MainView.qml"));
 
     return require(mainWindow.contains(QStringLiteral("void documentReplaced();")),
-                   QStringLiteral("MainWindow exposes a backend document replacement notification"), err)
+                   QStringLiteral("Session exposes a backend document replacement notification"), err)
         && require(containsAfter(documentUi,
-                                 QStringLiteral("void MainWindow::DocumentSection::loadDocument"),
-                                 QStringLiteral("emit owner_.documentReplaced();")),
+                                 QStringLiteral("void miacode::runtime::DocumentSessionHost::loadDocument"),
+                                 QStringLiteral("emit session_.documentReplaced();")),
                    QStringLiteral("every loadDocument path publishes the backend replacement after loading"), err)
         && require(containsAfter(documentModel,
                                  QStringLiteral("&miacode::v2::ShellNotifications::documentReplaced"),
@@ -67,14 +67,14 @@ bool verifyBackendReplacementPublishesOneQmlRefresh(QTextStream& err)
 bool verifyNewDocumentPublishesFinalFileIdentity(QTextStream& err)
 {
     const QString fileFlow = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp"));
+        QStringLiteral("src/app/runtime/document/DocumentFileFlow.cpp"));
     const int newDocument = fileFlow.indexOf(QStringLiteral("const SimaiDocument newDocument"));
     const int end = fileFlow.indexOf(QStringLiteral("namespace {"), newDocument);
     const QString createFlow = newDocument >= 0
         ? fileFlow.mid(newDocument, (end >= 0 ? end : fileFlow.size()) - newDocument)
         : QString();
     return require(containsAfter(createFlow,
-                                 QStringLiteral("owner_.setCurrentFilePath(targetPath)"),
+                                 QStringLiteral("session_.setCurrentFilePath(targetPath)"),
                                  QStringLiteral("workspace().openSource(newDocument.toText(), targetPath)"))
                        && containsAfter(createFlow,
                                         QStringLiteral("workspace().openSource(newDocument.toText(), targetPath)"),
@@ -147,21 +147,21 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
     const QString documentModel = sourceFile(
         QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
     const QString mainWindow = sourceFile(
-        QStringLiteral("src/app/mainwindow/MainWindow.h"));
+        QStringLiteral("src/app/runtime/Session.h"));
     const QString memberStorage = sourceFile(
-        QStringLiteral("src/app/mainwindow/MainWindowMemberStorage.inc"));
+        QStringLiteral("src/app/runtime/SessionMembers.inc"));
     const QString documentBridge = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentBridge.cpp"));
+        QStringLiteral("src/app/runtime/document/DocumentBridge.cpp"));
     const QString fileFlow = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp"));
+        QStringLiteral("src/app/runtime/document/DocumentAutosave.cpp"));
     const QString timelineFlow = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp"));
+        QStringLiteral("src/app/runtime/playback/TimelineFlow.cpp"));
     const QString followSync = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
+        QStringLiteral("src/app/runtime/playback/FollowSync.cpp"));
     const QString frameBootstrap = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp"));
+        QStringLiteral("src/app/runtime/SessionBootstrap.cpp"));
     const QString documentFileFlow = sourceFile(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp"));
+        QStringLiteral("src/app/runtime/document/DocumentFileFlow.cpp"));
 
     // The owner moved to the non-Widget assembly in stage 3.5 item 1; the count
     // is what matters and it is still one apiece, reached by reference.
@@ -208,10 +208,10 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
         && require(!memberStorage.contains(QStringLiteral("SimaiDocument document_"))
                        && !documentBridge.contains(QStringLiteral("state_.document_ ="))
                        && !mainWindow.contains(QStringLiteral("applyChartTextThroughWorkspace(")),
-                   QStringLiteral("MainWindow keeps no SimaiDocument and adds no workspace write-through helper"), err)
+                   QStringLiteral("Session keeps no SimaiDocument and adds no workspace write-through helper"), err)
         && require(!documentModel.contains(QStringLiteral("applyCommittedDocument("))
                        && frameBootstrap.contains(QStringLiteral("&miacode::v2::ChartWorkspace::changed"))
-                       && documentFileFlow.contains(QStringLiteral("void MainWindow::DocumentSection::syncRuntimeFromWorkspace()"))
+                       && documentFileFlow.contains(QStringLiteral("void miacode::runtime::DocumentSessionHost::syncRuntimeFromWorkspace()"))
                        && documentFileFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ = snapshot.revision")),
                    QStringLiteral("QML does not echo commits into the window; the window follows ChartWorkspace::changed"), err)
         && require(documentModel.contains(
@@ -220,7 +220,7 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                            QStringLiteral("editorSyncController_->requestNavigation("))
                        && timelineFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_"))
                        && followSync.contains(
-                           QStringLiteral("follow.revision = owner_.appliedQmlWorkspaceRevision_"))
+                           QStringLiteral("follow.revision = session_.appliedQmlWorkspaceRevision_"))
                        && !followSync.contains(QStringLiteral("documentValidationSnapshot()")),
                    QStringLiteral("initial, navigation, and follow identities stay on the committed workspace revision"), err)
         && require(timelineFlow.contains(
@@ -228,7 +228,7 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                        && timelineFlow.contains(QStringLiteral("upsertExtraField(QStringLiteral(\"wholebpm\")"))
                        && timelineFlow.contains(QStringLiteral("upsertExtraField(QStringLiteral(\"clock_count\")")),
                    QStringLiteral("latency BPM, offset, and clock_count write the workspace"), err)
-        && require(fileFlow.contains(QStringLiteral("owner_.qmlDocumentSaveHandler_(path)")),
+        && require(fileFlow.contains(QStringLiteral("session_.qmlDocumentSaveHandler_(path)")),
                    QStringLiteral("legacy close-save routing delegates durable writes to the workspace file service"), err);
 }
 

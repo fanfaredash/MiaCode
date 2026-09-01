@@ -53,9 +53,9 @@ bool verifySessionContract(QTextStream& err)
     // push, and the window turns those into reloadAssets / applyLevels. Both
     // halves are pinned so the distinction cannot quietly collapse into one.
     const QString frameBootstrap = readSource(
-        QStringLiteral("src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp"));
+        QStringLiteral("src/app/runtime/SessionBootstrap.cpp"));
     const QString previewSettings = readSource(
-        QStringLiteral("src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp"));
+        QStringLiteral("src/app/runtime/preview/WarmupAndSettings.cpp"));
     ok &= require(
         implementation.contains(QStringLiteral("normalizeIntroSoundFileName(fileName)"))
             && implementation.contains(QStringLiteral("setSelectedIntroSoundFileName(normalized)"))

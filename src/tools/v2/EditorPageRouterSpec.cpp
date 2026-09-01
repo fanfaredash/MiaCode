@@ -180,9 +180,9 @@ bool verifyTheSlotIsTheSingleSourceOfTruth(QTextStream& err)
 bool verifyTheExportSwitchReportsWhatItDid(QTextStream& err)
 {
     const QString documentUi = readFile(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp"));
+        QStringLiteral("src/app/runtime/document/DocumentPages.cpp"));
     const QString sectionHeader = readFile(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentSection.h"));
+        QStringLiteral("src/app/runtime/document/DocumentSessionHost.h"));
     bool ok = require(!documentUi.isEmpty() && !sectionHeader.isEmpty(),
                       QStringLiteral("the document section sources are readable"), err);
     if (!ok) {
@@ -190,7 +190,7 @@ bool verifyTheExportSwitchReportsWhatItDid(QTextStream& err)
     }
 
     const qsizetype start =
-        documentUi.indexOf(QStringLiteral("bool MainWindow::DocumentSection::switchToExportField()"));
+        documentUi.indexOf(QStringLiteral("bool miacode::runtime::DocumentSessionHost::switchToExportField()"));
     ok &= require(start >= 0, QStringLiteral("switchToExportField is present"), err);
     if (start < 0) {
         return false;
@@ -201,7 +201,7 @@ bool verifyTheExportSwitchReportsWhatItDid(QTextStream& err)
     ok &= require(body.contains(QStringLiteral("performSwitchToExportField();"))
                       && !body.contains(QStringLiteral("QTimer::singleShot")),
                   QStringLiteral("the export switch runs inline, not one tick later"), err);
-    ok &= require(body.contains(QStringLiteral("currentWidget() == ui_.exportPlaceholderPage_")),
+    ok &= require(body.contains(QStringLiteral("state_.activeOutlineKey_ == QLatin1String(\"export\")")),
                   QStringLiteral("it returns whether the switch actually landed"), err);
     ok &= require(!documentUi.contains(QStringLiteral("OutlineExportBusySpinner"))
                       && !sectionHeader.contains(QStringLiteral("OutlineExportBusySpinner")),

@@ -37,6 +37,7 @@ AnalysisProjection projectAnalysis(const AnalysisProjectionInput& input)
         row.detail = issue.message;
         row.difficultyId = input.activeDifficultyId;
         row.revision = input.validation.revision;
+        row.second = -1.0;
         result.validationRows.append(row);
     }
     result.muriRows = input.muriRows;
@@ -82,6 +83,7 @@ AnalysisProjection projectAnalysis(
         row.detail = issue.displayMessage;
         row.difficultyId = activeDifficultyId;
         row.revision = documentRevision;
+        row.second = -1.0;
         result.validationRows.append(std::move(row));
     }
     result.muriRows = muriRows;

@@ -7,13 +7,13 @@ current but **code is source of truth** — verify and fix drift in the same cha
 ## 1. Edit → parse → timeline → preview chain
 
 1. editor `contentsChange` / `scheduleTimelineRefresh`
-2. `MainWindow::applyTimelineQuickChange` / `refreshTimelineQuickModelFromCurrentText`
+2. `Session::applyTimelineQuickChange` / `refreshTimelineQuickModelFromCurrentText`
 3. `TimelineQuickModel::applyContentsChange` / `rebuildFromText`
 4. `TimelineView::setTimelineData`
-5. `MainWindow::requestTimelineSlowRefresh`
+5. `Session::requestTimelineSlowRefresh`
 6. `SimaiNativeParser::parseForTimeline`
 7. preview snapshot publication + `applyLatestTimelinePreviewStateToPausedPreview` (when paused)
-8. `MainWindow::scheduleTimelineAnalysisRefresh` → analysis result build → deferred UI apply
+8. `Session::scheduleTimelineAnalysisRefresh` → analysis result build → deferred UI apply
 9. `PreviewRuntime::setNoteMarkers`
 
 Implications:
@@ -101,14 +101,14 @@ Implications:
 - **Edited from UIv2's metadata form** (`EditorPane.qml` → `metadataFirst`). Latency writes
   `ChartWorkspace` via `updateDocumentField(First)` / `upsertExtraField` (`wholebpm`, `clock_count`).
 - `TimelineQuickModel` receives `first` on every rebuild; `buildTimelineSlowRefreshResult` shifts
-  markers by `first`; `MainWindow::applyLatencyDetectorOffset` writes raw `first` through the workspace.
+  markers by `first`; `Session::applyLatencyDetectorOffset` writes raw `first` through the workspace.
 - **Serialization compat contract (`SimaiDocument::toText`):** we read an empty/missing `&first`
   as `0`, but strict third-party players (e.g. MajdataPlay `double.Parse`) crash on a bare
   `&first=`. So `toText()` always emits a parseable value — empty `first` → `&first=0` — and
   drops empty *numeric* extra-metadata whose 0 is meaningless (`&wholebpm`/`&pvstart`/`&pvlen`,
   via `isDroppableWhenEmptyNumericField`) instead of writing a bare `&key=`. Do NOT revert these
   guards to an unconditional `serializeField`. Covered by `simai_document_spec`.
-- Review together on change: `sections/timeline/MainWindow.PreviewTimelineFlow.cpp`,
+- Review together on change: `src/app/runtime/playback/TimelineFlow.cpp`,
   `src/tools/latency/` analysis, `src/tools/video_export/VideoExportSnapshot.cpp`,
   `docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`.
 
@@ -116,12 +116,12 @@ Implications:
 
 - `SimaiTimingMetadata` is shared by parser, quick timeline, slow refresh, validation cache,
   normalization, export snapshot rebuild, CLI helpers.
-- `MainWindow::currentTimingMetadata` reads live metadata text so unsaved
+- `Session::currentTimingMetadata` reads live metadata text so unsaved
   `&whole_time_signature=` edits still affect validation/timeline.
 - Callers of `parseForTimeline` / `buildValidationReport` must pass timing metadata when available
   or fast/slow/export/tooling timelines drift.
 - Review together: `src/core/chart/document/SimaiTimingMetadata.cpp`,
-  `PreviewTimelineFlow.cpp`, `MainWindow.ValidationFlow.cpp`, `TimelineQuickModel.cpp`,
+  `PreviewTimelineFlow.cpp`, `ValidationFlow.cpp`, `TimelineQuickModel.cpp`,
   `TimelineSlowRefresh.cpp`, `VideoExportSnapshot.cpp`, `src/tools/muri/MuriDump.cpp`.
 
 ## 4. Runtime SFX ⇄ export SFX must stay in sync
@@ -177,7 +177,7 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   partial preload `1.0s` (`src/common/VideoExportConfig.h`). Full-vs-partial classification: any range
   STARTING at chart 0 counts as full-range even if it ends early (count-down lead-in, no frozen
   preload / pause glyph); only start > 0 is partial. Decided in TWO places that must stay in sync:
-  `VideoExportDialog.cpp` (`updated.fullRangeExport`) and `MainWindow.ExportSnapshot.cpp`
+  `VideoExportDialog.cpp` (`updated.fullRangeExport`) and `ExportSnapshot.cpp`
   (`fullRangeExport`).
 
 If one side changes, inspect the other in the same patch.
@@ -187,10 +187,10 @@ If one side changes, inspect the other in the same patch.
 > Updated 2026-05-29: `PreviewMediaController` and `src/preview/video/` were removed. Background
 > media (image + video) is now owned by `PreviewStageMediaHost`; `PreviewRuntime` exposes
 > stage-background state setters for the QSG stage layer. Verify the exact widget-shell vs
-> quickshell split in `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
+> quickshell split in `src/app/runtime/preview/StageMediaRoute.cpp`.
 
 - Shared resolver: `miacode::chart_assets::resolveBackgroundMediaPath`.
-- Route coordinator: `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
+- Route coordinator: `src/app/runtime/preview/StageMediaRoute.cpp`.
 - **Decode backend (preview side):** Windows decodes PV/BG via **QtAVPlayer (FFmpeg)** inside
   `PreviewStageMediaHost` (build macro `MIACODE_USE_QTAVPLAYER`); other platforms keep `QMediaPlayer`.
   The export *encoder output* is **unaffected** — it still decodes the background with the standalone
@@ -198,7 +198,7 @@ If one side changes, inspect the other in the same patch.
   vice-versa: both sides are now FFmpeg). The export *preview dialog* (WYSIWYG) rides the realtime
   preview path, so it inherits the QtAVPlayer backend. Speed changes use `QAVPlayer::setSpeed` (no Qt
   converter rebuild → the old `setPlaybackRate` rate-change crash class is gone).
-- Shared preview-time clock getter: `MainWindow::currentPreviewAuthoritativeAudioClockSecond`
+- Shared preview-time clock getter: `Session::currentPreviewAuthoritativeAudioClockSecond`
   (UI follow, export-dialog current second, weak-video late-start must read this — do not branch on
   `PreviewStageMediaHost::currentPlaybackSecond()`, which is video-local observability only).
 - Quickshell presentation split: images inline in `QuickShellPreviewSurface.qml`; video moves to
@@ -210,7 +210,7 @@ If one side changes, inspect the other in the same patch.
   its end may not stop BGM / SFX / chart / timeline — that coupling was the root cause in
   `docs/audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md` (a 0.333 s `pv.mp4` paused the whole
   preview 31 times). The only natural end of the main transport stays
-  `MainWindow.PreviewTick.cpp::onQtPreviewTickAtSecond()` against `previewPlaybackEndSeconds()`.
+  `Tick.cpp::onQtPreviewTickAtSecond()` against `previewPlaybackEndSeconds()`.
   Every backend `EndOfMedia` is classified by `src/core/video/PreviewEndOfMediaPolicy.h` (spec:
   `preview_end_of_media_policy_spec`), whose ONLY yardstick is the media's own duration versus the
   decoder's own progress — never the chart length, and never a "shorter than N seconds is
@@ -231,7 +231,7 @@ If one side changes, inspect the other in the same patch.
 
 ## 6. Track-path resolution lives in multiple places
 
-Owners: `MainWindow::resolveDefaultTrackPath`, `MainWindow::resolveLatencyDetectorTrackPath`,
+Owners: `Session::resolveDefaultTrackPath`, `Session::resolveLatencyDetectorTrackPath`,
 `QtPreviewSfxRuntime::resolveTrackPath`. Convention: sibling `track.mp3`; optional
 `MIACODE_TRACK_PATH` override on the main-window export path. Update all owners + `build-and-tools.md`
 on new filename/lookup rules.
@@ -239,8 +239,8 @@ on new filename/lookup rules.
 ## 7. Skin/asset lookup flows into both preview and export
 
 Root: `miacode::assets::findAssetRoot` / `assetPath`. Preview consumers:
-`MainWindow::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`,
-`miacode::preview_sfx::resolveSfxDirectory`. Export consumers: `MainWindow::buildVideoExportSnapshot`,
+`Session::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`,
+`miacode::preview_sfx::resolveSfxDirectory`. Export consumers: `Session::buildVideoExportSnapshot`,
 `buildVideoExportTaskFromSnapshot`, `VideoExportController::exportPreparedTask`. Review both on change.
 
 ## 8. Export snapshot boundary is a contract
@@ -248,7 +248,7 @@ Root: `miacode::assets::findAssetRoot` / `assetPath`. Preview consumers:
 `buildVideoExportSnapshot` → `VideoExportSnapshot::toJson` → `runCliVideoExportWorker` →
 `fromJson` → `buildVideoExportTaskFromSnapshot` → `VideoExportController::exportPreparedTask`. New
 export settings (and shared timing offsets, static Muri thresholds) must be added on BOTH
-serialization sides; worker protocol changes reflect in both `main.cpp` and MainWindow worker-event
+serialization sides; worker protocol changes reflect in both `main.cpp` and Session worker-event
 handling.
 
 ## 9. Shared render state flows through preview and export
@@ -258,7 +258,7 @@ from `src/common/LayoutRingConfig.h`, outline/judge-line variant, smooth brightn
 `fill/fit/square_fit`, tap/touch flow speeds, chart-review overlay toggles, HUD flags, Muri render
 options incl. `wifiNeedC` / `excludeTouchFromMultiTouch`) must stay aligned across preview
 persistence, export snapshot, and any analyzer entry that reconstructs runtime Muri results. Owners:
-`MainWindow::load/savePortableState` (app-scoped shared), `load/saveProjectRenderState` (chart-local
+`Session::load/savePortableState` (app-scoped shared), `load/saveProjectRenderState` (chart-local
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
 
@@ -266,7 +266,7 @@ layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExp
 
 | Tier | Key | State | Written by |
 |---|---|---|---|
-| **Project** `<chartDir>/.miacode/preferences.json` | `preview_audio` | `state_.previewAudioSettings_` (the live mixer) | every slider / mute / 应用本地预设, via `MainWindow::saveProjectAudioPreferences` |
+| **Project** `<chartDir>/.miacode/preferences.json` | `preview_audio` | `state_.previewAudioSettings_` (the live mixer) | every slider / mute / 应用本地预设, via `Session::saveProjectAudioPreferences` |
 | **App** `preferences.json` | `app.preview.audio` | `state_.softwarePreviewAudioSettings_` (本地预设) | only the 保存为本地预设 button, via `savePortableState` |
 
 The mixer is per-chart. `PreviewSection::loadProjectAudioPreferences` runs from
@@ -293,7 +293,7 @@ affects both live diagnostics and exported overlays.
 
 ## 11. Common "change here, check there" pairs
 
-- `SimaiNativeParser` → `MainWindow.ValidationFlow.cpp`, `PreviewTimelineFlow.cpp`,
+- `SimaiNativeParser` → `ValidationFlow.cpp`, `PreviewTimelineFlow.cpp`,
   `TimelineQuickModel.cpp`, `ChartNormalization.cpp`, `VideoExportSnapshot.cpp`, `MuriAnalyzer.cpp`.
 - Parser validation severities / modifier acceptance rules are a THREE-WAY sync set: the parser
   emit points, the spec tests (`src/tools/simai_parser/SimaiParserSpec.cpp` AND
@@ -309,12 +309,12 @@ affects both live diagnostics and exported overlays.
   `src/core/scene/PreviewOpacityCurves.cpp`, `VideoExportController.cpp`.
 - Muri static thresholds → `src/common/MuriConfig.h`, settings UI, `VideoExportSnapshot.cpp` +
   `VideoExportController.cpp`.
-- Muri list anchoring/dedupe → `MuriPanelEntries.cpp`, `MainWindow.ValidationFlow.cpp`,
+- Muri list anchoring/dedupe → `MuriPanelEntries.cpp`, `ValidationFlow.cpp`,
   `src/tools/muri/MuriSpec.cpp`.
 - **Preview auto-pause on audio-device change ⇄ export's "pause the preview first" step.**
   `TimelineSection::pausePreviewForAudioDeviceChange` only acts when `qtPreviewPlaying_` is true, and
   the only reason a device hotplug can't disturb a running video export is that
-  `MainWindow.ExportFlow.cpp` pauses the preview before opening the export dialog. If export ever
+  `ExportFlow.cpp` pauses the preview before opening the export dialog. If export ever
   starts while playback continues, that guard must be re-examined — it is the sole protection.
 
 ## 12. Latency-page audition reuses the main preview transport
@@ -338,7 +338,7 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
 - Play/Pause/Stop run the real transport — `onTogglePreviewPause` / `pauseQtPreviewPlaybackExact` /
   `startQtPreviewPlayback` → `onQtPreviewTick` — which drives preview render, bottom timeline,
   slider, SFX, and song audio. The page button calls
-  `LatencySandboxController::toggleAudition()` → `MainWindow::onTogglePreviewPause()`.
+  `LatencySandboxController::toggleAudition()` → `Session::onTogglePreviewPause()`.
 - The controller's `QTimer` is a ~30Hz UI poll ONLY: it mirrors `qtPreviewPlaying_` +
   `qtPreviewPauseSecond_` onto the page's own widgets (audition button + position label) via
   `auditionStateChanged` / `playheadAdvanced`. It does NOT drive playback.
@@ -347,7 +347,7 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
   install/teardown, so the level dispatch reads the correct mode at both edges.
 - **SFX-level isolation — two modes share ONE `previewSfxRuntime_`, and the runtime levels are a PURE
   FUNCTION of the current mode, NOT a snapshot that is restored on exit.** Single dispatch entry:
-  `MainWindow::applyPreviewAudioSettingsToRuntime()`, which branches on
+  `Session::applyPreviewAudioSettingsToRuntime()`, which branches on
   `LatencySandboxController::isOnPage()`:
   - on the latency page → `makePreviewLatencyAuditionLevels(previewAudioSettings_, sfxVolumePercent())`
     (every SFX kind = the page's independent slider; song keeps its normal effective volume);
@@ -361,7 +361,7 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
   next dispatch self-corrects. `latencySandboxAuditionActive_` no longer gates audio; it only gates
   *playback* (`hasPreviewableChart`).
 - **Leave teardown must NOT be gated on `activeOutlineKey_`.** The sidebar click handler
-  (`MainWindow.FrameBootstrap.cpp`) overwrites `activeOutlineKey_` with the destination BEFORE calling
+  (`SessionBootstrap.cpp`) overwrites `activeOutlineKey_` with the destination BEFORE calling
   `switchToXField`, so a `== "latency"` guard there is always false. The three
   `switchTo{Difficulty,Metadata,Welcome}Field` functions therefore call `onPageLeft()` UNCONDITIONALLY
   (it is idempotent — `setOnPage(false)` no-ops when not on the page). The old `== "latency"` guard
@@ -378,18 +378,18 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
   calling it first made `restoreSwitchView` false, so the follow decoration never came
   back. `leave()` runs after resume (and is idempotent if the field switch already ran it).
 - Review together on change: `src/audio/PreviewAudioSettings.*` (`makePreviewLatencyAuditionLevels`),
-  `sections/preview/MainWindow.PreviewWarmupAndSettings.cpp` (`applyPreviewAudioSettingsToRuntime`),
+  `src/app/runtime/preview/WarmupAndSettings.cpp` (`applyPreviewAudioSettingsToRuntime`),
   `src/tools/latency/LatencySandboxController.*`,
-  `sections/timeline/MainWindow.PreviewPlaybackGlue.cpp`,
-  `sections/timeline/MainWindow.PreviewTimelineFlow.cpp` (`hasPreviewableChart`),
-  `sections/document/MainWindow.DocumentUi.cpp` (`switchToLatencyField` + the `onPageLeft` calls).
+  `src/app/runtime/playback/PlaybackGlue.cpp`,
+  `src/app/runtime/playback/TimelineFlow.cpp` (`hasPreviewableChart`),
+  `src/app/runtime/document/DocumentPages.cpp` (`switchToLatencyField` + the `onPageLeft` calls).
 
 ### 12a. Export-page preview reuses the same transport (2026-06-13)
 
 The export hub's video sub-page applies the SAME pattern as the latency page: the badge-selected
 difficulty is installed as a playable preview source so the NORMAL transport plays/seeks it even
 though `activeDifficultyId_ == 0` (D4). `ExportSection::installExportPreviewAuditionScene`
-(`MainWindow.ExportSnapshot.cpp`) mirrors `installSandboxScene` (publish markers + snapshot-ready,
+(`ExportSnapshot.cpp`) mirrors `installSandboxScene` (publish markers + snapshot-ready,
 bottom-timeline rebuild, slider range, SFX `configureTimeline`), and
 `state_.exportPreviewAuditionActive_` is OR'd into `hasPreviewableChart()` alongside
 `latencySandboxAuditionActive_`. Install is in `createEmbeddedVideoExportPanel` (re-runs on badge
@@ -398,8 +398,8 @@ switch — the panel is recreated); teardown is in `endExportPreviewSession`
 the destination field reinstalls its own preview). Unlike latency, audio levels are NOT
 mode-switched (export uses the user's normal mix). Export progress is status-bar-only and never
 touches the transport — preview and a running export are independent. Review together:
-`MainWindow.ExportSnapshot.cpp`, `MainWindow.ExportFlow.cpp` (lifecycle),
-`PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `MainWindow.ExportWorker.cpp` +
+`ExportSnapshot.cpp`, `ExportFlow.cpp` (lifecycle),
+`PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `ExportWorker.cpp` +
 `WindowSection.cpp` (progress decoupling). Supersedes the reverted "导出效果预览".
 
 - **批量导出 sub-page: a badge switch retargets in place, so it must re-seed by hand.** The
@@ -431,7 +431,7 @@ The bottom-tab (时间轴/语法/无理 panel) divider height maps to `bottomTab
 is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
 `setShellBottomTabsHeight`). Propagation:
 
-1. `MainWindow.WindowShell.cpp`: `setShellBottomTabsHeight` (drag) / restore →
+1. `Shell.cpp`: `setShellBottomTabsHeight` (drag) / restore →
    `applyBottomTabsContentScale` → `timelineQuickStateBridge_->setContentScale` +
    `timelineView_->setContentScale`. Device height via `scaledBottomTabsTimelineContentHeight` /
    `bottomTabsContentScaleForTimelineContentHeight` (piecewise inverse — header caps at 100%,
@@ -449,7 +449,7 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
    (QML tab strip) still inherits the capped header scale.
 
 **SYNC-PAIR:** the `4.0` max is duplicated as `kBottomTabsContentScaleMax`
-(`MainWindow.WindowShell.cpp`), `kMaxContentScale` (`TimelineSceneStateBuilder.cpp`), and a literal
+(`Shell.cpp`), `kMaxContentScale` (`TimelineSceneStateBuilder.cpp`), and a literal
 `4.0` in the `setContentScale` clamps of `TimelineView.cpp` / `TimelineView.Core.cpp` /
 `TimelineQuickStateBridge.cpp` — change all together (also `hardcode-registry.md`). This scale is
 **UI-only** (in-app timeline panel); it has no video-export consumer.
@@ -461,10 +461,10 @@ cannot share a present signal. Each phase-locks to its own:
 
 - **Preview:** `PreviewQuickSceneRoot` → `QQuickWindow::frameSwapped` (render thread, queued to GUI)
   → `PreviewRuntime::framePresented` → the request/present handshake in
-  `MainWindow.FrameBootstrap.cpp` → `onQtPreviewTick`.
+  `SessionBootstrap.cpp` → `onQtPreviewTick`.
 - **Timeline:** `TimelineQuickItem::bindRenderCadence` → `QQuickWindow::afterAnimating` (GUI thread,
   fires immediately before that frame's scene-graph sync) → `TimelineQuickStateBridge::
-  renderCadenceTick` → `MainWindow::onTimelineRenderCadenceTick` → `flushQtPreviewTimelinePosition`.
+  renderCadenceTick` → `Session::onTimelineRenderCadenceTick` → `flushQtPreviewTimelinePosition`.
   `afterAnimating` rather than `frameSwapped` on purpose: it is already on the GUI thread, so the
   sampled second lands in the frame being synced right now — a fixed one-frame sample→present
   latency with no event-loop hop.
@@ -498,7 +498,7 @@ deliberate decision, not an oversight:
 
 - `TimelineView` → `QScrollBar::setValue` (int API; `TimelineView`'s own
   `horizontalScrollValue()` stays int because it *reads* the scrollbar).
-- `MainWindow.ExtensionHostRequests.cpp` timeline-state payload — extension-facing contract that
+- `deleted ExtensionHostRequests.cpp` timeline-state payload — extension-facing contract that
   has always carried a whole-pixel integer.
 - `TimelineSceneStateBuilder::maxHorizontalScrollValue` — a content extent, not a position.
 
@@ -590,7 +590,7 @@ If a fourth scanner appears, route it through `SimaiCommentScan` rather than re-
 
 ## 16. Preview follow reaches the v1 widget and the v2 QML editor on two different channels
 
-`MainWindow::TimelineSection::syncEditorCursorToPreviewSecond` has two modes, and they do NOT use
+`PlaybackHost::syncEditorCursorToPreviewSecond` has two modes, and they do NOT use
 the same route to the editor:
 
 - **Playing, 代码跟随 on** → it MOVES the caret. Route: `requestQmlEditorNavigation` →
@@ -599,12 +599,12 @@ the same route to the editor:
   handler is installed (v1).
 - **Paused, or 代码跟随 off** → it must NOT move the caret; it paints a decoration instead (the
   playhead's token span plus a visual follow caret, optionally scrolled into view). Route:
-  `MainWindow::setPreviewFollowDecoration` / `clearPreviewFollowDecoration` → both the v1
+  `Session::setPreviewFollowDecoration` / `clearPreviewFollowDecoration` → both the v1
   `ValidationSection` extra-selections/visual caret AND `QmlEditorFollowDecoration` →
   `QmlDocumentModel::qmlEditorFollowDecorationChanged` → `SourceEditor.applyFollowDecoration`.
 
 That second channel was missing until 2026-08-24, which is why v2 followed while playing and did
-nothing at all once paused. **Every decoration passes through that one MainWindow pair**, so feed
+nothing at all once paused. **Every decoration passes through that one Session pair**, so feed
 new decoration sources from there rather than adding a branch inside the follow sync.
 
 Two related rules:
@@ -619,8 +619,8 @@ Two related rules:
   commit, and SourceEditor then drops every follow update for the rest of the session.
 
 An editor Ctrl/Command click is the mirror image: v1 resolves it in an event filter on the widget
-viewport (`MainWindow.WindowInteraction.cpp`), v2 in `SourceEditor.qml`'s `PointHandler` →
-`QmlDocumentModel::seekPreviewToEditorLocation` → `MainWindow::seekPreviewToQmlEditorLocation`.
+viewport (`Interaction.cpp`), v2 in `SourceEditor.qml`'s `PointHandler` →
+`QmlDocumentModel::seekPreviewToEditorLocation` → `Session::seekPreviewToQmlEditorLocation`.
 Both perform the same sequence — resolve second, park playback, suppress timeline cursor sync
 across the discrete seek, then hand the timeline its cursor. Change one, change the other.
 

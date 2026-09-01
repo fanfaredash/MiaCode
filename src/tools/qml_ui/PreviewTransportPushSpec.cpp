@@ -46,7 +46,7 @@ QString readSource(const QString& relativePath)
 QStringList playingFlagAssignmentSites()
 {
     static const QRegularExpression assignment(
-        QStringLiteral("qtPreviewPlaying_\\s*=[^=]"));
+        QStringLiteral("state_\\.playing_\\s*=[^=]"));
     QStringList sites;
     QDirIterator it(sourceRoot() + QStringLiteral("/src"),
                     QStringList{QStringLiteral("*.cpp"), QStringLiteral("*.h"),
@@ -62,7 +62,7 @@ QStringList playingFlagAssignmentSites()
             if (!assignment.match(lines.at(i)).hasMatch()) continue;
             // The storage block declares the member and its reference alias;
             // those are definitions, not writers.
-            if (path.endsWith(QStringLiteral("MainWindowMemberStorage.inc"))) continue;
+            if (path.endsWith(QStringLiteral("SessionMembers.inc"))) continue;
             sites.append(QStringLiteral("%1:%2")
                              .arg(QFileInfo(path).fileName())
                              .arg(i + 1));
@@ -86,20 +86,20 @@ int main(int argc, char** argv)
     if (sites.size() != 1) {
         out << "  assignment sites: " << sites.join(QStringLiteral(", ")) << '\n';
     }
-    expect(sites.size() == 1 && sites.first().startsWith(QStringLiteral("MainWindow.WindowSection.cpp")),
-           QStringLiteral("qtPreviewPlaying_ is assigned in exactly one place"),
+    expect(sites.size() == 1 && sites.first().startsWith(QStringLiteral("ShellHost.cpp")),
+           QStringLiteral("playing_ is assigned in exactly one place"),
            out, &failed);
 
     // 2. 那个写入者会广播出去。
     const QString windowSection = readSource(
-        QStringLiteral("src/app/mainwindow/sections/window/MainWindow.WindowSection.cpp"));
-    expect(!windowSection.isEmpty(), QStringLiteral("MainWindow.WindowSection.cpp is readable"),
+        QStringLiteral("src/app/runtime/shell/ShellHost.cpp"));
+    expect(!windowSection.isEmpty(), QStringLiteral("ShellHost.cpp is readable"),
            out, &failed);
-    const int writerAt = windowSection.indexOf(QStringLiteral("void MainWindow::setPreviewPlayingFlag"));
+    const int writerAt = windowSection.indexOf(QStringLiteral("void Session::setPreviewPlayingFlag"));
     expect(writerAt >= 0, QStringLiteral("setPreviewPlayingFlag exists"), out, &failed);
     if (writerAt >= 0) {
         const QString writerBody = windowSection.mid(writerAt, 900);
-        expect(writerBody.contains(QStringLiteral("emit shellPresentationChanged()")),
+        expect(writerBody.contains(QStringLiteral("emit presentationChanged()")),
                QStringLiteral("setPreviewPlayingFlag announces the flip"), out, &failed);
     }
 
@@ -109,16 +109,16 @@ int main(int argc, char** argv)
     // 众多调用方之一，而导出片头的 lead-in 会移动播放头却从不经过它——那正是
     // 「片头在放、QML 滑块停在 0」的成因。
     const QString layoutUi = readSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelineLayoutUI.cpp"));
+        QStringLiteral("src/app/runtime/playback/LayoutUi.cpp"));
     const int publishAt = layoutUi.indexOf(
-        QStringLiteral("void MainWindow::TimelineSection::updatePreviewSliderPosition"));
+        QStringLiteral("void miacode::runtime::PlaybackHost::updatePreviewSliderPosition"));
     expect(publishAt >= 0, QStringLiteral("updatePreviewSliderPosition exists"), out, &failed);
     if (publishAt >= 0) {
-        const int nextFunctionAt = layoutUi.indexOf(QStringLiteral("\nvoid MainWindow::"), publishAt + 1);
+        const int nextFunctionAt = layoutUi.indexOf(QStringLiteral("\nvoid miacode::runtime::"), publishAt + 1);
         const QString publishBody = layoutUi.mid(
             publishAt, nextFunctionAt > publishAt ? nextFunctionAt - publishAt : -1);
         const int emitAt = publishBody.indexOf(
-            QStringLiteral("emit owner_.shellPreviewPlayheadChanged()"));
+            QStringLiteral("emit session_.previewPlayheadChanged()"));
         const int guardAt = publishBody.indexOf(QStringLiteral("ui_.previewSlider_ == nullptr"));
         expect(emitAt >= 0, QStringLiteral("updatePreviewSliderPosition announces the playhead"),
                out, &failed);
@@ -129,12 +129,12 @@ int main(int argc, char** argv)
 
     // 4. 片头 lead-in 走的是同一个发布点。
     const QString introRegion = readSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewIntroRegion.cpp"));
+        QStringLiteral("src/app/runtime/playback/IntroRegion.cpp"));
     const int tickAt = introRegion.indexOf(
-        QStringLiteral("void MainWindow::TimelineSection::tickExportIntroLeadIn"));
+        QStringLiteral("void miacode::runtime::PlaybackHost::tickExportIntroLeadIn"));
     expect(tickAt >= 0, QStringLiteral("tickExportIntroLeadIn exists"), out, &failed);
     if (tickAt >= 0) {
-        const int nextFunctionAt = introRegion.indexOf(QStringLiteral("\nbool MainWindow::"), tickAt + 1);
+        const int nextFunctionAt = introRegion.indexOf(QStringLiteral("\nbool miacode::runtime::"), tickAt + 1);
         const QString tickBody = introRegion.mid(
             tickAt, nextFunctionAt > tickAt ? nextFunctionAt - tickAt : -1);
         expect(tickBody.contains(QStringLiteral("updatePreviewSliderPosition(")),
@@ -144,15 +144,15 @@ int main(int argc, char** argv)
     // 5. 播放/暂停呈现也会广播——片头 lead-in 不写 qtPreviewPlaying_，所以单一写入者
     //    那条播报覆盖不到它。
     const QString editorState = readSource(
-        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentEditorState.cpp"));
+        QStringLiteral("src/app/runtime/document/DocumentEditorState.cpp"));
     const int pauseAt = editorState.indexOf(
-        QStringLiteral("void MainWindow::DocumentSection::updatePauseButtonAppearance"));
+        QStringLiteral("void miacode::runtime::DocumentSessionHost::updatePauseButtonAppearance"));
     expect(pauseAt >= 0, QStringLiteral("updatePauseButtonAppearance exists"), out, &failed);
     if (pauseAt >= 0) {
-        const int nextFunctionAt = editorState.indexOf(QStringLiteral("\nvoid MainWindow::"), pauseAt + 1);
+        const int nextFunctionAt = editorState.indexOf(QStringLiteral("\nvoid miacode::runtime::"), pauseAt + 1);
         const QString pauseBody = editorState.mid(
             pauseAt, nextFunctionAt > pauseAt ? nextFunctionAt - pauseAt : -1);
-        expect(pauseBody.contains(QStringLiteral("shellPresentationChanged()")),
+        expect(pauseBody.contains(QStringLiteral("presentationChanged()")),
                QStringLiteral("the play/pause presentation announces itself"), out, &failed);
     }
 
@@ -164,13 +164,13 @@ int main(int argc, char** argv)
     // MainWindow&. What matters here is unchanged: it LISTENS rather than
     // sampling.
     const QString bootstrap = readSource(
-        QStringLiteral("src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp"));
+        QStringLiteral("src/app/runtime/SessionBootstrap.cpp"));
     expect(modelSource.contains(
                QStringLiteral("ShellNotifications::previewPlayheadChanged"))
-               && bootstrap.contains(QStringLiteral("MainWindow::shellPreviewPlayheadChanged")),
+               && bootstrap.contains(QStringLiteral("Session::previewPlayheadChanged")),
            QStringLiteral("QmlPreviewModel listens for the playhead"), out, &failed);
     expect(modelSource.contains(QStringLiteral("ShellNotifications::presentationChanged"))
-               && bootstrap.contains(QStringLiteral("MainWindow::shellPresentationChanged")),
+               && bootstrap.contains(QStringLiteral("Session::presentationChanged")),
            QStringLiteral("QmlPreviewModel listens for shell presentation"), out, &failed);
     // A timer here would mean the transport is sampling MainWindow again, which
     // is what let a missing announcement go unnoticed in the first place.
@@ -180,9 +180,9 @@ int main(int argc, char** argv)
 
     // 6. 试听场景的播放就绪是它自己的，且失配时能自愈。
     const QString playbackGlue = readSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackGlue.cpp"));
+        QStringLiteral("src/app/runtime/playback/PlaybackGlue.cpp"));
     const int gateAt = playbackGlue.indexOf(
-        QStringLiteral("bool MainWindow::TimelineSection::preparePreviewStartState"));
+        QStringLiteral("bool miacode::runtime::PlaybackHost::preparePreviewStartState"));
     expect(gateAt >= 0, QStringLiteral("preparePreviewStartState exists"), out, &failed);
     if (gateAt >= 0) {
         const QString gateBody = playbackGlue.mid(gateAt);
@@ -199,13 +199,13 @@ int main(int argc, char** argv)
                    && !auditionBranch.contains(QStringLiteral("timelineRevision_")),
                QStringLiteral("it no longer borrows the edited difficulty's snapshot"), out, &failed);
     }
-    expect(playbackGlue.contains(QStringLiteral("bool MainWindow::ensureAuditionSceneReady"))
+    expect(playbackGlue.contains(QStringLiteral("bool Session::ensureAuditionSceneReady"))
                && playbackGlue.contains(QStringLiteral("reinstall()")),
            QStringLiteral("a stale audition scene rebuilds instead of refusing forever"), out, &failed);
 
     // 7. 两个安装方都登记，两个拆除方都清除。
     const QString exportSnapshot = readSource(
-        QStringLiteral("src/app/mainwindow/sections/export/MainWindow.ExportSnapshot.cpp"));
+        QStringLiteral("src/app/runtime/export/ExportSnapshot.cpp"));
     expect(exportSnapshot.contains(QStringLiteral("setAuditionSceneReady("))
                && exportSnapshot.contains(QStringLiteral("clearAuditionSceneReady()")),
            QStringLiteral("the export audition registers and releases its scene"), out, &failed);

@@ -1,6 +1,6 @@
 #include "QmlUiSettings.h"
 
-#include "mainwindow/MainWindowShared.h"
+#include "runtime/Shared.h"
 #include "AppVersion.h"
 #include "ui/UiText.h"
 #include "ui/ThemeVariantResolver.h"
@@ -189,15 +189,15 @@ void QmlUiSettings::reloadEditorSettings()
 {
     const QJsonObject editorUi = UiText::loadPreferencesObject().value(QStringLiteral("ui")).toObject();
     const int fontPointSize = qBound(
-        miacode::mainwindow::shared::kEditorTextFontSizeMin,
+        miacode::runtime::shared::kEditorTextFontSizeMin,
         editorUi.value(QStringLiteral("editor_text_font_size")).toInt(
-            miacode::mainwindow::shared::editorFont().pointSize()),
-        miacode::mainwindow::shared::kEditorTextFontSizeMax);
-    const double lineSpacingFactor = miacode::mainwindow::shared::normalizeEditorLineSpacingFactor(
+            miacode::runtime::shared::editorFont().pointSize()),
+        miacode::runtime::shared::kEditorTextFontSizeMax);
+    const double lineSpacingFactor = miacode::runtime::shared::normalizeEditorLineSpacingFactor(
         editorUi.value(QStringLiteral("editor_line_spacing_factor")).toDouble(
-            miacode::mainwindow::shared::kEditorLineSpacingFactorDefault));
-    const QFont codeFont = miacode::mainwindow::shared::editorFont(fontPointSize);
-    const int blockSpacing = miacode::mainwindow::shared::blockSpacingPixelsForPointSize(
+            miacode::runtime::shared::kEditorLineSpacingFactorDefault));
+    const QFont codeFont = miacode::runtime::shared::editorFont(fontPointSize);
+    const int blockSpacing = miacode::runtime::shared::blockSpacingPixelsForPointSize(
         fontPointSize, lineSpacingFactor);
     const bool halfWidth = editorUi.value(QStringLiteral("editor_half_width_input")).toBool(true);
     const bool overwrite = editorUi.value(QStringLiteral("editor_overwrite_mode")).toBool(false);
@@ -297,9 +297,9 @@ void QmlUiSettings::setPreviewWidthRatio(double value)
 
 void QmlUiSettings::setEditorAppearance(int pointSize, double lineSpacingFactor)
 {
-    const QFont font = miacode::mainwindow::shared::editorFont(pointSize);
+    const QFont font = miacode::runtime::shared::editorFont(pointSize);
     const int blockSpacing =
-        miacode::mainwindow::shared::blockSpacingPixelsForPointSize(pointSize, lineSpacingFactor);
+        miacode::runtime::shared::blockSpacingPixelsForPointSize(pointSize, lineSpacingFactor);
     if (codeFont_ == font && editorBlockSpacing_ == blockSpacing) {
         return;
     }

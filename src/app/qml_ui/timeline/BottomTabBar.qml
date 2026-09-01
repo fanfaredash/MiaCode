@@ -41,7 +41,8 @@ Rectangle {
         AppTab {
             Layout.fillHeight: true
             panelTab: true
-            text: UiText.text("Muri")
+            visible: root.timelineSession.muriTabVisible
+            text: root.timelineSession.muriTabLabel
             count: root.analysisSession.muriRows.length
             active: root.timelineSession.currentTabId === "muri"
             onClicked: root.timelineSession.setCurrentTabId("muri")

@@ -7,49 +7,40 @@ contracts, and the god-file watch-list. Pair with `feature-index.md` (feature �
 
 ```text
 src/
-  app/            App entry + window orchestration ONLY
+  app/            App entry + runtime assembly. No QMainWindow product window.
     main.cpp        GUI boot, CLI export, export-worker entry, startup timing
-    mainwindow/     MainWindow + sections/<feature>/ (partial-class slices).
-                    Shrinking: it BORROWS the v2 services, never owns them.
-                    Deleted entirely in stage 4 — do not add new state here.
-                    No SimaiDocument member. QML writes ChartWorkspace. The window
-                    follows ChartWorkspace::changed for timeline, preview path,
-                    and autosave. Menus, outline, metadata pages, and widget
-                    dialogs are not constructed.
+    runtime/        Session (QObject) + hosts. Progress: runtime/ASSEMBLY.md.
+                    Session owns hosts and installs them into ApplicationServices
+                    slots. Hosts: playback/, document/, export/, media/,
+                    settings/, shell/, preview/, editor/, validation/.
+                    Shared.cpp is fonts/icons/helpers. HostUi/HostState is still
+                    Session-owned storage lent to hosts — next slice, not a
+                    reason to put new feature state on Session.
+                    src/app/mainwindow/ is gone.
     v2/             ApplicationServices — the non-Widget owner of the document
                     domain and the shared UI boundaries: ChartWorkspace,
                     ChartWorkspaceFileService, AnalysisService,
                     EditorSyncController, ChartDropImportService,
                     UiRequestService, JobProgressService,
-                    PreviewAppearanceState. Constructed BEFORE MainWindow and
+                    PreviewAppearanceState. Constructed BEFORE Session and
                     destroyed after it. Nothing else in src/app may construct
                     one of these — application_services_spec scans the tree and
                     fails if it does.
-                    EIGHT contracts the QML layer names instead of MainWindow —
+                    EIGHT contracts the QML layer names —
                     EditorPageRouter, ExportEngine, PreviewSurface,
                     TimelineSurface, PreferencesStore, DocumentBridge,
-                    MediaToolsEngine, LatencyEngine — plus ShellNotifications,
-                    which relays the window's eleven push signals. The assembly
-                    holds SLOTS for the eight because MainWindow still
-                    implements them; it installs itself at startup and withdraws
-                    at the top of ~MainWindow, and consumers bind to the slot
-                    rather than snapshotting the pointer.
-                    As of 2026-09-01 QmlApplicationContext takes
-                    ApplicationServices& and NOTHING else: no MainWindow
-                    reference, parameter or include. When adding a QML-facing
-                    capability, extend one of these interfaces — never reach for
-                    MainWindow. The window installs itself and
-                    withdraws at the top of ~MainWindow, and consumers bind to
-                    exportEngineSlot() rather than snapshotting the pointer.
+                    MediaToolsEngine, LatencyEngine — plus ShellNotifications.
+                    Session installs the matching host into each slot; consumers
+                    bind to the slot rather than snapshotting the pointer.
+                    QmlApplicationContext takes ApplicationServices& and
+                    NOTHING else. When adding a QML-facing capability, extend
+                    one of these interfaces.
                     PreviewAppearanceState holds the eight values that decide
                     how BOTH the live preview and the exported video are drawn
                     (skin dir/variant, judge effect, outline, slide-earlier, tap
                     judge distance, center display, intro sound). It owns values
-                    only — applying them to the live surfaces and persisting
-                    them is MainWindow reacting to skinChanged /
-                    judgeEffectStyleChanged / introSoundChanged. MainWindow
-                    binds its same-named members to values() by reference;
-                    writes through values() are deliberately silent so restore
+                    only — hosts apply them to live surfaces and persist them.
+                    Writes through values() are deliberately silent so restore
                     paths do not look like user edits.
     qml_ui/         The default (v2) shell: QmlUiBootstrap, QmlApplicationContext,
                     the Qml*Model façades and the MiaCode.UI QML module.
@@ -57,8 +48,7 @@ src/
                     headers only. QuickShellController and QuickShellContracts
                     were deleted 2026-08-30; the v1 QML shell, native-surface
                     re-hosting and style bridge went 2026-08-25, and `--ui=v1`
-                    no longer exists. What remains is preview-composition
-                    plumbing that leaves with MainWindow in stage 4.
+                    no longer exists.
     ui/             UiText, UiTheme, ShortcutRegistry, WindowParityMetrics
   audio/          Audio backends + SFX runtime. Nothing else links BASS/miniaudio.
   common/         Cross-module utilities, debug logging, shared config headers
@@ -92,29 +82,25 @@ Path-translation table for stale docs/comments:
 | `src/preview/scene/` | `src/core/scene/` |
 | `src/preview/audio/` | `src/audio/` |
 | `src/preview/video/PreviewMediaController` | **removed** — widget-shell bg media now via `PreviewRuntime` stage-background + `PreviewStageMediaHost` |
+| `src/app/mainwindow/` | `src/app/runtime/` (`Session` + hosts; see `ASSEMBLY.md`) |
 
 ## 2. Dependency direction
 
 - `core/chart/` and `core/scene/` are the domain core: no dependency on `app/`, `preview/`,
   or Qt Widgets. `core/scene/` must stay GPU-free (no QSG / D3D11 includes).
 - `app/` (UI) depends on core; core never depends on UI.
-- `app/v2/` must stay **Qt Widgets-free** and must not include `mainwindow/`. The direction is
-  one-way: `mainwindow/` and `qml_ui/` reach into `app/v2/`, never the reverse. This is enforced
+- `app/v2/` must stay **Qt Widgets-free** and must not include `runtime/` hosts. The direction is
+  one-way: `runtime/` and `qml_ui/` reach into `app/v2/`, never the reverse. This is enforced
   by linkage, not review — `application_services_spec`, `ui_request_service_spec` and the other
   v2 specs link `Qt6::Core` (+`Gui`/`Test`) only, so a QtWidgets include fails the build.
 - `audio/` is the only place allowed to link BASS / miniaudio.
 - `tools/*` are standalone (each spec/dump/probe builds against a minimal source subset).
-- **The QML layer's reach into `MainWindow` is a tracked, monotonic number.**
-  `docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md` enumerates every name
-  `src/app/qml_ui/` uses on the hidden window, and `qml_ui_backend_surface_spec` holds code and
-  doc to set equality — new coupling fails, and migrating something without deleting its row
-  fails too. Update the doc in the same commit as the work. Prefer removing a `friend` grant or a
-  private-member read over shaving a method: a friend grant is unbounded access, so trading it
-  for named public calls is progress even when the method count rises. When the thing the QML
-  layer wants is a whole capability rather than a value (the export engine, page switching),
-  declare an interface in `src/app/v2/` and let MainWindow implement it — publishing those
-  entry points would formalize widget-era mechanics that are supposed to disappear. As of
-  2026-09-01 no QML type is a `friend` of MainWindow.
+- **QML names the eight slots, not Session.** `docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md`
+  plus `qml_ui_backend_surface_spec` still ratchet leftover names `src/app/qml_ui/` reads on
+  `Session.h`. New coupling fails, and migrating something without deleting its row fails too.
+  Update the doc in the same commit as the work. When the thing the QML layer wants is a
+  whole capability, extend an interface in `src/app/v2/` and let the matching host fill the
+  slot. As of 2026-09-01 no QML type is a `friend` of Session.
 - **Every library `MiaCode` links is on an allowlist**: `docs/ops/DEPENDENCY_ALLOWLIST.md`, guarded
   by `dependency_allowlist_spec`. Adding a dependency without a doc row fails the suite, and so
   does leaving a stale row behind. `src/tools/net` is deliberately NOT in the product target — it
@@ -144,11 +130,11 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
 
 (Ported from the prior design ledger; verified against current code where noted.)
 
-- `MainWindow` is orchestration, not the home for every feature body. New window features land
-  in `src/app/mainwindow/sections/<feature>/`.
+- `Session` is assembly, not the home for every feature body. New runtime work lands in
+  `src/app/runtime/<host>/` and fills an `ApplicationServices` slot.
 - `SimaiDocument` is the editable storage model for metadata + difficulty text.
-- `app/v2/ChartWorkspace` is the sole live document. `MainWindow` has no `SimaiDocument` member.
-  Nested sections read and write `ApplicationServices.workspace()`.
+- `app/v2/ChartWorkspace` is the sole live document. `Session` has no `SimaiDocument` member.
+  Hosts read and write `ApplicationServices.workspace()`.
 - Parser output is the shared intermediate representation for timeline, preview, Muri analysis,
   and export reconstruction.
 - Runtime SFX and export SFX must use the same note-to-sound semantics (see
@@ -174,11 +160,11 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
     central zh-keyed dictionary `src/app/ui/UiTextJaDictionary.cpp` (translate from the Chinese).
     Pass an explicit third `ja` arg only for a one-off that shouldn't live in the dictionary.
   - Parser validation messages: `SimaiNativeValidationLocale` (English/Chinese/Japanese); derive
-    it from `UiText::resolvedLanguage()` via `miacode::mainwindow::shared::uiValidationLocale()`.
+    it from `UiText::resolvedLanguage()` via `miacode::runtime::shared::uiValidationLocale()`.
     The zh/ja maps live in `SimaiNativeParser.Driver.cpp`.
   - QML: the palette bridge exports `uiLanguage` ("en"/"zh"/"ja"); QML uses a local
     `localized(en, zh, ja)` helper (see `BottomTabsQuickHost.qml`). No `qsTr` (no `.ts` shipped).
-  - CJK UI font candidates per language live in `MainWindowShared.cpp` (`uiFont`/`uiAccentFont`)
+  - CJK UI font candidates per language live in `Shared.cpp` (`uiFont`/`uiAccentFont`)
     and `main.cpp`; add families when adding a language.
   - `ui_text_locale_spec` (CTest) enforces zhMap/jaMap key parity AND that every inline
     `localized(en, zh)` zh string has a dictionary entry. Full rationale:
@@ -192,8 +178,8 @@ gated on build + CTest 25/25. The full methodology and rollback notes are kept a
 local archives.
 
 Conventions established by that pass — reuse, don't reinvent:
-- A single class's method bodies split across several `.cpp` (the `MainWindow.<Section>.cpp`
-  partial pattern) is the default; the class's public `.h` does not change.
+- A single class's method bodies split across several `.cpp` (the runtime host TU pattern)
+  is the default; the host's public `.h` stays the seam.
 - Stateless file-local helpers/constants shared by >1 split TU → a per-file `<Base>.Internal.h`
   in a named `…_detail` namespace (`inline`/`inline constexpr`); each TU `#include`s it +
   `using namespace …_detail;`. (Was an anonymous namespace = internal linkage = link error if moved.)
@@ -217,14 +203,14 @@ Done — do NOT regrow these (add a new focused unit instead):
 | `core/chart/transform/ChartBatchTransform.cpp` | 2302 | → `.Parsers/.Subdivision/.Selection/.Transform` + `…Internal.h` (`MC_OP` via `OperationLog.h`; also fed `chart_batch_transform_spec`) |
 | `editor/PlainCodeEditor.cpp` | 2019 | → `.Layout/.HighlightAndCaret/.BracketCompletion/.Input/.Bookmarks` + `.Internal.h` (`LineNumberArea` moved to header; also fed `plain_code_editor_spec`) |
 | `app/main.cpp` | 1864 | → core (`main`) + `startup_diagnostics_win32/graphics_backend/cli_shared/cli_video_export/cli_video_export_worker.cpp` + `MainEntrypoints.h` (`miacode::app::entry`) |
-| `app/mainwindow/sections/{dialogs,document,timeline}/` — the 5 biggest section files | 1.8–3.5k each | each sub-split into more `MainWindow.<Section>.cpp` partial slices (Dialogs→AudioSettings/MediaTools/TrackMetadata/ExportSettings; TimelinePlayback→PreviewSeek/PreviewPlaybackState/PreviewIntroRegion/PreviewTick; DocumentFlow→FileFlow/DesignerFlow/AutosaveFlow; PreviewTimelineFlow→3; TimelineLayout→4) + per-file `Internal.h` where helpers are shared |
+| `app/runtime/{media,document,playback}/` — the 5 biggest host files at the 2026-06-19 split | 1.8–3.5k each | each sub-split into more host TUs (MediaJobs→MediaTools; Playback→Seek/PlaybackState/IntroRegion/Tick; DocumentFlow→FileFlow/DesignerFlow/Autosave; TimelineFlow→3; Layout→4) + per-file `Internal.h` where helpers are shared |
 | `tools/muri/MuriAnalyzer.cpp` | ~1300 (was 4600) | (earlier) `analyze()` thin orchestrator over `miacode::muri::detail` stage TUs — don't regrow. History: `.claude/MURI_DECOMPOSITION_HANDOFF.md` |
 
 Still standing / out of scope of the 2026-06-19 pass:
 
 | File | ~lines | Note / direction |
 |---|---|---|
-| `app/mainwindow/MainWindow.h` + remaining `sections/*` | 176 methods; ~11 sections still 1.0–1.7k | god class sliced by friend partials; further reduction = promote sections to state-owning cooperators (design change) |
+| `app/runtime/Session.h` + hosts | assembly + `HostUi`/`HostState` still Session-owned | next slice: cut storage per host; do not grow Session.h |
 | `app/quick_shell/qml/QuickShellMain.qml` | 1582 | **SUGGEST-only**: extract a C++ surface-routing controller + layout engine first, then split QML — 38 root props + timers + layout call-chain are too coupled to move mechanically |
 | `core/chart/parser/SimaiNativeParser.cpp` | — | `#include "*.cpp"` unity split (`:1584`) → 真正 multi-TU, or rename includes to `.inc`/`.ipp` |
 | `core/chart/transform/ChartNormalization.cpp`, `preview/runtime/PreviewRuntime.cpp`, `timeline/TimelineSceneStateBuilder.cpp`, … | 1.0–1.7k (~30 files) | never deep-audited (the blind-spot tier — doc §6B); audit before splitting |

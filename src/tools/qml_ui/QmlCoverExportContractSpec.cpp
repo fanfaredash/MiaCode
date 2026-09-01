@@ -103,7 +103,7 @@ int main(int argc, char** argv)
         QStringLiteral("src/tools/cover_export/SceneFrameRenderer.cpp"));
     const QString pageHost = readSource(QStringLiteral("src/app/qml_ui/QmlEditorPageHost.cpp"));
     const QString mainWindow = readSource(
-        QStringLiteral("src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp"));
+        QStringLiteral("src/app/runtime/export/VideoExportHost.cpp"));
     const QString renderer = readSource(
         QStringLiteral("src/tools/cover_export/CoverCompositeRenderer.cpp"));
     const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));

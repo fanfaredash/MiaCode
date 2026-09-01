@@ -6,7 +6,7 @@
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
-#include "mainwindow/MainWindow.h"
+#include "runtime/Session.h"
 #include "app/v2/ApplicationServices.h"
 #include "UiNativeWindowTheme.h"
 #include "drop/QmlChartDropBridge.h"
@@ -78,10 +78,8 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     appendQmlUiRuntimeLog(QStringLiteral("start_enter"));
 
     applicationServices_ = std::make_unique<miacode::v2::ApplicationServices>();
-    backend_ = std::make_unique<MainWindow>(*applicationServices_);
-    backend_->setQuickShellBackendActive(true);
-    backend_->hide();
-    backend_->setVisible(false);
+    backend_ = std::make_unique<Session>(*applicationServices_);
+    backend_->setBackendActive(true);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
     applicationContext_ = std::make_unique<QmlApplicationContext>(*applicationServices_, this);
@@ -160,7 +158,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             releaseRootWindowResources();
             return false;
         }
-        backend_->setQuickShellRootWindow(window);
+        backend_->attachRootWindow(window);
         if (QQuickItem* rootItem = window->contentItem(); rootItem != nullptr) {
             rootItem->setFlag(QQuickItem::ItemAcceptsDrops, true);
         }
@@ -202,7 +200,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             rootWindow_ = nullptr;
             releaseRootWindowResources();
         });
-        backend_->shellSetRootWindowFrameGeometry(window->frameGeometry());
+        backend_->setRootWindowFrameGeometry(window->frameGeometry());
         if (!appIcon_.isNull()) {
             window->setIcon(appIcon_);
         }
@@ -246,7 +244,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         // frontend window is ready. UIv2 has no native surface host to forward
         // that readiness notification, so release the shared backend gate here
         // after the QML root window has been created and shown.
-        backend_->shellNoteQuickUiReady();
+        backend_->noteRootWindowReady();
     }
 
     if (!startupOpenTarget.trimmed().isEmpty() && applicationContext_ != nullptr) {
@@ -328,7 +326,7 @@ void QmlUiBootstrap::releaseRootWindowResources()
         chartDropBridge_->release();
     }
     if (backend_ != nullptr) {
-        backend_->setQuickShellRootWindow(nullptr);
+        backend_->attachRootWindow(nullptr);
     }
     if (applicationContext_ != nullptr) {
         applicationContext_->setChartDropBridge(nullptr);
