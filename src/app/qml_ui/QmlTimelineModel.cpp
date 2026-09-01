@@ -107,7 +107,7 @@ void QmlTimelineModel::userInteractionStarted()
 
 void QmlTimelineModel::surfaceReady()
 {
-    if (surface() != nullptr) surface()->timelineSurfaceReady();
+    if (surface() != nullptr) surface()->noteTimelineSurfaceReady();
 }
 
 void QmlTimelineModel::followPreviewToggled(bool enabled)

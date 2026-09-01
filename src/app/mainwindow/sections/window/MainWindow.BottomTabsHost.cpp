@@ -150,9 +150,9 @@ QObject* MainWindow::timelineStateBridge() const
     return shellTimelineStateBridgeObject();
 }
 
-bool MainWindow::timelineSurfaceReady() const
+void MainWindow::noteTimelineSurfaceReady()
 {
-    return shellTimelineSurfaceReady();
+    noteQuickTimelineSurfaceReady();
 }
 
 void MainWindow::navigateToSecond(double second)
@@ -218,11 +218,6 @@ bool MainWindow::muriTabVisible() const
 bool MainWindow::validationTabVisible() const
 {
     return shellValidationTabVisible();
-}
-
-bool MainWindow::shellTimelineSurfaceReady() const
-{
-    return quickTimelineSurfaceReady_;
 }
 
 void MainWindow::noteQuickTimelineSurfaceReady()

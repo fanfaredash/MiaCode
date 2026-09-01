@@ -57,6 +57,9 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `timeline_cadence_arbitration_policy_spec` (decides whether the timeline's watchdog timer may
   sample playback, or must yield to the `afterAnimating` render cadence — see
   `cross-chain-linkage.md` §14),
+  `timeline_surface_ready_spec` (the QSG timeline's readiness report — the gate both cadences
+  write through; a lost report freezes the playhead while scrubbing and 跟随预览 keep working —
+  see `cross-chain-linkage.md` §14),
   `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
   `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),

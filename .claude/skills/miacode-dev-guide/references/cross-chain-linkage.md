@@ -485,6 +485,25 @@ playback transport (`finalizeQtPreviewPlaybackStart` / `stopQtPreviewTimers`, al
 playback so `afterAnimating` keeps arriving; leaving it stuck true burns frames while paused,
 leaving it stuck false drops the timeline onto the watchdog.
 
+**Both cadences end at a gate.** `flushQtPreviewTimelinePosition` writes the bridge only when
+`quickTimelineBridgeReady()` — `!quickShellUiFocusBridgeMode_ || quickTimelineSurfaceReady_` — is
+true, because `TimelineQuickItem` refuses writes until it has a window, a bridge and a non-zero
+size. The flag is armed by exactly one report: `TimelineQuickItem::timelineSurfaceReady` →
+`BottomPanel.qml` → `QmlTimelineModel::surfaceReady` → `miacode::v2::TimelineSurface::
+noteTimelineSurfaceReady` → `MainWindow::noteQuickTimelineSurfaceReady`. Under the v2 shell
+`quickShellUiFocusBridgeMode_` is always true (`QmlUiBootstrap` calls
+`setQuickShellBackendActive(true)`), so a lost report freezes the playhead for the whole session —
+and it fails *quietly*, because everything else on that tick sits outside the gate:
+`applyQtPreviewPosition` still drives `previewCanvas_`, and the flush still runs
+`syncEditorCursorToPreviewSecond`. Symptom to recognise: **the timeline stops during playback while
+scrubbing still moves the preview and 跟随预览 still moves the caret.** That is this gate, not the
+cadence. Spec: `timeline_surface_ready_spec`.
+
+**Contract shape:** `noteTimelineSurfaceReady()` is a `void` command on purpose. It was once
+declared `bool timelineSurfaceReady() const`, which bound the QML call site to MainWindow's
+same-named getter — the report compiled, ran, and did nothing. Keep event reports on this interface
+shaped as commands.
+
 ### 14b. The timeline scroll is sub-pixel (`double`)
 
 `TimelineQuickStateBridge::horizontalScrollValue`, `TimelineSceneBuildRequest::

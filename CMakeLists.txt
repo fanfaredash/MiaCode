@@ -1891,6 +1891,26 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(preview_transport_push_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # The timeline half of the same push: the QSG surface has to tell the window
+    # it is writable before playback may move the playhead. Links the real
+    # QmlTimelineModel so the readiness report is exercised through the contract
+    # rather than described.
+    miacode_add_dev_tool(timeline_surface_ready_spec TEST
+        SOURCES
+            src/tools/qml_ui/TimelineSurfaceReadySpec.cpp
+            src/app/qml_ui/QmlTimelineModel.cpp
+            src/app/qml_ui/QmlTimelineModel.h
+            src/app/v2/ShellNotifications.cpp
+            src/app/v2/ShellNotifications.h
+            src/app/v2/TimelineSurface.h
+            src/app/ui/UiText.cpp
+            src/app/ui/UiText.h
+        LIBS Qt6::Core
+        INCLUDES src src/app src/app/ui
+    )
+    target_compile_definitions(timeline_surface_ready_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     miacode_add_dev_tool(qml_ui_bootstrap_lifecycle_spec TEST
         SOURCES
             src/tools/qml_ui/QmlUiBootstrapLifecycleSpec.cpp

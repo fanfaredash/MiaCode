@@ -25,7 +25,13 @@ public:
     // The QSG timeline's state bridge, for QML to bind against. Null until the
     // surface exists.
     virtual QObject* timelineStateBridge() const = 0;
-    virtual bool timelineSurfaceReady() const = 0;
+
+    // The QML item reports that it can be written to: it has a window, a state
+    // bridge and a non-zero size. This is a command, not a question. The window
+    // holds every timeline write back until the report arrives, so a member
+    // shaped like a getter would be invoked for effect and quietly do nothing —
+    // which is exactly how the playhead once froze for a whole session.
+    virtual void noteTimelineSurfaceReady() = 0;
 
     // Three navigation entry points rather than one, because they differ in
     // what they do to the view: `navigateToSecond` is a plain jump, `centerOn`

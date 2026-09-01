@@ -659,11 +659,6 @@ void MainWindow::WindowSection::shellTimelineUserInteractionStarted()
     owner_.timelineSection_->onTimelineUserInteractionStarted();
 }
 
-void MainWindow::WindowSection::shellTimelineSurfaceReady()
-{
-    owner_.noteQuickTimelineSurfaceReady();
-}
-
 void MainWindow::WindowSection::shellTimelineFollowPreviewToggled(bool enabled)
 {
     owner_.timelineSection_->onTimelineFollowPreviewToggled(enabled);
