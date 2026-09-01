@@ -91,6 +91,11 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 5. Timeline Data, Cursor Mapping, And Preview Synchronization
 
+- Playback transport contract (stage 4.5):
+  - Files: `src/app/v2/PlaybackControl.h`, `src/app/runtime/playback/PlaybackControlAdapter.h`, `src/app/runtime/playback/PlaybackControlAdapter.cpp`, `src/app/v2/ApplicationServices.h`, `src/app/runtime/SessionBootstrap.cpp`
+  - Classes: `miacode::v2::PlaybackControl`, `miacode::v2::PlaybackStateFeed`, `miacode::runtime::PlaybackControlAdapter`
+  - Owns: the revision/generation/sequence-stamped playback snapshot and the semantic play/stop/seek/scrub/rate command seam exposed by `ApplicationServices`; the adapter currently forwards to the legacy composite `PlaybackHost` while the Timeline and Preview hosts are extracted in stages 4.6–4.8. This is the transport authority boundary; do not add a second independent playhead or direct QML-to-widget playback path.
+
 - Timeline quick model:
   - Files: `src/timeline/TimelineQuickModel.h`, `src/timeline/TimelineQuickModel.cpp`, `src/timeline/TimelineRenderData.h`
   - Class: `TimelineQuickModel`

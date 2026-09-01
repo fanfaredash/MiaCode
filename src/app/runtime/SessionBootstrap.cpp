@@ -7,6 +7,7 @@
 #include "runtime/settings/SettingsHost.h"
 #include "runtime/preview/StageMediaHost.h"
 #include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackControlAdapter.h"
 #include "runtime/validation/ValidationHost.h"
 #include "runtime/shell/ShellHost.h"
 
@@ -181,9 +182,12 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     validation_ = std::make_unique<miacode::runtime::ValidationHost>(*this, ui_, state_);
     shell_ = std::make_unique<miacode::runtime::ShellHost>(*this, ui_, state_);
     playback_ = std::make_unique<miacode::runtime::PlaybackHost>(*this, ui_, state_);
+    playbackControl_ = std::make_unique<miacode::runtime::PlaybackControlAdapter>(*playback_);
+    applicationServices_.setPlaybackControl(playbackControl_.get());
     connect(&applicationServices_.workspace(), &miacode::v2::ChartWorkspace::changed,
-            this, [this](quint64) {
+            this, [this](quint64 revision) {
                 documents_->syncRuntimeFromWorkspace();
+                playbackControl_->setDocumentRevision(revision);
             });
     // unique_ptr owns it; pass no QObject parent to avoid double-delete.
     latencySandboxController_ = std::make_unique<miacode::latency::LatencySandboxController>(this, nullptr);

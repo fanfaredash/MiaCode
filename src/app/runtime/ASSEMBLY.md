@@ -24,8 +24,13 @@
 
 | 宿主 | 接口 | 代码 |
 |---|---|---|
-| `PlaybackHost` | `PreviewSurface` + `TimelineSurface` | `src/app/runtime/playback/` |
+| `PlaybackHost`（当前复合宿主） | `PreviewSurface` + `TimelineSurface` | `src/app/runtime/playback/` |
 | `VideoExportHost` | `ExportEngine` | `src/app/runtime/export/` |
+
+4.5 已建立独立的播放契约：`PlaybackControl` / `PlaybackStateFeed` / `PlaybackSnapshot` 位于
+`src/app/v2/PlaybackControl.h`，`PlaybackControlAdapter` 以类型化观测和命令转发连接当前复合
+`PlaybackHost`。新的 Preview/Timeline 代码应依赖 playback contract，而不是继续扩展复合宿主；
+4.6–4.9 再分别抽离 TimelineHost、PreviewHost 和最终的 PlaybackCoordinator。
 | `LatencySandboxController` | `LatencyEngine` | `src/tools/latency/` |
 | `MediaJobsHost` | `MediaToolsEngine` | `src/app/runtime/media/` |
 | `SettingsHost` | `PreferencesStore` | `src/app/runtime/settings/` |
@@ -35,11 +40,36 @@
 | `EditorHost` | 便携状态、书签、字体持久化 | `src/app/runtime/editor/` |
 | `ValidationHost` | 校验与无理列表 | `src/app/runtime/validation/` |
 
-`PlaybackHost` 同时填入预览与时间线两个槽，因为走带、播放头与时间线 QSG 共用同一套运行时对象。`DocumentSessionHost` 同时填入文档桥与页面路由，因为页面切换与未保存守卫同属文档会话。
+`PlaybackHost` 当前同时填入预览与时间线两个槽，因为走带、播放头与时间线 QSG 仍共用同一套运行时对象；这
+是迁移后的暂态，不是最终职责边界。`DocumentSessionHost` 同时填入文档桥与页面路由，因为页面切换与未保存
+守卫同属文档会话。
 
 `ApplicationServices` 只装配，不实现上述接口。
 
 入口：`QmlUiBootstrap` / CLI 导出构造 `ApplicationServices` + `Session`。`Session` 拥有宿主并安装槽位。QML 根窗口由 QML 引擎创建，与 `Session` 无父子关系。
+
+## Preview / Timeline 二次拆分（计划）
+
+当前的 `PlaybackHost` 约 8,975 行，混合了 transport、canonical playhead、frame pacing、Timeline
+QSG / viewport、PreviewRuntime、StageMedia、音频混音、布局和分析状态。后续遵循唯一不变量：
+**一个时间域、一个播放权威、两个独立投影**。
+
+目标装配为三个独立实例：
+
+| 目标宿主 | 负责 | 明确不负责 |
+|---|---|---|
+| `PlaybackCoordinator` | transport 状态机、canonical playhead、clock / frame pacing、seek / scrub 事务、播放生命周期、代次 / revision / sequence、Timeline command gate | QML/QSG、viewport/layout、StageMedia、mixer 实现、analysis 实现 |
+| `PreviewHost` | `PreviewRuntime`、StageMedia 路由与预热、渲染设置、音频 mixer / SFX、preview executor、只读音频时钟资源 | canonical playhead、独立 transport、Timeline 状态 |
+| `TimelineHost` | `TimelineQuickStateBridge`、QSG readiness、viewport / zoom、drag / follow / navigation 投影、底栏页签、Timeline 侧分析展示 | transport clock、播放权威、直接写文档模型、Preview 资源 |
+
+协调器向两个宿主发布带 `sessionGeneration`、`documentRevision`、`playbackSequence` 和 canonical
+chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate` 校验 revision、代次和
+写入顺序；Preview 与 Timeline 之间不得直接调用。`EditorSyncController` 继续拥有文档 revision
+与 follow 真相，Session 只负责显式构造、端口连接、生命周期和资源所有权。
+
+迁移期间可以保留旧 `PreviewSurface` 的 transport adapter；只有当三个槽位已分别指向
+`PlaybackCoordinator`、`PreviewHost`、`TimelineHost`，且契约测试与跨模块时间对齐回归通过后，才
+将旧 `PlaybackHost` 更名或删除。
 
 ## 进度
 
@@ -55,7 +85,13 @@
 - [x] 底栏三个页签（时间线 / 语法 / 无理）可见性改走独立布尔，不再询问已删除的 `QTabWidget`
 - [x] 产品面自查：语法 / 无理 / 解析、编辑、时间线、预览、导出、页签；无理列表不再被「不打断提示」偏好清空
 - [x] 语法列表跳转：语法行 `second` 哨兵为负值，激活完成后不再按 0 秒走带把光标拉回谱面开头
+- [x] 阶段 4.5：建立 `PlaybackControl` / stamped `PlaybackSnapshot`，完成兼容 adapter、服务槽位、
+  stale callback/session invalidation 边界与 Release 契约测试
+- [ ] `PlaybackHost` 仍是 Preview + Timeline 复合宿主；按上面的计划拆分为
+      `PlaybackCoordinator`、`PreviewHost`、`TimelineHost`
 - [ ] `HostUi` / `HostState` 仍由 `Session` 持有并借给宿主；后续按宿主切开这份存储
+- [ ] `QApplication` / `Qt6::Widgets` 仍在入口与 CMake；宿主拆分后再清除 native fallback 与
+      Widgets 依赖，避免把 QWidget 生命周期藏进新宿主
 
 ## 记录
 
@@ -90,3 +126,10 @@ QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理�
 ### 2026-09-01 语法错误点击跳到编辑器第一行
 
 语法行没有播放头时间，投影却把 `second` 写成 `0`。点击先按行列定位编辑器，激活完成后再调用 `navigateToSecond(0)`，时间轴把光标改到 0 秒对应行（通常是正文开头）。现语法行 `second < 0`，完成激活时只对 `pending.second >= 0` 走带。无理行仍带真实秒数。
+
+### 2026-09-02 远程合并后的当前边界
+
+`2aa9db83` 已将 `MainWindow` 宿主迁入 `src/app/runtime/` 并删除 `src/app/mainwindow/`；合并提交
+为 `4416596d`。`Session` 现在是 QObject 装配壳，`QmlApplicationContext` 只接收
+`ApplicationServices&`。下一步不再继续堆叠 `PlaybackHost`，而是先立 playback contract，再按
+`PlaybackCoordinator` / `PreviewHost` / `TimelineHost` 三个职责拆分；GUI 验收不属于本阶段进度判断。

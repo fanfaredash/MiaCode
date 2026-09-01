@@ -77,6 +77,11 @@ bool miacode::runtime::PlaybackHost::playing() const
     return state_.playing_ || exportIntroLeadInPlaying();
 }
 
+miacode::v2::PlaybackTransportState miacode::runtime::PlaybackHost::playbackTransportState() const
+{
+    return state_.previewTransportState_;
+}
+
 double miacode::runtime::PlaybackHost::positionSeconds() const
 {
     if (state_.exportIntroRegionActive_) {
@@ -108,6 +113,9 @@ void miacode::runtime::PlaybackHost::stop()
 void miacode::runtime::PlaybackHost::seek(double second)
 {
     seekPreviewToSecond(second, true);
+    if (!state_.playing_ && !exportIntroLeadInPlaying()) {
+        state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    }
 }
 
 void miacode::runtime::PlaybackHost::beginScrub()
@@ -123,6 +131,7 @@ void miacode::runtime::PlaybackHost::beginScrub()
     if (state_.playing_) {
         pauseQtPreviewPlaybackExact();
     }
+    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Scrubbing;
 }
 
 void miacode::runtime::PlaybackHost::updateScrub(double second, bool centerView)
@@ -188,6 +197,7 @@ void miacode::runtime::PlaybackHost::endScrub(double second, bool centerView)
         ui_.previewSeekDebounceTimer_->stop();
     }
     seekPreviewToSecond(clampedSecond, centerView);
+    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     const double appliedSecond = state_.pauseSecond_;
     const double misalignDelta = clampedSecond - appliedSecond;
     if (qAbs(misalignDelta) > kScrubMisalignWarnSeconds) {
@@ -209,6 +219,11 @@ void miacode::runtime::PlaybackHost::setPlaybackRate(double rate)
 void miacode::runtime::PlaybackHost::nudgePlaybackRate(int direction)
 {
     applyPreviewPlaybackRate(steppedPreviewPlaybackRate(state_.previewPlaybackRate_, direction));
+}
+
+double miacode::runtime::PlaybackHost::playbackRate() const
+{
+    return state_.previewPlaybackRate_;
 }
 
 QString miacode::runtime::PlaybackHost::playbackRateLabel() const

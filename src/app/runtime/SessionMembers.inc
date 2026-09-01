@@ -393,6 +393,8 @@
         bool documentDirty_ = false;
         bool currentFieldDirty_ = false;
         bool playing_ = false;
+        miacode::v2::PlaybackTransportState previewTransportState_ =
+            miacode::v2::PlaybackTransportState::Stopped;
         bool qtPreviewTimelineDirty_ = false;
         bool qtPreviewAwaitingFrameSwap_ = false;
         qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;

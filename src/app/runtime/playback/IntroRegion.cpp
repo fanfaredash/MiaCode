@@ -128,6 +128,7 @@ void miacode::runtime::PlaybackHost::enterExportIntroRegion(double positionSecon
         setupExportIntroOverlayData();
     }
     state_.exportIntroRegionActive_ = true;
+    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     state_.exportIntroPlayheadSeconds_ =
         qBound(-miacode::intro::kDurationSeconds, positionSeconds, 0.0);
     renderExportIntroFrame(state_.exportIntroPlayheadSeconds_);
@@ -150,6 +151,9 @@ void miacode::runtime::PlaybackHost::exitExportIntroRegion()
     }
     if (wasActive) {
         session_.updatePauseButtonAppearance();
+    }
+    if (state_.previewTransportState_ == miacode::v2::PlaybackTransportState::Playing) {
+        state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     }
 }
 
@@ -174,6 +178,7 @@ void miacode::runtime::PlaybackHost::pauseExportIntroAdvance()
         state_.exportIntroLeadInTimer_->stop();
     }
     // Keep the region + static frame so the paused intro stays on screen.
+    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     session_.updatePauseButtonAppearance();
 }
 
@@ -205,6 +210,7 @@ void miacode::runtime::PlaybackHost::startExportIntroAdvance(double fromPosition
         });
     }
     state_.exportIntroLeadInActive_ = true;
+    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Playing;
     state_.exportIntroLeadInElapsed_.restart();
     state_.exportIntroLeadInTimer_->start();
     session_.updatePauseButtonAppearance();

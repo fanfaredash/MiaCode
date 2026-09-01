@@ -241,6 +241,7 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
     bool playing() const override;
+    miacode::v2::PlaybackTransportState playbackTransportState() const override;
     double positionSeconds() const override;
     double durationSeconds() const override;
     double lowerBoundSeconds() const override;
@@ -252,6 +253,7 @@ public:
     void endScrub(double second, bool centerView) override;
     void setPlaybackRate(double rate) override;
     void nudgePlaybackRate(int direction) override;
+    double playbackRate() const override;
     QString playbackRateLabel() const override;
     QObject* previewRuntimeObject() const override;
     QObject* stageMediaHostObject() const override;

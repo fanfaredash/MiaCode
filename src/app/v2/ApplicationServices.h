@@ -22,6 +22,7 @@ class MediaToolsEngine;
 class LatencyEngine;
 class TimelineSurface;
 class PreviewSurface;
+class PlaybackControl;
 class PreferencesStore;
 class DocumentBridge;
 
@@ -119,6 +120,13 @@ public:
     PreviewSurface* previewSurface() const { return previewSurface_; }
     void setPreviewSurface(PreviewSurface* surface) { previewSurface_ = surface; }
 
+    // The playback authority is a separate slot even while a compatibility
+    // adapter wraps the current composite PlaybackHost. This prevents new
+    // consumers from taking transport ownership from either UI surface.
+    PlaybackControl*& playbackControlSlot() { return playbackControl_; }
+    PlaybackControl* playbackControl() const { return playbackControl_; }
+    void setPlaybackControl(PlaybackControl* control) { playbackControl_ = control; }
+
     PreferencesStore*& preferencesStoreSlot() { return preferencesStore_; }
     PreferencesStore* preferencesStore() const { return preferencesStore_; }
     void setPreferencesStore(PreferencesStore* store) { preferencesStore_ = store; }
@@ -156,6 +164,7 @@ private:
     LatencyEngine* latencyEngine_ = nullptr;
     TimelineSurface* timelineSurface_ = nullptr;
     PreviewSurface* previewSurface_ = nullptr;
+    PlaybackControl* playbackControl_ = nullptr;
     PreferencesStore* preferencesStore_ = nullptr;
     DocumentBridge* documentBridge_ = nullptr;
     QObject* exportPageSession_ = nullptr;

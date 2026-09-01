@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/v2/PlaybackControl.h"
 #include "audio/PreviewAudioSettings.h"
 #include "common/MuriRenderOptions.h"
 #include "core/video/PreviewRenderSettings.h"
@@ -33,6 +34,7 @@ public:
 
     // ---- transport ----
     virtual bool playing() const = 0;
+    virtual PlaybackTransportState playbackTransportState() const = 0;
     virtual double positionSeconds() const = 0;
     virtual double durationSeconds() const = 0;
     // Negative when 添加片头 is on: the intro occupies time before chart zero.
@@ -48,7 +50,9 @@ public:
     virtual void updateScrub(double second, bool centerView) = 0;
     virtual void endScrub(double second, bool centerView) = 0;
 
-    // No rate getter: the shell shows the label, never the number.
+    // The numeric rate is the domain observation; the label is presentation
+    // only and must not be parsed by transport consumers.
+    virtual double playbackRate() const = 0;
     virtual void setPlaybackRate(double rate) = 0;
     // Steps through the preset rate ladder; direction is -1 or +1.
     virtual void nudgePlaybackRate(int direction) = 0;

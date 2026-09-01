@@ -39,6 +39,7 @@
 #include "app/qml_ui/QmlDocumentProjection.h"
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/ApplicationServices.h"
+#include "app/v2/PlaybackControl.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -126,6 +127,7 @@ class VideoExportHost;
 class ValidationHost;
 class DocumentSessionHost;
 class PlaybackHost;
+class PlaybackControlAdapter;
 }
 
 // QML 通过 ApplicationServices 槽位调用运行时宿主；本类只装配宿主并附着根窗口。
@@ -757,6 +759,7 @@ private:
     std::unique_ptr<miacode::runtime::ValidationHost> validation_;
     std::unique_ptr<miacode::runtime::DocumentSessionHost> documents_;
     std::unique_ptr<miacode::runtime::PlaybackHost> playback_;
+    std::unique_ptr<miacode::runtime::PlaybackControlAdapter> playbackControl_;
 
     bool quickShellBottomTabsProxyActive() const;
     QString bottomTabsFallbackLabel(BottomTabsTabId tabId) const;

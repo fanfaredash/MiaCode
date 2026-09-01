@@ -2,6 +2,18 @@
 
 Use this file before changing behavior that crosses parser, preview, audio, export, or tooling boundaries.
 
+## Current Runtime Host Migration (2026-09-02)
+
+The stage 4.5 transport seam is now the shared playback authority for the preview/timeline host split:
+
+- `miacode::v2::PlaybackControl` exposes semantic transport commands; `PlaybackSnapshot` is the read-only state payload.
+- `PlaybackSnapshot` and `PlaybackCallbackStamp` carry `sessionGeneration`, `documentRevision`, and `playbackSequence`. Late callbacks must be rejected by `PlaybackStateFeed::acceptsPlaybackCallback(...)`.
+- `miacode::runtime::PlaybackControlAdapter` is the compatibility adapter over the current composite `PlaybackHost`. It must remain a forwarding seam, not a second clock, parser, audio engine, or renderer.
+- `ApplicationServices::playbackControlSlot()` is the runtime injection point. Session workspace revisions update the adapter's document revision before new runtime consumers read playback state.
+- Until stages 4.6–4.8 complete, `PlaybackHost` remains the legacy composite implementation. New Timeline/Preview code should depend on `PlaybackControl`/`PlaybackStateFeed`, not on `PlaybackHost` internals.
+
+When changing this contract, review `src/app/v2/PlaybackControl.h`, `src/app/runtime/playback/PlaybackControlAdapter.*`, `src/app/v2/ApplicationServices.*`, `src/app/runtime/Session.*`, and the relevant Preview/Timeline host seam together.
+
 ## 1. Edit To Parse To Timeline To Preview
 
 Primary chain:

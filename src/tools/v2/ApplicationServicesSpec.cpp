@@ -15,6 +15,7 @@
 // fails to LINK, which is a stronger guarantee than grepping for QWidget.
 
 #include "app/v2/ApplicationServices.h"
+#include "app/v2/PlaybackControl.h"
 
 #include <QCoreApplication>
 #include <QDirIterator>
@@ -157,6 +158,42 @@ bool verifyServicesAreLiveThroughTheAssembly(QTextStream& err)
     return ok;
 }
 
+class FakePlaybackControl final : public miacode::v2::PlaybackControl
+{
+public:
+    miacode::v2::PlaybackSnapshot playbackSnapshot() const override { return snapshot; }
+    bool acceptsPlaybackCallback(const miacode::v2::PlaybackCallbackStamp& stamp) const override
+    {
+        return stamp == snapshot.stamp();
+    }
+    void togglePlayback() override {}
+    void stop() override {}
+    void seek(double) override {}
+    void beginScrub() override {}
+    void updateScrub(double) override {}
+    void endScrub(double) override {}
+    void setPlaybackRate(double) override {}
+    void nudgePlaybackRate(int) override {}
+
+    miacode::v2::PlaybackSnapshot snapshot;
+};
+
+bool verifyPlaybackControlSlotIsLive(QTextStream& err)
+{
+    miacode::v2::ApplicationServices services;
+    FakePlaybackControl control;
+    miacode::v2::PlaybackControl*& slot = services.playbackControlSlot();
+    bool ok = require(services.playbackControl() == nullptr,
+                      QStringLiteral("the playback slot starts empty"), err);
+    services.setPlaybackControl(&control);
+    ok &= require(slot == &control && services.playbackControl() == &control,
+                  QStringLiteral("the playback control is published through one live slot"), err);
+    services.setPlaybackControl(nullptr);
+    ok &= require(slot == nullptr && services.playbackControl() == nullptr,
+                  QStringLiteral("withdrawing the playback control is visible to slot holders"), err);
+    return ok;
+}
+
 // Stage 3.5 requires the validation locale to have a non-Widget owner too: it
 // used to come from MainWindowShared, which is a QtWidgets translation unit, so
 // asking "what locale does the parser validate in" pulled in the widget layer.
@@ -248,6 +285,7 @@ int main(int argc, char** argv)
     ok &= verifyServicesShareOneWorkspace(err);
     ok &= verifyDestructionReleasesEverything(err);
     ok &= verifyServicesAreLiveThroughTheAssembly(err);
+    ok &= verifyPlaybackControlSlotIsLive(err);
     ok &= verifyValidationLocaleHasANonWidgetOwner(err);
     ok &= verifyNothingElseInTheProductConstructsTheServices(err);
 

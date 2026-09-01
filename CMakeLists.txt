@@ -131,6 +131,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/MediaToolsEngine.h
     src/app/v2/PreferencesStore.h
     src/app/v2/PreviewSurface.h
+    src/app/v2/PlaybackControl.h
     src/app/v2/ShellNotifications.cpp
     src/app/v2/ShellNotifications.h
     src/app/v2/TimelineSurface.h
@@ -220,6 +221,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/playback/IntroRegion.cpp
     src/app/runtime/playback/Tick.cpp
     src/app/runtime/playback/PlaybackGlue.cpp
+    src/app/runtime/playback/PlaybackControlAdapter.cpp
+    src/app/runtime/playback/PlaybackControlAdapter.h
     src/app/runtime/validation/ValidationFlow.cpp
     src/app/runtime/validation/ValidationListUi.cpp
     src/app/runtime/validation/ValidationRender.cpp
@@ -1828,6 +1831,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_compile_definitions(application_services_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    # Stage 4.5: the playback authority contract is intentionally tested before
+    # the current composite PlaybackHost is given a compatibility adapter.
+    miacode_add_dev_tool(playback_control_spec TEST
+        SOURCES
+            src/tools/v2/PlaybackControlSpec.cpp
+            src/app/v2/PlaybackControl.h
+            src/app/v2/PreviewSurface.h
+            src/app/runtime/playback/PlaybackControlAdapter.cpp
+            src/app/runtime/playback/PlaybackControlAdapter.h
+        LIBS Qt6::Core Qt6::Gui Qt6::Test
+        INCLUDES src src/audio src/common src/core/video
+    )
 
     miacode_add_dev_tool(qml_analysis_model_spec TEST
         SOURCES

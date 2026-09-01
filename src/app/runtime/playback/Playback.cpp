@@ -716,6 +716,7 @@ bool miacode::runtime::PlaybackHost::startQtPreviewPlayback(double second, bool 
 void miacode::runtime::PlaybackHost::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
 {
     stopQtPreviewPlayback(true);
+    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
     if (!statusMessage.isEmpty()) {
         session_.noteStatus(statusMessage);
     }

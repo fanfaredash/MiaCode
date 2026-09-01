@@ -41,6 +41,11 @@ void Session::setPreviewPlayingFlag(bool playing)
         return;
     }
     state_.playing_ = playing;
+    state_.previewTransportState_ = playing
+        ? miacode::v2::PlaybackTransportState::Playing
+        : (state_.previewTransportState_ == miacode::v2::PlaybackTransportState::Stopped
+               ? miacode::v2::PlaybackTransportState::Stopped
+               : miacode::v2::PlaybackTransportState::Paused);
     QMetaObject::invokeMethod(
         this, [this]() { emit presentationChanged(); }, Qt::QueuedConnection);
 }

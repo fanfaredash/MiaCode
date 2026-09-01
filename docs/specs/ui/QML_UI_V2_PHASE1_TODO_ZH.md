@@ -4,7 +4,9 @@
 > 目标架构与阶段定义见 [QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md)；
 > 本文只登记「还差什么、完成标志是什么、什么待复核」。
 >
-> **基线：2026-09-01 工作树**。本文所有状态以当前工作树源码和目标测试实测为准。
+> **基线：2026-09-02 工作树**。本文所有状态以远程合并后的当前源码和目标测试实测为准。
+> 当前基线为合并提交 `4416596d`（远程 `origin/feature/qml-ui` 已同步）；其中包含
+> `2aa9db83` 的 `MainWindow` 宿主迁移与 `src/app/mainwindow/` 删除。
 > 上一版基线是 `117a76a1`（2026-08-29）；阶段 1、阶段 2 与三个「暂未更新支持」入口
 > 都在这两个基线之间落地，第 2 章的实测表已按新基线整体重测。
 >
@@ -13,7 +15,7 @@
 > SVG、FFmpeg、BASS 等依赖都能说明其所属功能、加载时机和验证方式。Qt Quick/QML 仍由 C++
 > `QGuiApplication` + `QQmlApplicationEngine` 承载；QML 不能替代应用宿主。
 
-## 0. 2026-08-30 反馈闭环与接线复核
+## 0. 2026-08-30 反馈闭环与 2026-09-02 接线复核
 
 - [x] **调整菜单动态项丢失**：`MainMenu.qml` 的 `Repeater` 曾创建非视觉的
       `AppMenuAction`，Qt Quick `Menu` 不会把它插入菜单，因而顶部只剩分隔线、`更多…`
@@ -25,25 +27,19 @@
 - [x] **字体/皮肤入口一致**：导出页的“皮肤”页签与“预览设置 → 皮肤”并存；二者都走 v2 的
       owner-live 预览状态和 `UiRequestService`，HUD 字体变更均调用 `PreviewRuntime::update()`
       立即刷新右侧预览，不恢复任何 v1 控件接线。
-- [ ] **隐藏 v1/Widgets 接线复核（证据见下，旧有“仅封面导出”结论作废）**：
-      1. `QmlUiBootstrap` 仍创建并隐藏 `MainWindow`；所有 QML 模型经它取得大量状态与命令。
-      2. `QmlEditorPageHost` 的导出/延迟/离开页面路径仍调用
-         `switchToExportField` / `switchToLatencyField` / `switchToDifficultyField` /
-         `switchToMetadataField`。这些 `DocumentSection` 方法仍依赖 `editorStack_`、占位页和旧预览
-         控件状态；这是功能可用性会受隐藏 Widgets 状态影响的活跃接线。
-      3. root 拖放已改为 `QmlChartDropBridge`（单一 QWindow event filter）+ `Main.qml` 非拦截
-         QML 提示层；不再创建 `ChartDropOverlay(QWidget)`，也不再依赖 native overlay 生命周期。
-      4. 本次已删除 `QmlEditorPageHost.cpp` 中遗留的 `QBoxLayout` / `QStackedWidget` /
-         `QWindow` / `AdoptedWidgetCoordinates` 等**未使用** include；它们不是活跃调用，但此前使
-         “`src/app/qml_ui` 无 Widgets”这一表述不可靠。
+- [x] **隐藏 v1/Widgets 接线复核（2026-09-02）**：`2aa9db83` 已将启动装配改为
+      `QmlUiBootstrap` 构造 `ApplicationServices` + `Session`，`QmlApplicationContext` 只接收
+      `ApplicationServices&`，`QmlEditorPageHost` 经 `EditorPageRouter` 路由，且
+      `src/app/mainwindow/` 已删除。root 拖放仍由 `QmlChartDropBridge`（单一 QWindow event
+      filter）+ `Main.qml` 提示层承载，不再创建 `ChartDropOverlay(QWidget)`。
+- [ ] **运行时 Widgets 残留仍待清理**：`Session` / `HostUi` / `HostState` 仍携带旧宿主状态，
+      `src/app/main.cpp` 仍使用 `QApplication`，CMake 仍链接 `Qt6::Widgets`；隐藏的
+      `DocumentSessionHost` 还保留 native fallback 的旧切页方法。它们是阶段 4 的后续拆除项，
+      不能因为 `mainwindow/` 已删除就宣称 Widgets 已归零。
 
       已核对的非误报项：ZIP 打包使用 `UiRequestService`，偏好设置只转发
       `preferencesRequested` 给 QML，音视频工具也经 QML 请求边界；这些不是 v1 UI 回接。
-      `QmlApplicationContext` 当前仍持有 `MainWindow& backend_`，所以“QML 页面无 Widgets”
-      不能等同于“应用宿主已无 Widgets”；需要先抽出独立的 `ApplicationServices` / session
-      所有者，再删除隐藏窗口。
-      封面导出已于 2026-08-31 建立 v2 所有者并脱离此清单；后续拆除必须先为页面切换、拖放
-      建立 v2 所有者，不能再把 v1 控件重新接回 QML。
+      封面导出已于 2026-08-31 建立 v2 所有者并脱离此清单；后续拆除不得把 v1 控件重新接回 QML。
 
 - [x] **QML 文案单一通道（2026-08-31，2026-08-31 复核修正）**：QML 全部可见文案改经
       `UiText.qml` 单例进入既有 en/zh/ja 词典；76 个 v2 QML 文件里**没有**未包裹的中文字面量，
@@ -120,11 +116,13 @@
 
 ## 2. 基线实测：还挂着多少 Widgets
 
-| 项 | 实测（`4f30a2d2`） | 位置 |
+| 项 | 实测（`4416596d`，2026-09-02） | 位置 |
 |---|---|---|
 | 链接声明 | `COMPONENTS … Widgets …` + `Qt6::Widgets` | `CMakeLists.txt:101`、`:844` |
 | 应用对象 | `QApplication` | `src/app/main.cpp:436` |
-| 隐藏 `MainWindow` | **72 文件 / 42,750 行**（上一基线 73 / 48,732，−5,982） | `src/app/mainwindow/` |
+| 隐藏 `MainWindow` | **已删除（0 文件）**；`Session`/runtime hosts 已接管装配 | `src/app/runtime/`、`src/app/runtime/SessionBootstrap.cpp` |
+| Preview/Timeline 当前宿主 | **同一个 `PlaybackHost` 同时实现 `PreviewSurface` + `TimelineSurface`**；约 8,975 行，仍是下一轮拆分的主要对象 | `src/app/runtime/playback/` |
+| 旧宿主状态 | `HostUi` / `HostState` 仍被 `Session` 持有并借给多个宿主 | `src/app/runtime/Session.*`、`HostUi.*`、`HostState.*` |
 | ~~隐藏 `PlainCodeEditor`~~ | **已删除（2026-08-30）**。树上只剩两条历史注释；扩展相关校验已迁移到归档 API registry 与离线文档 | — |
 | ~~`QuickShellController`~~ | **已退役（2026-08-30）**。`src/app/quick_shell/` 只剩 **246 行**预览合成表面管道（`QuickShellPreviewCompositeSurface.*` + 三个策略头），与外壳控制器无关 | — |
 | QML 仍消费的 controller 属性/方法 | **0 个**（`shellController` 在 `*.qml` 里零命中） | — |
@@ -135,12 +133,12 @@
 | 位置 | 内容 |
 |---|---|
 | ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**。`src/app/qml_ui` 全目录现已无 Widgets 对话框 |
-| `src/app/qml_ui/QmlEditorPageHost.*` | 已不再收养 `QWidget`，但仍通过隐藏 `MainWindow::DocumentSection` 切页；该路径会操作 `editorStack_` / 占位页等 Widgets，不能记作“仅页面记账”（详见 §0） |
+| `src/app/qml_ui/QmlEditorPageHost.*` | 已不再收养 `QWidget`，页面路由改走 `EditorPageRouter`；runtime 的 `DocumentSessionHost` 仍保留 native fallback 的旧切页方法，不能记作 Widgets 已归零（详见 §0） |
 | `src/app/qml_ui/drop/QmlChartDropBridge.*` | 仅负责 root `QWindow` 拖放事件、路径筛选、请求代次和 busy/late-callback 保护；视觉提示由 `Main.qml` 承载 |
 
 `MainView.qml` 的对话框已是 `QtQuick.Dialogs`（非 Widgets），这条不用改。
 
-### 2.1 轻依赖目标与当前事实（2026-08-31）
+### 2.1 轻依赖目标与当前事实（2026-09-02）
 
 目标依赖分三层：
 
@@ -403,7 +401,7 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       一直停在 0（见 §3.C）。播放头改由 `applyQtPreviewPosition` 通过
       `shellPreviewPlayheadChanged` 推送，采样定时器已删除，`QmlPreviewModel` 现在不采样任何东西。
       漂移守卫 `preview_transport_push_spec` 会拒绝把定时器放回去。*
-- [ ] `TimelineQuickModel` 所有权从 `MainWindow` 迁到 `TimelineSession`。**已延后。**
+- [ ] `TimelineQuickModel` / 时间线 QSG 状态所有权从旧窗口迁到独立的 `TimelineHost`。**已延后至阶段 4.6。**
       *更正（2026-08-30）：此前记的「增量解析本身已完成，剩下的只是所有权」在实现上成立、
       在运行上不成立。`applyTextChange(QString,…)` 确实取代了 `applyContentsChange(QTextDocument*)`，
       但唯一的驱动方是隐藏编辑器的 `contentsChange`，而它被 `setEditorText` 的抑制挡住，
@@ -470,10 +468,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 这是删除 `MainWindow` 之前新增的架构关卡，避免把“换应用对象”误当成架构完成：
 
-> **当前状态（2026-09-01 第二轮）**：依赖分层三项（4 / 5 / 6）已完成，服务所有权（第 1 项）已完成。
-> 隐藏 `MainWindow` 仍然存在：`QmlApplicationContext` 仍持有 `MainWindow& backend_`，文档切页仍经过
-> 隐藏 `DocumentSection`/Widgets 状态，因此 `QtWidgets` 仍是当前产品依赖，且在 allowlist 里被明确
-> 标为「遗留 / 阶段 4 退出」。第 2、3 项不能由本轮的服务装配标记完成。
+> **当前状态（2026-09-02）**：依赖分层与服务所有权已落地，`MainWindow` 已从启动路径和源码目录
+> 删除，`QmlApplicationContext` 也已改为只接收 `ApplicationServices&`。但 `QtWidgets` 仍是当前
+> 产品依赖：`QApplication`、`HostUi` / `HostState` 和 native fallback 仍在 runtime 中；同时
+> `PlaybackHost` 还把 Preview 与 Timeline 两个职责放在一个复合宿主内。第 2、3 项的剩余工作
+> 现在转入阶段 4 的宿主二次拆分与 Widgets 清理，不能把本轮迁移误记为 Architecture Complete。
 
 - [x] `ApplicationServices` 已建立并**成为真正的所有者**（2026-09-01）。
       `src/app/v2/ApplicationServices.{h,cpp}` 是一个不含 Widgets 的 `QObject`，持有
@@ -481,10 +480,9 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       `ChartDropImportService`、`UiRequestService`、`JobProgressService` 七个服务。
       在此之前这七个服务分属两个 UI 对象：`MainWindow` 持有后四个，`QmlApplicationContext`
       持有前三个——「文档域归谁」取决于你问哪一个，而两个答案都是 UI 对象。
-      现在 `QmlUiBootstrap` **先**构造 `ApplicationServices`、**再**构造 `MainWindow` 并把它传进去；
-      窗口只借用，`ui_.uiRequests_` / `editorSyncController_` / `chartDropImportService_` 全部改为
-      指向装配对象，`QmlApplicationContext` 的 `uiRequests()` / `jobProgress()` / `editorSync()`
-      也不再经过 `backend_`。销毁顺序写死为「服务最后释放」。
+      现在 `QmlUiBootstrap` **先**构造 `ApplicationServices`、**再**构造 `Session`；Session 与各
+      runtime host 只借用这些服务，`QmlApplicationContext` 也不再经过窗口 backend。销毁顺序写死
+      为「服务最后释放」。
       CLI 导出路径（`cli_video_export.cpp`）走同一条装配。
       顺带把 `uiValidationLocale()` 的实现从 `MainWindowShared`（一个 QtWidgets TU）搬到
       `miacode::v2`，`MainWindowShared` 保留同名函数转发——「解析器用哪个语言校验」不该需要 widget 层。
@@ -726,7 +724,57 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       `MiaCode` Release 构建通过。
       完整 CTest 为 97/99；范围外既有 `qml_export_video_page_spec` 与
       `qtavplayer_platform_spec` 失败，不作为本批完成依据。
-- [ ] 搬迁/删除 `src/app/mainwindow/` 全部文件；仅保留已抽出的应用服务、预览/媒体/导出和领域能力。
+- [x] **阶段 4 第五批 / `MainWindow` → `Session` hosts（2026-09-02）**：远程提交
+      `2aa9db83` 已将窗口实现迁入 `src/app/runtime/`，删除 `src/app/mainwindow/` 全部文件；
+      `Session` 改为 QObject 装配壳，`QmlUiBootstrap` / CLI / latency sandbox 统一走新的
+      runtime 装配，`QmlApplicationContext` 不再持有窗口引用。合并提交为 `4416596d`。
+- [ ] **PlaybackHost 二次拆分（阶段 4.5–4.9，当前主线）**：当前 `PlaybackHost` 同时实现
+      `PreviewSurface` 与 `TimelineSurface`，并混合持有走带、QSG、舞台媒体、音频混音、布局、
+      分析与跟随状态；不能把它机械改名或简单按文件切开。目标是「一个时间域、一个播放权威、
+      两个独立投影」：最终由 `PreviewHost`、`TimelineHost` 与收缩后的
+      `PlaybackCoordinator` 分担职责，完成后才考虑将旧 `PlaybackHost` 更名。
+- [ ] **runtime Widgets 残留清理**：拆掉 `HostUi` / `HostState` 的共享状态袋及 native fallback
+      依赖，随后将 `main.cpp` 改为 `QGuiApplication` + `QQmlApplicationEngine`，从 CMake、生产
+      target 和全部 fallback 去除 `Qt6::Widgets` / `QWidget` / `QApplication` API。
+- [ ] **4.5–4.9 后续主线（非 GUI 验收）**：
+
+      > 统一边界原则：**一个时间域、一个播放权威、两个独立投影**。Preview 与 Timeline 可以
+      > 分别拥有资源和视图状态，但不能各自维护播放头、计时器或 seek 真相。GUI 验收另行处理；
+      > 本主线先以契约、单元测试、装配检查和跨模块回归推进。
+
+      1. **4.5 先立播放契约与协调器边界（2026-09-02，已完成）**：新增窄的 `PlaybackControl`、只读
+         `PlaybackSnapshot` / `PlaybackStateFeed`（名称可在实现前最终确定），将播放 / 暂停 / 停止 /
+         seek / scrub / 倍速与 canonical playhead 从 `PreviewSurface` 拆出；在
+         `ApplicationServices` 增加 playback 槽位，迁移期间保留兼容 adapter。快照携带
+         `sessionGeneration`、`documentRevision`、`playbackSequence`、canonical chart time、
+         transport state 与 rate，旧回调在边界丢弃。实现落在
+         `src/app/v2/PlaybackControl.h` 与
+         `src/app/runtime/playback/PlaybackControlAdapter.*`；adapter 只转发到当前复合
+         `PlaybackHost`，播放状态与数值倍速均从宿主类型化观测读取，并在 Session 析构前失效。
+         `playback_control_spec`、`application_services_spec` 与 MiaCode Release 构建通过。
+      2. **4.6 建立 `TimelineHost`**：新增 `src/app/runtime/timeline/TimelineHost.{h,cpp}`，接管
+         `TimelineSurface`、`TimelineQuickStateBridge`、QSG 就绪、底栏页签可见性、拖拽 / follow /
+         viewport / navigation 投影，以及时间线侧的分析展示。Timeline 只发出带 revision / sequence
+         的命令，不直接读 Preview 时钟，也不直接写文档模型；设置 `TimelineCommandGate` 统一校验
+         revision、代次与写入顺序。
+      3. **4.7 建立 `PreviewHost`**：新增 `src/app/runtime/preview/PreviewHost.{h,cpp}`，接管
+         `PreviewRuntime`、`StageMediaHost` 内部舞台媒体路由与预热、渲染设置、音频混音 / SFX 和
+         preview 专用 executor。它只通过窄的 `AudioClockSource` / `PreviewPlaybackPort` 与协调器
+         对接，不再拥有独立的 canonical playhead 或 Timeline 状态。
+      4. **4.8 收缩并最终重命名 `PlaybackHost`**：仅保留 transport state machine、canonical
+         playhead、clock / frame pacing、seek transaction、播放生命周期与协调命令；从中移出
+         QML / QSG、viewport / layout、StageMedia、mixer 和 analysis。协调器不允许反向包含 QML、
+         QQuick / QSG、布局、媒体 UI 或分析实现，PreviewHost 与 TimelineHost 之间不得直接调用。
+      5. **4.9 清理 Session 装配与共享状态**：`SessionBootstrap` 显式构造三个独立实例并分别注册
+         `playbackControl`、`previewSurface`、`timelineSurface`；移除通用 `HostUi` / `HostState` 借用，
+         让 Session 只保留生命周期、资源所有权和端口连接。同步更新 `ASSEMBLY.md`、仓库指南和
+         backend surface 清单。
+
+      **非 GUI 完成门槛**：补齐协调器 fake-clock 的 play/pause/resume/stop/seek/scrub/rate 测试，
+      `TimelineCommandGate` 的 revision / sequence / drag-follow 顺序测试，三宿主装配与生命周期测试，
+      以及 parser → timeline → preview → export 的 revision / chart-time 对齐回归；并用依赖检查确认
+      `TimelineHost` 不含 Preview 实现、`PreviewHost` 不含 Timeline 实现、协调器不含 QML/QSG/media UI。
+
 - [ ] `src/app/ui/` 的 widget 辅助件（`UiComponents` 等）
       随之删除或改为非 Widget 服务；同时替换
       `QStyleFactory`、`topLevelWidgets`、native Widget effect 等旧语义。
@@ -736,10 +784,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       构建 target 和隐藏 fallback 均不得重新引入 QWidget 类型。
 - [ ] `ShaderTools` 若仅为构建期工具，不计入运行时依赖；`Qt6::Svg`、`Qt6::OpenGL`、
       `Qt6::Network`、`Qt6::MultimediaQuickPrivate` 按实际功能和平台条件单独验收。
-- **Architecture Complete 完成标志**：无隐藏 `MainWindow` / native QWidget 拖放 overlay，
-      主 UI 进程无 `Qt6::Widgets` 和活动 QWidget 依赖；Release 构建、全量 CTest、QML import
-      部署扫描通过，并完成 macOS / Windows 冷启动、编辑预览、媒体、普通导出和封面导出的
-      依赖记录。功能 parity 与人工 GUI 结果另按 Release Complete 判定。
+- **Architecture Complete 完成标志**：隐藏 `MainWindow` / native QWidget 拖放 overlay 已清除，
+      但当前仍未完成，因为 `Qt6::Widgets`、`QApplication`、`HostUi` / `HostState` 与复合
+      `PlaybackHost` 仍在。必须完成 4.5–4.9、移除 Widgets 依赖，并通过 Release 构建、全量 CTest、
+      QML import 部署扫描及跨模块时间域回归；macOS / Windows 依赖记录与功能 parity 另行处理，
+      GUI 结果不作为本阶段的工作项。
 
 ### 0b（已完成，归档保留）/ 0c（已改判并完成）
 
@@ -1090,7 +1139,9 @@ dirty 真相已迁到 `ChartWorkspace` 的完整文档 save point，`Ctrl+Z` / `
 ### 7.8 播放期高位内存平台（延后）
 
 现有证据是"跃升后稳定"（private memory 约 957 MB 平台，第二段播放 1,051–1,064 MB），不是持续泄漏。
-**待复核**：阶段 2 迁移 Preview/Timeline **之前**先做分层取证（QtAVPlayer/D3D11VA 帧池、QML/Qt Quick、私有堆），不得先验归因于 preview texture cache。
+**待复核**：进入 `PlaybackHost` 二次拆分之前先做分层取证（QtAVPlayer/D3D11VA 帧池、QML/Qt Quick、
+私有堆），不得先验归因于 preview texture cache；拆分后用同一场景复测，确认内存归属没有被
+PreviewHost / TimelineHost 的重复缓存放大。
 
 ### 7.9 手工回归清单（2026-08-29 macOS 走查判定通过，见 §7.-1）
 
@@ -1120,12 +1171,14 @@ dirty 真相已迁到 `ChartWorkspace` 的完整文档 save point，`Ctrl+Z` / `
 | 文档所有者 | `src/app/v2/ChartWorkspace.*`、`ChartWorkspaceFileService.*` |
 | 分析快照 | `src/app/v2/AnalysisService.*` → `QmlAnalysisModel.*` / `QmlAnalysisProjection.*` |
 | 同步控制器 | `src/app/v2/EditorSyncController.*` |
-| 文档桥 | `src/app/qml_ui/QmlDocumentModel.*`、`QmlDocumentProjection.*`、`sections/document/MainWindow.DocumentBridge.cpp` |
-| 预览桥 | `src/app/qml_ui/QmlPreviewModel.*` |
+| 文档桥 | `src/app/qml_ui/QmlDocumentModel.*`、`QmlDocumentProjection.*`、`src/app/runtime/document/DocumentBridge.cpp`、`DocumentSessionHost.h`、`DocumentFileFlow.cpp` |
+| 预览桥（当前） | `src/app/qml_ui/QmlPreviewModel.*`、`src/app/v2/PreviewSurface.h`、`src/app/runtime/playback/PlaybackHost.*` |
+| 时间线桥（当前） | `src/app/qml_ui/QmlTimelineModel.*`、`src/app/v2/TimelineSurface.h`、`src/app/runtime/playback/PlaybackHost.*` |
+| 播放域（目标） | `src/app/runtime/preview/PreviewHost.*`、`src/app/runtime/timeline/TimelineHost.*`、`src/app/runtime/playback/PlaybackCoordinator.*`（阶段 4.5–4.9，尚未创建） |
 | 编辑器 | `src/app/qml_ui/QmlEditorController.*`、`QmlEditorInputBridge.*`、`editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
 | 快捷键 | `src/app/qml_ui/QmlShortcutModel.*` ← `src/app/ui/ShortcutRegistry.*` |
 | 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`export/ExportVideoPage.qml` |
-| 页面宿主（待删） | `src/app/qml_ui/QmlEditorPageHost.*`（不再收养 `QWidget`，但切页仍依赖隐藏 `DocumentSection` 的 Widgets 状态；见 §0） |
+| 页面宿主 | `src/app/qml_ui/QmlEditorPageHost.*`（QML-only `EditorPageRouter`；native fallback 仍在 `DocumentSessionHost`，见 §0） |
 | 主壳 | `src/app/qml_ui/Main.qml`、`layout/MainView.qml` |
 | 设置页 | `preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel.*`、`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel.*`、`preferences/PreferencesDialog.qml` + `QmlPreferencesModel.*` |
 | 表单控件 | `components/LabeledCombo.qml`、`LabeledSlider.qml`、`EditableValue.qml`、`DialogDrag.qml` |

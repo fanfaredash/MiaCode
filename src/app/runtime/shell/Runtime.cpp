@@ -8,6 +8,7 @@
 #include "runtime/settings/SettingsHost.h"
 #include "runtime/preview/StageMediaHost.h"
 #include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackControlAdapter.h"
 #include "runtime/validation/ValidationHost.h"
 #include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
@@ -322,6 +323,10 @@ Session::~Session()
     applicationServices_.setLatencyEngine(nullptr);
     applicationServices_.setTimelineSurface(nullptr);
     applicationServices_.setPreviewSurface(nullptr);
+    if (playbackControl_ != nullptr) {
+        playbackControl_->invalidateSession();
+    }
+    applicationServices_.setPlaybackControl(nullptr);
     applicationServices_.setPreferencesStore(nullptr);
     applicationServices_.setDocumentBridge(nullptr);
     applicationServices_.setExportPageSession(nullptr);
