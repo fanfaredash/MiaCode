@@ -818,9 +818,9 @@ int main(int argc, char** argv)
                    && panel.contains(QStringLiteral("timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)")),
                QStringLiteral("v2 timeline header keeps labels clear of its QML controls"));
         const int playingFlushStart = timelineTick.indexOf(
-            QStringLiteral("void miacode::runtime::PlaybackHost::flushQtPreviewTimelinePosition()"));
+            QStringLiteral("void miacode::runtime::PlaybackCoordinator::flushQtPreviewTimelinePosition()"));
         const QString playingFlush = playingFlushStart >= 0
-            ? timelineTick.mid(playingFlushStart, 1800)
+            ? timelineTick.mid(playingFlushStart, 2600)
             : QString();
         expect(!playingFlush.contains(QStringLiteral("|| !timelineTabIsForeground()"))
                    && playingFlush.contains(QStringLiteral("syncEditorCursorToPreviewSecond")),

@@ -1,4 +1,4 @@
-﻿#include "runtime/playback/PlaybackHost.h"
+﻿#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 #include "runtime/media/MediaJobsHost.h"
 
@@ -51,7 +51,7 @@ void Session::invalidateDocumentValidationRevision()
     emit documentValidationChanged();
 }
 
-void miacode::runtime::PlaybackHost::scheduleTimelineAnalysisRefresh(
+void miacode::runtime::PlaybackCoordinator::scheduleTimelineAnalysisRefresh(
     const TimelineSlowRefreshRequest& request,
     const SimaiNativeParseResult& parseResult,
     const TimelinePreviewRefreshState& previewState)
@@ -71,7 +71,7 @@ void miacode::runtime::PlaybackHost::scheduleTimelineAnalysisRefresh(
     requestTimelineAnalysisDispatch();
 }
 
-bool miacode::runtime::PlaybackHost::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs)
+bool miacode::runtime::PlaybackCoordinator::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs)
 {
     if (!hasActiveDifficulty()
         || !state_.latestTimelinePreviewSnapshotReady_
@@ -104,7 +104,7 @@ bool miacode::runtime::PlaybackHost::scheduleTimelineAnalysisRefreshFromLatestPr
     return true;
 }
 
-void miacode::runtime::PlaybackHost::requestTimelineAnalysisDispatch(int delayMs)
+void miacode::runtime::PlaybackCoordinator::requestTimelineAnalysisDispatch(int delayMs)
 {
     if (state_.pendingTimelineAnalysisRefresh_.revision == 0) {
         return;
@@ -123,7 +123,7 @@ void miacode::runtime::PlaybackHost::requestTimelineAnalysisDispatch(int delayMs
     dispatchTimelineAnalysisRefresh();
 }
 
-void miacode::runtime::PlaybackHost::dispatchTimelineAnalysisRefresh()
+void miacode::runtime::PlaybackCoordinator::dispatchTimelineAnalysisRefresh()
 {
     if (!hasActiveDifficulty() || state_.playing_ || state_.timelineAnalysisWorkerRunning_ || state_.pendingTimelineAnalysisRefresh_.revision == 0) {
         return;

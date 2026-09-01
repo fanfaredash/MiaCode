@@ -2,10 +2,12 @@
 
 #include "runtime/Session.h"
 
-#include "app/v2/PreviewSurface.h"
-#include "app/v2/TimelineSurface.h"
+#include "app/v2/AudioClockSource.h"
+#include "app/v2/PlaybackControl.h"
+#include "app/v2/PreviewPlaybackPort.h"
 #include "audio/PreviewAudioDeviceChangePolicy.h"
 #include "audio/PreviewAudioDeviceCutoff.h"
+#include "runtime/playback/PlaybackIdentityGate.h"
 
 namespace miacode::preview_audio {
 struct PreviewAudioCompletion;
@@ -13,10 +15,20 @@ struct PreviewAudioCompletion;
 
 namespace miacode::runtime {
 
-class PlaybackHost final : public miacode::v2::PreviewSurface,
-                                      public miacode::v2::TimelineSurface {
+class PlaybackCoordinator final : public miacode::v2::PlaybackControl,
+                                  public miacode::v2::PreviewPlaybackPort,
+                                  public miacode::v2::AudioClockSource {
 public:
-    PlaybackHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    PlaybackCoordinator(Session& session, Session::HostUi& ui, Session::HostState& state,
+                        quint64 sessionGeneration = 0);
+
+    void setDocumentRevision(quint64 revision);
+    void invalidateSession();
+
+    miacode::v2::PlaybackSnapshot playbackSnapshot() const override;
+    bool acceptsPlaybackCallback(
+        const miacode::v2::PlaybackCallbackStamp& stamp) const override;
+    double currentAudioClockSecond() const override;
 
     void resetPreviewTrackTimelineOffsets();
     void applyWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
@@ -240,61 +252,63 @@ public:
     void resetVisualClockSmoothing();
     void jumpToNearestTimelineNote(double second, int lane);
 
-    bool playing() const override;
-    miacode::v2::PlaybackTransportState playbackTransportState() const override;
-    double positionSeconds() const override;
-    double durationSeconds() const override;
-    double lowerBoundSeconds() const override;
+    bool playing() const;
+    miacode::v2::PlaybackTransportState playbackTransportState() const;
+    double positionSeconds() const;
+    double durationSeconds() const;
+    double lowerBoundSeconds() const;
     void togglePlayback() override;
     void stop() override;
     void seek(double second) override;
     void beginScrub() override;
-    void updateScrub(double second, bool centerView) override;
-    void endScrub(double second, bool centerView) override;
+    void updateScrub(double second) override;
+    void updateScrub(double second, bool centerView);
+    void endScrub(double second) override;
+    void endScrub(double second, bool centerView);
     void setPlaybackRate(double rate) override;
     void nudgePlaybackRate(int direction) override;
-    double playbackRate() const override;
-    QString playbackRateLabel() const override;
-    QObject* previewRuntimeObject() const override;
-    QObject* stageMediaHostObject() const override;
-    double canvasAspectRatio() const override;
-    QStringList statsTexts() const override;
-    RenderMode muriRenderMode() const override;
-    void setMuriRenderMode(RenderMode mode) override;
-    void toggleMuriRenderMode() override;
-    QStringList availableSkinDirectoryNames() const override;
-    QString skinDisplayName(const QString& directoryName) const override;
-    QString resolveSkinDir() const override;
-    QString resolveSkinRootDir() const override;
-    QString resolveCustomOutlineDir() const override;
+    double playbackRate() const;
+    QString playbackRateLabel() const;
+    QObject* previewRuntimeObject() const;
+    QObject* stageMediaHostObject() const;
+    double canvasAspectRatio() const;
+    QStringList statsTexts() const;
+    RenderMode muriRenderMode() const;
+    void setMuriRenderMode(RenderMode mode);
+    void toggleMuriRenderMode();
+    QStringList availableSkinDirectoryNames() const;
+    QString skinDisplayName(const QString& directoryName) const;
+    QString resolveSkinDir() const;
+    QString resolveSkinRootDir() const;
+    QString resolveCustomOutlineDir() const;
     void applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
-                             bool persistState) override;
-    QVariantMap renderSettings() const override;
-    void setRenderSetting(const QString& key, const QVariant& value) override;
-    void refreshSurfaces() override;
-    void applySfxLevels() override;
-    void prepareForShutdown() override;
-    PreviewAudioSettings audioSettings() const override;
-    void applyAudioSettings(const PreviewAudioSettings& settings) override;
-    void saveAudioSettingsAsSoftwareDefault() override;
-    void restoreAudioSettingsFromSoftwareDefault() override;
+                             bool persistState);
+    QVariantMap renderSettings() const;
+    void setRenderSetting(const QString& key, const QVariant& value);
+    void refreshSurfaces();
+    void applySfxLevels();
+    void prepareForShutdown();
+    PreviewAudioSettings audioSettings() const;
+    void applyAudioSettings(const PreviewAudioSettings& settings);
+    void saveAudioSettingsAsSoftwareDefault();
+    void restoreAudioSettingsFromSoftwareDefault();
 
-    QObject* timelineStateBridge() const override;
-    void noteTimelineSurfaceReady() override;
-    void navigateToSecond(double second) override;
-    void centerOnSecond(double second) override;
-    void wheelNavigateToSecond(double second) override;
-    void timelineDragStarted() override;
-    void timelineDragFinished(double second) override;
-    void timelineUserInteractionStarted() override;
-    void setFollowPreviewEnabled(bool enabled) override;
-    QString bottomTabsCurrentTabId() const override;
-    void setBottomTabsCurrentTabId(const QString& tabId) override;
-    bool bottomTabsVisible() const override;
-    bool timelineTabVisible() const override;
-    bool muriTabVisible() const override;
-    bool validationTabVisible() const override;
-    bool ignoreMuriIssuePrompts() const override;
+    QObject* timelineStateBridge() const;
+    void noteTimelineSurfaceReady();
+    void navigateToSecond(double second);
+    void centerOnSecond(double second);
+    void wheelNavigateToSecond(double second);
+    void timelineDragStarted();
+    void timelineDragFinished(double second);
+    void timelineUserInteractionStarted();
+    void setFollowPreviewEnabled(bool enabled);
+    QString bottomTabsCurrentTabId() const;
+    void setBottomTabsCurrentTabId(const QString& tabId);
+    bool bottomTabsVisible() const;
+    bool timelineTabVisible() const;
+    bool muriTabVisible() const;
+    bool validationTabVisible() const;
+    bool ignoreMuriIssuePrompts() const;
 
 private:
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
@@ -332,6 +346,9 @@ private:
     Session& session_;
     Session::HostUi& ui_;
     Session::HostState& state_;
+    PlaybackIdentityGate identity_;
+
+    bool beginPlaybackCommand();
 };
 
 }  // namespace miacode::runtime

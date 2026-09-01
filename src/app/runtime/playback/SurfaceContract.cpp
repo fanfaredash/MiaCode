@@ -2,7 +2,7 @@
 #include "runtime/Shared.h"
 #include "runtime/shell/ShellHost.h"
 #include "runtime/preview/StageMediaHost.h"
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/playback/Playback.Internal.h"
 #include "runtime/validation/ValidationHost.h"
 
@@ -72,54 +72,71 @@ constexpr double kScrubMisalignWarnSeconds = 0.05;
 
 }  // namespace
 
-bool miacode::runtime::PlaybackHost::playing() const
+bool miacode::runtime::PlaybackCoordinator::playing() const
 {
-    return state_.playing_ || exportIntroLeadInPlaying();
+    return identity_.active() && (state_.playing_ || exportIntroLeadInPlaying());
 }
 
-miacode::v2::PlaybackTransportState miacode::runtime::PlaybackHost::playbackTransportState() const
+miacode::v2::PlaybackTransportState miacode::runtime::PlaybackCoordinator::playbackTransportState() const
 {
-    return state_.previewTransportState_;
+    return identity_.active()
+        ? state_.previewTransportState_
+        : miacode::v2::PlaybackTransportState::Stopped;
 }
 
-double miacode::runtime::PlaybackHost::positionSeconds() const
+double miacode::runtime::PlaybackCoordinator::positionSeconds() const
 {
+    if (!identity_.active()) {
+        return 0.0;
+    }
     if (state_.exportIntroRegionActive_) {
         return state_.exportIntroPlayheadSeconds_;
     }
     return qMax(0.0, state_.pauseSecond_);
 }
 
-double miacode::runtime::PlaybackHost::durationSeconds() const
+double miacode::runtime::PlaybackCoordinator::durationSeconds() const
 {
-    return previewDurationSeconds();
+    return identity_.active() ? previewDurationSeconds() : 0.0;
 }
 
-double miacode::runtime::PlaybackHost::lowerBoundSeconds() const
+double miacode::runtime::PlaybackCoordinator::lowerBoundSeconds() const
 {
-    return exportIntroLowerBoundSeconds();
+    return identity_.active() ? exportIntroLowerBoundSeconds() : 0.0;
 }
 
-void miacode::runtime::PlaybackHost::togglePlayback()
+void miacode::runtime::PlaybackCoordinator::togglePlayback()
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     onTogglePreviewPause();
 }
 
-void miacode::runtime::PlaybackHost::stop()
+void miacode::runtime::PlaybackCoordinator::stop()
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     onStopPreview();
 }
 
-void miacode::runtime::PlaybackHost::seek(double second)
+void miacode::runtime::PlaybackCoordinator::seek(double second)
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     seekPreviewToSecond(second, true);
     if (!state_.playing_ && !exportIntroLeadInPlaying()) {
         state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     }
 }
 
-void miacode::runtime::PlaybackHost::beginScrub()
+void miacode::runtime::PlaybackCoordinator::beginScrub()
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     appendQuickShellBackendLog(QStringLiteral("preview_scrub_begin"));
     QToolTip::hideText();
     stopPreviewHeldSeek();
@@ -134,8 +151,11 @@ void miacode::runtime::PlaybackHost::beginScrub()
     state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Scrubbing;
 }
 
-void miacode::runtime::PlaybackHost::updateScrub(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::updateScrub(double second, bool centerView)
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     if (handleExportIntroSliderSeek(second)) {
         return;
     }
@@ -173,8 +193,11 @@ void miacode::runtime::PlaybackHost::updateScrub(double second, bool centerView)
     }
 }
 
-void miacode::runtime::PlaybackHost::endScrub(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::endScrub(double second, bool centerView)
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     if (handleExportIntroSliderSeek(second)) {
         stopPreviewHeldSeek();
         state_.previewScrubDragging_ = false;
@@ -211,22 +234,28 @@ void miacode::runtime::PlaybackHost::endScrub(double second, bool centerView)
     }
 }
 
-void miacode::runtime::PlaybackHost::setPlaybackRate(double rate)
+void miacode::runtime::PlaybackCoordinator::setPlaybackRate(double rate)
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     applyPreviewPlaybackRate(rate);
 }
 
-void miacode::runtime::PlaybackHost::nudgePlaybackRate(int direction)
+void miacode::runtime::PlaybackCoordinator::nudgePlaybackRate(int direction)
 {
+    if (!beginPlaybackCommand()) {
+        return;
+    }
     applyPreviewPlaybackRate(steppedPreviewPlaybackRate(state_.previewPlaybackRate_, direction));
 }
 
-double miacode::runtime::PlaybackHost::playbackRate() const
+double miacode::runtime::PlaybackCoordinator::playbackRate() const
 {
-    return state_.previewPlaybackRate_;
+    return identity_.active() ? state_.previewPlaybackRate_ : 1.0;
 }
 
-QString miacode::runtime::PlaybackHost::playbackRateLabel() const
+QString miacode::runtime::PlaybackCoordinator::playbackRateLabel() const
 {
     QString rateText = QString::number(state_.previewPlaybackRate_, 'f', 2);
     while (rateText.endsWith('0')) {
@@ -238,22 +267,22 @@ QString miacode::runtime::PlaybackHost::playbackRateLabel() const
     return QStringLiteral("%1x").arg(rateText);
 }
 
-QObject* miacode::runtime::PlaybackHost::previewRuntimeObject() const
+QObject* miacode::runtime::PlaybackCoordinator::previewRuntimeObject() const
 {
     return state_.scene_;
 }
 
-QObject* miacode::runtime::PlaybackHost::stageMediaHostObject() const
+QObject* miacode::runtime::PlaybackCoordinator::stageMediaHostObject() const
 {
     return state_.previewStageMediaHost_;
 }
 
-double miacode::runtime::PlaybackHost::canvasAspectRatio() const
+double miacode::runtime::PlaybackCoordinator::canvasAspectRatio() const
 {
     return normalizedPreviewCanvasAspectRatio(state_.previewCanvasAspectRatio_);
 }
 
-QStringList miacode::runtime::PlaybackHost::statsTexts() const
+QStringList miacode::runtime::PlaybackCoordinator::statsTexts() const
 {
     const miacode::preview::scene::PreviewObjectStatsSnapshot stats =
         state_.previewProgressStatsCache_ != nullptr
@@ -275,17 +304,17 @@ QStringList miacode::runtime::PlaybackHost::statsTexts() const
     };
 }
 
-RenderMode miacode::runtime::PlaybackHost::muriRenderMode() const
+RenderMode miacode::runtime::PlaybackCoordinator::muriRenderMode() const
 {
     return state_.muriRenderOptions_.renderMode;
 }
 
-void miacode::runtime::PlaybackHost::setMuriRenderMode(RenderMode mode)
+void miacode::runtime::PlaybackCoordinator::setMuriRenderMode(RenderMode mode)
 {
     session_.validation_->setMuriRenderMode(mode, true);
 }
 
-void miacode::runtime::PlaybackHost::toggleMuriRenderMode()
+void miacode::runtime::PlaybackCoordinator::toggleMuriRenderMode()
 {
     RenderMode nextMode = RenderMode::MaimuriDxStyle;
     switch (state_.muriRenderOptions_.renderMode) {
@@ -302,160 +331,160 @@ void miacode::runtime::PlaybackHost::toggleMuriRenderMode()
     session_.validation_->setMuriRenderMode(nextMode, true);
 }
 
-QStringList miacode::runtime::PlaybackHost::availableSkinDirectoryNames() const
+QStringList miacode::runtime::PlaybackCoordinator::availableSkinDirectoryNames() const
 {
     return session_.stageMedia_->availablePreviewSkinDirectoryNames();
 }
 
-QString miacode::runtime::PlaybackHost::skinDisplayName(const QString& directoryName) const
+QString miacode::runtime::PlaybackCoordinator::skinDisplayName(const QString& directoryName) const
 {
     return session_.stageMedia_->previewSkinDisplayName(directoryName);
 }
 
-QString miacode::runtime::PlaybackHost::resolveSkinDir() const
+QString miacode::runtime::PlaybackCoordinator::resolveSkinDir() const
 {
     return session_.stageMedia_->resolvePreviewSkinDir();
 }
 
-QString miacode::runtime::PlaybackHost::resolveSkinRootDir() const
+QString miacode::runtime::PlaybackCoordinator::resolveSkinRootDir() const
 {
     return session_.stageMedia_->resolvePreviewSkinRootDir();
 }
 
-QString miacode::runtime::PlaybackHost::resolveCustomOutlineDir() const
+QString miacode::runtime::PlaybackCoordinator::resolveCustomOutlineDir() const
 {
     return session_.stageMedia_->resolvePreviewCustomOutlineDir();
 }
 
-void miacode::runtime::PlaybackHost::applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
+void miacode::runtime::PlaybackCoordinator::applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                                   bool persistState)
 {
     session_.stageMedia_->applyPreviewOutlineVariant(variant, useAutoSelection, persistState);
 }
 
-QVariantMap miacode::runtime::PlaybackHost::renderSettings() const
+QVariantMap miacode::runtime::PlaybackCoordinator::renderSettings() const
 {
     return session_.previewRenderSettings();
 }
 
-void miacode::runtime::PlaybackHost::setRenderSetting(const QString& key, const QVariant& value)
+void miacode::runtime::PlaybackCoordinator::setRenderSetting(const QString& key, const QVariant& value)
 {
     session_.setPreviewRenderSetting(key, value);
 }
 
-void miacode::runtime::PlaybackHost::refreshSurfaces()
+void miacode::runtime::PlaybackCoordinator::refreshSurfaces()
 {
     session_.refreshPreviewSurfaces();
 }
 
-void miacode::runtime::PlaybackHost::applySfxLevels()
+void miacode::runtime::PlaybackCoordinator::applySfxLevels()
 {
     session_.applyPreviewSfxLevels();
 }
 
-void miacode::runtime::PlaybackHost::prepareForShutdown()
+void miacode::runtime::PlaybackCoordinator::prepareForShutdown()
 {
     session_.preparePreviewForShutdown();
 }
 
-PreviewAudioSettings miacode::runtime::PlaybackHost::audioSettings() const
+PreviewAudioSettings miacode::runtime::PlaybackCoordinator::audioSettings() const
 {
     return session_.currentPreviewAudioSettings();
 }
 
-void miacode::runtime::PlaybackHost::applyAudioSettings(const PreviewAudioSettings& settings)
+void miacode::runtime::PlaybackCoordinator::applyAudioSettings(const PreviewAudioSettings& settings)
 {
     session_.applyPreviewAudioSettingsFromUi(settings);
 }
 
-void miacode::runtime::PlaybackHost::saveAudioSettingsAsSoftwareDefault()
+void miacode::runtime::PlaybackCoordinator::saveAudioSettingsAsSoftwareDefault()
 {
     session_.savePreviewAudioSettingsAsSoftwareDefault();
 }
 
-void miacode::runtime::PlaybackHost::restoreAudioSettingsFromSoftwareDefault()
+void miacode::runtime::PlaybackCoordinator::restoreAudioSettingsFromSoftwareDefault()
 {
     session_.restorePreviewAudioSettingsFromSoftwareDefault();
 }
 
-QObject* miacode::runtime::PlaybackHost::timelineStateBridge() const
+QObject* miacode::runtime::PlaybackCoordinator::timelineStateBridge() const
 {
     return static_cast<QObject*>(state_.timelineQuickStateBridge_);
 }
 
-void miacode::runtime::PlaybackHost::navigateToSecond(double second)
+void miacode::runtime::PlaybackCoordinator::navigateToSecond(double second)
 {
     onTimelineHeaderNavigateRequested(second);
 }
 
-void miacode::runtime::PlaybackHost::centerOnSecond(double second)
+void miacode::runtime::PlaybackCoordinator::centerOnSecond(double second)
 {
     onTimelineCenterNavigateRequested(second);
 }
 
-void miacode::runtime::PlaybackHost::wheelNavigateToSecond(double second)
+void miacode::runtime::PlaybackCoordinator::wheelNavigateToSecond(double second)
 {
     onTimelineWheelNavigateRequested(second);
 }
 
-void miacode::runtime::PlaybackHost::timelineDragStarted()
+void miacode::runtime::PlaybackCoordinator::timelineDragStarted()
 {
     onTimelineDragStarted();
 }
 
-void miacode::runtime::PlaybackHost::timelineDragFinished(double second)
+void miacode::runtime::PlaybackCoordinator::timelineDragFinished(double second)
 {
     onTimelineDragFinished(second);
 }
 
-void miacode::runtime::PlaybackHost::timelineUserInteractionStarted()
+void miacode::runtime::PlaybackCoordinator::timelineUserInteractionStarted()
 {
     onTimelineUserInteractionStarted();
 }
 
-void miacode::runtime::PlaybackHost::setFollowPreviewEnabled(bool enabled)
+void miacode::runtime::PlaybackCoordinator::setFollowPreviewEnabled(bool enabled)
 {
     onTimelineFollowPreviewToggled(enabled);
 }
 
-QString miacode::runtime::PlaybackHost::bottomTabsCurrentTabId() const
+QString miacode::runtime::PlaybackCoordinator::bottomTabsCurrentTabId() const
 {
     return session_.currentBottomTabsTabIdString();
 }
 
-void miacode::runtime::PlaybackHost::setBottomTabsCurrentTabId(const QString& tabId)
+void miacode::runtime::PlaybackCoordinator::setBottomTabsCurrentTabId(const QString& tabId)
 {
     session_.setCurrentBottomTabsTabId(tabId);
 }
 
-bool miacode::runtime::PlaybackHost::bottomTabsVisible() const
+bool miacode::runtime::PlaybackCoordinator::bottomTabsVisible() const
 {
     return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Timeline)
         || session_.bottomTabsTabVisible(Session::BottomTabsTabId::Validation)
         || session_.bottomTabsTabVisible(Session::BottomTabsTabId::Muri);
 }
 
-bool miacode::runtime::PlaybackHost::timelineTabVisible() const
+bool miacode::runtime::PlaybackCoordinator::timelineTabVisible() const
 {
     return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Timeline);
 }
 
-bool miacode::runtime::PlaybackHost::muriTabVisible() const
+bool miacode::runtime::PlaybackCoordinator::muriTabVisible() const
 {
     return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Muri);
 }
 
-bool miacode::runtime::PlaybackHost::validationTabVisible() const
+bool miacode::runtime::PlaybackCoordinator::validationTabVisible() const
 {
     return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Validation);
 }
 
-bool miacode::runtime::PlaybackHost::ignoreMuriIssuePrompts() const
+bool miacode::runtime::PlaybackCoordinator::ignoreMuriIssuePrompts() const
 {
     return state_.ignoreMuriIssuePrompts_;
 }
 
-void miacode::runtime::PlaybackHost::noteTimelineSurfaceReady()
+void miacode::runtime::PlaybackCoordinator::noteTimelineSurfaceReady()
 {
     if (state_.timelineReady_) {
         return;

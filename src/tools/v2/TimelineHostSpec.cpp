@@ -1,7 +1,7 @@
 // Contract regression for the Timeline half of the Preview/Timeline split.
 //
 // TimelineHost is intentionally a forwarding seam in this stage: the old
-// composite PlaybackHost remains the implementation, while every Timeline
+// composite PlaybackCoordinator remains the implementation, while every Timeline
 // command receives a generation/revision/sequence identity before forwarding.
 
 #include "app/runtime/timeline/TimelineCommandGate.h"

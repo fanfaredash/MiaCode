@@ -1,0 +1,136 @@
+// Boundary regression for stage 4.8.
+//
+// The coordinator is the only playback authority. Preview and Timeline
+// compatibility surfaces are separate projection adapters and must not make
+// the coordinator depend on either UI surface contract.
+
+#include <QCoreApplication>
+#include <QFile>
+#include <QString>
+#include <QTextStream>
+
+#include "app/runtime/playback/PlaybackIdentityGate.h"
+
+#ifndef MIACODE_SOURCE_ROOT
+#error "MIACODE_SOURCE_ROOT must be defined (repo root absolute path)"
+#endif
+
+namespace {
+
+QString readSource(const QString& relativePath)
+{
+    QFile file(QStringLiteral(MIACODE_SOURCE_ROOT) + QLatin1Char('/') + relativePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
+bool require(bool condition, const QString& message, QTextStream& err)
+{
+    if (!condition) {
+        err << "FAIL: " << message << Qt::endl;
+    }
+    return condition;
+}
+
+bool verifyCoordinatorOwnsOnlyPlaybackContracts(QTextStream& err)
+{
+    const QString header = readSource(QStringLiteral("src/app/runtime/playback/PlaybackCoordinator.h"));
+    bool ok = require(!header.isEmpty(),
+                      QStringLiteral("PlaybackCoordinator.h is present"), err);
+    ok &= require(header.contains(QStringLiteral("class PlaybackCoordinator"))
+                      && header.contains(QStringLiteral("miacode::v2::PlaybackControl"))
+                      && header.contains(QStringLiteral("miacode::v2::PreviewPlaybackPort"))
+                      && header.contains(QStringLiteral("miacode::v2::AudioClockSource")),
+                  QStringLiteral("the coordinator implements the three narrow playback contracts"), err);
+    ok &= require(!header.contains(QStringLiteral("PreviewSurface.h"))
+                      && !header.contains(QStringLiteral("TimelineSurface.h"))
+                      && !header.contains(QStringLiteral("public miacode::v2::PreviewSurface"))
+                      && !header.contains(QStringLiteral("public miacode::v2::TimelineSurface")),
+                  QStringLiteral("the coordinator has no direct Preview or Timeline surface dependency"), err);
+    ok &= require(!header.contains(QStringLiteral("QQuick"))
+                      && !header.contains(QStringLiteral("QSG")),
+                  QStringLiteral("the coordinator header has no direct QML or scene-graph dependency"), err);
+    return ok;
+}
+
+bool verifyProjectionAdaptersOwnLegacySurfaceContracts(QTextStream& err)
+{
+    const QString adapters = readSource(
+        QStringLiteral("src/app/runtime/playback/PlaybackSurfaceAdapters.h"));
+    bool ok = require(!adapters.isEmpty(),
+                      QStringLiteral("legacy surface adapters are present"), err);
+    ok &= require(adapters.contains(QStringLiteral("PreviewSurface"))
+                      && adapters.contains(QStringLiteral("TimelineSurface"))
+                      && adapters.contains(QStringLiteral("PlaybackCoordinator")),
+                  QStringLiteral("surface compatibility is isolated behind explicit adapters"), err);
+    return ok;
+}
+
+bool verifyAssemblyNoLongerUsesPlaybackControlAdapter(QTextStream& err)
+{
+    const QString bootstrap = readSource(QStringLiteral("src/app/runtime/SessionBootstrap.cpp"));
+    const QString cmake = readSource(QStringLiteral("CMakeLists.txt"));
+    bool ok = require(!bootstrap.isEmpty() && !cmake.isEmpty(),
+                      QStringLiteral("coordinator assembly sources are readable"), err);
+    ok &= require(!bootstrap.contains(QStringLiteral("PlaybackControlAdapter"))
+                      && !cmake.contains(QStringLiteral("PlaybackControlAdapter.cpp")),
+                  QStringLiteral("the old playback adapter is removed from production assembly"), err);
+    return ok;
+}
+
+bool verifyPlaybackIdentityGateBehavior(QTextStream& err)
+{
+    miacode::runtime::PlaybackIdentityGate gate(41);
+    gate.setDocumentRevision(9);
+    const miacode::v2::PlaybackCallbackStamp initial = gate.currentStamp();
+    bool ok = require(gate.active()
+                          && initial.sessionGeneration == 41
+                          && initial.documentRevision == 9
+                          && initial.playbackSequence == 0,
+                      QStringLiteral("the identity gate starts with an explicit session and revision"), err);
+
+    ok &= require(gate.advanceSequence() == 1,
+                  QStringLiteral("one playback command advances exactly one sequence"), err);
+    const miacode::v2::PlaybackCallbackStamp current = gate.currentStamp();
+    ok &= require(gate.accepts(current),
+                  QStringLiteral("the current callback stamp is accepted"), err);
+    ok &= require(!gate.accepts(initial),
+                  QStringLiteral("a stale command sequence is rejected"), err);
+
+    const miacode::v2::PlaybackCallbackStamp wrongRevision{41, 10, 1};
+    const miacode::v2::PlaybackCallbackStamp wrongGeneration{42, 9, 1};
+    ok &= require(!gate.accepts(wrongRevision) && !gate.accepts(wrongGeneration),
+                  QStringLiteral("revision and generation mismatches are rejected"), err);
+
+    gate.invalidate();
+    const miacode::v2::PlaybackCallbackStamp invalidated = gate.currentStamp();
+    ok &= require(!gate.active()
+                      && invalidated.sessionGeneration == 42
+                      && invalidated.playbackSequence == 2
+                      && !gate.accepts(invalidated)
+                      && gate.advanceSequence() == 2,
+                  QStringLiteral("invalidation rejects callbacks and freezes command sequencing"), err);
+    gate.setDocumentRevision(11);
+    ok &= require(!gate.active() && !gate.accepts(gate.currentStamp()),
+                  QStringLiteral("a revision update cannot reactivate an invalidated session"), err);
+    return ok;
+}
+
+}  // namespace
+
+int main(int argc, char** argv)
+{
+    QCoreApplication app(argc, argv);
+    QTextStream err(stderr);
+    bool ok = true;
+    ok &= verifyCoordinatorOwnsOnlyPlaybackContracts(err);
+    ok &= verifyProjectionAdaptersOwnLegacySurfaceContracts(err);
+    ok &= verifyAssemblyNoLongerUsesPlaybackControlAdapter(err);
+    ok &= verifyPlaybackIdentityGateBehavior(err);
+    if (ok) {
+        QTextStream(stdout) << "playback_coordinator_spec: OK" << Qt::endl;
+    }
+    return ok ? 0 : 1;
+}

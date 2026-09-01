@@ -7,8 +7,8 @@
 #include "runtime/export/VideoExportHost.h"
 #include "runtime/settings/SettingsHost.h"
 #include "runtime/preview/StageMediaHost.h"
-#include "runtime/playback/PlaybackHost.h"
-#include "runtime/playback/PlaybackControlAdapter.h"
+#include "runtime/playback/PlaybackCoordinator.h"
+#include "runtime/playback/PlaybackSurfaceAdapters.h"
 #include "runtime/timeline/TimelineHost.h"
 #include "runtime/preview/PreviewHost.h"
 #include "runtime/validation/ValidationHost.h"
@@ -329,8 +329,14 @@ Session::~Session()
     if (timelineHost_ != nullptr) {
         timelineHost_->invalidateSession();
     }
-    if (playbackControl_ != nullptr) {
-        playbackControl_->invalidateSession();
+    if (playbackPreviewSurface_ != nullptr) {
+        playbackPreviewSurface_->invalidateSession();
+    }
+    if (playbackTimelineSurface_ != nullptr) {
+        playbackTimelineSurface_->invalidateSession();
+    }
+    if (playback_ != nullptr) {
+        playback_->invalidateSession();
     }
     applicationServices_.setTimelineSurface(nullptr);
     applicationServices_.setPreviewSurface(nullptr);

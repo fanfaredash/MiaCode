@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "app/v2/EditorSyncController.h"
 #include "runtime/Shared.h"
 
@@ -41,7 +41,7 @@
 using namespace miacode::runtime::shared;
 using namespace miacode::runtime::playback_detail;
 
-void miacode::runtime::PlaybackHost::clearPreviewPlayingRetainedSeek()
+void miacode::runtime::PlaybackCoordinator::clearPreviewPlayingRetainedSeek()
 {
     state_.previewPlayingSeekAudioGeneration_ = 0;
     state_.previewPlayingSeekPendingSequence_ = 0;
@@ -50,7 +50,7 @@ void miacode::runtime::PlaybackHost::clearPreviewPlayingRetainedSeek()
     state_.previewPlayingSeekWorkerSecond_ = 0.0;
 }
 
-void miacode::runtime::PlaybackHost::cancelPreviewStartupSync(const char* cause)
+void miacode::runtime::PlaybackCoordinator::cancelPreviewStartupSync(const char* cause)
 {
     const bool hadStartup = state_.previewStartupSyncPending_
         || state_.previewLateVideoStartPending_
@@ -114,7 +114,7 @@ void miacode::runtime::PlaybackHost::cancelPreviewStartupSync(const char* cause)
     }
 }
 
-void miacode::runtime::PlaybackHost::handlePreviewStartupCanvasPresented()
+void miacode::runtime::PlaybackCoordinator::handlePreviewStartupCanvasPresented()
 {
     if (!state_.previewStartupSyncPending_ || state_.previewStartupStrongGroupCommitted_) {
         return;
@@ -131,7 +131,7 @@ void miacode::runtime::PlaybackHost::handlePreviewStartupCanvasPresented()
     tryCommitPreviewStartupSync();
 }
 
-void miacode::runtime::PlaybackHost::handlePreviewStartupVideoPrepared(double second, quint64 transactionId)
+void miacode::runtime::PlaybackCoordinator::handlePreviewStartupVideoPrepared(double second, quint64 transactionId)
 {
     if (transactionId != state_.activePreviewPlaybackTransactionId_) {
         appendPreviewPlaybackLog(
@@ -173,13 +173,13 @@ void miacode::runtime::PlaybackHost::handlePreviewStartupVideoPrepared(double se
     }
 }
 
-void miacode::runtime::PlaybackHost::handlePreviewAudioPrepared(
+void miacode::runtime::PlaybackCoordinator::handlePreviewAudioPrepared(
     const miacode::preview_audio::PreviewAudioCompletion& completion)
 {
     handlePreviewAudioStartupCompletion(completion);
 }
 
-void miacode::runtime::PlaybackHost::handlePreviewRetainedPlaybackCompleted(
+void miacode::runtime::PlaybackCoordinator::handlePreviewRetainedPlaybackCompleted(
     const miacode::preview_audio::PreviewAudioCompletion& completion)
 {
     using namespace miacode::preview_audio;
@@ -305,7 +305,7 @@ void miacode::runtime::PlaybackHost::handlePreviewRetainedPlaybackCompleted(
     handlePreviewAudioStartupCompletion(completion);
 }
 
-void miacode::runtime::PlaybackHost::handlePreviewAudioStartupCompletion(
+void miacode::runtime::PlaybackCoordinator::handlePreviewAudioStartupCompletion(
     const miacode::preview_audio::PreviewAudioCompletion& completion)
 {
     using namespace miacode::preview_audio;
@@ -399,7 +399,7 @@ void miacode::runtime::PlaybackHost::handlePreviewAudioStartupCompletion(
     tryCommitPreviewStartupSync();
 }
 
-void miacode::runtime::PlaybackHost::handlePreviewPlayingRetainedSeekCompletion(
+void miacode::runtime::PlaybackCoordinator::handlePreviewPlayingRetainedSeekCompletion(
     const miacode::preview_audio::PreviewAudioCompletion& completion)
 {
     using namespace miacode::preview_audio;
@@ -483,7 +483,7 @@ void miacode::runtime::PlaybackHost::handlePreviewPlayingRetainedSeekCompletion(
             .arg(effectiveSecond, 0, 'f', 6));
 }
 
-void miacode::runtime::PlaybackHost::tryCommitPreviewStartupSync()
+void miacode::runtime::PlaybackCoordinator::tryCommitPreviewStartupSync()
 {
     if (!state_.previewStartupSyncPending_ || state_.previewStartupStrongGroupCommitted_) {
         return;
@@ -524,7 +524,7 @@ void miacode::runtime::PlaybackHost::tryCommitPreviewStartupSync()
             .arg(state_.previewLateVideoStartPending_ ? 1 : 0));
 }
 
-void miacode::runtime::PlaybackHost::stopQtPreviewTimers()
+void miacode::runtime::PlaybackCoordinator::stopQtPreviewTimers()
 {
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
@@ -549,7 +549,7 @@ void miacode::runtime::PlaybackHost::stopQtPreviewTimers()
     session_.setPreviewFixedTimerHighResolutionActive(false);
 }
 
-void miacode::runtime::PlaybackHost::finalizeQtPreviewPlaybackStart(double effectiveStartSecond)
+void miacode::runtime::PlaybackCoordinator::finalizeQtPreviewPlaybackStart(double effectiveStartSecond)
 {
     state_.pausedPreviewMediaSeekPending_ = false;
     // Position the clock count-in cursor for this playback start (skips ticks before
@@ -638,7 +638,7 @@ void miacode::runtime::PlaybackHost::finalizeQtPreviewPlaybackStart(double effec
     }
 }
 
-void miacode::runtime::PlaybackHost::pauseQtPreviewPlaybackExact(PauseSecondSource pauseSecondSource)
+void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSecondSource pauseSecondSource)
 {
     const bool wasPlaying = state_.playing_;
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
@@ -847,7 +847,7 @@ void miacode::runtime::PlaybackHost::pauseQtPreviewPlaybackExact(PauseSecondSour
     }
 }
 
-void miacode::runtime::PlaybackHost::applyPreviewAudioDeviceCutoff(
+void miacode::runtime::PlaybackCoordinator::applyPreviewAudioDeviceCutoff(
     const miacode::preview_audio::PreviewAudioDeviceCutoff& cutoff)
 {
     using miacode::preview_audio::device_change::Change;
@@ -940,7 +940,7 @@ void miacode::runtime::PlaybackHost::applyPreviewAudioDeviceCutoff(
     session_.updatePauseButtonAppearance();
 }
 
-void miacode::runtime::PlaybackHost::pausePreviewForAudioDeviceChange(
+void miacode::runtime::PlaybackCoordinator::pausePreviewForAudioDeviceChange(
     miacode::preview_audio::device_change::Change change)
 {
     const quint64 deviceChangeSequence = ++state_.previewAudioDeviceChangeSequence_;
@@ -1017,7 +1017,7 @@ void miacode::runtime::PlaybackHost::pausePreviewForAudioDeviceChange(
     session_.updatePauseButtonAppearance();
 }
 
-void miacode::runtime::PlaybackHost::emitChartSwitchResourceGauge()
+void miacode::runtime::PlaybackCoordinator::emitChartSwitchResourceGauge()
 {
     // Chart-switch leak gauge. The pause handler above is the ONLY other site that
     // arms a render sample, which left a chart switch (the scenario in
@@ -1064,7 +1064,7 @@ void miacode::runtime::PlaybackHost::emitChartSwitchResourceGauge()
     miacode::diag::leak_gauge::armRenderSample(switchPrivBytes, gaugeTxn);
 }
 
-void miacode::runtime::PlaybackHost::pauseQtPreviewPlaybackForReanchor()
+void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackForReanchor()
 {
     const bool wasPlaying = state_.playing_;
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
@@ -1127,7 +1127,7 @@ void miacode::runtime::PlaybackHost::pauseQtPreviewPlaybackForReanchor()
     }
 }
 
-void miacode::runtime::PlaybackHost::softStopQtPreviewPlaybackToSecond(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::softStopQtPreviewPlaybackToSecond(double second, bool centerView)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
@@ -1138,7 +1138,7 @@ void miacode::runtime::PlaybackHost::softStopQtPreviewPlaybackToSecond(double se
     anchorQtPreviewPlaybackToSecond(clampedSecond, centerView);
 }
 
-void miacode::runtime::PlaybackHost::anchorQtPreviewPlaybackToSecond(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::anchorQtPreviewPlaybackToSecond(double second, bool centerView)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     session_.ensurePreviewStageMediaRouteInitialized();

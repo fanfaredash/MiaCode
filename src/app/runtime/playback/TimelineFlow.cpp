@@ -1,4 +1,4 @@
-﻿#include "runtime/playback/PlaybackHost.h"
+﻿#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 #include "runtime/media/MediaJobsHost.h"
 #include "runtime/document/DocumentSessionHost.h"
@@ -42,27 +42,29 @@
 using namespace miacode::runtime::shared;
 using namespace miacode::runtime::preview_timeline_detail;
 
-miacode::runtime::PlaybackHost::PlaybackHost(
+miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     Session& session,
     Session::HostUi& ui,
-    Session::HostState& state)
+    Session::HostState& state,
+    quint64 sessionGeneration)
     : session_(session)
     , ui_(ui)
     , state_(state)
+    , identity_(sessionGeneration)
 {}
 
-bool miacode::runtime::PlaybackHost::timelineTabIsForeground() const
+bool miacode::runtime::PlaybackCoordinator::timelineTabIsForeground() const
 {
     return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Timeline)
         && session_.currentBottomTabsTabId() == Session::BottomTabsTabId::Timeline;
 }
 
-bool miacode::runtime::PlaybackHost::quickTimelineBridgeReady() const
+bool miacode::runtime::PlaybackCoordinator::quickTimelineBridgeReady() const
 {
     return !state_.uiFocusBridgeMode_ || state_.timelineReady_;
 }
 
-void miacode::runtime::PlaybackHost::queueTimelineCursorBridgeUpdate(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::queueTimelineCursorBridgeUpdate(double second, bool centerView)
 {
     if (state_.timelineQuickStateBridge_ == nullptr) {
         return;
@@ -73,7 +75,7 @@ void miacode::runtime::PlaybackHost::queueTimelineCursorBridgeUpdate(double seco
         state_.pendingQuickTimelineCursorCenterView_ || centerView;
 }
 
-void miacode::runtime::PlaybackHost::scheduleDeferredTimelineBridgeFlush()
+void miacode::runtime::PlaybackCoordinator::scheduleDeferredTimelineBridgeFlush()
 {
     const quint64 generation = ++state_.deferredTimelineBridgeFlushGeneration_;
     QTimer::singleShot(0, &session_, [this, generation]() {
@@ -84,13 +86,13 @@ void miacode::runtime::PlaybackHost::scheduleDeferredTimelineBridgeFlush()
     });
 }
 
-void miacode::runtime::PlaybackHost::deferTimelineCursorBridgeUpdate(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::deferTimelineCursorBridgeUpdate(double second, bool centerView)
 {
     queueTimelineCursorBridgeUpdate(second, centerView);
     scheduleDeferredTimelineBridgeFlush();
 }
 
-void miacode::runtime::PlaybackHost::flushDeferredTimelineBridgeState()
+void miacode::runtime::PlaybackCoordinator::flushDeferredTimelineBridgeState()
 {
     if (state_.timelineQuickStateBridge_ == nullptr
         || !quickTimelineBridgeReady()
@@ -245,13 +247,13 @@ bool upsertMetadataField(QVector<SimaiRawField>* fields, const QString& key, con
 
 }  // namespace
 
-void miacode::runtime::PlaybackHost::invalidatePreviewFollowBindingCache()
+void miacode::runtime::PlaybackCoordinator::invalidatePreviewFollowBindingCache()
 {
     state_.previewFollowBindingCacheValid_ = false;
     state_.previewFollowBindingCache_ = TimelineQuickModel::PreviewFollowBinding();
 }
 
-bool miacode::runtime::PlaybackHost::cachedPreviewFollowBindingContainsSecond(double second) const
+bool miacode::runtime::PlaybackCoordinator::cachedPreviewFollowBindingContainsSecond(double second) const
 {
     if (!state_.previewFollowBindingCacheValid_ || !state_.previewFollowBindingCache_.resolved) {
         return false;
@@ -269,7 +271,7 @@ bool miacode::runtime::PlaybackHost::cachedPreviewFollowBindingContainsSecond(do
     return true;
 }
 
-void miacode::runtime::PlaybackHost::cachePreviewFollowBinding(
+void miacode::runtime::PlaybackCoordinator::cachePreviewFollowBinding(
     const TimelineQuickModel::PreviewFollowBinding& binding)
 {
     if (!binding.resolved) {
@@ -280,7 +282,7 @@ void miacode::runtime::PlaybackHost::cachePreviewFollowBinding(
     state_.previewFollowBindingCache_ = binding;
 }
 
-void miacode::runtime::PlaybackHost::resetPreviewTrackTimelineOffsets()
+void miacode::runtime::PlaybackCoordinator::resetPreviewTrackTimelineOffsets()
 {
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setBackgroundTrackOffsetSeconds(0.0);
@@ -288,7 +290,7 @@ void miacode::runtime::PlaybackHost::resetPreviewTrackTimelineOffsets()
     session_.resetPreviewStageMediaRouteTimelineOffset();
 }
 
-void miacode::runtime::PlaybackHost::applyWaveformData(
+void miacode::runtime::PlaybackCoordinator::applyWaveformData(
     const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
 {
     const double previousTrackDurationSeconds = state_.previewTrackDurationSeconds_;
@@ -321,12 +323,12 @@ void miacode::runtime::PlaybackHost::applyWaveformData(
             .arg(summary));
 }
 
-void miacode::runtime::PlaybackHost::refreshWaveformCache()
+void miacode::runtime::PlaybackCoordinator::refreshWaveformCache()
 {
     refreshWaveformCache(-1.0);
 }
 
-void miacode::runtime::PlaybackHost::refreshWaveformCache(double knownDurationSeconds)
+void miacode::runtime::PlaybackCoordinator::refreshWaveformCache(double knownDurationSeconds)
 {
     resetPreviewTrackTimelineOffsets();
     if (state_.timelineQuickStateBridge_ == nullptr) {
@@ -438,12 +440,12 @@ void miacode::runtime::PlaybackHost::refreshWaveformCache(double knownDurationSe
         });
 }
 
-bool miacode::runtime::PlaybackHost::hasActiveDifficulty() const
+bool miacode::runtime::PlaybackCoordinator::hasActiveDifficulty() const
 {
     return state_.activeDifficultyId_ > 0 && session_.applicationServices_.workspace().document().difficulty(state_.activeDifficultyId_) != nullptr;
 }
 
-bool miacode::runtime::PlaybackHost::hasPreviewableChart() const
+bool miacode::runtime::PlaybackCoordinator::hasPreviewableChart() const
 {
     // latencySandboxAuditionActive_ is set while the latency page has its
     // synthesized test chart installed as the preview source.
@@ -455,12 +457,12 @@ bool miacode::runtime::PlaybackHost::hasPreviewableChart() const
         || state_.exportPreviewAuditionActive_;
 }
 
-int miacode::runtime::PlaybackHost::activeDifficultyId() const
+int miacode::runtime::PlaybackCoordinator::activeDifficultyId() const
 {
     return state_.activeDifficultyId_;
 }
 
-QString miacode::runtime::PlaybackHost::activeChartText() const
+QString miacode::runtime::PlaybackCoordinator::activeChartText() const
 {
     if (!hasActiveDifficulty()) {
         return QString();
@@ -469,23 +471,23 @@ QString miacode::runtime::PlaybackHost::activeChartText() const
     return difficultyData != nullptr ? difficultyData->chart : QString();
 }
 
-miacode::simai::SimaiTimingMetadata miacode::runtime::PlaybackHost::currentTimingMetadata() const
+miacode::simai::SimaiTimingMetadata miacode::runtime::PlaybackCoordinator::currentTimingMetadata() const
 {
     return miacode::simai::buildTimingMetadata(session_.applicationServices_.workspace().document());
 }
 
-double miacode::runtime::PlaybackHost::parsedRawFirstSeconds(bool* ok) const
+double miacode::runtime::PlaybackCoordinator::parsedRawFirstSeconds(bool* ok) const
 {
     return miacode::timeline::offset::parsedFirstSeconds(
         session_.applicationServices_.workspace().document().first, ok);
 }
 
-double miacode::runtime::PlaybackHost::parsedFirstSeconds(bool* ok) const
+double miacode::runtime::PlaybackCoordinator::parsedFirstSeconds(bool* ok) const
 {
     return parsedRawFirstSeconds(ok);
 }
 
-double miacode::runtime::PlaybackHost::parsedWholeBpm(bool* ok) const
+double miacode::runtime::PlaybackCoordinator::parsedWholeBpm(bool* ok) const
 {
     for (const SimaiRawField& field : session_.applicationServices_.workspace().document().extraFields) {
         if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) != 0) {
@@ -504,19 +506,19 @@ double miacode::runtime::PlaybackHost::parsedWholeBpm(bool* ok) const
     return 0.0;
 }
 
-int miacode::runtime::PlaybackHost::parsedClockCount() const
+int miacode::runtime::PlaybackCoordinator::parsedClockCount() const
 {
     const int value = miacode::chart_clock::clockCountFromDocument(
         session_.applicationServices_.workspace().document());
     return value > 0 ? value : 4;
 }
 
-QString miacode::runtime::PlaybackHost::parsedLatencyMeterId() const
+QString miacode::runtime::PlaybackCoordinator::parsedLatencyMeterId() const
 {
     return miacode::simai::latencyMeterIdForTimingMetadata(currentTimingMetadata());
 }
 
-void miacode::runtime::PlaybackHost::applyLatencyDetectorOffset(double seconds)
+void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorOffset(double seconds)
 {
     const double normalized = qIsFinite(seconds) ? seconds : 0.0;
     const QString serialized = QString::number(normalized, 'f', 3);
@@ -532,7 +534,7 @@ void miacode::runtime::PlaybackHost::applyLatencyDetectorOffset(double seconds)
     refreshTimelineMetadata();
 }
 
-void miacode::runtime::PlaybackHost::applyLatencyDetectorBpm(double bpm)
+void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
 {
     if (!qIsFinite(bpm) || bpm <= 0.0) {
         return;
@@ -545,7 +547,7 @@ void miacode::runtime::PlaybackHost::applyLatencyDetectorBpm(double bpm)
     session_.updateDirtyState();
 }
 
-void miacode::runtime::PlaybackHost::applyLatencyDetectorClockCount(int clockCount)
+void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int clockCount)
 {
     const int normalized = qMax(1, clockCount);
     miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
@@ -556,7 +558,7 @@ void miacode::runtime::PlaybackHost::applyLatencyDetectorClockCount(int clockCou
     refreshTimelineMetadata();
 }
 
-void miacode::runtime::PlaybackHost::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
+void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const bool pathChanged = normalizedPath != state_.currentFilePath_;
@@ -656,7 +658,7 @@ void miacode::runtime::PlaybackHost::setCurrentFilePath(const QString& path, boo
     }
 }
 
-void miacode::runtime::PlaybackHost::updateWindowTitle()
+void miacode::runtime::PlaybackCoordinator::updateWindowTitle()
 {
     QString titleText = session_.applicationServices_.workspace().document().title;
     if (ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.metadataPage_ && ui_.titleEdit_ != nullptr) {
@@ -673,7 +675,7 @@ void miacode::runtime::PlaybackHost::updateWindowTitle()
     session_.setWindowTitle(QString("MiaCode - %1%2").arg(elided, dirty ? QStringLiteral("[*]") : QString()));
 }
 
-void miacode::runtime::PlaybackHost::updateCurrentFileLabel()
+void miacode::runtime::PlaybackCoordinator::updateCurrentFileLabel()
 {
     if (ui_.currentFileLabel_ == nullptr) {
         return;
@@ -685,12 +687,12 @@ void miacode::runtime::PlaybackHost::updateCurrentFileLabel()
     }
 }
 
-QString miacode::runtime::PlaybackHost::editorText() const
+QString miacode::runtime::PlaybackCoordinator::editorText() const
 {
     return activeChartText();
 }
 
-void miacode::runtime::PlaybackHost::scheduleTimelineRefresh()
+void miacode::runtime::PlaybackCoordinator::scheduleTimelineRefresh()
 {
     if (!hasActiveDifficulty()) {
         return;
@@ -703,18 +705,18 @@ void miacode::runtime::PlaybackHost::scheduleTimelineRefresh()
     requestTimelineSlowRefresh();
 }
 
-void miacode::runtime::PlaybackHost::refreshTimelineMetadata()
+void miacode::runtime::PlaybackCoordinator::refreshTimelineMetadata()
 {
     scheduleTimelineRefresh();
 }
 
 
-void miacode::runtime::PlaybackHost::onTimelineHeaderNavigateRequested(double second)
+void miacode::runtime::PlaybackCoordinator::onTimelineHeaderNavigateRequested(double second)
 {
     navigateTimelineToSecond(second, true);
 }
 
-void miacode::runtime::PlaybackHost::onTimelineUserInteractionStarted()
+void miacode::runtime::PlaybackCoordinator::onTimelineUserInteractionStarted()
 {
     const bool pauseForViewportLock =
         state_.previewFollowEnabled_ && state_.previewViewportLockEnabled_;
@@ -735,7 +737,7 @@ void miacode::runtime::PlaybackHost::onTimelineUserInteractionStarted()
     }
 }
 
-void miacode::runtime::PlaybackHost::onTimelineDragStarted()
+void miacode::runtime::PlaybackCoordinator::onTimelineDragStarted()
 {
     appendTimelineInteractionLog(
         QStringLiteral("drag_scrub_begin"),
@@ -753,7 +755,7 @@ void miacode::runtime::PlaybackHost::onTimelineDragStarted()
     }
 }
 
-void miacode::runtime::PlaybackHost::onTimelineCenterNavigateRequested(double second)
+void miacode::runtime::PlaybackCoordinator::onTimelineCenterNavigateRequested(double second)
 {
     if (!state_.previewProgressFollowEnabled_) {
         Q_UNUSED(second);
@@ -775,7 +777,7 @@ void miacode::runtime::PlaybackHost::onTimelineCenterNavigateRequested(double se
     }
 }
 
-void miacode::runtime::PlaybackHost::onTimelineWheelNavigateRequested(double second)
+void miacode::runtime::PlaybackCoordinator::onTimelineWheelNavigateRequested(double second)
 {
     if (!state_.previewProgressFollowEnabled_) {
         Q_UNUSED(second);
@@ -791,7 +793,7 @@ void miacode::runtime::PlaybackHost::onTimelineWheelNavigateRequested(double sec
     seekPreviewToSecond(clampedSecond, false);
 }
 
-void miacode::runtime::PlaybackHost::onTimelineDragFinished(double second)
+void miacode::runtime::PlaybackCoordinator::onTimelineDragFinished(double second)
 {
     appendTimelineInteractionLog(
         QStringLiteral("drag_scrub_end"),
@@ -820,7 +822,7 @@ void miacode::runtime::PlaybackHost::onTimelineDragFinished(double second)
     seekPreviewToSecond(clampedSecond, false);
 }
 
-void miacode::runtime::PlaybackHost::onTimelineFollowPreviewToggled(bool enabled)
+void miacode::runtime::PlaybackCoordinator::onTimelineFollowPreviewToggled(bool enabled)
 {
     state_.previewFollowEnabled_ = enabled;
     if (state_.timelineQuickStateBridge_ != nullptr) {
@@ -842,7 +844,7 @@ void miacode::runtime::PlaybackHost::onTimelineFollowPreviewToggled(bool enabled
         !state_.playing_);
 }
 
-void miacode::runtime::PlaybackHost::onTimelineViewportLockToggled(bool enabled)
+void miacode::runtime::PlaybackCoordinator::onTimelineViewportLockToggled(bool enabled)
 {
     state_.previewViewportLockEnabled_ = enabled;
     if (state_.timelineQuickStateBridge_ != nullptr) {
@@ -858,7 +860,7 @@ void miacode::runtime::PlaybackHost::onTimelineViewportLockToggled(bool enabled)
     }
 }
 
-void miacode::runtime::PlaybackHost::onTimelineFollowProgressToggled(bool enabled)
+void miacode::runtime::PlaybackCoordinator::onTimelineFollowProgressToggled(bool enabled)
 {
     state_.previewProgressFollowEnabled_ = enabled;
     if (state_.timelineQuickStateBridge_ != nullptr) {
@@ -867,7 +869,7 @@ void miacode::runtime::PlaybackHost::onTimelineFollowProgressToggled(bool enable
     session_.savePortableState();
 }
 
-void miacode::runtime::PlaybackHost::onTimelineSyncToggled(bool enabled)
+void miacode::runtime::PlaybackCoordinator::onTimelineSyncToggled(bool enabled)
 {
     state_.timelineSyncEnabled_ = enabled;
     if (state_.timelineQuickStateBridge_ != nullptr) {
@@ -876,7 +878,7 @@ void miacode::runtime::PlaybackHost::onTimelineSyncToggled(bool enabled)
     session_.savePortableState();
 }
 
-void miacode::runtime::PlaybackHost::applyLatestTimelinePreviewStateToPausedPreview()
+void miacode::runtime::PlaybackCoordinator::applyLatestTimelinePreviewStateToPausedPreview()
 {
     if (state_.playing_) {
         return;
@@ -901,7 +903,7 @@ void miacode::runtime::PlaybackHost::applyLatestTimelinePreviewStateToPausedPrev
     state_.lastPreviewNoteMarkerSignature_ = state_.latestTimelineNoteMarkerSignature_;
 }
 
-void miacode::runtime::PlaybackHost::requestTimelineSlowRefresh()
+void miacode::runtime::PlaybackCoordinator::requestTimelineSlowRefresh()
 {
     if (!hasActiveDifficulty()) {
         return;
@@ -921,7 +923,7 @@ void miacode::runtime::PlaybackHost::requestTimelineSlowRefresh()
     dispatchTimelineSlowRefresh();
 }
 
-void miacode::runtime::PlaybackHost::dispatchTimelineSlowRefresh()
+void miacode::runtime::PlaybackCoordinator::dispatchTimelineSlowRefresh()
 {
     if (state_.timelineSlowWorkerRunning_ || state_.pendingTimelineSlowRefresh_.revision == 0) {
         return;
@@ -1021,7 +1023,7 @@ void miacode::runtime::PlaybackHost::dispatchTimelineSlowRefresh()
 }
 
 
-void miacode::runtime::PlaybackHost::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers)
+void miacode::runtime::PlaybackCoordinator::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     state_.muriStaticReferences_ = miacode::muri::buildStaticMuriReferences(
         noteMarkers,
@@ -1032,7 +1034,7 @@ void miacode::runtime::PlaybackHost::rebuildStaticMuriReferences(const QVector<T
     state_.muriStaticReferencesAvailable_ = !state_.muriStaticReferencesNoteMarkerSignature_.isEmpty();
 }
 
-double miacode::runtime::PlaybackHost::timelineSecondForCursor(int line, int col) const
+double miacode::runtime::PlaybackCoordinator::timelineSecondForCursor(int line, int col) const
 {
     QElapsedTimer timer;
     timer.start();
@@ -1051,12 +1053,12 @@ double miacode::runtime::PlaybackHost::timelineSecondForCursor(int line, int col
     return second;
 }
 
-bool miacode::runtime::PlaybackHost::resolveTimelineSecondForCursor(int line, int col, double* second) const
+bool miacode::runtime::PlaybackCoordinator::resolveTimelineSecondForCursor(int line, int col, double* second) const
 {
     return state_.timelineQuickModel_.resolveTimelineSecondForCursor(line, col, second);
 }
 
-void miacode::runtime::PlaybackHost::updateTimelineCursorFromEditorLocation(
+void miacode::runtime::PlaybackCoordinator::updateTimelineCursorFromEditorLocation(
     int line, int col, bool centerView)
 {
     if (state_.timelineQuickStateBridge_ == nullptr) {
@@ -1076,7 +1078,7 @@ void miacode::runtime::PlaybackHost::updateTimelineCursorFromEditorLocation(
     }
 }
 
-void miacode::runtime::PlaybackHost::navigateTimelineToSecond(double second, bool focusEditor)
+void miacode::runtime::PlaybackCoordinator::navigateTimelineToSecond(double second, bool focusEditor)
 {
     if (state_.timelineQuickStateBridge_ == nullptr) {
         return;
@@ -1112,12 +1114,12 @@ void miacode::runtime::PlaybackHost::navigateTimelineToSecond(double second, boo
     );
 }
 
-bool miacode::runtime::PlaybackHost::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
+bool miacode::runtime::PlaybackCoordinator::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
 {
     return state_.timelineQuickModel_.resolveNearestTimelineNote(second, lane, line, col, noteSecond);
 }
 
-bool miacode::runtime::PlaybackHost::moveEditorCursorToTimelineLocation(
+bool miacode::runtime::PlaybackCoordinator::moveEditorCursorToTimelineLocation(
     int line,
     int col,
     bool selectToken,

@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"
@@ -57,7 +57,7 @@ QVariantMap introLeadInBannerTemplateMap()
 }
 }  // namespace
 
-bool miacode::runtime::PlaybackHost::exportIntroEnabled() const
+bool miacode::runtime::PlaybackCoordinator::exportIntroEnabled() const
 {
     // Authoritative, read live from the panel each time (NO cached flag — a
     // cached duration could be reset to 0 by a transient refresh while 添加片头
@@ -65,14 +65,14 @@ bool miacode::runtime::PlaybackHost::exportIntroEnabled() const
     return state_.exportPreviewAuditionActive_ && session_.currentExportIntroLeadInSpec(nullptr);
 }
 
-double miacode::runtime::PlaybackHost::exportIntroLowerBoundSeconds() const
+double miacode::runtime::PlaybackCoordinator::exportIntroLowerBoundSeconds() const
 {
     // The intro occupies negative time [-duration, 0) only while the export
     // audition is up and 添加片头 is on; otherwise the slider starts at 0.
     return exportIntroEnabled() ? -miacode::intro::kDurationSeconds : 0.0;
 }
 
-void miacode::runtime::PlaybackHost::setupExportIntroOverlayData()
+void miacode::runtime::PlaybackCoordinator::setupExportIntroOverlayData()
 {
     if (state_.scene_ == nullptr) {
         return;
@@ -102,7 +102,7 @@ void miacode::runtime::PlaybackHost::setupExportIntroOverlayData()
         introBannerStyleMap(spec));
 }
 
-void miacode::runtime::PlaybackHost::renderExportIntroFrame(double positionSeconds)
+void miacode::runtime::PlaybackCoordinator::renderExportIntroFrame(double positionSeconds)
 {
     if (state_.scene_ == nullptr) {
         return;
@@ -115,7 +115,7 @@ void miacode::runtime::PlaybackHost::renderExportIntroFrame(double positionSecon
     state_.scene_->setIntroOverlayFrame(frame, true);
 }
 
-void miacode::runtime::PlaybackHost::enterExportIntroRegion(double positionSeconds)
+void miacode::runtime::PlaybackCoordinator::enterExportIntroRegion(double positionSeconds)
 {
     if (state_.scene_ == nullptr || !exportIntroEnabled()) {
         return;
@@ -135,7 +135,7 @@ void miacode::runtime::PlaybackHost::enterExportIntroRegion(double positionSecon
     updatePreviewSliderPosition(state_.exportIntroPlayheadSeconds_);
 }
 
-void miacode::runtime::PlaybackHost::exitExportIntroRegion()
+void miacode::runtime::PlaybackCoordinator::exitExportIntroRegion()
 {
     const bool wasActive = state_.exportIntroRegionActive_ || state_.exportIntroLeadInActive_;
     state_.exportIntroLeadInActive_ = false;
@@ -157,18 +157,18 @@ void miacode::runtime::PlaybackHost::exitExportIntroRegion()
     }
 }
 
-bool miacode::runtime::PlaybackHost::exportIntroLeadInPlaying() const
+bool miacode::runtime::PlaybackCoordinator::exportIntroLeadInPlaying() const
 {
     return state_.exportIntroLeadInActive_;
 }
 
-void miacode::runtime::PlaybackHost::cancelExportIntroLeadIn()
+void miacode::runtime::PlaybackCoordinator::cancelExportIntroLeadIn()
 {
     // Full exit (clears the overlay) — used by stop / teardown.
     exitExportIntroRegion();
 }
 
-void miacode::runtime::PlaybackHost::pauseExportIntroAdvance()
+void miacode::runtime::PlaybackCoordinator::pauseExportIntroAdvance()
 {
     if (!state_.exportIntroLeadInActive_) {
         return;
@@ -182,7 +182,7 @@ void miacode::runtime::PlaybackHost::pauseExportIntroAdvance()
     session_.updatePauseButtonAppearance();
 }
 
-void miacode::runtime::PlaybackHost::startExportIntroAdvance(double fromPositionSeconds)
+void miacode::runtime::PlaybackCoordinator::startExportIntroAdvance(double fromPositionSeconds)
 {
     if (state_.scene_ == nullptr || !exportIntroEnabled()) {
         return;
@@ -216,7 +216,7 @@ void miacode::runtime::PlaybackHost::startExportIntroAdvance(double fromPosition
     session_.updatePauseButtonAppearance();
 }
 
-void miacode::runtime::PlaybackHost::tickExportIntroLeadIn()
+void miacode::runtime::PlaybackCoordinator::tickExportIntroLeadIn()
 {
     if (!state_.exportIntroLeadInActive_) {
         return;
@@ -234,7 +234,7 @@ void miacode::runtime::PlaybackHost::tickExportIntroLeadIn()
     updatePreviewSliderPosition(position);
 }
 
-bool miacode::runtime::PlaybackHost::handleExportIntroSliderSeek(double second)
+bool miacode::runtime::PlaybackCoordinator::handleExportIntroSliderSeek(double second)
 {
     if (!exportIntroEnabled()) {
         return false;
@@ -254,7 +254,7 @@ bool miacode::runtime::PlaybackHost::handleExportIntroSliderSeek(double second)
     return true;
 }
 
-void miacode::runtime::PlaybackHost::refreshExportIntroState()
+void miacode::runtime::PlaybackCoordinator::refreshExportIntroState()
 {
     const bool introOn = exportIntroEnabled();
     if (!introOn) {
@@ -280,7 +280,7 @@ void miacode::runtime::PlaybackHost::refreshExportIntroState()
     }
 }
 
-void miacode::runtime::PlaybackHost::setExportAuditionClockSchedule(int clockCount, double clockBpm)
+void miacode::runtime::PlaybackCoordinator::setExportAuditionClockSchedule(int clockCount, double clockBpm)
 {
     // clock_count count-in for the export audition. clock ticks live at chart-time
     // [0, count*beat) (beat = 60/clockBpm), mirroring the export's
@@ -292,14 +292,14 @@ void miacode::runtime::PlaybackHost::setExportAuditionClockSchedule(int clockCou
     state_.exportAuditionClockNextIndex_ = 0;
 }
 
-void miacode::runtime::PlaybackHost::clearExportAuditionClockSchedule()
+void miacode::runtime::PlaybackCoordinator::clearExportAuditionClockSchedule()
 {
     state_.exportAuditionClockCount_ = 0;
     state_.exportAuditionClockBeatSeconds_ = 0.0;
     state_.exportAuditionClockNextIndex_ = 0;
 }
 
-void miacode::runtime::PlaybackHost::resetExportAuditionClockCursor(double startSecond)
+void miacode::runtime::PlaybackCoordinator::resetExportAuditionClockCursor(double startSecond)
 {
     // Skip ticks that already elapsed before startSecond WITHOUT firing them, so
     // resuming mid-chart or seeking past the count-in doesn't replay it.
@@ -314,7 +314,7 @@ void miacode::runtime::PlaybackHost::resetExportAuditionClockCursor(double start
     state_.exportAuditionClockNextIndex_ = index;
 }
 
-void miacode::runtime::PlaybackHost::maybeFireExportAuditionClockTicks(double second)
+void miacode::runtime::PlaybackCoordinator::maybeFireExportAuditionClockTicks(double second)
 {
     if (!state_.exportPreviewAuditionActive_
         || state_.exportAuditionClockCount_ <= 0

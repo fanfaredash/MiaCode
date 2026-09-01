@@ -6,8 +6,8 @@
 #include "runtime/export/VideoExportHost.h"
 #include "runtime/settings/SettingsHost.h"
 #include "runtime/preview/StageMediaHost.h"
-#include "runtime/playback/PlaybackHost.h"
-#include "runtime/playback/PlaybackControlAdapter.h"
+#include "runtime/playback/PlaybackCoordinator.h"
+#include "runtime/playback/PlaybackSurfaceAdapters.h"
 #include "runtime/timeline/TimelineHost.h"
 #include "runtime/preview/PreviewHost.h"
 #include "app/v2/SessionGeneration.h"
@@ -184,21 +184,25 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     stageMedia_ = std::make_unique<miacode::runtime::StageMediaHost>(*this, ui_, state_);
     validation_ = std::make_unique<miacode::runtime::ValidationHost>(*this, ui_, state_);
     shell_ = std::make_unique<miacode::runtime::ShellHost>(*this, ui_, state_);
-    playback_ = std::make_unique<miacode::runtime::PlaybackHost>(*this, ui_, state_);
     const quint64 sessionGeneration = miacode::v2::nextSessionGeneration();
-    playbackControl_ = std::make_unique<miacode::runtime::PlaybackControlAdapter>(
-        *playback_, sessionGeneration);
-    timelineHost_ = std::make_unique<miacode::runtime::TimelineHost>(*playback_, sessionGeneration);
+    playback_ = std::make_unique<miacode::runtime::PlaybackCoordinator>(
+        *this, ui_, state_, sessionGeneration);
+    playbackPreviewSurface_ =
+        std::make_unique<miacode::runtime::PlaybackPreviewSurfaceAdapter>(*playback_);
+    playbackTimelineSurface_ =
+        std::make_unique<miacode::runtime::PlaybackTimelineSurfaceAdapter>(*playback_);
+    timelineHost_ = std::make_unique<miacode::runtime::TimelineHost>(
+        *playbackTimelineSurface_, sessionGeneration);
     previewHost_ = std::make_unique<miacode::runtime::PreviewHost>(
-        *playback_, *playbackControl_, *playbackControl_);
+        *playbackPreviewSurface_, *playback_, *playback_);
     const quint64 initialWorkspaceRevision = applicationServices_.workspace().snapshot().revision;
-    playbackControl_->setDocumentRevision(initialWorkspaceRevision);
+    playback_->setDocumentRevision(initialWorkspaceRevision);
     timelineHost_->setDocumentRevision(initialWorkspaceRevision);
-    applicationServices_.setPlaybackControl(playbackControl_.get());
+    applicationServices_.setPlaybackControl(playback_.get());
     connect(&applicationServices_.workspace(), &miacode::v2::ChartWorkspace::changed,
             this, [this](quint64 revision) {
                 documents_->syncRuntimeFromWorkspace();
-                playbackControl_->setDocumentRevision(revision);
+                playback_->setDocumentRevision(revision);
                 timelineHost_->setDocumentRevision(revision);
             });
     // unique_ptr owns it; pass no QObject parent to avoid double-delete.

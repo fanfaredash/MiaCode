@@ -1,6 +1,6 @@
 ﻿#include "runtime/preview/StageMediaHost.h"
 #include "runtime/Shared.h"
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/shell/ShellHost.h"
 
 #include "BracketScopeHighlighter.h"

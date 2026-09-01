@@ -24,23 +24,27 @@
 
 | 宿主 | 接口 | 代码 |
 |---|---|---|
-| `PlaybackHost`（当前复合宿主） | `PreviewSurface` + `TimelineSurface` | `src/app/runtime/playback/` |
+| `PlaybackCoordinator`（4.8 播放协调器） | `PlaybackControl` + `PreviewPlaybackPort` + `AudioClockSource` | `src/app/runtime/playback/` |
+| `PlaybackPreviewSurfaceAdapter` | `PreviewSurface` 兼容投影 | `src/app/runtime/playback/` |
+| `PlaybackTimelineSurfaceAdapter` | `TimelineSurface` 兼容投影 | `src/app/runtime/playback/` |
 | `TimelineHost`（4.6 过渡宿主） | `TimelineSurface` | `src/app/runtime/timeline/` |
 | `PreviewHost`（4.7 过渡宿主） | `PreviewSurface` | `src/app/runtime/preview/` |
 | `VideoExportHost` | `ExportEngine` | `src/app/runtime/export/` |
 
 4.5 已建立独立的播放契约：`PlaybackControl` / `PlaybackStateFeed` / `PlaybackSnapshot` 位于
-`src/app/v2/PlaybackControl.h`，`PlaybackControlAdapter` 以类型化观测和命令转发连接当前复合
-`PlaybackHost`。新的 Preview/Timeline 代码应依赖 playback contract，而不是继续扩展复合宿主；
-4.6–4.9 再分别抽离 TimelineHost、PreviewHost 和最终的 PlaybackCoordinator。
+`src/app/v2/PlaybackControl.h`。4.8 起 `PlaybackCoordinator` 直接实现播放控制、Preview transport
+port 与 canonical audio clock；`PlaybackPreviewSurfaceAdapter` / `PlaybackTimelineSurfaceAdapter`
+只负责把旧 surface 槽位转接到协调器，不持有第二套状态。新的 Preview/Timeline 代码应依赖 playback
+contract，而不是继续扩展复合宿主。
 
 4.6 已将 `ApplicationServices::timelineSurface` 切换为 `TimelineHost`。QML ingress 先捕获
-`TimelineCommandStamp`，host 在转发前校验原始 generation/revision/sequence；当前被包裹的
-`PlaybackHost` 仍保留 Timeline 实现，后续阶段再搬出所有权。
+`TimelineCommandStamp`，host 在转发前校验原始 generation/revision/sequence；4.8 的
+`PlaybackTimelineSurfaceAdapter` 是其下游兼容 surface，协调器不再实现 `TimelineSurface`。
 
 4.7 已将 `ApplicationServices::previewSurface` 切换为 `PreviewHost`。PreviewHost 的 transport
-命令只经过 `PreviewPlaybackPort`，canonical position 只读 `AudioClockSource`；当前被包裹的
-`PlaybackHost` 仅暂时提供非 transport Preview 投影。
+命令只经过 `PreviewPlaybackPort`，canonical position 只读 `AudioClockSource`；4.8 起这两个端口
+由 `PlaybackCoordinator` 直接提供，非 transport Preview 能力经 `PlaybackPreviewSurfaceAdapter`
+转发。
 | `LatencySandboxController` | `LatencyEngine` | `src/tools/latency/` |
 | `MediaJobsHost` | `MediaToolsEngine` | `src/app/runtime/media/` |
 | `SettingsHost` | `PreferencesStore` | `src/app/runtime/settings/` |
@@ -50,9 +54,10 @@
 | `EditorHost` | 便携状态、书签、字体持久化 | `src/app/runtime/editor/` |
 | `ValidationHost` | 校验与无理列表 | `src/app/runtime/validation/` |
 
-`PlaybackHost` 当前同时填入预览与时间线两个槽，因为走带、播放头与时间线 QSG 仍共用同一套运行时对象；这
-是迁移后的暂态，不是最终职责边界。`DocumentSessionHost` 同时填入文档桥与页面路由，因为页面切换与未保存
-守卫同属文档会话。
+`PlaybackCoordinator` 不再直接填入预览与时间线 surface 槽位：两个无状态 adapter 分别填入
+`PreviewHost` / `TimelineHost` 的下游兼容入口，三者共享同一个协调器实例。协调器的实现体仍暂时调用
+共享的 `HostUi` / `HostState`，这是 4.9 的存储清理范围；它不改变单一播放权威。`DocumentSessionHost`
+同时填入文档桥与页面路由，因为页面切换与未保存守卫同属文档会话。
 
 `ApplicationServices` 只装配，不实现上述接口。
 
@@ -60,7 +65,7 @@
 
 ## Preview / Timeline 二次拆分（计划）
 
-当前的 `PlaybackHost` 约 8,975 行，混合了 transport、canonical playhead、frame pacing、Timeline
+当前的 `PlaybackCoordinator` 约 8,975 行，混合了 transport、canonical playhead、frame pacing、Timeline
 QSG / viewport、PreviewRuntime、StageMedia、音频混音、布局和分析状态。后续遵循唯一不变量：
 **一个时间域、一个播放权威、两个独立投影**。
 
@@ -77,9 +82,11 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
 写入顺序；Preview 与 Timeline 之间不得直接调用。`EditorSyncController` 继续拥有文档 revision
 与 follow 真相，Session 只负责显式构造、端口连接、生命周期和资源所有权。
 
-迁移期间可以保留旧 `PreviewSurface` 的 transport adapter；只有当三个槽位已分别指向
-`PlaybackCoordinator`、`PreviewHost`、`TimelineHost`，且契约测试与跨模块时间对齐回归通过后，才
-将旧 `PlaybackHost` 更名或删除。
+4.8 已完成契约边界收缩和旧类型重命名：`PlaybackCoordinator.h` 不直接包含或继承
+`PreviewSurface.h`、`TimelineSurface.h`、QML 或场景图契约；它仍通过 `Session.h` 间接看到共享
+`HostUi` / `HostState` 依赖，这是 4.9 的存储拆分范围。协调器还暂时公开旧 Preview/Timeline
+投影方法供 adapter 和 Session 内部转发；两个 surface adapter 仍是迁移期兼容层，协调器的旧实现
+文件还保留部分 preview/timeline 业务调用，不能把本阶段误记为全部业务实现已搬空。
 
 ## 进度
 
@@ -101,8 +108,10 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
   generation/revision/sequence 的命令，并完成失效、乱序与 Session 装配测试
 - [x] 阶段 4.7：建立 `PreviewHost` / `PreviewPlaybackPort` / `AudioClockSource`，将 Preview
   transport 与 canonical clock 从 legacy surface 隔离，并完成单一 authority / inert 生命周期测试
-- [ ] `PlaybackHost` 仍是 Preview + Timeline 复合宿主；按上面的计划拆分为
-      `PlaybackCoordinator`、`PreviewHost`、`TimelineHost`
+- [x] 阶段 4.8：将旧 `PlaybackHost` 重命名为 `PlaybackCoordinator`，直接实现
+      `PlaybackControl` / `PreviewPlaybackPort` / `AudioClockSource`；Preview/Timeline 旧槽位改由
+      两个无状态 surface adapter 承接，删除 `PlaybackControlAdapter`，并通过边界 spec 与 Release
+      构建验证
 - [ ] `HostUi` / `HostState` 仍由 `Session` 持有并借给宿主；后续按宿主切开这份存储
 - [ ] `QApplication` / `Qt6::Widgets` 仍在入口与 CMake；宿主拆分后再清除 native fallback 与
       Widgets 依赖，避免把 QWidget 生命周期藏进新宿主
@@ -131,7 +140,7 @@ QML 走带已走 `PreviewSurface` / `TimelineSurface`。Session 上对应的走�
 
 ### 2026-09-01 产品面自查
 
-QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理页 `muriRows`，解析走 `AnalysisService`（`parseForTimeline` + `buildTimelineAnalysisRefreshResult`）。时间线音符走 `PlaybackHost` 读 `ChartWorkspace`。预览走带走 `PreviewSurface`。导出走 `ExportEngine` / `QmlExportSession`。页签走 `EditorPageRouter`。
+QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理页 `muriRows`，解析走 `AnalysisService`（`parseForTimeline` + `buildTimelineAnalysisRefreshResult`）。时间线音符走 `PlaybackCoordinator` 读 `ChartWorkspace`。预览走带走 `PreviewSurface`。导出走 `ExportEngine` / `QmlExportSession`。页签走 `EditorPageRouter`。
 
 已修：`QmlAnalysisModel` 曾用 `ignoreMuriIssuePrompts` 清空 `muriRows`。该偏好只表示分析完成时不打断（时间线圆点、自动切页），无理页仍应列出结果。
 
@@ -145,5 +154,5 @@ QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理�
 
 `2aa9db83` 已将 `MainWindow` 宿主迁入 `src/app/runtime/` 并删除 `src/app/mainwindow/`；合并提交
 为 `4416596d`。`Session` 现在是 QObject 装配壳，`QmlApplicationContext` 只接收
-`ApplicationServices&`。下一步不再继续堆叠 `PlaybackHost`，而是先立 playback contract，再按
+`ApplicationServices&`。下一步不再继续堆叠 `PlaybackCoordinator`，而是先立 playback contract，再按
 `PlaybackCoordinator` / `PreviewHost` / `TimelineHost` 三个职责拆分；GUI 验收不属于本阶段进度判断。

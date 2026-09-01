@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "app/v2/EditorSyncController.h"
 #include "runtime/Shared.h"
 
@@ -88,7 +88,7 @@ QString Session::parsedLatencyMeterId() const
 }
 
 
-void miacode::runtime::PlaybackHost::seekPreviewToSecond(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::seekPreviewToSecond(double second, bool centerView)
 {
     session_.ensurePreviewStageMediaRouteInitialized();
     session_.ensurePreviewSfxRuntimePrepared();
@@ -180,7 +180,7 @@ void miacode::runtime::PlaybackHost::seekPreviewToSecond(double second, bool cen
     anchorQtPreviewPlaybackToSecond(clampedSecond, centerView);
 }
 
-void miacode::runtime::PlaybackHost::seekPreviewDiscreteToSecond(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double second, bool centerView)
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
@@ -298,7 +298,7 @@ void miacode::runtime::PlaybackHost::seekPreviewDiscreteToSecond(double second, 
             .arg(retainedResetElapsedMs, 0, 'f', 3));
 }
 
-void miacode::runtime::PlaybackHost::applyPreviewPlaybackRate(double rate)
+void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate)
 {
     session_.ensurePreviewStageMediaRouteInitialized();
     const double clampedRate = qMax(0.25, rate);
@@ -477,7 +477,7 @@ double Session::currentPreviewAuthoritativeAudioClockSecond() const
     return pauseSecond_;
 }
 
-bool miacode::runtime::PlaybackHost::startQtPreviewPlayback(double second, bool resumeFromPause)
+bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second, bool resumeFromPause)
 {
     if (!session_.preparePreviewStartState()) {
         state_.pendingPreviewPlaybackStart_ = hasActiveDifficulty();
@@ -713,7 +713,7 @@ bool miacode::runtime::PlaybackHost::startQtPreviewPlayback(double second, bool 
     return true;
 }
 
-void miacode::runtime::PlaybackHost::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
+void miacode::runtime::PlaybackCoordinator::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
 {
     stopQtPreviewPlayback(true);
     state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
@@ -722,7 +722,7 @@ void miacode::runtime::PlaybackHost::finishQtPreviewPlaybackAndReturnToEntry(con
     }
 }
 
-void miacode::runtime::PlaybackHost::stopQtPreviewPlayback(bool keepPosition)
+void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosition)
 {
     const bool wasPlaying = state_.playing_;
     const bool hadStartupSync = state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;

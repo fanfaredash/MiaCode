@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 #include "runtime/shell/ShellHost.h"
 
@@ -171,7 +171,7 @@ Session::PreviewCanvasFrameRateMode Session::previewCanvasFrameRateModeFromStora
     return previewFrameRateModeFromStorageValue(value, PreviewCanvasFrameRateMode::Fps60);
 }
 
-QString miacode::runtime::PlaybackHost::previewFrameRateModeStorageValue(PreviewCanvasFrameRateMode mode) const
+QString miacode::runtime::PlaybackCoordinator::previewFrameRateModeStorageValue(PreviewCanvasFrameRateMode mode) const
 {
     switch (mode) {
     case PreviewCanvasFrameRateMode::Fps30:
@@ -186,17 +186,17 @@ QString miacode::runtime::PlaybackHost::previewFrameRateModeStorageValue(Preview
     }
 }
 
-QString miacode::runtime::PlaybackHost::previewCanvasFrameRateModeStorageValue() const
+QString miacode::runtime::PlaybackCoordinator::previewCanvasFrameRateModeStorageValue() const
 {
     return previewFrameRateModeStorageValue(state_.previewCanvasFrameRateMode_);
 }
 
-QString miacode::runtime::PlaybackHost::previewStageMediaFrameRateModeStorageValue() const
+QString miacode::runtime::PlaybackCoordinator::previewStageMediaFrameRateModeStorageValue() const
 {
     return previewFrameRateModeStorageValue(state_.previewStageMediaFrameRateMode_);
 }
 
-QString miacode::runtime::PlaybackHost::timelineFrameRateModeStorageValue() const
+QString miacode::runtime::PlaybackCoordinator::timelineFrameRateModeStorageValue() const
 {
     return previewFrameRateModeStorageValue(state_.timelineFrameRateMode_);
 }
@@ -221,22 +221,22 @@ Session::PreviewCanvasFrameRateMode Session::currentTimelineFrameRateMode() cons
     return playback_->currentTimelineFrameRateMode();
 }
 
-Session::PreviewCanvasFrameRateMode miacode::runtime::PlaybackHost::currentPreviewStageMediaFrameRateMode() const
+Session::PreviewCanvasFrameRateMode miacode::runtime::PlaybackCoordinator::currentPreviewStageMediaFrameRateMode() const
 {
     return state_.previewStageMediaFrameRateMode_;
 }
 
-bool miacode::runtime::PlaybackHost::currentVideoDecodePrefersSoftware() const
+bool miacode::runtime::PlaybackCoordinator::currentVideoDecodePrefersSoftware() const
 {
     return state_.videoDecodePrefersSoftware_;
 }
 
-Session::PreviewCanvasFrameRateMode miacode::runtime::PlaybackHost::currentTimelineFrameRateMode() const
+Session::PreviewCanvasFrameRateMode miacode::runtime::PlaybackCoordinator::currentTimelineFrameRateMode() const
 {
     return state_.timelineFrameRateMode_;
 }
 
-double miacode::runtime::PlaybackHost::currentPreviewCanvasRefreshRate() const
+double miacode::runtime::PlaybackCoordinator::currentPreviewCanvasRefreshRate() const
 {
     QScreen* targetScreen = nullptr;
     if (session_.rootWindow_ != nullptr) {
@@ -252,7 +252,7 @@ double miacode::runtime::PlaybackHost::currentPreviewCanvasRefreshRate() const
     return refreshRate;
 }
 
-bool miacode::runtime::PlaybackHost::previewCanvasUsesFrameSwappedPacing() const
+bool miacode::runtime::PlaybackCoordinator::previewCanvasUsesFrameSwappedPacing() const
 {
     // Disabled (2026-04-27): the present-driven gate from 927322b was reverted
     // because coupling the playback tick to frameSwapped meant any render
@@ -267,7 +267,7 @@ bool miacode::runtime::PlaybackHost::previewCanvasUsesFrameSwappedPacing() const
     return false;
 }
 
-qint64 miacode::runtime::PlaybackHost::previewCanvasTargetFrameIntervalNs() const
+qint64 miacode::runtime::PlaybackCoordinator::previewCanvasTargetFrameIntervalNs() const
 {
     // The render thread Presents at vsync (syncInterval >= 1), so it
     // physically cannot sustain a target rate above displayHz. The GUI
@@ -299,7 +299,7 @@ qint64 miacode::runtime::PlaybackHost::previewCanvasTargetFrameIntervalNs() cons
     return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, targetHz)));
 }
 
-double miacode::runtime::PlaybackHost::targetRefreshRateForFrameRateMode(PreviewCanvasFrameRateMode mode) const
+double miacode::runtime::PlaybackCoordinator::targetRefreshRateForFrameRateMode(PreviewCanvasFrameRateMode mode) const
 {
     const double displayHz = currentPreviewCanvasRefreshRate();
     switch (mode) {
@@ -315,12 +315,12 @@ double miacode::runtime::PlaybackHost::targetRefreshRateForFrameRateMode(Preview
     }
 }
 
-qint64 miacode::runtime::PlaybackHost::targetFrameIntervalNsForFrameRateMode(PreviewCanvasFrameRateMode mode) const
+qint64 miacode::runtime::PlaybackCoordinator::targetFrameIntervalNsForFrameRateMode(PreviewCanvasFrameRateMode mode) const
 {
     return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, targetRefreshRateForFrameRateMode(mode))));
 }
 
-qint64 miacode::runtime::PlaybackHost::timelineTargetFrameIntervalNs() const
+qint64 miacode::runtime::PlaybackCoordinator::timelineTargetFrameIntervalNs() const
 {
     const double timelineTargetFps =
         qMin(targetRefreshRateForFrameRateMode(state_.timelineFrameRateMode_),
@@ -328,7 +328,7 @@ qint64 miacode::runtime::PlaybackHost::timelineTargetFrameIntervalNs() const
     return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, timelineTargetFps)));
 }
 
-void miacode::runtime::PlaybackHost::refreshTimelineWaveformPhaseCompensation()
+void miacode::runtime::PlaybackCoordinator::refreshTimelineWaveformPhaseCompensation()
 {
     if (state_.timelineQuickStateBridge_ == nullptr) {
         return;
@@ -338,7 +338,7 @@ void miacode::runtime::PlaybackHost::refreshTimelineWaveformPhaseCompensation()
         static_cast<double>(frameIntervalNs) / 1000000000.0);
 }
 
-void miacode::runtime::PlaybackHost::resetQtPreviewFixedFramePacing()
+void miacode::runtime::PlaybackCoordinator::resetQtPreviewFixedFramePacing()
 {
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
@@ -350,7 +350,7 @@ void miacode::runtime::PlaybackHost::resetQtPreviewFixedFramePacing()
         state_.qtPreviewFixedTickOriginNs_ + previewCanvasTargetFrameIntervalNs();
 }
 
-void miacode::runtime::PlaybackHost::scheduleNextQtPreviewTick()
+void miacode::runtime::PlaybackCoordinator::scheduleNextQtPreviewTick()
 {
     // Doc section 4.3: qtPreviewTimer_ is a watchdog in both modes. Normal visual cadence is
     // driven by framePresented -> queued tick; this timer only kicks if present never arrives.
@@ -380,7 +380,7 @@ void miacode::runtime::PlaybackHost::scheduleNextQtPreviewTick()
     ui_.qtPreviewTimer_->start();
 }
 
-void miacode::runtime::PlaybackHost::requestNextDisplayRefreshPreviewFrame()
+void miacode::runtime::PlaybackCoordinator::requestNextDisplayRefreshPreviewFrame()
 {
     if (!state_.playing_
         || state_.scene_ == nullptr
@@ -411,7 +411,7 @@ void miacode::runtime::PlaybackHost::requestNextDisplayRefreshPreviewFrame()
     scheduleNextQtPreviewTick();
 }
 
-void miacode::runtime::PlaybackHost::requestNextFixedIntervalPreviewFrame()
+void miacode::runtime::PlaybackCoordinator::requestNextFixedIntervalPreviewFrame()
 {
     // Doc section 4.1: fixed 60/120 is now present-driven. This mirrors the DisplayRefresh
     // request path — set awaiting flag, ask the canvas to update, arm the watchdog.
@@ -429,7 +429,7 @@ void miacode::runtime::PlaybackHost::requestNextFixedIntervalPreviewFrame()
     scheduleNextQtPreviewTick();
 }
 
-void miacode::runtime::PlaybackHost::requestNextPreviewCanvasFrame()
+void miacode::runtime::PlaybackCoordinator::requestNextPreviewCanvasFrame()
 {
     if (previewCanvasUsesFrameSwappedPacing()) {
         requestNextDisplayRefreshPreviewFrame();
@@ -438,7 +438,7 @@ void miacode::runtime::PlaybackHost::requestNextPreviewCanvasFrame()
     }
 }
 
-void miacode::runtime::PlaybackHost::advanceFixedIntervalGateAfterPresent()
+void miacode::runtime::PlaybackCoordinator::advanceFixedIntervalGateAfterPresent()
 {
     // Doc section 4.1: FPS gate between presents. Only run a visual tick when the target
     // interval has elapsed since the *scheduled* time of the previous tick (phase-locked),
@@ -527,7 +527,7 @@ void miacode::runtime::PlaybackHost::advanceFixedIntervalGateAfterPresent()
     }
 }
 
-void miacode::runtime::PlaybackHost::refreshPreviewFrameRateTimers()
+void miacode::runtime::PlaybackCoordinator::refreshPreviewFrameRateTimers()
 {
     const qint64 targetIntervalNs = previewCanvasTargetFrameIntervalNs();
     const qint64 timelineIntervalNs = timelineTargetFrameIntervalNs();
@@ -548,7 +548,7 @@ void miacode::runtime::PlaybackHost::refreshPreviewFrameRateTimers()
     refreshTimelineWaveformPhaseCompensation();
 }
 
-void miacode::runtime::PlaybackHost::applyPreviewStageMediaFrameRateMode()
+void miacode::runtime::PlaybackCoordinator::applyPreviewStageMediaFrameRateMode()
 {
     if (state_.previewStageMediaHost_ == nullptr) {
         return;
@@ -557,7 +557,7 @@ void miacode::runtime::PlaybackHost::applyPreviewStageMediaFrameRateMode()
         targetRefreshRateForFrameRateMode(state_.previewStageMediaFrameRateMode_));
 }
 
-void miacode::runtime::PlaybackHost::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+void miacode::runtime::PlaybackCoordinator::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
     if (state_.previewCanvasFrameRateMode_ == mode) {
         refreshPreviewFrameRateTimers();
@@ -597,7 +597,7 @@ void miacode::runtime::PlaybackHost::setPreviewCanvasFrameRateMode(PreviewCanvas
     }
 }
 
-void miacode::runtime::PlaybackHost::setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+void miacode::runtime::PlaybackCoordinator::setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
     state_.previewStageMediaFrameRateMode_ = mode;
     applyPreviewStageMediaFrameRateMode();
@@ -606,7 +606,7 @@ void miacode::runtime::PlaybackHost::setPreviewStageMediaFrameRateMode(PreviewCa
     }
 }
 
-void miacode::runtime::PlaybackHost::setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState)
+void miacode::runtime::PlaybackCoordinator::setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState)
 {
     if (state_.videoDecodePrefersSoftware_ == preferSoftware) {
         return;
@@ -622,7 +622,7 @@ void miacode::runtime::PlaybackHost::setVideoDecodePrefersSoftware(bool preferSo
     }
 }
 
-void miacode::runtime::PlaybackHost::setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+void miacode::runtime::PlaybackCoordinator::setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
     state_.timelineFrameRateMode_ = mode;
     refreshPreviewFrameRateTimers();

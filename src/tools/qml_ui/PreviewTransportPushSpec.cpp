@@ -111,7 +111,7 @@ int main(int argc, char** argv)
     const QString layoutUi = readSource(
         QStringLiteral("src/app/runtime/playback/LayoutUi.cpp"));
     const int publishAt = layoutUi.indexOf(
-        QStringLiteral("void miacode::runtime::PlaybackHost::updatePreviewSliderPosition"));
+        QStringLiteral("void miacode::runtime::PlaybackCoordinator::updatePreviewSliderPosition"));
     expect(publishAt >= 0, QStringLiteral("updatePreviewSliderPosition exists"), out, &failed);
     if (publishAt >= 0) {
         const int nextFunctionAt = layoutUi.indexOf(QStringLiteral("\nvoid miacode::runtime::"), publishAt + 1);
@@ -131,7 +131,7 @@ int main(int argc, char** argv)
     const QString introRegion = readSource(
         QStringLiteral("src/app/runtime/playback/IntroRegion.cpp"));
     const int tickAt = introRegion.indexOf(
-        QStringLiteral("void miacode::runtime::PlaybackHost::tickExportIntroLeadIn"));
+        QStringLiteral("void miacode::runtime::PlaybackCoordinator::tickExportIntroLeadIn"));
     expect(tickAt >= 0, QStringLiteral("tickExportIntroLeadIn exists"), out, &failed);
     if (tickAt >= 0) {
         const int nextFunctionAt = introRegion.indexOf(QStringLiteral("\nbool miacode::runtime::"), tickAt + 1);
@@ -182,7 +182,7 @@ int main(int argc, char** argv)
     const QString playbackGlue = readSource(
         QStringLiteral("src/app/runtime/playback/PlaybackGlue.cpp"));
     const int gateAt = playbackGlue.indexOf(
-        QStringLiteral("bool miacode::runtime::PlaybackHost::preparePreviewStartState"));
+        QStringLiteral("bool miacode::runtime::PlaybackCoordinator::preparePreviewStartState"));
     expect(gateAt >= 0, QStringLiteral("preparePreviewStartState exists"), out, &failed);
     if (gateAt >= 0) {
         const QString gateBody = playbackGlue.mid(gateAt);

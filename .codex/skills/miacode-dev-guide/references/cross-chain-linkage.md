@@ -8,15 +8,16 @@ The stage 4.5 transport seam is now the shared playback authority for the previe
 
 - `miacode::v2::PlaybackControl` exposes semantic transport commands; `PlaybackSnapshot` is the read-only state payload.
 - `PlaybackSnapshot` and `PlaybackCallbackStamp` carry `sessionGeneration`, `documentRevision`, and `playbackSequence`. Late callbacks must be rejected by `PlaybackStateFeed::acceptsPlaybackCallback(...)`.
-- `miacode::runtime::PlaybackControlAdapter` is the compatibility adapter over the current composite `PlaybackHost`. It must remain a forwarding seam, not a second clock, parser, audio engine, or renderer.
-- `ApplicationServices::playbackControlSlot()` is the runtime injection point. Session workspace revisions update the adapter's document revision before new runtime consumers read playback state.
-- Until stages 4.6–4.8 complete, `PlaybackHost` remains the legacy composite implementation. New Timeline/Preview code should depend on `PlaybackControl`/`PlaybackStateFeed`, not on `PlaybackHost` internals.
+- `miacode::runtime::PlaybackCoordinator` directly implements `PlaybackControl`, `PreviewPlaybackPort`, and `AudioClockSource`. It is the sole transport/canonical-clock authority; it must not grow a second clock, parser, audio engine, or renderer.
+- `ApplicationServices::playbackControlSlot()` is the runtime injection point. Session workspace revisions update the coordinator's document revision before new runtime consumers read playback state.
+- `PlaybackPreviewSurfaceAdapter` and `PlaybackTimelineSurfaceAdapter` are stateless compatibility projections for the old surface slots. They forward to the same coordinator and must not own playback, timeline, document, or render state.
 - Stage 4.6 installs `TimelineHost` in `ApplicationServices::timelineSurfaceSlot()`. `QmlTimelineModel` captures a `TimelineCommandStamp` before dispatch; `TimelineHost` validates the original generation/revision/sequence and never re-stamps a late command.
-- `TimelineHost` is a projection/command seam over the current composite `PlaybackHost`; its read methods are pass-throughs and its write methods carry no document or playback ownership. Do not move QSG, viewport, follow state, parser, or clock state into it until the later extraction stages.
-- Stage 4.7 installs `PreviewHost` in `ApplicationServices::previewSurfaceSlot()`. `QmlPreviewModel` reaches transport through `PreviewPlaybackPort`, while PreviewHost reads canonical position through `AudioClockSource`; both are sourced from the same `PlaybackControlAdapter` instance.
-- `PreviewHost` may temporarily delegate non-transport rendering/settings/media calls to the composite `PlaybackHost`, but its transport and position methods must never fall back to that legacy surface.
+- `TimelineHost` is a projection/command seam over `PlaybackTimelineSurfaceAdapter`; its read methods are pass-throughs and its write methods carry no document or playback ownership. Do not move QSG, viewport, follow state, parser, or clock state into it.
+- Stage 4.7 installs `PreviewHost` in `ApplicationServices::previewSurfaceSlot()`. `QmlPreviewModel` reaches transport through `PreviewPlaybackPort`, while PreviewHost reads canonical position through `AudioClockSource`; both are sourced from the same `PlaybackCoordinator` instance.
+- `PreviewHost` temporarily delegates non-transport rendering/settings/media calls through `PlaybackPreviewSurfaceAdapter`, but its transport and position methods must never fall back to an independent legacy clock.
+- Stage 4.8 renamed the old implementation to `PlaybackCoordinator` and removed its direct `PreviewSurface` / `TimelineSurface` inheritance. The coordinator header has no direct surface/QML/QSG include, but still reaches the shared `HostUi` / `HostState` through `Session.h` and temporarily exposes legacy projection methods for the adapters/Session. Removing that transitive dependency and compatibility API is explicitly stage 4.9 work.
 
-When changing this contract, review `src/app/v2/PlaybackControl.h`, `src/app/runtime/playback/PlaybackControlAdapter.*`, `src/app/v2/ApplicationServices.*`, `src/app/runtime/Session.*`, and the relevant Preview/Timeline host seam together.
+When changing this contract, review `src/app/v2/PlaybackControl.h`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/runtime/playback/PlaybackCoordinator.*`, `src/app/runtime/playback/PlaybackSurfaceAdapters.*`, `src/app/v2/ApplicationServices.*`, `src/app/runtime/Session.*`, and the relevant Preview/Timeline host seam together.
 
 ## 1. Edit To Parse To Timeline To Preview
 

@@ -126,8 +126,9 @@ class MediaJobsHost;
 class VideoExportHost;
 class ValidationHost;
 class DocumentSessionHost;
-class PlaybackHost;
-class PlaybackControlAdapter;
+class PlaybackCoordinator;
+class PlaybackPreviewSurfaceAdapter;
+class PlaybackTimelineSurfaceAdapter;
 class TimelineHost;
 class PreviewHost;
 }
@@ -153,7 +154,7 @@ class Session : public QObject
     friend class miacode::runtime::VideoExportHost;
     friend class miacode::runtime::ValidationHost;
     friend class miacode::runtime::DocumentSessionHost;
-    friend class miacode::runtime::PlaybackHost;
+    friend class miacode::runtime::PlaybackCoordinator;
     // The Export hub page launches the existing ExportSection entry slots
     // with an explicitly selected difficulty and reads document/difficulty
     // state for its badge row — same narrow-feature rationale as the
@@ -760,8 +761,9 @@ private:
     std::unique_ptr<miacode::runtime::VideoExportHost> videoExport_;
     std::unique_ptr<miacode::runtime::ValidationHost> validation_;
     std::unique_ptr<miacode::runtime::DocumentSessionHost> documents_;
-    std::unique_ptr<miacode::runtime::PlaybackHost> playback_;
-    std::unique_ptr<miacode::runtime::PlaybackControlAdapter> playbackControl_;
+    std::unique_ptr<miacode::runtime::PlaybackCoordinator> playback_;
+    std::unique_ptr<miacode::runtime::PlaybackPreviewSurfaceAdapter> playbackPreviewSurface_;
+    std::unique_ptr<miacode::runtime::PlaybackTimelineSurfaceAdapter> playbackTimelineSurface_;
     std::unique_ptr<miacode::runtime::TimelineHost> timelineHost_;
     std::unique_ptr<miacode::runtime::PreviewHost> previewHost_;
 

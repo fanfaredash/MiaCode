@@ -91,14 +91,14 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 5. Timeline Data, Cursor Mapping, And Preview Synchronization
 
-- Playback transport contract (stage 4.5):
-  - Files: `src/app/v2/PlaybackControl.h`, `src/app/runtime/playback/PlaybackControlAdapter.h`, `src/app/runtime/playback/PlaybackControlAdapter.cpp`, `src/app/v2/ApplicationServices.h`, `src/app/runtime/SessionBootstrap.cpp`
-  - Classes: `miacode::v2::PlaybackControl`, `miacode::v2::PlaybackStateFeed`, `miacode::runtime::PlaybackControlAdapter`
-  - Owns: the revision/generation/sequence-stamped playback snapshot and the semantic play/stop/seek/scrub/rate command seam exposed by `ApplicationServices`; the adapter currently forwards to the legacy composite `PlaybackHost` while the Timeline and Preview hosts are extracted in stages 4.6–4.8. This is the transport authority boundary; do not add a second independent playhead or direct QML-to-widget playback path.
+- Playback coordinator and transport contracts (stages 4.5/4.8):
+  - Files: `src/app/v2/PlaybackControl.h`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/runtime/playback/PlaybackCoordinator.h`, `src/app/runtime/playback/CoordinatorContract.cpp`, `src/app/runtime/playback/PlaybackSurfaceAdapters.{h,cpp}`, `src/app/v2/ApplicationServices.h`, `src/app/runtime/SessionBootstrap.cpp`
+  - Classes: `miacode::v2::PlaybackControl`, `miacode::v2::PlaybackStateFeed`, `miacode::runtime::PlaybackCoordinator`, `miacode::runtime::PlaybackPreviewSurfaceAdapter`, `miacode::runtime::PlaybackTimelineSurfaceAdapter`
+  - Owns: the revision/generation/sequence-stamped playback snapshot, canonical chart-time clock, and semantic play/stop/seek/scrub/rate command seam exposed by `ApplicationServices`. The two surface adapters are forwarding-only compatibility projections over that one authority; do not add a second independent playhead or direct QML-to-widget playback path.
 - Timeline projection command host (stage 4.6):
   - Files: `src/app/runtime/timeline/TimelineHost.h`, `src/app/runtime/timeline/TimelineHost.cpp`, `src/app/runtime/timeline/TimelineCommandGate.h`, `src/app/runtime/timeline/TimelineCommandGate.cpp`, `src/app/v2/TimelineSurface.h`, `src/app/qml_ui/QmlTimelineModel.cpp`
   - Classes: `miacode::runtime::TimelineHost`, `miacode::runtime::TimelineCommandGate`
-  - Owns: the TimelineSurface projection slot and the generation/revision/sequence validation boundary. QML captures a `TimelineCommandStamp` at ingress; the host validates that exact stamp before forwarding to the transitional composite `PlaybackHost`. It owns no playhead, timer, document, QSG scene, Preview, media, mixer, or QML state.
+  - Owns: the TimelineSurface projection slot and the generation/revision/sequence validation boundary. QML captures a `TimelineCommandStamp` at ingress; the host validates that exact stamp before forwarding to `PlaybackTimelineSurfaceAdapter`. It owns no playhead, timer, document, QSG scene, Preview, media, mixer, or QML state.
 
 - Timeline quick model:
   - Files: `src/timeline/TimelineQuickModel.h`, `src/timeline/TimelineQuickModel.cpp`, `src/timeline/TimelineRenderData.h`
@@ -126,9 +126,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 6. Preview Video, Media, And Render State
 
 - Preview projection host (stage 4.7):
-  - Files: `src/app/runtime/preview/PreviewHost.h`, `src/app/runtime/preview/PreviewHost.cpp`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/qml_ui/QmlPreviewModel.cpp`
+  - Files: `src/app/runtime/preview/PreviewHost.h`, `src/app/runtime/preview/PreviewHost.cpp`, `src/app/runtime/playback/PlaybackSurfaceAdapters.{h,cpp}`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/qml_ui/QmlPreviewModel.cpp`
   - Class: `miacode::runtime::PreviewHost`
-  - Owns: the PreviewSurface projection slot. Transport commands go only through `PreviewPlaybackPort`, canonical position comes only from `AudioClockSource`, and render/settings/media methods temporarily forward to the composite implementation. It must not own a second clock, playhead, transport, Timeline state, or media/mixer engine.
+  - Owns: the PreviewSurface projection slot. Transport commands go only through `PreviewPlaybackPort`, canonical position comes only from `AudioClockSource`, and render/settings/media methods temporarily forward through `PlaybackPreviewSurfaceAdapter`. It must not own a second clock, playhead, transport, Timeline state, or media/mixer engine.
 
 - Runtime preview host and Quick bridge:
   - Files: `src/preview/runtime/PreviewRuntime.h`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/runtime/PreviewSceneAssetLoader.h`, `src/preview/runtime/PreviewSceneAssetLoader.cpp`, `src/preview/runtime/PreviewSceneAssetRepository.h`, `src/preview/runtime/PreviewSceneAssetRepository.cpp`, `src/preview/runtime/PreviewQuickRuntimeSurface.h`, `src/preview/runtime/PreviewQuickRuntimeSurface.cpp`, `src/preview/runtime/PreviewQuickExportSession.h`, `src/preview/runtime/PreviewQuickExportSession.cpp`, `src/preview/runtime/PreviewQuickD3D11ExportSession.h`, `src/preview/runtime/PreviewQuickD3D11ExportSession.cpp`, `src/preview/runtime/qml/PreviewRuntimeView.qml`

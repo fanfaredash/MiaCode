@@ -120,9 +120,10 @@ public:
     PreviewSurface* previewSurface() const { return previewSurface_; }
     void setPreviewSurface(PreviewSurface* surface) { previewSurface_ = surface; }
 
-    // The playback authority is a separate slot even while a compatibility
-    // adapter wraps the current composite PlaybackHost. This prevents new
-    // consumers from taking transport ownership from either UI surface.
+    // The playback authority is a separate slot and points directly at the
+    // PlaybackCoordinator. Preview/Timeline compatibility adapters are kept
+    // behind their respective surface slots, so new consumers cannot take
+    // transport ownership from either UI surface.
     PlaybackControl*& playbackControlSlot() { return playbackControl_; }
     PlaybackControl* playbackControl() const { return playbackControl_; }
     void setPlaybackControl(PlaybackControl* control) { playbackControl_ = control; }

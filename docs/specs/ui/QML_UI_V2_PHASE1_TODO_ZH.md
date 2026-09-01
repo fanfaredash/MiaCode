@@ -121,7 +121,7 @@
 | 链接声明 | `COMPONENTS … Widgets …` + `Qt6::Widgets` | `CMakeLists.txt:101`、`:844` |
 | 应用对象 | `QApplication` | `src/app/main.cpp:436` |
 | 隐藏 `MainWindow` | **已删除（0 文件）**；`Session`/runtime hosts 已接管装配 | `src/app/runtime/`、`src/app/runtime/SessionBootstrap.cpp` |
-| Preview/Timeline 当前宿主 | **同一个 `PlaybackHost` 同时实现 `PreviewSurface` + `TimelineSurface`**；约 8,975 行，仍是下一轮拆分的主要对象 | `src/app/runtime/playback/` |
+| Preview/Timeline 当前宿主 | `PreviewHost` / `TimelineHost` 分别占据两个 surface 槽位；兼容投影由 `PlaybackSurfaceAdapters` 转到同一个 `PlaybackCoordinator`，实现体仍约 8,975 行并待 4.9 清理 | `src/app/runtime/{preview,timeline,playback}/` |
 | 旧宿主状态 | `HostUi` / `HostState` 仍被 `Session` 持有并借给多个宿主 | `src/app/runtime/Session.*`、`HostUi.*`、`HostState.*` |
 | ~~隐藏 `PlainCodeEditor`~~ | **已删除（2026-08-30）**。树上只剩两条历史注释；扩展相关校验已迁移到归档 API registry 与离线文档 | — |
 | ~~`QuickShellController`~~ | **已退役（2026-08-30）**。`src/app/quick_shell/` 只剩 **246 行**预览合成表面管道（`QuickShellPreviewCompositeSurface.*` + 三个策略头），与外壳控制器无关 | — |
@@ -470,9 +470,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 > **当前状态（2026-09-02）**：依赖分层与服务所有权已落地，`MainWindow` 已从启动路径和源码目录
 > 删除，`QmlApplicationContext` 也已改为只接收 `ApplicationServices&`。但 `QtWidgets` 仍是当前
-> 产品依赖：`QApplication`、`HostUi` / `HostState` 和 native fallback 仍在 runtime 中；同时
-> `PlaybackHost` 还把 Preview 与 Timeline 两个职责放在一个复合宿主内。第 2、3 项的剩余工作
-> 现在转入阶段 4 的宿主二次拆分与 Widgets 清理，不能把本轮迁移误记为 Architecture Complete。
+> 产品依赖：`QApplication`、`HostUi` / `HostState` 和 native fallback 仍在 runtime 中；旧
+> `PlaybackHost` 已在 4.8 收缩并重命名为 `PlaybackCoordinator`，其历史 Preview / Timeline
+> 实现仍借用共享状态。第 2、3 项的剩余工作现在转入阶段 4 的共享状态与 Widgets 清理，不能把
+> 本轮迁移误记为 Architecture Complete。
 
 - [x] `ApplicationServices` 已建立并**成为真正的所有者**（2026-09-01）。
       `src/app/v2/ApplicationServices.{h,cpp}` 是一个不含 Widgets 的 `QObject`，持有
@@ -728,11 +729,9 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       `2aa9db83` 已将窗口实现迁入 `src/app/runtime/`，删除 `src/app/mainwindow/` 全部文件；
       `Session` 改为 QObject 装配壳，`QmlUiBootstrap` / CLI / latency sandbox 统一走新的
       runtime 装配，`QmlApplicationContext` 不再持有窗口引用。合并提交为 `4416596d`。
-- [ ] **PlaybackHost 二次拆分（阶段 4.5–4.9，当前主线）**：当前 `PlaybackHost` 同时实现
-      `PreviewSurface` 与 `TimelineSurface`，并混合持有走带、QSG、舞台媒体、音频混音、布局、
-      分析与跟随状态；不能把它机械改名或简单按文件切开。目标是「一个时间域、一个播放权威、
-      两个独立投影」：最终由 `PreviewHost`、`TimelineHost` 与收缩后的
-      `PlaybackCoordinator` 分担职责，完成后才考虑将旧 `PlaybackHost` 更名。
+- [ ] **PlaybackHost 二次拆分（阶段 4.5–4.9，当前主线）**：目标仍是「一个时间域、一个播放权威、
+      两个独立投影」；4.8 已完成协调器契约收缩和旧类型重命名，4.9 继续清理共享状态与 Widgets
+      残留，之后才算本主线完成。
 - [ ] **runtime Widgets 残留清理**：拆掉 `HostUi` / `HostState` 的共享状态袋及 native fallback
       依赖，随后将 `main.cpp` 改为 `QGuiApplication` + `QQmlApplicationEngine`，从 CMake、生产
       target 和全部 fallback 去除 `Qt6::Widgets` / `QWidget` / `QApplication` API。
@@ -748,15 +747,16 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          `ApplicationServices` 增加 playback 槽位，迁移期间保留兼容 adapter。快照携带
          `sessionGeneration`、`documentRevision`、`playbackSequence`、canonical chart time、
          transport state 与 rate，旧回调在边界丢弃。实现落在
-         `src/app/v2/PlaybackControl.h` 与
-         `src/app/runtime/playback/PlaybackControlAdapter.*`；adapter 只转发到当前复合
-         `PlaybackHost`，播放状态与数值倍速均从宿主类型化观测读取，并在 Session 析构前失效。
-         `playback_control_spec`、`application_services_spec` 与 MiaCode Release 构建通过。
+         `src/app/v2/PlaybackControl.h`、`src/app/v2/PreviewPlaybackPort.h`、
+         `src/app/v2/AudioClockSource.h` 与 `src/app/runtime/playback/PlaybackCoordinator.*`；迁移期曾使用 adapter，现由
+         `PlaybackCoordinator` 直接实现播放控制与状态快照，并在 Session 析构前失效。
+         `application_services_spec` 与 MiaCode Release 构建通过。
       2. **4.6 建立 `TimelineHost`（2026-09-02，已完成）**：新增 `src/app/runtime/timeline/TimelineHost.{h,cpp}`，接管
          `TimelineSurface`、`TimelineQuickStateBridge`、QSG 就绪、底栏页签可见性、拖拽 / follow /
          viewport / navigation 投影，以及时间线侧的分析展示。Timeline 只发出带 revision / sequence
          的命令，不直接读 Preview 时钟，也不直接写文档模型；设置 `TimelineCommandGate` 统一校验
-         revision、代次与写入顺序。当前实现先以 `TimelineHost` 兼容转发到复合 `PlaybackHost`，由
+         revision、代次与写入顺序。当前实现先以 `TimelineHost` 兼容转发到
+         `PlaybackTimelineSurfaceAdapter`，再进入
          `QmlTimelineModel` 在 ingress 捕获 `TimelineCommandStamp`，host 只接受原始 stamp；
          `timeline_host_spec` 覆盖乱序、revision/session 失效、投影转发与撤槽。
       3. **4.7 建立 `PreviewHost`（2026-09-02，已完成）**：新增 `src/app/runtime/preview/PreviewHost.{h,cpp}`，接管
@@ -765,10 +765,14 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          对接，不再拥有独立的 canonical playhead 或 Timeline 状态。当前实现以兼容层转发非 transport
          PreviewSurface 能力；transport 命令与 canonical position 已分别改走 port / clock，
          `preview_host_spec` 与整套相关 Release 构建通过。
-      4. **4.8 收缩并最终重命名 `PlaybackHost`**：仅保留 transport state machine、canonical
-         playhead、clock / frame pacing、seek transaction、播放生命周期与协调命令；从中移出
-         QML / QSG、viewport / layout、StageMedia、mixer 和 analysis。协调器不允许反向包含 QML、
-         QQuick / QSG、布局、媒体 UI 或分析实现，PreviewHost 与 TimelineHost 之间不得直接调用。
+      4. **4.8 收缩并最终重命名 `PlaybackHost`（2026-09-02，已完成）**：
+         `PlaybackCoordinator` 直接实现 `PlaybackControl`、`PreviewPlaybackPort`、
+         `AudioClockSource`；`PlaybackCoordinator.h` 不直接包含或继承 `PreviewSurface` /
+         `TimelineSurface`、QML 或 QSG 契约，但仍通过 `Session.h` 间接借用共享 `HostUi` /
+         `HostState`。协调器仍暂时公开旧 projection 方法供 adapter / Session 兼容转发。两个无状态
+         surface adapter 承接旧槽位，删除旧 `PlaybackControlAdapter`；
+         实现体中仍有共享 `HostUi` / `HostState` 和历史 Preview/Timeline 调用，留到 4.9 清理。
+         `playback_coordinator_spec` 与 MiaCode Release 构建通过。
       5. **4.9 清理 Session 装配与共享状态**：`SessionBootstrap` 显式构造三个独立实例并分别注册
          `playbackControl`、`previewSurface`、`timelineSurface`；移除通用 `HostUi` / `HostState` 借用，
          让 Session 只保留生命周期、资源所有权和端口连接。同步更新 `ASSEMBLY.md`、仓库指南和
@@ -789,8 +793,8 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - [ ] `ShaderTools` 若仅为构建期工具，不计入运行时依赖；`Qt6::Svg`、`Qt6::OpenGL`、
       `Qt6::Network`、`Qt6::MultimediaQuickPrivate` 按实际功能和平台条件单独验收。
 - **Architecture Complete 完成标志**：隐藏 `MainWindow` / native QWidget 拖放 overlay 已清除，
-      但当前仍未完成，因为 `Qt6::Widgets`、`QApplication`、`HostUi` / `HostState` 与复合
-      `PlaybackHost` 仍在。必须完成 4.5–4.9、移除 Widgets 依赖，并通过 Release 构建、全量 CTest、
+      但当前仍未完成，因为 `Qt6::Widgets`、`QApplication`、`HostUi` / `HostState` 与协调器内部
+      的旧 runtime 依赖仍在。必须完成 4.5–4.9、移除 Widgets 依赖，并通过 Release 构建、全量 CTest、
       QML import 部署扫描及跨模块时间域回归；macOS / Windows 依赖记录与功能 parity 另行处理，
       GUI 结果不作为本阶段的工作项。
 
@@ -1176,9 +1180,9 @@ PreviewHost / TimelineHost 的重复缓存放大。
 | 分析快照 | `src/app/v2/AnalysisService.*` → `QmlAnalysisModel.*` / `QmlAnalysisProjection.*` |
 | 同步控制器 | `src/app/v2/EditorSyncController.*` |
 | 文档桥 | `src/app/qml_ui/QmlDocumentModel.*`、`QmlDocumentProjection.*`、`src/app/runtime/document/DocumentBridge.cpp`、`DocumentSessionHost.h`、`DocumentFileFlow.cpp` |
-| 预览桥（当前） | `src/app/qml_ui/QmlPreviewModel.*`、`src/app/v2/PreviewSurface.h`、`src/app/runtime/playback/PlaybackHost.*` |
-| 时间线桥（当前） | `src/app/qml_ui/QmlTimelineModel.*`、`src/app/v2/TimelineSurface.h`、`src/app/runtime/playback/PlaybackHost.*` |
-| 播放域（目标） | `src/app/runtime/preview/PreviewHost.*`、`src/app/runtime/timeline/TimelineHost.*`、`src/app/runtime/playback/PlaybackCoordinator.*`（阶段 4.5–4.9，尚未创建） |
+| 预览桥（当前） | `src/app/qml_ui/QmlPreviewModel.*`、`src/app/v2/PreviewSurface.h`、`src/app/runtime/preview/PreviewHost.*`、`src/app/runtime/playback/PlaybackSurfaceAdapters.*` |
+| 时间线桥（当前） | `src/app/qml_ui/QmlTimelineModel.*`、`src/app/v2/TimelineSurface.h`、`src/app/runtime/timeline/TimelineHost.*`、`src/app/runtime/playback/PlaybackSurfaceAdapters.*` |
+| 播放域（当前） | `src/app/runtime/preview/PreviewHost.*`、`src/app/runtime/timeline/TimelineHost.*`、`src/app/runtime/playback/PlaybackCoordinator.*`；4.9 仍需清理共享状态与 Widgets |
 | 编辑器 | `src/app/qml_ui/QmlEditorController.*`、`QmlEditorInputBridge.*`、`editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
 | 快捷键 | `src/app/qml_ui/QmlShortcutModel.*` ← `src/app/ui/ShortcutRegistry.*` |
 | 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`export/ExportVideoPage.qml` |

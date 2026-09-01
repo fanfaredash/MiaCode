@@ -1,6 +1,6 @@
 #include "runtime/editor/EditorHost.h"
 #include "runtime/settings/SettingsHost.h"
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 #include "runtime/document/DocumentSessionHost.h"
 #include "runtime/shell/ShellHost.h"

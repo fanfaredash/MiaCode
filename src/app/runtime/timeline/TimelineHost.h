@@ -7,7 +7,7 @@ namespace miacode::runtime {
 
 // Transitional Timeline projection host. It owns the command gate and the
 // TimelineSurface boundary while the implementation still lives in the
-// composite PlaybackHost. It owns no playhead, timer, QSG scene or document.
+// composite PlaybackCoordinator. It owns no playhead, timer, QSG scene or document.
 class TimelineHost final : public miacode::v2::TimelineSurface
 {
 public:

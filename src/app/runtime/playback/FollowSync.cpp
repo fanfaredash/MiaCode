@@ -1,11 +1,11 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 
 #include "app/v2/EditorSyncController.h"
 #include "common/PreviewInteractionConfig.h"
 
 #include <QtCore>
 
-double miacode::runtime::PlaybackHost::touchPadAuthoringAnchoredSecond(double previewSecond) const
+double miacode::runtime::PlaybackCoordinator::touchPadAuthoringAnchoredSecond(double previewSecond) const
 {
     if (state_.touchPadAuthoringAnchorSeekSecond_ < 0.0) {
         return previewSecond;
@@ -16,13 +16,13 @@ double miacode::runtime::PlaybackHost::touchPadAuthoringAnchoredSecond(double pr
         : previewSecond;
 }
 
-void miacode::runtime::PlaybackHost::setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond)
+void miacode::runtime::PlaybackCoordinator::setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond)
 {
     state_.touchPadAuthoringAnchorSeekSecond_ = seekSecond;
     state_.touchPadAuthoringAnchorTokenSecond_ = tokenSecond;
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewFollowDecorationForTimelineBlueLine(
+void miacode::runtime::PlaybackCoordinator::updatePreviewFollowDecorationForTimelineBlueLine(
     double second,
     bool ensureVisible,
     qint64* resolveElapsedNs,
@@ -95,7 +95,7 @@ void miacode::runtime::PlaybackHost::updatePreviewFollowDecorationForTimelineBlu
     }
 }
 
-void miacode::runtime::PlaybackHost::syncEditorCursorToPreviewSecond(
+void miacode::runtime::PlaybackCoordinator::syncEditorCursorToPreviewSecond(
     double second,
     bool centerView,
     bool ensureVisibleWhenPaused)

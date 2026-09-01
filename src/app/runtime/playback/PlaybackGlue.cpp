@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -63,7 +63,7 @@ bool Session::ensureAuditionSceneReady()
     return state_.auditionSceneReady_;
 }
 
-bool miacode::runtime::PlaybackHost::preparePreviewStartState()
+bool miacode::runtime::PlaybackCoordinator::preparePreviewStartState()
 {
     // Latency sandbox + export-page audition: the controller/section populated
     // the preview state synchronously (installSandboxScene /
@@ -95,9 +95,9 @@ bool miacode::runtime::PlaybackHost::preparePreviewStartState()
     return false;
 }
 
-void miacode::runtime::PlaybackHost::onStopPreview()
+void miacode::runtime::PlaybackCoordinator::onStopPreview()
 {
-    MC_OP("miacode::runtime::PlaybackHost::onStopPreview");
+    MC_OP("miacode::runtime::PlaybackCoordinator::onStopPreview");
     // Stop the export-page intro animation if it's mid-play (it clears the
     // overlay and leaves the chart paused at 0).
     if (state_.exportIntroLeadInActive_) {
@@ -132,9 +132,9 @@ void miacode::runtime::PlaybackHost::onStopPreview()
     session_.noteStatus("Qt preview stopped.");
 }
 
-void miacode::runtime::PlaybackHost::onTogglePreviewPause()
+void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
 {
-    MC_OP("miacode::runtime::PlaybackHost::onTogglePreviewPause");
+    MC_OP("miacode::runtime::PlaybackCoordinator::onTogglePreviewPause");
     if (state_.exportIntroLeadInActive_) {
         if (exportIntroEnabled()) {
             // The intro is advancing -> pause it, keeping the static frame on screen.

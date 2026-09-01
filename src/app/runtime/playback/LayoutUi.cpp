@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 #include "runtime/shell/ShellHost.h"
 
@@ -84,7 +84,7 @@ void appendPageLayoutDiag(
 
 }  // namespace
 
-double miacode::runtime::PlaybackHost::previewDurationSeconds() const
+double miacode::runtime::PlaybackCoordinator::previewDurationSeconds() const
 {
     // Unified content-duration policy = max(chartEnd + tail, music) — see
     // common/ContentDurationConfig.h. The chart end is the timeline bridge's
@@ -107,7 +107,7 @@ double miacode::runtime::PlaybackHost::previewDurationSeconds() const
     return qMax(0.0, duration);
 }
 
-double miacode::runtime::PlaybackHost::previewPlaybackEndSeconds() const
+double miacode::runtime::PlaybackCoordinator::previewPlaybackEndSeconds() const
 {
     if (state_.playing_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
         return qMax(0.0, state_.qtPreviewPlaybackEndSecond_);
@@ -122,7 +122,7 @@ double miacode::runtime::PlaybackHost::previewPlaybackEndSeconds() const
         chartEndSeconds, state_.previewTrackDurationSeconds_);
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewSliderRange()
+void miacode::runtime::PlaybackCoordinator::updatePreviewSliderRange()
 {
     if (ui_.previewSlider_ == nullptr) {
         return;
@@ -136,7 +136,7 @@ void miacode::runtime::PlaybackHost::updatePreviewSliderRange()
     ui_.previewSlider_->setMaximum(maximum);
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewSliderPosition(double second)
+void miacode::runtime::PlaybackCoordinator::updatePreviewSliderPosition(double second)
 {
     // The v2 transport's twin of the slider below, and announced before the
     // guards rather than after: the guards are about a v1 widget that may not
@@ -157,7 +157,7 @@ void miacode::runtime::PlaybackHost::updatePreviewSliderPosition(double second)
     ui_.previewSlider_->setValue(value);
 }
 
-void miacode::runtime::PlaybackHost::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
+void miacode::runtime::PlaybackCoordinator::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     auto cache = std::make_shared<miacode::preview::scene::PreviewProgressStatsCache>();
     cache->rebuild(noteMarkers);
@@ -168,7 +168,7 @@ void miacode::runtime::PlaybackHost::refreshPreviewObjectStatsTotals(const QVect
     updatePreviewObjectStats(state_.pauseSecond_);
 }
 
-void miacode::runtime::PlaybackHost::clearPreviewObjectStats()
+void miacode::runtime::PlaybackCoordinator::clearPreviewObjectStats()
 {
     state_.previewProgressStatsCache_.reset();
     if (state_.scene_ != nullptr) {
@@ -177,7 +177,7 @@ void miacode::runtime::PlaybackHost::clearPreviewObjectStats()
     updatePreviewObjectStats(0.0);
 }
 
-int miacode::runtime::PlaybackHost::updatePreviewStatsLayoutMode(int hostWidth)
+int miacode::runtime::PlaybackCoordinator::updatePreviewStatsLayoutMode(int hostWidth)
 {
     if (ui_.previewStatsCard_ == nullptr || ui_.previewStatsGridLayout_ == nullptr || ui_.previewStatsChips_.isEmpty()) {
         return 0;
@@ -286,7 +286,7 @@ int miacode::runtime::PlaybackHost::updatePreviewStatsLayoutMode(int hostWidth)
     return cardHeight;
 }
 
-int miacode::runtime::PlaybackHost::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
+int miacode::runtime::PlaybackCoordinator::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
 {
     const int statsHostWidth = qMax(0, panelWidth - kPreviewPanelMarginX * 2 - 16);
     if (ui_.previewStatsGridLayout_ == nullptr || ui_.previewStatsChips_.isEmpty()) {
@@ -339,7 +339,7 @@ int miacode::runtime::PlaybackHost::previewStatsMinimumHeightForPanelWidth(int p
         + qMax(0, rows - 1) * verticalSpacing;
 }
 
-double miacode::runtime::PlaybackHost::normalizedPreviewCanvasAspectRatio(double ratio) const
+double miacode::runtime::PlaybackCoordinator::normalizedPreviewCanvasAspectRatio(double ratio) const
 {
     if (!qIsFinite(ratio)) {
         return 1.0;
@@ -347,7 +347,7 @@ double miacode::runtime::PlaybackHost::normalizedPreviewCanvasAspectRatio(double
     return qBound(1.0, ratio, 3.0);
 }
 
-void miacode::runtime::PlaybackHost::setPreviewCanvasAspectRatio(double ratio, bool persistState)
+void miacode::runtime::PlaybackCoordinator::setPreviewCanvasAspectRatio(double ratio, bool persistState)
 {
     const double normalized = normalizedPreviewCanvasAspectRatio(ratio);
     if (qAbs(state_.previewCanvasAspectRatio_ - normalized) <= 1e-6) {
@@ -402,7 +402,7 @@ void miacode::runtime::PlaybackHost::setPreviewCanvasAspectRatio(double ratio, b
     }
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewWorkspaceLayout()
+void miacode::runtime::PlaybackCoordinator::updatePreviewWorkspaceLayout()
 {
     updatePreviewPanelLayout();
     session_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
@@ -414,15 +414,15 @@ void miacode::runtime::PlaybackHost::updatePreviewWorkspaceLayout()
     session_.shell_->applyFindOverlayInset();
 }
 
-void miacode::runtime::PlaybackHost::cacheWorkspaceLayoutSizes()
+void miacode::runtime::PlaybackCoordinator::cacheWorkspaceLayoutSizes()
 {
 }
 
-void miacode::runtime::PlaybackHost::restoreWorkspaceLayoutSizes()
+void miacode::runtime::PlaybackCoordinator::restoreWorkspaceLayoutSizes()
 {
 }
 
-void miacode::runtime::PlaybackHost::setWorkspacePanelsSwapped(bool swapped, bool persistState)
+void miacode::runtime::PlaybackCoordinator::setWorkspacePanelsSwapped(bool swapped, bool persistState)
 {
     if (state_.workspacePanelsSwapped_ == swapped) {
         if (ui_.swapWorkspaceSidesAction_ != nullptr) {
@@ -441,7 +441,7 @@ void miacode::runtime::PlaybackHost::setWorkspacePanelsSwapped(bool swapped, boo
     }
 }
 
-void miacode::runtime::PlaybackHost::applyWorkspacePanelArrangement()
+void miacode::runtime::PlaybackCoordinator::applyWorkspacePanelArrangement()
 {
     if (ui_.swapWorkspaceSidesAction_ != nullptr) {
         ui_.swapWorkspaceSidesAction_->blockSignals(true);
@@ -454,9 +454,9 @@ void miacode::runtime::PlaybackHost::applyWorkspacePanelArrangement()
     refreshLayoutAfterPageSwitch();
 }
 
-void miacode::runtime::PlaybackHost::refreshLayoutAfterPageSwitch()
+void miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch()
 {
-    MC_OP("miacode::runtime::PlaybackHost::refreshLayoutAfterPageSwitch");
+    MC_OP("miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch");
     QElapsedTimer totalTimer;
     totalTimer.start();
     QWidget* currentPageForDiag = ui_.editorStack_ != nullptr ? ui_.editorStack_->currentWidget() : nullptr;
@@ -570,7 +570,7 @@ void miacode::runtime::PlaybackHost::refreshLayoutAfterPageSwitch()
     }
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
+void miacode::runtime::PlaybackCoordinator::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
 {
     if (ui_.previewPanel_ != nullptr) {
         const QRect panelRect = ui_.previewPanel_->contentsRect();
@@ -627,7 +627,7 @@ void miacode::runtime::PlaybackHost::updatePreviewPanelLayout(int panelWidthOver
     session_.updatePreviewPlaybackRateToastGeometry();
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewObjectStats(double second)
+void miacode::runtime::PlaybackCoordinator::updatePreviewObjectStats(double second)
 {
     if (ui_.previewTapStatsLabel_ == nullptr
         || ui_.previewHoldStatsLabel_ == nullptr
@@ -660,7 +660,7 @@ void miacode::runtime::PlaybackHost::updatePreviewObjectStats(double second)
     session_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
 }
 
-QString miacode::runtime::PlaybackHost::formatPreviewTimestamp(double second) const
+QString miacode::runtime::PlaybackCoordinator::formatPreviewTimestamp(double second) const
 {
     const int totalCentiseconds = qMax(0, qRound(second * 100.0));
     const int minutes = totalCentiseconds / 6000;
@@ -672,7 +672,7 @@ QString miacode::runtime::PlaybackHost::formatPreviewTimestamp(double second) co
         .arg(centiseconds, 2, 10, QChar('0'));
 }
 
-void miacode::runtime::PlaybackHost::showPreviewSliderTimeHint(int sliderValue)
+void miacode::runtime::PlaybackCoordinator::showPreviewSliderTimeHint(int sliderValue)
 {
     if (ui_.previewSlider_ == nullptr) {
         return;

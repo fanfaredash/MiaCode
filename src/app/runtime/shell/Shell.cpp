@@ -3,7 +3,7 @@
 
 #include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "UiNativeWindowTheme.h"

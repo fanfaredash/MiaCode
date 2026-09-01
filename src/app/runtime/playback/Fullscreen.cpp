@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 #include "runtime/shell/ShellHost.h"
 
@@ -36,7 +36,7 @@
 
 using namespace miacode::runtime::shared;
 
-void miacode::runtime::PlaybackHost::togglePreviewFullscreen()
+void miacode::runtime::PlaybackCoordinator::togglePreviewFullscreen()
 {
     if (state_.previewFullscreenActive_) {
         exitPreviewFullscreen();
@@ -45,7 +45,7 @@ void miacode::runtime::PlaybackHost::togglePreviewFullscreen()
     enterPreviewFullscreen();
 }
 
-void miacode::runtime::PlaybackHost::enterPreviewFullscreen()
+void miacode::runtime::PlaybackCoordinator::enterPreviewFullscreen()
 {
     if (state_.previewFullscreenActive_) {
         return;
@@ -61,7 +61,7 @@ void miacode::runtime::PlaybackHost::enterPreviewFullscreen()
     updatePreviewFullscreenButtonAppearance();
 }
 
-void miacode::runtime::PlaybackHost::exitPreviewFullscreen()
+void miacode::runtime::PlaybackCoordinator::exitPreviewFullscreen()
 {
     if (!state_.previewFullscreenActive_) {
         return;
@@ -77,7 +77,7 @@ void miacode::runtime::PlaybackHost::exitPreviewFullscreen()
     updatePreviewFullscreenButtonAppearance();
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewFullscreenButtonAppearance()
+void miacode::runtime::PlaybackCoordinator::updatePreviewFullscreenButtonAppearance()
 {
     if (ui_.previewFullscreenButton_ == nullptr) {
         return;
@@ -93,7 +93,7 @@ void miacode::runtime::PlaybackHost::updatePreviewFullscreenButtonAppearance()
     ui_.previewFullscreenButton_->setToolTip(QString());
 }
 
-bool miacode::runtime::PlaybackHost::shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const
+bool miacode::runtime::PlaybackCoordinator::shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const
 {
     if (!state_.previewFullscreenActive_ || ui_.previewFullscreenWindow_ == nullptr) {
         return false;
@@ -124,7 +124,7 @@ bool miacode::runtime::PlaybackHost::shouldRevealPreviewFullscreenControls(const
     return globalCursorPos.y() >= windowGlobalRect.bottom() - revealHotzoneHeight;
 }
 
-QRect miacode::runtime::PlaybackHost::previewFullscreenControlCardRect(bool visible) const
+QRect miacode::runtime::PlaybackCoordinator::previewFullscreenControlCardRect(bool visible) const
 {
     if (ui_.previewFullscreenWindow_ == nullptr || ui_.previewControlCard_ == nullptr) {
         return QRect();
@@ -153,7 +153,7 @@ QRect miacode::runtime::PlaybackHost::previewFullscreenControlCardRect(bool visi
     return QRect(cardX, visible ? visibleY : hiddenY, cardWidth, cardHeight);
 }
 
-void miacode::runtime::PlaybackHost::showPreviewFullscreenControls(bool animate)
+void miacode::runtime::PlaybackCoordinator::showPreviewFullscreenControls(bool animate)
 {
     if (!state_.previewFullscreenActive_
         || ui_.previewFullscreenWindow_ == nullptr
@@ -213,7 +213,7 @@ void miacode::runtime::PlaybackHost::showPreviewFullscreenControls(bool animate)
     schedulePreviewFullscreenControlsAutoHide();
 }
 
-void miacode::runtime::PlaybackHost::hidePreviewFullscreenControls(bool animate)
+void miacode::runtime::PlaybackCoordinator::hidePreviewFullscreenControls(bool animate)
 {
     if (!state_.previewFullscreenActive_
         || ui_.previewFullscreenWindow_ == nullptr
@@ -277,7 +277,7 @@ void miacode::runtime::PlaybackHost::hidePreviewFullscreenControls(bool animate)
     state_.previewFullscreenControlsVisible_ = false;
 }
 
-void miacode::runtime::PlaybackHost::schedulePreviewFullscreenControlsAutoHide()
+void miacode::runtime::PlaybackCoordinator::schedulePreviewFullscreenControlsAutoHide()
 {
     if (!state_.previewFullscreenActive_ || ui_.previewFullscreenControlsTimer_ == nullptr) {
         return;
@@ -285,7 +285,7 @@ void miacode::runtime::PlaybackHost::schedulePreviewFullscreenControlsAutoHide()
     ui_.previewFullscreenControlsTimer_->start(kPreviewFullscreenControlsAutoHideDelayMs);
 }
 
-void miacode::runtime::PlaybackHost::pollPreviewFullscreenCursor()
+void miacode::runtime::PlaybackCoordinator::pollPreviewFullscreenCursor()
 {
     if (!state_.previewFullscreenActive_ || ui_.previewFullscreenWindow_ == nullptr) {
         return;
@@ -321,7 +321,7 @@ void miacode::runtime::PlaybackHost::pollPreviewFullscreenCursor()
     }
 }
 
-void miacode::runtime::PlaybackHost::updatePreviewFullscreenOverlayGeometry()
+void miacode::runtime::PlaybackCoordinator::updatePreviewFullscreenOverlayGeometry()
 {
     if (!state_.previewFullscreenActive_ || ui_.previewFullscreenWindow_ == nullptr) {
         return;

@@ -1,4 +1,4 @@
-﻿#include "runtime/playback/PlaybackHost.h"
+﻿#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 #include "runtime/media/MediaJobsHost.h"
 
@@ -38,7 +38,7 @@
 using namespace miacode::runtime::shared;
 using namespace miacode::runtime::preview_timeline_detail;
 
-void miacode::runtime::PlaybackHost::refreshTimelineQuickModelFromCurrentText()
+void miacode::runtime::PlaybackCoordinator::refreshTimelineQuickModelFromCurrentText()
 {
     if (state_.timelineQuickStateBridge_ == nullptr || !hasActiveDifficulty()) {
         return;

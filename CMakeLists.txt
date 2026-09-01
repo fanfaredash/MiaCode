@@ -224,8 +224,12 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/playback/IntroRegion.cpp
     src/app/runtime/playback/Tick.cpp
     src/app/runtime/playback/PlaybackGlue.cpp
-    src/app/runtime/playback/PlaybackControlAdapter.cpp
-    src/app/runtime/playback/PlaybackControlAdapter.h
+    src/app/runtime/playback/PlaybackCoordinator.h
+    src/app/runtime/playback/CoordinatorContract.cpp
+    src/app/runtime/playback/PlaybackIdentityGate.cpp
+    src/app/runtime/playback/PlaybackIdentityGate.h
+    src/app/runtime/playback/PlaybackSurfaceAdapters.cpp
+    src/app/runtime/playback/PlaybackSurfaceAdapters.h
     src/app/runtime/timeline/TimelineCommandGate.cpp
     src/app/runtime/timeline/TimelineCommandGate.h
     src/app/runtime/timeline/TimelineHost.cpp
@@ -1841,21 +1845,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(application_services_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
-    # Stage 4.5: the playback authority contract is intentionally tested before
-    # the current composite PlaybackHost is given a compatibility adapter.
-    miacode_add_dev_tool(playback_control_spec TEST
-        SOURCES
-            src/tools/v2/PlaybackControlSpec.cpp
-            src/app/v2/PlaybackControl.h
-            src/app/v2/AudioClockSource.h
-            src/app/v2/PreviewPlaybackPort.h
-            src/app/v2/PreviewSurface.h
-            src/app/runtime/playback/PlaybackControlAdapter.cpp
-            src/app/runtime/playback/PlaybackControlAdapter.h
-        LIBS Qt6::Core Qt6::Gui Qt6::Test
-        INCLUDES src src/audio src/common src/core/video
-    )
-
     # Stage 4.6: Timeline commands receive their own identity before the
     # compatibility host forwards them to the current composite implementation.
     miacode_add_dev_tool(timeline_host_spec TEST
@@ -1885,6 +1874,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/audio src/common src/core/video
     )
+
+    # Stage 4.8: the coordinator owns playback contracts; legacy Preview and
+    # Timeline surface compatibility lives in explicit projection adapters.
+    miacode_add_dev_tool(playback_coordinator_spec TEST
+        SOURCES
+            src/tools/v2/PlaybackCoordinatorSpec.cpp
+            src/app/runtime/playback/PlaybackIdentityGate.cpp
+            src/app/runtime/playback/PlaybackIdentityGate.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(playback_coordinator_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(qml_analysis_model_spec TEST
         SOURCES

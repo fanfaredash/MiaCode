@@ -6,7 +6,7 @@
 #include "runtime/export/VideoExportHost.h"
 #include "runtime/settings/SettingsHost.h"
 #include "runtime/preview/StageMediaHost.h"
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/validation/ValidationHost.h"
 #include "runtime/shell/ShellHost.h"
 

@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"
@@ -41,7 +41,7 @@ using namespace miacode::runtime::shared;
 
 using namespace miacode::runtime::playback_detail;
 
-void miacode::runtime::PlaybackHost::applyQtPreviewPosition(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second, bool centerView)
 {
     const bool quickTimelineBridgeReady =
         !state_.uiFocusBridgeMode_ || state_.timelineReady_;
@@ -91,18 +91,18 @@ void miacode::runtime::PlaybackHost::applyQtPreviewPosition(double second, bool 
     }
 }
 
-void miacode::runtime::PlaybackHost::syncPausedPreviewMediaTimestamps(double second)
+void miacode::runtime::PlaybackCoordinator::syncPausedPreviewMediaTimestamps(double second)
 {
     session_.seekPreviewStageMediaRouteWhilePaused(second);
 }
 
-qint64 miacode::runtime::PlaybackHost::timelineCadenceWatchdogThresholdMs() const
+qint64 miacode::runtime::PlaybackCoordinator::timelineCadenceWatchdogThresholdMs() const
 {
     return miacode::timeline::cadence::watchdogThresholdMs(
         timelineTargetFrameIntervalNs() / 1000000);
 }
 
-void miacode::runtime::PlaybackHost::onTimelineRenderCadenceTick()
+void miacode::runtime::PlaybackCoordinator::onTimelineRenderCadenceTick()
 {
     if (!state_.playing_) {
         return;
@@ -118,7 +118,7 @@ void miacode::runtime::PlaybackHost::onTimelineRenderCadenceTick()
     flushQtPreviewTimelinePosition();
 }
 
-void miacode::runtime::PlaybackHost::onTimelineCadenceWatchdogTick()
+void miacode::runtime::PlaybackCoordinator::onTimelineCadenceWatchdogTick()
 {
     miacode::timeline::cadence::ArbitrationState arbitration;
     arbitration.playing = state_.playing_;
@@ -132,7 +132,7 @@ void miacode::runtime::PlaybackHost::onTimelineCadenceWatchdogTick()
     flushQtPreviewTimelinePosition();
 }
 
-void miacode::runtime::PlaybackHost::flushQtPreviewTimelinePosition()
+void miacode::runtime::PlaybackCoordinator::flushQtPreviewTimelinePosition()
 {
     if (state_.playing_) {
         miacode::preview_audio::playback_flow::State playbackFlowState;
@@ -178,7 +178,7 @@ void miacode::runtime::PlaybackHost::flushQtPreviewTimelinePosition()
     state_.qtPreviewTimelineDirty_ = false;
 }
 
-void miacode::runtime::PlaybackHost::onQtPreviewTick()
+void miacode::runtime::PlaybackCoordinator::onQtPreviewTick()
 {
     if (!state_.playing_) {
         return;
@@ -210,7 +210,7 @@ void miacode::runtime::PlaybackHost::onQtPreviewTick()
     onQtPreviewTickAtSecond(second, fallbackSecond, hasAudioClock);
 }
 
-double miacode::runtime::PlaybackHost::applyVisualClockSmoothing(
+double miacode::runtime::PlaybackCoordinator::applyVisualClockSmoothing(
     double audioSecond, double fallbackSecond, bool hasAudioClock)
 {
     Q_UNUSED(fallbackSecond);
@@ -244,7 +244,7 @@ double miacode::runtime::PlaybackHost::applyVisualClockSmoothing(
     return audioSecond + lookaheadSeconds;
 }
 
-void miacode::runtime::PlaybackHost::resetVisualClockSmoothing()
+void miacode::runtime::PlaybackCoordinator::resetVisualClockSmoothing()
 {
     // Called on playback start, resume, and seek so the next tick hard-syncs visual to audio.
     state_.qtPreviewVisualClockSecond_ = -1.0;
@@ -253,7 +253,7 @@ void miacode::runtime::PlaybackHost::resetVisualClockSmoothing()
     state_.qtPreviewVisualClockDiagLastLogMs_ = -1;
 }
 
-void miacode::runtime::PlaybackHost::onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock)
+void miacode::runtime::PlaybackCoordinator::onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock)
 {
     if (!state_.playing_) {
         return;
@@ -437,7 +437,7 @@ void miacode::runtime::PlaybackHost::onQtPreviewTickAtSecond(double second, doub
     }
 }
 
-void miacode::runtime::PlaybackHost::jumpToNearestTimelineNote(double second, int lane)
+void miacode::runtime::PlaybackCoordinator::jumpToNearestTimelineNote(double second, int lane)
 {
     int line = 1;
     int col = 1;

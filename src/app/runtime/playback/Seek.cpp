@@ -1,4 +1,4 @@
-#include "runtime/playback/PlaybackHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"
@@ -38,7 +38,7 @@
 using namespace miacode::runtime::shared;
 using namespace miacode::runtime::playback_detail;
 
-void miacode::runtime::PlaybackHost::scheduleDeferredPreviewUiTail(
+void miacode::runtime::PlaybackCoordinator::scheduleDeferredPreviewUiTail(
     bool applyPreviewVisualSettings,
     bool applyDeferredAnalysis,
     bool dispatchTimelineAnalysis,
@@ -95,12 +95,12 @@ void miacode::runtime::PlaybackHost::scheduleDeferredPreviewUiTail(
         });
 }
 
-void miacode::runtime::PlaybackHost::schedulePreviewSeek(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::schedulePreviewSeek(double second, bool centerView)
 {
     requestPausedPreviewSeek(second, centerView, false, false);
 }
 
-quint64 miacode::runtime::PlaybackHost::requestPausedPreviewVisualSeek(
+quint64 miacode::runtime::PlaybackCoordinator::requestPausedPreviewVisualSeek(
     double second,
     bool centerView,
     int submitNowLogValue,
@@ -150,7 +150,7 @@ quint64 miacode::runtime::PlaybackHost::requestPausedPreviewVisualSeek(
     return generation;
 }
 
-void miacode::runtime::PlaybackHost::requestPausedPreviewSeek(
+void miacode::runtime::PlaybackCoordinator::requestPausedPreviewSeek(
     double second,
     bool centerView,
     bool submitMediaImmediately,
@@ -182,7 +182,7 @@ void miacode::runtime::PlaybackHost::requestPausedPreviewSeek(
     }
 }
 
-void miacode::runtime::PlaybackHost::applyPausedPreviewVisualSecond(double second, bool centerView)
+void miacode::runtime::PlaybackCoordinator::applyPausedPreviewVisualSecond(double second, bool centerView)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     state_.qtPreviewStartSecond_ = clampedSecond;
@@ -200,7 +200,7 @@ void miacode::runtime::PlaybackHost::applyPausedPreviewVisualSecond(double secon
     state_.pausedSeekAppliedVisualSecond_ = clampedSecond;
 }
 
-void miacode::runtime::PlaybackHost::submitPausedMediaSeek(double second, quint64 generation)
+void miacode::runtime::PlaybackCoordinator::submitPausedMediaSeek(double second, quint64 generation)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
@@ -222,7 +222,7 @@ void miacode::runtime::PlaybackHost::submitPausedMediaSeek(double second, quint6
     session_.submitPreviewStageMediaRoutePausedSeek(clampedSecond, generation);
 }
 
-void miacode::runtime::PlaybackHost::maybeSubmitLatestPausedMediaSeek()
+void miacode::runtime::PlaybackCoordinator::maybeSubmitLatestPausedMediaSeek()
 {
     if (state_.playing_ || state_.pausedSeekMediaPending_ || !session_.previewStageMediaRouteHasVideo()) {
         return;
@@ -233,7 +233,7 @@ void miacode::runtime::PlaybackHost::maybeSubmitLatestPausedMediaSeek()
     submitPausedMediaSeek(state_.pausedSeekTargetSecond_, state_.pausedSeekGeneration_);
 }
 
-void miacode::runtime::PlaybackHost::handlePausedPreviewMediaSeekCompleted(double second, quint64 generation)
+void miacode::runtime::PlaybackCoordinator::handlePausedPreviewMediaSeekCompleted(double second, quint64 generation)
 {
     const bool staleSubmitted = generation != state_.pausedSeekMediaSubmittedGeneration_;
     appendQuickShellBackendLog(
@@ -263,7 +263,7 @@ void miacode::runtime::PlaybackHost::handlePausedPreviewMediaSeekCompleted(doubl
     }
 }
 
-bool miacode::runtime::PlaybackHost::stepPreviewBySeconds(double deltaSeconds, bool centerView)
+bool miacode::runtime::PlaybackCoordinator::stepPreviewBySeconds(double deltaSeconds, bool centerView)
 {
     if (!qIsFinite(deltaSeconds)) {
         return false;
@@ -283,7 +283,7 @@ bool miacode::runtime::PlaybackHost::stepPreviewBySeconds(double deltaSeconds, b
     return moved;
 }
 
-bool miacode::runtime::PlaybackHost::handlePreviewSeekWheel(QWheelEvent* event)
+bool miacode::runtime::PlaybackCoordinator::handlePreviewSeekWheel(QWheelEvent* event)
 {
     if (event == nullptr) {
         return false;
@@ -313,7 +313,7 @@ bool miacode::runtime::PlaybackHost::handlePreviewSeekWheel(QWheelEvent* event)
     return handled;
 }
 
-void miacode::runtime::PlaybackHost::beginPreviewHeldSeek(int direction, int key)
+void miacode::runtime::PlaybackCoordinator::beginPreviewHeldSeek(int direction, int key)
 {
     if (direction == 0) {
         return;
@@ -333,7 +333,7 @@ void miacode::runtime::PlaybackHost::beginPreviewHeldSeek(int direction, int key
     }
 }
 
-void miacode::runtime::PlaybackHost::stopPreviewHeldSeek(int key)
+void miacode::runtime::PlaybackCoordinator::stopPreviewHeldSeek(int key)
 {
     if (key != 0 && state_.previewSeekHeldArrowKey_ != key) {
         return;
@@ -354,7 +354,7 @@ void miacode::runtime::PlaybackHost::stopPreviewHeldSeek(int key)
     }
 }
 
-void miacode::runtime::PlaybackHost::applyPreviewHeldSeekTick()
+void miacode::runtime::PlaybackCoordinator::applyPreviewHeldSeekTick()
 {
     if (state_.previewHeldSeekDirection_ == 0
         || state_.previewSeekHeldArrowKey_ == 0
