@@ -1,12 +1,12 @@
 #include "app/v2/UiRequestService.h"
 #include "MainWindow.DialogsSection.h"
 #include "../../MainWindowShared.h"
+#include "../preview/MainWindow.PreviewSection.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "AppVersion.h"
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
-#include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
@@ -18,10 +18,7 @@
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyAnalysis.h"
-#include "tools/video_export/HudFontSettings.h"
 
-#include <QDesktopServices>
-#include <QUrl>
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
@@ -51,14 +48,6 @@ MainWindow::DialogsSection::DialogsSection(
     , state_(state)
 {}
 
-QString MainWindow::DialogsSection::resolveLatencyDetectorTrackPath() const
-{
-    if (owner_.currentFilePath_.isEmpty()) {
-        return QString();
-    }
-    return miacode::chart_assets::resolveTrackPath(owner_.currentFilePath_);
-}
-
 QString MainWindow::DialogsSection::resolveCurrentChartDirectory() const
 {
     if (owner_.currentFilePath_.isEmpty()) {
@@ -67,8 +56,17 @@ QString MainWindow::DialogsSection::resolveCurrentChartDirectory() const
     return QFileInfo(owner_.currentFilePath_).absoluteDir().absolutePath();
 }
 
-void MainWindow::DialogsSection::releasePreviewMediaForFileOperation()
+bool MainWindow::DialogsSection::releasePreviewMediaForFileOperation()
 {
+    if (QCoreApplication::instance() == nullptr) {
+        return false;
+    }
+    if (owner_.previewMediaFileOperationActive_) {
+        return false;
+    }
+    // Acquire the transaction lock before any event pumping.  Re-entrant
+    // release requests must fail while the decoder is being torn down.
+    owner_.previewMediaFileOperationActive_ = true;
     owner_.onStopPreview();
     // clearPreviewStageMediaRoute() -> setChartPath("") -> clearMedia() drops the
     // retained frames from both QML sinks and unloads the demuxer. But that unload
@@ -84,18 +82,33 @@ void MainWindow::DialogsSection::releasePreviewMediaForFileOperation()
     // keep the HOST alive so the QML VideoOutput's sink stays attached (destroying
     // the host left the post-op preview blank, "压缩后视频不加载").
     // See project_pv_file_lock_release.
-    owner_.releasePreviewStageMediaDecoderForFileOperation();
+    if (!owner_.releasePreviewStageMediaDecoderForFileOperation()) {
+        owner_.previewMediaFileOperationActive_ = false;
+        return false;
+    }
     for (int i = 0; i < 8; ++i) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         QThread::msleep(25);
     }
+    return true;
 }
 
-void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloadTrack)
+bool MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloadTrack)
 {
-    if (owner_.currentFilePath_.isEmpty()) {
-        return;
+    const auto clearOperationLock = [this]() {
+        owner_.previewMediaFileOperationActive_ = false;
+    };
+    if (owner_.previewSection_ == nullptr
+        || !owner_.previewSection_->previewUsesStageMediaHostRoute()) {
+        clearOperationLock();
+        return false;
     }
+    const QFileInfo chartInfo(owner_.currentFilePath_);
+    if (owner_.currentFilePath_.isEmpty() || !chartInfo.exists() || !chartInfo.isFile()) {
+        clearOperationLock();
+        return false;
+    }
+    bool restoreAccepted = true;
     if (reloadTrack) {
         owner_.lastTrackPath_ = miacode::chart_assets::resolveTrackPath(owner_.currentFilePath_);
         if (state_.waveformCacheService_ != nullptr) {
@@ -115,6 +128,7 @@ void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloa
             owner_.previewSfxRuntimePreparationSequence_ = reload.post.accepted
                 ? reload.identity.sequence
                 : 0;
+            restoreAccepted = reload.post.accepted;
             owner_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(owner_.previewPlaybackRate_);
             owner_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(qMax(0.0, owner_.qtPreviewPauseSecond_));
         }
@@ -128,9 +142,18 @@ void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloa
         qMax(0.0, owner_.qtPreviewPauseSecond_),
         owner_.document_.videoPath
     );
+    if (owner_.previewStageMediaHost_ == nullptr) {
+        clearOperationLock();
+        return false;
+    }
     for (int i = 0; i < 4; ++i) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     }
+    // The route request has been accepted and its immediate synchronization
+    // events drained; this does not claim that an asynchronous decoder has
+    // already produced a frame.
+    clearOperationLock();
+    return restoreAccepted;
 }
 
 void MainWindow::DialogsSection::onPreviewAudioSettings()
@@ -244,30 +267,4 @@ void MainWindow::DialogsSection::onAbout()
     owner_.aboutIconLabel_.clear();
     owner_.invalidStarPreviewAboutClickCount_ = 0;
     owner_.invalidStarPreviewAboutClickElapsed_.invalidate();
-}
-
-void MainWindow::DialogsSection::showMediaOperationCompleteDialog(
-    const QString& title,
-    const QString& summary,
-    const QString& producedFilePath)
-{
-    miacode::v2::UiRequestService* const requests = owner_.uiRequestService();
-    if (requests == nullptr) {
-        return;
-    }
-    requests->requestNoticeAction(
-        miacode::v2::NoticeSeverity::Information,
-        title,
-        summary,
-        QDir::toNativeSeparators(producedFilePath),
-        UiText::text(QStringLiteral("dialogs.open_folder")),
-        [producedFilePath](bool openFolder) {
-            if (!openFolder) {
-                return;
-            }
-            const QString dir = QFileInfo(producedFilePath).absoluteDir().absolutePath();
-            if (!dir.isEmpty()) {
-                QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
-            }
-        });
 }

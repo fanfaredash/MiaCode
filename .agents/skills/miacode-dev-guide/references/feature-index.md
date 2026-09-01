@@ -50,13 +50,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `MainWindow.DocumentUi.cpp`) share one skeleton — **every leave path calls
   `latencyDetectionPage_->onPageLeft()` unconditionally** (SFX-leak regression guard, §9).
   Bottom-tab mode table: editor ON / latency ON / metadata OFF / welcome OFF / **export OFF**.
-  `switchToExportField` is the one exception to the shared skeleton: the export page is slow to
-  build (embedded video panel), so it shows `outlineBusySpinner_` (`miacode::ui::BusySpinner`,
-  `src/app/ui/BusySpinner.{h,cpp}`) floated over the `export` sidebar row and defers the heavy
-  body (`performSwitchToExportField`) by one event-loop tick via `QTimer::singleShot(0, …)`. The
-  spinner is a mouse-transparent viewport overlay positioned with the same `visualItemRect`
-  pattern as `deleteDifficultyButton_`; spinner `isActive()` guards re-entrancy. Stopped in the
-  same deferred lambda once the build returns.
+  `switchToExportField` now performs the page switch synchronously and returns the actual result;
+  the former deferred build and hidden sidebar spinner were removed after the export page stopped
+  embedding the old video panel.
 - Default UI (v2): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
   `MiaCode.UI`). It still owns a hidden `MainWindow` compatibility backend; the
   `QuickShellController` is deleted. Video export uses `QmlExportSession` + `ExportVideoPage.qml`;
@@ -1010,11 +1006,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `MainWindow.FrameBootstrapFinalize.cpp`) AND the export dialog's **皮肤 tab** (injected via
   `VideoExportDialog::injectOwnerWiredSettings(videoExtras, gameplayWidget, skinWidget)`). Intro
   sound + a 当前谱面资源 readout were part of an earlier draft but were DROPPED (2026-07-05) — the
-  panel is skin / judge line / font only. The HUD-font controls are an EMBEDDABLE widget
-  `miacode::video_export::createHudFontSettingsWidget(parent, onFontChanged)`
-  (`tools/video_export/HudFontSettings.{h,cpp}` — the former modal `openHudFontSettingsDialog` +
-  the export dialog's `hudFontSettingsButton_`/`openHudFontSettingsDialog()`/`refreshLivePreviewHudFont()`
-  are REMOVED). The export dialog's standalone **字体 tab is GONE**; the 视频设置 dialog
+  panel is skin / judge line / font only. The HUD-font controls are now owned by the QML export
+  and preview pages; `FontLibrary` and `PreviewHudState` remain the non-UI font data/state path.
+  The former embedded HUD-font widget and the export dialog's standalone **字体 tab are removed**;
+  the 视频设置 dialog
   (`onPreviewVideoSettings` → `openPreviewSettingsDialog`) dropped its skin/judge-line rows + the
   音乐 + 字体 tabs and now reads **视频 / 游戏 / 性能** (性能 = 预览刷新率). `buildExportInjectedSettings`
   keeps only 判定效果 / slide 层叠 / 中心显示. ⚠ **W1 note:** the preview-settings
@@ -1211,18 +1206,22 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 12. Toolbox media utilities
 
-- `sections/dialogs/MainWindow.Dialogs.cpp` + `MainWindow.DialogsSection.cpp` — prepend
-  silence/black, compress bg video, convert track to 44100 Hz (`onPrependTrackSilence`,
-  `onPrependPvBlack`, `onCompressBackgroundVideo`, `onConvertTrackTo44100Hz`). These four open
-  from a single popup, `onMediaProcessingTools()` (one button + one-line description each),
-  reached via the toolbox's "音频/视频处理 / Audio/Video Processing" entry — not a hover submenu.
-  The shared `runFfmpegBlocking(... totalDurationSeconds, error)` helper drives a determinate
-  progress bar by parsing ffmpeg `-progress pipe:1` `out_time_us=` against the expected output
-  duration (falls back to an indeterminate bar when duration is unknown).
+- `src/app/v2/MediaToolsService.{h,cpp}` is the canonical owner of the six single-file media
+  interfaces: prepend silence/black context, detection, restore, and apply, plus track-to-44100 Hz
+  conversion and background-video compression. `QmlUiBootstrap` creates the service and registers
+  it in `ApplicationServices::mediaToolsEngineSlot()`. The service uses `PreviewSurface`'s
+  begin/end media-file transaction together with `UiRequestService` and `JobProgressService`;
+  `MainWindow` only retains the QAction thin adapters. The four user actions still open from one
+  popup, `onMediaProcessingTools()` (one button + one-line description each), reached via the
+  toolbox's "音频/视频处理 / Audio/Video Processing" entry — not a hover submenu. The shared
+  ffmpeg progress path parses `-progress pipe:1` `out_time_us=` against the expected output
+  duration and falls back to an indeterminate bar when duration is unknown.
 - Toolbox menu itself is built in `sections/frame/MainWindow.FrameBootstrap.cpp` (`toolboxMenu_`).
   BPM & Latency was dropped from the toolbox (still in the top Tools menu via
   `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`
   constant (feature kept: `copyAreaPanel_`/`fullCopyAreaAction_`/`setFullCopyAreaVisible`).
+  `QmlMediaToolsModel` still owns the QML media-tools page state, and its PV batch queue remains
+  with the model as the only cross-opening batch owner.
 
 ## Update this file when
 

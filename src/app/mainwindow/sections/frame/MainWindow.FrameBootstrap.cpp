@@ -17,7 +17,6 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
-#include "BusySpinner.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
@@ -157,7 +156,6 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
     // Page routing takes the same door: the QML page host asks the router, not
     // this window.
     applicationServices_.setEditorPageRouter(this);
-    applicationServices_.setMediaToolsEngine(this);
     applicationServices_.setLatencyEngine(this);
     applicationServices_.setTimelineSurface(this);
     applicationServices_.setPreviewSurface(this);
@@ -842,11 +840,6 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
     outlineDock->setWidget(outlineDockShell);
     outlineList_->setMouseTracking(true);
     outlineList_->viewport()->setMouseTracking(true);
-    // Busy spinner floated over the "Export" sidebar row — shown while the
-    // export page (its embedded video panel especially) is being built, which
-    // is noticeably slow. Same viewport-overlay pattern as the delete button.
-    outlineBusySpinner_ = new miacode::ui::BusySpinner(outlineList_->viewport());
-    outlineBusySpinner_->hide();
     connect(outlineCollapseButton_, &QToolButton::clicked, this, [this]() {
         windowSection_->setOutlineDockCollapsed(!outlineDockCollapsed_);
     });

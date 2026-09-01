@@ -1,7 +1,6 @@
 ﻿#include "UiComponents.h"
 
 #include "DialogLocalization.h"
-#include "EditableValueLabel.h"
 #include "UiTheme.h"
 #include "common/AdoptedWidgetCoordinates.h"
 #include "mainwindow/MainWindowShared.h"
@@ -150,14 +149,13 @@ protected:
     }
 };
 
-EditableValueLabel* createDialogSliderValueLabel(QSlider* slider, const QString& suffix, QWidget* parent)
+QLabel* createDialogSliderValueLabel(QSlider* slider, const QString& suffix, QWidget* parent)
 {
     const int value = slider != nullptr ? slider->value() : 0;
-    auto* label = new EditableValueLabel(QString::number(value) + suffix, parent);
+    auto* label = new QLabel(QString::number(value) + suffix, parent);
     label->setMinimumWidth(46);
     label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     if (slider != nullptr) {
-        label->bindSlider(slider);
         QObject::connect(slider, &QSlider::valueChanged, label, [label, suffix](int v) {
             label->setText(QString::number(v) + suffix);
         });
@@ -253,7 +251,7 @@ QLabel* createFormLabel(const QString& text, QWidget* parent)
 }
 
 QWidget* createSliderValueRow(QSlider* slider,
-                              EditableValueLabel** valueOut,
+                              QLabel** valueOut,
                               const QString& suffix,
                               QWidget* parent)
 {
@@ -288,7 +286,7 @@ void applyDialogSliderStyle(QSlider* slider)
 
 QWidget* createDialogSliderOption(const QString& title,
                                   QSlider* slider,
-                                  EditableValueLabel** valueOut,
+                                  QLabel** valueOut,
                                   const QString& suffix,
                                   QWidget* parent,
                                   DialogSliderOptionLayout optionLayout)

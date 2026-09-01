@@ -40,7 +40,6 @@
 #include "app/v2/ApplicationServices.h"
 #include "app/v2/EditorPageRouter.h"
 #include "app/v2/LatencyEngine.h"
-#include "app/v2/MediaToolsEngine.h"
 #include "app/v2/DocumentBridge.h"
 #include "app/v2/PreferencesStore.h"
 #include "app/v2/PreviewSurface.h"
@@ -77,9 +76,6 @@ namespace miacode::latency {
 class LatencySandboxController;
 }
 namespace miacode::video_export {
-}
-namespace miacode::ui {
-class BusySpinner;
 }
 class QListWidget;
 class QListWidgetItem;
@@ -132,7 +128,6 @@ class PreviewProgressStatsCache;
 // stage 4; the hidden QStackedWidget the switches also drive is not.
 class MainWindow : public QMainWindow,
                    public miacode::v2::EditorPageRouter,
-                   public miacode::v2::MediaToolsEngine,
                    public miacode::v2::LatencyEngine,
                    public miacode::v2::TimelineSurface,
                    public miacode::v2::PreviewSurface,
@@ -508,12 +503,10 @@ private slots:
     // Asks the QML shell to show the media tools page. Kept as a slot because
     // the latency page and the tools menu both still trigger it.
     void onMediaProcessingTools();
-    // Menu-action slots and the pre-rename context builder. The QML page
-    // reaches the same work through miacode::v2::MediaToolsEngine, so
-    // these stay private.
+    // Menu-action slots remain as the widget menu's entry points. They
+    // forward to the non-Widget media service held by ApplicationServices.
     void onCompressBackgroundVideo();
     void onConvertTrackTo44100Hz();
-    QVariantMap prependMediaBlankContext(bool isTrack);
 
 private slots:
     void onReadTitleFromTrack();
@@ -700,14 +693,6 @@ public:
     void openPreferences() override;
     void requestShellClose(std::function<void(bool)> onDecided) override;
 
-    // ---- miacode::v2::MediaToolsEngine ----
-    void convertTrackTo44100Hz() override;
-    void compressBackgroundVideo() override;
-    QVariantMap mediaBlankContext(bool isTrack) override;
-    QVariantMap detectMediaBlankTiming(bool isTrack) override;
-    void restoreMediaBlankBackup(bool isTrack) override;
-    void applyMediaBlank(bool isTrack, double beats, double bpm) override;
-
     // ---- miacode::v2::LatencyEngine ----
     double documentWholeBpm() const override;
     double documentOffsetSeconds() const override;
@@ -744,6 +729,8 @@ public:
     void togglePlayback() override;
     void stop() override;
     void seek(double second) override;
+    bool beginMediaFileOperation() override;
+    bool endMediaFileOperation(bool reloadTrack) override;
     void beginScrub() override;
     void updateScrub(double second, bool centerView) override;
     void endScrub(double second, bool centerView) override;
@@ -1019,11 +1006,6 @@ private:
     QTabWidget* bottomTabsContainerForTab(BottomTabsTabId tabId) const;
     void syncBottomTabsCurrentTabToContainers();
     void syncQuickShellBottomTabsProxyRoute();
-
-    // Synchronously advance the outline busy spinner one frame (no-op unless it
-    // is active). Called from inside the slow export-page build so the spinner
-    // visibly rotates while the GUI thread is blocked. See DocumentUi.cpp.
-    void tickOutlineBusySpinner();
 
     #include "MainWindowMemberStorage.inc"
 };

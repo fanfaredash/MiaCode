@@ -3,7 +3,6 @@
 #include "../editor/MainWindow.EditorSection.h"
 
 #include "BracketScopeHighlighter.h"
-#include "BusySpinner.h"
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -892,13 +891,6 @@ bool MainWindow::DocumentSection::switchToExportField()
     return ui_.editorStack_->currentWidget() == ui_.exportPlaceholderPage_;
 }
 
-void MainWindow::tickOutlineBusySpinner()
-{
-    if (outlineBusySpinner_ != nullptr && outlineBusySpinner_->isActive()) {
-        outlineBusySpinner_->advance();
-    }
-}
-
 void MainWindow::DocumentSection::performSwitchToExportField()
 {
     if (ui_.exportPlaceholderPage_ == nullptr || ui_.editorStack_ == nullptr) {
@@ -951,7 +943,6 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     state_.pendingPreviewPlaybackSecond_ = 0.0;
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "export";
-    owner_.tickOutlineBusySpinner();
     populateMetadataPage();  // keeps document fields in sync for sidebar use
     ui_.editorStack_->setCurrentWidget(ui_.exportPlaceholderPage_);
     setChartBottomTabsMode(false);
@@ -962,14 +953,9 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    owner_.tickOutlineBusySpinner();
-    // The expensive part — building the embedded video panel — happens inside
-    // onPageEntered. It ticks the spinner at its own sub-step boundaries so the
-    // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->enter(previousActiveDifficultyId);
     }
-    owner_.tickOutlineBusySpinner();
     // Entering the export page changes the preview aspect (square → export video
     // ratio) and collapses the bottom tabs; both drive the workspace surface to a
     // new size ASYNCHRONOUSLY from QML, after the two refreshes below have already

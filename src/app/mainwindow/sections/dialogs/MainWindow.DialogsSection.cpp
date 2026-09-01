@@ -1,4 +1,5 @@
 #include "MainWindow.DialogsSection.h"
+#include "app/v2/MediaToolsService.h"
 
 void MainWindow::onPreviewAudioSettings()
 {
@@ -25,60 +26,20 @@ void MainWindow::onAbout()
     dialogsSection_->onAbout();
 }
 
-// ---- miacode::v2::MediaToolsEngine ----
-// The two menu-action names stay: BootstrapAndMenus connects QActions to them.
-void MainWindow::convertTrackTo44100Hz()
-{
-    onConvertTrackTo44100Hz();
-}
-
-void MainWindow::compressBackgroundVideo()
-{
-    onCompressBackgroundVideo();
-}
-
-QVariantMap MainWindow::mediaBlankContext(bool isTrack)
-{
-    return prependMediaBlankContext(isTrack);
-}
-
-QVariantMap MainWindow::prependMediaBlankContext(bool isTrack)
-{
-    return dialogsSection_->prependMediaBlankContext(
-        isTrack ? DialogsSection::MediaBlankTarget::Track
-                : DialogsSection::MediaBlankTarget::Pv);
-}
-
-QVariantMap MainWindow::detectMediaBlankTiming(bool isTrack)
-{
-    return dialogsSection_->detectMediaBlankTiming(
-        isTrack ? DialogsSection::MediaBlankTarget::Track
-                : DialogsSection::MediaBlankTarget::Pv);
-}
-
-void MainWindow::restoreMediaBlankBackup(bool isTrack)
-{
-    dialogsSection_->restoreMediaBlankBackup(
-        isTrack ? DialogsSection::MediaBlankTarget::Track
-                : DialogsSection::MediaBlankTarget::Pv);
-}
-
-void MainWindow::applyMediaBlank(bool isTrack, double beats, double bpm)
-{
-    dialogsSection_->applyMediaBlank(
-        isTrack ? DialogsSection::MediaBlankTarget::Track
-                : DialogsSection::MediaBlankTarget::Pv,
-        beats, bpm);
-}
-
 void MainWindow::onCompressBackgroundVideo()
 {
-    dialogsSection_->onCompressBackgroundVideo();
+    auto* const engine = applicationServices_.mediaToolsEngine();
+    if (engine != nullptr) {
+        engine->compressBackgroundVideo();
+    }
 }
 
 void MainWindow::onConvertTrackTo44100Hz()
 {
-    dialogsSection_->onConvertTrackTo44100Hz();
+    auto* const engine = applicationServices_.mediaToolsEngine();
+    if (engine != nullptr) {
+        engine->convertTrackTo44100Hz();
+    }
 }
 
 

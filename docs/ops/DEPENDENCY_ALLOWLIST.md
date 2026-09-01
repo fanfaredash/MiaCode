@@ -46,7 +46,7 @@ Qt 最低版本锁定：`6.8`
 | `bass` | 媒体 | 全平台（Win: `bass.lib`，macOS: `libbass.dylib`） | `BassPreviewAudioBackend`、`BassExportAudioBackend` | 预览音频后端初始化 | `MIACODE_HAS_BASS_AUDIO=1`；macOS 打包契约校验 dylib 已随包 |
 | `bassmix` | 媒体 | 全平台 | 同上（混音总线） | 同上 | 同上 |
 | `miniz` | 导出 | 全平台 | `ChartZipPackager`（ZIP 打包导出） | 触发 ZIP 导出 | `chart_zip_packager_spec` |
-| `Qt6::Widgets` | 遗留 | 全平台 | 隐藏 `MainWindow` 及 `src/app/ui/` 的 widget 辅助件、`HudFontSettings` | 进程启动（隐藏窗口构造） | **阶段 4 退出**：删除 `MainWindow` 后从本表移入禁止表 |
+| `Qt6::Widgets` | 遗留 | 全平台 | 隐藏 `MainWindow` 及 `src/app/ui/` 的 widget 辅助件 | 进程启动（隐藏窗口构造） | **阶段 4 退出**：删除 `MainWindow` 后从本表移入禁止表 |
 | `-framework AppKit` | 平台 | `APPLE` | `UiNativeWindowThemeMac.mm`、`QmlUiWindowChrome.mm`（原生标题栏/外观） | 根窗口创建 | 链接期；macOS 冷启动走查 |
 | `d3d11` | 平台 | `WIN32` | 共享预览设备、D3D11 导出会话、stage-media host（`src/preview/runtime/`） | 预览首次创建渲染设备 | 链接期；Windows 冷启动走查 |
 | `dxgi` | 平台 | `WIN32` | `GpuDevicePolicy`、`ProcessDiagnostics`、`TimelineQuickItem`（适配器枚举与显存计量） | 启动诊断 / 预览创建 | 链接期；Windows 冷启动走查 |

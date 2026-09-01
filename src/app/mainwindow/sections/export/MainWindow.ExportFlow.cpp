@@ -497,9 +497,7 @@ void MainWindow::ExportSection::beginExportPreviewSession(const VideoExportTask&
     // user sees the real exported look, ignoring the "暂停时显示判定区" pause-hide option.
     owner_.exportPreviewActive_ = true;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
-    owner_.tickOutlineBusySpinner();
     owner_.applyPreviewStageMediaRouteVisualSettings();
-    owner_.tickOutlineBusySpinner();
     // While the export dialog/panel is up the debug HUD is replaced by
     // the optional chart info HUD — the debug numbers don't reach the
     // exported video anyway, and the user wants to see chart metadata

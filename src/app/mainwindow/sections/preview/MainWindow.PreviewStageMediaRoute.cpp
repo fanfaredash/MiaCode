@@ -192,11 +192,12 @@ void MainWindow::PreviewSection::clearPreviewStageMediaRoute()
     refreshPreviewStageMediaRouteDebugState(false);
 }
 
-void MainWindow::PreviewSection::releasePreviewStageMediaDecoderForFileOperation()
+bool MainWindow::PreviewSection::releasePreviewStageMediaDecoderForFileOperation()
 {
-    if (state_.previewStageMediaHost_ != nullptr) {
-        state_.previewStageMediaHost_->releaseDecoderForFileReplace();
+    if (state_.previewStageMediaHost_ == nullptr) {
+        return true;
     }
+    return state_.previewStageMediaHost_->releaseDecoderForFileReplace();
 }
 
 void MainWindow::PreviewSection::applyPreviewMediaWarmupToStageMediaRoute(
@@ -581,9 +582,10 @@ void MainWindow::clearPreviewStageMediaRoute()
     previewSection_->clearPreviewStageMediaRoute();
 }
 
-void MainWindow::releasePreviewStageMediaDecoderForFileOperation()
+bool MainWindow::releasePreviewStageMediaDecoderForFileOperation()
 {
-    previewSection_->releasePreviewStageMediaDecoderForFileOperation();
+    return previewSection_ != nullptr
+        && previewSection_->releasePreviewStageMediaDecoderForFileOperation();
 }
 
 void MainWindow::applyPreviewMediaWarmupToStageMediaRoute(

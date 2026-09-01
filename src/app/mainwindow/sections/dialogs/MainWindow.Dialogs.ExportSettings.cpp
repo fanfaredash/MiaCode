@@ -5,7 +5,6 @@
 #include "AppVersion.h"
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
-#include "EditableValueLabel.h"
 #include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -19,7 +18,6 @@
 #include "core/scene/PreviewHudState.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyAnalysis.h"
-#include "tools/video_export/HudFontSettings.h"
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -566,23 +564,10 @@ void MainWindow::DialogsSection::buildSkinSettings(
         UiText::text(QStringLiteral("dialog.skin_settings.chart_effect")),
         chartEffectCombo);
 
-    // ---- 字体: embedded HUD-font picker (combo + import/reset + live sample),
-    //      the same controls the old "字体设置" sub-dialog hosted, inlined. ----
-    auto* fontGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.video_export.section.font")), root);
-    auto* fontGroupLayout = new QVBoxLayout(fontGroup);
-    fontGroupLayout->setContentsMargins(10, 8, 10, 8);
-    fontGroupLayout->setSpacing(8);
-    // {} refresh callback: the preview HUD re-reads the global font on its next
-    // repaint (scrub/play), matching the former font-tab behavior.
-    std::function<void()> refreshHudFontSettings;
-    fontGroupLayout->addWidget(
-        miacode::video_export::createHudFontSettingsWidget(fontGroup, {}, &refreshHudFontSettings));
-    rootLayout->addWidget(fontGroup);
-
     if (refreshOut != nullptr) {
         const QPointer<QWidget> rootGuard(root);
         *refreshOut =
-            [this, rootGuard, refreshSkinCombo, refreshJudgeLineCombo, refreshHudFontSettings, chartEffectCombo]() {
+            [this, rootGuard, refreshSkinCombo, refreshJudgeLineCombo, chartEffectCombo]() {
                 if (rootGuard.isNull()) {
                     return;
                 }
@@ -594,9 +579,6 @@ void MainWindow::DialogsSection::buildSkinSettings(
                         chartEffectCombo->findData(static_cast<int>(owner_.previewJudgeEffectStyle_))));
                 }
                 refreshJudgeLineCombo();
-                if (refreshHudFontSettings) {
-                    refreshHudFontSettings();
-                }
             };
     }
 

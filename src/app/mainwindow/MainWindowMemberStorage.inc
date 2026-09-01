@@ -124,9 +124,6 @@
         QLabel* editorEmptyStateLabel_ = nullptr;
         QTabWidget* bottomTabs_ = nullptr;
         QTabWidget* quickShellBottomTabsProxy_ = nullptr;
-        // Indeterminate spinner floated over the "Export" sidebar row while the
-        // (synchronous, ~hundreds-of-ms) export-page build runs.
-        miacode::ui::BusySpinner* outlineBusySpinner_ = nullptr;
         QSplitter* workspaceSplitter_ = nullptr;
         QWidget* previewPanel_ = nullptr;
         QWidget* previewLeftColumn_ = nullptr;
@@ -185,6 +182,7 @@
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
         TimelineQuickStateBridge* timelineQuickStateBridge_ = nullptr;
         bool quickShellBackendActive_ = false;
+        bool previewMediaFileOperationActive_ = false;
         bool quickShellUiFocusBridgeMode_ = false;
         bool quickTimelineSurfaceReady_ = false;
         quint64 deferredTimelineBridgeFlushGeneration_ = 0;
@@ -1091,7 +1089,6 @@
     QPushButton*& editorReplaceAllButton_ = ui_.editorReplaceAllButton_;
     QLabel*& editorEmptyStateLabel_ = ui_.editorEmptyStateLabel_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
-    miacode::ui::BusySpinner*& outlineBusySpinner_ = ui_.outlineBusySpinner_;
     QSplitter*& workspaceSplitter_ = ui_.workspaceSplitter_;
     QWidget*& previewPanel_ = ui_.previewPanel_;
     QWidget*& previewLeftColumn_ = ui_.previewLeftColumn_;
@@ -1139,6 +1136,7 @@
     QPropertyAnimation*& previewFullscreenControlsAnimation_ = ui_.previewFullscreenControlsAnimation_;
     QPropertyAnimation*& previewFullscreenControlsOpacityAnimation_ = ui_.previewFullscreenControlsOpacityAnimation_;
     bool& previewFullscreenActive_ = state_.previewFullscreenActive_;
+    bool& previewMediaFileOperationActive_ = state_.previewMediaFileOperationActive_;
     bool& previewFullscreenControlsVisible_ = state_.previewFullscreenControlsVisible_;
     bool& previewFullscreenCursorTrackingInitialized_ = state_.previewFullscreenCursorTrackingInitialized_;
     QPoint& previewFullscreenLastCursorPos_ = state_.previewFullscreenLastCursorPos_;

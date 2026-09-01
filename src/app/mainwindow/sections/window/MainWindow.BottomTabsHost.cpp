@@ -1,4 +1,5 @@
 #include "../../MainWindow.h"
+#include "../dialogs/MainWindow.DialogsSection.h"
 #include "MainWindow.WindowSection.h"
 #include "../timeline/MainWindow.TimelineSection.h"
 #include "../validation/MainWindow.ValidationSection.h"
@@ -69,6 +70,33 @@ double MainWindow::lowerBoundSeconds() const { return shellPreviewLowerBoundSeco
 void MainWindow::togglePlayback() { toggleShellPreviewPlayback(); }
 void MainWindow::stop() { stopShellPreview(); }
 void MainWindow::seek(double second) { seekShellPreview(second); }
+
+bool MainWindow::beginMediaFileOperation()
+{
+    if (dialogsSection_ == nullptr) {
+        return false;
+    }
+    return dialogsSection_->releasePreviewMediaForFileOperation();
+}
+
+bool MainWindow::endMediaFileOperation(bool reloadTrack)
+{
+    const bool active = previewMediaFileOperationActive_;
+    if (!active) {
+        return false;
+    }
+    if (dialogsSection_ == nullptr) {
+        previewMediaFileOperationActive_ = false;
+        return false;
+    }
+    const bool restored = dialogsSection_->reloadPreviewMediaAfterFileOperation(reloadTrack);
+    // DialogsSection also clears this for legacy callers that invoke reload
+    // directly; keep the MainWindow boundary explicit and clear only after
+    // reload has returned.
+    previewMediaFileOperationActive_ = false;
+    return restored;
+}
+
 void MainWindow::beginScrub() { beginShellPreviewScrub(); }
 
 void MainWindow::updateScrub(double second, bool centerView)

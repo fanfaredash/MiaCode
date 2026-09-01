@@ -320,7 +320,6 @@ MainWindow::~MainWindow()
     // reaching a destroyed section.
     applicationServices_.setExportEngine(nullptr);
     applicationServices_.setEditorPageRouter(nullptr);
-    applicationServices_.setMediaToolsEngine(nullptr);
     applicationServices_.setLatencyEngine(nullptr);
     applicationServices_.setTimelineSurface(nullptr);
     applicationServices_.setPreviewSurface(nullptr);

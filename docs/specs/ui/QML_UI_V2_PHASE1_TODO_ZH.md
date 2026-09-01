@@ -29,8 +29,8 @@
       1. `QmlUiBootstrap` 仍创建并隐藏 `MainWindow`；所有 QML 模型经它取得大量状态与命令。
       2. `QmlEditorPageHost` 的导出/延迟/离开页面路径仍调用
          `switchToExportField` / `switchToLatencyField` / `switchToDifficultyField` /
-         `switchToMetadataField`。这些 `DocumentSection` 方法仍依赖 `editorStack_`、占位页、旧预览
-         控件和侧栏 spinner；这是功能可用性会受隐藏 Widgets 状态影响的活跃接线。
+         `switchToMetadataField`。这些 `DocumentSection` 方法仍依赖 `editorStack_`、占位页和旧预览
+         控件状态；这是功能可用性会受隐藏 Widgets 状态影响的活跃接线。
       3. root 拖放已改为 `QmlChartDropBridge`（单一 QWindow event filter）+ `Main.qml` 非拦截
          QML 提示层；不再创建 `ChartDropOverlay(QWidget)`，也不再依赖 native overlay 生命周期。
       4. 本次已删除 `QmlEditorPageHost.cpp` 中遗留的 `QBoxLayout` / `QStackedWidget` /
@@ -444,7 +444,8 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       与方法 `export/startVideoExport` 原本打开模态导出对话框，现在改为打开 QML 导出中心的单个导出页
       （`onExportPreviewVideo()` 保留同名但换成 QML 路由）。扩展面能力未削减，Widgets 对话框消失。
       `FontLibrary` 作为无 UI 的字体数据服务保留；`CardFontSettings` 已随原封面 Widgets
-      工作台删除，`HudFontSettings` 仍属于阶段 4 的隐藏 MainWindow 遗留。
+      工作台删除，`HudFontSettings` 已在阶段 4 第一批拆除（2026-09-01），字体选择继续由
+      QML 页面通过 `FontLibrary` / `PreviewHudState` 承接。
 - [x] `ChartDropOverlay` 改为 `QmlChartDropBridge` + `Main.qml` QML 提示层（2026-09-01）。
 - [x] **阶段 3 / 0b 本轮收口记录（2026-09-01）**：扩展宿主、嵌入运行时、Open Bridge、watcher、
       扩展偏好设置/事件/手势及 bundled deployment 已从产品运行时移除；manifest/schema/SDK/docs/API
@@ -459,10 +460,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - **阶段 3 完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui`
   只剩**扫描这些字符串的 spec 自己**。2026-08-31 复核实测：
   `QmlExportFontContractSpec` / `QmlDocumentLifecycleContractSpec` / `QmlCoverExportContractSpec` /
-  `UiRequestServiceSpec` / `UiTextLocaleSpec`（都是断言里写着这些名字），
-  `QmlShortcutModel.h`（注释一句），加上唯一一个真的用 Widgets 的
-  `src/tools/video_export/HudFontSettings.cpp`——它只被隐藏 MainWindow 的导出设置对话框调用，
-  属于阶段 4 的遗留。原来那条「为空」的写法永远不可能成立，因为 spec 必须提到被禁的名字。
+  `UiRequestServiceSpec` / `UiTextLocaleSpec`（都是断言里写着这些名字），以及
+  `QmlShortcutModel.h`（注释一句）。此前唯一真的用 Widgets 的
+  `src/tools/video_export/HudFontSettings.cpp` 已随阶段 4 第一批拆除（2026-09-01）；当前扫描
+  范围不再有真实的 Widgets 字体适配器。原来那条「为空」的写法永远不可能成立，因为 spec
+  必须提到被禁的名字。
 
 ### 阶段 3.5 —— 应用宿主脱钩与依赖分层
 
@@ -585,12 +587,14 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          `LatencySandboxController`（随阶段 4 处理）。
          槽位纪律与导出引擎一致：装配对象持槽，窗口在 `~MainWindow` 最开头撤销。
      13. **音视频处理改由 `miacode::v2::MediaToolsEngine` 承接（方法 118 → 112）**。
-         六个入口（两个转换 + 前置空白的上下文/检测/还原/应用）改成接口，`MainWindow` 实现。
-         `isTrack` 一个参数区分音轨与背景视频，两条流程本来就同形，不再翻倍接口面。
-         PV 批量队列仍归 `QmlMediaToolsModel` 自己——它是唯一有跨次开启状态的部分。
-         过程中撞到一个真实的名字遮蔽：`MainWindow.Dialogs.MediaTools.cpp` 里有一个同名的
-         文件内 ffmpeg 辅助函数 `convertTrackTo44100Hz(...)`，新增的成员函数会在嵌套 section
-         类里把它遮住，已加 `::` 限定并注明原因。
+         这条架构演进现已完成：六个入口（两个转换 + 前置空白的上下文/检测/还原/应用）
+         由 `miacode::v2::MediaToolsService` 实现，`QmlUiBootstrap` 创建它并注册到
+         `ApplicationServices::mediaToolsEngineSlot()`；`MainWindow` 不再实现这些接口，只保留
+         QAction adapter 和 `PreviewSurface` 文件事务的窗口侧转发。`isTrack` 一个参数区分音轨
+         与背景视频，两条流程本来就同形，不再翻倍接口面。PV 批量队列仍归
+         `QmlMediaToolsModel` 自己——它是唯一有跨次开启状态的部分。
+         过程中撞到的真实名字遮蔽（旧 `MainWindow.Dialogs.MediaTools.cpp` 内同名的
+         `convertTrackTo44100Hz(...)` 文件内 ffmpeg 辅助函数）随实现迁出而消失；该文件已删除。
 
      14. **延迟检测改由 `miacode::v2::LatencyEngine` 承接（方法 112 → 104）**，
          并且 `QmlLatencyModel` **完全不再认识 `MainWindow`**——连构造参数都去掉了，
@@ -663,9 +667,9 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          现在改为同步执行并返回真实结果（`currentWidget() == exportPlaceholderPage_`），
          三个 `*OutlineExportBusySpinner` 辅助函数删除。
          `editor_page_router_spec` 守住这一条，反向验证过：把延迟改回去立刻失败。
-         **未做、已记录**：`outlineBusySpinner_` 本体和 `tickOutlineBusySpinner()`
-         在导出流程里还有 4 处调用，同样画在隐藏 widget 上、同样看不见。整套删除会扩散到
-         导出流程，不属于本项，留作阶段 4 的清理。
+         **阶段 4 第一批已完成（2026-09-01）**：`outlineBusySpinner_` 本体、
+         `tickOutlineBusySpinner()` 及导出流程中的 4 处调用已删除；它们原本只画在隐藏 widget
+         上，没有可见替代价值。`stage4_widget_residue_spec` 会守住这些残留不回归。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
       *进展（2026-09-01）*：
@@ -708,9 +712,25 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 ### 阶段 4 —— 删除 `MainWindow`，收口为 Qt Quick/QML 宿主
 
+- [x] **阶段 4 第一批拆除（2026-09-01）**：删除隐藏侧栏 `BusySpinner` 及其 7 处导出/文档
+      流程调用；删除隐藏导出设置使用的 `HudFontSettings` widget 适配器，保留 QML 的字体
+      选择路径与 `FontLibrary` / `PreviewHudState` 数据服务。
+- [x] **阶段 4 第二批拆除（2026-09-01）**：确认 `FlowLayout` 已无生产调用方，删除其实现、头文件
+      及 `MiaCode` target 条目；剩余 Widget helper 继续按依赖关系拆分。
+- [x] **阶段 4 第三批拆除（2026-09-01）**：删除 `EditableValueLabel`，将仍可达的旧对话框滑块
+      数值显示改为被动 `QLabel`；滑块、设置保存和旧入口保持不变。QML `EditableValue.qml` 的
+      双击输入路径不变。
+- [x] **阶段 4 第四批 / 媒体工具 owner migration（2026-09-01）**：六个单文件媒体接口由
+      `miacode::v2::MediaToolsService` 接管；`QmlUiBootstrap` 负责创建、注册到
+      `ApplicationServices::mediaToolsEngineSlot()` 及关闭顺序。`MainWindow` 仅保留 QAction
+      adapter 与 `PreviewSurface` 文件事务，旧 `MainWindow.Dialogs.MediaTools.cpp` 已删除。
+      `media_tools_service_spec`（runtime）、`stage4_media_tools_ownership_spec`（ownership）
+      与 `qml_ui_bootstrap_lifecycle_spec`（lifecycle）通过；`MiaCode` Release 构建通过。
+      完整 CTest 为 97/99；范围外既有 `qml_export_video_page_spec` 与
+      `qtavplayer_platform_spec` 失败，不作为本批完成依据。
 - [ ] 搬迁/删除 `src/app/mainwindow/` 全部文件；仅保留已抽出的应用服务、预览/媒体/导出和领域能力。
-- [ ] `src/app/ui/` 的 widget 辅助件（`UiComponents`、`EditableValueLabel`、`FlowLayout`、
-      `BusySpinner`）随之删除或改为非 Widget 服务；同时替换
+- [ ] `src/app/ui/` 的 widget 辅助件（`UiComponents` 等）
+      随之删除或改为非 Widget 服务；同时替换
       `QStyleFactory`、`topLevelWidgets`、native Widget effect 等旧语义。
 - [ ] `main.cpp` 最后换为 `QGuiApplication` + `QQmlApplicationEngine`；不得机械替换后继续
       依赖 `QApplication` API。

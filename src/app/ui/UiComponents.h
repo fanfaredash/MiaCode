@@ -28,8 +28,6 @@ class QWidget;
 
 namespace miacode::ui {
 
-class EditableValueLabel;
-
 enum class SettingsDialogChrome {
     Settings,
     Preferences,
@@ -68,13 +66,13 @@ private:
 QFrame* createCard(const QString& titleText, QWidget* parent, QVBoxLayout** bodyLayoutOut = nullptr);
 QLabel* createFormLabel(const QString& text, QWidget* parent);
 QWidget* createSliderValueRow(QSlider* slider,
-                              EditableValueLabel** valueOut,
+                              QLabel** valueOut,
                               const QString& suffix,
                               QWidget* parent);
 void applyDialogSliderStyle(QSlider* slider);
 QWidget* createDialogSliderOption(const QString& title,
                                   QSlider* slider,
-                                  EditableValueLabel** valueOut,
+                                  QLabel** valueOut,
                                   const QString& suffix,
                                   QWidget* parent,
                                   DialogSliderOptionLayout layout = DialogSliderOptionLayout::Inline);

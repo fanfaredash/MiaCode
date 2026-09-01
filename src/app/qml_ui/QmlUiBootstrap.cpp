@@ -8,6 +8,7 @@
 #include "MainEntrypoints.h"
 #include "mainwindow/MainWindow.h"
 #include "app/v2/ApplicationServices.h"
+#include "app/v2/MediaToolsService.h"
 #include "UiNativeWindowTheme.h"
 #include "drop/QmlChartDropBridge.h"
 #include "common/DebugLog.h"
@@ -63,13 +64,34 @@ QmlUiBootstrap::QmlUiBootstrap(const QIcon& appIcon, QObject* parent)
 
 QmlUiBootstrap::~QmlUiBootstrap()
 {
-    releaseRootWindowResources();
-    engine_.reset();
-    windowChrome_.reset();
-    applicationContext_.reset();
-    backend_.reset();
-    // Last: the services outlive everything that borrows them.
-    applicationServices_.reset();
+    if (mediaToolsService_ != nullptr && mediaToolsService_->hasActiveMediaOperation()) {
+        // There is no safe receiver left on which to defer destruction from a
+        // QObject destructor. Keep every object borrowed by the in-flight
+        // service operation alive instead of resetting it under its stack.
+        mediaToolsService_->invalidateCallbacks();
+        if (applicationContext_ != nullptr) {
+            applicationContext_->setParent(nullptr);
+        }
+        if (engine_ != nullptr) {
+            engine_->setParent(nullptr);
+        }
+        if (windowChrome_ != nullptr) {
+            windowChrome_->setParent(nullptr);
+        }
+        if (chartDropBridge_ != nullptr) {
+            chartDropBridge_->release();
+            chartDropBridge_->setParent(nullptr);
+        }
+        mediaToolsService_.release();
+        backend_.release();
+        applicationServices_.release();
+        applicationContext_.release();
+        engine_.release();
+        windowChrome_.release();
+        chartDropBridge_.release();
+        return;
+    }
+    shutdownOwnedResources();
 }
 
 bool QmlUiBootstrap::start(const QString& startupOpenTarget)
@@ -78,6 +100,12 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     appendQmlUiRuntimeLog(QStringLiteral("start_enter"));
 
     applicationServices_ = std::make_unique<miacode::v2::ApplicationServices>();
+    mediaToolsService_ = std::make_unique<miacode::v2::MediaToolsService>(
+        applicationServices_->workspace(),
+        applicationServices_->uiRequests(),
+        applicationServices_->jobProgress(),
+        applicationServices_->previewSurfaceSlot());
+    applicationServices_->setMediaToolsEngine(mediaToolsService_.get());
     backend_ = std::make_unique<MainWindow>(*applicationServices_);
     backend_->setQuickShellBackendActive(true);
     backend_->hide();
@@ -144,10 +172,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         appendQmlUiRuntimeLog(QStringLiteral("load_failed"));
         QTextStream(stderr) << "[QmlUi QML] no root object created for MiaCode.UI/Main\n";
         QTextStream(stderr).flush();
-        releaseRootWindowResources();
-        engine_.reset();
-        applicationContext_.reset();
-            backend_.reset();
+        shutdownOwnedResources();
         return false;
     }
 
@@ -157,7 +182,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         // The QML root owns the visual drop surface. The bridge is only a
         // window-level event adapter and the sole owner of the OS drag route.
         if (!rootLifecycle_.registerRoot()) {
-            releaseRootWindowResources();
+            shutdownOwnedResources();
             return false;
         }
         backend_->setQuickShellRootWindow(window);
@@ -165,7 +190,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             rootItem->setFlag(QQuickItem::ItemAcceptsDrops, true);
         }
         if (!rootLifecycle_.installRootEventFilter()) {
-            releaseRootWindowResources();
+            shutdownOwnedResources();
             return false;
         }
         chartDropBridge_ = std::make_unique<miacode::qml_ui::QmlChartDropBridge>(
@@ -193,7 +218,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             this);
         applicationContext_->setChartDropBridge(chartDropBridge_.get());
         if (!rootLifecycle_.installDropBridge()) {
-            releaseRootWindowResources();
+            shutdownOwnedResources();
             return false;
         }
         QObject::connect(window, &QObject::destroyed, this, [this]() {
@@ -231,7 +256,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             });
         }
         if (!rootLifecycle_.canShowRoot()) {
-            releaseRootWindowResources();
+            shutdownOwnedResources();
             return false;
         }
         window->show();
@@ -271,6 +296,11 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
 
 void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
 {
+    if (mediaToolsService_ != nullptr && mediaToolsService_->hasActiveMediaOperation()) {
+        mediaToolsService_->invalidateCallbacks();
+        scheduleAcceptedRootWindowShutdownRetry(source);
+        return;
+    }
     if (acceptedRootWindowShutdownStarted_) {
         return;
     }
@@ -296,19 +326,18 @@ void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
 
 void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& source)
 {
+    if (mediaToolsService_ != nullptr && mediaToolsService_->hasActiveMediaOperation()) {
+        mediaToolsService_->invalidateCallbacks();
+        scheduleAcceptedRootWindowDestroyRetry(source);
+        return;
+    }
     if (acceptedRootWindowDestroyStarted_) {
         return;
     }
     acceptedRootWindowDestroyStarted_ = true;
     appendQmlUiRuntimeLog(QStringLiteral("shutdown_destroy"), source);
 
-    releaseRootWindowResources();
-    engine_.reset();
-    windowChrome_.reset();
-    applicationContext_.reset();
-    backend_.reset();
-    // Last: the services outlive everything that borrows them.
-    applicationServices_.reset();
+    shutdownOwnedResources();
 
     if (qApp != nullptr) {
         qApp->quit();
@@ -335,4 +364,64 @@ void QmlUiBootstrap::releaseRootWindowResources()
     }
     chartDropBridge_.reset();
     rootWindow_ = nullptr;
+}
+
+void QmlUiBootstrap::shutdownOwnedResources()
+{
+    if (mediaToolsService_ != nullptr && mediaToolsService_->hasActiveMediaOperation()) {
+        mediaToolsService_->invalidateCallbacks();
+        scheduleOwnedResourceShutdownRetry();
+        return;
+    }
+    if (mediaToolsService_ != nullptr) {
+        mediaToolsService_->invalidateCallbacks();
+    }
+    releaseRootWindowResources();
+    engine_.reset();
+    windowChrome_.reset();
+    applicationContext_.reset();
+    if (applicationServices_ != nullptr) {
+        applicationServices_->setMediaToolsEngine(nullptr);
+    }
+    mediaToolsService_.reset();
+    backend_.reset();
+    // The assembly is last because the backend and service borrow its
+    // workspace, request boundary, progress service and pointer slots.
+    applicationServices_.reset();
+}
+
+void QmlUiBootstrap::scheduleAcceptedRootWindowShutdownRetry(const QString& source)
+{
+    if (shutdownRetryScheduled_) {
+        return;
+    }
+    shutdownRetryScheduled_ = true;
+    QTimer::singleShot(0, this, [this, source]() {
+        shutdownRetryScheduled_ = false;
+        beginAcceptedRootWindowShutdown(source);
+    });
+}
+
+void QmlUiBootstrap::scheduleAcceptedRootWindowDestroyRetry(const QString& source)
+{
+    if (shutdownRetryScheduled_) {
+        return;
+    }
+    shutdownRetryScheduled_ = true;
+    QTimer::singleShot(0, this, [this, source]() {
+        shutdownRetryScheduled_ = false;
+        destroyAcceptedRootWindowResourcesAndQuit(source);
+    });
+}
+
+void QmlUiBootstrap::scheduleOwnedResourceShutdownRetry()
+{
+    if (shutdownRetryScheduled_) {
+        return;
+    }
+    shutdownRetryScheduled_ = true;
+    QTimer::singleShot(0, this, [this]() {
+        shutdownRetryScheduled_ = false;
+        shutdownOwnedResources();
+    });
 }

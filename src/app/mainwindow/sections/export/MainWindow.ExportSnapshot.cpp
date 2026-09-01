@@ -458,8 +458,6 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     const double effectiveFirst = firstOk ? firstSeconds : 0.0;
     const TimelinePreviewRefreshState previewState =
         buildTimelinePreviewRefreshState(parseResult, effectiveFirst);
-    owner_.tickOutlineBusySpinner();
-
     // Preview note markers + "snapshot ready" — the same state a slow-refresh
     // publishes for a real difficulty, so preparePreviewStartState accepts it.
     owner_.latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
@@ -474,8 +472,6 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     if (owner_.timelineQuickStateBridge_ != nullptr) {
         owner_.timelineQuickStateBridge_->setTimelineData(owner_.timelineQuickModel_.snapshot());
     }
-    owner_.tickOutlineBusySpinner();
-
     // Decide the playhead for the freshly-installed audition.
     const double durationSeconds = owner_.previewDurationSeconds();
     const auto clampToDuration = [durationSeconds](double second) {

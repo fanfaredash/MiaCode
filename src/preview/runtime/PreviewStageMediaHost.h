@@ -119,7 +119,7 @@ public:
     // avformat_close_input has run by the time this returns. The backend is
     // rebuilt lazily on the next load (initializeBackendObjects), exactly like
     // recoverVideoBackend. See project_pv_file_lock_release.
-    void releaseDecoderForFileReplace();
+    bool releaseDecoderForFileReplace();
 
     double currentPlaybackSecond() const;
     bool videoPlaybackActive() const;

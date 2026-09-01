@@ -129,6 +129,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/ExportEngine.h
     src/app/v2/LatencyEngine.h
     src/app/v2/MediaToolsEngine.h
+    src/app/v2/MediaToolsService.cpp
+    src/app/v2/MediaToolsService.h
     src/app/v2/PreferencesStore.h
     src/app/v2/PreviewSurface.h
     src/app/v2/ShellNotifications.cpp
@@ -192,7 +194,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.AudioSettings.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.TrackMetadata.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.DialogsSection.cpp
@@ -251,12 +252,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/UiNativeWindowThemePolicy.h
     src/app/ui/WindowParityMetrics.h
     src/app/ui/WindowParityMetrics.cpp
-    src/app/ui/FlowLayout.h
-    src/app/ui/FlowLayout.cpp
-    src/app/ui/EditableValueLabel.h
-    src/app/ui/EditableValueLabel.cpp
-    src/app/ui/BusySpinner.h
-    src/app/ui/BusySpinner.cpp
     src/common/MuriTypes.h
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h
@@ -334,8 +329,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/muri/MuriStaticChecker.cpp
     src/tools/video_export/VideoExportSettings.h
     src/tools/video_export/VideoExportSettings.cpp
-    src/tools/video_export/HudFontSettings.h
-    src/tools/video_export/HudFontSettings.cpp
     src/tools/video_export/FontLibrary.h
     src/tools/video_export/FontLibrary.cpp
     src/tools/video_export/VideoExportController.h
@@ -1881,6 +1874,51 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_compile_definitions(v1_shell_removal_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(stage4_widget_residue_spec TEST
+        SOURCES
+            src/tools/ui/Stage4WidgetResidueSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(stage4_widget_residue_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(stage4_media_tools_ownership_spec TEST
+        SOURCES
+            src/tools/ui/Stage4MediaToolsOwnershipSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(stage4_media_tools_ownership_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(media_tools_service_spec TEST
+        SOURCES
+            src/tools/v2/MediaToolsServiceSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/app/v2/ChartWorkspace.h
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/JobProgressService.h
+            src/app/v2/JobProgressService.cpp
+            src/app/v2/MediaToolsEngine.h
+            src/app/v2/MediaToolsService.h
+            src/app/v2/MediaToolsService.cpp
+            src/app/v2/PreviewSurface.h
+            src/app/v2/UiRequestService.h
+            src/app/v2/UiRequestService.cpp
+            src/audio/OfflineAudioDecoder.h
+            src/audio/OfflineAudioDecoder.cpp
+            src/tools/latency/LatencyAnalysis.h
+            src/tools/latency/LatencyAnalysis.cpp
+            src/tools/latency/LatencyBatchAudioImpl.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Test
+        INCLUDES src src/app/ui src/audio src/common src/core/chart src/core/chart/parser
+                 src/core/video src/timeline src/tools src/tools/latency
+    )
 
     miacode_add_dev_tool(preview_transport_push_spec TEST
         SOURCES

@@ -5,7 +5,6 @@
 #include "AppVersion.h"
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
-#include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
@@ -17,7 +16,6 @@
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyAnalysis.h"
-#include "tools/video_export/HudFontSettings.h"
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -213,7 +211,13 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
     // Drop the preview's grip on the bg file before overwriting it so
     // Windows doesn't reject the write with a sharing-violation error,
     // mirroring the pattern used by the track/video file operations.
-    releasePreviewMediaForFileOperation();
+    if (!releasePreviewMediaForFileOperation()) {
+        QMessageBox::warning(
+            UiDialogs::effectiveParentWidget(&owner_),
+            title,
+            QStringLiteral("Preview media could not be released; no file was changed."));
+        return;
+    }
 
     if (!cover.save(bgPath, "JPG", 92)) {
         QMessageBox::critical(
@@ -222,7 +226,12 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
             UiText::text(QStringLiteral("track_metadata.failed_to_write_bg_jpg"))
         );
         // Still try to reload — the previous file (if any) is back.
-        reloadPreviewMediaAfterFileOperation(false);
+        if (!reloadPreviewMediaAfterFileOperation(false)) {
+            QMessageBox::warning(
+                UiDialogs::effectiveParentWidget(&owner_),
+                title,
+                QStringLiteral("Preview media could not be restored."));
+        }
         return;
     }
 
@@ -231,7 +240,13 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
     // cleared by releasePreviewMediaForFileOperation above, so the
     // re-resolution lands on the brand-new bg.jpg even if the chart
     // path itself didn't change.
-    reloadPreviewMediaAfterFileOperation(false);
+    if (!reloadPreviewMediaAfterFileOperation(false)) {
+        QMessageBox::warning(
+            UiDialogs::effectiveParentWidget(&owner_),
+            title,
+            QStringLiteral("The image was written, but preview media could not be restored."));
+        return;
+    }
     _mc_op_.note(QStringLiteral("bg=%1 replaced=%2 source_mime=%3 source_bytes=%4")
                      .arg(bgPath)
                      .arg(existed ? 1 : 0)

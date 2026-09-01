@@ -342,7 +342,7 @@ void PreviewStageMediaHost::clearMedia()
 }
 
 
-void PreviewStageMediaHost::releaseDecoderForFileReplace()
+bool PreviewStageMediaHost::releaseDecoderForFileReplace()
 {
     MC_OP("PreviewStageMediaHost::releaseDecoderForFileReplace");
     // Soft path first: drops the retained sink frames (both sinks), unloads the
@@ -385,6 +385,7 @@ void PreviewStageMediaHost::releaseDecoderForFileReplace()
     appendPreviewStageMediaLog(
         QStringLiteral("release_decoder_for_file_replace"),
         QStringLiteral("player_destroyed=1"));
+    return player_ == nullptr && !hasResolvedMedia() && mediaPath_.isEmpty();
 }
 
 

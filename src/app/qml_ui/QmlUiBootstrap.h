@@ -16,6 +16,7 @@ class MainWindow;
 class QmlApplicationContext;
 namespace miacode::v2 {
 class ApplicationServices;
+class MediaToolsService;
 }
 namespace miacode::qml_ui {
 class QmlChartDropBridge;
@@ -42,11 +43,16 @@ private:
     void beginAcceptedRootWindowShutdown(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
     void releaseRootWindowResources();
+    void shutdownOwnedResources();
+    void scheduleAcceptedRootWindowShutdownRetry(const QString& source);
+    void scheduleAcceptedRootWindowDestroyRetry(const QString& source);
+    void scheduleOwnedResourceShutdownRetry();
 
     QIcon appIcon_;
-    // Declared before backend_ so it is destroyed after it: the window's
-    // teardown still talks to these services.
+    // The service is constructed after the assembly and before the backend;
+    // shutdown invalidates it before the backend and assembly are destroyed.
     std::unique_ptr<miacode::v2::ApplicationServices> applicationServices_;
+    std::unique_ptr<miacode::v2::MediaToolsService> mediaToolsService_;
     std::unique_ptr<MainWindow> backend_;
     std::unique_ptr<QmlApplicationContext> applicationContext_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
@@ -57,5 +63,6 @@ private:
     miacode::qml_ui::RootLifecycle rootLifecycle_;
     bool acceptedRootWindowShutdownStarted_ = false;
     bool acceptedRootWindowDestroyStarted_ = false;
+    bool shutdownRetryScheduled_ = false;
     bool showWelcomeDialogOnStartup_ = false;
 };

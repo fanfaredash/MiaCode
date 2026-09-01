@@ -5,7 +5,6 @@
 #include "AppVersion.h"
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
-#include "EditableValueLabel.h"
 #include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -18,7 +17,6 @@
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyAnalysis.h"
-#include "tools/video_export/HudFontSettings.h"
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -97,9 +95,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         slider->setRange(0, maximumPercent);
         slider->setValue(valuePercent);
         slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-        auto* label = new miacode::ui::EditableValueLabel(QString::number(valuePercent) + "%", row);
+        auto* label = new QLabel(QString::number(valuePercent) + "%", row);
         label->setMinimumWidth(44);
-        label->bindSlider(slider);
         QToolButton* muteButton = nullptr;
         if (muteButtonOut != nullptr) {
             muteButton = new QToolButton(row);
@@ -224,9 +221,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         slider->setTickInterval(step);
         slider->setValue(value);
         slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-        auto* label = new miacode::ui::EditableValueLabel(QString::number(value) + suffix, row);
+        auto* label = new QLabel(QString::number(value) + suffix, row);
         label->setMinimumWidth(44);
-        label->bindSlider(slider);
         rowLayout->addWidget(slider, 1);
         rowLayout->addWidget(label, 0);
         *sliderOut = slider;
