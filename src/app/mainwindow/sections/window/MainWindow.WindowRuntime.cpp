@@ -325,6 +325,7 @@ MainWindow::~MainWindow()
     applicationServices_.setTimelineSurface(nullptr);
     applicationServices_.setPreviewSurface(nullptr);
     applicationServices_.setPreferencesStore(nullptr);
+    applicationServices_.setExportPageSession(nullptr);
 
     // Original diagnostic with member-touching .arg() chain — kept for
     // completeness but now safe because the bare marker above already

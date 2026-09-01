@@ -24,10 +24,12 @@ void appendPageHostLog(const QString& action, const QString& detail = QString())
 
 QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend,
                                      miacode::v2::EditorPageRouter*& routerSlot,
+                                     QObject*& exportSessionSlot,
                                      QObject* parent)
     : QObject(parent)
     , backend_(&backend)
     , routerSlot_(&routerSlot)
+    , exportSessionSlot_(&exportSessionSlot)
 {
     // The menu action and the chart.normalize shortcut land on MainWindow;
     // re-emit so the editor sees one request regardless of where it came from.
@@ -48,9 +50,16 @@ QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend,
     });
 }
 
+QmlExportSession* QmlEditorPageHost::exportSessionObject() const
+{
+    return exportSessionSlot_ != nullptr
+        ? qobject_cast<QmlExportSession*>(*exportSessionSlot_)
+        : nullptr;
+}
+
 QObject* QmlEditorPageHost::exportSession() const
 {
-    return backend_ != nullptr ? static_cast<QObject*>(backend_->qmlExportSession()) : nullptr;
+    return exportSessionSlot_ != nullptr ? *exportSessionSlot_ : nullptr;
 }
 
 void QmlEditorPageHost::markExportPageActive()
@@ -88,14 +97,14 @@ bool QmlEditorPageHost::resumeChartOrMetadata()
 bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
 {
     miacode::v2::EditorPageRouter* const pages = router();
-    if (pages == nullptr || backend_ == nullptr || backend_->qmlExportSession() == nullptr) {
+    if (pages == nullptr || exportSessionObject() == nullptr) {
         return false;
     }
     rememberResumeDifficulty();
     if (tab == QLatin1String("batch")) {
-        backend_->qmlExportSession()->setActiveTab(QStringLiteral("batch"));
+        exportSessionObject()->setActiveTab(QStringLiteral("batch"));
     } else {
-        backend_->qmlExportSession()->setActiveTab(QStringLiteral("export"));
+        exportSessionObject()->setActiveTab(QStringLiteral("export"));
     }
     if (!pages->enterExportPage()) {
         return false;
@@ -130,15 +139,15 @@ bool QmlEditorPageHost::openLatencyPage()
 
 bool QmlEditorPageHost::leaveOverlayPage()
 {
-    if (router() == nullptr || backend_ == nullptr) {
+    if (router() == nullptr) {
         return false;
     }
     if (!overlayActive()) {
         return true;
     }
 
-    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession() != nullptr) {
-        backend_->qmlExportSession()->leave();
+    if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
+        exportSessionObject()->leave();
     }
     activePageId_.clear();
     emit activePageIdChanged();
@@ -168,15 +177,15 @@ void QmlEditorPageHost::openBatchExport()
 
 bool QmlEditorPageHost::openCoverExport(int difficultyId)
 {
-    if (router() == nullptr || backend_ == nullptr) {
+    if (router() == nullptr) {
         return false;
     }
     // A direct export-page → cover-page navigation must release the video
     // session before cover becomes the owner of the Tools-menu difficulty.
     // Going through leaveOverlayPage already does this; sidebar and menu routes
     // intentionally do not, so make the transition explicit here.
-    if (activePageId_ == QLatin1String("export") && backend_->qmlExportSession() != nullptr) {
-        backend_->qmlExportSession()->leave();
+    if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
+        exportSessionObject()->leave();
     }
     rememberResumeDifficulty();
     const int selectedDifficultyId = difficultyId > 0 ? difficultyId : resumeDifficultyId_;

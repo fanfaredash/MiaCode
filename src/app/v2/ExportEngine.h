@@ -84,6 +84,25 @@ public:
     // synchronous and has no worker process to signal.
     virtual void cancelVideoExport() = 0;
 
+    // What the page needs about the document to build its difficulty list and
+    // pick a default. These read the same copy the export snapshot is built
+    // from, which is why they belong here rather than on ChartWorkspace — see
+    // the deferred-sync hazard recorded in
+    // docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md.
+    virtual QList<int> difficultyIds() const = 0;
+    virtual QString difficultyChartText(int difficultyId) const = 0;
+    // Which difficulty this project was last opened on; seeds the badge.
+    virtual int lastOpenedDifficultyId() const = 0;
+
+    // The 无理 overlay options the export task is seeded from.
+    virtual MuriRenderOptions muriRenderOptions() const = 0;
+
+    // Where the live playhead is, for seeding the export range from the
+    // current position.
+    virtual double currentAudioClockSecond() const = 0;
+    // Re-derives the negative-time intro region after an intro edit.
+    virtual void refreshIntroState() = 0;
+
 protected:
     ExportEngine() = default;
     ExportEngine(const ExportEngine&) = default;

@@ -10,12 +10,15 @@
 #include "app/v2/JobProgressService.h"
 #include "app/v2/ExportEngine.h"
 #include "app/v2/PreviewAppearanceState.h"
+#include "app/v2/PreviewSurface.h"
 #include "tools/video_export/VideoExportController.h"
 
 class MainWindow;
 
 // Pure-QML export settings session for the v2 shell. The only export UI there
-// is; it drives audition + worker launch via MainWindow::ExportSection.
+// is; it drives audition + worker launch through miacode::v2::ExportEngine and
+// the live preview through miacode::v2::PreviewSurface. The MainWindow& that
+// remains carries one push signal and nothing else.
 class QmlExportSession final : public QObject
 {
     Q_OBJECT
@@ -116,6 +119,7 @@ public:
                      miacode::v2::JobProgressService& jobProgress,
                      miacode::v2::PreviewAppearanceState& appearance,
                      miacode::v2::ExportEngine*& engineSlot,
+                     miacode::v2::PreviewSurface*& previewSlot,
                      QObject* parent = nullptr);
 
     QObject* uiRequests() { return uiRequests_; }
@@ -316,6 +320,11 @@ private:
     // the window withdrawing the engine during teardown is visible here at
     // once instead of leaving a dangling copy behind.
     miacode::v2::ExportEngine** engineSlot_ = nullptr;
+    miacode::v2::PreviewSurface** previewSlot_ = nullptr;
+    miacode::v2::PreviewSurface* preview() const
+    {
+        return previewSlot_ != nullptr ? *previewSlot_ : nullptr;
+    }
     miacode::v2::ExportEngine* engine() const
     {
         return engineSlot_ != nullptr ? *engineSlot_ : nullptr;

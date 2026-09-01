@@ -61,6 +61,37 @@ void MainWindow::ExportSection::cancelVideoExport()
     cancelVideoExportWorker();
 }
 
+QList<int> MainWindow::ExportSection::difficultyIds() const
+{
+    const QVector<int> ids = owner_.documentDifficultyIds();
+    return QList<int>(ids.cbegin(), ids.cend());
+}
+
+QString MainWindow::ExportSection::difficultyChartText(int difficultyId) const
+{
+    return owner_.documentDifficultyChartText(difficultyId);
+}
+
+int MainWindow::ExportSection::lastOpenedDifficultyId() const
+{
+    return owner_.projectLastOpenedDifficultyId();
+}
+
+MuriRenderOptions MainWindow::ExportSection::muriRenderOptions() const
+{
+    return owner_.muriRenderOptions();
+}
+
+double MainWindow::ExportSection::currentAudioClockSecond() const
+{
+    return owner_.currentPreviewAuthoritativeAudioClockSecond();
+}
+
+void MainWindow::ExportSection::refreshIntroState()
+{
+    owner_.refreshExportIntroState();
+}
+
 int MainWindow::resolveToolsMenuExportDifficultyId() const
 {
     // While the export page is open it owns the difficulty the Tools-menu

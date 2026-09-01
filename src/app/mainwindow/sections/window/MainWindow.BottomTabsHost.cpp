@@ -121,6 +121,7 @@ void MainWindow::setRenderSetting(const QString& key, const QVariant& value)
 }
 
 void MainWindow::refreshSurfaces() { refreshPreviewSurfaces(); }
+void MainWindow::applySfxLevels() { applyPreviewSfxLevels(); }
 
 PreviewAudioSettings MainWindow::audioSettings() const { return currentPreviewAudioSettings(); }
 

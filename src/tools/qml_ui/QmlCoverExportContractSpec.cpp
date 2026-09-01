@@ -187,7 +187,7 @@ int main(int argc, char** argv)
                // The page host reads the export session through MainWindow's
                // public read-only hand-off now, not its private member; the
                // release contract is unchanged.
-               && pageHost.contains(QStringLiteral("backend_->qmlExportSession()->leave()"))
+               && pageHost.contains(QStringLiteral("exportSessionObject()->leave()"))
                && !pageHost.contains(QStringLiteral("onExportCover()")),
            QStringLiteral("cover export routes into the QML page and releases a prior video session"), out, &failed);
     expect(mainWindow.contains(QStringLiteral("emit coverExportRequested"))

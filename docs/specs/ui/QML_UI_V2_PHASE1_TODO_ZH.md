@@ -620,6 +620,14 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          顺带把 `PreviewCanvasFrameRateMode` 从 `MainWindow` 的嵌套枚举移到
          `core/video/PreviewRenderSettings.h`（与更早的 `PreviewSkinVariant` 同一处理）。
 
+     18. **导出页剩余入口清零（方法 40 → 26）**。13 个入口分别归位：皮肤目录/判定线/渲染刷新/
+         SFX 电平归 `PreviewSurface`（新增 `applySfxLevels()`），文档难度查询、上次打开难度、
+         无理渲染选项、当前播放头、片头状态刷新归 `ExportEngine`。
+         导出会话对象本身改由装配对象持一个 `QObject*` 槽（会话是 QML 层类型，v2 层不能命名它，
+         两个读者 `qobject_cast`），`QmlEditorPageHost` 与 `QmlApplicationContext` 都从槽里取。
+         文档查询刻意留在 `ExportEngine` 而不是改读 `ChartWorkspace`——原因就是先前记录的
+         延迟同步陷阱：它们读的必须是导出快照所依据的那一份副本。
+
      12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
          它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
          先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets

@@ -74,9 +74,9 @@ bool verifyQmlFontContract(QTextStream& err)
     ok &= require(
         implementation.contains(QStringLiteral("fontLibraryEntries("))
             && implementation.contains(QStringLiteral("importFontFileIntoLibrary(selectedPath)"))
-            && implementation.contains(QStringLiteral("refreshExportIntroState()"))
+            && implementation.contains(QStringLiteral("refreshIntroState()"))
             && implementation.contains(QStringLiteral("setPreviewHudCustomFontPath(area, path)"))
-            && implementation.contains(QStringLiteral("backend_->refreshPreviewSurfaces()"))
+            && implementation.contains(QStringLiteral("preview()->refreshSurfaces()"))
             && previewWarmup.contains(QStringLiteral("void MainWindow::refreshPreviewSurfaces()"))
             && previewWarmup.contains(QStringLiteral("previewCanvas_->update()")),
         QStringLiteral("the export session uses the shared library and redraws the live preview"),

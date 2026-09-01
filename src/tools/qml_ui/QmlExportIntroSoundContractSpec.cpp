@@ -62,7 +62,7 @@ bool verifySessionContract(QTextStream& err)
             && implementation.contains(
                 QStringLiteral("appearance_->setIntroSoundFileName(normalized)"))
             && implementation.contains(QStringLiteral("setSelectedIntroSoundVolume(normalized)"))
-            && implementation.contains(QStringLiteral("backend_->applyPreviewSfxLevels()"))
+            && implementation.contains(QStringLiteral("preview()->applySfxLevels()"))
             && frameBootstrap.contains(QStringLiteral("PreviewAppearanceState::introSoundChanged"))
             && frameBootstrap.contains(QStringLiteral("applyPreviewSfxLevels(/*reloadAssets=*/true)"))
             && previewSettings.contains(QStringLiteral("previewSfxRuntime_->reloadAssets"))

@@ -1,6 +1,7 @@
 #include "QmlApplicationContext.h"
 
 #include "mainwindow/MainWindow.h"
+#include "export/QmlExportSession.h"
 
 QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
                                              miacode::v2::ApplicationServices& services,
@@ -17,8 +18,11 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , preview_(backend, services.previewSurfaceSlot(), this)
     , timeline_(backend, services.timelineSurfaceSlot(), this)
     , commands_(backend, document_, this)
-    , pages_(backend, services.editorPageRouterSlot(), this)
-    , coverExport_(*backend.qmlExportSession(), services.uiRequests(), this)
+    , pages_(backend, services.editorPageRouterSlot(), services.exportPageSessionSlot(), this)
+    // From the assembly's slot: MainWindow installs the session during its own
+    // construction, which finishes before this context is built.
+    , coverExport_(*qobject_cast<QmlExportSession*>(services.exportPageSession()),
+                   services.uiRequests(), this)
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)

@@ -7,6 +7,7 @@
 #include <QString>
 
 class MainWindow;
+class QmlExportSession;
 
 // Page routing for the v2 editor area. Every full-page surface is QML now, so
 // this only tracks which one is showing; no QWidget is ever adopted.
@@ -23,6 +24,7 @@ public:
     // longer needs friend access to the window.
     explicit QmlEditorPageHost(MainWindow& backend,
                                miacode::v2::EditorPageRouter*& routerSlot,
+                               QObject*& exportSessionSlot,
                                QObject* parent = nullptr);
 
     QString activePageId() const { return activePageId_; }
@@ -57,6 +59,9 @@ private:
     // Bound to the assembly's slot, not to a snapshot: the window withdraws the
     // router before teardown and that has to be visible here at once.
     miacode::v2::EditorPageRouter** routerSlot_ = nullptr;
+    // The export page session, from the assembly rather than the window.
+    QObject** exportSessionSlot_ = nullptr;
+    QmlExportSession* exportSessionObject() const;
     miacode::v2::EditorPageRouter* router() const
     {
         return routerSlot_ != nullptr ? *routerSlot_ : nullptr;

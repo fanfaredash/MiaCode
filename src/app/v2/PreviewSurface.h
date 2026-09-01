@@ -81,6 +81,9 @@ public:
     virtual void setRenderSetting(const QString& key, const QVariant& value) = 0;
     // Pushes whatever changed onto the live surfaces.
     virtual void refreshSurfaces() = 0;
+    // Pushes the current mixer levels into the live SFX runtime. A no-op until
+    // the audio engine is up, which is the guard callers used to repeat.
+    virtual void applySfxLevels() = 0;
 
     // ---- audio mixer ----
     virtual PreviewAudioSettings audioSettings() const = 0;

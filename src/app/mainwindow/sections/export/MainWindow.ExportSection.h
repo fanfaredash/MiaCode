@@ -31,6 +31,12 @@ public:
                            const BatchCallbacks& callbacks,
                            QString* errorMessage) override;
     void cancelVideoExport() override;
+    QList<int> difficultyIds() const override;
+    QString difficultyChartText(int difficultyId) const override;
+    int lastOpenedDifficultyId() const override;
+    MuriRenderOptions muriRenderOptions() const override;
+    double currentAudioClockSecond() const override;
+    void refreshIntroState() override;
 
     void applySharedExportTaskSettings(const VideoExportTask& task);
     // The three dialog entry slots take an explicit difficulty id; the

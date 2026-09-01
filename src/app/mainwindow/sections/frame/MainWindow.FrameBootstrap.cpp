@@ -760,7 +760,9 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
             });
     ui_.qmlExportSession_ = new QmlExportSession(
         *this, applicationServices_.uiRequests(), applicationServices_.jobProgress(),
-        applicationServices_.previewAppearance(), applicationServices_.exportEngineSlot(), this);
+        applicationServices_.previewAppearance(), applicationServices_.exportEngineSlot(),
+        applicationServices_.previewSurfaceSlot(), this);
+    applicationServices_.setExportPageSession(ui_.qmlExportSession_);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
     if (editorFindBar_ != nullptr) {

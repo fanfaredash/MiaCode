@@ -11,7 +11,7 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **40**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **26**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
@@ -42,6 +42,7 @@
 | 2026-09-01 | 时间轴与底栏页签改由 `miacode::v2::TimelineSurface` 接口承接（含分析页的两处） | **88** | 0 |
 | 2026-09-01 | 预览（传输 / 运行时对象 / 皮肤目录 / 渲染设置 / 音频混音）改由 `miacode::v2::PreviewSurface` 接口承接 | **61** | 0 |
 | 2026-09-01 | 偏好设置改由 `miacode::v2::PreferencesStore` 接口承接 | **40** | 0 |
+| 2026-09-01 | 导出页剩余入口分别归入 `ExportEngine` / `PreviewSurface`，导出会话对象改由装配对象持槽 | **26** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -153,25 +154,13 @@ QML 绑定的运行时对象、皮肤/判定线目录、渲染设置、音频混
 工作区还是旧的。此时改读工作区会让导出页列出**旧的**难度列表。要动这一处，得先把那条延迟同步
 处理掉，或者确认导出页不会在该窗口期内重建列表。
 
-**`src/app/qml_ui/export/QmlExportSession.cpp`** — 方法 13，私有成员 0
+**`src/app/qml_ui/export/QmlExportSession.cpp`** — 方法 0，私有成员 0
 
-- `applyPreviewOutlineVariant`
-- `applyPreviewSfxLevels`
-- `availablePreviewSkinDirectoryNames`
-- `currentPreviewAuthoritativeAudioClockSecond`
-- `documentDifficultyChartText`
-- `documentDifficultyIds`
-- `muriRenderOptions`
-- `previewSkinDisplayName`
-- `projectLastOpenedDifficultyId`
-- `refreshExportIntroState`
-- `refreshPreviewSurfaces`
-- `resolvePreviewCustomOutlineDir`
-- `resolvePreviewSkinRootDir`
+- *（已清空：本文件不再触达 `MainWindow`）*
 
-**`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 1，私有成员 0
+**`src/app/qml_ui/QmlEditorPageHost.cpp`** — 方法 0，私有成员 0
 
-- `qmlExportSession`
+- *（已清空：本文件不再触达 `MainWindow`）*
 
 ### 文档（→ `ChartWorkspace` / `DocumentService`）
 
@@ -207,9 +196,9 @@ QML 绑定的运行时对象、皮肤/判定线目录、渲染设置、音频混
 
 - *（已清空：本文件不再触达 `MainWindow`）*
 
-**`src/app/qml_ui/QmlApplicationContext.cpp`** — 方法 1，私有成员 0
+**`src/app/qml_ui/QmlApplicationContext.cpp`** — 方法 0，私有成员 0
 
-- `qmlExportSession`
+- *（已清空：本文件不再触达 `MainWindow`）*
 
 ### 延迟检测（→ `LatencyService`）
 

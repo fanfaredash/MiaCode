@@ -775,6 +775,7 @@ public:
     QVariantMap renderSettings() const override;
     void setRenderSetting(const QString& key, const QVariant& value) override;
     void refreshSurfaces() override;
+    void applySfxLevels() override;
     PreviewAudioSettings audioSettings() const override;
     void applyAudioSettings(const PreviewAudioSettings& settings) override;
     void saveAudioSettingsAsSoftwareDefault() override;

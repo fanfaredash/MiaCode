@@ -99,6 +99,23 @@ public:
 
     void cancelVideoExport() override { ++cancelCount; }
 
+    QList<int> difficultyIds() const override { return difficulties; }
+
+    QString difficultyChartText(int difficultyId) const override
+    {
+        return difficulties.contains(difficultyId) ? QStringLiteral("1,2,3,") : QString();
+    }
+
+    int lastOpenedDifficultyId() const override { return lastOpened; }
+    MuriRenderOptions muriRenderOptions() const override { return {}; }
+    double currentAudioClockSecond() const override { return audioClockSecond; }
+    void refreshIntroState() override { ++introRefreshCount; }
+
+    QList<int> difficulties{3, 4};
+    int lastOpened = 4;
+    int introRefreshCount = 0;
+    double audioClockSecond = 7.5;
+
     int seededDifficultyId = 0;
     int auditioningDifficultyId = 0;
     int launchedDifficultyId = 0;
@@ -119,6 +136,17 @@ bool verifyImplementableWithoutAWindow(QTextStream& err)
     contract.applySharedTaskSettings(seed);
     ok &= require(engine.appliedDurationSeconds == seed.contentDurationSeconds,
                   QStringLiteral("live settings reach the implementation"), err);
+
+    ok &= require(contract.difficultyIds() == QList<int>({3, 4})
+                      && !contract.difficultyChartText(3).isEmpty()
+                      && contract.difficultyChartText(9).isEmpty()
+                      && contract.lastOpenedDifficultyId() == 4,
+                  QStringLiteral("the page's document queries reach the implementation"), err);
+    ok &= require(contract.currentAudioClockSecond() > 0.0,
+                  QStringLiteral("the live playhead reaches the implementation"), err);
+    contract.refreshIntroState();
+    ok &= require(engine.introRefreshCount == 1,
+                  QStringLiteral("the intro-state nudge reaches the implementation"), err);
 
     ok &= require(contract.startAudition(4, seed) && engine.auditioningDifficultyId == 4,
                   QStringLiteral("audition starts on the requested difficulty"), err);

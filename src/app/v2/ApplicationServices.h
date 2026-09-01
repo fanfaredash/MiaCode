@@ -118,6 +118,14 @@ public:
     PreferencesStore* preferencesStore() const { return preferencesStore_; }
     void setPreferencesStore(PreferencesStore* store) { preferencesStore_ = store; }
 
+    // The single export page session. Typed QObject* because the session is a
+    // QML-layer type this layer must not name; its two readers qobject_cast it.
+    // Like the engine slots it is installed by whoever constructs it and
+    // withdrawn before teardown.
+    QObject*& exportPageSessionSlot() { return exportPageSession_; }
+    QObject* exportPageSession() const { return exportPageSession_; }
+    void setExportPageSession(QObject* session) { exportPageSession_ = session; }
+
     SimaiNativeValidationLocale validationLocale() const { return validationLocale_; }
 
 private:
@@ -139,6 +147,7 @@ private:
     TimelineSurface* timelineSurface_ = nullptr;
     PreviewSurface* previewSurface_ = nullptr;
     PreferencesStore* preferencesStore_ = nullptr;
+    QObject* exportPageSession_ = nullptr;
 };
 
 }  // namespace miacode::v2
