@@ -9,6 +9,7 @@
 #include "runtime/playback/PlaybackHost.h"
 #include "runtime/playback/PlaybackControlAdapter.h"
 #include "runtime/timeline/TimelineHost.h"
+#include "runtime/preview/PreviewHost.h"
 #include "app/v2/SessionGeneration.h"
 #include "runtime/validation/ValidationHost.h"
 #include "runtime/shell/ShellHost.h"
@@ -188,6 +189,8 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     playbackControl_ = std::make_unique<miacode::runtime::PlaybackControlAdapter>(
         *playback_, sessionGeneration);
     timelineHost_ = std::make_unique<miacode::runtime::TimelineHost>(*playback_, sessionGeneration);
+    previewHost_ = std::make_unique<miacode::runtime::PreviewHost>(
+        *playback_, *playbackControl_, *playbackControl_);
     const quint64 initialWorkspaceRevision = applicationServices_.workspace().snapshot().revision;
     playbackControl_->setDocumentRevision(initialWorkspaceRevision);
     timelineHost_->setDocumentRevision(initialWorkspaceRevision);
@@ -204,7 +207,7 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     applicationServices_.setMediaToolsEngine(mediaJobs_.get());
     applicationServices_.setLatencyEngine(latencySandboxController_.get());
     applicationServices_.setTimelineSurface(timelineHost_.get());
-    applicationServices_.setPreviewSurface(playback_.get());
+    applicationServices_.setPreviewSurface(previewHost_.get());
     applicationServices_.setPreferencesStore(settings_.get());
     applicationServices_.setDocumentBridge(documents_.get());
     logStartupStage("sections_ready");

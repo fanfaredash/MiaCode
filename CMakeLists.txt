@@ -133,6 +133,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/PreviewSurface.h
     src/app/v2/PlaybackControl.h
     src/app/v2/SessionGeneration.h
+    src/app/v2/AudioClockSource.h
+    src/app/v2/PreviewPlaybackPort.h
     src/app/v2/ShellNotifications.cpp
     src/app/v2/ShellNotifications.h
     src/app/v2/TimelineSurface.h
@@ -228,6 +230,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/timeline/TimelineCommandGate.h
     src/app/runtime/timeline/TimelineHost.cpp
     src/app/runtime/timeline/TimelineHost.h
+    src/app/runtime/preview/PreviewHost.cpp
+    src/app/runtime/preview/PreviewHost.h
     src/app/runtime/validation/ValidationFlow.cpp
     src/app/runtime/validation/ValidationListUi.cpp
     src/app/runtime/validation/ValidationRender.cpp
@@ -1843,6 +1847,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         SOURCES
             src/tools/v2/PlaybackControlSpec.cpp
             src/app/v2/PlaybackControl.h
+            src/app/v2/AudioClockSource.h
+            src/app/v2/PreviewPlaybackPort.h
             src/app/v2/PreviewSurface.h
             src/app/runtime/playback/PlaybackControlAdapter.cpp
             src/app/runtime/playback/PlaybackControlAdapter.h
@@ -1863,6 +1869,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/SessionGeneration.h
         LIBS Qt6::Core
         INCLUDES src
+    )
+
+    # Stage 4.7: PreviewHost keeps rendering/settings projection separate from
+    # the playback authority and consumes transport through typed ports.
+    miacode_add_dev_tool(preview_host_spec TEST
+        SOURCES
+            src/tools/v2/PreviewHostSpec.cpp
+            src/app/runtime/preview/PreviewHost.cpp
+            src/app/runtime/preview/PreviewHost.h
+            src/app/v2/AudioClockSource.h
+            src/app/v2/PreviewPlaybackPort.h
+            src/app/v2/PlaybackControl.h
+            src/app/v2/PreviewSurface.h
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/audio src/common src/core/video
     )
 
     miacode_add_dev_tool(qml_analysis_model_spec TEST

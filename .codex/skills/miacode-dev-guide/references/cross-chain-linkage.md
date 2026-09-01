@@ -13,6 +13,8 @@ The stage 4.5 transport seam is now the shared playback authority for the previe
 - Until stages 4.6–4.8 complete, `PlaybackHost` remains the legacy composite implementation. New Timeline/Preview code should depend on `PlaybackControl`/`PlaybackStateFeed`, not on `PlaybackHost` internals.
 - Stage 4.6 installs `TimelineHost` in `ApplicationServices::timelineSurfaceSlot()`. `QmlTimelineModel` captures a `TimelineCommandStamp` before dispatch; `TimelineHost` validates the original generation/revision/sequence and never re-stamps a late command.
 - `TimelineHost` is a projection/command seam over the current composite `PlaybackHost`; its read methods are pass-throughs and its write methods carry no document or playback ownership. Do not move QSG, viewport, follow state, parser, or clock state into it until the later extraction stages.
+- Stage 4.7 installs `PreviewHost` in `ApplicationServices::previewSurfaceSlot()`. `QmlPreviewModel` reaches transport through `PreviewPlaybackPort`, while PreviewHost reads canonical position through `AudioClockSource`; both are sourced from the same `PlaybackControlAdapter` instance.
+- `PreviewHost` may temporarily delegate non-transport rendering/settings/media calls to the composite `PlaybackHost`, but its transport and position methods must never fall back to that legacy surface.
 
 When changing this contract, review `src/app/v2/PlaybackControl.h`, `src/app/runtime/playback/PlaybackControlAdapter.*`, `src/app/v2/ApplicationServices.*`, `src/app/runtime/Session.*`, and the relevant Preview/Timeline host seam together.
 

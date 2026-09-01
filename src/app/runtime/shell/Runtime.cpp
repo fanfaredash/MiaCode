@@ -10,6 +10,7 @@
 #include "runtime/playback/PlaybackHost.h"
 #include "runtime/playback/PlaybackControlAdapter.h"
 #include "runtime/timeline/TimelineHost.h"
+#include "runtime/preview/PreviewHost.h"
 #include "runtime/validation/ValidationHost.h"
 #include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
@@ -322,6 +323,9 @@ Session::~Session()
     applicationServices_.setExportEngine(nullptr);
     applicationServices_.setEditorPageRouter(nullptr);
     applicationServices_.setLatencyEngine(nullptr);
+    if (previewHost_ != nullptr) {
+        previewHost_->invalidateSession();
+    }
     if (timelineHost_ != nullptr) {
         timelineHost_->invalidateSession();
     }

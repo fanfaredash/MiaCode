@@ -1,6 +1,8 @@
 #pragma once
 
 #include "app/v2/PlaybackControl.h"
+#include "app/v2/AudioClockSource.h"
+#include "app/v2/PreviewPlaybackPort.h"
 #include "app/v2/PreviewSurface.h"
 
 namespace miacode::runtime {
@@ -9,7 +11,9 @@ namespace miacode::runtime {
 // implementation still lives in the composite PlaybackHost. It owns no
 // preview resources and deliberately forwards every command to the legacy
 // surface, so 4.5 cannot accidentally create a second transport engine.
-class PlaybackControlAdapter final : public miacode::v2::PlaybackControl
+class PlaybackControlAdapter final : public miacode::v2::PlaybackControl,
+                                     public miacode::v2::PreviewPlaybackPort,
+                                     public miacode::v2::AudioClockSource
 {
 public:
     explicit PlaybackControlAdapter(miacode::v2::PreviewSurface& legacySurface,
@@ -19,6 +23,7 @@ public:
     void invalidateSession();
 
     miacode::v2::PlaybackSnapshot playbackSnapshot() const override;
+    double currentAudioClockSecond() const override;
     bool acceptsPlaybackCallback(
         const miacode::v2::PlaybackCallbackStamp& stamp) const override;
 

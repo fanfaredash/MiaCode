@@ -26,6 +26,7 @@
 |---|---|---|
 | `PlaybackHost`（当前复合宿主） | `PreviewSurface` + `TimelineSurface` | `src/app/runtime/playback/` |
 | `TimelineHost`（4.6 过渡宿主） | `TimelineSurface` | `src/app/runtime/timeline/` |
+| `PreviewHost`（4.7 过渡宿主） | `PreviewSurface` | `src/app/runtime/preview/` |
 | `VideoExportHost` | `ExportEngine` | `src/app/runtime/export/` |
 
 4.5 已建立独立的播放契约：`PlaybackControl` / `PlaybackStateFeed` / `PlaybackSnapshot` 位于
@@ -36,6 +37,10 @@
 4.6 已将 `ApplicationServices::timelineSurface` 切换为 `TimelineHost`。QML ingress 先捕获
 `TimelineCommandStamp`，host 在转发前校验原始 generation/revision/sequence；当前被包裹的
 `PlaybackHost` 仍保留 Timeline 实现，后续阶段再搬出所有权。
+
+4.7 已将 `ApplicationServices::previewSurface` 切换为 `PreviewHost`。PreviewHost 的 transport
+命令只经过 `PreviewPlaybackPort`，canonical position 只读 `AudioClockSource`；当前被包裹的
+`PlaybackHost` 仅暂时提供非 transport Preview 投影。
 | `LatencySandboxController` | `LatencyEngine` | `src/tools/latency/` |
 | `MediaJobsHost` | `MediaToolsEngine` | `src/app/runtime/media/` |
 | `SettingsHost` | `PreferencesStore` | `src/app/runtime/settings/` |
@@ -94,6 +99,8 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
   stale callback/session invalidation 边界与 Release 契约测试
 - [x] 阶段 4.6：建立 `TimelineHost` / `TimelineCommandGate`，将 QML Timeline ingress 改为带
   generation/revision/sequence 的命令，并完成失效、乱序与 Session 装配测试
+- [x] 阶段 4.7：建立 `PreviewHost` / `PreviewPlaybackPort` / `AudioClockSource`，将 Preview
+  transport 与 canonical clock 从 legacy surface 隔离，并完成单一 authority / inert 生命周期测试
 - [ ] `PlaybackHost` 仍是 Preview + Timeline 复合宿主；按上面的计划拆分为
       `PlaybackCoordinator`、`PreviewHost`、`TimelineHost`
 - [ ] `HostUi` / `HostState` 仍由 `Session` 持有并借给宿主；后续按宿主切开这份存储

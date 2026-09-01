@@ -41,6 +41,11 @@ miacode::v2::PlaybackSnapshot PlaybackControlAdapter::playbackSnapshot() const
     };
 }
 
+double PlaybackControlAdapter::currentAudioClockSecond() const
+{
+    return playbackSnapshot().canonicalChartTime;
+}
+
 bool PlaybackControlAdapter::acceptsPlaybackCallback(
     const miacode::v2::PlaybackCallbackStamp& stamp) const
 {

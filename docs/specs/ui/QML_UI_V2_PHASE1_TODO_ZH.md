@@ -759,10 +759,12 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          revision、代次与写入顺序。当前实现先以 `TimelineHost` 兼容转发到复合 `PlaybackHost`，由
          `QmlTimelineModel` 在 ingress 捕获 `TimelineCommandStamp`，host 只接受原始 stamp；
          `timeline_host_spec` 覆盖乱序、revision/session 失效、投影转发与撤槽。
-      3. **4.7 建立 `PreviewHost`**：新增 `src/app/runtime/preview/PreviewHost.{h,cpp}`，接管
+      3. **4.7 建立 `PreviewHost`（2026-09-02，已完成）**：新增 `src/app/runtime/preview/PreviewHost.{h,cpp}`，接管
          `PreviewRuntime`、`StageMediaHost` 内部舞台媒体路由与预热、渲染设置、音频混音 / SFX 和
          preview 专用 executor。它只通过窄的 `AudioClockSource` / `PreviewPlaybackPort` 与协调器
-         对接，不再拥有独立的 canonical playhead 或 Timeline 状态。
+         对接，不再拥有独立的 canonical playhead 或 Timeline 状态。当前实现以兼容层转发非 transport
+         PreviewSurface 能力；transport 命令与 canonical position 已分别改走 port / clock，
+         `preview_host_spec` 与整套相关 Release 构建通过。
       4. **4.8 收缩并最终重命名 `PlaybackHost`**：仅保留 transport state machine、canonical
          playhead、clock / frame pacing、seek transaction、播放生命周期与协调命令；从中移出
          QML / QSG、viewport / layout、StageMedia、mixer 和 analysis。协调器不允许反向包含 QML、

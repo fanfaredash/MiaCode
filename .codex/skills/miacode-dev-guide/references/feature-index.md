@@ -125,6 +125,11 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 6. Preview Video, Media, And Render State
 
+- Preview projection host (stage 4.7):
+  - Files: `src/app/runtime/preview/PreviewHost.h`, `src/app/runtime/preview/PreviewHost.cpp`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/qml_ui/QmlPreviewModel.cpp`
+  - Class: `miacode::runtime::PreviewHost`
+  - Owns: the PreviewSurface projection slot. Transport commands go only through `PreviewPlaybackPort`, canonical position comes only from `AudioClockSource`, and render/settings/media methods temporarily forward to the composite implementation. It must not own a second clock, playhead, transport, Timeline state, or media/mixer engine.
+
 - Runtime preview host and Quick bridge:
   - Files: `src/preview/runtime/PreviewRuntime.h`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/runtime/PreviewSceneAssetLoader.h`, `src/preview/runtime/PreviewSceneAssetLoader.cpp`, `src/preview/runtime/PreviewSceneAssetRepository.h`, `src/preview/runtime/PreviewSceneAssetRepository.cpp`, `src/preview/runtime/PreviewQuickRuntimeSurface.h`, `src/preview/runtime/PreviewQuickRuntimeSurface.cpp`, `src/preview/runtime/PreviewQuickExportSession.h`, `src/preview/runtime/PreviewQuickExportSession.cpp`, `src/preview/runtime/PreviewQuickD3D11ExportSession.h`, `src/preview/runtime/PreviewQuickD3D11ExportSession.cpp`, `src/preview/runtime/qml/PreviewRuntimeView.qml`
   - Classes: `PreviewRuntime`, `PreviewSceneAssetLoader`, `PreviewSceneAssetRepository`, `PreviewQuickRuntimeSurface`, `PreviewQuickExportSession`, `PreviewQuickD3D11ExportSession`
