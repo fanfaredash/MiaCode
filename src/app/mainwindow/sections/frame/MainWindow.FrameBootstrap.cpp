@@ -162,6 +162,7 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
     applicationServices_.setTimelineSurface(this);
     applicationServices_.setPreviewSurface(this);
     applicationServices_.setPreferencesStore(this);
+    applicationServices_.setDocumentBridge(this);
     preferencesSection_ = std::make_unique<PreferencesSection>(*this, ui_, state_);
     previewSection_ = std::make_unique<PreviewSection>(*this, ui_, state_);
     validationSection_ = std::make_unique<ValidationSection>(*this, ui_, state_);

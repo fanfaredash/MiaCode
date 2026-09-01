@@ -41,6 +41,7 @@
 #include "app/v2/EditorPageRouter.h"
 #include "app/v2/LatencyEngine.h"
 #include "app/v2/MediaToolsEngine.h"
+#include "app/v2/DocumentBridge.h"
 #include "app/v2/PreferencesStore.h"
 #include "app/v2/PreviewSurface.h"
 #include "app/v2/TimelineSurface.h"
@@ -135,7 +136,8 @@ class MainWindow : public QMainWindow,
                    public miacode::v2::LatencyEngine,
                    public miacode::v2::TimelineSurface,
                    public miacode::v2::PreviewSurface,
-                   public miacode::v2::PreferencesStore
+                   public miacode::v2::PreferencesStore,
+                   public miacode::v2::DocumentBridge
 {
     Q_OBJECT
 
@@ -290,8 +292,6 @@ public:
     void handleEditorPointerInteraction(int difficultyId);
     miacode::v2::EditorSyncController& editorSyncController();
     const miacode::v2::EditorSyncController& editorSyncController() const;
-    bool requestEditorNavigation(int line, int column, int endLine, int endColumn,
-                                 bool selectToken, bool focusEditor, bool centerView);
     bool editorAuthoringContextActive() const;
     void refreshEditorAuthoringContext();
     void setTouchPadAuthoringCtrlHold(bool active);
@@ -398,9 +398,8 @@ public:
     // It cannot be a return value: the unsaved-changes prompt is a QML dialog
     // now, and the only way to get an answer out of one synchronously would be
     // a nested event loop inside a window's close handler.
-    void requestShellClose(std::function<void(bool)> onDecided);
+    // requestShellClose is declared once, below, as the EditorPageRouter override.
     // The same question about the document alone, for flows that replace it.
-    void requestLeaveDocument(std::function<void(bool)> onDecided);
     // 打开最近. The list has always been kept (and persisted) here; until now
     // its only reader was the hidden MainWindow's own File menu, so under v2
     // nothing could see it. Entries that no longer exist on disk are dropped
@@ -409,14 +408,7 @@ public:
     // which for a chart is the song — v1's rule, and the reason its menu was
     // readable: a full path is both too wide for a menu and mostly the same
     // prefix repeated. The path rides along for the tooltip.
-    QVariantList recentDocumentEntries();
-    // Autosave snapshots for the open chart, newest first, as { path, label }.
-    // Same shape and the same reason.
-    QVariantList backupDocumentEntries();
-    // Restore one of them. Confirms through the shell before overwriting.
-    void restoreBackupDocument(const QString& path);
-    // Remember a chart the shell just created or opened.
-    void noteRecentDocument(const QString& path);
+    // These four are DocumentBridge overrides, declared once below.
     void toggleShellPreviewPlayback();
     void stopShellPreview();
     void seekShellPreview(double second);
@@ -707,6 +699,8 @@ public:
     bool enterLatencyPage() override;
     bool enterExportPage() override;
     void packChartAsZip() override;
+    void openPreferences() override;
+    void requestShellClose(std::function<void(bool)> onDecided) override;
 
     // ---- miacode::v2::MediaToolsEngine ----
     void convertTrackTo44100Hz() override;
@@ -803,6 +797,29 @@ public:
     void setVideoDecodePrefersSoftware(bool preferSoftware, bool persist) override;
     bool workspacePanelsSwapped() const override;
     void setWorkspacePanelsSwapped(bool swapped, bool persist) override;
+
+    // ---- miacode::v2::DocumentBridge ----
+    QString sourceText() const override;
+    QString filePath() const override;
+    // activeDifficultyId() is declared once, above, as the EditorPageRouter
+    // override; one implementation satisfies both interfaces.
+    bool applyCommittedDocument(const QString& sourceText, const QString& filePath,
+                                int activeDifficultyId, bool dirty, quint64 revision,
+                                CommitKind kind, bool usedSystemEncoding) override;
+    QVariantList recentDocumentEntries() override;
+    void noteRecentDocument(const QString& path) override;
+    QVariantList backupDocumentEntries() override;
+    void restoreBackupDocument(const QString& path) override;
+    miacode::chart_transform::ChartNormalizationOptions normalizationOptions() const override;
+    void setNormalizationOptions(
+        const miacode::chart_transform::ChartNormalizationOptions& options) override;
+    bool requestEditorNavigation(int line, int column, int endLine, int endColumn,
+                                 bool selectToken, bool focusEditor, bool centerView) override;
+    void setDocumentSaveHandler(std::function<bool(const QString&)> handler) override;
+    void setChartTextHandler(std::function<bool(const QString&)> handler) override;
+    void setLeaveDocumentHandler(
+        std::function<void(std::function<void(bool)>)> handler) override;
+    void requestLeaveDocument(std::function<void(bool)> onDecided) override;
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push

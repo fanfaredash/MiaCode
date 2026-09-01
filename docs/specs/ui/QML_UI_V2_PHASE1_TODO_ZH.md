@@ -628,6 +628,16 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          文档查询刻意留在 `ExportEngine` 而不是改读 `ChartWorkspace`——原因就是先前记录的
          延迟同步陷阱：它们读的必须是导出快照所依据的那一份副本。
 
+     19. **文档域与最后两个零散入口清零（方法 26 → 9）**。
+         14 个文档入口改由 `miacode::v2::DocumentBridge` 承接：窗口那份副本的读取与单向推送、
+         最近文件与自动备份两个列表、规范化选项、编辑器导航，以及三个**反向回调钩子**——
+         widget 侧流程（原生打开、菜单动作、崩溃恢复）需要 QML 层给一个**结果**，所以是
+         handler 而不是信号。
+         `onPreferences` 与 `requestShellClose` 并入 `EditorPageRouter`：它们和页面切换问的是
+         同一个「未保存改动怎么办」，只是作用域不同。`QmlShellLifecycle` 因此完全不认识 `MainWindow`。
+         **至此每个 `Qml*Model` 都不再调用 `MainWindow` 的任何方法**；剩下的 9 个全部在
+         `QmlUiBootstrap`，也就是第 3 项本身。
+
      12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
          它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
          先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets

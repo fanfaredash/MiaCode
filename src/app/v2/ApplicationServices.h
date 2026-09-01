@@ -22,6 +22,7 @@ class LatencyEngine;
 class TimelineSurface;
 class PreviewSurface;
 class PreferencesStore;
+class DocumentBridge;
 
 // The parser validation locale matching the session UI language.
 //
@@ -122,6 +123,10 @@ public:
     // QML-layer type this layer must not name; its two readers qobject_cast it.
     // Like the engine slots it is installed by whoever constructs it and
     // withdrawn before teardown.
+    DocumentBridge*& documentBridgeSlot() { return documentBridge_; }
+    DocumentBridge* documentBridge() const { return documentBridge_; }
+    void setDocumentBridge(DocumentBridge* bridge) { documentBridge_ = bridge; }
+
     QObject*& exportPageSessionSlot() { return exportPageSession_; }
     QObject* exportPageSession() const { return exportPageSession_; }
     void setExportPageSession(QObject* session) { exportPageSession_ = session; }
@@ -147,6 +152,7 @@ private:
     TimelineSurface* timelineSurface_ = nullptr;
     PreviewSurface* previewSurface_ = nullptr;
     PreferencesStore* preferencesStore_ = nullptr;
+    DocumentBridge* documentBridge_ = nullptr;
     QObject* exportPageSession_ = nullptr;
 };
 

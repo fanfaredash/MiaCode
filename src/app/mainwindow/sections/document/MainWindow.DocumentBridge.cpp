@@ -258,6 +258,47 @@ const MuriRenderOptions& MainWindow::muriRenderOptions() const
     return muriRenderOptions_;
 }
 
+// ---- miacode::v2::DocumentBridge ----
+// Thin forwarders onto the document* names the widget side uses.
+
+QString MainWindow::sourceText() const { return documentSourceText(); }
+QString MainWindow::filePath() const { return documentFilePath(); }
+
+bool MainWindow::applyCommittedDocument(const QString& sourceText, const QString& filePath,
+                                        int activeDifficultyId, bool dirty, quint64 revision,
+                                        CommitKind kind, bool usedSystemEncoding)
+{
+    return applyCommittedQmlDocument(sourceText, filePath, activeDifficultyId, dirty, revision,
+                                     static_cast<QmlDocumentCommitKind>(kind),
+                                     usedSystemEncoding);
+}
+
+miacode::chart_transform::ChartNormalizationOptions MainWindow::normalizationOptions() const
+{
+    return chartNormalizeOptions();
+}
+
+void MainWindow::setNormalizationOptions(
+    const miacode::chart_transform::ChartNormalizationOptions& options)
+{
+    setChartNormalizeOptions(options);
+}
+
+void MainWindow::setDocumentSaveHandler(std::function<bool(const QString&)> handler)
+{
+    setQmlDocumentSaveHandler(std::move(handler));
+}
+
+void MainWindow::setChartTextHandler(std::function<bool(const QString&)> handler)
+{
+    setQmlChartTextHandler(std::move(handler));
+}
+
+void MainWindow::setLeaveDocumentHandler(std::function<void(std::function<void(bool)>)> handler)
+{
+    setQmlLeaveDocumentHandler(std::move(handler));
+}
+
 QString MainWindow::documentSourceText() const
 {
     return document_.toText();

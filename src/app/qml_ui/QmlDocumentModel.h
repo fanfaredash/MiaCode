@@ -11,6 +11,7 @@
 #include "app/v2/AnalysisService.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
+#include "app/v2/DocumentBridge.h"
 #include "app/v2/UiRequestService.h"
 
 class MainWindow;
@@ -69,6 +70,7 @@ public:
         miacode::v2::ChartWorkspaceFileService& fileService,
         miacode::v2::AnalysisService& analysisService,
         miacode::v2::UiRequestService& uiRequests,
+        miacode::v2::DocumentBridge*& bridgeSlot,
         QObject* parent = nullptr);
     ~QmlDocumentModel() override;
 
@@ -258,6 +260,12 @@ private:
     void clearMetadataSourceRejection();
     QVariantList sourceIssuesToVariantList() const;
     MainWindow* backend_ = nullptr;
+    // Bound to the assembly's slot, not a snapshot.
+    miacode::v2::DocumentBridge** bridgeSlot_ = nullptr;
+    miacode::v2::DocumentBridge* bridge() const
+    {
+        return bridgeSlot_ != nullptr ? *bridgeSlot_ : nullptr;
+    }
     miacode::v2::ChartWorkspace* workspace_ = nullptr;
     miacode::v2::ChartWorkspaceFileService* fileService_ = nullptr;
     miacode::v2::AnalysisService* analysisService_ = nullptr;

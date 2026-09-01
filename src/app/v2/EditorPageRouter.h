@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 namespace miacode::v2 {
 
 // Switching the editor area between its full-page surfaces.
@@ -45,6 +47,15 @@ public:
     // 打包为 ZIP. Routed here rather than through a command bus because it is
     // reached from the page host's own menu entry.
     virtual void packChartAsZip() = 0;
+
+    // 偏好设置. The page host closes any overlay page first, so the entry point
+    // belongs with the other page-scope actions.
+    virtual void openPreferences() = 0;
+
+    // "May the window close?" — the same unsaved-changes question the page
+    // switches ask, at window scope. The continuation runs once; declining and
+    // dismissing are the same answer.
+    virtual void requestShellClose(std::function<void(bool)> onDecided) = 0;
 
 protected:
     EditorPageRouter() = default;

@@ -20,6 +20,8 @@
 #include <QStringList>
 #include <QTextStream>
 
+#include <functional>
+
 #ifndef MIACODE_SOURCE_ROOT
 #error "MIACODE_SOURCE_ROOT must be defined (repo root absolute path)"
 #endif
@@ -66,10 +68,21 @@ public:
     bool enterExportPage() override { return enterOverlay(QStringLiteral("export")); }
 
     void packChartAsZip() override { ++packCount; }
+    void openPreferences() override { ++preferencesCount; }
+
+    void requestShellClose(std::function<void(bool)> onDecided) override
+    {
+        ++closeRequestCount;
+        if (onDecided) {
+            onDecided(!refuseSwitches);
+        }
+    }
 
     bool refuseSwitches = false;
     int activeDifficulty = 0;
     int packCount = 0;
+    int preferencesCount = 0;
+    int closeRequestCount = 0;
     QString page;
 
 private:
@@ -103,6 +116,21 @@ bool verifyImplementableWithoutAWindow(QTextStream& err)
     contract.packChartAsZip();
     ok &= require(router.packCount == 1,
                   QStringLiteral("packing a zip reaches the implementation"), err);
+
+    contract.openPreferences();
+    ok &= require(router.preferencesCount == 1,
+                  QStringLiteral("偏好设置 reaches the implementation"), err);
+
+    // Declining and dismissing are the same answer, so the continuation always
+    // runs with an explicit verdict rather than being dropped.
+    bool closeAnswer = false;
+    int closeAnswers = 0;
+    contract.requestShellClose([&](bool confirmed) {
+        closeAnswer = confirmed;
+        ++closeAnswers;
+    });
+    ok &= require(router.closeRequestCount == 1 && closeAnswers == 1 && closeAnswer,
+                  QStringLiteral("the close question answers exactly once"), err);
     return ok;
 }
 

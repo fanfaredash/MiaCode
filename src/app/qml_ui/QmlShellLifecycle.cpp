@@ -16,9 +16,10 @@ void appendLifecycleLog(const QString& action, const QString& payload = QString(
 }
 }  // namespace
 
-QmlShellLifecycle::QmlShellLifecycle(MainWindow& backend, QObject* parent)
+QmlShellLifecycle::QmlShellLifecycle(miacode::v2::EditorPageRouter*& routerSlot,
+                                     QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , routerSlot_(&routerSlot)
 {
 }
 
@@ -30,13 +31,13 @@ void QmlShellLifecycle::requestClose()
         appendLifecycleLog(QStringLiteral("confirm_close"), QStringLiteral("result=already_asking"));
         return;
     }
-    if (backend_ == nullptr) {
+    if (router() == nullptr) {
         appendLifecycleLog(QStringLiteral("confirm_close"), QStringLiteral("result=no_backend"));
         emit closeDecided(true);
         return;
     }
     closeRequestInFlight_ = true;
-    backend_->requestShellClose([this](bool confirmed) {
+    router()->requestShellClose([this](bool confirmed) {
         closeRequestInFlight_ = false;
         appendLifecycleLog(QStringLiteral("confirm_close"),
                            QStringLiteral("result=%1").arg(confirmed ? "accepted" : "cancelled"));

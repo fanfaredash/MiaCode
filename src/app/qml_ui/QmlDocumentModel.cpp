@@ -44,25 +44,27 @@ QmlDocumentModel::QmlDocumentModel(
     MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
     miacode::v2::ChartWorkspaceFileService& fileService,
     miacode::v2::AnalysisService& analysisService,
-    miacode::v2::UiRequestService& uiRequests, QObject* parent)
+    miacode::v2::UiRequestService& uiRequests,
+    miacode::v2::DocumentBridge*& bridgeSlot, QObject* parent)
     : QObject(parent)
     , backend_(&backend)
     , workspace_(&workspace)
     , fileService_(&fileService)
     , analysisService_(&analysisService)
     , uiRequests_(&uiRequests)
+    , bridgeSlot_(&bridgeSlot)
 {
     if (!workspace_->snapshot().hasDocument) {
         workspace_->openSource(
-            backend_->documentSourceText(), backend_->documentFilePath(),
-            backend_->documentActiveDifficultyId());
+            bridge()->sourceText(), bridge()->filePath(),
+            bridge()->activeDifficultyId());
     }
-    backend_->setQmlDocumentSaveHandler([this](const QString& path) {
+    bridge()->setDocumentSaveHandler([this](const QString& path) {
         return saveToPath(path);
     });
-    backend_->setQmlLeaveDocumentHandler(
+    bridge()->setLeaveDocumentHandler(
         [this](std::function<void(bool)> onDecided) { requestLeaveDocument(std::move(onDecided)); });
-    backend_->setQmlChartTextHandler([this](const QString& text) {
+    bridge()->setChartTextHandler([this](const QString& text) {
         if (workspace_ == nullptr) return false;
         setChartText(text);
         return chartText() == text;
@@ -97,7 +99,7 @@ QmlDocumentModel::QmlDocumentModel(
                 miacode::debug_log::Channel::Runtime,
                 QStringLiteral("editor/document_replaced"),
                 QStringLiteral("path=%1 difficulty=%2 revision=%3 chart_chars=%4 difficulties=%5")
-                    .arg(backend_ != nullptr ? backend_->documentFilePath() : QString())
+                    .arg(bridge() != nullptr ? bridge()->filePath() : QString())
                     .arg(currentDifficultyId())
                     .arg(documentRevision_)
                     .arg(chartText().size())
@@ -109,9 +111,9 @@ QmlDocumentModel::QmlDocumentModel(
 
 QmlDocumentModel::~QmlDocumentModel()
 {
-    if (backend_ != nullptr) {
-        backend_->setQmlDocumentSaveHandler({});
-        backend_->setQmlChartTextHandler({});
+    if (bridge() != nullptr) {
+        bridge()->setDocumentSaveHandler({});
+        bridge()->setChartTextHandler({});
     }
 }
 
@@ -388,18 +390,18 @@ qulonglong QmlDocumentModel::bookmarkGeneration() const { return bookmarkGenerat
 
 QVariantList QmlDocumentModel::recentDocuments()
 {
-    return backend_ != nullptr ? backend_->recentDocumentEntries() : QVariantList{};
+    return bridge() != nullptr ? bridge()->recentDocumentEntries() : QVariantList{};
 }
 
 QVariantList QmlDocumentModel::backupDocuments()
 {
-    return backend_ != nullptr ? backend_->backupDocumentEntries() : QVariantList{};
+    return bridge() != nullptr ? bridge()->backupDocumentEntries() : QVariantList{};
 }
 
 void QmlDocumentModel::restoreBackup(const QString& path)
 {
-    if (backend_ != nullptr) {
-        backend_->restoreBackupDocument(path);
+    if (bridge() != nullptr) {
+        bridge()->restoreBackupDocument(path);
     }
 }
 
@@ -541,8 +543,8 @@ void QmlDocumentModel::createEmptyDocumentAt(const QString& targetPath)
     if (!openFile(QUrl::fromLocalFile(targetPath))) {
         return;
     }
-    if (backend_ != nullptr) {
-        backend_->noteRecentDocument(targetPath);
+    if (bridge() != nullptr) {
+        bridge()->noteRecentDocument(targetPath);
     }
 }
 
@@ -867,8 +869,8 @@ void QmlDocumentModel::navigateToBookmark(int difficultyId, int line)
         return;
     }
     QMetaObject::invokeMethod(this, [this, difficultyId, line] {
-        if (backend_ != nullptr && difficultyId == currentDifficultyId()) {
-            backend_->requestEditorNavigation(line, 1, line, 1, false, true, true);
+        if (bridge() != nullptr && difficultyId == currentDifficultyId()) {
+            bridge()->requestEditorNavigation(line, 1, line, 1, false, true, true);
         }
     }, Qt::QueuedConnection);
 }
@@ -878,30 +880,30 @@ void QmlDocumentModel::publishWorkspaceCommit(
 {
     if (workspace_ == nullptr) return;
     const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
-    MainWindow::QmlDocumentCommitKind backendKind =
-        MainWindow::QmlDocumentCommitKind::Incremental;
+    miacode::v2::DocumentBridge::CommitKind backendKind =
+        miacode::v2::DocumentBridge::CommitKind::Incremental;
     switch (kind) {
     case WorkspaceCommitKind::Incremental:
-        backendKind = MainWindow::QmlDocumentCommitKind::Incremental;
+        backendKind = miacode::v2::DocumentBridge::CommitKind::Incremental;
         break;
     case WorkspaceCommitKind::DifficultySelection:
-        backendKind = MainWindow::QmlDocumentCommitKind::DifficultySelection;
+        backendKind = miacode::v2::DocumentBridge::CommitKind::DifficultySelection;
         break;
     case WorkspaceCommitKind::Structure:
-        backendKind = MainWindow::QmlDocumentCommitKind::Structure;
+        backendKind = miacode::v2::DocumentBridge::CommitKind::Structure;
         break;
     case WorkspaceCommitKind::SourceReplacement:
-        backendKind = MainWindow::QmlDocumentCommitKind::SourceReplacement;
+        backendKind = miacode::v2::DocumentBridge::CommitKind::SourceReplacement;
         break;
     case WorkspaceCommitKind::Open:
-        backendKind = MainWindow::QmlDocumentCommitKind::Open;
+        backendKind = miacode::v2::DocumentBridge::CommitKind::Open;
         break;
     case WorkspaceCommitKind::SavePoint:
-        backendKind = MainWindow::QmlDocumentCommitKind::SavePoint;
+        backendKind = miacode::v2::DocumentBridge::CommitKind::SavePoint;
         break;
     }
-    if (backend_ != nullptr) {
-        backend_->applyCommittedQmlDocument(
+    if (bridge() != nullptr) {
+        bridge()->applyCommittedDocument(
             snapshot.sourceText, snapshot.filePath, snapshot.activeDifficultyId,
             snapshot.dirty, snapshot.revision, backendKind, usedSystemEncoding);
     }
@@ -962,11 +964,11 @@ bool QmlDocumentModel::saveToPath(const QString& path)
 
 void QmlDocumentModel::adoptBackendDocumentReplacement()
 {
-    if (backend_ == nullptr || workspace_ == nullptr) return;
+    if (bridge() == nullptr || workspace_ == nullptr) return;
     const miacode::v2::ChartWorkspaceSnapshot current = workspace_->snapshot();
-    const QString backendSource = backend_->documentSourceText();
-    const QString backendPath = backend_->documentFilePath();
-    const int backendDifficultyId = backend_->documentActiveDifficultyId();
+    const QString backendSource = bridge()->sourceText();
+    const QString backendPath = bridge()->filePath();
+    const int backendDifficultyId = bridge()->activeDifficultyId();
     if (current.hasDocument && current.sourceText == backendSource
         && current.filePath == backendPath
         && current.activeDifficultyId == backendDifficultyId) {
@@ -1206,10 +1208,10 @@ QVariantMap QmlDocumentModel::normalizeChartSelection(
 QVariantMap QmlDocumentModel::normalizeOptions() const
 {
     QVariantMap map;
-    if (backend_ == nullptr) {
+    if (bridge() == nullptr) {
         return map;
     }
-    const auto options = backend_->chartNormalizeOptions();
+    const auto options = bridge()->normalizationOptions();
     map.insert(QStringLiteral("reduceTo384Grid"), options.reduceTo384Grid);
     map.insert(QStringLiteral("sectionMeasureCount"), options.sectionMeasureCount);
     map.insert(
@@ -1222,10 +1224,10 @@ QVariantMap QmlDocumentModel::normalizeOptions() const
 
 void QmlDocumentModel::setNormalizeOptions(const QVariantMap& options)
 {
-    if (backend_ == nullptr) {
+    if (bridge() == nullptr) {
         return;
     }
-    backend_->setChartNormalizeOptions(normalizeOptionsFromVariant(options));
+    bridge()->setNormalizationOptions(normalizeOptionsFromVariant(options));
 }
 
 QVariantList QmlDocumentModel::normalizeGridOptions() const

@@ -12,12 +12,13 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , preferences_(this)
     , appBackground_(&services.uiRequests(), {}, {}, this)
     , document_(backend, services.workspace(), services.files(), services.analysis(),
-                services.uiRequests(), this)
+                services.uiRequests(), services.documentBridgeSlot(), this)
     , analysis_(backend, services.workspace(), services.analysis(),
                 services.timelineSurfaceSlot(), this)
     , preview_(backend, services.previewSurfaceSlot(), this)
     , timeline_(backend, services.timelineSurfaceSlot(), this)
-    , commands_(backend, document_, this)
+    , commands_(backend, document_, services.editorPageRouterSlot(),
+                services.documentBridgeSlot(), this)
     , pages_(backend, services.editorPageRouterSlot(), services.exportPageSessionSlot(), this)
     // From the assembly's slot: MainWindow installs the session during its own
     // construction, which finishes before this context is built.
@@ -33,7 +34,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , previewSettings_(services.uiRequests(), services.previewAppearance(),
                        services.previewSurfaceSlot(), this)
     , latency_(services.latencyEngineSlot(), this)
-    , lifecycle_(backend, this)
+    , lifecycle_(services.editorPageRouterSlot(), this)
 {
     // Keep the QML text controller in lockstep with the persisted settings.
     // Settings are the v2 boundary; MainWindow only owns their durable values.

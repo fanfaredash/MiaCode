@@ -723,6 +723,11 @@ void MainWindow::packChartAsZip()
     onPackAsZip();
 }
 
+void MainWindow::openPreferences()
+{
+    onPreferences();
+}
+
 void MainWindow::activateInitialField()
 {
     documentSection_->activateInitialField();

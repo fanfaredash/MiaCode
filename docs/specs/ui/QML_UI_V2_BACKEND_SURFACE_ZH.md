@@ -11,7 +11,7 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **26**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **9**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
@@ -43,6 +43,7 @@
 | 2026-09-01 | 预览（传输 / 运行时对象 / 皮肤目录 / 渲染设置 / 音频混音）改由 `miacode::v2::PreviewSurface` 接口承接 | **61** | 0 |
 | 2026-09-01 | 偏好设置改由 `miacode::v2::PreferencesStore` 接口承接 | **40** | 0 |
 | 2026-09-01 | 导出页剩余入口分别归入 `ExportEngine` / `PreviewSurface`，导出会话对象改由装配对象持槽 | **26** | 0 |
+| 2026-09-01 | 文档改由 `miacode::v2::DocumentBridge`，偏好设置入口与关窗询问并入 `EditorPageRouter` | **9** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -164,24 +165,14 @@ QML 绑定的运行时对象、皮肤/判定线目录、渲染设置、音频混
 
 ### 文档（→ `ChartWorkspace` / `DocumentService`）
 
-文档真相已在 `ChartWorkspace`，但初始装载、最近文件、备份与编辑器导航仍经窗口。
+已改由 `miacode::v2::DocumentBridge` 承接（2026-09-01）：窗口那份副本的读取与单向推送、
+最近文件与自动备份两个列表、谱面规范化选项、编辑器导航，以及三个**反向回调钩子**——
+widget 侧流程（原生打开、菜单动作、崩溃恢复）需要 QML 层给一个**结果**时用的那三个 handler，
+所以是 handler 而不是信号。
 
-**`src/app/qml_ui/QmlDocumentModel.cpp`** — 方法 14，私有成员 0
+**`src/app/qml_ui/QmlDocumentModel.cpp`** — 方法 0，私有成员 0
 
-- `applyCommittedQmlDocument`
-- `backupDocumentEntries`
-- `chartNormalizeOptions`
-- `documentActiveDifficultyId`
-- `documentFilePath`
-- `documentSourceText`
-- `noteRecentDocument`
-- `recentDocumentEntries`
-- `requestEditorNavigation`
-- `restoreBackupDocument`
-- `setChartNormalizeOptions`
-- `setQmlChartTextHandler`
-- `setQmlDocumentSaveHandler`
-- `setQmlLeaveDocumentHandler`
+- *（已清空：本文件不再触达 `MainWindow`）*
 
 ### 偏好设置（→ `PreferencesService`）
 
@@ -225,7 +216,12 @@ PV 批量队列本来就归模型自己（唯一有跨次开启状态的部分�
 
 ### 外壳宿主（→ QML 宿主自身，阶段 3.5 第 3 项）
 
-根窗口、拖放、关闭与偏好设置入口。这一组消失就等于隐藏 `MainWindow` 消失。
+根窗口、拖放、关闭前的预览收尾。**全仓库仅剩这一组**——每个 `Qml*Model` 都已经不再调用
+`MainWindow` 的任何方法。这一组消失就等于隐藏 `MainWindow` 消失，也就是第 3 项本身。
+
+偏好设置入口与关窗询问已并入 `EditorPageRouter`（`openPreferences` / `requestShellClose`）：
+它们和页面切换问的是同一个「未保存改动怎么办」，只是作用域不同。
+`QmlShellLifecycle` 因此**完全不认识 `MainWindow`**。
 
 **`src/app/qml_ui/QmlUiBootstrap.cpp`** — 方法 9，私有成员 0
 
@@ -239,14 +235,13 @@ PV 批量队列本来就归模型自己（唯一有跨次开启状态的部分�
 - `shellNoteQuickUiReady`
 - `shellSetRootWindowFrameGeometry`
 
-**`src/app/qml_ui/QmlShellLifecycle.cpp`** — 方法 1，私有成员 0
+**`src/app/qml_ui/QmlShellLifecycle.cpp`** — 方法 0，私有成员 0
 
-- `requestShellClose`
+- *（已清空：本文件不再触达 `MainWindow`）*
 
-**`src/app/qml_ui/QmlCommandService.cpp`** — 方法 2，私有成员 0
+**`src/app/qml_ui/QmlCommandService.cpp`** — 方法 0，私有成员 0
 
-- `onPreferences`
-- `requestLeaveDocument`
+- *（已清空：本文件不再触达 `MainWindow`）*
 
 ## 更新规则
 

@@ -124,6 +124,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/v2/ApplicationServices.cpp
     src/app/v2/ApplicationServices.h
+    src/app/v2/DocumentBridge.h
     src/app/v2/EditorPageRouter.h
     src/app/v2/ExportEngine.h
     src/app/v2/LatencyEngine.h

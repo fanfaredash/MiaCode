@@ -1,9 +1,10 @@
 #pragma once
 
+#include "app/v2/EditorPageRouter.h"
+
 #include <QObject>
 #include <QString>
 
-class MainWindow;
 
 namespace miacode::qml_ui {
 
@@ -24,7 +25,9 @@ class QmlShellLifecycle final : public QObject
     Q_OBJECT
 
 public:
-    explicit QmlShellLifecycle(MainWindow& backend, QObject* parent = nullptr);
+    // No MainWindow: the close question is a page-router operation.
+    explicit QmlShellLifecycle(miacode::v2::EditorPageRouter*& routerSlot,
+                               QObject* parent = nullptr);
 
     // Starts the backend's unsaved-changes flow. The verdict arrives on
     // closeDecided; false means the user cancelled and the window stays open.
@@ -38,7 +41,11 @@ signals:
     void rootCloseAccepted(const QString& source);
 
 private:
-    MainWindow* backend_ = nullptr;
+    miacode::v2::EditorPageRouter** routerSlot_ = nullptr;
+    miacode::v2::EditorPageRouter* router() const
+    {
+        return routerSlot_ != nullptr ? *routerSlot_ : nullptr;
+    }
     bool closeRequestInFlight_ = false;
 };
 

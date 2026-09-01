@@ -6,6 +6,9 @@
 
 #include <functional>
 
+#include "app/v2/DocumentBridge.h"
+#include "app/v2/EditorPageRouter.h"
+
 class MainWindow;
 class QmlDocumentModel;
 
@@ -13,7 +16,10 @@ class QmlCommandService final : public QObject
 {
     Q_OBJECT
 public:
-    QmlCommandService(MainWindow& backend, QmlDocumentModel& document, QObject* parent = nullptr);
+    QmlCommandService(MainWindow& backend, QmlDocumentModel& document,
+                      miacode::v2::EditorPageRouter*& routerSlot,
+                      miacode::v2::DocumentBridge*& bridgeSlot,
+                      QObject* parent = nullptr);
 
     // Everything that would discard the open document goes through one guard,
     // and the guard lives here rather than in each caller: an entry point that
@@ -51,5 +57,15 @@ private:
     void whenDocumentMayBeLeft(std::function<void()> proceed);
 
     MainWindow* backend_ = nullptr;
+    miacode::v2::EditorPageRouter** routerSlot_ = nullptr;
+    miacode::v2::DocumentBridge** bridgeSlot_ = nullptr;
+    miacode::v2::EditorPageRouter* router() const
+    {
+        return routerSlot_ != nullptr ? *routerSlot_ : nullptr;
+    }
+    miacode::v2::DocumentBridge* bridge() const
+    {
+        return bridgeSlot_ != nullptr ? *bridgeSlot_ : nullptr;
+    }
     QmlDocumentModel* document_ = nullptr;
 };
