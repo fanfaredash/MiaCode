@@ -15,7 +15,9 @@ struct AnalysisRow {
     int line = 1;
     int column = 1;
     int endColumn = 1;
-    double second = 0.0;
+    // Negative: this row has no playhead time (syntax diagnostics). Zero is a
+    // real chart time and must still seek.
+    double second = -1.0;
     QString severity;
     QString alert;
     QString title;

@@ -1206,7 +1206,8 @@ int main(int argc, char** argv)
     expect(sidebarSource.contains(QStringLiteral("bookmarkGeneration"))
                && sidebarSource.contains(QStringLiteral("bookmarksForDifficulty"))
                && sidebarSource.contains(QStringLiteral("navigateToBookmark"))
-               && sidebarSource.contains(QStringLiteral("Theme.difficultyColor"))
+               && sidebarSource.contains(QStringLiteral("DifficultySwatch"))
+               && sidebarSource.contains(QStringLiteral("difficultyId: difficultyGroup.modelData.id"))
                && sidebarSource.contains(QStringLiteral("setBookmarkGroupExpanded")),
            QStringLiteral("bookmarks are grouped under their difficulty in the sidebar, foldable and colour-coded, instead of overlaying the editor"), out, &failed);
     // The difficulty row is the fold control. A click means fold only when the
@@ -1236,7 +1237,7 @@ int main(int argc, char** argv)
                && !sidebarSource.contains(QStringLiteral("id: foldButton")),
            QStringLiteral("the difficulty row folds its own bookmarks, with no separate fold button"), out, &failed);
     QFile followSyncSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
+        QStringLiteral("src/app/runtime/playback/FollowSync.cpp"));
     expect(followSyncSource.open(QIODevice::ReadOnly),
            QStringLiteral("preview follow synchronization source is available"), out, &failed);
     const QString followSource = QString::fromUtf8(followSyncSource.readAll());

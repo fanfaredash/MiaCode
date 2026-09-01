@@ -1,6 +1,6 @@
 #include "AppVersion.h"
 #include "qml_ui/QmlUiBootstrap.h"
-#include "mainwindow/MainWindow.h"
+#include "runtime/Session.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
 #include "UiTheme.h"

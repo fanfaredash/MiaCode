@@ -60,11 +60,6 @@ Rectangle {
         return difficulty ? difficulty.label : UiText.text("难度")
     }
 
-    function displayTitleForKey(key) {
-        const dirty = root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
-        return (dirty ? "*" : "") + titleForKey(key)
-    }
-
     function tooltipForKey(key) {
         if (key === viewState.metadataEditorKey)
             return ""
@@ -146,11 +141,13 @@ Rectangle {
                     width: root.tabWidth
                     height: parent.height
                     preferredTabWidth: root.tabWidth
-                    text: root.displayTitleForKey(modelData)
+                    text: (root.documentSession.dirtyEditorKeys.indexOf(modelData) >= 0 ? "*" : "")
+                          + root.titleForKey(modelData)
                     secondaryText: ""
                     iconSource: modelData === root.viewState.metadataEditorKey
                         ? Qt.resolvedUrl("icons/metadata.svg")
-                        : Qt.resolvedUrl("icons/chart.svg")
+                        : ""
+                    difficultyId: root.difficultyIdForKey(modelData)
                     tooltip: root.tooltipForKey(modelData)
                     active: root.viewState.activeEditorKey === modelData
                     closable: true
@@ -272,7 +269,9 @@ Rectangle {
                 delegate: AppMenuItem {
                     required property string modelData
 
-                    text: root.displayTitleForKey(modelData)
+                    text: (root.documentSession.dirtyEditorKeys.indexOf(modelData) >= 0 ? "*" : "")
+                          + root.titleForKey(modelData)
+                    difficultyId: root.difficultyIdForKey(modelData)
                     checkable: true
                     checked: root.viewState.activeEditorKey === modelData
                     onTriggered: root.activateTab(modelData)

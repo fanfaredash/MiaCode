@@ -41,11 +41,6 @@ public:
     virtual void stop() = 0;
     virtual void seek(double second) = 0;
 
-    // Bracket an operation that replaces a chart's media files.  A successful
-    // begin guarantees that the preview no longer retains the media files.
-    virtual bool beginMediaFileOperation() = 0;
-    virtual bool endMediaFileOperation(bool reloadTrack) = 0;
-
     // A scrub is a gesture, not a seek: it suspends the follow behaviour for
     // its duration, so it has to be bracketed rather than inferred from a
     // stream of positions.

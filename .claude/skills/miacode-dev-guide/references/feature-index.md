@@ -1,7 +1,9 @@
 # Feature Index
 
 Map a user-facing feature to the files / classes / functions that own it. Paths verified against
-`CMakeLists.txt` on 2026-05-29. Code is source of truth — if an anchor moved, fix it here.
+`CMakeLists.txt` on 2026-09-01. Assembly map: `src/app/runtime/ASSEMBLY.md`. Code is source of
+truth — if an anchor moved, fix it here. Host methods live on the runtime host; `Session::`
+names are assembly forwards.
 
 ## 1. App boot & process modes — `src/app/main.cpp`
 
@@ -18,8 +20,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   close, so it fires only once. `storedPreferencesSchema()` reads the RAW on-disk tag (it does NOT
   go through `loadPreferencesObject`/`normalizedPreferencesRoot`, which would inject the current
   token and mask an old file). Result is passed to
-  `QuickShellBootstrap::setShowWelcomeDialogOnStartup`, which fires `MainWindow::showWelcomeDialog()`
-  from its post-show hook. Dialog body: `sections/preferences/MainWindow.WelcomeDialog.cpp` (see §2).
+  `QmlUiBootstrap::setShowWelcomeDialogOnStartup`, which fires `Session::showWelcomeDialog()`
+  (`SettingsHost::showWelcomeDialog` in `src/app/runtime/settings/Settings.cpp`).
 - CLI export: `wantsCliVideoExport`, `runCliVideoExport`.
 - **Export** worker (this is the export subprocess — keep): `wantsCliVideoExportWorker`,
   `runCliVideoExportWorker`.
@@ -27,17 +29,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `src/preview/ipc/*`, `PreviewWorkerSession`/`Supervisor`) was **deleted (2026-06-02)** — in-process
   QSG is the keeper; do not reintroduce.
 
-## 2. Main window & orchestration
+## 2. Session assembly & runtime hosts
 
-- Surface + shared state: `src/app/mainwindow/MainWindow.{h,cpp}`, `MainWindowShared.{h,cpp}`.
-  Class `MainWindow` owns top-level state, preview runtime instances, the export-worker process,
-  portable/project settings. **Orchestration only** — feature bodies live in `sections/`.
-- Section map: `src/app/mainwindow/sections/README.md`. Slices live under
-  `sections/{frame,document,timeline,validation,editor,preferences,preview,export,window,dialogs}/`.
-- Frame/menus/toolbar/layout: `sections/frame/MainWindow.BootstrapAndMenus.cpp`,
-  `MainWindow.FrameBootstrap.cpp`, `MainWindow.FrameBootstrapFinalize.cpp`.
+- Assembly + shared helpers: `src/app/runtime/Session.{h,cpp}`, `Shared.{h,cpp}`,
+  `SessionBootstrap.cpp`, `SessionMembers.inc`. `Session` is a `QObject` that owns hosts and
+  fills `ApplicationServices` slots. Feature bodies live in `src/app/runtime/<host>/`.
+  Host table: `src/app/runtime/ASSEMBLY.md`. Product chrome is `src/app/qml_ui/`.
+- Frame/bootstrap: `SessionBootstrap.cpp`, `SessionBootstrapFinalize.cpp`. Empty menu
+  `FrameHost` / `Menus.cpp` were deleted 2026-09-01.
 - **Sidebar (outline list) + central page stack (2026-06-11, export-page migration phase 1):**
-  `outlineList_` is rebuilt by `DocumentSection::rebuildFieldSidebar()` (`MainWindow.DocumentUi.cpp`).
+  `outlineList_` is rebuilt by `DocumentSection::rebuildFieldSidebar()` (`DocumentPages.cpp`).
   Item keys (`Qt::UserRole`), in order: `metadata` → `metadataPage_`, `difficulty_chart`
   (+UserRole+1=id) → chart editor, `add` (inline menu), **`export`** → `exportPage_` (the Export
   hub page, §8), `toolbox` (popup menu, no page switch). There is NO `latency` sidebar item
@@ -47,7 +48,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `welcomePage_` / `metadataPage_` / `latencyDetectionPage_` / `exportPage_` / `chartPage_`.
   Page-switch functions (`switchToMetadataField` / `switchToWelcomePage` /
   `switchToDifficultyField` / `switchToLatencyField` / `switchToExportField`, all in
-  `MainWindow.DocumentUi.cpp`) share one skeleton — **every leave path calls
+  `DocumentPages.cpp`) share one skeleton — **every leave path calls
   `latencyDetectionPage_->onPageLeft()` unconditionally** (SFX-leak regression guard, §9).
   Bottom-tab mode table: editor ON / latency ON / metadata OFF / welcome OFF / **export OFF**.
   `switchToExportField` is the one exception to the shared skeleton: the export page is slow to
@@ -62,7 +63,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `qml/QuickShellMain.qml`).
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
-  `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`
+  `ShellHost::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`
   → QML chrome).
   **Live re-theme contract for tools-layer pages/panels:** Qt does NOT regenerate a widget's
   literal `setStyleSheet(...)` string or a baked `QIcon` on a palette change, so any persistent
@@ -74,11 +75,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   per-widget sheet (menu/push buttons, sliders, read-only edit, tab strip, footer rule) + the
   transport icons. When you add a baked `setStyleSheet`/`setIcon(make*Icon(color))` to one of these,
   mirror it in that class's `applyThemeStyles()` or it stays frozen at the startup theme. Preview-pane side = `workspacePanelsSwapped_` (`preview.swap_side_panels`), live via
-  `MainWindow::setWorkspacePanelsSwapped` (QML reads `controller.workspacePanelsSwapped`, default =
+  `Session::setWorkspacePanelsSwapped` (QML reads `controller.workspacePanelsSwapped`, default =
   preview on right; swapped → preview on left). Both the theme row and a "谱面预览位置" (preview
   side) row live on the Preferences dialog's 外观 page
-  (`MainWindow::PreferencesSection::onPreferences`, `MainWindow.PreferencesDialog.cpp`) AND in the
-  first-run welcome dialog (`PreferencesSection::showWelcomeDialog`, `MainWindow.WelcomeDialog.cpp`)
+  (`SettingsHost::onPreferences`, `Settings.cpp`) AND in the
+  first-run welcome dialog (`SettingsHost::showWelcomeDialog`, `Settings.cpp`)
   — both drive the same setters; the welcome dialog keeps its self-contained `WelcomeLayoutPreview`
   schematic. The welcome dialog also exposes a 中文输入法 radio group (关闭输入法 default / 开启输入法 /
   转换全角字符) wired to `applyEditorHalfWidthInputEnabled` + `applyEditorImeInputDisabled` — the same
@@ -86,13 +87,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`QLabel#WelcomeHelpBadge`, styled in `preferencesDialogStyleSheet` so it re-themes, +
   `miacodeAllowTooltip` to bypass the global tooltip suppression) sits beside the 中文输入法 title.
   zh strings under `dialog.welcome.*` / `dialog.preferences.preview_side*` in `UiText.cpp`.
-  Toolbar settings/Preferences icon = `makeSettingsGearIcon` (`MainWindowShared.cpp`): the Google
+  Toolbar settings/Preferences icon = `makeSettingsGearIcon` (`Shared.cpp`): the Google
   Material "settings" gear rendered via `QSvgRenderer` (**Qt6::Svg**). The gear is font-matched by
   rendering the artwork into an *inset* of the icon box (so the glyph reads ~menu-text size) — do
   NOT shrink `toolBar->setIconSize(...)` to size it: the gear is the toolbar's only icon, so its
   icon box drives the toolbar row height and a smaller iconSize visibly shortens the toolbar.
 - Slider value labels are click-to-edit. A `QSlider` + percent/value `QLabel` pair built through
-  the shared row helpers — `addAudioRow` / `addVideoSliderRow` (`MainWindow.Dialogs.cpp`),
+  the shared row helpers — `addAudioRow` / `addVideoSliderRow` (`MediaJobs.cpp`),
   `addPercentSliderOption` (`VideoExportDialog.cpp`), `createSliderOption`
   (`BatchVideoExportDialog.cpp`), and the inline SFX-volume row (`LatencyDetectionPage.cpp`) —
   uses `miacode::ui::EditableValueLabel` (`src/app/ui/EditableValueLabel.{h,cpp}`) in place of a
@@ -109,7 +110,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   auto-apply event filter installed in `main.cpp` (GUI path only) themes every eligible QWidget
   top-level on Show/ActivationChange/palette change — popups/tooltips/frameless are excluded by
   `isEligibleWidget`; (2) `UiDialogs::prepareDialogWindow` applies it when preparing a dialog;
-  (3) `MainWindow::WindowSection::applySystemWindowBackdrop` forwards to it (legacy call sites)
+  (3) `ShellHost::applySystemWindowBackdrop` forwards to it (legacy call sites)
   and its no-target form sweeps ALL visible top-levels on theme switch. QML root windows are
   themed by `QuickShellBootstrap` via `UiNativeWindowTheme::applyToWindow` (no frame-refresh
   tail, unlike the widget path). Do NOT re-add per-file DWM copies — tools-layer dialogs
@@ -122,9 +123,19 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`).
 - Timing metadata: `src/core/chart/document/SimaiTimingMetadata.{h,cpp}` (`buildTimingMetadata`,
   `buildTimingMetadataFromRawText`, `parseInlineTimeSignatureComment`).
-- Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
+- Open/save/new/switch + autosave: `src/app/runtime/document/DocumentFlow.cpp`
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
+  Default (v2) QML shell document owner: `src/app/v2/ChartWorkspace.{h,cpp}` +
+  `ChartWorkspaceFileService`. `Session` has no `SimaiDocument`; `loadDocument()`
+  refreshes hidden widgets after `workspace.openSource` / an already-committed
+  workspace transaction. `openSource` / `open` load via `SimaiDocument::fromText`;
+  chart-body diagnostics (`SimaiNativeParser::buildValidationReport`) are recorded for
+  the validation panel and do not refuse the file. Each editor tab is one save
+  unit: Ctrl+S writes the active section (`save(saveSectionDifficultyId())`,
+  metadata tab → `save(0)`); closing a tab or leaving the document asks per dirty
+  difficulty. Specs: `src/tools/v2/ChartWorkspaceSpec.cpp`,
+  `ChartWorkspaceFileServiceSpec.cpp`.
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
   (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
   `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`
@@ -145,7 +156,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   original file is untouched, autosave reference remains the old file) with only one extra
   prompt line saying MiaCode did not exit normally last time. `cleanupCrashRecoveryForCleanExit`
   preserves the pending crash file until that deferred restore has had a chance to read it.
-- Editor header/page-mode UI: `sections/document/MainWindow.DocumentUi.cpp`.
+- Editor header/page-mode UI: `src/app/runtime/document/DocumentPages.cpp`.
 - Chart text editor: `src/editor/PlainCodeEditor.{h,cpp}` (line numbers, transform context menu,
   half-width normalization, `normalizedViewportHitPosition`, bracket auto-close
   `tryAutoCloseBracket`, closing-bracket type-over `tryOverwriteClosingBracket` (typing `)]}` when
@@ -167,7 +178,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   scrollbars from a timer fed by real event coordinates. **Install it on every scroll area that
   supports drag-selection on the workspace/sidebar surfaces** — today `PlainCodeEditor`'s ctor
   (covers the chart editor + copy area) and `metadataExtraEdit_` (plain `QTextEdit`,
-  `MainWindow.FrameBootstrap.cpp`).
+  `SessionBootstrap.cpp`).
 - Bracket-completion dropdown ("tab 补全"): typing `( [ {` pops a simai-aware suggestion list under
   the caret; typing `h` pops the full-bracket hold durations (`[8:1]` …). Candidate
   data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure — `candidatesForOpening` for the
@@ -182,23 +193,20 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   formerly three separate toggles (`editor_auto_close_brackets` / `editor_auto_insert_square_after_h`
   / `editor_bracket_completion`), now migrated in `EditorSection::loadPortableState` by falling back
   to the legacy auto-close key. Single setter `PlainCodeEditor::setAutoCompletionEnabled`, apply
-  `applyEditorAutoCompletionEnabled`, one checkbox ("自动补全") in `MainWindow.PreferencesDialog.cpp`.
+  `applyEditorAutoCompletionEnabled`, one checkbox ("自动补全") in `Settings.cpp`.
   Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the newline), Esc/keep-typing dismiss.
-- **Offset (`&first`) field location:** the chart-wide timing offset is edited from the
-  **difficulty-page header** (`firstEdit_`, label `difficultyFirstLabel_`, built in
-  `MainWindow.FrameBootstrap.cpp` next to `&lv_N`), NOT the metadata page (the metadata `first`
-  row was removed). One source of truth = `document_.first`, shared with the latency page. While a
-  difficulty is active, `TimelineSection::parsedRawFirstSeconds` reads the live field text (so an
-  uncommitted edit reflows the timeline; `editingFinished` triggers `refreshTimelineMetadata`);
-  it commits to `document_.first` in `applyCurrentFieldToDocument`'s difficulty branch (sets
-  `metadataTimingChanged`).
+- **Offset (`&first`) field location:** QML edits the chart-wide timing offset from the metadata
+  form (`metadataFirst` in `EditorPane.qml`). Owner is `ChartWorkspace::document().first`.
+  Latency writes it with `updateDocumentField(First)`. Timeline and export read
+  `applicationServices_.workspace().document()`. Hidden `firstEdit_` is display only.
+  `applyCurrentFieldToDocument` only clears the widget dirty latch.
 - **Header 顶部显示 preference (offset vs designer):** the header field pair next to Lv is
-  switchable — `MainWindow::EditorHeaderTopDisplay` (`Offset` default / `Designer`), state
+  switchable — `Session::EditorHeaderTopDisplay` (`Offset` default / `Designer`), state
   `editorHeaderTopDisplay_`, persisted as `ui.editor_header_top_display` (`"offset"`/`"designer"`),
   preference row at the top of Preferences → 编辑器. In Designer mode the header shows
   `difficultyDesignerLabel_` + `difficultyDesignerEdit_` (`&des_N` of the active difficulty,
-  re-added in `MainWindow.FrameBootstrap.cpp`); visibility is applied by
-  `updateEditorHeaderLayoutMode`, apply chain `MainWindow::applyEditorHeaderTopDisplay` →
+  re-added in `SessionBootstrap.cpp`); visibility is applied by
+  `updateEditorHeaderLayoutMode`, apply chain `Session::applyEditorHeaderTopDisplay` →
   `EditorSection::applyEditorHeaderTopDisplay`. The hidden pair's edit is still populated
   (`populateDifficultyPage`) and recaptured on commit/autosave, so reads are unconditional; any
   code that rewrites designers behind the header's back must call
@@ -206,8 +214,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   unified broadcast, preference flip all do).
 - **Per-difficulty designers + unified designer:** managed from a modal dialog, NOT a persistent
   checkbox. The metadata designer row has a "管理多个难度名义" button →
-  `MainWindow::onManagePerDifficultyDesigners` → `DocumentSection::openPerDifficultyDesignerDialog`
-  (`MainWindow.DocumentFlow.cpp`): seven rows for `&des_1..7` plus the "所有难度采用相同名义"
+  `Session::onManagePerDifficultyDesigners` → `DocumentSection::openPerDifficultyDesignerDialog`
+  (`DocumentFlow.cpp`): seven rows for `&des_1..7` plus the "所有难度采用相同名义"
   toggle, committed on OK. When the toggle is turned ON, ≤1 distinct non-empty name unifies
   silently; otherwise `promptCanonicalDesignerName` lets the user pick the canonical name or
   "clear all". Per-project pref key `unified_designer_enabled`;
@@ -223,8 +231,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   branch's header `difficultyDesignerEdit_` — see the 顶部显示 preference above); apply
   `applyUnifiedDesignerName`; load reconcile
   `refreshUnifiedDesignerStateForLoadedDocument`; new-difficulty seed
-  (`MainWindow.FrameBootstrap.cpp`); undo-delete restore re-seed
-  (`MainWindow.DocumentEditorState.cpp`); autosave snapshot mirror (`currentDocumentTextForAutosave`,
+  (`SessionBootstrap.cpp`); undo-delete restore re-seed
+  (`DocumentEditorState.cpp`); autosave snapshot mirror (`currentDocumentTextForAutosave`,
   which captures the live header designer text and treats it as canonical under unified mode).
   All broadcast/apply sites iterate `perDifficultyDesigners()` + `setDesignerForSlot` so standalone
   `&des_N` participate too. Cross-page UI sync = mirror `designerEdit_` (metadata) and call
@@ -238,9 +246,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   chart-info-HUD `chartDesigner`) uses per-difficulty `&des_N`, falling back to top `&des` when
   the per-difficulty name is **blank including whitespace** — gate on `designer.trimmed().isEmpty()`,
   never bare `.isEmpty()` (a `&des_N= ` value parses non-empty and must still fall back). All five
-  sites must stay aligned: intro `MainWindow.ExportSnapshot.cpp` (`intro.designer`), single-export
-  task `MainWindow.ExportSnapshot.cpp` + `MainWindow.ExportFlow.cpp` (live-preview `setChartInfo`
-  path) + batch `MainWindow.ExportFlow.cpp`, and the snapshot rebuild in `VideoExportSnapshot.cpp`
+  sites must stay aligned: intro `ExportSnapshot.cpp` (`intro.designer`), single-export
+  task `ExportSnapshot.cpp` + `ExportFlow.cpp` (live-preview `setChartInfo`
+  path) + batch `ExportFlow.cpp`, and the snapshot rebuild in `VideoExportSnapshot.cpp`
   (`buildVideoExportTaskFromSnapshot`).
 
 ## 3b. Editor bookmarks (2026-07-06 redesign)
@@ -261,7 +269,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `saveProjectRenderState` (kept for crash safety until the first simai save, dropped after).
   `saveToPath` pushes `editorBookmarks_` into the document via `syncBookmarksIntoDocument` before
   `toText()` and flips the flag.
-- **In-memory model:** `MainWindow::EditorBookmark` (user-visible face = `title` + `line`;
+- **In-memory model:** `Session::EditorBookmark` (user-visible face = `title` + `line`;
   `nameLocked` set on explicit rename; `text` is a legacy import-only field). User-initiated
   mutations call `EditorSection::markBookmarksMutatedByUser()` (marks the document dirty so the
   change reaches the file on save); the comment auto-sync (`syncBookmarksFromEditorText`) never
@@ -269,7 +277,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`defaultBookmarkNameFromComment`: first token of the `||` comment, else `fallbackBookmarkNameForLine`
   "第 N 行"/"LN").
 - **Sidebar (IDE-style tree, `outlineList_`):** built by `DocumentSection::rebuildFieldSidebar`
-  (`MainWindow.DocumentUi.cpp`); painted by `OutlineItemDelegate` in `MainWindowShared.h` from the
+  (`DocumentPages.cpp`); painted by `OutlineItemDelegate` in `Shared.h` from the
   shared `kOutlineItem*Role` constants. Difficulty rows carry the fold chevron at the ROW START
   (path chevron, `kDifficultyFoldHitZone` click zone in FrameBootstrap; per-difficulty state in
   `outlineBookmarkGroupExpanded_`, untouched groups default expanded only for the active
@@ -287,7 +295,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - **Editor entry points (`PlainCodeEditor`):** gutter double-click activates/creates; gutter drag
   moves; body & gutter right-click add 插入/重命名/删除/在侧边栏显示 via intent signals only
   (`lineNumberBookmarkCreateRequested/RenameRequested/DeleteRequested/Activated/ContextMenuRequested`)
-  — MainWindow (`FrameBootstrap`) owns the actions. Dialog-free: the old create/detail/manager
+  — Session (`SessionBootstrap`) owns the actions. Dialog-free: the old create/detail/manager
   dialogs and the toolbox 创建书签/书签管理 entries were REMOVED (toolbox keeps JSON
   import/export as compatibility tools; import marks the document dirty).
 
@@ -297,7 +305,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`parseForTimeline`, `validateSyntax`, `buildValidationReport`).
 - Internals (include-split into `SimaiNativeParser.cpp`): `.Slide.cpp`, `.TouchTap.cpp`,
   `.StrictChecks.cpp` (see `SimaiNativeParser.cpp:1584`).
-- Validation UI: `sections/validation/MainWindow.ValidationFlow.cpp` (`runValidateSimai*`,
+- Validation UI: `src/app/runtime/validation/ValidationFlow.cpp` (`runValidateSimai*`,
   `addValidationError`, `addValidationDecoration`).
 - Note-modifier sync set (one patch touches all): native parser (`.cpp`/`.TouchTap`/`.Slide`) →
   marker flags (`src/timeline/TimelineData.h`) → mirror (`TimelineQuickModel.cpp` +
@@ -329,32 +337,32 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   brightness `TimelineBrightnessMenu.qml` (live `AppSlider`s, Popup stays open while dragging).
   Their QML buttons live in `BottomPanel.qml`. The tab bar exposes Follow Code inline; View Lock and
   Progress Follow stay enabled, and Timeline Sync has no v2 editor control.
-- Refresh orchestration: `sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
+- Refresh orchestration: `src/app/runtime/playback/TimelineFlow.cpp`
   (`applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`,
   `requestTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`, `seekTimelineToCursor`).
 - Slow refresh workers: `src/timeline/TimelineSlowRefresh.{h,cpp}`.
 - Timing getters: same `PreviewTimelineFlow.cpp` (`currentTimingMetadata`, `parsedFirstSeconds`,
   `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`).
 - **Preview-follow while PAUSED updates the DECORATION ONLY** — `syncEditorCursorToPreviewSecond`
-  (`MainWindow.TimelinePreviewFollowSync.cpp:217`) returns after `setPreviewFollowDecoration`; the
+  (`FollowSync.cpp:217`) returns after `setPreviewFollowDecoration`; the
   real `QTextCursor` is moved (`applyPreviewFollowCursor`) only while playing. An earlier attempt to
   move it while paused was reverted because it clobbered drag selections (see the note at
-  `MainWindow.WindowInteraction.cpp:1450`). So the text caret and the playhead legitimately diverge
+  `Interaction.cpp:1450`). So the text caret and the playhead legitimately diverge
   after any paused seek, and that divergence is by design — the decoration is a read-only indicator
   of where the playhead is. Nothing authors against it: touch-pad click input targets the caret
   (§5b). The caret does drag the preview the other way, though — `cursorPositionChanged`
-  (`MainWindow.FrameBootstrap.cpp:1794`) syncs the timeline/preview to the caret while paused when
+  (`SessionBootstrap.cpp:1794`) syncs the timeline/preview to the caret while paused when
   `timelineSyncEnabled_`, which is why the two normally agree.
 
 ### 5b. Touch-pad click authoring (Ctrl/Cmd + click the preview)
 
 - Setting `preview.touch_pad_authoring_shortcut` (启用touch点击输入); Ctrl-hold gate in
-  `MainWindow.WindowInteraction.cpp:958` → `setTouchPadAuthoringCtrlHoldActive` →
+  `Interaction.cpp:958` → `setTouchPadAuthoringCtrlHoldActive` →
   `PreviewRuntime::setTouchPadAuthoringEnabled`.
 - Hit test + press/release gesture: `PreviewQuickSceneRoot::mousePressEvent/mouseReleaseEvent`
   (`touchPadAtItemPoint` → `touchPadTokenAtLogicalPoint`), state machine in
   `core/scene/TouchPadAuthoringState.h`, signal `PreviewRuntime::touchPadAuthoringClicked`.
-- Click handler: `MainWindow.FrameBootstrap.cpp:1326`. **Target token = the text caret, always** —
+- Click handler: `SessionBootstrap.cpp:1326`. **Target token = the text caret, always** —
   resolving a playhead second onto a token is not predictable for a user, so the insertion point is
   the one they set by hand (decided 2026-08-18; an earlier revision targeted the preview-follow
   highlight). Text edit planned by `planTouchPadAuthoringEdit`
@@ -362,7 +370,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`recordChartCursorUndoEntry` — a live `QTextCursor` would be shifted by the edit itself);
   preview then seeks to `tokenSecond - 1/60` (a deliberate convention, not a bug).
 - That seek parks the playhead one token EARLY, so `touchPadAuthoringAnchor*`
-  (`MainWindow.TimelinePreviewFollowSync.cpp:43`, cleared in `setEditorText`) maps it back for the
+  (`FollowSync.cpp:43`, cleared in `setEditorText`) maps it back for the
   highlight. Purely cosmetic — it does not feed the insertion point.
 - Token boundaries come from `src/core/chart/parser/SimaiCommentScan.*` so `||` comments are
   skipped exactly as the two parsers skip them — see `cross-chain-linkage.md` §15.
@@ -381,7 +389,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   — background media now flows through `PreviewStageMediaHost` plus `PreviewRuntime`'s
   stage-background setters (`setStageMediaAvailable`, `setStageMediaPresentationMode`,
   `setExternalStageMedia*`). Verify exact widget-shell vs quickshell routing in
-  `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
+  `src/app/runtime/preview/StageMediaRoute.cpp`.
   - **Video decode backend:** on **Windows** the host decodes PV/BG via **QtAVPlayer (FFmpeg)**,
     not `QMediaPlayer` — guarded by the `MIACODE_USE_QTAVPLAYER` build macro (CMake-defined on
     Windows; other platforms keep the `QMediaPlayer` path under `#elif defined(HAVE_QT_MULTIMEDIA)`).
@@ -389,7 +397,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     `third_party/ffmpeg/windows/dev/`. Decoded frames are *pushed* into the QML `VideoOutput`'s
     `QVideoSink` (`handleDecodedVideoFrame`) rather than observed; `setSpeed` (not `setPlaybackRate`)
     + `seek` drive playback, and the paused-seek / prepared-start acks settle on frame `pts`.
-    The public method/signal contract is unchanged, so `MainWindow.*` callers don't change.
+    The public method/signal contract is unchanged, so `Session.*` callers don't change.
     See `docs/ops/DEBUG_INDEX.md` for the public backend summary.
 - Backend-neutral scene state (NO GPU deps): `src/core/scene/` — `PreviewFrameState.h`,
   `PreviewLayerOrder.h`, `PreviewOpacityCurves.*`, `PreviewSceneGeometry.*`, `PreviewHudState.*`,
@@ -420,13 +428,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - **Output-device change → auto-pause** (BASS platforms only): `PreviewAudioDeviceWatcher.{h,cpp}`
   (owns the `QMediaDevices` observer + snapshot) + `PreviewAudioDeviceChangePolicy.h` (pure decision,
   CTest `preview_audio_device_change_policy_spec`) → `TimelineSection::pausePreviewForAudioDeviceChange`
-  in `sections/timeline/MainWindow.PreviewPlaybackState.cpp`, wired in `sections/frame/MainWindow.FrameBootstrap.cpp`.
+  in `src/app/runtime/playback/PlaybackState.cpp`, wired in `src/app/runtime/SessionBootstrap.cpp`.
   A hotplug or default-output switch pauses a playing preview; the user's resume is what re-anchors
   the transport. See `docs/superpowers/specs/2026-08-06-preview-audio-device-autopause-design.md` —
   in-place re-anchoring was tried three times and removed.
-- MainWindow hooks: `MainWindow.cpp` (`ensurePreviewSfxRuntimePrepared`,
+- Session hooks: `Session.cpp` (`ensurePreviewSfxRuntimePrepared`,
   `applyPreviewAudioSettingsToRuntime`); playback clock authority:
-  `sections/timeline/MainWindow.TimelinePlayback.cpp` (`currentPreviewAuthoritativeAudioClockSecond`).
+  `src/app/runtime/playback/Playback.cpp` (`currentPreviewAuthoritativeAudioClockSecond`).
 
 ## 8. Video export — `src/tools/video_export/`
 
@@ -441,15 +449,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `buildVideoExportAudioRenderPlan`, `chooseVideoEncoder`.
 - Snapshot boundary (contract): `VideoExportSnapshot.{h,cpp}` (`toJson`, `fromJson`,
   `buildVideoExportTaskFromSnapshot`).
-- MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
+- Session / export-host ownership: `Session.cpp` / `src/app/runtime/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
 - **Export hub page (E-C hybrid since 2026-06-11 — phases 1+2 of the export-page migration,
   implementation record; kept as local private notes):**
   `src/tools/export_page/ExportLauncherPage.{h,cpp}` (`miacode::export_page::ExportLauncherPage`,
-  a `MainWindow`-friend widget like the latency page) — an `editorStack_` page reached via the
+  a Session-friend widget like the latency page) — an `editorStack_` page reached via the
   sidebar `export` item, the toolbar Export button (now a direct jump; the old dropdown menu +
   250ms hover-open timer + `showExportToolbarMenu()` are DELETED), the Tools-menu
-  `exportVideoAction_` (since 2026-06-12 — see below), and `MainWindow::switchToExportField()`.
+  `exportVideoAction_` (since 2026-06-12 — see below), and `Session::switchToExportField()`.
   **Fixed-frame layout (2026-06-12 redesign):** the page itself NEVER scrolls and horizontal
   scrolling is forbidden everywhere — a pinned header (difficulty badge pill row + an UNDERLINE
   HORIZONTAL sub-nav, `role="subNavTab"` QToolButtons styled by
@@ -480,7 +488,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   embedded mode (tallest content, sacrificed so every tab fits without scrolling at default
   window sizes); tabs restyled by `UiTheme::embeddedExportTabStyleSheet` (flat underline).
   **D6 OVERTURNED 2026-06-12:** no UI entrance opens the modal form anymore — the Tools-menu
-  「导出谱面」 action now jumps to this page (`MainWindow::onExportPreviewVideo` wrapper deleted;
+  「导出谱面」 action now jumps to this page (`Session::onExportPreviewVideo` wrapper deleted;
   `ExportSection::onExportPreviewVideo` kept in code as the unreachable modal twin). Prefs
   persistence + the `refreshAddIntroEnabledState`/`applyUiToTask` bake-gate lockstep stay
   single-sourced in the one class. Lifecycle:
@@ -493,10 +501,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   pattern as the latency teardown). Badge switch while the video sub-page shows re-seeds the panel.
   **Inline export progress (STATUS-BAR ONLY — 2026-06-13 redesign; supersedes the A3 "ride the
   PLAYBACK bar" amendment):** a panel-launched export creates NO `QProgressDialog` (every
-  dialog-update site in `MainWindow.ExportWorker.cpp` is null-guarded). Progress (percent · stage ·
+  dialog-update site in `ExportWorker.cpp` is null-guarded). Progress (percent · stage ·
   ETA) shows in the STATUS BAR ONLY — the preview transport is NEVER touched by the export, so
   playback and a running export are NOT mutually exclusive (the worker is out-of-process). Helpers
-  `begin/update/endInlineExportProgress` (`MainWindow.ExportWorker.cpp`) only write the status bar;
+  `begin/update/endInlineExportProgress` (`ExportWorker.cpp`) only write the status bar;
   `videoExportInlineProgressSecond_ >= 0` is now just the "inline export running" sentinel (no
   slider drive); `shellVideoExportProgressSeconds()` returns -1 so `QuickShellPreviewTransport.qml`
   does NOT override the quick-shell preview slider. `videoExportUseInlineProgress_` still marks the
@@ -507,7 +515,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   **Playable export-page preview (所见即所导 — 2026-06-13):** the embedded video panel installs the
   BADGE-SELECTED difficulty as a real, PLAYABLE preview source so the NORMAL transport (play /
   pause / seek) drives the right-side preview even though `activeDifficultyId_ == 0` (D4 kept).
-  `ExportSection::installExportPreviewAuditionScene(difficultyId)` (`MainWindow.ExportSnapshot.cpp`)
+  `ExportSection::installExportPreviewAuditionScene(difficultyId)` (`ExportSnapshot.cpp`)
   mirrors `LatencySandboxController::installSandboxScene`: parse the difficulty's chart →
   `buildTimelinePreviewRefreshState` → publish `latestTimelineNoteMarkers_` / signature / revision /
   `latestTimelinePreviewSnapshotReady_` + `previewCanvas_->setNoteMarkers` + `timelineQuickModel_`
@@ -518,7 +526,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`PreviewTimelineFlow.cpp`); (2) the latency/audition early-path in `preparePreviewStartState()`
   (`PreviewPlaybackGlue.cpp`) — else `startQtPreviewPlayback` silently returns false; (3) the
   `playbackEnabled` branch in `DocumentSection::updateDifficultyScopedActionStates()`
-  (`MainWindow.DocumentUi.cpp`) — else the play/pause/stop button + shortcuts are GREYED on the page
+  (`DocumentPages.cpp`) — else the play/pause/stop button + shortcuts are GREYED on the page
   (refreshed by `installExportPreviewAuditionScene` / `teardownExportPreviewAuditionScene` calling
   it). Installed in `createEmbeddedVideoExportPanel`
   (so a badge switch, which recreates the panel, re-installs the new difficulty); torn down in
@@ -537,7 +545,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   chart audition; pause freezes the frame. Driver =
   `TimelineSection` `enter/exit/render/startExportIntroAdvance` + `tickExportIntroLeadIn` +
   `handleExportIntroSliderSeek` (routes a slider seek < 0 into the region) in
-  `MainWindow.TimelinePlayback.cpp`; overlay rendering is the re-added `PreviewRuntime`
+  `Playback.cpp`; overlay rendering is the re-added `PreviewRuntime`
   `setIntroOverlayData/setIntroOverlayFrame/clearIntroOverlay` + a z=3 `introOverlayLayer` in BOTH
   `PreviewRuntimeView.qml` and `QuickShellPreviewSurface.qml`.
   ⚠ **片头 styling (背景虚化 / 自定义背景 / 卡片阴影) is plumbed via a 5th `bannerStyle` arg
@@ -562,7 +570,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   **clock_count count-in** plays on the chart audition AFTER the 片头 hands off at 0 (✅ GUI-confirmed
   audible 2026-06-16): a per-tick
   scheduler (`setExportAuditionClockSchedule`/`resetExportAuditionClockCursor`/
-  `maybeFireExportAuditionClockTicks` in `MainWindow.TimelinePlayback.cpp`, gated on
+  `maybeFireExportAuditionClockTicks` in `Playback.cpp`, gated on
   `exportPreviewAuditionActive_`) fires `audition("clock")` at chart-time `index*60/clockBpm` for
   `index∈[0,clockCount)` — mirroring the export's `appendClockCountPlaybacks`. **NOT** injected into
   the SFX prepared timeline (the resume hand-off `resetCursor(0,false)` would skip the downbeat).
@@ -611,7 +619,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `onBatchExportPreviewVideo` / `buildVideoExportSeedTask` / `buildVideoExportSnapshot` all take
   `int difficultyId = 0` (0 = active difficulty, the menu-action behavior). For a non-active
   target, the seed/snapshot parse that difficulty's chart directly via
-  `ExportSection::buildParsedMarkersForDifficulty()` (`MainWindow.ExportSnapshot.cpp` — parse +
+  `ExportSection::buildParsedMarkersForDifficulty()` (`ExportSnapshot.cpp` — parse +
   &first-shift, mirroring the worker rebuild) + an inline `MuriAnalyzer::analyze`, because the
   live timeline markers belong to the active difficulty only. Batch export treats the explicit id
   as a default-token hint only. The intro payload comes from
@@ -630,8 +638,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Asset resolution reuses `miacode::chart_assets` (`src/common/ChartAssetPaths.h`). Rules:
   one background image, one PV; `*_bak` backups excluded; an out-of-folder `&video=` target
   is skipped (no sibling fallback); only an empty chart body is fatal.
-- Entry slot: `MainWindow::ExportSection::onPackAsZip()` in
-  `sections/export/MainWindow.PackZip.cpp` (progress + result popup mirror batch export).
+- Entry slot: `VideoExportHost::onPackAsZip()` in
+  `src/app/runtime/export/PackZip.cpp` (progress + result popup mirror batch export).
   UI: File menu under "Save As" + toolbox "Bookmarks" submenu, both via the single
   `packAsZipAction_` (created in `setupMenusAndActions`, reused in the toolbox build), **plus
   the Export hub page's 打包ZIP card (§8) — same slot, in-page entry (2026-06-11)**.
@@ -693,7 +701,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     assets + render settings, incl. `outlineVariant`/`outlineImagePath`); each `renderAt(T, px)`
     only moves `playheadSeconds` and re-grabs the WARM scene (no re-parse — the same "only the
     playhead changes per frame" insight the export uses). The seeded `VideoExportTask` therefore
-    must carry `skinDirectory` + `outlineImagePath` (added in `MainWindow.ExportFlow.cpp`, since the
+    must carry `skinDirectory` + `outlineImagePath` (added in `ExportFlow.cpp`, since the
     cover dialog gets `baseTask_` directly with NO snapshot rebuild).
   - **`CoverComposerView.{h,cpp}`** — host + export. The live view owns a bare `QQuickWindow`
     running `CoverComposer.qml`, embedded into the dialog via **`QWidget::createWindowContainer`**
@@ -747,7 +755,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     `common/PreviewInteractionConfig.h` (an event filter swallows the slider's default 1 ms arrow
     step + OS auto-repeat; press steps ±1/120 s immediately, then a 16 ms `Qt::PreciseTimer` advances
     by real elapsed time × `min(1 + heldSeconds, 3.0)`, mirroring
-    `MainWindow::TimelineSection::applyPreviewHeldSeekTick`). `renderChartFrameNow` (still
+    `PlaybackHost::applyPreviewHeldSeekTick`). `renderChartFrameNow` (still
     re-entrancy- and `chartFrameEnabled()`-guarded) now grabs at the CURRENT shared playhead, so the
     exported still is WYSIWYG with the live scene. `exportCover` stops playback, then re-grabs at the
     exact export resolution (`chartFrameRenderPx` = `sizeFraction × outputHeight`) before compositing,
@@ -761,7 +769,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     `"Standard"` `MaimaiBannerCard.qml` shows the スタンダード plate top-right AND `mirror`s the
     MBase tab so its tall shoulder seats the plate (the prefab only ships a left-shoulder tab).
     Persisted in the composition JSON `card.mode` (B2 save/import + silent preference restore).
-    The VIDEO intro path is still hardcoded `intro.mode = "DX"` in `MainWindow.ExportSnapshot.cpp`
+    The VIDEO intro path is still hardcoded `intro.mode = "DX"` in `ExportSnapshot.cpp`
     (`buildIntroBannerSpec`) — only the cover dialog exposes SD; banner_.mode just seeds the combo. The card toggle drives the card layer's `visible` on the shared model
     (NOTIFY → live scene + export both follow); reset re-ticks it, B2 import syncs it from the restored
     layer, and the QML selection chrome skips hidden layers (`l.visible` gate). The card drop shadow
@@ -866,7 +874,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   - **All 7 difficulty cards exist** (ids 1–7 = Easy/Basic/Advanced/Expert/Master/Re:Master/Utage).
     The prefab only shipped the 5 standard colours (Basic→Re:Master = ids 2–6); **Easy (blue
     `#69A6FF`) and Utage (orange `#E29A46`) are fan-made hue-recolours** matching MiaCode's own
-    `difficultyColor()` palette (`MainWindowShared.cpp`). Generator + recipe:
+    `difficultyColor()` palette (`Shared.cpp`). Generator + recipe:
     `tools/lvcard_gen/recolor_difficulty_cards.py` (masked-hue remap of EXP/ADV frame+tab+pill +
     atlas `_03`/`_02`, re-letters the baked name). The baked difficulty NAME is not a plain
     font+shadow — pixel cross-sections of MASTER/EXPERT show a **4-layer build**: near-white fill
@@ -877,7 +885,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     (+`_Tab`, `_LV_`) in `src/intro/assets/trackstart/` and `UI_NUM_MLevel_{EASY,UTAGE}.png` in
     `src/intro/assets/lv_atlas/` (atlas also copied to `tools/intro_remotion/public/assets/intro/lv_atlas/`).
     Wired by `EASY`/`UTAGE` keys in **both** `maimai_banner.json` (frame/tab/lvPill/lvAtlas),
-    `resources/intro.qrc`, and `introDifficultyAtlasKey()` in `MainWindow.ExportSnapshot.cpp`
+    `resources/intro.qrc`, and `introDifficultyAtlasKey()` in `ExportSnapshot.cpp`
     (case 1→`EASY`, 7→`UTAGE`; previously fell back to BASIC/MASTER stand-ins).
 - **Mirror QML/template edits to the prototype copies under `tools/intro_remotion/qml/`** for
     the standalone exporter preview. ⚠ Editing only `src/intro/qml/*.qml` (or qrc-listed assets)
@@ -891,22 +899,22 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   exports, and silently restores on the next dialog open (`applyCompositionJson(saved,
   interactive=false)` — fallback notice boxes suppressed).
 - Entry slot (2026-06-11): the **Export hub page's 导出封面 card** (§8) →
-  `MainWindow::ExportSection::onExportCover(difficultyId)` (`MainWindow.ExportFlow.cpp`) — the
+  `VideoExportHost::onExportCover(difficultyId)` (`ExportFlow.cpp`) — the
   toolbar Export dropdown is GONE; the toolbar Export button now jumps straight to the Export
   page. The seed `VideoExportTask` comes from
   `ExportSection::buildVideoExportSeedTask(difficultyId)` (shared with `onExportPreviewVideo`):
   `task.intro` (`IntroBannerSpec`, via `buildIntroBannerSpecForDifficulty()` wrapping
-  `buildIntroBannerSpec` in `MainWindow.ExportSnapshot.cpp`) drives the card, and
+  `buildIntroBannerSpec` in `ExportSnapshot.cpp`) drives the card, and
   `task.noteMarkers`/`skinDirectory`/`outlineImagePath`/render-settings/`contentDurationSeconds`
   feed the chart-frame `SceneFrameRenderer`. Output dir = the chart directory. (The former
   `VideoExportDialog::openExportCoverDialog` + its Font-tab button are REMOVED.
   **皮肤 panel reorg (2026-07-04/05):** skin / judge line / 字体 (embedded HUD-font picker) are
   now ONE shared owner-wired panel — `DialogsSection::buildSkinSettings(parent, skinOut,
-  includeFolderButtons)` (`MainWindow.Dialogs.ExportSettings.cpp`, alongside
+  includeFolderButtons)` (`deleted Dialogs.ExportSettings.cpp`, alongside
   `buildExportInjectedSettings`) — reused by BOTH a main-window **皮肤设置 popup** (`onSkinSettings`
   → `openSkinSettingsDialog`; toolbar button `skinSettingsButton_`/`skinSettingsAction_` sits
   between 预览设置 and 导出 at the SAME width as the 导出 button, wired in
-  `MainWindow.FrameBootstrapFinalize.cpp`) AND the export dialog's **皮肤 tab** (injected via
+  `SessionBootstrapFinalize.cpp`) AND the export dialog's **皮肤 tab** (injected via
   `VideoExportDialog::injectOwnerWiredSettings(videoExtras, gameplayWidget, skinWidget)`). Intro
   sound + a 当前谱面资源 readout were part of an earlier draft but were DROPPED (2026-07-05) — the
   panel is skin / judge line / font only. The HUD-font controls are an EMBEDDABLE widget
@@ -954,7 +962,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `refreshAddIntroEnabledState` greys 添加片头 only when the range START is non-zero, mirroring
   `applyUiToTask`'s bake gate (a [0, partial] clip counts as full-range and carries the intro)
   — the two gates must stay in lockstep. **⚠ Wiring rule:** `buildVideoExportSnapshot`
-  (`MainWindow.ExportSnapshot.cpp`) REBUILDS `built.intro` from the live document and must call
+  (`ExportSnapshot.cpp`) REBUILDS `built.intro` from the live document and must call
   `copyIntroStyling(requestedTask.intro, &built.intro)` (`VideoExportController.h`) — without
   it every dialog styling choice silently resets to defaults at export launch (the original
   "settings don't affect the export" bug). Deliberately ABSENT: 文字超长 (the animated
@@ -984,7 +992,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   audition card; the audio/video media-tools launcher sits in the page back-bar (not on
   the Offset row) so the rows stay uniform. `clock_count` (spin 1–64, default 4) is a
   plain manual field — no auto-detect button and BPM detection does NOT write it — that
-  saves through `MainWindow::applyLatencyDetectorClockCount` → `parsedClockCount` →
+  saves through `Session::applyLatencyDetectorClockCount` → `parsedClockCount` →
   `extraFields`. The `自动检测 Offset` entry point is visible here (wiring always intact).
 - **Detection algorithm** lives in `LatencyAnalysis.*` (pure, GUI-free): `decodeMonoTrack` →
   `buildOnsetEnvelope` (energy-flux, for BPM) + `buildTransientEnvelope` (abs-diff, for offset)
@@ -1008,11 +1016,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   per combo only when an `onset-*` dim is swept), then prints a combo table ranked by pass%. Used
   for Phase-0 coordinate-descent tuning against the `&first` ground-truth corpus.
 - UI title is **"延迟设置" / "Latency Settings"** (page header in
-  `sections/document/MainWindow.DocumentUi.cpp`, gated on `activeOutlineKey_=="latency"`).
+  `src/app/runtime/document/DocumentPages.cpp`, gated on `activeOutlineKey_=="latency"`).
 - **Entries (2026-06-11, L-A migration — the sidebar item is GONE):** (1) the metadata page's
-  "延迟与偏移校准" entry card (built in `MainWindow.FrameBootstrap.cpp` after the metadata card;
+  "延迟与偏移校准" entry card (built in `SessionBootstrap.cpp` after the metadata card;
   BPM/offset summary label `latencyEntrySummaryLabel_` refreshed by `populateMetadataPage` from
-  `parsedWholeBpm` + `document_.first`) → `switchToLatencyField()`; (2) the Tools menu's
+  `parsedWholeBpm` + workspace `document().first`) → `switchToLatencyField()`; (2) the Tools menu's
   "BPM && 延迟检测" `latencyDetectorAction_` (kept as the keyboard-reachable direct path).
   The page carries a "← 返回谱面信息" bar at the top of `LatencyDetectionPage::buildUi()`
   (`QPushButton#LatencyBackButton`, styled in `UiTheme::latencyDetectionPageStyleSheet`) →
@@ -1023,7 +1031,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   installs the synthesized test chart as the preview source and plays it through the real
   `startQtPreviewPlayback`/`onQtPreviewTick`. `LatencySandboxController` is a thin
   install/teardown + UI-poll layer; the page button → `toggleAudition()` →
-  `MainWindow::onTogglePreviewPause()`. See `cross-chain-linkage.md` §12.
+  `Session::onTogglePreviewPause()`. See `cross-chain-linkage.md` §12.
 - **Live param edits (incl. mid-playback):** `setBpm/setOffsetSeconds/setSubdivision` funnel into
   `regenerateAndPushIfActive()` → `setupSandboxPreviewState()`. The song audio is the fixed master
   clock and is never re-seeked here; only the test-chart notes + SFX timeline are rebuilt. Because
@@ -1031,7 +1039,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   follow it with `resetCursor(currentPreviewAuthoritativeAudioClockSecond(), false)` so taps before
   "now" aren't re-fired (the music keeps playing untouched).
 - **Ctrl+S (works):** the app has no global undo stack (undo = text editor only). Ctrl+S on this page
-  is routed via an **app-level `eventFilter`** (installed on `qApp`) → `MainWindow::onSaveFile()`, NOT a
+  is routed via an **app-level `eventFilter`** (installed on `qApp`) → `Session::onSaveFile()`, NOT a
   page `QShortcut` — a page QShortcut on the same key as the global Save `QAction` is *ambiguous* (Qt
   fires neither). Scoped to `isVisible() && (target==this || isAncestorOf(target))`; `onPageEntered()`
   takes focus so it catches the key on entry. Spin boxes use `keyboardTracking(false)` so a half-typed
@@ -1051,7 +1059,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     when dragging *any* SFX/volume slider was NOT the deliberate audition: it was
     `BassPreviewAudioBackend::applyLevels()` calling `resetCursor(authoritativeSecond(), false)` after its
     group rebuild. During active playback `authoritativeSecond()` is FROZEN at the last start/seek snapshot
-    (MainWindow's wall-clock is the live SFX master and is never written back to `lastAuthoritativeSecond`),
+    (the session wall-clock is the live SFX master and is never written back to `lastAuthoritativeSecond`),
     so re-seeking to it rewound the event cursor to the playback start and the next `drainEvents(wallClock)`
     replayed every tap from there in one burst. This hit BOTH the latency page and the audio-settings
     dialog — both funnel through `applyPreviewAudioSettingsToRuntime` → `applyLevels`. Fix: anchor the
@@ -1061,7 +1069,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     slider-drag audition is now viable if gated to non-playing state.
 - **SFX-level isolation (audition vs normal preview) — REDESIGNED (2026-06-01).** Two modes share ONE
   `previewSfxRuntime_`; runtime levels are now a PURE FUNCTION of the current mode, re-dispatched through
-  the single entry `MainWindow::applyPreviewAudioSettingsToRuntime()`. On the latency page
+  the single entry `Session::applyPreviewAudioSettingsToRuntime()`. On the latency page
   (`LatencySandboxController::isOnPage()`) it pushes `makePreviewLatencyAuditionLevels(mix, sfxPercent)`;
   otherwise the user's real mix. No snapshot/restore, no `latencySandboxAuditionActive_` *audio* gate
   (that flag now only gates *playback* — `hasPreviewableChart`). **Old leak root cause:** the sidebar
@@ -1098,12 +1106,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `ChartBatchTransform.{h,cpp}` (`transformChartText`, `toggleBreak/Ex/FireworkForSelection`,
   `randomRotateForSelection`), `ChartNormalization.{h,cpp}` (`normalizeChartText`),
-  `Non384SnapTable.*`. MainWindow entries: `onMirror*`, `onRotate*`, `onNormalizeWholeChart`,
+  `Non384SnapTable.*`. Session entries: `onMirror*`, `onRotate*`, `onNormalizeWholeChart`,
   `onToggle*Selection`.
 
 ## 12. Toolbox media utilities
 
-- `sections/dialogs/MainWindow.Dialogs.cpp` + `MainWindow.DialogsSection.cpp` — prepend
+- `src/app/runtime/media/MediaJobs.cpp` + `MediaJobsHost.cpp` — prepend
   silence/black, compress bg video, convert track to 44100 Hz (`onPrependTrackSilence`,
   `onPrependPvBlack`, `onCompressBackgroundVideo`, `onConvertTrackTo44100Hz`). These four open
   from a single popup, `onMediaProcessingTools()` (one button + one-line description each),
@@ -1111,7 +1119,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   The shared `runFfmpegBlocking(... totalDurationSeconds, error)` helper drives a determinate
   progress bar by parsing ffmpeg `-progress pipe:1` `out_time_us=` against the expected output
   duration (falls back to an indeterminate bar when duration is unknown).
-- Toolbox menu itself is built in `sections/frame/MainWindow.FrameBootstrap.cpp` (`toolboxMenu_`).
+- Toolbox menu itself is built in `src/app/runtime/SessionBootstrap.cpp` (`toolboxMenu_`).
   BPM & Latency was dropped from the toolbox (still in the top Tools menu via
   `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`
   constant (feature kept: `copyAreaPanel_`/`fullCopyAreaAction_`/`setFullCopyAreaVisible`).

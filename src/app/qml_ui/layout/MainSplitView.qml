@@ -34,7 +34,7 @@ Item {
     readonly property bool coverExportActive:
         root.pages.activePageId === "cover"
     readonly property real previewEditorAvailableWidth:
-        Math.max(1, workspaceSplit.width - (preview.visible ? 4 : 0))
+        Math.max(1, workspaceSplit.width - (preview.visible ? Theme.splitDividerThickness : 0))
     signal settingsRequested()
 
     function persistBottomPanelHeightRatio() {

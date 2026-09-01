@@ -82,7 +82,38 @@ bool verifyOpenSaveAndSaveAs(QTextStream& out)
     ok &= expect(workspace.snapshot().dirty
                      && workspace.snapshot().dirtyDifficultyIds == QVector<int>{6},
                  QStringLiteral("the other difficulty stays unsaved and still says so"), out);
+
+    ok &= expect(files.save(0).accepted && !workspace.snapshot().dirty,
+                 QStringLiteral("a whole-document save succeeds"), out);
+    multiFile.close();
+    multiFile.open(QIODevice::ReadOnly);
+    const QByteArray afterWholeSave = multiFile.readAll();
+    ok &= expect(afterWholeSave.contains("(120){4}5,")
+                     && afterWholeSave.contains("(120){4}6,"),
+                 QStringLiteral("a whole-document save writes every live difficulty"), out);
     return ok;
+}
+
+bool verifyOpenAcceptsEmptyInoteFile(QTextStream& out)
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("maidata.txt"));
+    const QByteArray source =
+        "&title=empty-slots\n&lv_2=\n&inote_2=\n&lv_5=12\n&inote_5=(120){4}1,\n";
+    if (!expect(directory.isValid() && writeBytes(path, source),
+                QStringLiteral("temporary empty-slot document is prepared"), out)) {
+        return false;
+    }
+
+    miacode::v2::ChartWorkspace workspace;
+    miacode::v2::ChartWorkspaceFileService files(workspace);
+    const auto opened = files.open(path);
+    return expect(opened.accepted && opened.error.isEmpty()
+                      && !opened.issues.isEmpty()
+                      && workspace.snapshot().hasDocument
+                      && workspace.snapshot().activeDifficultyId == 5
+                      && workspace.document().difficulty(2) != nullptr,
+                  QStringLiteral("opening a file with empty inote slots loads the document"), out);
 }
 
 bool verifyFailedOpenRetainsWorkspace(QTextStream& out)
@@ -103,7 +134,9 @@ bool verifyFailedOpenRetainsWorkspace(QTextStream& out)
 int main()
 {
     QTextStream out(stderr);
-    if (!verifyOpenSaveAndSaveAs(out) || !verifyFailedOpenRetainsWorkspace(out)) return 1;
+    if (!verifyOpenSaveAndSaveAs(out)
+        || !verifyOpenAcceptsEmptyInoteFile(out)
+        || !verifyFailedOpenRetainsWorkspace(out)) return 1;
     QTextStream result(stdout);
     result << "Chart workspace file-service checks passed." << Qt::endl;
     return 0;

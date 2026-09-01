@@ -772,9 +772,9 @@ int main(int argc, char** argv)
         const QString viewState = qmlSource(QStringLiteral("src/app/qml_ui/ViewState.qml"));
         const QString timelineSession = qmlSource(QStringLiteral("src/app/qml_ui/QmlTimelineModel.h"));
         const QString timelineTick = qmlSource(
-            QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTick.cpp"));
+            QStringLiteral("src/app/runtime/playback/Tick.cpp"));
         const QString editorDisplay = qmlSource(
-            QStringLiteral("src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp"));
+            QStringLiteral("src/app/runtime/editor/EditorDisplay.cpp"));
         const QString zoomMenu = qmlSource(QStringLiteral("src/app/qml_ui/timeline/TimelineZoomMenu.qml"));
         const QString brightnessMenu = qmlSource(QStringLiteral("src/app/qml_ui/timeline/TimelineBrightnessMenu.qml"));
         expect(!panel.isEmpty() && !tabBar.isEmpty() && !splitView.isEmpty()
@@ -818,7 +818,7 @@ int main(int argc, char** argv)
                    && panel.contains(QStringLiteral("timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)")),
                QStringLiteral("v2 timeline header keeps labels clear of its QML controls"));
         const int playingFlushStart = timelineTick.indexOf(
-            QStringLiteral("void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()"));
+            QStringLiteral("void miacode::runtime::PlaybackHost::flushQtPreviewTimelinePosition()"));
         const QString playingFlush = playingFlushStart >= 0
             ? timelineTick.mid(playingFlushStart, 1800)
             : QString();

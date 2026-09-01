@@ -588,11 +588,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          槽位纪律与导出引擎一致：装配对象持槽，窗口在 `~MainWindow` 最开头撤销。
      13. **音视频处理改由 `miacode::v2::MediaToolsEngine` 承接（方法 118 → 112）**。
          这条架构演进现已完成：六个入口（两个转换 + 前置空白的上下文/检测/还原/应用）
-         由 `miacode::v2::MediaToolsService` 实现，`QmlUiBootstrap` 创建它并注册到
-         `ApplicationServices::mediaToolsEngineSlot()`；`MainWindow` 不再实现这些接口，只保留
-         QAction adapter 和 `PreviewSurface` 文件事务的窗口侧转发。`isTrack` 一个参数区分音轨
-         与背景视频，两条流程本来就同形，不再翻倍接口面。PV 批量队列仍归
-         `QmlMediaToolsModel` 自己——它是唯一有跨次开启状态的部分。
+         由 `src/app/runtime/media/MediaJobsHost.{h,cpp}` 实现，`Session` 创建它并注册到
+         `ApplicationServices::mediaToolsEngineSlot()`；`MainWindow` 的旧 sections 已迁出。
+         `isTrack` 一个参数区分音轨与背景视频，两条流程本来就同形，不再翻倍接口面。PV
+         批量队列仍归 `QmlMediaToolsModel` 自己——它是唯一有跨次开启状态的部分。
          过程中撞到的真实名字遮蔽（旧 `MainWindow.Dialogs.MediaTools.cpp` 内同名的
          `convertTrackTo44100Hz(...)` 文件内 ffmpeg 辅助函数）随实现迁出而消失；该文件已删除。
 
@@ -721,11 +720,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       数值显示改为被动 `QLabel`；滑块、设置保存和旧入口保持不变。QML `EditableValue.qml` 的
       双击输入路径不变。
 - [x] **阶段 4 第四批 / 媒体工具 owner migration（2026-09-01）**：六个单文件媒体接口由
-      `miacode::v2::MediaToolsService` 接管；`QmlUiBootstrap` 负责创建、注册到
-      `ApplicationServices::mediaToolsEngineSlot()` 及关闭顺序。`MainWindow` 仅保留 QAction
-      adapter 与 `PreviewSurface` 文件事务，旧 `MainWindow.Dialogs.MediaTools.cpp` 已删除。
-      `media_tools_service_spec`（runtime）、`stage4_media_tools_ownership_spec`（ownership）
-      与 `qml_ui_bootstrap_lifecycle_spec`（lifecycle）通过；`MiaCode` Release 构建通过。
+      `src/app/runtime/media/MediaJobsHost.{h,cpp}` 与 `MediaTools.cpp` 接管；`Session` 负责
+      创建并注册到 `ApplicationServices::mediaToolsEngineSlot()`。旧 `MainWindow` sections 已
+      迁出，媒体任务不再存在平行 owner；`qml_ui_bootstrap_lifecycle_spec`（lifecycle）与
+      `MiaCode` Release 构建通过。
       完整 CTest 为 97/99；范围外既有 `qml_export_video_page_spec` 与
       `qtavplayer_platform_spec` 失败，不作为本批完成依据。
 - [ ] 搬迁/删除 `src/app/mainwindow/` 全部文件；仅保留已抽出的应用服务、预览/媒体/导出和领域能力。

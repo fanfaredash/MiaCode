@@ -184,6 +184,58 @@ bool verifyIncrementalChartAllowsIntermediateText(QTextStream& out)
                   QStringLiteral("incremental chart edits accept an incomplete token for later analysis"), out);
 }
 
+bool verifyDifficultyFieldsDirtyTheirSection(QTextStream& out)
+{
+    using miacode::v2::ChartWorkspaceDifficultyField;
+
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    bool ok = expect(workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                     QStringLiteral("an opened chart has no dirty sections"), out);
+
+    ok &= expect(workspace.updateDifficultyField(
+                     5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12+"))
+                     && workspace.snapshot().dirty
+                     && workspace.snapshot().dirtyDifficultyIds == QVector<int>{5},
+                 QStringLiteral("a level edit marks that difficulty immediately"), out);
+
+    workspace.selectDifficulty(6);
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{5},
+                 QStringLiteral("switching away keeps the edited difficulty marked"), out);
+
+    ok &= expect(workspace.updateDifficultyField(
+                     6, ChartWorkspaceDifficultyField::Designer, QStringLiteral("other"))
+                     && workspace.snapshot().dirtyDifficultyIds == (QVector<int>{5, 6}),
+                 QStringLiteral("a designer edit marks that difficulty without clearing the other"), out);
+
+    workspace.updateDifficultyField(5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12"));
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{6},
+                 QStringLiteral("restoring the saved level clears only that difficulty"), out);
+    return ok;
+}
+
+bool verifyOpenAcceptsEmptyInoteSlots(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    const auto opened = workspace.openSource(
+        QStringLiteral(
+            "&title=empty-slots\n"
+            "&lv_2=\n"
+            "&inote_2=\n"
+            "&lv_5=12\n"
+            "&inote_5=(120){4}1,\n"
+            "&lv_7=\n"
+            "&inote_7=\n"),
+        QStringLiteral("chart.txt"));
+    const auto state = workspace.snapshot();
+    return expect(opened.accepted && state.hasDocument && !state.dirty
+                      && state.activeDifficultyId == 5
+                      && workspace.document().difficulty(2) != nullptr
+                      && workspace.document().difficulty(7) != nullptr
+                      && !opened.issues.isEmpty(),
+                  QStringLiteral("empty inote slots load; chart diagnostics stay on the result"), out);
+}
+
 bool verifyInlineSourceSpanWinsOverLaterLevel(QTextStream& out)
 {
     const auto preflight = miacode::v2::ChartWorkspace::preflightSource(
@@ -192,6 +244,37 @@ bool verifyInlineSourceSpanWinsOverLaterLevel(QTextStream& out)
     return expect(!preflight.accepted && !preflight.issues.isEmpty()
                       && preflight.issues.constFirst().line == 1,
                   QStringLiteral("full-source diagnostics prefer the inline chart span over a later level field"), out);
+}
+
+bool verifyOwnedFieldMutationsAndSavePointRebind(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    bool ok = expect(workspace.setDesignerForSlot(5, QStringLiteral("slot"))
+                         && workspace.document().designerForSlot(5) == QLatin1String("slot")
+                         && workspace.snapshot().dirty,
+                     QStringLiteral("setDesignerForSlot is owned by the workspace"), out);
+    ok &= expect(workspace.upsertExtraField(QStringLiteral("wholebpm"), QStringLiteral("140")),
+                 QStringLiteral("upsertExtraField accepts a wholebpm write"), out);
+    bool foundWholeBpm = false;
+    for (const SimaiRawField& field : workspace.document().extraFields) {
+        if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) == 0
+            && field.value == QLatin1String("140")) {
+            foundWholeBpm = true;
+            break;
+        }
+    }
+    ok &= expect(foundWholeBpm, QStringLiteral("upsertExtraField writes wholebpm on the owned document"), out);
+    ok &= expect(workspace.replaceDifficultyChart(6, QStringLiteral("(120){4}9,"))
+                     && workspace.document().difficulty(6)->chart == QLatin1String("(120){4}9,"),
+                 QStringLiteral("replaceDifficultyChart mutates a non-active slot"), out);
+
+    const QString current = workspace.document().toText();
+    ok &= expect(workspace.rebindSavePoint(sourceWithTwoDifficulties()) && workspace.snapshot().dirty,
+                 QStringLiteral("rebinding the save point to the opened text keeps later edits dirty"), out);
+    ok &= expect(workspace.rebindSavePoint(current) && !workspace.snapshot().dirty,
+                 QStringLiteral("rebinding the save point to the current text clears dirty"), out);
+    return ok;
 }
 
 }  // namespace
@@ -205,7 +288,10 @@ int main()
         && verifyCompleteDocumentSaveAnchor(out)
         && verifyDocumentAndDifficultyTransactions(out)
         && verifyIncrementalChartAllowsIntermediateText(out)
-        && verifyInlineSourceSpanWinsOverLaterLevel(out);
+        && verifyDifficultyFieldsDirtyTheirSection(out)
+        && verifyOpenAcceptsEmptyInoteSlots(out)
+        && verifyInlineSourceSpanWinsOverLaterLevel(out)
+        && verifyOwnedFieldMutationsAndSavePointRebind(out);
     if (!ok) return 1;
     QTextStream result(stdout);
     result << "Chart workspace checks passed." << Qt::endl;

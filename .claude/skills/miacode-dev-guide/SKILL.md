@@ -25,12 +25,12 @@ same change.
   层叠关系错误 / stacking, hit-area mismatch → use the **`qt-ui-layout-pitfalls`** skill
   (symptom routing table + proven recipes) BEFORE editing any dialog/QML layout code.
 
-## Repo at a glance (current paths — verified 2026-05-29)
+## Repo at a glance (current paths — verified 2026-09-01)
 
 - App boot + CLI export + export-worker entry: `src/app/main.cpp`
-- Main window orchestration: `src/app/mainwindow/` (+ `sections/<feature>/`)
-- Default UI (**v2**): `src/app/qml_ui/`
-- QuickShell (**v1**, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
+- Runtime assembly: `src/app/runtime/` (`Session` + hosts). Progress: `src/app/runtime/ASSEMBLY.md`. There is no `QMainWindow` product window and no `src/app/mainwindow/`.
+- Default UI (**v2**): `src/app/qml_ui/` (`QmlUiBootstrap`). `src/app/v2/ChartWorkspace` is the sole document owner. Hosts fill the eight `ApplicationServices` slots (preview, timeline, export, latency, media tools, preferences, document, page router). QML binds those slots. Workspace edits go through `ChartWorkspace`; hosts follow `ChartWorkspace::changed`.
+- `src/app/quick_shell/` leftover is preview-host policy, not a second shell. `--ui=v1` does not exist.
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)
 - Parser + validation: `src/core/chart/parser/` (`SimaiNativeParser*` — include-split TU)
 - Chart transforms / normalization: `src/core/chart/transform/`
@@ -88,11 +88,11 @@ This is a committed product decision; treat it as a contract.
 - **No new god files.** Standing offenders not to grow: `VideoExportController.cpp` (~5000),
   `MuriAnalyzer.cpp` (~1300, decomposed into `miacode::muri::detail` stage TUs — now shared
   primitives + a thin `analyze()` orchestrator; don't regrow),
-  `MainWindow` (176-method partial-class across ~30 section files).
-  Add a new focused unit instead. Soft target: ~800 lines / one clear responsibility per file.
-- **MainWindow is orchestration only** (a must-keep contract). New window features land in
-  `sections/<feature>/` as cooperating objects, not as more `friend …Section` partials on the
-  one giant `MainWindow.h`.
+  `Session.h` (assembly surface). Add a new focused host under `src/app/runtime/<area>/`
+  instead. Soft target: ~800 lines / one clear responsibility per file.
+- **`Session` is assembly only** (a must-keep contract). New runtime work lands in a host
+  (`playback`, `document`, `export`, …) that fills an `ApplicationServices` slot. Do not grow
+  `Session.h` with feature bodies, and do not add `friend …Host` partials on Session.
 - **All logging goes through `miacode::debug_log` channels, gated by `--debug`.** Don't add raw
   `qDebug` / `std::cout` / `printf` / `OutputDebugString`. See `references/debug-and-logging.md`.
 - **Don't add env flags casually.** ~80 `MIACODE_*` vars already exist. Prefer reusing/removing.

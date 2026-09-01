@@ -3,7 +3,7 @@
 #include "DialogLocalization.h"
 #include "UiTheme.h"
 #include "common/AdoptedWidgetCoordinates.h"
-#include "mainwindow/MainWindowShared.h"
+#include "runtime/Shared.h"
 
 #include <QAbstractItemView>
 #include <QAbstractScrollArea>
@@ -233,7 +233,7 @@ QFrame* createCard(const QString& titleText, QWidget* parent, QVBoxLayout** body
 
     auto* title = new QLabel(titleText, card);
     title->setProperty("role", "cardTitle");
-    title->setFont(miacode::mainwindow::shared::uiAccentFont(13, QFont::DemiBold));
+    title->setFont(miacode::runtime::shared::uiAccentFont(13, QFont::DemiBold));
     layout->addWidget(title);
 
     if (bodyLayoutOut != nullptr) {
@@ -246,7 +246,7 @@ QLabel* createFormLabel(const QString& text, QWidget* parent)
 {
     auto* label = new QLabel(text, parent);
     label->setProperty("role", "cardHint");
-    label->setFont(miacode::mainwindow::shared::uiOutputFont());
+    label->setFont(miacode::runtime::shared::uiOutputFont());
     return label;
 }
 

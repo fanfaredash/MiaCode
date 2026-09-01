@@ -108,6 +108,8 @@ bool verifyWorkspaceSnapshotProjection(QTextStream& err)
                       && current.muriRows.constFirst().difficultyId == 5
                       && current.muriRows.constFirst().revision == 72,
                   QStringLiteral("every QML row inherits the accepted workspace identity"), err);
+    ok &= require(current.validationRows.constFirst().second < 0.0,
+                  QStringLiteral("syntax rows carry no playhead time"), err);
 
     for (const auto& stale : {
              miacode::qml_ui::projectAnalysis(snapshot, 4, 72, muriRows),

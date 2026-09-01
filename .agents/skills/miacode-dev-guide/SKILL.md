@@ -42,7 +42,8 @@ same change.
   encoding file I/O plus atomic saves; `AnalysisService` drives production QML validation/
   shifted-marker/Muri projection with one revision-stamped pending/available snapshot;
   `EditorSyncController` owns queued player/timeline/editor follow, navigation, caret and authoring
-  synchronization). `MainWindow` consumes committed workspace values for timeline and preview.
+  synchronization). `MainWindow` hosts preview, timeline, export, latency, and autosave.
+  QML writes `ChartWorkspace`; the window follows `ChartWorkspace::changed`.
 - QuickShell compatibility: `src/app/quick_shell/QuickShellController.*` remains temporarily for
   v2; the v1 shell, `--ui=v1`, and `MIACODE_UI_SKIN` were deleted in stage 0a.
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)

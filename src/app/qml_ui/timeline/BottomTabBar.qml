@@ -13,11 +13,15 @@ Rectangle {
     implicitHeight: 28
     color: Theme.surfaceColor("panel", Theme.colors.background.surface)
 
+    readonly property real leadingInkX: leadingTab.x + leadingTab.contentInkLeft
+    readonly property real trailingContentRight: followCode.x + followCode.width
+
     RowLayout {
         anchors.fill: parent
         z: 1
 
         AppTab {
+            id: leadingTab
             Layout.fillHeight: true
             panelTab: true
             visible: root.timelineSession.timelineTabVisible
@@ -37,7 +41,8 @@ Rectangle {
         AppTab {
             Layout.fillHeight: true
             panelTab: true
-            text: UiText.text("Muri")
+            visible: root.timelineSession.muriTabVisible
+            text: root.timelineSession.muriTabLabel
             count: root.analysisSession.muriRows.length
             active: root.timelineSession.currentTabId === "muri"
             onClicked: root.timelineSession.setCurrentTabId("muri")

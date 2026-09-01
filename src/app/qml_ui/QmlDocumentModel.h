@@ -259,6 +259,7 @@ private:
     void emitDocumentStateChanged();
     void refreshDocumentState();
     void clearMetadataSourceRejection();
+    bool runWorkspaceMutation(const std::function<bool()>& mutate);
     QVariantList sourceIssuesToVariantList() const;
     miacode::v2::ShellNotifications* notifications_ = nullptr;
     // Bound to the assembly's slot, not a snapshot.
@@ -282,6 +283,7 @@ private:
     qulonglong bookmarkGeneration_ = 0;
     bool unifiedDesignerEnabled_ = false;
     bool wholeSourceEditorActive_ = false;
+    bool suppressWorkspaceChanged_ = false;
     // Saving needs a path. A document that has never been written has none, so
     // the save asks for one first — through the shell's file request, which
     // makes it a continuation like the rest of this flow. Without this, 保存 on

@@ -12,7 +12,7 @@ namespace miacode::v2 {
 
 // What the export page needs the export engine to do.
 //
-// Stage 3.5 item 2: QmlExportSession used to reach `MainWindow::exportSection_`
+// Stage 3.5 item 2: QmlExportSession used to reach `MainWindow::videoExport_`
 // — a private member holding a 3,600-line partial-class section — which was the
 // last direct private-member read anywhere in src/app/qml_ui. That is not a
 // coupling an accessor can honestly fix: the QML page was depending on a

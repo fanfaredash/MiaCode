@@ -193,7 +193,7 @@ Rules going forward:
   `ffmpeg.exe`). Needs MSYS2 + VS BuildTools (both present on the dev box).
 - **Qt6::Svg (toolbar gear icon):** in `find_package(Qt6 … COMPONENTS … Svg)` +
   `target_link_libraries(MiaCode PRIVATE Qt6::Svg)`, so `makeSettingsGearIcon`
-  (`MainWindowShared.cpp`) renders the Google Material "settings" gear via `QSvgRenderer`.
+  (`Shared.cpp`) renders the Google Material "settings" gear via `QSvgRenderer`.
   windeployqt stages `Qt6Svg.dll` automatically (it's a direct link dependency — no extra
   packaging step). So far this is the only `QSvgRenderer` use; keep it that way unless a new
   feature genuinely needs SVG.

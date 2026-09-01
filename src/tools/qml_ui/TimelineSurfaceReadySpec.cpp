@@ -4,10 +4,10 @@
 // scrubbing still moved the preview and 跟随预览 still moved the caret.
 //
 // TimelineQuickItem refuses to be written to until it has a window, a state
-// bridge and a non-zero size, so the window holds every timeline write back
+// bridge and a non-zero size, so the runtime holds every timeline write back
 // behind quickTimelineBridgeReady() and waits to be told. The report travels
-// QML -> QmlTimelineModel::surfaceReady() -> the timeline surface -> the
-// window's quickTimelineSurfaceReady_ flag.
+// QML -> QmlTimelineModel::surfaceReady() -> the TimelineSurface -> the
+// PlaybackHost's timelineReady_ flag.
 //
 // Routing that call through miacode::v2::TimelineSurface broke it. MainWindow
 // carried two members named shellTimelineSurfaceReady — a `bool ... const`
@@ -71,7 +71,7 @@ QString functionBody(const QString& source, const QString& signature)
 QStringList readyFlagWriteSites()
 {
     static const QRegularExpression assignment(
-        QStringLiteral("quickTimelineSurfaceReady_\\s*=[^=]"));
+        QStringLiteral("timelineReady_\\s*=[^=]"));
     QStringList sites;
     QDirIterator it(sourceRoot() + QStringLiteral("/src"),
                     QStringList{QStringLiteral("*.cpp"), QStringLiteral("*.h"),
@@ -79,13 +79,18 @@ QStringList readyFlagWriteSites()
                     QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QString path = it.next();
+        // This spec contains the assertion text itself; do not count that
+        // lexical fixture as a production writer of the flag.
+        if (QFileInfo(path).fileName() == QLatin1String("TimelineSurfaceReadySpec.cpp")) {
+            continue;
+        }
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly)) continue;
         const QString text = QString::fromUtf8(file.readAll());
         const QStringList lines = text.split(QLatin1Char('\n'));
         for (const QString& line : lines) {
             // The storage declaration and the reference-binding aliases in
-            // MainWindowMemberStorage.inc introduce the flag; they do not write it.
+            // SessionMembers.inc introduces the flag; it does not write it.
             if (line.trimmed().startsWith(QStringLiteral("bool"))) continue;
             if (assignment.match(line).hasMatch()) {
                 sites << QFileInfo(path).fileName() + QStringLiteral(": ") + line.trimmed();
@@ -97,7 +102,7 @@ QStringList readyFlagWriteSites()
 }
 
 // A stand-in surface. Its only job is to prove the report is deliverable
-// through the contract; the production one is MainWindow.
+// through the contract; the production one is PlaybackHost.
 class FakeTimelineSurface final : public miacode::v2::TimelineSurface
 {
 public:
@@ -139,7 +144,7 @@ bool verifyTheReportReachesTheSurface(QTextStream& out, int* failed)
                  QStringLiteral("the QML item's ready report reaches the surface"), out, failed);
 
     // The item can go through readiness again — a reparent, a resize back from
-    // zero. De-duplicating is the window's job (noteQuickTimelineSurfaceReady
+    // zero. De-duplicating is the host's job (noteTimelineSurfaceReady
     // returns early once the flag is set); the model must not swallow repeats,
     // or a genuine re-arm after the flag was cleared would be lost.
     model.surfaceReady();
@@ -182,29 +187,27 @@ bool verifyTheContractDeclaresACommand(QTextStream& out, int* failed)
     return ok;
 }
 
-// The window's forwarder is where the report turns into the flag. It reached a
+// The runtime forwarder is where the report turns into the flag. It reached a
 // getter instead, which is why the whole chain went quiet without a diagnostic.
 bool verifyTheWindowForwardsToTheFlag(QTextStream& out, int* failed)
 {
     const QString host = readSource(
-        QStringLiteral("src/app/mainwindow/sections/window/MainWindow.BottomTabsHost.cpp"));
+        QStringLiteral("src/app/runtime/playback/SurfaceContract.cpp"));
     bool ok = expect(!host.isEmpty(),
-                     QStringLiteral("MainWindow.BottomTabsHost.cpp is readable"), out, failed);
+                     QStringLiteral("PlaybackHost surface contract is readable"), out, failed);
     if (!ok) return false;
 
     const QString forwarder = functionBody(
-        host, QStringLiteral("void MainWindow::noteTimelineSurfaceReady()"));
+        host, QStringLiteral("void miacode::runtime::PlaybackHost::noteTimelineSurfaceReady()"));
     ok &= expect(!forwarder.isEmpty(),
-                 QStringLiteral("the window implements the readiness command"), out, failed);
-    ok &= expect(forwarder.contains(QStringLiteral("noteQuickTimelineSurfaceReady()")),
+                 QStringLiteral("the playback host implements the readiness command"), out, failed);
+    ok &= expect(forwarder.contains(QStringLiteral("state_.timelineReady_ = true")),
                  QStringLiteral("the command reaches the flag rather than reading it back"),
                  out, failed);
 
-    const QString header = readSource(QStringLiteral("src/app/mainwindow/MainWindow.h"));
-    ok &= expect(!header.contains(QStringLiteral("void shellTimelineSurfaceReady();")),
-                 QStringLiteral("no void notifier shares a name with the "
-                                "shellTimelineSurfaceReady getter — that overload pair is what "
-                                "let the refactor pick the wrong member silently"), out, failed);
+    const QString header = readSource(QStringLiteral("src/app/runtime/playback/PlaybackHost.h"));
+    ok &= expect(header.contains(QStringLiteral("void noteTimelineSurfaceReady() override;")),
+                 QStringLiteral("the playback host exposes the command-shaped contract"), out, failed);
     return ok;
 }
 
@@ -213,20 +216,20 @@ bool verifyTheWindowForwardsToTheFlag(QTextStream& out, int* failed)
 bool verifyTheFlagIsWhatGatesPlaybackWrites(QTextStream& out, int* failed)
 {
     const QString flow = readSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp"));
+        QStringLiteral("src/app/runtime/playback/TimelineFlow.cpp"));
     const QString tick = readSource(
-        QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTick.cpp"));
+        QStringLiteral("src/app/runtime/playback/Tick.cpp"));
     bool ok = expect(!flow.isEmpty() && !tick.isEmpty(),
-                     QStringLiteral("the timeline section sources are readable"), out, failed);
+                     QStringLiteral("the playback timeline sources are readable"), out, failed);
     if (!ok) return false;
 
     const QString gate = functionBody(
-        flow, QStringLiteral("bool MainWindow::TimelineSection::quickTimelineBridgeReady() const"));
-    ok &= expect(gate.contains(QStringLiteral("state_.quickTimelineSurfaceReady_")),
+        flow, QStringLiteral("bool miacode::runtime::PlaybackHost::quickTimelineBridgeReady() const"));
+    ok &= expect(gate.contains(QStringLiteral("state_.timelineReady_")),
                  QStringLiteral("the write gate is the readiness flag"), out, failed);
 
     const QString flush = functionBody(
-        tick, QStringLiteral("void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()"));
+        tick, QStringLiteral("void miacode::runtime::PlaybackHost::flushQtPreviewTimelinePosition()"));
     ok &= expect(!flush.isEmpty(), QStringLiteral("the playback flush is present"), out, failed);
     ok &= expect(flush.contains(QStringLiteral("quickTimelineBridgeReady()"))
                      && flush.contains(QStringLiteral("setPlayheadSeconds(")),

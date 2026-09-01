@@ -35,13 +35,9 @@ struct ChartWorkspaceSnapshot {
     quint64 revision = 0;
     bool dirty = false;
     bool hasDocument = false;
-    // Which difficulties' charts differ from the last save point.
-    //
-    // `dirty` is about the file, which is what gets written; this is about the
-    // sections a person edits one at a time. The shell used to have only the
-    // first and had to draw the second, so it pinned the file's flag on
-    // whichever tab happened to be active — edit Expert, switch to Master, and
-    // the dot moved with you.
+    // Which difficulties differ from the last save point in chart, level, or
+    // designer. `dirty` is the file; this is the tab, whose save writes that
+    // whole difficulty record.
     QVector<int> dirtyDifficultyIds;
 };
 
@@ -78,8 +74,11 @@ public:
     static ChartWorkspacePreflightResult preflightSource(
         const QString& source, SimaiNativeValidationLocale locale);
 
-    // Opening establishes a new complete-document save point. Full-source
-    // editing is deliberately separate so it can never reset dirty state.
+    // Opening establishes a new complete-document save point from the maidata
+    // field parse. Chart-syntax diagnostics are recorded, not used as a gate:
+    // empty inote slots and invalid tokens are the validation panel's job, as
+    // in v1 loadDocument. Full-source editing is deliberately separate so it
+    // can never reset dirty state.
     ChartWorkspaceResult openSource(
         const QString& source, const QString& filePath = QString(),
         int preferredDifficultyId = 0);
@@ -92,6 +91,9 @@ public:
     bool addDifficulty(int difficultyId);
     bool removeDifficulty(int difficultyId);
     bool unifyDesigners(const QString& canonicalName);
+    bool setDesignerForSlot(int difficultyId, const QString& name);
+    bool upsertExtraField(const QString& key, const QString& value);
+    bool replaceDifficultyChart(int difficultyId, const QString& chartText);
     bool markSaved(const QString& filePath = QString());
     // What a save of one section should put on disk: the last save point with
     // that one difficulty's chart brought up to date, and nothing else. Saving
@@ -113,6 +115,7 @@ public:
     // that save point: there is no earlier text for it, and dropping it
     // entirely would be a structural edit, not a discard.
     ChartWorkspaceResult revertDifficultyChart(int difficultyId);
+    bool rebindSavePoint(const QString& savedSourceText);
 
     ChartWorkspaceSnapshot snapshot() const;
     const SimaiDocument& document() const;

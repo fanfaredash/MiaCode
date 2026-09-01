@@ -54,9 +54,7 @@ QmlDocumentModel::QmlDocumentModel(
     , bridgeSlot_(&bridgeSlot)
 {
     if (!workspace_->snapshot().hasDocument) {
-        workspace_->openSource(
-            bridge()->sourceText(), bridge()->filePath(),
-            bridge()->activeDifficultyId());
+        workspace_->openSource(SimaiDocument::createEmpty().toText());
     }
     bridge()->setDocumentSaveHandler([this](const QString& path) {
         return saveToPath(path);
@@ -68,11 +66,15 @@ QmlDocumentModel::QmlDocumentModel(
         setChartText(text);
         return chartText() == text;
     });
-    // The workspace was seeded from the already-open backend document above.
-    // Publish that first committed identity as well so every subsequent
-    // backend navigation value is stamped with the workspace revision.
+    // The workspace already has a document from window startup, or a fresh empty
+    // chart opened above. Publish that first committed identity so later
+    // navigation values are stamped with the workspace revision.
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
     refreshDocumentState();
+    connect(workspace_, &miacode::v2::ChartWorkspace::changed, this, [this](quint64) {
+        if (suppressWorkspaceChanged_) return;
+        publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
+    });
     connect(analysisService_, &miacode::v2::AnalysisService::snapshotChanged,
             this, [this](int, quint64) {
                 refreshDocumentState();
@@ -126,8 +128,12 @@ QString QmlDocumentModel::chartText() const
 
 void QmlDocumentModel::setChartText(const QString& value)
 {
-    if (workspace_ == nullptr
-        || !workspace_->replaceActiveDifficultyChart(value).accepted) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->replaceActiveDifficultyChart(value).accepted;
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 
@@ -175,48 +181,81 @@ QStringList QmlDocumentModel::designerCandidates() const
 
 void QmlDocumentModel::setMetadataTitle(const QString& value)
 {
-    if (workspace_ == nullptr || !workspace_->updateDocumentField(
-            miacode::v2::ChartWorkspaceDocumentField::Title, value)) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDocumentField(
+                miacode::v2::ChartWorkspaceDocumentField::Title, value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataArtist(const QString& value)
 {
-    if (workspace_ == nullptr || !workspace_->updateDocumentField(
-            miacode::v2::ChartWorkspaceDocumentField::Artist, value)) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDocumentField(
+                miacode::v2::ChartWorkspaceDocumentField::Artist, value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataFirst(const QString& value)
 {
-    if (workspace_ == nullptr || !workspace_->updateDocumentField(
-            miacode::v2::ChartWorkspaceDocumentField::First, value)) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDocumentField(
+                miacode::v2::ChartWorkspaceDocumentField::First, value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataDesigner(const QString& value)
 {
     if (workspace_ == nullptr) return;
-    const bool changed = unifiedDesignerEnabled_
-        ? workspace_->unifyDesigners(value)
-        : workspace_->updateDocumentField(
-              miacode::v2::ChartWorkspaceDocumentField::Designer, value);
+    const bool changed = runWorkspaceMutation([&] {
+        return unifiedDesignerEnabled_
+            ? workspace_->unifyDesigners(value)
+            : workspace_->updateDocumentField(
+                  miacode::v2::ChartWorkspaceDocumentField::Designer, value);
+    });
     if (!changed) return;
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataVideoPath(const QString& value)
 {
-    if (workspace_ == nullptr || !workspace_->updateDocumentField(
-            miacode::v2::ChartWorkspaceDocumentField::VideoPath, value)) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDocumentField(
+                miacode::v2::ChartWorkspaceDocumentField::VideoPath, value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataExtraText(const QString& value)
 {
-    if (workspace_ == nullptr || !workspace_->updateDocumentField(
-            miacode::v2::ChartWorkspaceDocumentField::ExtraText, value)) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDocumentField(
+                miacode::v2::ChartWorkspaceDocumentField::ExtraText, value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataSourceText(const QString& value)
 {
     if (workspace_ == nullptr) return;
-    const miacode::v2::ChartWorkspaceResult result = workspace_->replaceSource(value);
+    miacode::v2::ChartWorkspaceResult result;
+    if (!runWorkspaceMutation([&] {
+            result = workspace_->replaceSource(value);
+            return true;
+        })) {
+        return;
+    }
     metadataSourceIssues_.clear();
     metadataSourceIssues_.reserve(result.issues.size());
     for (const miacode::v2::ChartWorkspaceIssue& issue : result.issues) {
@@ -322,19 +361,26 @@ QString QmlDocumentModel::currentDifficultyDesigner() const
 }
 void QmlDocumentModel::setCurrentDifficultyLevel(const QString& value)
 {
-    if (workspace_ == nullptr || !workspace_->updateDifficultyField(
-            currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Level,
-            value)) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDifficultyField(
+                currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Level,
+                value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setCurrentDifficultyDesigner(const QString& value)
 {
     if (workspace_ == nullptr) return;
-    const bool changed = unifiedDesignerEnabled_
-        ? workspace_->unifyDesigners(value)
-        : workspace_->updateDifficultyField(
-              currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Designer,
-              value);
+    const bool changed = runWorkspaceMutation([&] {
+        return unifiedDesignerEnabled_
+            ? workspace_->unifyDesigners(value)
+            : workspace_->updateDifficultyField(
+                  currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Designer,
+                  value);
+    });
     if (!changed) return;
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
@@ -550,7 +596,7 @@ void QmlDocumentModel::createEmptyDocumentAt(const QString& targetPath)
 void QmlDocumentModel::closeDocument()
 {
     if (workspace_ == nullptr) return;
-    if (!workspace_->closeDocument().accepted) return;
+    if (!runWorkspaceMutation([&] { return workspace_->closeDocument().accepted; })) return;
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     publishWorkspaceCommit(WorkspaceCommitKind::Open, true);
@@ -559,7 +605,10 @@ void QmlDocumentModel::closeDocument()
 bool QmlDocumentModel::saveDifficultySection(int difficultyId)
 {
     if (fileService_ == nullptr) return false;
-    if (!fileService_->save(difficultyId).accepted) return false;
+    if (!runWorkspaceMutation([&] { return fileService_->save(difficultyId).accepted; })) {
+        emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        return false;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
 }
@@ -567,11 +616,11 @@ bool QmlDocumentModel::saveDifficultySection(int difficultyId)
 bool QmlDocumentModel::revertDifficultyChart(int difficultyId)
 {
     if (workspace_ == nullptr) return false;
-    const miacode::v2::ChartWorkspaceResult result =
-        workspace_->revertDifficultyChart(difficultyId);
-    if (!result.accepted) return false;
-    // A section going back to its saved text is a source replacement as far as
-    // every consumer is concerned: the text they hold is no longer current.
+    if (!runWorkspaceMutation([&] {
+            return workspace_->revertDifficultyChart(difficultyId).accepted;
+        })) {
+        return false;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
     return true;
 }
@@ -580,10 +629,22 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 {
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
     if (fileService_ == nullptr) return false;
-    const miacode::v2::ChartWorkspaceFileResult result = fileService_->open(path);
-    if (!result.accepted) {
+    miacode::v2::ChartWorkspaceFileResult result;
+    if (!runWorkspaceMutation([&] {
+            result = fileService_->open(path);
+            return result.accepted;
+        })) {
         emit operationFailed(tr("打开失败"), tr("无法打开谱面文件。"));
         return false;
+    }
+    if (!result.issues.isEmpty()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("editor/document_open"),
+            QStringLiteral("reason=open_file issues=%1 path=%2 error=%3")
+                .arg(result.issues.size())
+                .arg(path)
+                .arg(result.error));
     }
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
@@ -591,6 +652,7 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
         WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
     return true;
 }
+
 void QmlDocumentModel::requestLeaveDocument(std::function<void(bool)> onDecided)
 {
     if (workspace_ == nullptr || !workspace_->snapshot().dirty) {
@@ -611,8 +673,13 @@ void QmlDocumentModel::saveSectionOrAskForPath(
         return;
     }
     if (!workspace_->snapshot().filePath.isEmpty()) {
-        const bool saved = fileService_->save(difficultyId).accepted;
-        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        const bool saved = runWorkspaceMutation(
+            [&] { return fileService_->save(difficultyId).accepted; });
+        if (saved) {
+            publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        } else {
+            emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        }
         finish(saved);
         return;
     }
@@ -635,8 +702,13 @@ void QmlDocumentModel::saveSectionOrAskForPath(
         }
         // A file that does not exist yet has no earlier content for the other
         // difficulties to be left at, so the first write is the whole document.
-        const bool saved = fileService_->saveAs(path, 0).accepted;
-        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        const bool saved = runWorkspaceMutation(
+            [&] { return fileService_->saveAs(path, 0).accepted; });
+        if (saved) {
+            publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        } else {
+            emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        }
         finish(saved);
     });
 }
@@ -685,7 +757,12 @@ void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
                     });
                 return;
             }
-            workspace_->revertDifficultyChart(difficultyId);
+            if (!runWorkspaceMutation([&] {
+                    return workspace_->revertDifficultyChart(difficultyId).accepted;
+                })) {
+                if (onDecided) onDecided(false);
+                return;
+            }
             publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
             // That difficulty is no longer among the dirty ones, so this walks
             // the list down rather than around it.
@@ -744,9 +821,12 @@ int QmlDocumentModel::saveSectionDifficultyId() const
 bool QmlDocumentModel::save()
 {
     if (fileService_ == nullptr) return false;
-    const miacode::v2::ChartWorkspaceFileResult result =
-        fileService_->save(saveSectionDifficultyId());
-    if (!result.accepted) return false;
+    if (!runWorkspaceMutation([&] {
+            return fileService_->save(saveSectionDifficultyId()).accepted;
+        })) {
+        emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        return false;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
 }
@@ -760,26 +840,34 @@ void QmlDocumentModel::discardChanges()
     if (fileService_ == nullptr || workspace_ == nullptr) return;
     const QString path = workspace_->snapshot().filePath;
     if (path.isEmpty()) return;
-    const miacode::v2::ChartWorkspaceFileResult result = fileService_->open(path);
-    if (!result.accepted) return;
+    miacode::v2::ChartWorkspaceFileResult result;
+    if (!runWorkspaceMutation([&] {
+            result = fileService_->open(path);
+            return result.accepted;
+        })) {
+        return;
+    }
     clearMetadataSourceRejection();
     publishWorkspaceCommit(
         WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
 }
 void QmlDocumentModel::selectDifficulty(int id)
 {
-    if (workspace_ == nullptr || !workspace_->selectDifficulty(id)) return;
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] { return workspace_->selectDifficulty(id); })) return;
     publishWorkspaceCommit(WorkspaceCommitKind::DifficultySelection);
 }
 bool QmlDocumentModel::addDifficulty(int id)
 {
-    if (workspace_ == nullptr || !workspace_->addDifficulty(id)) return false;
+    if (workspace_ == nullptr) return false;
+    if (!runWorkspaceMutation([&] { return workspace_->addDifficulty(id); })) return false;
     publishWorkspaceCommit(WorkspaceCommitKind::Structure);
     return true;
 }
 bool QmlDocumentModel::removeDifficulty(int id)
 {
-    if (workspace_ == nullptr || !workspace_->removeDifficulty(id)) return false;
+    if (workspace_ == nullptr) return false;
+    if (!runWorkspaceMutation([&] { return workspace_->removeDifficulty(id); })) return false;
     publishWorkspaceCommit(WorkspaceCommitKind::Structure);
     return true;
 }
@@ -804,7 +892,7 @@ void QmlDocumentModel::enableUnifiedDesigner(const QString& canonicalName)
 {
     if (workspace_ == nullptr) return;
     unifiedDesignerEnabled_ = true;
-    workspace_->unifyDesigners(canonicalName);
+    runWorkspaceMutation([&] { return workspace_->unifyDesigners(canonicalName); });
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
     emit unifiedDesignerEnabledChanged();
 }
@@ -874,38 +962,20 @@ void QmlDocumentModel::navigateToBookmark(int difficultyId, int line)
     }, Qt::QueuedConnection);
 }
 
+bool QmlDocumentModel::runWorkspaceMutation(const std::function<bool()>& mutate)
+{
+    suppressWorkspaceChanged_ = true;
+    const bool ok = mutate();
+    suppressWorkspaceChanged_ = false;
+    return ok;
+}
+
 void QmlDocumentModel::publishWorkspaceCommit(
     WorkspaceCommitKind kind, bool replacement, bool usedSystemEncoding)
 {
+    Q_UNUSED(kind);
+    Q_UNUSED(usedSystemEncoding);
     if (workspace_ == nullptr) return;
-    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
-    miacode::v2::DocumentBridge::CommitKind backendKind =
-        miacode::v2::DocumentBridge::CommitKind::Incremental;
-    switch (kind) {
-    case WorkspaceCommitKind::Incremental:
-        backendKind = miacode::v2::DocumentBridge::CommitKind::Incremental;
-        break;
-    case WorkspaceCommitKind::DifficultySelection:
-        backendKind = miacode::v2::DocumentBridge::CommitKind::DifficultySelection;
-        break;
-    case WorkspaceCommitKind::Structure:
-        backendKind = miacode::v2::DocumentBridge::CommitKind::Structure;
-        break;
-    case WorkspaceCommitKind::SourceReplacement:
-        backendKind = miacode::v2::DocumentBridge::CommitKind::SourceReplacement;
-        break;
-    case WorkspaceCommitKind::Open:
-        backendKind = miacode::v2::DocumentBridge::CommitKind::Open;
-        break;
-    case WorkspaceCommitKind::SavePoint:
-        backendKind = miacode::v2::DocumentBridge::CommitKind::SavePoint;
-        break;
-    }
-    if (bridge() != nullptr) {
-        bridge()->applyCommittedDocument(
-            snapshot.sourceText, snapshot.filePath, snapshot.activeDifficultyId,
-            snapshot.dirty, snapshot.revision, backendKind, usedSystemEncoding);
-    }
     emitDocumentStateChanged();
     if (replacement) emit documentReplaced();
 }
@@ -952,31 +1022,16 @@ void QmlDocumentModel::refreshDocumentState()
 bool QmlDocumentModel::saveToPath(const QString& path)
 {
     if (fileService_ == nullptr || path.trimmed().isEmpty()) return false;
-    // 另存为 writes a whole document deliberately: the new file has no earlier
-    // content for the other difficulties to be left at, so saving one section
-    // there would drop the rest of the chart on the floor.
-    const miacode::v2::ChartWorkspaceFileResult result = fileService_->saveAs(path, 0);
-    if (!result.accepted) return false;
+    if (!runWorkspaceMutation([&] { return fileService_->saveAs(path, 0).accepted; })) {
+        emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        return false;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
 }
 
 void QmlDocumentModel::adoptBackendDocumentReplacement()
 {
-    if (bridge() == nullptr || workspace_ == nullptr) return;
-    const miacode::v2::ChartWorkspaceSnapshot current = workspace_->snapshot();
-    const QString backendSource = bridge()->sourceText();
-    const QString backendPath = bridge()->filePath();
-    const int backendDifficultyId = bridge()->activeDifficultyId();
-    if (current.hasDocument && current.sourceText == backendSource
-        && current.filePath == backendPath
-        && current.activeDifficultyId == backendDifficultyId) {
-        return;
-    }
-
-    const miacode::v2::ChartWorkspaceResult adopted = workspace_->openSource(
-        backendSource, backendPath, backendDifficultyId);
-    if (!adopted.accepted) return;
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     emitDocumentStateChanged();

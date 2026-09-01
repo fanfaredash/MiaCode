@@ -192,7 +192,8 @@ QSet<QString> collectQmlFriendGrants(const QString& mainWindowHeader)
     auto it = grant.globalMatch(mainWindowHeader);
     while (it.hasNext()) {
         const QString name = it.next().captured(1);
-        if (name.contains(QStringLiteral("latency::"))) {
+        if (name.contains(QStringLiteral("latency::"))
+            || name.contains(QStringLiteral("runtime::"))) {
             continue;
         }
         names.insert(name);
@@ -233,11 +234,11 @@ bool verifyRecordedCounts(const QString& doc, const BackendSurface& surface, int
 int main()
 {
     const QString doc = readFile(QStringLiteral("docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md"));
-    const QString mainWindowHeader = readFile(QStringLiteral("src/app/mainwindow/MainWindow.h"));
+    const QString mainWindowHeader = readFile(QStringLiteral("src/app/runtime/Session.h"));
     bool ok = require(!doc.isEmpty(),
                       QStringLiteral("docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md is readable"));
     ok &= require(!mainWindowHeader.isEmpty(),
-                  QStringLiteral("src/app/mainwindow/MainWindow.h is readable"));
+                  QStringLiteral("src/app/runtime/Session.h is readable"));
     if (!ok) {
         return 1;
     }

@@ -158,10 +158,17 @@ Rectangle {
             }
 
             AppTextField {
+                property bool userEdited: false
+
                 Layout.preferredWidth: 90
                 placeholderText: UiText.text("等级")
                 text: root.documentSession.currentDifficultyLevel
-                onEditingFinished: root.documentSession.currentDifficultyLevel = text
+                onTextEdited: userEdited = true
+                onEditingFinished: {
+                    if (userEdited)
+                        root.documentSession.currentDifficultyLevel = text
+                    userEdited = false
+                }
             }
 
             AppTextField {
@@ -343,13 +350,22 @@ Rectangle {
                 font.pixelSize: Theme.secondaryFontSize
             }
             AppTextArea {
+                id: extraFieldsEdit
+                property bool userEdited: false
+
                 width: metadataColumn.width
                 height: 150
                 text: root.documentSession.metadataExtraText
                 placeholderText: UiText.text("每行一个 &字段=值")
+                onTextChanged: {
+                    if (activeFocus && text !== root.documentSession.metadataExtraText)
+                        extraFieldsEdit.userEdited = true
+                }
                 onActiveFocusChanged: {
-                    if (!activeFocus)
+                    if (!activeFocus && extraFieldsEdit.userEdited) {
                         root.documentSession.metadataExtraText = text
+                        extraFieldsEdit.userEdited = false
+                    }
                 }
             }
         }
@@ -441,6 +457,16 @@ Rectangle {
     }
     // 整谱规范化: the sidebar entry asks, this pane collects options and applies
     // the transform as one editor transaction so undo covers it.
+    Connections {
+        target: root.documentSession
+        function onMetadataChanged() {
+            if (extraFieldsEdit.activeFocus)
+                return
+            extraFieldsEdit.userEdited = false
+            extraFieldsEdit.text = root.documentSession.metadataExtraText
+        }
+    }
+
     Connections {
         target: root.pages
         function onNormalizeWholeChartRequested() {

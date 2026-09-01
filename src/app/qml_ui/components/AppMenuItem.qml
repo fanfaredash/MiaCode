@@ -23,9 +23,11 @@ MenuItem {
     // Action. Keep their shortcut spelling on the visual item so Qt can both
     // insert it into Menu and render the binding.
     property string shortcutText: ""
+    property int difficultyId: 0
     readonly property real textWidth: label.contentWidth
     readonly property real chromeWidth: leftPadding + rightPadding
                                         + (checkable ? 12 + row.spacing : 0)
+                                        + (difficultyId > 0 ? Theme.difficultySwatchSize + row.spacing : 0)
 
     readonly property color labelColor: {
         if (!root.enabled)
@@ -47,6 +49,14 @@ MenuItem {
         Item {
             Layout.preferredWidth: root.checkable ? 12 : 0
             visible: root.checkable
+        }
+
+        DifficultySwatch {
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
+            Layout.alignment: Qt.AlignVCenter
+            visible: root.difficultyId > 0
+            difficultyId: root.difficultyId
         }
 
         ControlsImpl.MnemonicLabel {

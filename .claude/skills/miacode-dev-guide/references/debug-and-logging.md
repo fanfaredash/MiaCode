@@ -279,12 +279,12 @@ in), `startup/gpu_policy` (resolved GPU device policy request→adapter LUID + f
 three are a bundle emitted by `logProcessStartupDiagnostics(phase)` (`process_identity.cpp`): once
 early in `main()` (`phase=boot`, lands in the app-local `logs/` **before** a chart binds) and again
 after the runtime log dir rebinds to a chart's `.miacode/logs/` (`phase=log_dir_rebound`, from both
-`MainWindow.PreviewTimelineFlow` chart-open and the export worker) — so a collected per-chart log is
+`TimelineFlow` chart-open and the export worker) — so a collected per-chart log is
 self-contained instead of missing the pre-bind boot lines. Also:
 `startup/gpu_provider` (P4 root/composite device-bind decision: `action=bound|skip source=… reason=…`),
 `quick_shell/device` (actual RHI adapter Qt Quick bound per surface — D3D11 DXGI desc or GL renderer
 string; scheduled render-thread probe in `gpu_adapter_probe.cpp`), `quick_shell/topology` (frontend /
-hidden-MainWindow / stage-media-route / window counts). Export channel gains `export_gl_renderer`
+hidden-window / stage-media-route / window counts). Export channel gains `export_gl_renderer`
 (GL vendor/renderer/version at `PreviewQuickExportSession::initialize`) and the `render_backend`
 summary now carries `render_backend=opengl_qquick_rendercontrol rhi_api=OpenGL adapter_or_renderer=…
 readback_mode=…`. The old `media_backend adapter="…"` field was renamed `probe_adapter` (+

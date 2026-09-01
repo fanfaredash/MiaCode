@@ -157,7 +157,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - Storage: `src/core/chart/document/SimaiDocument.{h,cpp}` (`createEmpty`, `fromText`, `toText`,
   `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`).
-- UIv2 document owner: `src/app/v2/ChartWorkspace.{h,cpp}`. `openSource` establishes a complete-
+- UIv2 document owner: `src/app/v2/ChartWorkspace.{h,cpp}`. `MainWindow` has no `SimaiDocument`;
+  nested sections read and write `ApplicationServices.workspace()`. `openSource` establishes a complete-
   document save point; `replaceSource`, incremental body/metadata/difficulty transactions,
   difficulty structure/selection, and `markSaved` publish one monotonic revision while content
   comparison restores v1-style save-anchor dirty semantics. `src/tools/v2/ChartWorkspaceSpec.cpp`
@@ -236,9 +237,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   back to `mapToGlobal`; in the macOS QuickShell workspace it maps the caret through the bound
   bridge surface and adopted `QWindow`, avoiding the stale orphan-NSPanel coordinate origin.
 - **Offset (`&first`) field location:** UIv2 edits the chart-wide timing offset from the metadata
-  form's `metadataFirst` field in `EditorPane.qml`. The difficulty header displays the active
-  difficulty's designer. One source of truth remains `document_.first`, shared with the latency
-  page and committed through `QmlDocumentModel` / `ChartWorkspace`.
+  form's `metadataFirst` field in `EditorPane.qml`. Owner is `ChartWorkspace::document().first`.
+  Latency writes it with `updateDocumentField(First)`. Timeline and export read
+  `applicationServices_.workspace().document()`. Hidden `firstEdit_` is display only.
 - **Per-difficulty designers + unified designer:** managed from a modal dialog, NOT a persistent
   checkbox. The metadata designer row has a "管理多个难度名义" button →
   `MainWindow::onManagePerDifficultyDesigners` → `DocumentSection::openPerDifficultyDesignerDialog`
@@ -1115,7 +1116,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - **Entries (2026-06-11, L-A migration — the sidebar item is GONE):** (1) the metadata page's
   "延迟与偏移校准" entry card (built in `MainWindow.FrameBootstrap.cpp` after the metadata card;
   BPM/offset summary label `latencyEntrySummaryLabel_` refreshed by `populateMetadataPage` from
-  `parsedWholeBpm` + `document_.first`) → `switchToLatencyField()`; (2) the Tools menu's
+  `parsedWholeBpm` + workspace `document().first`) → `switchToLatencyField()`; (2) the Tools menu's
   "BPM && 延迟检测" `latencyDetectorAction_` (kept as the keyboard-reachable direct path).
   The page carries a "← 返回谱面信息" bar at the top of `LatencyDetectionPage::buildUi()`
   (`QPushButton#LatencyBackButton`, styled in `UiTheme::latencyDetectionPageStyleSheet`) →
@@ -1206,17 +1207,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 12. Toolbox media utilities
 
-- `src/app/v2/MediaToolsService.{h,cpp}` is the canonical owner of the six single-file media
-  interfaces: prepend silence/black context, detection, restore, and apply, plus track-to-44100 Hz
-  conversion and background-video compression. `QmlUiBootstrap` creates the service and registers
-  it in `ApplicationServices::mediaToolsEngineSlot()`. The service uses `PreviewSurface`'s
-  begin/end media-file transaction together with `UiRequestService` and `JobProgressService`;
-  `MainWindow` only retains the QAction thin adapters. The four user actions still open from one
-  popup, `onMediaProcessingTools()` (one button + one-line description each), reached via the
-  toolbox's "音频/视频处理 / Audio/Video Processing" entry — not a hover submenu. The shared
-  ffmpeg progress path parses `-progress pipe:1` `out_time_us=` against the expected output
-  duration and falls back to an indeterminate bar when duration is unknown.
-- Toolbox menu itself is built in `sections/frame/MainWindow.FrameBootstrap.cpp` (`toolboxMenu_`).
+- `src/app/runtime/media/MediaJobsHost.{h,cpp}` plus `MediaTools.cpp` are the canonical owner of
+  the six single-file media interfaces: prepend silence/black context, detection, restore, and
+  apply, plus track-to-44100 Hz conversion and background-video compression. `Session` creates the
+  host and registers it in `ApplicationServices::mediaToolsEngineSlot()`. The host uses the shared
+  workspace, UI-request, job-progress and preview routes; there is no parallel media service.
+  The four user actions still open from one popup, `onMediaProcessingTools()` (one button +
+  one-line description each), reached via the toolbox's "音频/视频处理 / Audio/Video Processing"
+  entry — not a hover submenu. The shared ffmpeg progress path parses `-progress pipe:1`
+  `out_time_us=` against the expected output duration and falls back to an indeterminate bar when
+  duration is unknown.
+- Toolbox menu and runtime media handlers live under `src/app/runtime/media/`.
   BPM & Latency was dropped from the toolbox (still in the top Tools menu via
   `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`
   constant (feature kept: `copyAreaPanel_`/`fullCopyAreaAction_`/`setFullCopyAreaVisible`).

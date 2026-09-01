@@ -70,15 +70,15 @@ bool verifyQmlFontContract(QTextStream& err)
     // QML layer no longer reaches previewCanvas_ directly — so both ends are
     // pinned: the session asks, and the window still calls update().
     const QString previewWarmup = readSource(
-        QStringLiteral("src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp"));
+        QStringLiteral("src/app/runtime/preview/WarmupAndSettings.cpp"));
     ok &= require(
         implementation.contains(QStringLiteral("fontLibraryEntries("))
             && implementation.contains(QStringLiteral("importFontFileIntoLibrary(selectedPath)"))
             && implementation.contains(QStringLiteral("refreshIntroState()"))
             && implementation.contains(QStringLiteral("setPreviewHudCustomFontPath(area, path)"))
             && implementation.contains(QStringLiteral("preview()->refreshSurfaces()"))
-            && previewWarmup.contains(QStringLiteral("void MainWindow::refreshPreviewSurfaces()"))
-            && previewWarmup.contains(QStringLiteral("previewCanvas_->update()")),
+            && previewWarmup.contains(QStringLiteral("void Session::refreshPreviewSurfaces()"))
+            && previewWarmup.contains(QStringLiteral("scene_->update()")),
         QStringLiteral("the export session uses the shared library and redraws the live preview"),
         err);
     ok &= require(

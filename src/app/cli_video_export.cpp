@@ -1,6 +1,6 @@
 #include "MainEntrypoints.h"
 
-#include "mainwindow/MainWindow.h"
+#include "runtime/Session.h"
 #include "app/v2/ApplicationServices.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/DebugLog.h"
@@ -311,7 +311,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         }
     }
 
-    MainWindow::CliVideoExportRequest request;
+    Session::CliVideoExportRequest request;
     request.chartPathOrDirectory = chartInput;
     request.difficulty = parser.value(QStringLiteral("difficulty")).trimmed();
     request.outputPath = parser.value(QStringLiteral("output")).trimmed();
@@ -348,7 +348,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     // they own the document domain and the job/UI boundaries, and the window
     // only borrows them (stage 3.5 item 1).
     miacode::v2::ApplicationServices applicationServices;
-    MainWindow window(applicationServices);
+    Session window(applicationServices);
     QString resolvedOutputPath;
     QString exportError;
     QString exportDetails;
