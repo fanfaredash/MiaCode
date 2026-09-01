@@ -150,11 +150,6 @@ void MainWindow::shellTimelineUserInteractionStarted()
     windowSection_->shellTimelineUserInteractionStarted();
 }
 
-void MainWindow::shellTimelineSurfaceReady()
-{
-    windowSection_->shellTimelineSurfaceReady();
-}
-
 void MainWindow::shellTimelineFollowPreviewToggled(bool enabled)
 {
     windowSection_->shellTimelineFollowPreviewToggled(enabled);

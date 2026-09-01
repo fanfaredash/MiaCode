@@ -40,7 +40,6 @@ public:
     void shellTimelineDragStarted();
     void shellTimelineDragFinished(double second);
     void shellTimelineUserInteractionStarted();
-    void shellTimelineSurfaceReady();
     void shellTimelineFollowPreviewToggled(bool enabled);
     void shellTimelineViewportLockToggled(bool enabled);
     void shellTimelineFollowProgressToggled(bool enabled);

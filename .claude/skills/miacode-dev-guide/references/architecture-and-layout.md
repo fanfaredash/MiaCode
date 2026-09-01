@@ -34,7 +34,11 @@ src/
                     ApplicationServices& and NOTHING else: no MainWindow
                     reference, parameter or include. When adding a QML-facing
                     capability, extend one of these interfaces — never reach for
-                    MainWindow. The window installs itself and
+                    MainWindow. If the capability is an EVENT REPORT rather than
+                    state, declare it `void`: a `bool … const` member named for
+                    an event binds silently to a same-named getter on the window
+                    and the report compiles, runs and does nothing — that is how
+                    the timeline playhead froze (cross-chain-linkage.md §14). The window installs itself and
                     withdraws at the top of ~MainWindow, and consumers bind to
                     exportEngineSlot() rather than snapshotting the pointer.
                     PreviewAppearanceState holds the eight values that decide

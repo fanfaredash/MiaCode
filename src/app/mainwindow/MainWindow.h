@@ -392,7 +392,6 @@ public:
     miacode::v2::UiRequestService* uiRequestService() const;
     miacode::v2::JobProgressService* jobProgressService() const;
     void preparePreviewForShutdown();
-    bool shellTimelineSurfaceReady() const;
     void noteQuickTimelineSurfaceReady();
     // Asks whether the window may close, answering through the continuation.
     // It cannot be a return value: the unsaved-changes prompt is a QML dialog
@@ -431,7 +430,6 @@ public:
     void shellTimelineDragStarted();
     void shellTimelineDragFinished(double second);
     void shellTimelineUserInteractionStarted();
-    void shellTimelineSurfaceReady();
     void shellTimelineFollowPreviewToggled(bool enabled);
     void shellTimelineViewportLockToggled(bool enabled);
     void shellTimelineFollowProgressToggled(bool enabled);
@@ -722,7 +720,7 @@ public:
 
     // ---- miacode::v2::TimelineSurface ----
     QObject* timelineStateBridge() const override;
-    bool timelineSurfaceReady() const override;
+    void noteTimelineSurfaceReady() override;
     void navigateToSecond(double second) override;
     void centerOnSecond(double second) override;
     void wheelNavigateToSecond(double second) override;
