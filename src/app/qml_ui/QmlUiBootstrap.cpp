@@ -177,7 +177,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             },
             [this](const QStringList& paths, quint64 requestId, quint64 generation,
                    std::function<void(const miacode::qml_ui::QmlChartDropResult&)> done) {
-                backend_->handleAudioDrop(
+                applicationServices_->documentBridge()->importDroppedAudio(
                     paths,
                     requestId,
                     generation,
@@ -272,9 +272,10 @@ void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
     if (!rootWindow_.isNull()) {
         rootWindow_->hide();
     }
-    if (backend_ != nullptr) {
-        backend_->releaseChartDropImportService();
-        backend_->preparePreviewForShutdown();
+    if (applicationServices_ != nullptr && applicationServices_->documentBridge() != nullptr
+        && applicationServices_->previewSurface() != nullptr) {
+        applicationServices_->documentBridge()->releaseChartDropImport();
+        applicationServices_->previewSurface()->prepareForShutdown();
     }
 
     QTimer::singleShot(0, this, [this, source]() {
@@ -308,8 +309,9 @@ void QmlUiBootstrap::releaseRootWindowResources()
     if (!rootLifecycle_.beginRelease()) {
         return;
     }
-    if (backend_ != nullptr) {
-        backend_->releaseChartDropImportService();
+    if (applicationServices_ != nullptr
+        && applicationServices_->documentBridge() != nullptr) {
+        applicationServices_->documentBridge()->releaseChartDropImport();
     }
     if (chartDropBridge_ != nullptr) {
         chartDropBridge_->release();

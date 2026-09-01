@@ -85,6 +85,11 @@ public:
     // the audio engine is up, which is the guard callers used to repeat.
     virtual void applySfxLevels() = 0;
 
+    // Quiesce the preview before the root window goes away — stop playback and
+    // release what the render thread holds. Called once, from the accepted
+    // close path.
+    virtual void prepareForShutdown() = 0;
+
     // ---- audio mixer ----
     virtual PreviewAudioSettings audioSettings() const = 0;
     virtual void applyAudioSettings(const PreviewAudioSettings& settings) = 0;

@@ -262,6 +262,18 @@ const MuriRenderOptions& MainWindow::muriRenderOptions() const
 // Thin forwarders onto the document* names the widget side uses.
 
 QString MainWindow::sourceText() const { return documentSourceText(); }
+
+void MainWindow::importDroppedAudio(const QStringList& audioPaths, quint64 requestId,
+                                    quint64 generation,
+                                    miacode::v2::ChartDropImportService::Completion completion)
+{
+    handleAudioDrop(audioPaths, requestId, generation, std::move(completion));
+}
+
+void MainWindow::releaseChartDropImport()
+{
+    releaseChartDropImportService();
+}
 QString MainWindow::filePath() const { return documentFilePath(); }
 
 bool MainWindow::applyCommittedDocument(const QString& sourceText, const QString& filePath,

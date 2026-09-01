@@ -668,8 +668,20 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          导出流程，不属于本项，留作阶段 4 的清理。
 - [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
       都由 QML 宿主及应用服务明确拥有。
-      *进展（2026-09-01）*：前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。
-      但 `QmlUiBootstrap::start()` 仍然 `make_unique<MainWindow>`，本项未完成。
+      *进展（2026-09-01）*：
+      1. 前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。
+      2. **拖放已归位**：拖放建谱的两个入口进了 `DocumentBridge`（它是文档工作，
+         只是 OS 拖放路由恰好落在宿主上），关机前的预览收尾进了 `PreviewSurface`。
+      3. `QmlUiBootstrap` 现在对窗口只剩 **6 个纯窗口生命周期调用**：
+         `setQuickShellBackendActive` / `hide` / `setVisible` /
+         `setQuickShellRootWindow`（×2）/ `shellSetRootWindowFrameGeometry` /
+         `shellNoteQuickUiReady`。
+      **本项无法在阶段 3.5 内完成，原因写清楚**：这 6 个不是耦合，是**所有权**——宿主在管理
+      它自己创建的那个窗口。要它们消失，只能让宿主不再创建窗口；而那要求 `MainWindow` 对
+      八个接口的**实现**先搬出去（预览运行时、时间轴、导出引擎、文档 section，约 30 个文件、
+      两万行），那正是阶段 4 的内容。接口已经就位，所以搬实现时**页面侧一行不用改**。
+      对话框 transient parent 亦同：`UiDialogs::effectiveParentWidget` 仍以隐藏窗口为锚，
+      随窗口一起消失。
 - [x] 为 `MiaCode` 建立 Qt 与第三方依赖 allowlist（2026-09-01）。
       [docs/ops/DEPENDENCY_ALLOWLIST.md](../../ops/DEPENDENCY_ALLOWLIST.md) 按宿主 / 渲染 /
       媒体 / 导出 / 平台 / 遗留六层登记 `MiaCode` 链接的每一个库，逐条写明平台条件、直接使用点、

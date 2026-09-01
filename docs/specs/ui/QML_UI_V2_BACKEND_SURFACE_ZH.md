@@ -11,12 +11,19 @@
 > 多一个（新耦合）失败，少一个（搬走了但没更新本文）也失败。搬走一项 = 删掉本文一行，
 > 计数自然下降；新增一项必须显式加行，评审能看见。
 >
-> **计数（2026-09-01）**：方法 **9**，直接读取的 `MainWindow` 私有成员 **0**，
+> **计数（2026-09-01）**：方法 **6**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
-> **剩下的 9 个全部在 `QmlUiBootstrap`**，而且它们不是「模型伸手进窗口」，是**宿主管理它自己
-> 创建的那个窗口**——隐藏、给根窗口、推几何、关机前收尾、拖放路由。把它们藏到接口后面只是
-> 换个名字，不会去掉所有权。要它们消失，只能是宿主不再创建那个窗口，也就是第 3 项本身。
+> **剩下的 6 个全部在 `QmlUiBootstrap`，而且全部是纯粹的窗口生命周期**：
+> `setQuickShellBackendActive` / `hide` / `setVisible` / `setQuickShellRootWindow` ×2 /
+> `shellSetRootWindowFrameGeometry` / `shellNoteQuickUiReady`。
+> 原本混在其中的三个**领域**操作已经归位：拖放建谱的两个进了 `DocumentBridge`
+> （它是文档工作，只是 OS 拖放路由恰好落在宿主上），关机前的预览收尾进了 `PreviewSurface`。
+>
+> 这 6 个不是「模型伸手进窗口」，是**宿主管理它自己创建的那个窗口**。把它们藏到接口后面只是
+> 换个名字，不会去掉所有权。要它们消失，只能是宿主不再创建那个窗口——也就是第 3 项本身，
+> 而那要求 `MainWindow` 对八个接口的**实现**先搬出去（预览运行时、时间轴、导出引擎、
+> 文档 section，约 30 个文件），那是阶段 4。
 >
 > 除 `QmlUiBootstrap` 外，`src/app/qml_ui` 里**只剩一处**对 widget 层的编译期依赖：
 > `QmlUiSettings.cpp` 用 `MainWindowShared` 的编辑器字体与行距度量。那是字体/度量模块的
@@ -53,6 +60,7 @@
 | 2026-09-01 | 导出页剩余入口分别归入 `ExportEngine` / `PreviewSurface`，导出会话对象改由装配对象持槽 | **26** | 0 |
 | 2026-09-01 | 文档改由 `miacode::v2::DocumentBridge`，偏好设置入口与关窗询问并入 `EditorPageRouter` | **9** | 0 |
 | 2026-09-01 | 11 个推送信号改经 `miacode::v2::ShellNotifications` 中继，**`QmlApplicationContext` 去掉 `MainWindow& backend_`** | **9** | 0 |
+| 2026-09-01 | 拖放建谱归 `DocumentBridge`、关机前预览收尾归 `PreviewSurface`，宿主只剩纯窗口生命周期 | **6** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`
@@ -232,12 +240,9 @@ PV 批量队列本来就归模型自己（唯一有跨次开启状态的部分�
 它们和页面切换问的是同一个「未保存改动怎么办」，只是作用域不同。
 `QmlShellLifecycle` 因此**完全不认识 `MainWindow`**。
 
-**`src/app/qml_ui/QmlUiBootstrap.cpp`** — 方法 9，私有成员 0
+**`src/app/qml_ui/QmlUiBootstrap.cpp`** — 方法 6，私有成员 0
 
-- `handleAudioDrop`
 - `hide`
-- `preparePreviewForShutdown`
-- `releaseChartDropImportService`
 - `setQuickShellBackendActive`
 - `setQuickShellRootWindow`
 - `setVisible`

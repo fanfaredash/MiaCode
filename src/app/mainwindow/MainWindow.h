@@ -770,6 +770,7 @@ public:
     void setRenderSetting(const QString& key, const QVariant& value) override;
     void refreshSurfaces() override;
     void applySfxLevels() override;
+    void prepareForShutdown() override;
     PreviewAudioSettings audioSettings() const override;
     void applyAudioSettings(const PreviewAudioSettings& settings) override;
     void saveAudioSettingsAsSoftwareDefault() override;
@@ -820,6 +821,10 @@ public:
     void setLeaveDocumentHandler(
         std::function<void(std::function<void(bool)>)> handler) override;
     void requestLeaveDocument(std::function<void(bool)> onDecided) override;
+    void importDroppedAudio(const QStringList& audioPaths, quint64 requestId,
+                            quint64 generation,
+                            miacode::v2::ChartDropImportService::Completion completion) override;
+    void releaseChartDropImport() override;
 
     // The live-surface half of the preview appearance settings. The values
     // themselves belong to miacode::v2::PreviewAppearanceState; these two push

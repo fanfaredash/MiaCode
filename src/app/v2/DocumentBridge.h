@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 #include <QString>
@@ -74,6 +75,18 @@ public:
         std::function<void(std::function<void(bool)>)> handler) = 0;
     // Asks whatever handler is installed; the continuation runs once.
     virtual void requestLeaveDocument(std::function<void(bool)> onDecided) = 0;
+
+    // ---- chart drop ----
+    //
+    // Dropping audio onto the root window creates a chart beside it. This is
+    // document work, not window work: the bootstrap only happens to be where
+    // the OS drag route lands.
+    virtual void importDroppedAudio(const QStringList& audioPaths, quint64 requestId,
+                                    quint64 generation,
+                                    ChartDropImportService::Completion completion) = 0;
+    // Invalidates any in-flight import so a late callback cannot reach a
+    // half-destroyed shell.
+    virtual void releaseChartDropImport() = 0;
 
 protected:
     DocumentBridge() = default;
