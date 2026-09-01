@@ -21,10 +21,20 @@ src/
                     destroyed after it. Nothing else in src/app may construct
                     one of these — application_services_spec scans the tree and
                     fails if it does.
-                    ExportEngine (export page) and EditorPageRouter (page
-                    switching) are contracts the QML layer names instead of
-                    MainWindow; the assembly holds only their SLOTS because both
-                    implementations are still the window. The window installs itself and
+                    EIGHT contracts the QML layer names instead of MainWindow —
+                    EditorPageRouter, ExportEngine, PreviewSurface,
+                    TimelineSurface, PreferencesStore, DocumentBridge,
+                    MediaToolsEngine, LatencyEngine — plus ShellNotifications,
+                    which relays the window's eleven push signals. The assembly
+                    holds SLOTS for the eight because MainWindow still
+                    implements them; it installs itself at startup and withdraws
+                    at the top of ~MainWindow, and consumers bind to the slot
+                    rather than snapshotting the pointer.
+                    As of 2026-09-01 QmlApplicationContext takes
+                    ApplicationServices& and NOTHING else: no MainWindow
+                    reference, parameter or include. When adding a QML-facing
+                    capability, extend one of these interfaces — never reach for
+                    MainWindow. The window installs itself and
                     withdraws at the top of ~MainWindow, and consumers bind to
                     exportEngineSlot() rather than snapshotting the pointer.
                     PreviewAppearanceState holds the eight values that decide
