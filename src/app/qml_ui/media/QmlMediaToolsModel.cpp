@@ -1,8 +1,9 @@
 #include "QmlMediaToolsModel.h"
 
+#include "app/v2/MediaToolsEngine.h"
+
 #include "app/v2/JobProgressService.h"
 #include "app/v2/UiRequestService.h"
-#include "mainwindow/MainWindow.h"
 #include "ui/UiText.h"
 #include "tools/media/PvBatchCompressionWorker.h"
 
@@ -15,13 +16,11 @@
 
 namespace miacode::qml_ui {
 
-QmlMediaToolsModel::QmlMediaToolsModel(MainWindow& backend,
-                                       miacode::v2::UiRequestService& uiRequests,
+QmlMediaToolsModel::QmlMediaToolsModel(                               miacode::v2::UiRequestService& uiRequests,
                                        miacode::v2::JobProgressService& jobProgress,
                                        miacode::v2::MediaToolsEngine*& engineSlot,
                                        QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
     , uiRequests_(&uiRequests)
     , jobProgress_(&jobProgress)
     , engineSlot_(&engineSlot)

@@ -5,7 +5,8 @@
 
 #include "app/v2/TimelineSurface.h"
 
-class MainWindow;
+#include "app/v2/ShellNotifications.h"
+
 
 namespace miacode::qml_ui {
 
@@ -43,7 +44,7 @@ class QmlTimelineModel final : public QObject
     Q_PROPERTY(QString followCodeLabel READ followCodeLabel CONSTANT)
 
 public:
-    explicit QmlTimelineModel(MainWindow& backend,
+    explicit QmlTimelineModel(miacode::v2::ShellNotifications& notifications,
                               miacode::v2::TimelineSurface*& surfaceSlot,
                               QObject* parent = nullptr);
 
@@ -72,7 +73,7 @@ signals:
     void tabsChanged();
 
 private:
-    MainWindow* backend_ = nullptr;
+    miacode::v2::ShellNotifications* notifications_ = nullptr;
     // Bound to the assembly's slot, not a snapshot.
     miacode::v2::TimelineSurface** surfaceSlot_ = nullptr;
     miacode::v2::TimelineSurface* surface() const

@@ -1,6 +1,5 @@
 #include "QmlAnalysisModel.h"
 
-#include "app/mainwindow/MainWindow.h"
 #include "common/MuriTypes.h"
 #include "tools/muri/MuriPanelEntries.h"
 
@@ -46,11 +45,10 @@ QVector<miacode::qml_ui::AnalysisRow> muriRowsForSnapshot(
 }  // namespace
 
 QmlAnalysisModel::QmlAnalysisModel(
-    MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
+    miacode::v2::ChartWorkspace& workspace,
     miacode::v2::AnalysisService& analysisService,
     miacode::v2::TimelineSurface*& surfaceSlot, QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
     , surfaceSlot_(&surfaceSlot)
     , workspace_(&workspace)
     , analysisService_(&analysisService)

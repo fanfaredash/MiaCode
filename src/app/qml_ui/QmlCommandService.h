@@ -9,14 +9,13 @@
 #include "app/v2/DocumentBridge.h"
 #include "app/v2/EditorPageRouter.h"
 
-class MainWindow;
 class QmlDocumentModel;
 
 class QmlCommandService final : public QObject
 {
     Q_OBJECT
 public:
-    QmlCommandService(MainWindow& backend, QmlDocumentModel& document,
+    QmlCommandService(QmlDocumentModel& document,
                       miacode::v2::EditorPageRouter*& routerSlot,
                       miacode::v2::DocumentBridge*& bridgeSlot,
                       QObject* parent = nullptr);
@@ -56,7 +55,6 @@ public:
 private:
     void whenDocumentMayBeLeft(std::function<void()> proceed);
 
-    MainWindow* backend_ = nullptr;
     miacode::v2::EditorPageRouter** routerSlot_ = nullptr;
     miacode::v2::DocumentBridge** bridgeSlot_ = nullptr;
     miacode::v2::EditorPageRouter* router() const

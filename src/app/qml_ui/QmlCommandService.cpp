@@ -2,16 +2,13 @@
 #include "QmlShortcutCommands.h"
 
 #include "QmlDocumentModel.h"
-#include "mainwindow/MainWindow.h"
 
 QmlCommandService::QmlCommandService(
-    MainWindow& backend,
     QmlDocumentModel& document,
     miacode::v2::EditorPageRouter*& routerSlot,
     miacode::v2::DocumentBridge*& bridgeSlot,
     QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
     , routerSlot_(&routerSlot)
     , bridgeSlot_(&bridgeSlot)
     , document_(&document)
@@ -20,7 +17,7 @@ QmlCommandService::QmlCommandService(
 
 void QmlCommandService::whenDocumentMayBeLeft(std::function<void()> proceed)
 {
-    if (backend_ == nullptr) {
+    if (bridge() == nullptr) {
         return;
     }
     bridge()->requestLeaveDocument([proceed = std::move(proceed)](bool mayLeave) {
@@ -74,7 +71,7 @@ void QmlCommandService::disableUnifiedDesigner() { document_->disableUnifiedDesi
 
 void QmlCommandService::openPreferences()
 {
-    if (backend_ != nullptr) {
+    if (router() != nullptr) {
         router()->openPreferences();
     }
 }

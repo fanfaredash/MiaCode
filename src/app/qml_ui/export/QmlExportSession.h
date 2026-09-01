@@ -13,7 +13,8 @@
 #include "app/v2/PreviewSurface.h"
 #include "tools/video_export/VideoExportController.h"
 
-class MainWindow;
+#include "app/v2/ShellNotifications.h"
+
 
 // Pure-QML export settings session for the v2 shell. The only export UI there
 // is; it drives audition + worker launch through miacode::v2::ExportEngine and
@@ -114,7 +115,7 @@ class QmlExportSession final : public QObject
     Q_PROPERTY(QString batchOutputDirectory READ batchOutputDirectory WRITE setBatchOutputDirectory NOTIFY batchChanged)
 
 public:
-    QmlExportSession(MainWindow& backend,
+    QmlExportSession(miacode::v2::ShellNotifications& notifications,
                      miacode::v2::UiRequestService& uiRequests,
                      miacode::v2::JobProgressService& jobProgress,
                      miacode::v2::PreviewAppearanceState& appearance,
@@ -329,7 +330,7 @@ private:
     {
         return engineSlot_ != nullptr ? *engineSlot_ : nullptr;
     }
-    MainWindow* backend_ = nullptr;
+    miacode::v2::ShellNotifications* notifications_ = nullptr;
     bool pageSessionActive_ = false;
     bool exportRunning_ = false;
     bool hasSeededTask_ = false;

@@ -14,6 +14,14 @@
 > **计数（2026-09-01）**：方法 **9**，直接读取的 `MainWindow` 私有成员 **0**，
 > friend 授权 **0** 个 QML 类型。
 >
+> **剩下的 9 个全部在 `QmlUiBootstrap`**，而且它们不是「模型伸手进窗口」，是**宿主管理它自己
+> 创建的那个窗口**——隐藏、给根窗口、推几何、关机前收尾、拖放路由。把它们藏到接口后面只是
+> 换个名字，不会去掉所有权。要它们消失，只能是宿主不再创建那个窗口，也就是第 3 项本身。
+>
+> 除 `QmlUiBootstrap` 外，`src/app/qml_ui` 里**只剩一处**对 widget 层的编译期依赖：
+> `QmlUiSettings.cpp` 用 `MainWindowShared` 的编辑器字体与行距度量。那是字体/度量模块的
+> 归属问题，不是窗口依赖，另记。
+>
 > 计数按**去重后的名字**算，不是调用点数。方法数在两次削减后都停在 120，这是想要的结果而不是
 > 没进展：耦合从「没有接口」降级成窄接口时，用到的名字要么本来就在清单里，要么一进一出。
 > 详见「已完成的削减」。
@@ -44,6 +52,7 @@
 | 2026-09-01 | 偏好设置改由 `miacode::v2::PreferencesStore` 接口承接 | **40** | 0 |
 | 2026-09-01 | 导出页剩余入口分别归入 `ExportEngine` / `PreviewSurface`，导出会话对象改由装配对象持槽 | **26** | 0 |
 | 2026-09-01 | 文档改由 `miacode::v2::DocumentBridge`，偏好设置入口与关窗询问并入 `EditorPageRouter` | **9** | 0 |
+| 2026-09-01 | 11 个推送信号改经 `miacode::v2::ShellNotifications` 中继，**`QmlApplicationContext` 去掉 `MainWindow& backend_`** | **9** | 0 |
 
 第三次削减用 4 个方法名换掉 3 个私有成员：`document_` 的四处读取改走本来就公有的
 `documentDifficultyIds()` / `documentDifficultyChartText()`（语义完全等价——`difficultyIds()`

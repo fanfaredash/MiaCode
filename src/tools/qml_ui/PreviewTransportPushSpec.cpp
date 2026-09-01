@@ -159,9 +159,18 @@ int main(int argc, char** argv)
     // 4. QML 侧接收推送，且不再自己采样。
     const QString modelHeader = readSource(QStringLiteral("src/app/qml_ui/QmlPreviewModel.h"));
     const QString modelSource = readSource(QStringLiteral("src/app/qml_ui/QmlPreviewModel.cpp"));
-    expect(modelSource.contains(QStringLiteral("MainWindow::shellPreviewPlayheadChanged")),
+    // The window still raises both, but the model subscribes through the
+    // miacode::v2::ShellNotifications relay now — it no longer holds a
+    // MainWindow&. What matters here is unchanged: it LISTENS rather than
+    // sampling.
+    const QString bootstrap = readSource(
+        QStringLiteral("src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp"));
+    expect(modelSource.contains(
+               QStringLiteral("ShellNotifications::previewPlayheadChanged"))
+               && bootstrap.contains(QStringLiteral("MainWindow::shellPreviewPlayheadChanged")),
            QStringLiteral("QmlPreviewModel listens for the playhead"), out, &failed);
-    expect(modelSource.contains(QStringLiteral("MainWindow::shellPresentationChanged")),
+    expect(modelSource.contains(QStringLiteral("ShellNotifications::presentationChanged"))
+               && bootstrap.contains(QStringLiteral("MainWindow::shellPresentationChanged")),
            QStringLiteral("QmlPreviewModel listens for shell presentation"), out, &failed);
     // A timer here would mean the transport is sampling MainWindow again, which
     // is what let a missing announcement go unnoticed in the first place.

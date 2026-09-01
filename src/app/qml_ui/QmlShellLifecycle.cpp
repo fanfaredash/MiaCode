@@ -1,7 +1,6 @@
 #include "QmlShellLifecycle.h"
 
 #include "common/DebugLog.h"
-#include "mainwindow/MainWindow.h"
 
 namespace miacode::qml_ui {
 

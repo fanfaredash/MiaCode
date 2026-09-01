@@ -7,6 +7,7 @@
 #include "EditorSyncController.h"
 #include "JobProgressService.h"
 #include "PreviewAppearanceState.h"
+#include "ShellNotifications.h"
 #include "UiRequestService.h"
 
 #include <QObject>
@@ -77,6 +78,9 @@ public:
     JobProgressService& jobProgress() { return jobProgress_; }
     const JobProgressService& jobProgress() const { return jobProgress_; }
 
+    ShellNotifications& shellNotifications() { return shellNotifications_; }
+    const ShellNotifications& shellNotifications() const { return shellNotifications_; }
+
     PreviewAppearanceState& previewAppearance() { return previewAppearance_; }
     const PreviewAppearanceState& previewAppearance() const { return previewAppearance_; }
 
@@ -145,6 +149,7 @@ private:
     UiRequestService uiRequests_;
     JobProgressService jobProgress_;
     PreviewAppearanceState previewAppearance_;
+    ShellNotifications shellNotifications_;
     ExportEngine* exportEngine_ = nullptr;
     EditorPageRouter* editorPageRouter_ = nullptr;
     MediaToolsEngine* mediaToolsEngine_ = nullptr;

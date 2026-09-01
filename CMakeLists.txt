@@ -131,6 +131,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/MediaToolsEngine.h
     src/app/v2/PreferencesStore.h
     src/app/v2/PreviewSurface.h
+    src/app/v2/ShellNotifications.cpp
+    src/app/v2/ShellNotifications.h
     src/app/v2/TimelineSurface.h
     src/app/v2/PreviewAppearanceState.cpp
     src/app/v2/PreviewAppearanceState.h
@@ -1731,6 +1733,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/JobProgressService.cpp
             src/app/v2/PreviewAppearanceState.h
             src/app/v2/PreviewAppearanceState.cpp
+            src/app/v2/ShellNotifications.h
+            src/app/v2/ShellNotifications.cpp
             src/app/v2/UiRequestService.h
             src/app/v2/UiRequestService.cpp
             resources/fonts.qrc
@@ -1771,6 +1775,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/JobProgressService.cpp
             src/app/v2/PreviewAppearanceState.h
             src/app/v2/PreviewAppearanceState.cpp
+            src/app/v2/ShellNotifications.h
+            src/app/v2/ShellNotifications.cpp
             src/app/v2/UiRequestService.h
             src/app/v2/UiRequestService.cpp
             resources/fonts.qrc
@@ -1823,6 +1829,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/JobProgressService.cpp
             src/app/v2/PreviewAppearanceState.h
             src/app/v2/PreviewAppearanceState.cpp
+            src/app/v2/ShellNotifications.h
+            src/app/v2/ShellNotifications.cpp
             src/app/v2/UiRequestService.h
             src/app/v2/UiRequestService.cpp
             resources/fonts.qrc

@@ -163,6 +163,36 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
     applicationServices_.setPreviewSurface(this);
     applicationServices_.setPreferencesStore(this);
     applicationServices_.setDocumentBridge(this);
+
+    // Relay the window's push notifications into the assembly so the QML models
+    // can subscribe without holding a MainWindow&. Nothing waits on a result
+    // here, so a relay changes nothing about the contract — unlike the handler
+    // hooks on DocumentBridge, which need an answer back.
+    {
+        miacode::v2::ShellNotifications& notify = applicationServices_.shellNotifications();
+        connect(this, &MainWindow::shellPresentationChanged,
+                &notify, &miacode::v2::ShellNotifications::presentationChanged);
+        connect(this, &MainWindow::shellPreviewPlayheadChanged,
+                &notify, &miacode::v2::ShellNotifications::previewPlayheadChanged);
+        connect(this, &MainWindow::previewSkinDirectoryChanged,
+                &notify, &miacode::v2::ShellNotifications::previewSkinDirectoryChanged);
+        connect(this, &MainWindow::documentReplaced,
+                &notify, &miacode::v2::ShellNotifications::documentReplaced);
+        connect(this, &MainWindow::editorPreferencesChanged,
+                &notify, &miacode::v2::ShellNotifications::editorPreferencesChanged);
+        connect(this, &MainWindow::muriPromptPreferenceChanged,
+                &notify, &miacode::v2::ShellNotifications::muriPromptPreferenceChanged);
+        connect(this, &MainWindow::videoExportWorkerRunningChanged,
+                &notify, &miacode::v2::ShellNotifications::videoExportWorkerRunningChanged);
+        connect(this, &MainWindow::normalizeWholeChartRequested,
+                &notify, &miacode::v2::ShellNotifications::normalizeWholeChartRequested);
+        connect(this, &MainWindow::mediaToolsRequested,
+                &notify, &miacode::v2::ShellNotifications::mediaToolsRequested);
+        connect(this, &MainWindow::preferencesRequested,
+                &notify, &miacode::v2::ShellNotifications::preferencesRequested);
+        connect(this, &MainWindow::coverExportRequested,
+                &notify, &miacode::v2::ShellNotifications::coverExportRequested);
+    }
     preferencesSection_ = std::make_unique<PreferencesSection>(*this, ui_, state_);
     previewSection_ = std::make_unique<PreviewSection>(*this, ui_, state_);
     validationSection_ = std::make_unique<ValidationSection>(*this, ui_, state_);
@@ -760,9 +790,10 @@ MainWindow::MainWindow(miacode::v2::ApplicationServices& services, QWidget* pare
                 }
             });
     ui_.qmlExportSession_ = new QmlExportSession(
-        *this, applicationServices_.uiRequests(), applicationServices_.jobProgress(),
-        applicationServices_.previewAppearance(), applicationServices_.exportEngineSlot(),
-        applicationServices_.previewSurfaceSlot(), this);
+        applicationServices_.shellNotifications(), applicationServices_.uiRequests(),
+        applicationServices_.jobProgress(), applicationServices_.previewAppearance(),
+        applicationServices_.exportEngineSlot(), applicationServices_.previewSurfaceSlot(),
+        this);
     applicationServices_.setExportPageSession(ui_.qmlExportSession_);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);

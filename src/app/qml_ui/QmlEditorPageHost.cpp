@@ -1,6 +1,5 @@
 #include "QmlEditorPageHost.h"
 
-#include "mainwindow/MainWindow.h"
 #include "common/DebugLog.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 
@@ -22,30 +21,30 @@ void appendPageHostLog(const QString& action, const QString& detail = QString())
 
 } // namespace
 
-QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend,
+QmlEditorPageHost::QmlEditorPageHost(miacode::v2::ShellNotifications& notifications,
                                      miacode::v2::EditorPageRouter*& routerSlot,
                                      QObject*& exportSessionSlot,
                                      QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , notifications_(&notifications)
     , routerSlot_(&routerSlot)
     , exportSessionSlot_(&exportSessionSlot)
 {
     // The menu action and the chart.normalize shortcut land on MainWindow;
     // re-emit so the editor sees one request regardless of where it came from.
-    connect(&backend, &MainWindow::normalizeWholeChartRequested, this, [this]() {
+    connect(&notifications, &miacode::v2::ShellNotifications::normalizeWholeChartRequested, this, [this]() {
         openNormalizeWholeChart();
     });
-    connect(&backend, &MainWindow::mediaToolsRequested, this, [this]() {
+    connect(&notifications, &miacode::v2::ShellNotifications::mediaToolsRequested, this, [this]() {
         openMediaProcessingTools();
     });
-    connect(&backend, &MainWindow::preferencesRequested, this, [this]() {
+    connect(&notifications, &miacode::v2::ShellNotifications::preferencesRequested, this, [this]() {
         if (overlayActive()) {
             leaveOverlayPage();
         }
         emit preferencesRequested();
     });
-    connect(&backend, &MainWindow::coverExportRequested, this, [this](int difficultyId) {
+    connect(&notifications, &miacode::v2::ShellNotifications::coverExportRequested, this, [this](int difficultyId) {
         openCoverExport(difficultyId);
     });
 }

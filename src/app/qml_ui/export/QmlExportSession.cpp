@@ -1,7 +1,8 @@
 #include "QmlExportSession.h"
 
+#include "core/chart/document/SimaiDocument.h"
+
 #include "app/v2/JobProgressService.h"
-#include "mainwindow/MainWindow.h"
 #include "UiText.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
@@ -41,7 +42,7 @@ double minimumExportRangeSecondsForChart(double chartDurationSeconds)
 
 }  // namespace
 
-QmlExportSession::QmlExportSession(MainWindow& backend,
+QmlExportSession::QmlExportSession(miacode::v2::ShellNotifications& notifications,
                                    miacode::v2::UiRequestService& uiRequests,
                                    miacode::v2::JobProgressService& jobProgress,
                                    miacode::v2::PreviewAppearanceState& appearance,
@@ -55,9 +56,9 @@ QmlExportSession::QmlExportSession(MainWindow& backend,
     , appearance_(&appearance)
     , engineSlot_(&engineSlot)
     , previewSlot_(&previewSlot)
-    , backend_(&backend)
+    , notifications_(&notifications)
 {
-    connect(&backend, &MainWindow::videoExportWorkerRunningChanged, this, [this](bool running) {
+    connect(&notifications, &miacode::v2::ShellNotifications::videoExportWorkerRunningChanged, this, [this](bool running) {
         if (batchExportRunning_ || exportRunning_ == running) {
             return;
         }

@@ -9,7 +9,6 @@
 
 #include <atomic>
 
-class MainWindow;
 class QThread;
 
 namespace miacode::v2 {
@@ -32,8 +31,7 @@ class QmlMediaToolsModel final : public QObject
     Q_PROPERTY(bool batchRunning READ batchRunning NOTIFY batchRunningChanged)
 
 public:
-    explicit QmlMediaToolsModel(MainWindow& backend,
-                               miacode::v2::UiRequestService& uiRequests,
+    explicit QmlMediaToolsModel(                       miacode::v2::UiRequestService& uiRequests,
                                miacode::v2::JobProgressService& jobProgress,
                                miacode::v2::MediaToolsEngine*& engineSlot,
                                QObject* parent = nullptr);
@@ -74,7 +72,6 @@ private:
     void setRowStatus(int row, const QString& status);
     void finishBatch(int succeeded, int failed, bool canceled, const QString& fatalError);
 
-    MainWindow* backend_ = nullptr;
     // From the application assembly, not from the hidden window.
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
     miacode::v2::JobProgressService* jobProgress_ = nullptr;

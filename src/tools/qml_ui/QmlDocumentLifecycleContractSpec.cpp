@@ -46,16 +46,16 @@ bool verifyBackendReplacementPublishesOneQmlRefresh(QTextStream& err)
                                  QStringLiteral("emit owner_.documentReplaced();")),
                    QStringLiteral("every loadDocument path publishes the backend replacement after loading"), err)
         && require(containsAfter(documentModel,
-                                 QStringLiteral("&MainWindow::documentReplaced"),
+                                 QStringLiteral("&miacode::v2::ShellNotifications::documentReplaced"),
                                  QStringLiteral("clearMetadataSourceRejection();"))
                        && containsAfter(documentModel,
-                                        QStringLiteral("&MainWindow::documentReplaced"),
+                                        QStringLiteral("&miacode::v2::ShellNotifications::documentReplaced"),
                                         QStringLiteral("Qt::QueuedConnection"))
                        && containsAfter(documentModel,
-                                        QStringLiteral("&MainWindow::documentReplaced"),
+                                        QStringLiteral("&miacode::v2::ShellNotifications::documentReplaced"),
                                         QStringLiteral("emitDocumentStateChanged();"))
                        && containsAfter(documentModel,
-                                        QStringLiteral("&MainWindow::documentReplaced"),
+                                        QStringLiteral("&miacode::v2::ShellNotifications::documentReplaced"),
                                         QStringLiteral("emit documentReplaced();")),
                    QStringLiteral("backend replacements wait for the completed transaction, clear rejected source state, and publish the complete QML document snapshot"), err)
         && require(containsAfter(mainView,

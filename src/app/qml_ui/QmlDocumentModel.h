@@ -14,7 +14,8 @@
 #include "app/v2/DocumentBridge.h"
 #include "app/v2/UiRequestService.h"
 
-class MainWindow;
+#include "app/v2/ShellNotifications.h"
+
 
 // QML-facing owner for the active MiaCode chart document. This class is the
 // single boundary between the visual UI and the existing chart model;
@@ -66,7 +67,7 @@ class QmlDocumentModel final : public QObject
 
 public:
     explicit QmlDocumentModel(
-        MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
+        miacode::v2::ShellNotifications& notifications, miacode::v2::ChartWorkspace& workspace,
         miacode::v2::ChartWorkspaceFileService& fileService,
         miacode::v2::AnalysisService& analysisService,
         miacode::v2::UiRequestService& uiRequests,
@@ -259,7 +260,7 @@ private:
     void refreshDocumentState();
     void clearMetadataSourceRejection();
     QVariantList sourceIssuesToVariantList() const;
-    MainWindow* backend_ = nullptr;
+    miacode::v2::ShellNotifications* notifications_ = nullptr;
     // Bound to the assembly's slot, not a snapshot.
     miacode::v2::DocumentBridge** bridgeSlot_ = nullptr;
     miacode::v2::DocumentBridge* bridge() const

@@ -27,6 +27,7 @@ ApplicationServices::ApplicationServices(QObject* parent)
     , uiRequests_(this)
     , jobProgress_(this)
     , previewAppearance_(this)
+    , shellNotifications_(this)
 {
 }
 

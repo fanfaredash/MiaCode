@@ -9,7 +9,6 @@
 
 #include "app/v2/TimelineSurface.h"
 
-class MainWindow;
 
 class QmlAnalysisModel final : public QObject
 {
@@ -24,7 +23,7 @@ class QmlAnalysisModel final : public QObject
 
 public:
     QmlAnalysisModel(
-        MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
+        miacode::v2::ChartWorkspace& workspace,
         miacode::v2::AnalysisService& analysisService,
         miacode::v2::TimelineSurface*& surfaceSlot, QObject* parent = nullptr);
 
@@ -50,7 +49,6 @@ private:
     void refresh();
     QVariantList rowsToVariantList(const QVector<miacode::qml_ui::AnalysisRow>& rows) const;
 
-    MainWindow* backend_ = nullptr;
     // Jumping to an issue's second and the 无理 prompt preference both belong
     // to the timeline surface, not to the window.
     miacode::v2::TimelineSurface** surfaceSlot_ = nullptr;

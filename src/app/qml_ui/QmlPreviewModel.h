@@ -9,7 +9,8 @@
 
 #include "app/v2/PreviewSurface.h"
 
-class MainWindow;
+#include "app/v2/ShellNotifications.h"
+
 
 // Real-time preview state exposed to the pure-QML UI. Playback and rendering
 // remain owned by MiaCode's preview runtime.
@@ -41,7 +42,7 @@ class QmlPreviewModel final : public QObject
     Q_PROPERTY(double canvasAspectRatio READ canvasAspectRatio NOTIFY presentationChanged)
 
 public:
-    explicit QmlPreviewModel(MainWindow& backend,
+    explicit QmlPreviewModel(miacode::v2::ShellNotifications& notifications,
                              miacode::v2::PreviewSurface*& surfaceSlot,
                              QObject* parent = nullptr);
 
@@ -92,7 +93,7 @@ private:
     void resetV2UiProbe();
     void appendV2UiProbeSummary() const;
 
-    MainWindow* backend_ = nullptr;
+    miacode::v2::ShellNotifications* notifications_ = nullptr;
     // Bound to the assembly's slot, not a snapshot.
     miacode::v2::PreviewSurface** surfaceSlot_ = nullptr;
     miacode::v2::PreviewSurface* surface() const

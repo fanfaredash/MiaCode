@@ -6,7 +6,6 @@
 
 #include "editor/BookmarkCommentSyntax.h"
 
-#include "app/mainwindow/MainWindow.h"
 #include "app/v2/UiRequestService.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
@@ -41,13 +40,13 @@ QVariantList unsavedSectionChoices()
 
 
 QmlDocumentModel::QmlDocumentModel(
-    MainWindow& backend, miacode::v2::ChartWorkspace& workspace,
+    miacode::v2::ShellNotifications& notifications, miacode::v2::ChartWorkspace& workspace,
     miacode::v2::ChartWorkspaceFileService& fileService,
     miacode::v2::AnalysisService& analysisService,
     miacode::v2::UiRequestService& uiRequests,
     miacode::v2::DocumentBridge*& bridgeSlot, QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , notifications_(&notifications)
     , workspace_(&workspace)
     , fileService_(&fileService)
     , analysisService_(&analysisService)
@@ -80,7 +79,7 @@ QmlDocumentModel::QmlDocumentModel(
                 emit syntaxIssuesChanged();
                 emit documentStateChanged();
             });
-    connect(backend_, &MainWindow::documentReplaced, this, [this] {
+    connect(notifications_, &miacode::v2::ShellNotifications::documentReplaced, this, [this] {
         // A chart may be replaced by the backend directly (startup, root
         // ChartDrop, native File/Open, recovery), not only through this QML
         // facade.  Some replacement routes finalize their dirty/revision

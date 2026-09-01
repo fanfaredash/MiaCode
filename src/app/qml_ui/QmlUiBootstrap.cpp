@@ -84,8 +84,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     backend_->setVisible(false);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
-    applicationContext_ =
-        std::make_unique<QmlApplicationContext>(*backend_, *applicationServices_, this);
+    applicationContext_ = std::make_unique<QmlApplicationContext>(*applicationServices_, this);
     QObject::connect(
         static_cast<miacode::qml_ui::QmlShellLifecycle*>(applicationContext_->shell()),
         &miacode::qml_ui::QmlShellLifecycle::rootCloseAccepted,

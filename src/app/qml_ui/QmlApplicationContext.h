@@ -22,8 +22,6 @@
 
 #include <QObject>
 
-class MainWindow;
-
 // Root contract injected into MiaCode.UI. Every visual component reaches the
 // application through these cohesive service objects.
 class QmlApplicationContext final : public QObject
@@ -57,12 +55,11 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* coverExport READ coverExport CONSTANT)
 
 public:
-    // `services` owns the document domain and the shared UI boundaries; the
-    // window is still the backend for the shell state QML has not taken over
-    // yet (stage 3.5 items 2-3 shrink it to nothing). Nothing reached through
-    // `services` may be re-fetched from the window.
-    explicit QmlApplicationContext(MainWindow& backend,
-                                   miacode::v2::ApplicationServices& services,
+    // Stage 3.5 item 2 is complete here: the context takes the application
+    // service assembly and nothing else. No MainWindow — not a reference, not a
+    // parameter, not an include. Every domain reaches the window, while it
+    // still exists, through an interface the window implements.
+    explicit QmlApplicationContext(miacode::v2::ApplicationServices& services,
                                    QObject* parent = nullptr);
 
     QObject* document();
@@ -95,7 +92,6 @@ signals:
     void chartDropBridgeChanged();
 
 private:
-    MainWindow& backend_;
     miacode::v2::ApplicationServices& services_;
     QmlUiSettings preferences_;
     miacode::qml_ui::QmlAppBackgroundModel appBackground_;

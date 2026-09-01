@@ -1,25 +1,22 @@
 #include "QmlApplicationContext.h"
 
-#include "mainwindow/MainWindow.h"
 #include "export/QmlExportSession.h"
 
-QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
-                                             miacode::v2::ApplicationServices& services,
+QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& services,
                                              QObject* parent)
     : QObject(parent)
-    , backend_(backend)
     , services_(services)
     , preferences_(this)
     , appBackground_(&services.uiRequests(), {}, {}, this)
-    , document_(backend, services.workspace(), services.files(), services.analysis(),
+    , document_(services.shellNotifications(), services.workspace(), services.files(), services.analysis(),
                 services.uiRequests(), services.documentBridgeSlot(), this)
-    , analysis_(backend, services.workspace(), services.analysis(),
+    , analysis_(services.workspace(), services.analysis(),
                 services.timelineSurfaceSlot(), this)
-    , preview_(backend, services.previewSurfaceSlot(), this)
-    , timeline_(backend, services.timelineSurfaceSlot(), this)
-    , commands_(backend, document_, services.editorPageRouterSlot(),
+    , preview_(services.shellNotifications(), services.previewSurfaceSlot(), this)
+    , timeline_(services.shellNotifications(), services.timelineSurfaceSlot(), this)
+    , commands_(document_, services.editorPageRouterSlot(),
                 services.documentBridgeSlot(), this)
-    , pages_(backend, services.editorPageRouterSlot(), services.exportPageSessionSlot(), this)
+    , pages_(services.shellNotifications(), services.editorPageRouterSlot(), services.exportPageSessionSlot(), this)
     // From the assembly's slot: MainWindow installs the session during its own
     // construction, which finishes before this context is built.
     , coverExport_(*qobject_cast<QmlExportSession*>(services.exportPageSession()),
@@ -27,7 +24,7 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)
-    , mediaTools_(backend, services.uiRequests(), services.jobProgress(),
+    , mediaTools_(services.uiRequests(), services.jobProgress(),
                   services.mediaToolsEngineSlot(), this)
     , preferencesModel_(services.preferencesStoreSlot(), preferences_, this)
     , audioSettings_(services.previewSurfaceSlot(), this)
@@ -58,9 +55,9 @@ QmlApplicationContext::QmlApplicationContext(MainWindow& backend,
     };
     connect(&preferences_, &QmlUiSettings::editorSettingsChanged,
             this, applyEditorSettings);
-    connect(&backend_, &MainWindow::editorPreferencesChanged,
+    connect(&services.shellNotifications(), &miacode::v2::ShellNotifications::editorPreferencesChanged,
             &preferences_, &QmlUiSettings::reloadEditorSettings);
-    connect(&backend_, &MainWindow::muriPromptPreferenceChanged,
+    connect(&services.shellNotifications(), &miacode::v2::ShellNotifications::muriPromptPreferenceChanged,
             &analysis_, &QmlAnalysisModel::refreshPreferences);
     connect(&pages_, &QmlEditorPageHost::coverPageRequested,
             &coverExport_, &QmlCoverExportSession::enter);

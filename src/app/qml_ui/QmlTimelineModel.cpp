@@ -1,20 +1,19 @@
 #include "QmlTimelineModel.h"
 
-#include "mainwindow/MainWindow.h"
 #include "ui/UiText.h"
 
 namespace miacode::qml_ui {
 
-QmlTimelineModel::QmlTimelineModel(MainWindow& backend,
+QmlTimelineModel::QmlTimelineModel(miacode::v2::ShellNotifications& notifications,
                                    miacode::v2::TimelineSurface*& surfaceSlot,
                                    QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , notifications_(&notifications)
     , surfaceSlot_(&surfaceSlot)
 {
     // Pushed, not polled: MainWindow says when the panel's presentation
     // changed, and nothing wakes in between.
-    connect(backend_, &MainWindow::shellPresentationChanged,
+    connect(notifications_, &miacode::v2::ShellNotifications::presentationChanged,
             this, &QmlTimelineModel::tabsChanged);
 }
 

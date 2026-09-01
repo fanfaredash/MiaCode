@@ -3,7 +3,6 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/MuriRenderOptions.h"
-#include "mainwindow/MainWindow.h"
 
 #include <array>
 #include <QElapsedTimer>
@@ -28,23 +27,23 @@ constexpr std::array<StatisticDescriptor, 6> kStatisticDescriptors{{
 
 } // namespace
 
-QmlPreviewModel::QmlPreviewModel(MainWindow& backend,
+QmlPreviewModel::QmlPreviewModel(miacode::v2::ShellNotifications& notifications,
                                  miacode::v2::PreviewSurface*& surfaceSlot,
                                  QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , notifications_(&notifications)
     , surfaceSlot_(&surfaceSlot)
 {
     v2UiProbeEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
-    connect(backend_, &MainWindow::shellPresentationChanged, this, [this]() {
+    connect(notifications_, &miacode::v2::ShellNotifications::presentationChanged, this, [this]() {
         updateV2UiProbePlaybackState();
         refreshFromBackend();
     });
-    connect(backend_, &MainWindow::shellPreviewPlayheadChanged, this, [this]() {
+    connect(notifications_, &miacode::v2::ShellNotifications::previewPlayheadChanged, this, [this]() {
         updateV2UiProbePlaybackState();
         refreshFromBackend();
     });
-    connect(backend_, &MainWindow::previewSkinDirectoryChanged, this, [this]() {
+    connect(notifications_, &miacode::v2::ShellNotifications::previewSkinDirectoryChanged, this, [this]() {
         refreshSkinDirectory();
         rebuildStatistics();
         emit statisticsChanged();

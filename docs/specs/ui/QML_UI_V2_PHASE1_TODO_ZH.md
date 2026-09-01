@@ -490,8 +490,13 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       装配对象都会**链接失败**；它还扫描整个 `src/app`（除装配自身），禁止任何地方再 `new` /
       `make_unique` / 以值成员形式构造这七个服务——否则装配对象会变成第三个所有者而不是唯一所有者。
       这条反向验证已实测：在 `MainWindow.h` 里加一个 `UiRequestService` 值成员，守卫立刻失败。
-- [ ] `QmlApplicationContext` 不再持有 `MainWindow& backend_`；QML 通过窄 QObject 门面访问
-      services / sessions，不能再经隐藏窗口取得状态、命令或页面切换。
+- [x] **`QmlApplicationContext` 已不再持有 `MainWindow& backend_`（2026-09-01 完成）**。
+      不是引用、不是构造参数、也不是 include——它现在只接受 `ApplicationServices&`。
+      九个域全部改由 `src/app/v2/` 的接口承接（`EditorPageRouter` / `ExportEngine` /
+      `PreviewSurface` / `TimelineSurface` / `PreferencesStore` / `DocumentBridge` /
+      `MediaToolsEngine` / `LatencyEngine`，加上值对象 `PreviewAppearanceState`），
+      11 个推送信号经 `ShellNotifications` 中继。方法面 120 → 9，私有成员直读 17 → 0，
+      QML 类型的 friend 授权 5 → 0。落地过程见下方第 13–20 条。
       *进展（2026-09-01）*：
       1. 文档域、UI 请求、作业进度、editor-sync 已改为经 `services_` 取得；`backend_` 不再是这
          四者的来源。`uiRequestService()` / `jobProgressService()` 这两个方法**已从 QML 层完全消失**
@@ -637,6 +642,17 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          同一个「未保存改动怎么办」，只是作用域不同。`QmlShellLifecycle` 因此完全不认识 `MainWindow`。
          **至此每个 `Qml*Model` 都不再调用 `MainWindow` 的任何方法**；剩下的 9 个全部在
          `QmlUiBootstrap`，也就是第 3 项本身。
+
+     20. **最后一步：11 个推送信号改经 `miacode::v2::ShellNotifications` 中继，
+         `QmlApplicationContext` 去掉 `MainWindow& backend_`（item 2 完成）**。
+         方法调用早已全部搬到接口后面，但各 `Qml*Model` 仍为了 **connect 信号**而持有
+         `MainWindow&`——窗口因此还是 11 个文件的编译期依赖。
+         信号在装配对象里**转发**而不是搬走，因为它们大多仍由 widget 时代的代码路径抛出；
+         对通知来说这没有损失：与 `DocumentBridge` 上那三个 handler 不同，没有人在等一个结果。
+         结果：`QmlApplicationContext` 只接受 `ApplicationServices&`。
+         `src/app/qml_ui` 里除 `QmlUiBootstrap` 外，仅剩 `QmlUiSettings.cpp` 一处对
+         `MainWindowShared` 的编译期依赖（编辑器字体与行距度量）——那是字体/度量模块的归属问题，
+         不是窗口依赖，另记。
 
      12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
          它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
