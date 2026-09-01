@@ -2627,6 +2627,18 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(qml_ui_backend_surface_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # A theme change has two entry points — the OS colour scheme and the user's
+    # own choice — and only the first used to notify QML, so picking a theme
+    # repainted the timeline and nothing else. Source contract because
+    # QmlUiSettings pulls in MainWindowShared and cannot link Core-only.
+    miacode_add_dev_tool(qml_ui_theme_contract_spec TEST
+        SOURCES
+            src/tools/qml_ui/QmlUiThemeContractSpec.cpp
+        LIBS Qt6::Core
+    )
+    target_compile_definitions(qml_ui_theme_contract_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     # Drift guard for docs/ops/DEPENDENCY_ALLOWLIST.md (stage 3.5, item 4).
     # Parses every target_link_libraries(MiaCode …) call plus the doc's
     # allow/forbid/media-adapter tables, so an undocumented dependency, a stale

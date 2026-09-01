@@ -219,6 +219,17 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         }
 #endif
         UiNativeWindowTheme::applyToWindow(window);
+        // The native frame is applied, not bound: without re-applying it the
+        // titlebar keeps the palette it was born with while every QML surface
+        // and the QSG timeline follow the new theme. Same call, repeated.
+        if (auto* settings = qobject_cast<QmlUiSettings*>(applicationContext_->preferences());
+            settings != nullptr) {
+            QObject::connect(settings, &QmlUiSettings::themeChanged, this, [this]() {
+                if (rootWindow_ != nullptr) {
+                    UiNativeWindowTheme::applyToWindow(rootWindow_);
+                }
+            });
+        }
         if (!rootLifecycle_.canShowRoot()) {
             releaseRootWindowResources();
             return false;

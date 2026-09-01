@@ -174,6 +174,12 @@ void QmlUiSettings::setThemeToken(const QString& token)
         return;
     }
     UiText::setPreferredTheme(next);
+    // UiText only stores and persists — it notifies nobody. Without this the
+    // stored preference changes and the timeline follows it (a QSG item reading
+    // UiTheme::colors() on its next repaint), while every QML surface stays on
+    // the old palette until the next launch. The OS colour-scheme change
+    // already ends here; the user's own choice has to as well.
+    reloadTheme();
 }
 
 void QmlUiSettings::setSidebarVisible(bool value)

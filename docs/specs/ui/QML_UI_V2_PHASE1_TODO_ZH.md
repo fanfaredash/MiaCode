@@ -852,6 +852,36 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 **所有者同时报告：「导出已取消」仍是 Qt 风格弹窗。已定位并修复，见 §7.-4。**
 
+### 7.-5 主题切换只对时间轴生效（2026-09-01 所有者报告，已修）
+
+**报告**：在偏好设置里改主题，只有时间轴跟着变。
+
+**根因**：解析后的主题有两条改变路径，只有一条通知了 QML。
+
+- 系统改配色 → `QStyleHints::colorSchemeChanged` → `QmlUiSettings::reloadTheme()`
+  → 更新 `darkTheme_` → `emit themeChanged()` → `Theme.qml` 整套调色板重绑定。
+- 用户自己选主题 → `QmlUiSettings::setThemeToken()` → `UiText::setPreferredTheme()`，**到此为止**。
+  `UiText` 只负责存储和持久化，不通知任何人。
+
+时间轴之所以还跟着变，恰恰是因为它**绕过了**这条通知：它是个 C++ QSG item，每次重绘直接读
+`UiTheme::colors()`（由存储的偏好实时派生），根本不走 QML 的 `darkTheme` 属性。
+于是唯一不依赖通知的那个界面，成了唯一会更新的那个。
+
+**不是本轮接口重构引入的**：`git log -L` 显示 `setThemeToken` 自 `bf5bbe6d`
+（本轮工作开始之前的 HEAD）加入时就没有调用 `reloadTheme()`。
+
+**已修**：`setThemeToken()` 在写入偏好后调用 `reloadTheme()`——让用户发起的路径终点，
+和系统发起的路径终点一致。后者早已在生产里跑，所以这条路径本身是被验证过的。
+同时在 `QmlUiBootstrap` 里把 `themeChanged` 接到 `UiNativeWindowTheme::applyToWindow()`：
+原生标题栏是**应用**上去的、不是绑定的，不重新应用就会保持出生时的配色。
+
+**守卫**：`qml_ui_theme_contract_spec`（源码契约——`QmlUiSettings` 依赖 `MainWindowShared`
+的编辑器字体度量，无法只链 Core）。它同时钉住前提：`UiText::setPreferredTheme` 仍然只存不通知，
+所以每个写入者都欠外壳一次通知。反向验证过。
+
+**待所有者复核**：中/英/日三种语言下切浅色/深色/跟随系统，确认编辑器、侧栏、底栏、预览、
+导出页、各弹窗**和原生标题栏**都跟着变。语言切换仍然需要重启（未改动）。
+
 ### 7.-4 阶段 3 的「Widget 对话框归零」有一个判定盲区（2026-09-01 发现并修复）
 
 阶段 3 的完成标志是
