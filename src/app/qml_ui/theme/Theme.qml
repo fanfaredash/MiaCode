@@ -92,6 +92,11 @@ QtObject {
     // control but never the content, so ChromeRow spends this on padding to
     // keep text off the highlight edge.
     readonly property int rowPaddingX: 10
+    // SplitView handle: 1px layout (same as non-interactive dividers),
+    // wider invisible hit, thicker stroke only while hovered/pressed.
+    readonly property int splitDividerThickness: 1
+    readonly property int splitHandleActiveThickness: 3
+    readonly property int splitHandleHitExtent: 9
     readonly property int activityButtonSize: 48
     readonly property int activityIconSize: 24
     readonly property int activityIconTop: Math.round((activityButtonSize - activityIconSize) * 0.5)
@@ -101,6 +106,8 @@ QtObject {
         "#69A6FF", "#78C85A", "#DCC548", "#E35C50", "#7A4FD1", "#D548B6", "#E29A46"
     ]
     readonly property color difficultyColorFallback: "#8A8F98"
+    readonly property int difficultySwatchSize: 10
+    readonly property int difficultySwatchRadius: 3
     function difficultyColor(difficultyId) {
         return difficultyId >= 1 && difficultyId <= difficultyColors.length
             ? difficultyColors[difficultyId - 1]

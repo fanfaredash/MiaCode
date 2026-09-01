@@ -7,16 +7,65 @@
 
 #include <QCoreApplication>
 #include <QGuiApplication>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QSettings>
 #include <QSysInfo>
 #include <QtGlobal>
 
 namespace {
-constexpr auto kSidebarVisible = "ui/sidebarVisible";
-constexpr auto kSidebarWidth = "ui/sidebarWidth";
-constexpr auto kBottomPanelVisible = "ui/bottomPanelVisible";
-constexpr auto kBottomPanelHeightRatio = "ui/bottomPanelHeightRatio";
-constexpr auto kPreviewWidthRatio = "ui/previewWidthRatio";
-constexpr auto kFontSize = "appearance/fontSize";
+constexpr auto kUiSection = "ui";
+constexpr auto kSidebarVisible = "sidebar_visible";
+constexpr auto kSidebarWidth = "sidebar_width";
+constexpr auto kBottomPanelVisible = "bottom_panel_visible";
+constexpr auto kBottomPanelHeightRatio = "bottom_panel_height_ratio";
+constexpr auto kPreviewWidthRatio = "preview_width_ratio";
+constexpr auto kFontSize = "ui_font_size";
+
+constexpr auto kLegacySidebarVisible = "ui/sidebarVisible";
+constexpr auto kLegacySidebarWidth = "ui/sidebarWidth";
+constexpr auto kLegacyBottomPanelVisible = "ui/bottomPanelVisible";
+constexpr auto kLegacyBottomPanelHeightRatio = "ui/bottomPanelHeightRatio";
+constexpr auto kLegacyPreviewWidthRatio = "ui/previewWidthRatio";
+constexpr auto kLegacyFontSize = "appearance/fontSize";
+
+QJsonObject loadUiObject()
+{
+    return UiText::loadPreferencesObject().value(QLatin1String(kUiSection)).toObject();
+}
+
+void storeUiValue(const char* key, const QJsonValue& value)
+{
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject ui = root.value(QLatin1String(kUiSection)).toObject();
+    ui.insert(QLatin1String(key), value);
+    root.insert(QLatin1String(kUiSection), ui);
+    UiText::savePreferencesObject(root);
+}
+
+bool jsonBool(const QJsonObject& ui, const char* key, QSettings& legacy, const char* legacyKey, bool fallback)
+{
+    if (ui.contains(QLatin1String(key))) {
+        return ui.value(QLatin1String(key)).toBool(fallback);
+    }
+    return legacy.value(QLatin1String(legacyKey), fallback).toBool();
+}
+
+int jsonInt(const QJsonObject& ui, const char* key, QSettings& legacy, const char* legacyKey, int fallback)
+{
+    if (ui.contains(QLatin1String(key))) {
+        return ui.value(QLatin1String(key)).toInt(fallback);
+    }
+    return legacy.value(QLatin1String(legacyKey), fallback).toInt();
+}
+
+double jsonDouble(const QJsonObject& ui, const char* key, QSettings& legacy, const char* legacyKey, double fallback)
+{
+    if (ui.contains(QLatin1String(key))) {
+        return ui.value(QLatin1String(key)).toDouble(fallback);
+    }
+    return legacy.value(QLatin1String(legacyKey), fallback).toDouble();
+}
 }
 
 QmlUiSettings::QmlUiSettings(QObject* parent)
@@ -24,19 +73,40 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
 {
     uiFontFamily_ = QGuiApplication::font().family();
 
-    // 启动时读取并约束到界面可接受范围。
-    sidebarVisible_ = settings_.value(kSidebarVisible, true).toBool();
+    // 启动时读取并约束到界面可接受范围。无 json 键时回退到旧 QSettings，供 macOS 上已有记录迁入。
+    const QJsonObject ui = loadUiObject();
+    QSettings legacySettings;
+    sidebarVisible_ = jsonBool(ui, kSidebarVisible, legacySettings, kLegacySidebarVisible, true);
     sidebarWidth_ = qBound(kSidebarMinimumContentWidth,
-                           settings_.value(kSidebarWidth, 190).toInt(),
+                           jsonInt(ui, kSidebarWidth, legacySettings, kLegacySidebarWidth, 190),
                            kSidebarMaximumContentWidth);
-    bottomPanelVisible_ = settings_.value(kBottomPanelVisible, true).toBool();
+    bottomPanelVisible_ = jsonBool(ui, kBottomPanelVisible, legacySettings, kLegacyBottomPanelVisible, true);
     bottomPanelHeightRatio_ = qBound(kBottomPanelMinimumHeightRatio,
-                                     settings_.value(kBottomPanelHeightRatio, 0.35).toDouble(),
+                                     jsonDouble(ui, kBottomPanelHeightRatio, legacySettings,
+                                                kLegacyBottomPanelHeightRatio, 0.35),
                                      kBottomPanelMaximumHeightRatio);
     previewWidthRatio_ = qBound(kPreviewMinimumWidthRatio,
-                                settings_.value(kPreviewWidthRatio, 0.5).toDouble(),
+                                jsonDouble(ui, kPreviewWidthRatio, legacySettings,
+                                           kLegacyPreviewWidthRatio, 0.5),
                                 kPreviewMaximumWidthRatio);
-    fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
+    fontSize_ = qBound(12, jsonInt(ui, kFontSize, legacySettings, kLegacyFontSize, 13), 14);
+    if (!ui.contains(QLatin1String(kSidebarVisible))
+        || !ui.contains(QLatin1String(kSidebarWidth))
+        || !ui.contains(QLatin1String(kBottomPanelVisible))
+        || !ui.contains(QLatin1String(kBottomPanelHeightRatio))
+        || !ui.contains(QLatin1String(kPreviewWidthRatio))
+        || !ui.contains(QLatin1String(kFontSize))) {
+        QJsonObject root = UiText::loadPreferencesObject();
+        QJsonObject nextUi = root.value(QLatin1String(kUiSection)).toObject();
+        nextUi.insert(QLatin1String(kSidebarVisible), sidebarVisible_);
+        nextUi.insert(QLatin1String(kSidebarWidth), sidebarWidth_);
+        nextUi.insert(QLatin1String(kBottomPanelVisible), bottomPanelVisible_);
+        nextUi.insert(QLatin1String(kBottomPanelHeightRatio), bottomPanelHeightRatio_);
+        nextUi.insert(QLatin1String(kPreviewWidthRatio), previewWidthRatio_);
+        nextUi.insert(QLatin1String(kFontSize), fontSize_);
+        root.insert(QLatin1String(kUiSection), nextUi);
+        UiText::savePreferencesObject(root);
+    }
     reloadTheme();
     if (QGuiApplication::styleHints() != nullptr) {
         connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
@@ -186,7 +256,7 @@ void QmlUiSettings::setSidebarVisible(bool value)
 {
     if (sidebarVisible_ == value) return;
     sidebarVisible_ = value;
-    settings_.setValue(kSidebarVisible, value);
+    storeUiValue(kSidebarVisible, value);
     emit sidebarVisibleChanged();
 }
 
@@ -195,7 +265,7 @@ void QmlUiSettings::setSidebarWidth(int value)
     value = qBound(kSidebarMinimumContentWidth, value, kSidebarMaximumContentWidth);
     if (sidebarWidth_ == value) return;
     sidebarWidth_ = value;
-    settings_.setValue(kSidebarWidth, value);
+    storeUiValue(kSidebarWidth, value);
     emit sidebarWidthChanged();
 }
 
@@ -203,7 +273,7 @@ void QmlUiSettings::setBottomPanelVisible(bool value)
 {
     if (bottomPanelVisible_ == value) return;
     bottomPanelVisible_ = value;
-    settings_.setValue(kBottomPanelVisible, value);
+    storeUiValue(kBottomPanelVisible, value);
     emit bottomPanelVisibleChanged();
 }
 
@@ -212,7 +282,7 @@ void QmlUiSettings::setBottomPanelHeightRatio(double value)
     value = qBound(kBottomPanelMinimumHeightRatio, value, kBottomPanelMaximumHeightRatio);
     if (qFuzzyCompare(bottomPanelHeightRatio_, value)) return;
     bottomPanelHeightRatio_ = value;
-    settings_.setValue(kBottomPanelHeightRatio, value);
+    storeUiValue(kBottomPanelHeightRatio, value);
     emit bottomPanelHeightRatioChanged();
 }
 
@@ -221,7 +291,7 @@ void QmlUiSettings::setPreviewWidthRatio(double value)
     value = qBound(kPreviewMinimumWidthRatio, value, kPreviewMaximumWidthRatio);
     if (qFuzzyCompare(previewWidthRatio_, value)) return;
     previewWidthRatio_ = value;
-    settings_.setValue(kPreviewWidthRatio, value);
+    storeUiValue(kPreviewWidthRatio, value);
     emit previewWidthRatioChanged();
 }
 
@@ -243,6 +313,6 @@ void QmlUiSettings::setFontSize(int value)
     value = qBound(12, value, 14);
     if (fontSize_ == value) return;
     fontSize_ = value;
-    settings_.setValue(kFontSize, value);
+    storeUiValue(kFontSize, value);
     emit fontSizeChanged();
 }

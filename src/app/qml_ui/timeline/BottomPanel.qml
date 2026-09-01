@@ -21,7 +21,7 @@ Rectangle {
 
     color: Theme.surfaceColor("panel", Theme.colors.background.surface)
     clip: true
-    readonly property int contentTopMargin: 4
+    readonly property int contentTopMargin: 0
 
     BottomTabBar {
         id: tabs
@@ -63,7 +63,7 @@ Rectangle {
     AppDropDownButton {
         id: zoomButton
 
-        x: Math.round(4 * timelineItem.headerScale)
+        x: Math.round(tabs.leadingInkX)
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         height: Math.min(implicitHeight, Math.max(1, timelineItem.timelineTop))
         visible: timelineItem.visible
@@ -90,7 +90,7 @@ Rectangle {
 
         width: Math.max(28, Math.round(28 * timelineItem.headerScale))
         height: Math.max(24, Math.round(24 * timelineItem.headerScale))
-        x: Math.max(zoomButton.x + zoomButton.width + 8, parent.width - width - 8)
+        x: Math.round(tabs.trailingContentRight - (width + iconWidth) / 2)
         y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
         visible: timelineItem.visible
         iconSource: Qt.resolvedUrl("icons/settings.svg")

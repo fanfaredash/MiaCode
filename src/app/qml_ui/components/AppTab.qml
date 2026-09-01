@@ -10,6 +10,7 @@ Item {
     property string text
     property string secondaryText
     property url iconSource
+    property int difficultyId: 0
     property string tooltip
     property bool active: false
     property bool panelTab: false
@@ -17,6 +18,12 @@ Item {
     property int count: -1
     property real preferredTabWidth: 160
     readonly property bool hovered: tabButton.hovered || closeButton.hovered
+    // Ink left of the title, mapped into this tab. Header controls bind to it
+    // instead of a second guessed inset.
+    readonly property real contentInkLeft: {
+        const inset = Math.max(0, (label.width - label.contentWidth) / 2)
+        return label.mapToItem(root, inset, 0).x
+    }
 
     signal clicked()
     signal closeRequested()
@@ -53,10 +60,20 @@ Item {
                 anchors.rightMargin: root.panelTab ? 12 : 5
                 spacing: 6
 
+                DifficultySwatch {
+                    Layout.preferredWidth: implicitWidth
+                    Layout.preferredHeight: implicitHeight
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: !root.panelTab && root.difficultyId > 0
+                    difficultyId: root.difficultyId
+                }
+
                 ControlsImpl.IconImage {
                     Layout.preferredWidth: 15
                     Layout.preferredHeight: 15
-                    visible: !root.panelTab && root.iconSource.toString().length > 0
+                    visible: !root.panelTab
+                             && root.difficultyId <= 0
+                             && root.iconSource.toString().length > 0
                     source: root.iconSource
                     sourceSize: Qt.size(15, 15)
                     color: root.active ? Theme.colors.text.active : Theme.colors.text.secondary

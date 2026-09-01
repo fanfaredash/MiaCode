@@ -145,15 +145,11 @@ Column {
                         font.pixelSize: Theme.secondaryFontSize
                     }
 
-                    // Difficulty colour block, same palette as v1's badge icon.
-                    Rectangle {
+                    DifficultySwatch {
                         anchors.left: parent.left
                         anchors.leftMargin: 22
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 10
-                        height: 10
-                        radius: 3
-                        color: Theme.difficultyColor(difficultyGroup.modelData.id)
+                        difficultyId: difficultyGroup.modelData.id
                     }
 
                     Tooltip {
@@ -198,6 +194,7 @@ Column {
             delegate: AppMenuItem {
                 required property var modelData
                 text: modelData.label
+                difficultyId: modelData.id
                 onTriggered: {
                     if (root.commands.addDifficulty(modelData.id))
                         root.viewState.openDifficultyEditor(modelData.id)

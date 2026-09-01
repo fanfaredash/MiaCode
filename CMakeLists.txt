@@ -630,6 +630,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppCheckBox.qml
     src/app/qml_ui/components/AppDropDownButton.qml
     src/app/qml_ui/components/AppTab.qml
+    src/app/qml_ui/components/DifficultySwatch.qml
     src/app/qml_ui/components/PanelHeader.qml
     src/app/qml_ui/components/SplitHandle.qml
     src/app/qml_ui/components/Tooltip.qml

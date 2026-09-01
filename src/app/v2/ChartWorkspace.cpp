@@ -49,10 +49,26 @@ EffectiveSourceSpans effectiveSourceSpans(const QString& source)
     return spans;
 }
 
-int firstDifficultyId(const SimaiDocument& document)
+// Same fallback order as MainWindow::activateInitialField: last-opened if it
+// still exists, otherwise Master → Re:Master → Expert → Utage → Advanced →
+// Basic → Easy. Empty or invalid inote slots are still difficulties; picking
+// the smallest id would land the editor on a blank Basic in a Master chart.
+int resolveOpenDifficultyId(const SimaiDocument& document, int requested)
 {
+    if (document.difficulty(requested) != nullptr) {
+        return requested;
+    }
     const QVector<int> ids = document.difficultyIds();
-    return ids.isEmpty() ? 0 : ids.constFirst();
+    if (ids.isEmpty()) {
+        return 0;
+    }
+    static const int kPreferredOrder[] = {5, 6, 4, 7, 3, 2, 1};
+    for (int id : kPreferredOrder) {
+        if (ids.contains(id)) {
+            return id;
+        }
+    }
+    return ids.constFirst();
 }
 
 }  // namespace
@@ -98,20 +114,23 @@ ChartWorkspaceResult ChartWorkspace::openSource(
 {
     const ChartWorkspacePreflightResult preflight =
         preflightSource(source, SimaiNativeValidationLocale::English);
-    if (!preflight.accepted) return reject(preflight.issues);
-
+    // Maidata field parse is the open gate. Chart-body diagnostics (empty
+    // inote, unmatched brackets, unknown tokens) stay on the result for the
+    // validation panel; they must not refuse the file. v1 loadDocument uses
+    // SimaiDocument::fromText the same way.
     document_ = preflight.candidate;
     const int requestedDifficulty = preferredDifficultyId > 0
         ? preferredDifficultyId : activeDifficultyId_;
-    activeDifficultyId_ = document_.difficulty(requestedDifficulty) != nullptr
-        ? requestedDifficulty : firstDifficultyId(document_);
+    activeDifficultyId_ = resolveOpenDifficultyId(document_, requestedDifficulty);
     filePath_ = filePath;
     hasDocument_ = true;
     sourceText_ = document_.toText();
     savedSourceText_ = sourceText_;
     savedDocument_ = document_;
     dirty_ = false;
-    return commit();
+    ChartWorkspaceResult result = commit();
+    result.issues = preflight.issues;
+    return result;
 }
 
 ChartWorkspaceResult ChartWorkspace::replaceSource(const QString& source)
@@ -127,7 +146,7 @@ ChartWorkspaceResult ChartWorkspace::replaceSource(const QString& source)
     const int previousDifficulty = activeDifficultyId_;
     document_ = preflight.candidate;
     activeDifficultyId_ = document_.difficulty(previousDifficulty) != nullptr
-        ? previousDifficulty : firstDifficultyId(document_);
+        ? previousDifficulty : resolveOpenDifficultyId(document_, 0);
     refreshSourceAndDirty();
     return commit();
 }
@@ -237,7 +256,7 @@ bool ChartWorkspace::removeDifficulty(int difficultyId)
     if (!hasDocument_ || document_.difficulty(difficultyId) == nullptr) return false;
     document_.removeDifficulty(difficultyId);
     if (activeDifficultyId_ == difficultyId) {
-        activeDifficultyId_ = firstDifficultyId(document_);
+        activeDifficultyId_ = resolveOpenDifficultyId(document_, 0);
     }
     refreshSourceAndDirty();
     commit();
@@ -308,9 +327,12 @@ QVector<int> ChartWorkspace::computeDirtyDifficultyIds() const
         const SimaiDifficultyData* current = document_.difficulty(id);
         const SimaiDifficultyData* saved = savedDocument_.difficulty(id);
         if (current == nullptr) continue;
-        // A difficulty added since the save point has no earlier text to be
-        // compared against; everything in it is new, so it is changed.
-        if (saved == nullptr || saved->chart != current->chart) {
+        // A difficulty added since the save point has no earlier record;
+        // chart, level, and designer are all new, so it is changed.
+        if (saved == nullptr
+            || saved->chart != current->chart
+            || saved->level != current->level
+            || saved->designer != current->designer) {
             ids.append(id);
         }
     }

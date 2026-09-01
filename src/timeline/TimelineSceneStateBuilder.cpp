@@ -605,6 +605,9 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             state.timelineLeft + 1.0, state.timelineHeight + 2.0);
         state.frameRects.append(TimelineSceneRect{sidebarRect, opaqueSidebar});
     }
+    // Outer 1px box (top/left/right/bottom) is omitted: the QML shell already
+    // draws pane edges (SplitHandle, StatusBar). Keeping those strokes here
+    // stacks two 1px lines at every embed seam.
     state.frameLines.append(TimelineSceneLine{
         QPointF(0.0, state.timelineTop - 1.0),
         QPointF(request.viewportSize.width(), state.timelineTop - 1.0),
@@ -615,30 +618,6 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         QPointF(state.timelineLeft, state.timelineTop - 1.0),
         QPointF(state.timelineLeft, state.timelineTop + state.timelineHeight),
         theme.axis,
-        1.0,
-    });
-    state.frameLines.append(TimelineSceneLine{
-        QPointF(0.0, 0.0),
-        QPointF(request.viewportSize.width() - 1.0, 0.0),
-        theme.border,
-        1.0,
-    });
-    state.frameLines.append(TimelineSceneLine{
-        QPointF(0.0, 0.0),
-        QPointF(0.0, state.timelineTop + state.timelineHeight),
-        theme.border,
-        1.0,
-    });
-    state.frameLines.append(TimelineSceneLine{
-        QPointF(request.viewportSize.width() - 1.0, 0.0),
-        QPointF(request.viewportSize.width() - 1.0, state.timelineTop + state.timelineHeight),
-        theme.border,
-        1.0,
-    });
-    state.frameLines.append(TimelineSceneLine{
-        QPointF(0.0, state.timelineTop + state.timelineHeight),
-        QPointF(request.viewportSize.width() - 1.0, state.timelineTop + state.timelineHeight),
-        theme.border,
         1.0,
     });
 

@@ -97,7 +97,9 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   clamps — change all together. See `cross-chain-linkage.md`.
 - `src/app/qml_ui/QmlUiSettings.h` — v2 workspace split ratios: bottom panel height
   `0.20..0.65` (default `0.35`) and preview width `0.30..0.50`. QML persists one ratio per
-  split after divider release and derives live geometry from the owning `SplitView` extent. The
+  split after divider release into `preferences.json` `ui` (`sidebar_visible`, `sidebar_width`,
+  `bottom_panel_visible`, `bottom_panel_height_ratio`, `preview_width_ratio`) and derives live
+  geometry from the owning `SplitView` extent. The
   active QSG timeline then fits its nine `qreal` lanes to the actual `TimelineQuickItem` viewport;
   header/material scale remains capped at `1.0`, and viewport changes use a separate layout revision.
   **Known, accepted:** `editorHost` still has `SplitView.minimumHeight: 180` (`MainSplitView.qml`).

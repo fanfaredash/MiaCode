@@ -460,6 +460,7 @@ bool MainWindow::DocumentSection::applyCommittedQmlDocument(
             owner_.setCurrentFilePath(filePath, true);
             owner_.addRecentFilePath(filePath);
         }
+        resetAutosaveState(sourceText);
         break;
     case MainWindow::QmlDocumentCommitKind::Incremental:
         state_.document_ = committedDocument;

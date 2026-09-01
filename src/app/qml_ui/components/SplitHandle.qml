@@ -7,13 +7,25 @@ Item {
 
     signal released()
 
-    implicitWidth: 4
-    implicitHeight: 4
+    implicitWidth: Theme.splitDividerThickness
+    implicitHeight: Theme.splitDividerThickness
+    // Paint above both panes so the thickened stroke is visible on each side.
+    z: 1
     readonly property bool handlePressed: Controls.SplitHandle.pressed
+    readonly property bool handleActive: handlePressed || Controls.SplitHandle.hovered
     readonly property bool verticalDivider: parent !== null
                                             && parent.orientation === Qt.Horizontal
+    readonly property real lineThickness: handleActive
+                                          ? Theme.splitHandleActiveThickness
+                                          : Theme.splitDividerThickness
 
-    // 悬停时切换为对应方向的调整光标，让分隔条可定位。
+    containmentMask: Item {
+        x: root.verticalDivider ? (root.width - width) / 2 : 0
+        y: root.verticalDivider ? 0 : (root.height - height) / 2
+        width: root.verticalDivider ? Theme.splitHandleHitExtent : root.width
+        height: root.verticalDivider ? root.height : Theme.splitHandleHitExtent
+    }
+
     // HoverHandler 只设置光标，不拦截指针事件，不干扰 SplitView 的拖拽。
     HoverHandler {
         cursorShape: root.verticalDivider ? Qt.SplitHCursor : Qt.SplitVCursor
@@ -21,9 +33,9 @@ Item {
 
     Rectangle {
         anchors.centerIn: parent
-        width: parent.width > parent.height ? parent.width : 1
-        height: parent.width > parent.height ? 1 : parent.height
-        color: root.handlePressed || Controls.SplitHandle.hovered
+        width: root.verticalDivider ? root.lineThickness : parent.width
+        height: root.verticalDivider ? parent.height : root.lineThickness
+        color: root.handleActive
                ? Theme.colors.accent.focus
                : Theme.colors.border.normal
     }
@@ -38,4 +50,3 @@ Item {
         root.wasPressed = root.handlePressed
     }
 }
-

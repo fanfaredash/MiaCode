@@ -54,9 +54,18 @@ QmlDocumentModel::QmlDocumentModel(
     , bridgeSlot_(&bridgeSlot)
 {
     if (!workspace_->snapshot().hasDocument) {
-        workspace_->openSource(
+        const miacode::v2::ChartWorkspaceResult seeded = workspace_->openSource(
             bridge()->sourceText(), bridge()->filePath(),
             bridge()->activeDifficultyId());
+        if (!seeded.issues.isEmpty()) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("editor/document_open"),
+                QStringLiteral("reason=seed_backend issues=%1 path=%2 difficulties=%3")
+                    .arg(seeded.issues.size())
+                    .arg(bridge()->filePath())
+                    .arg(workspace_->document().difficultyIds().size()));
+        }
     }
     bridge()->setDocumentSaveHandler([this](const QString& path) {
         return saveToPath(path);
@@ -559,7 +568,10 @@ void QmlDocumentModel::closeDocument()
 bool QmlDocumentModel::saveDifficultySection(int difficultyId)
 {
     if (fileService_ == nullptr) return false;
-    if (!fileService_->save(difficultyId).accepted) return false;
+    if (!fileService_->save(difficultyId).accepted) {
+        emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        return false;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
 }
@@ -585,12 +597,22 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
         emit operationFailed(tr("打开失败"), tr("无法打开谱面文件。"));
         return false;
     }
+    if (!result.issues.isEmpty()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("editor/document_open"),
+            QStringLiteral("reason=open_file issues=%1 path=%2 error=%3")
+                .arg(result.issues.size())
+                .arg(path)
+                .arg(result.error));
+    }
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     publishWorkspaceCommit(
         WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
     return true;
 }
+
 void QmlDocumentModel::requestLeaveDocument(std::function<void(bool)> onDecided)
 {
     if (workspace_ == nullptr || !workspace_->snapshot().dirty) {
@@ -612,7 +634,11 @@ void QmlDocumentModel::saveSectionOrAskForPath(
     }
     if (!workspace_->snapshot().filePath.isEmpty()) {
         const bool saved = fileService_->save(difficultyId).accepted;
-        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        if (saved) {
+            publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        } else {
+            emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        }
         finish(saved);
         return;
     }
@@ -636,7 +662,11 @@ void QmlDocumentModel::saveSectionOrAskForPath(
         // A file that does not exist yet has no earlier content for the other
         // difficulties to be left at, so the first write is the whole document.
         const bool saved = fileService_->saveAs(path, 0).accepted;
-        if (saved) publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        if (saved) {
+            publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
+        } else {
+            emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        }
         finish(saved);
     });
 }
@@ -746,7 +776,10 @@ bool QmlDocumentModel::save()
     if (fileService_ == nullptr) return false;
     const miacode::v2::ChartWorkspaceFileResult result =
         fileService_->save(saveSectionDifficultyId());
-    if (!result.accepted) return false;
+    if (!result.accepted) {
+        emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        return false;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
 }
@@ -956,7 +989,10 @@ bool QmlDocumentModel::saveToPath(const QString& path)
     // content for the other difficulties to be left at, so saving one section
     // there would drop the rest of the chart on the floor.
     const miacode::v2::ChartWorkspaceFileResult result = fileService_->saveAs(path, 0);
-    if (!result.accepted) return false;
+    if (!result.accepted) {
+        emit operationFailed(tr("保存失败"), tr("无法写入谱面文件。"));
+        return false;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
     return true;
 }
@@ -976,7 +1012,24 @@ void QmlDocumentModel::adoptBackendDocumentReplacement()
 
     const miacode::v2::ChartWorkspaceResult adopted = workspace_->openSource(
         backendSource, backendPath, backendDifficultyId);
-    if (!adopted.accepted) return;
+    if (!adopted.accepted) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("editor/document_replaced"),
+            QStringLiteral("reason=adopt_failed path=%1 issues=%2")
+                .arg(backendPath)
+                .arg(adopted.issues.size()));
+        return;
+    }
+    if (!adopted.issues.isEmpty()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("editor/document_replaced"),
+            QStringLiteral("reason=adopt_with_issues path=%1 issues=%2 difficulty=%3")
+                .arg(backendPath)
+                .arg(adopted.issues.size())
+                .arg(backendDifficultyId));
+    }
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     emitDocumentStateChanged();

@@ -32,7 +32,7 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::open(const QString& path) co
     const QString text = decodeDocumentText(file.readAll(), &usedSystemEncoding);
     const ChartWorkspaceResult result = workspace_->openSource(text, normalizedPath);
     return {result.accepted, result.revision,
-            result.accepted ? QString() : QStringLiteral("validation_failed"), result.issues,
+            result.accepted ? QString() : QStringLiteral("open_failed"), result.issues,
             usedSystemEncoding};
 }
 

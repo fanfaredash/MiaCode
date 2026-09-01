@@ -27,6 +27,9 @@ public:
     // "save" and "what is on screen" drift apart.
     ChartWorkspace& workspace() const { return *workspace_; }
 
+    // Reads maidata (or a chart directory's maidata.txt) into the workspace.
+    // Chart-body validation issues are returned on `issues` and do not fail
+    // the open: an empty or invalid inote is still a loaded document.
     ChartWorkspaceFileResult open(const QString& path) const;
     // Write an empty chart at `path`, creating its folder if needed. The
     // workspace is untouched — the caller opens the file afterwards, so a new

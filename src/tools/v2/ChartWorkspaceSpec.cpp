@@ -184,6 +184,58 @@ bool verifyIncrementalChartAllowsIntermediateText(QTextStream& out)
                   QStringLiteral("incremental chart edits accept an incomplete token for later analysis"), out);
 }
 
+bool verifyDifficultyFieldsDirtyTheirSection(QTextStream& out)
+{
+    using miacode::v2::ChartWorkspaceDifficultyField;
+
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    bool ok = expect(workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                     QStringLiteral("an opened chart has no dirty sections"), out);
+
+    ok &= expect(workspace.updateDifficultyField(
+                     5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12+"))
+                     && workspace.snapshot().dirty
+                     && workspace.snapshot().dirtyDifficultyIds == QVector<int>{5},
+                 QStringLiteral("a level edit marks that difficulty immediately"), out);
+
+    workspace.selectDifficulty(6);
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{5},
+                 QStringLiteral("switching away keeps the edited difficulty marked"), out);
+
+    ok &= expect(workspace.updateDifficultyField(
+                     6, ChartWorkspaceDifficultyField::Designer, QStringLiteral("other"))
+                     && workspace.snapshot().dirtyDifficultyIds == (QVector<int>{5, 6}),
+                 QStringLiteral("a designer edit marks that difficulty without clearing the other"), out);
+
+    workspace.updateDifficultyField(5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12"));
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{6},
+                 QStringLiteral("restoring the saved level clears only that difficulty"), out);
+    return ok;
+}
+
+bool verifyOpenAcceptsEmptyInoteSlots(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    const auto opened = workspace.openSource(
+        QStringLiteral(
+            "&title=empty-slots\n"
+            "&lv_2=\n"
+            "&inote_2=\n"
+            "&lv_5=12\n"
+            "&inote_5=(120){4}1,\n"
+            "&lv_7=\n"
+            "&inote_7=\n"),
+        QStringLiteral("chart.txt"));
+    const auto state = workspace.snapshot();
+    return expect(opened.accepted && state.hasDocument && !state.dirty
+                      && state.activeDifficultyId == 5
+                      && workspace.document().difficulty(2) != nullptr
+                      && workspace.document().difficulty(7) != nullptr
+                      && !opened.issues.isEmpty(),
+                  QStringLiteral("empty inote slots load; chart diagnostics stay on the result"), out);
+}
+
 bool verifyInlineSourceSpanWinsOverLaterLevel(QTextStream& out)
 {
     const auto preflight = miacode::v2::ChartWorkspace::preflightSource(
@@ -205,6 +257,8 @@ int main()
         && verifyCompleteDocumentSaveAnchor(out)
         && verifyDocumentAndDifficultyTransactions(out)
         && verifyIncrementalChartAllowsIntermediateText(out)
+        && verifyDifficultyFieldsDirtyTheirSection(out)
+        && verifyOpenAcceptsEmptyInoteSlots(out)
         && verifyInlineSourceSpanWinsOverLaterLevel(out);
     if (!ok) return 1;
     QTextStream result(stdout);

@@ -125,6 +125,14 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
+  Default (v2) QML shell document owner: `src/app/v2/ChartWorkspace.{h,cpp}` +
+  `ChartWorkspaceFileService`. `openSource` / `open` load via `SimaiDocument::fromText`;
+  chart-body diagnostics (`SimaiNativeParser::buildValidationReport`) are recorded for
+  the validation panel and do not refuse the file. Each editor tab is one save
+  unit: Ctrl+S writes the active section (`save(saveSectionDifficultyId())`,
+  metadata tab → `save(0)`); closing a tab or leaving the document asks per dirty
+  difficulty. Specs: `src/tools/v2/ChartWorkspaceSpec.cpp`,
+  `ChartWorkspaceFileServiceSpec.cpp`.
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
   (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
   `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`
