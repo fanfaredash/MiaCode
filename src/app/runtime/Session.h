@@ -128,6 +128,7 @@ class ValidationHost;
 class DocumentSessionHost;
 class PlaybackHost;
 class PlaybackControlAdapter;
+class TimelineHost;
 }
 
 // QML 通过 ApplicationServices 槽位调用运行时宿主；本类只装配宿主并附着根窗口。
@@ -760,6 +761,7 @@ private:
     std::unique_ptr<miacode::runtime::DocumentSessionHost> documents_;
     std::unique_ptr<miacode::runtime::PlaybackHost> playback_;
     std::unique_ptr<miacode::runtime::PlaybackControlAdapter> playbackControl_;
+    std::unique_ptr<miacode::runtime::TimelineHost> timelineHost_;
 
     bool quickShellBottomTabsProxyActive() const;
     QString bottomTabsFallbackLabel(BottomTabsTabId tabId) const;

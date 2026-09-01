@@ -752,11 +752,13 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
          `src/app/runtime/playback/PlaybackControlAdapter.*`；adapter 只转发到当前复合
          `PlaybackHost`，播放状态与数值倍速均从宿主类型化观测读取，并在 Session 析构前失效。
          `playback_control_spec`、`application_services_spec` 与 MiaCode Release 构建通过。
-      2. **4.6 建立 `TimelineHost`**：新增 `src/app/runtime/timeline/TimelineHost.{h,cpp}`，接管
+      2. **4.6 建立 `TimelineHost`（2026-09-02，已完成）**：新增 `src/app/runtime/timeline/TimelineHost.{h,cpp}`，接管
          `TimelineSurface`、`TimelineQuickStateBridge`、QSG 就绪、底栏页签可见性、拖拽 / follow /
          viewport / navigation 投影，以及时间线侧的分析展示。Timeline 只发出带 revision / sequence
          的命令，不直接读 Preview 时钟，也不直接写文档模型；设置 `TimelineCommandGate` 统一校验
-         revision、代次与写入顺序。
+         revision、代次与写入顺序。当前实现先以 `TimelineHost` 兼容转发到复合 `PlaybackHost`，由
+         `QmlTimelineModel` 在 ingress 捕获 `TimelineCommandStamp`，host 只接受原始 stamp；
+         `timeline_host_spec` 覆盖乱序、revision/session 失效、投影转发与撤槽。
       3. **4.7 建立 `PreviewHost`**：新增 `src/app/runtime/preview/PreviewHost.{h,cpp}`，接管
          `PreviewRuntime`、`StageMediaHost` 内部舞台媒体路由与预热、渲染设置、音频混音 / SFX 和
          preview 专用 executor。它只通过窄的 `AudioClockSource` / `PreviewPlaybackPort` 与协调器

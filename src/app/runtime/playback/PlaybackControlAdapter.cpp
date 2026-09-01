@@ -5,7 +5,9 @@ namespace miacode::runtime {
 PlaybackControlAdapter::PlaybackControlAdapter(
     miacode::v2::PreviewSurface& legacySurface, quint64 sessionGeneration)
     : legacySurface_(&legacySurface)
-    , sessionGeneration_(qMax<quint64>(1, sessionGeneration))
+    , sessionGeneration_(sessionGeneration != 0
+                             ? sessionGeneration
+                             : miacode::v2::nextSessionGeneration())
 {
 }
 

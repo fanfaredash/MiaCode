@@ -95,6 +95,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Files: `src/app/v2/PlaybackControl.h`, `src/app/runtime/playback/PlaybackControlAdapter.h`, `src/app/runtime/playback/PlaybackControlAdapter.cpp`, `src/app/v2/ApplicationServices.h`, `src/app/runtime/SessionBootstrap.cpp`
   - Classes: `miacode::v2::PlaybackControl`, `miacode::v2::PlaybackStateFeed`, `miacode::runtime::PlaybackControlAdapter`
   - Owns: the revision/generation/sequence-stamped playback snapshot and the semantic play/stop/seek/scrub/rate command seam exposed by `ApplicationServices`; the adapter currently forwards to the legacy composite `PlaybackHost` while the Timeline and Preview hosts are extracted in stages 4.6–4.8. This is the transport authority boundary; do not add a second independent playhead or direct QML-to-widget playback path.
+- Timeline projection command host (stage 4.6):
+  - Files: `src/app/runtime/timeline/TimelineHost.h`, `src/app/runtime/timeline/TimelineHost.cpp`, `src/app/runtime/timeline/TimelineCommandGate.h`, `src/app/runtime/timeline/TimelineCommandGate.cpp`, `src/app/v2/TimelineSurface.h`, `src/app/qml_ui/QmlTimelineModel.cpp`
+  - Classes: `miacode::runtime::TimelineHost`, `miacode::runtime::TimelineCommandGate`
+  - Owns: the TimelineSurface projection slot and the generation/revision/sequence validation boundary. QML captures a `TimelineCommandStamp` at ingress; the host validates that exact stamp before forwarding to the transitional composite `PlaybackHost`. It owns no playhead, timer, document, QSG scene, Preview, media, mixer, or QML state.
 
 - Timeline quick model:
   - Files: `src/timeline/TimelineQuickModel.h`, `src/timeline/TimelineQuickModel.cpp`, `src/timeline/TimelineRenderData.h`

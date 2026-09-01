@@ -132,6 +132,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/PreferencesStore.h
     src/app/v2/PreviewSurface.h
     src/app/v2/PlaybackControl.h
+    src/app/v2/SessionGeneration.h
     src/app/v2/ShellNotifications.cpp
     src/app/v2/ShellNotifications.h
     src/app/v2/TimelineSurface.h
@@ -223,6 +224,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/playback/PlaybackGlue.cpp
     src/app/runtime/playback/PlaybackControlAdapter.cpp
     src/app/runtime/playback/PlaybackControlAdapter.h
+    src/app/runtime/timeline/TimelineCommandGate.cpp
+    src/app/runtime/timeline/TimelineCommandGate.h
+    src/app/runtime/timeline/TimelineHost.cpp
+    src/app/runtime/timeline/TimelineHost.h
     src/app/runtime/validation/ValidationFlow.cpp
     src/app/runtime/validation/ValidationListUi.cpp
     src/app/runtime/validation/ValidationRender.cpp
@@ -1843,6 +1848,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/runtime/playback/PlaybackControlAdapter.h
         LIBS Qt6::Core Qt6::Gui Qt6::Test
         INCLUDES src src/audio src/common src/core/video
+    )
+
+    # Stage 4.6: Timeline commands receive their own identity before the
+    # compatibility host forwards them to the current composite implementation.
+    miacode_add_dev_tool(timeline_host_spec TEST
+        SOURCES
+            src/tools/v2/TimelineHostSpec.cpp
+            src/app/runtime/timeline/TimelineCommandGate.cpp
+            src/app/runtime/timeline/TimelineCommandGate.h
+            src/app/runtime/timeline/TimelineHost.cpp
+            src/app/runtime/timeline/TimelineHost.h
+            src/app/v2/TimelineSurface.h
+            src/app/v2/SessionGeneration.h
+        LIBS Qt6::Core
+        INCLUDES src
     )
 
     miacode_add_dev_tool(qml_analysis_model_spec TEST

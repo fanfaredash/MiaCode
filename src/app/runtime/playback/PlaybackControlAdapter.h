@@ -13,7 +13,7 @@ class PlaybackControlAdapter final : public miacode::v2::PlaybackControl
 {
 public:
     explicit PlaybackControlAdapter(miacode::v2::PreviewSurface& legacySurface,
-                                    quint64 sessionGeneration = 1);
+                                    quint64 sessionGeneration = 0);
 
     void setDocumentRevision(quint64 revision);
     void invalidateSession();

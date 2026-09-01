@@ -69,50 +69,67 @@ QString QmlTimelineModel::followCodeLabel() const
 
 void QmlTimelineModel::setCurrentTabId(const QString& tabId)
 {
-    if (surface() == nullptr || tabId.trimmed().isEmpty() || tabId == currentTabId()) {
+    miacode::v2::TimelineSurface* current = surface();
+    if (current == nullptr || tabId.trimmed().isEmpty() || tabId == currentTabId()) {
         return;
     }
-    surface()->setBottomTabsCurrentTabId(tabId);
+    current->setBottomTabsCurrentTabId(current->issueCommandStamp(), tabId);
 }
 
 void QmlTimelineModel::headerNavigate(double second)
 {
-    if (surface() != nullptr) surface()->navigateToSecond(second);
+    if (auto* current = surface(); current != nullptr) {
+        current->navigateToSecond(current->issueCommandStamp(), second);
+    }
 }
 
 void QmlTimelineModel::wheelNavigate(double second)
 {
-    if (surface() != nullptr) surface()->wheelNavigateToSecond(second);
+    if (auto* current = surface(); current != nullptr) {
+        current->wheelNavigateToSecond(current->issueCommandStamp(), second);
+    }
 }
 
 void QmlTimelineModel::centerNavigate(double second)
 {
-    if (surface() != nullptr) surface()->centerOnSecond(second);
+    if (auto* current = surface(); current != nullptr) {
+        current->centerOnSecond(current->issueCommandStamp(), second);
+    }
 }
 
 void QmlTimelineModel::dragStarted()
 {
-    if (surface() != nullptr) surface()->timelineDragStarted();
+    if (auto* current = surface(); current != nullptr) {
+        current->timelineDragStarted(current->issueCommandStamp());
+    }
 }
 
 void QmlTimelineModel::dragFinished(double second)
 {
-    if (surface() != nullptr) surface()->timelineDragFinished(second);
+    if (auto* current = surface(); current != nullptr) {
+        current->timelineDragFinished(current->issueCommandStamp(), second);
+    }
 }
 
 void QmlTimelineModel::userInteractionStarted()
 {
-    if (surface() != nullptr) surface()->timelineUserInteractionStarted();
+    if (auto* current = surface(); current != nullptr) {
+        current->timelineUserInteractionStarted(current->issueCommandStamp());
+    }
 }
 
 void QmlTimelineModel::surfaceReady()
 {
-    if (surface() != nullptr) surface()->noteTimelineSurfaceReady();
+    if (auto* current = surface(); current != nullptr) {
+        current->noteTimelineSurfaceReady(current->issueCommandStamp());
+    }
 }
 
 void QmlTimelineModel::followPreviewToggled(bool enabled)
 {
-    if (surface() != nullptr) surface()->setFollowPreviewEnabled(enabled);
+    if (auto* current = surface(); current != nullptr) {
+        current->setFollowPreviewEnabled(current->issueCommandStamp(), enabled);
+    }
 }
 
 }  // namespace miacode::qml_ui

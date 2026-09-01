@@ -8,6 +8,8 @@
 #include "runtime/preview/StageMediaHost.h"
 #include "runtime/playback/PlaybackHost.h"
 #include "runtime/playback/PlaybackControlAdapter.h"
+#include "runtime/timeline/TimelineHost.h"
+#include "app/v2/SessionGeneration.h"
 #include "runtime/validation/ValidationHost.h"
 #include "runtime/shell/ShellHost.h"
 
@@ -182,19 +184,26 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     validation_ = std::make_unique<miacode::runtime::ValidationHost>(*this, ui_, state_);
     shell_ = std::make_unique<miacode::runtime::ShellHost>(*this, ui_, state_);
     playback_ = std::make_unique<miacode::runtime::PlaybackHost>(*this, ui_, state_);
-    playbackControl_ = std::make_unique<miacode::runtime::PlaybackControlAdapter>(*playback_);
+    const quint64 sessionGeneration = miacode::v2::nextSessionGeneration();
+    playbackControl_ = std::make_unique<miacode::runtime::PlaybackControlAdapter>(
+        *playback_, sessionGeneration);
+    timelineHost_ = std::make_unique<miacode::runtime::TimelineHost>(*playback_, sessionGeneration);
+    const quint64 initialWorkspaceRevision = applicationServices_.workspace().snapshot().revision;
+    playbackControl_->setDocumentRevision(initialWorkspaceRevision);
+    timelineHost_->setDocumentRevision(initialWorkspaceRevision);
     applicationServices_.setPlaybackControl(playbackControl_.get());
     connect(&applicationServices_.workspace(), &miacode::v2::ChartWorkspace::changed,
             this, [this](quint64 revision) {
                 documents_->syncRuntimeFromWorkspace();
                 playbackControl_->setDocumentRevision(revision);
+                timelineHost_->setDocumentRevision(revision);
             });
     // unique_ptr owns it; pass no QObject parent to avoid double-delete.
     latencySandboxController_ = std::make_unique<miacode::latency::LatencySandboxController>(this, nullptr);
     applicationServices_.setEditorPageRouter(documents_.get());
     applicationServices_.setMediaToolsEngine(mediaJobs_.get());
     applicationServices_.setLatencyEngine(latencySandboxController_.get());
-    applicationServices_.setTimelineSurface(playback_.get());
+    applicationServices_.setTimelineSurface(timelineHost_.get());
     applicationServices_.setPreviewSurface(playback_.get());
     applicationServices_.setPreferencesStore(settings_.get());
     applicationServices_.setDocumentBridge(documents_.get());

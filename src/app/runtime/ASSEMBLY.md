@@ -25,12 +25,17 @@
 | 宿主 | 接口 | 代码 |
 |---|---|---|
 | `PlaybackHost`（当前复合宿主） | `PreviewSurface` + `TimelineSurface` | `src/app/runtime/playback/` |
+| `TimelineHost`（4.6 过渡宿主） | `TimelineSurface` | `src/app/runtime/timeline/` |
 | `VideoExportHost` | `ExportEngine` | `src/app/runtime/export/` |
 
 4.5 已建立独立的播放契约：`PlaybackControl` / `PlaybackStateFeed` / `PlaybackSnapshot` 位于
 `src/app/v2/PlaybackControl.h`，`PlaybackControlAdapter` 以类型化观测和命令转发连接当前复合
 `PlaybackHost`。新的 Preview/Timeline 代码应依赖 playback contract，而不是继续扩展复合宿主；
 4.6–4.9 再分别抽离 TimelineHost、PreviewHost 和最终的 PlaybackCoordinator。
+
+4.6 已将 `ApplicationServices::timelineSurface` 切换为 `TimelineHost`。QML ingress 先捕获
+`TimelineCommandStamp`，host 在转发前校验原始 generation/revision/sequence；当前被包裹的
+`PlaybackHost` 仍保留 Timeline 实现，后续阶段再搬出所有权。
 | `LatencySandboxController` | `LatencyEngine` | `src/tools/latency/` |
 | `MediaJobsHost` | `MediaToolsEngine` | `src/app/runtime/media/` |
 | `SettingsHost` | `PreferencesStore` | `src/app/runtime/settings/` |
@@ -87,6 +92,8 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
 - [x] 语法列表跳转：语法行 `second` 哨兵为负值，激活完成后不再按 0 秒走带把光标拉回谱面开头
 - [x] 阶段 4.5：建立 `PlaybackControl` / stamped `PlaybackSnapshot`，完成兼容 adapter、服务槽位、
   stale callback/session invalidation 边界与 Release 契约测试
+- [x] 阶段 4.6：建立 `TimelineHost` / `TimelineCommandGate`，将 QML Timeline ingress 改为带
+  generation/revision/sequence 的命令，并完成失效、乱序与 Session 装配测试
 - [ ] `PlaybackHost` 仍是 Preview + Timeline 复合宿主；按上面的计划拆分为
       `PlaybackCoordinator`、`PreviewHost`、`TimelineHost`
 - [ ] `HostUi` / `HostState` 仍由 `Session` 持有并借给宿主；后续按宿主切开这份存储

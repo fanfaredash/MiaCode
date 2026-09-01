@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QtGlobal>
+#include "app/v2/SessionGeneration.h"
 
 namespace miacode::v2 {
 
