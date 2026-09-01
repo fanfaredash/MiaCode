@@ -1,4 +1,5 @@
 #include "runtime/playback/PlaybackCoordinator.h"
+#include "runtime/Session.h"
 #include "runtime/Shared.h"
 #include "runtime/shell/ShellHost.h"
 

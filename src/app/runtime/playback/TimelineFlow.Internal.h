@@ -15,6 +15,7 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "runtime/Session.h"
 
 namespace miacode::runtime::preview_timeline_detail {
 

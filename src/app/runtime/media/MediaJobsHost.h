@@ -10,7 +10,7 @@ namespace miacode::runtime {
 
 class MediaJobsHost final : public miacode::v2::MediaToolsEngine {
 public:
-    MediaJobsHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    MediaJobsHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
@@ -68,8 +68,8 @@ private:
         const QString& producedFilePath);
 
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
 };
 
 }  // namespace miacode::runtime

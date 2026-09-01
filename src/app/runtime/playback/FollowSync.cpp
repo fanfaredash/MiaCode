@@ -1,4 +1,5 @@
 #include "runtime/playback/PlaybackCoordinator.h"
+#include "runtime/Session.h"
 
 #include "app/v2/EditorSyncController.h"
 #include "common/PreviewInteractionConfig.h"

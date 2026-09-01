@@ -6,7 +6,7 @@ namespace miacode::runtime {
 
 class ValidationHost {
 public:
-    ValidationHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    ValidationHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
     QListWidgetItem* addWrappedListEntry(
         QListWidget* list,
@@ -65,8 +65,8 @@ private:
     void rebuildMuriDiagnosticsPanel();
 
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
 };
 
 }  // namespace miacode::runtime

@@ -56,7 +56,8 @@ contract，而不是继续扩展复合宿主。
 
 `PlaybackCoordinator` 不再直接填入预览与时间线 surface 槽位：两个无状态 adapter 分别填入
 `PreviewHost` / `TimelineHost` 的下游兼容入口，三者共享同一个协调器实例。协调器的实现体仍暂时调用
-共享的 `HostUi` / `HostState`，这是 4.9 的存储清理范围；它不改变单一播放权威。`DocumentSessionHost`
+显式的 `RuntimeContext::Ui` / `RuntimeContext::State` 过渡期共享记录，这是 4.9 的后续存储清理范围；
+它不改变单一播放权威。`DocumentSessionHost`
 同时填入文档桥与页面路由，因为页面切换与未保存守卫同属文档会话。
 
 `ApplicationServices` 只装配，不实现上述接口。
@@ -83,8 +84,9 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
 与 follow 真相，Session 只负责显式构造、端口连接、生命周期和资源所有权。
 
 4.8 已完成契约边界收缩和旧类型重命名：`PlaybackCoordinator.h` 不直接包含或继承
-`PreviewSurface.h`、`TimelineSurface.h`、QML 或场景图契约；它仍通过 `Session.h` 间接看到共享
-`HostUi` / `HostState` 依赖，这是 4.9 的存储拆分范围。协调器还暂时公开旧 Preview/Timeline
+`PreviewSurface.h`、`TimelineSurface.h`、QML 或场景图契约。4.9a 又将其头文件对共享存储的依赖
+收缩为 `RuntimeContext.h`，不再包含 `Session.h`；`RuntimeContext::Ui` / `RuntimeContext::State`
+仍是 4.9 的过渡期共享记录，后续按宿主拆分其所有权。协调器还暂时公开旧 Preview/Timeline
 投影方法供 adapter 和 Session 内部转发；两个 surface adapter 仍是迁移期兼容层，协调器的旧实现
 文件还保留部分 preview/timeline 业务调用，不能把本阶段误记为全部业务实现已搬空。
 
@@ -112,7 +114,10 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
       `PlaybackControl` / `PreviewPlaybackPort` / `AudioClockSource`；Preview/Timeline 旧槽位改由
       两个无状态 surface adapter 承接，删除 `PlaybackControlAdapter`，并通过边界 spec 与 Release
       构建验证
-- [ ] `HostUi` / `HostState` 仍由 `Session` 持有并借给宿主；后续按宿主切开这份存储
+- [x] 阶段 4.9a：将共享 UI/state 类型外置为 `RuntimeContext::Ui` / `RuntimeContext::State`，
+      宿主构造签名改用显式上下文类型，`PlaybackCoordinator.h` 脱离 `Session.h`
+- [ ] 阶段 4.9b：按 PlaybackCoordinator / PreviewHost / TimelineHost 及其他运行时宿主切开
+      `RuntimeContext` 共享记录，Session 只保留生命周期、资源所有权和端口连接
 - [ ] `QApplication` / `Qt6::Widgets` 仍在入口与 CMake；宿主拆分后再清除 native fallback 与
       Widgets 依赖，避免把 QWidget 生命周期藏进新宿主
 
@@ -144,7 +149,8 @@ QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理�
 
 已修：`QmlAnalysisModel` 曾用 `ignoreMuriIssuePrompts` 清空 `muriRows`。该偏好只表示分析完成时不打断（时间线圆点、自动切页），无理页仍应列出结果。
 
-`ValidationHost` 仍向已删除的 `errorList_` / `muriList_` 写列表，QML 不读这两份控件。`HostUi` 大量空指针仍在。这些不挡当前产品面。
+`ValidationHost` 仍向已删除的 `errorList_` / `muriList_` 写列表，QML 不读这两份控件。`RuntimeContext::Ui`
+仍保留大量迁移期空指针；这些不挡当前产品面，但属于后续 Widgets 清理范围。
 
 ### 2026-09-01 语法错误点击跳到编辑器第一行
 

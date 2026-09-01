@@ -1,11 +1,14 @@
-// Boundary regression for stage 4.8.
+// Boundary regression for stages 4.8 and 4.9a.
 //
 // The coordinator is the only playback authority. Preview and Timeline
 // compatibility surfaces are separate projection adapters and must not make
-// the coordinator depend on either UI surface contract.
+// the coordinator depend on either UI surface contract. RuntimeContext is the
+// transitional storage boundary while the remaining per-domain state split is
+// completed in the later 4.9 work.
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QStringList>
 #include <QString>
 #include <QTextStream>
 
@@ -53,6 +56,67 @@ bool verifyCoordinatorOwnsOnlyPlaybackContracts(QTextStream& err)
                       && !header.contains(QStringLiteral("QSG")),
                   QStringLiteral("the coordinator header has no direct QML or scene-graph dependency"), err);
     return ok;
+}
+
+bool verifyRuntimeContextBoundary(QTextStream& err)
+{
+    const QString coordinator = readSource(
+        QStringLiteral("src/app/runtime/playback/PlaybackCoordinator.h"));
+    const QString context = readSource(QStringLiteral("src/app/runtime/RuntimeContext.h"));
+    const QString members = readSource(QStringLiteral("src/app/runtime/SessionMembers.inc"));
+    const QString session = readSource(QStringLiteral("src/app/runtime/Session.h"));
+    bool ok = require(!coordinator.isEmpty() && !context.isEmpty() && !members.isEmpty()
+                          && !session.isEmpty(),
+                      QStringLiteral("runtime context boundary sources are readable"), err);
+    ok &= require(coordinator.contains(QStringLiteral("runtime/RuntimeContext.h"))
+                      && !coordinator.contains(QStringLiteral("runtime/Session.h")),
+                  QStringLiteral("PlaybackCoordinator.h depends on RuntimeContext, not Session.h"), err);
+    ok &= require(!coordinator.contains(QStringLiteral("Session::HostUi"))
+                      && !coordinator.contains(QStringLiteral("Session::HostState")),
+                  QStringLiteral("the coordinator header has no Session-owned UI/state type dependency"), err);
+    ok &= require(context.contains(QStringLiteral("class RuntimeContext"))
+                      && context.contains(QStringLiteral("MIACODE_RUNTIME_CONTEXT_TYPES"))
+                      && members.contains(QStringLiteral("struct Ui"))
+                      && members.contains(QStringLiteral("struct State"))
+                      && !members.contains(QStringLiteral("struct HostUi"))
+                      && !members.contains(QStringLiteral("struct HostState")),
+                  QStringLiteral("RuntimeContext injects the transitional Ui and State records"), err);
+    ok &= require(session.contains(QStringLiteral("runtime/RuntimeContext.h"))
+                      && session.contains(QStringLiteral("MIACODE_SESSION_RUNTIME_MEMBERS")),
+                  QStringLiteral("Session includes RuntimeContext and only injects its runtime members"), err);
+
+    const QStringList hostHeaders{
+        QStringLiteral("src/app/runtime/document/DocumentSessionHost.h"),
+        QStringLiteral("src/app/runtime/editor/EditorHost.h"),
+        QStringLiteral("src/app/runtime/export/VideoExportHost.h"),
+        QStringLiteral("src/app/runtime/media/MediaJobsHost.h"),
+        QStringLiteral("src/app/runtime/preview/StageMediaHost.h"),
+        QStringLiteral("src/app/runtime/settings/SettingsHost.h"),
+        QStringLiteral("src/app/runtime/shell/ShellHost.h"),
+        QStringLiteral("src/app/runtime/validation/ValidationHost.h"),
+    };
+    for (const QString& hostPath : hostHeaders) {
+        const QString host = readSource(hostPath);
+        ok &= require(!host.isEmpty(), hostPath + QStringLiteral(" is readable"), err);
+        ok &= require(!host.contains(QStringLiteral("Session::HostUi"))
+                          && !host.contains(QStringLiteral("Session::HostState"))
+                          && host.contains(QStringLiteral("RuntimeContext::Ui"))
+                          && host.contains(QStringLiteral("RuntimeContext::State")),
+                      hostPath + QStringLiteral(" uses explicit RuntimeContext types"), err);
+    }
+    return ok;
+}
+
+bool verifyRuntimeContextOutlivesHosts(QTextStream& err)
+{
+    const QString session = readSource(QStringLiteral("src/app/runtime/Session.h"));
+    const qsizetype contextPosition = session.indexOf(
+        QStringLiteral("miacode::runtime::RuntimeContext runtimeContext_;"));
+    const qsizetype firstHostPosition = session.indexOf(
+        QStringLiteral("std::unique_ptr<miacode::runtime::EditorHost> editor_;"));
+    return require(contextPosition >= 0 && firstHostPosition >= 0
+                       && contextPosition < firstHostPosition,
+                   QStringLiteral("RuntimeContext is declared before every borrowing host"), err);
 }
 
 bool verifyProjectionAdaptersOwnLegacySurfaceContracts(QTextStream& err)
@@ -126,6 +190,8 @@ int main(int argc, char** argv)
     QTextStream err(stderr);
     bool ok = true;
     ok &= verifyCoordinatorOwnsOnlyPlaybackContracts(err);
+    ok &= verifyRuntimeContextBoundary(err);
+    ok &= verifyRuntimeContextOutlivesHosts(err);
     ok &= verifyProjectionAdaptersOwnLegacySurfaceContracts(err);
     ok &= verifyAssemblyNoLongerUsesPlaybackControlAdapter(err);
     ok &= verifyPlaybackIdentityGateBehavior(err);

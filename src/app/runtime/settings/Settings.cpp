@@ -24,8 +24,8 @@ void applyConfiguredShortcut(
 
 miacode::runtime::SettingsHost::SettingsHost(
     Session& session,
-    Session::HostUi& ui,
-    Session::HostState& state)
+    RuntimeContext::Ui& ui,
+    RuntimeContext::State& state)
     : session_(session)
     , ui_(ui)
     , state_(state)

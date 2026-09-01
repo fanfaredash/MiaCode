@@ -6,7 +6,7 @@ namespace miacode::runtime {
 
 class StageMediaHost {
 public:
-    StageMediaHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    StageMediaHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
     void ensurePreviewSfxRuntimePrepared();
     void schedulePreviewSubsystemWarmup();
@@ -97,8 +97,8 @@ public:
 
 private:
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
     // The preview appearance settings are owned by the application assembly,
     // not by the window; this is the same single copy Session binds to.
     miacode::v2::PreviewAppearanceState::Values& previewAppearanceValues_;

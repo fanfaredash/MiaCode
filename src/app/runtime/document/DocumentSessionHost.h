@@ -14,7 +14,7 @@ class DocumentSessionHost final : public miacode::v2::DocumentBridge,
 public:
     using CommitKind = miacode::v2::DocumentBridge::CommitKind;
 
-    DocumentSessionHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    DocumentSessionHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
     bool maybeSaveBeforeContinue();
     // The same decision, asked without blocking. The v2 shell has no place to
@@ -230,8 +230,8 @@ private:
     bool restoreChartSelectionTransformCursor(const Session::SelectionTransformUndoEntry& entry, bool transformedSelection);
 
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
 };
 
 }  // namespace miacode::runtime

@@ -32,8 +32,8 @@ using namespace miacode::runtime::shared;
 
 miacode::runtime::ValidationHost::ValidationHost(
     Session& session,
-    Session::HostUi& ui,
-    Session::HostState& state)
+    RuntimeContext::Ui& ui,
+    RuntimeContext::State& state)
     : session_(session)
     , ui_(ui)
     , state_(state)

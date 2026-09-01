@@ -1,4 +1,10 @@
-    struct HostUi {
+#if (defined(MIACODE_SESSION_RUNTIME_MEMBERS) && defined(MIACODE_RUNTIME_CONTEXT_TYPES)) \
+    || (!defined(MIACODE_SESSION_RUNTIME_MEMBERS) && !defined(MIACODE_RUNTIME_CONTEXT_TYPES))
+#error "SessionMembers.inc requires exactly one runtime member mode"
+#endif
+
+#if !defined(MIACODE_SESSION_RUNTIME_MEMBERS)
+    struct Ui {
         QPlainTextEdit* outputView_ = nullptr;
         QListWidget* errorList_ = nullptr;
         QListWidget* muriList_ = nullptr;
@@ -84,7 +90,7 @@
         // Per-difficulty designer state (`&des_N` + the "share one designer"
         // toggle) is managed by a dialog, not a persistent checkbox, so there
         // is no unifiedDesignerCheckbox_ widget; the runtime flag lives in
-        // HostState::unifiedDesignerEnabled_.
+        // State::unifiedDesignerEnabled_.
         QLineEdit* firstEdit_ = nullptr;
         QLineEdit* designerEdit_ = nullptr;
         QTextEdit* metadataExtraEdit_ = nullptr;
@@ -171,7 +177,7 @@
         BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
     };
 
-    struct HostState {
+    struct State {
         // "All difficulties share one designer" preference (set via the
         // per-difficulty designer dialog, persisted per project). True ⇒
         // broadcast designer edits between top &des and every &des_N inside
@@ -665,8 +671,9 @@
         int activeDifficultyId_ = 0;
     };
 
-    HostUi ui_;
-    HostState state_;
+#endif  // !MIACODE_SESSION_RUNTIME_MEMBERS
+
+#if !defined(MIACODE_RUNTIME_CONTEXT_TYPES)
     // The preview appearance settings live in the application assembly, not in
     // this window. Binding the members below to that one copy is what lets the
     // ~26 files that read them stay exactly as they are while the owner moves.
@@ -1155,3 +1162,4 @@
     DeletedDifficultyUndoState& deletedDifficultyUndoState_ = state_.deletedDifficultyUndoState_;
     QString& activeOutlineKey_ = state_.activeOutlineKey_;
     int& activeDifficultyId_ = state_.activeDifficultyId_;
+#endif

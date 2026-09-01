@@ -32,7 +32,7 @@
       `ApplicationServices&`，`QmlEditorPageHost` 经 `EditorPageRouter` 路由，且
       `src/app/mainwindow/` 已删除。root 拖放仍由 `QmlChartDropBridge`（单一 QWindow event
       filter）+ `Main.qml` 提示层承载，不再创建 `ChartDropOverlay(QWidget)`。
-- [ ] **运行时 Widgets 残留仍待清理**：`Session` / `HostUi` / `HostState` 仍携带旧宿主状态，
+- [ ] **运行时 Widgets 残留仍待清理**：`Session` / `RuntimeContext::Ui` / `RuntimeContext::State` 仍携带旧宿主状态，
       `src/app/main.cpp` 仍使用 `QApplication`，CMake 仍链接 `Qt6::Widgets`；隐藏的
       `DocumentSessionHost` 还保留 native fallback 的旧切页方法。它们是阶段 4 的后续拆除项，
       不能因为 `mainwindow/` 已删除就宣称 Widgets 已归零。
@@ -122,7 +122,7 @@
 | 应用对象 | `QApplication` | `src/app/main.cpp:436` |
 | 隐藏 `MainWindow` | **已删除（0 文件）**；`Session`/runtime hosts 已接管装配 | `src/app/runtime/`、`src/app/runtime/SessionBootstrap.cpp` |
 | Preview/Timeline 当前宿主 | `PreviewHost` / `TimelineHost` 分别占据两个 surface 槽位；兼容投影由 `PlaybackSurfaceAdapters` 转到同一个 `PlaybackCoordinator`，实现体仍约 8,975 行并待 4.9 清理 | `src/app/runtime/{preview,timeline,playback}/` |
-| 旧宿主状态 | `HostUi` / `HostState` 仍被 `Session` 持有并借给多个宿主 | `src/app/runtime/Session.*`、`HostUi.*`、`HostState.*` |
+| 旧宿主状态 | 原 `HostUi` / `HostState` 已外置为 `RuntimeContext::Ui` / `RuntimeContext::State`，目前仍是被多个宿主借用的共享迁移存储 | `src/app/runtime/RuntimeContext.h`、`Session.*` |
 | ~~隐藏 `PlainCodeEditor`~~ | **已删除（2026-08-30）**。树上只剩两条历史注释；扩展相关校验已迁移到归档 API registry 与离线文档 | — |
 | ~~`QuickShellController`~~ | **已退役（2026-08-30）**。`src/app/quick_shell/` 只剩 **246 行**预览合成表面管道（`QuickShellPreviewCompositeSurface.*` + 三个策略头），与外壳控制器无关 | — |
 | QML 仍消费的 controller 属性/方法 | **0 个**（`shellController` 在 `*.qml` 里零命中） | — |
@@ -470,7 +470,7 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 > **当前状态（2026-09-02）**：依赖分层与服务所有权已落地，`MainWindow` 已从启动路径和源码目录
 > 删除，`QmlApplicationContext` 也已改为只接收 `ApplicationServices&`。但 `QtWidgets` 仍是当前
-> 产品依赖：`QApplication`、`HostUi` / `HostState` 和 native fallback 仍在 runtime 中；旧
+> 产品依赖：`QApplication`、`RuntimeContext::Ui` / `RuntimeContext::State` 共享状态袋和 native fallback 仍在 runtime 中；旧
 > `PlaybackHost` 已在 4.8 收缩并重命名为 `PlaybackCoordinator`，其历史 Preview / Timeline
 > 实现仍借用共享状态。第 2、3 项的剩余工作现在转入阶段 4 的共享状态与 Widgets 清理，不能把
 > 本轮迁移误记为 Architecture Complete。
@@ -730,9 +730,9 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       `Session` 改为 QObject 装配壳，`QmlUiBootstrap` / CLI / latency sandbox 统一走新的
       runtime 装配，`QmlApplicationContext` 不再持有窗口引用。合并提交为 `4416596d`。
 - [ ] **PlaybackHost 二次拆分（阶段 4.5–4.9，当前主线）**：目标仍是「一个时间域、一个播放权威、
-      两个独立投影」；4.8 已完成协调器契约收缩和旧类型重命名，4.9 继续清理共享状态与 Widgets
-      残留，之后才算本主线完成。
-- [ ] **runtime Widgets 残留清理**：拆掉 `HostUi` / `HostState` 的共享状态袋及 native fallback
+      两个独立投影」；4.8 已完成协调器契约收缩和旧类型重命名，4.9a 已完成运行时上下文边界外置，
+      后续继续清理按宿主共享状态与 Widgets 残留，之后才算本主线完成。
+- [ ] **runtime Widgets 残留清理**：拆掉 `RuntimeContext::Ui` / `RuntimeContext::State` 的共享状态袋（原 `HostUi` / `HostState`）及 native fallback
       依赖，随后将 `main.cpp` 改为 `QGuiApplication` + `QQmlApplicationEngine`，从 CMake、生产
       target 和全部 fallback 去除 `Qt6::Widgets` / `QWidget` / `QApplication` API。
 - [ ] **4.5–4.9 后续主线（非 GUI 验收）**：
@@ -768,15 +768,18 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       4. **4.8 收缩并最终重命名 `PlaybackHost`（2026-09-02，已完成）**：
          `PlaybackCoordinator` 直接实现 `PlaybackControl`、`PreviewPlaybackPort`、
          `AudioClockSource`；`PlaybackCoordinator.h` 不直接包含或继承 `PreviewSurface` /
-         `TimelineSurface`、QML 或 QSG 契约，但仍通过 `Session.h` 间接借用共享 `HostUi` /
-         `HostState`。协调器仍暂时公开旧 projection 方法供 adapter / Session 兼容转发。两个无状态
+         `TimelineSurface`、QML 或 QSG 契约，4.9a 已改为通过 `RuntimeContext.h` 间接借用共享
+         `RuntimeContext::Ui` / `RuntimeContext::State`。协调器仍暂时公开旧 projection 方法供 adapter / Session 兼容转发。两个无状态
          surface adapter 承接旧槽位，删除旧 `PlaybackControlAdapter`；
-         实现体中仍有共享 `HostUi` / `HostState` 和历史 Preview/Timeline 调用，留到 4.9 清理。
+         实现体中仍有共享 `RuntimeContext::Ui` / `RuntimeContext::State` 和历史 Preview/Timeline 调用，留到 4.9 清理。
          `playback_coordinator_spec` 与 MiaCode Release 构建通过。
-      5. **4.9 清理 Session 装配与共享状态**：`SessionBootstrap` 显式构造三个独立实例并分别注册
-         `playbackControl`、`previewSurface`、`timelineSurface`；移除通用 `HostUi` / `HostState` 借用，
-         让 Session 只保留生命周期、资源所有权和端口连接。同步更新 `ASSEMBLY.md`、仓库指南和
-         backend surface 清单。
+      5. **4.9 清理 Session 装配与共享状态（进行中）**：`SessionBootstrap` 显式构造三个独立实例并分别注册
+         `playbackControl`、`previewSurface`、`timelineSurface`；最终移除通用共享状态借用，让 Session 只保留
+         生命周期、资源所有权和端口连接。同步更新 `ASSEMBLY.md`、仓库指南和 backend surface 清单。
+         当前已完成的 4.9a 是：新增 `src/app/runtime/RuntimeContext.h`，将 `Ui` / `State` 类型从
+         `Session` 的类型定义中外置；所有 runtime host 构造签名改用 `RuntimeContext::Ui` /
+         `RuntimeContext::State`，`PlaybackCoordinator.h` 不再包含 `Session.h`。这仍是过渡期共享存储，
+         后续按 PlaybackCoordinator / PreviewHost / TimelineHost 及其他宿主切开实际所有权。
 
       **非 GUI 完成门槛**：补齐协调器 fake-clock 的 play/pause/resume/stop/seek/scrub/rate 测试，
       `TimelineCommandGate` 的 revision / sequence / drag-follow 顺序测试，三宿主装配与生命周期测试，
@@ -793,7 +796,7 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - [ ] `ShaderTools` 若仅为构建期工具，不计入运行时依赖；`Qt6::Svg`、`Qt6::OpenGL`、
       `Qt6::Network`、`Qt6::MultimediaQuickPrivate` 按实际功能和平台条件单独验收。
 - **Architecture Complete 完成标志**：隐藏 `MainWindow` / native QWidget 拖放 overlay 已清除，
-      但当前仍未完成，因为 `Qt6::Widgets`、`QApplication`、`HostUi` / `HostState` 与协调器内部
+      但当前仍未完成，因为 `Qt6::Widgets`、`QApplication`、`RuntimeContext::Ui` / `RuntimeContext::State` 共享袋与协调器内部
       的旧 runtime 依赖仍在。必须完成 4.5–4.9、移除 Widgets 依赖，并通过 Release 构建、全量 CTest、
       QML import 部署扫描及跨模块时间域回归；macOS / Windows 依赖记录与功能 parity 另行处理，
       GUI 结果不作为本阶段的工作项。

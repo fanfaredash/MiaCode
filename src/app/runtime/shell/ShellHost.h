@@ -11,7 +11,7 @@ namespace miacode::runtime {
 
 class ShellHost {
 public:
-    ShellHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    ShellHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
     bool rootWindowFrameGeometryAvailable() const;
     QRect rootWindowFrameGeometry() const;
@@ -82,8 +82,8 @@ private:
     void clearFocusedTextEditState();
 
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
     QPointer<QTextEdit> pendingTextFocusWidget_;
     int pendingTextCursorAnchor_ = -1;
     int pendingTextCursorPosition_ = -1;

@@ -44,8 +44,8 @@ using namespace miacode::runtime::preview_timeline_detail;
 
 miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     Session& session,
-    Session::HostUi& ui,
-    Session::HostState& state,
+    RuntimeContext::Ui& ui,
+    RuntimeContext::State& state,
     quint64 sessionGeneration)
     : session_(session)
     , ui_(ui)

@@ -8,7 +8,7 @@ namespace miacode::runtime {
 
 class SettingsHost final : public miacode::v2::PreferencesStore {
 public:
-    SettingsHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    SettingsHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
     void showWelcomeDialog();
     void applyConfiguredShortcuts();
@@ -37,8 +37,8 @@ public:
 
 private:
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
 };
 
 }  // namespace miacode::runtime

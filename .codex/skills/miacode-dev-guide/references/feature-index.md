@@ -91,10 +91,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 5. Timeline Data, Cursor Mapping, And Preview Synchronization
 
-- Playback coordinator and transport contracts (stages 4.5/4.8):
-  - Files: `src/app/v2/PlaybackControl.h`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/runtime/playback/PlaybackCoordinator.h`, `src/app/runtime/playback/CoordinatorContract.cpp`, `src/app/runtime/playback/PlaybackSurfaceAdapters.{h,cpp}`, `src/app/v2/ApplicationServices.h`, `src/app/runtime/SessionBootstrap.cpp`
+- Playback coordinator and transport contracts (stages 4.5/4.8/4.9a):
+  - Files: `src/app/v2/PlaybackControl.h`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/runtime/RuntimeContext.h`, `src/app/runtime/playback/PlaybackCoordinator.h`, `src/app/runtime/playback/CoordinatorContract.cpp`, `src/app/runtime/playback/PlaybackSurfaceAdapters.{h,cpp}`, `src/app/v2/ApplicationServices.h`, `src/app/runtime/SessionBootstrap.cpp`
   - Classes: `miacode::v2::PlaybackControl`, `miacode::v2::PlaybackStateFeed`, `miacode::runtime::PlaybackCoordinator`, `miacode::runtime::PlaybackPreviewSurfaceAdapter`, `miacode::runtime::PlaybackTimelineSurfaceAdapter`
-  - Owns: the revision/generation/sequence-stamped playback snapshot, canonical chart-time clock, and semantic play/stop/seek/scrub/rate command seam exposed by `ApplicationServices`. The two surface adapters are forwarding-only compatibility projections over that one authority; do not add a second independent playhead or direct QML-to-widget playback path.
+  - Owns: the revision/generation/sequence-stamped playback snapshot, canonical chart-time clock, and semantic play/stop/seek/scrub/rate command seam exposed by `ApplicationServices`. The two surface adapters are forwarding-only compatibility projections over that one authority; do not add a second independent playhead or direct QML-to-widget playback path. Runtime hosts receive transitional shared records through explicit `RuntimeContext::Ui` / `RuntimeContext::State` references; these records are not yet per-host ownership.
 - Timeline projection command host (stage 4.6):
   - Files: `src/app/runtime/timeline/TimelineHost.h`, `src/app/runtime/timeline/TimelineHost.cpp`, `src/app/runtime/timeline/TimelineCommandGate.h`, `src/app/runtime/timeline/TimelineCommandGate.cpp`, `src/app/v2/TimelineSurface.h`, `src/app/qml_ui/QmlTimelineModel.cpp`
   - Classes: `miacode::runtime::TimelineHost`, `miacode::runtime::TimelineCommandGate`

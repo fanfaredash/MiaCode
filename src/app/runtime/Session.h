@@ -43,6 +43,7 @@
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "runtime/RuntimeContext.h"
 
 class QAction;
 class QByteArray;
@@ -465,16 +466,8 @@ private:
     enum class PreviewStageMediaRoute {
         QuickShellStageHost,
     };
-    enum class TextEncoding {
-        Utf8,
-        System,
-    };
-    enum class BottomTabsTabId {
-        Timeline,
-        Validation,
-        Muri,
-        Unknown,
-    };
+    using TextEncoding = miacode::runtime::RuntimeContext::TextEncoding;
+    using BottomTabsTabId = miacode::runtime::RuntimeContext::BottomTabsTabId;
     struct TimelineCursorNote;
     struct PreparedStartupRestoreDocument {
         quint64 generation = 0;
@@ -685,74 +678,24 @@ private:
     bool bottomTabsTabVisible(BottomTabsTabId tabId) const;
     void restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId preferredTabId);
     void applyMuriRenderOptions();
-    struct ValidationCachedIssue {
-        int line = 1;
-        int col = 1;
-        int endCol = 1;
-        SimaiNativeValidationSeverity severity = SimaiNativeValidationSeverity::Error;
-        QString rawMessage;
-        QString displayMessage;
-        QString issueTypeKey;
-        QString issueTypeLabel;
-    };
-
-    struct ValidationDecoration {
-        int line = 1;
-        int col = 1;
-        int endCol = 1;
-        QString message;
-        bool warning = false;
-    };
-
-    struct ValidationCacheEntry {
-        QString chartText;
-        SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
-        miacode::simai::SimaiTimingMetadata timingMetadata;
-        quint64 validationRevision = 0;
-        bool ok = true;
-        int errorCount = 0;
-        int warningCount = 0;
-        int lenientNoteCount = 0;
-        int lenientErrorCount = 0;
-        int strictNoteCount = 0;
-        int strictErrorCount = 0;
-        QVector<ValidationCachedIssue> issues;
-    };
-
-    struct DeletedDifficultyUndoState {
-        bool valid = false;
-        bool wasActive = false;
-        int difficultyId = 0;
-        SimaiDifficultyData difficultyData;
-    };
-
-    struct SelectionTransformUndoEntry {
-        int undoStepAfterApply = 0;
-        int originalAnchor = -1;
-        int originalPosition = -1;
-        int transformedAnchor = -1;
-        int transformedPosition = -1;
-        double previewSecond = -1.0;
-    };
+    using ValidationCachedIssue = miacode::runtime::RuntimeContext::ValidationCachedIssue;
+    using ValidationDecoration = miacode::runtime::RuntimeContext::ValidationDecoration;
+    using ValidationCacheEntry = miacode::runtime::RuntimeContext::ValidationCacheEntry;
+    using DeletedDifficultyUndoState = miacode::runtime::RuntimeContext::DeletedDifficultyUndoState;
+    using SelectionTransformUndoEntry = miacode::runtime::RuntimeContext::SelectionTransformUndoEntry;
 
 public:
     // Derived sidebar bookmark for a non-control `||` chart comment. This is a
     // transient view cache rebuilt from chart text, never a persisted object.
-    struct EditorBookmark {
-        QString title;
-        QString text;
-        int line = 1;
-        QString source;
-        QString commentText;
-        QString commentFingerprint;
-        QString contextBefore;
-        QString contextAfter;
-        int difficultyId = 0;
-        // True when the name comes from an explicit `[label]` comment prefix.
-        bool nameLocked = false;
-    };
+    using EditorBookmark = miacode::runtime::RuntimeContext::EditorBookmark;
 
 private:
+    // Declared before every host that borrows ui_/state_ so the context outlives
+    // all borrowers during reverse member destruction.
+    miacode::runtime::RuntimeContext runtimeContext_;
+    miacode::runtime::RuntimeContext::Ui& ui_ = runtimeContext_.ui;
+    miacode::runtime::RuntimeContext::State& state_ = runtimeContext_.state;
+
     std::unique_ptr<miacode::runtime::EditorHost> editor_;
     std::unique_ptr<miacode::runtime::SettingsHost> settings_;
     std::unique_ptr<miacode::runtime::StageMediaHost> stageMedia_;
@@ -774,5 +717,7 @@ private:
     void syncBottomTabsCurrentTabToContainers();
     void syncQuickShellBottomTabsProxyRoute();
 
+    #define MIACODE_SESSION_RUNTIME_MEMBERS 1
     #include "SessionMembers.inc"
+    #undef MIACODE_SESSION_RUNTIME_MEMBERS
 };

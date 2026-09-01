@@ -15,7 +15,11 @@ The stage 4.5 transport seam is now the shared playback authority for the previe
 - `TimelineHost` is a projection/command seam over `PlaybackTimelineSurfaceAdapter`; its read methods are pass-throughs and its write methods carry no document or playback ownership. Do not move QSG, viewport, follow state, parser, or clock state into it.
 - Stage 4.7 installs `PreviewHost` in `ApplicationServices::previewSurfaceSlot()`. `QmlPreviewModel` reaches transport through `PreviewPlaybackPort`, while PreviewHost reads canonical position through `AudioClockSource`; both are sourced from the same `PlaybackCoordinator` instance.
 - `PreviewHost` temporarily delegates non-transport rendering/settings/media calls through `PlaybackPreviewSurfaceAdapter`, but its transport and position methods must never fall back to an independent legacy clock.
-- Stage 4.8 renamed the old implementation to `PlaybackCoordinator` and removed its direct `PreviewSurface` / `TimelineSurface` inheritance. The coordinator header has no direct surface/QML/QSG include, but still reaches the shared `HostUi` / `HostState` through `Session.h` and temporarily exposes legacy projection methods for the adapters/Session. Removing that transitive dependency and compatibility API is explicitly stage 4.9 work.
+- Stage 4.8 renamed the old implementation to `PlaybackCoordinator` and removed its direct `PreviewSurface` / `TimelineSurface` inheritance. The coordinator header has no direct surface/QML/QSG include, but at the 4.8 boundary still reached shared UI/state through `Session.h` and temporarily exposed legacy projection methods for the adapters/Session. Removing that transitive dependency and compatibility API is explicitly stage 4.9 work.
+- Stage 4.9a moved the transitional shared UI/state records to `src/app/runtime/RuntimeContext.h`. Runtime hosts
+  now accept explicit `RuntimeContext::Ui` / `RuntimeContext::State` references, and
+  `PlaybackCoordinator.h` includes `RuntimeContext.h` without importing `Session.h`. The records are still
+  shared migration storage; per-host ownership and the remaining legacy projection API are later 4.9 work.
 
 When changing this contract, review `src/app/v2/PlaybackControl.h`, `src/app/v2/PreviewPlaybackPort.h`, `src/app/v2/AudioClockSource.h`, `src/app/runtime/playback/PlaybackCoordinator.*`, `src/app/runtime/playback/PlaybackSurfaceAdapters.*`, `src/app/v2/ApplicationServices.*`, `src/app/runtime/Session.*`, and the relevant Preview/Timeline host seam together.
 

@@ -5,7 +5,7 @@
 
 #include <QApplication>
 
-miacode::runtime::ShellHost::ShellHost(Session& session, Session::HostUi& ui, Session::HostState& state)
+miacode::runtime::ShellHost::ShellHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state)
     : session_(session)
     , ui_(ui)
     , state_(state)

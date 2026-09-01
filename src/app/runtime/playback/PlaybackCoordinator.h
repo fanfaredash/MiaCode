@@ -1,6 +1,6 @@
 #pragma once
 
-#include "runtime/Session.h"
+#include "runtime/RuntimeContext.h"
 
 #include "app/v2/AudioClockSource.h"
 #include "app/v2/PlaybackControl.h"
@@ -8,6 +8,8 @@
 #include "audio/PreviewAudioDeviceChangePolicy.h"
 #include "audio/PreviewAudioDeviceCutoff.h"
 #include "runtime/playback/PlaybackIdentityGate.h"
+
+class Session;
 
 namespace miacode::preview_audio {
 struct PreviewAudioCompletion;
@@ -19,7 +21,7 @@ class PlaybackCoordinator final : public miacode::v2::PlaybackControl,
                                   public miacode::v2::PreviewPlaybackPort,
                                   public miacode::v2::AudioClockSource {
 public:
-    PlaybackCoordinator(Session& session, Session::HostUi& ui, Session::HostState& state,
+    PlaybackCoordinator(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state,
                         quint64 sessionGeneration = 0);
 
     void setDocumentRevision(quint64 revision);
@@ -344,8 +346,8 @@ private:
     void softStopQtPreviewPlaybackToSecond(double second, bool centerView);
     void anchorQtPreviewPlaybackToSecond(double second, bool centerView);
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
     PlaybackIdentityGate identity_;
 
     bool beginPlaybackCommand();

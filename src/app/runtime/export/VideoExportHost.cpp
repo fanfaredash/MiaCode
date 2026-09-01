@@ -5,7 +5,7 @@
 
 #include <QPointer>
 
-miacode::runtime::VideoExportHost::VideoExportHost(Session& session, Session::HostUi& ui, Session::HostState& state)
+miacode::runtime::VideoExportHost::VideoExportHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state)
     : session_(session)
     , ui_(ui)
     , state_(state)

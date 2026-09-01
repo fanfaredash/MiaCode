@@ -1,0 +1,145 @@
+#pragma once
+
+#include <functional>
+#include <memory>
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+#include "PreviewAudioSettings.h"
+#include "PreviewRenderSettings.h"
+#include "SimaiDocument.h"
+#include "SimaiNativeParser.h"
+#include "SimaiTimingMetadata.h"
+#include "common/MuriRenderOptions.h"
+#include "common/MuriTypes.h"
+#include "common/PreviewGameplayConfig.h"
+#include "common/PreviewTimingSettings.h"
+#include "common/PreviewVideoGeometryConfig.h"
+#include "core/chart/transform/ChartNormalization.h"
+#include "app/v2/PlaybackControl.h"
+#include "timeline/TimelineData.h"
+#include "timeline/TimelineQuickModel.h"
+#include "timeline/TimelineSlowRefresh.h"
+#include "tools/video_export/VideoExportSnapshot.h"
+
+class BracketScopeHighlighter;
+class IntroBannerSpec;
+class PreviewAudioDeviceWatcher;
+class PreviewRuntime;
+class PreviewStageMediaHost;
+class QmlExportSession;
+class QtPreviewSfxRuntime;
+class QuickShellPreviewCompositeSurface;
+class QSoundEffect;
+class TimelineQuickStateBridge;
+
+namespace miacode::preview::scene {
+class PreviewProgressStatsCache;
+}
+
+namespace miacode::waveform {
+class WaveformCacheService;
+struct WaveformData;
+}
+
+namespace miacode::v2 {
+class JobProgressService;
+class UiRequestService;
+}
+
+namespace miacode::runtime {
+
+// Transitional runtime storage boundary. The two nested records are kept
+// together for now because the legacy runtime still has cross-domain reads,
+// but they no longer form part of Session's type definition. This lets each
+// host declare the storage boundary it actually borrows and keeps playback
+// contract headers independent from Session internals.
+class RuntimeContext final
+{
+public:
+    enum class TextEncoding {
+        Utf8,
+        System,
+    };
+
+    enum class BottomTabsTabId {
+        Timeline,
+        Validation,
+        Muri,
+        Unknown,
+    };
+
+    struct ValidationCachedIssue {
+        int line = 1;
+        int col = 1;
+        int endCol = 1;
+        SimaiNativeValidationSeverity severity = SimaiNativeValidationSeverity::Error;
+        QString rawMessage;
+        QString displayMessage;
+        QString issueTypeKey;
+        QString issueTypeLabel;
+    };
+
+    struct ValidationDecoration {
+        int line = 1;
+        int col = 1;
+        int endCol = 1;
+        QString message;
+        bool warning = false;
+    };
+
+    struct ValidationCacheEntry {
+        QString chartText;
+        SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
+        miacode::simai::SimaiTimingMetadata timingMetadata;
+        quint64 validationRevision = 0;
+        bool ok = true;
+        int errorCount = 0;
+        int warningCount = 0;
+        int lenientNoteCount = 0;
+        int lenientErrorCount = 0;
+        int strictNoteCount = 0;
+        int strictErrorCount = 0;
+        QVector<ValidationCachedIssue> issues;
+    };
+
+    struct DeletedDifficultyUndoState {
+        bool valid = false;
+        bool wasActive = false;
+        int difficultyId = 0;
+        SimaiDifficultyData difficultyData;
+    };
+
+    struct SelectionTransformUndoEntry {
+        int undoStepAfterApply = 0;
+        int originalAnchor = -1;
+        int originalPosition = -1;
+        int transformedAnchor = -1;
+        int transformedPosition = -1;
+        double previewSecond = -1.0;
+    };
+
+    struct EditorBookmark {
+        QString title;
+        QString text;
+        int line = 1;
+        QString source;
+        QString commentText;
+        QString commentFingerprint;
+        QString contextBefore;
+        QString contextAfter;
+        int difficultyId = 0;
+        bool nameLocked = false;
+    };
+
+#define MIACODE_RUNTIME_CONTEXT_TYPES 1
+#include "runtime/SessionMembers.inc"
+#undef MIACODE_RUNTIME_CONTEXT_TYPES
+
+    Ui ui;
+    State state;
+};
+
+}  // namespace miacode::runtime

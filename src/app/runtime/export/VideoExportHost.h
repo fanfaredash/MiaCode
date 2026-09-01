@@ -16,7 +16,7 @@ public:
     using BatchExportResult = miacode::v2::ExportEngine::BatchResult;
     using BatchExportCallbacks = miacode::v2::ExportEngine::BatchCallbacks;
 
-    VideoExportHost(Session& session, Session::HostUi& ui, Session::HostState& state);
+    VideoExportHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
     // ---- miacode::v2::ExportEngine ----
     VideoExportTask buildSeedTask(int difficultyId) override;
@@ -163,8 +163,8 @@ private:
     void endExportProgress();
 
     Session& session_;
-    Session::HostUi& ui_;
-    Session::HostState& state_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
 };
 
 }  // namespace miacode::runtime
