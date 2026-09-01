@@ -645,7 +645,6 @@
         quint64 pendingDifficultySwitchPreviewRestoreRevision_ = 0;
         int pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;
         double pendingDifficultySwitchPreviewRestoreSecond_ = 0.0;
-        SimaiDocument document_;
         int previewStatsLayoutRows_ = 0;
         int previewStatsLayoutCols_ = 0;
         bool previewFullscreenActive_ = false;
@@ -1036,7 +1035,6 @@
     bool& editorOverwriteModeEnabled_ = state_.editorOverwriteModeEnabled_;
     bool& editorAutoCompletionEnabled_ = state_.editorAutoCompletionEnabled_;
     bool& editorImeInputDisabled_ = state_.editorImeInputDisabled_;
-    SimaiDocument& document_ = state_.document_;
     QWidget*& welcomePage_ = ui_.welcomePage_;
     QLabel*& welcomeEmptyHintLabel_ = ui_.welcomeEmptyHintLabel_;
     QWidget*& metadataPage_ = ui_.metadataPage_;

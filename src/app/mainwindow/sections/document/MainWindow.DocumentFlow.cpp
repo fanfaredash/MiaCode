@@ -136,105 +136,11 @@ bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
 
 bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
 {
-    bool changed = false;
-    bool metadataTimingChanged = false;
-    bool designerBroadcastNeeded = false;
-    QString broadcastDesignerValue;
-    if (owner_.hasActiveDifficulty()) {
-        SimaiDifficultyData& difficultyData = state_.document_.ensureDifficulty(state_.activeDifficultyId_);
-        const QString newLevel = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData.level;
-        const QString newChart = owner_.editorText();
-        if (difficultyData.level != newLevel || difficultyData.chart != newChart) {
-            difficultyData.level = newLevel;
-            difficultyData.chart = newChart;
-            changed = true;
-        }
-        // Header designer edit (visible in 顶部显示=谱师 mode; while hidden it
-        // mirrors the model, so this block is a no-op). Editing it under
-        // unified mode broadcasts the new name, same as editing the top &des.
-        const QString newDesigner = ui_.difficultyDesignerEdit_ != nullptr
-            ? ui_.difficultyDesignerEdit_->text()
-            : difficultyData.designer;
-        if (difficultyData.designer != newDesigner) {
-            difficultyData.designer = newDesigner;
-            changed = true;
-            if (state_.unifiedDesignerEnabled_) {
-                designerBroadcastNeeded = true;
-                broadcastDesignerValue = newDesigner;
-            }
-        }
-        const QString newFirst = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : state_.document_.first;
-        if (state_.document_.first != newFirst) {
-            state_.document_.first = newFirst;
-            metadataTimingChanged = true;
-            changed = true;
-        }
-    } else {
-        const QString newTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
-        const QString newArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
-        const QString newDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
-        QVector<SimaiRawField> newExtraFields = SimaiDocument::parseUnmanagedFields(
-            ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
-            true
-        );
-        SimaiDocument::ensureDefaultClockCount(&newExtraFields);
-        const bool designerEdited = (state_.document_.designer != newDesigner);
-        if (state_.document_.title != newTitle
-            || state_.document_.artist != newArtist
-            || designerEdited
-            || state_.document_.extraFields != newExtraFields) {
-            state_.document_.title = newTitle;
-            state_.document_.artist = newArtist;
-            state_.document_.designer = newDesigner;
-            state_.document_.extraFields = newExtraFields;
-            changed = true;
-        }
-        if (state_.unifiedDesignerEnabled_ && designerEdited) {
-            designerBroadcastNeeded = true;
-            broadcastDesignerValue = newDesigner;
-        }
-    }
-
-    // Broadcast designer name to every other slot when the "unified" option
-    // is enabled. We do this *after* the just-edited field has been applied
-    // so the value being broadcast is always the new one. The edit can
-    // originate from the top &des (metadata page) or from the header's
-    // per-difficulty field (顶部显示=谱师 mode) — mirror whichever line edit
-    // was NOT the source so both read the canonical name afterwards.
-    if (designerBroadcastNeeded) {
-        if (state_.document_.designer != broadcastDesignerValue) {
-            state_.document_.designer = broadcastDesignerValue;
-            changed = true;
-        }
-        // Charted difficulties AND chart-less standalone &des_N both follow the
-        // unified name. setDesignerForSlot("") clears a standalone entry, which
-        // is the correct "clear all" behaviour when broadcasting an empty name.
-        const QVector<QPair<int, QString>> designerSlots = state_.document_.perDifficultyDesigners();
-        for (const QPair<int, QString>& slot : designerSlots) {
-            if (slot.second != broadcastDesignerValue) {
-                state_.document_.setDesignerForSlot(slot.first, broadcastDesignerValue);
-                changed = true;
-            }
-        }
-        if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != broadcastDesignerValue) {
-            QSignalBlocker block(ui_.designerEdit_);
-            ui_.designerEdit_->setText(broadcastDesignerValue);
-        }
-        syncHeaderDesignerEditFromModel();
-    }
-
+    // QML already commits into ChartWorkspace. Flushing hidden widget fields
+    // would overwrite that. This path only clears the widget dirty latch.
     anchorCurrentFieldCleanState();
     state_.currentFieldDirty_ = false;
-    if (changed) {
-        state_.documentDirty_ = true;
-    }
     updateDirtyState();
-    owner_.updateWindowTitle();
-    rebuildFieldSidebar();
-    if (metadataTimingChanged) {
-        owner_.refreshWaveformCache();
-        owner_.refreshTimelineMetadata();
-    }
     return true;
 }
 
@@ -452,7 +358,8 @@ bool MainWindow::openStartupTarget(const QString& path)
         }
 
         setCurrentFilePath(QString(), true);
-        loadDocument(SimaiDocument::createEmpty());
+        applicationServices_.workspace().openSource(SimaiDocument::createEmpty().toText());
+        loadDocument();
         postShellNotice(
             UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.title")),
             UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.message"))
@@ -733,9 +640,9 @@ void MainWindow::activateInitialField()
     documentSection_->activateInitialField();
 }
 
-void MainWindow::loadDocument(const SimaiDocument& document)
+void MainWindow::loadDocument()
 {
-    documentSection_->loadDocument(document);
+    documentSection_->loadDocument();
 }
 
 void MainWindow::clearTimelineAndPreview()

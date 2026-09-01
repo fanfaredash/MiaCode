@@ -10,13 +10,11 @@
 
 namespace miacode::v2 {
 
-// The document work that still needs the window.
-//
-// Stage 3.5 item 2. ChartWorkspace is the document's truth; this is everything
-// around it that the window still owns — the one-way push into the window's own
-// copy, the recent-files and autosave-backup lists, the chart-normalization
-// options, the editor navigation, and the three handler hooks the window calls
-// back into when a widget-side path needs the QML layer to answer.
+    // The document work that still needs the window.
+    //
+    // ChartWorkspace is the document. This is recent files, autosave-backup lists,
+    // chart-normalization options, editor navigation, and the handler hooks a
+    // widget-side path uses when the QML layer must answer.
 //
 // Deliberately Qt Widgets-free.
 class DocumentBridge
@@ -35,14 +33,12 @@ public:
 
     virtual ~DocumentBridge() = default;
 
-    // ---- what the window still holds a copy of ----
     virtual QString sourceText() const = 0;
     virtual QString filePath() const = 0;
     virtual int activeDifficultyId() const = 0;
 
-    // Transitional one-way adapter: ChartWorkspace commits first, then the
-    // window consumes this immutable value for timeline/preview. It never
-    // supplies v2 dirty/revision truth — it is told them.
+    // ChartWorkspace has already committed. The window refreshes timeline and
+    // preview from that workspace; it does not keep a second SimaiDocument.
     virtual bool applyCommittedDocument(const QString& sourceText, const QString& filePath,
                                         int activeDifficultyId, bool dirty, quint64 revision,
                                         CommitKind kind, bool usedSystemEncoding) = 0;

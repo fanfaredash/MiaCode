@@ -75,8 +75,11 @@ bool verifyNewDocumentPublishesFinalFileIdentity(QTextStream& err)
         : QString();
     return require(containsAfter(createFlow,
                                  QStringLiteral("owner_.setCurrentFilePath(targetPath)"),
-                                 QStringLiteral("loadDocument(newDocument)")),
-                   QStringLiteral("new-document replacement publishes after the final file identity is installed"), err);
+                                 QStringLiteral("workspace().openSource(newDocument.toText(), targetPath)"))
+                       && containsAfter(createFlow,
+                                        QStringLiteral("workspace().openSource(newDocument.toText(), targetPath)"),
+                                        QStringLiteral("loadDocument();")),
+                   QStringLiteral("new-document replacement opens the workspace then refreshes hidden UI after the file identity is installed"), err);
 }
 
 bool verifyV2AnalysisUsesWorkspaceSnapshot(QTextStream& err)
@@ -145,6 +148,8 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
         QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
     const QString mainWindow = sourceFile(
         QStringLiteral("src/app/mainwindow/MainWindow.h"));
+    const QString memberStorage = sourceFile(
+        QStringLiteral("src/app/mainwindow/MainWindowMemberStorage.inc"));
     const QString documentBridge = sourceFile(
         QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentBridge.cpp"));
     const QString fileFlow = sourceFile(
@@ -153,6 +158,10 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp"));
     const QString followSync = sourceFile(
         QStringLiteral("src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp"));
+    const QString frameBootstrap = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp"));
+    const QString documentFileFlow = sourceFile(
+        QStringLiteral("src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp"));
 
     // The owner moved to the non-Widget assembly in stage 3.5 item 1; the count
     // is what matters and it is still one apiece, reached by reference.
@@ -196,23 +205,15 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                        && !documentModel.contains(
                            QStringLiteral("backend_->saveDocument()")),
                    QStringLiteral("QmlDocumentModel never asks MainWindow to own a mutation or determine dirty"), err)
-        && require(mainWindow.contains(QStringLiteral("applyCommittedQmlDocument("))
-                       && documentBridge.contains(
-                           QStringLiteral("revision <= owner_.appliedQmlWorkspaceRevision_"))
-                       && containsAfter(documentBridge,
-                                        QStringLiteral("state_.document_ = committedDocument;"),
-                                        QStringLiteral("state_.documentDirty_ = dirty;")),
-                   QStringLiteral("MainWindow accepts only monotonic committed adapter values and mirrors workspace dirty"), err)
-        // What the gate DOES with the pair is a behaviour regression against the
-        // real object (editor_sync_controller_spec); it used to be an
-        // `appliedQmlWorkspaceRevision_ > 0` scan here, which went red when the
-        // guard moved into EditorSyncController — a scan cannot tell a moved
-        // guard from a deleted one. What stays here is the half a source
-        // contract can actually see: both publishers read the revision
-        // MainWindow last accepted from the workspace. The follow path once
-        // sent the validation snapshot's revision instead — a different counter
-        // that matched only by coincidence, and silently disabled 代码跟随 for
-        // the rest of the session once a difficulty switch separated the two.
+        && require(!memberStorage.contains(QStringLiteral("SimaiDocument document_"))
+                       && !documentBridge.contains(QStringLiteral("state_.document_ ="))
+                       && !mainWindow.contains(QStringLiteral("applyChartTextThroughWorkspace(")),
+                   QStringLiteral("MainWindow keeps no SimaiDocument and adds no workspace write-through helper"), err)
+        && require(!documentModel.contains(QStringLiteral("applyCommittedDocument("))
+                       && frameBootstrap.contains(QStringLiteral("&miacode::v2::ChartWorkspace::changed"))
+                       && documentFileFlow.contains(QStringLiteral("void MainWindow::DocumentSection::syncRuntimeFromWorkspace()"))
+                       && documentFileFlow.contains(QStringLiteral("appliedQmlWorkspaceRevision_ = snapshot.revision")),
+                   QStringLiteral("QML does not echo commits into the window; the window follows ChartWorkspace::changed"), err)
         && require(documentModel.contains(
                        QStringLiteral("publishWorkspaceCommit(WorkspaceCommitKind::Incremental);"))
                        && timelineFlow.contains(
@@ -222,6 +223,11 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                            QStringLiteral("follow.revision = owner_.appliedQmlWorkspaceRevision_"))
                        && !followSync.contains(QStringLiteral("documentValidationSnapshot()")),
                    QStringLiteral("initial, navigation, and follow identities stay on the committed workspace revision"), err)
+        && require(timelineFlow.contains(
+                       QStringLiteral("updateDocumentField(miacode::v2::ChartWorkspaceDocumentField::First"))
+                       && timelineFlow.contains(QStringLiteral("upsertExtraField(QStringLiteral(\"wholebpm\")"))
+                       && timelineFlow.contains(QStringLiteral("upsertExtraField(QStringLiteral(\"clock_count\")")),
+                   QStringLiteral("latency BPM, offset, and clock_count write the workspace"), err)
         && require(fileFlow.contains(QStringLiteral("owner_.qmlDocumentSaveHandler_(path)")),
                    QStringLiteral("legacy close-save routing delegates durable writes to the workspace file service"), err);
 }

@@ -29,8 +29,8 @@ same change.
 
 - App boot + CLI export + export-worker entry: `src/app/main.cpp`
 - Main window orchestration: `src/app/mainwindow/` (+ `sections/<feature>/`)
-- Default UI (**v2**): `src/app/qml_ui/`
-- QuickShell (**v1**, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
+- Default UI (**v2**): `src/app/qml_ui/` (`QmlUiBootstrap`). `src/app/v2/ChartWorkspace` is the sole document owner. `MainWindow` hosts preview, timeline, export, latency, and autosave. QML does not echo edits into the window; the window follows `ChartWorkspace::changed`.
+- `src/app/quick_shell/` leftover is preview-host policy, not a second shell. `--ui=v1` does not exist.
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)
 - Parser + validation: `src/core/chart/parser/` (`SimaiNativeParser*` — include-split TU)
 - Chart transforms / normalization: `src/core/chart/transform/`

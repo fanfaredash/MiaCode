@@ -156,7 +156,8 @@ public:
     // Positioning is separate so sidebar rebuilds can re-anchor an active
     // spinner after rows move.
     void activateInitialField();
-    void loadDocument(const SimaiDocument& document);
+    void loadDocument();
+    void syncRuntimeFromWorkspace();
     void clearTimelineAndPreview();
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 

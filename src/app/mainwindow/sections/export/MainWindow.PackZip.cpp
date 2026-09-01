@@ -37,7 +37,7 @@ void MainWindow::ExportSection::onPackAsZip()
         owner_.documentSection_->applyCurrentFieldToDocument();
     }
 
-    const QString chartText = owner_.document_.toText();
+    const QString chartText = owner_.applicationServices_.workspace().document().toText();
     if (chartText.isEmpty()) {
         _mc_op_.fail(QStringLiteral("empty chart"));
         requests->postNotice(
@@ -55,7 +55,7 @@ void MainWindow::ExportSection::onPackAsZip()
         defaultDir = owner_.documentSection_->resolveInitialOpenDirectory();
     }
     const QString defaultName =
-        miacode::zip_export::sanitizedZipStem(owner_.document_.title) + QStringLiteral(".zip");
+        miacode::zip_export::sanitizedZipStem(owner_.applicationServices_.workspace().document().title) + QStringLiteral(".zip");
 
     miacode::v2::FileRequest request;
     request.title = dialogTitle;
@@ -90,7 +90,7 @@ void MainWindow::ExportSection::packChartToZipAtPath(
     miacode::zip_export::ChartZipInput input;
     input.chartText = chartText;
     input.chartPath = chartPath;
-    input.videoFieldValue = owner_.document_.videoPath;
+    input.videoFieldValue = owner_.applicationServices_.workspace().document().videoPath;
     input.outputZipPath = outputPath;
 
     jobProgress->begin(

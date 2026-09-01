@@ -422,7 +422,7 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
     state_.deferredQuickShellStartupStageMediaChartPath_ = state_.currentFilePath_;
     // Phase 4c — pick up the &video= override from the parsed document
     // so the lazy host-init path (this code) honours it on first load.
-    state_.deferredQuickShellStartupStageMediaVideoOverride_ = state_.document_.videoPath;
+    state_.deferredQuickShellStartupStageMediaVideoOverride_ = owner_.applicationServices_.workspace().document().videoPath;
     state_.deferredQuickShellStartupStageMediaPausedSecond_ = qMax(0.0, state_.qtPreviewPauseSecond_);
     state_.deferredQuickShellStartupStageMediaPending_ = !state_.currentFilePath_.isEmpty();
     if (!shouldDeferQuickShellStartupStageMediaLoad()) {

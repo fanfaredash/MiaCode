@@ -91,6 +91,9 @@ public:
     bool addDifficulty(int difficultyId);
     bool removeDifficulty(int difficultyId);
     bool unifyDesigners(const QString& canonicalName);
+    bool setDesignerForSlot(int difficultyId, const QString& name);
+    bool upsertExtraField(const QString& key, const QString& value);
+    bool replaceDifficultyChart(int difficultyId, const QString& chartText);
     bool markSaved(const QString& filePath = QString());
     // What a save of one section should put on disk: the last save point with
     // that one difficulty's chart brought up to date, and nothing else. Saving
@@ -112,6 +115,7 @@ public:
     // that save point: there is no earlier text for it, and dropping it
     // entirely would be a structural edit, not a discard.
     ChartWorkspaceResult revertDifficultyChart(int difficultyId);
+    bool rebindSavePoint(const QString& savedSourceText);
 
     ChartWorkspaceSnapshot snapshot() const;
     const SimaiDocument& document() const;

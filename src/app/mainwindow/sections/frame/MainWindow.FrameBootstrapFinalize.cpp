@@ -83,89 +83,7 @@ int previewFrameSwapWatchdogTimeoutMs(qint64 frameIntervalNs)
 
 void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage)
 {
-    constexpr int kToolbarLeadingSpacerWidth = 6;
-    auto* toolbarLeadingSpacer = new QWidget(toolBar);
-    toolbarLeadingSpacer->setFixedWidth(kToolbarLeadingSpacerWidth);
-    toolBar->addWidget(toolbarLeadingSpacer);
-    toolBar->addAction(openAction_);
-    toolBar->addAction(saveAction_);
-    // Beta20-fix / post-rename — we used to clamp every custom toolbar
-    // button to a 64-px floor with 12-px synthetic side padding. That
-    // floor was wider than the natural width of Qt's own
-    // addAction()-managed buttons next to it (Open / Save), so after
-    // settings labels changed width over time, so the
-    // pair sat in a visibly oversized cell with empty air on each side
-    // of the text. We now let `sizeHint()` produce the natural width
-    // exactly the way `addAction()` would, and only sync Audio/Video
-    // to each other (so the pair stays equal width even when the two
-    // labels happen to differ slightly in glyph advance).
-    constexpr int kToolbarActionButtonWidth = 64;
-    const auto makeCompactToolbarButton = [toolBar](QAction* action) -> QToolButton* {
-        auto* button = new QToolButton(toolBar);
-        button->setDefaultAction(action);
-        button->setAutoRaise(true);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
-        button->ensurePolished();
-        return button;
-    };
-
-    previewAudioSettingsButton_ = makeCompactToolbarButton(previewAudioSettingsAction_);
-    previewVideoSettingsButton_ = makeCompactToolbarButton(previewVideoSettingsAction_);
-    // 皮肤 sits between 预览设置 and 导出 but matches the 导出 button width (computed
-    // below), NOT the wider 音频设置/预览设置 equal-width pair.
-    skinSettingsButton_ = makeCompactToolbarButton(skinSettingsAction_);
-    int settingsButtonWidth = 1;
-    if (previewAudioSettingsButton_ != nullptr) {
-        settingsButtonWidth = qMax(settingsButtonWidth, previewAudioSettingsButton_->sizeHint().width());
-    }
-    if (previewVideoSettingsButton_ != nullptr) {
-        settingsButtonWidth = qMax(settingsButtonWidth, previewVideoSettingsButton_->sizeHint().width());
-    }
-    // Shared by the 皮肤 + 导出 buttons = the Open toolbar button's width.
-    int actionButtonWidth = kToolbarActionButtonWidth;
-    if (QWidget* openWidget = toolBar->widgetForAction(openAction_); openWidget != nullptr) {
-        actionButtonWidth = qMax(1, openWidget->sizeHint().width());
-    }
-    if (previewAudioSettingsButton_ != nullptr) {
-        previewAudioSettingsButton_->setFixedWidth(settingsButtonWidth);
-        toolBar->addWidget(previewAudioSettingsButton_);
-    }
-    if (previewVideoSettingsButton_ != nullptr) {
-        previewVideoSettingsButton_->setFixedWidth(settingsButtonWidth);
-        toolBar->addWidget(previewVideoSettingsButton_);
-    }
-    if (skinSettingsButton_ != nullptr) {
-        skinSettingsButton_->setFixedWidth(actionButtonWidth);
-        toolBar->addWidget(skinSettingsButton_);
-    }
-    settingsPlaceholderAction_ = toolBar->addAction(
-        makeSettingsGearIcon(QColor("#5D6E83")),
-        UiText::text(QStringLiteral("action.preferences"))
-    );
-    settingsPlaceholderAction_->setToolTip(UiText::text(QStringLiteral("action.preferences")));
-    connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
-    // The toolbar Export button jumps straight to the Export hub page (the
-    // sidebar "export" item equivalent) — the old dropdown menu + 250ms
-    // hover-open timer are gone; the page itself hosts the four entries.
-    // Deliberately NOT bound to exportVideoAction_ (difficulty-scoped): the
-    // page is reachable without an active difficulty and greys its own cards.
-    exportVideoButton_ = makeCompactToolbarButton(nullptr);
-    if (exportVideoButton_ != nullptr) {
-        exportVideoButton_->setText(UiText::text(QStringLiteral("toolbar.export")));
-        exportVideoButton_->setToolTip(UiText::text(QStringLiteral("document.open_the_export_page_video")));
-        exportVideoButton_->setFixedWidth(actionButtonWidth);
-        toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
-        connect(exportVideoButton_, &QToolButton::clicked, this, [this]() {
-            switchToExportField();
-        });
-    }
-
-    statusBar()->setSizeGripEnabled(false);
-    statusBar()->addPermanentWidget(new QLabel("Current File:", this));
-    currentFileLabel_ = new QLabel(this);
-    statusBar()->addPermanentWidget(currentFileLabel_, 1);
-    updateCurrentFileLabel();
+    Q_UNUSED(toolBar);
 
     autosaveTimer_ = new QTimer(this);
     autosaveTimer_->setInterval(kAutosaveIntervalMs);
@@ -682,7 +600,8 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     updatePauseButtonAppearance();
     const bool restoredStartupDocument = restoreLastSessionFile();
     if (!restoredStartupDocument) {
-        loadDocument(SimaiDocument::createEmpty());
+        applicationServices_.workspace().openSource(SimaiDocument::createEmpty().toText());
+        loadDocument();
         logStartupStage("initial_empty_document_applied");
     } else {
         logStartupStage("initial_last_session_document_applied");

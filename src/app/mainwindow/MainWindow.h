@@ -316,9 +316,8 @@ public:
     bool removeDocumentDifficulty(int difficultyId);
     void enableUnifiedDocumentDesigner(const QString& canonicalName);
     void disableUnifiedDocumentDesigner();
-    // Transitional one-way adapter: ChartWorkspace commits first, then the
-    // hidden MainWindow consumes this immutable value for timeline/preview and
-    // legacy-page compatibility. It never supplies UIv2 dirty/revision truth.
+    // ChartWorkspace has already committed. The window refreshes hidden widgets,
+    // timeline, and preview from that workspace. It does not keep a SimaiDocument.
     bool applyCommittedQmlDocument(
         const QString& sourceText, const QString& filePath, int activeDifficultyId,
         bool dirty, quint64 revision, QmlDocumentCommitKind kind,
@@ -342,9 +341,6 @@ public:
     // whole file. Without a handler installed the Widgets prompt still runs,
     // which is what the hidden window's own File menu still needs.
     void setQmlLeaveDocumentHandler(std::function<void(std::function<void(bool)>)> handler);
-    // Write-back into the workspace for the few callers that still edit the
-    // active chart from the MainWindow side. Without it they would be writing
-    // into a document copy the QML editor overwrites on its next commit.
     // 音频设置 page. The mixer is a value type, so the page reads a copy and
     // hands one back; every write lands on the same runtime-apply and persist
     // path the Widgets dialog used, rather than the page poking members.
@@ -363,7 +359,6 @@ public:
     void setPreviewRenderSetting(const QString& key, const QVariant& value);
 
     void setQmlChartTextHandler(std::function<bool(const QString&)> handler);
-    bool applyChartTextThroughWorkspace(const QString& text);
     DocumentValidationSnapshot documentValidationSnapshot() const;
     QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
     void invalidateDocumentValidationRevision();

@@ -236,7 +236,7 @@ void MainWindow::DocumentSection::applyBackupFile(const QString& normalizedPath,
     }
     // Read the on-disk chart as the undo baseline BEFORE overwriting the
     // document, exactly as the confirm-and-apply version did inline.
-    QString diskReferenceText = state_.document_.toText();
+    QString diskReferenceText = owner_.applicationServices_.workspace().document().toText();
     if (!state_.currentFilePath_.isEmpty()) {
         QFile currentFile(state_.currentFilePath_);
         if (currentFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -255,12 +255,18 @@ void MainWindow::DocumentSection::applyBackupFile(const QString& normalizedPath,
 
     const QString backupText = decodeChartBackupText(file.readAll());
 
-    loadDocument(SimaiDocument::fromText(backupText));
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
+    const miacode::v2::ChartWorkspaceResult replaced = workspace.replaceSource(backupText);
+    if (!replaced.accepted) {
+        workspace.openSource(backupText, state_.currentFilePath_);
+        workspace.rebindSavePoint(diskReferenceText);
+    }
+    loadDocument();
     state_.autosaveReferenceContentSignature_ = autosaveContentSignature(diskReferenceText);
     state_.autosaveLastLatestContentSignature_.clear();
     state_.autosaveLastHistoryContentSignature_.clear();
     state_.autosaveLastHistorySnapshotMs_ = kAutosaveUnsetTimestampMs;
-    state_.documentDirty_ = true;
+    state_.documentDirty_ = workspace.snapshot().dirty;
     state_.currentFieldDirty_ = true;
     updateDirtyState();
     owner_.scheduleTimelineRefresh();
@@ -309,7 +315,7 @@ void MainWindow::DocumentSection::runPendingAbnormalExitBackupRestore()
 
 QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
 {
-    SimaiDocument snapshot = state_.document_;
+    SimaiDocument snapshot = owner_.applicationServices_.workspace().document();
     // Tracks where a live (possibly uncommitted) designer edit was captured
     // from, so the unified-mode mirror below broadcasts what the user is
     // actually typing rather than a stale committed value.
@@ -621,7 +627,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
         return false;
     }
     QByteArray data;
-    const QString serialized = state_.document_.toText();
+    const QString serialized = owner_.applicationServices_.workspace().document().toText();
     if (state_.currentEncoding_ == TextEncoding::System) {
         QStringEncoder encoder(QStringConverter::System);
         data = encoder.encode(serialized);
@@ -648,6 +654,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     owner_.addRecentFilePath(normalizedPath);
     owner_.saveProjectRenderState();
     resetAutosaveState(serialized);
+    owner_.applicationServices_.workspace().markSaved(normalizedPath);
     const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();
     if (!autosaveDirectoryPath.isEmpty()) {
         rebuildAutosaveMetadata(autosaveDirectoryPath);

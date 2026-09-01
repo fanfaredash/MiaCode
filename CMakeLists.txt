@@ -191,10 +191,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.AudioSettings.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.TrackMetadata.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.DialogsSection.cpp
     src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp
     src/app/mainwindow/sections/editor/MainWindow.EditorState.cpp
@@ -207,7 +204,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
     src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp
-    src/app/mainwindow/sections/preferences/MainWindow.WelcomeDialog.cpp
     src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp
     src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp
     src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp

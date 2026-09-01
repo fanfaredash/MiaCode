@@ -1033,9 +1033,9 @@ void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, 
     QVector<EditorBookmark> derived;
     const int activeDifficultyId = state_.activeDifficultyId_;
     const bool hasActiveDifficulty = owner_.hasActiveDifficulty();
-    const QVector<int> ids = state_.document_.difficultyIds();
+    const QVector<int> ids = owner_.applicationServices_.workspace().document().difficultyIds();
     for (int difficultyId : ids) {
-        const SimaiDifficultyData* difficultyData = state_.document_.difficulty(difficultyId);
+        const SimaiDifficultyData* difficultyData = owner_.applicationServices_.workspace().document().difficulty(difficultyId);
         if (difficultyData == nullptr) {
             continue;
         }

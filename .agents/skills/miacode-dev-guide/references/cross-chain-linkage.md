@@ -185,13 +185,14 @@ Implications:
 
 ## 2. `&first` / timing-offset chain
 
-- `SimaiDocument` stores raw `first`; `MainWindow::parsedFirstSeconds` is the getter; preview/export
+- `SimaiDocument` stores raw `first`; `TimelineSection::parsedFirstSeconds` reads
+  `ApplicationServices.workspace().document().first`; preview/export
   use the finite parsed raw `&first` directly (no inverted "effectiveFirst").
 - **Edited from UIv2's metadata form** (`EditorPane.qml` → `metadataFirst`). The difficulty header
-  displays the active difficulty designer. The latency page still writes `document_.first` via
-  `applyLatencyDetectorOffset` — same single source of truth.
+  displays the active difficulty designer. Latency writes `ChartWorkspace` via
+  `updateDocumentField(First)` / `upsertExtraField` (`wholebpm`, `clock_count`).
 - `TimelineQuickModel` receives `first` on every rebuild; `buildTimelineSlowRefreshResult` shifts
-  markers by `first`; `MainWindow::applyLatencyDetectorOffset` writes raw `first` back.
+  markers by `first`; `MainWindow::applyLatencyDetectorOffset` writes raw `first` through the workspace.
 - **Serialization compat contract (`SimaiDocument::toText`):** we read an empty/missing `&first`
   as `0`, but strict third-party players (e.g. MajdataPlay `double.Parse`) crash on a bare
   `&first=`. So `toText()` always emits a parseable value — empty `first` → `&first=0` — and

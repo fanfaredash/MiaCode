@@ -12,6 +12,10 @@ src/
     mainwindow/     MainWindow + sections/<feature>/ (partial-class slices).
                     Shrinking: it BORROWS the v2 services, never owns them.
                     Deleted entirely in stage 4 — do not add new state here.
+                    No SimaiDocument member. QML writes ChartWorkspace. The window
+                    follows ChartWorkspace::changed for timeline, preview path,
+                    and autosave. Menus, outline, metadata pages, and widget
+                    dialogs are not constructed.
     v2/             ApplicationServices — the non-Widget owner of the document
                     domain and the shared UI boundaries: ChartWorkspace,
                     ChartWorkspaceFileService, AnalysisService,
@@ -143,6 +147,8 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
 - `MainWindow` is orchestration, not the home for every feature body. New window features land
   in `src/app/mainwindow/sections/<feature>/`.
 - `SimaiDocument` is the editable storage model for metadata + difficulty text.
+- `app/v2/ChartWorkspace` is the sole live document. `MainWindow` has no `SimaiDocument` member.
+  Nested sections read and write `ApplicationServices.workspace()`.
 - Parser output is the shared intermediate representation for timeline, preview, Muri analysis,
   and export reconstruction.
 - Runtime SFX and export SFX must use the same note-to-sound semantics (see

@@ -246,6 +246,37 @@ bool verifyInlineSourceSpanWinsOverLaterLevel(QTextStream& out)
                   QStringLiteral("full-source diagnostics prefer the inline chart span over a later level field"), out);
 }
 
+bool verifyOwnedFieldMutationsAndSavePointRebind(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    bool ok = expect(workspace.setDesignerForSlot(5, QStringLiteral("slot"))
+                         && workspace.document().designerForSlot(5) == QLatin1String("slot")
+                         && workspace.snapshot().dirty,
+                     QStringLiteral("setDesignerForSlot is owned by the workspace"), out);
+    ok &= expect(workspace.upsertExtraField(QStringLiteral("wholebpm"), QStringLiteral("140")),
+                 QStringLiteral("upsertExtraField accepts a wholebpm write"), out);
+    bool foundWholeBpm = false;
+    for (const SimaiRawField& field : workspace.document().extraFields) {
+        if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) == 0
+            && field.value == QLatin1String("140")) {
+            foundWholeBpm = true;
+            break;
+        }
+    }
+    ok &= expect(foundWholeBpm, QStringLiteral("upsertExtraField writes wholebpm on the owned document"), out);
+    ok &= expect(workspace.replaceDifficultyChart(6, QStringLiteral("(120){4}9,"))
+                     && workspace.document().difficulty(6)->chart == QLatin1String("(120){4}9,"),
+                 QStringLiteral("replaceDifficultyChart mutates a non-active slot"), out);
+
+    const QString current = workspace.document().toText();
+    ok &= expect(workspace.rebindSavePoint(sourceWithTwoDifficulties()) && workspace.snapshot().dirty,
+                 QStringLiteral("rebinding the save point to the opened text keeps later edits dirty"), out);
+    ok &= expect(workspace.rebindSavePoint(current) && !workspace.snapshot().dirty,
+                 QStringLiteral("rebinding the save point to the current text clears dirty"), out);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -259,7 +290,8 @@ int main()
         && verifyIncrementalChartAllowsIntermediateText(out)
         && verifyDifficultyFieldsDirtyTheirSection(out)
         && verifyOpenAcceptsEmptyInoteSlots(out)
-        && verifyInlineSourceSpanWinsOverLaterLevel(out);
+        && verifyInlineSourceSpanWinsOverLaterLevel(out)
+        && verifyOwnedFieldMutationsAndSavePointRebind(out);
     if (!ok) return 1;
     QTextStream result(stdout);
     result << "Chart workspace checks passed." << Qt::endl;

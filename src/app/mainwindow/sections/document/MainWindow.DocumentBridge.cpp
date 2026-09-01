@@ -11,17 +11,17 @@ QString MainWindow::DocumentSection::documentField(MainWindow::DocumentField fie
 {
     switch (field) {
     case MainWindow::DocumentField::Title:
-        return state_.document_.title;
+        return owner_.applicationServices_.workspace().document().title;
     case MainWindow::DocumentField::Artist:
-        return state_.document_.artist;
+        return owner_.applicationServices_.workspace().document().artist;
     case MainWindow::DocumentField::First:
-        return state_.document_.first;
+        return owner_.applicationServices_.workspace().document().first;
     case MainWindow::DocumentField::Designer:
-        return state_.document_.designer;
+        return owner_.applicationServices_.workspace().document().designer;
     case MainWindow::DocumentField::VideoPath:
-        return state_.document_.videoPath;
+        return owner_.applicationServices_.workspace().document().videoPath;
     case MainWindow::DocumentField::ExtraText:
-        return SimaiDocument::serializeRawFields(state_.document_.extraFields);
+        return SimaiDocument::serializeRawFields(owner_.applicationServices_.workspace().document().extraFields);
     }
     return {};
 }
@@ -30,7 +30,7 @@ QString MainWindow::DocumentSection::difficultyField(
     int difficultyId,
     MainWindow::DifficultyField field) const
 {
-    const SimaiDifficultyData* difficulty = state_.document_.difficulty(difficultyId);
+    const SimaiDifficultyData* difficulty = owner_.applicationServices_.workspace().document().difficulty(difficultyId);
     if (difficulty == nullptr) {
         return {};
     }
@@ -47,65 +47,55 @@ bool MainWindow::DocumentSection::updateDocumentField(
     MainWindow::DocumentField field,
     const QString& value)
 {
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
     if (field == MainWindow::DocumentField::Designer && state_.unifiedDesignerEnabled_) {
-        if (state_.document_.designer == value) {
+        if (workspace.document().designer == value) {
             return false;
         }
         applyUnifiedDesignerName(value);
         return true;
     }
 
-    bool timingChanged = false;
+    if (!workspace.updateDocumentField(
+            static_cast<miacode::v2::ChartWorkspaceDocumentField>(field), value)) {
+        return false;
+    }
+
+    const bool timingChanged = field == MainWindow::DocumentField::First
+        || field == MainWindow::DocumentField::ExtraText;
     switch (field) {
     case MainWindow::DocumentField::Title:
-        if (state_.document_.title == value) return false;
-        state_.document_.title = value;
         if (ui_.titleEdit_ != nullptr) {
             QSignalBlocker blocker(ui_.titleEdit_);
             ui_.titleEdit_->setText(value);
         }
         break;
     case MainWindow::DocumentField::Artist:
-        if (state_.document_.artist == value) return false;
-        state_.document_.artist = value;
         if (ui_.artistEdit_ != nullptr) {
             QSignalBlocker blocker(ui_.artistEdit_);
             ui_.artistEdit_->setText(value);
         }
         break;
     case MainWindow::DocumentField::First:
-        if (state_.document_.first == value) return false;
-        state_.document_.first = value;
         if (ui_.firstEdit_ != nullptr) {
             QSignalBlocker blocker(ui_.firstEdit_);
             ui_.firstEdit_->setText(value);
         }
-        timingChanged = true;
         break;
     case MainWindow::DocumentField::Designer:
-        if (state_.document_.designer == value) return false;
-        state_.document_.designer = value;
         if (ui_.designerEdit_ != nullptr) {
             QSignalBlocker blocker(ui_.designerEdit_);
             ui_.designerEdit_->setText(value);
         }
         break;
     case MainWindow::DocumentField::VideoPath:
-        if (state_.document_.videoPath == value) return false;
-        state_.document_.videoPath = value;
         break;
-    case MainWindow::DocumentField::ExtraText: {
-        QVector<SimaiRawField> fields = SimaiDocument::parseUnmanagedFields(value, true);
-        SimaiDocument::ensureDefaultClockCount(&fields);
-        if (state_.document_.extraFields == fields) return false;
-        state_.document_.extraFields = fields;
-        setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
-        timingChanged = true;
+    case MainWindow::DocumentField::ExtraText:
+        setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
         break;
-    }
     }
 
-    state_.documentDirty_ = true;
+    state_.documentDirty_ = workspace.snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();
     owner_.updateWindowTitle();
@@ -123,38 +113,33 @@ bool MainWindow::DocumentSection::updateDifficultyField(
     MainWindow::DifficultyField field,
     const QString& value)
 {
-    SimaiDifficultyData* difficulty = state_.document_.difficulty(difficultyId);
-    if (difficulty == nullptr) {
-        return false;
-    }
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
     if (field == MainWindow::DifficultyField::Designer && state_.unifiedDesignerEnabled_) {
-        if (difficulty->designer == value && state_.document_.designer == value) {
+        if (workspace.document().designerForSlot(difficultyId) == value
+            && workspace.document().designer == value) {
             return false;
         }
         applyUnifiedDesignerName(value);
         return true;
     }
 
-    switch (field) {
-    case MainWindow::DifficultyField::Level:
-        if (difficulty->level == value) return false;
-        difficulty->level = value;
-        if (difficultyId == state_.activeDifficultyId_ && ui_.difficultyLevelEdit_ != nullptr) {
+    if (!workspace.updateDifficultyField(
+            difficultyId, static_cast<miacode::v2::ChartWorkspaceDifficultyField>(field), value)) {
+        return false;
+    }
+
+    if (difficultyId == state_.activeDifficultyId_) {
+        if (field == MainWindow::DifficultyField::Level && ui_.difficultyLevelEdit_ != nullptr) {
             QSignalBlocker blocker(ui_.difficultyLevelEdit_);
             ui_.difficultyLevelEdit_->setText(value);
         }
-        break;
-    case MainWindow::DifficultyField::Designer:
-        if (difficulty->designer == value) return false;
-        difficulty->designer = value;
-        if (difficultyId == state_.activeDifficultyId_ && ui_.difficultyDesignerEdit_ != nullptr) {
+        if (field == MainWindow::DifficultyField::Designer && ui_.difficultyDesignerEdit_ != nullptr) {
             QSignalBlocker blocker(ui_.difficultyDesignerEdit_);
             ui_.difficultyDesignerEdit_->setText(value);
         }
-        break;
     }
 
-    state_.documentDirty_ = true;
+    state_.documentDirty_ = workspace.snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();
     updateEditorHeader();
@@ -164,12 +149,19 @@ bool MainWindow::DocumentSection::updateDifficultyField(
 
 bool MainWindow::DocumentSection::updateActiveChartText(const QString& value)
 {
-    SimaiDifficultyData* difficulty = state_.document_.difficulty(state_.activeDifficultyId_);
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
+    const SimaiDifficultyData* difficulty =
+        workspace.document().difficulty(state_.activeDifficultyId_);
     if (difficulty == nullptr || difficulty->chart == value) {
         return false;
     }
-    difficulty->chart = value;
-    state_.documentDirty_ = true;
+    if (workspace.snapshot().activeDifficultyId != state_.activeDifficultyId_) {
+        workspace.selectDifficulty(state_.activeDifficultyId_);
+    }
+    if (!workspace.replaceActiveDifficultyChart(value).accepted) {
+        return false;
+    }
+    state_.documentDirty_ = workspace.snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();
     owner_.scheduleTimelineRefresh();
@@ -181,7 +173,7 @@ MainWindow::DocumentSourceReplaceResult MainWindow::DocumentSection::replaceDocu
     const QString& value)
 {
     MainWindow::DocumentSourceReplaceResult result;
-    if (state_.document_.toText() == value) {
+    if (owner_.applicationServices_.workspace().document().toText() == value) {
         result.accepted = true;
         result.revision = owner_.documentValidationSnapshot().revision;
         return result;
@@ -194,7 +186,7 @@ MainWindow::DocumentSourceReplaceResult MainWindow::DocumentSection::replaceDocu
         miacode::qml_ui::preflightDocumentSource(value, miacode::mainwindow::shared::uiValidationLocale());
     result.issues = preflight.issues;
     miacode::qml_ui::DocumentSourceTransactionInput transactionInput;
-    transactionInput.committedSourceText = state_.document_.toText();
+    transactionInput.committedSourceText = owner_.applicationServices_.workspace().document().toText();
     transactionInput.attemptedSourceText = value;
     transactionInput.retainedRevision = owner_.documentValidationSnapshot().revision;
     transactionInput.issues = result.issues;
@@ -209,8 +201,14 @@ MainWindow::DocumentSourceReplaceResult MainWindow::DocumentSection::replaceDocu
 
     // Phase 2: publish the fully preflighted document as one transaction and
     // immediately request a fresh timeline/validation revision.
-    loadDocument(preflight.candidate);
-    state_.documentDirty_ = true;
+    const miacode::v2::ChartWorkspaceResult replaced =
+        owner_.applicationServices_.workspace().replaceSource(value);
+    if (!replaced.accepted) {
+        result.accepted = false;
+        return result;
+    }
+    loadDocument();
+    state_.documentDirty_ = owner_.applicationServices_.workspace().snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();
     owner_.scheduleTimelineRefresh();
@@ -221,11 +219,13 @@ MainWindow::DocumentSourceReplaceResult MainWindow::DocumentSection::replaceDocu
 bool MainWindow::DocumentSection::addDocumentDifficulty(int difficultyId)
 {
     if (!SimaiDocument::isDifficultyId(difficultyId)
-        || state_.document_.difficulty(difficultyId) != nullptr) {
+        || owner_.applicationServices_.workspace().document().difficulty(difficultyId) != nullptr) {
         return false;
     }
-    state_.document_.ensureDifficulty(difficultyId);
-    state_.documentDirty_ = true;
+    if (!owner_.applicationServices_.workspace().addDifficulty(difficultyId)) {
+        return false;
+    }
+    state_.documentDirty_ = owner_.applicationServices_.workspace().snapshot().dirty;
     markCurrentFieldDirty();
     rebuildFieldSidebar();
     const bool selected = switchToDifficultyField(difficultyId);
@@ -245,7 +245,7 @@ QString MainWindow::difficultyField(int difficultyId, DifficultyField field) con
 
 QVector<int> MainWindow::documentDifficultyIds() const
 {
-    return document_.difficultyIds();
+    return applicationServices_.workspace().document().difficultyIds();
 }
 
 int MainWindow::projectLastOpenedDifficultyId() const
@@ -313,7 +313,8 @@ void MainWindow::setLeaveDocumentHandler(std::function<void(std::function<void(b
 
 QString MainWindow::documentSourceText() const
 {
-    return document_.toText();
+    const miacode::v2::ChartWorkspaceSnapshot snapshot = applicationServices_.workspace().snapshot();
+    return snapshot.hasDocument ? snapshot.sourceText : QString();
 }
 
 QString MainWindow::activeDocumentChartText() const
@@ -323,7 +324,7 @@ QString MainWindow::activeDocumentChartText() const
 
 QString MainWindow::documentDifficultyChartText(int difficultyId) const
 {
-    const SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    const SimaiDifficultyData* difficulty = applicationServices_.workspace().document().difficulty(difficultyId);
     return difficulty != nullptr ? difficulty->chart : QString();
 }
 
@@ -417,101 +418,14 @@ bool MainWindow::DocumentSection::applyCommittedQmlDocument(
     bool dirty, quint64 revision, MainWindow::QmlDocumentCommitKind kind,
     bool usedSystemEncoding)
 {
-    if (revision <= owner_.appliedQmlWorkspaceRevision_) return false;
-
-    const SimaiDocument committedDocument = SimaiDocument::fromText(sourceText);
-    const SimaiDocument previousDocument = state_.document_;
-    const QString previousSource = previousDocument.toText();
-    const int previousDifficultyId = state_.activeDifficultyId_;
-    const bool sourceChanged = previousSource != sourceText;
-    const bool timingChanged = previousDocument.first != committedDocument.first
-        || previousDocument.extraFields != committedDocument.extraFields;
-    const SimaiDifficultyData* previousDifficulty =
-        previousDocument.difficulty(activeDifficultyId);
-    const SimaiDifficultyData* committedDifficulty =
-        committedDocument.difficulty(activeDifficultyId);
-    const bool activeChartChanged = previousDifficulty == nullptr
-        || committedDifficulty == nullptr
-        || previousDifficulty->chart != committedDifficulty->chart;
-
-    owner_.appliedQmlWorkspaceRevision_ = revision;
-    switch (kind) {
-    case MainWindow::QmlDocumentCommitKind::Open:
-        applyOpenedDocumentState(
-            filePath,
-            usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
-            committedDocument,
-            false,
-            -1.0);
-        break;
-    case MainWindow::QmlDocumentCommitKind::Structure:
-    case MainWindow::QmlDocumentCommitKind::SourceReplacement:
-        loadDocument(committedDocument);
-        break;
-    case MainWindow::QmlDocumentCommitKind::DifficultySelection:
-        state_.document_ = committedDocument;
-        if (activeDifficultyId > 0 && activeDifficultyId != previousDifficultyId) {
-            switchToDifficultyField(activeDifficultyId);
-        }
-        break;
-    case MainWindow::QmlDocumentCommitKind::SavePoint:
-        state_.document_ = committedDocument;
-        if (filePath != state_.currentFilePath_) {
-            owner_.setCurrentFilePath(filePath, true);
-            owner_.addRecentFilePath(filePath);
-        }
-        resetAutosaveState(sourceText);
-        break;
-    case MainWindow::QmlDocumentCommitKind::Incremental:
-        state_.document_ = committedDocument;
-        populateMetadataPage();
-        if (activeDifficultyId > 0 && committedDifficulty != nullptr) {
-            state_.activeDifficultyId_ = activeDifficultyId;
-            populateDifficultyPage(activeDifficultyId);
-        }
-        rebuildFieldSidebar();
-        if (timingChanged) {
-            owner_.refreshWaveformCache();
-            owner_.refreshTimelineMetadata();
-        } else if (activeChartChanged) {
-            owner_.scheduleTimelineRefresh();
-        }
-        break;
-    }
-
-    // loadDocument may apply a legacy project preference while constructing
-    // hidden widgets. Reassert the committed value so MainWindow cannot
-    // manufacture a second writable document during the transition.
-    state_.document_ = committedDocument;
-    if (activeDifficultyId > 0
-        && state_.document_.difficulty(activeDifficultyId) != nullptr
-        && state_.activeDifficultyId_ != activeDifficultyId) {
-        switchToDifficultyField(activeDifficultyId);
-    }
-    if (kind == MainWindow::QmlDocumentCommitKind::Open
-        || kind == MainWindow::QmlDocumentCommitKind::Structure
-        || kind == MainWindow::QmlDocumentCommitKind::SourceReplacement
-        || (sourceChanged && kind == MainWindow::QmlDocumentCommitKind::SavePoint)) {
-        populateMetadataPage();
-        if (activeDifficultyId > 0) populateDifficultyPage(activeDifficultyId);
-        rebuildFieldSidebar();
-    }
-    state_.documentDirty_ = dirty;
-    state_.currentFieldDirty_ = false;
-    anchorCurrentFieldCleanState();
-    updateDirtyState();
-    // An edit landed: source text moved and the document is not at its save
-    // point. Opening and saving both reach here too, and neither is an edit —
-    // the first leaves the source unchanged relative to what was just loaded,
-    // and both leave the document clean.
-    //
-    // updateDirtyState() runs first because it is what starts the routine
-    // autosave timer; this adds the per-edit half back, which left with the
-    // hidden chart editor that used to drive it.
-    if (sourceChanged && dirty) {
-        noteDocumentEditedForAutosave();
-    }
-    owner_.updateWindowTitle();
+    Q_UNUSED(sourceText);
+    Q_UNUSED(filePath);
+    Q_UNUSED(activeDifficultyId);
+    Q_UNUSED(dirty);
+    Q_UNUSED(revision);
+    Q_UNUSED(kind);
+    Q_UNUSED(usedSystemEncoding);
+    syncRuntimeFromWorkspace();
     return true;
 }
 
@@ -528,15 +442,6 @@ bool MainWindow::applyCommittedQmlDocument(
 void MainWindow::setQmlChartTextHandler(std::function<bool(const QString&)> handler)
 {
     qmlChartTextHandler_ = std::move(handler);
-}
-
-bool MainWindow::applyChartTextThroughWorkspace(const QString& text)
-{
-    // No handler means no QML document owner is attached, which in v2 only
-    // happens before bootstrap finishes. Refuse rather than fall back to the
-    // local copy: a write that does not reach the workspace is lost on the
-    // next commit, which is worse than a reported failure.
-    return qmlChartTextHandler_ ? qmlChartTextHandler_(text) : false;
 }
 
 void MainWindow::setQmlDocumentSaveHandler(

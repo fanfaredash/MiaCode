@@ -132,12 +132,12 @@ void MainWindow::DocumentSection::updateDirtyState()
 bool MainWindow::DocumentSection::currentFieldHasUndoChanges() const
 {
     if (owner_.hasActiveDifficulty()) {
-        const SimaiDifficultyData* difficultyData = state_.document_.difficulty(state_.activeDifficultyId_);
+        const SimaiDifficultyData* difficultyData = owner_.applicationServices_.workspace().document().difficulty(state_.activeDifficultyId_);
         const QString savedLevel = difficultyData != nullptr ? difficultyData->level : QString();
         const bool levelDirty = ui_.difficultyLevelEdit_ != nullptr && ui_.difficultyLevelEdit_->text() != savedLevel;
         // The header's offset field edits the chart-wide &first, not a
         // per-difficulty value.
-        const bool offsetDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->text() != state_.document_.first;
+        const bool offsetDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->text() != owner_.applicationServices_.workspace().document().first;
         // Header designer edit (顶部显示=谱师 mode). While hidden it mirrors the
         // model, so this stays false outside that mode.
         const QString savedDesigner = difficultyData != nullptr ? difficultyData->designer : QString();
@@ -149,9 +149,9 @@ bool MainWindow::DocumentSection::currentFieldHasUndoChanges() const
     }
 
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
-        const bool titleDirty = ui_.titleEdit_ != nullptr && ui_.titleEdit_->text() != state_.document_.title;
-        const bool artistDirty = ui_.artistEdit_ != nullptr && ui_.artistEdit_->text() != state_.document_.artist;
-        const bool designerDirty = ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != state_.document_.designer;
+        const bool titleDirty = ui_.titleEdit_ != nullptr && ui_.titleEdit_->text() != owner_.applicationServices_.workspace().document().title;
+        const bool artistDirty = ui_.artistEdit_ != nullptr && ui_.artistEdit_->text() != owner_.applicationServices_.workspace().document().artist;
+        const bool designerDirty = ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != owner_.applicationServices_.workspace().document().designer;
         bool extraDirty = false;
         if (ui_.metadataExtraEdit_ != nullptr && ui_.metadataExtraEdit_->document() != nullptr) {
             extraDirty = ui_.metadataExtraEdit_->document()->availableUndoSteps() != state_.metadataExtraUndoSaveAnchor_;
@@ -243,7 +243,7 @@ bool MainWindow::DocumentSection::undoDeletedDifficultyField()
         clearDeletedDifficultyUndoState();
         return false;
     }
-    if (state_.document_.difficulty(deletedState.difficultyId) != nullptr) {
+    if (owner_.applicationServices_.workspace().document().difficulty(deletedState.difficultyId) != nullptr) {
         owner_.statusBar()->showMessage(
             QString("Cannot restore %1 because that difficulty already exists.")
                 .arg(SimaiDocument::difficultyName(deletedState.difficultyId))
@@ -252,18 +252,23 @@ bool MainWindow::DocumentSection::undoDeletedDifficultyField()
     }
 
     owner_.stopQtPreviewPlayback(true);
-    SimaiDifficultyData& restoredDifficulty = state_.document_.ensureDifficulty(deletedState.difficultyId);
-    restoredDifficulty = deletedState.difficultyData;
-    restoredDifficulty.id = deletedState.difficultyId;
-    // Keep the "all difficulties share one designer" invariant intact: the
-    // captured snapshot holds whatever name was current at delete time, which
-    // may now be stale if the shared name changed before the undo. Re-seed
-    // from the canonical &des so the restored difficulty doesn't reintroduce a
-    // divergent designer. Mirrors the seed applied when a difficulty is freshly
-    // added (see MainWindow.FrameBootstrap.cpp).
-    if (state_.unifiedDesignerEnabled_) {
-        restoredDifficulty.designer = state_.document_.designer;
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
+    if (!workspace.addDifficulty(deletedState.difficultyId)) {
+        return false;
     }
+    workspace.replaceDifficultyChart(
+        deletedState.difficultyId, deletedState.difficultyData.chart);
+    workspace.updateDifficultyField(
+        deletedState.difficultyId,
+        miacode::v2::ChartWorkspaceDifficultyField::Level,
+        deletedState.difficultyData.level);
+    const QString designer = state_.unifiedDesignerEnabled_
+        ? workspace.document().designer
+        : deletedState.difficultyData.designer;
+    workspace.updateDifficultyField(
+        deletedState.difficultyId,
+        miacode::v2::ChartWorkspaceDifficultyField::Designer,
+        designer);
     state_.validationCacheByDifficulty_.remove(deletedState.difficultyId);
     state_.documentDirty_ = true;
     state_.currentFieldDirty_ = false;

@@ -190,7 +190,7 @@ void MainWindow::PreviewSection::schedulePreviewSubsystemWarmup()
     const QString trackPathSnapshot = state_.lastTrackPath_;
     // Phase 4c — capture &video= override snapshot so the worker
     // pre-resolves the right path (explicit override beats sibling).
-    const QString chartVideoOverrideSnapshot = state_.document_.videoPath;
+    const QString chartVideoOverrideSnapshot = owner_.applicationServices_.workspace().document().videoPath;
     const double playbackRateSnapshot = state_.previewPlaybackRate_;
     schedulePreviewMediaWarmup(generation, chartPathSnapshot, trackPathSnapshot, chartVideoOverrideSnapshot);
     schedulePreviewSfxWarmup(generation, chartPathSnapshot, trackPathSnapshot, audioSettingsSnapshot, playbackRateSnapshot);
@@ -432,7 +432,7 @@ PreviewOutlineVariant MainWindow::PreviewSection::autoPreviewOutlineVariantForCh
     // fall through to JudgeAreaLabeled even though the video does
     // render behind the playfield.
     return miacode::chart_assets::hasChartBackgroundMedia(
-                chartPath, state_.document_.videoPath)
+                chartPath, owner_.applicationServices_.workspace().document().videoPath)
         ? PreviewOutlineVariant::Line
         : PreviewOutlineVariant::JudgeAreaLabeled;
 }

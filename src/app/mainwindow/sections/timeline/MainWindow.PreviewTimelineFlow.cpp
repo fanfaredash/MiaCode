@@ -439,7 +439,7 @@ void MainWindow::TimelineSection::refreshWaveformCache(double knownDurationSecon
 
 bool MainWindow::TimelineSection::hasActiveDifficulty() const
 {
-    return state_.activeDifficultyId_ > 0 && state_.document_.difficulty(state_.activeDifficultyId_) != nullptr;
+    return state_.activeDifficultyId_ > 0 && owner_.applicationServices_.workspace().document().difficulty(state_.activeDifficultyId_) != nullptr;
 }
 
 bool MainWindow::TimelineSection::hasPreviewableChart() const
@@ -464,28 +464,19 @@ QString MainWindow::TimelineSection::activeChartText() const
     if (!hasActiveDifficulty()) {
         return QString();
     }
-    const SimaiDifficultyData* difficultyData = state_.document_.difficulty(state_.activeDifficultyId_);
+    const SimaiDifficultyData* difficultyData = owner_.applicationServices_.workspace().document().difficulty(state_.activeDifficultyId_);
     return difficultyData != nullptr ? difficultyData->chart : QString();
 }
 
 miacode::simai::SimaiTimingMetadata MainWindow::TimelineSection::currentTimingMetadata() const
 {
-    if (ui_.metadataExtraEdit_ != nullptr) {
-        return miacode::simai::buildTimingMetadataFromRawText(ui_.metadataExtraEdit_->toPlainText(), true);
-    }
-    return miacode::simai::buildTimingMetadata(state_.document_);
+    return miacode::simai::buildTimingMetadata(owner_.applicationServices_.workspace().document());
 }
 
 double MainWindow::TimelineSection::parsedRawFirstSeconds(bool* ok) const
 {
-    QString rawValue = state_.document_.first;
-    // The offset field now lives in the difficulty-page header. Read its live
-    // text whenever a difficulty is active so an uncommitted edit reflows the
-    // timeline/preview immediately (it commits to document_.first on field save).
-    if (hasActiveDifficulty() && ui_.firstEdit_ != nullptr) {
-        rawValue = ui_.firstEdit_->text();
-    }
-    return miacode::timeline::offset::parsedFirstSeconds(rawValue, ok);
+    return miacode::timeline::offset::parsedFirstSeconds(
+        owner_.applicationServices_.workspace().document().first, ok);
 }
 
 double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const
@@ -495,11 +486,7 @@ double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const
 
 double MainWindow::TimelineSection::parsedWholeBpm(bool* ok) const
 {
-    const QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
-        ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
-        true
-    );
-    for (const SimaiRawField& field : fields) {
+    for (const SimaiRawField& field : owner_.applicationServices_.workspace().document().extraFields) {
         if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) != 0) {
             continue;
         }
@@ -518,8 +505,8 @@ double MainWindow::TimelineSection::parsedWholeBpm(bool* ok) const
 
 int MainWindow::TimelineSection::parsedClockCount() const
 {
-    const QVector<SimaiRawField> fields = metadataExtraFieldsFromUi(ui_.metadataExtraEdit_, state_.document_.extraFields);
-    const int value = miacode::chart_clock::clockCountFromFields(fields);
+    const int value = miacode::chart_clock::clockCountFromDocument(
+        owner_.applicationServices_.workspace().document());
     return value > 0 ? value : 4;
 }
 
@@ -532,12 +519,13 @@ void MainWindow::TimelineSection::applyLatencyDetectorOffset(double seconds)
 {
     const double normalized = qIsFinite(seconds) ? seconds : 0.0;
     const QString serialized = QString::number(normalized, 'f', 3);
-    state_.document_.first = serialized;
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
+    workspace.updateDocumentField(miacode::v2::ChartWorkspaceDocumentField::First, serialized);
     if (ui_.firstEdit_ != nullptr) {
         QSignalBlocker blocker(ui_.firstEdit_);
         ui_.firstEdit_->setText(serialized);
     }
-    state_.documentDirty_ = true;
+    state_.documentDirty_ = workspace.snapshot().dirty;
     owner_.updateDirtyState();
     resetPreviewTrackTimelineOffsets();
     refreshTimelineMetadata();
@@ -548,23 +536,21 @@ void MainWindow::TimelineSection::applyLatencyDetectorBpm(double bpm)
     if (!qIsFinite(bpm) || bpm <= 0.0) {
         return;
     }
-    QVector<SimaiRawField> fields = metadataExtraFieldsFromUi(ui_.metadataExtraEdit_, state_.document_.extraFields);
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
     const QString serializedBpm = QString::number(bpm, 'f', 3);
-    upsertMetadataField(&fields, QStringLiteral("wholebpm"), serializedBpm);
-    state_.document_.extraFields = fields;
-    owner_.setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
-    state_.documentDirty_ = true;
+    workspace.upsertExtraField(QStringLiteral("wholebpm"), serializedBpm);
+    owner_.setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
+    state_.documentDirty_ = workspace.snapshot().dirty;
     owner_.updateDirtyState();
 }
 
 void MainWindow::TimelineSection::applyLatencyDetectorClockCount(int clockCount)
 {
     const int normalized = qMax(1, clockCount);
-    QVector<SimaiRawField> fields = metadataExtraFieldsFromUi(ui_.metadataExtraEdit_, state_.document_.extraFields);
-    upsertMetadataField(&fields, QStringLiteral("clock_count"), QString::number(normalized));
-    state_.document_.extraFields = fields;
-    owner_.setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
-    state_.documentDirty_ = true;
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
+    workspace.upsertExtraField(QStringLiteral("clock_count"), QString::number(normalized));
+    owner_.setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
+    state_.documentDirty_ = workspace.snapshot().dirty;
     owner_.updateDirtyState();
     refreshTimelineMetadata();
 }
@@ -647,7 +633,7 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
         // than the outgoing chart's.
         owner_.loadProjectAudioPreferences();
     }
-    owner_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.qtPreviewPauseSecond_, state_.document_.videoPath);  // Phase 4c &video= override
+    owner_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.qtPreviewPauseSecond_, owner_.applicationServices_.workspace().document().videoPath);  // Phase 4c &video= override
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setPlayheadSeconds(state_.qtPreviewPauseSecond_, false);
     }
@@ -671,7 +657,7 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
 
 void MainWindow::TimelineSection::updateWindowTitle()
 {
-    QString titleText = state_.document_.title;
+    QString titleText = owner_.applicationServices_.workspace().document().title;
     if (ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.metadataPage_ && ui_.titleEdit_ != nullptr) {
         titleText = ui_.titleEdit_->text();
     }
@@ -1369,8 +1355,8 @@ double MainWindow::latencyDocumentWholeBpm() const
     if (ok && whole > 0.0) {
         return whole;
     }
-    for (const int id : document_.difficultyIds()) {
-        const SimaiDifficultyData* difficultyData = document_.difficulty(id);
+    for (const int id : applicationServices_.workspace().document().difficultyIds()) {
+        const SimaiDifficultyData* difficultyData = applicationServices_.workspace().document().difficulty(id);
         if (difficultyData == nullptr || difficultyData->chart.isEmpty()) {
             continue;
         }
@@ -1385,7 +1371,7 @@ double MainWindow::latencyDocumentWholeBpm() const
 double MainWindow::latencyDocumentOffsetSeconds() const
 {
     bool ok = false;
-    const double value = document_.first.trimmed().toDouble(&ok);
+    const double value = applicationServices_.workspace().document().first.trimmed().toDouble(&ok);
     return ok ? value : 0.0;
 }
 

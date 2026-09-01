@@ -135,7 +135,7 @@
     bool switchToLatencyField();
     bool switchToExportField();
     void activateInitialField();
-    void loadDocument(const SimaiDocument& document);
+    void loadDocument();
     void clearTimelineAndPreview();
     QString activeChartText() const;
     miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;

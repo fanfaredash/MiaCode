@@ -126,7 +126,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
   Default (v2) QML shell document owner: `src/app/v2/ChartWorkspace.{h,cpp}` +
-  `ChartWorkspaceFileService`. `openSource` / `open` load via `SimaiDocument::fromText`;
+  `ChartWorkspaceFileService`. `MainWindow` has no `SimaiDocument`; `loadDocument()`
+  refreshes hidden widgets after `workspace.openSource` / an already-committed
+  workspace transaction. `openSource` / `open` load via `SimaiDocument::fromText`;
   chart-body diagnostics (`SimaiNativeParser::buildValidationReport`) are recorded for
   the validation panel and do not refuse the file. Each editor tab is one save
   unit: Ctrl+S writes the active section (`save(saveSectionDifficultyId())`,
@@ -192,14 +194,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   to the legacy auto-close key. Single setter `PlainCodeEditor::setAutoCompletionEnabled`, apply
   `applyEditorAutoCompletionEnabled`, one checkbox ("自动补全") in `MainWindow.PreferencesDialog.cpp`.
   Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the newline), Esc/keep-typing dismiss.
-- **Offset (`&first`) field location:** the chart-wide timing offset is edited from the
-  **difficulty-page header** (`firstEdit_`, label `difficultyFirstLabel_`, built in
-  `MainWindow.FrameBootstrap.cpp` next to `&lv_N`), NOT the metadata page (the metadata `first`
-  row was removed). One source of truth = `document_.first`, shared with the latency page. While a
-  difficulty is active, `TimelineSection::parsedRawFirstSeconds` reads the live field text (so an
-  uncommitted edit reflows the timeline; `editingFinished` triggers `refreshTimelineMetadata`);
-  it commits to `document_.first` in `applyCurrentFieldToDocument`'s difficulty branch (sets
-  `metadataTimingChanged`).
+- **Offset (`&first`) field location:** QML edits the chart-wide timing offset from the metadata
+  form (`metadataFirst` in `EditorPane.qml`). Owner is `ChartWorkspace::document().first`.
+  Latency writes it with `updateDocumentField(First)`. Timeline and export read
+  `applicationServices_.workspace().document()`. Hidden `firstEdit_` is display only.
+  `applyCurrentFieldToDocument` only clears the widget dirty latch.
 - **Header 顶部显示 preference (offset vs designer):** the header field pair next to Lv is
   switchable — `MainWindow::EditorHeaderTopDisplay` (`Offset` default / `Designer`), state
   `editorHeaderTopDisplay_`, persisted as `ui.editor_header_top_display` (`"offset"`/`"designer"`),
@@ -1020,7 +1019,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - **Entries (2026-06-11, L-A migration — the sidebar item is GONE):** (1) the metadata page's
   "延迟与偏移校准" entry card (built in `MainWindow.FrameBootstrap.cpp` after the metadata card;
   BPM/offset summary label `latencyEntrySummaryLabel_` refreshed by `populateMetadataPage` from
-  `parsedWholeBpm` + `document_.first`) → `switchToLatencyField()`; (2) the Tools menu's
+  `parsedWholeBpm` + workspace `document().first`) → `switchToLatencyField()`; (2) the Tools menu's
   "BPM && 延迟检测" `latencyDetectorAction_` (kept as the keyboard-reachable direct path).
   The page carries a "← 返回谱面信息" bar at the top of `LatencyDetectionPage::buildUi()`
   (`QPushButton#LatencyBackButton`, styled in `UiTheme::latencyDetectionPageStyleSheet`) →

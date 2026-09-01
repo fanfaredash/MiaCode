@@ -396,7 +396,7 @@ IntroBannerSpec MainWindow::ExportSection::buildIntroBannerSpecForDifficulty(int
     // designer/level/difficulty/bpm/jacket) is populated regardless of whether
     // the intro pre-roll itself is enabled — the cover export reuses the payload.
     return buildIntroBannerSpec(
-        owner_.document_,
+        owner_.applicationServices_.workspace().document(),
         difficultyId,
         owner_.currentFilePath_,
         /*addIntro=*/true,
@@ -409,12 +409,12 @@ QVector<TimelineNoteMarker> MainWindow::ExportSection::buildParsedMarkersForDiff
     // document — the export-page launch path for a non-active difficulty.
     // Mirrors the worker-side rebuild (buildVideoExportTaskFromSnapshot) so
     // the seed/dialog sees the same markers the worker will re-derive.
-    const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
+    const SimaiDifficultyData* difficulty = owner_.applicationServices_.workspace().document().difficulty(difficultyId);
     if (difficulty == nullptr || difficulty->chart.trimmed().isEmpty()) {
         return {};
     }
     const miacode::simai::SimaiTimingMetadata timingMetadata =
-        miacode::simai::buildTimingMetadata(owner_.document_);
+        miacode::simai::buildTimingMetadata(owner_.applicationServices_.workspace().document());
     const SimaiNativeParseResult parsedTimeline = SimaiNativeParser::parseForTimeline(
         difficulty->chart,
         timingMetadata);
@@ -422,7 +422,7 @@ QVector<TimelineNoteMarker> MainWindow::ExportSection::buildParsedMarkersForDiff
         return {};
     }
     bool firstOk = false;
-    const double firstSeconds = parsedDocumentFirstSeconds(owner_.document_.first, &firstOk);
+    const double firstSeconds = parsedDocumentFirstSeconds(owner_.applicationServices_.workspace().document().first, &firstOk);
     return shiftedNoteMarkers(
         parsedTimeline.noteMarkers, firstOk ? firstSeconds : 0.0, NonFiniteHandling::Propagate);
 }
@@ -434,7 +434,7 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     // preview source so the normal transport (play/pause/seek) drives it on the
     // export page even though activeDifficultyId_ == 0 (decision D4). The export
     // WYSIWYG forcing (beginExportPreviewSession) is applied separately and stays.
-    const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
+    const SimaiDifficultyData* difficulty = owner_.applicationServices_.workspace().document().difficulty(difficultyId);
     if (owner_.previewCanvas_ == nullptr || difficulty == nullptr
         || difficulty->chart.trimmed().isEmpty()) {
         return;
@@ -450,11 +450,11 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     owner_.exportPreviewAuditionActive_ = true;
 
     const miacode::simai::SimaiTimingMetadata timingMetadata =
-        miacode::simai::buildTimingMetadata(owner_.document_);
+        miacode::simai::buildTimingMetadata(owner_.applicationServices_.workspace().document());
     const SimaiNativeParseResult parseResult =
         SimaiNativeParser::parseForTimeline(difficulty->chart, timingMetadata);
     bool firstOk = false;
-    const double firstSeconds = parsedDocumentFirstSeconds(owner_.document_.first, &firstOk);
+    const double firstSeconds = parsedDocumentFirstSeconds(owner_.applicationServices_.workspace().document().first, &firstOk);
     const double effectiveFirst = firstOk ? firstSeconds : 0.0;
     const TimelinePreviewRefreshState previewState =
         buildTimelinePreviewRefreshState(parseResult, effectiveFirst);
@@ -522,7 +522,7 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     // createEmbeddedVideoExportPanel. The VALUE / BPM still come from the chart.
     owner_.setExportAuditionClockSchedule(
         0,
-        miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+        miacode::chart_clock::clockBpmForChart(owner_.applicationServices_.workspace().document(), difficulty->chart));
 
     // Re-enable the preview play/pause/stop controls: they are difficulty-scoped
     // (hasActiveDifficulty) by default, and the page now has a previewable chart.
@@ -538,7 +538,7 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     const QString installedChart = difficulty->chart;
     owner_.setAuditionSceneReady(
         [this, difficultyId, installedChart]() {
-            const SimaiDifficultyData* current = owner_.document_.difficulty(difficultyId);
+            const SimaiDifficultyData* current = owner_.applicationServices_.workspace().document().difficulty(difficultyId);
             return current != nullptr && current->chart == installedChart;
         },
         [this, difficultyId]() { installExportPreviewAuditionScene(difficultyId); });
@@ -577,7 +577,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     }
     const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
     if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
-        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
+        || owner_.applicationServices_.workspace().document().difficulty(resolvedDifficultyId) == nullptr) {
         if (errorMessage != nullptr) {
             *errorMessage = UiText::text(QStringLiteral("dialog.video_export.error.no_difficulty"));
         }
@@ -609,7 +609,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     VideoExportSnapshot built;
     built.jobId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     built.createdAtUtc = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-    built.chartTextUtf8 = owner_.document_.toText();
+    built.chartTextUtf8 = owner_.applicationServices_.workspace().document().toText();
     built.difficultyId = resolvedDifficultyId;
     built.difficultyName = SimaiDocument::difficultyShortName(resolvedDifficultyId);
     built.originalChartPath = owner_.currentFilePath_;
@@ -623,7 +623,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     // QMediaPlayer on the override path, export's ffmpeg input uses
     // the sibling file (or nothing if no sibling exists).
     built.backgroundMediaPath = miacode::chart_assets::resolveChartVideoPath(
-        owner_.currentFilePath_, owner_.document_.videoPath);
+        owner_.currentFilePath_, owner_.applicationServices_.workspace().document().videoPath);
     if (built.backgroundMediaPath.isEmpty()) {
         built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(owner_.currentFilePath_);
     }
@@ -655,7 +655,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.preset = requestedTask.preset;
     built.sizePreset = requestedTask.sizePreset;
     built.fullRangeExport = requestedTask.fullRangeExport;
-    const QString exportStem = sanitizeExportFileStem(owner_.document_.title, QStringLiteral("out"));
+    const QString exportStem = sanitizeExportFileStem(owner_.applicationServices_.workspace().document().title, QStringLiteral("out"));
     const QString difficultyName = SimaiDocument::difficultyShortName(resolvedDifficultyId).replace(':', '_');
     const QString defaultOutputName = QStringLiteral("%1_%2.mp4").arg(exportStem, difficultyName);
     built.outputPath = resolveVideoExportOutputPath(
@@ -675,7 +675,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.introSoundFileName = requestedTask.introSoundFileName;
     built.introSoundVolume = requestedTask.introSoundVolume;
     built.intro = buildIntroBannerSpec(
-        owner_.document_,
+        owner_.applicationServices_.workspace().document(),
         resolvedDifficultyId,
         owner_.currentFilePath_,
         requestedTask.intro.enabled,
@@ -958,7 +958,8 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     }
 
     owner_.setCurrentFilePath(chartPath);
-    owner_.loadDocument(SimaiDocument::fromText(chartText));
+    owner_.applicationServices_.workspace().openSource(chartText, chartPath);
+    owner_.loadDocument();
     owner_.refreshWaveformCache();
 
     const int difficultyId = difficultyIdFromCliToken(request.difficulty);
@@ -969,9 +970,9 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
         );
     }
 
-    if (owner_.document_.difficulty(difficultyId) == nullptr) {
+    if (owner_.applicationServices_.workspace().document().difficulty(difficultyId) == nullptr) {
         QStringList available;
-        const QVector<int> ids = owner_.document_.difficultyIds();
+        const QVector<int> ids = owner_.applicationServices_.workspace().document().difficultyIds();
         available.reserve(ids.size());
         for (int id : ids) {
             available.append(SimaiDocument::difficultyShortName(id));
@@ -1012,7 +1013,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     }
 
     const QFileInfo chartInfo(owner_.currentFilePath_);
-    const QString exportStem = sanitizeExportFileStem(owner_.document_.title, QStringLiteral("out"));
+    const QString exportStem = sanitizeExportFileStem(owner_.applicationServices_.workspace().document().title, QStringLiteral("out"));
     const QString difficultyName = SimaiDocument::difficultyShortName(difficultyId).replace(':', '_');
     const QString defaultOutputName = QString("%1_%2.mp4")
         .arg(exportStem)
@@ -1097,12 +1098,12 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.showTimestamp = request.showTimestamp;
     task.showObjectStatsHud = request.showObjectStatsHud;
     task.showChartInfoHud = request.showChartInfoHud;
-    task.chartTitle = owner_.document_.title;
-    task.chartArtist = owner_.document_.artist;
-    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {
+    task.chartTitle = owner_.applicationServices_.workspace().document().title;
+    task.chartArtist = owner_.applicationServices_.workspace().document().artist;
+    if (const SimaiDifficultyData* difficulty = owner_.applicationServices_.workspace().document().difficulty(difficultyId)) {
         task.chartDesigner = !difficulty->designer.trimmed().isEmpty()
             ? difficulty->designer
-            : owner_.document_.designer;
+            : owner_.applicationServices_.workspace().document().designer;
         const QString diffShort = SimaiDocument::difficultyShortName(difficultyId);
         const QString diffLevel = difficulty->level.trimmed();
         if (!diffShort.isEmpty() || !diffLevel.isEmpty()) {
@@ -1111,20 +1112,20 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
                 .trimmed();
         }
     } else {
-        task.chartDesigner = owner_.document_.designer;
+        task.chartDesigner = owner_.applicationServices_.workspace().document().designer;
     }
     task.centerDisplayMode = request.centerDisplayMode;
     task.outputPath = outputPath;
     task.previewMaxOutputSeconds = request.previewMaxOutputSeconds;
     task.intro = buildIntroBannerSpec(
-        owner_.document_,
+        owner_.applicationServices_.workspace().document(),
         difficultyId,
         chartPath,
         request.addIntro,
         fullRangeExport);
-    task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
-    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {
-        task.clockBpm = miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart);
+    task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.applicationServices_.workspace().document());
+    if (const SimaiDifficultyData* difficulty = owner_.applicationServices_.workspace().document().difficulty(difficultyId)) {
+        task.clockBpm = miacode::chart_clock::clockBpmForChart(owner_.applicationServices_.workspace().document(), difficulty->chart);
     }
 
     const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, nullptr);

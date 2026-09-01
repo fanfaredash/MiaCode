@@ -443,7 +443,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     task.centerDisplayMode = owner_.previewCenterDisplayMode_;
 
     const QFileInfo chartInfo(owner_.currentFilePath_);
-    QString chartTitle = owner_.document_.title;
+    QString chartTitle = owner_.applicationServices_.workspace().document().title;
     if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.metadataPage_ && owner_.titleEdit_ != nullptr) {
         chartTitle = owner_.titleEdit_->text();
     }
@@ -452,9 +452,9 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     // convention still surface a name in the HUD. The trimmed() gate is the
     // export-side fallback contract (feature-index §3) — keep all five sites
     // aligned.
-    QString chartDesigner = owner_.document_.designer;
+    QString chartDesigner = owner_.applicationServices_.workspace().document().designer;
     QString chartDifficultyLabel;
-    const SimaiDifficultyData* resolvedDifficulty = owner_.document_.difficulty(resolvedDifficultyId);
+    const SimaiDifficultyData* resolvedDifficulty = owner_.applicationServices_.workspace().document().difficulty(resolvedDifficultyId);
     if (resolvedDifficulty != nullptr) {
         if (!resolvedDifficulty->designer.trimmed().isEmpty()) {
             chartDesigner = resolvedDifficulty->designer;
@@ -467,7 +467,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
                 .trimmed();
         }
     }
-    const QString chartArtist = owner_.document_.artist;
+    const QString chartArtist = owner_.applicationServices_.workspace().document().artist;
     task.chartTitle = chartTitle;
     task.chartArtist = chartArtist;
     task.chartDifficultyLabel = chartDifficultyLabel;
@@ -485,7 +485,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     task.intro = buildIntroBannerSpecForDifficulty(resolvedDifficultyId);
     // Seed clock_count so the dialog's "Enable clock_count (N)" checkbox shows the
     // chart's value; the checkbox then gates whether it reaches the export.
-    task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
+    task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.applicationServices_.workspace().document());
     return task;
 }
 
@@ -765,7 +765,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTaskPublic(int di
 bool MainWindow::ExportSection::startQmlExportAudition(int difficultyId, const VideoExportTask& visualTask)
 {
     if (!SimaiDocument::isDifficultyId(difficultyId)
-        || owner_.document_.difficulty(difficultyId) == nullptr
+        || owner_.applicationServices_.workspace().document().difficulty(difficultyId) == nullptr
         || owner_.previewCanvas_ == nullptr) {
         return false;
     }
@@ -794,13 +794,13 @@ bool MainWindow::ExportSection::startQmlExportAudition(int difficultyId, const V
         owner_.previewCanvas_->setShowObjectStatsHud(visualTask.showObjectStatsHud);
         owner_.previewCanvas_->setShowChartInfoHud(visualTask.showChartInfoHud);
     }
-    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
+    if (const SimaiDifficultyData* difficulty = owner_.applicationServices_.workspace().document().difficulty(difficultyId);
         difficulty != nullptr) {
         owner_.setExportAuditionClockSchedule(
             visualTask.clockCountEnabled
-                ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
+                ? miacode::chart_clock::clockCountFromDocument(owner_.applicationServices_.workspace().document())
                 : 0,
-            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+            miacode::chart_clock::clockBpmForChart(owner_.applicationServices_.workspace().document(), difficulty->chart));
     }
     owner_.refreshExportIntroState();
     return true;

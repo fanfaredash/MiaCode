@@ -99,7 +99,7 @@ int MainWindow::resolveToolsMenuExportDifficultyId() const
     if (qmlExportSession_ != nullptr && qmlExportSession_->pageSessionActive()) {
         const int selectedDifficultyId = qmlExportSession_->selectedDifficultyId();
         if (SimaiDocument::isDifficultyId(selectedDifficultyId)
-            && document_.difficulty(selectedDifficultyId) != nullptr) {
+            && applicationServices_.workspace().document().difficulty(selectedDifficultyId) != nullptr) {
             return selectedDifficultyId;
         }
     }

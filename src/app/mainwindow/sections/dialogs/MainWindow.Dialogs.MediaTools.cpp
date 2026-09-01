@@ -772,7 +772,7 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     }
 
     const QString videoPath = miacode::chart_assets::resolveChartVideoPath(
-        owner_.currentFilePath_, owner_.document_.videoPath);
+        owner_.currentFilePath_, owner_.applicationServices_.workspace().document().videoPath);
     if (!QFileInfo::exists(videoPath)) {
         requests->postNotice(
             miacode::v2::NoticeSeverity::Warning, title,
@@ -940,7 +940,7 @@ MainWindow::DialogsSection::MediaBlankPaths MainWindow::DialogsSection::resolveM
     paths.inputPath = paths.isTrack
         ? QDir(chartDirPath).filePath(QStringLiteral("track.mp3"))
         : miacode::chart_assets::resolveChartVideoPath(
-              owner_.currentFilePath_, owner_.document_.videoPath);
+              owner_.currentFilePath_, owner_.applicationServices_.workspace().document().videoPath);
     const QFileInfo inputInfo(paths.inputPath);
     paths.inputName = paths.isTrack ? QStringLiteral("track.mp3") : inputInfo.fileName();
     paths.backupName = paths.isTrack

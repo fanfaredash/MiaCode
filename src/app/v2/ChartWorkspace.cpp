@@ -280,6 +280,51 @@ bool ChartWorkspace::unifyDesigners(const QString& canonicalName)
     return true;
 }
 
+bool ChartWorkspace::setDesignerForSlot(int difficultyId, const QString& name)
+{
+    if (!hasDocument_ || !SimaiDocument::isDifficultyId(difficultyId)) return false;
+    if (document_.designerForSlot(difficultyId) == name) return false;
+    document_.setDesignerForSlot(difficultyId, name);
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::upsertExtraField(const QString& key, const QString& value)
+{
+    if (!hasDocument_ || key.trimmed().isEmpty()) return false;
+    QVector<SimaiRawField> fields = document_.extraFields;
+    bool found = false;
+    for (SimaiRawField& field : fields) {
+        if (field.key.compare(key, Qt::CaseInsensitive) != 0) continue;
+        if (field.value == value) return false;
+        field.value = value;
+        found = true;
+        break;
+    }
+    if (!found) {
+        fields.append({key, value});
+    }
+    SimaiDocument::ensureDefaultClockCount(&fields);
+    if (fields == document_.extraFields) return false;
+    document_.extraFields = std::move(fields);
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::replaceDifficultyChart(int difficultyId, const QString& chartText)
+{
+    if (!hasDocument_) return false;
+    SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    if (difficulty == nullptr) return false;
+    if (difficulty->chart == chartText) return false;
+    difficulty->chart = chartText;
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
 bool ChartWorkspace::markSaved(const QString& filePath)
 {
     if (!hasDocument_) return false;
@@ -317,6 +362,16 @@ ChartWorkspaceResult ChartWorkspace::revertDifficultyChart(int difficultyId)
     difficulty->chart = saved->chart;
     refreshSourceAndDirty();
     return commit();
+}
+
+bool ChartWorkspace::rebindSavePoint(const QString& savedSourceText)
+{
+    if (!hasDocument_) return false;
+    savedSourceText_ = savedSourceText;
+    savedDocument_ = SimaiDocument::fromText(savedSourceText);
+    dirty_ = sourceText_ != savedSourceText_;
+    commit();
+    return true;
 }
 
 QVector<int> ChartWorkspace::computeDirtyDifficultyIds() const

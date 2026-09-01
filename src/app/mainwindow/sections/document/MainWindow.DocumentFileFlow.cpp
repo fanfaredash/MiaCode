@@ -280,7 +280,8 @@ void MainWindow::DocumentSection::onNewFile()
     // Install the new path first so its file/title consumers receive one
     // coherent snapshot rather than the outgoing chart path.
     owner_.setCurrentFilePath(targetPath);
-    loadDocument(newDocument);
+    owner_.applicationServices_.workspace().openSource(newDocument.toText(), targetPath);
+    loadDocument();
     owner_.clearValidationCache();
     state_.currentEncoding_ = TextEncoding::Utf8;
     owner_.statusBar()->showMessage(QString("Created: %1").arg(targetPath));
@@ -715,7 +716,15 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
         }
     }
 
-    loadDocument(document);
+    miacode::v2::ChartWorkspace& workspace = owner_.applicationServices_.workspace();
+    const QString source = document.toText();
+    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace.snapshot();
+    if (!snapshot.hasDocument
+        || snapshot.filePath != normalizedPath
+        || workspace.document().toText() != source) {
+        workspace.openSource(source, normalizedPath);
+    }
+    loadDocument();
     owner_.refreshWaveformCache(knownTrackDurationSeconds);
     if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
         schedulePendingAbnormalExitBackupRestore();
@@ -726,5 +735,65 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
                 .arg(QFileInfo(normalizedPath).fileName())
                 .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
         );
+    }
+}
+
+void MainWindow::DocumentSection::syncRuntimeFromWorkspace()
+{
+    const miacode::v2::ChartWorkspaceSnapshot snapshot =
+        owner_.applicationServices_.workspace().snapshot();
+    if (snapshot.revision <= owner_.appliedQmlWorkspaceRevision_) {
+        return;
+    }
+    owner_.appliedQmlWorkspaceRevision_ = snapshot.revision;
+
+    if (!snapshot.hasDocument) {
+        state_.documentDirty_ = false;
+        state_.currentFieldDirty_ = false;
+        state_.activeDifficultyId_ = 0;
+        clearTimelineAndPreview();
+        return;
+    }
+
+    const bool pathChanged = snapshot.filePath != state_.currentFilePath_;
+    if (pathChanged) {
+        owner_.setCurrentFilePath(snapshot.filePath, true);
+        if (!snapshot.filePath.isEmpty()) {
+            owner_.addRecentFilePath(snapshot.filePath);
+            miacode::crash_recovery::prepareForChart(snapshot.filePath);
+            const bool previousSessionAbandoned =
+                miacode::crash_recovery::consumeAbandonedSessionChartMatch(snapshot.filePath);
+            const QString crashRecoveryPath =
+                miacode::crash_recovery::crashRecoveryFilePath(snapshot.filePath);
+            const bool crashRecoveryFileExists =
+                !crashRecoveryPath.isEmpty() && QFileInfo(crashRecoveryPath).exists();
+            if (previousSessionAbandoned || crashRecoveryFileExists) {
+                state_.pendingAbnormalExitBackupRestorePath_ =
+                    latestBackupRestoreFilePathForChart(snapshot.filePath);
+                state_.pendingAbnormalExitBackupRestoreChartPath_ =
+                    state_.pendingAbnormalExitBackupRestorePath_.isEmpty()
+                        ? QString()
+                        : snapshot.filePath;
+                if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
+                    schedulePendingAbnormalExitBackupRestore();
+                }
+            }
+        }
+        owner_.refreshWaveformCache();
+        resetAutosaveState(snapshot.sourceText);
+    }
+
+    state_.documentDirty_ = snapshot.dirty;
+    state_.currentFieldDirty_ = false;
+    if (snapshot.dirty) {
+        noteDocumentEditedForAutosave();
+    }
+    const bool difficultyChanged =
+        SimaiDocument::isDifficultyId(snapshot.activeDifficultyId)
+        && snapshot.activeDifficultyId != state_.activeDifficultyId_;
+    if (difficultyChanged) {
+        switchToDifficultyField(snapshot.activeDifficultyId);
+    } else {
+        owner_.scheduleTimelineRefresh();
     }
 }

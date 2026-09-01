@@ -126,7 +126,7 @@ void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloa
         owner_.currentFilePath_,
         owner_.lastTrackPath_,
         qMax(0.0, owner_.qtPreviewPauseSecond_),
-        owner_.document_.videoPath
+        owner_.applicationServices_.workspace().document().videoPath
     );
     for (int i = 0; i < 4; ++i) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
@@ -135,115 +135,33 @@ void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloa
 
 void MainWindow::DialogsSection::onPreviewAudioSettings()
 {
-    MC_OP("MainWindow::DialogsSection::onPreviewAudioSettings");
-    openPreviewSettingsDialog(
-        true,
-        false,
-        UiText::text(QStringLiteral("dialog.audio_settings.title"))
-    );
 }
+
 
 void MainWindow::DialogsSection::onPreviewVideoSettings()
 {
-    MC_OP("MainWindow::DialogsSection::onPreviewVideoSettings");
-    openPreviewSettingsDialog(
-        false,
-        true,
-        UiText::text(QStringLiteral("dialog.video_settings.title"))
-    );
 }
+
 
 void MainWindow::DialogsSection::onAbout()
 {
-    MC_OP("MainWindow::DialogsSection::onAbout");
-    QString buildType = "Release";
-#ifndef NDEBUG
-    buildType = "Debug";
-#endif
-    const QString platform = QString("%1 / %2 / %3")
-        .arg(QSysInfo::productType())
-        .arg(QSysInfo::currentCpuArchitecture())
-        .arg(QSysInfo::buildAbi());
+}
 
-    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(UiText::text(QStringLiteral("action.about")));
-    dialog.setModal(true);
-    dialog.setMinimumWidth(500);
-    dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
-    auto* rootLayout = new QVBoxLayout(&dialog);
-    rootLayout->setContentsMargins(14, 14, 14, 12);
-    rootLayout->setSpacing(10);
+void MainWindow::DialogsSection::onSkinSettings()
+{
+}
 
-    auto* card = new QFrame(&dialog);
-    card->setObjectName("AboutCard");
-    auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(16, 14, 16, 14);
-    cardLayout->setSpacing(10);
+void MainWindow::DialogsSection::onReadTitleFromTrack()
+{
+}
 
-    auto* titleRow = new QHBoxLayout();
-    titleRow->setSpacing(10);
-    auto* iconLabel = new QLabel(card);
-    iconLabel->setObjectName("AboutIcon");
-    iconLabel->setFixedSize(64, 64);
-    QPixmap appIcon = QIcon(":/icons/app.png").pixmap(48, 48);
-    if (!appIcon.isNull()) {
-        iconLabel->setPixmap(appIcon);
-        iconLabel->setAlignment(Qt::AlignCenter);
-    }
-    owner_.aboutIconLabel_ = iconLabel;
-    iconLabel->installEventFilter(&owner_);
-    titleRow->addWidget(iconLabel, 0, Qt::AlignVCenter);
+void MainWindow::DialogsSection::onReadArtistFromTrack()
+{
+}
 
-    auto* titleTextCol = new QVBoxLayout();
-    titleTextCol->setSpacing(4);
-    auto* titleLabel = new QLabel("MiaCode", card);
-    titleLabel->setObjectName("AboutTitle");
-    QString displayVersion = QString::fromLatin1(MIACODE_DISPLAY_VERSION_STRING).trimmed();
-    if (displayVersion.isEmpty()) {
-        displayVersion = QCoreApplication::applicationVersion().trimmed();
-    }
-    if (displayVersion.isEmpty()) {
-        displayVersion = QStringLiteral("0.0.0");
-    }
-    auto* versionLabel = new QLabel(QStringLiteral("v%1").arg(displayVersion), card);
-    versionLabel->setObjectName("AboutVersion");
-    titleTextCol->addWidget(titleLabel, 0, Qt::AlignLeft);
-    titleTextCol->addWidget(versionLabel, 0, Qt::AlignLeft);
-    titleRow->addLayout(titleTextCol, 0);
-    titleRow->addStretch(1);
-    cardLayout->addLayout(titleRow);
-
-    auto* infoGrid = new QGridLayout();
-    infoGrid->setHorizontalSpacing(12);
-    infoGrid->setVerticalSpacing(6);
-    auto addRow = [card, infoGrid](int row, const QString& key, const QString& value) {
-        auto* k = new QLabel(key, card);
-        k->setObjectName("AboutKey");
-        auto* v = new QLabel(value, card);
-        v->setObjectName("AboutValue");
-        v->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        infoGrid->addWidget(k, row, 0);
-        infoGrid->addWidget(v, row, 1);
-    };
-    addRow(0, UiText::text(QStringLiteral("about.platform")), platform);
-    addRow(1, UiText::text(QStringLiteral("about.build_type")), buildType);
-    cardLayout->addLayout(infoGrid);
-    rootLayout->addWidget(card);
-
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
-    UiDialogs::localizeButtonBox(buttonBox);
-    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
-    dialog.exec();
-    if (owner_.aboutIconLabel_ != nullptr) {
-        owner_.aboutIconLabel_->removeEventFilter(&owner_);
-    }
-    owner_.aboutIconLabel_.clear();
-    owner_.invalidStarPreviewAboutClickCount_ = 0;
-    owner_.invalidStarPreviewAboutClickElapsed_.invalidate();
+void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
+{
 }
 
 void MainWindow::DialogsSection::showMediaOperationCompleteDialog(
