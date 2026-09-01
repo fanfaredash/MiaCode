@@ -19,6 +19,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         title: UiText.text("谱面")
+        sidebarTitle: true
         showMore: false
     }
 

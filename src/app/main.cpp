@@ -21,6 +21,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFont>
+#include <QFontInfo>
 #include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -580,15 +581,19 @@ int main(int argc, char* argv[])
         }
         if (!cjkUiFamilies.isEmpty()) {
             QFont cjkUiFont;
+            bool matched = false;
             for (const QString& family : cjkUiFamilies) {
                 cjkUiFont.setFamily(family);
-                if (cjkUiFont.family().compare(family, Qt::CaseInsensitive) == 0) {
+                if (QFontInfo(cjkUiFont).family().compare(family, Qt::CaseInsensitive) == 0) {
+                    matched = true;
                     break;
                 }
             }
-            cjkUiFont.setStyleStrategy(QFont::PreferAntialias);
-            cjkUiFont.setHintingPreference(QFont::PreferNoHinting);
-            app.setFont(cjkUiFont);
+            if (matched) {
+                cjkUiFont.setStyleStrategy(QFont::PreferAntialias);
+                cjkUiFont.setHintingPreference(QFont::PreferNoHinting);
+                app.setFont(cjkUiFont);
+            }
         }
     }
     logStartupStage("ui_font_ready");

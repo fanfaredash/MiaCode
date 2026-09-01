@@ -431,6 +431,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 ## 8. Video export — `src/tools/video_export/`
 
 - Dialogs: `VideoExportDialog.{h,cpp}`, `BatchVideoExportDialog.{h,cpp}`, `VideoExportPreferences.h`.
+- UI host (v2 QML, default): `src/app/qml_ui/export/ExportVideoPage.qml` + `QmlExportSession`.
+  Settings tabs are 输出 / 视频 / 游戏 / 皮肤 / 片头. Single-export range controls live on the
+  Output tab; batch omits the file path and the range selector.
 - Controller + pipeline: `VideoExportController.{h,cpp}` (⚠ ~5000 lines — see god-file list),
   `VideoExportQuickRenderBackend.*`, `VideoExportAudioRenderPlan.*`, `VideoExportAudioBackend.h`,
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,

@@ -483,9 +483,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   settings through the same owner-live state. Each writes a selected `PreviewHudFontArea` through
   `setPreviewHudCustomFontPath` and must call `PreviewRuntime::update()` so the visible preview
   rebuilds its font metrics immediately. Both import flows use `UiRequestService`; do not recreate a
-  Widgets picker or a deleted dialog. In v2, single and batch modes use one settings-tab
+  Widgets picker or a deleted dialog.   In v2, single and batch modes use one settings-tab
   layout: batch-only difficulty/output-directory/chart-directory inputs sit above it, while the
-  single-file output path and range tab remain single-export-only. Never replace those batch
+  single-file output path and range selector remain single-export-only on the Output tab. Never replace those batch
   settings with instructional text that sends the user to the other mode. The former
   `BatchVideoExportDialog` is deleted.
 - The shared Intro tab exposes the selected intro-sound basename and its independent 0..2 volume in

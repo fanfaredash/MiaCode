@@ -486,7 +486,7 @@ bool verifyVisualRangeSelectorDragsTheSharedPreview(QTextStream& err)
                  QStringLiteral("the export range harness exposes its export and preview sessions"), err)) {
         return false;
     }
-    session->setProperty("settingsTab", QStringLiteral("range"));
+    session->setProperty("settingsTab", QStringLiteral("output"));
     QCoreApplication::processEvents();
 
     auto* selector = root->findChild<QQuickItem*>(QStringLiteral("exportRangeSelector"));
@@ -585,7 +585,7 @@ bool verifyVisualRangeSelectorSeparatesPointerTargetsAndLayout(QTextStream& err)
                  QStringLiteral("the pointer-target harness exposes its export and preview sessions"), err)) {
         return false;
     }
-    session->setProperty("settingsTab", QStringLiteral("range"));
+    session->setProperty("settingsTab", QStringLiteral("output"));
     QCoreApplication::processEvents();
 
     auto* selector = root->findChild<QQuickItem*>(QStringLiteral("exportRangeSelector"));

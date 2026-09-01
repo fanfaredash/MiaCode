@@ -25,6 +25,7 @@ QtObject {
             disabled: "#6E6E6E",
             editor: "#BBBEBF",
             lineNumber: "#858889",
+            heading: "#FFFFFF",
             onAccent: "#FFFFFF"
         },
         accent: {
@@ -59,6 +60,7 @@ QtObject {
     // 行距, in the pixels of bottom margin each text block carries.
     readonly property int codeBlockSpacing: preferences ? preferences.editorBlockSpacing : 0
     readonly property int uiFontSize: preferences ? preferences.fontSize : 13
+    readonly property int headingFontSize: uiFontSize + 1
     readonly property int secondaryFontSize: uiFontSize - 1
     readonly property int captionFontSize: uiFontSize - 3
 
@@ -73,7 +75,8 @@ QtObject {
     function surfaceColor(token, baseColor) {
         if (!appBackground || !appBackground.imageReadable || token === "card")
             return baseColor
-        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, overlayAlpha(token))
+        const c = Qt.color(baseColor)
+        return Qt.rgba(c.r, c.g, c.b, overlayAlpha(token))
     }
 
     // Geometry aligned with v1 UiTheme dialog* sheets (colors stay local).
@@ -89,6 +92,9 @@ QtObject {
     // control but never the content, so ChromeRow spends this on padding to
     // keep text off the highlight edge.
     readonly property int rowPaddingX: 10
+    readonly property int activityButtonSize: 48
+    readonly property int activityIconSize: 24
+    readonly property int activityIconTop: Math.round((activityButtonSize - activityIconSize) * 0.5)
 
     // Per-difficulty swatch, matching v1 difficultyColor() in MainWindowShared.
     readonly property var difficultyColors: [

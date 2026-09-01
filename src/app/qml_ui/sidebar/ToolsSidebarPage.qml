@@ -17,6 +17,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         title: UiText.text("工具")
+        sidebarTitle: true
         showMore: false
     }
 

@@ -10,7 +10,7 @@ Rectangle {
     signal viewRequested(string viewId)
     signal settingsRequested()
 
-    implicitWidth: 48
+    implicitWidth: Theme.activityButtonSize
     color: Theme.surfaceColor("panel", Theme.colors.background.editor)
 
     Column {
@@ -54,16 +54,16 @@ Rectangle {
         required property string tooltip
         property bool selected: false
 
-        width: 48
-        height: 48
+        width: Theme.activityButtonSize
+        height: Theme.activityButtonSize
         hoverEnabled: true
 
         contentItem: ControlsImpl.IconImage {
             anchors.centerIn: parent
-            width: 24
-            height: 24
+            width: Theme.activityIconSize
+            height: Theme.activityIconSize
             source: button.iconSource
-            sourceSize: Qt.size(24, 24)
+            sourceSize: Qt.size(Theme.activityIconSize, Theme.activityIconSize)
             color: button.selected || button.hovered
                    ? Theme.colors.text.active
                    : Theme.colors.text.secondary
@@ -82,7 +82,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 width: 2
-                height: 24
+                height: Theme.activityIconSize
                 radius: 1
                 visible: button.selected
                 color: Theme.colors.accent.primary

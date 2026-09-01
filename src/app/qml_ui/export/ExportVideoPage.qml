@@ -195,18 +195,13 @@ Rectangle {
             Row {
                 spacing: 4
                 Repeater {
-                    model: {
-                        const tabs = [
-                            { id: "output", label: UiText.text("输出") },
-                            { id: "video", label: UiText.text("视频") },
-                            { id: "gameplay", label: UiText.text("游戏") },
-                            { id: "skin", label: UiText.text("皮肤") },
-                            { id: "intro", label: UiText.text("片头") }
-                        ]
-                        if (root.session && root.session.activeTab === "export")
-                            tabs.push({ id: "range", label: UiText.text("导出区间") })
-                        return tabs
-                    }
+                    model: [
+                        { id: "output", label: UiText.text("输出") },
+                        { id: "video", label: UiText.text("视频") },
+                        { id: "gameplay", label: UiText.text("游戏") },
+                        { id: "skin", label: UiText.text("皮肤") },
+                        { id: "intro", label: UiText.text("片头") }
+                    ]
                     delegate: AppTab {
                         required property var modelData
                         panelTab: true
@@ -230,13 +225,17 @@ Rectangle {
                     width: parent.width
                     spacing: 12
 
-                    // Output
-                    GridLayout {
+                    // Output (single-export range lives on this tab)
+                    ColumnLayout {
                         visible: root.session && root.session.settingsTab === "output"
-                        columns: 2
-                        columnSpacing: 12
-                        rowSpacing: 10
+                        spacing: 12
                         Layout.fillWidth: true
+
+                        GridLayout {
+                            columns: 2
+                            columnSpacing: 12
+                            rowSpacing: 10
+                            Layout.fillWidth: true
 
                         Text {
                             visible: root.session && root.session.activeTab === "export"
@@ -337,6 +336,74 @@ Rectangle {
                             model: root.session ? root.session.sizePresetOptions : []
                             currentIndex: root.session ? root.session.sizePresetIndex : 0
                             onActivated: if (root.session) root.session.sizePresetIndex = currentIndex
+                        }
+                        }
+
+                        ColumnLayout {
+                            visible: root.session && root.session.activeTab === "export"
+                            spacing: 10
+                            Layout.fillWidth: true
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            height: 1
+                            color: Theme.colors.border.normal
+                        }
+
+                        Text {
+                            text: UiText.text("导出区间")
+                            color: Theme.colors.text.active
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.uiFontSize
+                            font.bold: true
+                        }
+
+                        ExportRangeSelector {
+                            objectName: "exportRangeSelector"
+                            Layout.fillWidth: true
+                            exportSession: root.session
+                            previewSession: root.previewSession
+                        }
+                        RowLayout {
+                            Text {
+                                text: UiText.text("开始")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 80
+                            }
+                            AppTextField {
+                                id: exportRangeStartField
+
+                                objectName: "exportRangeStartField"
+                                Layout.preferredWidth: 100
+                                text: root.session ? root.session.exportStartSeconds.toFixed(3) : "0"
+                                onEditingFinished: if (root.session) text = root.session.setExportStartText(text)
+                            }
+                        }
+                        RowLayout {
+                            Text {
+                                text: UiText.text("结束")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                Layout.preferredWidth: 80
+                            }
+                            AppTextField {
+                                id: exportRangeEndField
+
+                                objectName: "exportRangeEndField"
+                                Layout.preferredWidth: 100
+                                text: root.session ? root.session.exportEndSeconds.toFixed(3) : "0"
+                                onEditingFinished: if (root.session) text = root.session.setExportEndText(text)
+                            }
+                        }
+                        Text {
+                            text: root.session
+                                  ? UiText.text("总时长 %1 s").arg(root.session.contentDurationSeconds.toFixed(3))
+                                  : ""
+                            color: Theme.colors.text.secondary
+                            font.family: Theme.uiFont
+                        }
                         }
                     }
 
@@ -903,59 +970,6 @@ Rectangle {
                                 onClicked: if (root.session) root.session.resetIntroFonts()
                             }
                             Item { Layout.fillWidth: true }
-                        }
-                    }
-
-                    // Range
-                    ColumnLayout {
-                        visible: root.session && root.session.activeTab === "export"
-                                 && root.session.settingsTab === "range"
-                        spacing: 10
-                        Layout.fillWidth: true
-                        ExportRangeSelector {
-                            objectName: "exportRangeSelector"
-                            Layout.fillWidth: true
-                            exportSession: root.session
-                            previewSession: root.previewSession
-                        }
-                        RowLayout {
-                            Text {
-                                text: UiText.text("开始")
-                                color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
-                                Layout.preferredWidth: 80
-                            }
-                            AppTextField {
-                                id: exportRangeStartField
-
-                                objectName: "exportRangeStartField"
-                                Layout.preferredWidth: 100
-                                text: root.session ? root.session.exportStartSeconds.toFixed(3) : "0"
-                                onEditingFinished: if (root.session) text = root.session.setExportStartText(text)
-                            }
-                        }
-                        RowLayout {
-                            Text {
-                                text: UiText.text("结束")
-                                color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
-                                Layout.preferredWidth: 80
-                            }
-                            AppTextField {
-                                id: exportRangeEndField
-
-                                objectName: "exportRangeEndField"
-                                Layout.preferredWidth: 100
-                                text: root.session ? root.session.exportEndSeconds.toFixed(3) : "0"
-                                onEditingFinished: if (root.session) text = root.session.setExportEndText(text)
-                            }
-                        }
-                        Text {
-                            text: root.session
-                                  ? UiText.text("总时长 %1 s").arg(root.session.contentDurationSeconds.toFixed(3))
-                                  : ""
-                            color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
                         }
                     }
                 }
