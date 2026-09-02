@@ -18,9 +18,14 @@ namespace miacode::v2 {
 //
 // Stage 3.5 item 2. The appearance VALUES already left for
 // PreviewAppearanceState; what stays here is everything that needs the running
-// preview — the playhead, the scrub gesture, the rate, the QSG runtime and
+// preview — the playhead and rate as read-only state, the QSG runtime and
 // stage-media host QML binds to, the skin/outline catalog on disk, and the
 // audio mixer.
+//
+// Stage 4.5 step B removed the transport commands (toggle/stop/seek/scrub/
+// rate-set) that used to live here: PlaybackControl is the one owner of
+// transport now, and QmlPreviewModel calls it directly. What remains below is
+// read-only observation plus the non-transport preview responsibilities.
 //
 // The window's `shell*` prefixes are v1 QuickShell controller history and are
 // not carried forward.
@@ -32,30 +37,17 @@ class PreviewSurface
 public:
     virtual ~PreviewSurface() = default;
 
-    // ---- transport ----
+    // ---- transport (read-only; commands live on PlaybackControl) ----
     virtual bool playing() const = 0;
     virtual PlaybackTransportState playbackTransportState() const = 0;
     virtual double positionSeconds() const = 0;
     virtual double durationSeconds() const = 0;
     // Negative when 添加片头 is on: the intro occupies time before chart zero.
     virtual double lowerBoundSeconds() const = 0;
-    virtual void togglePlayback() = 0;
-    virtual void stop() = 0;
-    virtual void seek(double second) = 0;
-
-    // A scrub is a gesture, not a seek: it suspends the follow behaviour for
-    // its duration, so it has to be bracketed rather than inferred from a
-    // stream of positions.
-    virtual void beginScrub() = 0;
-    virtual void updateScrub(double second, bool centerView) = 0;
-    virtual void endScrub(double second, bool centerView) = 0;
 
     // The numeric rate is the domain observation; the label is presentation
     // only and must not be parsed by transport consumers.
     virtual double playbackRate() const = 0;
-    virtual void setPlaybackRate(double rate) = 0;
-    // Steps through the preset rate ladder; direction is -1 or +1.
-    virtual void nudgePlaybackRate(int direction) = 0;
     virtual QString playbackRateLabel() const = 0;
 
     // ---- what QML binds to ----

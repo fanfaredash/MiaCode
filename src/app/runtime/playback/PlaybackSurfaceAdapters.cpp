@@ -41,65 +41,9 @@ double PlaybackPreviewSurfaceAdapter::lowerBoundSeconds() const
     return coordinator_ != nullptr ? coordinator_->lowerBoundSeconds() : 0.0;
 }
 
-void PlaybackPreviewSurfaceAdapter::togglePlayback()
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->togglePlayback();
-    }
-}
-
-void PlaybackPreviewSurfaceAdapter::stop()
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->stop();
-    }
-}
-
-void PlaybackPreviewSurfaceAdapter::seek(double second)
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->seek(second);
-    }
-}
-
-void PlaybackPreviewSurfaceAdapter::beginScrub()
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->beginScrub();
-    }
-}
-
-void PlaybackPreviewSurfaceAdapter::updateScrub(double second, bool centerView)
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->updateScrub(second, centerView);
-    }
-}
-
-void PlaybackPreviewSurfaceAdapter::endScrub(double second, bool centerView)
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->endScrub(second, centerView);
-    }
-}
-
 double PlaybackPreviewSurfaceAdapter::playbackRate() const
 {
     return coordinator_ != nullptr ? coordinator_->playbackRate() : 1.0;
-}
-
-void PlaybackPreviewSurfaceAdapter::setPlaybackRate(double rate)
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->setPlaybackRate(rate);
-    }
-}
-
-void PlaybackPreviewSurfaceAdapter::nudgePlaybackRate(int direction)
-{
-    if (coordinator_ != nullptr) {
-        coordinator_->nudgePlaybackRate(direction);
-    }
 }
 
 QString PlaybackPreviewSurfaceAdapter::playbackRateLabel() const

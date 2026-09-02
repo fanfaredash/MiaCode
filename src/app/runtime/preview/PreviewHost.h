@@ -26,15 +26,7 @@ public:
     double positionSeconds() const override;
     double durationSeconds() const override;
     double lowerBoundSeconds() const override;
-    void togglePlayback() override;
-    void stop() override;
-    void seek(double second) override;
-    void beginScrub() override;
-    void updateScrub(double second, bool centerView) override;
-    void endScrub(double second, bool centerView) override;
     double playbackRate() const override;
-    void setPlaybackRate(double rate) override;
-    void nudgePlaybackRate(int direction) override;
     QString playbackRateLabel() const override;
     QObject* previewRuntimeObject() const override;
     QObject* stageMediaHostObject() const override;

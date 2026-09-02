@@ -54,65 +54,9 @@ double PreviewHost::lowerBoundSeconds() const
     return playbackSnapshot().lowerBoundSeconds;
 }
 
-void PreviewHost::togglePlayback()
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->togglePlayback();
-    }
-}
-
-void PreviewHost::stop()
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->stop();
-    }
-}
-
-void PreviewHost::seek(double second)
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->seek(second);
-    }
-}
-
-void PreviewHost::beginScrub()
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->beginScrub();
-    }
-}
-
-void PreviewHost::updateScrub(double second, bool)
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->updateScrub(second);
-    }
-}
-
-void PreviewHost::endScrub(double second, bool)
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->endScrub(second);
-    }
-}
-
 double PreviewHost::playbackRate() const
 {
     return playbackSnapshot().playbackRate;
-}
-
-void PreviewHost::setPlaybackRate(double rate)
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->setPlaybackRate(rate);
-    }
-}
-
-void PreviewHost::nudgePlaybackRate(int direction)
-{
-    if (playbackPort_ != nullptr) {
-        playbackPort_->nudgePlaybackRate(direction);
-    }
 }
 
 QString PreviewHost::playbackRateLabel() const

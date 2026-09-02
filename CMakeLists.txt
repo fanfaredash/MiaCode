@@ -1938,6 +1938,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/audio src/common src/core/video
     )
+    target_compile_definitions(preview_host_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     # Stage 4.8: the coordinator owns playback contracts; legacy Preview and
     # Timeline surface compatibility lives in explicit projection adapters.
