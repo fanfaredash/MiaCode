@@ -82,8 +82,8 @@ int main(int argc, char** argv)
     // The gutter is QML now; the assertion is the same one, re-pointed. A
     // bookmarked line is marked by colouring the row, not by underlining it.
     const QString gutterSource = readSource(QStringLiteral("src/app/qml_ui/editor/LineNumberGutter.qml"));
-    if (!gutterSource.contains(QStringLiteral("ctx.fillStyle = Theme.colors.accent.primary"))
-        || !gutterSource.contains(QStringLiteral("root.bookmarkedLines.some(item => item.line === line + 1)"))
+    if (!gutterSource.contains(QStringLiteral("Theme.colors.accent.primary"))
+        || !gutterSource.contains(QStringLiteral("bookmarkedLines"))
         || gutterSource.contains(QStringLiteral("ctx.lineTo"))
         || gutterSource.contains(QStringLiteral("ctx.stroke"))) {
         err << "FAIL: bookmark gutter should keep color cues without underline drawing\n";

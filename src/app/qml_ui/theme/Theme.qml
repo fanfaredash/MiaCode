@@ -23,7 +23,8 @@ QtObject {
             primary: "#BFBFBF",
             secondary: "#AEAEAE",
             disabled: "#6E6E6E",
-            editor: "#BBBEBF",
+            // Ordinary notes: same full brightness as text.active, not a muted gray.
+            editor: "#E8E8E8",
             lineNumber: "#858889",
             heading: "#FFFFFF",
             onAccent: "#FFFFFF"
@@ -34,6 +35,10 @@ QtObject {
             soft: "#A5D6FF",
             focus: Qt.rgba(0x39 / 255, 0x94 / 255, 0xBC / 255, 0xB3 / 255)
         },
+        scroll: {
+            handle: "#5E6062",
+            handleHover: "#7A7C7E"
+        },
         state: {
             // Row chrome: gray lifts only (no accent tint on hover/selection).
             hover: Qt.rgba(1, 1, 1, 0x2A / 512),
@@ -43,12 +48,15 @@ QtObject {
             // Editor text selection (not row chrome).
             menuSelection: Qt.rgba(0x39 / 255, 0x94 / 255, 0xBC / 255, 0x26 / 255),
             textSelection: Qt.rgba(0x27 / 255, 0x67 / 255, 0x82 / 255, 0xDD / 255),
-            lineHighlight: "#2A2B2C"
+            followHighlight: "#52B0D8",
+            lineHighlight: "#2A2B2C",
+            focusLine: "#232425",
+            selectionHighlight: "#3E4042"
         },
         syntax: {
-            keyword: "#F29A83",
+            keyword: "#F5AE9C",
             comment: "#71B77A",
-            duration: "#88A4FF",
+            duration: "#A0B6FF",
             modifier: "#D2A8FF",
             error: "#C62828",
             warning: "#B07B00"

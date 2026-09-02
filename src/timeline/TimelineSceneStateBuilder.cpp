@@ -1,5 +1,6 @@
 #include "timeline/TimelineSceneStateBuilder.h"
 
+#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QDir>
 #include <QtMath>
@@ -97,10 +98,8 @@ const miacode::timeline::TimelineNoteAssetSet& sceneNoteAssets(const TimelineSce
 
 QFont timelineLaneLabelFont()
 {
-    QFont laneLabelFont(QStringLiteral("Consolas"));
-    laneLabelFont.setStyleHint(QFont::Monospace);
+    QFont laneLabelFont = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
     laneLabelFont.setPointSize(10);
-    laneLabelFont.setWeight(QFont::DemiBold);
     return laneLabelFont;
 }
 

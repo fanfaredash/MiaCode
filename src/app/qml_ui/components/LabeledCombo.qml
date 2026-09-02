@@ -28,7 +28,6 @@ RowLayout {
         Layout.preferredWidth: root.labelWidth
         text: root.label
         color: Theme.colors.text.secondary
-        font.family: Theme.uiFont
         wrapMode: Text.WordWrap
     }
     AppComboBox {

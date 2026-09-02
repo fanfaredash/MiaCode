@@ -129,7 +129,6 @@ QByteArray autosaveContentSignature(const QString& text);
 QString resolveProjectDataDirectoryPath(const QString& filePath);
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs);
 QFont editorFont(int pointSize = -1);
-QFont timelineHeaderLineNumberFont(int pointSize = -1);
 int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor);
 void applyBlockSpacingToTextEdit(QTextEdit* editor, int blockSpacingPixels);
 QFont uiOutputFont();

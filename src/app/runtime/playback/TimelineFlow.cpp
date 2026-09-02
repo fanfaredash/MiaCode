@@ -1029,10 +1029,13 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineSlowRefresh()
                     const double followSecond = guard->state_.playing_
                         ? guard->currentPreviewAuthoritativeAudioClockSecond()
                         : guard->state_.pauseSecond_;
+                    // Chart edits rebuild the timeline. Refresh the follow span
+                    // only — reveal would yank the editor off the caret when the
+                    // playhead and the caret cannot share one viewport.
                     guard->syncEditorCursorToPreviewSecond(
                         qMax(0.0, followSecond),
-                        true,
-                        !guard->state_.playing_);
+                        false,
+                        false);
                 }
                 guard->scheduleTimelineAnalysisRefresh(request, parseResult, previewState);
                 if (guard->state_.pendingPreviewPlaybackStart_

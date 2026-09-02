@@ -119,6 +119,8 @@ Item {
     // window in the middle of the app.
     Dialog {
         id: noticeDialog
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.uiFontSize
         objectName: "uiRequestNoticeDialog"
 
         property string actionLabel: ""
@@ -166,7 +168,6 @@ Item {
                 Layout.fillWidth: true
                 text: noticeDialog.text
                 color: Theme.colors.text.active
-                font.family: Theme.uiFont
                 wrapMode: Text.WordWrap
             }
             Text {

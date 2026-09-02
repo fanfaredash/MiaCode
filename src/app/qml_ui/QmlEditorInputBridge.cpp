@@ -8,10 +8,6 @@
 #include <QQuickItem>
 #include <QQuickTextDocument>
 #include <QStringList>
-#include <QTextBlock>
-#include <QTextBlockFormat>
-#include <QTextCursor>
-#include <QTextDocument>
 
 namespace miacode::qml_ui {
 namespace {
@@ -46,7 +42,6 @@ QmlEditorInputBridge::QmlEditorInputBridge(QObject* parent) : QObject(parent) {}
 QObject* QmlEditorInputBridge::target() const { return target_; }
 bool QmlEditorInputBridge::imeInputDisabled() const { return imeInputDisabled_; }
 QQuickTextDocument* QmlEditorInputBridge::textDocument() const { return textDocument_; }
-int QmlEditorInputBridge::blockSpacing() const { return blockSpacing_; }
 
 void QmlEditorInputBridge::setTarget(QObject* target)
 {
@@ -70,30 +65,7 @@ void QmlEditorInputBridge::setTextDocument(QQuickTextDocument* document)
 {
     if (textDocument_ == document) return;
     textDocument_ = document;
-    applyBlockSpacing();
     emit textDocumentChanged();
-}
-
-void QmlEditorInputBridge::setBlockSpacing(int spacing)
-{
-    const int normalized = qMax(0, spacing);
-    if (blockSpacing_ == normalized) return;
-    blockSpacing_ = normalized;
-    applyBlockSpacing();
-    emit blockSpacingChanged();
-}
-
-void QmlEditorInputBridge::applyBlockSpacing()
-{
-    QTextDocument* document = textDocument_ != nullptr ? textDocument_->textDocument() : nullptr;
-    if (document == nullptr || document->firstBlock().blockFormat().bottomMargin() == blockSpacing_) return;
-    QTextCursor cursor(document);
-    cursor.beginEditBlock();
-    cursor.select(QTextCursor::Document);
-    QTextBlockFormat format;
-    format.setBottomMargin(blockSpacing_);
-    cursor.mergeBlockFormat(format);
-    cursor.endEditBlock();
 }
 
 void QmlEditorInputBridge::applyInputMethodState()

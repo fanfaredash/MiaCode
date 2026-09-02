@@ -10,7 +10,8 @@ import MiaCode.UI
 // 偏好设置 → 性能，避免同一设置有两个入口。
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     required property var previewSettings
 
     readonly property var values: root.previewSettings.values
@@ -223,7 +224,6 @@ Dialog {
                     Layout.preferredWidth: 120
                     text: root.labels.judgeEffect
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                     wrapMode: Text.WordWrap
                 }
                 Repeater {
@@ -250,7 +250,6 @@ Dialog {
                 Text {
                     text: UiText.text("皮肤")
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                     Layout.preferredWidth: 120
                 }
                 AppComboBox {
@@ -274,7 +273,6 @@ Dialog {
                 Text {
                     text: UiText.text("判定效果")
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                     Layout.preferredWidth: 120
                 }
                 AppComboBox {
@@ -293,7 +291,6 @@ Dialog {
                 Text {
                     text: UiText.text("判定线")
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                     Layout.preferredWidth: 120
                 }
                 AppComboBox {
@@ -331,7 +328,6 @@ Dialog {
                 Text {
                     text: UiText.text("区域")
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                     Layout.preferredWidth: 120
                 }
                 AppComboBox {
@@ -351,7 +347,6 @@ Dialog {
                 Text {
                     text: UiText.text("字体")
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                     Layout.preferredWidth: 120
                 }
                 AppComboBox {

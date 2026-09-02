@@ -7,7 +7,8 @@ import MiaCode.UI
 // preferences.aboutInfo() so the version macro and UiText stay the sources.
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     required property var preferences
 
     readonly property var info: preferences.aboutInfo()
@@ -51,7 +52,6 @@ Dialog {
                     objectName: "aboutVersion"
                     text: "v" + root.info.version
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                 }
             }
             Item { Layout.fillWidth: true }

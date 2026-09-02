@@ -203,7 +203,7 @@ Rectangle {
                 }
             }
 
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: AppScrollBar {}
         }
 
         Label {
@@ -261,7 +261,7 @@ Rectangle {
                     }
                 }
             }
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: AppScrollBar {}
         }
         Label {
             anchors.centerIn: parent

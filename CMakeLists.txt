@@ -648,6 +648,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppSwitch.qml
     src/app/qml_ui/components/AppComboBox.qml
     src/app/qml_ui/components/AppSlider.qml
+    src/app/qml_ui/components/AppScrollBar.qml
     src/app/qml_ui/components/AppMenu.qml
     src/app/qml_ui/components/AppMenuAction.qml
     src/app/qml_ui/components/AppMenuItem.qml

@@ -98,7 +98,8 @@ void EditorTextStyle::applyToRange(int start, int end)
     cursor.setPosition(from);
     cursor.setPosition(to, QTextCursor::KeepAnchor);
     QTextBlockFormat format;
-    format.setBottomMargin(static_cast<qreal>(blockSpacing_));
+    format.setLineHeight(static_cast<qreal>(blockSpacing_), QTextBlockFormat::LineDistanceHeight);
+    format.setBottomMargin(0);
     cursor.mergeBlockFormat(format);
     applying_ = false;
 }

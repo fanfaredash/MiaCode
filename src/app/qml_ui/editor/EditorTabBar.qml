@@ -118,7 +118,7 @@ Rectangle {
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
         interactive: root.draggingEditorKey.length === 0
-        ScrollBar.horizontal: ScrollBar {
+        ScrollBar.horizontal: AppScrollBar {
             policy: root.tabsOverflow ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
             height: 3
         }

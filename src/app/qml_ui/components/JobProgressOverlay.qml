@@ -56,6 +56,7 @@ Item {
                 text: root.progress ? root.progress.title : ""
                 color: Theme.colors.text.active
                 font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
                 font.bold: true
                 elide: Text.ElideRight
             }
@@ -65,7 +66,6 @@ Item {
                 width: parent.width
                 text: root.progress ? root.progress.label : ""
                 color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
                 elide: Text.ElideMiddle
             }
 

@@ -33,7 +33,10 @@ ItemDelegate {
     // assignment both write the same value and fight over it, so a row that
     // wants the code font (the completion popup) would keep losing its family
     // back to the UI one.
-    property font labelFont: Qt.font({ family: Theme.uiFont, pixelSize: Theme.uiFontSize })
+    property font labelFont: Qt.font({
+        family: Theme.uiFont,
+        pixelSize: Theme.uiFontSize
+    })
 
     leftPadding: Theme.rowPaddingX
     rightPadding: Theme.rowPaddingX

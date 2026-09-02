@@ -11,7 +11,6 @@ Button {
 
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
-    font.weight: Font.Medium
     leftPadding: 12
     rightPadding: 12
     topPadding: 0

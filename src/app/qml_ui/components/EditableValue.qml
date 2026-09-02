@@ -56,7 +56,6 @@ Item {
         visible: !editor.visible
         text: root.text
         color: root.color
-        font.family: Theme.uiFont
         horizontalAlignment: root.horizontalAlignment
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight

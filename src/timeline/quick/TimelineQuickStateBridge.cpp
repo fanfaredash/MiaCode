@@ -151,9 +151,8 @@ TimelineQuickStateBridge::TimelineQuickStateBridge(QObject* parent)
     : QObject(parent)
     , zoomPresets_(makeTimelineZoomPresets())
 {
-    headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    headerLineNumberFont_.setStyleHint(QFont::Monospace);
-    headerLineNumberFont_.setFixedPitch(true);
+    headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    headerLineNumberFont_.setPointSize(11);
 }
 
 void TimelineQuickStateBridge::bumpAllRevisions()
@@ -259,14 +258,6 @@ TimelineQuickStateBridge::muriMarkersByLocation() const
 QHash<quint64, QString> TimelineQuickStateBridge::muriMarkerTooltips() const
 {
     return muriMarkerTooltips_;
-}
-
-void TimelineQuickStateBridge::setHeaderLineNumberFont(const QFont& font)
-{
-    headerLineNumberFont_ = font;
-    ++gridRevision_;
-    bumpHeaderRevision();
-    emit renderStateChanged();
 }
 
 QFont TimelineQuickStateBridge::headerLineNumberFont() const

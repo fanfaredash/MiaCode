@@ -53,7 +53,6 @@ public:
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
     QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkersByLocation() const;
     QHash<quint64, QString> muriMarkerTooltips() const;
-    void setHeaderLineNumberFont(const QFont& font);
     QFont headerLineNumberFont() const;
     QString skinDirectory() const;
     void setSkinDirectory(const QString& skinDirectory);
