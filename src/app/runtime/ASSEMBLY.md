@@ -126,9 +126,44 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
         会继续别名源记录的存储）。`runtime_context_boundary_spec` 是独立编译 TU，
         逐字段 `static_assert`「State 只借不拥、TimelineState 拥有不借」；成员声明顺序
         由 `playback_coordinator_spec` 的文本检查守住，因为编译期断言看不到顺序。
-  - [ ] 后续：让实际借用方（`PlaybackCoordinator` 等）直接持 `TimelineState&` 而不是
-        经 `State` 的兼容引用，并按同样方式切出 preview / document / validation / export
-        域的存储。
+  - [x] 结论修正（2026-09-02，两份盘点之后）：**「按宿主切存储」这条路只对 timeline 成立，
+        不要复制到其他域**。盘点显示 `State` 剩余 338 个自有字段里，164 独占 / **165 跨域** /
+        9 零引用；timeline 之所以能干净切出，是因为它是唯一自包含的域（切完后 `timeline`
+        目录触及的剩余 State 字段为 0）。而 `playing_` 有 12 个域读写、`pauseSecond_` 8 个、
+        `previewPlaybackRate_` 9 个、`scene_` 9 个——把它们塞进某个宿主的存储袋只是换个地方共享。
+        这些恰好是 canonical 播放状态，正确动作是让它们**不再是字段**：收进协调器私有成员、
+        其余人改读 4.5 已建好的 `PlaybackSnapshot`。因此剩余工作重排为 4.9c–4.9f。
+- [x] 阶段 4.9c（2026-09-02）：删死存储——`State` 9 个 + `Ui` 47 个零引用字段（`src/` 中除 `.inc`
+      自身外无任何访问），含 7 个从未创建过的重型控件/布局。连带删掉 selection-transform undo 死簇：
+      存储字段没了之后，`DocumentSessionHost.h` 里操作它的 5 个方法全部只有声明——无实现、
+      无调用点——连同 `Session.h` 的 `using` 别名与 `RuntimeContext::SelectionTransformUndoEntry`
+      一并清除。净删 147 行。Release 全量构建通过，全量 CTest 101 项 100 通过
+      （唯一红为既有 `qtavplayer_platform_spec`）。
+- [ ] 阶段 4.9d：**切断 `PlaybackCoordinator` 对 `Session&` 的依赖**（本主线的关键路径）。
+      现状：构造签名要 `Session&`，实现体有 204 处 `session_.` 调用、73 个不同方法。
+      这直接导致没有任何测试能构造协调器——门槛第 1 项（fake-clock 七种转换）和第 3 项
+      （三宿主装配与生命周期）为空，根因是同一个。73 个方法按四类归口：
+      ① Widgets 补妆（`refreshQuickShellRehostedWidgetParent`、`updatePauseButtonAppearance`、
+      `showPreviewFullscreenControls`）→ 随 Widgets 清理消失，不要为它们造抽象；
+      ② 已有契约（`currentPreviewAuthoritativeAudioClockSecond` → `AudioClockSource`；
+      `applicationServices_`；`editorSyncController`）→ 接窄端口；
+      ③ 舞台媒体路由（`ensurePreviewStageMediaRouteInitialized` 等）→ 归 `PreviewHost` / `StageMediaHost`；
+      ④ 持久化与状态播报（`savePortableState`、`noteStatus`、`updateDirtyState`）→ 文档端口 /
+      `ShellNotifications`。真正需要新设计的很少。
+      **完成判据：`PlaybackCoordinator` 能在 spec 里被构造出来。**
+- [ ] 阶段 4.9e：canonical 播放状态收进协调器私有成员，跨域读者改读 `PlaybackSnapshot`
+      （`playing_` / `pauseSecond_` / `previewPlaybackRate_` / `previewTransportState_` /
+      `qtPreview*` 一族）。这是把 4.5 的契约真正落地，「一个播放权威」才算成立。依赖 4.9d 的端口。
+- [ ] 阶段 4.9f：补齐门槛测试，依赖 4.9d。四项：协调器 fake-clock 的
+      play/pause/resume/stop/seek/scrub/rate；三宿主装配与生命周期；`TimelineCommandGate` 的
+      drag-follow **带戳重载**乱序注入（当前只有 `navigateToSecond` 走过乱序）；
+      parser → timeline → preview → export 的 revision / chart-time 对齐。
+      **同时替掉两处文本扫描**：`playback_coordinator_spec` 的 `verifyRuntimeContextOutlivesHosts`
+      与 `verifyTimelineStorageIsConstructedBeforeItsAliases` 现在都是比较成员声明字符串在
+      `Session.h` / `RuntimeContext.h` 里的先后位置。当时的理由「编译期断言看不到成员顺序」本身没错，
+      但它掩盖了真正的原因：**这些对象根本构造不出来**。4.9d 之后应改为真的构造/析构观察。
+      另外协调器的依赖检查漏了门槛原文要求的 "media UI" 一项，且 Timeline↔Preview 互不依赖
+      目前没有任何断言，只是两个 spec 的 CMake SOURCES 恰好精简——是副作用不是设计。
 - [ ] `QApplication` / `Qt6::Widgets` 仍在入口与 CMake；宿主拆分后再清除 native fallback 与
       Widgets 依赖，避免把 QWidget 生命周期藏进新宿主
 

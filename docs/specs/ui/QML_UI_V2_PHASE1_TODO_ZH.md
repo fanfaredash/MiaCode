@@ -848,9 +848,33 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   先跑 `find build-macos -name "*.cpp" -size 0`，再用 `simai_native_dump` 交叉验证同一段文本，
   不要直接去动 `src/core/chart/parser/`。全量构建前先 `df -h /`。
 - **仍然失败的 1 项**：`qtavplayer_platform_spec`（既有已知失败，不属于本主线范围）。
-- **仍未完成**：4.9b 只切出了第一个域记录，实际借用方仍经 `State` 的兼容引用读时间线存储；
-  preview / document / validation / export 域存储尚未切分。4.9b 后续、4.9c、4.9d 仍未完成，
-  不能标记阶段 4.9 或 Architecture Complete。未运行 Windows 构建。
+- **仍未完成**：见下方两份盘点后的重排计划。不能标记阶段 4.9 或 Architecture Complete。
+  未运行 Windows 构建。
+
+### 两份盘点与主线重排（2026-09-02）
+
+- **存量盘点结论**：`RuntimeContext::State` 剩余 338 个自有字段 = 164 独占 / **165 跨域** / 9 零引用；
+  `Ui` 153 个 = 54 独占 / 52 跨域 / 47 零引用。**「按宿主切存储」这条路只对 timeline 成立**——
+  timeline 是唯一自包含的域（4.9b 切完后该目录触及的剩余 State 字段为 0），而 `playing_` 有 12 个域
+  读写、`pauseSecond_` 8 个、`previewPlaybackRate_` 9 个、`scene_` 9 个。这些是 canonical 播放状态，
+  塞进任何一个宿主的存储袋都只是换个地方共享；正确动作是让它们不再是字段，收进协调器私有成员、
+  其余人改读 4.5 已建好的 `PlaybackSnapshot`。
+- **门槛覆盖盘点结论**：5 项非 GUI 门槛里 **3 项完全没有测试**（协调器 fake-clock 七种转换、
+  三宿主装配与生命周期、parser→timeline→preview→export 对齐），1 项部分覆盖
+  （`TimelineCommandGate` 的 revision / sequence 有真行为测试，但 drag-follow 的**带戳重载**
+  从未被乱序注入过，只有 `navigateToSecond` 走过），1 项是文本扫描且漏项
+  （协调器依赖检查没检查门槛原文要求的 "media UI"；Timeline↔Preview 互不依赖没有任何断言，
+  只是两个 spec 的 CMake SOURCES 恰好精简——是副作用不是设计）。
+- **三项空缺的根因是同一个**：`PlaybackCoordinator` 构造签名要 `Session&`，实现体有 **204 处
+  `session_.` 调用、73 个不同方法**，因此没有任何测试能构造它（全仓也找不到任何 fake clock）。
+  不是没人写，是写不了。
+- **自我更正**：`playback_coordinator_spec` 的 `verifyRuntimeContextOutlivesHosts` 与 4.9b 新增的
+  `verifyTimelineStorageIsConstructedBeforeItsAliases` 都被判定为「文本扫描冒充生命周期保证」，
+  这个批评成立。当时给的理由「编译期断言看不到成员顺序」本身没错，但它掩盖了真正的问题：
+  **这些对象根本构造不出来**。4.9d 之后应改为真的构造/析构观察。
+- **剩余主线重排为 4.9c → 4.9d → 4.9e → 4.9f**，顺序由依赖关系决定而非偏好
+  （4.9f 依赖 4.9d，4.9e 依赖 4.9d 的端口）。各阶段内容见
+  `src/app/runtime/ASSEMBLY.md` 的进度清单。
 
 ### 0b（已完成，归档保留）/ 0c（已改判并完成）
 

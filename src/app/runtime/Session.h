@@ -682,7 +682,6 @@ private:
     using ValidationDecoration = miacode::runtime::RuntimeContext::ValidationDecoration;
     using ValidationCacheEntry = miacode::runtime::RuntimeContext::ValidationCacheEntry;
     using DeletedDifficultyUndoState = miacode::runtime::RuntimeContext::DeletedDifficultyUndoState;
-    using SelectionTransformUndoEntry = miacode::runtime::RuntimeContext::SelectionTransformUndoEntry;
 
 public:
     // Derived sidebar bookmark for a non-control `||` chart comment. This is a

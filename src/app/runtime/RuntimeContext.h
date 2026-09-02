@@ -112,15 +112,6 @@ public:
         SimaiDifficultyData difficultyData;
     };
 
-    struct SelectionTransformUndoEntry {
-        int undoStepAfterApply = 0;
-        int originalAnchor = -1;
-        int originalPosition = -1;
-        int transformedAnchor = -1;
-        int transformedPosition = -1;
-        double previewSecond = -1.0;
-    };
-
     struct EditorBookmark {
         QString title;
         QString text;

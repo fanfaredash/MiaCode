@@ -219,15 +219,6 @@ private:
     // the busy spinner can paint before the build blocks the UI thread.
     void performSwitchToExportField();
     void setChartBottomTabsMode(bool enabled);
-    void pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold);
-    void updateLastObservedChartEditorUndoRedoSteps();
-    void recordChartSelectionTransformUndoEntry(
-        int originalAnchor,
-        int originalPosition,
-        const QTextCursor& transformedCursor,
-        double previewSecond = -1.0);
-    const Session::SelectionTransformUndoEntry* findChartSelectionTransformUndoEntry(int undoStepAfterApply) const;
-    bool restoreChartSelectionTransformCursor(const Session::SelectionTransformUndoEntry& entry, bool transformedSelection);
 
     Session& session_;
     RuntimeContext::Ui& ui_;
