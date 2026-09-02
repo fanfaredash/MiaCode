@@ -366,369 +366,44 @@ Esc/非文本键 → 每视图撤销历史 → section 级脏 → 关闭标签�
 Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任何已删 Widgets 表面。
 
 
-### 阶段 1（收尾）—— 文档域单一所有者
+### 阶段 1–3.5（已完成，精简归档）
 
-已落地：`ChartWorkspace`、`ChartWorkspaceFileService`、`AnalysisService`（`src/app/v2/`），生产 QML 的文档事务、save-point dirty、revision-stamped 分析快照均不再以 `MainWindow` 为真相。
+> 详细工程记录见 `src/app/runtime/ASSEMBLY.md` 与各阶段提交说明；此处只留成果与仍然有效的结论。
 
-剩余：
+- **阶段 1 — 文档域单一所有者**：文档事务、save-point dirty、revision 标记的分析快照全部脱离窗口，
+  改由独立的文档域服务持有。隐藏的 Widgets 文本编辑器与第二份文档副本已删除；过程中修好了两个
+  原本就坏的功能（扩展编辑 API 与谱面变换命令都作用在一个从未与 QML 选区同步的隐藏光标上）。
+- **阶段 2 — 退役旧外壳控制器**：25 个 QML 消费点迁到三个模型对象；**轮询彻底消失**，离散状态与
+  播放头改为推送。旧控制器与其抽象基类已删除。
+- **阶段 3 — 导出服务与 Widget 对话框归零**：选文件 / 消息 / 进度统一到两条无 Widgets 的共享边界，
+  四条导出与媒体流程共用同一个进度浮层；封面导出重建为 QML 页面；一批 Widgets 对话框与面板组删除。
+  守卫用「只链核心库」的方式保证 Widgets 对话框放不回来——链接失败，而不是靠字符串扫描。
+- **阶段 3.5 — 应用宿主脱钩与依赖分层**：装配对象成为七个应用服务的**唯一所有者**（此前分属两个
+  UI 对象，「文档域归谁」取决于问谁）。QML 应用上下文不再持有窗口引用：九个域改由窄接口承接，
+  推送信号经通知中继转发，**窗口方法面 120 → 9、私有成员直读 17 → 0、QML 类型的 friend 授权 5 → 0**。
+  同期建立依赖 allowlist 与其守卫，把网络模块移出产品运行时。
 
-- [x] 删除隐藏 `PlainCodeEditor` 与第二份文档副本（2026-08-30）。`src/editor/PlainCodeEditor.*`
-      与 `BracketCompletionPopup.*` 已删除，应用不再链接任何 Widgets 文本编辑器。
-      过程中修好了两个原本已坏的功能：扩展 `editor/*` API 与 14 个谱面变换命令，
-      两者此前都作用在一个从未被 QML 选区同步过的隐藏光标上。
-- [x] 修复 `qml_document_lifecycle_contract_spec`（2026-08-29，见 §7.1）。
-- **阶段 1 除延后项外已收尾。**
-- [ ] **增量时间轴解析已实际失效**（2026-08-30 记录）。`applyTimelineQuickChange` 只由隐藏编辑器的
-      `contentsChange` 驱动，而每次 v2 写入都经 `setEditorText` 抑制脏跟踪，所以它从未运行——
-      v2 的每一次编辑都是全量重建。隐藏编辑器删除后这条路彻底断了。重新接上的正确位置是工作区提交
-      （它知道确切编辑范围），属于阶段 2 `TimelineQuickModel` 所有权那一项，**所有者已决定继续延后**。
+**阶段 1–3.5 留下的、仍然有效的三条注意事项**：
 
-### 阶段 2 —— `PreviewSession` / `TimelineSession`，退役 `QuickShellController`
-
-> **2026-08-30 所有者决定：`TimelineQuickModel` 所有权迁移继续延后。**
-> 阶段 2 的其余部分（`shellController.*` 消费点迁移、MainWindow 改推送、删 `refreshTimer_`
-> 与 `src/app/quick_shell/`）按「一次做到底」推进。
-
-- [x] 把 25 个 `shellController.*` QML 消费点搬走（2026-08-30）。落点是三个对象而非两个：
-      `QmlTimelineModel`（时间轴与底栏页签）、`QmlPreviewModel`（原有对象，接管预览剩余项：
-      画布比例、播放切换、速度步进、交互日志）、`QmlShellLifecycle`（根窗口关闭契约）。
-      其中三处不需要新对象：`exportPageActive` 与 QML 已有的 `pages.activePageId === "export"`
-      是同一个条件；`workspacePanelsSwapped` 就是 `preferencesModel.previewOnLeft`。
-- [x] **轮询消失**（2026-08-30）。`refreshTimer_` 每隔 200ms/33ms 拉 ~25 个值、无论是否播放。
-      现在离散状态由 `MainWindow::shellPresentationChanged` 推送。
-      *更正（2026-08-30 同日）：这一条最初留了一个「播放时钟仍需采样、定时器只在播放期间运行」
-      的例外，而那个例外本身就是缺陷——闸门 `playing_` 从来没有推送方，定时器从未启动，走带
-      一直停在 0（见 §3.C）。播放头改由 `applyQtPreviewPosition` 通过
-      `shellPreviewPlayheadChanged` 推送，采样定时器已删除，`QmlPreviewModel` 现在不采样任何东西。
-      漂移守卫 `preview_transport_push_spec` 会拒绝把定时器放回去。*
-- [ ] `TimelineQuickModel` / 时间线 QSG 状态所有权从旧窗口迁到独立的 `TimelineHost`。**已延后至阶段 4.6。**
-      *更正（2026-08-30）：此前记的「增量解析本身已完成，剩下的只是所有权」在实现上成立、
-      在运行上不成立。`applyTextChange(QString,…)` 确实取代了 `applyContentsChange(QTextDocument*)`，
-      但唯一的驱动方是隐藏编辑器的 `contentsChange`，而它被 `setEditorText` 的抑制挡住，
-      所以 v2 从未走过增量路径——每次编辑都是 `scheduleTimelineRefresh()` 全量重建。
-      隐藏编辑器删除后连这条驱动也没有了。要恢复增量，得改由工作区提交驱动（它知道确切编辑范围），
-      这正是本项要做的事，不只是搬所有权。*
-- **完成标志**：~~`refreshTimer_` 消失~~✅；~~QML 不再出现 `shellController`~~✅；
-      `src/app/quick_shell/` 部分删除——`QuickShellController.{h,cpp}`（866 行）与
-      `QuickShellContracts.h`（127 行，三个抽象基类）已删；目录里剩下的
-      `QuickShellPreviewCompositeSurface.*` / `QuickShellPopupPosition.h` /
-      `QuickShellKeyboardActivation.h` / `QuickShellPreviewSurfacePolicy.h` 是预览合成表面的
-      平台管道，与外壳控制器无关，随阶段 4 的 `MainWindow` 一并处理。
-
-### 阶段 3 —— `ExportService` 与 Widget 对话框归零
-
-已建成的共享边界（`src/app/v2/`，均无 Widgets，各自有只链 `Qt6::Core`+`Qt6::Test` 的 spec）：
-`UiRequestService`（选文件 / 消息 / 带动作的消息）与 `JobProgressService`（进度 + 不确定态 +
-按 token 的协作式取消）。`MainWindow` 持有唯一实例，`MainView.qml` 承载唯一的 `UiRequestHost`
-与 `JobProgressOverlay`。
-
-- [x] **进度条归一（2026-08-29）**：视频导出、批量导出、ZIP 打包、音视频处理（4 条 ffmpeg 流程）
-      现在全部走同一个 `JobProgressOverlay`。`src/app` 已无 `QProgressDialog`。同时删除了两处
-      并行进度表示：预览传输条上的 inline 导出进度（`videoExportUseInlineProgress_` 自嵌入面板
-      删除后再无人置 true）与恒返回 -1 的 `shellVideoExportProgressSeconds()`（连带去掉
-      `QuickShellController` 轮询间隔对它的依赖）。
-
-- [x] `QmlExportSession` 的 `QFileDialog` / `QMessageBox` 换成 QML 侧 `QtQuick.Dialogs` + 结果值
-      （2026-08-29）。落点是可复用的 `miacode::v2::UiRequestService` + `components/UiRequestHost.qml`，
-      而不是导出页就地改写——B 类的 Net / 音视频处理 / 偏好设置页同样需要选文件与提示，共用这一条边界。
-      `ui_request_service_spec` 只链 `Qt6::Core` + `Qt6::Test`，所以任何把 Widgets 对话框放回这条边界的
-      改动都会**链接失败**，不依赖字符串扫描；`qml_export_video_page_spec` 驱动真实 `FileDialog` /
-      `FolderDialog` / `MessageDialog` 走完请求—应答回环。仍需原生桌面确认实际弹窗外观与取消语义。
-- [x] **封面导出重建为 QML 页面 + 无 Widgets 作业 API（2026-08-31）**：由
-      `QmlCoverExportSession` + `CoverCompositeRenderer` 完成，见 §0 / §3.B。
-- [x] **删除 CoverStudio 组（2026-08-31）**。`NetBatch*Dialog` 已在更早批次删除；
-      `ExportLauncherPage`、`BatchExportPanel` 组、`VideoExportDialog` 组亦已删除。
-- [x] **废弃 `VideoExportDialog` 的扩展 API 形态**（2026-08-29）。扩展命令 `export.video.start`
-      与方法 `export/startVideoExport` 原本打开模态导出对话框，现在改为打开 QML 导出中心的单个导出页
-      （`onExportPreviewVideo()` 保留同名但换成 QML 路由）。扩展面能力未削减，Widgets 对话框消失。
-      `FontLibrary` 作为无 UI 的字体数据服务保留；`CardFontSettings` 已随原封面 Widgets
-      工作台删除，`HudFontSettings` 已在阶段 4 第一批拆除（2026-09-01），字体选择继续由
-      QML 页面通过 `FontLibrary` / `PreviewHudState` 承接。
-- [x] `ChartDropOverlay` 改为 `QmlChartDropBridge` + `Main.qml` QML 提示层（2026-09-01）。
-- [x] **阶段 3 / 0b 本轮收口记录（2026-09-01）**：扩展宿主、嵌入运行时、Open Bridge、watcher、
-      扩展偏好设置/事件/手势及 bundled deployment 已从产品运行时移除；manifest/schema/SDK/docs/API
-      registry 与离线校验仍保留。背景设置恢复为 `QmlAppBackgroundModel` + `AppBackgroundSettings`，
-      根窗口由 QML 负责背景图和 overlay token。ChartDrop 已由单一 `QmlChartDropBridge` 事件适配器
-      和 `ChartDropImportService` 异步事务服务承接，释放时会使迟到回调失效，QML 只显示非拦截提示层。
-      构建后产物不再保留旧的 `extensions` 目录。
-- **本轮验证记录**：主程序及相关 target 构建通过；新增/定向 CTest 7/7 通过；扩展一致性与 macOS
-      打包契约通过；最新全量 CTest 通过 88/89 项。剩余 `qtavplayer_platform_spec` 的
-      seek-before-start 断言未涉及本轮改动，另行处理。GUI harness
-      按所有者要求跳过，故背景视觉和桌面拖放仍不记为原生 GUI 验收通过。
-- **阶段 3 完成标志**：`grep -rl "QtWidgets\|QDialog\|QMessageBox\|QFileDialog" src/tools src/app/qml_ui`
-  只剩**扫描这些字符串的 spec 自己**。2026-08-31 复核实测：
-  `QmlExportFontContractSpec` / `QmlDocumentLifecycleContractSpec` / `QmlCoverExportContractSpec` /
-  `UiRequestServiceSpec` / `UiTextLocaleSpec`（都是断言里写着这些名字），以及
-  `QmlShortcutModel.h`（注释一句）。此前唯一真的用 Widgets 的
-  `src/tools/video_export/HudFontSettings.cpp` 已随阶段 4 第一批拆除（2026-09-01）；当前扫描
-  范围不再有真实的 Widgets 字体适配器。原来那条「为空」的写法永远不可能成立，因为 spec
-  必须提到被禁的名字。
-
-### 阶段 3.5 —— 应用宿主脱钩与依赖分层
-
-这是删除 `MainWindow` 之前新增的架构关卡，避免把“换应用对象”误当成架构完成：
-
-> **当前状态（2026-09-02）**：依赖分层与服务所有权已落地，`MainWindow` 已从启动路径和源码目录
-> 删除，`QmlApplicationContext` 也已改为只接收 `ApplicationServices&`。但 `QtWidgets` 仍是当前
-> 产品依赖：`QApplication`、`RuntimeContext::Ui` / `RuntimeContext::State` 共享状态袋和 native fallback 仍在 runtime 中；旧
-> `PlaybackHost` 已在 4.8 收缩并重命名为 `PlaybackCoordinator`，其历史 Preview / Timeline
-> 实现仍借用共享状态。第 2、3 项的剩余工作现在转入阶段 4 的共享状态与 Widgets 清理，不能把
-> 本轮迁移误记为 Architecture Complete。
-
-- [x] `ApplicationServices` 已建立并**成为真正的所有者**（2026-09-01）。
-      `src/app/v2/ApplicationServices.{h,cpp}` 是一个不含 Widgets 的 `QObject`，持有
-      `ChartWorkspace`、`ChartWorkspaceFileService`、`AnalysisService`、`EditorSyncController`、
-      `ChartDropImportService`、`UiRequestService`、`JobProgressService` 七个服务。
-      在此之前这七个服务分属两个 UI 对象：`MainWindow` 持有后四个，`QmlApplicationContext`
-      持有前三个——「文档域归谁」取决于你问哪一个，而两个答案都是 UI 对象。
-      现在 `QmlUiBootstrap` **先**构造 `ApplicationServices`、**再**构造 `Session`；Session 与各
-      runtime host 只借用这些服务，`QmlApplicationContext` 也不再经过窗口 backend。销毁顺序写死
-      为「服务最后释放」。
-      CLI 导出路径（`cli_video_export.cpp`）走同一条装配。
-      顺带把 `uiValidationLocale()` 的实现从 `MainWindowShared`（一个 QtWidgets TU）搬到
-      `miacode::v2`，`MainWindowShared` 保留同名函数转发——「解析器用哪个语言校验」不该需要 widget 层。
-      守卫 `application_services_spec` 只链 `Qt6::Core`/`Gui`/`Test`，所以任何 QtWidgets 依赖爬进
-      装配对象都会**链接失败**；它还扫描整个 `src/app`（除装配自身），禁止任何地方再 `new` /
-      `make_unique` / 以值成员形式构造这七个服务——否则装配对象会变成第三个所有者而不是唯一所有者。
-      这条反向验证已实测：在 `MainWindow.h` 里加一个 `UiRequestService` 值成员，守卫立刻失败。
-- [x] **`QmlApplicationContext` 已不再持有 `MainWindow& backend_`（2026-09-01 完成）**。
-      不是引用、不是构造参数、也不是 include——它现在只接受 `ApplicationServices&`。
-      九个域全部改由 `src/app/v2/` 的接口承接（`EditorPageRouter` / `ExportEngine` /
-      `PreviewSurface` / `TimelineSurface` / `PreferencesStore` / `DocumentBridge` /
-      `MediaToolsEngine` / `LatencyEngine`，加上值对象 `PreviewAppearanceState`），
-      11 个推送信号经 `ShellNotifications` 中继。方法面 120 → 9，私有成员直读 17 → 0，
-      QML 类型的 friend 授权 5 → 0。落地过程见下方第 13–20 条。
-      *进展（2026-09-01）*：
-      1. 文档域、UI 请求、作业进度、editor-sync 已改为经 `services_` 取得；`backend_` 不再是这
-         四者的来源。`uiRequestService()` / `jobProgressService()` 这两个方法**已从 QML 层完全消失**
-         （13 处调用点改为构造时注入 `UiRequestService&` / `JobProgressService&`）。
-      2. 剩余耦合已全部登记为可度量清单：
-         [QML_UI_V2_BACKEND_SURFACE_ZH.md](QML_UI_V2_BACKEND_SURFACE_ZH.md) 按未来所有者
-         （PreviewSession / TimelineSession / ExportSession / 文档 / 偏好设置 / 延迟 / 媒体工具 /
-         外壳宿主）分组列出 **120 个方法 + 17 个直接读取的私有成员 + 5 个 friend 授权**。
-         守卫 `qml_ui_backend_surface_spec` 对代码与清单做集合相等比较：新增耦合失败，
-         搬走了却没改清单也失败，文档虚报计数同样失败——四个方向都已反向验证。
-      3. **本轮发现并记录的事实**：`MainWindow.h` 把 5 个 QML 类型声明为 `friend`，它们绕过公有
-         接口直接读写窗口私有成员（`QmlExportSession` 一个就占 15 个）。这与本项要求的
-         「窄 QObject 门面」正相反，所以清零顺序是**先消 friend 与私有成员读取，再削减公有方法**；
-         先搬公有方法只会让剩下的耦合更隐蔽。
-      4. 按上述顺序先动了第一项：`QmlEditorPageHost` 的两处私有成员读取换成等价公有访问器
-         （私有成员 17 → 15，方法数不变，因为这两个名字本来就在清单里被别的文件用着）。
-         它的 `friend` 授权仍保留——四个 `switchTo*Field` 声明在私有 `.inc` 里，把它们改成公有
-         等于把接口做宽；它们随第 3 项（页面路由归 QML 宿主）一起消失。
-      5. **预览外观八个值搬进 `miacode::v2::PreviewAppearanceState`（私有成员 15 → 4）**。
-         皮肤目录/variant、判定特效、判定线外观、slide 提前、tap 判定文字距离、中央显示模式、
-         开场音——这八个值决定屏幕预览和导出视频**两边**怎么画，所以三个调用方都要用它们。
-         它们现在由装配对象持有；`MainWindow` 把同名成员按引用绑到这一份上（`MainWindowState`
-         里的声明删除，`state_.x` 与别名一起改指），所以读写它们的约 26 个文件一行没动。
-         窗口改为**响应** `skinChanged` / `judgeEffectStyleChanged` / `introSoundChanged`
-         去应用到实时表面并持久化——三个信号分开是因为代价不同，合成一个会让每次切判定特效
-         都重载整套皮肤。`previewCanvas_` / `previewSfxRuntime_` / `previewAudioSettings_` 三个
-         私有成员换成两个窄方法 `refreshPreviewSurfaces()` / `applyPreviewSfxLevels()`。
-         结果：`savePortableState` 和 `applyPreviewSkinDirectoryToSurfaces` 从 QML 面上**消失**
-         （持久化归值的所有者，不归调用方），方法数仍是 120（去二进二）。
-         **同时消掉一处真实缺陷来源**：皮肤选择的「比较目录名 → 赋值 → 推导 variant → 应用 →
-         持久化」原本有**三份拷贝**（QML 导出页、QML 预览设置页、Widgets 导出设置对话框），
-         各自推导 variant，任何一份写错就会出现「目录是 skinDX、variant 还是 Standard」。
-         现在 variant 由 `PreviewAppearanceState::variantForDirectory()` 单点推导，
-         `setSkinDirectory()` 根本不接受不一致的组合，`preview_appearance_state_spec` 守住这条。
-         顺带把 `PreviewSkinVariant` 从 `MainWindow` 的嵌套枚举移到
-         `core/video/PreviewRenderSettings.h`——它是渲染设置，不该逼每个消费方包含窗口头文件。
-      6. **剩下三个可直接换掉的私有成员改走窄访问器（私有成员 4 → 1，方法 120 → 124）**。
-         `document_` 的四处读取改走本来就公有的 `documentDifficultyIds()` /
-         `documentDifficultyChartText()`（语义完全等价：`difficultyIds()` 就是难度表的键集，
-         所以 `contains(id)` 与 `difficulty(id) != nullptr` 是同一个问题）；
-         `projectLastOpenedDifficultyId_` 与 `muriRenderOptions_` 各加一个具名访问器。
-         方法数上升是预期内的：`friend` 给出的是**无边界**访问权，换成具名访问器后这份耦合
-         第一次变成可枚举、可逐条搬走的东西。
-         **全仓库现在只剩 `QmlExportSession` 的 `exportSection_` 一处私有成员直读**，
-         它是真正的导出引擎，必须随 `ExportSession` 一起搬，不能用访问器糊过去。
-      7. **记录一个下一步的陷阱**：`document_` 的读取虽然改走了公有访问器，但读的仍是
-         `MainWindow` 的文档副本而不是 `ChartWorkspace`。看似应该顺手改读工作区，但
-         `MainWindow` → 工作区是**延迟**同步的（`documentReplaced` 经
-         `QMetaObject::invokeMethod` 排队后才 `adoptBackendDocumentReplacement()`），
-         后端替换文档（启动 / 根窗口拖放 / 原生打开 / 崩溃恢复）之后存在一个窗口期，
-         此时改读工作区会让导出页列出**旧的**难度列表。要动它得先处理那条延迟同步。
-         细节已写进 [QML_UI_V2_BACKEND_SURFACE_ZH.md](QML_UI_V2_BACKEND_SURFACE_ZH.md)。
-      8. **friend 授权 5 → 2**。把 `QmlCommandService` / `QmlPreviewModel` /
-         `QmlPreviewSettingsModel` **本来就在调用**的 8 个方法从私有改为公有，集中成
-         `MainWindow.h` 里一个具名的「QML 页面的有界入口」块，然后删掉这三条 `friend`。
-         8 个方法是：5 个皮肤/判定线目录查询（纯路径解析与目录枚举）、`applyPreviewOutlineVariant`
-         与 `setMuriRenderMode`（两者早就带 `persist` 参数，与既有偏好设置公有面同形）、
-         `onPreferences`。**清单计数一个都没动**——这些名字本来就在清单里；变的是访问权从
-         「无边界，任何后续改动都能拿到任何东西」变成「就这 8 个」。
-      9. **导出引擎接缝立起来，私有成员直读归零，friend 授权 2 → 1**。
-         `exportSection_` 是全仓库最后一处私有成员直读，也是唯一一处加访问器只会让问题
-         **更正式**的耦合——页面依赖的不是一个值，而是窗口内部的一整块引擎。
-         做法是先立接口：`miacode::v2::ExportEngine`（七个操作：seed task、apply live settings、
-         start/stop audition、launch video/batch export、cancel），`MainWindow::ExportSection`
-         实现它并把自己装进 `ApplicationServices` 的槽位，`QmlExportSession` 只认接口。
-         那 3,600 行实现**没有搬**——搬它是阶段 4 的事；变的是方向：实现真的搬出窗口时，
-         只有实现侧要改，页面一行不动。
-         槽位而不是快照：消费方绑定 `exportEngineSlot()`，窗口在 `~MainWindow` 最开头撤销引擎，
-         所以撤销对每个持有者立刻可见——导出页是 QObject child，会比 `exportSection_` 活得久，
-         这正是防止它调进一个已析构 section 的机制。
-         剩下的 `currentPreviewAuthoritativeAudioClockSecond` / `refreshExportIntroState`
-         按第 8 条的办法公开，`QmlExportSession` 的 friend 授权随之删除。
-         守卫 `export_engine_spec` 只链 Core+Gui+Test，证明这个契约不需要窗口就能实现，
-         并守住槽位纪律与「用户取消是结果不是失败」。
-         **只剩 `QmlEditorPageHost` 一条 friend**：四个 `switchTo*Field` 驱动隐藏 widget 栈，
-         公开它们等于把一件本该消失的事写进正式接口，随第 3 项一起消失。
-     10. 顺带修好上一轮的一处文档损坏：清册的按文件分块在正则重生成时丢了换行，
-         把小标题粘到了上一条 bullet 后面（15 块显示成 8 块）。本次整节按结构重新生成。
-     11. **页面路由改由 `miacode::v2::EditorPageRouter` 承接，QML 类型的 friend 授权归零，
-         方法 124 → 118**。四个 `switchTo*Field` 声明在私有 `.inc` 里，上一轮判定「公开它们
-         等于把一件本该消失的事写进正式接口」——这个判断成立，所以做法和导出引擎一样是**先立接口**：
-         七个操作（`hasActiveDifficulty` / `activeDifficultyId` / 四个 `enter*Page` /
-         `packChartAsZip`），`MainWindow` 实现，`switchTo*Field` **保持私有**。
-         `QmlEditorPageHost` 现在只认接口，`friend class QmlEditorPageHost` 删除——
-         至此 `MainWindow.h` 对 QML 类型的 friend 授权全部为 0，只剩 widget 侧的
-         `LatencySandboxController`（随阶段 4 处理）。
-         槽位纪律与导出引擎一致：装配对象持槽，窗口在 `~MainWindow` 最开头撤销。
-     13. **音视频处理改由 `miacode::v2::MediaToolsEngine` 承接（方法 118 → 112）**。
-         这条架构演进现已完成：六个入口（两个转换 + 前置空白的上下文/检测/还原/应用）
-         由 `src/app/runtime/media/MediaJobsHost.{h,cpp}` 实现，`Session` 创建它并注册到
-         `ApplicationServices::mediaToolsEngineSlot()`；`MainWindow` 的旧 sections 已迁出。
-         `isTrack` 一个参数区分音轨与背景视频，两条流程本来就同形，不再翻倍接口面。PV
-         批量队列仍归 `QmlMediaToolsModel` 自己——它是唯一有跨次开启状态的部分。
-         过程中撞到的真实名字遮蔽（旧 `MainWindow.Dialogs.MediaTools.cpp` 内同名的
-         `convertTrackTo44100Hz(...)` 文件内 ffmpeg 辅助函数）随实现迁出而消失；该文件已删除。
-
-     14. **延迟检测改由 `miacode::v2::LatencyEngine` 承接（方法 112 → 104）**，
-         并且 `QmlLatencyModel` **完全不再认识 `MainWindow`**——连构造参数都去掉了，
-         这是第一个做到这一点的 `Qml*Model`。
-         三个文档读取（bpm / offset / clock）刻意留在接口上而不是改读 `ChartWorkspace`：
-         延迟页没有活动难度，所以「谱面的 bpm」意思是「`&wholebpm`，否则任意非空难度的第一个
-         内联 `(BPM)`」——这条解析规则属于页面所有者，不属于工作区。
-
-     15. **时间轴与底栏页签改由 `miacode::v2::TimelineSurface` 承接（方法 104 → 88）**。
-         16 个入口：走带的三种导航（跳转 / 居中 / 滚轮，三者对视口的影响不同，所以不合并）、
-         拖拽生命周期、跟随预览开关、底栏当前页签与四个可见性、无理提示偏好。
-         分析页那两处（跳到问题所在秒、无理提示偏好）本来就属于时间轴域，一并搬过去。
-         窗口上的 `shell*` 前缀是 v1 QuickShell 控制器的遗留命名，接口没有把这段历史带过来。
-         `QmlTimelineModel` 仍持有 `MainWindow&`，但只用于连 `shellPresentationChanged`
-         一个推送信号，不再调用任何方法。
-
-     16. **预览改由 `miacode::v2::PreviewSurface` 承接（方法 88 → 61）**。
-         33 个入口：播放传输、scrub 手势（刻意与 seek 分开——手势要成对括起来才能挂起跟随行为）、
-         倍速、QML 绑定的两个运行时对象、无理渲染模式、皮肤/判定线目录、渲染设置、音频混音。
-         外观那八个**值**更早就搬到 `PreviewAppearanceState` 了，这里剩的是需要「正在跑的预览」的部分。
-         `QmlAudioSettingsModel` 与 `QmlPreviewSettingsModel` 至此**完全不认识 `MainWindow`**；
-         `QmlPreviewModel` 只剩三个推送信号的连接。
-         过程中去掉了 `setMuriRenderMode(mode, bool persistState = true)` 的默认实参——
-         接口的单参重载会让所有单参调用变歧义。
-
-     17. **偏好设置改由 `miacode::v2::PreferencesStore` 承接（方法 61 → 40）**。
-         21 个入口：编辑器字号/行距/半角输入/自动补全/IME、三个帧率模式与屏幕刷新率、
-         软件解码偏好、工作区面板交换。上一轮记的「这些 setter 不是纯设置」成立，所以它们
-         留在窗口实现的接口后面而不是变成值对象；`persist` 参数保留，因为同一批入口既服务
-         用户编辑也服务从盘恢复，去掉它会让「读设置」变成「重写设置」。
-         `QmlPreferencesModel` 至此**完全不认识 `MainWindow`**。
-         顺带把 `PreviewCanvasFrameRateMode` 从 `MainWindow` 的嵌套枚举移到
-         `core/video/PreviewRenderSettings.h`（与更早的 `PreviewSkinVariant` 同一处理）。
-
-     18. **导出页剩余入口清零（方法 40 → 26）**。13 个入口分别归位：皮肤目录/判定线/渲染刷新/
-         SFX 电平归 `PreviewSurface`（新增 `applySfxLevels()`），文档难度查询、上次打开难度、
-         无理渲染选项、当前播放头、片头状态刷新归 `ExportEngine`。
-         导出会话对象本身改由装配对象持一个 `QObject*` 槽（会话是 QML 层类型，v2 层不能命名它，
-         两个读者 `qobject_cast`），`QmlEditorPageHost` 与 `QmlApplicationContext` 都从槽里取。
-         文档查询刻意留在 `ExportEngine` 而不是改读 `ChartWorkspace`——原因就是先前记录的
-         延迟同步陷阱：它们读的必须是导出快照所依据的那一份副本。
-
-     19. **文档域与最后两个零散入口清零（方法 26 → 9）**。
-         14 个文档入口改由 `miacode::v2::DocumentBridge` 承接：窗口那份副本的读取与单向推送、
-         最近文件与自动备份两个列表、规范化选项、编辑器导航，以及三个**反向回调钩子**——
-         widget 侧流程（原生打开、菜单动作、崩溃恢复）需要 QML 层给一个**结果**，所以是
-         handler 而不是信号。
-         `onPreferences` 与 `requestShellClose` 并入 `EditorPageRouter`：它们和页面切换问的是
-         同一个「未保存改动怎么办」，只是作用域不同。`QmlShellLifecycle` 因此完全不认识 `MainWindow`。
-         **至此每个 `Qml*Model` 都不再调用 `MainWindow` 的任何方法**；剩下的 9 个全部在
-         `QmlUiBootstrap`，也就是第 3 项本身。
-
-     20. **最后一步：11 个推送信号改经 `miacode::v2::ShellNotifications` 中继，
-         `QmlApplicationContext` 去掉 `MainWindow& backend_`（item 2 完成）**。
-         方法调用早已全部搬到接口后面，但各 `Qml*Model` 仍为了 **connect 信号**而持有
-         `MainWindow&`——窗口因此还是 11 个文件的编译期依赖。
-         信号在装配对象里**转发**而不是搬走，因为它们大多仍由 widget 时代的代码路径抛出；
-         对通知来说这没有损失：与 `DocumentBridge` 上那三个 handler 不同，没有人在等一个结果。
-         结果：`QmlApplicationContext` 只接受 `ApplicationServices&`。
-         `src/app/qml_ui` 里除 `QmlUiBootstrap` 外，仅剩 `QmlUiSettings.cpp` 一处对
-         `MainWindowShared` 的编译期依赖（编辑器字体与行距度量）——那是字体/度量模块的归属问题，
-         不是窗口依赖，另记。
-
-     12. **顺带修掉一个真实缺陷：`switchToExportField` 曾在切换发生前就返回 `true`**。
-         它把真正的切换延后一个事件循环 tick，理由是「导出页要建嵌入式视频面板、会阻塞 UI 线程，
-         先让侧栏 Export 行上的忙碌转圈画出来」。这两个理由现在都不成立：嵌入式面板随 Widgets
-         导出对话框一起删了；侧栏是 QML，那个 spinner 建在**隐藏**的 `outlineList_->viewport()` 上，
-         永远到不了屏幕。留下来的只有「报告一个尚未发生的成功」——保存守卫拒绝切换时，
-         QML 页面宿主仍会把导出页显示出来，外壳和文档对「用户在哪一页」的认知就此不一致。
-         现在改为同步执行并返回真实结果（`currentWidget() == exportPlaceholderPage_`），
-         三个 `*OutlineExportBusySpinner` 辅助函数删除。
-         `editor_page_router_spec` 守住这一条，反向验证过：把延迟改回去立刻失败。
-         **阶段 4 第一批已完成（2026-09-01）**：`outlineBusySpinner_` 本体、
-         `tickOutlineBusySpinner()` 及导出流程中的 4 处调用已删除；它们原本只画在隐藏 widget
-         上，没有可见替代价值。`stage4_widget_residue_spec` 会守住这些残留不回归。
-- [ ] `QmlUiBootstrap` 不再创建隐藏 `MainWindow`；根窗口、拖放、关闭和对话框 transient parent
-      都由 QML 宿主及应用服务明确拥有。
-      *进展（2026-09-01）*：
-      1. 前置条件已满足——服务不再由窗口创建，窗口的存在不再是它们的前提。
-      2. **拖放已归位**：拖放建谱的两个入口进了 `DocumentBridge`（它是文档工作，
-         只是 OS 拖放路由恰好落在宿主上），关机前的预览收尾进了 `PreviewSurface`。
-      3. `QmlUiBootstrap` 现在对窗口只剩 **6 个纯窗口生命周期调用**：
-         `setQuickShellBackendActive` / `hide` / `setVisible` /
-         `setQuickShellRootWindow`（×2）/ `shellSetRootWindowFrameGeometry` /
-         `shellNoteQuickUiReady`。
-      **本项无法在阶段 3.5 内完成，原因写清楚**：这 6 个不是耦合，是**所有权**——宿主在管理
-      它自己创建的那个窗口。要它们消失，只能让宿主不再创建窗口；而那要求 `MainWindow` 对
-      八个接口的**实现**先搬出去（预览运行时、时间轴、导出引擎、文档 section，约 30 个文件、
-      两万行），那正是阶段 4 的内容。接口已经就位，所以搬实现时**页面侧一行不用改**。
-      对话框 transient parent 亦同：`UiDialogs::effectiveParentWidget` 仍以隐藏窗口为锚，
-      随窗口一起消失。
-- [x] 为 `MiaCode` 建立 Qt 与第三方依赖 allowlist（2026-09-01）。
-      [docs/ops/DEPENDENCY_ALLOWLIST.md](../../ops/DEPENDENCY_ALLOWLIST.md) 按宿主 / 渲染 /
-      媒体 / 导出 / 平台 / 遗留六层登记 `MiaCode` 链接的每一个库，逐条写明平台条件、直接使用点、
-      加载时机和验证方式。守卫 `dependency_allowlist_spec` 解析全部
-      `target_link_libraries(MiaCode …)` 与文档三张表比对，五个漂移方向都有反向验证：
-      新增依赖漏登记、文档留着已删依赖、禁止表里的库被链接、Qt 版本不一致、QtAVPlayer 头文件
-      泄漏出适配层。
-      顺带清掉一条假依赖：`OpenGL` 曾被写成 `REQUIRED` 组件却没有任何 target 链接
-      `Qt6::OpenGL`；守卫新增「REQUIRED 组件必须被链接或声明为构建期组件」这一条后它无法再回来。
-- [x] `src/tools/net` 移出主程序（2026-09-01）。Net 页面已从 v2 产品运行时移除，所以
-      `src/tools/net/` 现在只在 `net_client_spec` 里编译（`MIACODE_BUILD_DEV_TOOLS=ON` 才构建），
-      `Qt6::Network` 从 `MiaCode` 的链接行和产品作用域 `find_package` 一并删除，改到 dev-tools
-      分支。两个此前无人断言的批量 worker 也搬进该 target，否则它们会变成谁都不编译的死代码。
-      **诚实记录**：`QtNetwork` 框架仍会被加载——它是 `Qt6::Qml` 的传递依赖。本项改变的是
-      「产品是否自己使用网络」，不是部署包里少一个框架；allowlist 的「传递依赖」一节写明了这点
-      和复核命令，不允许把它说成依赖数量减少。
-- [x] `Qt6::MultimediaQuickPrivate` 锁定并收口（2026-09-01）。它在 `src/` 里**没有任何直接
-      使用点**，存在的唯一理由是 `third_party/QtAVPlayer` 的 `QT_AVPLAYER_MULTIMEDIA` 帧桥；
-      allowlist 列出**允许 `#include <QtAVPlayer/…>` 的 7 个文件**（`PreviewStageMediaHost*` 六个
-      TU 加 `PreviewSharedD3D11Device.cpp`），守卫扫描整棵 `src/` 树，多一个文件就失败。
-      版本锁由守卫要求 `CMakeLists.txt` 每一处 `find_package(Qt6 <ver> …)` 与文档写死的 `6.8`
-      一致来保证。改用公共 Multimedia/VideoOutput API 的后续项已写在 allowlist 末尾（阶段 4 之后，
-      未排期，前置条件是帧桥不再需要 `qsgvideonode` 私有头）。
+1. **增量时间轴解析实际从未运行**。它唯一的驱动方是隐藏编辑器的变更信号，而该信号被写入抑制挡住；
+   隐藏编辑器删除后这条路彻底断了，v2 的每次编辑都是全量重建。要恢复得改由工作区提交驱动
+   （它知道确切编辑范围）。**所有者已决定继续延后。**
+2. **文档读取有一个延迟同步陷阱**。窗口时代那份文档副本与工作区之间是延迟同步的，后端替换文档
+   （启动 / 拖放 / 原生打开 / 崩溃恢复）之后存在一个窗口期。导出快照必须读它所依据的那一份副本，
+   不能顺手改读工作区，否则会列出旧的难度列表。
+3. **网络框架仍会被加载**——它是 QML 模块的传递依赖。阶段 3.5 改变的是「产品是否自己使用网络」，
+   不是部署包里少一个框架。不允许把这条记成依赖数量减少。
 
 ### 阶段 4 —— 删除 `MainWindow`，收口为 Qt Quick/QML 宿主
 
-- [x] **阶段 4 第一批拆除（2026-09-01）**：删除隐藏侧栏 `BusySpinner` 及其 7 处导出/文档
-      流程调用；删除隐藏导出设置使用的 `HudFontSettings` widget 适配器，保留 QML 的字体
-      选择路径与 `FontLibrary` / `PreviewHudState` 数据服务。
-- [x] **阶段 4 第二批拆除（2026-09-01）**：确认 `FlowLayout` 已无生产调用方，删除其实现、头文件
-      及 `MiaCode` target 条目；剩余 Widget helper 继续按依赖关系拆分。
-- [x] **阶段 4 第三批拆除（2026-09-01）**：删除 `EditableValueLabel`，将仍可达的旧对话框滑块
-      数值显示改为被动 `QLabel`；滑块、设置保存和旧入口保持不变。QML `EditableValue.qml` 的
-      双击输入路径不变。
-- [x] **阶段 4 第四批 / 媒体工具 owner migration（2026-09-01）**：六个单文件媒体接口由
-      `src/app/runtime/media/MediaJobsHost.{h,cpp}` 与 `MediaTools.cpp` 接管；`Session` 负责
-      创建并注册到 `ApplicationServices::mediaToolsEngineSlot()`。旧 `MainWindow` sections 已
-      迁出，媒体任务不再存在平行 owner；`qml_ui_bootstrap_lifecycle_spec`（lifecycle）与
-      `MiaCode` Release 构建通过。
-      完整 CTest 为 97/99；范围外既有 `qml_export_video_page_spec` 与
-      `qtavplayer_platform_spec` 失败，不作为本批完成依据。
-- [x] **阶段 4 第五批 / `MainWindow` → `Session` hosts（2026-09-02）**：远程提交
-      `2aa9db83` 已将窗口实现迁入 `src/app/runtime/`，删除 `src/app/mainwindow/` 全部文件；
-      `Session` 改为 QObject 装配壳，`QmlUiBootstrap` / CLI / latency sandbox 统一走新的
-      runtime 装配，`QmlApplicationContext` 不再持有窗口引用。合并提交为 `4416596d`。
+- [x] **阶段 4 第一至三批 Widgets 拆除（2026-09-01）**：删除隐藏侧栏忙碌指示器及其调用点、
+      隐藏导出设置用的字体 widget 适配器、已无生产调用方的自定义布局件与可编辑数值标签。
+      QML 侧的字体选择与双击输入路径不变。守卫会拦住这些残留回归。
+- [x] **阶段 4 第四批 / 媒体工具所有权迁移（2026-09-01）**：六个媒体接口改由 runtime 的媒体宿主
+      接管并注册到装配对象槽位，旧窗口 sections 迁出，媒体任务不再存在平行 owner。
+- [x] **阶段 4 第五批 / 窗口实现迁入 runtime（2026-09-02）**：窗口实现全部迁入 `src/app/runtime/`，
+      旧 `src/app/mainwindow/` 目录删除；`Session` 改为 QObject 装配壳，入口、CLI 与延迟沙盒
+      统一走新的 runtime 装配，QML 应用上下文不再持有窗口引用。
 - [ ] **PlaybackHost 二次拆分（阶段 4.5–4.9，当前主线）**：目标仍是「一个时间域、一个播放权威、
       两个独立投影」；4.8 已完成协调器契约收缩和旧类型重命名，4.9a 已完成运行时上下文边界外置，
       后续继续清理按宿主共享状态与 Widgets 残留，之后才算本主线完成。
@@ -741,45 +416,66 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       > 分别拥有资源和视图状态，但不能各自维护播放头、计时器或 seek 真相。GUI 验收另行处理；
       > 本主线先以契约、单元测试、装配检查和跨模块回归推进。
 
-      1. **4.5 先立播放契约与协调器边界（2026-09-02，已完成）**：新增窄的 `PlaybackControl`、只读
-         `PlaybackSnapshot` / `PlaybackStateFeed`（名称可在实现前最终确定），将播放 / 暂停 / 停止 /
-         seek / scrub / 倍速与 canonical playhead 从 `PreviewSurface` 拆出；在
-         `ApplicationServices` 增加 playback 槽位，迁移期间保留兼容 adapter。快照携带
-         `sessionGeneration`、`documentRevision`、`playbackSequence`、canonical chart time、
-         transport state 与 rate，旧回调在边界丢弃。实现落在
-         `src/app/v2/PlaybackControl.h`、`src/app/v2/PreviewPlaybackPort.h`、
-         `src/app/v2/AudioClockSource.h` 与 `src/app/runtime/playback/PlaybackCoordinator.*`；迁移期曾使用 adapter，现由
-         `PlaybackCoordinator` 直接实现播放控制与状态快照，并在 Session 析构前失效。
-         `application_services_spec` 与 MiaCode Release 构建通过。
-      2. **4.6 建立 `TimelineHost`（2026-09-02，已完成）**：新增 `src/app/runtime/timeline/TimelineHost.{h,cpp}`，接管
-         `TimelineSurface`、`TimelineQuickStateBridge`、QSG 就绪、底栏页签可见性、拖拽 / follow /
-         viewport / navigation 投影，以及时间线侧的分析展示。Timeline 只发出带 revision / sequence
-         的命令，不直接读 Preview 时钟，也不直接写文档模型；设置 `TimelineCommandGate` 统一校验
-         revision、代次与写入顺序。当前实现先以 `TimelineHost` 兼容转发到
-         `PlaybackTimelineSurfaceAdapter`，再进入
-         `QmlTimelineModel` 在 ingress 捕获 `TimelineCommandStamp`，host 只接受原始 stamp；
-         `timeline_host_spec` 覆盖乱序、revision/session 失效、投影转发与撤槽。
-      3. **4.7 建立 `PreviewHost`（2026-09-02，已完成）**：新增 `src/app/runtime/preview/PreviewHost.{h,cpp}`，接管
-         `PreviewRuntime`、`StageMediaHost` 内部舞台媒体路由与预热、渲染设置、音频混音 / SFX 和
-         preview 专用 executor。它只通过窄的 `AudioClockSource` / `PreviewPlaybackPort` 与协调器
-         对接，不再拥有独立的 canonical playhead 或 Timeline 状态。当前实现以兼容层转发非 transport
-         PreviewSurface 能力；transport 命令与 canonical position 已分别改走 port / clock，
-         `preview_host_spec` 与整套相关 Release 构建通过。
-      4. **4.8 收缩并最终重命名 `PlaybackHost`（2026-09-02，已完成）**：
-         `PlaybackCoordinator` 直接实现 `PlaybackControl`、`PreviewPlaybackPort`、
-         `AudioClockSource`；`PlaybackCoordinator.h` 不直接包含或继承 `PreviewSurface` /
-         `TimelineSurface`、QML 或 QSG 契约，4.9a 已改为通过 `RuntimeContext.h` 间接借用共享
-         `RuntimeContext::Ui` / `RuntimeContext::State`。协调器仍暂时公开旧 projection 方法供 adapter / Session 兼容转发。两个无状态
-         surface adapter 承接旧槽位，删除旧 `PlaybackControlAdapter`；
-         实现体中仍有共享 `RuntimeContext::Ui` / `RuntimeContext::State` 和历史 Preview/Timeline 调用，留到 4.9 清理。
-         `playback_coordinator_spec` 与 MiaCode Release 构建通过。
-      5. **4.9 清理 Session 装配与共享状态（进行中）**：`SessionBootstrap` 显式构造三个独立实例并分别注册
-         `playbackControl`、`previewSurface`、`timelineSurface`；最终移除通用共享状态借用，让 Session 只保留
-         生命周期、资源所有权和端口连接。同步更新 `ASSEMBLY.md`、仓库指南和 backend surface 清单。
-         当前已完成的 4.9a 是：新增 `src/app/runtime/RuntimeContext.h`，将 `Ui` / `State` 类型从
-         `Session` 的类型定义中外置；所有 runtime host 构造签名改用 `RuntimeContext::Ui` /
-         `RuntimeContext::State`，`PlaybackCoordinator.h` 不再包含 `Session.h`。这仍是过渡期共享存储，
-         后续按 PlaybackCoordinator / PreviewHost / TimelineHost 及其他宿主切开实际所有权。
+      1. **4.5–4.8（已完成，精简归档）**。四步依次立起了播放契约与三个宿主：
+         窄的播放控制接口 + 只读播放快照（携带 session 代次、文档 revision、播放序号、
+         canonical chart time、走带状态与倍速，旧回调在边界丢弃）；`TimelineHost` 接管时间线
+         投影并设命令闸门统一校验 revision / 代次 / 写入顺序；`PreviewHost` 接管预览运行时、
+         舞台媒体与音频，只通过窄的时钟与走带端口与协调器对接；最后旧 `PlaybackHost` 收缩并
+         重命名为 `PlaybackCoordinator`，直接实现三个窄契约，两个无状态 adapter 承接旧槽位。
+         **详细工程记录见 `src/app/runtime/ASSEMBLY.md`。**
+
+      2. **4.9 拆掉共享状态袋、让 Session 只做装配（进行中，当前主线）**
+
+         **4.9a–4.9c 已完成**：共享 `Ui` / `State` 类型外置到独立的运行时上下文头文件，宿主构造
+         签名改用显式上下文类型；时间线存储切进独立的域记录，兼容引用留在原处、拷贝被禁用，
+         并新增一个**独立编译单元**用编译期断言逐字段钉住「借用方不得拥有」；删除全部零引用死存储
+         及其连带的只有声明没有实现的方法簇。
+
+         **4.9d 切断协调器对 `Session&` 的依赖（进行中）**——本主线的关键路径。
+         起点：构造签名要 `Session&`，实现体有 **204 处 `session_.` 调用、73 个不同成员**，
+         因此没有任何测试能构造协调器，完成门槛第 1、3 项为空，根因是同一个。
+
+         | 步 | 内容 | `session_.` |
+         |---|---|---|
+         | 1 | 自指绕路 / 死代码 / 已持有同一存储 | 204 → 169 |
+         | 2 | canonical 时钟计算搬进协调器 | 169 → 155 |
+         | 3 | Widgets 补妆函数体搬进协调器 | 155 → 125 |
+         | 4a | 薄转发（只碰已持有的引用），不需要端口 | 125 → **79** |
+         | 4b | 窄端口 + 信号路径 | 79 → 0（**下一步**） |
+         | 5 | 构造签名去掉 `Session&` | — |
+
+         **前四步没有引入任何新抽象**——全是删冗余、搬函数体、直读协调器已持有的同一份引用。
+         关键杠杆是协调器与 `Session` 持有的是**同一个**上下文引用，所以只要函数体不越出
+         这份存储，绕道就是纯冗余。
+
+         **4b 的关键前提（已查证）**：三个候选宿主端口**自己的构造签名都要 `Session&`**，
+         所以直接注入它们并不能达成完成判据——测试里仍需先造 `Session`，只是把依赖藏到下一层，
+         **`session_.` 归零而目标落空**。必须用窄抽象接口。
+
+         **4b 的处置方案**（剩余 79 处按功能分组）：
+
+         - **30 处不需要新接口**：文档工作区读取与编辑器跟随同步的两个协作者都是已验证可独立
+           构造的应用层类，直接注入即可；三处信号改走已有的通知中继。
+         - **46 处收敛为四个窄接口**：偏好持久化、舞台媒体、文档状态、校验刷新。约 19 个虚方法，
+           实现类就是现有的四个宿主。**刻意不做成单个聚合接口**——那只是给 `Session&` 换名字，
+           接口镜像神对象不是解耦，而且会丢掉「哪个宿主拥有什么」这个信息。
+         - **7 处判定依赖运行时分支**，热路径是薄转发、首次构造分支跨宿主，静态读不出走哪条，
+           需单独定夺，不塞进任何接口凑数。
+         - **3 处零散**（延迟沙盒指针、一个无归属的 Session 自有字段）需单独定归属。
+
+         **顺序上的硬性要求**：构造签名一去掉 `Session&`，**立刻写 fake-clock 那个 spec**，
+         不要继续清理。那个测试是「端口够不够用」的唯一证明；四个接口都造完才发现构造不出来，
+         就是白造。
+
+         **4.9d 的诚实边界**：它让协调器可测、依赖显式且窄，但**不会让运行时摆脱 `Session`**——
+         实现这些接口的宿主自己仍要 `Session&`，生产路径上 `Session` 照旧装配一切。
+         宿主本身脱钩是 4.9e 往后的事。
+
+      3. **4.9e / 4.9f（未开始）**：canonical 播放状态收进协调器私有成员、跨域读者改读播放快照；
+         补齐下列完成门槛测试，并替换掉两处「文本扫描冒充生命周期保证」的检查。
+         **4.9e 的一个已知真问题**：时钟契约建好了却被所有潜在消费者绕开——外部调用者要的是
+         实时外推值，而契约给的是按 tick 写入的采样值，两者播放中不是同一个数，
+         所以不能机械改成走契约，契约本身可能需要同时暴露两种读法。
 
       **非 GUI 完成门槛**：补齐协调器 fake-clock 的 play/pause/resume/stop/seek/scrub/rate 测试，
       `TimelineCommandGate` 的 revision / sequence / drag-follow 顺序测试，三宿主装配与生命周期测试，
@@ -801,100 +497,30 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       QML import 部署扫描及跨模块时间域回归；macOS / Windows 依赖记录与功能 parity 另行处理，
       GUI 结果不作为本阶段的工作项。
 
-### 本轮中间审计与暂停记录（2026-09-02）
+### 审计与盘点结论（2026-09-02，精简保留）
 
-- **阶段 4.8 Sol 架构审计**：审计指出协调器头文件仍间接依赖 `Session.h` / 旧 projection API；该项被登记为 4.9 后续边界，而不是在 4.8 误判为全部抽离。审计还指出失效流程不能只递增 sequence，已补 `PlaybackIdentityGate` 的 active guard 与安全快照；原先仅做文本扫描的边界测试已补行为测试；过时装配注释已修正。4.8 已提交为 `8a241345`。
-- **阶段 4.9a Sol 架构审计**：类型外置和协调器头文件解耦基本成立，但发现 `RuntimeContext` 若声明在宿主 `unique_ptr` 之后会先析构，造成借用引用悬空。已将上下文移到所有宿主之前，并在 `playback_coordinator_spec` 增加成员顺序回归；同时增加 `SessionMembers.inc` 的两种预处理模式互斥保护，修正文档旧类型描述。审计确认八个 runtime host 的显式上下文签名一致、PreviewHost / TimelineHost 不借用该共享记录；建议的独立 compile-only 头文件 TU 尚未实施。4.9a 已提交为 `5246ff2a`。
-- **4.9a 验证证据**：MiaCode Release 与 `playback_coordinator_spec`、`timeline_host_spec`、`timeline_surface_ready_spec`、`preview_host_spec`、`application_services_spec`、`timeline_model_spec`、`preview_transport_push_spec` 均已通过；`git diff --check` 通过；runtime 源码未发现 `Session::HostUi`、`Session::HostState`、`struct HostUi`、`struct HostState`；未运行 Windows 构建和全量 CTest。
-- **4.9b 第一片时间线存储（2026-09-02，续做完成）**：上一轮暂停时只改了 `RuntimeContext.h`（新增
-  `TimelineState` 与 `state(timeline)` 构造），`SessionMembers.inc` 未跟进，暂存状态并不能编译。本轮补完：
-  `struct State` 的 29 个时间线字段改为绑定到 `TimelineState` 的引用别名，`State` 增加
-  `explicit State(TimelineState&)`；`State` 与 `RuntimeContext` 都禁用拷贝——拷贝出的 `State`
-  会继续别名源记录的存储，而 `explicit` + 左值引用参数也挡住了用临时量构造导致的悬空。
-- **4.9b 边界测试**：新增 `runtime_context_boundary_spec`（`src/tools/v2/RuntimeContextBoundarySpec.cpp`），
-  这是 4.9a 审计建议、当时未实施的「独立编译 TU」：它真正解析 `RuntimeContext.h`，逐字段
-  `static_assert`「`State` 只借不拥、`TimelineState` 拥有不借」，不是文本扫描。已做反向验证——
-  把 `timelineReady_` 改回 `State` 自有字段后构建按预期失败并报出该字段名。编译期断言看不到成员
-  顺序，所以声明顺序（`timeline` 必须在 `state` 之前构造）另由 `playback_coordinator_spec` 新增的
-  文本检查守住，与 4.9a 的宿主顺序检查同一类。
-- **4.9b 顺带修复的两个既有失败**：`debug_flag_index_spec` 此前就被 4.8/4.9a 引入的
-  `MIACODE_SESSION_RUNTIME_MEMBERS` / `MIACODE_RUNTIME_CONTEXT_TYPES` 打挂（当时只跑了子集 spec，
-  没跑全量 CTest 因而未暴露），本轮的断言宏又加了第三个；已在该 spec 中新增
-  `kSourcePreprocessorMacros` 白名单，与既有的 `kCompileDefinitions` 分开，说明这类 token 是
-  源码内的预处理选择器而非 env flag。`export_engine_spec` 扫的是早已删除的
-  `src/app/runtime/sections/export`，扫不到文件必然失败；已改指向现路径 `src/app/runtime/export`
-  （该目录只有一处注释提到 QMessageBox，spec 本就跳过注释行，因此通过是真通过）。
-- **4.9b 验证证据**：`cmake --build build-macos -j4` 全量 Release 构建通过（`MiaCode` 已按本轮改动
-  重新链接），仅剩两条与本轮无关的既有告警。全量 CTest 101 项：100 通过，仅剩既有已知的 `qtavplayer_platform_spec` 一红（见下条更正）。
-- **更正：`preview_guide_layer_spec` / `preview_slide_vanilla_trim_spec` 不是解析器回归**。
-  提交 `23c31fb5` 的说明和本文档此前的记载都把这两项判成「解析/场景域的既有回归、需另开一轮」，
-  **判错了**，此处更正（提交信息已在历史里，不改写）。真实根因是本地构建产物损坏：磁盘写满期间
-  Qt 的 AUTORCC **静默产出 0 字节的生成源文件**而不是报错——
-  `preview_slide_vanilla_trim_spec_autogen/.../qrc_slide_data.cpp`、
-  `preview_guide_layer_spec_autogen/.../qrc_slide_data.cpp`（应各 26,170,768 字节）与
-  `preview_guide_layer_spec_autogen/.../qrc_fonts.cpp`（应 29,973,292 字节）全是 0。
-  空文件照常编译链接，产出的二进制里根本没有 `qInitResources_slide_data` 符号；
-  `SimaiNativeParser.cpp` 的 `slideDataRoot()` 打不开 `:/data/slide_data.json` 后返回空表
-  **并静态缓存**，于是 `SimaiNativeParser.Slide.cpp` 里每个 slide/wifi 音符查表必空、
-  被判成 "unknown shape" 硬错误，`parseForTimeline` 返回 `ok=false`——与谱面文本是否合法无关。
-  定案靠两条交叉验证：同一段文本喂 `build-macos/simai_native_dump` 解析 `ok=true`；
-  三个目标编译出的 `SimaiNativeParser.cpp.o` 哈希完全一致。删掉这 3 个坏文件并只重建这两个
-  target 后，两项均通过，**未改任何源码**。
-- **该次污染的影响范围已界定**：全仓扫描所有 `qrc_*.cpp`，每份要么是字节正确的大小、要么是 0，
-  没有截断这种中间态；0 字节的只有上述 3 个，MiaCode 本体与其余 13 个目标的资源均完好。
-  因此 4.9b 的 Release 构建与测试证据本身成立，无需清库重建——这是查出来的结论，不是假设。
-- **运维教训（写给后续几轮）**：这台机器磁盘常年接近满，而磁盘写满在这里不只是「构建失败」，
-  而是**静默污染产物、伪造成测试红项**。判断一个 spec 红项之前，若它倒在解析类断言上，
-  先跑 `find build-macos -name "*.cpp" -size 0`，再用 `simai_native_dump` 交叉验证同一段文本，
-  不要直接去动 `src/core/chart/parser/`。全量构建前先 `df -h /`。
-- **仍然失败的 1 项**：`qtavplayer_platform_spec`（既有已知失败，不属于本主线范围）。
-- **仍未完成**：见下方两份盘点后的重排计划。不能标记阶段 4.9 或 Architecture Complete。
-  未运行 Windows 构建。
+四次审计/盘点的结论，凡已落实到代码的过程细节都已删去，只留仍在指导后续工作的判断。
 
-### 已裁决（不修）：`noteStatus` 掏空导致 3 条用户可见反馈消失（2026-09-02）
+**架构审计（4.8 / 4.9a）**：两次审计各抓到一个真问题——失效流程只递增序号而没有 active guard；
+共享上下文若声明在宿主之后会先析构、造成借用引用悬空。均已修复并补了回归。审计同时指出
+「边界测试只做文本扫描」，以及建议的独立编译单元当时未实施；后者已在 4.9b 补上。
 
-阶段 4.9d 第 1 步删除协调器里 10 处 `session_.noteStatus(...)` 调用时发现：
-`Session::noteStatus` 的函数体是**空的 `{}`**（`shell/ShellHost.cpp:82`，连形参名都没写），
-应是更早的 Widgets 移除期间状态栏消失后留下的空壳。10 条消息里 7 条是走带状态叙述或诊断
-（QML 已能从 `presentationChanged` / 播放快照自行渲染，或本就该进 `debug_log`），
-但下面 **3 条是用户可见的失败解释，目前静默消失**——用户按了播放没反应、跳转不动，界面不给任何提示：
+**存量盘点**：共享状态袋剩余 338 个自有字段 = 164 独占 / **165 跨域** / 9 零引用。
+**「按宿主切存储」这条路只对时间线成立**——它是唯一自包含的域。播放相关的几个字段各有 8–12 个域
+读写，塞进任何一个宿主的存储袋都只是换个地方共享；正确动作是让它们不再是字段，收进协调器私有
+成员、其余人改读播放快照。这条结论直接决定了 4.9c–4.9f 的排法。
 
-| 原调用点 | 消息 | 场景 |
-|---|---|---|
-| `playback/PlaybackGlue.cpp:191` | `"Select a difficulty field first."` | 未选难度就按播放 |
-| `playback/Tick.cpp:445` | `"Timeline metadata unavailable."` | `resolveNearestTimelineNote` 失败 |
-| `playback/Tick.cpp:449` | `"Timeline metadata unavailable."` | `moveEditorCursorToTimelineLocation` 失败 |
+**完成门槛覆盖盘点**：5 项非 GUI 门槛里 **3 项完全没有测试**，1 项部分覆盖，1 项是文本扫描且漏项。
+**三项空缺的根因是同一个**：协调器构造要 `Session&`，因此没有任何测试能构造它——不是没人写，是写不了。
+这就是 4.9d 成为关键路径的原因。
 
-**这不是 4.9d 引入的回归**，是既有缺口；而且因为函数体是空的，它不会以任何形式报错，
-不会被任何测试或日志发现。调用点已随第 1 步删除，此表是它们的位置记录。
+**自我更正**：两处「生命周期保证」实为比较成员声明字符串在源码里的先后位置，其中一处是 4.9b 新增的。
+当时给的理由（编译期断言看不到成员顺序）本身没错，但掩盖了真正的问题：**这些对象根本构造不出来**。
+4.9d 之后应改为真的构造/析构观察。
 
-**裁决（2026-09-02）：判定不需要修。** 调用点已随 4.9d 第 1 步删除，不再接任何 UI 通路。
-上表保留作为记录，避免后续有人重新发现同一现象、再走一遍分析。
-
-### 两份盘点与主线重排（2026-09-02）
-
-- **存量盘点结论**：`RuntimeContext::State` 剩余 338 个自有字段 = 164 独占 / **165 跨域** / 9 零引用；
-  `Ui` 153 个 = 54 独占 / 52 跨域 / 47 零引用。**「按宿主切存储」这条路只对 timeline 成立**——
-  timeline 是唯一自包含的域（4.9b 切完后该目录触及的剩余 State 字段为 0），而 `playing_` 有 12 个域
-  读写、`pauseSecond_` 8 个、`previewPlaybackRate_` 9 个、`scene_` 9 个。这些是 canonical 播放状态，
-  塞进任何一个宿主的存储袋都只是换个地方共享；正确动作是让它们不再是字段，收进协调器私有成员、
-  其余人改读 4.5 已建好的 `PlaybackSnapshot`。
-- **门槛覆盖盘点结论**：5 项非 GUI 门槛里 **3 项完全没有测试**（协调器 fake-clock 七种转换、
-  三宿主装配与生命周期、parser→timeline→preview→export 对齐），1 项部分覆盖
-  （`TimelineCommandGate` 的 revision / sequence 有真行为测试，但 drag-follow 的**带戳重载**
-  从未被乱序注入过，只有 `navigateToSecond` 走过），1 项是文本扫描且漏项
-  （协调器依赖检查没检查门槛原文要求的 "media UI"；Timeline↔Preview 互不依赖没有任何断言，
-  只是两个 spec 的 CMake SOURCES 恰好精简——是副作用不是设计）。
-- **三项空缺的根因是同一个**：`PlaybackCoordinator` 构造签名要 `Session&`，实现体有 **204 处
-  `session_.` 调用、73 个不同方法**，因此没有任何测试能构造它（全仓也找不到任何 fake clock）。
-  不是没人写，是写不了。
-- **自我更正**：`playback_coordinator_spec` 的 `verifyRuntimeContextOutlivesHosts` 与 4.9b 新增的
-  `verifyTimelineStorageIsConstructedBeforeItsAliases` 都被判定为「文本扫描冒充生命周期保证」，
-  这个批评成立。当时给的理由「编译期断言看不到成员顺序」本身没错，但它掩盖了真正的问题：
-  **这些对象根本构造不出来**。4.9d 之后应改为真的构造/析构观察。
-- **剩余主线重排为 4.9c → 4.9d → 4.9e → 4.9f**，顺序由依赖关系决定而非偏好
-  （4.9f 依赖 4.9d，4.9e 依赖 4.9d 的端口）。各阶段内容见
-  `src/app/runtime/ASSEMBLY.md` 的进度清单。
+**运维教训**：这台机器磁盘常年接近满，而磁盘写满在这里不只是「构建失败」，而是**静默污染产物、
+伪造成源码级回归**——曾有两个 spec 因 0 字节的生成资源文件而表现为解析器错误，骗过了一轮判断。
+判断 spec 红项前，若它倒在解析类断言上，先查构建目录里有没有 0 字节的生成源文件；全量构建前先看磁盘。
 
 ### 0b（已完成，归档保留）/ 0c（已改判并完成）
 
