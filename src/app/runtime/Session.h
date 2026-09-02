@@ -487,7 +487,6 @@ private:
     void updatePreviewFullscreenButtonAppearance();
     void updatePreviewFullscreenOverlayGeometry();
     QString formatPreviewPlaybackRateToastText(double rate) const;
-    void showPreviewPlaybackRateToast(double rate);
     void updatePreviewPlaybackRateToastGeometry();
     void showPreviewFullscreenControls(bool animate = true);
     void hidePreviewFullscreenControls(bool animate = true);
@@ -624,7 +623,6 @@ private:
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     void clearPreviewFollowDecoration();
-    void clearValidationErrors();
     void clearValidationDecorations();
     void addValidationError(
         int line,

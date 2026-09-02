@@ -199,7 +199,27 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          **4.9e 的一个真问题**：那 8 个外部调用者要的是外推值，而 `AudioClockSource` 给的是
          采样值，所以它们不能机械改成走契约——`AudioClockSource` 建好了却被所有潜在消费者绕开，
          契约本身可能需要同时暴露两种读法。
-      3. D：Widgets 补妆函数体搬进协调器
+      3. ~~D：Widgets 补妆函数体搬进协调器~~
+         **已完成 2026-09-02**：`session_.` 计数 155 → **125**。8 项中 7 项函数体逐字搬入。
+         `refreshQuickShellRehostedWidgetParent`（14 处）做成 `LayoutUi.cpp` 匿名命名空间里的
+         自由函数——它不依赖任何成员状态，调用点又全在这一个文件里，不必给协调器公共接口增负担。
+         `updateEditorFindBarGeometry` / `applyFindOverlayInset` 只搬函数体，`ShellHost` 侧原方法
+         仍有 6 处内部调用因而保留。连带删除因此无人调用的
+         `Session::showPreviewPlaybackRateToast` 与 `Session::clearValidationErrors` 转发壳。
+
+         **裁决一：`setCurrentBottomTabsTabId` 移出 D 类，归入 E。** 它不是 Widgets 补妆——
+         函数体除 `ui_`/`state_` 外还调用兄弟宿主 `validation_->flushPendingMuriDiagnosticsPanelRefresh()`
+         （另有一句 `playback_->flushDeferredTimelineBridgeState()` 确属自指绕路）。
+         把它搬进协调器会让协调器穿过 `Session` 去调另一个宿主，正是本阶段要消除的耦合；
+         跨宿主编排本就是 `Session` 保留的正当职责。改为在 E 步走窄端口。
+
+         **裁决二：搬入的 `updatePauseButtonAppearance` 体内保留了
+         `emit session_.presentationChanged()`。** 这不是新增耦合——原宿主
+         `DocumentSessionHost` 里就是这么写的，且 `PlaybackCoordinator` 早已是 `Session` 的
+         friend（`Session.h:157-158`），属平移而非回退。但它和 `setPreviewPlayingFlag` 是同一类
+         问题，**E 步必须把这两条信号路径一并改走 `ShellNotifications`**（已有等价契约）。
+         计数里那 2 处新增的 `session_.` 就是它和 `formatPreviewPlaybackRateToastText`，
+         是真实存量耦合，指标保持诚实。
       4. E：5 个端口 + `setPreviewPlayingFlag` 的信号路径
       5. 构造签名去掉 `Session&`；门槛 1、3 的测试从此可写
 

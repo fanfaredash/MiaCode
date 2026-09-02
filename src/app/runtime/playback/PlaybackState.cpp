@@ -936,7 +936,7 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewAudioDeviceCutoff(
             .arg(state_.previewPendingDevicePauseToken_)
             .arg(state_.playing_ ? 1 : 0)
             .arg(state_.pauseSecond_, 0, 'f', 6));
-    session_.updatePauseButtonAppearance();
+    updatePauseButtonAppearance();
 }
 
 void miacode::runtime::PlaybackCoordinator::pausePreviewForAudioDeviceChange(
@@ -1013,7 +1013,7 @@ void miacode::runtime::PlaybackCoordinator::pausePreviewForAudioDeviceChange(
             .arg(state_.previewPendingDevicePauseToken_)
             .arg(state_.playing_ ? 1 : 0)
             .arg(state_.pauseSecond_, 0, 'f', 6));
-    session_.updatePauseButtonAppearance();
+    updatePauseButtonAppearance();
 }
 
 void miacode::runtime::PlaybackCoordinator::emitChartSwitchResourceGauge()
@@ -1192,4 +1192,47 @@ void miacode::runtime::PlaybackCoordinator::anchorQtPreviewPlaybackToSecond(doub
         clampedSecond,
         true,
         state_.previewFollowEnabled_);
+}
+
+// Stage 4.9d-3 (D-class): moved verbatim from DocumentSessionHost::updatePauseButtonAppearance
+// (document/DocumentEditorState.cpp) — pure ui_/state_ widget presentation, no
+// DocumentSessionHost-own state. The queued emit still targets Session (this
+// coordinator's own session_ member is the same Session& the original body used).
+void miacode::runtime::PlaybackCoordinator::updatePauseButtonAppearance()
+{
+    // The play/pause presentation changed, and the QML transport's button reads
+    // the same condition this one does — playing_ OR the export
+    // intro's lead-in. setPreviewPlayingFlag announces the first; nothing
+    // announced the second, so the intro played with the transport still
+    // showing a play button. Announced before the widget guard, because a v1
+    // action that no longer exists is not a reason to leave the shell stale,
+    // and queued for the same reason that writer is: callers reach here from
+    // the middle of a transition.
+    QMetaObject::invokeMethod(
+        &session_, [this]() { emit session_.presentationChanged(); }, Qt::QueuedConnection);
+    if (ui_.pausePreviewAction_ == nullptr) {
+        return;
+    }
+    const QColor iconColor =
+        state_.previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : UiTheme::colors().iconPrimary;
+    const bool previewPlaying = state_.playing_ || state_.exportIntroLeadInActive_;
+    if (previewPlaying) {
+        ui_.pausePreviewAction_->setIcon(makePreviewPauseIcon(iconColor));
+        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.pause")));
+    } else {
+        ui_.pausePreviewAction_->setIcon(makePreviewPlayIcon(iconColor));
+        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.play")));
+    }
+    if (ui_.pausePreviewButton_ != nullptr) {
+        ui_.pausePreviewButton_->setText(
+            previewPlaying
+                ? UiText::text(QStringLiteral("preview.pause"))
+                : UiText::text(QStringLiteral("preview.play"))
+        );
+        ui_.pausePreviewButton_->setStyleSheet(
+            state_.previewFullscreenActive_
+                ? previewFullscreenPauseButtonStyleSheet(previewPlaying)
+                : UiTheme::pausePreviewButtonStyleSheet(previewPlaying)
+        );
+    }
 }

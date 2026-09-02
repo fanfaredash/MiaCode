@@ -355,6 +355,16 @@ private:
     void finalizeQtPreviewPlaybackStart(double effectiveStartSecond);
     void softStopQtPreviewPlaybackToSecond(double second, bool centerView);
     void anchorQtPreviewPlaybackToSecond(double second, bool centerView);
+    // Stage 4.9d-3 (D-class): function bodies moved in verbatim from their
+    // former Session/ShellHost/DocumentSessionHost homes — see LayoutUi.cpp,
+    // PlaybackState.cpp, TimelineFlow.cpp and Playback.cpp for the definitions.
+    void updatePauseButtonAppearance();
+    void setMetadataExtraText(const QString& text);
+    void clearValidationErrors();
+    void showPreviewPlaybackRateToast(double rate);
+    void updatePreviewPlaybackRateToastGeometry();
+    void updateEditorFindBarGeometry();
+    void applyFindOverlayInset();
     Session& session_;
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;

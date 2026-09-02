@@ -83,6 +83,135 @@ void appendPageLayoutDiag(
         level);
 }
 
+// Stage 4.9d-3 (D-class): local copy of the rehost-refresh helpers, moved
+// verbatim from ShellHost's real refreshQuickShellRehostedWidgetParent
+// (shell/Runtime.cpp) since the function body touches only the passed-in
+// widget and Qt Widgets APIs, not any Session/ShellHost state. ShellHost
+// keeps its own copy (DocumentPages.cpp still calls through Session), so
+// this is a deliberate, temporary duplication rather than a shared helper.
+QString rehostPointerHex(const void* pointer)
+{
+    return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
+
+constexpr qint64 kRehostLayoutStepSlowMs = 50;
+constexpr qint64 kRehostLayoutTotalSlowMs = 80;
+
+// Stage 4.9d-3 (D-class): local copy of the find-bar geometry constants,
+// moved verbatim alongside ShellHost::updateEditorFindBarGeometry /
+// applyFindOverlayInset (shell/Interaction.cpp). Both bodies only ever
+// touch ui_.editorFindBar_ / ui_.editorFindGeometryHost_ / ui_.editorStack_,
+// so they carry over unchanged; ShellHost keeps its own copy since it is
+// still called internally (e.g. shell/Interaction.cpp's find/replace flow).
+constexpr int kEditorFindBarMinWidth = 300;
+constexpr int kEditorFindBarMaxWidth = 500;
+constexpr int kEditorFindBarHorizontalMargin = 14;
+constexpr int kEditorFindBarTopMargin = 10;
+constexpr int kEditorFindBarOverlayGap = 8;
+
+QString rehostWidgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("(null)");
+    }
+    return QStringLiteral("class=%1 name=%2 ptr=%3 size=%4x%5 visible=%6 parent=%7")
+        .arg(QString::fromUtf8(widget->metaObject()->className()))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
+        .arg(rehostPointerHex(widget))
+        .arg(widget->width())
+        .arg(widget->height())
+        .arg(widget->isVisible() ? 1 : 0)
+        .arg(rehostPointerHex(widget->parentWidget()));
+}
+
+void appendRehostLayoutDiag(
+    const QString& action,
+    const QString& step,
+    QWidget* widget,
+    qint64 elapsedMs,
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("layout/rehosted_widget"),
+        QStringLiteral("action=%1 step=%2 elapsed_ms=%3 widget=\"%4\"")
+            .arg(action, step)
+            .arg(elapsedMs)
+            .arg(rehostWidgetSummary(widget)),
+        /*force=*/false,
+        level);
+}
+
+void refreshQuickShellRehostedWidgetParent(QWidget* widget)
+{
+    MC_OP("miacode::runtime::PlaybackCoordinator::refreshQuickShellRehostedWidgetParent");
+    if (widget == nullptr) {
+        return;
+    }
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    MIACODE_HANG_PHASE(
+        "WindowSection::refreshQuickShellRehostedWidgetParent",
+        rehostWidgetSummary(widget));
+    if (auto* dock = qobject_cast<QDockWidget*>(widget); dock != nullptr) {
+        if (QWidget* dockWidget = dock->widget(); dockWidget != nullptr) {
+            dockWidget->updateGeometry();
+        }
+    }
+    if (QLayout* layout = widget->layout(); layout != nullptr) {
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+        MIACODE_HANG_PHASE(
+            "WindowSection::refreshQuickShellRehostedWidgetParent.widgetLayout",
+            rehostWidgetSummary(widget));
+        layout->activate();
+        const qint64 elapsedMs = stepTimer.elapsed();
+        if (elapsedMs >= kRehostLayoutStepSlowMs) {
+            appendRehostLayoutDiag(
+                QStringLiteral("rehost_refresh_step_slow"),
+                QStringLiteral("widget_layout_activate"),
+                widget,
+                elapsedMs,
+                miacode::debug_log::Level::Warn);
+        }
+    }
+    widget->updateGeometry();
+    widget->update();
+    if (QWidget* parentWidget = widget->parentWidget(); parentWidget != nullptr) {
+        if (QLayout* parentLayout = parentWidget->layout(); parentLayout != nullptr) {
+            QElapsedTimer stepTimer;
+            stepTimer.start();
+            MIACODE_HANG_PHASE(
+                "WindowSection::refreshQuickShellRehostedWidgetParent.parentLayout",
+                rehostWidgetSummary(parentWidget));
+            parentLayout->activate();
+            const qint64 elapsedMs = stepTimer.elapsed();
+            if (elapsedMs >= kRehostLayoutStepSlowMs) {
+                appendRehostLayoutDiag(
+                    QStringLiteral("rehost_refresh_step_slow"),
+                    QStringLiteral("parent_layout_activate"),
+                    parentWidget,
+                    elapsedMs,
+                    miacode::debug_log::Level::Warn);
+            }
+        }
+        parentWidget->updateGeometry();
+        parentWidget->update();
+    }
+    const qint64 totalMs = totalTimer.elapsed();
+    if (totalMs >= kRehostLayoutTotalSlowMs) {
+        appendRehostLayoutDiag(
+            QStringLiteral("rehost_refresh_total_slow"),
+            QStringLiteral("total"),
+            widget,
+            totalMs,
+            miacode::debug_log::Level::Warn);
+    }
+}
+
 }  // namespace
 
 double miacode::runtime::PlaybackCoordinator::previewDurationSeconds() const
@@ -406,13 +535,47 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasAspectRatio(double r
 void miacode::runtime::PlaybackCoordinator::updatePreviewWorkspaceLayout()
 {
     updatePreviewPanelLayout();
-    session_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
-    session_.shell_->updateEditorFindBarGeometry();
-    session_.shell_->applyFindOverlayInset();
+    refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
+    refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
+    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    updateEditorFindBarGeometry();
+    applyFindOverlayInset();
+}
+
+// Stage 4.9d-3 (D-class): moved verbatim from ShellHost::updateEditorFindBarGeometry
+// (shell/Interaction.cpp) — pure ui_ widget geometry, no ShellHost-own state.
+void miacode::runtime::PlaybackCoordinator::updateEditorFindBarGeometry()
+{
+    QWidget* geometryHost = ui_.editorFindGeometryHost_ != nullptr ? ui_.editorFindGeometryHost_ : ui_.editorStack_;
+    if (ui_.editorFindBar_ == nullptr || geometryHost == nullptr) {
+        return;
+    }
+    const int availableWidth = qMax(0, geometryHost->width() - (kEditorFindBarHorizontalMargin * 2));
+    if (availableWidth <= 0) {
+        return;
+    }
+    int width = qMin(kEditorFindBarMaxWidth, availableWidth);
+    if (availableWidth >= kEditorFindBarMinWidth) {
+        width = qMax(kEditorFindBarMinWidth, width);
+    }
+    const int x = qMax(kEditorFindBarHorizontalMargin, geometryHost->width() - kEditorFindBarHorizontalMargin - width);
+    const int y = kEditorFindBarTopMargin;
+    const int height = ui_.editorFindBar_->sizeHint().height();
+    ui_.editorFindBar_->setGeometry(x, y, width, height);
+    ui_.editorFindBar_->raise();
+}
+
+// Stage 4.9d-3 (D-class): moved verbatim from ShellHost::applyFindOverlayInset
+// (shell/Interaction.cpp) — pure ui_ widget read, no ShellHost-own state.
+void miacode::runtime::PlaybackCoordinator::applyFindOverlayInset()
+{
+    const int topInset =
+        (ui_.editorFindBar_ != nullptr && ui_.editorFindBar_->isVisible())
+        ? ui_.editorFindBar_->height() + kEditorFindBarOverlayGap
+        : 0;
+    Q_UNUSED(topInset);
 }
 
 void miacode::runtime::PlaybackCoordinator::cacheWorkspaceLayoutSizes()
@@ -554,11 +717,11 @@ void miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch()
                 miacode::debug_log::Level::Warn);
         }
     }
-    session_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
+    refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
+    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
     const qint64 totalMs = totalTimer.elapsed();
     if (totalMs >= kPageLayoutTotalSlowMs) {
         appendPageLayoutDiag(
@@ -622,9 +785,9 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewPanelLayout(int panelWi
             ui_.previewStatsCard_->show();
         }
     }
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
-    session_.updatePreviewPlaybackRateToastGeometry();
+    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    updatePreviewPlaybackRateToastGeometry();
 }
 
 void miacode::runtime::PlaybackCoordinator::updatePreviewObjectStats(double second)
@@ -656,8 +819,8 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewObjectStats(double seco
     ui_.previewBreakStatsLabel_->setText(fmt("Break", stats.breakPlayed, stats.breakTotal));
     ui_.previewTotalStatsLabel_->setText(fmt("Total", stats.totalPlayed, stats.totalCount));
     updatePreviewStatsLayoutMode(-1);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    session_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
 }
 
 QString miacode::runtime::PlaybackCoordinator::formatPreviewTimestamp(double second) const

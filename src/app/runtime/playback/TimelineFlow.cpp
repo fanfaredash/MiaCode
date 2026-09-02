@@ -542,7 +542,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
     miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     const QString serializedBpm = QString::number(bpm, 'f', 3);
     workspace.upsertExtraField(QStringLiteral("wholebpm"), serializedBpm);
-    session_.setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
+    setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
     state_.documentDirty_ = workspace.snapshot().dirty;
     session_.updateDirtyState();
 }
@@ -552,10 +552,39 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int c
     const int normalized = qMax(1, clockCount);
     miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     workspace.upsertExtraField(QStringLiteral("clock_count"), QString::number(normalized));
-    session_.setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
+    setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
     state_.documentDirty_ = workspace.snapshot().dirty;
     session_.updateDirtyState();
     refreshTimelineMetadata();
+}
+
+// Stage 4.9d-3 (D-class): moved verbatim from DocumentSessionHost::setMetadataExtraText
+// (document/DocumentEditorState.cpp) — pure ui_/state_ widget presentation, no
+// DocumentSessionHost-own state.
+void miacode::runtime::PlaybackCoordinator::setMetadataExtraText(const QString& text)
+{
+    if (ui_.metadataExtraEdit_ == nullptr) {
+        return;
+    }
+    const bool previousSuppress = state_.suppressTextDirtyTracking_;
+    state_.suppressTextDirtyTracking_ = true;
+    QSignalBlocker blocker(ui_.metadataExtraEdit_);
+    ui_.metadataExtraEdit_->setPlainText(text);
+    ui_.metadataExtraEdit_->document()->clearUndoRedoStacks();
+    ui_.metadataExtraEdit_->document()->setModified(false);
+    state_.metadataExtraUndoSaveAnchor_ = ui_.metadataExtraEdit_->document()->availableUndoSteps();
+    applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixelsForPointSize(state_.editorTextFontPointSize_, state_.editorLineSpacingFactor_));
+    state_.suppressTextDirtyTracking_ = previousSuppress;
+}
+
+// Stage 4.9d-3 (D-class): moved verbatim from ValidationHost::clearValidationErrors
+// (validation/ValidationFlow.cpp) — pure ui_ widget clear, no ValidationHost-own state.
+void miacode::runtime::PlaybackCoordinator::clearValidationErrors()
+{
+    if (ui_.errorList_ == nullptr) {
+        return;
+    }
+    ui_.errorList_->clear();
 }
 
 void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
@@ -571,7 +600,7 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
     if (pathChanged) {
         invalidatePreviewFollowBindingCache();
         session_.clearValidationCache();
-        session_.clearValidationErrors();
+        clearValidationErrors();
         session_.clearValidationDecorations();
         stopQtPreviewPlayback(false);
         if (session_.latencySandboxController() != nullptr) {
@@ -725,7 +754,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineUserInteractionStarted()
     }
     if (state_.playing_) {
         pauseQtPreviewPlaybackExact();
-        session_.updatePauseButtonAppearance();
+        updatePauseButtonAppearance();
         if (pauseForViewportLock) {
             const double second = qMax(0.0, state_.pauseSecond_);
             QTimer::singleShot(0, &session_, [this, second]() {

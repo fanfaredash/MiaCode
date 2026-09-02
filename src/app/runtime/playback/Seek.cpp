@@ -90,7 +90,7 @@ void miacode::runtime::PlaybackCoordinator::scheduleDeferredPreviewUiTail(
                 updatePreviewFollowDecorationForTimelineBlueLine(objectStatsSecond, true);
             }
             if (updatePauseButton) {
-                session_.updatePauseButtonAppearance();
+                updatePauseButtonAppearance();
             }
         });
 }

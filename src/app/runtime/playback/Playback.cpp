@@ -379,7 +379,7 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate
             }
         }
     }
-    session_.showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
+    showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_about_to_call");
     session_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "ui_rate_change");
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_returned");
@@ -909,29 +909,6 @@ QString Session::formatPreviewPlaybackRateToastText(double rate) const
         .arg(percent);
 }
 
-void Session::showPreviewPlaybackRateToast(double rate)
-{
-    if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
-        return;
-    }
-    if (previewPlaybackRateToastTimer_ != nullptr) {
-        previewPlaybackRateToastTimer_->stop();
-    }
-    if (previewPlaybackRateToastOpacityAnimation_ != nullptr) {
-        previewPlaybackRateToastOpacityAnimation_->stop();
-    }
-    previewPlaybackRateToastLabel_->setText(formatPreviewPlaybackRateToastText(rate));
-    updatePreviewPlaybackRateToastGeometry();
-    if (previewPlaybackRateToastOpacityEffect_ != nullptr) {
-        previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
-    }
-    previewPlaybackRateToast_->show();
-    previewPlaybackRateToast_->raise();
-    if (previewPlaybackRateToastTimer_ != nullptr) {
-        previewPlaybackRateToastTimer_->start();
-    }
-}
-
 void Session::updatePreviewPlaybackRateToastGeometry()
 {
     if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
@@ -952,6 +929,41 @@ void Session::hidePreviewPlaybackRateToast()
     }
     if (previewPlaybackRateToast_ != nullptr) {
         previewPlaybackRateToast_->hide();
+    }
+}
+
+// Stage 4.9d-3 (D-class): moved verbatim from Session::showPreviewPlaybackRateToast /
+// Session::updatePreviewPlaybackRateToastGeometry above — pure ui_ widget
+// presentation, no Session-own state. formatPreviewPlaybackRateToastText stays a
+// Session method (not part of this step's D-class list), reached via the session_
+// reference below.
+void miacode::runtime::PlaybackCoordinator::showPreviewPlaybackRateToast(double rate)
+{
+    if (ui_.previewPlaybackRateToast_ == nullptr || ui_.previewPlaybackRateToastLabel_ == nullptr) {
+        return;
+    }
+    if (ui_.previewPlaybackRateToastTimer_ != nullptr) {
+        ui_.previewPlaybackRateToastTimer_->stop();
+    }
+    if (ui_.previewPlaybackRateToastOpacityAnimation_ != nullptr) {
+        ui_.previewPlaybackRateToastOpacityAnimation_->stop();
+    }
+    ui_.previewPlaybackRateToastLabel_->setText(session_.formatPreviewPlaybackRateToastText(rate));
+    updatePreviewPlaybackRateToastGeometry();
+    if (ui_.previewPlaybackRateToastOpacityEffect_ != nullptr) {
+        ui_.previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
+    }
+    ui_.previewPlaybackRateToast_->show();
+    ui_.previewPlaybackRateToast_->raise();
+    if (ui_.previewPlaybackRateToastTimer_ != nullptr) {
+        ui_.previewPlaybackRateToastTimer_->start();
+    }
+}
+
+void miacode::runtime::PlaybackCoordinator::updatePreviewPlaybackRateToastGeometry()
+{
+    if (ui_.previewPlaybackRateToast_ == nullptr || ui_.previewPlaybackRateToastLabel_ == nullptr) {
+        return;
     }
 }
 

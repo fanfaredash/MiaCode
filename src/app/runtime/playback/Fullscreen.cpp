@@ -58,7 +58,7 @@ void miacode::runtime::PlaybackCoordinator::enterPreviewFullscreen()
         state_.scene_->setSuppressObjectStatsHud(true);
     }
     session_.refreshQuickShellPreviewCompositeSurfaceState();
-    session_.updatePauseButtonAppearance();
+    updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
 }
 
@@ -74,7 +74,7 @@ void miacode::runtime::PlaybackCoordinator::exitPreviewFullscreen()
         state_.scene_->setSuppressObjectStatsHud(false);
     }
     session_.refreshQuickShellPreviewCompositeSurfaceState();
-    session_.updatePauseButtonAppearance();
+    updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
 }
 

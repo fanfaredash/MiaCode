@@ -739,11 +739,6 @@ void Session::clearPreviewFollowDecoration()
     }
 }
 
-void Session::clearValidationErrors()
-{
-    validation_->clearValidationErrors();
-}
-
 void Session::clearMuriDiagnostics()
 {
     validation_->clearMuriDiagnostics();

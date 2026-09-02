@@ -179,7 +179,7 @@ void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
             QString("op=%1 source=toggle_action paused_second=%2")
                 .arg(opId)
                 .arg(state_.pauseSecond_, 0, 'f', 6));
-        session_.updatePauseButtonAppearance();
+        updatePauseButtonAppearance();
         return;
     }
 
@@ -202,7 +202,7 @@ void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
                 .arg(state_.pauseSecond_, 0, 'f', 6));
         return;
     }
-    session_.updatePauseButtonAppearance();
+    updatePauseButtonAppearance();
 }
 
 void Session::onStopPreview()
