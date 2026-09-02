@@ -15,7 +15,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
-#include <QFontInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QLocale>
@@ -408,6 +407,14 @@ QColor previewFullscreenOverlayIconColor()
 QFont editorFont(int pointSize)
 {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    static const QString bundledEditorFontFamily = []() -> QString {
+        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/consola.ttf"));
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        return families.isEmpty() ? QString() : families.first();
+    }();
+    if (!bundledEditorFontFamily.isEmpty()) {
+        font.setFamily(bundledEditorFontFamily);
+    }
     font.setStyleHint(QFont::Monospace);
     font.setFixedPitch(true);
     if (pointSize > 0) {
