@@ -1,25 +1,19 @@
 cmake_minimum_required(VERSION 3.21)
 
-set(MIACODE_VERSION_MAJOR "1")
-set(MIACODE_VERSION_MINOR "1")
+set(MIACODE_VERSION_MAJOR "2")
+set(MIACODE_VERSION_MINOR "0")
 set(MIACODE_VERSION_PATCH "0")
-# Single source of truth for the prerelease tag. Both the package
-# filename (MiaCode-v<version>-win64.zip via package-win.ps1) and the
-# user-visible "About" dialog read this. Beta20 unified the previously
-# split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
-# they always drifted apart in practice (e.g. beta20 zip shipping with
-# beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.15")
+# Single source of truth for the prerelease tag and package version. The
+# About dialog appends its compile date to this version at runtime.
+set(MIACODE_VERSION_PRERELEASE "alpha")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-# Display version is identical to the package version. Kept as a
-# distinct preprocessor define so consumers in `app.setApplicationVersion`
-# and the About dialog don't need a code change; they just both resolve
-# to the same string now.
+# The application metadata version remains the package version. The About
+# dialog adds its compile date to the visible version separately.
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION_STRING}")
 
 if (APPLE)
@@ -648,6 +642,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppSwitch.qml
     src/app/qml_ui/components/AppComboBox.qml
     src/app/qml_ui/components/AppSlider.qml
+    src/app/qml_ui/components/AppScrollBar.qml
     src/app/qml_ui/components/AppMenu.qml
     src/app/qml_ui/components/AppMenuAction.qml
     src/app/qml_ui/components/AppMenuItem.qml

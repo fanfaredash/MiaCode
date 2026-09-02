@@ -40,6 +40,7 @@ Rectangle {
             text: card.title
             color: Theme.colors.text.active
             font.family: Theme.uiFont
+            font.pixelSize: Theme.uiFontSize
             font.bold: true
         }
         ColumnLayout {
@@ -87,7 +88,6 @@ Rectangle {
                         Layout.fillWidth: true
                         text: root.latency.bpmDetectResult
                         color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
                         elide: Text.ElideRight
                     }
                 }
@@ -96,7 +96,6 @@ Rectangle {
                     Text {
                         text: UiText.text("计数拍")
                         color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
                     }
                     AppTextField {
                         objectName: "latencyClockCountField"
@@ -112,7 +111,6 @@ Rectangle {
                     Text {
                         text: UiText.text("解码器")
                         color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
                     }
                     AppComboBox {
                         objectName: "latencyDecoderCombo"
@@ -154,7 +152,6 @@ Rectangle {
                         Layout.fillWidth: true
                         text: root.latency.offsetDetectResult
                         color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
                         elide: Text.ElideRight
                     }
                 }
@@ -181,7 +178,6 @@ Rectangle {
                     Text {
                         text: UiText.text("细分")
                         color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
                     }
                     AppTab {
                         panelTab: true
@@ -201,7 +197,6 @@ Rectangle {
                     Text {
                         text: UiText.text("音效音量")
                         color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
                     }
                     AppSlider {
                         objectName: "latencySfxVolumeSlider"
@@ -215,7 +210,6 @@ Rectangle {
                     Text {
                         text: root.latency.sfxVolumePercent + "%"
                         color: Theme.colors.text.active
-                        font.family: Theme.uiFont
                     }
                 }
             }

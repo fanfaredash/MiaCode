@@ -16,8 +16,6 @@ CheckBox {
     focusPolicy: Qt.TabFocus
     font.family: Theme.uiFont
     font.pixelSize: Theme.secondaryFontSize
-    font.weight: Font.Normal
-
     indicator: Item {
         implicitWidth: 15
         implicitHeight: 15

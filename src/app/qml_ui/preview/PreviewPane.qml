@@ -45,6 +45,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         title: UiText.text("预览")
+        sidebarTitle: true
 
         ChromeRow {
             id: renderModeButton

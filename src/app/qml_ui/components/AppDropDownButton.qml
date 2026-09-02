@@ -12,7 +12,6 @@ AbstractButton {
 
     font.family: Theme.uiFont
     font.pixelSize: Theme.captionFontSize
-    font.weight: Font.Normal
     topPadding: 0
     bottomPadding: 0
     leftPadding: 8

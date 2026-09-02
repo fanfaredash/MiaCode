@@ -24,6 +24,7 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
 - Qt resources:
   - `resources/app_icons.qrc`
   - `resources/fonts.qrc`
+    - `editorFont` registers bundled `assets/fonts/consola.ttf` on every platform and falls back to Qt's system fixed font when registration fails
   - `resources/slide_data.qrc`
   - `resources/preview_judge_effects.qrc`
   - `resources/preview_runtime_qml.qrc`

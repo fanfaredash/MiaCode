@@ -9,6 +9,9 @@
 #include <QEvent>
 #include <QFileInfo>
 #include <QMimeData>
+#include <QMouseEvent>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QTimer>
 #include <QUrl>
 
@@ -142,6 +145,19 @@ bool QmlChartDropBridge::eventFilter(QObject* watched, QEvent* event)
     }
 
     switch (event->type()) {
+    case QEvent::MouseButtonPress: {
+        auto* window = qobject_cast<QQuickWindow*>(window_.data());
+        if (window != nullptr && window->property("sourceEditorFocused").toBool()
+            && !window->property("sourceEditorOverlayHeld").toBool()) {
+            if (QQuickItem* focus = window->activeFocusItem()) {
+                const QPointF scene = static_cast<QMouseEvent*>(event)->scenePosition();
+                if (!focus->contains(focus->mapFromScene(scene))) {
+                    focus->setFocus(false);
+                }
+            }
+        }
+        return false;
+    }
     case QEvent::DragLeave:
         scheduleDragLeave();
         return false;

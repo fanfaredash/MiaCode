@@ -213,6 +213,7 @@ Dialog {
                     text: UiText.text("背景覆盖层")
                     color: Theme.colors.text.active
                     font.family: Theme.uiFont
+                    font.pixelSize: Theme.uiFontSize
                     font.bold: true
                 }
                 LabeledSlider { label: UiText.text("工具栏（深色）"); from: 0; to: 255; value: root.appBackground.toolbarAlphaDark; readout: root.appBackground.toolbarAlphaDark; onMoved: function(v) { root.appBackground.toolbarAlphaDark = Math.round(v) } }
@@ -336,7 +337,7 @@ Dialog {
                 clip: true
                 focus: true
                 model: root.shortcutRows
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: AppScrollBar {}
 
                 Keys.onPressed: function(event) {
                     if (root.capturingId.length === 0)

@@ -1,10 +1,26 @@
 #include "SimaiSyntaxHighlighter.h"
 
 #include <QAbstractTextDocumentLayout>
+#include <QPointF>
 #include <QTextCharFormat>
 #include <QTextBlock>
 #include <QTextDocument>
+#include <QTextLayout>
+#include <QTextLine>
+#include <QVariantList>
 #include <QVariantMap>
+#include <QVector>
+
+namespace {
+
+struct VisualLine {
+    qreal x = 0;
+    qreal y = 0;
+    qreal width = 0;
+    qreal height = 0;
+};
+
+}
 
 SimaiSyntaxHighlighter::SimaiSyntaxHighlighter(QObject* parent)
     : QSyntaxHighlighter(parent)
@@ -29,6 +45,113 @@ QVariantList SimaiSyntaxHighlighter::lineTopPositions() const
         positions.append(top - firstTop);
     }
     return positions;
+}
+
+QVariantList SimaiSyntaxHighlighter::selectionLineRanges(int start, int end) const
+{
+    QVariantList ranges;
+    if (!textDocument_ || !textDocument_->textDocument() || start >= end) {
+        return ranges;
+    }
+    QTextDocument* document = textDocument_->textDocument();
+    QAbstractTextDocumentLayout* documentLayout = document->documentLayout();
+    if (documentLayout == nullptr) {
+        return ranges;
+    }
+    const int maxEnd = document->characterCount();
+    start = qBound(0, start, maxEnd);
+    end = qBound(0, end, maxEnd);
+    if (start >= end) {
+        return ranges;
+    }
+
+    QVector<VisualLine> selected;
+    for (QTextBlock block = document->findBlock(start);
+         block.isValid() && block.position() < end;
+         block = block.next()) {
+        QTextLayout* layout = block.layout();
+        if (layout == nullptr) {
+            continue;
+        }
+        const QPointF origin = documentLayout->blockBoundingRect(block).topLeft();
+        const int blockPos = block.position();
+        const int lineCount = layout->lineCount();
+        for (int i = 0; i < lineCount; ++i) {
+            const QTextLine line = layout->lineAt(i);
+            if (!line.isValid()) {
+                continue;
+            }
+            const int lineStart = blockPos + line.textStart();
+            const int lineEnd = lineStart + line.textLength();
+            const int from = qMax(start, lineStart);
+            const int to = qMin(end, lineEnd);
+            if (from >= to) {
+                continue;
+            }
+            const qreal x0 = line.cursorToX(from - blockPos);
+            const qreal x1 = line.cursorToX(to - blockPos);
+            VisualLine visual;
+            visual.x = origin.x() + x0;
+            visual.y = origin.y() + line.y();
+            visual.width = qMax(qreal(0), x1 - x0);
+            visual.height = line.height();
+            selected.append(visual);
+        }
+    }
+    for (int i = 0; i + 1 < selected.size(); ++i) {
+        selected[i].height = selected[i + 1].y - selected[i].y;
+    }
+
+    for (const VisualLine& visual : selected) {
+        QVariantMap range;
+        range.insert(QStringLiteral("x"), visual.x);
+        range.insert(QStringLiteral("y"), visual.y);
+        range.insert(QStringLiteral("width"), visual.width);
+        range.insert(QStringLiteral("height"), visual.height);
+        ranges.append(range);
+    }
+    return ranges;
+}
+
+QVariantList SimaiSyntaxHighlighter::cursorBlockLines(int position) const
+{
+    QVariantList ranges;
+    if (!textDocument_ || !textDocument_->textDocument()) {
+        return ranges;
+    }
+    QTextDocument* document = textDocument_->textDocument();
+    QAbstractTextDocumentLayout* documentLayout = document->documentLayout();
+    if (documentLayout == nullptr) {
+        return ranges;
+    }
+    const QTextBlock block = document->findBlock(qBound(0, position, document->characterCount()));
+    QTextLayout* layout = block.layout();
+    if (!block.isValid() || layout == nullptr) {
+        return ranges;
+    }
+    const QPointF origin = documentLayout->blockBoundingRect(block).topLeft();
+    QVector<VisualLine> lines;
+    const int lineCount = layout->lineCount();
+    for (int i = 0; i < lineCount; ++i) {
+        const QTextLine line = layout->lineAt(i);
+        if (!line.isValid()) {
+            continue;
+        }
+        VisualLine visual;
+        visual.y = origin.y() + line.y();
+        visual.height = line.height();
+        lines.append(visual);
+    }
+    for (int i = 0; i + 1 < lines.size(); ++i) {
+        lines[i].height = lines[i + 1].y - lines[i].y;
+    }
+    for (const VisualLine& visual : lines) {
+        QVariantMap range;
+        range.insert(QStringLiteral("y"), visual.y);
+        range.insert(QStringLiteral("height"), visual.height);
+        ranges.append(range);
+    }
+    return ranges;
 }
 
 QQuickTextDocument* SimaiSyntaxHighlighter::textDocument() const

@@ -15,7 +15,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
-#include <QFontInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QLocale>
@@ -407,55 +406,23 @@ QColor previewFullscreenOverlayIconColor()
 
 QFont editorFont(int pointSize)
 {
-#ifdef Q_OS_MACOS
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    if (!QFontInfo(font).fixedPitch()) {
-        for (const QString& family : QStringList{"SF Mono", "Menlo", "Monaco", "Noto Sans Mono", "JetBrains Mono"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0 && QFontInfo(font).fixedPitch()) {
-                break;
-            }
-        }
+    static const QString bundledEditorFontFamily = []() -> QString {
+        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/maple_mono_cn.ttf"));
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        return families.isEmpty() ? QString() : families.first();
+    }();
+    if (!bundledEditorFontFamily.isEmpty()) {
+        font.setFamily(bundledEditorFontFamily);
     }
     font.setStyleHint(QFont::Monospace);
     font.setFixedPitch(true);
-    font.setPointSize(pointSize > 0 ? pointSize : 13);
+    if (pointSize > 0) {
+        font.setPointSize(pointSize);
+    }
     font.setStyleStrategy(QFont::PreferAntialias);
     font.setHintingPreference(QFont::PreferNoHinting);
     return font;
-#else
-    static const QString embeddedConsolasFamily = []() -> QString {
-        const int fontId = QFontDatabase::addApplicationFont(":/fonts/consola.ttf");
-        if (fontId < 0) {
-            return QString();
-        }
-        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-        if (families.isEmpty()) {
-            return QString();
-        }
-        return families.first();
-    }();
-
-    QFont font;
-    if (!embeddedConsolasFamily.isEmpty()) {
-        font.setFamily(embeddedConsolasFamily);
-    } else {
-        font.setFamily("Consolas");
-        if (!QFontInfo(font).exactMatch()) {
-            font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-        }
-    }
-    font.setStyleHint(QFont::Monospace);
-    font.setFixedPitch(true);
-    font.setPointSize(pointSize > 0 ? pointSize : 10);
-    return font;
-#endif
-}
-
-QFont timelineHeaderLineNumberFont(int pointSize)
-{
-    Q_UNUSED(pointSize);
-    return editorFont(11);
 }
 
 int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor)
@@ -481,119 +448,32 @@ void applyBlockSpacingToTextEdit(QTextEdit* editor, int blockSpacingPixels)
 
 QFont uiOutputFont()
 {
-#ifdef Q_OS_MACOS
     QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    font.setPointSize(12);
     font.setStyleStrategy(QFont::PreferAntialias);
     font.setHintingPreference(QFont::PreferNoHinting);
     return font;
-#else
-    QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    QStringList cjkFamilies;
-    const QString uiLanguageToken = UiText::resolvedLanguageToken();
-    if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
-        cjkFamilies = QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"};
-    } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
-        cjkFamilies = QStringList{"Yu Gothic UI", "Meiryo UI", "Meiryo", "Noto Sans CJK JP"};
-    }
-    for (const QString& family : cjkFamilies) {
-        font.setFamily(family);
-        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-            break;
-        }
-    }
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    font.setPointSize(11);
-    return font;
-#endif
 }
 
 QFont uiAccentFont(int pointSize, QFont::Weight weight)
 {
-#ifdef Q_OS_MACOS
     QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    QStringList macCjkFamilies;
-    const QString uiLanguageToken = UiText::resolvedLanguageToken();
-    if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
-        macCjkFamilies = QStringList{"PingFang SC", "Hiragino Sans GB"};
-    } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
-        macCjkFamilies = QStringList{"Hiragino Sans", "Hiragino Kaku Gothic ProN"};
-    }
-    for (const QString& family : macCjkFamilies) {
-        font.setFamily(family);
-        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-            break;
-        }
-    }
-    font.setPointSize(pointSize + ((pointSize <= 11) ? 1 : 0));
-    font.setWeight(weight);
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    return font;
-#else
-    QFont font;
-    QStringList familyCandidates;
-    const QString uiLanguageToken = UiText::resolvedLanguageToken();
-    if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
-        familyCandidates << "Microsoft YaHei UI" << "Microsoft YaHei" << "PingFang SC" << "Noto Sans CJK SC";
-    } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
-        familyCandidates << "Yu Gothic UI" << "Meiryo UI" << "Meiryo" << "Noto Sans CJK JP";
-    }
-    familyCandidates << "Segoe UI Variable Text" << "Segoe UI";
-    for (const QString& family : familyCandidates) {
-        font.setFamily(family);
-        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-            break;
-        }
-    }
-    if (font.family().isEmpty()) {
-        font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    }
     font.setPointSize(pointSize);
     font.setWeight(weight);
     font.setStyleStrategy(QFont::PreferAntialias);
     font.setHintingPreference(QFont::PreferNoHinting);
     return font;
-#endif
 }
 
 QFont uiMonoFont(int pointSize, QFont::Weight weight)
 {
-#ifdef Q_OS_MACOS
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    if (!QFontInfo(font).fixedPitch()) {
-        for (const QString& family : QStringList{"SF Mono", "Menlo", "Monaco", "Noto Sans Mono", "JetBrains Mono"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0 && QFontInfo(font).fixedPitch()) {
-                break;
-            }
-        }
-    }
-    font.setPointSize(pointSize + 1);
+    font.setPointSize(pointSize);
     font.setWeight(weight);
     font.setStyleHint(QFont::Monospace);
     font.setFixedPitch(true);
     font.setStyleStrategy(QFont::PreferAntialias);
     font.setHintingPreference(QFont::PreferNoHinting);
     return font;
-#else
-    QFont font;
-    for (const QString& family : QStringList{"Cascadia Mono", "JetBrains Mono", "Cascadia Code", "Consolas"}) {
-        font.setFamily(family);
-        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-            break;
-        }
-    }
-    if (font.family().isEmpty()) {
-        font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    }
-    font.setPointSize(pointSize);
-    font.setWeight(weight);
-    font.setStyleHint(QFont::Monospace);
-    font.setFixedPitch(true);
-    return font;
-#endif
 }
 
 QString previewFullscreenControlCardStyleSheet()

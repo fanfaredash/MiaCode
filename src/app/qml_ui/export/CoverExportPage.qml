@@ -263,7 +263,7 @@ Rectangle {
                     clip: true
                     spacing: 2
                     model: root.session ? root.session.layoutModel.layers : []
-                    ScrollBar.vertical: ScrollBar {}
+                    ScrollBar.vertical: AppScrollBar {}
 
                     // 状态写在行里，但不放交互子项：ChromeRow 的高亮铺满整行，
                     // 会从任何按钮底下穿过去（见 ChromeRow 的说明）。显示/锁定的
@@ -462,7 +462,7 @@ Rectangle {
                         contentWidth: width
                         contentHeight: inspector.implicitHeight
                         boundsBehavior: Flickable.StopAtBounds
-                        ScrollBar.vertical: ScrollBar {}
+                        ScrollBar.vertical: AppScrollBar {}
 
                         ColumnLayout {
                             id: inspector

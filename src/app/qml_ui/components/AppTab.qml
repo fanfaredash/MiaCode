@@ -106,7 +106,7 @@ Item {
                     Layout.preferredWidth: 16
                     Layout.preferredHeight: 16
                     radius: 8
-                    visible: root.count >= 0
+                    visible: root.count > 0
                     color: Theme.colors.accent.badge
 
                     Text {
@@ -206,7 +206,7 @@ Item {
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-                width: label.implicitWidth + (root.count >= 0 ? 20 : 0) + 3
+                width: label.implicitWidth + (root.count > 0 ? 20 : 0) + 3
                 height: 1
                 visible: root.active && root.panelTab
                 color: Theme.colors.accent.primary

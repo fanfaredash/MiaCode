@@ -116,7 +116,6 @@ Rectangle {
                 Text {
                     text: UiText.text("难度")
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                 }
                 Flow {
                     Layout.fillWidth: true
@@ -135,7 +134,6 @@ Rectangle {
                 Text {
                     text: UiText.text("输出文件夹")
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -155,7 +153,6 @@ Rectangle {
                     Text {
                         text: UiText.text("谱面文件夹")
                         color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
                         Layout.fillWidth: true
                     }
                     AppButton {
@@ -172,7 +169,7 @@ Rectangle {
                     Layout.preferredHeight: Math.min(contentHeight, root.height * 0.2)
                     clip: true
                     model: root.session ? root.session.chartDirectories : []
-                    ScrollBar.vertical: ScrollBar {}
+                    ScrollBar.vertical: AppScrollBar {}
                     delegate: RowLayout {
                         width: ListView.view.width
                         required property int index
@@ -182,7 +179,6 @@ Rectangle {
                             text: modelData
                             elide: Text.ElideMiddle
                             color: Theme.colors.text.active
-                            font.family: Theme.uiFont
                         }
                         AppButton {
                             text: UiText.text("移除")
@@ -218,7 +214,7 @@ Rectangle {
                 clip: true
                 contentHeight: settingsBody.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: AppScrollBar {}
 
                 ColumnLayout {
                     id: settingsBody
@@ -369,7 +365,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("开始")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 80
                             }
                             AppTextField {
@@ -385,7 +380,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("结束")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 80
                             }
                             AppTextField {
@@ -402,7 +396,6 @@ Rectangle {
                                   ? UiText.text("总时长 %1 s").arg(root.session.contentDurationSeconds.toFixed(3))
                                   : ""
                             color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
                         }
                         }
                     }
@@ -417,7 +410,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("外圈亮度")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppSlider {
@@ -432,7 +424,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("内圈亮度")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppSlider {
@@ -447,7 +438,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("Layout 整图大小")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppSlider {
@@ -463,7 +453,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("背景缩放")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -514,7 +503,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("Tap 流速")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppTextField {
@@ -532,7 +520,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("Touch 流速")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppTextField {
@@ -561,7 +548,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("皮肤")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -585,7 +571,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("判定效果")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -604,7 +589,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("判定线")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -642,7 +626,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("区域")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -662,7 +645,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("字体")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -741,7 +723,6 @@ Rectangle {
                             Text {
                                 text: root.session ? root.session.introSoundLabel : ""
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -774,7 +755,6 @@ Rectangle {
                             Text {
                                 text: root.session ? root.session.introSoundVolumeLabel : ""
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppSlider {
@@ -794,7 +774,6 @@ Rectangle {
                                 Layout.preferredWidth: 52
                                 text: Math.round(introSoundVolumeSlider.value) + "%"
                                 color: Theme.colors.text.active
-                                font.family: Theme.uiFont
                                 horizontalAlignment: Text.AlignRight
                             }
                         }
@@ -803,7 +782,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("背景")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -837,7 +815,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("谱面类型")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -878,7 +855,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("标题字体")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {
@@ -900,7 +876,6 @@ Rectangle {
                             Text {
                                 text: UiText.text("正文字体")
                                 color: Theme.colors.text.secondary
-                                font.family: Theme.uiFont
                                 Layout.preferredWidth: 120
                             }
                             AppComboBox {

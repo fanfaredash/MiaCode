@@ -631,6 +631,11 @@ Two related rules:
 - The v2 decoration is read-only. It must never move the caret or selection, and its
   ensure-visible scroll must not either — that is the whole difference between it and the playing
   caret-move path.
+- Timeline slow-refresh completion (`TimelineFlow.cpp`, after a chart parse)
+  republishes the follow span with `centerView=false` and
+  `ensureVisibleWhenPaused=false`. Reveal belongs to turning 代码跟随 on, a
+  playhead seek, and playing viewport-lock ticks. A paused edit whose caret
+  and playhead cannot share one viewport must keep `contentY` on the caret.
 - Both routes are gated on the same difficulty + workspace `documentRevision`
   (`appliedQmlWorkspaceRevision_`) as the document projection. Do not publish follow against
   `timelineRevision_` / the validation snapshot revision: leaving the editor for export (or any

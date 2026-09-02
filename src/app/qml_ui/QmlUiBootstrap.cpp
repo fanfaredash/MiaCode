@@ -76,6 +76,7 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
 {
     miacode::oplog::appendStartupBeaconLine("qml_ui/start_enter");
     appendQmlUiRuntimeLog(QStringLiteral("start_enter"));
+    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
 
     applicationServices_ = std::make_unique<miacode::v2::ApplicationServices>();
     backend_ = std::make_unique<Session>(*applicationServices_);

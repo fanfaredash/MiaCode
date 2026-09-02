@@ -13,7 +13,6 @@ Menu {
     padding: Theme.menuPadding
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
-
     // Action-created rows and default Instantiator paths use this delegate.
     delegate: AppMenuItem {}
 

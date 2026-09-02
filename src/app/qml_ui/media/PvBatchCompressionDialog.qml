@@ -8,7 +8,8 @@ import MiaCode.UI
 // job came from and how each one ended.
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     required property var mediaTools
 
     title: UiText.text("批量压缩 PV")
@@ -57,7 +58,7 @@ Dialog {
             Layout.fillHeight: true
             clip: true
             model: root.mediaTools ? root.mediaTools.batchJobs : []
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: AppScrollBar {}
             delegate: RowLayout {
                 width: ListView.view.width
                 required property int index
@@ -73,7 +74,6 @@ Dialog {
                         color: modelData.hasVideo
                                ? Theme.colors.text.active
                                : Theme.colors.text.disabled
-                        font.family: Theme.uiFont
                     }
                     Text {
                         Layout.fillWidth: true
@@ -97,7 +97,6 @@ Dialog {
             Layout.fillWidth: true
             text: root.mediaTools ? root.mediaTools.batchSummary : ""
             color: Theme.colors.text.secondary
-            font.family: Theme.uiFont
             wrapMode: Text.WordWrap
         }
 

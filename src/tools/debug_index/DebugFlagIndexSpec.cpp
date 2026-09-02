@@ -67,8 +67,9 @@ const QSet<QString> kSelfExcludedFileNames = {
     QStringLiteral("V1ShellRemovalSpec.cpp"),
 };
 
-// MIACODE_* tokens that are CMake compile definitions (injected via
-// target_compile_definitions), not runtime env flags read with qgetenv. These
+// MIACODE_* tokens the build supplies rather than the environment: injected via
+// target_compile_definitions, or #defined into a header CMake configures (see
+// src/app/AppVersion.h.in). They are never read with qgetenv, so they
 // legitimately do not belong in docs/ops/DEBUG_INDEX.md. Any spec that consumes
 // the source-root compile define (this one, ui_text_locale_spec, …) references
 // the token in source, so filter it out globally rather than per-file.
@@ -77,6 +78,9 @@ const QSet<QString> kCompileDefinitions = {
     // Path to the spec-only MiaCode.UI import mirror; a dev-tools compile
     // definition, not a runtime env flag.
     QStringLiteral("MIACODE_QML_SPEC_IMPORT_ROOT"),
+    // Baked into the configured src/app/AppVersion.h.in; the About page reads it
+    // as a compile-time constant, not as a switch.
+    QStringLiteral("MIACODE_VERSION_STRING"),
 };
 
 // MIACODE_* tokens that are in-source preprocessor selectors: they are #defined

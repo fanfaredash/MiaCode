@@ -8,7 +8,8 @@ import MiaCode.UI
 // so this dialog owns no result UI of its own.
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     required property var mediaTools
 
     title: UiText.text("音视频处理")
@@ -42,6 +43,7 @@ Dialog {
                     text: toolRow.label
                     color: Theme.colors.text.active
                     font.family: Theme.uiFont
+                    font.pixelSize: Theme.uiFontSize
                     font.bold: true
                 }
                 Text {

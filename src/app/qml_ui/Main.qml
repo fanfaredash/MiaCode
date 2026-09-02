@@ -7,6 +7,7 @@ ApplicationWindow {
     id: window
 
     property bool sourceEditorFocused: false
+    property bool sourceEditorOverlayHeld: false
 
     required property var applicationContext
     readonly property var shellLifecycle: applicationContext.shell
@@ -39,6 +40,8 @@ ApplicationWindow {
     title: Qt.application.name + (mainView.documentTitle.length > 0
                                   ? " — " + mainView.documentTitle
                                   : "")
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     color: Theme.colors.background.surface
     topPadding: 0
     leftPadding: 0
@@ -176,6 +179,7 @@ ApplicationWindow {
                 anchors.centerIn: parent
                 color: Theme.colors.text.primary
                 text: UiText.text("drop_chart.preview.title")
+                font.family: Theme.uiFont
                 font.pixelSize: 16
             }
         }

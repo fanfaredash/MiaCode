@@ -8,7 +8,8 @@ import MiaCode.UI
 // they are turned into the length that will actually be inserted.
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     required property var mediaTools
 
     property bool isTrack: true
@@ -65,7 +66,6 @@ Dialog {
                         .arg(root.formatNumber(root.bpm))
                         .arg(root.formatNumber(root.blankSeconds))
             color: Theme.colors.text.secondary
-            font.family: Theme.uiFont
             wrapMode: Text.WordWrap
         }
 
@@ -85,7 +85,6 @@ Dialog {
             Text {
                 text: numberRow.label
                 color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
             }
             AppTextField {
                 id: spin

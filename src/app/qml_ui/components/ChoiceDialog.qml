@@ -17,7 +17,8 @@ import MiaCode.UI
 // caller did not offer.
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     property string message: ""
     property string details: ""
     property var choices: []
@@ -70,7 +71,6 @@ Dialog {
             Layout.fillWidth: true
             text: root.message
             color: Theme.colors.text.active
-            font.family: Theme.uiFont
             wrapMode: Text.WordWrap
         }
         Text {

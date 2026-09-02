@@ -7,7 +7,8 @@ import MiaCode.UI
 // leaves the actual transform to the caller — the dialog owns no document state.
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     // Human-readable description of what will be normalized (whole chart, or a
     // line/column range), supplied by the caller.
     property string selectionDescription: ""
@@ -65,7 +66,6 @@ Dialog {
             Layout.fillWidth: true
             text: root.selectionDescription
             color: Theme.colors.text.secondary
-            font.family: Theme.uiFont
             wrapMode: Text.WordWrap
         }
 
@@ -74,7 +74,6 @@ Dialog {
             Text {
                 text: UiText.text("对齐到 384 分网格")
                 color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
             }
             AppComboBox {
                 id: reduceCombo
@@ -90,7 +89,6 @@ Dialog {
             Text {
                 text: UiText.text("谱面分段")
                 color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
             }
             AppComboBox {
                 id: sectionCombo
@@ -106,7 +104,6 @@ Dialog {
             Text {
                 text: UiText.text("整理语法")
                 color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
             }
             AppComboBox {
                 id: syntaxCombo

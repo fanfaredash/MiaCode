@@ -5,15 +5,6 @@ import MiaCode.UI
 Item {
     id: root
 
-    PointHandler {
-        acceptedButtons: Qt.LeftButton
-        target: null
-        onActiveChanged: {
-            if (active)
-                root.forceActiveFocus(Qt.MouseFocusReason)
-        }
-    }
-
     required property var hostWindow
     required property var applicationContext
     readonly property var documentSession: applicationContext.document

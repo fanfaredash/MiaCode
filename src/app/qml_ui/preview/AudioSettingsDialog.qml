@@ -12,7 +12,8 @@ import MiaCode.UI
 // and when the panel is gone (the runtime goes with it).
 Dialog {
     id: root
-
+    font.family: Theme.uiFont
+    font.pixelSize: Theme.uiFontSize
     required property var audioSettings
 
     // The channel set is fixed, so the Repeater is driven by the key list and
@@ -74,7 +75,6 @@ Dialog {
                     Layout.preferredWidth: 96
                     text: channelRow.channel.label
                     color: Theme.colors.text.secondary
-                    font.family: Theme.uiFont
                     elide: Text.ElideRight
                 }
                 IconButton {

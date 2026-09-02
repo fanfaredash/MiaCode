@@ -212,8 +212,10 @@ Rectangle {
                 return
             const target = sourceArea.y + sourceArea.cursorRectangle.y
                 + sourceArea.cursorRectangle.height / 2 - flickable.height / 2
+            flickable.allowScroll = true
             flickable.contentY = Math.max(0, Math.min(
                 Math.max(0, flickable.contentHeight - flickable.height), target))
+            flickable.allowScroll = false
         }
     }
 
@@ -289,6 +291,7 @@ Rectangle {
 
     function bumpFollowLayout() {
         root.followLayoutTick++
+        root.lineTops = highlighter.lineTopPositions()
     }
 
     // Scrolls the decoration into view without touching the caret or selection.
@@ -307,9 +310,11 @@ Rectangle {
             const bottom = top + rect.height
             if (top >= flickable.contentY && bottom <= flickable.contentY + flickable.height)
                 return
+            flickable.allowScroll = true
             flickable.contentY = Math.max(0, Math.min(
                 Math.max(0, flickable.contentHeight - flickable.height),
                 top + rect.height / 2 - flickable.height / 2))
+            flickable.allowScroll = false
         }
     }
 
@@ -424,6 +429,7 @@ Rectangle {
         activeLine: root.activeLine
         contentY: editorScroll.contentY
         lineTops: root.lineTops
+        topPadding: sourceArea.topPadding
         rowHeight: root.codeLineHeight
         bookmarkedLines: root.bookmarks
         onJumpRequested: root.jumpToLine(line)
@@ -434,6 +440,8 @@ Rectangle {
 
     Dialog {
         id: bookmarkTitleDialog
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.uiFontSize
         parent: Overlay.overlay
         modal: true
         title: UiText.text("重命名书签")
@@ -567,20 +575,42 @@ Rectangle {
         anchors.bottom: parent.bottom
         clip: true
         flickableDirection: Flickable.VerticalFlick
-        ScrollBar.vertical: ScrollBar {}
+        // Left-button drag would steal the press TextArea needs to place the
+        // caret. Wheel and trackpad still flick, including overshoot.
+        acceptedButtons: Qt.NoButton
+        ScrollBar.vertical: AppScrollBar {
+            id: editorVScroll
+        }
+        property real userViewportY: 0
+        property bool allowScroll: false
+        property bool applyingViewport: false
+        function clampViewportY(y) {
+            return Math.max(0, Math.min(y, Math.max(0, contentHeight - height)))
+        }
+        onContentYChanged: {
+            if (applyingViewport)
+                return
+            if (allowScroll || moving || flicking || dragging || editorVScroll.pressed) {
+                userViewportY = contentY
+                return
+            }
+            const kept = clampViewportY(userViewportY)
+            if (contentY === kept)
+                return
+            applyingViewport = true
+            contentY = kept
+            applyingViewport = false
+        }
         // TextEdit 与 QSyntaxHighlighter 组合在布局尺寸变化后存在不重绘的
         // 已知问题（QTBUG-58092 一类），窗口缩放后内容要等交互才刷新。
         // 视口尺寸变化时重新应用高亮，强制文本布局重绘。
         function refreshHighlight() {
-            Qt.callLater(() => sourceArea.rehighlight())
+            Qt.callLater(() => {
+                sourceArea.rehighlight()
+                root.bumpFollowLayout()
+            })
         }
-        function refreshLineTops() {
-            Qt.callLater(() => root.lineTops = highlighter.lineTopPositions())
-        }
-        onWidthChanged: {
-            refreshHighlight()
-            refreshLineTops()
-        }
+        onWidthChanged: refreshHighlight()
         onHeightChanged: refreshHighlight()
 
         TextArea.flickable: TextArea {
@@ -591,65 +621,116 @@ Rectangle {
             property string historyText: ""
             property int historyAnchor: 0
             property int historyPosition: 0
+            property bool selectionHeld: false
 
             wrapMode: TextArea.Wrap
-            padding: 12
+            width: editorScroll.width
+            // TextArea.flickable clips the text node to the viewport inset by
+            // padding (qquicktextarea.cpp updatePaintNode). Child highlights
+            // are not in that clip, so vertical padding shows as a text-only
+            // mask. Keep horizontal inset; match the gutter with topPadding 0.
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
             color: Theme.colors.text.editor
-            selectedTextColor: Theme.colors.text.editor
-            selectionColor: Theme.colors.state.textSelection
+            // Native selection paints an opaque fill, then redraws glyphs in
+            // selectedTextColor, which wipes syntax colours. Keep the engine
+            // selection for copy/caret, and draw the line-highlight fill
+            // underneath the glyphs instead.
+            selectedTextColor: Qt.rgba(0, 0, 0, 0)
+            selectionColor: Qt.rgba(0, 0, 0, 0)
             inputMethodHints: root.editorController.halfWidthInputEnabled
                 ? Qt.ImhLatinOnly : Qt.ImhNone
             persistentSelection: true
             selectByMouse: true
             font: Theme.codeFont
 
-            background: Item {
-                Rectangle {
-                    anchors.fill: parent
-                    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
-                }
-                // Preview follow decoration: the playhead's token span. Drawn in
-                // the background so it sits under the glyphs and never competes
-                // with the real selection.
-                Rectangle {
-                    readonly property rect startRect: {
+            background: Rectangle {
+                color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
+            }
+
+            Item {
+                visible: sourceArea.selectionStart === sourceArea.selectionEnd
+                z: -1
+                Repeater {
+                    model: {
                         root.followLayoutTick
-                        return sourceArea.positionToRectangle(root.followDecorationStart)
+                        sourceArea.text
+                        sourceArea.cursorPosition
+                        return highlighter.cursorBlockLines(sourceArea.cursorPosition)
                     }
-                    readonly property rect endRect: {
-                        root.followLayoutTick
-                        return sourceArea.positionToRectangle(root.followDecorationEnd)
+                    delegate: Rectangle {
+                        required property var modelData
+                        x: sourceArea.leftPadding
+                        y: modelData.y + sourceArea.topPadding
+                        width: editorScroll.width - sourceArea.leftPadding
+                        height: modelData.height
+                        color: Theme.colors.state.focusLine
                     }
-                    visible: root.followDecorationActive
-                        && root.followDecorationEnd > root.followDecorationStart
-                        && startRect.height > 0
-                        && startRect.y + 0.5 >= sourceArea.topPadding
-                    x: startRect.x
-                    y: startRect.y - editorScroll.contentY
-                    // A span that wraps or crosses lines falls back to the rest of
-                    // the first line rather than painting a misleading rectangle.
-                    width: endRect.y > startRect.y
-                        ? Math.max(0, sourceArea.width - sourceArea.rightPadding - startRect.x)
-                        : Math.max(0, endRect.x - startRect.x)
-                    height: Math.max(startRect.height, root.codeLineHeight)
-                    color: Theme.colors.state.textSelection
-                    opacity: 0.45
                 }
             }
 
+            Item {
+                id: selectionHighlight
+                visible: sourceArea.selectionStart !== sourceArea.selectionEnd
+                z: -1
+                readonly property int selA: Math.min(sourceArea.selectionStart, sourceArea.selectionEnd)
+                readonly property int selB: Math.max(sourceArea.selectionStart, sourceArea.selectionEnd)
+                readonly property var lineRanges: {
+                    root.followLayoutTick
+                    sourceArea.text
+                    return highlighter.selectionLineRanges(selA, selB)
+                }
+                readonly property color fill: Theme.colors.state.selectionHighlight
+
+                Repeater {
+                    model: selectionHighlight.lineRanges
+                    delegate: Rectangle {
+                        required property var modelData
+                        color: selectionHighlight.fill
+                        x: modelData.x + sourceArea.leftPadding
+                        y: modelData.y + sourceArea.topPadding
+                        width: modelData.width
+                        height: modelData.height
+                    }
+                }
+            }
+
+            // Same stacking band as the current-line / selection fills (z: -1,
+            // under glyphs). Declared after them so the playhead span stays
+            // visible when it shares a line with the caret (Z1).
             Rectangle {
-                x: sourceArea.leftPadding
-                y: Math.max(0, sourceArea.cursorRectangle.y)
-                width: sourceArea.width - sourceArea.leftPadding - sourceArea.rightPadding
-                height: root.codeLineHeight
-                color: Theme.colors.state.lineHighlight
+                readonly property rect startRect: {
+                    root.followLayoutTick
+                    return sourceArea.positionToRectangle(root.followDecorationStart)
+                }
+                readonly property rect endRect: {
+                    root.followLayoutTick
+                    return sourceArea.positionToRectangle(root.followDecorationEnd)
+                }
+                visible: root.followDecorationActive
+                    && root.followDecorationEnd > root.followDecorationStart
+                    && startRect.height > 0
+                    && startRect.y + 0.5 >= sourceArea.topPadding
+                x: startRect.x
+                y: startRect.y
+                width: endRect.y > startRect.y
+                    ? Math.max(0, sourceArea.width - sourceArea.rightPadding - startRect.x)
+                    : Math.max(0, endRect.x - startRect.x)
+                height: Math.max(startRect.height, root.codeLineHeight)
+                color: Theme.colors.state.followHighlight
+                opacity: 0.5
                 z: -1
             }
 
             // Preview follow caret. Distinct from the real caret so a paused
             // seek is visible without stealing the cursor.
             Rectangle {
-                readonly property rect caretRect: sourceArea.positionToRectangle(root.followDecorationCursor)
+                readonly property rect caretRect: {
+                    root.followLayoutTick
+                    return sourceArea.positionToRectangle(root.followDecorationCursor)
+                }
                 visible: root.followDecorationActive
                     && (root.syncController.followPlaybackActive || !sourceArea.activeFocus)
                 x: caretRect.x
@@ -660,7 +741,6 @@ Rectangle {
             }
             onContentHeightChanged: root.bumpFollowLayout()
             onTextChanged: {
-                editorInputBridge.applyBlockSpacing()
                 root.bumpFollowLayout()
                 // Rehighlighting is a formatting pass over the same characters,
                 // but TextEdit still reports it as textChanged. Writing that
@@ -676,17 +756,21 @@ Rectangle {
                         root.documentSession.chartText = text
                 }
                 root.updateCursorPosition()
-                editorScroll.refreshLineTops()
                 root.bookmarks = root.collectBookmarks()
                 historyText = text
                 historyAnchor = selectionStart
                 historyPosition = selectionEnd
             }
             onCursorPositionChanged: {
+                editorScroll.allowScroll = true
                 root.updateCursorPosition()
                 root.scheduleEditorContext(root.programmaticSelectionDepth === 0)
                 if (!syncingFromController)
                     root.editorController.updateCompletionForQml(text, cursorPosition)
+                Qt.callLater(() => {
+                    editorScroll.userViewportY = editorScroll.contentY
+                    editorScroll.allowScroll = false
+                })
             }
             onActiveFocusChanged: {
                 root.scheduleEditorContext(false)
@@ -780,7 +864,7 @@ Rectangle {
                 root.editorController.setDocumentContextForQml(
                     root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
                 root.updateCursorPosition()
-                editorScroll.refreshLineTops()
+                root.bumpFollowLayout()
             }
 
             EditorTextStyle {
@@ -808,23 +892,25 @@ Rectangle {
 
             cursorDelegate: Rectangle {
                 id: editorCaret
-                width: 1
+                width: 2
                 color: Theme.colors.text.editor
                 visible: sourceArea.activeFocus && !sourceArea.readOnly
-                    && sourceArea.selectionStart === sourceArea.selectionEnd
                     && !root.syncController.followPlaybackActive
 
                 Connections {
                     target: sourceArea
                     function onCursorPositionChanged() {
                         editorCaret.opacity = 1
-                        caretBlinkTimer.restart()
+                    }
+                    function onSelectionHeldChanged() {
+                        if (sourceArea.selectionHeld)
+                            editorCaret.opacity = 1
                     }
                 }
 
                 Timer {
                     id: caretBlinkTimer
-                    running: editorCaret.visible && interval > 0
+                    running: editorCaret.visible && !sourceArea.selectionHeld && interval > 0
                     repeat: true
                     interval: Application.styleHints.cursorFlashTime / 2
                     onTriggered: editorCaret.opacity = editorCaret.opacity > 0 ? 0 : 1
@@ -841,12 +927,17 @@ Rectangle {
                 editorScrollY: editorScroll.contentY
             }
 
+            Binding {
+                target: root.Window.window
+                property: "sourceEditorOverlayHeld"
+                value: completionPopup.pointerInside
+            }
+
             QmlEditorInputBridge {
                 id: editorInputBridge
                 target: sourceArea
                 imeInputDisabled: root.editorController.imeInputDisabled
                 textDocument: sourceArea.textDocument
-                blockSpacing: Theme.codeBlockSpacing
                 onImeComposingChanged: root.imeComposing = composing
                 onImeCommitted: function(text) {
                     root.applyImeCommittedText(text)
@@ -867,11 +958,13 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton
                 target: null
                 onActiveChanged: {
+                    sourceArea.selectionHeld = (point.pressedButtons & Qt.LeftButton) !== 0
                     if (active && !root.metadataMode)
                         root.syncController.beginPointerInteraction(
                             root.documentSession.currentDifficultyId,
                             root.documentSession.documentRevision)
                 }
+                onPointChanged: sourceArea.selectionHeld = (point.pressedButtons & Qt.LeftButton) !== 0
             }
 
             PointHandler {

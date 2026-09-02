@@ -205,6 +205,8 @@ Column {
 
     Dialog {
         id: removeDifficultyDialog
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.uiFontSize
         parent: Overlay.overlay
         anchors.centerIn: parent
         modal: true

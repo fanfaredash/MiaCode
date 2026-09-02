@@ -9,8 +9,8 @@
 #include <QSyntaxHighlighter>
 #include <QTextBlockUserData>
 #include <QTextDocument>
-#include <QVector>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQmlIntegration>
 
 // simai 源码编辑器的原生高亮器。它直接格式化 TextArea 使用的
@@ -35,9 +35,14 @@ class SimaiSyntaxHighlighter : public QSyntaxHighlighter
 public:
     explicit SimaiSyntaxHighlighter(QObject* parent = nullptr);
 
-    // 返回每个逻辑行顶部在文档坐标系中的 y 坐标。TextArea 开启自动换行后
-    // 行高不再固定，行号 gutter 需要按真实行顶对齐而不是按行数乘固定行高。
+    // 返回每个逻辑行顶部在文档坐标系中的 y 坐标。
     Q_INVOKABLE QVariantList lineTopPositions() const;
+
+    // 选区覆盖到的每一条 QTextLine：左右为该行上选区起止的 cursorToX。
+    Q_INVOKABLE QVariantList selectionLineRanges(int start, int end) const;
+
+    // 光标所在逻辑行（QTextBlock）的全部 QTextLine，用于当前行全宽焦点背景。
+    Q_INVOKABLE QVariantList cursorBlockLines(int position) const;
 
     QQuickTextDocument* textDocument() const;
     QColor keywordColor() const;

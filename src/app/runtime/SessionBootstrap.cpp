@@ -433,7 +433,6 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     logStartupStage("preview_runtime_ready");
 
     timelineQuickStateBridge_ = new TimelineQuickStateBridge(this);
-    timelineQuickStateBridge_->setHeaderLineNumberFont(timelineHeaderLineNumberFont());
     timelineQuickStateBridge_->setShowSlideTracks(true);
     timelineQuickStateBridge_->setSkinDirectory(resolvePreviewSkinDir());
     timelineQuickStateBridge_->setViewportLockEnabled(previewViewportLockEnabled_);

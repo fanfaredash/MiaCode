@@ -58,6 +58,6 @@ Rectangle {
             }
         }
 
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: AppScrollBar {}
     }
 }

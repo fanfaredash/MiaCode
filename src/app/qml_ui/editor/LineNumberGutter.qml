@@ -33,114 +33,100 @@ Rectangle {
     color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
     clip: true
 
-    FontMetrics {
-        id: codeFontMetrics
-        font: Theme.codeFont
+    // 只为可见行建场景图文字，和正文同一套变换；整列贴图在窗口插值里会拉伸。
+    readonly property int firstVisibleLine: {
+        const tops = root.lineTops
+        const viewTop = root.contentY - root.topPadding
+        if (root.lineCount <= 0)
+            return 0
+        if (tops.length === 0) {
+            const h = Math.max(root.rowHeight, 1)
+            return Math.max(0, Math.floor(viewTop / h))
+        }
+        let first = 0
+        let low = 0
+        let high = tops.length - 1
+        while (low <= high) {
+            const mid = (low + high) >> 1
+            if (tops[mid] <= viewTop) {
+                first = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return first
+    }
+    readonly property int lastVisibleLine: {
+        const tops = root.lineTops
+        const viewBottom = root.contentY + height - root.topPadding
+        const lastIndex = root.lineCount - 1
+        if (lastIndex < 0)
+            return -1
+        if (tops.length === 0) {
+            const h = Math.max(root.rowHeight, 1)
+            return Math.min(lastIndex, Math.ceil(viewBottom / h))
+        }
+        let last = tops.length - 1
+        let low = root.firstVisibleLine
+        let high = tops.length - 1
+        while (low <= high) {
+            const mid = (low + high) >> 1
+            if (tops[mid] <= viewBottom) {
+                last = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return Math.min(last, lastIndex)
     }
 
-    // 行号用 Canvas 只绘制可见行，避免大谱面下为每一行常驻一个 Text
-    // 组件导致滚动和光标移动时全量重新布局。
-    Canvas {
-        id: gutterCanvas
-        anchors.fill: parent
-
-        function refresh() {
-            requestPaint()
-        }
-
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.clearRect(0, 0, width, height)
-            const tops = root.lineTops
-            if (root.rowHeight <= 0 || root.lineCount <= 0) {
-                return
+    Repeater {
+        model: root.lineCount <= 0
+            ? 0
+            : Math.max(0, root.lastVisibleLine - root.firstVisibleLine + 1)
+        delegate: Item {
+            required property int index
+            readonly property int line: root.firstVisibleLine + index
+            readonly property real lineTop: {
+                const tops = root.lineTops
+                return line < tops.length ? tops[line] : line * root.rowHeight
             }
-
-            // lineTops 尚未发布（如首帧）时按固定行高兜底，避免行号区空白。
-            if (tops.length === 0) {
-                const font = Theme.codeFont
-                ctx.font = font.pixelSize + "px \"" + font.family + "\""
-                ctx.textAlign = "right"
-                ctx.textBaseline = "alphabetic"
-                const firstLine = Math.max(0, Math.floor((root.contentY - root.topPadding) / root.rowHeight))
-                const lastLine = Math.min(
-                    root.lineCount - 1,
-                    Math.ceil((root.contentY + height - root.topPadding) / root.rowHeight))
-                for (let line = firstLine; line <= lastLine; ++line) {
-                    ctx.fillStyle = line + 1 === root.activeLine
-                        ? Theme.colors.text.editor
-                        : Theme.colors.text.lineNumber
-                    ctx.fillText(
-                        String(line + 1),
-                        width - 6,
-                        root.topPadding + line * root.rowHeight - root.contentY
-                            + codeFontMetrics.ascent)
-                    if (root.bookmarkedLines.some(item => item.line === line + 1)) {
-                        ctx.fillStyle = Theme.colors.accent.primary
-                        ctx.fillRect(3, root.topPadding + line * root.rowHeight - root.contentY + 5,
-                                     3, root.rowHeight - 10)
-                    }
-                }
-                return
+            readonly property real lineHeight: {
+                const tops = root.lineTops
+                if (line + 1 < tops.length)
+                    return tops[line + 1] - lineTop
+                return root.rowHeight
             }
-
-            // lineTops 单调递增，二分找到首尾可见行，避免大谱面下全量遍历。
-            const viewTop = root.contentY - root.topPadding
-            const viewBottom = root.contentY + height - root.topPadding
-            let firstLine = 0
-            let low = 0
-            let high = tops.length - 1
-            while (low <= high) {
-                const mid = (low + high) >> 1
-                if (tops[mid] < viewTop) {
-                    firstLine = mid + 1
-                    low = mid + 1
-                } else {
-                    high = mid - 1
-                }
-            }
-            let lastLine = tops.length - 1
-            low = firstLine
-            high = tops.length - 1
-            while (low <= high) {
-                const mid = (low + high) >> 1
-                if (tops[mid] <= viewBottom) {
-                    lastLine = mid
-                    low = mid + 1
-                } else {
-                    high = mid - 1
-                }
-            }
-            const font = Theme.codeFont
-            ctx.font = font.pixelSize + "px \"" + font.family + "\""
-            ctx.textAlign = "right"
-            ctx.textBaseline = "alphabetic"
-
-            for (let line = firstLine; line <= lastLine; ++line) {
-                const lineTop = tops.length > 0 ? tops[line] : line * root.rowHeight
-                ctx.fillStyle = line + 1 === root.activeLine
+            x: 0
+            y: root.topPadding + lineTop - root.contentY
+            width: root.width
+            height: lineHeight
+            Text {
+                anchors.right: parent.right
+                anchors.rightMargin: 6
+                anchors.top: parent.top
+                text: String(line + 1)
+                font: Theme.codeFont
+                color: line + 1 === root.activeLine
                     ? Theme.colors.text.editor
                     : Theme.colors.text.lineNumber
-                ctx.fillText(
-                    String(line + 1),
-                    width - 6,
-                    root.topPadding + lineTop - root.contentY + codeFontMetrics.ascent)
-                if (root.bookmarkedLines.some(item => item.line === line + 1)) {
-                    ctx.fillStyle = Theme.colors.accent.primary
-                    ctx.fillRect(3, root.topPadding + lineTop - root.contentY + 5,
-                                 3, root.rowHeight - 10)
+            }
+            Rectangle {
+                visible: {
+                    const marks = root.bookmarkedLines
+                    const n = line + 1
+                    return marks.some(item => item.line === n)
                 }
+                x: 3
+                y: 2
+                width: 3
+                height: Math.max(0, root.rowHeight - 4)
+                color: Theme.colors.accent.primary
             }
         }
     }
-
-    onLineCountChanged: gutterCanvas.refresh()
-    onLineTopsChanged: gutterCanvas.refresh()
-    onActiveLineChanged: gutterCanvas.refresh()
-    onContentYChanged: gutterCanvas.refresh()
-    onRowHeightChanged: gutterCanvas.refresh()
-    onTopPaddingChanged: gutterCanvas.refresh()
-    onBookmarkedLinesChanged: gutterCanvas.refresh()
 
     function lineAt(y) {
         const documentY = y + contentY - topPadding

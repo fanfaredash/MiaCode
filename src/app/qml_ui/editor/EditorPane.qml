@@ -296,7 +296,7 @@ Rectangle {
         contentHeight: metadataColumn.implicitHeight + 32
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: AppScrollBar {}
 
         Column {
             id: metadataColumn
@@ -382,6 +382,8 @@ Rectangle {
 
     Dialog {
         id: canonicalDesignerDialog
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.uiFontSize
         property var candidates: []
 
         anchors.centerIn: parent
@@ -413,6 +415,8 @@ Rectangle {
 
     Dialog {
         id: removeDifficultyDialog
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.uiFontSize
         anchors.centerIn: parent
         modal: true
         title: UiText.text("删除当前难度")
