@@ -442,7 +442,33 @@ void miacode::runtime::PlaybackCoordinator::applySfxLevels()
 
 void miacode::runtime::PlaybackCoordinator::prepareForShutdown()
 {
+    // Order is load-bearing. preview_.preparePreviewForShutdown() (Session's
+    // own orchestration) stops the preview timers and flips the surface/
+    // playing flags first; those steps can themselves run direct-connected
+    // signal cascades that re-arm a fixed-gate awaiting/queued flag. Only
+    // after that settles do we zero the playback-domain fields below, so
+    // nothing downstream can set one back to true. A lingering singleShot
+    // tick callback that still fires later during teardown then reads them
+    // as already-cleared and takes the no-op branch instead of re-entering
+    // the request path. Clearing first would let a reentrant call triggered
+    // by the forwarded call re-arm a flag we had already zeroed.
     preview_.preparePreviewForShutdown();
+
+    state_.qtPreviewAwaitingFrameSwap_ = false;
+    state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
+    state_.previewStartupSyncPending_ = false;
+    state_.previewLateVideoStartPending_ = false;
+    state_.previewStartupVideoPrepareStarted_ = false;
+    state_.pausedPreviewMediaSeekPending_ = false;
+    state_.pendingPreviewPlaybackStart_ = false;
+    state_.activePreviewPlaybackTransactionId_ = 0;
 }
 
 PreviewAudioSettings miacode::runtime::PlaybackCoordinator::audioSettings() const

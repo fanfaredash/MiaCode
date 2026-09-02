@@ -428,23 +428,10 @@ void Session::preparePreviewForShutdown()
     if (scene_ != nullptr) {
         scene_->setActivePlaybackProfilingEnabled(false);
     }
-    // Doc 4.1: clear fixed-gate awaiting/queued state so lingering singleShot tick callbacks
-    // cannot re-enter the request path during shutdown teardown.
-    qtPreviewAwaitingFrameSwap_ = false;
-    qtPreviewAwaitingFrameSwapSinceMs_ = -1;
-    qtPreviewAwaitingFrameSwapSinceNs_ = -1;
-    qtPreviewDisplayRefreshTickQueued_ = false;
-    qtPreviewFixedAwaitingFrame_ = false;
-    qtPreviewFixedAwaitingFrameSinceMs_ = -1;
-    qtPreviewFixedAwaitingFrameSinceNs_ = -1;
-    qtPreviewFixedFrameTickQueued_ = false;
-    qtPreviewLastVisualTickNs_ = -1;
-    previewStartupSyncPending_ = false;
-    previewLateVideoStartPending_ = false;
-    state_.previewStartupVideoPrepareStarted_ = false;
-    pausedPreviewMediaSeekPending_ = false;
-    pendingPreviewPlaybackStart_ = false;
-    state_.activePreviewPlaybackTransactionId_ = 0;
+    // Doc 4.1's fixed-gate awaiting/queued state zeroing now happens in
+    // PlaybackCoordinator::prepareForShutdown() (SurfaceContract.cpp), which
+    // calls this function first and clears that state only once it returns —
+    // see the ordering note there for why the split must stay in that order.
 
     if (previewAudioDeviceWatcher_ != nullptr) {
         previewAudioDeviceWatcher_->disconnect(this);
