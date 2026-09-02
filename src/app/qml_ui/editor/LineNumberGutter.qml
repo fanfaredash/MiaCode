@@ -120,9 +120,9 @@ Rectangle {
                     return marks.some(item => item.line === n)
                 }
                 x: 3
-                y: 5
+                y: 2
                 width: 3
-                height: Math.max(0, parent.height - 10)
+                height: Math.max(0, root.rowHeight - 4)
                 color: Theme.colors.accent.primary
             }
         }
