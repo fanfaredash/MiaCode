@@ -6,6 +6,7 @@
 #include "app/v2/PlaybackControl.h"
 #include "app/v2/PlaybackDocumentPort.h"
 #include "app/v2/PlaybackPreferencesPort.h"
+#include "app/v2/PlaybackPreviewPort.h"
 #include "app/v2/PlaybackValidationPort.h"
 #include "app/v2/PreviewPlaybackPort.h"
 #include "audio/PreviewAudioDeviceChangePolicy.h"
@@ -33,6 +34,7 @@ public:
                         miacode::v2::PlaybackPreferencesPort& preferences,
                         miacode::v2::PlaybackValidationPort& validation,
                         miacode::v2::PlaybackDocumentPort& documents,
+                        miacode::v2::PlaybackPreviewPort& preview,
                         quint64 sessionGeneration = 0);
 
     void setDocumentRevision(quint64 revision);
@@ -404,6 +406,7 @@ private:
     miacode::v2::PlaybackPreferencesPort& preferences_;
     miacode::v2::PlaybackValidationPort& validation_;
     miacode::v2::PlaybackDocumentPort& documents_;
+    miacode::v2::PlaybackPreviewPort& preview_;
     PlaybackIdentityGate identity_;
 
     bool beginPlaybackCommand();

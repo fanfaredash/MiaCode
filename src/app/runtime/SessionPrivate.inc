@@ -8,13 +8,6 @@
     void noteQuickShellStartupUiReady();
     void scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
     void updatePreviewStageMediaPresentationMode(bool requestUpdate = true);
-    void ensurePreviewStageMediaRouteInitialized();
-    void syncPreviewStageMediaRouteChartPath(
-        const QString& chartPath,
-        const QString& trackPath,
-        double pausedSecond,
-        const QString& chartVideoOverridePath = QString()
-    );
     void clearPreviewStageMediaRoute();
     void releasePreviewStageMediaDecoderForFileOperation();
     void applyPreviewMediaWarmupToStageMediaRoute(
@@ -34,7 +27,6 @@
     void refreshQuickShellPreviewCompositeSurfaceState();
     void refreshPreviewStageMediaRouteDebugState(bool requestUpdate = true);
     void ensurePreviewSfxRuntimePrepared();
-    void schedulePreviewSubsystemWarmup();
     void schedulePreviewMediaWarmup(quint64 generation, const QString& chartPathSnapshot, const QString& trackPathSnapshot, const QString& chartVideoOverrideSnapshot = QString());
     void schedulePreviewSfxWarmup(
         quint64 generation,

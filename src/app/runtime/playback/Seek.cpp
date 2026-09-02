@@ -68,7 +68,7 @@ void miacode::runtime::PlaybackCoordinator::scheduleDeferredPreviewUiTail(
                 return;
             }
             if (applyPreviewVisualSettings) {
-                session_.applyEffectivePreviewOutlineVariantToCanvas();
+                preview_.applyEffectivePreviewOutlineVariantToCanvas();
                 applyPreviewStageMediaRouteVisualSettings(state_);
             }
             if (applyDeferredAnalysis) {

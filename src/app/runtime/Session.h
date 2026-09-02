@@ -41,6 +41,7 @@
 #include "app/v2/ApplicationServices.h"
 #include "app/v2/PlaybackControl.h"
 #include "app/v2/PlaybackPreferencesPort.h"
+#include "app/v2/PlaybackPreviewPort.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -136,7 +137,9 @@ class PreviewHost;
 }
 
 // QML 通过 ApplicationServices 槽位调用运行时宿主；本类只装配宿主并附着根窗口。
-class Session : public QObject, public miacode::v2::PlaybackPreferencesPort
+class Session : public QObject,
+                public miacode::v2::PlaybackPreferencesPort,
+                public miacode::v2::PlaybackPreviewPort
 {
     Q_OBJECT
 
@@ -374,7 +377,10 @@ public:
     QmlExportSession* qmlExportSession() const { return qmlExportSession_; }
     miacode::v2::UiRequestService* uiRequestService() const;
     miacode::v2::JobProgressService* jobProgressService() const;
-    void preparePreviewForShutdown();
+    // PlaybackPreviewPort: the port's one method that is Session's own
+    // orchestration rather than a StageMediaHost forward — see
+    // PlaybackPreviewPort.h.
+    void preparePreviewForShutdown() override;
     QString windowTitle() const;
     void noteStatus(const QString& text);
 
@@ -516,7 +522,6 @@ private:
     QString previewOutlineVariantStorageValue() const;
     PreviewOutlineVariant autoPreviewOutlineVariantForChart(const QString& chartPath) const;
     PreviewOutlineVariant effectivePreviewOutlineVariant() const;
-    void applyEffectivePreviewOutlineVariantToCanvas();
     QString resolvePreviewCustomOutlinePath() const;
     QStringList availablePreviewCustomOutlineFileNames() const;
     void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState);
@@ -553,9 +558,13 @@ public:
     // The skin/outline entries are catalog queries — path resolution and
     // directory listing, no state of their own. The two setters already took a
     // "persist" flag, so they match the preference surface below.
-    QString resolvePreviewSkinDir() const;
+    //
+    // Also two of PlaybackPreviewPort's nine methods (stage 4.9d-4b-2d); no
+    // visibility change needed here, they were already public for the QML
+    // pages above.
+    QString resolvePreviewSkinDir() const override;
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
-                                    bool persistState);
+                                    bool persistState) override;
     // No default on persistState so one-argument calls stay unambiguous.
     void setMuriRenderMode(RenderMode mode, bool persistState);
     void onPreferences();
@@ -604,6 +613,22 @@ public:
     void loadProjectRenderState() override;
     void setLastOpenDirectory(const QString& pathOrDir) override;
 
+    // PlaybackPreviewPort: the remaining six were private until stage
+    // 4.9d-4b-2d made them part of the coordinator's preview port, which
+    // requires public access. Function bodies unchanged (see
+    // preview/StageMediaRoute.cpp and preview/WarmupAndSettings.cpp) — each
+    // is still a one-line forward into stageMedia_.
+    void ensurePreviewStageMediaRouteInitialized() override;
+    void syncPreviewStageMediaRouteChartPath(
+        const QString& chartPath,
+        const QString& trackPath,
+        double pausedSecond,
+        const QString& chartVideoOverridePath = QString()) override;
+    void schedulePreviewSubsystemWarmup() override;
+    void applyPreviewAudioSettingsToRuntime() override;
+    void loadProjectAudioPreferences() override;
+    void applyEffectivePreviewOutlineVariantToCanvas() override;
+
 private:
     // Transient Alt-hold override: while the preview is paused, holding Alt
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
@@ -615,8 +640,6 @@ private:
     void persistEditorTextFontPreference() const;
     void saveProjectRenderState() const;
     void removeProjectRenderState() const;
-    void applyPreviewAudioSettingsToRuntime();
-    void loadProjectAudioPreferences();
     void saveProjectAudioPreferences() const;
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     void clearPreviewFollowDecoration();

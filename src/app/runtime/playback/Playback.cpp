@@ -91,7 +91,7 @@ QString Session::parsedLatencyMeterId() const
 
 void miacode::runtime::PlaybackCoordinator::seekPreviewToSecond(double second, bool centerView)
 {
-    session_.ensurePreviewStageMediaRouteInitialized();
+    preview_.ensurePreviewStageMediaRouteInitialized();
     ensurePreviewSfxRuntimePrepared(state_);
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     // The negative-time 片头 region is preview-only and lives left of chart 0;
@@ -185,7 +185,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
-    session_.ensurePreviewStageMediaRouteInitialized();
+    preview_.ensurePreviewStageMediaRouteInitialized();
     ensurePreviewSfxRuntimePrepared(state_);
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     // Leave the negative-time 片头 region on any discrete seek to a chart
@@ -301,7 +301,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
 
 void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate)
 {
-    session_.ensurePreviewStageMediaRouteInitialized();
+    preview_.ensurePreviewStageMediaRouteInitialized();
     const double clampedRate = qMax(0.25, rate);
     // G2 Diag: sync beacon at the rate-change UI entry. The user-reported 0.5x
     // crash leaves NO async DebugLog tail (the AsyncLogWriter queue drops on
@@ -510,7 +510,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
 
     state_.pendingPreviewPlaybackStart_ = false;
 
-    session_.ensurePreviewStageMediaRouteInitialized();
+    preview_.ensurePreviewStageMediaRouteInitialized();
     ensurePreviewSfxRuntimePrepared(state_);
     // Re-assert the correct preview levels on EVERY play (fresh or resume).
     // applyPreviewAudioSettingsToRuntime() re-derives them from the current mode:
@@ -518,7 +518,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     // audition keeps its independent SFX slider — so neither can bleed into the
     // other. resetCursor does not touch the retained transaction, so this is safe
     // on resume.
-    session_.applyPreviewAudioSettingsToRuntime();
+    preview_.applyPreviewAudioSettingsToRuntime();
     cancelPreviewStartupSync("start_qt_preview_playback");
     clearPreviewPlayingRetainedSeek();
     const double startupWorkerSecond = state_.previewSfxRuntime_ != nullptr

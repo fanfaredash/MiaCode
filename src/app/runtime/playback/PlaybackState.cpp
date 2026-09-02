@@ -683,7 +683,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
     // expose a stale playing frame after a device cutoff had already frozen the chart.
     QElapsedTimer visualStateTimer;
     visualStateTimer.start();
-    session_.applyEffectivePreviewOutlineVariantToCanvas();
+    preview_.applyEffectivePreviewOutlineVariantToCanvas();
     applyPreviewStageMediaRouteVisualSettings(state_);
     appendPreviewPlaybackLog(
         QStringLiteral("pause_visual_state_applied"),
@@ -1140,7 +1140,7 @@ void miacode::runtime::PlaybackCoordinator::softStopQtPreviewPlaybackToSecond(do
 void miacode::runtime::PlaybackCoordinator::anchorQtPreviewPlaybackToSecond(double second, bool centerView)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    session_.ensurePreviewStageMediaRouteInitialized();
+    preview_.ensurePreviewStageMediaRouteInitialized();
     cancelPreviewStartupSync("anchor_qt_preview_playback_to_second");
     clearPreviewPlayingRetainedSeek();
     pausePreviewStageMediaRoutePlayback();

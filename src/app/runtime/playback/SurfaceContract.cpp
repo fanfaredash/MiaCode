@@ -429,10 +429,12 @@ QString miacode::runtime::PlaybackCoordinator::skinDisplayName(const QString& di
 
 QString miacode::runtime::PlaybackCoordinator::resolveSkinDir() const
 {
-    // Not part of this step (H/S-class): resolvePreviewSkinDir() also reads
-    // StageMediaHost's own previewAppearanceValues_ member, so it still has to
-    // route through the host.
-    return session_.stageMedia_->resolvePreviewSkinDir();
+    // Stage 4.9d-4b-2d: routed through PlaybackPreviewPort instead of the
+    // Session's stageMedia_ host directly. resolvePreviewSkinDir() still
+    // reads StageMediaHost's own previewAppearanceValues_ member under the
+    // hood — that body is unchanged, only the seam the coordinator reaches
+    // it through.
+    return preview_.resolvePreviewSkinDir();
 }
 
 QString miacode::runtime::PlaybackCoordinator::resolveSkinRootDir() const
@@ -448,7 +450,7 @@ QString miacode::runtime::PlaybackCoordinator::resolveCustomOutlineDir() const
 void miacode::runtime::PlaybackCoordinator::applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                                   bool persistState)
 {
-    session_.stageMedia_->applyPreviewOutlineVariant(variant, useAutoSelection, persistState);
+    preview_.applyPreviewOutlineVariant(variant, useAutoSelection, persistState);
 }
 
 QVariantMap miacode::runtime::PlaybackCoordinator::renderSettings() const
@@ -482,7 +484,7 @@ void miacode::runtime::PlaybackCoordinator::applySfxLevels()
 
 void miacode::runtime::PlaybackCoordinator::prepareForShutdown()
 {
-    session_.preparePreviewForShutdown();
+    preview_.preparePreviewForShutdown();
 }
 
 PreviewAudioSettings miacode::runtime::PlaybackCoordinator::audioSettings() const

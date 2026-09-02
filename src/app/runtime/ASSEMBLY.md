@@ -288,10 +288,25 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          「`FollowSync` 走值投影」，换取值途径两者都没变，所以字面串跟随更新、强度不变。
          执行体在此拒绝了一条捷径——留一行死代码引用来骗过文本扫描，那能同时满足两条矛盾指令
          且全量测试全绿，但属于造假满足 spec。**这个拒绝是对的。**
-      4b-2d. 最后一批（剩余 19 处）：舞台媒体组 13（含分支歧义的
-         `ensurePreviewStageMediaRouteInitialized` 6 与 `syncPreviewStageMediaRouteChartPath` 1）、
-         `latencySandboxController` 2、`setCurrentBottomTabsTabId` 1（**不属播放域**，
-         是协调器为兼容暴露的底栏投影，真正归属 `TimelineHost`，需单独定）。
+      4b-2d. ~~预览端口~~ **已完成 2026-09-02**：`session_.` 计数 19 → **3**（16 处）。
+         新增 `src/app/v2/PlaybackPreviewPort.h`（9 个纯虚方法），按能力切、由 `Session` 实现
+         （8 个归 `StageMediaHost`、`preparePreviewForShutdown` 是 Session 自有编排），与偏好端口同型。
+         6 个方法因接口可见性从 private 改 public；`Session` 侧未新增任何薄转发——9 个方法本就都在。
+         **挂了三轮的「分支歧义」在此消解，且不是被解决的**：
+         `ensurePreviewStageMediaRouteInitialized` 的实现体真正构造 `PreviewStageMediaHost`、
+         接多条捕获 `session_` 的 `QObject::connect`、读文档 `videoPath`——它不是薄转发，
+         合理地需要 `Session`。歧义只在「要把函数体搬进协调器」时才是问题；改走端口后函数体
+         留在原处不动，协调器只说「确保已初始化」，**歧义不再相关**。
+         **四个端口的切法各有依据，两种各两个，不强行统一**：
+         偏好（能力/Session）、校验（宿主/ValidationHost）、文档（宿主/DocumentSessionHost）、
+         预览（能力/Session）。归属散的按能力切、归属集中的按宿主切。
+      4b-2e. 最后 3 处，归属均未定：
+         `session_.latencySandboxController()`（`TimelineFlow.cpp:618-619`，调 `exitIfActive()`）——
+         延迟沙盒是独立域；先查 `ApplicationServices` 的 `LatencyEngine` 槽位有无等价能力，
+         有就直接走协调器已持有的 `services_`，不必新造端口。
+         `session_.setCurrentBottomTabsTabId`（`SurfaceContract.cpp:588`）——**不属播放域**，
+         是协调器为兼容暴露的底栏页签投影，阶段 3.5 已把底栏页签归入 `TimelineSurface` 契约，
+         真正归属 `TimelineHost`。
          **一个待观察项**：协调器构造签名已到 7 个参数，端口全切完约 9 个。
          第 5 步去掉 `Session&` 后若仍显臃肿，考虑收成一个依赖结构体；
          但不要为了参数个数好看而把窄端口重新捆成宽接口。

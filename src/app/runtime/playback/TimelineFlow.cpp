@@ -52,6 +52,7 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     miacode::v2::PlaybackPreferencesPort& preferences,
     miacode::v2::PlaybackValidationPort& validation,
     miacode::v2::PlaybackDocumentPort& documents,
+    miacode::v2::PlaybackPreviewPort& preview,
     quint64 sessionGeneration)
     : session_(session)
     , services_(services)
@@ -60,6 +61,7 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     , preferences_(preferences)
     , validation_(validation)
     , documents_(documents)
+    , preview_(preview)
     , identity_(sessionGeneration)
 {}
 
@@ -673,9 +675,9 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
         // dispatch below, so the new chart's volumes are the ones handed to
         // reloadAssetsForChart and applyPreviewAudioSettingsToRuntime rather
         // than the outgoing chart's.
-        session_.loadProjectAudioPreferences();
+        preview_.loadProjectAudioPreferences();
     }
-    session_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.pauseSecond_, services_.workspace().document().videoPath);  // Phase 4c &video= override
+    preview_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.pauseSecond_, services_.workspace().document().videoPath);  // Phase 4c &video= override
     if (state_.scene_ != nullptr) {
         state_.scene_->setPlayheadSeconds(state_.pauseSecond_, false);
     }
@@ -687,13 +689,13 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
         state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
         state_.previewSfxRuntimePreparationSequence_ = 0;
     }
-    session_.applyPreviewAudioSettingsToRuntime();
+    preview_.applyPreviewAudioSettingsToRuntime();
     if (!suppressImmediateRefresh) {
         refreshWaveformCache();
         refreshTimelineMetadata();
     }
     if (pathChanged && state_.previewWarmupGeneration_ > 0) {
-        session_.schedulePreviewSubsystemWarmup();
+        preview_.schedulePreviewSubsystemWarmup();
     }
 }
 
@@ -807,7 +809,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineCenterNavigateRequested(do
     const bool shouldRenderNow = !state_.previewScrubRenderElapsed_.isValid()
         || elapsedMs >= kPreviewScrubRenderIntervalMs;
     if (shouldRenderNow) {
-        session_.ensurePreviewStageMediaRouteInitialized();
+        preview_.ensurePreviewStageMediaRouteInitialized();
         ensurePreviewSfxRuntimePrepared(state_);
         requestPausedPreviewSeek(clampedSecond, false, false, false);
         state_.previewScrubRenderElapsed_.restart();

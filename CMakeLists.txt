@@ -1893,6 +1893,22 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src
     )
 
+    # Stage 4.9d-4b-2d: the playback coordinator's fourth narrow port, onto
+    # the preview stage-media route (warmup, chart-path resync,
+    # initialization-on-demand), the audio-runtime/outline-canvas re-applies,
+    # and preview shutdown. Cut by capability, same as preferences_port_spec
+    # above (eight of the nine methods' eventual owner is StageMediaHost, the
+    # ninth is Session's own orchestration). Linking Core+Test only (no Gui)
+    # is the same link-time guarantee as the other three port specs.
+    miacode_add_dev_tool(preview_port_spec TEST
+        SOURCES
+            src/tools/v2/PreviewPortSpec.cpp
+            src/app/v2/PlaybackPreviewPort.h
+            src/core/video/PreviewRenderSettings.h
+        LIBS Qt6::Core Qt6::Test
+        INCLUDES src src/core/video
+    )
+
     # Stage 4.6: Timeline commands receive their own identity before the
     # compatibility host forwards them to the current composite implementation.
     miacode_add_dev_tool(timeline_host_spec TEST
