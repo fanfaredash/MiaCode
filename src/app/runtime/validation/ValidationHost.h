@@ -48,9 +48,13 @@ public:
     void onMuriItemActivated(QListWidgetItem* item);
     void showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList);
     void refreshMuriDiagnosticsPanel();
-    void flushPendingMuriDiagnosticsPanelRefresh();
+    void flushPendingMuriDiagnosticsPanelRefresh() override;
     void clearValidationCache() override;
     void applyDeferredAnalysisUiUpdates() override;
+    // Stage 4.9d-4b-2e: lets PlaybackCoordinator::setCurrentBottomTabsTabId
+    // re-relayout the issue lists after a bottom-tab switch without naming
+    // QListWidget on the port — see scheduleWrappedListRelayout below.
+    void scheduleBottomTabsIssueListRelayout() override;
     void setValidationTabVisible(bool visible);
     void refreshValidationPanelForActiveField();
     void applyMuriRenderOptions();

@@ -4,6 +4,7 @@
 #include "runtime/document/DocumentSessionHost.h"
 
 #include "app/v2/ApplicationServices.h"
+#include "app/v2/LatencyEngine.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -33,7 +34,6 @@
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
-#include "tools/latency/LatencySandboxController.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -615,8 +615,8 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
         clearValidationErrors();
         validation_.clearValidationDecorations();
         stopQtPreviewPlayback(false);
-        if (session_.latencySandboxController() != nullptr) {
-            session_.latencySandboxController()->exitIfActive();
+        if (auto* latency = services_.latencyEngine(); latency != nullptr) {
+            latency->exitSandboxIfActive();
         }
     }
     if ((pathChanged || trackPathChanged) && state_.waveformCacheService_ != nullptr) {

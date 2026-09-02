@@ -300,31 +300,18 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          **四个端口的切法各有依据，两种各两个，不强行统一**：
          偏好（能力/Session）、校验（宿主/ValidationHost）、文档（宿主/DocumentSessionHost）、
          预览（能力/Session）。归属散的按能力切、归属集中的按宿主切。
-      4b-2e. 最后 3 处，归属均未定：
-         `session_.latencySandboxController()`（`TimelineFlow.cpp:618-619`，调 `exitIfActive()`）——
-         延迟沙盒是独立域；先查 `ApplicationServices` 的 `LatencyEngine` 槽位有无等价能力，
-         有就直接走协调器已持有的 `services_`，不必新造端口。
-         `session_.setCurrentBottomTabsTabId`（`SurfaceContract.cpp:588`）——**不属播放域**，
-         是协调器为兼容暴露的底栏页签投影，阶段 3.5 已把底栏页签归入 `TimelineSurface` 契约，
-         真正归属 `TimelineHost`。
-         **一个待观察项**：协调器构造签名已到 7 个参数，端口全切完约 9 个。
-         第 5 步去掉 `Session&` 后若仍显臃肿，考虑收成一个依赖结构体；
-         但不要为了参数个数好看而把窄端口重新捆成宽接口。
-         **关键前提（2026-09-02 查证）**：`StageMediaHost` / `ValidationHost` /
-         `DocumentSessionHost` 的构造签名**自己都要 `Session&`**
-         （`preview/StageMediaHost.h:9`、`validation/ValidationHost.h:9`、`document/DocumentSessionHost.h:17`），
-         所以**直接注入这些宿主并不能达成完成判据**——测试里仍需先造 `Session`，
-         只是把依赖藏到下一层，`session_.` 归零而目标落空。
-         必须是**窄抽象接口**：S 组的实质是那些 `Session` 方法本身就是转发进兄弟宿主的壳
-         （`savePortableState`→`editor_->`、`updateDirtyState`→`documents_->`、
-         `clearValidationCache`→`validation_->`），而协调器只用到每个宿主的很小一片
-         （校验 5 个方法、文档 4 个、编辑器基本只有 `savePortableState`），
-         所以是每个 3-5 方法的窄接口，不是 1:1 镜像宿主的 50 方法仪式。
-         `ApplicationServices`（11 处）与 `EditorSyncController`（11 处）是 v2 类、
-         已能在 spec 里构造（`application_services_spec` 就在这么做），可直接注入。
-         另需单独处理：`ensurePreviewStageMediaRouteInitialized`(6) 与
-         `syncPreviewStageMediaRouteChartPath`(1) 的判定依赖运行时分支——热路径是薄转发，
-         首次构造分支会回调 `session_.playback_->` 与 `applicationServices_`，静态无法唯一判定。
+      4b-2e. ~~最后 3 处~~ **已完成 2026-09-02**：`session_.` 计数 3 → **0**。
+         延迟沙盒 2 处：给已有的 `LatencyEngine` 契约加 `exitSandboxIfActive()`，
+         协调器走它本就持有的 `services_.latencyEngine()`——**不新造端口**。
+         刻意不走已有的 `LatencyEngine::sandbox()`：那会返回具体的 `LatencySandboxController*`，
+         把 `src/tools/latency/` 头文件拽进 `playback/`，等于刚拆掉的耦合换个方向接回来。
+         顺带删掉 `TimelineFlow.cpp` 里已成死引用的该头文件 include。
+         底栏页签 1 处：函数体搬进协调器（只碰已持有的 `ui_`/`state_`），
+         其中 `playback_->` 是自指绕路改 `this->`，跨宿主的那一处给校验端口加方法。
+         执行体在此做了一个正确的判断：`scheduleWrappedListRelayout(QListWidget*)` **没有**
+         按原样加上端口，因为端口头文件明写「Deliberately free of Session, QWidget, and QML/QSG types」
+         且由只链核心库的 spec 在链接层守住；改为不带控件参数的
+         `scheduleBottomTabsIssueListRelayout()`，`ValidationHost` 自己从共享的 `ui_` 取控件。
       5. 构造签名去掉 `Session&`；门槛 1、3 的测试从此可写
 
       **完成判据：`PlaybackCoordinator` 能在 spec 里被构造出来。**

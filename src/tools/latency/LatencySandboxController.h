@@ -56,6 +56,7 @@ public:
     void applyDetectorOffset(double seconds) override;
     void applyDetectorClockCount(int clockCount) override;
     LatencySandboxController* sandbox() const override;
+    void exitSandboxIfActive() override;
 
     // Whether the user currently has the latency page selected. Set by the
     // page's enter/exit hooks; installs/restores the test-chart preview source.

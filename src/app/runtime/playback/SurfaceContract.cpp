@@ -578,6 +578,21 @@ QString miacode::runtime::PlaybackCoordinator::bottomTabsTabIdToString(RuntimeCo
     return QStringLiteral("unknown");
 }
 
+miacode::runtime::RuntimeContext::BottomTabsTabId miacode::runtime::PlaybackCoordinator::bottomTabsTabIdFromString(const QString& tabId)
+{
+    const QString normalized = tabId.trimmed().toLower();
+    if (normalized == QStringLiteral("timeline")) {
+        return RuntimeContext::BottomTabsTabId::Timeline;
+    }
+    if (normalized == QStringLiteral("validation")) {
+        return RuntimeContext::BottomTabsTabId::Validation;
+    }
+    if (normalized == QStringLiteral("muri")) {
+        return RuntimeContext::BottomTabsTabId::Muri;
+    }
+    return RuntimeContext::BottomTabsTabId::Unknown;
+}
+
 QString miacode::runtime::PlaybackCoordinator::bottomTabsCurrentTabId() const
 {
     return bottomTabsTabIdToString(state_.currentBottomTabsTabId_);
@@ -585,7 +600,101 @@ QString miacode::runtime::PlaybackCoordinator::bottomTabsCurrentTabId() const
 
 void miacode::runtime::PlaybackCoordinator::setBottomTabsCurrentTabId(const QString& tabId)
 {
-    session_.setCurrentBottomTabsTabId(tabId);
+    setCurrentBottomTabsTabId(bottomTabsTabIdFromString(tabId));
+}
+
+// Stage 4.9d-4b-2e: moved in verbatim from Session::syncBottomTabsCurrentTabToContainers
+// (used to be defined further down this file) — pure ui_/state_ widget sync, no
+// Session-own state. bottomTabsPageForTab's tabId->widget mapping is reproduced
+// inline since this is its only caller here.
+void miacode::runtime::PlaybackCoordinator::syncBottomTabsCurrentTabToContainers()
+{
+    if (ui_.bottomTabs_ == nullptr) {
+        return;
+    }
+
+    const auto pageForTab = [this](RuntimeContext::BottomTabsTabId tabId) -> QWidget* {
+        switch (tabId) {
+        case RuntimeContext::BottomTabsTabId::Timeline:
+            return nullptr;
+        case RuntimeContext::BottomTabsTabId::Validation:
+            return ui_.errorList_;
+        case RuntimeContext::BottomTabsTabId::Muri:
+            return ui_.muriList_;
+        case RuntimeContext::BottomTabsTabId::Unknown:
+            break;
+        }
+        return nullptr;
+    };
+
+    const bool quickShellBottomTabsProxyActive = state_.backendActive_ && ui_.quickShellBottomTabsProxy_ != nullptr;
+    if (!quickShellBottomTabsProxyActive) {
+        QWidget* targetPage = pageForTab(state_.currentBottomTabsTabId_);
+        const int index = targetPage != nullptr ? ui_.bottomTabs_->indexOf(targetPage) : -1;
+        if (index >= 0 && ui_.bottomTabs_->isTabVisible(index) && ui_.bottomTabs_->currentIndex() != index) {
+            ui_.bottomTabs_->setCurrentIndex(index);
+        }
+        return;
+    }
+
+    if (ui_.quickShellBottomTabsProxy_ != nullptr) {
+        QWidget* targetPage = pageForTab(state_.currentBottomTabsTabId_);
+        const int proxyIndex = targetPage != nullptr
+            ? ui_.quickShellBottomTabsProxy_->indexOf(targetPage)
+            : -1;
+        if (proxyIndex >= 0
+            && ui_.quickShellBottomTabsProxy_->isTabVisible(proxyIndex)
+            && ui_.quickShellBottomTabsProxy_->currentIndex() != proxyIndex) {
+            ui_.quickShellBottomTabsProxy_->setCurrentIndex(proxyIndex);
+        }
+    }
+}
+
+// Stage 4.9d-4b-2e: moved in verbatim from Session::setCurrentBottomTabsTabId
+// (BottomTabsTabId overload). The QString overload above now flows into this
+// one instead of the reverse (Session's setCurrentBottomTabsTabId(QString) used
+// to call its own enum overload); Session::setCurrentBottomTabsTabId(BottomTabsTabId)
+// is now the one-line forwarder — see SurfaceContract.cpp's Session-side definition.
+// The two cross-host calls the original body made — validation_->...() and
+// playback_->...() — are now validation_. (a reference, no null check needed) and
+// a direct call to this class's own flushDeferredTimelineBridgeState() (no more
+// self-indirection through a playback_ pointer). presentationChanged is announced
+// through services_.shellNotifications() directly, the signal's real destination
+// (see PlaybackState.cpp's updatePauseButtonAppearance for the established
+// retargeting precedent) rather than through Session's now-unused forwarding signal.
+void miacode::runtime::PlaybackCoordinator::setCurrentBottomTabsTabId(RuntimeContext::BottomTabsTabId tabId)
+{
+    if (tabId == RuntimeContext::BottomTabsTabId::Unknown) {
+        return;
+    }
+    // Issue #2 fix — in QuickShell mode the legacy QTabWidget is hidden
+    // (the QML BottomTabBar renders the tab bar instead) and the
+    // legacy widget's `isTabVisible(index)` may report false even when
+    // the QML controller reports the tab as user-visible. The early
+    // return on `!bottomTabsTabVisibleFromState(tabId)` then drops every
+    // click from the QML tab bar — which is exactly the symptom the user
+    // reported ("clicking validation/muri detect has no effect").
+    // Skip the legacy visibility gate when the QuickShell backend is
+    // active; visibility there is already gated at the QML level by
+    // the validationTabVisible / muriTabVisible properties.
+    if (!state_.backendActive_ && !bottomTabsTabVisibleFromState(tabId)) {
+        return;
+    }
+    const RuntimeContext::BottomTabsTabId previousTabId = state_.currentBottomTabsTabId_;
+    state_.currentBottomTabsTabId_ = tabId;
+    syncBottomTabsCurrentTabToContainers();
+    if (tabId == RuntimeContext::BottomTabsTabId::Muri) {
+        validation_.flushPendingMuriDiagnosticsPanelRefresh();
+    }
+    if (tabId == RuntimeContext::BottomTabsTabId::Timeline) {
+        flushDeferredTimelineBridgeState();
+    }
+    if (tabId != RuntimeContext::BottomTabsTabId::Timeline) {
+        validation_.scheduleBottomTabsIssueListRelayout();
+    }
+    if (previousTabId != tabId) {
+        emit services_.shellNotifications().presentationChanged();
+    }
 }
 
 bool miacode::runtime::PlaybackCoordinator::bottomTabsVisible() const
@@ -834,40 +943,15 @@ void Session::syncQuickShellBottomTabsProxyRoute()
     syncBottomTabsCurrentTabToContainers();
 }
 
+// Stage 4.9d-4b-2e: function body moved to
+// PlaybackCoordinator::setCurrentBottomTabsTabId (SurfaceContract.cpp, near
+// bottomTabsTabIdToString) — this stays as a one-line forwarder per
+// SessionForwarding.cpp's convention because shell/Interaction.cpp,
+// document/DocumentPages.cpp and validation/ValidationRuntime.cpp still call
+// it from outside playback/.
 void Session::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
 {
-    if (tabId == BottomTabsTabId::Unknown) {
-        return;
-    }
-    // Issue #2 fix — in QuickShell mode the legacy QTabWidget is hidden
-    // (the QML BottomTabBar renders the tab bar instead) and the
-    // legacy widget's `isTabVisible(index)` may report false even when
-    // the QML controller reports the tab as user-visible. The early
-    // return on `!bottomTabsTabVisible(tabId)` then drops every click
-    // from the QML tab bar — which is exactly the symptom the user
-    // reported ("clicking validation/muri detect has no effect").
-    // Skip the legacy visibility gate when the QuickShell backend is
-    // active; visibility there is already gated at the QML level by
-    // the validationTabVisible / muriTabVisible properties.
-    if (!backendActive_ && !bottomTabsTabVisible(tabId)) {
-        return;
-    }
-    const BottomTabsTabId previousTabId = currentBottomTabsTabId_;
-    currentBottomTabsTabId_ = tabId;
-    syncBottomTabsCurrentTabToContainers();
-    if (tabId == BottomTabsTabId::Muri && validation_ != nullptr) {
-        validation_->flushPendingMuriDiagnosticsPanelRefresh();
-    }
-    if (tabId == BottomTabsTabId::Timeline && playback_ != nullptr) {
-        playback_->flushDeferredTimelineBridgeState();
-    }
-    if (tabId != BottomTabsTabId::Timeline) {
-        scheduleWrappedListRelayout(errorList_);
-        scheduleWrappedListRelayout(muriList_);
-    }
-    if (previousTabId != tabId) {
-        emit presentationChanged();
-    }
+    playback_->setCurrentBottomTabsTabId(tabId);
 }
 
 void Session::setCurrentBottomTabsTabId(const QString& tabId)

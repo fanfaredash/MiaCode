@@ -4,7 +4,7 @@
 // analysis presentation (render-mode selection, the validation cache, muri
 // decorations, and the deferred analysis UI tail). Unlike
 // PlaybackPreferencesPort — cut by capability because its methods' eventual
-// owners are split across three hosts — this port is cut by host: all five
+// owners are split across three hosts — this port is cut by host: all
 // methods already belong to ValidationHost, and Session implements the port
 // only insofar as ValidationHost does.
 //
@@ -50,6 +50,10 @@ public:
 
     void applyDeferredAnalysisUiUpdates() override { ++applyDeferredAnalysisUiUpdatesCount; }
 
+    void flushPendingMuriDiagnosticsPanelRefresh() override { ++flushPendingMuriDiagnosticsPanelRefreshCount; }
+
+    void scheduleBottomTabsIssueListRelayout() override { ++scheduleBottomTabsIssueListRelayoutCount; }
+
     RenderMode lastMode = RenderMode::Native;
     bool lastPersistState = false;
     int setMuriRenderModeCount = 0;
@@ -57,6 +61,8 @@ public:
     int clearValidationDecorationsCount = 0;
     int applyAlignedMuriAnalysisReportToViewsCount = 0;
     int applyDeferredAnalysisUiUpdatesCount = 0;
+    int flushPendingMuriDiagnosticsPanelRefreshCount = 0;
+    int scheduleBottomTabsIssueListRelayoutCount = 0;
 };
 
 bool verifyImplementableWithoutSessionOrAWindow(QTextStream& err)
@@ -85,6 +91,14 @@ bool verifyImplementableWithoutSessionOrAWindow(QTextStream& err)
     contract.applyDeferredAnalysisUiUpdates();
     ok &= require(validation.applyDeferredAnalysisUiUpdatesCount == 1,
                   QStringLiteral("applyDeferredAnalysisUiUpdates reaches the implementation"), err);
+
+    contract.flushPendingMuriDiagnosticsPanelRefresh();
+    ok &= require(validation.flushPendingMuriDiagnosticsPanelRefreshCount == 1,
+                  QStringLiteral("flushPendingMuriDiagnosticsPanelRefresh reaches the implementation"), err);
+
+    contract.scheduleBottomTabsIssueListRelayout();
+    ok &= require(validation.scheduleBottomTabsIssueListRelayoutCount == 1,
+                  QStringLiteral("scheduleBottomTabsIssueListRelayout reaches the implementation"), err);
 
     return ok;
 }

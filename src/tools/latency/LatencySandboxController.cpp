@@ -462,4 +462,9 @@ LatencySandboxController* LatencySandboxController::sandbox() const
     return const_cast<LatencySandboxController*>(this);
 }
 
+void LatencySandboxController::exitSandboxIfActive()
+{
+    exitIfActive();
+}
+
 }  // namespace miacode::latency

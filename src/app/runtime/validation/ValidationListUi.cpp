@@ -209,6 +209,17 @@ void miacode::runtime::ValidationHost::scheduleWrappedListRelayout(QListWidget* 
     });
 }
 
+// Stage 4.9d-4b-2e: the port-facing entry point for
+// PlaybackCoordinator::setCurrentBottomTabsTabId, moved in from
+// Session::setCurrentBottomTabsTabId — same two calls that function made
+// directly, just re-derived from ui_ instead of taking QListWidget* across
+// the port (see PlaybackValidationPort.h).
+void miacode::runtime::ValidationHost::scheduleBottomTabsIssueListRelayout()
+{
+    scheduleWrappedListRelayout(ui_.errorList_);
+    scheduleWrappedListRelayout(ui_.muriList_);
+}
+
 QString miacode::runtime::ValidationHost::currentValidationIgnoreScopeKey() const
 {
     return state_.currentFilePath_.isEmpty() ? QStringLiteral("<unsaved>") : state_.currentFilePath_;

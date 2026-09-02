@@ -319,6 +319,11 @@ public:
     void setFollowPreviewEnabled(bool enabled);
     QString bottomTabsCurrentTabId() const;
     void setBottomTabsCurrentTabId(const QString& tabId);
+    // Stage 4.9d-4b-2e: moved in verbatim from Session::setCurrentBottomTabsTabId
+    // (SurfaceContract.cpp) — public because Session::setCurrentBottomTabsTabId
+    // still has callers outside playback/ and forwards here one line, matching
+    // SessionForwarding.cpp's convention.
+    void setCurrentBottomTabsTabId(RuntimeContext::BottomTabsTabId tabId);
     bool bottomTabsVisible() const;
     bool timelineTabVisible() const;
     bool muriTabVisible() const;
@@ -336,6 +341,10 @@ public:
 private:
     bool bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId tabId) const;
     static QString bottomTabsTabIdToString(RuntimeContext::BottomTabsTabId tabId);
+    static RuntimeContext::BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId);
+    // Stage 4.9d-4b-2e: moved in verbatim from Session::syncBottomTabsCurrentTabToContainers
+    // (SurfaceContract.cpp) — pure ui_/state_ widget sync, no Session-own state.
+    void syncBottomTabsCurrentTabToContainers();
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredTimelineBridgeFlush();
     void invalidatePreviewFollowBindingCache();

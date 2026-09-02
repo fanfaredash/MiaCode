@@ -41,6 +41,12 @@ public:
     // The audition sandbox. Null before the window has built one.
     virtual miacode::latency::LatencySandboxController* sandbox() const = 0;
 
+    // Stop any in-progress audition playback (used on file-path change). Only
+    // acts while the latency page is selected; never touches normal-difficulty
+    // playback. A named intent method rather than routing callers through
+    // sandbox() so playback/ never needs to know the sandbox's concrete type.
+    virtual void exitSandboxIfActive() = 0;
+
 protected:
     LatencyEngine() = default;
     LatencyEngine(const LatencyEngine&) = default;
