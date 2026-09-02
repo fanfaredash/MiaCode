@@ -801,6 +801,38 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
       QML import 部署扫描及跨模块时间域回归；macOS / Windows 依赖记录与功能 parity 另行处理，
       GUI 结果不作为本阶段的工作项。
 
+### 本轮中间审计与暂停记录（2026-09-02）
+
+- **阶段 4.8 Sol 架构审计**：审计指出协调器头文件仍间接依赖 `Session.h` / 旧 projection API；该项被登记为 4.9 后续边界，而不是在 4.8 误判为全部抽离。审计还指出失效流程不能只递增 sequence，已补 `PlaybackIdentityGate` 的 active guard 与安全快照；原先仅做文本扫描的边界测试已补行为测试；过时装配注释已修正。4.8 已提交为 `8a241345`。
+- **阶段 4.9a Sol 架构审计**：类型外置和协调器头文件解耦基本成立，但发现 `RuntimeContext` 若声明在宿主 `unique_ptr` 之后会先析构，造成借用引用悬空。已将上下文移到所有宿主之前，并在 `playback_coordinator_spec` 增加成员顺序回归；同时增加 `SessionMembers.inc` 的两种预处理模式互斥保护，修正文档旧类型描述。审计确认八个 runtime host 的显式上下文签名一致、PreviewHost / TimelineHost 不借用该共享记录；建议的独立 compile-only 头文件 TU 尚未实施。4.9a 已提交为 `5246ff2a`。
+- **4.9a 验证证据**：MiaCode Release 与 `playback_coordinator_spec`、`timeline_host_spec`、`timeline_surface_ready_spec`、`preview_host_spec`、`application_services_spec`、`timeline_model_spec`、`preview_transport_push_spec` 均已通过；`git diff --check` 通过；runtime 源码未发现 `Session::HostUi`、`Session::HostState`、`struct HostUi`、`struct HostState`；未运行 Windows 构建和全量 CTest。
+- **4.9b 第一片时间线存储（2026-09-02，续做完成）**：上一轮暂停时只改了 `RuntimeContext.h`（新增
+  `TimelineState` 与 `state(timeline)` 构造），`SessionMembers.inc` 未跟进，暂存状态并不能编译。本轮补完：
+  `struct State` 的 29 个时间线字段改为绑定到 `TimelineState` 的引用别名，`State` 增加
+  `explicit State(TimelineState&)`；`State` 与 `RuntimeContext` 都禁用拷贝——拷贝出的 `State`
+  会继续别名源记录的存储，而 `explicit` + 左值引用参数也挡住了用临时量构造导致的悬空。
+- **4.9b 边界测试**：新增 `runtime_context_boundary_spec`（`src/tools/v2/RuntimeContextBoundarySpec.cpp`），
+  这是 4.9a 审计建议、当时未实施的「独立编译 TU」：它真正解析 `RuntimeContext.h`，逐字段
+  `static_assert`「`State` 只借不拥、`TimelineState` 拥有不借」，不是文本扫描。已做反向验证——
+  把 `timelineReady_` 改回 `State` 自有字段后构建按预期失败并报出该字段名。编译期断言看不到成员
+  顺序，所以声明顺序（`timeline` 必须在 `state` 之前构造）另由 `playback_coordinator_spec` 新增的
+  文本检查守住，与 4.9a 的宿主顺序检查同一类。
+- **4.9b 顺带修复的两个既有失败**：`debug_flag_index_spec` 此前就被 4.8/4.9a 引入的
+  `MIACODE_SESSION_RUNTIME_MEMBERS` / `MIACODE_RUNTIME_CONTEXT_TYPES` 打挂（当时只跑了子集 spec，
+  没跑全量 CTest 因而未暴露），本轮的断言宏又加了第三个；已在该 spec 中新增
+  `kSourcePreprocessorMacros` 白名单，与既有的 `kCompileDefinitions` 分开，说明这类 token 是
+  源码内的预处理选择器而非 env flag。`export_engine_spec` 扫的是早已删除的
+  `src/app/runtime/sections/export`，扫不到文件必然失败；已改指向现路径 `src/app/runtime/export`
+  （该目录只有一处注释提到 QMessageBox，spec 本就跳过注释行，因此通过是真通过）。
+- **4.9b 验证证据**：`cmake --build build-macos -j4` 全量 Release 构建通过（`MiaCode` 已按本轮改动
+  重新链接），仅剩两条与本轮无关的既有告警。全量 CTest 101 项：修复后 98 通过、3 失败（见下条）。
+- **仍然失败、且不属于本轮范围的 3 项**：`qtavplayer_platform_spec`（既有已知失败）、
+  `preview_guide_layer_spec`、`preview_slide_vanilla_trim_spec`（后两项在 `chart parses:` 断言处失败，
+  只链接 `src/core/scene` 与解析器，不含本轮改动的任何文件，属于解析/场景域的既有回归，需另开一轮处理）。
+- **仍未完成**：4.9b 只切出了第一个域记录，实际借用方仍经 `State` 的兼容引用读时间线存储；
+  preview / document / validation / export 域存储尚未切分。4.9b 后续、4.9c、4.9d 仍未完成，
+  不能标记阶段 4.9 或 Architecture Complete。未运行 Windows 构建。
+
 ### 0b（已完成，归档保留）/ 0c（已改判并完成）
 
 - [x] 0b 扩展宿主删除（2026-09-01）——产品运行时、宿主、Open Bridge、扩展 UI/事件/手势/

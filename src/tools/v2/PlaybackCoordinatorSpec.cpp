@@ -1,4 +1,4 @@
-// Boundary regression for stages 4.8 and 4.9a.
+// Boundary regression for stages 4.8, 4.9a and 4.9b.
 //
 // The coordinator is the only playback authority. Preview and Timeline
 // compatibility surfaces are separate projection adapters and must not make
@@ -119,6 +119,27 @@ bool verifyRuntimeContextOutlivesHosts(QTextStream& err)
                    QStringLiteral("RuntimeContext is declared before every borrowing host"), err);
 }
 
+bool verifyTimelineStorageIsConstructedBeforeItsAliases(QTextStream& err)
+{
+    // Stage 4.9b. RuntimeContextBoundarySpec compile-asserts that State only
+    // aliases the timeline record; a compile-time assertion cannot see member
+    // ORDER, and a reordered context would bind those aliases into storage that
+    // has not been constructed yet. Same hazard class as the 4.9a host-order
+    // check above, so it is guarded the same way.
+    const QString context = readSource(QStringLiteral("src/app/runtime/RuntimeContext.h"));
+    const qsizetype timelinePosition =
+        context.indexOf(QStringLiteral("    TimelineState timeline;"));
+    const qsizetype statePosition = context.indexOf(QStringLiteral("    State state;"));
+    bool ok = require(timelinePosition >= 0 && statePosition >= 0
+                          && timelinePosition < statePosition,
+                      QStringLiteral("TimelineState is declared before the State record aliasing it"), err);
+    ok &= require(context.contains(QStringLiteral(": state(timeline)")),
+                  QStringLiteral("RuntimeContext injects the timeline record into State"), err);
+    ok &= require(context.contains(QStringLiteral("RuntimeContext(const RuntimeContext&) = delete;")),
+                  QStringLiteral("RuntimeContext is non-copyable so aliases cannot outlive their record"), err);
+    return ok;
+}
+
 bool verifyProjectionAdaptersOwnLegacySurfaceContracts(QTextStream& err)
 {
     const QString adapters = readSource(
@@ -192,6 +213,7 @@ int main(int argc, char** argv)
     ok &= verifyCoordinatorOwnsOnlyPlaybackContracts(err);
     ok &= verifyRuntimeContextBoundary(err);
     ok &= verifyRuntimeContextOutlivesHosts(err);
+    ok &= verifyTimelineStorageIsConstructedBeforeItsAliases(err);
     ok &= verifyProjectionAdaptersOwnLegacySurfaceContracts(err);
     ok &= verifyAssemblyNoLongerUsesPlaybackControlAdapter(err);
     ok &= verifyPlaybackIdentityGateBehavior(err);

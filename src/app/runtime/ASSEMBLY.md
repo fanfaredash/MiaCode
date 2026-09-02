@@ -86,7 +86,9 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
 4.8 已完成契约边界收缩和旧类型重命名：`PlaybackCoordinator.h` 不直接包含或继承
 `PreviewSurface.h`、`TimelineSurface.h`、QML 或场景图契约。4.9a 又将其头文件对共享存储的依赖
 收缩为 `RuntimeContext.h`，不再包含 `Session.h`；`RuntimeContext::Ui` / `RuntimeContext::State`
-仍是 4.9 的过渡期共享记录，后续按宿主拆分其所有权。协调器还暂时公开旧 Preview/Timeline
+仍是 4.9 的过渡期共享记录，后续按宿主拆分其所有权。4.9b 已切出第一个域记录
+`RuntimeContext::TimelineState`：时间线存储由它拥有，`State` 只保留兼容引用，
+借用方尚未改为直接持有该窄记录。协调器还暂时公开旧 Preview/Timeline
 投影方法供 adapter 和 Session 内部转发；两个 surface adapter 仍是迁移期兼容层，协调器的旧实现
 文件还保留部分 preview/timeline 业务调用，不能把本阶段误记为全部业务实现已搬空。
 
@@ -118,6 +120,15 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
       宿主构造签名改用显式上下文类型，`PlaybackCoordinator.h` 脱离 `Session.h`
 - [ ] 阶段 4.9b：按 PlaybackCoordinator / PreviewHost / TimelineHost 及其他运行时宿主切开
       `RuntimeContext` 共享记录，Session 只保留生命周期、资源所有权和端口连接
+  - [x] 第一片时间线存储（2026-09-02）：时间线刷新、快照、就绪、游标与分析调度的 29 个字段
+        移入 `RuntimeContext::TimelineState`；`RuntimeContext::State` 只保留迁移期兼容引用，
+        自身不再拥有这些值，`State` 与 `RuntimeContext` 均禁用拷贝（拷贝出的 `State`
+        会继续别名源记录的存储）。`runtime_context_boundary_spec` 是独立编译 TU，
+        逐字段 `static_assert`「State 只借不拥、TimelineState 拥有不借」；成员声明顺序
+        由 `playback_coordinator_spec` 的文本检查守住，因为编译期断言看不到顺序。
+  - [ ] 后续：让实际借用方（`PlaybackCoordinator` 等）直接持 `TimelineState&` 而不是
+        经 `State` 的兼容引用，并按同样方式切出 preview / document / validation / export
+        域的存储。
 - [ ] `QApplication` / `Qt6::Widgets` 仍在入口与 CMake；宿主拆分后再清除 native fallback 与
       Widgets 依赖，避免把 QWidget 生命周期藏进新宿主
 

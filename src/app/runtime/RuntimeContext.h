@@ -134,10 +134,57 @@ public:
         bool nameLocked = false;
     };
 
+    // Timeline projection and refresh state has a separate storage owner. The
+    // legacy State record below exposes references during this incremental
+    // migration, but it no longer owns these values.
+    struct TimelineState {
+        TimelineQuickStateBridge* timelineQuickStateBridge_ = nullptr;
+        QThreadPool* timelineSlowRefreshPool_ = nullptr;
+        QThreadPool* timelineAnalysisPool_ = nullptr;
+        bool timelineReady_ = false;
+        quint64 deferredTimelineBridgeFlushGeneration_ = 0;
+        bool pendingQuickTimelineCursorSync_ = false;
+        double pendingQuickTimelineCursorSecond_ = 0.0;
+        bool pendingQuickTimelineCursorCenterView_ = false;
+        int lastTimelineParseDifficultyId_ = 0;
+        QString lastTimelineParseChartText_;
+        miacode::simai::SimaiTimingMetadata lastTimelineParseTimingMetadata_;
+        SimaiNativeParseResult lastTimelineParseResult_;
+        QVector<TimelineNoteMarker> latestTimelineNoteMarkers_;
+        QByteArray latestTimelineNoteMarkerSignature_;
+        quint64 latestTimelinePreviewRevision_ = 0;
+        bool latestTimelinePreviewSnapshotReady_ = false;
+        TimelineQuickModel timelineQuickModel_;
+        TimelineSlowRefreshRequest pendingTimelineSlowRefresh_;
+        TimelineAnalysisRefreshRequest pendingTimelineAnalysisRefresh_;
+        quint64 timelineRevision_ = 0;
+        quint64 timelineSlowRequestedRevision_ = 0;
+        quint64 timelineSlowRunningRevision_ = 0;
+        quint64 timelineAnalysisRequestedRevision_ = 0;
+        quint64 timelineAnalysisRunningRevision_ = 0;
+        bool timelineSlowWorkerRunning_ = false;
+        bool timelineAnalysisWorkerRunning_ = false;
+        quint64 waveformRefreshGeneration_ = 0;
+        PreviewCanvasFrameRateMode timelineFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
+        bool timelineSyncEnabled_ = false;
+    };
+
 #define MIACODE_RUNTIME_CONTEXT_TYPES 1
 #include "runtime/SessionMembers.inc"
 #undef MIACODE_RUNTIME_CONTEXT_TYPES
 
+    // Declaration order is load-bearing: `state` binds compatibility references
+    // into `timeline`, so the timeline record must be declared (and therefore
+    // constructed) first. Copying is deleted because a copied `state` would
+    // still alias the source context's timeline storage.
+    RuntimeContext()
+        : state(timeline)
+    {}
+
+    RuntimeContext(const RuntimeContext&) = delete;
+    RuntimeContext& operator=(const RuntimeContext&) = delete;
+
+    TimelineState timeline;
     Ui ui;
     State state;
 };

@@ -79,6 +79,22 @@ const QSet<QString> kCompileDefinitions = {
     QStringLiteral("MIACODE_QML_SPEC_IMPORT_ROOT"),
 };
 
+// MIACODE_* tokens that are in-source preprocessor selectors: they are #defined
+// and #undef'd inside the tree to pick an include mode or to generate repeated
+// static assertions. They are never read with qgetenv, so they do not belong in
+// docs/ops/DEBUG_INDEX.md either. Kept separate from kCompileDefinitions so the
+// two reasons a MIACODE_* token can legitimately skip the doc stay distinct.
+const QSet<QString> kSourcePreprocessorMacros = {
+    // runtime/SessionMembers.inc is included twice with different meanings:
+    // once to define the Ui/State records, once to inject Session's borrowing
+    // reference members. Stage 4.9a.
+    QStringLiteral("MIACODE_SESSION_RUNTIME_MEMBERS"),
+    QStringLiteral("MIACODE_RUNTIME_CONTEXT_TYPES"),
+    // Per-field static assertion generator in RuntimeContextBoundarySpec.cpp.
+    // Stage 4.9b.
+    QStringLiteral("MIACODE_TIMELINE_STORAGE_MOVED"),
+};
+
 QSet<QString> collectFlags(const QString& text)
 {
     static const QRegularExpression re(QStringLiteral("MIACODE_[A-Z0-9_]+"));
@@ -86,7 +102,8 @@ QSet<QString> collectFlags(const QString& text)
     QRegularExpressionMatchIterator it = re.globalMatch(text);
     while (it.hasNext()) {
         const QString flag = it.next().captured(0);
-        if (kCompileDefinitions.contains(flag)) {
+        if (kCompileDefinitions.contains(flag)
+            || kSourcePreprocessorMacros.contains(flag)) {
             continue;
         }
         flags.insert(flag);

@@ -8,7 +8,7 @@
 // miacode::v2::ExportEngine is the seam that replaced it. This target links
 // Qt6::Core / Qt6::Gui / Qt6::Test only, so the interface failing to link here
 // is how a QtWidgets type creeping into the contract gets caught — which is the
-// whole point, since the implementation still lives inside a QMainWindow.
+// whole point, since the implementation still carries Widgets-era dependencies.
 //
 // The behaviour worth pinning is the slot discipline. The engine is the one
 // service ApplicationServices does not own: the window installs itself and
@@ -39,7 +39,8 @@ bool require(bool condition, const QString& message, QTextStream& err)
 }
 
 // A stand-in implementation. Its only job is to prove the contract can be
-// implemented without a window — the production one is MainWindow::ExportSection.
+// implemented without a window — the production one is
+// miacode::runtime::VideoExportHost (src/app/runtime/export/).
 class FakeExportEngine final : public miacode::v2::ExportEngine
 {
 public:
@@ -258,7 +259,7 @@ bool verifyTheExportSectionShowsNoWidgetDialogs(QTextStream& err)
     bool ok = true;
     int scanned = 0;
     QDirIterator walk(QStringLiteral(MIACODE_SOURCE_ROOT)
-                          + QStringLiteral("/src/app/runtime/sections/export"),
+                          + QStringLiteral("/src/app/runtime/export"),
                       QStringList{QStringLiteral("*.cpp"), QStringLiteral("*.h")},
                       QDir::Files, QDirIterator::Subdirectories);
     while (walk.hasNext()) {

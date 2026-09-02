@@ -178,6 +178,49 @@
     };
 
     struct State {
+        explicit State(TimelineState& timeline)
+            : timeline_(timeline)
+        {}
+
+        // A copy would keep aliasing the source record's timeline storage.
+        State(const State&) = delete;
+        State& operator=(const State&) = delete;
+
+        // Timeline refresh / snapshot / readiness / cursor / analysis storage
+        // is owned by TimelineState. The aliases below are the migration-period
+        // compatibility view for call sites that still read them through the
+        // shared record; State itself no longer stores any of these values.
+        TimelineState& timeline_;
+        TimelineQuickStateBridge*& timelineQuickStateBridge_ = timeline_.timelineQuickStateBridge_;
+        QThreadPool*& timelineSlowRefreshPool_ = timeline_.timelineSlowRefreshPool_;
+        QThreadPool*& timelineAnalysisPool_ = timeline_.timelineAnalysisPool_;
+        bool& timelineReady_ = timeline_.timelineReady_;
+        quint64& deferredTimelineBridgeFlushGeneration_ = timeline_.deferredTimelineBridgeFlushGeneration_;
+        bool& pendingQuickTimelineCursorSync_ = timeline_.pendingQuickTimelineCursorSync_;
+        double& pendingQuickTimelineCursorSecond_ = timeline_.pendingQuickTimelineCursorSecond_;
+        bool& pendingQuickTimelineCursorCenterView_ = timeline_.pendingQuickTimelineCursorCenterView_;
+        int& lastTimelineParseDifficultyId_ = timeline_.lastTimelineParseDifficultyId_;
+        QString& lastTimelineParseChartText_ = timeline_.lastTimelineParseChartText_;
+        miacode::simai::SimaiTimingMetadata& lastTimelineParseTimingMetadata_ = timeline_.lastTimelineParseTimingMetadata_;
+        SimaiNativeParseResult& lastTimelineParseResult_ = timeline_.lastTimelineParseResult_;
+        QVector<TimelineNoteMarker>& latestTimelineNoteMarkers_ = timeline_.latestTimelineNoteMarkers_;
+        QByteArray& latestTimelineNoteMarkerSignature_ = timeline_.latestTimelineNoteMarkerSignature_;
+        quint64& latestTimelinePreviewRevision_ = timeline_.latestTimelinePreviewRevision_;
+        bool& latestTimelinePreviewSnapshotReady_ = timeline_.latestTimelinePreviewSnapshotReady_;
+        TimelineQuickModel& timelineQuickModel_ = timeline_.timelineQuickModel_;
+        TimelineSlowRefreshRequest& pendingTimelineSlowRefresh_ = timeline_.pendingTimelineSlowRefresh_;
+        TimelineAnalysisRefreshRequest& pendingTimelineAnalysisRefresh_ = timeline_.pendingTimelineAnalysisRefresh_;
+        quint64& timelineRevision_ = timeline_.timelineRevision_;
+        quint64& timelineSlowRequestedRevision_ = timeline_.timelineSlowRequestedRevision_;
+        quint64& timelineSlowRunningRevision_ = timeline_.timelineSlowRunningRevision_;
+        quint64& timelineAnalysisRequestedRevision_ = timeline_.timelineAnalysisRequestedRevision_;
+        quint64& timelineAnalysisRunningRevision_ = timeline_.timelineAnalysisRunningRevision_;
+        bool& timelineSlowWorkerRunning_ = timeline_.timelineSlowWorkerRunning_;
+        bool& timelineAnalysisWorkerRunning_ = timeline_.timelineAnalysisWorkerRunning_;
+        quint64& waveformRefreshGeneration_ = timeline_.waveformRefreshGeneration_;
+        PreviewCanvasFrameRateMode& timelineFrameRateMode_ = timeline_.timelineFrameRateMode_;
+        bool& timelineSyncEnabled_ = timeline_.timelineSyncEnabled_;
+
         // "All difficulties share one designer" preference (set via the
         // per-difficulty designer dialog, persisted per project). True ⇒
         // broadcast designer edits between top &des and every &des_N inside
@@ -186,14 +229,8 @@
         PreviewRuntime* scene_ = nullptr;
         PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
-        TimelineQuickStateBridge* timelineQuickStateBridge_ = nullptr;
         bool backendActive_ = false;
         bool uiFocusBridgeMode_ = false;
-        bool timelineReady_ = false;
-        quint64 deferredTimelineBridgeFlushGeneration_ = 0;
-        bool pendingQuickTimelineCursorSync_ = false;
-        double pendingQuickTimelineCursorSecond_ = 0.0;
-        bool pendingQuickTimelineCursorCenterView_ = false;
         BottomTabsTabId currentBottomTabsTabId_ = BottomTabsTabId::Timeline;
         double bottomTabsContentScale_ = 1.0;
         double previewPaneWidthRatio_ = 0.0;
@@ -209,8 +246,6 @@
         PreviewAudioDeviceWatcher* previewAudioDeviceWatcher_ = nullptr;
         miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
         QThreadPool* previewWarmupPool_ = nullptr;
-        QThreadPool* timelineSlowRefreshPool_ = nullptr;
-        QThreadPool* timelineAnalysisPool_ = nullptr;
         QProcess* videoExportWorkerProcess_ = nullptr;
         QSoundEffect* invalidStarPreviewEnableSound_ = nullptr;
         QSoundEffect* invalidStarPreviewDisableSound_ = nullptr;
@@ -252,24 +287,6 @@
         int lastObservedEditorUndoSteps_ = 0;
         int lastObservedEditorRedoSteps_ = 0;
         bool editorSelectionUndoRedoRestoreInProgress_ = false;
-        int lastTimelineParseDifficultyId_ = 0;
-        QString lastTimelineParseChartText_;
-        miacode::simai::SimaiTimingMetadata lastTimelineParseTimingMetadata_;
-        SimaiNativeParseResult lastTimelineParseResult_;
-        QVector<TimelineNoteMarker> latestTimelineNoteMarkers_;
-        QByteArray latestTimelineNoteMarkerSignature_;
-        quint64 latestTimelinePreviewRevision_ = 0;
-        bool latestTimelinePreviewSnapshotReady_ = false;
-        TimelineQuickModel timelineQuickModel_;
-        TimelineSlowRefreshRequest pendingTimelineSlowRefresh_;
-        TimelineAnalysisRefreshRequest pendingTimelineAnalysisRefresh_;
-        quint64 timelineRevision_ = 0;
-        quint64 timelineSlowRequestedRevision_ = 0;
-        quint64 timelineSlowRunningRevision_ = 0;
-        quint64 timelineAnalysisRequestedRevision_ = 0;
-        quint64 timelineAnalysisRunningRevision_ = 0;
-        bool timelineSlowWorkerRunning_ = false;
-        bool timelineAnalysisWorkerRunning_ = false;
         // Set true while LatencySandboxController has hot-swapped the
         // timeline noteMarkers + audio settings for a sandbox audition.
         // Gates code paths that otherwise refresh from the real chart.
@@ -306,7 +323,6 @@
         // path so the eventual setChartPath call has the right metadata.
         QString deferredQuickShellStartupStageMediaVideoOverride_;
         double deferredQuickShellStartupStageMediaPausedSecond_ = 0.0;
-        quint64 waveformRefreshGeneration_ = 0;
         bool pendingDeferredValidationUiRefresh_ = false;
         bool pendingDeferredMuriUiRefresh_ = false;
         bool pendingMuriPanelRefresh_ = false;
@@ -554,7 +570,6 @@
         bool previewFollowEnabled_ = false;
         bool previewViewportLockEnabled_ = true;
         bool previewProgressFollowEnabled_ = true;
-        bool timelineSyncEnabled_ = false;
         MuriAnalysisReport muriAnalysisReport_;
         // Monotonic counter; ++ on every store into muriAnalysisReport_ (fresh analysis or
         // reset), stamped into muriAnalysisReport_.revision so PreviewRuntime can skip a
@@ -581,7 +596,6 @@
         // Preview video decode mode preference: false = hardware (default), true =
         // software. Pushed to PreviewStageMediaHost::setVideoDecodePreference.
         bool videoDecodePrefersSoftware_ = false;
-        PreviewCanvasFrameRateMode timelineFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;
         bool previewForceLabeledJudgeLineWhenPaused_ = true;

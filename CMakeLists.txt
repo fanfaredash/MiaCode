@@ -1889,6 +1889,27 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(playback_coordinator_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # Stage 4.9b: the independent translation unit that parses RuntimeContext.h.
+    # Compile-only — the static assertions inside fail the build if the timeline
+    # storage split regresses.
+    miacode_add_dev_tool(runtime_context_boundary_spec TEST
+        SOURCES
+            src/tools/v2/RuntimeContextBoundarySpec.cpp
+            src/app/runtime/RuntimeContext.h
+            src/app/runtime/SessionMembers.inc
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES
+            src
+            src/app
+            src/audio
+            src/common
+            src/core/video
+            src/core/chart/document
+            src/core/chart/parser
+            src/timeline
+            src/tools/video_export
+    )
+
     miacode_add_dev_tool(qml_analysis_model_spec TEST
         SOURCES
             src/tools/qml_ui/QmlAnalysisModelSpec.cpp
