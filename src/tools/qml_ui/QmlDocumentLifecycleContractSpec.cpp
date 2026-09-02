@@ -227,8 +227,14 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                        && documentBridge.contains(
                            QStringLiteral("editorSyncController_->requestNavigation("))
                        && documentBridge.contains(QStringLiteral("appliedQmlWorkspaceRevision_"))
+                       // Stage 4.9d-4b-2c routed the coordinator's read of the
+                       // field through the new PlaybackDocumentPort instead of
+                       // a direct session_.appliedQmlWorkspaceRevision_ read;
+                       // the field itself did not move, only the access path.
+                       // The invariant this line pins — follow carries the
+                       // committed workspace revision — is unchanged.
                        && followSync.contains(
-                           QStringLiteral("follow.revision = session_.appliedQmlWorkspaceRevision_"))
+                           QStringLiteral("follow.revision = documents_.appliedWorkspaceRevision()"))
                        && !followSync.contains(QStringLiteral("documentValidationSnapshot()")),
                    QStringLiteral("initial, navigation, and follow identities stay on the committed workspace revision"), err)
         && require(timelineFlow.contains(

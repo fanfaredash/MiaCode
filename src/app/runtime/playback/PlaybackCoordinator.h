@@ -4,6 +4,7 @@
 
 #include "app/v2/AudioClockSource.h"
 #include "app/v2/PlaybackControl.h"
+#include "app/v2/PlaybackDocumentPort.h"
 #include "app/v2/PlaybackPreferencesPort.h"
 #include "app/v2/PlaybackValidationPort.h"
 #include "app/v2/PreviewPlaybackPort.h"
@@ -31,6 +32,7 @@ public:
                         RuntimeContext::Ui& ui, RuntimeContext::State& state,
                         miacode::v2::PlaybackPreferencesPort& preferences,
                         miacode::v2::PlaybackValidationPort& validation,
+                        miacode::v2::PlaybackDocumentPort& documents,
                         quint64 sessionGeneration = 0);
 
     void setDocumentRevision(quint64 revision);
@@ -401,6 +403,7 @@ private:
     RuntimeContext::State& state_;
     miacode::v2::PlaybackPreferencesPort& preferences_;
     miacode::v2::PlaybackValidationPort& validation_;
+    miacode::v2::PlaybackDocumentPort& documents_;
     PlaybackIdentityGate identity_;
 
     bool beginPlaybackCommand();

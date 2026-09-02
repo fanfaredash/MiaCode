@@ -51,6 +51,7 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     RuntimeContext::State& state,
     miacode::v2::PlaybackPreferencesPort& preferences,
     miacode::v2::PlaybackValidationPort& validation,
+    miacode::v2::PlaybackDocumentPort& documents,
     quint64 sessionGeneration)
     : session_(session)
     , services_(services)
@@ -58,6 +59,7 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     , state_(state)
     , preferences_(preferences)
     , validation_(validation)
+    , documents_(documents)
     , identity_(sessionGeneration)
 {}
 
@@ -537,7 +539,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorOffset(double se
         ui_.firstEdit_->setText(serialized);
     }
     state_.documentDirty_ = workspace.snapshot().dirty;
-    session_.updateDirtyState();
+    documents_.updateDirtyState();
     resetPreviewTrackTimelineOffsets();
     refreshTimelineMetadata();
 }
@@ -552,7 +554,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
     workspace.upsertExtraField(QStringLiteral("wholebpm"), serializedBpm);
     setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
     state_.documentDirty_ = workspace.snapshot().dirty;
-    session_.updateDirtyState();
+    documents_.updateDirtyState();
 }
 
 void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int clockCount)
@@ -562,7 +564,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int c
     workspace.upsertExtraField(QStringLiteral("clock_count"), QString::number(normalized));
     setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
     state_.documentDirty_ = workspace.snapshot().dirty;
-    session_.updateDirtyState();
+    documents_.updateDirtyState();
     refreshTimelineMetadata();
 }
 
@@ -1174,7 +1176,7 @@ bool miacode::runtime::PlaybackCoordinator::moveEditorCursorToTimelineLocation(
         state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(
             line, col, &startColumn, &endColumn);
     }
-    return session_.documents_->requestEditorNavigation(
+    return documents_.requestEditorNavigation(
         line, startColumn, line, endColumn,
         selectToken, focusEditor, centerView);
 }

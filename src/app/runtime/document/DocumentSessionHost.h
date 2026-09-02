@@ -4,13 +4,15 @@
 
 #include "app/v2/DocumentBridge.h"
 #include "app/v2/EditorPageRouter.h"
+#include "app/v2/PlaybackDocumentPort.h"
 
 class QTextCursor;
 
 namespace miacode::runtime {
 
 class DocumentSessionHost final : public miacode::v2::DocumentBridge,
-                                      public miacode::v2::EditorPageRouter {
+                                      public miacode::v2::EditorPageRouter,
+                                      public miacode::v2::PlaybackDocumentPort {
 public:
     using CommitKind = miacode::v2::DocumentBridge::CommitKind;
 
@@ -28,7 +30,7 @@ public:
     // they cannot drift.
     bool applyUnsavedChangesChoice(const QString& choiceId, const QString& logContext);
     bool maybeSaveCurrentFieldChanges();
-    bool applyCurrentFieldToDocument();
+    bool applyCurrentFieldToDocument() override;
     QString documentField(Session::DocumentField field) const;
     QString difficultyField(int difficultyId, Session::DifficultyField field) const;
     bool updateDocumentField(Session::DocumentField field, const QString& value);
@@ -88,7 +90,10 @@ public:
     bool saveToPath(const QString& path);
     void setMetadataExtraText(const QString& text);
     void updatePauseButtonAppearance();
-    void updateDirtyState();
+    void updateDirtyState() override;
+    // The workspace revision QML last committed — see PlaybackDocumentPort.h
+    // for why this is a query rather than a relocation of the field.
+    quint64 appliedWorkspaceRevision() const override;
     bool currentFieldHasUndoChanges() const;
     void anchorCurrentFieldCleanState();
     void refreshCurrentFieldDirtyState();
@@ -181,6 +186,9 @@ public:
     miacode::chart_transform::ChartNormalizationOptions normalizationOptions() const override;
     void setNormalizationOptions(
         const miacode::chart_transform::ChartNormalizationOptions& options) override;
+    // Overrides both DocumentBridge::requestEditorNavigation and
+    // PlaybackDocumentPort::requestEditorNavigation, which share this exact
+    // signature.
     bool requestEditorNavigation(int line, int column, int endLine, int endColumn,
                                  bool selectToken, bool focusEditor, bool centerView) override;
     void setDocumentSaveHandler(std::function<bool(const QString&)> handler) override;

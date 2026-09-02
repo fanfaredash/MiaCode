@@ -1244,8 +1244,12 @@ int main(int argc, char** argv)
     expect(followSource.contains(QStringLiteral("EditorFollowState"))
                && followSource.contains(QStringLiteral("publishFollow"))
                // The follow identity must be the workspace revision the editor
-               // compares against, not the unrelated timeline counter.
-               && followSource.contains(QStringLiteral("appliedQmlWorkspaceRevision_"))
+               // compares against, not the unrelated timeline counter. Stage
+               // 4.9d-4b-2c moved the coordinator's read of that revision
+               // behind PlaybackDocumentPort::appliedWorkspaceRevision() (the
+               // field itself stays on Session); the invariant pinned here —
+               // follow uses the applied workspace revision — is unchanged.
+               && followSource.contains(QStringLiteral("appliedWorkspaceRevision()"))
                && !followSource.contains(QStringLiteral("documentValidationSnapshot()"))
                && source.contains(QStringLiteral("navigationAckTimer"))
                && source.contains(QStringLiteral("decorationCenterTimer")),

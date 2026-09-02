@@ -1878,6 +1878,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common
     )
 
+    # Stage 4.9d-4b-2c: the playback coordinator's third narrow port, onto
+    # document state (dirty tracking, committing the field QML is holding,
+    # editor navigation, and a read-only query for the applied workspace
+    # revision). All four methods already belong to one host
+    # (DocumentSessionHost), so the port is cut by host, same as
+    # validation_port_spec above. Linking Core+Test only (no Gui) is the same
+    # link-time guarantee.
+    miacode_add_dev_tool(document_port_spec TEST
+        SOURCES
+            src/tools/v2/DocumentPortSpec.cpp
+            src/app/v2/PlaybackDocumentPort.h
+        LIBS Qt6::Core Qt6::Test
+        INCLUDES src
+    )
+
     # Stage 4.6: Timeline commands receive their own identity before the
     # compatibility host forwards them to the current composite implementation.
     miacode_add_dev_tool(timeline_host_spec TEST

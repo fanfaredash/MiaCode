@@ -270,7 +270,28 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          且 `Session.h` 里 `validation_`(689) 声明早于 `playback_`(691)，所以析构时协调器先走，
          不存在借用引用悬空——这正是 4.9a 审计抓到过的方向。
          `validation_port_spec` 同样只链 `Qt6::Core` + `Qt6::Test`。
-      4b-2c. 其余端口（舞台媒体 ~13 / 文档状态 7）+ 分支歧义 7 处 + 零散 3 处（剩余 25 处）。
+      4b-2c. ~~文档端口~~ **已完成 2026-09-02**：`session_.` 计数 25 → **19**（6 处）。
+         新增 `src/app/v2/PlaybackDocumentPort.h`（4 个纯虚方法），由 `DocumentSessionHost` 实现，
+         按宿主切（与校验端口同型）。`DocumentSessionHost::requestEditorNavigation` 现在同时
+         override `DocumentBridge` 与本端口的同签名纯虚函数——一份实现服务两个契约，
+         文档宿主本就同时面向 QML 桥接与播放端口。
+         **`appliedWorkspaceRevision()` 是只读查询，不是把字段搬过来**：
+         `appliedQmlWorkspaceRevision_` 语义上属文档域（写于 `DocumentFileFlow.cpp:748`），
+         挂在 `Session` 上是早于域拆分的历史；但有两个文本扫描 spec 钉着它作为 Session 成员的
+         字面拼写，搬迁属文档域自己的整理，不在 4.9d 范围。端口只加查询，宿主用它本就持有的
+         `Session&` 作答。**字段搬迁另记为文档域待办。**
+         **本 stage 第 5 次文本扫描 spec 需跟随代码移动**（前四次：`refreshPreviewSurfaces`、
+         `Session::refreshPreviewSurfaces`、`ensureAuditionSceneReady`、
+         `updatePreviewSliderPosition` 的 emit 写法）。这次两条断言钉的是
+         `FollowSync.cpp` 里调用点的确切拼写，改端口必然打断它们——**与字段搬没搬无关**。
+         判据是不变量有没有变：两条要保护的是「跟随状态携带已提交的工作区 revision」与
+         「`FollowSync` 走值投影」，换取值途径两者都没变，所以字面串跟随更新、强度不变。
+         执行体在此拒绝了一条捷径——留一行死代码引用来骗过文本扫描，那能同时满足两条矛盾指令
+         且全量测试全绿，但属于造假满足 spec。**这个拒绝是对的。**
+      4b-2d. 最后一批（剩余 19 处）：舞台媒体组 13（含分支歧义的
+         `ensurePreviewStageMediaRouteInitialized` 6 与 `syncPreviewStageMediaRouteChartPath` 1）、
+         `latencySandboxController` 2、`setCurrentBottomTabsTabId` 1（**不属播放域**，
+         是协调器为兼容暴露的底栏投影，真正归属 `TimelineHost`，需单独定）。
          **一个待观察项**：协调器构造签名已到 7 个参数，端口全切完约 9 个。
          第 5 步去掉 `Session&` 后若仍显臃肿，考虑收成一个依赖结构体；
          但不要为了参数个数好看而把窄端口重新捆成宽接口。

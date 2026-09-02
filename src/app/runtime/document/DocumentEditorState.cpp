@@ -127,6 +127,14 @@ void miacode::runtime::DocumentSessionHost::updateDirtyState()
     session_.updateWindowTitle();
 }
 
+// See PlaybackDocumentPort.h: this is a read-only query, not a relocation of
+// appliedQmlWorkspaceRevision_ — the field stays on Session, whose write site
+// is DocumentFileFlow.cpp:748.
+quint64 miacode::runtime::DocumentSessionHost::appliedWorkspaceRevision() const
+{
+    return session_.appliedQmlWorkspaceRevision_;
+}
+
 bool miacode::runtime::DocumentSessionHost::currentFieldHasUndoChanges() const
 {
     if (session_.hasActiveDifficulty()) {

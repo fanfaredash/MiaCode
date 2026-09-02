@@ -88,7 +88,7 @@ bool miacode::runtime::PlaybackCoordinator::preparePreviewStartState()
     }
 
     const bool chartFieldVisible = state_.activeOutlineKey_ == QLatin1String("chart");
-    if (state_.currentFieldDirty_ && !chartFieldVisible && !session_.applyCurrentFieldToDocument()) {
+    if (state_.currentFieldDirty_ && !chartFieldVisible && !documents_.applyCurrentFieldToDocument()) {
         return false;
     }
 
