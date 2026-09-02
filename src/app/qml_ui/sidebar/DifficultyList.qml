@@ -166,15 +166,68 @@ Column {
                 model: difficultyGroup.bookmarksExpanded ? difficultyGroup.bookmarks : []
 
                 delegate: NavRow {
+                    id: bookmarkRow
                     required property var modelData
                     width: parent.width
                     height: root.viewState.difficultySectionExpanded ? 26 : 0
                     // Past the difficulty label's own 38, so a bookmark reads as
                     // belonging to the row above it rather than sitting level
                     // with it.
-                    textLeftPadding: 44
-                    text: UiText.text("书签 %1：%2").arg(modelData.line).arg(modelData.title)
+                    textLeftPadding: 38
                     Accessible.name: UiText.text("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
+
+                    Rectangle {
+                        x: 13
+                        y: Theme.chromeInsetY
+                        width: 1
+                        height: Math.max(0, bookmarkRow.height - Theme.chromeInsetY * 2)
+                        color: {
+                            const guide = Qt.color(Theme.colors.text.secondary)
+                            return Qt.rgba(guide.r, guide.g, guide.b,
+                                           Theme.darkTheme ? 48 / 255 : 58 / 255)
+                        }
+                    }
+
+                    contentItem: Item {
+                        Rectangle {
+                            id: lineBadge
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.max(18, lineNumber.implicitWidth + 10)
+                            height: 16
+                            radius: 4
+                            color: {
+                                const accent = Qt.color(Theme.colors.accent.primary)
+                                return Qt.rgba(accent.r, accent.g, accent.b,
+                                               Theme.darkTheme ? 56 / 255 : 32 / 255)
+                            }
+
+                            Text {
+                                id: lineNumber
+                                anchors.centerIn: parent
+                                text: String(bookmarkRow.modelData.line)
+                                color: Theme.colors.text.primary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Math.max(9, Theme.uiFontSize - 2)
+                            }
+                        }
+
+                        Text {
+                            anchors.left: lineBadge.right
+                            anchors.leftMargin: 6
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            text: bookmarkRow.modelData.title
+                            color: !bookmarkRow.enabled ? Theme.colors.text.disabled
+                                   : bookmarkRow.selected ? Theme.colors.text.active
+                                   : Theme.colors.text.secondary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Math.max(1, Theme.uiFontSize - 1)
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
                     onClicked: {
                         root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
                         root.documentSession.navigateToBookmark(
