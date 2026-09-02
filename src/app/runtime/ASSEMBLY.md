@@ -188,7 +188,17 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          **减少 `Session` 的表面积**，而不只是不再去调它。`qml_export_font_contract_spec` 有一条
          断言原本钉着 `"void Session::refreshPreviewSurfaces()"` 的源码文本，已改为钉协调器侧的
          `PlaybackCoordinator::refreshSurfaces()`，强度不变。
-      2. F：canonical 时钟计算搬进协调器
+      2. ~~F：canonical 时钟计算搬进协调器~~
+         **已完成 2026-09-02**：`session_.` 计数 169 → **155**（14 处）。
+         `PlaybackCoordinator::authoritativeAudioClockSecond()` 承接墙钟外推计算体，
+         `Session::currentPreviewAuthoritativeAudioClockSecond()` 保留为转发壳——它在
+         `playback/` 之外**还有 8 个调用者**（延迟校准 2、启动装配 5、文档页 3、视频导出 1），
+         不能删。函数体确认只读 `state_`，纯移动无语义改变。
+         定义处留了一段注释，说明它与 `AudioClockSource::currentAudioClockSecond()` 是
+         「源」与「下游采样」而非同一个数，并写明**不许合并、不许其一转调另一**。
+         **4.9e 的一个真问题**：那 8 个外部调用者要的是外推值，而 `AudioClockSource` 给的是
+         采样值，所以它们不能机械改成走契约——`AudioClockSource` 建好了却被所有潜在消费者绕开，
+         契约本身可能需要同时暴露两种读法。
       3. D：Widgets 补妆函数体搬进协调器
       4. E：5 个端口 + `setPreviewPlayingFlag` 的信号路径
       5. 构造签名去掉 `Session&`；门槛 1、3 的测试从此可写

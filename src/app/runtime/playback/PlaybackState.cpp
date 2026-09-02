@@ -161,7 +161,7 @@ void miacode::runtime::PlaybackCoordinator::handlePreviewStartupVideoPrepared(do
     if (state_.previewStartupStrongGroupCommitted_
         && state_.previewLateVideoStartPending_
         && state_.previewStageMediaHost_ != nullptr) {
-        const double currentSecond = session_.currentPreviewAuthoritativeAudioClockSecond();
+        const double currentSecond = authoritativeAudioClockSecond();
         state_.previewStageMediaHost_->commitPreparedPlaybackStart(currentSecond);
         state_.previewStartupVideoStarted_ = true;
         state_.previewLateVideoStartPending_ = false;
@@ -658,7 +658,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
     // overwrite the runtime's PausePreviewResult.pauseSecond with it below.
     const double wallClockPauseSecond = deviceChangePause
         ? state_.previewPendingDevicePauseWallSecond_
-        : session_.currentPreviewAuthoritativeAudioClockSecond();
+        : authoritativeAudioClockSecond();
     // Disarming happens before the GUI freezes. A later Qt/IMM duplicate observes
     // the same physical cutoff as already handled and cannot create a second clock
     // sample or a second worker pause.
@@ -976,7 +976,7 @@ void miacode::runtime::PlaybackCoordinator::pausePreviewForAudioDeviceChange(
     state_.previewPendingDevicePauseTransactionId_ = state_.activePreviewPlaybackTransactionId_;
     state_.previewPendingDevicePauseToken_ = deviceChangeSequence;
     state_.previewPendingDevicePauseWallSecond_ =
-        session_.currentPreviewAuthoritativeAudioClockSecond();
+        authoritativeAudioClockSecond();
     state_.previewDevicePauseSubmissionInProgress_ = true;
     appendPreviewPlaybackLog(
         QStringLiteral("device_change_pause_begin"),
@@ -1075,7 +1075,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackForReanchor()
     timer.start();
     // G1 Commit 6: pause-second from wall-clock master; see pauseQtPreviewPlaybackExact
     // for rationale.
-    const double wallClockPauseSecond = session_.currentPreviewAuthoritativeAudioClockSecond();
+    const double wallClockPauseSecond = authoritativeAudioClockSecond();
     miacode::runtime::shared::writePreviewPauseSecond(
         state_.pauseSecond_, wallClockPauseSecond, state_.playing_, "pause_qt_preview_playback_for_reanchor");
     cancelPreviewStartupSync("pause_qt_preview_playback_for_reanchor");

@@ -837,7 +837,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineFollowPreviewToggled(bool 
     // Turning the option off stops the caret/viewport follow, not the highlight:
     // it stays as the on-screen cue for where the playhead is (and as the target
     // touch-pad click authoring writes to). Refresh it either way.
-    const double second = qMax(0.0, session_.currentPreviewAuthoritativeAudioClockSecond());
+    const double second = qMax(0.0, authoritativeAudioClockSecond());
     syncEditorCursorToPreviewSecond(
         second,
         enabled && state_.playing_ && state_.previewViewportLockEnabled_,
@@ -855,7 +855,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineViewportLockToggled(bool e
         return;
     }
     if (state_.playing_ && state_.previewFollowEnabled_) {
-        const double second = qMax(0.0, session_.currentPreviewAuthoritativeAudioClockSecond());
+        const double second = qMax(0.0, authoritativeAudioClockSecond());
         syncEditorCursorToPreviewSecond(second, true, false);
     }
 }

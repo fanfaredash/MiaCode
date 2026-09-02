@@ -106,7 +106,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewToSecond(double second, b
         // from_chart is the wall-clock chart-second right before the re-anchor,
         // to_chart is the requested target. Reason "playing_seek" disambiguates
         // from the discrete / paused / scrub paths.
-        const double fromChartSecond = session_.currentPreviewAuthoritativeAudioClockSecond();
+        const double fromChartSecond = authoritativeAudioClockSecond();
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Audio,
             QString(),
@@ -198,7 +198,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
     // sec; the branch below may then reanchor a playing session into pause
     // before applying the seek.
     {
-        const double fromChartSecond = session_.currentPreviewAuthoritativeAudioClockSecond();
+        const double fromChartSecond = authoritativeAudioClockSecond();
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Audio,
             QString(),
@@ -329,7 +329,7 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate
     // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §6.2 — sampling chart-second
     // before the rate flip is the only way to keep audio and visual in step
     // across the transition.
-    const double chartNow = session_.currentPreviewAuthoritativeAudioClockSecond();
+    const double chartNow = authoritativeAudioClockSecond();
     const bool wasPlaying = state_.playing_;
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Audio,
@@ -435,6 +435,25 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate
 
 double Session::currentPreviewAuthoritativeAudioClockSecond() const
 {
+    return playback_->authoritativeAudioClockSecond();
+}
+
+// Relationship to AudioClockSource::currentAudioClockSecond() (see
+// CoordinatorContract.cpp): that method returns
+// playbackSnapshot().canonicalChartTime, which ultimately reads
+// state_.pauseSecond_ — a value this method itself computes and Tick.cpp
+// (onQtPreviewTick) then writes into pauseSecond_ once per tick. The two are
+// the same signal sampled at different times, not the same call: this method
+// re-derives the current second on EVERY call by extrapolating live off the
+// wall clock (qtPreviewElapsed_) while playing, whereas currentAudioClockSecond()
+// returns whatever second the last tick happened to write. Mid-playback they are
+// not the same number. Do not merge these two or make one call the other —
+// that would either strip currentAudioClockSecond() of the tick-boundary
+// snapshot semantics its PlaybackSnapshot consumers rely on, or strip this
+// method of the live wall-clock extrapolation its high-frequency UI callers
+// rely on.
+double miacode::runtime::PlaybackCoordinator::authoritativeAudioClockSecond() const
+{
     // G1 Commit 4: wall-clock is now the master timeline. BASS handles
     // audio output, but chart-second comes from qtPreviewElapsed_ —
     // a monotonic QElapsedTimer that doesn't suffer from buffer
@@ -467,14 +486,14 @@ double Session::currentPreviewAuthoritativeAudioClockSecond() const
     //
     // "lateVideoPending && !playing" cannot occur: the flag is only raised in
     // tryCommitPreviewStartupSync, which sets playing_ in the same call.
-    if (playing_) {
-        const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
-        return qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
+    if (state_.playing_) {
+        const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
+        return state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
     }
-    if (previewStartupSyncPending_ || previewLateVideoStartPending_) {
-        return previewStartupPreparedSecond_;
+    if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
+        return state_.previewStartupPreparedSecond_;
     }
-    return pauseSecond_;
+    return state_.pauseSecond_;
 }
 
 bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second, bool resumeFromPause)
@@ -737,7 +756,7 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
     }
     if (!pauseSecondCaptured) {
         miacode::runtime::shared::writePreviewPauseSecond(
-            state_.pauseSecond_, session_.currentPreviewAuthoritativeAudioClockSecond(), state_.playing_, "stop_qt_preview_playback");
+            state_.pauseSecond_, authoritativeAudioClockSecond(), state_.playing_, "stop_qt_preview_playback");
         pauseSecondCaptured = true;
     }
     cancelPreviewStartupSync("stop_qt_preview_playback");

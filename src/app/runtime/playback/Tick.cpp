@@ -141,7 +141,7 @@ void miacode::runtime::PlaybackCoordinator::flushQtPreviewTimelinePosition()
         const miacode::preview_audio::playback_flow::TickDecision tickDecision =
             miacode::preview_audio::playback_flow::decidePlayingTick(
                 playbackFlowState,
-                qMax(0.0, session_.currentPreviewAuthoritativeAudioClockSecond()));
+                qMax(0.0, authoritativeAudioClockSecond()));
         const double second = tickDecision.visualSecond;
         // The timeline item can be hidden while validation or Muri is the
         // foreground bottom tab. Its render state may pause in that state,

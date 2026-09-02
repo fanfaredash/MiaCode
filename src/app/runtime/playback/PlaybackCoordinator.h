@@ -312,6 +312,14 @@ public:
     bool validationTabVisible() const;
     bool ignoreMuriIssuePrompts() const;
 
+    // Live wall-clock extrapolation of the playhead. Public because
+    // Session::currentPreviewAuthoritativeAudioClockSecond() forwards here for
+    // the four domains outside playback/ that still read the clock through
+    // Session, matching how every other forwarding shell reaches this class.
+    // NOT the same value as currentAudioClockSecond() — see the definition site
+    // in Playback.cpp for why the two must stay separate.
+    double authoritativeAudioClockSecond() const;
+
 private:
     bool bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId tabId) const;
     static QString bottomTabsTabIdToString(RuntimeContext::BottomTabsTabId tabId);

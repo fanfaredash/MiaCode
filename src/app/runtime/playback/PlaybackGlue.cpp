@@ -115,7 +115,7 @@ void miacode::runtime::PlaybackCoordinator::onStopPreview()
             .arg(opId)
             .arg(wasActive ? 1 : 0)
             .arg(returnSecond, 0, 'f', 6)
-            .arg(session_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
+            .arg(authoritativeAudioClockSecond(), 0, 'f', 6));
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;
@@ -165,14 +165,14 @@ void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
             .arg(state_.previewStartupSyncPending_ ? 1 : 0)
             .arg(state_.previewAudioDeviceChangeSequence_)
             .arg(state_.pauseSecond_, 0, 'f', 6)
-            .arg(session_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6)
+            .arg(authoritativeAudioClockSecond(), 0, 'f', 6)
             .arg(state_.previewPendingPlayInteractionId_));
     if (state_.playing_) {
         appendPreviewInteractionLog(
             QStringLiteral("pause_request"),
             QString("op=%1 source=toggle_action current_second=%2")
                 .arg(opId)
-                .arg(session_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
+                .arg(authoritativeAudioClockSecond(), 0, 'f', 6));
         pauseQtPreviewPlaybackExact();
         appendPreviewInteractionLog(
             QStringLiteral("pause_complete"),
