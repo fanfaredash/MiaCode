@@ -24,6 +24,9 @@ same change.
 - UI layout bugs — 边界被吞 / clipped borders, tab 页被裁剪, dark-mode 失效, 1px 缝隙/接缝,
   层叠关系错误 / stacking, hit-area mismatch → use the **`qt-ui-layout-pitfalls`** skill
   (symptom routing table + proven recipes) BEFORE editing any dialog/QML layout code.
+- Splitting work between a reasoning model and an executor model (which subagent to
+  dispatch, what a Task/Execution/Escalation Packet must contain, when to escalate) →
+  `docs/ops/DUAL_MODEL_WORKFLOW_ZH.md`; the agent definitions live in `.claude/agents/`.
 
 ## Repo at a glance (current paths — verified 2026-09-01)
 

@@ -156,6 +156,7 @@ scripts/ffmpeg/trim/ffmpeg-codec-survey.txt
 # Ignore local Claude config, but version-control the repo-guide skill.
 .claude/*
 !.claude/skills/
+!.claude/agents/
 
 # Python bytecode caches (e.g. tools/lvcard_gen).
 __pycache__/
