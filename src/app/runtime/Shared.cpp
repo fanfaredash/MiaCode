@@ -1163,4 +1163,30 @@ double probeAudioDurationSeconds(const QString& trackPath)
     return static_cast<double>(totalFrames) / 48000.0;
 }
 
+// See the declaration in Shared.h for why this must stay the only writer of
+// `playing_`. Moved verbatim from ShellHost.cpp's `Session::setPreviewPlayingFlag`
+// (Stage 4.9d-4b-2); the broadcast target changed from `Session::presentationChanged`
+// (which only forwarded it, see SessionBootstrap.cpp) to `notifications` directly,
+// the same retargeting PlaybackState.cpp's `updatePauseButtonAppearance` already did
+// for the sibling presentation announcement.
+void writePreviewPlayingFlag(
+    RuntimeContext::State& state,
+    miacode::v2::ShellNotifications& notifications,
+    bool playing)
+{
+    if (state.playing_ == playing) {
+        return;
+    }
+    state.playing_ = playing;
+    state.previewTransportState_ = playing
+        ? miacode::v2::PlaybackTransportState::Playing
+        : (state.previewTransportState_ == miacode::v2::PlaybackTransportState::Stopped
+               ? miacode::v2::PlaybackTransportState::Stopped
+               : miacode::v2::PlaybackTransportState::Paused);
+    QMetaObject::invokeMethod(
+        &notifications,
+        [&notifications]() { emit notifications.presentationChanged(); },
+        Qt::QueuedConnection);
+}
+
 }  // namespace miacode::runtime::shared

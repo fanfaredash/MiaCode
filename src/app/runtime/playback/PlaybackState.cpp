@@ -1,4 +1,5 @@
 #include "runtime/playback/PlaybackCoordinator.h"
+#include "app/v2/ApplicationServices.h"
 #include "app/v2/EditorSyncController.h"
 #include "runtime/Shared.h"
 
@@ -561,8 +562,8 @@ void miacode::runtime::PlaybackCoordinator::finalizeQtPreviewPlaybackStart(doubl
         state_.pauseSecond_, effectiveStartSecond, state_.playing_, "finalize_qt_preview_playback_start");
     state_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
-    session_.setPreviewPlayingFlag(true);
-    session_.editorSyncController().setPlaybackActive(true);
+    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), true);
+    services_.editorSync().setPlaybackActive(true);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
             effectiveStartSecond,
@@ -672,8 +673,8 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
     clearPreviewPlayingRetainedSeek();
     pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
-    session_.setPreviewPlayingFlag(false);
-    session_.editorSyncController().setPlaybackActive(false);
+    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    services_.editorSync().setPlaybackActive(false);
     miacode::runtime::shared::writePreviewPauseSecond(
         state_.pauseSecond_, wallClockPauseSecond, state_.playing_, "pause_qt_preview_playback_exact");
     state_.pausedPreviewMediaSeekPending_ = false;
@@ -1087,8 +1088,8 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackForReanchor()
     // Spec: pause-for-reanchor lands in 暂停-R, so request R-centring.
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
-    session_.setPreviewPlayingFlag(false);
-    session_.editorSyncController().setPlaybackActive(false);
+    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);
     }
@@ -1150,8 +1151,8 @@ void miacode::runtime::PlaybackCoordinator::anchorQtPreviewPlaybackToSecond(doub
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    session_.setPreviewPlayingFlag(false);
-    session_.editorSyncController().setPlaybackActive(false);
+    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);
     }
@@ -1196,8 +1197,10 @@ void miacode::runtime::PlaybackCoordinator::anchorQtPreviewPlaybackToSecond(doub
 
 // Stage 4.9d-3 (D-class): moved verbatim from DocumentSessionHost::updatePauseButtonAppearance
 // (document/DocumentEditorState.cpp) — pure ui_/state_ widget presentation, no
-// DocumentSessionHost-own state. The queued emit still targets Session (this
-// coordinator's own session_ member is the same Session& the original body used).
+// DocumentSessionHost-own state. Stage 4.9d-4b-1 retargeted the queued emit
+// from Session::presentationChanged (which only forwarded it) straight to
+// ShellNotifications, the signal's real destination — see SessionBootstrap.cpp
+// for the forwarding connect this bypasses.
 void miacode::runtime::PlaybackCoordinator::updatePauseButtonAppearance()
 {
     // The play/pause presentation changed, and the QML transport's button reads
@@ -1209,7 +1212,9 @@ void miacode::runtime::PlaybackCoordinator::updatePauseButtonAppearance()
     // and queued for the same reason that writer is: callers reach here from
     // the middle of a transition.
     QMetaObject::invokeMethod(
-        &session_, [this]() { emit session_.presentationChanged(); }, Qt::QueuedConnection);
+        &services_.shellNotifications(),
+        [this]() { emit services_.shellNotifications().presentationChanged(); },
+        Qt::QueuedConnection);
     if (ui_.pausePreviewAction_ == nullptr) {
         return;
     }

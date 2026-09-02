@@ -1,6 +1,7 @@
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Session.h"
 
+#include "app/v2/ApplicationServices.h"
 #include "app/v2/EditorSyncController.h"
 #include "common/PreviewInteractionConfig.h"
 
@@ -23,6 +24,16 @@ void miacode::runtime::PlaybackCoordinator::setTouchPadAuthoringAnchor(double se
     state_.touchPadAuthoringAnchorTokenSecond_ = tokenSecond;
 }
 
+// Moved in verbatim from Session::clearPreviewFollowDecoration
+// (validation/ValidationFlow.cpp) — the body only ever touched the editor-sync
+// controller, which the coordinator reaches directly via services_.editorSync().
+void miacode::runtime::PlaybackCoordinator::clearPreviewFollowDecoration()
+{
+    miacode::v2::EditorFollowState follow;
+    follow.playbackActive = state_.playing_;
+    services_.editorSync().publishFollow(follow);
+}
+
 void miacode::runtime::PlaybackCoordinator::updatePreviewFollowDecorationForTimelineBlueLine(
     double second,
     bool ensureVisible,
@@ -40,7 +51,7 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewFollowDecorationForTime
         *spanOut = TimelineQuickModel::PreviewFollowSpan();
     }
     if (!hasActiveDifficulty()) {
-        session_.clearPreviewFollowDecoration();
+        clearPreviewFollowDecoration();
         invalidatePreviewFollowBindingCache();
         return;
     }
@@ -65,7 +76,7 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewFollowDecorationForTime
         }
     }
     if (!resolved || !binding.resolved) {
-        session_.clearPreviewFollowDecoration();
+        clearPreviewFollowDecoration();
         return;
     }
     if (spanOut != nullptr) {
@@ -90,7 +101,7 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewFollowDecorationForTime
     follow.active = true;
     follow.reveal = ensureVisible;
     follow.playbackActive = state_.playing_;
-    session_.editorSyncController().publishFollow(follow);
+    services_.editorSync().publishFollow(follow);
     if (followOverlayElapsedNs != nullptr) {
         *followOverlayElapsedNs = timer.nsecsElapsed();
     }
@@ -102,7 +113,7 @@ void miacode::runtime::PlaybackCoordinator::syncEditorCursorToPreviewSecond(
     bool ensureVisibleWhenPaused)
 {
     if (state_.suppressTimelineCursorSync_ || !hasActiveDifficulty()) {
-        session_.clearPreviewFollowDecoration();
+        clearPreviewFollowDecoration();
         if (!hasActiveDifficulty()) {
             invalidatePreviewFollowBindingCache();
         }

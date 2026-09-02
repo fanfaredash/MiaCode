@@ -234,7 +234,21 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          **本轮第三次遇到文本扫描 spec 钉着具体实现位置**（`PreviewTransportPushSpec` 钉
          `"bool Session::ensureAuditionSceneReady"`，前两次是 `refreshPreviewSurfaces`），
          每次搬家都要跟着改断言——这本身就是 4.9f「替掉文本扫描」的佐证。
-      4b. E 类 S 组窄端口 + `setPreviewPlayingFlag` / `presentationChanged` 的信号路径。
+      4b-1. ~~注入 `ApplicationServices&`~~ **已完成 2026-09-02**：`session_.` 计数 79 → **49**（30 处）。
+         一个注入覆盖三组，因为装配对象同时持有它们：文档工作区（11）、`editorSync()`（11）、
+         `shellNotifications()`（8）。`Session::editorSyncController_` 本就只是从装配对象借来的
+         缓存指针，不是 Session 自有对象。信号改直接发之前先查证了消费方——全部连在
+         `ShellNotifications` 上，无人直连 `Session` 的信号，因此绕过 Session 无感知损失。
+         异步 `QueuedConnection` 语义原样保留。
+         **`setPreviewPlayingFlag`（6 处）撞上真实不变量**：`preview_transport_push_spec` 要求
+         `state_.playing_` 全仓**恰好一个**赋值站点。原计划「协调器直接写」会产生第二个写入口，
+         那不是文本 pin 跟随的表面问题，是破坏守卫要保护的不变量。改为按仓库既有做法新增写入原语
+         `writePreviewPlayingFlag`——相邻字段 `pauseSecond_` 的 `writePreviewPauseSecond` 就是同一套办法，
+         其注释明写「这条不变量是规则、不是计数」。守卫只改期望的文件名，`sites.size() == 1` 未动。
+         **守卫的正则同时放宽为匹配成员与自由函数两种写法**：先前钉死 `state_.` 前缀，导致新函数的
+         参数被命名成 `state_` 只为迎合正则——那是测试反过来决定命名。正则改宽后该 spec 需排除自身
+         （它在注释里写出了两种形式），与 `DebugFlagIndexSpec` 排除自身同一惯例。
+      4b-2. E 类 S 组窄端口（剩余 49 处）。
          **关键前提（2026-09-02 查证）**：`StageMediaHost` / `ValidationHost` /
          `DocumentSessionHost` 的构造签名**自己都要 `Session&`**
          （`preview/StageMediaHost.h:9`、`validation/ValidationHost.h:9`、`document/DocumentSessionHost.h:17`），

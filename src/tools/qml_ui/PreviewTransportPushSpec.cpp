@@ -45,8 +45,13 @@ QString readSource(const QString& relativePath)
 // Every assignment to the flag, wherever it lives, with the file it came from.
 QStringList playingFlagAssignmentSites()
 {
+    // Matches both the member form (state_.playing_ = …) and the free-function
+    // form (state.playing_ = …). The invariant is that exactly one site assigns
+    // the flag, not which spelling reaches it — pinning the spelling once made a
+    // function parameter get named state_ purely to satisfy this regex, which is
+    // the test dictating naming rather than checking behaviour.
     static const QRegularExpression assignment(
-        QStringLiteral("state_\\.playing_\\s*=[^=]"));
+        QStringLiteral("\\bstate_?\\.playing_\\s*=[^=]"));
     QStringList sites;
     QDirIterator it(sourceRoot() + QStringLiteral("/src"),
                     QStringList{QStringLiteral("*.cpp"), QStringLiteral("*.h"),
@@ -63,6 +68,10 @@ QStringList playingFlagAssignmentSites()
             // The storage block declares the member and its reference alias;
             // those are definitions, not writers.
             if (path.endsWith(QStringLiteral("SessionMembers.inc"))) continue;
+            // This spec spells both matched forms out in its own comment, the
+            // way DebugFlagIndexSpec excludes itself for naming the flags it
+            // checks. It assigns no runtime state, so nothing real is hidden.
+            if (path.endsWith(QStringLiteral("PreviewTransportPushSpec.cpp"))) continue;
             sites.append(QStringLiteral("%1:%2")
                              .arg(QFileInfo(path).fileName())
                              .arg(i + 1));
@@ -82,25 +91,39 @@ int main(int argc, char** argv)
     int failed = 0;
 
     // 1. 播放标志只有一个写入者。
+    //
+    // Stage 4.9d-4b-2 moved the write off Session (`ShellHost.cpp`) into a
+    // free-function primitive next to `writePreviewPauseSecond`, so
+    // PlaybackCoordinator's six call sites route through it instead of each
+    // being able to assign `state_.playing_` inline. The expected prefix below
+    // moved with it — that is a location change, not a loosened check: the site
+    // count still has to be exactly 1.
     const QStringList sites = playingFlagAssignmentSites();
     if (sites.size() != 1) {
         out << "  assignment sites: " << sites.join(QStringLiteral(", ")) << '\n';
     }
-    expect(sites.size() == 1 && sites.first().startsWith(QStringLiteral("ShellHost.cpp")),
+    expect(sites.size() == 1 && sites.first().startsWith(QStringLiteral("Shared.cpp")),
            QStringLiteral("playing_ is assigned in exactly one place"),
            out, &failed);
 
     // 2. 那个写入者会广播出去。
-    const QString windowSection = readSource(
-        QStringLiteral("src/app/runtime/shell/ShellHost.cpp"));
-    expect(!windowSection.isEmpty(), QStringLiteral("ShellHost.cpp is readable"),
+    //
+    // Same move as above: the writer now lives in Shared.cpp as
+    // `writePreviewPlayingFlag`, and broadcasts directly through the
+    // `ShellNotifications&` it is handed instead of through
+    // `Session::presentationChanged` (which only forwarded it — see
+    // SessionBootstrap.cpp for that connect). The assertion strength is
+    // unchanged: the writer must still announce the flip.
+    const QString sharedSection = readSource(
+        QStringLiteral("src/app/runtime/Shared.cpp"));
+    expect(!sharedSection.isEmpty(), QStringLiteral("Shared.cpp is readable"),
            out, &failed);
-    const int writerAt = windowSection.indexOf(QStringLiteral("void Session::setPreviewPlayingFlag"));
-    expect(writerAt >= 0, QStringLiteral("setPreviewPlayingFlag exists"), out, &failed);
+    const int writerAt = sharedSection.indexOf(QStringLiteral("void writePreviewPlayingFlag"));
+    expect(writerAt >= 0, QStringLiteral("writePreviewPlayingFlag exists"), out, &failed);
     if (writerAt >= 0) {
-        const QString writerBody = windowSection.mid(writerAt, 900);
-        expect(writerBody.contains(QStringLiteral("emit presentationChanged()")),
-               QStringLiteral("setPreviewPlayingFlag announces the flip"), out, &failed);
+        const QString writerBody = sharedSection.mid(writerAt, 900);
+        expect(writerBody.contains(QStringLiteral("emit notifications.presentationChanged()")),
+               QStringLiteral("writePreviewPlayingFlag announces the flip"), out, &failed);
     }
 
     // 3. 发布播放头的那**一个**地方会广播出去。
@@ -118,7 +141,7 @@ int main(int argc, char** argv)
         const QString publishBody = layoutUi.mid(
             publishAt, nextFunctionAt > publishAt ? nextFunctionAt - publishAt : -1);
         const int emitAt = publishBody.indexOf(
-            QStringLiteral("emit session_.previewPlayheadChanged()"));
+            QStringLiteral("emit services_.shellNotifications().previewPlayheadChanged()"));
         const int guardAt = publishBody.indexOf(QStringLiteral("ui_.previewSlider_ == nullptr"));
         expect(emitAt >= 0, QStringLiteral("updatePreviewSliderPosition announces the playhead"),
                out, &failed);

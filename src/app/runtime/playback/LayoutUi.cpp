@@ -3,6 +3,8 @@
 #include "runtime/Shared.h"
 #include "runtime/shell/ShellHost.h"
 
+#include "app/v2/ApplicationServices.h"
+
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
@@ -275,7 +277,7 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewSliderPosition(double s
     // which is why the export intro — whose lead-in moves the playhead without
     // ever reaching applyQtPreviewPosition — is now visible to the shell at
     // all. Before this, the intro played while the QML thumb sat at 0.
-    emit session_.previewPlayheadChanged();
+    emit services_.shellNotifications().previewPlayheadChanged();
     if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
         return;
     }

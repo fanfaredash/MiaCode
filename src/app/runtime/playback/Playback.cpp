@@ -1,4 +1,5 @@
 #include "runtime/playback/PlaybackCoordinator.h"
+#include "app/v2/ApplicationServices.h"
 #include "app/v2/EditorSyncController.h"
 #include "runtime/Shared.h"
 
@@ -221,8 +222,8 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    session_.setPreviewPlayingFlag(false);
-    session_.editorSyncController().setPlaybackActive(false);
+    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);
     }
@@ -782,8 +783,8 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
         state_.qtPreviewPendingTimelineCenterView_ = true;
         state_.qtPreviewTimelineDirty_ = true;
     }
-    session_.setPreviewPlayingFlag(false);
-    session_.editorSyncController().setPlaybackActive(false);
+    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);
     }

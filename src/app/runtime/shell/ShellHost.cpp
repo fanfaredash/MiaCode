@@ -1,6 +1,8 @@
 #include "runtime/shell/ShellHost.h"
 #include "runtime/document/DocumentSessionHost.h"
 
+#include "runtime/Shared.h"
+
 #include "common/DebugOptions.h"
 
 #include <QApplication>
@@ -37,17 +39,7 @@ void Session::attachRootWindow(QWindow* window)
 
 void Session::setPreviewPlayingFlag(bool playing)
 {
-    if (state_.playing_ == playing) {
-        return;
-    }
-    state_.playing_ = playing;
-    state_.previewTransportState_ = playing
-        ? miacode::v2::PlaybackTransportState::Playing
-        : (state_.previewTransportState_ == miacode::v2::PlaybackTransportState::Stopped
-               ? miacode::v2::PlaybackTransportState::Stopped
-               : miacode::v2::PlaybackTransportState::Paused);
-    QMetaObject::invokeMethod(
-        this, [this]() { emit presentationChanged(); }, Qt::QueuedConnection);
+    miacode::runtime::shared::writePreviewPlayingFlag(state_, applicationServices_.shellNotifications(), playing);
 }
 
 void Session::setRootWindowFrameGeometry(const QRect& geometry)

@@ -36,6 +36,10 @@ class QTextEdit;
 class QWidget;
 class Session;
 
+namespace miacode::v2 {
+class ShellNotifications;
+}
+
 namespace miacode::runtime::shared {
 
 // Single writer for the preview pause second.
@@ -89,6 +93,32 @@ inline void writePreviewPauseSecond(
             .arg(next, 0, 'f', 6)
             .arg((next - previous) * 1000.0, 0, 'f', 3));
 }
+
+// Single writer for the preview playing flag.
+//
+// Why this exists: `playing_` sits right next to `pauseSecond_` in
+// RuntimeContext::State and used to have the same problem — it was written from
+// `Session::setPreviewPlayingFlag`, a method any holder of a Session& could call
+// directly. That was fine while playback logic lived on Session, but once it
+// moved into PlaybackCoordinator (which holds the same `state_` by reference),
+// the coordinator could just as easily have assigned `state_.playing_` inline
+// at its six call sites instead of forwarding through Session. Either path
+// compiles; only one keeps `playing_` at a single assignment site, which is the
+// property `preview_transport_push_spec` pins.
+//
+// So this follows the same rule as writePreviewPauseSecond immediately above:
+// a rule, not a headcount. `playing_` must never be assigned except through
+// this function. Check it with
+//
+//   grep -rn "playing_[[:space:]]*=[^=]" src --include="*.cpp" --include="*.h" \
+//     --include="*.inc" | grep -v writePreviewPlayingFlag
+//
+// which should match only the declaration and the reference alias in
+// SessionMembers.inc. Any other hit is a second writer.
+void writePreviewPlayingFlag(
+    RuntimeContext::State& state,
+    miacode::v2::ShellNotifications& notifications,
+    bool playing);
 
 inline constexpr int kEmbeddedPreviewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
 inline constexpr int kPreviewPanelMarginX = miacode::window_parity::kPreviewPanelMarginX;

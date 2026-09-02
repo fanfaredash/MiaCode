@@ -3,6 +3,8 @@
 #include "runtime/media/MediaJobsHost.h"
 #include "runtime/document/DocumentSessionHost.h"
 
+#include "app/v2/ApplicationServices.h"
+
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
@@ -44,10 +46,12 @@ using namespace miacode::runtime::preview_timeline_detail;
 
 miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     Session& session,
+    miacode::v2::ApplicationServices& services,
     RuntimeContext::Ui& ui,
     RuntimeContext::State& state,
     quint64 sessionGeneration)
     : session_(session)
+    , services_(services)
     , ui_(ui)
     , state_(state)
     , identity_(sessionGeneration)
@@ -442,7 +446,7 @@ void miacode::runtime::PlaybackCoordinator::refreshWaveformCache(double knownDur
 
 bool miacode::runtime::PlaybackCoordinator::hasActiveDifficulty() const
 {
-    return state_.activeDifficultyId_ > 0 && session_.applicationServices_.workspace().document().difficulty(state_.activeDifficultyId_) != nullptr;
+    return state_.activeDifficultyId_ > 0 && services_.workspace().document().difficulty(state_.activeDifficultyId_) != nullptr;
 }
 
 bool miacode::runtime::PlaybackCoordinator::hasPreviewableChart() const
@@ -467,19 +471,19 @@ QString miacode::runtime::PlaybackCoordinator::activeChartText() const
     if (!hasActiveDifficulty()) {
         return QString();
     }
-    const SimaiDifficultyData* difficultyData = session_.applicationServices_.workspace().document().difficulty(state_.activeDifficultyId_);
+    const SimaiDifficultyData* difficultyData = services_.workspace().document().difficulty(state_.activeDifficultyId_);
     return difficultyData != nullptr ? difficultyData->chart : QString();
 }
 
 miacode::simai::SimaiTimingMetadata miacode::runtime::PlaybackCoordinator::currentTimingMetadata() const
 {
-    return miacode::simai::buildTimingMetadata(session_.applicationServices_.workspace().document());
+    return miacode::simai::buildTimingMetadata(services_.workspace().document());
 }
 
 double miacode::runtime::PlaybackCoordinator::parsedRawFirstSeconds(bool* ok) const
 {
     return miacode::timeline::offset::parsedFirstSeconds(
-        session_.applicationServices_.workspace().document().first, ok);
+        services_.workspace().document().first, ok);
 }
 
 double miacode::runtime::PlaybackCoordinator::parsedFirstSeconds(bool* ok) const
@@ -489,7 +493,7 @@ double miacode::runtime::PlaybackCoordinator::parsedFirstSeconds(bool* ok) const
 
 double miacode::runtime::PlaybackCoordinator::parsedWholeBpm(bool* ok) const
 {
-    for (const SimaiRawField& field : session_.applicationServices_.workspace().document().extraFields) {
+    for (const SimaiRawField& field : services_.workspace().document().extraFields) {
         if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) != 0) {
             continue;
         }
@@ -509,7 +513,7 @@ double miacode::runtime::PlaybackCoordinator::parsedWholeBpm(bool* ok) const
 int miacode::runtime::PlaybackCoordinator::parsedClockCount() const
 {
     const int value = miacode::chart_clock::clockCountFromDocument(
-        session_.applicationServices_.workspace().document());
+        services_.workspace().document());
     return value > 0 ? value : 4;
 }
 
@@ -522,7 +526,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorOffset(double se
 {
     const double normalized = qIsFinite(seconds) ? seconds : 0.0;
     const QString serialized = QString::number(normalized, 'f', 3);
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::v2::ChartWorkspace& workspace = services_.workspace();
     workspace.updateDocumentField(miacode::v2::ChartWorkspaceDocumentField::First, serialized);
     if (ui_.firstEdit_ != nullptr) {
         QSignalBlocker blocker(ui_.firstEdit_);
@@ -539,7 +543,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
     if (!qIsFinite(bpm) || bpm <= 0.0) {
         return;
     }
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::v2::ChartWorkspace& workspace = services_.workspace();
     const QString serializedBpm = QString::number(bpm, 'f', 3);
     workspace.upsertExtraField(QStringLiteral("wholebpm"), serializedBpm);
     setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
@@ -550,7 +554,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
 void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int clockCount)
 {
     const int normalized = qMax(1, clockCount);
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::v2::ChartWorkspace& workspace = services_.workspace();
     workspace.upsertExtraField(QStringLiteral("clock_count"), QString::number(normalized));
     setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
     state_.documentDirty_ = workspace.snapshot().dirty;
@@ -665,7 +669,7 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
         // than the outgoing chart's.
         session_.loadProjectAudioPreferences();
     }
-    session_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.pauseSecond_, session_.applicationServices_.workspace().document().videoPath);  // Phase 4c &video= override
+    session_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.pauseSecond_, services_.workspace().document().videoPath);  // Phase 4c &video= override
     if (state_.scene_ != nullptr) {
         state_.scene_->setPlayheadSeconds(state_.pauseSecond_, false);
     }
@@ -689,7 +693,7 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
 
 void miacode::runtime::PlaybackCoordinator::updateWindowTitle()
 {
-    QString titleText = session_.applicationServices_.workspace().document().title;
+    QString titleText = services_.workspace().document().title;
     if (ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.metadataPage_ && ui_.titleEdit_ != nullptr) {
         titleText = ui_.titleEdit_->text();
     }
@@ -860,7 +864,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineFollowPreviewToggled(bool 
     invalidatePreviewFollowBindingCache();
     session_.savePortableState();
     if (!hasActiveDifficulty()) {
-        session_.clearPreviewFollowDecoration();
+        clearPreviewFollowDecoration();
         return;
     }
     // Turning the option off stops the caret/viewport follow, not the highlight:

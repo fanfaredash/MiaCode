@@ -15,13 +15,18 @@ namespace miacode::preview_audio {
 struct PreviewAudioCompletion;
 }
 
+namespace miacode::v2 {
+class ApplicationServices;
+}
+
 namespace miacode::runtime {
 
 class PlaybackCoordinator final : public miacode::v2::PlaybackControl,
                                   public miacode::v2::PreviewPlaybackPort,
                                   public miacode::v2::AudioClockSource {
 public:
-    PlaybackCoordinator(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state,
+    PlaybackCoordinator(Session& session, miacode::v2::ApplicationServices& services,
+                        RuntimeContext::Ui& ui, RuntimeContext::State& state,
                         quint64 sessionGeneration = 0);
 
     void setDocumentRevision(quint64 revision);
@@ -382,7 +387,12 @@ private:
     bool ensureAuditionSceneReady();
     miacode::waveform::WaveformCacheService* ensureWaveformCacheService();
     QString formatPreviewPlaybackRateToastText(double rate) const;
+    // Stage 4.9d-4b-1: Session::clearPreviewFollowDecoration's body only touched
+    // the editor-sync controller, which is reachable directly through
+    // services_.editorSync() — see FollowSync.cpp for the definition.
+    void clearPreviewFollowDecoration();
     Session& session_;
+    miacode::v2::ApplicationServices& services_;
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;
     PlaybackIdentityGate identity_;
