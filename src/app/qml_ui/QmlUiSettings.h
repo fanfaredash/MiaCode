@@ -26,6 +26,7 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(double previewWidthRatio READ previewWidthRatio WRITE setPreviewWidthRatio NOTIFY previewWidthRatioChanged)
     Q_PROPERTY(double previewMinimumWidthRatio READ previewMinimumWidthRatio CONSTANT)
     Q_PROPERTY(double previewMaximumWidthRatio READ previewMaximumWidthRatio CONSTANT)
+    Q_PROPERTY(bool previewCanvasFreeAspect READ previewCanvasFreeAspect WRITE setPreviewCanvasFreeAspect NOTIFY previewCanvasFreeAspectChanged)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily CONSTANT)
     Q_PROPERTY(QString themeToken READ themeToken CONSTANT)
     Q_PROPERTY(bool darkTheme READ darkTheme NOTIFY themeChanged)
@@ -56,6 +57,7 @@ public:
     double previewWidthRatio() const;
     double previewMinimumWidthRatio() const;
     double previewMaximumWidthRatio() const;
+    bool previewCanvasFreeAspect() const;
     QString uiFontFamily() const;
     QString themeToken() const;
     bool darkTheme() const;
@@ -72,6 +74,7 @@ public:
     void setBottomPanelVisible(bool value);
     void setBottomPanelHeightRatio(double value);
     void setPreviewWidthRatio(double value);
+    void setPreviewCanvasFreeAspect(bool value);
     void setFontSize(int value);
     void reloadEditorSettings();
     void reloadTheme();
@@ -84,6 +87,7 @@ signals:
     void bottomPanelVisibleChanged();
     void bottomPanelHeightRatioChanged();
     void previewWidthRatioChanged();
+    void previewCanvasFreeAspectChanged();
     void fontSizeChanged();
     void editorSettingsChanged();
     void themeChanged();
@@ -101,6 +105,7 @@ private:
     bool bottomPanelVisible_ = true;
     double bottomPanelHeightRatio_ = 0.35;
     double previewWidthRatio_ = 0.5;
+    bool previewCanvasFreeAspect_ = false;
     QString uiFontFamily_;
     QFont codeFont_;
     int editorBlockSpacing_ = 0;

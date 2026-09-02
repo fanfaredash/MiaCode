@@ -561,8 +561,8 @@ QImage buildCircularDimMaskImage(
         return mask;
     }
 
-    const double layoutSide = miacode::preview_video::layoutSquareSideForCanvasHeight(
-        static_cast<double>(height),
+    const double layoutSide = miacode::preview_video::layoutSquareSideForStage(
+        QRectF(0.0, 0.0, static_cast<double>(width), static_cast<double>(height)),
         layoutSquareScale
     );
     const double centerX = (static_cast<double>(width) - 1.0) * 0.5;
@@ -609,8 +609,8 @@ QImage buildCircularMediaMaskImage(
     QImage mask(width, height, QImage::Format_Grayscale8);
     mask.fill(0);
 
-    const double layoutSide = miacode::preview_video::layoutSquareSideForCanvasHeight(
-        static_cast<double>(height),
+    const double layoutSide = miacode::preview_video::layoutSquareSideForStage(
+        QRectF(0.0, 0.0, static_cast<double>(width), static_cast<double>(height)),
         layoutSquareScale
     );
     const double radius = qMax(1.0, layoutSide * 0.5);

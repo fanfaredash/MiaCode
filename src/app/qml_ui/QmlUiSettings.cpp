@@ -22,6 +22,7 @@ constexpr auto kSidebarWidth = "sidebar_width";
 constexpr auto kBottomPanelVisible = "bottom_panel_visible";
 constexpr auto kBottomPanelHeightRatio = "bottom_panel_height_ratio";
 constexpr auto kPreviewWidthRatio = "preview_width_ratio";
+constexpr auto kPreviewCanvasFreeAspect = "preview_canvas_free_aspect";
 constexpr auto kFontSize = "ui_font_size";
 
 constexpr auto kLegacySidebarVisible = "ui/sidebarVisible";
@@ -29,6 +30,7 @@ constexpr auto kLegacySidebarWidth = "ui/sidebarWidth";
 constexpr auto kLegacyBottomPanelVisible = "ui/bottomPanelVisible";
 constexpr auto kLegacyBottomPanelHeightRatio = "ui/bottomPanelHeightRatio";
 constexpr auto kLegacyPreviewWidthRatio = "ui/previewWidthRatio";
+constexpr auto kLegacyPreviewCanvasFreeAspect = "ui/previewCanvasFreeAspect";
 constexpr auto kLegacyFontSize = "appearance/fontSize";
 
 QJsonObject loadUiObject()
@@ -91,6 +93,8 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
                                 jsonDouble(ui, kPreviewWidthRatio, legacySettings,
                                            kLegacyPreviewWidthRatio, 0.5),
                                 kPreviewMaximumWidthRatio);
+    previewCanvasFreeAspect_ = jsonBool(ui, kPreviewCanvasFreeAspect, legacySettings,
+                                        kLegacyPreviewCanvasFreeAspect, false);
     fontSize_ = qBound(12, jsonInt(ui, kFontSize, legacySettings, kLegacyFontSize, 13), 14);
     if (!ui.contains(QLatin1String(kSidebarVisible))
         || !ui.contains(QLatin1String(kSidebarWidth))
@@ -183,6 +187,7 @@ double QmlUiSettings::bottomPanelMaximumHeightRatio() const { return kBottomPane
 double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
 double QmlUiSettings::previewMinimumWidthRatio() const { return kPreviewMinimumWidthRatio; }
 double QmlUiSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
+bool QmlUiSettings::previewCanvasFreeAspect() const { return previewCanvasFreeAspect_; }
 QString QmlUiSettings::uiFontFamily() const { return uiFontFamily_; }
 QString QmlUiSettings::themeToken() const
 {
@@ -310,6 +315,14 @@ void QmlUiSettings::setPreviewWidthRatio(double value)
     previewWidthRatio_ = value;
     storeUiValue(kPreviewWidthRatio, value);
     emit previewWidthRatioChanged();
+}
+
+void QmlUiSettings::setPreviewCanvasFreeAspect(bool value)
+{
+    if (previewCanvasFreeAspect_ == value) return;
+    previewCanvasFreeAspect_ = value;
+    storeUiValue(kPreviewCanvasFreeAspect, value);
+    emit previewCanvasFreeAspectChanged();
 }
 
 void QmlUiSettings::setEditorAppearance(int pointSize, double lineSpacingFactor)

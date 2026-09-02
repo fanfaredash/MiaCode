@@ -100,6 +100,9 @@ Item {
             workspaceSplit.moveItem(currentPreviewIndex, targetPreviewIndex)
     }
 
+    readonly property bool freeAspectActive:
+        root.preferences && root.preferences.previewCanvasFreeAspect
+
     function fittedFullscreenWidth(hostWidth, hostHeight) {
         const aspect = Math.max(1.0, root.previewSession.canvasAspectRatio || 1.0)
         const safeWidth = Math.max(1, hostWidth)
@@ -254,6 +257,7 @@ Item {
                 visible: !root.coverExportActive
                 surfaceActive: !root.coverExportActive && !fullscreenPreview.visible
                 previewSession: root.previewSession
+                preferences: root.preferences
                 exportPageActive: root.exportVideoActive
                 SplitView.preferredWidth: root.previewEditorAvailableWidth
                                           * root.preferences.previewWidthRatio
@@ -275,8 +279,12 @@ Item {
 
         Loader {
             anchors.centerIn: parent
-            width: root.fittedFullscreenWidth(parent.width, parent.height)
-            height: root.fittedFullscreenHeight(parent.width, parent.height)
+            width: root.freeAspectActive
+                   ? parent.width
+                   : root.fittedFullscreenWidth(parent.width, parent.height)
+            height: root.freeAspectActive
+                    ? parent.height
+                    : root.fittedFullscreenHeight(parent.width, parent.height)
             active: fullscreenPreview.visible && width >= 64 && height >= 64
 
             sourceComponent: Preview.PreviewSurface {

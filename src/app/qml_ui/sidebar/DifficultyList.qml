@@ -14,6 +14,18 @@ Column {
 
     width: parent ? parent.width : implicitWidth
 
+    component FoldIndicator: Text {
+        property bool expanded: false
+
+        width: 10
+        text: expanded ? "▾" : "▸"
+        color: Theme.colors.text.secondary
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.secondaryFontSize
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+    }
+
     Item {
         width: root.width
         height: 30
@@ -31,14 +43,28 @@ Column {
                     = !root.viewState.difficultySectionExpanded
             }
 
-            contentItem: Text {
-                text: (root.viewState.difficultySectionExpanded ? "▾  " : "▸  ")
-                    + UiText.text("难度")
-                color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.secondaryFontSize
-                font.bold: true
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Item {
+                FoldIndicator {
+                    id: sectionFoldIndicator
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    expanded: root.viewState.difficultySectionExpanded
+                }
+
+                Text {
+                    anchors.left: sectionFoldIndicator.right
+                    anchors.leftMargin: 8
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    text: UiText.text("难度")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.secondaryFontSize
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             Tooltip {
@@ -130,19 +156,16 @@ Column {
                     // the 难度 section header's own chevron. The slot is always
                     // reserved so every colour block lines up; only the glyph is
                     // conditional.
-                    Text {
+                    FoldIndicator {
                         anchors.left: parent.left
                         anchors.leftMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 10
-                        horizontalAlignment: Text.AlignHCenter
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
                         visible: difficultyGroup.bookmarks.length > 0
-                        text: difficultyGroup.bookmarksExpanded ? "▾" : "▸"
+                        expanded: difficultyGroup.bookmarksExpanded
                         color: difficultyGroup.activeEditor
                                ? Theme.colors.text.active
                                : Theme.colors.text.secondary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.secondaryFontSize
                     }
 
                     DifficultySwatch {
@@ -184,7 +207,7 @@ Column {
                         color: {
                             const guide = Qt.color(Theme.colors.text.secondary)
                             return Qt.rgba(guide.r, guide.g, guide.b,
-                                           Theme.darkTheme ? 48 / 255 : 58 / 255)
+                                           Theme.darkTheme ? 0.36 : 0.32)
                         }
                     }
 

@@ -7,7 +7,8 @@ Rectangle {
     id: root
 
     required property var previewSession
-    // True while the export page is up. The fullscreen button hides there:
+    required property var preferences
+    // True while the export page is up. The canvas menu hides there:
     // entering preview fullscreen on that page crashes the Intel iGPU D3D11
     // driver with hardware decode. Supplied by the caller, which knows the
     // active page.
@@ -42,6 +43,7 @@ Rectangle {
     }
     property bool scrubActive: false
     property real rateMenuClosedAt: 0
+    property real canvasMenuClosedAt: 0
     property real activeScrubSecond: root.previewSession.positionSeconds
     readonly property real displayedSeconds: root.scrubActive
         ? root.activeScrubSecond
@@ -166,12 +168,23 @@ Rectangle {
         }
 
         IconButton {
+            id: canvasMenuButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             visible: !root.exportPageActive
-            iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
-            tooltip: UiText.text("全屏预览")
-            onClicked: root.fullscreenRequested()
+            active: canvasMenu.visible
+            iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
+            tooltip: UiText.text("预览画布")
+            Accessible.description: UiText.text("打开预览画布菜单")
+            onClicked: {
+                if (canvasMenu.visible) {
+                    canvasMenu.close()
+                    return
+                }
+                if (Date.now() - root.canvasMenuClosedAt < 200)
+                    return
+                canvasMenu.openAt(canvasMenuButton)
+            }
         }
     }
 
@@ -179,5 +192,12 @@ Rectangle {
         id: rateMenu
         previewSession: root.previewSession
         onClosed: root.rateMenuClosedAt = Date.now()
+    }
+
+    PreviewCanvasMenu {
+        id: canvasMenu
+        preferences: root.preferences
+        onClosed: root.canvasMenuClosedAt = Date.now()
+        onFullscreenRequested: root.fullscreenRequested()
     }
 }
