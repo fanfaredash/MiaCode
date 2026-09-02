@@ -453,12 +453,12 @@ void miacode::runtime::PlaybackCoordinator::applyOutlineVariant(PreviewOutlineVa
 
 QVariantMap miacode::runtime::PlaybackCoordinator::renderSettings() const
 {
-    return session_.previewRenderSettings();
+    return preferences_.previewRenderSettings();
 }
 
 void miacode::runtime::PlaybackCoordinator::setRenderSetting(const QString& key, const QVariant& value)
 {
-    session_.setPreviewRenderSetting(key, value);
+    preferences_.setPreviewRenderSetting(key, value);
 }
 
 void miacode::runtime::PlaybackCoordinator::refreshSurfaces()
@@ -492,17 +492,17 @@ PreviewAudioSettings miacode::runtime::PlaybackCoordinator::audioSettings() cons
 
 void miacode::runtime::PlaybackCoordinator::applyAudioSettings(const PreviewAudioSettings& settings)
 {
-    session_.applyPreviewAudioSettingsFromUi(settings);
+    preferences_.applyPreviewAudioSettingsFromUi(settings);
 }
 
 void miacode::runtime::PlaybackCoordinator::saveAudioSettingsAsSoftwareDefault()
 {
-    session_.savePreviewAudioSettingsAsSoftwareDefault();
+    preferences_.savePreviewAudioSettingsAsSoftwareDefault();
 }
 
 void miacode::runtime::PlaybackCoordinator::restoreAudioSettingsFromSoftwareDefault()
 {
-    session_.restorePreviewAudioSettingsFromSoftwareDefault();
+    preferences_.restorePreviewAudioSettingsFromSoftwareDefault();
 }
 
 QObject* miacode::runtime::PlaybackCoordinator::timelineStateBridge() const

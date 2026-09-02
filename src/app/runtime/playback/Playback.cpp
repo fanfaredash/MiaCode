@@ -417,7 +417,7 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate
             }
         }
     }
-    session_.savePortableState();
+    preferences_.savePortableState();
     // G2 Commit 2: the playback-restart cycle below previously ran whenever
     // playing_ was true, because it was the only way to get the new
     // TEMPO onto the BGM tempo stream. With applyPlaybackRateAtChartSecond

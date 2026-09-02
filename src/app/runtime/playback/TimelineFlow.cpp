@@ -49,11 +49,13 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     miacode::v2::ApplicationServices& services,
     RuntimeContext::Ui& ui,
     RuntimeContext::State& state,
+    miacode::v2::PlaybackPreferencesPort& preferences,
     quint64 sessionGeneration)
     : session_(session)
     , services_(services)
     , ui_(ui)
     , state_(state)
+    , preferences_(preferences)
     , identity_(sessionGeneration)
 {}
 
@@ -641,7 +643,7 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
         miacode::app::entry::logProcessStartupDiagnostics(QStringLiteral("log_dir_rebound"));
     }
     if (!state_.currentFilePath_.isEmpty()) {
-        session_.setLastOpenDirectory(state_.currentFilePath_);
+        preferences_.setLastOpenDirectory(state_.currentFilePath_);
 
         if (!nextTrackPath.isEmpty()) {
             // Keep preview audio in sync with the currently opened chart directory.
@@ -662,7 +664,7 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
     updateWindowTitle();
     updateCurrentFileLabel();
     if (pathChanged) {
-        session_.loadProjectRenderState();
+        preferences_.loadProjectRenderState();
         // Rebind the project-scoped mixer BEFORE the SFX reload / level
         // dispatch below, so the new chart's volumes are the ones handed to
         // reloadAssetsForChart and applyPreviewAudioSettingsToRuntime rather
@@ -862,7 +864,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineFollowPreviewToggled(bool 
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(enabled);
     }
     invalidatePreviewFollowBindingCache();
-    session_.savePortableState();
+    preferences_.savePortableState();
     if (!hasActiveDifficulty()) {
         clearPreviewFollowDecoration();
         return;
@@ -883,7 +885,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineViewportLockToggled(bool e
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setViewportLockEnabled(enabled);
     }
-    session_.savePortableState();
+    preferences_.savePortableState();
     if (!enabled || !hasActiveDifficulty()) {
         return;
     }
@@ -899,7 +901,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineFollowProgressToggled(bool
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setFollowProgressEnabled(enabled);
     }
-    session_.savePortableState();
+    preferences_.savePortableState();
 }
 
 void miacode::runtime::PlaybackCoordinator::onTimelineSyncToggled(bool enabled)
@@ -908,7 +910,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineSyncToggled(bool enabled)
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setTimelineSyncEnabled(enabled);
     }
-    session_.savePortableState();
+    preferences_.savePortableState();
 }
 
 void miacode::runtime::PlaybackCoordinator::applyLatestTimelinePreviewStateToPausedPreview()

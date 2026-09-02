@@ -530,7 +530,7 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasAspectRatio(double r
     }
     refreshLayoutAfterPageSwitch();
     if (persistState) {
-        session_.savePortableState();
+        preferences_.savePortableState();
     }
 }
 
@@ -603,7 +603,7 @@ void miacode::runtime::PlaybackCoordinator::setWorkspacePanelsSwapped(bool swapp
     state_.workspacePanelsSwapped_ = swapped;
     applyWorkspacePanelArrangement();
     if (persistState) {
-        session_.savePortableState();
+        preferences_.savePortableState();
     }
 }
 

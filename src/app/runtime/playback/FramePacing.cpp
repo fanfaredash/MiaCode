@@ -519,7 +519,7 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasFrameRateMode(Previe
         setPreviewFixedTimerHighResolutionActive(state_, false);
     }
     if (persistState) {
-        session_.savePortableState();
+        preferences_.savePortableState();
     }
 }
 
@@ -528,7 +528,7 @@ void miacode::runtime::PlaybackCoordinator::setPreviewStageMediaFrameRateMode(Pr
     state_.previewStageMediaFrameRateMode_ = mode;
     applyPreviewStageMediaFrameRateMode();
     if (persistState) {
-        session_.savePortableState();
+        preferences_.savePortableState();
     }
 }
 
@@ -539,7 +539,7 @@ void miacode::runtime::PlaybackCoordinator::setVideoDecodePrefersSoftware(bool p
     }
     state_.videoDecodePrefersSoftware_ = preferSoftware;
     if (persistState) {
-        session_.savePortableState();
+        preferences_.savePortableState();
     }
     // Push to the host if it already exists; otherwise the cached value is
     // applied once at host construction (ensurePreviewStageMediaHostInitialized).
@@ -553,6 +553,6 @@ void miacode::runtime::PlaybackCoordinator::setTimelineFrameRateMode(PreviewCanv
     state_.timelineFrameRateMode_ = mode;
     refreshPreviewFrameRateTimers();
     if (persistState) {
-        session_.savePortableState();
+        preferences_.savePortableState();
     }
 }

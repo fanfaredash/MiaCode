@@ -40,6 +40,7 @@
 #include "app/qml_ui/QmlAnalysisProjection.h"
 #include "app/v2/ApplicationServices.h"
 #include "app/v2/PlaybackControl.h"
+#include "app/v2/PlaybackPreferencesPort.h"
 #include "app/v2/EditorSyncController.h"
 #include "app/v2/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -135,7 +136,7 @@ class PreviewHost;
 }
 
 // QML 通过 ApplicationServices 槽位调用运行时宿主；本类只装配宿主并附着根窗口。
-class Session : public QObject
+class Session : public QObject, public miacode::v2::PlaybackPreferencesPort
 {
     Q_OBJECT
 
@@ -332,9 +333,9 @@ public:
     // 音频设置 page. The mixer is a value type, so the page reads a copy and
     // hands one back; every write lands on the same runtime-apply and persist
     // path the Widgets dialog used, rather than the page poking members.
-    void applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings);
-    void savePreviewAudioSettingsAsSoftwareDefault();
-    void restorePreviewAudioSettingsFromSoftwareDefault();
+    void applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings) override;
+    void savePreviewAudioSettingsAsSoftwareDefault() override;
+    void restorePreviewAudioSettingsFromSoftwareDefault() override;
 
     // 预览设置 page. Read as one map, written one key at a time: each of these
     // has its own way of reaching the running preview — a canvas setter, a
@@ -342,8 +343,8 @@ public:
     // wiring belongs here beside the members rather than in the QML layer. The
     // map also carries the ranges (square scale, flow speed) so the page does
     // not restate limits the preview owns.
-    QVariantMap previewRenderSettings() const;
-    void setPreviewRenderSetting(const QString& key, const QVariant& value);
+    QVariantMap previewRenderSettings() const override;
+    void setPreviewRenderSetting(const QString& key, const QVariant& value) override;
 
     void setQmlChartTextHandler(std::function<bool(const QString&)> handler);
     DocumentValidationSnapshot documentValidationSnapshot() const;
@@ -534,9 +535,12 @@ private:
     void resetPortablePreviewSettingsToDefaults();
     void applyPortablePreviewSettings(const QJsonObject& preview);
     void loadPortableState();
-    void savePortableState() const;
 
 public:
+    // PlaybackPreferencesPort: was private until stage 4.9d-4b-2a made it part
+    // of the coordinator's preferences port, which requires public access.
+    void savePortableState() const override;
+
     // The QML pages' bounded reach into the window.
     //
     // These were private, which meant QmlCommandService, QmlPreviewModel and
@@ -595,6 +599,11 @@ public:
     bool currentEditorImeInputDisabled() const;
     bool currentWorkspacePanelsSwapped() const;
 
+    // PlaybackPreferencesPort: were private until stage 4.9d-4b-2a made them
+    // part of the coordinator's preferences port, which requires public access.
+    void loadProjectRenderState() override;
+    void setLastOpenDirectory(const QString& pathOrDir) override;
+
 private:
     // Transient Alt-hold override: while the preview is paused, holding Alt
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
@@ -604,13 +613,11 @@ private:
     void openRecentFilePath(const QString& path);
     void refreshRecentFilesMenu(QMenu* recentFilesMenu);
     void persistEditorTextFontPreference() const;
-    void loadProjectRenderState();
     void saveProjectRenderState() const;
     void removeProjectRenderState() const;
     void applyPreviewAudioSettingsToRuntime();
     void loadProjectAudioPreferences();
     void saveProjectAudioPreferences() const;
-    void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     void clearPreviewFollowDecoration();
     void clearValidationDecorations();

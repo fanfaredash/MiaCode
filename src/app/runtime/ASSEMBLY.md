@@ -248,7 +248,18 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          **守卫的正则同时放宽为匹配成员与自由函数两种写法**：先前钉死 `state_.` 前缀，导致新函数的
          参数被命名成 `state_` 只为迎合正则——那是测试反过来决定命名。正则改宽后该 spec 需排除自身
          （它在注释里写出了两种形式），与 `DebugFlagIndexSpec` 排除自身同一惯例。
-      4b-2. E 类 S 组窄端口（剩余 49 处）。
+      4b-2a. ~~偏好端口~~ **已完成 2026-09-02**：`session_.` 计数 49 → **31**（18 处）。
+         **本主线第一次新增抽象**——此前 204 → 49 全靠删冗余、搬函数体、注入已有对象。
+         新增 `src/app/v2/PlaybackPreferencesPort.h`（8 个纯虚方法），与其他窄契约同目录。
+         **按能力切而非按宿主切**：这 8 个方法的最终归属散在三个宿主
+         （`savePortableState` / `loadProjectRenderState` 归 `EditorHost`、`setLastOpenDirectory`
+         归 `DocumentSessionHost`、渲染与音频偏好读写留在 `Session`），由 `Session` 实现——
+         跨宿主编排正是它保留的正当职责（与 4.9d 第 3 步判 `setCurrentBottomTabsTabId` 同一标准）。
+         三个方法因接口可见性要求从 private 改 public，函数体未动。
+         **`preferences_port_spec` 是链接层证明而非文本扫描**：只链 `Qt6::Core` + `Qt6::Test`
+         （连 `Gui` 都不需要），用 fake 实现该接口；谁往接口里塞进需要窗口或 Widgets 的类型，
+         这个 target 就链接失败。这个 fake 也是「协调器能否脱离 `Session` 构造」的第一块拼图。
+      4b-2b. 其余三个窄端口（舞台媒体 / 文档状态 / 校验刷新）+ 分支歧义 7 处 + 零散 3 处（剩余 31 处）。
          **关键前提（2026-09-02 查证）**：`StageMediaHost` / `ValidationHost` /
          `DocumentSessionHost` 的构造签名**自己都要 `Session&`**
          （`preview/StageMediaHost.h:9`、`validation/ValidationHost.h:9`、`document/DocumentSessionHost.h:17`），

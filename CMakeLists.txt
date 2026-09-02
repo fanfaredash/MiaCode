@@ -1847,6 +1847,23 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(application_services_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # Stage 4.9d-4b-2a: the playback coordinator's first narrow port onto
+    # preferences and persisted state. Session implements it, but the port
+    # itself must not need Session, QWidget, or QML/QSG to be implemented —
+    # linking Core+Test only (no Gui) is the guarantee: if the port ever grows
+    # a method whose type reaches beyond Qt6::Core, this target fails to LINK.
+    miacode_add_dev_tool(preferences_port_spec TEST
+        SOURCES
+            src/tools/v2/PreferencesPortSpec.cpp
+            src/app/v2/PlaybackPreferencesPort.h
+            src/audio/PreviewAudioSettings.h
+            src/audio/PreviewAudioSettings.cpp
+            src/common/PreviewSfxAssets.h
+            src/common/PreviewSfxSemantics.h
+        LIBS Qt6::Core Qt6::Test
+        INCLUDES src src/common src/audio src/core/video
+    )
+
     # Stage 4.6: Timeline commands receive their own identity before the
     # compatibility host forwards them to the current composite implementation.
     miacode_add_dev_tool(timeline_host_spec TEST
