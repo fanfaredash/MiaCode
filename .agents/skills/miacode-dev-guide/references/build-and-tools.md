@@ -15,7 +15,7 @@ the historical `build/` directory, so do not use that preset for routine local v
 - Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
 - **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export and D3D11 sources
   inside `if(WIN32)`; guard their owning members/includes/call sites with `Q_OS_WIN`. Realtime
-  preview BASS is enabled on both Windows and macOS when `MIACODE_HAS_BASS_AUDIO` is defined;
+  preview BASS is enabled on Windows, macOS, and Linux when `MIACODE_HAS_BASS_AUDIO` is defined;
   miniaudio is the compatibility backend for builds without that definition.
   Published preview snapshots use `std::shared_ptr<const PreviewFrameState>` plus the free
   `std::atomic_load_explicit` / `std::atomic_store_explicit` overloads — do not replace this with
@@ -74,13 +74,23 @@ Rules going forward:
   version freshness against `CMakeLists.txt` + generated `AppVersion.h`, auto-rebuilds MiaCode,
   runs windeployqt with `--qmldir src`, keeps the Qt Quick DLL set, copies repo-local BASS DLLs).
 - macOS build/package: `scripts/build/build-macos.sh`, `scripts/build/package-mac.sh`.
-- ffmpeg provisioning: `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`, `scripts/ffmpeg/ensure-macos-ffmpeg.sh` (the standalone
-  `ffmpeg.exe` used by **export**).
-- ffmpeg **dev SDK** provisioning: Windows `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
+- Linux build/package: `scripts/build/build-linux.sh`, `scripts/build/package-linux.sh`. The wrapper
+  builds with 8 jobs by default in a fixed Ubuntu 22.04 / Qt 6.11.1 Docker or Podman image and
+  clears `dist/`, then emits `MiaCode-v<version>-linux-x86_64/` plus a matching `tar.gz`.
+  `MiaCode.AppImage` bundles Qt/QML, the C++ runtime, XCB Fcitx/IBus input plugins, assets,
+  extensions, and the pinned export FFmpeg; release documentation and license notices sit beside
+  the AppImage in the version directory. Incremental build, packaging, and download files stay
+  under `build/`; glibc, the loader, X11, and graphics drivers remain system-provided.
+- ffmpeg provisioning: `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`, `scripts/ffmpeg/ensure-macos-ffmpeg.sh`,
+  `scripts/ffmpeg/ensure-linux-ffmpeg.sh` (the standalone
+  `ffmpeg` executable used by **export**).
+- ffmpeg **dev SDK** provisioning (Windows): `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
   n7.1 LGPL *shared* build (headers + import libs + runtime DLLs) into
   `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. On macOS,
   `package-mac.sh` accepts `MIACODE_FFMPEG_DEV_DIR` or finds Homebrew `ffmpeg@6` (then `ffmpeg`).
   Both are CMake inputs, not runtime flags; the SDK root must contain `include/` and `lib/`.
+  Linux developer builds use pkg-config from the host toolchain for FFmpeg, libva, libva-drm,
+  and libdrm; `PKG_CONFIG_PATH` selects a non-system installation.
 - Public debug launchers: `scripts/debug/Start_MiaCode_Debug.bat`, `scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat`,
   and `scripts/debug/Start_MiaCode_QtPluginDiag.bat`. One-off A/B launchers stay as ignored maintainer-local
   tools unless they become part of a repeatable public support workflow.
@@ -121,11 +131,16 @@ Rules going forward:
   export depend on it.
 - ffmpeg: pinned-binary notes in `third_party/ffmpeg/README.md`; never commit the binary
   (`.gitignore` blocks it). Export resolves ffmpeg from app-local/repo-local fallback.
-- **QtAVPlayer preview backend (Windows and macOS):** vendored MIT source in `third_party/QtAVPlayer/`
+  The Linux x86_64 provisioner validates the fixed archive and binary hashes, ELF architecture,
+  resolved runtime linkage without system FFmpeg libraries, version, and the
+  encoder/filter/protocol/format surface used by MiaCode before packaging it as
+  `app/ffmpeg/ffmpeg`.
+- **QtAVPlayer preview backend (desktop):** vendored MIT source in `third_party/QtAVPlayer/`
   (compiled straight into `MiaCode` with `QT_AVPLAYER_MULTIMEDIA` + `QT_BUILD_QTAVPLAYER_LIB`);
   needs the `Qt6::MultimediaQuickPrivate` component and the FFmpeg dev SDK (see §4). The CMake
-  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and is `if (WIN32 OR APPLE)`
-  gated. Windows uses D3D11VA; macOS compiles QtAVPlayer's VideoToolbox/Metal hwdevice. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
+  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and covers Windows,
+  macOS, and Linux. Windows uses D3D11VA; macOS compiles VideoToolbox/Metal; Linux obtains FFmpeg,
+  libva, libva-drm, and libdrm from pkg-config and compiles the VA-API DRM/EGL hwdevice. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
   `qavdemuxer.cpp`/`QtAVPlayer.cmake`) since it's capture-device-only — saves ~7 MB + one DLL.
   **Packaging:** `package-win.ps1` stages 6 `av*.dll` into `app/` next to `MiaCode.exe`
   (`avcodec-61`/`avformat-61`/`avutil-59`/`swresample-5`/`swscale-8` overlap windeployqt's set;

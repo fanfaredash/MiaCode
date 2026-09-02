@@ -245,8 +245,8 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
 
 - Shared resolver: `miacode::chart_assets::resolveBackgroundMediaPath`.
 - Route coordinator: `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
-- **Decode backend (preview side):** Windows decodes PV/BG via **QtAVPlayer (FFmpeg)** inside
-  `PreviewStageMediaHost` (build macro `MIACODE_USE_QTAVPLAYER`); other platforms keep `QMediaPlayer`.
+- **Decode backend (preview side):** every desktop platform decodes PV/BG via **QtAVPlayer (FFmpeg)**
+  inside `PreviewStageMediaHost` (build macro `MIACODE_USE_QTAVPLAYER`).
   The export *encoder output* is **unaffected** — it still decodes the background with the standalone
   `ffmpeg.exe` filtergraph in `VideoExportController` (so a file that previews can also export, and
   vice-versa: both sides are now FFmpeg). The export *preview dialog* (WYSIWYG) rides the realtime
@@ -260,7 +260,7 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
   frame retained in the video sinks so the background freezes on that frame. It must not pause the
   chart, BGM, SFX, or timeline. The sole natural-completion owner is
   `TimelineSection::onQtPreviewTickAtSecond`, using `previewPlaybackEndSeconds()` and the unified
-  `max(chart end + tail, music duration)` policy. Review the QtAVPlayer and QMediaPlayer EOM branches
+  `max(chart end + tail, music duration)` policy. Review the QtAVPlayer EOM branch
   in `PreviewStageMediaHost_Backend.cpp` together with the signal wiring in
   `MainWindow.PreviewStageMediaRoute.cpp`; never reconnect visual-media EOM to
   `finishQtPreviewPlaybackAndReturnToEntry`.
@@ -280,8 +280,8 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
   suspicious" threshold. `natural` keeps the last frame; `stale` (audit
   `PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md` §5.2 — a 121 s PV ending at 1.267 s) runs
   the bounded seek-then-reload recovery in `PreviewStageMediaHost_Timeout.cpp`; `unknown` does
-  nothing. Change the classifier and the spec together, and keep both backends
-  (QtAVPlayer + `QMediaPlayer`) routed through `handleVideoEndOfMedia`.
+  nothing. Change the classifier and the spec together, and keep QtAVPlayer routed through
+  `handleVideoEndOfMedia`.
 - Pause-hide option `previewForceLabeledJudgeLineWhenPaused_` (UI label key
   `dialog.render_settings.gameplay.force_labeled_judge_line_when_paused`, zh "暂停时显示判定区"):
   when ON + preview paused, the on-screen preview switches outline to `JudgeAreaLabeled` AND hides

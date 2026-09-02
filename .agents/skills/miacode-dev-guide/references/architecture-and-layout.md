@@ -92,7 +92,7 @@ There is now exactly one scene stack: `core/scene/*LayerState` →
   deprecated *preview* worker.)
 - New preview/export rendering work adds a `core/scene/` state builder or a
   `preview/quick_scene/` layer; do not reintroduce a painter/OpenGL fallback path.
-- Realtime preview BGM timing is backend-owned: Windows/macOS BASS builds use BASS/BASS_FX for
+- Realtime preview BGM timing is backend-owned: Windows/macOS/Linux BASS builds use BASS/BASS_FX for
   all rates; builds without BASS use the stretched SoundTouch path with an engine-time anchor clock.
 - `QtPreviewSfxRuntime` is a GUI-thread facade only. Every native preview-audio construction,
   backend call, health sample, and destruction belongs to the in-process `PreviewAudioWorker`

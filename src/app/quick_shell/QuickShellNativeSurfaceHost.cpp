@@ -372,8 +372,8 @@ QuickShellNativeSurfaceHost::~QuickShellNativeSurfaceHost()
             widget->hide();
             widget->setParent(mainWindow);
         };
+        releaseBack(contentProvider_->shellMenuBarWidget());
         if (mainWindow != nullptr) {
-            releaseBack(mainWindow->menuBar());
             if (QToolBar* toolBar = mainWindow->findChild<QToolBar*>()) {
                 releaseBack(toolBar);
             }
@@ -839,23 +839,23 @@ void QuickShellNativeSurfaceHost::attachNativeWidgets()
         return;
     }
 
+    if (QMenuBar* windowMenuBar = contentProvider_->shellMenuBarWidget(); windowMenuBar != nullptr) {
+        windowMenuBar->setNativeMenuBar(false);
+        if (windowMenuBar->parentWidget() != topChromeSurfaceWidget_) {
+            windowMenuBar->setParent(topChromeSurfaceWidget_);
+        }
+        if (topChromeLayout->indexOf(windowMenuBar) < 0) {
+            topChromeLayout->addWidget(windowMenuBar);
+        }
+#ifdef Q_OS_MACOS
+        miacode::quick_shell::mac::installTopLevelMenuPopupPositioning(
+            windowMenuBar, surfaceBundle_.topChrome);
+#endif
+        windowMenuBar->show();
+    }
+
     if (QMainWindow* mainWindow = qobject_cast<QMainWindow*>(contentProvider_->shellWindowWidget());
         mainWindow != nullptr) {
-        if (QMenuBar* windowMenuBar = mainWindow->menuBar(); windowMenuBar != nullptr) {
-            windowMenuBar->setNativeMenuBar(false);
-            if (windowMenuBar->parentWidget() != topChromeSurfaceWidget_) {
-                windowMenuBar->setParent(topChromeSurfaceWidget_);
-            }
-            if (topChromeLayout->indexOf(windowMenuBar) < 0) {
-                topChromeLayout->addWidget(windowMenuBar);
-            }
-#ifdef Q_OS_MACOS
-            miacode::quick_shell::mac::installTopLevelMenuPopupPositioning(
-                windowMenuBar, surfaceBundle_.topChrome);
-#endif
-            windowMenuBar->show();
-        }
-
         if (QToolBar* toolBar = mainWindow->findChild<QToolBar*>(); toolBar != nullptr) {
             mainWindow->removeToolBar(toolBar);
             if (toolBar->parentWidget() != topChromeSurfaceWidget_) {

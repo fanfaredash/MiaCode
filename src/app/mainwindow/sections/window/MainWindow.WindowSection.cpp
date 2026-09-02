@@ -318,6 +318,11 @@ QWidget* MainWindow::shellWindowWidget() const
     return windowSection_->shellWindowWidget();
 }
 
+QMenuBar* MainWindow::shellMenuBarWidget() const
+{
+    return mainMenuBar_;
+}
+
 QDockWidget* MainWindow::shellOutlineDockWidget() const
 {
     return windowSection_->shellOutlineDockWidget();

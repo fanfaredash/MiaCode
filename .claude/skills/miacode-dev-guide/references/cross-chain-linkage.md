@@ -205,8 +205,8 @@ If one side changes, inspect the other in the same patch.
   `PreviewStageMediaHost::currentPlaybackSecond()`, which is video-local observability only).
 - Quickshell presentation split: images inline in `QuickShellPreviewSurface.qml`; video moves to
   `QuickShellPreviewCompositeSurface` (own `QQuickView`).
-- Export consumes the shared resolver via `VideoExportController`; Windows export audio = single
-  mixed WAV via `BassExportAudioBackend`, non-Windows = `LegacyExportAudioBackend` fallback.
+- Export consumes the shared resolver via `VideoExportController`; Windows/macOS/Linux export audio
+  uses a single mixed WAV via `BassExportAudioBackend`; no-BASS builds use `LegacyExportAudioBackend`.
 - Filenames: `bg.mp4`, `pv.mp4`, `bg.{jpg,png,jpeg}`. Keep preview + export aligned.
 - **`EndOfMedia` is never a transport event.** A background video is subordinate visual media, so
   its end may not stop BGM / SFX / chart / timeline — that coupling was the root cause in

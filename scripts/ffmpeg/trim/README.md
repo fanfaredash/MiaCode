@@ -63,7 +63,7 @@ needs and that video silently fails. Five guards, layered:
    to assert the mandatory filters + allowlisted decoders are present, and it
    **backs up the previous full SDK** to `dev.full.bak`. If a PV later fails on the
    trimmed build, A/B against the backup to confirm it's a trim gap, add the codec,
-   rebuild. The host's own `preview/stage_media action=video_software_fallback` +
+   rebuild. The host's `preview/stage_media media_error` and
    `video_frame_first` logs surface decode failures in the app.
 
 ## Prerequisites

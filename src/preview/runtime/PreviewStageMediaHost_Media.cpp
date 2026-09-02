@@ -449,12 +449,9 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     }
 
     imageSource_ = QUrl();
-    // Clear stale bg + arm the toImage() throttle so the first decoded frame
-    // after this chart switch is captured immediately.
+    // Clear the stale image background before the decoded video frame arrives.
     loadedBackgroundImage_ = QImage();
-    videoFrameToImageThrottle_.invalidate();
     mediaKind_ = MediaKind::Video;
-    softwareDecodeFallbackTried_ = false;
     videoBackendLoaded_ = false;
     lastVideoFrame_ = QVideoFrame();
     lastFramePtsSeconds_ = -1.0;
@@ -493,8 +490,8 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
         [this, sourceGeneration](const QAVVideoFrame& avFrame) {
             const double ptsSeconds = avFrame.pts();
             const double durationSeconds = avFrame.duration();
-            // Implicit QAVVideoFrame -> QVideoFrame; a D3D11VA hardware frame
-            // stays a zero-copy RhiTexture handle through this conversion.
+            // Implicit QAVVideoFrame -> QVideoFrame; a platform hardware frame
+            // keeps its RHI texture handle through this conversion.
             QVideoFrame vf = avFrame;
             handleDecodedVideoFrame(vf, ptsSeconds, durationSeconds, sourceGeneration);
         });

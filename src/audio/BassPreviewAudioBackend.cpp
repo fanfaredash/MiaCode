@@ -102,6 +102,10 @@ bool BassPreviewAudioBackend::runtimeLibrariesPresent() const
         && runtimeLibraryExists(QStringLiteral("libbassmix.dylib"))
         && runtimeLibraryExists(QStringLiteral("libbass_fx.dylib"))
         && runtimeLibraryExists(QStringLiteral("libbassopus.dylib"));
+#elif defined(Q_OS_LINUX) && defined(MIACODE_HAS_BASS_AUDIO)
+    return runtimeLibraryExists(QStringLiteral("libbass.so"))
+        && runtimeLibraryExists(QStringLiteral("libbassmix.so"))
+        && runtimeLibraryExists(QStringLiteral("libbass_fx.so"));
 #else
     return false;
 #endif

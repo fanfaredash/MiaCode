@@ -10,6 +10,7 @@
 #include "qavvideobuffer_gpu_p.h"
 #include "qavstream.h"
 #include <QDebug>
+#include <QScopeGuard>
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -17,6 +18,7 @@
 #include <GLES2/gl2ext.h>
 #include <va/va_drmcommon.h>
 #include <drm_fourcc.h>
+#include <unistd.h>
 
 extern "C" {
 #include <libavutil/hwcontext_vaapi.h>
@@ -31,8 +33,6 @@ QT_BEGIN_NAMESPACE
 
 class QAVHWDevice_VAAPI_DRM_EGLPrivate
 {
-public:
-    GLuint textures[2] = {0};
 };
 
 QAVHWDevice_VAAPI_DRM_EGL::QAVHWDevice_VAAPI_DRM_EGL()
@@ -42,10 +42,6 @@ QAVHWDevice_VAAPI_DRM_EGL::QAVHWDevice_VAAPI_DRM_EGL()
 
 QAVHWDevice_VAAPI_DRM_EGL::~QAVHWDevice_VAAPI_DRM_EGL()
 {
-    Q_D(QAVHWDevice_VAAPI_DRM_EGL);
-
-    if (d->textures[0])
-        glDeleteTextures(2, &d->textures[0]);
 }
 
 AVPixelFormat QAVHWDevice_VAAPI_DRM_EGL::format() const
@@ -61,15 +57,19 @@ AVHWDeviceType QAVHWDevice_VAAPI_DRM_EGL::type() const
 class VideoBuffer_EGL : public QAVVideoBuffer_GPU
 {
 public:
-    VideoBuffer_EGL(QAVHWDevice_VAAPI_DRM_EGLPrivate *hw, const QAVVideoFrame &frame)
+    explicit VideoBuffer_EGL(const QAVVideoFrame &frame)
         : QAVVideoBuffer_GPU(frame)
-        , m_hw(hw)
     {
         if (!s_eglCreateImageKHR) {
             s_eglCreateImageKHR = reinterpret_cast<PFNEGLCREATEIMAGEKHRPROC>(eglGetProcAddress("eglCreateImageKHR"));
             s_eglDestroyImageKHR = reinterpret_cast<PFNEGLDESTROYIMAGEKHRPROC>(eglGetProcAddress("eglDestroyImageKHR"));
             s_glEGLImageTargetTexture2DOES = reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(eglGetProcAddress("glEGLImageTargetTexture2DOES"));
         }
+    }
+
+    ~VideoBuffer_EGL() override
+    {
+        releaseTextures();
     }
 
     QAVVideoFrame::HandleType handleType() const override
@@ -79,13 +79,14 @@ public:
 
     QVariant textures() const
     {
-        return QList<QVariant>() << m_hw->textures[0] << m_hw->textures[1];
+        return QList<QVariant>() << m_textures[0] << m_textures[1];
     }
 
     QVariant handle(QRhi */*rhi*/) const override
     {
-        if (!m_hw->textures[0])
-            glGenTextures(2, m_hw->textures);
+        if (m_texturesReady)
+            return textures();
+        releaseTextures();
 
         auto va_frame = frame().frame();
         AVHWDeviceContext *hwctx = (AVHWDeviceContext *)frame().stream().codec()->avctx()->hw_device_ctx->data;
@@ -93,7 +94,7 @@ public:
         VADisplay va_display = vactx->display;
         VASurfaceID va_surface = (VASurfaceID)(uintptr_t)va_frame->data[3];
 
-        VADRMPRIMESurfaceDescriptor prime;
+        VADRMPRIMESurfaceDescriptor prime{};
         auto status = vaExportSurfaceHandle(va_display, va_surface,
                                             VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2,
                                             VA_EXPORT_SURFACE_READ_ONLY | VA_EXPORT_SURFACE_SEPARATE_LAYERS,
@@ -102,6 +103,10 @@ public:
             qWarning() << "vaExportSurfaceHandle failed" << status;
             return textures();
         }
+        const auto releaseExportedObjects = qScopeGuard([&prime] {
+            for (uint32_t i = 0; i < prime.num_objects; ++i)
+                ::close(prime.objects[i].fd);
+        });
 
         if (prime.fourcc != VA_FOURCC_NV12) {
             qWarning() << "prime.fourcc != VA_FOURCC_NV12";
@@ -110,20 +115,30 @@ public:
 
         vaSyncSurface(va_display, va_surface);
 
+        glGenTextures(2, m_textures);
         static const uint32_t formats[2] = { DRM_FORMAT_R8, DRM_FORMAT_GR88 };
         for (int i = 0; i < 2; ++i) {
             if (prime.layers[i].drm_format != formats[i])
                 qWarning() << "Wrong DRM format:" << prime.layers[i].drm_format << formats[i];
 
-            EGLint img_attr[] = {
+            const auto objectIndex = prime.layers[i].object_index[0];
+            const auto modifier = prime.objects[objectIndex].drm_format_modifier;
+            EGLint img_attr[19] = {
                 EGL_LINUX_DRM_FOURCC_EXT,      EGLint(formats[i]),
                 EGL_WIDTH,                     va_frame->width / (i + 1),
                 EGL_HEIGHT,                    va_frame->height / (i + 1),
-                EGL_DMA_BUF_PLANE0_FD_EXT,     prime.objects[prime.layers[i].object_index[0]].fd,
+                EGL_DMA_BUF_PLANE0_FD_EXT,     prime.objects[objectIndex].fd,
                 EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGLint(prime.layers[i].offset[0]),
                 EGL_DMA_BUF_PLANE0_PITCH_EXT,  EGLint(prime.layers[i].pitch[0]),
-                EGL_NONE
             };
+            int attrCount = 12;
+            if (modifier != DRM_FORMAT_MOD_INVALID) {
+                img_attr[attrCount++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
+                img_attr[attrCount++] = EGLint(modifier & 0xffffffffULL);
+                img_attr[attrCount++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
+                img_attr[attrCount++] = EGLint(modifier >> 32);
+            }
+            img_attr[attrCount] = EGL_NONE;
 
             EGLImage img = s_eglCreateImageKHR(eglGetCurrentDisplay(),
                                                EGL_NO_CONTEXT,
@@ -131,11 +146,12 @@ public:
                                                NULL, img_attr);
             if (!img) {
                 qWarning() << "eglCreateImageKHR failed";
+                releaseTextures();
                 return textures();
             }
 
             glActiveTexture(GL_TEXTURE0 + i);
-            glBindTexture(GL_TEXTURE_2D, m_hw->textures[i]);
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -149,15 +165,27 @@ public:
             s_eglDestroyImageKHR(eglGetCurrentDisplay(), img);
         }
 
+        m_texturesReady = true;
         return textures();
     }
 
-    QAVHWDevice_VAAPI_DRM_EGLPrivate *m_hw = nullptr;
+private:
+    void releaseTextures() const
+    {
+        if (m_textures[0])
+            glDeleteTextures(2, m_textures);
+        m_textures[0] = 0;
+        m_textures[1] = 0;
+        m_texturesReady = false;
+    }
+
+    mutable GLuint m_textures[2] = {0};
+    mutable bool m_texturesReady = false;
 };
 
 QAVVideoBuffer *QAVHWDevice_VAAPI_DRM_EGL::videoBuffer(const QAVVideoFrame &frame) const
 {
-    return new VideoBuffer_EGL(d_ptr.get(), frame);
+    return new VideoBuffer_EGL(frame);
 }
 
 QT_END_NAMESPACE

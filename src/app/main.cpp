@@ -24,6 +24,8 @@
 #include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPixmap>
+#include <QSize>
 #include <QTextStream>
 #include <QTimer>
 #include <QStringList>
@@ -55,6 +57,28 @@
 #include "MainEntrypoints.h"
 
 namespace {
+
+QIcon applicationWindowIcon()
+{
+#ifdef Q_OS_LINUX
+    const QPixmap source(QStringLiteral(":/icons/app.png"));
+    if (!source.isNull()) {
+        QIcon icon;
+        const int iconSizes[] = {16, 20, 22, 24, 32, 48, 64, 96, 128, 256};
+        for (const int size : iconSizes) {
+            icon.addPixmap(
+                source.scaled(
+                    QSize(size, size),
+                    Qt::KeepAspectRatio,
+                    Qt::SmoothTransformation
+                )
+            );
+        }
+        return icon;
+    }
+#endif
+    return QIcon(QStringLiteral(":/icons/app.png"));
+}
 
 bool wantsCliVideoExport(const QStringList& arguments)
 {
@@ -237,6 +261,50 @@ int main(int argc, char* argv[])
     const bool cliVideoExportRequested = wantsCliVideoExport(rawArgs);
     const bool cliVideoExportWorkerRequested = wantsCliVideoExportWorker(rawArgs);
     const bool forceOpenGlGraphicsApi = cliVideoExportRequested || cliVideoExportWorkerRequested;
+#if defined(Q_OS_LINUX)
+    // QQuickRenderControl adopts the export session's QOpenGLContext. Under
+    // xcb, Qt's default GLX integration produces a context that the Quick RHI
+    // cannot adopt on affected Linux/NVIDIA configurations, while xcb/EGL
+    // works. Keep an explicit user choice, and leave native Wayland export
+    // processes alone.
+    const QString requestedQpaPlatform =
+        qEnvironmentVariable("QT_QPA_PLATFORM").trimmed().toLower();
+    const bool exportUsesXcb =
+        requestedQpaPlatform.startsWith(QStringLiteral("xcb"))
+        || (requestedQpaPlatform.isEmpty()
+            && qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+            && !qEnvironmentVariableIsEmpty("DISPLAY"));
+    const bool guiUsesXcbCompatibility =
+        !forceOpenGlGraphicsApi
+        && requestedQpaPlatform.isEmpty()
+        && !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+        && !qEnvironmentVariableIsEmpty("DISPLAY");
+    if ((exportUsesXcb || guiUsesXcbCompatibility)
+        && qEnvironmentVariableIsEmpty("QT_XCB_GL_INTEGRATION")) {
+        qputenv("QT_XCB_GL_INTEGRATION", QByteArrayLiteral("xcb_egl"));
+    }
+
+    // QuickShell embeds native QWidget surfaces through QWindow::fromWinId(). Qt's
+    // Wayland plugin cannot import those foreign windows, while XWayland/xcb can.
+    // Keep explicit QPA choices and headless/export process modes untouched.
+    if (!cliVideoExportRequested
+        && !cliVideoExportWorkerRequested
+        && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")
+        && !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+        && !qEnvironmentVariableIsEmpty("DISPLAY")) {
+        qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("xcb"));
+
+        // KDE Wayland normally leaves the Qt IM module unset so native clients
+        // can use text-input. Once this process moves to XWayland, honour the
+        // session's XMODIFIERS choice without changing the global session.
+        const QString xModifiers = qEnvironmentVariable("XMODIFIERS").trimmed();
+        if (qEnvironmentVariableIsEmpty("QT_IM_MODULE")
+            && qEnvironmentVariableIsEmpty("QT_IM_MODULES")
+            && xModifiers.contains(QStringLiteral("@im=fcitx"), Qt::CaseInsensitive)) {
+            qputenv("QT_IM_MODULE", QByteArrayLiteral("fcitx"));
+        }
+    }
+#endif
     const QString startupOpenTarget =
         !cliVideoExportRequested && !cliVideoExportWorkerRequested
             ? startupOpenTargetFromArguments(rawArgs)
@@ -276,9 +344,8 @@ int main(int argc, char* argv[])
     }
 
     // (libmpv probe removed in beta20 — the "Phase 4 video source built on
-    // top of this" never landed; chart-preview video backgrounds use Qt's
-    // QMediaPlayer + QVideoSink stack via PreviewStageMediaHost. Shipping
-    // libmpv-2.dll cost ~113 MB to log a single startup version line.)
+    // top of this" never landed; chart-preview video backgrounds use the
+    // QtAVPlayer + QVideoSink stack via PreviewStageMediaHost.)
 
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=before_env_var_parse");
@@ -547,7 +614,7 @@ int main(int argc, char* argv[])
         !miacodePreferencesExistedAtStartup
         || miacodePreferencesSchemaOutdated
         || wantsWelcomeDialog(rawArgs);
-    const QIcon appIcon(QStringLiteral(":/icons/app.png"));
+    const QIcon appIcon = applicationWindowIcon();
 #ifndef Q_OS_MACOS
     app.setWindowIcon(appIcon);
 #endif

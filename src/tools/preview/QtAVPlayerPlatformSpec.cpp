@@ -45,6 +45,8 @@ int main()
         "third_party/QtAVPlayer/src/QtAVPlayer/QtAVPlayer.cmake");
     const QString videoToolbox = sourceFile(
         "third_party/QtAVPlayer/src/QtAVPlayer/qavhwdevice_videotoolbox.mm");
+    const QString vaapiDrm = sourceFile(
+        "third_party/QtAVPlayer/src/QtAVPlayer/qavhwdevice_vaapi_drm_egl.cpp");
     const QString videoFrame = sourceFile(
         "third_party/QtAVPlayer/src/QtAVPlayer/qavvideoframe.cpp");
     const QString backend = sourceFile(
@@ -57,27 +59,33 @@ int main()
         "src/preview/runtime/PreviewSharedD3D11Device.cpp");
     const QString packageMac = sourceFile("scripts/build/package-mac.sh");
 
-    ok &= require(!cmake.isEmpty() && !qtavCmake.isEmpty() && !videoToolbox.isEmpty() && !videoFrame.isEmpty() && !backend.isEmpty() && !playback.isEmpty()
+    ok &= require(!cmake.isEmpty() && !qtavCmake.isEmpty() && !videoToolbox.isEmpty()
+                      && !vaapiDrm.isEmpty() && !videoFrame.isEmpty() && !backend.isEmpty() && !playback.isEmpty()
                       && !diagnostics.isEmpty() && !sharedDevice.isEmpty() && !packageMac.isEmpty(),
                   QStringLiteral("QtAVPlayer platform sources are readable"), err);
 
     ok &= require(cmake.contains(QStringLiteral(
-                      "if (WIN32 OR APPLE)\n    find_package(Qt6 6.8 REQUIRED COMPONENTS MultimediaQuickPrivate)")),
-                  QStringLiteral("QtAVPlayer private Qt Multimedia bridge covers Windows and macOS"), err);
+                      "if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL \"Linux\")\n    find_package(Qt6 6.8 REQUIRED COMPONENTS MultimediaQuickPrivate)")),
+                  QStringLiteral("QtAVPlayer private Qt Multimedia bridge covers all desktop platforms"), err);
     const qsizetype qtavBlock = cmake.indexOf(QStringLiteral("# QtAVPlayer (FFmpeg)"));
     ok &= require(qtavBlock >= 0
-                      && cmake.indexOf(QStringLiteral("if (WIN32 OR APPLE)"), qtavBlock) >= 0,
-                  QStringLiteral("QtAVPlayer CMake integration covers Windows and macOS"), err);
+                      && cmake.indexOf(QStringLiteral("if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL \"Linux\")"), qtavBlock) >= 0,
+                  QStringLiteral("QtAVPlayer CMake integration covers all desktop platforms"), err);
     ok &= require(containsAll(cmake, {
                       QStringLiteral("MIACODE_USE_QTAVPLAYER=1"),
                       QStringLiteral("QT_AVPLAYER_MULTIMEDIA"),
                       QStringLiteral("Qt6::MultimediaQuickPrivate"),
                       QStringLiteral("MIACODE_FFMPEG_DEV_DIR"),
+                      QStringLiteral("PkgConfig::MIACODE_FFMPEG"),
+                      QStringLiteral("QT_AVPLAYER_VA_DRM"),
                   }),
-                  QStringLiteral("both platforms build the QVideoFrame bridge from FFmpeg"), err);
+                  QStringLiteral("all desktop platforms build the QVideoFrame bridge from FFmpeg"), err);
     ok &= require(qtavCmake.contains(QStringLiteral("if(APPLE)"))
                       && qtavCmake.contains(QStringLiteral("qavhwdevice_videotoolbox.mm")),
                   QStringLiteral("QtAVPlayer Apple VideoToolbox source remains enabled"), err);
+    ok &= require(qtavCmake.contains(QStringLiteral("if(QT_AVPLAYER_VA_DRM)"))
+                      && qtavCmake.contains(QStringLiteral("qavhwdevice_vaapi_drm_egl.cpp")),
+                  QStringLiteral("QtAVPlayer Linux VA-API DRM/EGL source remains enabled"), err);
     ok &= require(containsAll(videoToolbox, {
                       QStringLiteral("if (d->pbuf)\n        CVPixelBufferRelease(d->pbuf);"),
                       QStringLiteral("if (m_hw->pbuf)\n            CVPixelBufferRelease(m_hw->pbuf);"),
@@ -125,9 +133,13 @@ int main()
     ok &= require(containsAll(backend, {
                       QStringLiteral("hardware_decoder=d3d11va"),
                       QStringLiteral("hardware_decoder=videotoolbox"),
+                      QStringLiteral("hardware_decoder=vaapi"),
                       QStringLiteral("#elif defined(Q_OS_MACOS)"),
                   }),
-                  QStringLiteral("backend diagnostics identify the active Windows or macOS hardware decoder"), err);
+                  QStringLiteral("backend diagnostics identify each desktop hardware decoder"), err);
+    ok &= require(!backend.contains(QStringLiteral("video_software_fallback"))
+                      && !backend.contains(QStringLiteral("maybeRetryWithSoftwareDecode")),
+                  QStringLiteral("QtAVPlayer keeps the selected decode mode without host fallback"), err);
     ok &= require(diagnostics.contains(QStringLiteral("#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)")),
                   QStringLiteral("D3D11 diagnostics are platform guarded"), err);
     ok &= require(sharedDevice.contains(QStringLiteral("#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)")),
@@ -141,9 +153,8 @@ int main()
         : QString();
     ok &= require(containsAll(commit, {
                       QStringLiteral("lastSeekMs_ = targetMs;\n    player_->seek(targetMs);"),
-                      QStringLiteral("lastSeekMs_ = targetMs;\n    player_->setPosition(targetMs);"),
                   }),
-                  QStringLiteral("prepared playback commit always seeks before starting either backend"), err);
+                  QStringLiteral("prepared playback commit seeks before starting QtAVPlayer"), err);
 
     if (ok) {
         out << "QtAVPlayer platform spec passed." << Qt::endl;

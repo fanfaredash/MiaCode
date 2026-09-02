@@ -8,7 +8,7 @@
 
 | 目录 | 内容 |
 |---|---|
-| `build/` | Windows/macOS 构建与打包入口 |
+| `build/` | Windows/macOS/Linux 构建与打包入口 |
 | `debug/` | Windows/macOS 调试/诊断启动入口 |
 | `ffmpeg/` | FFmpeg 运行时、开发 SDK 获取脚本，以及 decode-only 裁剪工具链 |
 | `assets/` | 资产生成和字体裁剪辅助脚本 |
@@ -47,12 +47,26 @@ macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK。先运行
 `third_party/ffmpeg/macos/dev/` 固定 FFmpeg 6 SDK；打包仅复制其中必需的六个 dylib，
 不会查找或复制 Homebrew 依赖。也可用 `MIACODE_FFMPEG_DEV_DIR` 显式指定兼容 SDK。
 
+Linux AppImage（x86_64、Release、默认并发 8，需要 Docker 或 Podman）：
+
+```bash
+bash scripts/build/build-linux.sh
+```
+
+脚本每次清空 `dist/`，然后生成
+`dist/MiaCode-v<version>-linux-x86_64/` 和同名 `tar.gz`。版本目录内的
+`MiaCode.AppImage` 包含 Qt、C++ 运行库、XCB 输入法插件、固定版本 FFmpeg 和其他
+运行时文件；README、许可证和声明文件与 AppImage 并列放置。脚本自动选择 Docker
+或 Podman，也可通过 `MIACODE_CONTAINER_ENGINE` 指定。构建使用 Ubuntu 22.04 /
+Qt 6.11.1 基线，增量编译、打包中间文件和下载缓存统一放在 `build/`。运行时使用
+X11/XWayland，并依赖系统的 glibc 2.35+、图形驱动和 X11 运行库。
+
 ## 其他脚本
 
 - `debug/Start_MiaCode_Debug.bat`：发布包内唯一 Windows 调试启动入口。
 - `debug/Start_MiaCode_Debug.command`：发布包根目录内的 macOS 调试启动入口；双击后以 `--debug` 启动 `MiaCode.app`，并将日志写入发布包根目录的 `logs/`。
 - `debug/Start_MiaCode_SoftwareVideoDecode.bat`、`debug/Start_MiaCode_QtPluginDiag.bat`：公开保留的支持诊断入口，不随 Windows 发布包分发。
-- `ffmpeg/ensure-windows-ffmpeg.ps1`、`ffmpeg/ensure-macos-ffmpeg.sh`：获取导出用独立 `ffmpeg`。
+- `ffmpeg/ensure-windows-ffmpeg.ps1`、`ffmpeg/ensure-macos-ffmpeg.sh`、`ffmpeg/ensure-linux-ffmpeg.sh`：获取导出用独立 `ffmpeg`。
 - `ffmpeg/ensure-macos-ffmpeg-dev.sh`：构建 macOS QtAVPlayer 预览解码用的固定 FFmpeg 6 SDK。
 - `ffmpeg/ensure-windows-ffmpeg-dev.ps1`：获取 Windows QtAVPlayer 预览解码开发 SDK。
 - `ffmpeg/trim/`：构建 Windows decode-only FFmpeg dev SDK 的裁剪工具链。

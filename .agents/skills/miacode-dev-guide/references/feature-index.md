@@ -8,6 +8,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - GUI entry: `main`, `setWindowsAppUserModelId`, `wantsQuickShellBeta`,
   `startupOpenTargetFromArguments` (Qt startup, theme/font, window launch, startup-timing log,
   `--quick-shell-beta` routing, file/folder drag-open).
+- Linux GUI startup defaults to the `xcb` QPA plugin when running inside a Wayland session with
+  XWayland available. QuickShell embeds native QWidget surfaces through `QWindow::fromWinId()`,
+  which the Wayland QPA plugin cannot import. An explicit `QT_QPA_PLATFORM` value wins, and CLI
+  export / export-worker processes keep their existing platform selection. Linux export processes
+  using xcb select `QT_XCB_GL_INTEGRATION=xcb_egl` unless the user already chose an xcb GL
+  integration: the offscreen `QQuickRenderControl` session can adopt the EGL context, whereas the
+  default GLX context fails initialization on affected NVIDIA systems. When the automatic
+  XWayland GUI fallback sees `XMODIFIERS=@im=fcitx`, it also selects the Fcitx Qt input context
+  unless the user already set `QT_IM_MODULE` or `QT_IM_MODULES`; GTK input-module state is never
+  changed.
 - First-run welcome / initial-config dialog: `wantsWelcomeDialog` (`--welcome` flag) + first-run
   probe `QFile::exists(UiText::preferencesFilePath())` **OR** a schema-outdated probe
   `UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema()` — both captured right
@@ -59,7 +69,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   same deferred lambda once the build returns.
 - QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
   `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
-  `qml/QuickShellMain.qml`).
+  `qml/QuickShellMain.qml`). The single application `QMenuBar` is owned explicitly by
+  `MainWindow` and exposed through `QuickShellNativeContentProvider::shellMenuBarWidget()`;
+  the hidden `QMainWindow` layout must not own a menu bar that QuickShell reparents into its
+  top-chrome surface.
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`
@@ -376,13 +389,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   stage-background setters (`setStageMediaAvailable`, `setStageMediaPresentationMode`,
   `setExternalStageMedia*`). Verify exact widget-shell vs quickshell routing in
   `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
-  - **Video decode backend:** on **Windows and macOS** the host decodes PV/BG via **QtAVPlayer (FFmpeg)**,
-    not `QMediaPlayer` — guarded by the `MIACODE_USE_QTAVPLAYER` build macro (CMake-defined on
-    `WIN32 OR APPLE`; other platforms keep the `QMediaPlayer` path under `#elif defined(HAVE_QT_MULTIMEDIA)`).
-    Windows hardware decode is D3D11VA; macOS uses VideoToolbox with QtAVPlayer's Metal bridge.
+  - **Video decode backend:** every desktop platform decodes PV/BG via **QtAVPlayer (FFmpeg)**,
+    guarded by the `MIACODE_USE_QTAVPLAYER` build macro. Windows hardware decode is D3D11VA,
+    macOS uses VideoToolbox with the Metal bridge, and Linux uses VA-API through DRM/EGL.
     QtAVPlayer source is vendored in `third_party/QtAVPlayer/`; it links the FFmpeg dev SDK selected by
-    `MIACODE_FFMPEG_DEV_DIR` (Windows defaults to `third_party/ffmpeg/windows/dev/`; macOS package builds
-    resolve Homebrew `ffmpeg@6`/`ffmpeg` when no explicit SDK is supplied). Decoded frames are *pushed* into the QML `VideoOutput`'s
+    `MIACODE_FFMPEG_DEV_DIR` on Windows and macOS; Linux resolves its development libraries through
+    pkg-config. Decoded frames are *pushed* into the QML `VideoOutput`'s
     `QVideoSink` (`handleDecodedVideoFrame`) rather than observed; `setSpeed` (not `setPlaybackRate`)
     + `seek` drive playback, and the paused-seek / prepared-start acks settle on frame `pts`.
     The public method/signal contract is unchanged, so `MainWindow.*` callers don't change.
@@ -425,7 +437,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `BASS_GetDevice` / `BASS_Init` / final `BASS_Free` for preview, waveform, and export owners;
   existing devices are borrowed and never freed by the lease.
 - Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}`
-  (Windows/macOS, real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
+  (Windows/macOS/Linux, real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
   `MiniaudioPreviewAudioBackend.{h,cpp}` (no-BASS compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
@@ -600,8 +612,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the SFX prepared timeline (the resume hand-off `resetCursor(0,false)` would skip the downbeat).
   Seeded from `installExportPreviewAuditionScene` (`clockCountFromDocument`+`clockBpmForChart`),
   cleared in `teardownExportPreviewAuditionScene`. ⚠ **Both backends must load a `"clock"` sample
-  for `audition("clock")` to make sound** — added to `BassPreviewAudioBackend` (Windows:
-  `clockSample_`, load+reset+`applySampleLevels`); the miniaudio (non-Windows) backend gracefully
+  for `audition("clock")` to make sound** — added to `BassPreviewAudioBackend` (Windows/macOS/Linux:
+  `clockSample_`, load+reset+`applySampleLevels`); the miniaudio compatibility backend gracefully
   no-ops (`sampleForKind` miss → silent count-in there). `clock.wav` ships in `assets/SFX/`.
   ⚠⚠ **The on-screen preview transport (default shell too) is the QML
   `QuickShellPreviewTransport.qml`** — its slider was hardcoded `from: 0` (the real clamp) — NOT the

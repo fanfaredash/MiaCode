@@ -350,8 +350,9 @@ void QuickShellStyleBridge::refreshFromBackend()
 
         if (QMainWindow* mainWindow = qobject_cast<QMainWindow*>(contentProvider_->shellWindowWidget());
             mainWindow != nullptr) {
+            QMenuBar* mainMenuBar = contentProvider_->shellMenuBarWidget();
             const int menuHeight =
-                mainWindow->menuBar() != nullptr ? qMax(24, mainWindow->menuBar()->sizeHint().height()) : 30;
+                mainMenuBar != nullptr ? qMax(24, mainMenuBar->sizeHint().height()) : 30;
             QToolBar* mainToolBar = mainWindow->findChild<QToolBar*>();
             const int toolBarHeight =
                 mainToolBar != nullptr ? qMax(28, mainToolBar->sizeHint().height()) : 32;

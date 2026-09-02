@@ -483,9 +483,7 @@ private:
     QVideoFrameFormat m_videoFormat;
     QVideoFrame::MapMode m_mode = QVideoFrame::NotMapped;
     QVariant m_textures;
-#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
     QRhi *m_rhi = nullptr;
-#endif
 };
 
 #endif // #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -524,6 +522,8 @@ QAVVideoFrame::operator QVideoFrame() const
 #endif
             break;
         case AV_PIX_FMT_VAAPI:
+            format = VideoFrame::Format_NV12;
+            break;
         case AV_PIX_FMT_VDPAU:
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
             format = VideoFrame::Format_BGRA32;
