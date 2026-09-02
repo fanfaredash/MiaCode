@@ -13,7 +13,7 @@ Rectangle {
     required property var latency
     required property var pages
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
     clip: true
 
     onVisibleChanged: {

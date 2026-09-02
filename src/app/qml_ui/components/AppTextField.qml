@@ -23,7 +23,7 @@ TextField {
         implicitHeight: Theme.controlMinHeight
         radius: Theme.controlRadius
         color: root.enabled
-               ? Theme.surfaceColor("input", Theme.colors.background.editor)
+               ? Theme.surfaceColor("input", Theme.colors.background.surface)
                : Theme.colors.background.elevated
         border.width: Theme.controlBorderWidth
         border.color: !root.enabled ? Theme.colors.border.normal

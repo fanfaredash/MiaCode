@@ -11,7 +11,7 @@ Rectangle {
     property int cursorColumn: 1
 
     implicitHeight: 23
-    color: Theme.surfaceColor("status", Theme.colors.background.surface)
+    color: Theme.surfaceColor("status", Theme.colors.background.panel)
 
     Rectangle {
         anchors.left: parent.left

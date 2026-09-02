@@ -13,11 +13,14 @@ Rectangle {
 
     readonly property int minimumTabWidth: 100
     readonly property int preferredTabWidth: 160
+    readonly property int tabSpacing: 8
     readonly property int tabCount: viewState.openEditorTabs.length
-    readonly property bool tabsOverflow: tabCount * minimumTabWidth > width
+    readonly property real availableTabWidth: width - 2 * (Theme.panelPadding - Theme.chromeInsetX)
+        - Math.max(0, tabCount - 1) * (tabSpacing - 2 * Theme.chromeInsetX)
+    readonly property bool tabsOverflow: tabCount * minimumTabWidth > availableTabWidth
     readonly property real tabWidth: tabCount === 0 ? preferredTabWidth
         : tabsOverflow ? minimumTabWidth
-        : Math.min(preferredTabWidth, width / tabCount)
+        : Math.min(preferredTabWidth, availableTabWidth / tabCount)
 
     function difficultyData(id) {
         const difficulties = root.documentSession.difficulties
@@ -103,13 +106,15 @@ Rectangle {
     }
 
     implicitHeight: 34
-    color: Theme.surfaceColor("editorHeader", Theme.colors.background.surface)
+    color: Theme.surfaceColor("editorHeader", Theme.colors.background.panel)
 
     Flickable {
         id: tabViewport
 
         anchors.left: parent.left
         anchors.right: root.tabsOverflow ? overflowButton.left : parent.right
+        anchors.leftMargin: Theme.panelPadding - Theme.chromeInsetX
+        anchors.rightMargin: Theme.panelPadding - Theme.chromeInsetX
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         contentWidth: tabRow.width
@@ -128,6 +133,7 @@ Rectangle {
 
             width: childrenRect.width
             height: parent.height
+            spacing: root.tabSpacing - 2 * Theme.chromeInsetX
 
             Repeater {
                 id: tabRepeater
@@ -250,6 +256,7 @@ Rectangle {
         id: overflowButton
 
         anchors.right: parent.right
+        anchors.rightMargin: Theme.panelPadding - horizontalInset
         anchors.top: parent.top
         width: 30
         height: parent.height

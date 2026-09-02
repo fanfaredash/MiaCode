@@ -15,13 +15,32 @@ Rectangle {
     required property var commands
     required property var timelineSession
     required property var previewSession
-    property real zoomMenuClosedAt: 0
-    property real brightnessMenuClosedAt: 0
     signal analysisRowActivated(int difficultyId, var revision, int line, int column, int endColumn, double second)
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
     clip: true
     readonly property int contentTopMargin: 0
+
+    // 时间轴外壳颜色的唯一来源是 Theme.qml 的 colors.timeline 分组。
+    // 桥接对象必须先于 TimelineQuickItem 创建，颜色才会在首次绘制前进入
+    // C++ 快照；后续若给该分组换值，这里会随绑定自动重新推送。
+    TimelineThemeBridge {
+        id: timelineTheme
+        windowColor: Theme.colors.timeline.window
+        headerColor: Theme.colors.timeline.header
+        sidebarColor: Theme.colors.timeline.sidebar
+        baseColor: Theme.colors.timeline.base
+        borderColor: Theme.colors.timeline.border
+        axisColor: Theme.colors.timeline.axis
+        gridMajorColor: Theme.colors.timeline.gridMajor
+        gridSubdivisionColor: Theme.colors.timeline.gridSubdivision
+        gridMinorColor: Theme.colors.timeline.gridMinor
+        laneEvenColor: Theme.colors.timeline.laneEven
+        laneOddColor: Theme.colors.timeline.laneOdd
+        labelColor: Theme.colors.timeline.label
+        textSecondaryColor: Theme.colors.timeline.textSecondary
+        waveStrokeColor: Theme.colors.timeline.waveStroke
+    }
 
     BottomTabBar {
         id: tabs
@@ -39,16 +58,14 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
-        anchors.topMargin: root.contentTopMargin
         anchors.bottom: parent.bottom
         visible: root.timelineSession.currentTabId === "timeline"
         enabled: visible
         stateBridge: root.timelineSession.stateBridge
-        // Keep header labels and markers clear of the QML controls.
-        headerLeftLimit: zoomButton.x + zoomButton.width + 2
-        headerRightLimit: Math.max(0, brightnessButton.x - 2)
-        headerMarkerLeftLimit: zoomButton.x + zoomButton.width + 2
-        headerMarkerRightLimit: Math.max(0, brightnessButton.x - 2)
+        headerLeftLimit: zoomButton.x + zoomButton.width + Theme.panelPadding
+        headerRightLimit: brightnessButton.x - Theme.panelPadding
+        headerMarkerLeftLimit: headerLeftLimit
+        headerMarkerRightLimit: headerRightLimit
         onHeaderNavigateRequested: second => root.timelineSession.headerNavigate(second)
         onTimelineWheelNavigateRequested: second => root.timelineSession.wheelNavigate(second)
         onCenterNavigateRequested: second => root.timelineSession.centerNavigate(second)
@@ -62,50 +79,46 @@ Rectangle {
 
     AppDropDownButton {
         id: zoomButton
+        compact: true
 
-        x: Math.round(tabs.leadingInkX)
-        y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
-        height: Math.min(implicitHeight, Math.max(1, timelineItem.timelineTop))
+        x: Theme.panelPadding - Theme.chromeInsetX
+        y: timelineItem.y + (timelineItem.timelineTop - height) / 2
+        height: implicitHeight
         visible: timelineItem.visible
         text: UiText.text("%1%").arg(Math.round(root.timelineSession.stateBridge
             ? root.timelineSession.stateBridge.zoomScale * 100
             : 50))
         sizeToLabels: zoomMenu.zoomLabels
         tooltip: UiText.text("时间轴缩放")
-        expanded: zoomMenu.visible
+        expanded: zoomMenu.active
         Accessible.description: UiText.text("打开时间轴缩放预设")
         onClicked: {
-            if (zoomMenu.visible) {
+            if (zoomMenu.active) {
                 zoomMenu.close()
                 return
             }
-            if (Date.now() - root.zoomMenuClosedAt < 200)
-                return
             zoomMenu.openAt(zoomButton)
         }
     }
 
     IconButton {
         id: brightnessButton
+        compact: true
 
-        width: Math.max(28, Math.round(28 * timelineItem.headerScale))
-        height: Math.max(24, Math.round(24 * timelineItem.headerScale))
-        x: Math.round(tabs.trailingContentRight - (width + iconWidth) / 2)
-        y: timelineItem.y + Math.max(0, (timelineItem.timelineTop - height) / 2)
+        width: implicitWidth
+        height: implicitHeight
+        x: root.width - Theme.panelPadding - width + horizontalInset
+        y: timelineItem.y + (timelineItem.timelineTop - height) / 2
         visible: timelineItem.visible
         iconSource: Qt.resolvedUrl("icons/settings.svg")
-        iconWidth: Math.max(16, Math.round(16 * timelineItem.headerScale))
-        iconHeight: iconWidth
         tooltip: UiText.text("时间轴亮度")
-        active: brightnessMenu.visible
+        active: brightnessMenu.active
         Accessible.description: UiText.text("打开波形和小节线亮度设置")
         onClicked: {
-            if (brightnessMenu.visible) {
+            if (brightnessMenu.active) {
                 brightnessMenu.close()
                 return
             }
-            if (Date.now() - root.brightnessMenuClosedAt < 200)
-                return
             brightnessMenu.openAt(brightnessButton)
         }
     }
@@ -113,13 +126,11 @@ Rectangle {
     TimelineZoomMenu {
         id: zoomMenu
         stateBridge: root.timelineSession.stateBridge
-        onClosed: root.zoomMenuClosedAt = Date.now()
     }
 
     TimelineBrightnessMenu {
         id: brightnessMenu
         stateBridge: root.timelineSession.stateBridge
-        onClosed: root.brightnessMenuClosedAt = Date.now()
     }
 
     Item {
@@ -174,7 +185,6 @@ Rectangle {
                 required property var modelData
                 width: ListView.view.width
                 height: 34
-                tone: "hover"
                 onClicked: root.analysisSession.activateRow(modelData)
 
                 contentItem: RowLayout {
@@ -235,7 +245,6 @@ Rectangle {
                 required property var modelData
                 width: ListView.view.width
                 height: 42
-                tone: "hover"
                 onClicked: root.analysisSession.activateRow(modelData)
                 contentItem: ColumnLayout {
                     spacing: 2

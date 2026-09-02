@@ -14,24 +14,25 @@ Item {
     property string tooltip
     property bool active: false
     property bool panelTab: false
+    property bool compact: false
     property bool closable: false
     property int count: -1
     property real preferredTabWidth: 160
     readonly property bool hovered: tabButton.hovered || closeButton.hovered
-    // Ink left of the title, mapped into this tab. Header controls bind to it
-    // instead of a second guessed inset.
-    readonly property real contentInkLeft: {
-        const inset = Math.max(0, (label.width - label.contentWidth) / 2)
-        return label.mapToItem(root, inset, 0).x
-    }
 
     signal clicked()
     signal closeRequested()
 
-    implicitHeight: panelTab ? 28 : 34
+    implicitHeight: compact ? Theme.compactControlHeight : panelTab ? 28 : 34
     implicitWidth: panelTab
         ? contentRow.implicitWidth + contentRow.anchors.leftMargin + contentRow.anchors.rightMargin
         : preferredTabWidth
+
+    FontMetrics {
+        id: tabMetrics
+        font.family: Theme.uiFont
+        font.pixelSize: root.panelTab ? Theme.secondaryFontSize : Theme.uiFontSize
+    }
 
     AbstractButton {
         id: tabButton
@@ -58,8 +59,8 @@ Item {
                 id: contentRow
 
                 anchors.fill: parent
-                anchors.leftMargin: root.panelTab ? 12 : 10
-                anchors.rightMargin: root.panelTab ? 12 : 5
+                anchors.leftMargin: root.compact ? 8 : root.panelTab ? 12 : 10
+                anchors.rightMargin: root.compact ? 8 : root.panelTab ? 12 : 5
                 spacing: 6
 
                 DifficultySwatch {
@@ -89,7 +90,7 @@ Item {
                     elide: Text.ElideRight
                     color: root.active ? Theme.colors.text.active : Theme.colors.text.secondary
                     font.family: Theme.uiFont
-                    font.pixelSize: root.panelTab ? Theme.secondaryFontSize : Theme.uiFontSize
+                    font.pixelSize: root.compact ? Theme.compactFontSize : Theme.secondaryFontSize
                     horizontalAlignment: Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -148,7 +149,7 @@ Item {
                     background: HoverChrome {
                         hovered: closeButton.hovered
                         pressed: closeButton.down
-                        tone: "icon"
+                        focused: closeButton.visualFocus
                     }
                     Tooltip {
                         visible: closeButton.hovered
@@ -158,63 +159,12 @@ Item {
             }
         }
 
-        background: Item {
-            // Document tabs: idle/active sheet; hover uses rounded HoverChrome
-            // (active tab keeps full-bleed editor fill for adjacent tiling).
-            Rectangle {
-                anchors.fill: parent
-                color: {
-                    if (root.panelTab)
-                        return Theme.surfaceColor("panel", Theme.colors.background.surface)
-                    if (root.active)
-                        return Theme.surfaceColor("editorHeader", Theme.colors.background.editor)
-                    return Theme.surfaceColor("editorHeader", Theme.colors.background.surface)
-                }
-            }
-
-            HoverChrome {
-                anchors.fill: parent
-                margins: root.panelTab ? 2 : -1
-                visible: root.hovered && (!root.active || root.panelTab)
-                hovered: root.hovered
-                tone: "hover"
-            }
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                width: 1
-                visible: !root.panelTab
-                color: Theme.colors.border.normal
-            }
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: 1
-                visible: root.active && !root.panelTab
-                color: Theme.colors.accent.primary
-            }
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 1
-                visible: tabButton.activeFocus
-                color: Theme.colors.accent.focus
-            }
-
-            Rectangle {
-                anchors.bottom: parent.bottom
-                x: root.contentInkLeft
-                width: contentRow.implicitWidth
-                height: 1
-                visible: root.active && root.panelTab
-                color: Theme.colors.accent.primary
-            }
+        background: HoverChrome {
+            contentHeight: Math.ceil(tabMetrics.height)
+            selected: root.active
+            hovered: tabButton.hovered && !closeButton.hovered
+            pressed: tabButton.down
+            focused: tabButton.visualFocus
         }
     }
 

@@ -4,11 +4,9 @@
 #include <QQuickWindow>
 #include <QSGClipNode>
 #include <QSGNode>
-#include <QSGSimpleTextureNode>
 #include <QSGTransformNode>
 
 #include "timeline/quick/TimelineQuickLayerUtils.h"
-#include "timeline/quick/TimelineQuickTextureCache.h"
 
 namespace {
 
@@ -87,10 +85,8 @@ bool headerSlotsValid(TimelineQuickHeaderRootNode* root)
 QSGNode* TimelineQuickHeaderLayer::updateNode(
     QSGNode* oldNode,
     const miacode::timeline::TimelineSceneState& state,
-    QQuickWindow* window,
-    TimelineQuickTextureCache* textures) const
+    QQuickWindow* window) const
 {
-    Q_UNUSED(window);
     auto* root = dynamic_cast<TimelineQuickHeaderRootNode*>(oldNode);
     if (root == nullptr) {
         delete oldNode;
@@ -154,17 +150,8 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
     }
     if (appearanceChanged || layoutChanged || root->headerRevision != state.headerRevision) {
         clearChildren(headerContentRoot);
-        if (textures != nullptr) {
-            for (const auto& label : state.headerLabels) {
-                const TimelineQuickTextureHandle handle = textures->textTexture(label);
-                if (handle.texture == nullptr) {
-                    continue;
-                }
-                auto* node = new QSGSimpleTextureNode();
-                node->setTexture(handle.texture);
-                node->setRect(QRectF(label.topLeft, handle.logicalSize));
-                headerContentRoot->appendChildNode(node);
-            }
+        for (const auto& label : state.headerLabels) {
+            headerContentRoot->appendChildNode(buildTimelineTextNode(window, label));
         }
         root->headerRevision = state.headerRevision;
     }

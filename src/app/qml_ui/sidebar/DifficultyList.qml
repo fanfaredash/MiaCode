@@ -37,7 +37,6 @@ Column {
             anchors.verticalCenter: parent.verticalCenter
             height: parent.height
             leftPadding: 8
-            tone: "hover"
             onClicked: {
                 root.viewState.difficultySectionExpanded
                     = !root.viewState.difficultySectionExpanded
@@ -199,17 +198,6 @@ Column {
                     textLeftPadding: 38
                     Accessible.name: UiText.text("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
 
-                    Rectangle {
-                        x: 13
-                        y: Theme.chromeInsetY
-                        width: 1
-                        height: Math.max(0, bookmarkRow.height - Theme.chromeInsetY * 2)
-                        color: {
-                            const guide = Qt.color(Theme.colors.text.secondary)
-                            return Qt.rgba(guide.r, guide.g, guide.b,
-                                           Theme.darkTheme ? 0.36 : 0.32)
-                        }
-                    }
 
                     contentItem: Item {
                         Rectangle {
@@ -281,6 +269,9 @@ Column {
 
     Dialog {
         id: removeDifficultyDialog
+
+        enter: FadeTransition {}
+        exit: FadeTransition { appearing: false }
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         parent: Overlay.overlay

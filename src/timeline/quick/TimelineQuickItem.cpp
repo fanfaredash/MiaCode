@@ -1069,11 +1069,6 @@ int TimelineQuickItem::timelineTop() const
     return cachedTimelineTop_;
 }
 
-qreal TimelineQuickItem::headerScale() const
-{
-    return qBound<qreal>(0.75, static_cast<qreal>(cachedTimelineTop_) / 34.0, 1.0);
-}
-
 bool TimelineQuickItem::isReady() const
 {
     return ready_;
@@ -1497,7 +1492,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         return gridLayer_->updateNode(oldChild, state, window(), textures_.get());
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
-        return headerLayer_->updateNode(oldChild, state, window(), textures_.get());
+        return headerLayer_->updateNode(oldChild, state, window());
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return gridLinesLayer_->updateNode(oldChild, state, window());
@@ -1705,7 +1700,7 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     const miacode::timeline::TimelineSceneState state = currentSceneState();
     const double clickSecond = clampSceneSecond(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, event->position().x()));
-    // Clickable header shares timelineTop with the painted header and first lane.
+    // The number strip is the timeline's navigation area.
     const QRectF headerRect(
         state.timelineLeft,
         0.0,

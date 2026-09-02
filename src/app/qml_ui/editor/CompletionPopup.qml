@@ -6,7 +6,7 @@ import MiaCode.UI
 // SourceEditor routes ↑ ↓ Tab Enter Esc through the controller — so this popup
 // is a pure projection of the controller session and never grabs input. Its job
 // is to show *which* candidate those keys are acting on.
-Popup {
+AppDropdownPanel {
     id: root
 
     required property var editor
@@ -98,13 +98,6 @@ Popup {
         function onHeightChanged() { root.updateAnchor() }
     }
 
-    background: Rectangle {
-        radius: Theme.controlRadius
-        color: Theme.colors.background.elevated
-        border.width: Theme.controlBorderWidth
-        border.color: Theme.colors.border.normal
-    }
-
     contentItem: ListView {
         id: candidateList
         model: root.controller.completionCandidates
@@ -123,6 +116,7 @@ Popup {
         }
 
         delegate: ChromeRow {
+            stateColors: Theme.colors.popupState
             id: candidateRow
 
             // Declaring modelData as a required property switches the whole

@@ -8,6 +8,9 @@ import MiaCode.UI
 // so this dialog owns no result UI of its own.
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     required property var mediaTools

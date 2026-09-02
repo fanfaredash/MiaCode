@@ -7,6 +7,9 @@ import MiaCode.UI
 // leaves the actual transform to the caller — the dialog owns no document state.
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     // Human-readable description of what will be normalized (whole chart, or a

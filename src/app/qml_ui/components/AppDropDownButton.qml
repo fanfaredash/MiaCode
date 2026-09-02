@@ -7,6 +7,7 @@ AbstractButton {
     id: root
 
     property bool expanded: false
+    property bool compact: false
     property string tooltip
     property var sizeToLabels: []
 
@@ -14,10 +15,12 @@ AbstractButton {
     font.pixelSize: Theme.captionFontSize
     topPadding: 0
     bottomPadding: 0
-    leftPadding: 8
-    rightPadding: 8
+    leftPadding: compact ? 6 : 8
+    rightPadding: compact ? 6 : 8
     implicitWidth: leftPadding + rightPadding + root.longestLabelWidth + 6 + root.chevronSize
-    implicitHeight: 22
+    implicitHeight: compact ? Theme.compactControlHeight : Math.max(Theme.controlMinHeight,
+                             Math.max(label.implicitHeight, chevronSize)
+                             + 2 * (Theme.chromePadding + Theme.chromeInsetY))
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
     Accessible.name: root.tooltip.length > 0 ? root.tooltip : root.text
@@ -66,6 +69,7 @@ AbstractButton {
 
     contentItem: Item {
         Text {
+            id: label
             anchors.left: parent.left
             anchors.right: chevron.left
             anchors.rightMargin: 6
@@ -90,17 +94,13 @@ AbstractButton {
         }
     }
 
-    background: Rectangle {
-        radius: Theme.itemRadius
-        color: root.down || root.expanded
-            ? Theme.colors.state.pressed
-            : root.hovered
-                ? Theme.colors.state.hover
-                : Theme.surfaceColor("input", Theme.colors.background.elevated)
-        border.width: Theme.controlBorderWidth
-        border.color: root.visualFocus || root.expanded || root.hovered
-            ? Theme.colors.accent.primary
-            : Theme.colors.border.control
+    background: HoverChrome {
+        contentHeight: Math.max(label.implicitHeight, root.chevronSize)
+        baseColor: Theme.surfaceColor("input", Theme.colors.background.elevated)
+        selected: root.expanded
+        hovered: root.hovered
+        pressed: root.down
+        focused: root.visualFocus
     }
 
     Tooltip {

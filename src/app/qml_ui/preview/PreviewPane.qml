@@ -14,7 +14,6 @@ Rectangle {
     // exactly one PreviewSurface may subscribe to the runtime at a time. The
     // compact and fullscreen owners use the same rule.
     property bool surfaceActive: true
-    property real renderMenuClosedAt: 0
     signal fullscreenRequested()
 
     // Export page still uses the backend ratio. Edit mode defaults to 1:1;
@@ -28,7 +27,7 @@ Rectangle {
         return Math.max(1.0, (ratio > 0 && isFinite(ratio)) ? ratio : 1.0)
     }
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
     clip: true
 
     function fittedFrameWidth(hostWidth, hostHeight) {
@@ -53,17 +52,15 @@ Rectangle {
         ChromeRow {
             id: renderModeButton
             implicitWidth: renderModeLabelText.implicitWidth + leftPadding + rightPadding
-            tone: "icon"
+            selected: renderModeMenu.active
             focusPolicy: Qt.TabFocus
             Accessible.name: root.previewSession.renderModeLabel
             Accessible.description: UiText.text("打开预览渲染模式菜单")
             onClicked: {
-                if (renderModeMenu.visible) {
+                if (renderModeMenu.active) {
                     renderModeMenu.close()
                     return
                 }
-                if (Date.now() - root.renderMenuClosedAt < 200)
-                    return
                 renderModeMenu.openAt(renderModeButton)
             }
 
@@ -71,7 +68,7 @@ Rectangle {
                 id: renderModeLabelText
                 text: root.previewSession.renderModeLabel
                 color: !renderModeButton.enabled ? Theme.colors.text.disabled
-                     : (renderModeButton.hovered || renderModeButton.down) ? Theme.colors.text.active
+                     : (renderModeButton.selected || renderModeButton.hovered || renderModeButton.visualFocus) ? Theme.colors.text.active
                      : Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize
@@ -85,7 +82,6 @@ Rectangle {
     PreviewRenderModeMenu {
         id: renderModeMenu
         previewSession: root.previewSession
-        onClosed: root.renderMenuClosedAt = Date.now()
     }
 
     Item {

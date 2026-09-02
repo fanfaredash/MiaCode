@@ -35,7 +35,6 @@ class TimelineQuickItem : public QQuickItem
     Q_PROPERTY(bool viewportLockEnabled READ viewportLockEnabled WRITE setViewportLockEnabled NOTIFY viewportLockEnabledChanged)
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
     Q_PROPERTY(int timelineTop READ timelineTop NOTIFY sceneMetricsChanged)
-    Q_PROPERTY(qreal headerScale READ headerScale NOTIFY sceneMetricsChanged)
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)
 
 public:
@@ -64,7 +63,6 @@ public:
     bool followProgressEnabled() const;
     void setFollowProgressEnabled(bool enabled);
     int timelineTop() const;
-    qreal headerScale() const;
     bool isReady() const;
 
     Q_INVOKABLE void cycleZoomPreset();

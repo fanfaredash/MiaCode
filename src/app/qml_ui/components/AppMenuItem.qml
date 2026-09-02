@@ -8,13 +8,15 @@ import MiaCode.UI
 MenuItem {
     id: root
 
-    implicitHeight: 28
+    property bool compact: false
+
+    implicitHeight: compact ? Theme.compactControlHeight : 28
     leftPadding: 12
     rightPadding: subMenu ? 22 : 16
     topPadding: 3
     bottomPadding: 3
     font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
+    font.pixelSize: compact ? Theme.compactFontSize : Theme.uiFontSize
     // Where the full identity goes when the label is deliberately short — the
     // recent-charts and backup lists show a folder name or a timestamp, and the
     // path they stand for is too wide to be a menu row.
@@ -87,10 +89,11 @@ MenuItem {
     }
 
     background: HoverChrome {
+        stateColors: Theme.colors.popupState
         selected: root.checked
-        hovered: root.highlighted
+        hovered: root.highlighted || root.hovered
         pressed: root.down
-        tone: "nav"
+        focused: root.visualFocus
     }
 
     indicator: Text {

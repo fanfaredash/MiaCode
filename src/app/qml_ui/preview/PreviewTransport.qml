@@ -17,7 +17,7 @@ Rectangle {
 
 
     implicitHeight: 63
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
 
     Rectangle {
         anchors.left: parent.left
@@ -42,8 +42,6 @@ Rectangle {
         return Math.min(0, bound)
     }
     property bool scrubActive: false
-    property real rateMenuClosedAt: 0
-    property real canvasMenuClosedAt: 0
     property real activeScrubSecond: root.previewSession.positionSeconds
     readonly property real displayedSeconds: root.scrubActive
         ? root.activeScrubSecond
@@ -154,15 +152,13 @@ Rectangle {
             text: UiText.text("%1x").arg(root.previewSession.rate)
             sizeToLabels: rateMenu.rateLabels
             tooltip: UiText.text("播放速度")
-            expanded: rateMenu.visible
+            expanded: rateMenu.active
             Accessible.description: UiText.text("打开播放速度预设")
             onClicked: {
-                if (rateMenu.visible) {
+                if (rateMenu.active) {
                     rateMenu.close()
                     return
                 }
-                if (Date.now() - root.rateMenuClosedAt < 200)
-                    return
                 rateMenu.openAt(rateButton)
             }
         }
@@ -172,17 +168,15 @@ Rectangle {
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             visible: !root.exportPageActive
-            active: canvasMenu.visible
+            active: canvasMenu.active
             iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
             tooltip: UiText.text("预览画布")
             Accessible.description: UiText.text("打开预览画布菜单")
             onClicked: {
-                if (canvasMenu.visible) {
+                if (canvasMenu.active) {
                     canvasMenu.close()
                     return
                 }
-                if (Date.now() - root.canvasMenuClosedAt < 200)
-                    return
                 canvasMenu.openAt(canvasMenuButton)
             }
         }
@@ -191,13 +185,11 @@ Rectangle {
     PreviewRateMenu {
         id: rateMenu
         previewSession: root.previewSession
-        onClosed: root.rateMenuClosedAt = Date.now()
     }
 
     PreviewCanvasMenu {
         id: canvasMenu
         preferences: root.preferences
-        onClosed: root.canvasMenuClosedAt = Date.now()
         onFullscreenRequested: root.fullscreenRequested()
     }
 }

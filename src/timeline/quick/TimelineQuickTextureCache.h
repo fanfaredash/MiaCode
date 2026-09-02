@@ -76,7 +76,6 @@ public:
     void setSkinDirectory(const QString& skinDirectory);
     QSGTexture* textureForKey(const QString& key, const QImage& image);
     QSGTexture* textureForPixmapKey(const QString& key, const QPixmap& pixmap);
-    TimelineQuickTextureHandle textTexture(const miacode::timeline::TimelineSceneTextLabel& label);
     QSGTexture* noteTexture(
         const QString& spriteType,
         const QSize& targetSize,

@@ -3,15 +3,11 @@ import QtQuick.Controls
 import MiaCode.UI
 
 // Sticky extras live in this popup (a Menu would dismiss on item click).
-Popup {
+AppStickyPopup {
     id: root
 
     required property var previewSession
-
-    padding: Theme.menuPadding
-    modal: false
-    focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    minimumWidth: 180
 
     readonly property real rowWidth: Math.max(
         180,
@@ -20,30 +16,6 @@ Popup {
         smoothSwitch.implicitWidth
     )
 
-    property var anchorItem: null
-
-    function openAt(anchor) {
-        if (!anchor || Overlay.overlay === null)
-            return
-        parent = Overlay.overlay
-        root.anchorItem = anchor
-        reposition()
-        open()
-    }
-
-    function reposition() {
-        if (!root.anchorItem || Overlay.overlay === null)
-            return
-        const below = root.anchorItem.mapToItem(Overlay.overlay, 0, root.anchorItem.height)
-        x = Math.max(0, below.x + root.anchorItem.width - width)
-        y = below.y
-    }
-
-    onImplicitWidthChanged: if (visible)
-        reposition()
-    onImplicitHeightChanged: if (visible)
-        reposition()
-
     contentItem: Column {
         id: body
         width: root.rowWidth
@@ -51,6 +23,7 @@ Popup {
 
         component ModeRow: ChromeRow {
             id: modeRow
+            stateColors: Theme.colors.popupState
 
             required property string label
             required property bool active
@@ -173,13 +146,5 @@ Popup {
                 font.pixelSize: Theme.secondaryFontSize
             }
         }
-    }
-
-    background: Rectangle {
-        implicitWidth: 180
-        color: Theme.colors.background.elevated
-        border.width: Theme.controlBorderWidth
-        border.color: Theme.colors.border.normal
-        radius: Theme.controlRadius
     }
 }

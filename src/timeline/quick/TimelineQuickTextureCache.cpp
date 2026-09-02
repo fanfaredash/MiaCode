@@ -186,22 +186,6 @@ QSGTexture* TimelineQuickTextureCache::textureForPixmapKey(const QString& key, c
     return pixmap.isNull() ? nullptr : textureForKey(key, pixmap.toImage());
 }
 
-TimelineQuickTextureHandle TimelineQuickTextureCache::textTexture(
-    const miacode::timeline::TimelineSceneTextLabel& label)
-{
-    const qreal dpr = effectiveDevicePixelRatio();
-    const TimelineQuickRasterizedImage rasterized = makeTimelineTextImage(label, dpr);
-    const QString key = QStringLiteral("text|%1|%2|%3|dpr=%4")
-                            .arg(label.text)
-                            .arg(label.font.toString())
-                            .arg(label.color.name(QColor::HexArgb))
-                            .arg(qRound(dpr * 100.0));
-    return TimelineQuickTextureHandle{
-        textureForKey(key, rasterized.image),
-        rasterized.logicalSize,
-    };
-}
-
 QString TimelineQuickTextureCache::noteTextureKey(
     const QString& spriteType,
     const QSize& targetSize,

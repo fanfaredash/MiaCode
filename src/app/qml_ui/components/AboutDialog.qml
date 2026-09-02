@@ -7,6 +7,9 @@ import MiaCode.UI
 // preferences.aboutInfo() so the version macro and UiText stay the sources.
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     required property var preferences

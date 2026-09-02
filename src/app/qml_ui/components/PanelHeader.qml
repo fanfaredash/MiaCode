@@ -16,9 +16,10 @@ Rectangle {
     }
 
     implicitHeight: root.sidebarTitle
-                    ? Math.ceil(titleLabel.y + titleLabel.implicitHeight + Theme.chromeInsetY)
+                    ? Math.max(Math.ceil(titleLabel.y + titleLabel.implicitHeight + Theme.chromeInsetY),
+                               trailingRow.implicitHeight)
                     : 34
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: "transparent"
 
     FontMetrics {
         id: titleMetrics

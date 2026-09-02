@@ -11,20 +11,26 @@ AbstractButton {
     property string glyph: ""
     property string tooltip
     property bool active: false
-    property int iconWidth: 16
-    property int iconHeight: 16
+    property bool compact: false
+    property int iconWidth: compact ? 14 : 16
+    property int iconHeight: compact ? 14 : 16
     property Item keyForwardTarget: null
+    readonly property real horizontalInset: chrome.horizontalInset
 
     Keys.priority: Keys.BeforeItem
     Keys.forwardTo: root.keyForwardTarget ? [root.keyForwardTarget] : []
 
-    implicitWidth: glyph.length > 0 ? 24 : 28
-    implicitHeight: glyph.length > 0 ? 24 : 27
+    implicitWidth: compact ? Theme.compactControlHeight : Math.max(Theme.controlMinHeight,
+                            (glyph.length > 0 ? glyphLabel.implicitWidth : iconWidth)
+                            + 2 * (Theme.chromePadding + Theme.chromeInsetX))
+    implicitHeight: compact ? Theme.compactControlHeight : Math.max(Theme.controlMinHeight,
+                             (glyph.length > 0 ? glyphLabel.implicitHeight : iconHeight)
+                             + 2 * (Theme.chromePadding + Theme.chromeInsetY))
     hoverEnabled: true
     Accessible.name: root.tooltip
 
     readonly property color glyphColor: !root.enabled ? Theme.colors.text.disabled
-                                       : (root.active || root.hovered) ? Theme.colors.text.active
+                                       : (root.active || root.checked || root.hovered || root.visualFocus) ? Theme.colors.text.active
                                        : Theme.colors.text.secondary
 
     contentItem: Item {
@@ -41,6 +47,7 @@ AbstractButton {
         }
 
         Text {
+            id: glyphLabel
             anchors.centerIn: parent
             visible: root.glyph.length > 0
             text: root.glyph
@@ -52,22 +59,14 @@ AbstractButton {
         }
     }
 
-    background: Item {
-        HoverChrome {
-            anchors.fill: parent
-            hovered: root.hovered
-            pressed: root.down
-            tone: "icon"
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            visible: root.visualFocus
-            radius: Theme.itemRadius
-            color: "transparent"
-            border.width: 1
-            border.color: Theme.colors.accent.primary
-        }
+    background: HoverChrome {
+        id: chrome
+        contentWidth: root.glyph.length > 0 ? glyphLabel.implicitWidth : root.iconWidth
+        contentHeight: root.glyph.length > 0 ? glyphLabel.implicitHeight : root.iconHeight
+        selected: root.active || root.checked
+        hovered: root.hovered
+        pressed: root.down
+        focused: root.visualFocus
     }
 
     Tooltip {

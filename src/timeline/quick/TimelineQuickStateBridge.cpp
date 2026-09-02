@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include <QDir>
-#include <QFontDatabase>
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -147,11 +146,11 @@ QHash<quint64, QString> muriMarkerTooltipsForReport(const MuriAnalysisReport& re
 
 }  // namespace
 
-TimelineQuickStateBridge::TimelineQuickStateBridge(QObject* parent)
+TimelineQuickStateBridge::TimelineQuickStateBridge(QObject* parent, const QFont& font)
     : QObject(parent)
     , zoomPresets_(makeTimelineZoomPresets())
 {
-    headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    headerLineNumberFont_ = font;
     headerLineNumberFont_.setPointSize(11);
 }
 

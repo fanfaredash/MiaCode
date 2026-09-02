@@ -55,20 +55,16 @@ ComboBox {
         implicitHeight: root.implicitHeight
         radius: Theme.controlRadius
         color: root.enabled
-               ? Theme.surfaceColor("input", Theme.colors.background.editor)
+               ? Theme.surfaceColor("input", Theme.colors.background.surface)
                : Theme.colors.background.elevated
         border.width: Theme.controlBorderWidth
-        // visualFocus, not activeFocus: a ComboBox takes focus on click and keeps
-        // it, so an accent border tied to activeFocus stayed lit long after the
-        // press and came back lit when the dialog reopened and restored focus.
-        // visualFocus is true only when focus arrived by keyboard, which is the
-        // one case that still needs an indicator.
         border.color: !root.enabled ? Theme.colors.border.normal
                      : (root.visualFocus || root.hovered || root.down) ? Theme.colors.accent.primary
                      : Theme.colors.border.control
     }
 
     delegate: ChromeRow {
+        stateColors: Theme.colors.popupState
         id: itemDelegate
         width: ListView.view ? ListView.view.width : root.width
         height: 28
@@ -77,10 +73,10 @@ ComboBox {
         labelFont: root.font
     }
 
-    popup: Popup {
+    popup: AppDropdownPanel {
         y: root.height + 2
         width: Math.max(root.width, 100)
-        padding: 6
+        padding: Theme.menuPadding
         implicitHeight: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, 260)
 
         contentItem: ListView {
@@ -89,13 +85,6 @@ ComboBox {
             model: root.delegateModel
             currentIndex: root.highlightedIndex
             ScrollIndicator.vertical: ScrollIndicator {}
-        }
-
-        background: Rectangle {
-            radius: Theme.controlRadius
-            color: Theme.colors.background.elevated
-            border.width: Theme.controlBorderWidth
-            border.color: Theme.colors.border.normal
         }
     }
 }

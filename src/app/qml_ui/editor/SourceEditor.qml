@@ -166,7 +166,7 @@ Rectangle {
         return result + 1
     }
 
-    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
+    color: Theme.surfaceColor("codeEditor", Theme.colors.background.surface)
     clip: true
 
     readonly property bool canUndo: editorController.canUndo
@@ -551,6 +551,9 @@ Rectangle {
 
     Dialog {
         id: bookmarkTitleDialog
+
+        enter: FadeTransition {}
+        exit: FadeTransition { appearing: false }
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         parent: Overlay.overlay
@@ -758,7 +761,7 @@ Rectangle {
             font: Theme.codeFont
 
             background: Rectangle {
-                color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
+                color: Theme.surfaceColor("codeEditor", Theme.colors.background.surface)
             }
 
             Item {

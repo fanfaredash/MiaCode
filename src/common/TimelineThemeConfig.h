@@ -5,16 +5,14 @@
 #include <QColor>
 #include <QtGlobal>
 
-#include "app/ui/UiTheme.h"
-
 namespace miacode::timeline {
 
 constexpr double kTimelineWaveformBrightnessMin = 0.2;
 constexpr double kTimelineWaveformBrightnessMax = 2.0;
 // Default waveform brightness (== translucent-fill opacity multiplier). 0.5
-// gives a subtle silhouette that reads clearly in both themes without
-// dominating the grid — adopted as the shipped default. The slider still
-// spans kTimelineWaveformBrightnessMin..Max so users can dial it up/down.
+// gives a subtle silhouette that reads clearly without dominating the grid —
+// adopted as the shipped default. The slider still spans
+// kTimelineWaveformBrightnessMin..Max so users can dial it up/down.
 constexpr double kTimelineWaveformBrightnessDefault = 0.5;
 constexpr double kTimelineMeasureLineBrightnessMin = 0.2;
 constexpr double kTimelineMeasureLineBrightnessMax = 2.0;
@@ -58,13 +56,12 @@ inline qreal timelineGridLineHeightFraction(qreal tieredFraction)
 // keep RGB (hue + saturation) fixed. Rationale — the old per-channel RGB
 // multiply had three problems: (1) at the high end the channels clamp to 255 at
 // different points, so the teal drifted to pale cyan (a hue shift, not
-// "brighter"); (2) on a light theme, lifting RGB moved the colour toward white,
-// i.e. LESS contrast as you raised "brightness" (inverted); (3) once a channel
-// clamped, more slider did nothing. Driving alpha instead is monotonic and
-// intuitive in BOTH themes (higher = more prominent / more grid covered), never
-// shifts hue, and uses the whole slider range. The curve is anchored so 1.0x
-// reproduces the palette's base alpha exactly; below 1.0x it fades toward the
-// backdrop, above 1.0x it approaches fully opaque (no dead zone at the top).
+// "brighter"); (2) lifting RGB moved the colour toward white, i.e. LESS
+// contrast as you raised "brightness" (inverted); (3) once a channel clamped,
+// more slider did nothing. Driving alpha instead is monotonic and intuitive,
+// never shifts hue, and uses the whole slider range. The curve is anchored so
+// 1.0x reproduces the palette's base alpha exactly; below 1.0x it fades toward
+// the backdrop, above 1.0x it approaches fully opaque (no dead zone at the top).
 inline QColor adjustedTimelineWaveformColor(QColor color, double brightness)
 {
     const double clamped = normalizedTimelineWaveformBrightness(brightness);
@@ -91,12 +88,51 @@ inline QColor adjustedTimelineMeasureLineColor(QColor color, double brightness)
         return color;
     }
     if (clamped > 1.0) {
+        // Timeline chrome is a single dark scheme; brighten toward white with
+        // the legacy dark-theme factor.
         const double t = (clamped - 1.0) / (kTimelineMeasureLineBrightnessMax - 1.0);
-        const int factor = qRound(100.0 + (UiTheme::isDarkTheme() ? 80.0 : 45.0) * t);
-        color = UiTheme::isDarkTheme() ? color.lighter(factor) : color.darker(factor);
+        const int factor = qRound(100.0 + 80.0 * t);
+        color = color.lighter(factor);
         color.setAlpha(baseAlpha);
     }
     return color;
+}
+
+// Timeline "shell" chrome colours (window/base/border/grids/lanes/labels and
+// the translucent waveform tint). These live in Theme.qml as the single source
+// of truth; the QML TimelineThemeBridge writes them here before any scene
+// state is built, and scene builders read them through timelineThemeColors().
+struct TimelineChromeColors {
+    QColor window;
+    QColor header;
+    QColor sidebar;
+    QColor base;
+    QColor border;
+    QColor axis;
+    QColor gridMajor;
+    QColor gridSubdivision;
+    QColor gridMinor;
+    QColor laneEven;
+    QColor laneOdd;
+    QColor label;
+    QColor textSecondary;
+    QColor waveStroke;
+};
+
+inline TimelineChromeColors& timelineChromeColorsStorage()
+{
+    static TimelineChromeColors colors;
+    return colors;
+}
+
+inline const TimelineChromeColors& timelineChromeColors()
+{
+    return timelineChromeColorsStorage();
+}
+
+inline void setTimelineChromeColors(const TimelineChromeColors& colors)
+{
+    timelineChromeColorsStorage() = colors;
 }
 
 struct TimelineThemeColors {
@@ -137,47 +173,46 @@ struct TimelineThemeColors {
 
 inline TimelineThemeColors timelineThemeColors()
 {
-    const UiTheme::Colors& c = UiTheme::colors();
+    const TimelineChromeColors& c = timelineChromeColors();
     return TimelineThemeColors{
-        c.timelineWindow,
-        c.timelineHeader,
-        c.timelineSidebar,
-        c.timelineBase,
-        c.timelineBorder,
-        c.timelineAxis,
-        // Beta21-fix11 — wired through dedicated palette entries:
-        //   bar lines        -> c.timelineGridMajor
-        //   timeline lines   -> c.timelineGridSubdivision (between bar / note)
-        //   note lines       -> c.timelineGridMinor
-        // Tune these palette entries directly in UiTheme.cpp without
-        // affecting any other timeline element (axis boundary, lane
-        // labels, etc.).
-        c.timelineGridMajor,
-        c.timelineGridSubdivision,
-        c.timelineGridMinor,
-        c.timelineLaneEven,
-        c.timelineLaneOdd,
-        c.timelineLabel,
+        c.window,
+        c.header,
+        c.sidebar,
+        c.base,
+        c.border,
+        c.axis,
+        // Tiered grid lines map to dedicated chrome entries:
+        //   bar lines        -> c.gridMajor
+        //   beat lines       -> c.gridSubdivision (between bar / note)
+        //   note lines       -> c.gridMinor
+        c.gridMajor,
+        c.gridSubdivision,
+        c.gridMinor,
+        c.laneEven,
+        c.laneOdd,
+        c.label,
         c.textSecondary,
-        c.timelineWaveStroke,
-        c.timelinePlayhead,
-        c.timelineCursor,
-        c.timelinePlayhead,
-        QColor(c.timelineCursor.red(), c.timelineCursor.green(), c.timelineCursor.blue(), 230),
-        QColor(255, 146, 43, 230),
-        c.dark ? QColor("#202122") : QColor("#F3F4F6"),
-        c.dark ? QColor("#333536") : c.timelineBorder,
-        c.dark ? QColor("#2A2B2C") : QColor("#EEF5FF"),
-        c.dark ? QColor("#333536") : c.accentPressed,
-        c.dark ? QColor("#3994BC") : c.accent,
-        c.accent,
-        QColor(255, 214, 64),
-        QColor(255, 146, 43),
-        c.accentText,
-        QColor(44, 214, 255),
-        QColor(44, 214, 255, 180),
-        c.accent,
-        c.accent,
+        c.waveStroke,
+        // Below: functional marker colours kept local to the timeline (single
+        // dark scheme; they do not vary with the shell chrome).
+        QColor("#FFC90E"),                 // playhead
+        QColor("#F29A83"),                 // cursor
+        QColor("#FFC90E"),                 // entry marker (same as playhead)
+        QColor(242, 154, 131, 230),        // cursor marker (cursor at ~90%)
+        QColor(255, 146, 43, 230),         // muri marker
+        QColor("#202122"),                 // controlFill
+        QColor("#333536"),                 // controlBorder
+        QColor("#2A2B2C"),                 // controlHover
+        QColor("#333536"),                 // controlPressed
+        QColor("#3994BC"),                 // controlAccent
+        QColor("#4F8FEC"),                 // noteNormal
+        QColor("#FFD640"),                 // noteEach
+        QColor("#FF922B"),                 // noteBreak
+        QColor("#F7FBFF"),                 // noteExStroke
+        QColor(44, 214, 255),              // touch
+        QColor(44, 214, 255, 180),         // touchHold
+        QColor("#4F8FEC"),                 // slideTrack
+        QColor("#4F8FEC"),                 // holdBody (no-texture fallback line)
         {
             QColor(232, 124, 72),
             QColor(208, 106, 182),

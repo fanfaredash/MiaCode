@@ -15,7 +15,7 @@ ChromeRow {
     contentItem: Text {
         text: root.text
         color: !root.enabled ? Theme.colors.text.disabled
-               : root.selected ? Theme.colors.text.active
+               : (root.chromeSelected || root.hovered || root.visualFocus) ? Theme.colors.text.active
                : Theme.colors.text.secondary
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize

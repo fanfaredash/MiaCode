@@ -275,7 +275,7 @@ Item {
         anchors.fill: parent
         visible: false
         z: 80
-        color: Theme.colors.background.editor
+        color: Theme.colors.background.surface
 
         Loader {
             anchors.centerIn: parent
