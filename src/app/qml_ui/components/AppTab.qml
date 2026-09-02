@@ -30,7 +30,7 @@ Item {
 
     implicitHeight: panelTab ? 28 : 34
     implicitWidth: panelTab
-        ? label.implicitWidth + (count >= 0 ? 22 : 0) + 24
+        ? contentRow.implicitWidth + contentRow.anchors.leftMargin + contentRow.anchors.rightMargin
         : preferredTabWidth
 
     AbstractButton {
@@ -55,6 +55,8 @@ Item {
 
         contentItem: Item {
             RowLayout {
+                id: contentRow
+
                 anchors.fill: parent
                 anchors.leftMargin: root.panelTab ? 12 : 10
                 anchors.rightMargin: root.panelTab ? 12 : 5
@@ -82,13 +84,13 @@ Item {
                 Text {
                     id: label
 
-                    Layout.fillWidth: true
+                    Layout.fillWidth: !root.panelTab
                     text: root.text
                     elide: Text.ElideRight
                     color: root.active ? Theme.colors.text.active : Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     font.pixelSize: root.panelTab ? Theme.secondaryFontSize : Theme.uiFontSize
-                    horizontalAlignment: root.panelTab ? Text.AlignHCenter : Text.AlignLeft
+                    horizontalAlignment: Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                 }
 
@@ -103,13 +105,15 @@ Item {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: 16
-                    Layout.preferredHeight: 16
-                    radius: 8
+                    implicitWidth: Math.max(implicitHeight, countLabel.implicitWidth + 8)
+                    implicitHeight: 16
+                    radius: height / 2
                     visible: root.count > 0
                     color: Theme.colors.accent.badge
 
                     Text {
+                        id: countLabel
+
                         anchors.fill: parent
                         text: root.count
                         color: Theme.colors.text.onAccent
@@ -204,9 +208,9 @@ Item {
             }
 
             Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-                width: label.implicitWidth + (root.count > 0 ? 20 : 0) + 3
+                x: root.contentInkLeft
+                width: contentRow.implicitWidth
                 height: 1
                 visible: root.active && root.panelTab
                 color: Theme.colors.accent.primary

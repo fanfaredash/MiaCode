@@ -18,6 +18,7 @@ struct VisualLine {
     qreal y = 0;
     qreal width = 0;
     qreal height = 0;
+    int lineIndex = 0;
 };
 
 }
@@ -66,6 +67,7 @@ QVariantList SimaiSyntaxHighlighter::selectionLineRanges(int start, int end) con
     }
 
     QVector<VisualLine> selected;
+    int lineIndex = 0;
     for (QTextBlock block = document->findBlock(start);
          block.isValid() && block.position() < end;
          block = block.next()) {
@@ -81,6 +83,7 @@ QVariantList SimaiSyntaxHighlighter::selectionLineRanges(int start, int end) con
             if (!line.isValid()) {
                 continue;
             }
+            const int currentLineIndex = lineIndex++;
             const int lineStart = blockPos + line.textStart();
             const int lineEnd = lineStart + line.textLength();
             const int from = qMax(start, lineStart);
@@ -95,11 +98,9 @@ QVariantList SimaiSyntaxHighlighter::selectionLineRanges(int start, int end) con
             visual.y = origin.y() + line.y();
             visual.width = qMax(qreal(0), x1 - x0);
             visual.height = line.height();
+            visual.lineIndex = currentLineIndex;
             selected.append(visual);
         }
-    }
-    for (int i = 0; i + 1 < selected.size(); ++i) {
-        selected[i].height = selected[i + 1].y - selected[i].y;
     }
 
     for (const VisualLine& visual : selected) {
@@ -108,6 +109,7 @@ QVariantList SimaiSyntaxHighlighter::selectionLineRanges(int start, int end) con
         range.insert(QStringLiteral("y"), visual.y);
         range.insert(QStringLiteral("width"), visual.width);
         range.insert(QStringLiteral("height"), visual.height);
+        range.insert(QStringLiteral("lineIndex"), visual.lineIndex);
         ranges.append(range);
     }
     return ranges;
@@ -450,4 +452,3 @@ void SimaiSyntaxHighlighter::highlightBlock(const QString& text)
     }
     setCurrentBlockState(static_cast<int>(signature & 0x7fffffffu));
 }
-

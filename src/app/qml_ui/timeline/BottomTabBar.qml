@@ -18,6 +18,7 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
+        spacing: 0
         z: 1
 
         AppTab {

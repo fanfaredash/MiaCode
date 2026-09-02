@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Shapes
 import QtQuick.Window
 import MiaCode.UI
 
@@ -292,6 +293,116 @@ Rectangle {
     function bumpFollowLayout() {
         root.followLayoutTick++
         root.lineTops = highlighter.lineTopPositions()
+    }
+
+    function lineRangePath(ranges) {
+        const commands = []
+        const epsilon = Math.max(0.5, root.codeLineHeight / 8)
+        const cornerRadius = 3
+        let left = []
+        let right = []
+
+        function appendPoint(edge, x, y) {
+            const last = edge[edge.length - 1]
+            if (last && last.x === x && last.y === y)
+                return
+            const before = edge[edge.length - 2]
+            if (before && ((before.x === x && last.x === x)
+                        || (before.y === y && last.y === y))) {
+                edge[edge.length - 1] = { x, y }
+            } else {
+                edge.push({ x, y })
+            }
+        }
+
+        function closeContour() {
+            if (left.length === 0)
+                return
+            const points = right.concat(left.reverse())
+            for (let i = 0; i < points.length; ++i) {
+                const previous = points[(i + points.length - 1) % points.length]
+                const current = points[i]
+                const next = points[(i + 1) % points.length]
+                const dx1 = current.x - previous.x
+                const dy1 = current.y - previous.y
+                const dx2 = next.x - current.x
+                const dy2 = next.y - current.y
+                const length1 = Math.abs(dx1) + Math.abs(dy1)
+                const length2 = Math.abs(dx2) + Math.abs(dy2)
+                const radius = Math.min(cornerRadius, length1 / 2, length2 / 2)
+                const startX = current.x - dx1 / length1 * radius
+                const startY = current.y - dy1 / length1 * radius
+                const endX = current.x + dx2 / length2 * radius
+                const endY = current.y + dy2 / length2 * radius
+                const sweep = dx1 * dy2 - dy1 * dx2 > 0 ? 1 : 0
+                commands.push(`${i === 0 ? "M" : "L"} ${startX} ${startY}`,
+                    `A ${radius} ${radius} 0 0 ${sweep} ${endX} ${endY}`)
+            }
+            commands.push("Z")
+            left = []
+            right = []
+        }
+
+        let previous = null
+        for (const current of ranges) {
+            if (current.width <= 0 || current.height <= 0) {
+                closeContour()
+                previous = null
+                continue
+            }
+            const currentRight = current.x + current.width
+            if (previous) {
+                const overlapLeft = Math.max(previous.x, current.x)
+                const overlapRight = Math.min(previous.x + previous.width, currentRight)
+                if (current.lineIndex === previous.lineIndex + 1
+                        && overlapRight - overlapLeft > epsilon) {
+                    // Trace both ends of the gap: shrinking uses the upper line's
+                    // bottom; expanding uses the lower line's top.
+                    const gapTop = previous.y + previous.height
+                    appendPoint(left, overlapLeft, gapTop)
+                    appendPoint(left, overlapLeft, current.y)
+                    appendPoint(right, overlapRight, gapTop)
+                    appendPoint(right, overlapRight, current.y)
+                } else {
+                    closeContour()
+                }
+            }
+            appendPoint(left, current.x, current.y)
+            appendPoint(left, current.x, current.y + current.height)
+            appendPoint(right, currentRight, current.y)
+            appendPoint(right, currentRight, current.y + current.height)
+            previous = current
+        }
+        closeContour()
+        return commands.join(" ")
+    }
+
+    component RangeHighlight: Shape {
+        id: highlight
+        required property int rangeStart
+        required property int rangeEnd
+        required property color fillColor
+        property bool active: true
+        visible: active && rangeEnd > rangeStart
+        x: sourceArea.leftPadding
+        y: sourceArea.topPadding
+        z: -1
+        preferredRendererType: Shape.CurveRenderer
+        readonly property string outline: {
+            if (!visible)
+                return ""
+            root.followLayoutTick
+            sourceArea.text
+            return root.lineRangePath(highlighter.selectionLineRanges(rangeStart, rangeEnd))
+        }
+
+        // One filled contour keeps shared row edges out of antialiasing and
+        // applies follow opacity once across the complete selection.
+        ShapePath {
+            fillColor: highlight.fillColor
+            strokeColor: "transparent"
+            PathSvg { path: highlight.outline }
+        }
     }
 
     // Scrolls the decoration into view without touching the caret or selection.
@@ -671,57 +782,23 @@ Rectangle {
                 }
             }
 
-            Item {
+            RangeHighlight {
                 id: selectionHighlight
-                visible: sourceArea.selectionStart !== sourceArea.selectionEnd
-                z: -1
-                readonly property int selA: Math.min(sourceArea.selectionStart, sourceArea.selectionEnd)
-                readonly property int selB: Math.max(sourceArea.selectionStart, sourceArea.selectionEnd)
-                readonly property var lineRanges: {
-                    root.followLayoutTick
-                    sourceArea.text
-                    return highlighter.selectionLineRanges(selA, selB)
-                }
-                readonly property color fill: Theme.colors.state.selectionHighlight
-
-                Repeater {
-                    model: selectionHighlight.lineRanges
-                    delegate: Rectangle {
-                        required property var modelData
-                        color: selectionHighlight.fill
-                        x: modelData.x + sourceArea.leftPadding
-                        y: modelData.y + sourceArea.topPadding
-                        width: modelData.width
-                        height: modelData.height
-                    }
-                }
+                rangeStart: Math.min(sourceArea.selectionStart, sourceArea.selectionEnd)
+                rangeEnd: Math.max(sourceArea.selectionStart, sourceArea.selectionEnd)
+                fillColor: Theme.colors.state.selectionHighlight
             }
 
             // Same stacking band as the current-line / selection fills (z: -1,
             // under glyphs). Declared after them so the playhead span stays
             // visible when it shares a line with the caret (Z1).
-            Rectangle {
-                readonly property rect startRect: {
-                    root.followLayoutTick
-                    return sourceArea.positionToRectangle(root.followDecorationStart)
-                }
-                readonly property rect endRect: {
-                    root.followLayoutTick
-                    return sourceArea.positionToRectangle(root.followDecorationEnd)
-                }
-                visible: root.followDecorationActive
-                    && root.followDecorationEnd > root.followDecorationStart
-                    && startRect.height > 0
-                    && startRect.y + 0.5 >= sourceArea.topPadding
-                x: startRect.x
-                y: startRect.y
-                width: endRect.y > startRect.y
-                    ? Math.max(0, sourceArea.width - sourceArea.rightPadding - startRect.x)
-                    : Math.max(0, endRect.x - startRect.x)
-                height: Math.max(startRect.height, root.codeLineHeight)
-                color: Theme.colors.state.followHighlight
+            RangeHighlight {
+                id: followHighlight
+                active: root.followDecorationActive
+                rangeStart: root.followDecorationStart
+                rangeEnd: root.followDecorationEnd
+                fillColor: Theme.colors.state.followHighlight
                 opacity: 0.5
-                z: -1
             }
 
             // Preview follow caret. Distinct from the real caret so a paused
