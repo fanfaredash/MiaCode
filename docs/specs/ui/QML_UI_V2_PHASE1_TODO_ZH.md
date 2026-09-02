@@ -825,10 +825,29 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `src/app/runtime/sections/export`，扫不到文件必然失败；已改指向现路径 `src/app/runtime/export`
   （该目录只有一处注释提到 QMessageBox，spec 本就跳过注释行，因此通过是真通过）。
 - **4.9b 验证证据**：`cmake --build build-macos -j4` 全量 Release 构建通过（`MiaCode` 已按本轮改动
-  重新链接），仅剩两条与本轮无关的既有告警。全量 CTest 101 项：修复后 98 通过、3 失败（见下条）。
-- **仍然失败、且不属于本轮范围的 3 项**：`qtavplayer_platform_spec`（既有已知失败）、
-  `preview_guide_layer_spec`、`preview_slide_vanilla_trim_spec`（后两项在 `chart parses:` 断言处失败，
-  只链接 `src/core/scene` 与解析器，不含本轮改动的任何文件，属于解析/场景域的既有回归，需另开一轮处理）。
+  重新链接），仅剩两条与本轮无关的既有告警。全量 CTest 101 项：100 通过，仅剩既有已知的 `qtavplayer_platform_spec` 一红（见下条更正）。
+- **更正：`preview_guide_layer_spec` / `preview_slide_vanilla_trim_spec` 不是解析器回归**。
+  提交 `23c31fb5` 的说明和本文档此前的记载都把这两项判成「解析/场景域的既有回归、需另开一轮」，
+  **判错了**，此处更正（提交信息已在历史里，不改写）。真实根因是本地构建产物损坏：磁盘写满期间
+  Qt 的 AUTORCC **静默产出 0 字节的生成源文件**而不是报错——
+  `preview_slide_vanilla_trim_spec_autogen/.../qrc_slide_data.cpp`、
+  `preview_guide_layer_spec_autogen/.../qrc_slide_data.cpp`（应各 26,170,768 字节）与
+  `preview_guide_layer_spec_autogen/.../qrc_fonts.cpp`（应 29,973,292 字节）全是 0。
+  空文件照常编译链接，产出的二进制里根本没有 `qInitResources_slide_data` 符号；
+  `SimaiNativeParser.cpp` 的 `slideDataRoot()` 打不开 `:/data/slide_data.json` 后返回空表
+  **并静态缓存**，于是 `SimaiNativeParser.Slide.cpp` 里每个 slide/wifi 音符查表必空、
+  被判成 "unknown shape" 硬错误，`parseForTimeline` 返回 `ok=false`——与谱面文本是否合法无关。
+  定案靠两条交叉验证：同一段文本喂 `build-macos/simai_native_dump` 解析 `ok=true`；
+  三个目标编译出的 `SimaiNativeParser.cpp.o` 哈希完全一致。删掉这 3 个坏文件并只重建这两个
+  target 后，两项均通过，**未改任何源码**。
+- **该次污染的影响范围已界定**：全仓扫描所有 `qrc_*.cpp`，每份要么是字节正确的大小、要么是 0，
+  没有截断这种中间态；0 字节的只有上述 3 个，MiaCode 本体与其余 13 个目标的资源均完好。
+  因此 4.9b 的 Release 构建与测试证据本身成立，无需清库重建——这是查出来的结论，不是假设。
+- **运维教训（写给后续几轮）**：这台机器磁盘常年接近满，而磁盘写满在这里不只是「构建失败」，
+  而是**静默污染产物、伪造成测试红项**。判断一个 spec 红项之前，若它倒在解析类断言上，
+  先跑 `find build-macos -name "*.cpp" -size 0`，再用 `simai_native_dump` 交叉验证同一段文本，
+  不要直接去动 `src/core/chart/parser/`。全量构建前先 `df -h /`。
+- **仍然失败的 1 项**：`qtavplayer_platform_spec`（既有已知失败，不属于本主线范围）。
 - **仍未完成**：4.9b 只切出了第一个域记录，实际借用方仍经 `State` 的兼容引用读时间线存储；
   preview / document / validation / export 域存储尚未切分。4.9b 后续、4.9c、4.9d 仍未完成，
   不能标记阶段 4.9 或 Architecture Complete。未运行 Windows 构建。
