@@ -553,7 +553,7 @@ void VideoExportDialog::applyThemeStyles()
     }
 
     // Plain push buttons.
-    for (QPushButton* button : {cancelButton_}) {
+    for (QPushButton* button : {cancelButton_, saveVideoPresetButton_, applyVideoPresetButton_}) {
         if (button != nullptr) {
             miacode::ui::applyDialogPushButtonStyle(button);
         }

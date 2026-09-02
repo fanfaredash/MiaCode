@@ -3,6 +3,7 @@
 #include "BusySpinner.h"
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
+#include "PreviewVideoNumericPreset.h"
 #include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -1297,6 +1298,19 @@ VideoExportDialog::VideoExportDialog(
     backgroundScaleModeLayout->addWidget(backgroundScaleModeCombo_, 1);
     optionsLayout->addWidget(backgroundScaleModeRow, 3, 0, 1, 2);
     visualsPageLayout->addWidget(optionsContent_, 0);
+    auto* videoPresetRow = new QWidget(visualsPage);
+    auto* videoPresetLayout = new QHBoxLayout(videoPresetRow);
+    videoPresetLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
+    videoPresetLayout->setSpacing(8);
+    videoPresetLayout->addStretch(1);
+    saveVideoPresetButton_ = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.render_settings.button.set_software_default_audio")),
+        videoPresetRow);
+    applyVideoPresetButton_ = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.render_settings.button.restore_project_default")),
+        videoPresetRow);
+    videoPresetLayout->addWidget(saveVideoPresetButton_);
+    videoPresetLayout->addWidget(applyVideoPresetButton_);
 
     // Former HUD page — overlay toggles — merged onto the Video tab below the
     // picture controls, in an aligned 2-column grid so the checkboxes line up
@@ -1319,6 +1333,7 @@ VideoExportDialog::VideoExportDialog(
 
     // ("添加片头" moved to its own "片头" tab, built below.)
     visualsPageLayout->addWidget(hudToggles, 0);
+    visualsPageLayout->addWidget(videoPresetRow, 0);
     visualsPageLayout->addStretch(1);
     miacode::ui::busyTick();
 
@@ -1682,6 +1697,42 @@ VideoExportDialog::VideoExportDialog(
                 : baseTask_.backgroundBrightnessOuter;
             const double inner = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
             previewBrightnessCallback_(outer, inner);
+        }
+    });
+    connect(saveVideoPresetButton_, &QPushButton::clicked, this, [this]() {
+        miacode::ui::savePreviewVideoNumericPreset({
+            qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0),
+            qBound(0.0, static_cast<double>(brightnessInnerSlider_->value()) / 100.0, 1.0),
+            miacode::preview_video::normalizedLayoutSquareScale(
+                static_cast<double>(layoutSquareScaleSlider_->value()) / 100.0),
+        });
+    });
+    connect(applyVideoPresetButton_, &QPushButton::clicked, this, [this]() {
+        const miacode::ui::PreviewVideoNumericPreset preset =
+            miacode::ui::loadPreviewVideoNumericPreset();
+        const int outer = qRound(preset.backgroundBrightnessOuter * 100.0);
+        const int inner = qRound(preset.backgroundBrightnessInner * 100.0);
+        const int scale = qRound(preset.layoutSquareScale * 100.0);
+        {
+            const QSignalBlocker blocker(brightnessOuterSlider_);
+            brightnessOuterSlider_->setValue(outer);
+        }
+        {
+            const QSignalBlocker blocker(brightnessInnerSlider_);
+            brightnessInnerSlider_->setValue(inner);
+        }
+        {
+            const QSignalBlocker blocker(layoutSquareScaleSlider_);
+            layoutSquareScaleSlider_->setValue(scale);
+        }
+        brightnessOuterValueLabel_->setText(QStringLiteral("%1%").arg(outer));
+        brightnessInnerValueLabel_->setText(QStringLiteral("%1%").arg(inner));
+        layoutSquareScaleValueLabel_->setText(QStringLiteral("%1%").arg(scale));
+        if (previewBrightnessCallback_) {
+            previewBrightnessCallback_(preset.backgroundBrightnessOuter, preset.backgroundBrightnessInner);
+        }
+        if (previewLayoutScaleCallback_) {
+            previewLayoutScaleCallback_(preset.layoutSquareScale);
         }
     });
     previewSlider_->setFocusPolicy(Qt::StrongFocus);

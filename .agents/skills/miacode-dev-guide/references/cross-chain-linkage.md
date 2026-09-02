@@ -349,6 +349,9 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 `MainWindow::load/savePortableState` (app-scoped shared), `load/saveProjectRenderState` (chart-local
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
+The three video-page numeric values share one local preset at `app.preview.numeric_preset`; both the
+preview-settings 视频 page and video-export 视频 page save/apply it, and neither gameplay page is part
+of that preset.
 
 ## 10. Parser output feeds Muri on both paths
 

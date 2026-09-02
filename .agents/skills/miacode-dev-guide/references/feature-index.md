@@ -951,7 +951,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   are REMOVED). The export dialog's standalone **字体 tab is GONE**; the 视频设置 dialog
   (`onPreviewVideoSettings` → `openPreviewSettingsDialog`) dropped its skin/judge-line rows + the
   音乐 + 字体 tabs and now reads **视频 / 游戏 / 性能** (性能 = 预览刷新率). `buildExportInjectedSettings`
-  keeps only 判定效果 / slide 层叠 / 中心显示. ⚠ **W1 note:** the preview-settings
+  keeps only 判定效果 / slide 层叠 / 中心显示. The 视频 page alone owns **保存为本地预设 /
+  应用本地预设** for outer/inner background brightness and square-layout scale. The same actions
+  appear on the video-export dialog's 视频 page and share `app.preview.numeric_preset`; applying it
+  updates the export task's sliders, so the rendered video uses those values. A missing preset applies
+  the compiled numeric defaults. ⚠ **W1 note:** the preview-settings
   `createDialogMenuButton` must keep the `ensurePolished()`+`setFixedHeight(qMax(sizeHint,30)+4)`
   or its dropdowns clip their bottom border (`qt-ui-layout-pitfalls` W1).) HUD font
   picker areas are independently persisted under `app.video_export.hud_font_paths`: chart info,

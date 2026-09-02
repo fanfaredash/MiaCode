@@ -353,6 +353,8 @@ private:
     miacode::ui::EditableValueLabel* brightnessOuterValueLabel_ = nullptr;
     miacode::ui::EditableValueLabel* brightnessInnerValueLabel_ = nullptr;
     miacode::ui::EditableValueLabel* layoutSquareScaleValueLabel_ = nullptr;
+    QPushButton* saveVideoPresetButton_ = nullptr;
+    QPushButton* applyVideoPresetButton_ = nullptr;
     QDoubleSpinBox* startSecondSpin_ = nullptr;
     QDoubleSpinBox* endSecondSpin_ = nullptr;
     // Held so applyThemeStyles() can re-apply their baked button stylesheets on
