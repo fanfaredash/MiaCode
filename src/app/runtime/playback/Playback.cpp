@@ -479,7 +479,7 @@ double Session::currentPreviewAuthoritativeAudioClockSecond() const
 
 bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second, bool resumeFromPause)
 {
-    if (!session_.preparePreviewStartState()) {
+    if (!preparePreviewStartState()) {
         state_.pendingPreviewPlaybackStart_ = hasActiveDifficulty();
         state_.pendingPreviewPlaybackResumeFromPause_ = resumeFromPause;
         state_.pendingPreviewPlaybackRevision_ = state_.timelineRevision_;
@@ -713,13 +713,10 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     return true;
 }
 
-void miacode::runtime::PlaybackCoordinator::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
+void miacode::runtime::PlaybackCoordinator::finishQtPreviewPlaybackAndReturnToEntry()
 {
     stopQtPreviewPlayback(true);
     state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
-    if (!statusMessage.isEmpty()) {
-        session_.noteStatus(statusMessage);
-    }
 }
 
 void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosition)
@@ -947,11 +944,6 @@ bool Session::startQtPreviewPlayback(double second, bool resumeFromPause)
 void Session::pauseQtPreviewPlaybackExact()
 {
     playback_->pauseQtPreviewPlaybackExact();
-}
-
-void Session::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
-{
-    playback_->finishQtPreviewPlaybackAndReturnToEntry(statusMessage);
 }
 
 void Session::stopQtPreviewPlayback(bool keepPosition)

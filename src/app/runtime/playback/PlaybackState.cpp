@@ -738,7 +738,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
     // beta4 leak gauge (LOW-FREQUENCY — once per user pause, never per frame): sample
     // process resource counters so a monotonic climb across edit→play→pause cycles localises
     // the reported "改多了就掉帧" leak. Gated on runtime debug output so it only costs the
-    // findChildren() walk in --debug / diagnostic builds. See
+    // resource-gauge query in --debug / diagnostic builds. See
     // docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md.
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
         // beta7 leak gauge — d_play_kb = private-bytes grown over the playback window (the big
@@ -753,10 +753,9 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("preview/resource_gauge"),
-            QStringLiteral("reason=pause_exact txn=%1 qobject_descendants=%2 d_play_kb=%3 "
-                           "inflight=%4 inflight_peak=%5 presents_in_play=%6 %7 %8")
+            QStringLiteral("reason=pause_exact txn=%1 d_play_kb=%2 "
+                           "inflight=%3 inflight_peak=%4 presents_in_play=%5 %6 %7")
                 .arg(playbackTxn)
-                .arg(static_cast<qint64>(session_.findChildren<QObject*>().size()))
                 .arg(dPlayKb)
                 .arg(miacode::diag::leak_gauge::inflightDepth())
                 .arg(miacode::diag::leak_gauge::inflightPeak())
@@ -1050,11 +1049,10 @@ void miacode::runtime::PlaybackCoordinator::emitChartSwitchResourceGauge()
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("preview/resource_gauge"),
         QStringLiteral("reason=chart_switch txn=%1 switch_seq=%2 difficulty=%3 "
-                       "qobject_descendants=%4 inflight=%5 inflight_peak=%6 %7 %8")
+                       "inflight=%4 inflight_peak=%5 %6 %7")
             .arg(gaugeTxn)
             .arg(state_.chartSwitchGaugeTxnCounter_)
             .arg(state_.activeDifficultyId_)
-            .arg(static_cast<qint64>(session_.findChildren<QObject*>().size()))
             .arg(miacode::diag::leak_gauge::inflightDepth())
             .arg(miacode::diag::leak_gauge::inflightPeak())
             .arg(miacode::diag::processResourceGaugePayload())

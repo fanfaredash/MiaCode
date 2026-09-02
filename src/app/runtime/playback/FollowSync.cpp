@@ -75,7 +75,7 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewFollowDecorationForTime
     QElapsedTimer timer;
     timer.start();
     miacode::v2::EditorFollowState follow;
-    follow.difficultyId = session_.activeDifficultyId();
+    follow.difficultyId = activeDifficultyId();
     // The workspace revision QML last committed — the same identity
     // requestEditorNavigation publishes, and the one the editor compares
     // against. This used to carry the validation snapshot's revision instead,

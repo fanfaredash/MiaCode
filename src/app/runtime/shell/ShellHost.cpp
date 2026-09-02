@@ -74,11 +74,6 @@ QString Session::windowTitle() const
     return titleText_;
 }
 
-void Session::setWindowTitle(const QString& title)
-{
-    titleText_ = title;
-}
-
 void Session::noteStatus(const QString&)
 {
 }

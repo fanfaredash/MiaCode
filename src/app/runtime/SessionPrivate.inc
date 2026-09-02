@@ -206,7 +206,6 @@
     void onTimelineRenderCadenceTick();
     void onTimelineCadenceWatchdogTick();
     void onQtPreviewTick();
-    void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     bool previewCanvasUsesFrameSwappedPacing() const;
     qint64 previewCanvasTargetFrameIntervalNs() const;
     void resetQtPreviewFixedFramePacing();
@@ -259,4 +258,3 @@
     void armWorkspaceSurfaceSettleRelayout();
     int bottomTabsTabIndex(BottomTabsTabId tabId) const;
     BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId) const;
-    QString bottomTabsTabIdString(BottomTabsTabId tabId) const;

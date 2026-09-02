@@ -130,7 +130,6 @@ void miacode::runtime::PlaybackCoordinator::onStopPreview()
         QString("op=%1 source=stop_action final_second=%2")
             .arg(opId)
             .arg(state_.pauseSecond_, 0, 'f', 6));
-    session_.noteStatus("Qt preview stopped.");
 }
 
 void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
@@ -181,14 +180,10 @@ void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
                 .arg(opId)
                 .arg(state_.pauseSecond_, 0, 'f', 6));
         session_.updatePauseButtonAppearance();
-        session_.noteStatus(
-            QString("Qt preview paused at %1s.").arg(state_.pauseSecond_, 0, 'f', 2)
-        );
         return;
     }
 
     if (!hasPreviewableChart()) {
-        session_.noteStatus("Select a difficulty field first.");
         return;
     }
     state_.previewPendingPlayInteractionId_ = opId;
@@ -208,20 +203,6 @@ void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
         return;
     }
     session_.updatePauseButtonAppearance();
-    if (state_.previewStartupSyncPending_) {
-        session_.noteStatus(
-            QString("Qt preview starting at %1s.").arg(state_.pauseSecond_, 0, 'f', 2)
-        );
-    } else {
-        session_.noteStatus(
-            QString("Qt preview resumed at %1s.").arg(state_.pauseSecond_, 0, 'f', 2)
-        );
-    }
-}
-
-bool Session::preparePreviewStartState()
-{
-    return playback_->preparePreviewStartState();
 }
 
 void Session::onStopPreview()

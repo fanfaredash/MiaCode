@@ -240,8 +240,8 @@ Session::PreviewCanvasFrameRateMode miacode::runtime::PlaybackCoordinator::curre
 double miacode::runtime::PlaybackCoordinator::currentPreviewCanvasRefreshRate() const
 {
     QScreen* targetScreen = nullptr;
-    if (session_.rootWindow_ != nullptr) {
-        targetScreen = session_.rootWindow_->screen();
+    if (state_.rootWindow_ != nullptr) {
+        targetScreen = state_.rootWindow_->screen();
     }
     if (targetScreen == nullptr) {
         targetScreen = QGuiApplication::primaryScreen();
@@ -618,7 +618,7 @@ void miacode::runtime::PlaybackCoordinator::setVideoDecodePrefersSoftware(bool p
     }
     // Push to the host if it already exists; otherwise the cached value is
     // applied once at host construction (ensurePreviewStageMediaHostInitialized).
-    if (auto* host = session_.previewStageMediaHost()) {
+    if (auto* host = state_.previewStageMediaHost_) {
         host->setVideoDecodePreference(preferSoftware);
     }
 }

@@ -374,7 +374,9 @@ void miacode::runtime::PlaybackCoordinator::setRenderSetting(const QString& key,
 
 void miacode::runtime::PlaybackCoordinator::refreshSurfaces()
 {
-    session_.refreshPreviewSurfaces();
+    if (state_.scene_ != nullptr) {
+        state_.scene_->update();
+    }
 }
 
 void miacode::runtime::PlaybackCoordinator::applySfxLevels()
@@ -389,7 +391,7 @@ void miacode::runtime::PlaybackCoordinator::prepareForShutdown()
 
 PreviewAudioSettings miacode::runtime::PlaybackCoordinator::audioSettings() const
 {
-    return session_.currentPreviewAudioSettings();
+    return state_.previewAudioSettings_;
 }
 
 void miacode::runtime::PlaybackCoordinator::applyAudioSettings(const PreviewAudioSettings& settings)
@@ -447,9 +449,40 @@ void miacode::runtime::PlaybackCoordinator::setFollowPreviewEnabled(bool enabled
     onTimelineFollowPreviewToggled(enabled);
 }
 
+bool miacode::runtime::PlaybackCoordinator::bottomTabsTabVisibleFromState(
+    RuntimeContext::BottomTabsTabId tabId) const
+{
+    switch (tabId) {
+    case RuntimeContext::BottomTabsTabId::Timeline:
+        return state_.timelineTabVisible_;
+    case RuntimeContext::BottomTabsTabId::Validation:
+        return state_.validationTabVisible_;
+    case RuntimeContext::BottomTabsTabId::Muri:
+        return state_.muriTabVisible_;
+    case RuntimeContext::BottomTabsTabId::Unknown:
+        break;
+    }
+    return false;
+}
+
+QString miacode::runtime::PlaybackCoordinator::bottomTabsTabIdToString(RuntimeContext::BottomTabsTabId tabId)
+{
+    switch (tabId) {
+    case RuntimeContext::BottomTabsTabId::Timeline:
+        return QStringLiteral("timeline");
+    case RuntimeContext::BottomTabsTabId::Validation:
+        return QStringLiteral("validation");
+    case RuntimeContext::BottomTabsTabId::Muri:
+        return QStringLiteral("muri");
+    case RuntimeContext::BottomTabsTabId::Unknown:
+        break;
+    }
+    return QStringLiteral("unknown");
+}
+
 QString miacode::runtime::PlaybackCoordinator::bottomTabsCurrentTabId() const
 {
-    return session_.currentBottomTabsTabIdString();
+    return bottomTabsTabIdToString(state_.currentBottomTabsTabId_);
 }
 
 void miacode::runtime::PlaybackCoordinator::setBottomTabsCurrentTabId(const QString& tabId)
@@ -459,24 +492,24 @@ void miacode::runtime::PlaybackCoordinator::setBottomTabsCurrentTabId(const QStr
 
 bool miacode::runtime::PlaybackCoordinator::bottomTabsVisible() const
 {
-    return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Timeline)
-        || session_.bottomTabsTabVisible(Session::BottomTabsTabId::Validation)
-        || session_.bottomTabsTabVisible(Session::BottomTabsTabId::Muri);
+    return bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId::Timeline)
+        || bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId::Validation)
+        || bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId::Muri);
 }
 
 bool miacode::runtime::PlaybackCoordinator::timelineTabVisible() const
 {
-    return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Timeline);
+    return bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId::Timeline);
 }
 
 bool miacode::runtime::PlaybackCoordinator::muriTabVisible() const
 {
-    return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Muri);
+    return bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId::Muri);
 }
 
 bool miacode::runtime::PlaybackCoordinator::validationTabVisible() const
 {
-    return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Validation);
+    return bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId::Validation);
 }
 
 bool miacode::runtime::PlaybackCoordinator::ignoreMuriIssuePrompts() const
@@ -490,7 +523,7 @@ void miacode::runtime::PlaybackCoordinator::noteTimelineSurfaceReady()
         return;
     }
     state_.timelineReady_ = true;
-    if (session_.runtimeDebugOutputEnabled_) {
+    if (state_.runtimeDebugOutputEnabled_) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("quick_shell/backend"),
@@ -577,29 +610,9 @@ Session::BottomTabsTabId Session::bottomTabsTabIdFromString(const QString& tabId
     return BottomTabsTabId::Unknown;
 }
 
-QString Session::bottomTabsTabIdString(BottomTabsTabId tabId) const
-{
-    switch (tabId) {
-    case BottomTabsTabId::Timeline:
-        return QStringLiteral("timeline");
-    case BottomTabsTabId::Validation:
-        return QStringLiteral("validation");
-    case BottomTabsTabId::Muri:
-        return QStringLiteral("muri");
-    case BottomTabsTabId::Unknown:
-        break;
-    }
-    return QStringLiteral("unknown");
-}
-
 Session::BottomTabsTabId Session::currentBottomTabsTabId() const
 {
     return currentBottomTabsTabId_;
-}
-
-QString Session::currentBottomTabsTabIdString() const
-{
-    return bottomTabsTabIdString(currentBottomTabsTabId());
 }
 
 bool Session::bottomTabsTabVisible(BottomTabsTabId tabId) const

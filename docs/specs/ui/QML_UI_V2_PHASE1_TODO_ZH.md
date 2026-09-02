@@ -851,6 +851,28 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - **仍未完成**：见下方两份盘点后的重排计划。不能标记阶段 4.9 或 Architecture Complete。
   未运行 Windows 构建。
 
+### 待裁决：`noteStatus` 掏空导致 3 条用户可见反馈消失（2026-09-02 发现）
+
+阶段 4.9d 第 1 步删除协调器里 10 处 `session_.noteStatus(...)` 调用时发现：
+`Session::noteStatus` 的函数体是**空的 `{}`**（`shell/ShellHost.cpp:82`，连形参名都没写），
+应是更早的 Widgets 移除期间状态栏消失后留下的空壳。10 条消息里 7 条是走带状态叙述或诊断
+（QML 已能从 `presentationChanged` / 播放快照自行渲染，或本就该进 `debug_log`），
+但下面 **3 条是用户可见的失败解释，目前静默消失**——用户按了播放没反应、跳转不动，界面不给任何提示：
+
+| 原调用点 | 消息 | 场景 |
+|---|---|---|
+| `playback/PlaybackGlue.cpp:191` | `"Select a difficulty field first."` | 未选难度就按播放 |
+| `playback/Tick.cpp:445` | `"Timeline metadata unavailable."` | `resolveNearestTimelineNote` 失败 |
+| `playback/Tick.cpp:449` | `"Timeline metadata unavailable."` | `moveEditorCursorToTimelineLocation` 失败 |
+
+**这不是 4.9d 引入的回归**，是既有缺口；而且因为函数体是空的，它不会以任何形式报错，
+不会被任何测试或日志发现。调用点已随第 1 步删除，此表是它们的位置记录。
+
+**未处理，待裁决**：修它需要先决定这些消息在 QML 里的呈现形态（toast / 内联提示 / 其他），
+那是产品决定。仓库现有两条通路：`UiRequestService`、`ShellNotifications`。
+三个方向：① 插队修（需先定呈现形态）② 4.9 主线走完再接（编排者倾向，因为 4.9d 正在动这块代码）
+③ 判定 QML 侧已有等价提示、无需修。
+
 ### 两份盘点与主线重排（2026-09-02）
 
 - **存量盘点结论**：`RuntimeContext::State` 剩余 338 个自有字段 = 164 独占 / **165 跨域** / 9 零引用；

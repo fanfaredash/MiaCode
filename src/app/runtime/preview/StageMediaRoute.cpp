@@ -563,14 +563,6 @@ void Session::ensurePreviewStageMediaRouteInitialized()
     stageMedia_->ensurePreviewStageMediaRouteInitialized();
 }
 
-PreviewStageMediaHost* Session::previewStageMediaHost() const
-{
-    // Phase 4c — non-owning. Returns nullptr until the host has been
-    // lazily created (first chart-load triggers it inside
-    // PreviewSection::ensurePreviewStageMediaHostInitialized).
-    return state_.previewStageMediaHost_;
-}
-
 void Session::syncPreviewStageMediaRouteChartPath(const QString& chartPath, const QString& trackPath, double pausedSecond, const QString& chartVideoOverridePath)
 {
     stageMedia_->syncPreviewStageMediaRouteChartPath(chartPath, trackPath, pausedSecond, chartVideoOverridePath);

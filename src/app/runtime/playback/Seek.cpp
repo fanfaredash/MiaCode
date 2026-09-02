@@ -348,7 +348,6 @@ void miacode::runtime::PlaybackCoordinator::stopPreviewHeldSeek(int key)
     state_.previewSeekHeldArrowKey_ = 0;
     state_.previewSeekHeldArrowLastElapsedMs_ = 0;
     state_.previewSeekHeldArrowElapsed_.invalidate();
-    session_.setProperty(kQuickShellTransportSeekProperty, false);
     if (ui_.previewHeldSeekTimer_ != nullptr) {
         ui_.previewHeldSeekTimer_->stop();
     }

@@ -235,7 +235,7 @@ public:
     void handlePreviewAudioPrepared(const miacode::preview_audio::PreviewAudioCompletion& completion);
     void handlePreviewRetainedPlaybackCompleted(
         const miacode::preview_audio::PreviewAudioCompletion& completion);
-    void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
+    void finishQtPreviewPlaybackAndReturnToEntry();
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
@@ -313,6 +313,8 @@ public:
     bool ignoreMuriIssuePrompts() const;
 
 private:
+    bool bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId tabId) const;
+    static QString bottomTabsTabIdToString(RuntimeContext::BottomTabsTabId tabId);
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredTimelineBridgeFlush();
     void invalidatePreviewFollowBindingCache();

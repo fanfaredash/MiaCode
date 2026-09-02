@@ -20,7 +20,6 @@
 namespace miacode::runtime::playback_detail {
 
 inline constexpr double kTimelineZeroSecondTolerance = 1e-6;
-inline constexpr auto kQuickShellTransportSeekProperty = "miacode.quick_shell_transport_seek";
 inline constexpr int kPreviewPlaybackRateToastMinWidth = 196;
 inline constexpr int kPreviewPlaybackRateToastMinHeight = 96;
 inline constexpr int kPreviewPlaybackRateToastHorizontalMargin = 20;

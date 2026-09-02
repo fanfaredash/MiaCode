@@ -55,8 +55,8 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
 
 bool miacode::runtime::PlaybackCoordinator::timelineTabIsForeground() const
 {
-    return session_.bottomTabsTabVisible(Session::BottomTabsTabId::Timeline)
-        && session_.currentBottomTabsTabId() == Session::BottomTabsTabId::Timeline;
+    return bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId::Timeline)
+        && state_.currentBottomTabsTabId_ == RuntimeContext::BottomTabsTabId::Timeline;
 }
 
 bool miacode::runtime::PlaybackCoordinator::quickTimelineBridgeReady() const
@@ -672,7 +672,7 @@ void miacode::runtime::PlaybackCoordinator::updateWindowTitle()
     const QFontMetrics metrics(QGuiApplication::font());
     const QString elided = metrics.elidedText(titleText, Qt::ElideRight, 420);
     const bool dirty = state_.documentDirty_ || state_.currentFieldDirty_;
-    session_.setWindowTitle(QString("MiaCode - %1%2").arg(elided, dirty ? QStringLiteral("[*]") : QString()));
+    state_.titleText_ = QString("MiaCode - %1%2").arg(elided, dirty ? QStringLiteral("[*]") : QString());
 }
 
 void miacode::runtime::PlaybackCoordinator::updateCurrentFileLabel()
@@ -748,7 +748,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineDragStarted()
     QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
     if (state_.previewFullscreenActive_) {
-        session_.showPreviewFullscreenControls(false);
+        showPreviewFullscreenControls(false);
     }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
@@ -805,7 +805,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineDragFinished(double second
     if (!state_.previewProgressFollowEnabled_) {
         Q_UNUSED(second);
         if (state_.previewFullscreenActive_) {
-            session_.showPreviewFullscreenControls(false);
+            showPreviewFullscreenControls(false);
         }
         if (ui_.previewSeekDebounceTimer_ != nullptr) {
             ui_.previewSeekDebounceTimer_->stop();
@@ -814,7 +814,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineDragFinished(double second
     }
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (state_.previewFullscreenActive_) {
-        session_.showPreviewFullscreenControls(false);
+        showPreviewFullscreenControls(false);
     }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
@@ -1105,13 +1105,6 @@ void miacode::runtime::PlaybackCoordinator::navigateTimelineToSecond(double seco
     moveEditorCursorToTimelineLocation(line, col, false, focusEditor, true, true);
 
     state_.suppressTimelineCursorSync_ = previousSuppressState;
-
-    session_.noteStatus(
-        QString("Timeline jump: %1s -> L%2 C%3")
-            .arg(clampedSecond, 0, 'f', 3)
-            .arg(line)
-            .arg(col)
-    );
 }
 
 bool miacode::runtime::PlaybackCoordinator::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const

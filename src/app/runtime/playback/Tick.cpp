@@ -281,7 +281,7 @@ void miacode::runtime::PlaybackCoordinator::onQtPreviewTickAtSecond(double secon
             // note timing as well.
             state_.previewSfxRuntime_->drainEvents(second);
         }
-        finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current timeline.");
+        finishQtPreviewPlaybackAndReturnToEntry();
         return;
     }
 
@@ -442,17 +442,9 @@ void miacode::runtime::PlaybackCoordinator::jumpToNearestTimelineNote(double sec
     int line = 1;
     int col = 1;
     if (!resolveNearestTimelineNote(second, lane, &line, &col, nullptr)) {
-        session_.noteStatus("Timeline metadata unavailable.");
         return;
     }
     if (!moveEditorCursorToTimelineLocation(line, col, true, true, true, false)) {
-        session_.noteStatus("Timeline metadata unavailable.");
         return;
     }
-    session_.noteStatus(
-        QString("Timeline jump: %1s -> L%2 C%3")
-            .arg(qMax(0.0, second), 0, 'f', 3)
-            .arg(line)
-            .arg(col)
-    );
 }

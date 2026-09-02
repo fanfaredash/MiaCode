@@ -559,7 +559,6 @@ void miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch()
     session_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
     session_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     session_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
-    session_.updateEditorHeaderLayoutMode();
     const qint64 totalMs = totalTimer.elapsed();
     if (totalMs >= kPageLayoutTotalSlowMs) {
         appendPageLayoutDiag(

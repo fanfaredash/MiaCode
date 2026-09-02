@@ -162,11 +162,6 @@ class Session : public QObject
     // latency page above.
 
 public:
-    // Phase 4c — non-owning accessor for the preview stage-media host
-    // (QMediaPlayer + QVideoSink). The host is created lazily inside
-    // MainWindow.PreviewStageMediaRoute on first chart-load.
-    PreviewStageMediaHost* previewStageMediaHost() const;
-
     // Accessor for the latency-detection sandbox controller. The
     // The QML latency page binds its controls to the controller
     // (BPM/offset/subdivision/SFX-volume + audition lifecycle).
@@ -342,7 +337,6 @@ public:
     // 音频设置 page. The mixer is a value type, so the page reads a copy and
     // hands one back; every write lands on the same runtime-apply and persist
     // path the Widgets dialog used, rather than the page poking members.
-    PreviewAudioSettings currentPreviewAudioSettings() const;
     void applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings);
     void savePreviewAudioSettingsAsSoftwareDefault();
     void restorePreviewAudioSettingsFromSoftwareDefault();
@@ -386,7 +380,6 @@ public:
     miacode::v2::JobProgressService* jobProgressService() const;
     void preparePreviewForShutdown();
     QString windowTitle() const;
-    void setWindowTitle(const QString& title);
     void noteStatus(const QString& text);
 
 protected:
@@ -591,7 +584,6 @@ public:
     // sound bank first when the selected intro sound changed. A no-op until the
     // audio engine is up, which is the guard every caller used to repeat.
     void applyPreviewSfxLevels(bool reloadAssets = false);
-    void refreshPreviewSurfaces();
 
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     // 延迟校准's narrow surface for the QML page. Reads mirror what the
@@ -631,7 +623,6 @@ private:
     void saveProjectAudioPreferences() const;
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
-    bool preparePreviewStartState();
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();
@@ -671,7 +662,6 @@ private:
     void applyDeferredAnalysisUiUpdates();
     void setValidationTabVisible(bool visible);
     BottomTabsTabId currentBottomTabsTabId() const;
-    QString currentBottomTabsTabIdString() const;
     void setCurrentBottomTabsTabId(BottomTabsTabId tabId);
     void setCurrentBottomTabsTabId(const QString& tabId);
     void setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible);

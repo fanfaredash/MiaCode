@@ -481,11 +481,6 @@ void miacode::runtime::StageMediaHost::setTouchPadAuthoringCtrlHoldActive(bool a
     applyEffectivePreviewOutlineVariantToCanvas();
 }
 
-PreviewAudioSettings Session::currentPreviewAudioSettings() const
-{
-    return state_.previewAudioSettings_;
-}
-
 void Session::applyPreviewAudioSettingsFromUi(const PreviewAudioSettings& settings)
 {
     state_.previewAudioSettings_ = settings;
@@ -1161,13 +1156,6 @@ void Session::applyPreviewSfxLevels(bool reloadAssets)
         return;
     }
     previewSfxRuntime_->applyLevels(previewAudioSettings_);
-}
-
-void Session::refreshPreviewSurfaces()
-{
-    if (scene_ != nullptr) {
-        scene_->update();
-    }
 }
 
 void Session::applyPreviewSkinDirectoryToSurfaces()

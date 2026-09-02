@@ -140,16 +140,59 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
       一并清除。净删 147 行。Release 全量构建通过，全量 CTest 101 项 100 通过
       （唯一红为既有 `qtavplayer_platform_spec`）。
 - [ ] 阶段 4.9d：**切断 `PlaybackCoordinator` 对 `Session&` 的依赖**（本主线的关键路径）。
-      现状：构造签名要 `Session&`，实现体有 204 处 `session_.` 调用、73 个不同方法。
-      这直接导致没有任何测试能构造协调器——门槛第 1 项（fake-clock 七种转换）和第 3 项
-      （三宿主装配与生命周期）为空，根因是同一个。73 个方法按四类归口：
-      ① Widgets 补妆（`refreshQuickShellRehostedWidgetParent`、`updatePauseButtonAppearance`、
-      `showPreviewFullscreenControls`）→ 随 Widgets 清理消失，不要为它们造抽象；
-      ② 已有契约（`currentPreviewAuthoritativeAudioClockSecond` → `AudioClockSource`；
-      `applicationServices_`；`editorSyncController`）→ 接窄端口；
-      ③ 舞台媒体路由（`ensurePreviewStageMediaRouteInitialized` 等）→ 归 `PreviewHost` / `StageMediaHost`；
-      ④ 持久化与状态播报（`savePortableState`、`noteStatus`、`updateDirtyState`）→ 文档端口 /
-      `ShellNotifications`。真正需要新设计的很少。
+      现状：构造签名要 `Session&`，实现体有 204 处 `session_.` 调用、73 个不同成员。
+      这直接导致没有任何测试能构造协调器——门槛第 1 项（fake-clock 七种转换）与第 3 项
+      （三宿主装配与生命周期）为空，根因是同一个。
+
+      **归口分类（2026-09-02 事实盘点后，推翻了此前"73 个方法各自归口"的设想）**：
+      决定性事实是 `PlaybackCoordinator.h:348-350` —— 协调器**已经持有与 `Session` 同一个
+      `RuntimeContext::Ui&` / `State&`**。因此相当一部分 `session_.` 调用只是绕路去读写
+      协调器自己手里就有引用的字段，属于冗余而非耦合。
+
+      | 类 | 成员 | 调用 | 处置 |
+      |---|---|---|---|
+      | A 自指绕路 | 3 | 5 | Session 侧实现体就是 `playback_->同名方法()`，绕回协调器自己；改直调 |
+      | B 死代码/纯诊断 | 4 | 14 | `noteStatus` 函数体为空却被调 10 次；`updateEditorHeaderLayoutMode` 同样为空；`setProperty` 写的动态属性全仓无人读；`findChildren` 仅诊断计数 |
+      | C 已持有同一存储 | 10 | 22 | 函数体即 `return state_.xxx;`；改直读。其中 `setPreviewPlayingFlag`（6）含异步 `emit presentationChanged`，须留到端口步，不可直读替代 |
+      | D Widgets 补妆 | 8 | 33 | 纯 QWidget/QLayout 操作，**且 widget 指针全部来自协调器已持有的 `ui_`**；只有"刷新布局"这个动作绕道 Session |
+      | E 需要真端口 | 46 | 112 | 收敛为 5 个端口，见下 |
+      | F 时钟 | 1 | 14 | `currentPreviewAuthoritativeAudioClockSecond`，见下 |
+      | G 平台条件 | 1 | 4 | `setPreviewFixedTimerHighResolutionActive` 全 body 在 `#ifdef Q_OS_WIN` 内；macOS 上为空操作但 Windows 有真行为，**不是死代码** |
+
+      **F 类不是正确性问题**：曾怀疑协调器自身的 `AudioClockSource` 与 Session 侧方法是两份真相，
+      经查是"源与下游采样"——Session 侧按墙钟实时外推（数据全部来自协调器同样持有的
+      `state_.qtPreviewElapsed_` / `qtPreviewStartSecond_` / `previewPlaybackRate_`），
+      而 `AudioClockSource` 返回的 `state_.pauseSecond_` 正是 `Tick.cpp:145` 调用前者后写入的。
+      一份真相两条路径，不是权威冲突。但**canonical 时钟的计算体住在 `Session` 而非号称播放权威的
+      协调器里**，且该函数只读协调器已有的 `state_` 字段——搬进协调器是纯移动，不需要重新设计。
+
+      **D 类不与 Widgets 移除合并**：函数体只碰 `ui_`、不碰任何 Session 状态，所以搬进协调器即可，
+      不需要造用完即弃的兼容端口，也不必把 4.9d 阻塞在整条 Widgets 移除之后；搬完后它们会随
+      Widgets 移除自然消失。
+
+      **E 类的 5 个端口**：`StageMediaHost&`（吃掉全部 `*StageMediaRoute*` 家族与 SFX 预热，约 41 处）、
+      持久化端口（`savePortableState` 及音频/渲染偏好存取，约 16 处）、`ApplicationServices&`
+      （11 处全是 `.workspace().document()`）、`EditorSyncController&`（含
+      `clearPreviewFollowDecoration`，11 处）、`ValidationHost&` / `DocumentSessionHost&`（约 11 处）。
+      `previewPlayheadChanged` 已有等价契约 `ShellNotifications::previewPlayheadChanged`
+      （Session 现在就在转发），改直接发即可，不算新端口。
+      `appliedQmlWorkspaceRevision_` 是 `Session` 自己的字段（不是 `state_` 别名），
+      是唯一没有现成去处的成员，需单独定归属。
+
+      **执行顺序**（每步之间构建 + 全量 CTest；`session_.` 计数是天然进度指标 204 → 169 → 155 → 122 → 0）：
+      1. ~~A+B+C（不含 `setPreviewPlayingFlag`）：纯删除与直读，零设计风险~~
+         **已完成 2026-09-02**：`session_.` 计数 204 → **169**（降 35 = A 类 5 + B 类 14 + C 类 16）。
+         连带删除第 1 步之后变成全仓无引用的 6 个 `Session` 方法、1 个私有 helper
+         （`bottomTabsTabIdString`）、`finishQtPreviewPlaybackAndReturnToEntry` 的死参数与其
+         `Session` 转发壳、以及常量 `kQuickShellTransportSeekProperty`——这是解耦第一次开始
+         **减少 `Session` 的表面积**，而不只是不再去调它。`qml_export_font_contract_spec` 有一条
+         断言原本钉着 `"void Session::refreshPreviewSurfaces()"` 的源码文本，已改为钉协调器侧的
+         `PlaybackCoordinator::refreshSurfaces()`，强度不变。
+      2. F：canonical 时钟计算搬进协调器
+      3. D：Widgets 补妆函数体搬进协调器
+      4. E：5 个端口 + `setPreviewPlayingFlag` 的信号路径
+      5. 构造签名去掉 `Session&`；门槛 1、3 的测试从此可写
+
       **完成判据：`PlaybackCoordinator` 能在 spec 里被构造出来。**
 - [ ] 阶段 4.9e：canonical 播放状态收进协调器私有成员，跨域读者改读 `PlaybackSnapshot`
       （`playing_` / `pauseSecond_` / `previewPlaybackRate_` / `previewTransportState_` /

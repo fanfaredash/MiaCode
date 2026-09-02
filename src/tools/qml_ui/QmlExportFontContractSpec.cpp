@@ -68,17 +68,19 @@ bool verifyQmlFontContract(QTextStream& err)
 
     // The live redraw goes through MainWindow's narrow surface method now — the
     // QML layer no longer reaches previewCanvas_ directly — so both ends are
-    // pinned: the session asks, and the window still calls update().
-    const QString previewWarmup = readSource(
-        QStringLiteral("src/app/runtime/preview/WarmupAndSettings.cpp"));
+    // pinned: the session asks, and the playback coordinator still calls
+    // update().
+    const QString playbackSurfaceContract = readSource(
+        QStringLiteral("src/app/runtime/playback/SurfaceContract.cpp"));
     ok &= require(
         implementation.contains(QStringLiteral("fontLibraryEntries("))
             && implementation.contains(QStringLiteral("importFontFileIntoLibrary(selectedPath)"))
             && implementation.contains(QStringLiteral("refreshIntroState()"))
             && implementation.contains(QStringLiteral("setPreviewHudCustomFontPath(area, path)"))
             && implementation.contains(QStringLiteral("preview()->refreshSurfaces()"))
-            && previewWarmup.contains(QStringLiteral("void Session::refreshPreviewSurfaces()"))
-            && previewWarmup.contains(QStringLiteral("scene_->update()")),
+            && playbackSurfaceContract.contains(
+                QStringLiteral("void miacode::runtime::PlaybackCoordinator::refreshSurfaces()"))
+            && playbackSurfaceContract.contains(QStringLiteral("scene_->update()")),
         QStringLiteral("the export session uses the shared library and redraws the live preview"),
         err);
     ok &= require(
