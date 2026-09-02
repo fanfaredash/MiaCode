@@ -15,7 +15,7 @@ Rectangle {
     readonly property bool useEmbeddedMenu: root.platform.embeddedMenuInTitleBar
     readonly property bool useCaptionButtons: root.platform.captionButtons
 
-    implicitHeight: 34
+    implicitHeight: 32
     color: Theme.surfaceColor("editorHeader", Theme.colors.background.surface)
 
     // Title stays window-centered. Menu only yields to the painted glyph width
@@ -153,13 +153,5 @@ Rectangle {
         visible: root.useCaptionButtons
         width: root.useCaptionButtons ? implicitWidth : 0
         hostWindow: root.hostWindow
-    }
-
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 1
-        color: Theme.colors.border.normal
     }
 }

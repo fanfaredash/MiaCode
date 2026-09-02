@@ -40,7 +40,7 @@ class TimelineQuickStateBridge : public QObject
     Q_PROPERTY(QVariantList zoomPresetValues READ zoomPresetValues CONSTANT)
 
 public:
-    explicit TimelineQuickStateBridge(QObject* parent = nullptr);
+    explicit TimelineQuickStateBridge(QObject* parent = nullptr, const QFont& font = QFont());
 
     void setQuickViewportSize(const QSize& viewportSize);
     int timelineTop() const;

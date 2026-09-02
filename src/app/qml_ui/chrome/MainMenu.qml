@@ -57,10 +57,27 @@ Item {
     function openAnchoredMenu(menu, anchor) {
         if (!menu || !anchor)
             return
-        if (root._activeMenu && root._activeMenu !== menu && root._activeMenu.visible)
-            root._activeMenu.close()
+        const previous = root._activeMenu
+        if (previous === menu)
+            return
+        // Adjacent entries switch immediately; opening and closing the menu
+        // session use the regular fade transitions.
+        if (previous) {
+            previous.exit.enabled = false
+            previous.close()
+            previous.exit.enabled = true
+            menu.enter.enabled = false
+            menu.opacity = 1
+        }
         root._activeMenu = menu
+        menu.closePolicy = Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
         menu.popup(anchor, 0, anchor.height)
+        menu.enter.enabled = true
+    }
+
+    Connections {
+        target: root._activeMenu
+        function onAboutToHide() { root._activeMenu = null }
     }
 
     function plainTitle(text) {
@@ -129,10 +146,9 @@ Item {
         bottomPadding: 0
         visible: root.visibleCount > btn.menuIndex
         focusPolicy: Qt.NoFocus
-        tone: "bar"
         selected: btn.menuOpen
 
-        readonly property bool menuOpen: btn.menu && btn.menu.visible
+        readonly property bool menuOpen: btn.menu.active
 
         implicitWidth: Math.ceil(label.implicitWidth) + leftPadding + rightPadding
 
@@ -149,13 +165,18 @@ Item {
         }
 
 
-        onClicked: root.openAnchoredMenu(btn.menu, btn)
+        onClicked: {
+            if (btn.menuOpen)
+                root.closeActiveMenu()
+            else
+                root.openAnchoredMenu(btn.menu, btn)
+        }
 
         // Menubar-style: while a menu is open, hovering another top item switches it.
         onHoveredChanged: {
             if (!btn.hovered || !btn.visible || !btn.menu)
                 return
-            if (root._activeMenu && root._activeMenu.visible && root._activeMenu !== btn.menu)
+            if (root._activeMenu && root._activeMenu !== btn.menu)
                 root.openAnchoredMenu(btn.menu, btn)
         }
     }
@@ -205,7 +226,17 @@ Item {
             iconWidth: 16
             iconHeight: 16
             tooltip: UiText.text("更多")
-            onClicked: root.openAnchoredMenu(overflowMenu, moreButton)
+            active: overflowMenu.active
+            onClicked: {
+                if (root._activeMenu === overflowMenu)
+                    root.closeActiveMenu()
+                else
+                    root.openAnchoredMenu(overflowMenu, moreButton)
+            }
+            onHoveredChanged: {
+                if (hovered && root._activeMenu && root._activeMenu !== overflowMenu)
+                    root.openAnchoredMenu(overflowMenu, moreButton)
+            }
         }
     }
 

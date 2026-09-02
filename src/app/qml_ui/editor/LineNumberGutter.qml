@@ -30,7 +30,7 @@ Rectangle {
     focus: false
 
     width: 36
-    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
+    color: Theme.surfaceColor("codeEditor", Theme.colors.background.surface)
     clip: true
 
     // 只为可见行建场景图文字，和正文同一套变换；整列贴图在窗口插值里会拉伸。
@@ -163,20 +163,20 @@ Rectangle {
         }
     }
 
-    Menu {
+    AppMenu {
         id: bookmarkMenu
         property int line: 1
-        MenuItem {
+        AppMenuItem {
             text: UiText.text("跳转到此行")
             onTriggered: root.jumpRequested(bookmarkMenu.line)
         }
-        MenuItem {
+        AppMenuItem {
             text: root.bookmarked(bookmarkMenu.line) ? UiText.text("删除书签") : UiText.text("创建书签")
             onTriggered: root.bookmarked(bookmarkMenu.line)
                          ? root.deleteRequested(bookmarkMenu.line)
                          : root.createRequested(bookmarkMenu.line)
         }
-        MenuItem {
+        AppMenuItem {
             text: UiText.text("重命名书签")
             enabled: root.bookmarked(bookmarkMenu.line)
             onTriggered: root.renameRequested(bookmarkMenu.line)

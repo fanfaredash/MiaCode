@@ -138,7 +138,6 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
     QQuickWindow* window,
     TimelineQuickTextureCache* textures) const
 {
-    Q_UNUSED(window);
     auto* root = dynamic_cast<TimelineQuickOverlayRootNode*>(oldNode);
     if (root == nullptr) {
         delete oldNode;
@@ -200,20 +199,11 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
         for (const auto& line : state.frameLines) {
             staticRoot->appendChildNode(buildTimelineLineNode(line));
         }
-        if (textures != nullptr) {
-            for (const auto& label : state.laneLabels) {
-                if (label.text.isEmpty()) {
-                    continue;
-                }
-                const TimelineQuickTextureHandle handle = textures->textTexture(label);
-                if (handle.texture == nullptr) {
-                    continue;
-                }
-                auto* node = new QSGSimpleTextureNode();
-                node->setTexture(handle.texture);
-                node->setRect(QRectF(label.topLeft, handle.logicalSize));
-                staticRoot->appendChildNode(node);
+        for (const auto& label : state.laneLabels) {
+            if (label.text.isEmpty()) {
+                continue;
             }
+            staticRoot->appendChildNode(buildTimelineTextNode(window, label));
         }
         root->staticRevision = state.gridRevision;
     }

@@ -7,7 +7,8 @@ Rectangle {
     id: root
 
     required property var previewSession
-    // True while the export page is up. The fullscreen button hides there:
+    required property var preferences
+    // True while the export page is up. The canvas menu hides there:
     // entering preview fullscreen on that page crashes the Intel iGPU D3D11
     // driver with hardware decode. Supplied by the caller, which knows the
     // active page.
@@ -16,7 +17,7 @@ Rectangle {
 
 
     implicitHeight: 63
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
 
     Rectangle {
         anchors.left: parent.left
@@ -41,7 +42,6 @@ Rectangle {
         return Math.min(0, bound)
     }
     property bool scrubActive: false
-    property real rateMenuClosedAt: 0
     property real activeScrubSecond: root.previewSession.positionSeconds
     readonly property real displayedSeconds: root.scrubActive
         ? root.activeScrubSecond
@@ -152,32 +152,44 @@ Rectangle {
             text: UiText.text("%1x").arg(root.previewSession.rate)
             sizeToLabels: rateMenu.rateLabels
             tooltip: UiText.text("播放速度")
-            expanded: rateMenu.visible
+            expanded: rateMenu.active
             Accessible.description: UiText.text("打开播放速度预设")
             onClicked: {
-                if (rateMenu.visible) {
+                if (rateMenu.active) {
                     rateMenu.close()
                     return
                 }
-                if (Date.now() - root.rateMenuClosedAt < 200)
-                    return
                 rateMenu.openAt(rateButton)
             }
         }
 
         IconButton {
+            id: canvasMenuButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             visible: !root.exportPageActive
-            iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
-            tooltip: UiText.text("全屏预览")
-            onClicked: root.fullscreenRequested()
+            active: canvasMenu.active
+            iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
+            tooltip: UiText.text("预览画布")
+            Accessible.description: UiText.text("打开预览画布菜单")
+            onClicked: {
+                if (canvasMenu.active) {
+                    canvasMenu.close()
+                    return
+                }
+                canvasMenu.openAt(canvasMenuButton)
+            }
         }
     }
 
     PreviewRateMenu {
         id: rateMenu
         previewSession: root.previewSession
-        onClosed: root.rateMenuClosedAt = Date.now()
+    }
+
+    PreviewCanvasMenu {
+        id: canvasMenu
+        preferences: root.preferences
+        onFullscreenRequested: root.fullscreenRequested()
     }
 }

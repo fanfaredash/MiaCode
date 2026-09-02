@@ -14,6 +14,9 @@ import MiaCode.UI
 Dialog {
     id: root
 
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
+
     required property var preferencesModel
     required property var shortcuts
     required property var preferences

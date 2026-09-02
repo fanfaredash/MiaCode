@@ -16,7 +16,7 @@ ListView {
         border.color: Theme.colors.border.normal
     }
     model: bookmarks
-    delegate: ItemDelegate {
+    delegate: ChromeRow {
         required property var modelData
         width: ListView.view.width
         text: UiText.text("第 %1 行：%2").arg(modelData.line).arg(modelData.title)

@@ -6,7 +6,9 @@ import MiaCode.UI
 CheckBox {
     id: root
 
-    spacing: 6
+    property bool compact: false
+
+    spacing: compact ? 4 : 6
     leftPadding: 0
     rightPadding: 0
     topPadding: 0
@@ -15,10 +17,10 @@ CheckBox {
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
     font.family: Theme.uiFont
-    font.pixelSize: Theme.secondaryFontSize
+    font.pixelSize: compact ? Theme.compactFontSize : Theme.secondaryFontSize
     indicator: Item {
-        implicitWidth: 15
-        implicitHeight: 15
+        implicitWidth: root.compact ? 13 : 15
+        implicitHeight: root.compact ? 13 : 15
         x: root.leftPadding
         y: (root.height - height) / 2
 
@@ -34,8 +36,8 @@ CheckBox {
 
         ControlsImpl.IconImage {
             anchors.centerIn: parent
-            width: 11
-            height: 11
+            width: root.compact ? 9 : 11
+            height: root.compact ? 9 : 11
             visible: root.checked
             source: "qrc:/icons/checkmark.svg"
             sourceSize: Qt.size(width, height)

@@ -13,16 +13,12 @@
 
 class QSGNode;
 class QSGTexture;
-
-struct TimelineQuickRasterizedImage {
-    QImage image;
-    QSizeF logicalSize;
-};
+class QQuickWindow;
 
 QImage makeTimelineGlyphImage(const miacode::timeline::TimelineSceneGlyph& glyph);
-TimelineQuickRasterizedImage makeTimelineTextImage(
-    const miacode::timeline::TimelineSceneTextLabel& label,
-    qreal devicePixelRatio = 1.0);
+QSGNode* buildTimelineTextNode(
+    QQuickWindow* window,
+    const miacode::timeline::TimelineSceneTextLabel& label);
 QSGNode* buildTimelineLineNode(const miacode::timeline::TimelineSceneLine& line);
 QSGNode* buildTimelineRectNode(const miacode::timeline::TimelineSceneRect& rect);
 QSGNode* buildTimelineTriangleNode(const miacode::timeline::TimelineSceneTriangle& triangle);

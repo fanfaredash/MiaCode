@@ -7,25 +7,27 @@ Rectangle {
     id: root
 
     required property var previewSession
-    // See PreviewTransport: the fullscreen button hides on the export page.
+    required property var preferences
+    // See PreviewTransport: the canvas menu hides on the export page.
     property bool exportPageActive: false
     // MainSplitView keeps the transport chrome mounted for layout stability, but
     // exactly one PreviewSurface may subscribe to the runtime at a time. The
     // compact and fullscreen owners use the same rule.
     property bool surfaceActive: true
-    property real renderMenuClosedAt: 0
     signal fullscreenRequested()
 
-    // Mirror QuickShellMain: backend aspect is authoritative (export page
-    // widens the canvas; chart/latency stay 1:1). Prefer width/height >= 1.
+    // Export page still uses the backend ratio. Edit mode defaults to 1:1;
+    // free aspect sizes the surface to the live stage geometry.
+    readonly property bool freeAspectActive:
+        !root.exportPageActive && root.preferences && root.preferences.previewCanvasFreeAspect
     readonly property real canvasAspectRatio: {
         const ratio = root.previewSession && root.previewSession.canvasAspectRatio !== undefined
                       ? root.previewSession.canvasAspectRatio
                       : 1.0
-        return Math.max(1.0, ratio)
+        return Math.max(1.0, (ratio > 0 && isFinite(ratio)) ? ratio : 1.0)
     }
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
     clip: true
 
     function fittedFrameWidth(hostWidth, hostHeight) {
@@ -50,17 +52,15 @@ Rectangle {
         ChromeRow {
             id: renderModeButton
             implicitWidth: renderModeLabelText.implicitWidth + leftPadding + rightPadding
-            tone: "icon"
+            selected: renderModeMenu.active
             focusPolicy: Qt.TabFocus
             Accessible.name: root.previewSession.renderModeLabel
             Accessible.description: UiText.text("打开预览渲染模式菜单")
             onClicked: {
-                if (renderModeMenu.visible) {
+                if (renderModeMenu.active) {
                     renderModeMenu.close()
                     return
                 }
-                if (Date.now() - root.renderMenuClosedAt < 200)
-                    return
                 renderModeMenu.openAt(renderModeButton)
             }
 
@@ -68,7 +68,7 @@ Rectangle {
                 id: renderModeLabelText
                 text: root.previewSession.renderModeLabel
                 color: !renderModeButton.enabled ? Theme.colors.text.disabled
-                     : (renderModeButton.hovered || renderModeButton.down) ? Theme.colors.text.active
+                     : (renderModeButton.selected || renderModeButton.hovered || renderModeButton.visualFocus) ? Theme.colors.text.active
                      : Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize
@@ -82,7 +82,6 @@ Rectangle {
     PreviewRenderModeMenu {
         id: renderModeMenu
         previewSession: root.previewSession
-        onClosed: root.renderMenuClosedAt = Date.now()
     }
 
     Item {
@@ -96,8 +95,12 @@ Rectangle {
         Loader {
             id: previewSurfaceLoader
             anchors.centerIn: parent
-            width: root.fittedFrameWidth(parent.width, parent.height)
-            height: root.fittedFrameHeight(parent.width, parent.height)
+            width: root.freeAspectActive
+                   ? parent.width
+                   : root.fittedFrameWidth(parent.width, parent.height)
+            height: root.freeAspectActive
+                    ? parent.height
+                    : root.fittedFrameHeight(parent.width, parent.height)
             // Do not construct an invisible scene root: it still subscribes to
             // PreviewRuntime::frameStateChanged even when QSG skips painting it.
             active: root.surfaceActive && root.visible && width >= 64 && height >= 64
@@ -118,6 +121,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: statistics.top
         previewSession: root.previewSession
+        preferences: root.preferences
         exportPageActive: root.exportPageActive
         onFullscreenRequested: root.fullscreenRequested()
     }

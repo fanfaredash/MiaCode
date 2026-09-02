@@ -14,6 +14,18 @@ Column {
 
     width: parent ? parent.width : implicitWidth
 
+    component FoldIndicator: Text {
+        property bool expanded: false
+
+        width: 10
+        text: expanded ? "▾" : "▸"
+        color: Theme.colors.text.secondary
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.secondaryFontSize
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+    }
+
     Item {
         width: root.width
         height: 30
@@ -25,20 +37,33 @@ Column {
             anchors.verticalCenter: parent.verticalCenter
             height: parent.height
             leftPadding: 8
-            tone: "hover"
             onClicked: {
                 root.viewState.difficultySectionExpanded
                     = !root.viewState.difficultySectionExpanded
             }
 
-            contentItem: Text {
-                text: (root.viewState.difficultySectionExpanded ? "▾  " : "▸  ")
-                    + UiText.text("难度")
-                color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.secondaryFontSize
-                font.bold: true
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Item {
+                FoldIndicator {
+                    id: sectionFoldIndicator
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    expanded: root.viewState.difficultySectionExpanded
+                }
+
+                Text {
+                    anchors.left: sectionFoldIndicator.right
+                    anchors.leftMargin: 8
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    text: UiText.text("难度")
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.secondaryFontSize
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             Tooltip {
@@ -130,19 +155,16 @@ Column {
                     // the 难度 section header's own chevron. The slot is always
                     // reserved so every colour block lines up; only the glyph is
                     // conditional.
-                    Text {
+                    FoldIndicator {
                         anchors.left: parent.left
                         anchors.leftMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 10
-                        horizontalAlignment: Text.AlignHCenter
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
                         visible: difficultyGroup.bookmarks.length > 0
-                        text: difficultyGroup.bookmarksExpanded ? "▾" : "▸"
+                        expanded: difficultyGroup.bookmarksExpanded
                         color: difficultyGroup.activeEditor
                                ? Theme.colors.text.active
                                : Theme.colors.text.secondary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.secondaryFontSize
                     }
 
                     DifficultySwatch {
@@ -166,15 +188,57 @@ Column {
                 model: difficultyGroup.bookmarksExpanded ? difficultyGroup.bookmarks : []
 
                 delegate: NavRow {
+                    id: bookmarkRow
                     required property var modelData
                     width: parent.width
                     height: root.viewState.difficultySectionExpanded ? 26 : 0
                     // Past the difficulty label's own 38, so a bookmark reads as
                     // belonging to the row above it rather than sitting level
                     // with it.
-                    textLeftPadding: 44
-                    text: UiText.text("书签 %1：%2").arg(modelData.line).arg(modelData.title)
+                    textLeftPadding: 38
                     Accessible.name: UiText.text("%1，第 %2 行").arg(modelData.title).arg(modelData.line)
+
+
+                    contentItem: Item {
+                        Rectangle {
+                            id: lineBadge
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.max(18, lineNumber.implicitWidth + 10)
+                            height: 16
+                            radius: 4
+                            color: {
+                                const accent = Qt.color(Theme.colors.accent.primary)
+                                return Qt.rgba(accent.r, accent.g, accent.b,
+                                               Theme.darkTheme ? 56 / 255 : 32 / 255)
+                            }
+
+                            Text {
+                                id: lineNumber
+                                anchors.centerIn: parent
+                                text: String(bookmarkRow.modelData.line)
+                                color: Theme.colors.text.primary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Math.max(9, Theme.uiFontSize - 2)
+                            }
+                        }
+
+                        Text {
+                            anchors.left: lineBadge.right
+                            anchors.leftMargin: 6
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            text: bookmarkRow.modelData.title
+                            color: !bookmarkRow.enabled ? Theme.colors.text.disabled
+                                   : bookmarkRow.selected ? Theme.colors.text.active
+                                   : Theme.colors.text.secondary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Math.max(1, Theme.uiFontSize - 1)
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
                     onClicked: {
                         root.viewState.openDifficultyEditor(difficultyGroup.modelData.id)
                         root.documentSession.navigateToBookmark(
@@ -205,6 +269,9 @@ Column {
 
     Dialog {
         id: removeDifficultyDialog
+
+        enter: FadeTransition {}
+        exit: FadeTransition { appearing: false }
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         parent: Overlay.overlay

@@ -8,6 +8,9 @@ import MiaCode.UI
 // job came from and how each one ended.
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     required property var mediaTools

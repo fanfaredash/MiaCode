@@ -17,6 +17,9 @@ import MiaCode.UI
 // caller did not offer.
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     property string message: ""

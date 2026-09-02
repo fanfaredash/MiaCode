@@ -1,6 +1,5 @@
 #include "timeline/TimelineSceneStateBuilder.h"
 
-#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QDir>
 #include <QtMath>
@@ -27,15 +26,13 @@ using miacode::timeline::TimelineThemeColors;
 
 constexpr int kPlayableLaneCount = 8;
 constexpr int kLaneCount = kPlayableLaneCount + 1;
-constexpr int kHeaderHeight = 28;
+constexpr int kHeaderHeight = 26;
+constexpr int kTimelineBottomPadding = 8;
 constexpr int kLaneHeight = 20;
-constexpr int kTimelineLeftMargin = 40;
-constexpr int kTimelineTopMargin = 6;
+constexpr int kTimelineLeftMargin = 32;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kTimelineHeaderLineLabelMinSpacingPx = 22;
 constexpr int kTimelineHeaderMultiDigitLabelSideGapPx = 2;
-constexpr qreal kTimelineHeaderSingleDigitFontScale = 0.9;
-constexpr qreal kTimelineHeaderMultiDigitBaseFontScale = 0.8;
 constexpr qreal kTimelineTopMarkerTipOffsetPx = 1.0;
 constexpr qreal kTimelinePlaybackEntryMarkerHalfWidthPx = 6.0;
 constexpr qreal kTimelinePlaybackEntryMarkerHeightPx = 8.0;
@@ -70,6 +67,9 @@ QString laneLabelForIndex(int laneIndex)
     if (laneIndex >= 0 && laneIndex < kPlayableLaneCount) {
         return QString::number(laneIndex + 1);
     }
+    if (laneIndex == kPlayableLaneCount) {
+        return QStringLiteral("T");
+    }
     return QString();
 }
 
@@ -96,18 +96,24 @@ const miacode::timeline::TimelineNoteAssetSet& sceneNoteAssets(const TimelineSce
     return cachedAssets.noteIcons.isEmpty() ? fallbackSceneNoteAssets() : cachedAssets;
 }
 
-QFont timelineLaneLabelFont()
+QFont timelineHeaderLabelFont(const QFont& sourceFont)
 {
-    QFont laneLabelFont = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    laneLabelFont.setPointSize(10);
-    return laneLabelFont;
+    QFont font(sourceFont);
+    font.setPixelSize(10);
+    return font;
 }
 
-// "Material" scale — caps at 100%. Drives note 素材/markers, lane-label fonts and the
-// header region, so none of them grow when the bottom tab is dragged past 100%.
+// Note assets and markers scale with the grid, up to their native size.
 double normalizedContentScale(double scale)
 {
     return qBound(0.5, scale, 1.0);
+}
+
+QFont timelineLaneLabelFont(const QFont& sourceFont, double contentScale)
+{
+    QFont font(sourceFont);
+    font.setPointSizeF(10.0 * normalizedContentScale(contentScale));
+    return font;
 }
 
 // Raw, uncapped scale used ONLY for the note grid (lane height / timeline height), so the
@@ -134,20 +140,6 @@ int scaledMetric(int value, double contentScale)
 qreal scaledMetric(qreal value, double contentScale)
 {
     return value * static_cast<qreal>(normalizedContentScale(contentScale));
-}
-
-QFont scaledFontForContentScale(const QFont& sourceFont, double contentScale)
-{
-    QFont scaledFont(sourceFont);
-    const qreal scale = static_cast<qreal>(normalizedContentScale(contentScale));
-    if (scaledFont.pointSizeF() > 0.0) {
-        scaledFont.setPointSizeF(qMax(1.0, scaledFont.pointSizeF() * scale));
-    } else if (scaledFont.pointSize() > 0) {
-        scaledFont.setPointSizeF(qMax(1.0, static_cast<qreal>(scaledFont.pointSize()) * scale));
-    } else if (scaledFont.pixelSize() > 0) {
-        scaledFont.setPixelSize(qMax(1, qRound(static_cast<qreal>(scaledFont.pixelSize()) * scale)));
-    }
-    return scaledFont;
 }
 
 QSizeF timelineTextLogicalSize(const QFont& font, const QString& text)
@@ -308,43 +300,6 @@ bool shouldPaintTimelineBeatMarker(const TimelineRenderBeat& beat)
     return (beat.subdivisionIndex % stride) == 0;
 }
 
-QFont scaledTimelineHeaderFont(const QFont& sourceFont, qreal scale)
-{
-    QFont scaledFont(sourceFont);
-    const qreal clampedScale = qMax(0.1, scale);
-    if (scaledFont.pointSizeF() > 0.0) {
-        scaledFont.setPointSizeF(qMax(1.0, scaledFont.pointSizeF() * clampedScale));
-    } else if (scaledFont.pointSize() > 0) {
-        scaledFont.setPointSizeF(qMax(1.0, static_cast<qreal>(scaledFont.pointSize()) * clampedScale));
-    } else if (scaledFont.pixelSize() > 0) {
-        scaledFont.setPixelSize(qMax(1, qRound(static_cast<qreal>(scaledFont.pixelSize()) * clampedScale)));
-    }
-    return scaledFont;
-}
-
-qreal timelineHeaderLabelScale(const QFont& baseFont, int digitCount)
-{
-    if (digitCount <= 1) {
-        return kTimelineHeaderSingleDigitFontScale;
-    }
-    const qreal multiDigitWidthBudget = qMax<qreal>(
-        8.0,
-        static_cast<qreal>(kTimelineHeaderLineLabelMinSpacingPx - kTimelineHeaderMultiDigitLabelSideGapPx));
-    const QString widthSample(qMax(1, digitCount), QLatin1Char('8'));
-    const qreal widthScale = multiDigitWidthBudget
-        / qMax<qreal>(1.0, static_cast<qreal>(QFontMetricsF(baseFont).horizontalAdvance(widthSample)));
-    return qMin(kTimelineHeaderMultiDigitBaseFontScale, widthScale);
-}
-
-int timelineHeaderLabelHalfWidthPx(const QFont& baseFont, const QString& labelText)
-{
-    if (labelText.isEmpty()) {
-        return 0;
-    }
-    const QFont labelFont = scaledTimelineHeaderFont(baseFont, timelineHeaderLabelScale(baseFont, labelText.size()));
-    return qCeil(QFontMetricsF(labelFont).horizontalAdvance(labelText) * 0.5) + 1;
-}
-
 void appendTrackLine(
     QVector<TimelineSceneLine>* lines,
     const QPointF& start,
@@ -405,17 +360,18 @@ TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& r
     double contentScale = normalizedContentScale(request.contentScale);
     if (request.fitViewportHeight) {
         const double viewportScale =
-            (static_cast<double>(qMax(1, request.viewportSize.height())) - 17.0) / 197.0;
+            static_cast<double>(request.viewportSize.height() - kHeaderHeight - kTimelineBottomPadding)
+                / (kLaneCount * kLaneHeight);
         contentScale = qBound(0.5, viewportScale, 1.0);
     }
     TimelineSceneLayoutMetrics metrics;
     metrics.viewportSize = request.viewportSize;
-    metrics.timelineLeft = scaledMetric(kTimelineLeftMargin, contentScale);
-    metrics.timelineTop = scaledMetric(kHeaderHeight + kTimelineTopMargin, headerContentScale(contentScale));
+    metrics.timelineLeft = kTimelineLeftMargin;
+    metrics.timelineTop = kHeaderHeight;
     if (request.fitViewportHeight) {
         metrics.timelineHeight = qMax<qreal>(
-            1.0,
-            static_cast<qreal>(request.viewportSize.height() - metrics.timelineTop));
+            0.0,
+            static_cast<qreal>(request.viewportSize.height() - metrics.timelineTop - kTimelineBottomPadding));
         metrics.laneHeight = metrics.timelineHeight / static_cast<qreal>(kLaneCount);
     } else {
         const double gridScale = gridContentScale(request.contentScale);
@@ -562,17 +518,14 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     };
 
     const TimelineThemeColors theme = timelineThemeColors();
-    const QFont laneLabelFont = scaledFontForContentScale(timelineLaneLabelFont(), state.contentScale);
+    const QFont laneLabelFont = timelineLaneLabelFont(request.headerLineNumberFont, state.contentScale);
+    const QFontMetricsF laneLabelMetrics(laneLabelFont);
     state.baseBackgroundRects.append(TimelineSceneRect{
         QRectF(0.0, 0.0, request.viewportSize.width(), request.viewportSize.height()),
         theme.window,
     });
     {
-        // Phase 9d-native polish — force the header-band fill opaque
-        // so the native-rendered zoom control sits on a solid
-        // background. theme.header inherits a
-        // semi-transparent alpha from the palette which lets
-        // scrolling content leak through the text label area.
+        // Keep scrolling content below the opaque number strip.
         QColor opaqueHeader = theme.header;
         opaqueHeader.setAlpha(255);
         state.baseBackgroundRects.append(TimelineSceneRect{
@@ -630,23 +583,14 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         });
         TimelineSceneTextLabel label;
         label.text = laneLabelForIndex(lane);
+        const QRectF inkRect = laneLabelMetrics.tightBoundingRect(label.text);
         label.font = laneLabelFont;
         label.color = theme.label;
         label.logicalSize = timelineTextLogicalSize(label.font, label.text);
-        const QFontMetricsF laneMetrics(label.font);
-        const qreal textLeft = scaledMetric(4.0, state.contentScale)
-            + qMax<qreal>(
-                0.0,
-                static_cast<qreal>(state.timelineLeft - scaledMetric(8, state.contentScale))
-                    - laneMetrics.horizontalAdvance(label.text));
-        const qreal textTop = y + scaledMetric(1.0, state.contentScale)
-            + qMax<qreal>(
-                0.0,
-                (static_cast<qreal>(state.laneHeight - scaledMetric(1, state.contentScale))
-                    - laneMetrics.height()) * 0.5);
         label.topLeft = QPointF(
-            textLeft - kTimelineTextHorizontalPadding,
-            textTop - kTimelineTextVerticalPadding);
+            qRound((state.timelineLeft - inkRect.width()) * 0.5 - inkRect.left() - kTimelineTextHorizontalPadding),
+            qRound(y + (state.laneHeight - inkRect.height()) * 0.5
+                   - inkRect.top() - laneLabelMetrics.ascent() - kTimelineTextVerticalPadding));
         state.laneLabels.append(label);
     }
 
@@ -879,20 +823,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
-    const QFont oneDigitFont =
-        scaledTimelineHeaderFont(
-            request.headerLineNumberFont,
-            kTimelineHeaderSingleDigitFontScale * static_cast<qreal>(headerContentScale(state.contentScale)));
-    const QFontMetricsF oneDigitMetrics(oneDigitFont);
+    const QFont headerFont = timelineHeaderLabelFont(request.headerLineNumberFont);
+    const QFontMetricsF headerMetrics(headerFont);
     qreal singleDigitWidth = 0.0;
     for (QChar digit = QLatin1Char('0'); digit <= QLatin1Char('9'); digit = QChar(digit.unicode() + 1)) {
-        singleDigitWidth = qMax(singleDigitWidth, static_cast<qreal>(oneDigitMetrics.horizontalAdvance(digit)));
+        singleDigitWidth = qMax(singleDigitWidth, static_cast<qreal>(headerMetrics.horizontalAdvance(digit)));
     }
     const qreal markerTipY =
         static_cast<qreal>(state.timelineTop)
         - scaledMetric(kTimelineTopMarkerTipOffsetPx, headerContentScale(state.contentScale));
-    const qreal headerTextBottom = (static_cast<qreal>(state.timelineTop - oneDigitMetrics.height()) * 0.5)
-        + oneDigitMetrics.height();
+    const qreal headerTextBottom = (state.timelineTop + headerMetrics.height()) * 0.5;
     const qreal markerHeight = qMin(
         qMax(0.0, markerTipY - headerTextBottom
             - scaledMetric(
@@ -901,37 +841,35 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         singleDigitWidth * kTimelineHeaderAnchorMarkerLegacyWidthFactor
             * kTimelineHeaderAnchorMarkerLegacyHeightFactor);
     QVector<HeaderLineLabel> headerLabels;
+    qreal lastHeaderLabelRight = 0.0;
     const qreal headerMarkerHalfWidth =
         markerHeight >= 2.0 ? markerHeight * kTimelineTopMarkerHalfWidthPerHeight : 0.0;
     bool hasLastHeaderMarker = false;
     int lastHeaderMarkerX = 0;
-    const qreal headerLabelMinSpacing =
-        scaledMetric(kTimelineHeaderLineLabelMinSpacingPx, headerContentScale(state.contentScale));
+    const qreal headerLabelMinSpacing = kTimelineHeaderLineLabelMinSpacingPx;
     // Header labels and their line-start triangles are static QSG nodes
     // within one horizontal scroll bucket. Emit one viewport of padding
     // on each side so intra-bucket paging only moves the transform; the
     // node trees rebuild at bucket boundaries, not on every scroll tick.
     for (const HeaderLineLabel& label : collapsedHeaderLabels) {
         const QString labelText = QString::number(label.lineNumber);
-        const QFont labelFont = scaledTimelineHeaderFont(
-            request.headerLineNumberFont,
-            timelineHeaderLabelScale(request.headerLineNumberFont, labelText.size())
-                * static_cast<qreal>(headerContentScale(state.contentScale)));
-        const QFontMetricsF labelMetrics(labelFont);
         const qreal labelHalfWidth =
-            (labelMetrics.horizontalAdvance(labelText) * 0.5) + kTimelineTextHorizontalPadding;
+            (headerMetrics.horizontalAdvance(labelText) * 0.5) + kTimelineTextHorizontalPadding;
         if (headerLabelEmitSpanFits(label.screenX, labelHalfWidth)
             && (headerLabels.isEmpty()
-                || label.screenX - headerLabels.constLast().screenX >= headerLabelMinSpacing)) {
+                || (label.screenX - headerLabels.constLast().screenX >= headerLabelMinSpacing
+                    && label.screenX - labelHalfWidth >= lastHeaderLabelRight
+                        + kTimelineHeaderMultiDigitLabelSideGapPx))) {
             headerLabels.append(label);
+            lastHeaderLabelRight = label.screenX + labelHalfWidth;
             state.headerLabels.append(TimelineSceneTextLabel{
                 labelText,
                 QPointF(
-                    label.screenX - (labelMetrics.horizontalAdvance(labelText) * 0.5) - kTimelineTextHorizontalPadding,
-                    headerTextBottom - labelMetrics.height() - kTimelineTextVerticalPadding),
-                labelFont,
+                    label.screenX - (headerMetrics.horizontalAdvance(labelText) * 0.5) - kTimelineTextHorizontalPadding,
+                    headerTextBottom - headerMetrics.height() - kTimelineTextVerticalPadding),
+                headerFont,
                 theme.textSecondary,
-                timelineTextLogicalSize(labelFont, labelText),
+                timelineTextLogicalSize(headerFont, labelText),
             });
         }
         if (markerHeight >= 2.0
@@ -1054,7 +992,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     const auto appendNoteForRef = [&](const TimelineVisibleNoteRef& visibleRef, bool trackLayer) {
         const TimelineRenderLine& line = request.snapshot.lines.at(visibleRef.lineIndex);
         const TimelineRenderNote& note = line.notes.at(visibleRef.noteIndex);
-        if (note.lane < 1 || note.lane > kLaneCount) {
+        if (note.lane < 1 || note.lane > state.laneCount) {
             return;
         }
 

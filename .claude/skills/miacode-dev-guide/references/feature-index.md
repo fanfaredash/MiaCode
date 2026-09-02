@@ -384,6 +384,15 @@ names are assembly forwards.
   preview host (`QQuickView`) and the export session renders `PreviewQuickSceneRoot` headlessly.
 - v2 preview playback rate: `src/app/qml_ui/preview/PreviewTransport.qml` + `PreviewRateMenu.qml`
   (`AppDropDownButton` + `AppMenu`, same chrome as timeline zoom). Rate writes `QmlPreviewModel::rate`.
+  Canvas menu (`PreviewCanvasMenu.qml`) on the same strip: free-aspect toggle (edit-mode stage
+  fill, persisted on `QmlUiSettings::previewCanvasFreeAspect`, default off = 1:1) and the original
+  fullscreen action. Live fill binds the surface to `stageArea` width/height and the in-window
+  fullscreen overlay to its host; it does not call
+  `setPreviewCanvasAspectRatio` on resize. The backend `canvasAspectRatio` remains the landscape
+  `[1.0, 3.0]` export-audition ratio and is not the free-aspect state. The playfield square
+  (`centeredLayoutRectForStage`)
+  uses the stage short side, so a tall/narrow canvas shrinks the disc instead of clipping it;
+  landscape 16:9/4:3 still uses height as that short side.
 - Stage-media host (background image+video, both shells): `src/preview/runtime/PreviewStageMediaHost.{h,cpp}`,
   `qml/PreviewStageMediaItem.qml`. **`PreviewMediaController` / `src/preview/video/` was removed**
   — background media now flows through `PreviewStageMediaHost` plus `PreviewRuntime`'s

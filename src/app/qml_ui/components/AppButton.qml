@@ -6,11 +6,13 @@ import MiaCode.UI
 Button {
     id: root
 
-    // true = accent fill (primary action); false = outlined secondary.
+    // Primary actions use a stronger font weight.
     property bool emphasized: false
+    property bool selected: false
 
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
+    font.weight: root.emphasized ? Font.DemiBold : Font.Normal
     leftPadding: 12
     rightPadding: 12
     topPadding: 0
@@ -34,31 +36,11 @@ Button {
         elide: Text.ElideRight
     }
 
-    background: Rectangle {
-        radius: Theme.controlRadius
-        border.width: Theme.controlBorderWidth
-        border.color: {
-            if (!root.enabled)
-                return Theme.colors.border.normal
-            if (root.emphasized || root.down || root.hovered)
-                return Theme.colors.accent.primary
-            return Theme.colors.border.control
-        }
-        color: {
-            if (!root.enabled)
-                return Theme.surfaceColor("input", Theme.colors.background.elevated)
-            if (root.emphasized) {
-                if (root.down)
-                    return Theme.colors.accent.badge
-                if (root.hovered)
-                    return Theme.colors.accent.badge
-                return Theme.colors.accent.primary
-            }
-            if (root.down)
-                return Theme.colors.state.pressed
-            if (root.hovered)
-                return Theme.colors.state.hover
-            return Theme.surfaceColor("input", Theme.colors.background.elevated)
-        }
+    background: HoverChrome {
+        baseColor: Theme.surfaceColor("input", Theme.colors.background.elevated)
+        selected: root.selected || root.checked
+        hovered: root.hovered
+        pressed: root.down
+        focused: root.visualFocus
     }
 }

@@ -63,7 +63,7 @@ Rectangle {
         root.session.selectLayerKey(key)
     }
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
     clip: true
 
     ColumnLayout {
@@ -90,8 +90,9 @@ Rectangle {
                 id: layoutMenuButton
                 objectName: "coverLayoutMenuButton"
                 text: UiText.text("cover.layout")
+                selected: layoutMenu.active
                 enabled: !!root.session && !root.session.busy
-                onClicked: layoutMenu.visible ? layoutMenu.close() : layoutMenu.openAt(layoutMenuButton)
+                onClicked: layoutMenu.active ? layoutMenu.close() : layoutMenu.openAt(layoutMenuButton)
             }
             AppButton {
                 objectName: "coverExportButton"
@@ -196,7 +197,7 @@ Rectangle {
                 SplitView.minimumWidth: 190
                 SplitView.preferredWidth: 240
                 SplitView.maximumWidth: 360
-                color: Theme.colors.background.surface
+                color: Theme.colors.background.panel
                 clip: true
 
                 PanelHeader {
@@ -209,18 +210,18 @@ Rectangle {
                     ChromeRow {
                         id: addLayerButton
                         objectName: "coverAddLayerButton"
+                        selected: addLayerMenu.active
                         implicitWidth: addLayerLabel.implicitWidth + leftPadding + rightPadding
-                        tone: "icon"
                         focusPolicy: Qt.TabFocus
                         enabled: !!root.session && !root.session.busy
                         Accessible.name: UiText.text("cover.add_layer")
-                        onClicked: addLayerMenu.visible ? addLayerMenu.close()
+                        onClicked: addLayerMenu.active ? addLayerMenu.close()
                                                         : addLayerMenu.openAt(addLayerButton)
                         contentItem: Text {
                             id: addLayerLabel
                             text: UiText.text("cover.add_layer")
                             color: !addLayerButton.enabled ? Theme.colors.text.disabled
-                                 : (addLayerButton.hovered || addLayerButton.down)
+                                 : (addLayerButton.selected || addLayerButton.hovered || addLayerButton.visualFocus)
                                    ? Theme.colors.text.active : Theme.colors.text.secondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.uiFontSize
@@ -362,7 +363,7 @@ Rectangle {
                 id: canvasPane
                 SplitView.fillWidth: true
                 SplitView.minimumWidth: 280
-                color: Theme.colors.background.editor
+                color: Theme.colors.background.surface
                 clip: true
 
                 Item {
@@ -417,7 +418,7 @@ Rectangle {
                 SplitView.minimumWidth: 280
                 SplitView.preferredWidth: 330
                 SplitView.maximumWidth: 460
-                color: Theme.colors.background.surface
+                color: Theme.colors.background.panel
                 clip: true
 
                 ColumnLayout {

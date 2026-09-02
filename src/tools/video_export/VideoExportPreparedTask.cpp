@@ -671,8 +671,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
         if (innerCircleFitOuterFill) {
             const int innerSide = qMax(
                 1,
-                qRound(miacode::preview_video::layoutSquareSideForCanvasHeight(
-                    static_cast<double>(frameHeight),
+                qRound(miacode::preview_video::layoutSquareSideForStage(
+                    QRectF(0.0, 0.0, static_cast<double>(frameWidth), static_cast<double>(frameHeight)),
                     task.layoutSquareScale
                 ))
             );

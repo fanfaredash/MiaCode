@@ -177,7 +177,7 @@ Item {
         MainToolBar {
             id: mainToolBar
             width: parent.width
-            height: 36
+            height: implicitHeight
             sidebarActive: root.compact
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible

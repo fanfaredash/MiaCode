@@ -56,14 +56,6 @@ Rectangle {
         onSettingsRequested: root.settingsRequested()
     }
 
-    Rectangle {
-        anchors.left: activityBar.right
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 1
-        color: Theme.colors.border.normal
-    }
-
     Item {
         id: pageHost
         anchors.left: activityBar.right

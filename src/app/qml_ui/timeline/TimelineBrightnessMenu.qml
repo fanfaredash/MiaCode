@@ -3,21 +3,16 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-Popup {
+AppStickyPopup {
     id: root
 
     required property var stateBridge
+    minimumWidth: 180
+    openAbove: true
 
     readonly property int brightnessPercentMin: 20
     readonly property int brightnessPercentMax: 200
     readonly property int brightnessPercentStep: 5
-
-    padding: Theme.menuPadding
-    modal: false
-    focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-    property var anchorItem: null
 
     function percentFromBrightness(value) {
         const percent = Math.round(value * 100)
@@ -30,31 +25,9 @@ Popup {
         return Math.max(root.brightnessPercentMin, Math.min(root.brightnessPercentMax, stepped)) / 100
     }
 
-    function openAt(anchor) {
-        if (!anchor || Overlay.overlay === null || !root.stateBridge)
-            return
-        parent = Overlay.overlay
-        root.anchorItem = anchor
-        reposition()
-        open()
-    }
-
-    function reposition() {
-        if (!root.anchorItem || Overlay.overlay === null)
-            return
-        const above = root.anchorItem.mapToItem(Overlay.overlay, 0, 0)
-        x = Math.max(0, above.x + root.anchorItem.width - width)
-        y = Math.max(0, above.y - height)
-    }
-
-    onImplicitWidthChanged: if (visible)
-        reposition()
-    onImplicitHeightChanged: if (visible)
-        reposition()
-
     contentItem: ColumnLayout {
-        spacing: 10
-        width: 250
+        spacing: 8
+        width: 220
 
         component BrightnessRow: ColumnLayout {
             id: row
@@ -63,18 +36,18 @@ Popup {
             required property real brightness
             signal brightnessEdited(real value)
 
-            spacing: 6
+            spacing: 4
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 8
 
                 Text {
                     Layout.fillWidth: true
                     text: row.title
                     color: Theme.colors.text.primary
                     font.family: Theme.uiFont
-                    font.pixelSize: Theme.uiFontSize
+                    font.pixelSize: Theme.compactFontSize
                     font.weight: Font.DemiBold
                 }
 
@@ -82,7 +55,7 @@ Popup {
                     text: UiText.text("%1%").arg(Math.round(row.brightness * 100))
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
-                    font.pixelSize: Theme.uiFontSize
+                    font.pixelSize: Theme.compactFontSize
                     horizontalAlignment: Text.AlignRight
                 }
             }
@@ -126,13 +99,5 @@ Popup {
             brightness: root.stateBridge ? root.stateBridge.measureLineBrightness : 1.0
             onBrightnessEdited: value => root.stateBridge.measureLineBrightness = value
         }
-    }
-
-    background: Rectangle {
-        implicitWidth: 180
-        color: Theme.colors.background.elevated
-        border.width: Theme.controlBorderWidth
-        border.color: Theme.colors.border.normal
-        radius: Theme.controlRadius
     }
 }

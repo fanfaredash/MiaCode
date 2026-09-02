@@ -31,14 +31,18 @@ inline double normalizedLayoutSquareScale(double value)
     return clampLayoutSquareScale(kLayoutSquareScaleMin + steps * kLayoutSquareScaleStep);
 }
 
-inline double layoutSquareSideForCanvasHeight(double canvasHeight, double layoutSquareScale)
+inline double layoutSquareSideForStage(const QRectF& stageRect, double layoutSquareScale)
 {
-    return std::max(1.0, std::max(1.0, canvasHeight) * normalizedLayoutSquareScale(layoutSquareScale));
+    const double shortSide = std::max(
+        1.0,
+        std::min(std::max(1.0, stageRect.width()), std::max(1.0, stageRect.height()))
+    );
+    return std::max(1.0, shortSide * normalizedLayoutSquareScale(layoutSquareScale));
 }
 
 inline QRectF centeredLayoutRectForStage(const QRectF& stageRect, double layoutSquareScale)
 {
-    const double side = layoutSquareSideForCanvasHeight(stageRect.height(), layoutSquareScale);
+    const double side = layoutSquareSideForStage(stageRect, layoutSquareScale);
     const QPointF center = stageRect.center();
     return QRectF(
         center.x() - side * 0.5,

@@ -123,7 +123,7 @@ Rectangle {
         }
     }
 
-    color: Theme.surfaceColor("codeEditor", Theme.colors.background.editor)
+    color: Theme.surfaceColor("codeEditor", Theme.colors.background.panel)
 
     EditorTabBar {
         id: tabs
@@ -142,12 +142,12 @@ Rectangle {
         anchors.top: tabs.bottom
         height: 42
         visible: root.viewState.difficultyEditorActive
-        color: Theme.colors.background.surface
+        color: Theme.colors.background.panel
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 8
+            anchors.leftMargin: Theme.panelPadding
+            anchors.rightMargin: Theme.panelPadding
             spacing: 8
 
             Label {
@@ -189,6 +189,7 @@ Rectangle {
             }
 
             AppButton {
+                Layout.rightMargin: -Theme.chromeInsetX
                 text: UiText.text("删除难度")
                 enabled: root.documentSession.currentDifficultyId > 0
                 onClicked: removeDifficultyDialog.open()
@@ -203,11 +204,11 @@ Rectangle {
         anchors.top: tabs.bottom
         height: 42
         visible: root.viewState.metadataEditorActive
-        color: Theme.colors.background.surface
+        color: Theme.colors.background.panel
 
         AppButton {
             anchors.left: parent.left
-            anchors.leftMargin: 10
+            anchors.leftMargin: Theme.panelPadding - Theme.chromeInsetX
             anchors.verticalCenter: parent.verticalCenter
             text: root.viewState.metadataEditorMode === 0
                 ? UiText.text("字段源码")
@@ -219,7 +220,7 @@ Rectangle {
         AppSwitch {
             id: unifiedDesignerSwitch
             anchors.right: parent.right
-            anchors.rightMargin: 10
+            anchors.rightMargin: Theme.panelPadding
             anchors.verticalCenter: parent.verticalCenter
             text: UiText.text("统一谱师")
 
@@ -382,6 +383,9 @@ Rectangle {
 
     Dialog {
         id: canonicalDesignerDialog
+
+        enter: FadeTransition {}
+        exit: FadeTransition { appearing: false }
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         property var candidates: []
@@ -415,6 +419,9 @@ Rectangle {
 
     Dialog {
         id: removeDifficultyDialog
+
+        enter: FadeTransition {}
+        exit: FadeTransition { appearing: false }
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         anchors.centerIn: parent

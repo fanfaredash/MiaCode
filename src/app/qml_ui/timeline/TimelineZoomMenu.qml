@@ -21,6 +21,7 @@ AppMenu {
 
         delegate: AppMenuItem {
             required property var modelData
+            compact: true
 
             text: UiText.text("%1%").arg(Math.round(modelData * 100))
             checkable: true

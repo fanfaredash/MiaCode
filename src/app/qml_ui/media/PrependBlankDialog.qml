@@ -8,6 +8,9 @@ import MiaCode.UI
 // they are turned into the length that will actually be inserted.
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     required property var mediaTools

@@ -119,6 +119,9 @@ Item {
     // window in the middle of the app.
     Dialog {
         id: noticeDialog
+
+        enter: FadeTransition {}
+        exit: FadeTransition { appearing: false }
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         objectName: "uiRequestNoticeDialog"

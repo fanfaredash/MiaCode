@@ -256,8 +256,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h
     src/app/ui/UiTheme.cpp
-    src/app/ui/UiComponents.h
-    src/app/ui/UiComponents.cpp
     src/app/ui/UiNativeWindowTheme.h
     src/app/ui/UiNativeWindowTheme.cpp
     src/app/ui/UiNativeWindowThemePolicy.h
@@ -650,6 +648,10 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppScrollBar.qml
     src/app/qml_ui/components/AppMenu.qml
     src/app/qml_ui/components/AppMenuAction.qml
+    src/app/qml_ui/components/FloatingCard.qml
+    src/app/qml_ui/components/FadeTransition.qml
+    src/app/qml_ui/components/AppStickyPopup.qml
+    src/app/qml_ui/components/AppDropdownPanel.qml
     src/app/qml_ui/components/AppMenuItem.qml
     src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/components/UiRequestHost.qml
@@ -700,6 +702,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/preview/PreviewPane.qml
     src/app/qml_ui/preview/PreviewRenderModeMenu.qml
     src/app/qml_ui/preview/PreviewRateMenu.qml
+    src/app/qml_ui/preview/PreviewCanvasMenu.qml
     src/app/qml_ui/preview/PreviewTransport.qml
     src/app/qml_ui/preview/NoteStatistics.qml
     src/app/qml_ui/preview/AudioSettingsDialog.qml
@@ -795,6 +798,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlUiBootstrap.cpp
         src/app/qml_ui/QmlUiBootstrap.h
         src/app/qml_ui/QmlUiRootLifecycle.h
+        src/app/qml_ui/TimelineThemeBridge.cpp
+        src/app/qml_ui/TimelineThemeBridge.h
     QML_FILES
         ${MIACODE_UI_QML_FILES}
     RESOURCES

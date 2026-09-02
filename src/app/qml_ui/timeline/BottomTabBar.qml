@@ -10,39 +10,43 @@ Rectangle {
     required property var analysisSession
     required property var timelineSession
 
-    implicitHeight: 28
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
-
-    readonly property real leadingInkX: leadingTab.x + leadingTab.contentInkLeft
-    readonly property real trailingContentRight: followCode.x + followCode.width
+    implicitHeight: Theme.compactControlHeight + 2
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
 
     RowLayout {
         anchors.fill: parent
+        anchors.leftMargin: Theme.panelPadding - Theme.chromeInsetX
+        anchors.rightMargin: Theme.panelPadding
+        spacing: 0
         z: 1
 
         AppTab {
-            id: leadingTab
-            Layout.fillHeight: true
+            Layout.alignment: Qt.AlignVCenter
             panelTab: true
+            compact: true
             visible: root.timelineSession.timelineTabVisible
             text: root.timelineSession.timelineTabLabel
             active: root.timelineSession.currentTabId === "timeline"
             onClicked: root.timelineSession.setCurrentTabId("timeline")
         }
         AppTab {
-            Layout.fillHeight: true
+            Layout.alignment: Qt.AlignVCenter
             panelTab: true
+            compact: true
             visible: root.timelineSession.validationTabVisible
             text: root.timelineSession.validationTabLabel
+            Layout.leftMargin: 4
             count: root.analysisSession.validationRows.length
             active: root.timelineSession.currentTabId === "validation"
             onClicked: root.timelineSession.setCurrentTabId("validation")
         }
         AppTab {
-            Layout.fillHeight: true
+            Layout.alignment: Qt.AlignVCenter
             panelTab: true
+            compact: true
             visible: root.timelineSession.muriTabVisible
             text: root.timelineSession.muriTabLabel
+            Layout.leftMargin: 4
             count: root.analysisSession.muriRows.length
             active: root.timelineSession.currentTabId === "muri"
             onClicked: root.timelineSession.setCurrentTabId("muri")
@@ -51,10 +55,8 @@ Rectangle {
         Item { Layout.fillWidth: true }
 
         AppCheckBox {
-            id: followCode
-
+            compact: true
             Layout.alignment: Qt.AlignVCenter
-            Layout.rightMargin: 8
             visible: root.timelineSession.currentTabId === "timeline"
             text: root.timelineSession.followCodeLabel
             checked: root.timelineSession.stateBridge

@@ -20,7 +20,7 @@ Rectangle {
     property bool canUndo: false
     property bool canRedo: false
 
-    implicitHeight: 36
+    implicitHeight: 32
     color: Theme.surfaceColor("toolbar", Theme.colors.background.surface)
 
     Row {
@@ -51,7 +51,6 @@ Rectangle {
             enabled: root.canRedo
             onClicked: root.redoRequested()
         }
-        ToolSeparator {}
         IconButton {
             iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
             tooltip: UiText.text("音频设置")
@@ -84,17 +83,4 @@ Rectangle {
         }
     }
 
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 1
-        color: Theme.colors.border.normal
-    }
-
-    component ToolSeparator: Rectangle {
-        width: 1
-        height: 20
-        color: Theme.colors.border.normal
-    }
 }

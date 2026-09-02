@@ -473,7 +473,7 @@ int miacode::runtime::PlaybackCoordinator::previewStatsMinimumHeightForPanelWidt
 
 double miacode::runtime::PlaybackCoordinator::normalizedPreviewCanvasAspectRatio(double ratio) const
 {
-    if (!qIsFinite(ratio)) {
+    if (!qIsFinite(ratio) || ratio <= 0.0) {
         return 1.0;
     }
     return qBound(1.0, ratio, 3.0);

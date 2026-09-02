@@ -36,7 +36,6 @@ Row {
     CaptionButton {
         glyph: "\uE8BB"
         accessibleName: UiText.text("关闭")
-        closeButton: true
         onClicked: root.hostWindow.close()
     }
 
@@ -45,7 +44,6 @@ Row {
 
         required property string glyph
         required property string accessibleName
-        property bool closeButton: false
 
         width: 46
         height: root.height
@@ -54,33 +52,17 @@ Row {
 
         contentItem: Text {
             text: button.glyph
-            color: button.closeButton && button.hovered ? "#FFFFFF"
-                   : (button.hovered ? Theme.colors.text.active : Theme.colors.text.secondary)
+            color: button.hovered || button.visualFocus ? Theme.colors.text.active : Theme.colors.text.secondary
             font.family: "Segoe Fluent Icons"
             font.pixelSize: 10
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
 
-        background: Item {
-            HoverChrome {
-                anchors.fill: parent
-                visible: !button.closeButton
-                hovered: button.hovered
-                pressed: button.down
-                tone: "icon"
-            }
-            Rectangle {
-                anchors.fill: parent
-                visible: button.closeButton
-                color: {
-                    if (button.down)
-                        return "#A92317"
-                    if (button.hovered)
-                        return "#C42B1C"
-                    return "transparent"
-                }
-            }
+        background: HoverChrome {
+            hovered: button.hovered
+            pressed: button.down
+            focused: button.visualFocus
         }
     }
 }

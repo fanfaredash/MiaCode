@@ -10,7 +10,8 @@ Rectangle {
     required property var commands
     property var pages
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
+    topLeftRadius: 10
     clip: true
 
     PanelHeader {

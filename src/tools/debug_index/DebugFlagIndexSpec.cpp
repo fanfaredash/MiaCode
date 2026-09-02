@@ -97,6 +97,8 @@ const QSet<QString> kSourcePreprocessorMacros = {
     // Per-field static assertion generator in RuntimeContextBoundarySpec.cpp.
     // Stage 4.9b.
     QStringLiteral("MIACODE_TIMELINE_STORAGE_MOVED"),
+    // Setter-boilerplate generator in qml_ui/TimelineThemeBridge.cpp.
+    QStringLiteral("MIACODE_TIMELINE_THEME_SETTER"),
 };
 
 QSet<QString> collectFlags(const QString& text)

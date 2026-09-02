@@ -12,6 +12,9 @@ import MiaCode.UI
 // and when the panel is gone (the runtime goes with it).
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     required property var audioSettings

@@ -10,6 +10,9 @@ import MiaCode.UI
 // 偏好设置 → 性能，避免同一设置有两个入口。
 Dialog {
     id: root
+
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     required property var previewSettings
@@ -365,7 +368,7 @@ Dialog {
                 Layout.fillWidth: true
                 implicitHeight: previewHudFontSample.implicitHeight + 20
                 radius: Theme.controlRadius
-                color: Theme.colors.background.editor
+                color: Theme.colors.background.surface
                 border.width: Theme.controlBorderWidth
                 border.color: Theme.colors.border.control
                 Text {

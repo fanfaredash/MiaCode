@@ -11,7 +11,7 @@ Rectangle {
     signal settingsRequested()
 
     implicitWidth: Theme.activityButtonSize
-    color: Theme.surfaceColor("panel", Theme.colors.background.editor)
+    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
 
     Column {
         anchors.left: parent.left
@@ -72,10 +72,10 @@ Rectangle {
         background: Item {
             HoverChrome {
                 anchors.fill: parent
-                margins: 6
+                contentWidth: Theme.activityIconSize
+                contentHeight: Theme.activityIconSize
                 hovered: button.hovered
                 pressed: button.down
-                tone: "icon"
             }
 
             Rectangle {

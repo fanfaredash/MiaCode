@@ -6,11 +6,34 @@ import MiaCode.UI
 Menu {
     id: root
 
+    enter: FadeTransition {
+        id: fadeIn
+    }
+    exit: FadeTransition {
+        appearing: false
+        initialOpacity: root.opacity
+    }
+
+    property bool closing: false
+    readonly property bool active: visible && !closing
+
+    Connections {
+        target: root
+        function onAboutToShow() {
+            fadeIn.initialOpacity = root.closing ? root.opacity : 0
+            root.closing = false
+        }
+        function onAboutToHide() { root.closing = true }
+        function onClosed() { root.closing = false }
+    }
+
     property var anchorItem: null
     property bool openRightAligned: false
     property bool hugContent: false
 
     padding: Theme.menuPadding
+    margins: 0
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     // Action-created rows and default Instantiator paths use this delegate.
@@ -33,7 +56,8 @@ Menu {
     function openAt(anchor) {
         if (!anchor || Overlay.overlay === null)
             return
-        parent = Overlay.overlay
+        parent = anchor
+        closePolicy = Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
         root.anchorItem = anchor
         width = root.popupWidthForAnchor(anchor)
         open()
@@ -43,12 +67,9 @@ Menu {
     function reposition() {
         if (!root.anchorItem || Overlay.overlay === null)
             return
-        const above = root.anchorItem.mapToItem(Overlay.overlay, 0, 0)
         width = root.popupWidthForAnchor(root.anchorItem)
-        x = root.openRightAligned
-            ? Math.max(0, above.x + root.anchorItem.width - width)
-            : above.x
-        y = Math.max(0, above.y - height)
+        x = root.openRightAligned ? root.anchorItem.width - width : 0
+        y = -height
     }
 
     onImplicitHeightChanged: if (visible)
@@ -56,11 +77,7 @@ Menu {
     onCountChanged: if (visible)
         reposition()
 
-    background: Rectangle {
+    background: FloatingCard {
         implicitWidth: root.hugContent ? 1 : 180
-        color: Theme.colors.background.elevated
-        border.width: Theme.controlBorderWidth
-        border.color: Theme.colors.border.normal
-        radius: Theme.controlRadius
     }
 }

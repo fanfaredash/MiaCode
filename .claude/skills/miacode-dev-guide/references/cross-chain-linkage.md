@@ -262,6 +262,23 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
 
+**Free-aspect preview geometry and the playfield square are one cross-render contract:**
+
+- The v2 canvas menu persists `QmlUiSettings::previewCanvasFreeAspect`. In edit mode,
+  `PreviewPane.qml` and the `MainSplitView.qml` fullscreen host bind `PreviewSurface` directly to
+  the available stage width/height. `PreviewQuickSceneRoot::geometryChange` publishes that live
+  size through `PreviewRuntime::setFrameSize`, so resizing must not call
+  `setPreviewCanvasAspectRatio`. Backend `canvasAspectRatio` stays in `[1.0, 3.0]` and belongs to
+  export audition / fixed-ratio layout; the export page keeps using it and continues to require
+  width >= height.
+- The playfield square is centred and sized from the stage **short side**. Keep
+  `PreviewVideoGeometryConfig.h` (`layoutSquareSideForStage` /
+  `centeredLayoutRectForStage`), `PreviewStageDimMaterial.frag`, realtime stage media placement,
+  and export mask/prepared-frame sizing in `VideoExportFrameRender.cpp` /
+  `VideoExportPreparedTask.cpp` on that same formula. Landscape 1:1/4:3/16:9 remains
+  height-based; a tall/narrow live canvas becomes width-based. Reintroducing a height-only helper
+  clips the disc in portrait-shaped free-aspect hosts and splits preview from export.
+
 **Preview audio spans TWO storage tiers — keep them straight (2026-08-18):**
 
 | Tier | Key | State | Written by |
