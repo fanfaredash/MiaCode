@@ -333,7 +333,25 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          无任何 `connect` / `NOTIFY` / QML 处理器。与此前 `noteStatus` 是空函数同类——
          不报错、不挂测试，只是什么都不发生。**本轮未删也未接线**，那是产品决定。
 
-      **完成判据：`PlaybackCoordinator` 能在 spec 里被构造出来。**
+      6. **TU 边界切分（未完成，4.9d 的真实剩余工作）**。
+         **2026-09-02 链接探测结论：协调器目前无法独立链接，4.9d 的完成判据并未达成。**
+         真实链接尝试用到 33 个源文件仍剩 171 个未定义符号；符号闭包投影扩张到 246 个文件
+         仍未收敛，且 `SessionBootstrap.cpp` 已进入必需集合。
+         **根因**：4.9d 只把方法**体**搬进协调器，没有把**文件**按归属切开——
+         `TimelineFlow.cpp`（`Session::`41 / `Coordinator::`56）、`Playback.cpp`（36/10）、
+         `SurfaceContract.cpp`（17/66）、`PlaybackGlue.cpp`（11/6）、`FramePacing.cpp`（9/26）、
+         `AnalysisFlow.cpp`（3/4）里两个类的方法混在同一个 TU。
+         C++ 链接目标文件时必须解析该 TU 内**所有**未定义符号，与调用图可达性无关，
+         所以链接协调器即链接这些文件里剩余的全部 `Session::` 方法及其依赖树。
+         **教训**：「构造签名不再需要 `Session`」是必要条件而非充分条件；
+         此前记为「完成判据达成」是未经验证的断言，现更正。
+         剩余工作：把 117 个 `Session::` 定义从这 6 个 TU 移入 Session 侧文件
+         （`SessionForwarding.cpp` 已是现成落点，那里已有 45 个），使协调器 TU 只含协调器方法。
+         这同时符合仓库「不养 god file / 每文件一个职责」的既有准则。
+         探针 spec `playback_coordinator_construction_spec` 已留在 CMake 里（标
+         `EXCLUDE_FROM_ALL`、不注册 ctest），作为证据与切分完成后的验收工具。
+
+      **完成判据：`PlaybackCoordinator` 能在 spec 里被构造出来——即探针 spec 链接通过。**
 - [ ] 阶段 4.9e：canonical 播放状态收进协调器私有成员，跨域读者改读 `PlaybackSnapshot`
       （`playing_` / `pauseSecond_` / `previewPlaybackRate_` / `previewTransportState_` /
       `qtPreview*` 一族）。这是把 4.5 的契约真正落地，「一个播放权威」才算成立。依赖 4.9d 的端口。

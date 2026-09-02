@@ -1947,6 +1947,96 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(playback_coordinator_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # Stage 4.9f pre-work probe (result: does NOT link). SOURCES below is the
+    # snapshot reached while chasing undefined symbols two rounds deep: round 1
+    # (TimelineFlow.cpp + PlaybackIdentityGate, the TU that defines the
+    # constructor) needed 30 more files just to satisfy its own undefined
+    # symbols; round 2, adding all 30, still leaves 171 undefined symbols
+    # (PreviewStageMediaHost's whole video-decode surface, MuriAnalyzer,
+    # QuickShellPreviewCompositeSurface, DocumentSessionHost's vtable, a
+    # miniaudio implementation TU, ...) and was still growing. A symbol-closure
+    # projection over the full object graph (nm on the already-built MiaCode
+    # objects) shows the same trajectory does not converge before pulling in
+    # SessionBootstrap.cpp: 2 -> 32 -> 75 -> 166 -> 246 files across five
+    # rounds, still 37 files short of closure when the probe was stopped.
+    #
+    # Conclusion: PlaybackCoordinator's implementation TUs are not
+    # link-independent of the Session assembly today, because those TUs still
+    # define Session::-owned methods (TimelineFlow.cpp alone has 41 of them)
+    # that a direct (non-archive) link must resolve even though the coordinator
+    # never calls them. Left EXCLUDE_FROM_ALL and out of CTest: it does not
+    # link, so it must not be part of the default build or the full suite.
+    # SOURCES/LIBS/INCLUDES are kept as the recorded evidence of how far this
+    # got; do not extend them to force a link — see the Result Packet for the
+    # full undefined-symbol trace.
+    miacode_add_dev_tool(playback_coordinator_construction_spec
+        SOURCES
+            src/tools/v2/PlaybackCoordinatorConstructionSpec.cpp
+            src/app/runtime/playback/PlaybackIdentityGate.cpp
+            src/app/runtime/playback/PlaybackIdentityGate.h
+            src/app/runtime/playback/TimelineFlow.cpp
+            # Round 2: TimelineFlow.cpp.o's undefined symbols (linker probe run),
+            # added as a batch rather than one at a time to keep the probe's
+            # iteration count down. See the Result Packet for the per-round counts.
+            src/app/process_identity.cpp
+            src/app/runtime/Shared.Preview.cpp
+            src/app/runtime/Shared.cpp
+            src/app/runtime/document/DocumentFlow.cpp
+            src/app/runtime/playback/AnalysisFlow.cpp
+            src/app/runtime/playback/FollowSync.cpp
+            src/app/runtime/playback/Fullscreen.cpp
+            src/app/runtime/playback/LayoutUi.cpp
+            src/app/runtime/playback/Playback.cpp
+            src/app/runtime/playback/PlaybackState.cpp
+            src/app/runtime/playback/QuickParse.cpp
+            src/app/runtime/playback/Seek.cpp
+            src/app/runtime/playback/SurfaceContract.cpp
+            src/app/runtime/playback/Tick.cpp
+            src/app/v2/ChartWorkspace.cpp
+            src/app/v2/EditorSyncController.cpp
+            src/audio/QtPreviewSfxRuntime.cpp
+            src/common/CrashRecovery.cpp
+            src/common/DebugLog.cpp
+            src/common/OperationLog.cpp
+            src/common/ProcessDiagnostics.cpp
+            src/common/WaveformCache.cpp
+            src/core/chart/document/SimaiDocument.cpp
+            src/core/chart/document/SimaiTimingMetadata.cpp
+            src/core/chart/parser/SimaiNativeParser.cpp
+            src/preview/runtime/PreviewRuntime.cpp
+            src/timeline/TimelineQuickModel.cpp
+            src/timeline/TimelineSlowRefresh.cpp
+            src/timeline/quick/TimelineQuickStateBridge.cpp
+            src/tools/muri/MuriStaticChecker.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Svg Qt6::Quick
+        INCLUDES
+            ${CMAKE_CURRENT_BINARY_DIR}/generated
+            third_party/bass/include
+            src
+            src/app
+            src/app/qml_ui
+            src/app/quick_shell
+            src/app/ui
+            src/core/video
+            src/editor
+            src/preview
+            src/audio
+            src/preview/quick_scene
+            src/preview/runtime
+            src/core/scene
+            src/core/chart
+            src/core/chart/document
+            src/core/chart/parser
+            src/timeline
+            src/tools/latency
+            src/tools/video_export
+    )
+    target_compile_definitions(playback_coordinator_construction_spec PRIVATE HAVE_QT_MULTIMEDIA=1)
+    # This target does not link (see the comment above) — excluded so a
+    # default `cmake --build build-macos` and the full `ctest` run are not
+    # broken by a probe that was expected to possibly fail.
+    set_target_properties(playback_coordinator_construction_spec PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
     # Stage 4.9b: the independent translation unit that parses RuntimeContext.h.
     # Compile-only — the static assertions inside fail the build if the timeline
     # storage split regresses.
