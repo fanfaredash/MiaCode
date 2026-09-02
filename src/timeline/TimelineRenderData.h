@@ -51,6 +51,8 @@ struct TimelineRenderNote {
     double secondOffset = 0.0;
     double endSecondOffset = -1.0;
     double slideTraceSecondOffset = -1.0;
+    // HS multiplier frozen when this note was parsed.
+    double hsMultiplier = 1.0;
     int sourceCol = 1;
     int lane = 1;
     int endLane = 1;
@@ -125,6 +127,58 @@ inline double timelineRenderAbsoluteSecond(const TimelineRenderLine& line, doubl
     return line.startSecond + secondOffset;
 }
 
+inline double timelineRenderNoteBodyEndSecond(
+    const TimelineRenderLine& line,
+    const TimelineRenderNote& note,
+    bool includeSlideTracks = true)
+{
+    const double startSecond = timelineRenderAbsoluteSecond(line, note.secondOffset);
+    const double endSecond = note.endSecondOffset >= 0.0
+        ? timelineRenderAbsoluteSecond(line, note.endSecondOffset)
+        : startSecond;
+    double visualEnd = startSecond;
+    if ((note.kind == TimelineRenderNoteKind::Hold || note.kind == TimelineRenderNoteKind::TouchHold)
+        && endSecond > startSecond) {
+        visualEnd = qMax(visualEnd, endSecond);
+    }
+    if (includeSlideTracks
+        && (note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi)) {
+        visualEnd = qMax(visualEnd, endSecond);
+    }
+    return visualEnd;
+}
+
+inline double timelineRenderNoteExportVisualEndSecond(
+    const TimelineRenderLine& line,
+    const TimelineRenderNote& note,
+    bool includeSlideTracks = true)
+{
+    const double startSecond = timelineRenderAbsoluteSecond(line, note.secondOffset);
+    const double endSecond = note.endSecondOffset >= 0.0
+        ? timelineRenderAbsoluteSecond(line, note.endSecondOffset)
+        : startSecond;
+    double visualEnd = timelineRenderNoteBodyEndSecond(line, note, includeSlideTracks);
+    if (note.kind == TimelineRenderNoteKind::Tap
+        || note.kind == TimelineRenderNoteKind::Hold
+        || note.kind == TimelineRenderNoteKind::Slide
+        || note.kind == TimelineRenderNoteKind::Wifi) {
+        const double effectSecond = note.kind == TimelineRenderNoteKind::Hold ? endSecond : startSecond;
+        visualEnd = qMax(visualEnd, effectSecond + miacode::preview_gameplay::kJudgeEffectDurationSeconds);
+    } else if (note.kind == TimelineRenderNoteKind::Touch) {
+        visualEnd = qMax(visualEnd, startSecond + miacode::preview_gameplay::kJudgeEffectTouchDurationSeconds);
+    } else if (note.kind == TimelineRenderNoteKind::TouchHold) {
+        visualEnd = qMax(visualEnd, endSecond + miacode::preview_gameplay::kJudgeEffectDurationSeconds);
+    }
+    if (timelineRenderFlagSet(note, TimelineRenderFlagIsFirework)
+        && (note.kind == TimelineRenderNoteKind::Touch || note.kind == TimelineRenderNoteKind::TouchHold)) {
+        const double triggerSecond = (note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond)
+            ? endSecond
+            : startSecond;
+        visualEnd = qMax(visualEnd, triggerSecond + kTimelineFireworkDurationSeconds);
+    }
+    return visualEnd;
+}
+
 inline double timelineRenderLineVisualEndSecond(const TimelineRenderLine& line, bool includeSlideTracks)
 {
     double visualEnd = -std::numeric_limits<double>::infinity();
@@ -139,7 +193,8 @@ inline double timelineRenderLineVisualEndSecond(const TimelineRenderLine& line, 
             && endSecond > startSecond) {
             visualEnd = qMax(visualEnd, endSecond);
         }
-        if (includeSlideTracks && (note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi)) {
+        if (includeSlideTracks
+            && (note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi)) {
             visualEnd = qMax(visualEnd, endSecond);
         }
         if (timelineRenderFlagSet(note, TimelineRenderFlagIsFirework)

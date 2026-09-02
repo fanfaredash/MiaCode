@@ -148,6 +148,11 @@ public:
     // rebuilt per open so it never needs it, but calling it there is harmless.
     void applyThemeStyles();
 
+    // Applies an initial interval after the dialog has built its full-chart
+    // timeline, keeping the range scale independent from the selected span.
+    void setInitialExportRange(double startSecond, double endSecond);
+    void showExportRangePage();
+
 signals:
     // Embedded mode only: the user confirmed the export (settings already
     // validated + persisted; requestedExportTask() carries the task).
@@ -371,6 +376,7 @@ private:
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;
     QWidget* rangeContent_ = nullptr;
+    QWidget* rangePage_ = nullptr;
     QWidget* gameplayPage_ = nullptr;
     QWidget* skinPage_ = nullptr;
     QVBoxLayout* visualsPageLayout_ = nullptr;

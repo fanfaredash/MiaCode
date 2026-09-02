@@ -592,6 +592,16 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     copyAction->setEnabled(textCursor().hasSelection());
     connect(copyAction, &QAction::triggered, this, &QTextEdit::copy);
 
+    auto* exportRangeAction = menu->addAction(
+        translated(QStringLiteral("video_export.export_range_from_selection"), QStringLiteral("Export Selected Range")));
+    exportRangeAction->setEnabled(textCursor().hasSelection());
+    connect(exportRangeAction, &QAction::triggered, this, [this]() {
+        const QTextCursor cursor = textCursor();
+        if (cursor.hasSelection() && cursor.selectionEnd() > cursor.selectionStart()) {
+            emit exportRangeRequested(cursor.selectionStart(), cursor.selectionEnd());
+        }
+    });
+
     auto* pasteAction = menu->addAction(translated(QStringLiteral("action.paste"), QStringLiteral("Paste")));
     ShortcutRegistry::instance().applyShortcut(
         pasteAction,

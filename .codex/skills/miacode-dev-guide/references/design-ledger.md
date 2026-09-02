@@ -169,3 +169,5 @@ When a previously flexible area becomes a hard contract, add it to section 2.
 When a hard contract is intentionally relaxed, remove or rewrite the old rule instead of layering contradictory text on top of it.
 
 When a design choice is still under discussion but the current code depends on it, write it here as "current default" or "open/risky", not as a permanent rule.
+
+Current default: the chart-editor `Export Selected Range` context-menu action is enabled only for a non-empty selection and opens the existing export-range page without saving. Selection edges snap to complete comma-delimited objects; the range starts before the first selected object when possible, moves past any earlier object body/track still visible, and ends after the selected object's full judge/effect tail plus at most one second of following empty comma time. These export-only visual-tail rules do not change the global editor timeline's note-body visibility semantics.

@@ -705,6 +705,12 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             if (close < 0) {
                 break;
             }
+            bool hsOk = false;
+            const double hsMultiplier = lineState->text.mid(index + 4, close - index - 4)
+                .trimmed().toDouble(&hsOk);
+            if (hsOk && !qFuzzyIsNull(hsMultiplier)) {
+                state.hsMultiplier = hsMultiplier;
+            }
             index = close;
             continue;
         }
@@ -797,7 +803,8 @@ bool TimelineQuickModel::parseNoteToken(
     }
 
     const double lineBaseSecond = lineState->render.startSecond;
-    const auto appendNote = [lineState, groupIndices, lineBaseSecond](const TimelineRenderNote& note) {
+    const auto appendNote = [lineState, state, groupIndices, lineBaseSecond](TimelineRenderNote note) {
+        note.hsMultiplier = state->hsMultiplier;
         const int noteIndex = lineState->render.notes.size();
         lineState->render.notes.append(note);
         if (groupIndices != nullptr) {
