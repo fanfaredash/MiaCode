@@ -45,11 +45,9 @@ constexpr int kTimelineAnalysisIdleDelayMs = 180;
 
 }  // namespace
 
-void Session::invalidateDocumentValidationRevision()
-{
-    ++state_.timelineRevision_;
-    emit documentValidationChanged();
-}
+// Session::invalidateDocumentValidationRevision() moved to SessionForwarding.cpp
+// (stage 4.9d-6: TU boundary split so this file holds only Coordinator::
+// methods and can link independently of the Session assembly).
 
 void miacode::runtime::PlaybackCoordinator::scheduleTimelineAnalysisRefresh(
     const TimelineSlowRefreshRequest& request,

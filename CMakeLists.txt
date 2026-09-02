@@ -206,20 +206,24 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/preview/StageMediaRoute.cpp
     src/app/runtime/preview/WarmupAndSettings.cpp
     src/app/runtime/playback/TimelineFlow.cpp
+    src/app/runtime/playback/SessionForwarding.TimelineFlow.cpp
     src/app/runtime/playback/FollowSync.cpp
     src/app/runtime/playback/AnalysisFlow.cpp
     src/app/runtime/playback/QuickParse.cpp
     src/app/runtime/playback/Layout.cpp
     src/app/runtime/playback/FramePacing.cpp
+    src/app/runtime/playback/SessionForwarding.FramePacing.cpp
     src/app/runtime/playback/Fullscreen.cpp
     src/app/runtime/playback/LayoutUi.cpp
     src/app/runtime/playback/SessionForwarding.cpp
     src/app/runtime/playback/Playback.cpp
+    src/app/runtime/playback/SessionForwarding.Playback.cpp
     src/app/runtime/playback/Seek.cpp
     src/app/runtime/playback/PlaybackState.cpp
     src/app/runtime/playback/IntroRegion.cpp
     src/app/runtime/playback/Tick.cpp
     src/app/runtime/playback/PlaybackGlue.cpp
+    src/app/runtime/playback/SessionForwarding.PlaybackGlue.cpp
     src/app/runtime/playback/PlaybackCoordinator.h
     src/app/runtime/playback/CoordinatorContract.cpp
     src/app/runtime/playback/PlaybackIdentityGate.cpp
@@ -237,6 +241,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/validation/ValidationRender.cpp
     src/app/runtime/validation/ValidationRuntime.cpp
     src/app/runtime/playback/SurfaceContract.cpp
+    src/app/runtime/playback/SessionForwarding.SurfaceContract.cpp
     src/app/runtime/shell/Interaction.cpp
     src/app/runtime/shell/Runtime.cpp
     src/app/runtime/shell/ShellHost.cpp

@@ -333,7 +333,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          无任何 `connect` / `NOTIFY` / QML 处理器。与此前 `noteStatus` 是空函数同类——
          不报错、不挂测试，只是什么都不发生。**本轮未删也未接线**，那是产品决定。
 
-      6. **TU 边界切分（未完成，4.9d 的真实剩余工作）**。
+      6. **TU 边界切分（2026-09-03 已完成）**。
          **2026-09-02 链接探测结论：协调器目前无法独立链接，4.9d 的完成判据并未达成。**
          真实链接尝试用到 33 个源文件仍剩 171 个未定义符号；符号闭包投影扩张到 246 个文件
          仍未收敛，且 `SessionBootstrap.cpp` 已进入必需集合。
@@ -348,6 +348,15 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          剩余工作：把 117 个 `Session::` 定义从这 6 个 TU 移入 Session 侧文件
          （`SessionForwarding.cpp` 已是现成落点，那里已有 45 个），使协调器 TU 只含协调器方法。
          这同时符合仓库「不养 god file / 每文件一个职责」的既有准则。
+         **完成情况**：117 个 `Session::` 定义已移入 5 个新的 `SessionForwarding.<原文件名>.cpp`，
+         六个协调器 TU 内已无 `Session::` 方法定义（余下少量命中是 `Session::ValidationCacheEntry`、
+         `Session::PreviewCanvasFrameRateMode` 这类**嵌套类型引用**，非方法定义）。
+         Release 构建通过，全量 CTest 105 项 104 通过。
+         **切分效果有数字**：重跑链接探测，未定义符号里的 `Session::` 从主导降到 **5 个**，
+         且这 5 个来自探针 SOURCES 里其他文件（如 `DocumentFlow.cpp`）的引用，不再由协调器 TU 带入。
+         其余 166 个是 `MuriAnalyzer`、`TimelineQuickModel`、解析器等**协调器真实的协作者**——
+         性质从「被迫拽进来的无关实现」变成「本来就该一起链接的依赖」。
+         剩余工作是整理探针的 SOURCES（去掉不需要的文件、补齐真实协作者）直到闭包收敛。
          探针 spec `playback_coordinator_construction_spec` 已留在 CMake 里（标
          `EXCLUDE_FROM_ALL`、不注册 ctest），作为证据与切分完成后的验收工具。
 

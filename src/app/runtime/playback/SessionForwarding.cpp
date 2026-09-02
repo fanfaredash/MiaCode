@@ -273,3 +273,12 @@ void Session::showPreviewSliderTimeHint(int sliderValue)
 {
     playback_->showPreviewSliderTimeHint(sliderValue);
 }
+
+// Moved from AnalysisFlow.cpp (stage 4.9d-6: TU boundary split — AnalysisFlow.cpp
+// keeps only the Coordinator::-owned analysis dispatch, this is the one
+// Session::-owned method it used to carry).
+void Session::invalidateDocumentValidationRevision()
+{
+    ++state_.timelineRevision_;
+    emit documentValidationChanged();
+}

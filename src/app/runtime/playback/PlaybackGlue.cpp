@@ -27,20 +27,9 @@ void appendPreviewInteractionLog(const QString& action, const QString& payload =
 
 }  // namespace
 
-void Session::setAuditionSceneReady(std::function<bool()> stillCurrent,
-                                       std::function<void()> reinstall)
-{
-    state_.auditionSceneStillCurrent_ = std::move(stillCurrent);
-    state_.auditionSceneReinstall_ = std::move(reinstall);
-    state_.auditionSceneReady_ = true;
-}
-
-void Session::clearAuditionSceneReady()
-{
-    state_.auditionSceneReady_ = false;
-    state_.auditionSceneStillCurrent_ = {};
-    state_.auditionSceneReinstall_ = {};
-}
+// Session::setAuditionSceneReady and Session::clearAuditionSceneReady moved
+// to SessionForwarding.PlaybackGlue.cpp (stage 4.9d-6: TU boundary split so
+// this file holds only Coordinator:: methods).
 
 // The readiness gate for latency-sandbox and export-page auditions (see
 // state_.auditionSceneReady_ in SessionMembers.inc for what it guards). A
@@ -213,47 +202,9 @@ void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
     updatePauseButtonAppearance();
 }
 
-void Session::onStopPreview()
-{
-    playback_->onStopPreview();
-}
-
-void Session::onTogglePreviewPause()
-{
-    playback_->onTogglePreviewPause();
-}
-
-void Session::cancelExportIntroLeadIn()
-{
-    playback_->cancelExportIntroLeadIn();
-}
-
-bool Session::exportIntroLeadInPlaying() const
-{
-    return playback_->exportIntroLeadInPlaying();
-}
-
-bool Session::handleExportIntroSliderSeek(double second)
-{
-    return playback_->handleExportIntroSliderSeek(second);
-}
-
-double Session::exportIntroLowerBoundSeconds() const
-{
-    return playback_->exportIntroLowerBoundSeconds();
-}
-
-void Session::refreshExportIntroState()
-{
-    playback_->refreshExportIntroState();
-}
-
-void Session::setExportAuditionClockSchedule(int clockCount, double clockBpm)
-{
-    playback_->setExportAuditionClockSchedule(clockCount, clockBpm);
-}
-
-void Session::clearExportAuditionClockSchedule()
-{
-    playback_->clearExportAuditionClockSchedule();
-}
+// Session::onStopPreview, Session::onTogglePreviewPause, Session::cancelExportIntroLeadIn,
+// Session::exportIntroLeadInPlaying, Session::handleExportIntroSliderSeek,
+// Session::exportIntroLowerBoundSeconds, Session::refreshExportIntroState,
+// Session::setExportAuditionClockSchedule, and Session::clearExportAuditionClockSchedule
+// moved to SessionForwarding.PlaybackGlue.cpp (stage 4.9d-6: TU boundary split so
+// this file holds only Coordinator:: methods).
