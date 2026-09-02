@@ -3,14 +3,14 @@
 Module layout, dependency direction, the render-architecture decision, must-keep design
 contracts, and the god-file watch-list. Pair with `feature-index.md` (feature → file map).
 
-## 1. Module layout (current, post "first-unification" reorg)
+## 1. Module layout (verified 2026-09-02)
 
 ```text
 src/
   app/            App entry + window orchestration ONLY
     main.cpp        GUI boot, CLI export, export-worker entry, startup timing
     mainwindow/     MainWindow + sections/<feature>/ (partial-class slices)
-    quick_shell/    --quick-shell-beta QML shell + controller/style bridges
+    quick_shell/    Default QML shell + controller/style/native-surface bridges
     ui/             UiText, UiTheme, ShortcutRegistry, WindowParityMetrics
   audio/          Audio backends + SFX runtime. Nothing else links BASS/miniaudio.
   common/         Cross-module utilities, debug logging, shared config headers
@@ -23,6 +23,8 @@ src/
                   NO QSG / D3D11 deps. Preview*LayerState, PreviewFrameState, etc.
     video/        Shared render settings only (PreviewRenderSettings.h). Tiny.
   editor/         In-app chart text editor (PlainCodeEditor, BracketScopeHighlighter)
+  extensions/     Extension manifests, Open Bridge integration, and embedded runtime
+  intro/          Shared intro-card layout, text, and render helpers
   preview/
     quick_scene/  ACTIVE QSG chart layer renderers (PreviewQuick*Layer, *SceneRoot)
     runtime/      PreviewRuntime, PreviewQuickExportSession, PreviewStageMediaHost,
@@ -55,7 +57,7 @@ Path-translation table for stale docs/comments:
 
 ## 3. Render-architecture decision (2026-05-29, updated 2026-08-07)
 
-See `SKILL.md` for the canonical statement. Summary:
+This file owns the detailed render-architecture decision:
 
 - **KEEP (main):** in-process QSG — `PreviewRuntime` → `PreviewQuickSceneRoot`, `core/scene/*`,
   `preview/quick_scene/*`. Realtime preview + export share it.
@@ -66,7 +68,7 @@ See `SKILL.md` for the canonical statement. Summary:
 - **DELETED (2026-06-02):** the out-of-process worker (`preview/ipc/*`,
   `PreviewWorkerSession`/`Supervisor`, `MIACODE_PREVIEW_OUT_OF_PROCESS`, `MIACODE_PREVIEW_WORKER_*`)
   is gone. Do not reintroduce.
-- `src/README.md` predates this and framed DComp/sources as the future — superseded.
+- `src/README.md` is a short landing page; this reference owns the detailed decision.
 
 There is now exactly one scene stack: `core/scene/*LayerState` →
 `preview/quick_scene/PreviewQuick*Layer`. Older docs and commit messages describe a second

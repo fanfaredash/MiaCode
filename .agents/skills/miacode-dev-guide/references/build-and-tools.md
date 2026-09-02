@@ -1,17 +1,16 @@
 # Build & Tools
 
 Build configurations, targets, the dev-tools/spec convention, scripts, packaging, assets, and
-helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Presets:
-`CMakePresets.json` (configure `vs2022-qt6` → `build/`; build presets `release`, `debug`).
+helper binaries. The root `CMakeLists.txt` is authoritative. `CMakePresets.json` still points to
+the historical `build/` directory, so do not use that preset for routine local verification.
 
 ## 1. Build configuration policy
 
-- **Release is the only configuration that matters for routine work.** Build / test / verify in
-  Release (`--config Release`). Do not create or maintain a separate Debug build just to get
+- **Release is the only configuration that matters for routine work.** Configure, build, and test
+  in `build-devtools/` with `--config Release`. Do not create or maintain a separate Debug build just to get
   diagnostics — debug behavior is a **runtime `--debug` flag** (see `debug-and-logging.md`).
-- Debug-specific CMake handling that exists today is standard MSVC/windeployqt boilerplate
-  (`CMAKE_MSVC_DEBUG_INFORMATION_FORMAT` at `CMakeLists.txt:36`; launcher runtime lib at `:565`;
-  windeployqt `$<CONFIG:Debug>` at `:1179`/`:1190`). Leave it unless it gets in the way; it is
+- Debug-specific CMake handling that exists today is standard MSVC/windeployqt boilerplate.
+  Leave it unless it gets in the way; it is
   not a second supported product config.
 - Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
 - **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export and D3D11 sources
@@ -34,47 +33,16 @@ launcher exe that forwards to `app/MiaCode.exe`).
 > compiles. With CXX-only, CMake silently demotes `.c` sources to `<None>` and the link fails
 > with unresolved `mz_zip_*` symbols. The `miniz` target has AUTOMOC/UIC/RCC turned off (plain C).
 
-Everything else is gated behind `option(MIACODE_BUILD_DEV_TOOLS … OFF)` (`CMakeLists.txt:48`,
-block at `:586`). These are dev/diagnostic/spec binaries, off by default:
+Everything else is gated behind `option(MIACODE_BUILD_DEV_TOOLS … OFF)`. These are
+dev/diagnostic/spec binaries, off by default:
 
-- Dumps/probes: `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`,
-  `latency_offset_batch` (batch offset-detection evaluator: walks a chart corpus, scores
-  `detectOffset` vs each chart's `&first` folded mod one 8th-note; `DetectionTuning` weights
-  exposed as CLI flags. Manual diagnostic — needs a corpus, so NOT a CTest case.)
-- Specs (standalone `main()` style): `oplog_self_test`, `simai_parser_spec`,
-  `simai_document_spec` (SimaiDocument designer model — standalone chart-less `&des_N` round-trip),
-  `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
-  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`,
-  `preview_end_of_media_policy_spec` (background-video `EndOfMedia` classification:
-  natural short PV vs stale mid-clip end, measured against the media's own duration),
-  `preview_head_layer_spec`,
-  `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
-  `preview_sfx_timeline_spec`, `preview_audio_settings_spec`,
-  `preview_audio_command_queue_spec`, `preview_audio_worker_protocol_spec`,
-  `preview_audio_worker_spec` (also compile-checks the production miniaudio backend and, on
-  Windows/macOS, the production BASS backend), `preview_audio_non_gui_barrier_spec`,
-  `preview_bass_device_lease_spec`, `preview_audio_playback_flow_policy_spec`,
-  `preview_audio_device_change_policy_spec`, `preview_audio_health_spec`,
-  `bass_preview_retained_state_spec`, `bass_preview_debug_log_routing_spec`,
-  `bass_preview_sfx_scheduler_policy_spec`, `ui_hang_watchdog_policy_spec`,
-  `log_pruning_policy_spec`, `quickshell_preview_surface_policy_spec`,
-  `video_export_runtime_policy_spec`, `video_export_intro_mode_spec`,
-  `video_export_audio_render_plan_spec`,
-  `touch_pad_authoring_state_spec`,
-  `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
-  `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in
-  `docs/ops/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the
-  spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define. Note:
-  `MIACODE_SOURCE_ROOT` itself is a compile def, not an env flag, so the spec filters it via
-  `kCompileDefinitions` — any new spec that consumes the source-root define is fine),
-  `process_diagnostics_spec` (DebugLog PV-memory channel/session/path and current-process memory
-  sample contract), `pv_memory_diagnostics_spec` (pure PV source/clear-epoch accounting), and
-  `pv_memory_host_contract_spec` (source-level guard that host instrumentation stays debug-gated
-  and reuses the single existing `toImage()` conversion),
-  `ui_text_locale_spec` (i18n drift guard — see the localization note in
-  `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define),
-  `ui_text_preferences_spec` (canonical preference normalization/migration and unknown-key
-  preservation guard)
+- Manual dumps/probes cover parser output, Muri, SoundTouch, and latency-corpus evaluation.
+- Standalone specs cover chart/document transforms, editor/timeline behavior, extensions,
+  preview/render/media/audio policies, export/packaging, networking, UI/i18n, and diagnostics.
+- Do not maintain a copied target inventory here. The `miacode_add_dev_tool(...)` calls in
+  `CMakeLists.txt` are the target source of truth; after configuration, use
+  `ctest --test-dir build-devtools -C Release -N` for the registered-test inventory.
+- Corpus- or media-dependent diagnostic tools are intentionally not registered with CTest.
 
 ## 3. Spec / dev-tool convention (audit 2026-05-29 — being standardized)
 
@@ -95,12 +63,14 @@ Rules going forward:
   compile define, e.g. a source-root path? Append a `target_compile_definitions(NAME PRIVATE …)`
   after the call — see `debug_flag_index_spec`.)
 - Reuse the shared source-group variables; only list sources unique to that spec.
-- Build the suite with `cmake --build build --config Release` after configuring with
-  `-DMIACODE_BUILD_DEV_TOOLS=ON`, then `ctest --test-dir build -C Release`.
+- Build the suite with `cmake --build build-devtools --config Release --parallel 4` after
+  configuring `build-devtools/` with `-DMIACODE_BUILD_DEV_TOOLS=ON`, then run
+  `ctest --test-dir build-devtools -C Release`.
 
 ## 4. Build & packaging scripts (`scripts/`, whitelisted in `.gitignore`)
 
-- Windows build/package: `scripts/build/build-win.ps1`, `scripts/build/package-win.ps1` (defaults to `build/`, prechecks
+- Windows build/package: `scripts/build/build-win.ps1`, `scripts/build/package-win.ps1` (their
+  historical default is `build/`; pass `-BuildDir build-devtools` in this workspace; they precheck
   version freshness against `CMakeLists.txt` + generated `AppVersion.h`, auto-rebuilds MiaCode,
   runs windeployqt with `--qmldir src`, keeps the Qt Quick DLL set, copies repo-local BASS DLLs).
 - macOS build/package: `scripts/build/build-macos.sh`, `scripts/build/package-mac.sh`.

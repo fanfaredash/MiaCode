@@ -1,137 +1,62 @@
 ---
 name: miacode-dev-guide
-description: Repository guide for MiaCode (a Qt6/C++/QML maimai chart editor + video exporter). Use when working anywhere in this repo to locate a feature's owning files/classes/functions; understand the module layout (core/app/preview/audio/timeline/tools) and dependency rules; follow cross-module sync pairs (parser ↔ timeline ↔ preview ↔ export ↔ Muri); find debug flags and the --debug logging system; follow build/target/CTest/packaging conventions; or check the committed render-architecture decision (in-process QSG is the only render path; the DComp/D3D11 backend and the out-of-process worker have both been removed). Also update this skill in the same change whenever repo structure, cross-module contracts, debug flags, or build conventions change.
+description: Repository guide for MiaCode, a Qt 6/C++/QML chart editor and video exporter. Use for any work in this repo that needs feature ownership, module boundaries, cross-path behavior, build/test conventions, diagnostics, assets, or architectural constraints.
 ---
 
 # MiaCode Dev Guide
 
-The repo memory layer for MiaCode. Start from the user-facing feature, map it to the
-owning entry point, then open only the reference file you need. **Code is the source of
-truth.** When code and any reference disagree, trust the code and fix the reference in the
-same change.
+Use this skill as the repository memory index. Start from the user-facing behavior and read
+only the reference that owns it. Code and project-native build/test results are authoritative;
+when a reference disagrees, correct the reference in the same change.
 
 ## Route the task
 
-- Module layout, dependency rules, the render-architecture decision, must-keep design
-  contracts, and god-file watch-list → `references/architecture-and-layout.md`
-- Map a feature to its files / classes / functions → `references/feature-index.md`
-- Behavior mirrored across parser / timeline / preview / audio / export / Muri →
-  `references/cross-chain-linkage.md`
-- Constants, thresholds, magic-value ownership, promote-vs-keep-local → `references/hardcode-registry.md`
-- Debug switches, the `--debug` logging system, log channels, env-var index → `references/debug-and-logging.md`
-- Build configs, targets, the `MIACODE_BUILD_DEV_TOOLS` spec convention + CTest, scripts,
-  assets, packaging, helper binaries → `references/build-and-tools.md`
-- UI layout bugs — 边界被吞 / clipped borders, tab 页被裁剪, dark-mode 失效, 1px 缝隙/接缝,
-  层叠关系错误 / stacking, hit-area mismatch → use the **`qt-ui-layout-pitfalls`** skill
-  (symptom routing table + proven recipes) BEFORE editing any dialog/QML layout code.
+- Architecture, module boundaries, active implementations, and structural constraints:
+  [references/architecture-and-layout.md](references/architecture-and-layout.md)
+- Feature ownership down to files, classes, and functions:
+  [references/feature-index.md](references/feature-index.md)
+- Parser, timeline, preview, audio, export, latency, and Muri synchronization:
+  [references/cross-chain-linkage.md](references/cross-chain-linkage.md)
+- Constants, thresholds, and configuration ownership:
+  [references/hardcode-registry.md](references/hardcode-registry.md)
+- Runtime `--debug`, log channels, environment flags, and diagnostics:
+  [references/debug-and-logging.md](references/debug-and-logging.md)
+- Release builds, targets, CTest, scripts, assets, and packaging:
+  [references/build-and-tools.md](references/build-and-tools.md)
+- Dialog/QML clipping, seams, stacking, dark-mode, overflow, or hit-area defects: use
+  `qt-ui-layout-pitfalls` before editing layout code.
 
-## Repo at a glance (current paths — verified 2026-05-29)
+## Repository contracts
 
-- App boot + CLI export + export-worker entry: `src/app/main.cpp`
-- Main window orchestration: `src/app/mainwindow/` (+ `sections/<feature>/`)
-- QuickShell beta shell + controller bridge: `src/app/quick_shell/`
-- Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)
-- Parser + validation: `src/core/chart/parser/` (`SimaiNativeParser*` — include-split TU)
-- Chart transforms / normalization: `src/core/chart/transform/`
-- Backend-neutral frame-state + per-layer scene math (NO GPU deps): `src/core/scene/`
-  (`Preview*LayerState`, `PreviewFrameState`, `PreviewOpacityCurves`, `PreviewMarkerDrawOrder`)
-- **Active** QSG render layers: `src/preview/quick_scene/` (`PreviewQuick*Layer`, `PreviewQuickSceneRoot`)
-- Preview runtime host, headless export session, stage media: `src/preview/runtime/`
-  (`PreviewRuntime`, `PreviewQuickExportSession`, `PreviewStageMediaHost`, `PreviewSceneAsset*`)
-- Audio backends + SFX runtime: `src/audio/` (`BassPreviewAudioBackend`,
-  `MiniaudioPreviewAudioBackend`, `QtPreviewSfxRuntime*`, `PreviewAudioSettings`)
-- Timeline data + QSG timeline surface: `src/timeline/` (+ `quick/`)
-- Tools: `src/tools/{latency,muri,video_export,chart_transform,...}`
-- Shared config headers + logging + oplog: `src/common/`
+- `QuickShellBootstrap` is the normal GUI entry. `MainWindow` and QWidget surfaces are hosted
+  implementation surfaces; keep new top-level orchestration in QuickShell/controller sections.
+- In-process Qt Quick/QSG is the only preview and export render path. Keep scene math GPU-free
+  in `src/core/scene/`, render layers in `src/preview/quick_scene/`, and runtime hosting in
+  `src/preview/runtime/`. Do not recreate the removed DComp or preview-worker architectures.
+- Treat preview/export and other mirrored consumers as synchronization pairs unless
+  `cross-chain-linkage.md` explicitly marks a path as compatibility-only or diagnostic.
+- Keep `MainWindow` orchestration thin; add focused units under
+  `src/app/mainwindow/sections/<feature>/` and register new translation units in CMake.
+- Route logs through `miacode::debug_log`; do not add ad-hoc console/debug-output channels.
+- Routine verification is Release-only and uses `build-devtools/`. Enable
+  `MIACODE_BUILD_DEV_TOOLS` when specs are required and run CTest with `-C Release`.
 
-### Preview-audio device-cutoff contract (Windows, updated 2026-08-09)
+## Working sequence
 
-- `PreviewAudioDeviceWatcher` uses IMM endpoint callbacks as the sole Windows source when
-  native registration succeeds; it creates `QMediaDevices` only as the Windows-registration
-  fallback and on non-Windows. Its direct-cutoff handler may run on Core Audio's MTA, so it calls only
-  `QtPreviewSfxRuntime::requestDeviceChangeCutoff()`. That method closes the playback
-  generation and synchronously invokes `PreviewBassEmergencyPause` on the previously
-  bound concrete BASS output; GUI freezing is delivered later by `deviceCutoffRequested`
-  to `TimelineSection`.
-- `QtPreviewSfxRuntime` captures the cutoff chart-second from its monotonic playback
-  anchor and posts one `DeviceChangePause` worker barrier. The GUI must use that
-  captured second and identity, never sample a second clock or post a duplicate pause.
-- If the same notification arrives while the clock is not armed, the runtime still
-  posts a route-invalidation-only barrier. It must release the concrete endpoint and
-  retained stream without emitting a GUI pause or clock sample; the next explicit Play
-  must cold-Prepare. The paused PV/BG/outline policy is applied synchronously with the
-  GUI playing-state flip, never through a deferred UI-tail callback.
-- Windows BASS must set `BASS_CONFIG_DEV_DEFAULT=FALSE` exactly once before its first
-  enumeration/init, then bind `BASS_Init` to the resolved Core Audio endpoint ID. BASS
-  does not reopen that configuration window after `BASS_Free`, so rebuilds must reuse
-  the first configuration result rather than call `BASS_SetConfig` again. On a cutoff
-  the backend destroys its streams/device lease; only the next explicit Play may rebuild
-  assets on the current endpoint. Do not reintroduce `BASS_Init(-1)` on this path.
+1. Locate the primary owner in `feature-index.md`.
+2. Read the relevant linkage/architecture reference and inspect all named consumers.
+3. Make the smallest coherent change, preserving active-path and serialization boundaries.
+4. Validate proportionally in Release; before commit or push, review the full diff and run the
+   necessary build/tests as required by the workspace rules.
 
-> Note: `src/simai/`, `src/preview/scene/`, `src/preview/audio/`, `src/preview/video/` are
-> OLD paths from before the "first-unification" reorg. They no longer exist. `src/render/`
-> and `src/sources/` are also gone (DComp removal, 2026-08-07). If a doc or comment points
-> there, it is stale → use the paths above.
+## Keep the guide current
 
-## Render-architecture decision (2026-05-29, updated 2026-08-07) — read before touching preview/render
-
-This is a committed product decision; treat it as a contract.
-
-1. **In-process QSG is the MAIN path — keep it.** `PreviewRuntime` → `PreviewQuickSceneRoot`,
-   fed by `core/scene/*LayerState`, rendered by `preview/quick_scene/*`. Both realtime preview
-   and video export run through this stack (export via `PreviewQuickExportSession`).
-2. **DComp/D3D11 — DELETED (2026-08-07).** `src/render/*` and `src/sources/*` are gone, along
-   with all six `MIACODE_*_DCOMP*` flags and the `dcomp` / `d3dcompiler` link libraries.
-   Rationale: the backend had been default-off since beta34, so it carried ~11k lines and a
-   parallel branch in every preview/timeline paint path while shipping to nobody; the
-   decoupling work in decision 2's old form was strictly more expensive than deletion.
-   `--quick-shell-beta` survives as an inert argument (it only ever set
-   `MIACODE_PREVIEW_USE_DCOMP=1`). Do not reintroduce a second render backend.
-3. **Out-of-process worker — DELETED (2026-06-02).** `src/preview/ipc/*`, `PreviewWorkerSession`
-   (`src/preview/runtime/`), and the `MIACODE_PREVIEW_OUT_OF_PROCESS` / `MIACODE_PREVIEW_WORKER_*`
-   flags are gone. Do not reintroduce this "v2" direction; in-process QSG is the keeper.
-4. **`src/README.md` is superseded on this point.** It framed `sources/`+`compositor`+`render`
-   as the v2 future and `preview/` (QSG) as legacy-to-be-deleted. Those trees no longer exist;
-   QSG is the keeper.
-
-## Work the repo in this order
-
-1. Identify the user-facing capability and its entry point (`references/feature-index.md`).
-2. Follow downstream consumers before editing. Many behaviors are mirrored across preview-time
-   and export-time code — treat them as a **sync pair** unless `references/cross-chain-linkage.md`
-   says otherwise.
-3. Prefer code over docs when they disagree; fix the disproven reference in the same change.
-4. Build / test / verify in **Release** only. Debug behavior is a runtime `--debug` flag, not a
-   separate Debug CMake build (`references/build-and-tools.md`).
-
-## Structural guardrails (from the 2026-05-29 audit)
-
-- **No new god files.** Standing offenders not to grow: `VideoExportController.cpp` (~5000),
-  `MuriAnalyzer.cpp` (~1300, decomposed into `miacode::muri::detail` stage TUs — now shared
-  primitives + a thin `analyze()` orchestrator; don't regrow),
-  `MainWindow` (176-method partial-class across ~30 section files).
-  Add a new focused unit instead. Soft target: ~800 lines / one clear responsibility per file.
-- **MainWindow is orchestration only** (a must-keep contract). New window features land in
-  `sections/<feature>/` as cooperating objects, not as more `friend …Section` partials on the
-  one giant `MainWindow.h`.
-- **All logging goes through `miacode::debug_log` channels, gated by `--debug`.** Don't add raw
-  `qDebug` / `std::cout` / `printf` / `OutputDebugString`. See `references/debug-and-logging.md`.
-- **Don't add env flags casually.** ~80 `MIACODE_*` vars already exist. Prefer reusing/removing.
-  If you must add one, give it an entry in `references/debug-and-logging.md` in the same change.
-- **New scene/render work uses the QSG path:** add a `core/scene/` state builder + a
-  `preview/quick_scene/` layer. Do NOT reintroduce a painter/OpenGL fallback or a second
-  native render backend.
-- **Never commit build artifacts/logs** (`*.obj`, `*.log`, `build/` output, `experimental/`
-  binaries). `.gitignore` covers most — keep it that way.
-
-## Maintenance rules (keep this skill true)
-
-- After renames / moves / splits → update paths, class names, function names in
-  `feature-index.md` and `architecture-and-layout.md`.
-- After changing cross-module behavior → update `cross-chain-linkage.md`.
-- After adding / moving / re-scoping a constant → update `hardcode-registry.md`.
-- After adding / removing / re-gating a debug flag or log channel → update `debug-and-logging.md`.
-- After changing build targets, specs, scripts, packaging, or asset conventions → update
+- Moves, renames, ownership, or module changes: update `feature-index.md` and, when structural,
+  `architecture-and-layout.md`.
+- Cross-module behavior or serialized boundaries: update `cross-chain-linkage.md`.
+- Constants/config ownership: update `hardcode-registry.md`.
+- Flags, channels, or diagnostics: update `debug-and-logging.md`.
+- Targets, scripts, assets, packaging, or verification conventions: update
   `build-and-tools.md`.
-- When removing a feature, delete its stale breadcrumbs instead of leaving dangling references.
-- English is the maintained source of truth for this skill; do not create a translated mirror.
+- Remove stale breadcrumbs when code is removed. Maintain one English source of truth here;
+  `.codex/skills/miacode-dev-guide/SKILL.md` is only a compatibility entrypoint.

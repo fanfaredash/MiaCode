@@ -1,6 +1,6 @@
 # `src` Directory Layout
 
-> **Route note:** `.codex/skills/miacode-dev-guide/` is the authoritative
+> **Route note:** `.agents/skills/miacode-dev-guide/` is the authoritative
 > architecture map. This file is the local `src/` landing page and records
 > which implementation path is the default when multiple versions coexist.
 
