@@ -259,7 +259,21 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          **`preferences_port_spec` 是链接层证明而非文本扫描**：只链 `Qt6::Core` + `Qt6::Test`
          （连 `Gui` 都不需要），用 fake 实现该接口；谁往接口里塞进需要窗口或 Widgets 的类型，
          这个 target 就链接失败。这个 fake 也是「协调器能否脱离 `Session` 构造」的第一块拼图。
-      4b-2b. 其余三个窄端口（舞台媒体 / 文档状态 / 校验刷新）+ 分支歧义 7 处 + 零散 3 处（剩余 31 处）。
+      4b-2b. ~~校验端口~~ **已完成 2026-09-02**：`session_.` 计数 31 → **25**（6 处）。
+         新增 `src/app/v2/PlaybackValidationPort.h`（5 个纯虚方法），由 `ValidationHost` 实现。
+         **与偏好端口是刻意的对照**：那个按能力切（8 个方法散在三个宿主，`Session` 实现），
+         这个按宿主切（5 个方法今天就只有一个归属）。**不强行统一成一种**——归属散的按能力切、
+         归属集中的按宿主切；强行统一会在其中一种情况下造出没必要的转发层。
+         接口不带默认实参（阶段 3.5 先例），`ValidationHost` 侧保留自己的默认实参：
+         虚函数的默认实参在调用点静态解析、不参与派发，只影响已持有 `ValidationHost&` 的调用方。
+         构造顺序已验证：`validation_` 构造于 `SessionBootstrap.cpp:185`、协调器于 `:188`；
+         且 `Session.h` 里 `validation_`(689) 声明早于 `playback_`(691)，所以析构时协调器先走，
+         不存在借用引用悬空——这正是 4.9a 审计抓到过的方向。
+         `validation_port_spec` 同样只链 `Qt6::Core` + `Qt6::Test`。
+      4b-2c. 其余端口（舞台媒体 ~13 / 文档状态 7）+ 分支歧义 7 处 + 零散 3 处（剩余 25 处）。
+         **一个待观察项**：协调器构造签名已到 7 个参数，端口全切完约 9 个。
+         第 5 步去掉 `Session&` 后若仍显臃肿，考虑收成一个依赖结构体；
+         但不要为了参数个数好看而把窄端口重新捆成宽接口。
          **关键前提（2026-09-02 查证）**：`StageMediaHost` / `ValidationHost` /
          `DocumentSessionHost` 的构造签名**自己都要 `Session&`**
          （`preview/StageMediaHost.h:9`、`validation/ValidationHost.h:9`、`document/DocumentSessionHost.h:17`），

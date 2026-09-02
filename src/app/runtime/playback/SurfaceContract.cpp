@@ -395,7 +395,7 @@ RenderMode miacode::runtime::PlaybackCoordinator::muriRenderMode() const
 
 void miacode::runtime::PlaybackCoordinator::setMuriRenderMode(RenderMode mode)
 {
-    session_.validation_->setMuriRenderMode(mode, true);
+    validation_.setMuriRenderMode(mode, true);
 }
 
 void miacode::runtime::PlaybackCoordinator::toggleMuriRenderMode()
@@ -412,7 +412,7 @@ void miacode::runtime::PlaybackCoordinator::toggleMuriRenderMode()
         nextMode = RenderMode::Native;
         break;
     }
-    session_.validation_->setMuriRenderMode(nextMode, true);
+    validation_.setMuriRenderMode(nextMode, true);
 }
 
 QStringList miacode::runtime::PlaybackCoordinator::availableSkinDirectoryNames() const

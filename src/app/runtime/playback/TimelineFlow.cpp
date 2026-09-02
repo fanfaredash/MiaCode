@@ -50,12 +50,14 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     RuntimeContext::Ui& ui,
     RuntimeContext::State& state,
     miacode::v2::PlaybackPreferencesPort& preferences,
+    miacode::v2::PlaybackValidationPort& validation,
     quint64 sessionGeneration)
     : session_(session)
     , services_(services)
     , ui_(ui)
     , state_(state)
     , preferences_(preferences)
+    , validation_(validation)
     , identity_(sessionGeneration)
 {}
 
@@ -605,9 +607,9 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
     const bool trackPathChanged = previousTrackPath != nextTrackPath;
     if (pathChanged) {
         invalidatePreviewFollowBindingCache();
-        session_.clearValidationCache();
+        validation_.clearValidationCache();
         clearValidationErrors();
-        session_.clearValidationDecorations();
+        validation_.clearValidationDecorations();
         stopQtPreviewPlayback(false);
         if (session_.latencySandboxController() != nullptr) {
             session_.latencySandboxController()->exitIfActive();
@@ -934,7 +936,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatestTimelinePreviewStateToPau
     if (state_.scene_ != nullptr && noteMarkersChanged) {
         state_.scene_->setNoteMarkers(state_.latestTimelineNoteMarkers_);
     }
-    session_.applyAlignedMuriAnalysisReportToViews();
+    validation_.applyAlignedMuriAnalysisReportToViews();
     state_.lastPreviewNoteMarkerSignature_ = state_.latestTimelineNoteMarkerSignature_;
 }
 

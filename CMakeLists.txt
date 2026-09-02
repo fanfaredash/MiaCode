@@ -1864,6 +1864,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/audio src/core/video
     )
 
+    # Stage 4.9d-4b-2b: the playback coordinator's second narrow port, this one
+    # onto muri validation/analysis presentation. All five methods already
+    # belong to one host (ValidationHost), so the port is cut by host rather
+    # than by capability — see PlaybackValidationPort.h. Linking Core+Test only
+    # (no Gui) is the same link-time guarantee as preferences_port_spec above.
+    miacode_add_dev_tool(validation_port_spec TEST
+        SOURCES
+            src/tools/v2/ValidationPortSpec.cpp
+            src/app/v2/PlaybackValidationPort.h
+            src/common/MuriRenderOptions.h
+        LIBS Qt6::Core Qt6::Test
+        INCLUDES src src/common
+    )
+
     # Stage 4.6: Timeline commands receive their own identity before the
     # compatibility host forwards them to the current composite implementation.
     miacode_add_dev_tool(timeline_host_spec TEST

@@ -5,6 +5,7 @@
 #include "app/v2/AudioClockSource.h"
 #include "app/v2/PlaybackControl.h"
 #include "app/v2/PlaybackPreferencesPort.h"
+#include "app/v2/PlaybackValidationPort.h"
 #include "app/v2/PreviewPlaybackPort.h"
 #include "audio/PreviewAudioDeviceChangePolicy.h"
 #include "audio/PreviewAudioDeviceCutoff.h"
@@ -29,6 +30,7 @@ public:
     PlaybackCoordinator(Session& session, miacode::v2::ApplicationServices& services,
                         RuntimeContext::Ui& ui, RuntimeContext::State& state,
                         miacode::v2::PlaybackPreferencesPort& preferences,
+                        miacode::v2::PlaybackValidationPort& validation,
                         quint64 sessionGeneration = 0);
 
     void setDocumentRevision(quint64 revision);
@@ -398,6 +400,7 @@ private:
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;
     miacode::v2::PlaybackPreferencesPort& preferences_;
+    miacode::v2::PlaybackValidationPort& validation_;
     PlaybackIdentityGate identity_;
 
     bool beginPlaybackCommand();

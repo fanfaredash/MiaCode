@@ -72,7 +72,7 @@ void miacode::runtime::PlaybackCoordinator::scheduleDeferredPreviewUiTail(
                 applyPreviewStageMediaRouteVisualSettings(state_);
             }
             if (applyDeferredAnalysis) {
-                session_.applyDeferredAnalysisUiUpdates();
+                validation_.applyDeferredAnalysisUiUpdates();
             }
             if (dispatchTimelineAnalysis && state_.pendingTimelineAnalysisRefresh_.revision != 0) {
                 requestTimelineAnalysisDispatch(0);
