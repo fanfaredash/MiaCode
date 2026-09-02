@@ -48,8 +48,8 @@ Rectangle {
         let high = tops.length - 1
         while (low <= high) {
             const mid = (low + high) >> 1
-            if (tops[mid] < viewTop) {
-                first = mid + 1
+            if (tops[mid] <= viewTop) {
+                first = mid
                 low = mid + 1
             } else {
                 high = mid - 1

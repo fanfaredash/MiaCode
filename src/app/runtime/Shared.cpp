@@ -408,7 +408,7 @@ QFont editorFont(int pointSize)
 {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     static const QString bundledEditorFontFamily = []() -> QString {
-        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/consola.ttf"));
+        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/maple_mono_cn.ttf"));
         const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
         return families.isEmpty() ? QString() : families.first();
     }();
