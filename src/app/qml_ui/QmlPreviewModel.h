@@ -7,6 +7,7 @@
 
 #include "common/MuriRenderOptions.h"
 
+#include "app/v2/PlaybackControl.h"
 #include "app/v2/PreviewSurface.h"
 
 #include "app/v2/ShellNotifications.h"
@@ -44,6 +45,7 @@ class QmlPreviewModel final : public QObject
 public:
     explicit QmlPreviewModel(miacode::v2::ShellNotifications& notifications,
                              miacode::v2::PreviewSurface*& surfaceSlot,
+                             miacode::v2::PlaybackControl*& controlSlot,
                              QObject* parent = nullptr);
 
     double positionSeconds() const;
@@ -99,6 +101,14 @@ private:
     miacode::v2::PreviewSurface* surface() const
     {
         return surfaceSlot_ != nullptr ? *surfaceSlot_ : nullptr;
+    }
+    // Bound to the assembly's slot, not a snapshot. Same shape as surface():
+    // transport commands go through this directly, with no null check, same
+    // as they already did through surface().
+    miacode::v2::PlaybackControl** controlSlot_ = nullptr;
+    miacode::v2::PlaybackControl* playbackControl() const
+    {
+        return controlSlot_ != nullptr ? *controlSlot_ : nullptr;
     }
     double positionSeconds_ = 0.0;
     double durationSeconds_ = 0.0;

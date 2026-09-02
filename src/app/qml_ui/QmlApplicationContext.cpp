@@ -12,7 +12,7 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
                 services.uiRequests(), services.documentBridgeSlot(), this)
     , analysis_(services.workspace(), services.analysis(),
                 services.timelineSurfaceSlot(), this)
-    , preview_(services.shellNotifications(), services.previewSurfaceSlot(), this)
+    , preview_(services.shellNotifications(), services.previewSurfaceSlot(), services.playbackControlSlot(), this)
     , timeline_(services.shellNotifications(), services.timelineSurfaceSlot(), this)
     , commands_(document_, services.editorPageRouterSlot(),
                 services.documentBridgeSlot(), this)

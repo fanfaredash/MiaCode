@@ -513,14 +513,18 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 推进 4.9d/4.9e 过程中查实、但需要产品或架构决定的四项。**都已查证到可以决策的程度，未擅自处理。**
 
-1. **关闭应用时不再做最后一次自动保存检查**。`ShellHost::closeEvent` 是不可达死代码
-   （无调用者，`ShellHost` 不继承 `QObject`/`QWidget`，无 connect/取址），真实关闭路径是
-   `requestShellClose` → `finishShellClose`。两者对比：真实路径做了弹窗清理、崩溃恢复清理、
-   会话标记清除、偏好落盘、导出 worker 清理，**唯独少了 `runAutosaveCheck(false)`**。
-   全仓该函数的调用点只剩自动保存定时器与两处文档操作。
-   可能是 QML 化时的有意简化（干净退出本就会清掉崩溃恢复数据，再自动保存一次确实矛盾），
-   也可能是漏掉的一步。**`closeEvent` 因此保留未删——删了这个差异就再无证据。**
-   注意自动保存在本项目已栽过一次（见 §7.-2「每次编辑安全网在 v2 从未运行」）。
+1. ~~关闭应用时不再做最后一次自动保存检查~~ —— **该结论是错的，2026-09-03 已更正，无需处理。**
+   原判断来自对比 `ShellHost::closeEvent`（死代码）与 `finishShellClose`（活路径）两个**函数体**，
+   发现后者没有 `runAutosaveCheck`。**但没有跟进被调函数做了什么**：真实链路是
+   `requestShellClose` → `documents_->requestLeaveDocument()`，而后者在**函数开头第一件事**
+   就是 `runAutosaveCheck(false)`（`DocumentFileFlow.cpp:207`）；同步版 `maybeSaveBeforeContinue()`
+   同样如此（`:181`）。死掉的 `closeEvent` 是先调 `maybeSaveBeforeContinue()`（内含一次）
+   再显式调一次，属**重复**；活路径只跑一次，覆盖完整。**缺口不存在。**
+   *方法教训*：这与同期另一处失误同类——用 `grep "session_"` 断定「剩余调用不碰 Session API」，
+   漏了 `guard->` 那 74 处。两次都是**用一个看得见的表面替代实际的因果链**。
+   `ShellHost::closeEvent` 因此成为真正的纯死代码，但**未删**：保留它的原有理由已不成立，
+   而同一轮里刚证明自己会漏看因果链，不宜再凭一次对比就删 90 行；要删值得单开一轮逐个核对。
+
 2. **`documentValidationChanged` 有 6 个发射点、0 个消费方**——无任何 `connect` / `NOTIFY` /
    QML 处理器。与此前 `noteStatus` 是空函数同类：不报错、不挂测试，只是什么都不发生。
    本轮未删也未接线。

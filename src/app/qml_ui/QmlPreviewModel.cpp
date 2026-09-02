@@ -29,10 +29,12 @@ constexpr std::array<StatisticDescriptor, 6> kStatisticDescriptors{{
 
 QmlPreviewModel::QmlPreviewModel(miacode::v2::ShellNotifications& notifications,
                                  miacode::v2::PreviewSurface*& surfaceSlot,
+                                 miacode::v2::PlaybackControl*& controlSlot,
                                  QObject* parent)
     : QObject(parent)
     , notifications_(&notifications)
     , surfaceSlot_(&surfaceSlot)
+    , controlSlot_(&controlSlot)
 {
     v2UiProbeEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
     connect(notifications_, &miacode::v2::ShellNotifications::presentationChanged, this, [this]() {
@@ -253,11 +255,11 @@ double QmlPreviewModel::canvasAspectRatio() const
     return surface() != nullptr ? surface()->canvasAspectRatio() : 1.0;
 }
 
-void QmlPreviewModel::setPositionSeconds(double value) { surface()->seek(value); }
-void QmlPreviewModel::setRate(double value) { surface()->setPlaybackRate(value); }
+void QmlPreviewModel::setPositionSeconds(double value) { playbackControl()->seek(value); }
+void QmlPreviewModel::setRate(double value) { playbackControl()->setPlaybackRate(value); }
 void QmlPreviewModel::setPlaying(bool value)
 {
-    if (value != playing()) surface()->togglePlayback();
+    if (value != playing()) playbackControl()->togglePlayback();
 }
 
 void QmlPreviewModel::toggleRenderMode()
@@ -298,11 +300,11 @@ void QmlPreviewModel::setSmoothStarErase(bool enabled)
     refreshFromBackend();
 }
 
-void QmlPreviewModel::stop() { surface()->stop(); }
+void QmlPreviewModel::stop() { playbackControl()->stop(); }
 
-void QmlPreviewModel::togglePlayback() { surface()->togglePlayback(); }
+void QmlPreviewModel::togglePlayback() { playbackControl()->togglePlayback(); }
 
-void QmlPreviewModel::adjustRate(int direction) { surface()->nudgePlaybackRate(direction); }
+void QmlPreviewModel::adjustRate(int direction) { playbackControl()->nudgePlaybackRate(direction); }
 
 void QmlPreviewModel::logPreviewInteraction(const QString& action, const QString& payload)
 {
@@ -315,8 +317,8 @@ void QmlPreviewModel::logPreviewInteraction(const QString& action, const QString
         true);
 }
 
-void QmlPreviewModel::beginScrub() { surface()->beginScrub(); }
+void QmlPreviewModel::beginScrub() { playbackControl()->beginScrub(); }
 
-void QmlPreviewModel::updateScrub(double second) { surface()->updateScrub(second, true); }
+void QmlPreviewModel::updateScrub(double second) { playbackControl()->updateScrub(second); }
 
-void QmlPreviewModel::endScrub(double second) { surface()->endScrub(second, true); }
+void QmlPreviewModel::endScrub(double second) { playbackControl()->endScrub(second); }
