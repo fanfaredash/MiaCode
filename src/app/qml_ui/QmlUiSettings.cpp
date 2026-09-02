@@ -9,6 +9,8 @@
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QDate>
+#include <QStringList>
 #include <QSettings>
 #include <QSysInfo>
 #include <QtGlobal>
@@ -117,7 +119,22 @@ QmlUiSettings::QmlUiSettings(QObject* parent)
 
 QVariantMap QmlUiSettings::aboutInfo() const
 {
-    QString version = QString::fromLatin1(MIACODE_DISPLAY_VERSION_STRING).trimmed();
+    QString version = QString::fromLatin1(MIACODE_VERSION_STRING).trimmed();
+    const QStringList compilerDate = QStringLiteral(__DATE__).simplified().split(QLatin1Char(' '));
+    const QStringList monthNames = {
+        QStringLiteral("Jan"), QStringLiteral("Feb"), QStringLiteral("Mar"),
+        QStringLiteral("Apr"), QStringLiteral("May"), QStringLiteral("Jun"),
+        QStringLiteral("Jul"), QStringLiteral("Aug"), QStringLiteral("Sep"),
+        QStringLiteral("Oct"), QStringLiteral("Nov"), QStringLiteral("Dec")
+    };
+    if (compilerDate.size() == 3) {
+        const int month = monthNames.indexOf(compilerDate.at(0)) + 1;
+        const QDate buildDate(compilerDate.at(2).toInt(), month, compilerDate.at(1).toInt());
+        if (buildDate.isValid()) {
+            version += QStringLiteral(" (") + buildDate.toString(QStringLiteral("yyyyMMdd"))
+                + QStringLiteral(")");
+        }
+    }
     if (version.isEmpty()) {
         version = QCoreApplication::applicationVersion().trimmed();
     }
