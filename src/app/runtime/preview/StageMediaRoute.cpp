@@ -43,27 +43,11 @@ miacode::runtime::StageMediaHost::StageMediaHost(
 
 void miacode::runtime::StageMediaHost::applyPreviewStageMediaRouteVisualSettings()
 {
-    // While the export-preview dialog is up, PV/BG stays visible regardless of the
-    // pause-hide option so the user previews exactly what the exported video shows.
-    // Holding Alt while paused inverts the pause-hide option (same effective
-    // flag as effectivePreviewOutlineVariant) so judge area ⇄ PV/BG flip together.
-    const bool forceJudgeAreaWhenPaused =
-        state_.previewForceLabeledJudgeLineWhenPaused_ != state_.pauseDisplayAltHoldActive_;
-    const bool mediaVisible = !forceJudgeAreaWhenPaused
-        || state_.playing_
-        || state_.exportPreviewActive_;
-    if (state_.previewStageMediaHost_ != nullptr) {
-        state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
-        state_.previewStageMediaHost_->setLayoutSquareScale(state_.previewLayoutSquareScale_);
-        state_.previewStageMediaHost_->setMediaVisible(mediaVisible);
-    }
-    if (state_.scene_ != nullptr) {
-        const bool stageMediaVisible =
-            mediaVisible
-            && state_.previewStageMediaHost_ != nullptr
-            && state_.previewStageMediaHost_->hasResolvedMedia();
-        state_.scene_->setStageMediaAvailable(stageMediaVisible);
-    }
+    // Stage 4.9d-4a: body moved to runtime::shared so PlaybackCoordinator can call
+    // it too without routing through Session — see runtime/Shared.cpp. Qualified
+    // (not the `using namespace` in scope) because this member shares the free
+    // function's name, which would otherwise hide it.
+    miacode::runtime::shared::applyPreviewStageMediaRouteVisualSettings(state_);
 }
 
 Session::PreviewStageMediaRoute miacode::runtime::StageMediaHost::previewStageMediaRoute() const
@@ -226,18 +210,8 @@ void miacode::runtime::StageMediaHost::resetPreviewStageMediaRouteTimelineOffset
 
 void miacode::runtime::StageMediaHost::applyPreviewStageMediaRoutePlaybackRate(double rate, const char* site)
 {
-    char buf[260];
-    std::snprintf(buf, sizeof(buf),
-        "preview/rate/route_apply tid=0x%llx site=%s rate=%.3f host=%d has_video=%d",
-        static_cast<unsigned long long>(reinterpret_cast<quintptr>(QThread::currentThreadId())),
-        site != nullptr ? site : "(unspecified)",
-        rate,
-        state_.previewStageMediaHost_ != nullptr ? 1 : 0,
-        state_.previewStageMediaHost_ != nullptr && state_.previewStageMediaHost_->hasVideoMedia() ? 1 : 0);
-    miacode::oplog::appendStartupBeaconLine(buf);
-    if (state_.previewStageMediaHost_ != nullptr) {
-        state_.previewStageMediaHost_->setPlaybackRate(rate);
-    }
+    // Stage 4.9d-4a: body moved to runtime::shared — see runtime/Shared.cpp.
+    miacode::runtime::shared::applyPreviewStageMediaRoutePlaybackRate(state_, rate, site);
 }
 
 bool miacode::runtime::StageMediaHost::previewStageMediaRouteHasVideo() const
@@ -332,28 +306,11 @@ void miacode::runtime::StageMediaHost::ensureQuickShellPreviewCompositeSurfaceIn
 
 void miacode::runtime::StageMediaHost::refreshQuickShellPreviewCompositeSurfaceState()
 {
-    ensureQuickShellPreviewCompositeSurfaceInitialized();
-    if (state_.quickShellPreviewCompositeSurface_ == nullptr) {
-        return;
-    }
-
-    const bool nextActive = quickShellPreviewUsesSeparateSurface();
-    state_.quickShellPreviewCompositeSurface_->setRuntime(state_.scene_);
-    state_.quickShellPreviewCompositeSurface_->setMediaHost(state_.previewStageMediaHost_);
-    state_.quickShellPreviewCompositeSurface_->setActive(nextActive);
-
-    if (state_.quickShellPreviewCompositeSurfaceActive_ == nextActive) {
-        return;
-    }
-
-    state_.quickShellPreviewCompositeSurfaceActive_ = nextActive;
-    if (state_.runtimeDebugOutputEnabled_) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Audio,
-            QStringLiteral("preview/stage_media"),
-            QString("action=presentation_mode mode=%1")
-                .arg(nextActive ? QStringLiteral("separate_surface") : QStringLiteral("inline")));
-    }
+    // Stage 4.9d-4a: body moved to runtime::shared (which inlines this class's
+    // ensureQuickShellPreviewCompositeSurfaceInitialized() and the hardcoded
+    // quickShellPreviewUsesSeparateSurface() == false, since a free function can't
+    // reach either) — see runtime/Shared.cpp.
+    miacode::runtime::shared::refreshQuickShellPreviewCompositeSurfaceState(state_, session_);
 }
 
 void miacode::runtime::StageMediaHost::ensurePreviewStageMediaHostInitialized()
@@ -452,65 +409,8 @@ void miacode::runtime::StageMediaHost::shutdownPreviewStageMediaHost()
 
 void miacode::runtime::StageMediaHost::refreshPreviewStageMediaRouteDebugState(bool requestUpdate)
 {
-    if (state_.scene_ == nullptr) {
-        return;
-    }
-    miacode::preview::scene::PreviewExternalStageMediaType mediaType =
-        miacode::preview::scene::PreviewExternalStageMediaType::None;
-    bool videoPlaybackActive = false;
-    double playbackSecond = 0.0;
-    double clockDeltaSeconds = 0.0;
-    qint64 videoFrameAgeMs = -1;
-    qint64 videoFrameCountTotal = 0;
-    double videoFrameRate = 0.0;
-    double videoFrameIntervalAvgMs = 0.0;
-    double videoFrameIntervalMaxMs = 0.0;
-    qint64 videoFrameStallCount = 0;
-    bool videoFrameStalled = false;
-    bool hasResolvedMedia = false;
-    bool hasVideoMedia = false;
-    QString mediaTypeName = QStringLiteral("none");
-    if (previewUsesStageMediaHostRoute() && state_.previewStageMediaHost_ != nullptr) {
-        hasResolvedMedia = state_.previewStageMediaHost_->hasResolvedMedia();
-        hasVideoMedia = state_.previewStageMediaHost_->hasVideoMedia();
-        if (state_.previewStageMediaHost_->hasVideoMedia()) {
-            mediaType = miacode::preview::scene::PreviewExternalStageMediaType::Video;
-            mediaTypeName = QStringLiteral("video");
-        } else if (state_.previewStageMediaHost_->hasResolvedMedia()) {
-            mediaType = miacode::preview::scene::PreviewExternalStageMediaType::Image;
-            mediaTypeName = QStringLiteral("image");
-        }
-        videoPlaybackActive = state_.previewStageMediaHost_->videoPlaybackActive();
-        playbackSecond = state_.previewStageMediaHost_->currentPlaybackSecond();
-        clockDeltaSeconds = state_.previewStageMediaHost_->clockDeltaSeconds();
-        videoFrameAgeMs = state_.previewStageMediaHost_->videoFrameAgeMs();
-        videoFrameCountTotal = state_.previewStageMediaHost_->videoFrameCountTotal();
-        videoFrameRate = state_.previewStageMediaHost_->videoFrameRateEstimate();
-        videoFrameIntervalAvgMs = state_.previewStageMediaHost_->videoFrameIntervalAvgMs();
-        videoFrameIntervalMaxMs = state_.previewStageMediaHost_->videoFrameIntervalMaxMs();
-        videoFrameStallCount = state_.previewStageMediaHost_->videoFrameStallCount();
-        videoFrameStalled = state_.previewStageMediaHost_->videoFrameStalled();
-    }
-    state_.scene_->setExternalStageMediaProfileSummary(
-        quickShellPreviewUsesSeparateSurface(),
-        hasResolvedMedia,
-        hasVideoMedia,
-        mediaTypeName,
-        videoFrameCountTotal,
-        videoFrameRate,
-        videoFrameIntervalAvgMs,
-        videoFrameIntervalMaxMs,
-        videoFrameStallCount
-    );
-    state_.scene_->setExternalStageMediaDebugState(
-        mediaType,
-        videoPlaybackActive,
-        playbackSecond,
-        clockDeltaSeconds,
-        videoFrameAgeMs,
-        videoFrameStalled,
-        requestUpdate
-    );
+    // Stage 4.9d-4a: body moved to runtime::shared — see runtime/Shared.cpp.
+    miacode::runtime::shared::refreshPreviewStageMediaRouteDebugState(state_, requestUpdate);
 }
 
 void Session::applyPreviewStageMediaRouteVisualSettings()
@@ -586,19 +486,9 @@ void Session::applyPreviewMediaWarmupToStageMediaRoute(
     stageMedia_->applyPreviewMediaWarmupToStageMediaRoute(chartPath, resolvedMediaPath, trackPath);
 }
 
-void Session::resetPreviewStageMediaRouteTimelineOffset()
-{
-    stageMedia_->resetPreviewStageMediaRouteTimelineOffset();
-}
-
 void Session::applyPreviewStageMediaRoutePlaybackRate(double rate, const char* site)
 {
     stageMedia_->applyPreviewStageMediaRoutePlaybackRate(rate, site);
-}
-
-bool Session::previewStageMediaRouteHasVideo() const
-{
-    return stageMedia_->previewStageMediaRouteHasVideo();
 }
 
 double Session::previewStageMediaRouteCurrentPlaybackSecond() const
@@ -609,31 +499,6 @@ double Session::previewStageMediaRouteCurrentPlaybackSecond() const
 void Session::startPreviewStageMediaRoutePlayback(double second)
 {
     stageMedia_->startPreviewStageMediaRoutePlayback(second);
-}
-
-void Session::syncPreviewStageMediaRoutePlayback(double second)
-{
-    stageMedia_->syncPreviewStageMediaRoutePlayback(second);
-}
-
-void Session::pausePreviewStageMediaRoutePlayback()
-{
-    stageMedia_->pausePreviewStageMediaRoutePlayback();
-}
-
-void Session::seekPreviewStageMediaRouteWhilePaused(double second)
-{
-    stageMedia_->seekPreviewStageMediaRouteWhilePaused(second);
-}
-
-void Session::submitPreviewStageMediaRoutePausedSeek(double second, quint64 generation)
-{
-    stageMedia_->submitPreviewStageMediaRoutePausedSeek(second, generation);
-}
-
-void Session::setPreviewStageMediaRouteObservedPlayheadSecond(double second)
-{
-    stageMedia_->setPreviewStageMediaRouteObservedPlayheadSecond(second);
 }
 
 void Session::ensureQuickShellPreviewCompositeSurfaceInitialized()

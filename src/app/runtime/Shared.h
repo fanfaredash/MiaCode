@@ -27,12 +27,14 @@
 #include "WindowParityMetrics.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "runtime/RuntimeContext.h"
 
 class QDialog;
 class QFileInfo;
 class QMenu;
 class QTextEdit;
 class QWidget;
+class Session;
 
 namespace miacode::runtime::shared {
 
@@ -161,6 +163,34 @@ QString modernScrollBarStyle();
 void styleRoundedMenu(QMenu& menu);
 qint64 fileLastModifiedMs(const QFileInfo& fileInfo);
 double probeAudioDurationSeconds(const QString& trackPath);
+
+// Stage 4.9d-4a: bodies pulled out of miacode::runtime::StageMediaHost (and, for
+// setPreviewFixedTimerHighResolutionActive, Session) so PlaybackCoordinator can call
+// them without going through session_. Both the original host method and the
+// coordinator's own copy now call these — see runtime/preview/StageMediaRoute.cpp,
+// runtime/preview/WarmupAndSettings.cpp, runtime/playback/FramePacing.cpp and
+// runtime/playback/SurfaceContract.cpp for the forwarding shells.
+void ensurePreviewSfxRuntimePrepared(RuntimeContext::State& state);
+void applyPreviewStageMediaRouteVisualSettings(RuntimeContext::State& state);
+void applyPreviewStageMediaRoutePlaybackRate(RuntimeContext::State& state, double rate, const char* site = nullptr);
+void refreshQuickShellPreviewCompositeSurfaceState(RuntimeContext::State& state, Session& session);
+void refreshPreviewStageMediaRouteDebugState(RuntimeContext::State& state, bool requestUpdate = true);
+// Windows-only body (Q_OS_WIN); a no-op elsewhere. See the definition for why the
+// platform conditional must not be simplified away.
+void setPreviewFixedTimerHighResolutionActive(RuntimeContext::State& state, bool active);
+// Skin-directory / outline-directory resolution: pure filesystem + asset-path
+// lookups, no member state. previewSkinDisplayName and availablePreviewSkinDirectoryNames
+// depend on the small name-normalization helpers below, which used to be
+// WarmupAndSettings.cpp anonymous-namespace-local; promoted here so both
+// StageMediaHost and PlaybackCoordinator can call the same implementation.
+QString standardPreviewSkinDirectoryName();
+QString dxPreviewSkinDirectoryName();
+QString normalizePreviewSkinDirectoryName(QString name);
+bool hasCorePreviewSkinAssets(const QString& directory);
+QString resolvePreviewSkinRootDir();
+QString resolvePreviewCustomOutlineDir();
+QStringList availablePreviewSkinDirectoryNames();
+QString previewSkinDisplayName(const QString& directoryName);
 
 // Sidebar (outlineList_) item data roles, shared by the list builder
 // (DocumentSection::rebuildFieldSidebar), the click/context-menu wiring

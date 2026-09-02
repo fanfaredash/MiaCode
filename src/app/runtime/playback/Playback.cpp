@@ -91,7 +91,7 @@ QString Session::parsedLatencyMeterId() const
 void miacode::runtime::PlaybackCoordinator::seekPreviewToSecond(double second, bool centerView)
 {
     session_.ensurePreviewStageMediaRouteInitialized();
-    session_.ensurePreviewSfxRuntimePrepared();
+    ensurePreviewSfxRuntimePrepared(state_);
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     // The negative-time 片头 region is preview-only and lives left of chart 0;
     // ANY funnel seek targets a real chart position (clamped >= 0), so it must
@@ -153,7 +153,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewToSecond(double second, b
         if (state_.scene_ != nullptr) {
             state_.scene_->setPlayheadSeconds(clampedSecond, false);
         }
-        session_.syncPreviewStageMediaRoutePlayback(clampedSecond);
+        syncPreviewStageMediaRoutePlayback(clampedSecond);
         updatePreviewSliderPosition(clampedSecond);
         appendPreviewPlaybackLog(
             QStringLiteral("playing_seek_requested"),
@@ -185,7 +185,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
     QElapsedTimer totalTimer;
     totalTimer.start();
     session_.ensurePreviewStageMediaRouteInitialized();
-    session_.ensurePreviewSfxRuntimePrepared();
+    ensurePreviewSfxRuntimePrepared(state_);
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     // Leave the negative-time 片头 region on any discrete seek to a chart
     // position (see seekPreviewToSecond) — keeps the region flag from going
@@ -213,7 +213,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
         pauseQtPreviewPlaybackForReanchor();
     }
 
-    session_.pausePreviewStageMediaRoutePlayback();
+    pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     miacode::runtime::shared::writePreviewPauseSecond(
         state_.pauseSecond_, clampedSecond, state_.playing_, "seek_preview_discrete_to_second");
@@ -266,7 +266,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
         true,
         state_.previewFollowEnabled_);
 
-    if (!session_.previewStageMediaRouteHasVideo()) {
+    if (!previewStageMediaRouteHasVideo()) {
         state_.pausedSeekMediaPending_ = false;
         state_.pausedSeekMediaAckGeneration_ = generation;
         appendPreviewInteractionLog(
@@ -381,7 +381,7 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate
     }
     showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_about_to_call");
-    session_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "ui_rate_change");
+    applyPreviewStageMediaRoutePlaybackRate(state_, state_.previewPlaybackRate_, "ui_rate_change");
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_returned");
     if (state_.previewSfxRuntime_ != nullptr) {
         if (wasPlaying) {
@@ -510,7 +510,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     state_.pendingPreviewPlaybackStart_ = false;
 
     session_.ensurePreviewStageMediaRouteInitialized();
-    session_.ensurePreviewSfxRuntimePrepared();
+    ensurePreviewSfxRuntimePrepared(state_);
     // Re-assert the correct preview levels on EVERY play (fresh or resume).
     // applyPreviewAudioSettingsToRuntime() re-derives them from the current mode:
     // a normal difficulty gets the user's real mix, while the latency page's
@@ -541,7 +541,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
               state_.previewTapFlowSpeed_,
               state_.previewTouchFlowSpeed_)
         : requestedSecond;
-    const bool hasVideoMedia = session_.previewStageMediaRouteHasVideo();
+    const bool hasVideoMedia = previewStageMediaRouteHasVideo();
     const quint64 playbackTxn = ++state_.previewPlaybackTransactionCounter_;
     state_.activePreviewPlaybackTransactionId_ = playbackTxn;
     // Stamp the transaction tag on both backends HERE, above the retained/cold branch,
@@ -595,7 +595,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
 
     state_.qtPreviewPlaybackReturnSecond_ = requestedSecond;
     state_.qtPreviewPlaybackEndSecond_ = qMax(0.0, previewPlaybackEndSeconds());
-    session_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "playback_start_prepare");
+    applyPreviewStageMediaRoutePlaybackRate(state_, state_.previewPlaybackRate_, "playback_start_prepare");
     state_.pausedSeekMediaPending_ = false;
     state_.pausedSeekMediaSubmittedGeneration_ = 0;
     state_.pausedSeekMediaAckGeneration_ = 0;
@@ -761,7 +761,7 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
     }
     cancelPreviewStartupSync("stop_qt_preview_playback");
     clearPreviewPlayingRetainedSeek();
-    session_.pausePreviewStageMediaRoutePlayback();
+    pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     if (!keepPosition) {
         miacode::runtime::shared::writePreviewPauseSecond(
@@ -895,20 +895,6 @@ void Session::applyPreviewPlaybackRate(double rate)
     playback_->applyPreviewPlaybackRate(rate);
 }
 
-QString Session::formatPreviewPlaybackRateToastText(double rate) const
-{
-    const int percent = qRound(rate * 100.0);
-    const QString title = UiText::text(QStringLiteral("timeline.playback_speed"));
-    return QStringLiteral(
-               "<div style='text-align:center;'>"
-               "<div style='font-size:14px;font-weight:600;line-height:1.2;'>%1</div>"
-               "<div style='margin-top:6px;font-size:28px;font-weight:700;line-height:1.1;'>%2%%</div>"
-               "</div>"
-           )
-        .arg(title.toHtmlEscaped())
-        .arg(percent);
-}
-
 void Session::updatePreviewPlaybackRateToastGeometry()
 {
     if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
@@ -932,11 +918,24 @@ void Session::hidePreviewPlaybackRateToast()
     }
 }
 
+// Pure value formatting, no state_/ui_ touched at all.
+QString miacode::runtime::PlaybackCoordinator::formatPreviewPlaybackRateToastText(double rate) const
+{
+    const int percent = qRound(rate * 100.0);
+    const QString title = UiText::text(QStringLiteral("timeline.playback_speed"));
+    return QStringLiteral(
+               "<div style='text-align:center;'>"
+               "<div style='font-size:14px;font-weight:600;line-height:1.2;'>%1</div>"
+               "<div style='margin-top:6px;font-size:28px;font-weight:700;line-height:1.1;'>%2%%</div>"
+               "</div>"
+           )
+        .arg(title.toHtmlEscaped())
+        .arg(percent);
+}
+
 // Stage 4.9d-3 (D-class): moved verbatim from Session::showPreviewPlaybackRateToast /
 // Session::updatePreviewPlaybackRateToastGeometry above — pure ui_ widget
-// presentation, no Session-own state. formatPreviewPlaybackRateToastText stays a
-// Session method (not part of this step's D-class list), reached via the session_
-// reference below.
+// presentation, no Session-own state.
 void miacode::runtime::PlaybackCoordinator::showPreviewPlaybackRateToast(double rate)
 {
     if (ui_.previewPlaybackRateToast_ == nullptr || ui_.previewPlaybackRateToastLabel_ == nullptr) {
@@ -948,7 +947,7 @@ void miacode::runtime::PlaybackCoordinator::showPreviewPlaybackRateToast(double 
     if (ui_.previewPlaybackRateToastOpacityAnimation_ != nullptr) {
         ui_.previewPlaybackRateToastOpacityAnimation_->stop();
     }
-    ui_.previewPlaybackRateToastLabel_->setText(session_.formatPreviewPlaybackRateToastText(rate));
+    ui_.previewPlaybackRateToastLabel_->setText(formatPreviewPlaybackRateToastText(rate));
     updatePreviewPlaybackRateToastGeometry();
     if (ui_.previewPlaybackRateToastOpacityEffect_ != nullptr) {
         ui_.previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);

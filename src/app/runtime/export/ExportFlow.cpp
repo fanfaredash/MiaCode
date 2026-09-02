@@ -540,21 +540,6 @@ void miacode::runtime::VideoExportHost::endExportPreviewSession()
     session_.restoreSquareAfterVideoExport_ = false;
 }
 
-bool Session::currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const
-{
-    // The export session owns the shared 片头 settings. The audition reads them
-    // at play time so both single and batch preview stay WYSIWYG.
-    if (qmlExportSession_ != nullptr
-        && qmlExportSession_->pageSessionActive()
-        && qmlExportSession_->previewIntroSpec().enabled) {
-        if (outSpec != nullptr) {
-            *outSpec = qmlExportSession_->previewIntroSpec();
-        }
-        return true;
-    }
-    return false;
-}
-
 // Opens the pure-QML export centre on its single-export tab. Extensions reach
 // this through "export.video.start" / "export/startVideoExport"; there is no
 // modal export dialog behind it any more.

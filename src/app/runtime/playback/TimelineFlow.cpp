@@ -287,7 +287,7 @@ void miacode::runtime::PlaybackCoordinator::resetPreviewTrackTimelineOffsets()
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setBackgroundTrackOffsetSeconds(0.0);
     }
-    session_.resetPreviewStageMediaRouteTimelineOffset();
+    resetPreviewStageMediaRouteTimelineOffset();
 }
 
 void miacode::runtime::PlaybackCoordinator::applyWaveformData(
@@ -385,7 +385,7 @@ void miacode::runtime::PlaybackCoordinator::refreshWaveformCache(double knownDur
 
     const QString cacheDirectoryPath = miacode::waveform::waveformCacheDirectoryPath(
         miacode::waveform::projectDataDirectoryPathForFile(state_.currentFilePath_));
-    session_.ensureWaveformCacheService()->requestWaveform(
+    ensureWaveformCacheService()->requestWaveform(
         trackPath,
         cacheDirectoryPath,
         [this, generation, trackPath](miacode::waveform::WaveformDataPtr waveformData) {
@@ -798,7 +798,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineCenterNavigateRequested(do
         || elapsedMs >= kPreviewScrubRenderIntervalMs;
     if (shouldRenderNow) {
         session_.ensurePreviewStageMediaRouteInitialized();
-        session_.ensurePreviewSfxRuntimePrepared();
+        ensurePreviewSfxRuntimePrepared(state_);
         requestPausedPreviewSeek(clampedSecond, false, false, false);
         state_.previewScrubRenderElapsed_.restart();
     } else {
@@ -1295,10 +1295,10 @@ void Session::resetPreviewTrackTimelineOffsets()
     playback_->resetPreviewTrackTimelineOffsets();
 }
 
-miacode::waveform::WaveformCacheService* Session::ensureWaveformCacheService()
+miacode::waveform::WaveformCacheService* miacode::runtime::PlaybackCoordinator::ensureWaveformCacheService()
 {
     if (state_.waveformCacheService_ == nullptr) {
-        state_.waveformCacheService_ = new miacode::waveform::WaveformCacheService(this);
+        state_.waveformCacheService_ = new miacode::waveform::WaveformCacheService(&session_);
     }
     state_.waveformCacheService_->setThreadPool(
         state_.previewWarmupPool_ != nullptr ? state_.previewWarmupPool_ : QThreadPool::globalInstance());

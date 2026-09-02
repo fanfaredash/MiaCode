@@ -64,7 +64,7 @@ void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second
     if (state_.scene_ != nullptr) {
         state_.scene_->setPlayheadSeconds(second, !state_.playing_);
     }
-    session_.setPreviewStageMediaRouteObservedPlayheadSecond(second);
+    setPreviewStageMediaRouteObservedPlayheadSecond(second);
     const bool suppressPausedSecondaryUi =
         !state_.playing_ && state_.suppressPausedPreviewSecondaryUiUpdates_;
     // During playback the media-host's syncPlayback already emits diagnosticsChanged on actual
@@ -72,7 +72,7 @@ void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second
     // lambda. Calling the refresh again here would duplicate the work on every tick.
     // For paused state, keep calling it so UI reflects changes while the user seeks.
     if (!suppressPausedSecondaryUi && !state_.playing_) {
-        session_.refreshPreviewStageMediaRouteDebugState(true);
+        refreshPreviewStageMediaRouteDebugState(state_, true);
     }
     // Publishes to the v1 slider and the v2 transport both.
     updatePreviewSliderPosition(second);
@@ -93,7 +93,7 @@ void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second
 
 void miacode::runtime::PlaybackCoordinator::syncPausedPreviewMediaTimestamps(double second)
 {
-    session_.seekPreviewStageMediaRouteWhilePaused(second);
+    seekPreviewStageMediaRouteWhilePaused(second);
 }
 
 qint64 miacode::runtime::PlaybackCoordinator::timelineCadenceWatchdogThresholdMs() const
@@ -266,7 +266,7 @@ void miacode::runtime::PlaybackCoordinator::onQtPreviewTickAtSecond(double secon
     if (diagEnabled) {
         tickProfileTimer.start();
     }
-    session_.syncPreviewStageMediaRoutePlayback(second);
+    syncPreviewStageMediaRoutePlayback(second);
     if (diagEnabled) {
         syncMediaElapsedNs = tickProfileTimer.nsecsElapsed();
     }

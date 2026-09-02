@@ -12,7 +12,6 @@
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QDialog>
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>

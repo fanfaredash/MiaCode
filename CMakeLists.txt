@@ -187,6 +187,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/RuntimeContext.h
     src/app/runtime/Shared.h
     src/app/runtime/Shared.cpp
+    src/app/runtime/Shared.Preview.cpp
     src/app/runtime/document/DocumentFlow.cpp
     src/app/runtime/document/DocumentBridge.cpp
     src/app/runtime/document/DocumentFileFlow.cpp

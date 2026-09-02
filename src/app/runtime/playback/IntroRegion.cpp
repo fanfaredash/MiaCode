@@ -1,6 +1,7 @@
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 
+#include "app/qml_ui/export/QmlExportSession.h"
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
@@ -57,12 +58,29 @@ QVariantMap introLeadInBannerTemplateMap()
 }
 }  // namespace
 
+// qmlExportSession_ is a RuntimeContext::Ui field (see SessionMembers.inc), so
+// this only touches ui_.
+bool miacode::runtime::PlaybackCoordinator::currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const
+{
+    // The export session owns the shared 片头 settings. The audition reads them
+    // at play time so both single and batch preview stay WYSIWYG.
+    if (ui_.qmlExportSession_ != nullptr
+        && ui_.qmlExportSession_->pageSessionActive()
+        && ui_.qmlExportSession_->previewIntroSpec().enabled) {
+        if (outSpec != nullptr) {
+            *outSpec = ui_.qmlExportSession_->previewIntroSpec();
+        }
+        return true;
+    }
+    return false;
+}
+
 bool miacode::runtime::PlaybackCoordinator::exportIntroEnabled() const
 {
     // Authoritative, read live from the panel each time (NO cached flag — a
     // cached duration could be reset to 0 by a transient refresh while 添加片头
     // is steadily on, collapsing the slider range; the bug we saw).
-    return state_.exportPreviewAuditionActive_ && session_.currentExportIntroLeadInSpec(nullptr);
+    return state_.exportPreviewAuditionActive_ && currentExportIntroLeadInSpec(nullptr);
 }
 
 double miacode::runtime::PlaybackCoordinator::exportIntroLowerBoundSeconds() const
@@ -78,7 +96,7 @@ void miacode::runtime::PlaybackCoordinator::setupExportIntroOverlayData()
         return;
     }
     IntroBannerSpec spec;
-    if (!session_.currentExportIntroLeadInSpec(&spec)) {
+    if (!currentExportIntroLeadInSpec(&spec)) {
         return;
     }
     // backgroundImage is ALWAYS the 曲绘 jacket (it feeds the card's jacket slot
@@ -196,7 +214,7 @@ void miacode::runtime::PlaybackCoordinator::startExportIntroAdvance(double fromP
     // while audition() is proven (clock_count works). The SFX runtime is already
     // prepared by installExportPreviewAuditionScene; ensure it anyway (idempotent).
     if (state_.exportIntroPlayheadSeconds_ <= -miacode::intro::kDurationSeconds + 0.1) {
-        session_.ensurePreviewSfxRuntimePrepared();
+        ensurePreviewSfxRuntimePrepared(state_);
         if (state_.previewSfxRuntime_ != nullptr) {
             state_.previewSfxRuntime_->audition(QStringLiteral("track_start"), 1.0);
         }

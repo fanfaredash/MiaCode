@@ -42,7 +42,13 @@ void Session::clearAuditionSceneReady()
     state_.auditionSceneReinstall_ = {};
 }
 
-bool Session::ensureAuditionSceneReady()
+// The readiness gate for latency-sandbox and export-page auditions (see
+// state_.auditionSceneReady_ in SessionMembers.inc for what it guards). A
+// stale scene rebuilds here instead of refusing forever.
+// Session::clearAuditionSceneReady()'s 3-line body is inlined here since it's
+// a Session member the coordinator can't call; it only ever touches these
+// same three state_ fields.
+bool miacode::runtime::PlaybackCoordinator::ensureAuditionSceneReady()
 {
     const bool current = state_.auditionSceneReady_
         && (!state_.auditionSceneStillCurrent_ || state_.auditionSceneStillCurrent_());
@@ -59,7 +65,9 @@ bool Session::ensureAuditionSceneReady()
     // Take the callback out first so a reinstall that fails cannot be retried
     // forever from inside itself.
     const std::function<void()> reinstall = state_.auditionSceneReinstall_;
-    clearAuditionSceneReady();
+    state_.auditionSceneReady_ = false;
+    state_.auditionSceneStillCurrent_ = {};
+    state_.auditionSceneReinstall_ = {};
     reinstall();
     return state_.auditionSceneReady_;
 }
@@ -76,7 +84,7 @@ bool miacode::runtime::PlaybackCoordinator::preparePreviewStartState()
     // Readiness is the scene's own, not the edited difficulty's snapshot: see
     // auditionSceneReady_ for why borrowing that pair wedged this page.
     if (state_.latencySandboxAuditionActive_ || state_.exportPreviewAuditionActive_) {
-        return session_.ensureAuditionSceneReady();
+        return ensureAuditionSceneReady();
     }
 
     const bool chartFieldVisible = state_.activeOutlineKey_ == QLatin1String("chart");

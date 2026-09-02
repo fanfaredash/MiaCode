@@ -69,7 +69,7 @@ void miacode::runtime::PlaybackCoordinator::scheduleDeferredPreviewUiTail(
             }
             if (applyPreviewVisualSettings) {
                 session_.applyEffectivePreviewOutlineVariantToCanvas();
-                session_.applyPreviewStageMediaRouteVisualSettings();
+                applyPreviewStageMediaRouteVisualSettings(state_);
             }
             if (applyDeferredAnalysis) {
                 session_.applyDeferredAnalysisUiUpdates();
@@ -84,7 +84,7 @@ void miacode::runtime::PlaybackCoordinator::scheduleDeferredPreviewUiTail(
                 updatePreviewObjectStats(objectStatsSecond);
             }
             if (refreshStageMediaDebugState) {
-                session_.refreshPreviewStageMediaRouteDebugState(true);
+                refreshPreviewStageMediaRouteDebugState(state_, true);
             }
             if (updatePausedPreviewFollowDecoration && !state_.playing_) {
                 updatePreviewFollowDecorationForTimelineBlueLine(objectStatsSecond, true);
@@ -163,7 +163,7 @@ void miacode::runtime::PlaybackCoordinator::requestPausedPreviewSeek(
         centerView,
         submitMediaImmediately ? 1 : 0,
         logHotPath);
-    if (!session_.previewStageMediaRouteHasVideo()) {
+    if (!previewStageMediaRouteHasVideo()) {
         state_.pausedSeekMediaPending_ = false;
         state_.pausedSeekMediaAckGeneration_ = generation;
         if (ui_.previewSeekDebounceTimer_ != nullptr) {
@@ -206,7 +206,7 @@ void miacode::runtime::PlaybackCoordinator::submitPausedMediaSeek(double second,
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
-    if (!session_.previewStageMediaRouteHasVideo()) {
+    if (!previewStageMediaRouteHasVideo()) {
         state_.pausedSeekMediaPending_ = false;
         state_.pausedSeekMediaAckGeneration_ = generation;
         return;
@@ -219,12 +219,12 @@ void miacode::runtime::PlaybackCoordinator::submitPausedMediaSeek(double second,
             .arg(generation)
             .arg(clampedSecond, 0, 'f', 6)
     );
-    session_.submitPreviewStageMediaRoutePausedSeek(clampedSecond, generation);
+    submitPreviewStageMediaRoutePausedSeek(clampedSecond, generation);
 }
 
 void miacode::runtime::PlaybackCoordinator::maybeSubmitLatestPausedMediaSeek()
 {
-    if (state_.playing_ || state_.pausedSeekMediaPending_ || !session_.previewStageMediaRouteHasVideo()) {
+    if (state_.playing_ || state_.pausedSeekMediaPending_ || !previewStageMediaRouteHasVideo()) {
         return;
     }
     if (state_.pausedSeekMediaAckGeneration_ >= state_.pausedSeekGeneration_) {
@@ -253,7 +253,7 @@ void miacode::runtime::PlaybackCoordinator::handlePausedPreviewMediaSeekComplete
     state_.pausedSeekMediaAckGeneration_ = generation;
     state_.qtPreviewStartSecond_ = second;
     state_.qtPreviewElapsed_.restart();
-    session_.refreshPreviewStageMediaRouteDebugState(false);
+    refreshPreviewStageMediaRouteDebugState(state_, false);
     if (generation < state_.pausedSeekGeneration_) {
         appendQuickShellBackendLog(
             QStringLiteral("paused_seek_media_drop"),

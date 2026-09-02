@@ -30,11 +30,6 @@
 #include <QtGui>
 #include <QtWidgets>
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-#include <mmsystem.h>
-#endif
-
 using namespace miacode::runtime::shared;
 
 namespace {
@@ -44,20 +39,6 @@ void appendPreviewFramePacingDiagLog(const QString& action, const QString& paylo
     if (!miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
         return;
     }
-    QString text = QStringLiteral("action=%1").arg(action);
-    if (!payload.trimmed().isEmpty()) {
-        text += QStringLiteral(" ") + payload.trimmed();
-    }
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("preview/frame_pacing"),
-        text,
-        true
-    );
-}
-
-void appendPreviewFramePacingStatusLog(const QString& action, const QString& payload = QString())
-{
     QString text = QStringLiteral("action=%1").arg(action);
     if (!payload.trimmed().isEmpty()) {
         text += QStringLiteral(" ") + payload.trimmed();
@@ -82,66 +63,10 @@ int previewFrameSwapWatchdogTimeoutMs(qint64 frameIntervalNs)
 
 void Session::setPreviewFixedTimerHighResolutionActive(bool active)
 {
-#ifdef Q_OS_WIN
-    const bool envRequested = miacode::debug_options::previewFixedTimerHighResolutionEnabled();
-    const bool desired =
-        active && envRequested;
-    if (active && scene_ != nullptr) {
-        scene_->noteFixedTimerHighResolutionRequest(envRequested);
-    }
-    if (qtPreviewFixedTimerHighResResolutionActive_ == desired) {
-        if (active) {
-            appendPreviewFramePacingStatusLog(
-                QStringLiteral("fixed_timer_high_res_requested"),
-                QStringLiteral("env=%1 active=%2 already_active=%3")
-                    .arg(envRequested ? 1 : 0)
-                    .arg(active ? 1 : 0)
-                    .arg(qtPreviewFixedTimerHighResResolutionActive_ ? 1 : 0)
-            );
-        }
-        return;
-    }
-    if (desired) {
-        appendPreviewFramePacingStatusLog(
-            QStringLiteral("fixed_timer_high_res_requested"),
-            QStringLiteral("env=1 active=1 already_active=0")
-        );
-        const MMRESULT result = timeBeginPeriod(1);
-        if (result == TIMERR_NOERROR) {
-            qtPreviewFixedTimerHighResResolutionActive_ = true;
-            if (scene_ != nullptr) {
-                scene_->noteFixedTimerHighResolutionBeginResult(true);
-            }
-            appendPreviewFramePacingStatusLog(
-                QStringLiteral("fixed_timer_high_res_enabled"),
-                QStringLiteral("result=0")
-            );
-            return;
-        }
-        if (scene_ != nullptr) {
-            scene_->noteFixedTimerHighResolutionBeginResult(false);
-        }
-        appendPreviewFramePacingStatusLog(
-            QStringLiteral("fixed_timer_high_res_failed"),
-            QStringLiteral("result=%1").arg(static_cast<unsigned int>(result))
-        );
-        return;
-    }
-    const bool activeAtStop = qtPreviewFixedTimerHighResResolutionActive_;
-    if (!activeAtStop) {
-        return;
-    }
-    if (scene_ != nullptr) {
-        scene_->noteFixedTimerHighResolutionStopState(true);
-    }
-    timeEndPeriod(1);
-    qtPreviewFixedTimerHighResResolutionActive_ = false;
-    appendPreviewFramePacingStatusLog(
-        QStringLiteral("fixed_timer_high_res_disabled")
-    );
-#else
-    Q_UNUSED(active);
-#endif
+    // Stage 4.9d-4a: body (including its #ifdef Q_OS_WIN / Windows timeBeginPeriod
+    // path) moved to runtime::shared — see runtime/Shared.cpp. Qualified because
+    // this member shares the free function's name.
+    miacode::runtime::shared::setPreviewFixedTimerHighResolutionActive(state_, active);
 }
 
 Session::PreviewCanvasFrameRateMode Session::previewFrameRateModeFromStorageValue(
@@ -584,14 +509,14 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasFrameRateMode(Previe
     if (state_.playing_) {
         // Doc 4.3: high-res timer is no longer the cadence source; keep the call to preserve
         // existing Windows timer resolution hygiene for the watchdog path.
-        session_.setPreviewFixedTimerHighResolutionActive(!previewCanvasUsesFrameSwappedPacing());
+        setPreviewFixedTimerHighResolutionActive(state_, !previewCanvasUsesFrameSwappedPacing());
         if (state_.scene_ != nullptr && previewCanvasUsesFrameSwappedPacing()) {
             requestNextDisplayRefreshPreviewFrame();
         } else {
             requestNextFixedIntervalPreviewFrame();
         }
     } else {
-        session_.setPreviewFixedTimerHighResolutionActive(false);
+        setPreviewFixedTimerHighResolutionActive(state_, false);
     }
     if (persistState) {
         session_.savePortableState();

@@ -322,11 +322,6 @@ public:
     void setAuditionSceneReady(std::function<bool()> stillCurrent,
                                std::function<void()> reinstall);
     void clearAuditionSceneReady();
-    // True when an audition scene can be played right now. Rebuilds it once if
-    // it has gone stale — the readiness gate for these pages had no recovery at
-    // all, so a Play that was refused stayed refused until the page happened to
-    // reinstall for some other reason.
-    bool ensureAuditionSceneReady();
 
     void setQmlDocumentSaveHandler(std::function<bool(const QString&)> handler);
     // The v2 shell answers the unsaved-changes question itself, because only it
@@ -486,7 +481,6 @@ private:
     void exitPreviewFullscreen();
     void updatePreviewFullscreenButtonAppearance();
     void updatePreviewFullscreenOverlayGeometry();
-    QString formatPreviewPlaybackRateToastText(double rate) const;
     void updatePreviewPlaybackRateToastGeometry();
     void showPreviewFullscreenControls(bool animate = true);
     void hidePreviewFullscreenControls(bool animate = true);
@@ -555,11 +549,7 @@ public:
     // The skin/outline entries are catalog queries — path resolution and
     // directory listing, no state of their own. The two setters already took a
     // "persist" flag, so they match the preference surface below.
-    QStringList availablePreviewSkinDirectoryNames() const;
-    QString previewSkinDisplayName(const QString& directoryName) const;
     QString resolvePreviewSkinDir() const;
-    QString resolvePreviewSkinRootDir() const;
-    QString resolvePreviewCustomOutlineDir() const;
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                     bool persistState);
     // No default on persistState so one-argument calls stay unambiguous.

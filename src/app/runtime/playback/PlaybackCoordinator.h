@@ -365,6 +365,23 @@ private:
     void updatePreviewPlaybackRateToastGeometry();
     void updateEditorFindBarGeometry();
     void applyFindOverlayInset();
+    // Stage 4.9d-4a (T-class): thin StageMediaHost forwards whose bodies only touch
+    // state_/ui_ (including via the state_.previewStageMediaHost_ pointer the
+    // coordinator already holds) — moved in verbatim, see SurfaceContract.cpp.
+    bool previewStageMediaRouteHasVideo() const;
+    void pausePreviewStageMediaRoutePlayback();
+    void syncPreviewStageMediaRoutePlayback(double second);
+    void setPreviewStageMediaRouteObservedPlayheadSecond(double second);
+    void resetPreviewStageMediaRouteTimelineOffset();
+    void submitPreviewStageMediaRoutePausedSeek(double second, quint64 generation);
+    void seekPreviewStageMediaRouteWhilePaused(double second);
+    // Stage 4.9d-4a: Session-own preview methods with no other caller outside
+    // playback/ — moved in verbatim, see IntroRegion.cpp, PlaybackGlue.cpp,
+    // TimelineFlow.cpp and Playback.cpp for the definitions.
+    bool currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const;
+    bool ensureAuditionSceneReady();
+    miacode::waveform::WaveformCacheService* ensureWaveformCacheService();
+    QString formatPreviewPlaybackRateToastText(double rate) const;
     Session& session_;
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;

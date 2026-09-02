@@ -490,7 +490,7 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasAspectRatio(double r
     } else {
         updatePreviewPanelLayout();
     }
-    session_.refreshQuickShellPreviewCompositeSurfaceState();
+    refreshQuickShellPreviewCompositeSurfaceState(state_, session_);
     if (ui_.workspaceSplitter_ != nullptr && ui_.previewPanel_ != nullptr && ui_.previewLeftColumn_ != nullptr) {
         const bool restoringToSquare = qAbs(normalized - 1.0) <= 1e-6 && previousRatio > 1.0 + 1e-6;
         const int availableWidth = qMax(0, ui_.workspaceSplitter_->contentsRect().width());

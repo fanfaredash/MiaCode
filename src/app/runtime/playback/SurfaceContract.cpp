@@ -6,6 +6,7 @@
 #include "runtime/playback/Playback.Internal.h"
 #include "runtime/validation/ValidationHost.h"
 
+#include "QtPreviewSfxRuntime.h"
 #include "common/DebugLog.h"
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -277,6 +278,89 @@ QObject* miacode::runtime::PlaybackCoordinator::stageMediaHostObject() const
     return state_.previewStageMediaHost_;
 }
 
+// Bodies mirror miacode::runtime::StageMediaHost
+// (runtime/preview/StageMediaRoute.cpp), which still owns the primary
+// implementation; these are independent copies operating on the same
+// state_.previewStageMediaHost_ pointer the coordinator already holds.
+
+bool miacode::runtime::PlaybackCoordinator::previewStageMediaRouteHasVideo() const
+{
+    return state_.previewStageMediaHost_ != nullptr && state_.previewStageMediaHost_->hasVideoMedia();
+}
+
+void miacode::runtime::PlaybackCoordinator::pausePreviewStageMediaRoutePlayback()
+{
+    if (!previewStageMediaRouteHasVideo()) {
+        return;
+    }
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->pausePlayback();
+    }
+}
+
+void miacode::runtime::PlaybackCoordinator::syncPreviewStageMediaRoutePlayback(double second)
+{
+    if (!previewStageMediaRouteHasVideo()) {
+        return;
+    }
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->syncPlayback(second);
+    }
+}
+
+void miacode::runtime::PlaybackCoordinator::setPreviewStageMediaRouteObservedPlayheadSecond(double second)
+{
+    // StageMediaHost::previewUsesStageMediaHostRoute() is a hardcoded
+    // `return true;` (not state-dependent, not virtual) — folded into this guard.
+    if (state_.previewStageMediaHost_ == nullptr) {
+        return;
+    }
+    state_.previewStageMediaHost_->setObservedPlayheadSecond(second);
+}
+
+void miacode::runtime::PlaybackCoordinator::resetPreviewStageMediaRouteTimelineOffset()
+{
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setTimelineOffsetSeconds(0.0);
+    }
+}
+
+void miacode::runtime::PlaybackCoordinator::submitPreviewStageMediaRoutePausedSeek(double second, quint64 generation)
+{
+    // The original body reads Session's previewDurationSeconds() through its
+    // session_ member, which is a self-referential hop: that Session method just
+    // forwards to playback_->previewDurationSeconds(), and playback_ IS this
+    // coordinator (the only miacode::runtime::PlaybackCoordinator instance for
+    // this Session — see SessionBootstrap.cpp). Call the coordinator's own
+    // method directly instead.
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    if (!previewStageMediaRouteHasVideo()) {
+        state_.pausedPreviewMediaSeekPending_ = false;
+        return;
+    }
+    state_.pausedPreviewMediaSeekPending_ = true;
+    state_.pausedPreviewMediaSeekSecond_ = clampedSecond;
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->submitPausedSeek(clampedSecond, generation);
+    }
+}
+
+void miacode::runtime::PlaybackCoordinator::seekPreviewStageMediaRouteWhilePaused(double second)
+{
+    // See submitPreviewStageMediaRoutePausedSeek above for why previewDurationSeconds()
+    // is called directly instead of through the session_ member reference.
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    if (!previewStageMediaRouteHasVideo()) {
+        state_.pausedPreviewMediaSeekPending_ = false;
+        return;
+    }
+    state_.pausedPreviewMediaSeekPending_ = true;
+    state_.pausedPreviewMediaSeekSecond_ = clampedSecond;
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setPlayheadSeconds(clampedSecond);
+    }
+}
+
 double miacode::runtime::PlaybackCoordinator::canvasAspectRatio() const
 {
     return normalizedPreviewCanvasAspectRatio(state_.previewCanvasAspectRatio_);
@@ -333,27 +417,32 @@ void miacode::runtime::PlaybackCoordinator::toggleMuriRenderMode()
 
 QStringList miacode::runtime::PlaybackCoordinator::availableSkinDirectoryNames() const
 {
-    return session_.stageMedia_->availablePreviewSkinDirectoryNames();
+    // Stage 4.9d-4a (T-class): calls runtime::shared directly instead of routing
+    // through the session_ member's stageMedia_ host — see runtime/Shared.cpp.
+    return availablePreviewSkinDirectoryNames();
 }
 
 QString miacode::runtime::PlaybackCoordinator::skinDisplayName(const QString& directoryName) const
 {
-    return session_.stageMedia_->previewSkinDisplayName(directoryName);
+    return previewSkinDisplayName(directoryName);
 }
 
 QString miacode::runtime::PlaybackCoordinator::resolveSkinDir() const
 {
+    // Not part of this step (H/S-class): resolvePreviewSkinDir() also reads
+    // StageMediaHost's own previewAppearanceValues_ member, so it still has to
+    // route through the host.
     return session_.stageMedia_->resolvePreviewSkinDir();
 }
 
 QString miacode::runtime::PlaybackCoordinator::resolveSkinRootDir() const
 {
-    return session_.stageMedia_->resolvePreviewSkinRootDir();
+    return resolvePreviewSkinRootDir();
 }
 
 QString miacode::runtime::PlaybackCoordinator::resolveCustomOutlineDir() const
 {
-    return session_.stageMedia_->resolvePreviewCustomOutlineDir();
+    return resolvePreviewCustomOutlineDir();
 }
 
 void miacode::runtime::PlaybackCoordinator::applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
@@ -381,7 +470,14 @@ void miacode::runtime::PlaybackCoordinator::refreshSurfaces()
 
 void miacode::runtime::PlaybackCoordinator::applySfxLevels()
 {
-    session_.applyPreviewSfxLevels();
+    // Stage 4.9d-4a (T-class): Session::applyPreviewSfxLevels(bool reloadAssets =
+    // false)'s body, inlined for the reloadAssets=false path this call site always
+    // uses (previewSfxRuntime_/previewAudioSettings_ are state_ aliases). See
+    // Session::applyPreviewSfxLevels in runtime/preview/WarmupAndSettings.cpp,
+    // which still has its own (unrelated) caller in SessionBootstrap.cpp.
+    if (state_.previewSfxRuntime_ != nullptr && state_.previewSfxRuntime_->audioEngineInitialized()) {
+        state_.previewSfxRuntime_->applyLevels(state_.previewAudioSettings_);
+    }
 }
 
 void miacode::runtime::PlaybackCoordinator::prepareForShutdown()

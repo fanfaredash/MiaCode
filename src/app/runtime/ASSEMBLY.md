@@ -220,7 +220,36 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          问题，**E 步必须把这两条信号路径一并改走 `ShellNotifications`**（已有等价契约）。
          计数里那 2 处新增的 `session_.` 就是它和 `formatPreviewPlaybackRateToastText`，
          是真实存量耦合，指标保持诚实。
-      4. E：5 个端口 + `setPreviewPlayingFlag` 的信号路径
+      4a. ~~T 类薄转发：不需要端口~~
+         **已完成 2026-09-02**：`session_.` 计数 125 → **79**（46 处，125−46=79 精确吻合）。
+         一次逐成员实现体判定把剩余 125 处分成 T（薄转发，只碰协调器已持有的 `state_`/`ui_`，
+         含对 `state_.previewStageMediaHost_` 这类已持有指针的调用）/ H（需宿主自有成员）/
+         S（跨宿主编排）三类：**T 20 个成员 46 处、H 1 个 1 处、S 29 个 64 处、分支歧义 2 个 7 处**。
+         T 类按「无其他调用者→搬进协调器 / 有其他调用者且体小→协调器侧等价实现 /
+         有其他调用者且体大→提成 `runtime::shared` 自由函数，双方共用」三选一处理，
+         避免把 60 行的体复制两份。连带删除因此无引用的 15 个 `Session` 方法。
+         `Shared.cpp` 因新增自由函数达 1548 行（超「约 800 行/单一职责」软目标），
+         已按仓库 `Base.Suffix.cpp` 惯例拆出 `Shared.Preview.cpp`（400 行），
+         `Shared.cpp` 回到 1166 行。
+         **本轮第三次遇到文本扫描 spec 钉着具体实现位置**（`PreviewTransportPushSpec` 钉
+         `"bool Session::ensureAuditionSceneReady"`，前两次是 `refreshPreviewSurfaces`），
+         每次搬家都要跟着改断言——这本身就是 4.9f「替掉文本扫描」的佐证。
+      4b. E 类 S 组窄端口 + `setPreviewPlayingFlag` / `presentationChanged` 的信号路径。
+         **关键前提（2026-09-02 查证）**：`StageMediaHost` / `ValidationHost` /
+         `DocumentSessionHost` 的构造签名**自己都要 `Session&`**
+         （`preview/StageMediaHost.h:9`、`validation/ValidationHost.h:9`、`document/DocumentSessionHost.h:17`），
+         所以**直接注入这些宿主并不能达成完成判据**——测试里仍需先造 `Session`，
+         只是把依赖藏到下一层，`session_.` 归零而目标落空。
+         必须是**窄抽象接口**：S 组的实质是那些 `Session` 方法本身就是转发进兄弟宿主的壳
+         （`savePortableState`→`editor_->`、`updateDirtyState`→`documents_->`、
+         `clearValidationCache`→`validation_->`），而协调器只用到每个宿主的很小一片
+         （校验 5 个方法、文档 4 个、编辑器基本只有 `savePortableState`），
+         所以是每个 3-5 方法的窄接口，不是 1:1 镜像宿主的 50 方法仪式。
+         `ApplicationServices`（11 处）与 `EditorSyncController`（11 处）是 v2 类、
+         已能在 spec 里构造（`application_services_spec` 就在这么做），可直接注入。
+         另需单独处理：`ensurePreviewStageMediaRouteInitialized`(6) 与
+         `syncPreviewStageMediaRouteChartPath`(1) 的判定依赖运行时分支——热路径是薄转发，
+         首次构造分支会回调 `session_.playback_->` 与 `applicationServices_`，静态无法唯一判定。
       5. 构造签名去掉 `Session&`；门槛 1、3 的测试从此可写
 
       **完成判据：`PlaybackCoordinator` 能在 spec 里被构造出来。**

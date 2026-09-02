@@ -99,83 +99,22 @@ void warmupFileIntoOsCache(const QString& path, qint64 maxBytes = -1)
     }
 }
 
-QString standardPreviewSkinDirectoryName()
-{
-    return QStringLiteral("skinSD");
-}
-
-QString dxPreviewSkinDirectoryName()
-{
-    return QStringLiteral("skinDX");
-}
-
-QString legacyStandardPreviewSkinDirectoryName()
-{
-    return QStringLiteral("skinSTD");
-}
-
-QString normalizePreviewSkinDirectoryName(QString name)
-{
-    name = name.trimmed();
-    return name.compare(legacyStandardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0
-        ? standardPreviewSkinDirectoryName()
-        : name;
-}
-
-bool hasCorePreviewSkinAssets(const QString& directory)
-{
-    if (directory.isEmpty()) {
-        return false;
-    }
-    const QDir dir(directory);
-    return QFileInfo::exists(dir.filePath(QStringLiteral("tap.png")))
-        && QFileInfo::exists(dir.filePath(QStringLiteral("hold.png")))
-        && QFileInfo::exists(dir.filePath(QStringLiteral("star.png")));
-}
-
 }  // namespace
+
+// Stage 4.9d-4a: standardPreviewSkinDirectoryName / dxPreviewSkinDirectoryName /
+// legacyStandardPreviewSkinDirectoryName / normalizePreviewSkinDirectoryName /
+// hasCorePreviewSkinAssets moved from this file's anonymous namespace to
+// runtime::shared (runtime/Shared.h/.cpp) — availablePreviewSkinDirectoryNames()
+// and previewSkinDisplayName() below now call the shared:: versions (see their
+// forwarding bodies), and this file's other, unmoved callers of those helpers
+// (previewSkinVariantStorageValue, resolvePreviewSkinDir) reach them through the
+// `using namespace miacode::runtime::shared;` at the top of this file.
 
 void miacode::runtime::StageMediaHost::ensurePreviewSfxRuntimePrepared()
 {
-    // A reload already in flight counts as prepared-in-progress. A chart change
-    // invalidates readiness, then its background data warm-up posts the atomic
-    // path+asset load on the worker (see applyPreviewSfxWarmupResult below).
-    // The completion handler in sections/frame/MainWindow.FrameBootstrap.cpp
-    // flips previewSfxRuntimePrepared_. Without the sequence check below, pressing
-    // play (or scrubbing) inside that window re-posted a SECOND full engine +
-    // sample + BGM load, and its newer assetGeneration invalidated the first
-    // reload's completion — so the redundant work also delayed the ready edge it
-    // was racing. The completion handler clears the sequence on failure too, so a
-    // failed reload still gets retried by the next call here.
-    if (state_.previewSfxRuntime_ == nullptr
-        || state_.previewSfxRuntimePrepared_
-        || state_.previewSfxRuntimePreparationSequence_ != 0) {
-        return;
-    }
-    QElapsedTimer initTimer;
-    initTimer.start();
-    const bool hasCurrentWarmupPaths =
-        state_.previewSfxWarmupAppliedGeneration_ == state_.previewWarmupGeneration_
-        && state_.previewSfxWarmupChartPath_ == state_.currentFilePath_;
-    const QString trackPath = hasCurrentWarmupPaths
-        ? state_.previewSfxWarmupTrackPath_
-        : state_.lastTrackPath_;
-    const QString sfxDir = hasCurrentWarmupPaths
-        ? state_.previewSfxWarmupSfxDir_
-        : miacode::preview_sfx::resolveSfxDirectory();
-    const QtPreviewSfxRuntime::AssetSubmission reload =
-        state_.previewSfxRuntime_->reloadAssetsForChartWithWarmupPaths(
-            state_.currentFilePath_, trackPath, sfxDir, state_.previewAudioSettings_);
-    state_.previewSfxRuntimePrepared_ = false;
-    state_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
-        ? reload.identity.assetGeneration
-        : 0;
-    state_.previewSfxRuntimePreparationSequence_ = reload.post.accepted
-        ? reload.identity.sequence
-        : 0;
-    state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
-    const qint64 elapsedMs = initTimer.elapsed();
-    appendStartupTimingStage("mainwindow/preview_sfx_runtime_prepare_on_demand", elapsedMs, elapsedMs);
+    // Stage 4.9d-4a: body moved to runtime::shared — see runtime/Shared.cpp.
+    // Qualified because this member shares the free function's name.
+    miacode::runtime::shared::ensurePreviewSfxRuntimePrepared(state_);
 }
 
 void miacode::runtime::StageMediaHost::schedulePreviewSubsystemWarmup()
@@ -815,50 +754,15 @@ QString miacode::runtime::StageMediaHost::resolvePreviewSkinRootDir() const
 
 QStringList miacode::runtime::StageMediaHost::availablePreviewSkinDirectoryNames() const
 {
-    const QString root = resolvePreviewSkinRootDir();
-    if (root.isEmpty()) {
-        return {};
-    }
-
-    QStringList names;
-    const QStringList builtInNames{
-        standardPreviewSkinDirectoryName(),
-        dxPreviewSkinDirectoryName(),
-    };
-    const QDir rootDir(root);
-    for (const QString& name : builtInNames) {
-        if (hasCorePreviewSkinAssets(rootDir.filePath(name))) {
-            names.append(name);
-        }
-    }
-
-    const QFileInfoList entries = rootDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
-    for (const QFileInfo& entry : entries) {
-        const QString name = entry.fileName();
-        bool isBuiltIn = false;
-        for (const QString& builtInName : builtInNames) {
-            if (name.compare(builtInName, Qt::CaseInsensitive) == 0) {
-                isBuiltIn = true;
-                break;
-            }
-        }
-        if (!isBuiltIn && hasCorePreviewSkinAssets(entry.absoluteFilePath())) {
-            names.append(name);
-        }
-    }
-    return names;
+    // Stage 4.9d-4a: body moved to runtime::shared — see runtime/Shared.cpp.
+    // Qualified because this member shares the free function's name.
+    return miacode::runtime::shared::availablePreviewSkinDirectoryNames();
 }
 
 QString miacode::runtime::StageMediaHost::previewSkinDisplayName(const QString& directoryName) const
 {
-    const QString normalized = normalizePreviewSkinDirectoryName(directoryName);
-    if (normalized.compare(standardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
-        return UiText::text(QStringLiteral("dialog.render_settings.video.skin.standard"));
-    }
-    if (normalized.compare(dxPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
-        return UiText::text(QStringLiteral("dialog.render_settings.video.skin.dx"));
-    }
-    return normalized;
+    // Stage 4.9d-4a: body moved to runtime::shared — see runtime/Shared.cpp.
+    return miacode::runtime::shared::previewSkinDisplayName(directoryName);
 }
 
 QString miacode::runtime::StageMediaHost::resolvePreviewSkinDir() const
@@ -1096,11 +1000,6 @@ void Session::applyPreviewOutlineVariant(
     stageMedia_->applyPreviewOutlineVariant(variant, useAutoSelection, persistState);
 }
 
-QString Session::resolvePreviewCustomOutlineDir() const
-{
-    return stageMedia_->resolvePreviewCustomOutlineDir();
-}
-
 QString Session::resolvePreviewCustomOutlinePath() const
 {
     return stageMedia_->resolvePreviewCustomOutlinePath();
@@ -1126,24 +1025,9 @@ QString Session::previewSkinVariantStorageValue() const
     return stageMedia_->previewSkinVariantStorageValue();
 }
 
-QStringList Session::availablePreviewSkinDirectoryNames() const
-{
-    return stageMedia_->availablePreviewSkinDirectoryNames();
-}
-
-QString Session::previewSkinDisplayName(const QString& directoryName) const
-{
-    return stageMedia_->previewSkinDisplayName(directoryName);
-}
-
 QString Session::resolvePreviewSkinDir() const
 {
     return stageMedia_->resolvePreviewSkinDir();
-}
-
-QString Session::resolvePreviewSkinRootDir() const
-{
-    return stageMedia_->resolvePreviewSkinRootDir();
 }
 
 void Session::applyPreviewSfxLevels(bool reloadAssets)

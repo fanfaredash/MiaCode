@@ -199,7 +199,8 @@ int main(int argc, char** argv)
                    && !auditionBranch.contains(QStringLiteral("timelineRevision_")),
                QStringLiteral("it no longer borrows the edited difficulty's snapshot"), out, &failed);
     }
-    expect(playbackGlue.contains(QStringLiteral("bool Session::ensureAuditionSceneReady"))
+    expect(playbackGlue.contains(
+               QStringLiteral("bool miacode::runtime::PlaybackCoordinator::ensureAuditionSceneReady"))
                && playbackGlue.contains(QStringLiteral("reinstall()")),
            QStringLiteral("a stale audition scene rebuilds instead of refusing forever"), out, &failed);
 

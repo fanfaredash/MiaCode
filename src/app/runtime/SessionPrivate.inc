@@ -22,17 +22,10 @@
         const QString& resolvedMediaPath,
         const QString& trackPath
     );
-    void resetPreviewStageMediaRouteTimelineOffset();
     void applyPreviewStageMediaRoutePlaybackRate(double rate, const char* site = nullptr);
     void applyPreviewStageMediaRouteVisualSettings();
-    bool previewStageMediaRouteHasVideo() const;
     double previewStageMediaRouteCurrentPlaybackSecond() const;
     void startPreviewStageMediaRoutePlayback(double second);
-    void syncPreviewStageMediaRoutePlayback(double second);
-    void pausePreviewStageMediaRoutePlayback();
-    void seekPreviewStageMediaRouteWhilePaused(double second);
-    void submitPreviewStageMediaRoutePausedSeek(double second, quint64 generation);
-    void setPreviewStageMediaRouteObservedPlayheadSecond(double second);
     void ensurePreviewStageMediaHostInitialized();
     void ensureQuickShellPreviewCompositeSurfaceInitialized();
     void shutdownPreviewStageMediaHost();
@@ -110,7 +103,6 @@
     // embedded video panel has 添加片头 active, so the audition can play the
     // animated intro before the chart. cancelExportIntroLeadIn() forwards to the
     // timeline driver (used by teardown).
-    bool currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const;
     bool exportIntroLeadInPlaying() const;
     void cancelExportIntroLeadIn();
     // Negative-time intro region forwarders: handleExportIntroSliderSeek routes a
@@ -144,7 +136,6 @@
     int parsedClockCount() const;
     QString parsedLatencyMeterId() const;
     void resetPreviewTrackTimelineOffsets();
-    miacode::waveform::WaveformCacheService* ensureWaveformCacheService();
     void applyWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
     void refreshWaveformCache();
     void refreshWaveformCache(double knownDurationSeconds);

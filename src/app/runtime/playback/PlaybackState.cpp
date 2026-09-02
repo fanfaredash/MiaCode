@@ -471,7 +471,7 @@ void miacode::runtime::PlaybackCoordinator::handlePreviewPlayingRetainedSeekComp
             state_.activePreviewPlaybackTransactionId_);
     }
     resetVisualClockSmoothing();
-    session_.syncPreviewStageMediaRoutePlayback(effectiveSecond);
+    syncPreviewStageMediaRoutePlayback(effectiveSecond);
     applyQtPreviewPosition(effectiveSecond, centerView);
     appendPreviewPlaybackLog(
         QStringLiteral("playing_seek_completion_accepted"),
@@ -546,7 +546,7 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewTimers()
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setPlaybackCadenceActive(false);
     }
-    session_.setPreviewFixedTimerHighResolutionActive(false);
+    setPreviewFixedTimerHighResolutionActive(state_, false);
 }
 
 void miacode::runtime::PlaybackCoordinator::finalizeQtPreviewPlaybackStart(double effectiveStartSecond)
@@ -594,7 +594,7 @@ void miacode::runtime::PlaybackCoordinator::finalizeQtPreviewPlaybackStart(doubl
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(true);
     }
-    session_.setPreviewFixedTimerHighResolutionActive(!previewCanvasUsesFrameSwappedPacing());
+    setPreviewFixedTimerHighResolutionActive(state_, !previewCanvasUsesFrameSwappedPacing());
     if (state_.scene_ != nullptr && previewCanvasUsesFrameSwappedPacing()) {
         requestNextDisplayRefreshPreviewFrame();
     } else {
@@ -670,7 +670,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
     // backend pause is allowed to complete after the UI has become inert.
     cancelPreviewStartupSync("pause_qt_preview_playback_exact");
     clearPreviewPlayingRetainedSeek();
-    session_.pausePreviewStageMediaRoutePlayback();
+    pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     session_.setPreviewPlayingFlag(false);
     session_.editorSyncController().setPlaybackActive(false);
@@ -683,7 +683,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
     QElapsedTimer visualStateTimer;
     visualStateTimer.start();
     session_.applyEffectivePreviewOutlineVariantToCanvas();
-    session_.applyPreviewStageMediaRouteVisualSettings();
+    applyPreviewStageMediaRouteVisualSettings(state_);
     appendPreviewPlaybackLog(
         QStringLiteral("pause_visual_state_applied"),
         QString("txn=%1 source=%2 inline=1 elapsed_ms=%3")
@@ -1080,7 +1080,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackForReanchor()
         state_.pauseSecond_, wallClockPauseSecond, state_.playing_, "pause_qt_preview_playback_for_reanchor");
     cancelPreviewStartupSync("pause_qt_preview_playback_for_reanchor");
     clearPreviewPlayingRetainedSeek();
-    session_.pausePreviewStageMediaRoutePlayback();
+    pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = state_.pauseSecond_;
@@ -1142,7 +1142,7 @@ void miacode::runtime::PlaybackCoordinator::anchorQtPreviewPlaybackToSecond(doub
     session_.ensurePreviewStageMediaRouteInitialized();
     cancelPreviewStartupSync("anchor_qt_preview_playback_to_second");
     clearPreviewPlayingRetainedSeek();
-    session_.pausePreviewStageMediaRoutePlayback();
+    pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     miacode::runtime::shared::writePreviewPauseSecond(
         state_.pauseSecond_, clampedSecond, state_.playing_, "anchor_qt_preview_playback_to_second");
