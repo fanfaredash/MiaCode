@@ -13,7 +13,7 @@
 #include "audio/PreviewAudioDeviceCutoff.h"
 #include "runtime/playback/PlaybackIdentityGate.h"
 
-class Session;
+class QObject;
 
 namespace miacode::preview_audio {
 struct PreviewAudioCompletion;
@@ -25,11 +25,16 @@ class ApplicationServices;
 
 namespace miacode::runtime {
 
+// PlaybackCoordinator only needs a QObject to anchor timers/connections and
+// to act as its own liveness token for the async analysis callbacks below —
+// it never calls into any Session API. Production wiring passes the owning
+// Session (Session IS-A QObject); ValidationPortSpec-style specs may pass any
+// QObject, since nothing here ever casts owner_ back to a concrete type.
 class PlaybackCoordinator final : public miacode::v2::PlaybackControl,
                                   public miacode::v2::PreviewPlaybackPort,
                                   public miacode::v2::AudioClockSource {
 public:
-    PlaybackCoordinator(Session& session, miacode::v2::ApplicationServices& services,
+    PlaybackCoordinator(QObject& owner, miacode::v2::ApplicationServices& services,
                         RuntimeContext::Ui& ui, RuntimeContext::State& state,
                         miacode::v2::PlaybackPreferencesPort& preferences,
                         miacode::v2::PlaybackValidationPort& validation,
@@ -408,7 +413,9 @@ private:
     // the editor-sync controller, which is reachable directly through
     // services_.editorSync() — see FollowSync.cpp for the definition.
     void clearPreviewFollowDecoration();
-    Session& session_;
+    // Timer/connection parent and QPointer-tracked liveness anchor only — see
+    // the class comment above. Production passes the owning Session.
+    QObject& owner_;
     miacode::v2::ApplicationServices& services_;
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;

@@ -133,11 +133,11 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineAnalysisRefresh()
     state_.pendingTimelineAnalysisRefresh_ = TimelineAnalysisRefreshRequest();
     state_.timelineAnalysisWorkerRunning_ = true;
     state_.timelineAnalysisRunningRevision_ = request.revision;
-    QPointer<Session> guard(&session_);
+    QPointer<QObject> guard(&owner_);
     QThreadPool* const pool = state_.timelineAnalysisPool_ != nullptr
         ? state_.timelineAnalysisPool_
         : QThreadPool::globalInstance();
-    pool->start([guard, request]() {
+    pool->start([this, guard, request]() {
         miacode::diag::MemoryStageScope memScope("preview/mem_stage", "analysis_build");
         TimelineAnalysisRefreshResult result;
         {
@@ -151,7 +151,7 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineAnalysisRefresh()
         miacode::diag::leak_gauge::noteInflightDispatch();
         QMetaObject::invokeMethod(
             guard.data(),
-            [guard, result = std::move(result)]() mutable {
+            [this, guard, result = std::move(result)]() mutable {
                 miacode::diag::leak_gauge::noteInflightApplied();
                 if (guard.isNull()) {
                     return;
@@ -161,15 +161,15 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineAnalysisRefresh()
                 QElapsedTimer applyTimer;
                 applyTimer.start();
 
-                guard->state_.timelineAnalysisWorkerRunning_ = false;
-                if (result.revision != guard->state_.timelineAnalysisRequestedRevision_
-                    || result.revision != guard->state_.timelineRevision_
-                    || !guard->hasActiveDifficulty()
-                    || result.difficultyId != guard->activeDifficultyId()
-                    || result.chartText != guard->activeChartText()
-                    || result.timingMetadata != guard->currentTimingMetadata()
-                    || result.noteMarkerSignature != guard->state_.latestTimelineNoteMarkerSignature_) {
-                    guard->requestTimelineAnalysisDispatch();
+                state_.timelineAnalysisWorkerRunning_ = false;
+                if (result.revision != state_.timelineAnalysisRequestedRevision_
+                    || result.revision != state_.timelineRevision_
+                    || !hasActiveDifficulty()
+                    || result.difficultyId != activeDifficultyId()
+                    || result.chartText != activeChartText()
+                    || result.timingMetadata != currentTimingMetadata()
+                    || result.noteMarkerSignature != state_.latestTimelineNoteMarkerSignature_) {
+                    requestTimelineAnalysisDispatch();
                     return;
                 }
 
@@ -201,30 +201,30 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineAnalysisRefresh()
                 const int muriStaticReferenceCount = result.staticReferences.size();
                 miacode::timeline::publishTimelineAnalysisState(
                     [&] {
-                        guard->state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
-                        guard->state_.pendingDeferredValidationUiRefresh_ = true;
+                        state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
+                        state_.pendingDeferredValidationUiRefresh_ = true;
                     },
                     [&] {
-                        guard->state_.muriAnalysisReport_ = std::move(result.analysisReport);
-                        guard->state_.muriAnalysisReport_.revision = ++guard->state_.muriAnalysisReportRevisionCounter_;
-                        guard->state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
-                        guard->state_.muriAnalysisReportDifficultyId_ = result.difficultyId;
-                        guard->state_.muriAnalysisReportTimelineRevision_ = result.revision;
-                        guard->state_.muriAnalysisResultAvailable_ = true;
+                        state_.muriAnalysisReport_ = std::move(result.analysisReport);
+                        state_.muriAnalysisReport_.revision = ++state_.muriAnalysisReportRevisionCounter_;
+                        state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
+                        state_.muriAnalysisReportDifficultyId_ = result.difficultyId;
+                        state_.muriAnalysisReportTimelineRevision_ = result.revision;
+                        state_.muriAnalysisResultAvailable_ = true;
                     },
                     [&] {
-                        guard->state_.muriStaticReferences_ = std::move(result.staticReferences);
-                        guard->state_.muriStaticReferencesNoteMarkerSignature_ = result.noteMarkerSignature;
-                        guard->state_.muriStaticReferencesDifficultyId_ = result.difficultyId;
-                        guard->state_.muriStaticReferencesTimelineRevision_ = result.revision;
-                        guard->state_.muriStaticReferencesAvailable_ = true;
-                        guard->state_.pendingDeferredMuriUiRefresh_ = true;
+                        state_.muriStaticReferences_ = std::move(result.staticReferences);
+                        state_.muriStaticReferencesNoteMarkerSignature_ = result.noteMarkerSignature;
+                        state_.muriStaticReferencesDifficultyId_ = result.difficultyId;
+                        state_.muriStaticReferencesTimelineRevision_ = result.revision;
+                        state_.muriStaticReferencesAvailable_ = true;
+                        state_.pendingDeferredMuriUiRefresh_ = true;
                     },
-                    [&] { emit guard->documentValidationChanged(); });
-                if (!guard->state_.playing_) {
-                    guard->applyDeferredAnalysisUiUpdates();
+                    [&] { validation_.notifyDocumentValidationChanged(); });
+                if (!state_.playing_) {
+                    validation_.applyDeferredAnalysisUiUpdates();
                 }
-                if (guard->state_.runtimeDebugOutputEnabled_) {
+                if (state_.runtimeDebugOutputEnabled_) {
                     appendTimelinePerfLog(
                         QStringLiteral("edit/muri_perf"),
                         QStringLiteral("phase=analysis_apply validation_issues=%1 diagnostics=%2 static_refs=%3 elapsed_ms=%4")
@@ -234,7 +234,7 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineAnalysisRefresh()
                             .arg(applyTimer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
                     );
                 }
-                guard->requestTimelineAnalysisDispatch();
+                requestTimelineAnalysisDispatch();
             },
             Qt::QueuedConnection
         );

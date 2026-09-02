@@ -281,7 +281,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
         return;
     }
 
-    QTimer::singleShot(0, &session_, [this, generation, clampedSecond]() {
+    QTimer::singleShot(0, &owner_, [this, generation, clampedSecond]() {
         if (generation != state_.pausedSeekGeneration_
             || state_.playing_
             || state_.pausedSeekMediaPending_) {

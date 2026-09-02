@@ -45,7 +45,7 @@ using namespace miacode::runtime::shared;
 using namespace miacode::runtime::preview_timeline_detail;
 
 miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
-    Session& session,
+    QObject& owner,
     miacode::v2::ApplicationServices& services,
     RuntimeContext::Ui& ui,
     RuntimeContext::State& state,
@@ -54,7 +54,7 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     miacode::v2::PlaybackDocumentPort& documents,
     miacode::v2::PlaybackPreviewPort& preview,
     quint64 sessionGeneration)
-    : session_(session)
+    : owner_(owner)
     , services_(services)
     , ui_(ui)
     , state_(state)
@@ -90,7 +90,7 @@ void miacode::runtime::PlaybackCoordinator::queueTimelineCursorBridgeUpdate(doub
 void miacode::runtime::PlaybackCoordinator::scheduleDeferredTimelineBridgeFlush()
 {
     const quint64 generation = ++state_.deferredTimelineBridgeFlushGeneration_;
-    QTimer::singleShot(0, &session_, [this, generation]() {
+    QTimer::singleShot(0, &owner_, [this, generation]() {
         if (generation != state_.deferredTimelineBridgeFlushGeneration_) {
             return;
         }
@@ -769,7 +769,7 @@ void miacode::runtime::PlaybackCoordinator::onTimelineUserInteractionStarted()
         updatePauseButtonAppearance();
         if (pauseForViewportLock) {
             const double second = qMax(0.0, state_.pauseSecond_);
-            QTimer::singleShot(0, &session_, [this, second]() {
+            QTimer::singleShot(0, &owner_, [this, second]() {
                 if (state_.previewFollowEnabled_ && state_.previewViewportLockEnabled_) {
                     syncEditorCursorToPreviewSecond(second, true, false);
                 }
@@ -974,11 +974,11 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineSlowRefresh()
     state_.pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
     state_.timelineSlowWorkerRunning_ = true;
     state_.timelineSlowRunningRevision_ = request.revision;
-    QPointer<Session> guard(&session_);
+    QPointer<QObject> guard(&owner_);
     QThreadPool* const pool = state_.timelineSlowRefreshPool_ != nullptr
         ? state_.timelineSlowRefreshPool_
         : QThreadPool::globalInstance();
-    pool->start([guard, request]() {
+    pool->start([this, guard, request]() {
         miacode::diag::MemoryStageScope memScope("preview/mem_stage", "slow_refresh_build");
         SimaiNativeParseResult parseResult;
         TimelinePreviewRefreshState previewState;
@@ -998,65 +998,65 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineSlowRefresh()
         miacode::diag::leak_gauge::noteInflightDispatch();
         QMetaObject::invokeMethod(
             guard.data(),
-            [guard, request, parseResult, previewState]() mutable {
+            [this, guard, request, parseResult, previewState]() mutable {
                 miacode::diag::leak_gauge::noteInflightApplied();
                 if (guard.isNull()) {
                     return;
                 }
 
-                guard->state_.timelineSlowWorkerRunning_ = false;
-                if (request.revision != guard->state_.timelineSlowRequestedRevision_
-                    || request.revision != guard->state_.timelineRevision_
-                    || !guard->hasActiveDifficulty()
-                    || request.difficultyId != guard->activeDifficultyId()
-                    || request.chartText != guard->activeChartText()
-                    || request.timingMetadata != guard->currentTimingMetadata()) {
-                    guard->dispatchTimelineSlowRefresh();
+                state_.timelineSlowWorkerRunning_ = false;
+                if (request.revision != state_.timelineSlowRequestedRevision_
+                    || request.revision != state_.timelineRevision_
+                    || !hasActiveDifficulty()
+                    || request.difficultyId != activeDifficultyId()
+                    || request.chartText != activeChartText()
+                    || request.timingMetadata != currentTimingMetadata()) {
+                    dispatchTimelineSlowRefresh();
                     return;
                 }
 
-                guard->state_.lastTimelineParseDifficultyId_ = request.difficultyId;
-                guard->state_.lastTimelineParseChartText_ = request.chartText;
-                guard->state_.lastTimelineParseTimingMetadata_ = request.timingMetadata;
-                guard->state_.lastTimelineParseResult_ = parseResult;
-                guard->state_.latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
-                guard->state_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
-                guard->state_.latestTimelinePreviewRevision_ = request.revision;
-                guard->state_.latestTimelinePreviewSnapshotReady_ = true;
-                if (!guard->state_.playing_) {
-                    guard->applyLatestTimelinePreviewStateToPausedPreview();
+                state_.lastTimelineParseDifficultyId_ = request.difficultyId;
+                state_.lastTimelineParseChartText_ = request.chartText;
+                state_.lastTimelineParseTimingMetadata_ = request.timingMetadata;
+                state_.lastTimelineParseResult_ = parseResult;
+                state_.latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
+                state_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
+                state_.latestTimelinePreviewRevision_ = request.revision;
+                state_.latestTimelinePreviewSnapshotReady_ = true;
+                if (!state_.playing_) {
+                    applyLatestTimelinePreviewStateToPausedPreview();
                 }
-                if (guard->state_.pendingDifficultySwitchPreviewRestore_
-                    && guard->state_.pendingDifficultySwitchPreviewRestoreRevision_ == request.revision
-                    && guard->state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ == request.difficultyId) {
-                    const double restoreSecond = guard->state_.pendingDifficultySwitchPreviewRestoreSecond_;
-                    guard->state_.pendingDifficultySwitchPreviewRestore_ = false;
-                    guard->state_.pendingDifficultySwitchPreviewRestoreRevision_ = 0;
-                    guard->state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;
-                    guard->state_.pendingDifficultySwitchPreviewRestoreSecond_ = 0.0;
-                    guard->seekPreviewDiscreteToSecond(restoreSecond, false);
-                    guard->deferTimelineCursorBridgeUpdate(restoreSecond, false);
+                if (state_.pendingDifficultySwitchPreviewRestore_
+                    && state_.pendingDifficultySwitchPreviewRestoreRevision_ == request.revision
+                    && state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ == request.difficultyId) {
+                    const double restoreSecond = state_.pendingDifficultySwitchPreviewRestoreSecond_;
+                    state_.pendingDifficultySwitchPreviewRestore_ = false;
+                    state_.pendingDifficultySwitchPreviewRestoreRevision_ = 0;
+                    state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;
+                    state_.pendingDifficultySwitchPreviewRestoreSecond_ = 0.0;
+                    seekPreviewDiscreteToSecond(restoreSecond, false);
+                    deferTimelineCursorBridgeUpdate(restoreSecond, false);
                 }
-                if (guard->state_.previewFollowEnabled_ && guard->hasActiveDifficulty()) {
-                    const double followSecond = guard->state_.playing_
-                        ? guard->currentPreviewAuthoritativeAudioClockSecond()
-                        : guard->state_.pauseSecond_;
-                    guard->syncEditorCursorToPreviewSecond(
+                if (state_.previewFollowEnabled_ && hasActiveDifficulty()) {
+                    const double followSecond = state_.playing_
+                        ? authoritativeAudioClockSecond()
+                        : state_.pauseSecond_;
+                    syncEditorCursorToPreviewSecond(
                         qMax(0.0, followSecond),
                         true,
-                        !guard->state_.playing_);
+                        !state_.playing_);
                 }
-                guard->scheduleTimelineAnalysisRefresh(request, parseResult, previewState);
-                if (guard->state_.pendingPreviewPlaybackStart_
-                    && !guard->state_.playing_
-                    && guard->state_.pendingPreviewPlaybackRevision_ == request.revision
-                    && guard->state_.pendingPreviewPlaybackDifficultyId_ == request.difficultyId) {
-                    const double pendingSecond = guard->state_.pendingPreviewPlaybackSecond_;
-                    const bool resumeFromPause = guard->state_.pendingPreviewPlaybackResumeFromPause_;
-                    guard->state_.pendingPreviewPlaybackStart_ = false;
-                    guard->startQtPreviewPlayback(pendingSecond, resumeFromPause);
+                scheduleTimelineAnalysisRefresh(request, parseResult, previewState);
+                if (state_.pendingPreviewPlaybackStart_
+                    && !state_.playing_
+                    && state_.pendingPreviewPlaybackRevision_ == request.revision
+                    && state_.pendingPreviewPlaybackDifficultyId_ == request.difficultyId) {
+                    const double pendingSecond = state_.pendingPreviewPlaybackSecond_;
+                    const bool resumeFromPause = state_.pendingPreviewPlaybackResumeFromPause_;
+                    state_.pendingPreviewPlaybackStart_ = false;
+                    startQtPreviewPlayback(pendingSecond, resumeFromPause);
                 }
-                guard->dispatchTimelineSlowRefresh();
+                dispatchTimelineSlowRefresh();
             },
             Qt::QueuedConnection
         );
@@ -1310,7 +1310,7 @@ void Session::resetPreviewTrackTimelineOffsets()
 miacode::waveform::WaveformCacheService* miacode::runtime::PlaybackCoordinator::ensureWaveformCacheService()
 {
     if (state_.waveformCacheService_ == nullptr) {
-        state_.waveformCacheService_ = new miacode::waveform::WaveformCacheService(&session_);
+        state_.waveformCacheService_ = new miacode::waveform::WaveformCacheService(&owner_);
     }
     state_.waveformCacheService_->setThreadPool(
         state_.previewWarmupPool_ != nullptr ? state_.previewWarmupPool_ : QThreadPool::globalInstance());

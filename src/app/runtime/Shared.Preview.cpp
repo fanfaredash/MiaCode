@@ -1,7 +1,5 @@
 #include "runtime/Shared.h"
 
-#include "runtime/Session.h"
-
 #include "QtPreviewSfxRuntime.h"
 #include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
@@ -143,7 +141,7 @@ void applyPreviewStageMediaRoutePlaybackRate(RuntimeContext::State& state, doubl
     }
 }
 
-void refreshQuickShellPreviewCompositeSurfaceState(RuntimeContext::State& state, Session& session)
+void refreshQuickShellPreviewCompositeSurfaceState(RuntimeContext::State& state, QObject& owner)
 {
     // Inlines StageMediaHost::ensureQuickShellPreviewCompositeSurfaceInitialized()
     // (construct-on-demand, then unconditionally re-bind runtime/media-host) — that
@@ -152,7 +150,7 @@ void refreshQuickShellPreviewCompositeSurfaceState(RuntimeContext::State& state,
     // original StageMediaHost::refreshQuickShellPreviewCompositeSurfaceState body,
     // which called both.
     if (state.quickShellPreviewCompositeSurface_ == nullptr) {
-        state.quickShellPreviewCompositeSurface_ = new QuickShellPreviewCompositeSurface(&session);
+        state.quickShellPreviewCompositeSurface_ = new QuickShellPreviewCompositeSurface(&owner);
     }
     state.quickShellPreviewCompositeSurface_->setRuntime(state.scene_);
     state.quickShellPreviewCompositeSurface_->setMediaHost(state.previewStageMediaHost_);

@@ -51,6 +51,10 @@ public:
     void flushPendingMuriDiagnosticsPanelRefresh() override;
     void clearValidationCache() override;
     void applyDeferredAnalysisUiUpdates() override;
+    // Stage 4.9d-4c: lets PlaybackCoordinator's async analysis-apply callback
+    // reach documentValidationChanged through the validation port instead of
+    // a Session reference — see PlaybackValidationPort.h.
+    void notifyDocumentValidationChanged() override;
     // Stage 4.9d-4b-2e: lets PlaybackCoordinator::setCurrentBottomTabsTabId
     // re-relayout the issue lists after a bottom-tab switch without naming
     // QListWidget on the port — see scheduleWrappedListRelayout below.

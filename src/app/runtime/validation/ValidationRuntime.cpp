@@ -618,6 +618,11 @@ void miacode::runtime::ValidationHost::clearValidationCache()
     emit session_.documentValidationChanged();
 }
 
+void miacode::runtime::ValidationHost::notifyDocumentValidationChanged()
+{
+    emit session_.documentValidationChanged();
+}
+
 void miacode::runtime::ValidationHost::applyDeferredAnalysisUiUpdates()
 {
     if (state_.playing_) {

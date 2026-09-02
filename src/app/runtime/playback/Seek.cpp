@@ -52,7 +52,7 @@ void miacode::runtime::PlaybackCoordinator::scheduleDeferredPreviewUiTail(
     const quint64 generation = ++state_.deferredPreviewUiTailGeneration_;
     QTimer::singleShot(
         0,
-        &session_,
+        &owner_,
         [this,
          generation,
          applyPreviewVisualSettings,

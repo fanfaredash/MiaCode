@@ -54,6 +54,8 @@ public:
 
     void scheduleBottomTabsIssueListRelayout() override { ++scheduleBottomTabsIssueListRelayoutCount; }
 
+    void notifyDocumentValidationChanged() override { ++notifyDocumentValidationChangedCount; }
+
     RenderMode lastMode = RenderMode::Native;
     bool lastPersistState = false;
     int setMuriRenderModeCount = 0;
@@ -63,6 +65,7 @@ public:
     int applyDeferredAnalysisUiUpdatesCount = 0;
     int flushPendingMuriDiagnosticsPanelRefreshCount = 0;
     int scheduleBottomTabsIssueListRelayoutCount = 0;
+    int notifyDocumentValidationChangedCount = 0;
 };
 
 bool verifyImplementableWithoutSessionOrAWindow(QTextStream& err)
@@ -99,6 +102,10 @@ bool verifyImplementableWithoutSessionOrAWindow(QTextStream& err)
     contract.scheduleBottomTabsIssueListRelayout();
     ok &= require(validation.scheduleBottomTabsIssueListRelayoutCount == 1,
                   QStringLiteral("scheduleBottomTabsIssueListRelayout reaches the implementation"), err);
+
+    contract.notifyDocumentValidationChanged();
+    ok &= require(validation.notifyDocumentValidationChangedCount == 1,
+                  QStringLiteral("notifyDocumentValidationChanged reaches the implementation"), err);
 
     return ok;
 }

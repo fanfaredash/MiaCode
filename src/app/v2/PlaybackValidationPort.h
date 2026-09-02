@@ -43,6 +43,12 @@ public:
     virtual void applyDeferredAnalysisUiUpdates() = 0;
     virtual void flushPendingMuriDiagnosticsPanelRefresh() = 0;
     virtual void scheduleBottomTabsIssueListRelayout() = 0;
+    // Stage 4.9d-4c: lets PlaybackCoordinator's async analysis-apply callback
+    // signal documentValidationChanged without holding a Session reference of
+    // its own. ValidationHost is one of documentValidationChanged's existing
+    // emitters (see ValidationRuntime.cpp), so this keeps emission on a host
+    // that already owns the signal rather than adding a second one.
+    virtual void notifyDocumentValidationChanged() = 0;
 };
 
 }  // namespace miacode::v2

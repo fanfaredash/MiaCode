@@ -32,9 +32,9 @@
 class QDialog;
 class QFileInfo;
 class QMenu;
+class QObject;
 class QTextEdit;
 class QWidget;
-class Session;
 
 namespace miacode::v2 {
 class ShellNotifications;
@@ -196,14 +196,16 @@ double probeAudioDurationSeconds(const QString& trackPath);
 
 // Stage 4.9d-4a: bodies pulled out of miacode::runtime::StageMediaHost (and, for
 // setPreviewFixedTimerHighResolutionActive, Session) so PlaybackCoordinator can call
-// them without going through session_. Both the original host method and the
+// them without going through a Session reference. Both the original host method and the
 // coordinator's own copy now call these — see runtime/preview/StageMediaRoute.cpp,
 // runtime/preview/WarmupAndSettings.cpp, runtime/playback/FramePacing.cpp and
 // runtime/playback/SurfaceContract.cpp for the forwarding shells.
 void ensurePreviewSfxRuntimePrepared(RuntimeContext::State& state);
 void applyPreviewStageMediaRouteVisualSettings(RuntimeContext::State& state);
 void applyPreviewStageMediaRoutePlaybackRate(RuntimeContext::State& state, double rate, const char* site = nullptr);
-void refreshQuickShellPreviewCompositeSurfaceState(RuntimeContext::State& state, Session& session);
+// owner is only used as the QuickShellPreviewCompositeSurface's QObject
+// parent, never as a Session — see Shared.Preview.cpp.
+void refreshQuickShellPreviewCompositeSurfaceState(RuntimeContext::State& state, QObject& owner);
 void refreshPreviewStageMediaRouteDebugState(RuntimeContext::State& state, bool requestUpdate = true);
 // Windows-only body (Q_OS_WIN); a no-op elsewhere. See the definition for why the
 // platform conditional must not be simplified away.

@@ -312,7 +312,26 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          按原样加上端口，因为端口头文件明写「Deliberately free of Session, QWidget, and QML/QSG types」
          且由只链核心库的 spec 在链接层守住；改为不带控件参数的
          `scheduleBottomTabsIssueListRelayout()`，`ValidationHost` 自己从共享的 `ui_` 取控件。
-      5. 构造签名去掉 `Session&`；门槛 1、3 的测试从此可写
+      5. ~~构造签名去掉 `Session&`~~ **已完成 2026-09-02**。
+         构造签名首参改为 `QObject& owner`，成员 `Session& session_` → `QObject& owner_`；
+         `PlaybackCoordinator.h` 的 `Session` **类型引用清零**（余下 14 处命中全是注释与
+         `invalidateSession()` 方法名——后者指身份代次失效，与 `Session` 类型无关）。
+         `runtime::shared::refreshQuickShellPreviewCompositeSurfaceState` 的第二参同样改 `QObject&`，
+         `Shared.Preview.cpp` 因此不再 include `Session.h`。
+         **一次方法失误的记录**：编排者曾用 `grep "session_"` 断定「剩余 14 处都不调 Session API」，
+         但 `QPointer<Session> guard(&session_)` 之后的用法写作 `guard->…`，该 grep 看不见——
+         实测 74 处。执行体撞上后停手升级，是对的。查清后归类：
+         `guard->state_` 52 处（与协调器持有的是**同一个引用**，纯别名）、
+         协调器已有的同名方法 19 处、校验端口 1 处、信号 1 处。
+         执行体同时排除了一个能编译且能过测试的错误方案——guard 换 `QPointer<QObject>` 后
+         再 `qobject_cast<Session*>` 找回：spec 传普通 `QObject` 时 cast 静默返回空、
+         判活为真、**异步分析结果被悄悄丢弃**。那是把类型检查糊过去、留一个运行时活契约缺口。
+         协调器那处 `emit documentValidationChanged()` 改走校验端口新增的
+         `notifyDocumentValidationChanged()`，由本就在发该信号的 `ValidationHost` 实现——
+         不新增同义信号，发射权留在已拥有它的宿主手里。
+         **顺带发现（未处理，待裁决）**：`documentValidationChanged` 全仓 **6 个发射点、0 个消费方**，
+         无任何 `connect` / `NOTIFY` / QML 处理器。与此前 `noteStatus` 是空函数同类——
+         不报错、不挂测试，只是什么都不发生。**本轮未删也未接线**，那是产品决定。
 
       **完成判据：`PlaybackCoordinator` 能在 spec 里被构造出来。**
 - [ ] 阶段 4.9e：canonical 播放状态收进协调器私有成员，跨域读者改读 `PlaybackSnapshot`

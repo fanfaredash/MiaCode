@@ -221,9 +221,9 @@ void miacode::runtime::PlaybackCoordinator::startExportIntroAdvance(double fromP
     }
 
     if (state_.exportIntroLeadInTimer_ == nullptr) {
-        state_.exportIntroLeadInTimer_ = new QTimer(&session_);
+        state_.exportIntroLeadInTimer_ = new QTimer(&owner_);
         state_.exportIntroLeadInTimer_->setInterval(16);  // ~60 fps overlay frame stepping
-        QObject::connect(state_.exportIntroLeadInTimer_, &QTimer::timeout, &session_, [this]() {
+        QObject::connect(state_.exportIntroLeadInTimer_, &QTimer::timeout, &owner_, [this]() {
             tickExportIntroLeadIn();
         });
     }
