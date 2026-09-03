@@ -37,6 +37,10 @@ names are assembly forwards.
   Host table: `src/app/runtime/ASSEMBLY.md`. Product chrome is `src/app/qml_ui/`.
 - Frame/bootstrap: `SessionBootstrap.cpp`, `SessionBootstrapFinalize.cpp`. Empty menu
   `FrameHost` / `Menus.cpp` were deleted 2026-09-01.
+- QML window chrome: `src/app/qml_ui/chrome/{WindowTitleBar,MainMenu,MainToolBar,
+  WindowGestureArea}.qml`. `MainMenu` is transparent over the title-bar material.
+  `WindowGestureArea` supplies native move and double-click zoom gestures behind both chrome
+  rows; menu, toolbar, and caption controls remain the foreground pointer targets.
 - **Sidebar (outline list) + central page stack (2026-06-11, export-page migration phase 1):**
   `outlineList_` is rebuilt by `DocumentSection::rebuildFieldSidebar()` (`DocumentPages.cpp`).
   Item keys (`Qt::UserRole`), in order: `metadata` → `metadataPage_`, `difficulty_chart`
@@ -58,6 +62,12 @@ names are assembly forwards.
   spinner is a mouse-transparent viewport overlay positioned with the same `visualItemRect`
   pattern as `deleteDifficultyButton_`; spinner `isActive()` guards re-entrancy. Stopped in the
   same deferred lambda once the build returns.
+- Default QML tools entry: `src/app/qml_ui/sidebar/ActivityBar.qml` owns an `AppMenu` popup for
+  latency calibration, media processing, and chart normalization. Latency replaces the editor
+  through `QmlEditorPageHost::openLatencyPage`; the other two remain modal overlays, and chart
+  normalization is unavailable while the video export page is active. `MediaToolsDialog` is a
+  content-height launcher; batch-PV and prepend dialogs open above it without closing it, and
+  their Back action returns to the launcher.
 - QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
   `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
   `qml/QuickShellMain.qml`).

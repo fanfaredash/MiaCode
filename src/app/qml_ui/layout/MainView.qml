@@ -156,6 +156,7 @@ Item {
                 ? root.applicationContext.windowChrome.titleBarLeadingInset
                 : 0
             documentTitle: root.documentSession.documentTitle
+            normalizationEnabled: root.pages.activePageId !== "export"
         }
 
         Loader {
@@ -171,6 +172,7 @@ Item {
                 shortcuts: root.applicationContext.shortcuts
                 documentSession: root.documentSession
                 commandsEnabled: true
+                normalizationEnabled: root.pages.activePageId !== "export"
             }
         }
 
@@ -178,6 +180,7 @@ Item {
             id: mainToolBar
             width: parent.width
             height: implicitHeight
+            hostWindow: root.hostWindow
             sidebarActive: root.compact
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible
@@ -353,8 +356,7 @@ Item {
         progress: root.jobProgress
     }
 
-    // 音视频处理 lives at shell level: the tools menu, the latency page and the
-    // tools sidebar all reach the same dialog.
+    // Window-level tool overlays keep the current center page mounted.
     MediaToolsDialog {
         id: mediaToolsDialog
         objectName: "shellMediaToolsDialog"
@@ -373,6 +375,22 @@ Item {
         id: prependBlankDialog
         objectName: "shellPrependBlankDialog"
         mediaTools: root.mediaTools
+    }
+
+    NormalizeOptionsDialog {
+        id: normalizeDialog
+        objectName: "shellNormalizeOptionsDialog"
+        documentSession: root.documentSession
+
+        onAccepted: {
+            const options = {
+                reduceTo384Grid: normalizeDialog.reduceTo384Grid,
+                sectionMeasureCount: normalizeDialog.sectionMeasureCount,
+                syntax: normalizeDialog.syntax
+            }
+            root.documentSession.setNormalizeOptions(options)
+            splitView.applyNormalization(options)
+        }
     }
 
     AudioSettingsDialog {
@@ -405,6 +423,16 @@ Item {
     Connections {
         target: root.pages
         function onMediaToolsRequested() { mediaToolsDialog.open() }
+        function onNormalizeWholeChartRequested() {
+            if (root.pages.activePageId === "export" || !splitView.canNormalizeChart())
+                return
+            const stored = root.documentSession.normalizeOptions()
+            normalizeDialog.reduceTo384Grid = stored.reduceTo384Grid
+            normalizeDialog.sectionMeasureCount = stored.sectionMeasureCount
+            normalizeDialog.syntax = stored.syntax
+            normalizeDialog.selectionDescription = splitView.normalizationSelectionDescription()
+            normalizeDialog.open()
+        }
         function onPreferencesRequested() { preferencesDialog.open() }
     }
 }

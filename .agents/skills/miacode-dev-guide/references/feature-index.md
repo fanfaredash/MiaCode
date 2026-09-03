@@ -59,8 +59,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   cover export uses `export/QmlCoverExportWindow` + `CoverExportWindow.qml`, owning a private QML
   engine and `QmlCoverExportSession`, with `CoverExportPage.qml` as content and a pure Quick
   off-screen compositor (`tools/cover_export/CoverCompositeRenderer`). `QmlEditorPageHost` emits
-  `coverWindowRequested` without changing the main page. It routes
-  export/latency and leave transitions, but those transitions still call
+  `coverWindowRequested` without changing the main page. `sidebar/ActivityBar.qml` owns the
+  three-action tools popup: latency routes through `openLatencyPage()` and replaces the editor,
+  while media processing and chart normalization remain modal overlays; normalization is disabled
+  while video export owns the center page. `QmlEditorPageHost` routes export/latency and leave
+  transitions, but those transitions still call
   `DocumentSection::switchTo*Field()` and therefore remain coupled to hidden `editorStack_` state.
   `QmlDocumentModel` submits body, metadata, difficulty and
   file transactions to `app/v2/ChartWorkspace` / `ChartWorkspaceFileService`; the public

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import MiaCode.UI
 
 // Shared combo — geometry mirrors v1 dialogComboBoxStyleSheet (QML Popup, no Win11 chrome).
@@ -10,7 +11,9 @@ ComboBox {
 
     font.family: Theme.uiFont
     font.pixelSize: root.compact ? Theme.secondaryFontSize : Theme.uiFontSize
-    implicitHeight: root.compact ? 27 : Theme.controlMinHeight
+    implicitHeight: Theme.controlMinHeight
+    Layout.preferredHeight: implicitHeight
+    Layout.maximumHeight: implicitHeight
     leftPadding: 10
     rightPadding: 28
     hoverEnabled: true
@@ -54,6 +57,12 @@ ComboBox {
     }
 
     background: Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: Theme.chromeInsetY
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.chromeInsetY
         implicitHeight: root.implicitHeight
         radius: Theme.controlRadius
         color: Theme.overlayColor(root.enabled

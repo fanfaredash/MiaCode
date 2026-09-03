@@ -8,7 +8,7 @@ import MiaCode.UI
 // Custom menubar
 // Overflow removes complete top-level entries (right → left)
 
-Rectangle {
+Item {
     id: root
 
     required property var commands
@@ -16,6 +16,7 @@ Rectangle {
     // Source of the 调整 menu's operation rows; see chartTransformMenu().
     required property var documentSession
     property bool commandsEnabled: true
+    property bool normalizationEnabled: true
     // Re-read each time the menu opens rather than kept live: the list only
     // changes when a document is opened, and a menu nobody is looking at has no
     // reason to hold a copy.
@@ -29,7 +30,6 @@ Rectangle {
 
     implicitHeight: 34
     height: parent ? parent.height : implicitHeight
-    color: Theme.surfaceColor(Theme.colors.background.titleBar)
     // Shrink-wrap to whole visible controls
     width: barRow.width
     enabled: commandsEnabled
@@ -140,7 +140,8 @@ Rectangle {
         required property int menuIndex
         stateColors: Theme.colors.activityState
 
-        height: root.height
+        y: (root.height - height) / 2
+        height: Theme.controlMinHeight
         padding: 0
         leftPadding: 8
         rightPadding: 8
@@ -223,7 +224,8 @@ Rectangle {
             id: moreButton
             stateColors: Theme.colors.activityState
             width: root.overflowButtonWidth
-            height: root.height
+            y: (root.height - height) / 2
+            height: Theme.controlMinHeight
             visible: root.visibleCount < 6
             iconSource: Qt.resolvedUrl("icons/more.svg")
             iconWidth: 16
@@ -449,7 +451,7 @@ Rectangle {
             }
             AppMenuAction {
                 text: UiText.text("整谱规范化")
-                enabled: root.commandsEnabled
+                enabled: root.commandsEnabled && root.normalizationEnabled
                 onTriggered: root.commands.normalizeChartRequested()
             }
 

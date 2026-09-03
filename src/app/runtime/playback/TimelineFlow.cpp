@@ -737,7 +737,10 @@ QString miacode::runtime::PlaybackCoordinator::editorText() const
 
 void miacode::runtime::PlaybackCoordinator::scheduleTimelineRefresh()
 {
-    if (!hasActiveDifficulty()) {
+    // The latency page owns the preview/timeline source while its synthesized
+    // audition chart is installed. Document metadata writes still update the
+    // workspace, but the normal difficulty must not replace that source.
+    if (!hasActiveDifficulty() || state_.latencySandboxAuditionActive_) {
         return;
     }
     ++state_.timelineRevision_;
@@ -1010,6 +1013,7 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineSlowRefresh()
                 if (request.revision != state_.timelineSlowRequestedRevision_
                     || request.revision != state_.timelineRevision_
                     || !hasActiveDifficulty()
+                    || state_.latencySandboxAuditionActive_
                     || request.difficultyId != activeDifficultyId()
                     || request.chartText != activeChartText()
                     || request.timingMetadata != currentTimingMetadata()) {

@@ -5,6 +5,8 @@ import MiaCode.UI
 Rectangle {
     id: root
 
+    required property var hostWindow
+
     signal toggleSidebarRequested()
     signal toggleBottomRequested()
     signal openRequested()
@@ -27,11 +29,19 @@ Rectangle {
         stateColors: Theme.colors.activityState
     }
 
+    WindowGestureArea {
+        anchors.fill: parent
+        hostWindow: root.hostWindow
+        z: 0
+    }
+
     Row {
+        id: leftActions
         anchors.left: parent.left
         anchors.leftMargin: 8
         anchors.verticalCenter: parent.verticalCenter
         spacing: 5
+        z: 1
 
         ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/folder-open.svg")
@@ -68,10 +78,12 @@ Rectangle {
     }
 
     Row {
+        id: rightActions
         anchors.right: parent.right
         anchors.rightMargin: 8
         anchors.verticalCenter: parent.verticalCenter
         spacing: 5
+        z: 1
 
         ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/panel-left.svg")

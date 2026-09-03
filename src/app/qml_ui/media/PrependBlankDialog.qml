@@ -23,7 +23,7 @@ AppDialog {
     preferredWidth: 440
     footer: DialogFooter {
         acceptText: UiText.text("确定")
-        cancelText: UiText.text("取消")
+        cancelText: UiText.text("返回")
         onAccepted: root.accept()
         onRejected: root.reject()
     }

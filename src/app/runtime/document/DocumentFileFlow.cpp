@@ -788,8 +788,14 @@ void miacode::runtime::DocumentSessionHost::syncRuntimeFromWorkspace()
     if (snapshot.dirty) {
         noteDocumentEditedForAutosave();
     }
+    // Overlay audition pages deliberately keep their source outside the
+    // workspace's active difficulty. A metadata-only workspace write must not
+    // turn that intentional mismatch into a real difficulty switch.
+    const bool auditionPageOwnsSource =
+        state_.latencySandboxAuditionActive_ || state_.exportPreviewAuditionActive_;
     const bool difficultyChanged =
-        SimaiDocument::isDifficultyId(snapshot.activeDifficultyId)
+        !auditionPageOwnsSource
+        && SimaiDocument::isDifficultyId(snapshot.activeDifficultyId)
         && snapshot.activeDifficultyId != state_.activeDifficultyId_;
     if (difficultyChanged) {
         switchToDifficultyField(snapshot.activeDifficultyId);

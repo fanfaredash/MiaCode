@@ -671,6 +671,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/LabeledSlider.qml
     src/app/qml_ui/components/AboutDialog.qml
     src/app/qml_ui/components/JobProgressOverlay.qml
+    src/app/qml_ui/chrome/WindowGestureArea.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml
@@ -686,7 +687,6 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/sidebar/ChartFieldSidebar.qml
     src/app/qml_ui/sidebar/DifficultyList.qml
     src/app/qml_ui/sidebar/ExportSidebarPage.qml
-    src/app/qml_ui/sidebar/ToolsSidebarPage.qml
     src/app/qml_ui/export/ExportRangeSelector.qml
     src/app/qml_ui/export/ExportVideoPage.qml
     src/app/qml_ui/export/CoverExportPage.qml

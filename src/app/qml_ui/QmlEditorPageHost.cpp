@@ -38,12 +38,8 @@ QmlEditorPageHost::QmlEditorPageHost(miacode::v2::ShellNotifications& notificati
     connect(&notifications, &miacode::v2::ShellNotifications::mediaToolsRequested, this, [this]() {
         openMediaProcessingTools();
     });
-    connect(&notifications, &miacode::v2::ShellNotifications::preferencesRequested, this, [this]() {
-        if (overlayActive()) {
-            leaveOverlayPage();
-        }
-        emit preferencesRequested();
-    });
+    connect(&notifications, &miacode::v2::ShellNotifications::preferencesRequested,
+            this, &QmlEditorPageHost::preferencesRequested);
     connect(&notifications, &miacode::v2::ShellNotifications::coverExportRequested, this, [this](int difficultyId) {
         openCoverExport(difficultyId);
     });
@@ -123,9 +119,13 @@ bool QmlEditorPageHost::openLatencyPage()
     if (pages == nullptr) {
         return false;
     }
+    const bool leavingExportPage = activePageId_ == QLatin1String("export");
     rememberResumeDifficulty();
     if (!pages->enterLatencyPage()) {
         return false;
+    }
+    if (leavingExportPage && exportSessionObject() != nullptr) {
+        exportSessionObject()->leave();
     }
     // The page is QML now; only the active id has to change so MainSplitView
     // shows it.
@@ -155,16 +155,13 @@ bool QmlEditorPageHost::leaveOverlayPage()
 
 void QmlEditorPageHost::openMediaProcessingTools()
 {
-    if (overlayActive()) {
-        leaveOverlayPage();
-    }
     emit mediaToolsRequested();
 }
 
 void QmlEditorPageHost::openNormalizeWholeChart()
 {
-    if (overlayActive()) {
-        leaveOverlayPage();
+    if (activePageId_ == QLatin1String("export")) {
+        return;
     }
     emit normalizeWholeChartRequested();
 }

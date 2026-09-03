@@ -68,14 +68,16 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   also the capture padding), and `popupBlurScale` (0.5 on each axis). These apply in
   both wallpaper states through `BackdropBlur` / `FloatingCard`; `popupOpacity` remains
   the fill policy for ordinary floating surfaces.
-  Dialogs use dark/light `dialogTintOpacity` (0.94/0.98), theme-specific shadow opacity
-  (0.28/0.14), and `dialogBlurRadius` (96 logical pixels) through
+  Dialogs use dark/light `dialogTintOpacity`, their own `dialogShadowOpacity` (0.34/0.18),
+  and `dialogBlurRadius` (96 logical pixels) through
   the same effect and half-resolution sampling. Radius also sets the sampling padding.
   Dialog tint uses `colors.background.panel` (#191A1B); menu tint uses
   `colors.background.elevated` (#202122), keeping large dialog surfaces darker.
-  Dialog geometry uses `dialogPadding` (16) and `dialogMargin` (24); individual dialogs
-  declare preferred widths; `dialogHeight` (560) and `dialogCompactHeight` (280) provide
-  stable height tiers; `ChoiceDialog` uses its implicit height for content-fit notices.
+  Dialog geometry uses `dialogPadding` (16), `panelPadding` (8), and `dialogMargin` (24);
+  individual dialogs declare preferred widths; `dialogHeight` (560) and
+  `dialogCompactHeight` (280) provide stable height tiers; content-fit dialogs use their
+  implicit height. `modalScrimColor` owns the dimming fill, and `AppDialog` binds its opacity
+  to the dialog fade transition.
   `AppDialog` centers and bounds all dialogs to the window Overlay. Shared `popupRadius`
   (12) owns menu, dropdown and dialog card/blur-mask corners; `controlRadius` (6)
   remains the radius for small controls and tooltips.

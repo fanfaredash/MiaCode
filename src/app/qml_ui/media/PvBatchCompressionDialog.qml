@@ -11,12 +11,12 @@ AppDialog {
 
     required property var mediaTools
 
-    title: UiText.text("批量压缩 PV")
+    title: UiText.text("批量压缩视频")
     preferredWidth: 680
     preferredHeight: Theme.dialogHeight
     fillBody: true
     footer: DialogFooter {
-        cancelText: UiText.text("关闭")
+        cancelText: UiText.text("返回")
         onRejected: root.reject()
     }
 

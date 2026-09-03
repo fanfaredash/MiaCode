@@ -64,6 +64,18 @@ Item {
         editorPane.selectCurrentLine()
     }
 
+    function canNormalizeChart() {
+        return editorPane.canNormalizeChart()
+    }
+
+    function normalizationSelectionDescription() {
+        return editorPane.normalizationSelectionDescription()
+    }
+
+    function applyNormalization(options) {
+        return editorPane.applyNormalization(options)
+    }
+
     function applyChartTransform(opId) {
         return editorPane.applyChartTransform(opId)
     }
@@ -193,7 +205,6 @@ Item {
                         viewState: root.viewState
                         documentSession: root.documentSession
                         commands: root.commands
-                        pages: root.pages
                     }
 
                     // v2 video export center: QML chrome + ExportVideoController panel surface.

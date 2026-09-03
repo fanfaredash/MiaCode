@@ -11,6 +11,7 @@ Rectangle {
     required property var platform
     property string documentTitle: ""
     property real leadingInset: 0
+    property bool normalizationEnabled: true
 
     readonly property bool useEmbeddedMenu: root.platform.embeddedMenuInTitleBar
     readonly property bool useCaptionButtons: root.platform.captionButtons
@@ -42,6 +43,12 @@ Rectangle {
     onWidthChanged: root.scheduleMainMenuReflow()
     onMenuAvailableWidthChanged: root.scheduleMainMenuReflow()
     onDocumentTitleChanged: root.scheduleMainMenuReflow()
+
+    WindowGestureArea {
+        anchors.fill: parent
+        hostWindow: root.hostWindow
+        z: 0
+    }
 
     Row {
         id: brand
@@ -95,36 +102,9 @@ Rectangle {
                 shortcuts: root.shortcuts
                 documentSession: root.documentSession
                 commandsEnabled: root.visible
+                normalizationEnabled: root.normalizationEnabled
             }
             onLoaded: root.scheduleMainMenuReflow()
-        }
-    }
-
-    Item {
-        id: dragArea
-        anchors.left: menuHost.right
-        anchors.right: captionButtons.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        z: 0
-
-        DragHandler {
-            target: null
-            acceptedButtons: Qt.LeftButton
-            onActiveChanged: {
-                if (active)
-                    root.hostWindow.startSystemMove()
-            }
-        }
-
-        TapHandler {
-            acceptedButtons: Qt.LeftButton
-            onDoubleTapped: {
-                if (root.hostWindow.visibility === Window.Maximized)
-                    root.hostWindow.showNormal()
-                else
-                    root.hostWindow.showMaximized()
-            }
         }
     }
 

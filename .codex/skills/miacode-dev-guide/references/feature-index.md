@@ -22,6 +22,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - QML editor-tab workspace state:
   - Files: `src/app/qml_ui/ViewState.qml`, `src/app/qml_ui/editor/EditorTabBar.qml`
   - Owns: session-local open-editor tab ordering, MRU history, and active selection. Dragging exchanges any two open editor tabs, including metadata; the chart's difficulty order or serialized content is not changed.
+- QML tools entry:
+  - Files: `src/app/qml_ui/sidebar/ActivityBar.qml`, `src/app/qml_ui/QmlEditorPageHost.*`
+  - Owns: the tools popup and its three routes. Latency calibration replaces the editor; media processing and chart normalization remain modal overlays. Chart normalization is unavailable while video export owns the center page.
 
 - Main window surface and shared state:
   - Files: `src/app/mainwindow/MainWindow.h`, `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp`

@@ -11,7 +11,6 @@ Item {
     required property var commands
     required property var editorController
     required property var editorSync
-    required property var pages
 
     readonly property bool metadataSourceActive: viewState.metadataEditorActive
         && viewState.metadataEditorMode === 1
@@ -50,6 +49,18 @@ Item {
 
     function applyChartTransform(opId) {
         return sourceVisible && sourceEditor.applyChartTransform(opId)
+    }
+
+    function canNormalizeChart() {
+        return sourceVisible && !metadataSourceActive
+    }
+
+    function normalizationSelectionDescription() {
+        return canNormalizeChart() ? sourceEditor.selectionDescription() : ""
+    }
+
+    function applyNormalization(options) {
+        return canNormalizeChart() && sourceEditor.applyNormalization(options)
     }
 
     function revealSyntaxIssue(difficultyId, revision, line, column, endColumn) {
@@ -157,7 +168,7 @@ Item {
             spacing: 8
 
             Label {
-                text: root.documentSession.currentDifficultyName
+                text: UiText.text("等级")
                 color: Theme.colors.text.primary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize
@@ -166,8 +177,8 @@ Item {
             AppTextField {
                 property bool userEdited: false
 
-                Layout.preferredWidth: 90
-                placeholderText: UiText.text("等级")
+                Layout.preferredWidth: 48
+                Layout.maximumWidth: Layout.preferredWidth
                 text: root.documentSession.currentDifficultyLevel
                 onTextEdited: userEdited = true
                 onEditingFinished: {
@@ -177,12 +188,19 @@ Item {
                 }
             }
 
+            Label {
+                text: UiText.text("谱师")
+                color: Theme.colors.text.primary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+            }
+
             AppTextField {
                 id: difficultyDesignerField
                 property bool userEdited: false
 
-                Layout.fillWidth: true
-                placeholderText: UiText.text("谱师")
+                Layout.preferredWidth: 100
+                Layout.maximumWidth: Layout.preferredWidth
                 text: root.documentSession.currentDifficultyDesigner
                 // 文档打开、难度切换和焦点转移都可能结束编辑状态。只有收到
                 // TextInput 的真实编辑信号后，才把显示值提交给文档模型。
@@ -194,8 +212,33 @@ Item {
                 }
             }
 
+            Label {
+                text: UiText.text("延迟")
+                color: Theme.colors.text.primary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+            }
+
+            AppTextField {
+                property bool userEdited: false
+
+                Layout.preferredWidth: 64
+                Layout.maximumWidth: Layout.preferredWidth
+                text: root.documentSession.metadataFirst
+                onTextEdited: userEdited = true
+                onEditingFinished: {
+                    if (userEdited)
+                        root.documentSession.metadataFirst = text
+                    userEdited = false
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 2 * Theme.panelPadding
+            }
+
             AppButton {
-                Layout.rightMargin: -Theme.chromeInsetX
                 text: UiText.text("删除难度")
                 enabled: root.documentSession.currentDifficultyId > 0
                 onClicked: removeDifficultyDialog.open()
@@ -459,8 +502,6 @@ Item {
             }
         }
     }
-    // 整谱规范化: the sidebar entry asks, this pane collects options and applies
-    // the transform as one editor transaction so undo covers it.
     Connections {
         target: root.documentSession
         function onMetadataChanged() {
@@ -470,38 +511,4 @@ Item {
             extraFieldsEdit.text = root.documentSession.metadataExtraText
         }
     }
-
-    Connections {
-        target: root.pages
-        function onNormalizeWholeChartRequested() {
-            // Normalize acts on chart body. With no difficulty open (or the
-            // metadata source showing) there is nothing to act on, so the entry
-            // does nothing rather than transforming the wrong text.
-            if (!root.sourceVisible || root.metadataSourceActive)
-                return
-            const stored = root.documentSession.normalizeOptions()
-            normalizeDialog.reduceTo384Grid = stored.reduceTo384Grid
-            normalizeDialog.sectionMeasureCount = stored.sectionMeasureCount
-            normalizeDialog.syntax = stored.syntax
-            normalizeDialog.selectionDescription = sourceEditor.selectionDescription()
-            normalizeDialog.open()
-        }
-    }
-
-    NormalizeOptionsDialog {
-        id: normalizeDialog
-        objectName: "normalizeOptionsDialog"
-        documentSession: root.documentSession
-
-        onAccepted: {
-            const options = {
-                reduceTo384Grid: normalizeDialog.reduceTo384Grid,
-                sectionMeasureCount: normalizeDialog.sectionMeasureCount,
-                syntax: normalizeDialog.syntax
-            }
-            root.documentSession.setNormalizeOptions(options)
-            sourceEditor.applyNormalization(options)
-        }
-    }
-
 }

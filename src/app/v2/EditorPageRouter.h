@@ -48,8 +48,6 @@ public:
     // reached from the page host's own menu entry.
     virtual void packChartAsZip() = 0;
 
-    // 偏好设置. The page host closes any overlay page first, so the entry point
-    // belongs with the other page-scope actions.
     virtual void openPreferences() = 0;
 
     // "May the window close?" — the same unsaved-changes question the page

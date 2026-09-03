@@ -37,8 +37,8 @@ public:
     Q_INVOKABLE bool openLatencyPage();
     Q_INVOKABLE bool leaveOverlayPage();
     Q_INVOKABLE void openMediaProcessingTools();
-    // Normalize acts on the editor's live selection, so the host only asks;
-    // EditorPane owns the options dialog and the transform.
+    // Normalize remains an editor-owned overlay and is unavailable while the
+    // video export page owns the center workspace.
     Q_INVOKABLE void openNormalizeWholeChart();
     Q_INVOKABLE void openBatchExport();
     Q_INVOKABLE bool openCoverExport(int difficultyId = 0);

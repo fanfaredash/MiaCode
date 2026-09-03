@@ -17,7 +17,11 @@ Dialog {
     focus: true
     closePolicy: Popup.CloseOnEscape
     margins: Theme.dialogMargin
-    padding: Theme.dialogPadding
+    leftPadding: Theme.dialogPadding
+    rightPadding: Theme.dialogPadding
+    topPadding: Theme.panelPadding
+    bottomPadding: Theme.panelPadding
+    spacing: 0
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
 
@@ -33,6 +37,10 @@ Dialog {
         appearing: false
         initialOpacity: root.opacity
     }
+    Overlay.modal: Rectangle {
+        color: Theme.modalScrimColor
+        opacity: root.opacity
+    }
     onAboutToShow: {
         enterTransition.initialOpacity = root.closing ? root.opacity : 0
         root.closing = false
@@ -44,16 +52,22 @@ Dialog {
         popup: root
         tintColor: Theme.dialogTintColor
         blurRadius: Theme.dialogBlurRadius
+        shadowBlur: 0.68
+        shadowOpacity: Theme.dialogShadowOpacity
+        shadowVerticalOffset: 3
     }
 
     header: Label {
         text: root.title
         visible: root.title.length > 0
-        color: Theme.colors.text.active
+        color: Theme.colors.text.heading
         elide: Text.ElideRight
-        font.bold: true
-        padding: Theme.dialogPadding
-
+        font.pixelSize: Theme.headingFontSize
+        font.weight: Font.DemiBold
+        leftPadding: Theme.dialogPadding
+        rightPadding: Theme.dialogPadding
+        topPadding: Theme.dialogPadding
+        bottomPadding: Theme.panelPadding
     }
 
     contentItem: ScrollView {

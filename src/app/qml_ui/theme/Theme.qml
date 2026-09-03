@@ -261,8 +261,10 @@ QtObject {
     readonly property int popupBlurRadius: 64
     readonly property real dialogTintOpacity: darkTheme ? 0.94 : 0.90
     readonly property int dialogBlurRadius: 96
+    readonly property color modalScrimColor: Qt.rgba(0, 0, 0, 0.5)
     readonly property real popupBlurScale: 0.5
     readonly property real popupShadowOpacity: darkTheme ? 0.28 : 0.14
+    readonly property real dialogShadowOpacity: darkTheme ? 0.34 : 0.18
     readonly property real followHighlightOpacity: darkTheme ? 0.5 : 0.65
     readonly property color popupTintColor: {
         const c = Qt.color(colors.background.elevated)

@@ -318,6 +318,12 @@ Live: `requestTimelineSlowRefresh` → `parseForTimeline` → analysis refresh. 
 `onNormalizeWholeChart` → `normalizeChartText` → `buildValidationReport`. A marker-field change
 affects both live diagnostics and exported overlays.
 
+QML normalization route: `ActivityBar` tools popup or `MainMenu` →
+`QmlEditorPageHost::openNormalizeWholeChart` → `MainView`'s window-level
+`NormalizeOptionsDialog` → `MainSplitView` / `EditorPane` → `SourceEditor::applyNormalization`.
+The page host rejects this route while video export is active; latency and editor pages stay
+mounted beneath the dialog.
+
 ## 11. Common "change here, check there" pairs
 
 - `SimaiNativeParser` → `ValidationFlow.cpp`, `PreviewTimelineFlow.cpp`,
@@ -372,6 +378,13 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
 - Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's preview
   state, then re-dispatches audio levels (see below). `setOnPage` flips `onPage_` BEFORE running
   install/teardown, so the level dispatch reads the correct mode at both edges.
+- While `latencySandboxAuditionActive_` is true, `PlaybackCoordinator::scheduleTimelineRefresh`
+  rejects normal-difficulty rebuilds and the slow-refresh completion gate rejects an older
+  in-flight result. BPM/offset/clock-count writes still update `ChartWorkspace`; the sandbox's
+  own hot-apply rebuild remains the sole preview/timeline source until page exit.
+  `DocumentSessionHost::syncRuntimeFromWorkspace` also treats the workspace/session active-
+  difficulty mismatch as intentional while latency or export audition owns the source; otherwise
+  a metadata write would route through `switchToDifficultyField` and clear the audition scene.
 - **SFX-level isolation — two modes share ONE `previewSfxRuntime_`, and the runtime levels are a PURE
   FUNCTION of the current mode, NOT a snapshot that is restored on exit.** Single dispatch entry:
   `Session::applyPreviewAudioSettingsToRuntime()`, which branches on

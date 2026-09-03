@@ -13,7 +13,7 @@ AppDialog {
 
     title: UiText.text("音视频处理")
     preferredWidth: 560
-    preferredHeight: Theme.dialogHeight
+    preferredHeight: implicitHeight
     footer: DialogFooter {
         cancelText: UiText.text("关闭")
         onRejected: root.reject()
@@ -56,48 +56,33 @@ AppDialog {
 
         ToolRow {
             objectName: "mediaToolSampleRate"
-            label: UiText.text("采样率")
-            description: UiText.text("将 track.mp3 转换为 44100Hz，并自动备份原文件。")
-            onClicked: {
-                root.close()
-                root.mediaTools.convertTrackTo44100Hz()
-            }
+            label: UiText.text("转换采样率")
+            description: UiText.text("将 track.mp3 的采样率转换为 44100 Hz，并自动备份原文件。")
+            onClicked: root.mediaTools.convertTrackTo44100Hz()
+        }
+        ToolRow {
+            objectName: "mediaToolPrependTrack"
+            label: UiText.text("音频前置空白")
+            description: UiText.text("在 track.mp3 开头插入指定时长的空白音频，并自动备份原文件。")
+            onClicked: root.prependRequested(true)
+        }
+        ToolRow {
+            objectName: "mediaToolPrependPv"
+            label: UiText.text("视频前置黑幕")
+            description: UiText.text("在背景视频开头插入指定时长的黑幕，并自动备份原文件。")
+            onClicked: root.prependRequested(false)
         }
         ToolRow {
             objectName: "mediaToolCompressVideo"
             label: UiText.text("压缩视频")
-            description: UiText.text("将背景视频压缩到 20 MiB 以内，并自动备份原文件。")
-            onClicked: {
-                root.close()
-                root.mediaTools.compressBackgroundVideo()
-            }
+            description: UiText.text("将背景视频压缩至 20 MiB 以内，并自动备份原文件。")
+            onClicked: root.mediaTools.compressBackgroundVideo()
         }
         ToolRow {
             objectName: "mediaToolBatchPv"
-            label: UiText.text("批量压缩 PV")
-            description: UiText.text("扫描一个目录，批量压缩其中的背景视频。")
-            onClicked: {
-                root.close()
-                batchPage.open()
-            }
-        }
-        ToolRow {
-            objectName: "mediaToolPrependTrack"
-            label: UiText.text("音轨前置静音")
-            description: UiText.text("在 track.mp3 开头插入一段静音，并自动备份原文件。")
-            onClicked: {
-                root.close()
-                root.prependRequested(true)
-            }
-        }
-        ToolRow {
-            objectName: "mediaToolPrependPv"
-            label: UiText.text("PV 前置黑屏")
-            description: UiText.text("在背景视频开头插入一段黑幕，并自动备份原文件。")
-            onClicked: {
-                root.close()
-                root.prependRequested(false)
-            }
+            label: UiText.text("批量压缩视频")
+            description: UiText.text("选择目录并批量压缩其中的背景视频。")
+            onClicked: batchPage.open()
         }
     }
 
