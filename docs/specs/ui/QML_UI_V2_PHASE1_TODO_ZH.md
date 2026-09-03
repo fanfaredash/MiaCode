@@ -509,6 +509,63 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 **未处理**：定位这个竞争需要 QML 加载路径的排查，不属当前架构主线范围。
 
+### 元数据页 UI 反馈待办（2026-09-04 所有者截图标注）
+
+来源：所有者在应用截图上标注的三组反馈（2026-09-04），照实记录，未做需求扩展。
+
+- [ ] **1. 三处标签统一改为「谱面信息」**
+  现状：三处显示不一致——
+  - 左侧「谱面」侧栏条目：`src/app/qml_ui/sidebar/ChartFieldSidebar.qml:43`，
+    `text: UiText.text("元数据")`，显示「元数据」。
+  - 编辑区顶部标签页：`src/app/qml_ui/editor/EditorTabBar.qml:61`，
+    `titleForKey()` 里 `return UiText.text("元数据")`，显示「元数据」。
+  - 元数据表单的段标题：`src/app/qml_ui/editor/EditorPane.qml:315`，
+    `text: UiText.text("谱面信息设置")`，显示「谱面信息设置」。
+
+  要改成：三处统一显示「谱面信息」。
+
+  背景：上一轮曾按所有者审核把段标题从「元数据」改回 v1 的「谱面信息设置」；这次所有者
+  进一步定为三处统一用「谱面信息」——比 v1（谱面信息设置）和当前 v2（元数据）都短，
+  是新决定，不是回退。
+
+  落点提示：三处 QML 都是通过 `UiText.text(...)` 查表取文案，本体不在 QML 里。
+  「元数据」是 `qmlOnlyEntries()` 里的字面量表条目（`src/app/ui/UiText.cpp:4316`：
+  `{QStringLiteral("元数据"), {QStringLiteral("Metadata"), QStringLiteral("メタデータ")}}`）；
+  「谱面信息设置」是键值表条目 `editor.metadata`（`UiText.cpp:1727`）和 `sidebar.metadata`
+  （`UiText.cpp:1777`），两个键当前指向同一中文文案。改动前要确认这两个键有没有被
+  上述三处之外的地方引用，避免连带改动。
+
+- [ ] **2. `clock_count` 字段标签改为「拍数」**
+  现状：`src/app/qml_ui/editor/EditorPane.qml:347`，`label: UiText.text("clock_count")`；
+  文案本体在 `src/app/ui/UiText.cpp:4302`：
+  `{QStringLiteral("clock_count"), {QStringLiteral("clock_count"), QStringLiteral("clock_count")}}`，
+  中/英/日三语当前都显示字面 `clock_count`。
+
+  要改成：中文标签改为「拍数」。
+
+  注意：加这个字段时曾有一条约束「不要把 clock_count 译成中文」，那是当时的指示；
+  现在所有者明确要中文标签「拍数」，**以本条为准**，覆盖前述约束。
+
+- [ ] **3. 「其他 &xx 字段」不应再重复显示 `&clock_count=4`**
+  现状：`clock_count` 已有专用输入框（`EditorPane.qml:345-349`），但同一表单下方
+  「其他 &xx 字段」自由编辑区（绑定 `documentSession.metadataExtraText`，见
+  `src/app/qml_ui/QmlDocumentModel.cpp:159` 的 `metadataExtraText()`，经
+  `src/app/v2/ChartWorkspace.cpp:196` 调用 `SimaiDocument::parseUnmanagedFields`）
+  仍会把 `clock_count` 当「未受管字段」列出，与上方的专用框重复。
+
+  根因 / 过滤逻辑位置：受管字段名单在
+  `src/core/chart/document/SimaiDocument.cpp:55-69` 的
+  `isReservedMetadataKey(const QString& key)`；当前判定为受管的只有
+  `title` / `artist` / `first` / `des` / `video` / `kBookmarksFieldKey`
+  （行 57-59），以及 `lv_N` / `des_N` / `inote_N` 难度后缀字段（行 64-66）。
+  `clock_count` 不在其中，因此会被 `parseUnmanagedFields`
+  （`SimaiDocument.cpp:234-246`，内部靠 `isReservedMetadataKey` 过滤）保留进
+  未受管字段列表。
+
+  要改成：把 `clock_count` 加入 `isReservedMetadataKey` 的受管字段判定
+  （`SimaiDocument.cpp:57-59` 那一行 `if`），使其和 `title`/`artist`/`first`/`des`/`video`
+  一样被排除出「其他 &xx 字段」。
+
 ### 待所有者裁决（2026-09-03，均不阻塞推进）
 
 推进 4.9d/4.9e 过程中查实、但需要产品或架构决定的四项。**都已查证到可以决策的程度，未擅自处理。**
