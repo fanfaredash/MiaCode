@@ -7,6 +7,7 @@
 #include "app/v2/PlaybackDocumentPort.h"
 #include "app/v2/PlaybackPreferencesPort.h"
 #include "app/v2/PlaybackPreviewPort.h"
+#include "app/v2/PlaybackStateAuthority.h"
 #include "app/v2/PlaybackValidationPort.h"
 #include "app/v2/PreviewPlaybackPort.h"
 #include "audio/PreviewAudioDeviceChangePolicy.h"
@@ -31,6 +32,7 @@ namespace miacode::runtime {
 // Session (Session IS-A QObject); ValidationPortSpec-style specs may pass any
 // QObject, since nothing here ever casts owner_ back to a concrete type.
 class PlaybackCoordinator final : public miacode::v2::PlaybackControl,
+                                  public miacode::v2::PlaybackStateAuthority,
                                   public miacode::v2::PreviewPlaybackPort,
                                   public miacode::v2::AudioClockSource {
 public:
@@ -287,6 +289,14 @@ public:
     void endScrub(double second, bool centerView);
     void setPlaybackRate(double rate) override;
     void nudgePlaybackRate(int direction) override;
+
+    // ---- miacode::v2::PlaybackStateAuthority ----
+    // See PlaybackStateAuthority.h: non-command state writes, as opposed to
+    // the user-transport-command overrides above.
+    void restorePlaybackRate(double rate) override;
+    void reanchorObservedSecond(double second) override;
+    void repositionSilently(double second, const char* reason) override;
+
     double playbackRate() const;
     QString playbackRateLabel() const;
     QObject* previewRuntimeObject() const;

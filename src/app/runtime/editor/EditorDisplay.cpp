@@ -482,7 +482,12 @@ void miacode::runtime::EditorHost::resetPortablePreviewSettingsToDefaults()
     state_.previewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     state_.softwarePreviewTimingSettings_ = PreviewTimingSettings();
     state_.previewTimingSettings_ = state_.softwarePreviewTimingSettings_;
-    state_.previewPlaybackRate_ = 1.0;
+    // Non-command write: the preview backend has no rate to command yet at
+    // reset/restore time — see PlaybackStateAuthority.h for why this cannot
+    // go through PlaybackControl::setPlaybackRate().
+    if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
+        authority->restorePlaybackRate(1.0);
+    }
     state_.showSlideTracks_ = true;
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
@@ -528,10 +533,13 @@ void miacode::runtime::EditorHost::resetPortablePreviewSettingsToDefaults()
 void miacode::runtime::EditorHost::applyPortablePreviewSettings(const QJsonObject& preview)
 {
     if (preview.value("preview_playback_rate").isDouble()) {
-        state_.previewPlaybackRate_ = qMax(
-            0.25,
-            preview.value("preview_playback_rate").toDouble(state_.previewPlaybackRate_)
-        );
+        // Non-command write: restoring the persisted rate, same as the reset
+        // above — see PlaybackStateAuthority.h. The 0.25 floor now lives in
+        // PlaybackCoordinator::restorePlaybackRate.
+        if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
+            authority->restorePlaybackRate(
+                preview.value("preview_playback_rate").toDouble(state_.previewPlaybackRate_));
+        }
     }
     if (preview.value("show_slide_tracks").isBool()) {
         state_.showSlideTracks_ = preview.value("show_slide_tracks").toBool(state_.showSlideTracks_);

@@ -341,6 +341,7 @@ Session::~Session()
     applicationServices_.setTimelineSurface(nullptr);
     applicationServices_.setPreviewSurface(nullptr);
     applicationServices_.setPlaybackControl(nullptr);
+    applicationServices_.setPlaybackStateAuthority(nullptr);
     applicationServices_.setPreferencesStore(nullptr);
     applicationServices_.setDocumentBridge(nullptr);
     applicationServices_.setExportPageSession(nullptr);

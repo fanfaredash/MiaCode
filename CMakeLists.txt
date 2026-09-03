@@ -126,6 +126,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/PreferencesStore.h
     src/app/v2/PreviewSurface.h
     src/app/v2/PlaybackControl.h
+    src/app/v2/PlaybackStateAuthority.h
     src/app/v2/SessionGeneration.h
     src/app/v2/AudioClockSource.h
     src/app/v2/PreviewPlaybackPort.h
@@ -1912,6 +1913,18 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/video/PreviewRenderSettings.h
         LIBS Qt6::Core Qt6::Test
         INCLUDES src src/core/video
+    )
+
+    # Stage 4.9e-3: the coordinator's second playback contract, alongside
+    # PlaybackControl — non-command state writes rather than user transport
+    # commands (see PlaybackStateAuthority.h). Linking Core+Test only (no Gui)
+    # is the same link-time guarantee as the four port specs above.
+    miacode_add_dev_tool(playback_state_authority_spec TEST
+        SOURCES
+            src/tools/v2/PlaybackStateAuthoritySpec.cpp
+            src/app/v2/PlaybackStateAuthority.h
+        LIBS Qt6::Core Qt6::Test
+        INCLUDES src
     )
 
     # Stage 4.6: Timeline commands receive their own identity before the

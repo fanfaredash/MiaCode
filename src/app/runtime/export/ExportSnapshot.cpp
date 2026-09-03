@@ -1,6 +1,8 @@
 #include "runtime/export/VideoExportHost.h"
 #include "runtime/Shared.h"
 
+#include "app/v2/PlaybackStateAuthority.h"
+
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -495,8 +497,11 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
     // different one) → start at 0; 片头-on then shows the intro head as intended.
     session_.exportPreviewEntrySeedSecond_ = -1.0;
     session_.lastExportAuditionDifficultyId_ = difficultyId;
-    miacode::runtime::shared::writePreviewPauseSecond(
-        session_.pauseSecond_, startSecond, session_.playing_, "install_export_preview_audition_scene");
+    // Non-command write: installing the audition scene at a carried-over or
+    // default position, not a seek — see PlaybackStateAuthority.h.
+    if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
+        authority->repositionSilently(startSecond, "install_export_preview_audition_scene");
+    }
     if (session_.timelineQuickStateBridge_ != nullptr) {
         session_.timelineQuickStateBridge_->setPlayheadSeconds(startSecond, false);
     }

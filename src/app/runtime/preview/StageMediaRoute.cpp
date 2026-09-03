@@ -351,8 +351,15 @@ void miacode::runtime::StageMediaHost::ensurePreviewStageMediaHostInitialized()
             refreshPreviewStageMediaRouteDebugState(false);
             return;
         }
-        state_.qtPreviewStartSecond_ = second;
-        state_.qtPreviewElapsed_.restart();
+        // Non-command write: the media backend is reporting where it actually
+        // paused, not answering a seek — see PlaybackStateAuthority.h. The
+        // guard above (playing_ / pausedSeekMediaPending_) is duplicated
+        // inside reanchorObservedSecond itself, so the write stays safe for
+        // any future caller of the port; this call site keeps its own copy
+        // only to gate the diagnostics above.
+        if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
+            authority->reanchorObservedSecond(second);
+        }
         refreshPreviewStageMediaRouteDebugState(false);
     });
     QObject::connect(

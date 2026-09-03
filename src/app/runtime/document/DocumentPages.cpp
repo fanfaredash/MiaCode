@@ -2,6 +2,8 @@
 #include "runtime/Shared.h"
 #include "runtime/editor/EditorHost.h"
 
+#include "app/v2/PlaybackStateAuthority.h"
+
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
@@ -267,8 +269,11 @@ bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
     state_.pendingPreviewPlaybackRevision_ = 0;
     state_.pendingPreviewPlaybackDifficultyId_ = 0;
     state_.pendingPreviewPlaybackSecond_ = 0.0;
-    miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, restorePreviewSecond, state_.playing_, "switch_to_latency_field");
+    // Non-command write: a page switch relocating the paused playhead, not a
+    // seek — see PlaybackStateAuthority.h.
+    if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
+        authority->repositionSilently(restorePreviewSecond, "switch_to_latency_field");
+    }
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
     populateMetadataPage();
@@ -540,8 +545,13 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->waveformData() : nullptr;
     clearTimelineAndPreview();
     if (restoreSwitchView) {
-        miacode::runtime::shared::writePreviewPauseSecond(
-            state_.pauseSecond_, restorePreviewSecond, state_.playing_, "switch_to_difficulty_field");
+        // Non-command write: clearTimelineAndPreview() just cleared
+        // pauseSecond_ implicitly to 0 via the timeline reset above; this
+        // overwrites it with the position carried across the switch. Must
+        // stay a plain, unconditional write — see PlaybackStateAuthority.h.
+        if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
+            authority->repositionSilently(restorePreviewSecond, "switch_to_difficulty_field");
+        }
         state_.pendingDifficultySwitchPreviewRestore_ = true;
         state_.pendingDifficultySwitchPreviewRestoreRevision_ = state_.timelineRevision_ + 1;
         state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = difficultyId;
@@ -646,8 +656,11 @@ void miacode::runtime::DocumentSessionHost::loadDocument()
     resetAutosaveState(snapshot.sourceText);
     state_.documentDirty_ = snapshot.dirty;
     state_.currentFieldDirty_ = false;
-    miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, 0.0, state_.playing_, "load_document");
+    // Non-command write: a fresh document starts the playhead at 0 — see
+    // PlaybackStateAuthority.h.
+    if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
+        authority->repositionSilently(0.0, "load_document");
+    }
     state_.lastExportAuditionDifficultyId_ = 0;
     state_.activeDifficultyId_ = snapshot.activeDifficultyId;
     if (SimaiDocument::isDifficultyId(state_.activeDifficultyId_)) {

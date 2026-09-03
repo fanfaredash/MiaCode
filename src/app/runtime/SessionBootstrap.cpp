@@ -200,6 +200,7 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     playback_->setDocumentRevision(initialWorkspaceRevision);
     timelineHost_->setDocumentRevision(initialWorkspaceRevision);
     applicationServices_.setPlaybackControl(playback_.get());
+    applicationServices_.setPlaybackStateAuthority(playback_.get());
     connect(&applicationServices_.workspace(), &miacode::v2::ChartWorkspace::changed,
             this, [this](quint64 revision) {
                 documents_->syncRuntimeFromWorkspace();

@@ -23,6 +23,7 @@ class LatencyEngine;
 class TimelineSurface;
 class PreviewSurface;
 class PlaybackControl;
+class PlaybackStateAuthority;
 class PreferencesStore;
 class DocumentBridge;
 
@@ -128,6 +129,15 @@ public:
     PlaybackControl* playbackControl() const { return playbackControl_; }
     void setPlaybackControl(PlaybackControl* control) { playbackControl_ = control; }
 
+    // The second playback contract, same slot shape as playbackControlSlot()
+    // just above: non-command state writes (see PlaybackStateAuthority.h)
+    // rather than user transport commands. Also points at the
+    // PlaybackCoordinator; kept as its own slot so a consumer that only needs
+    // one of the two contracts cannot reach the other through it.
+    PlaybackStateAuthority*& playbackStateAuthoritySlot() { return playbackStateAuthority_; }
+    PlaybackStateAuthority* playbackStateAuthority() const { return playbackStateAuthority_; }
+    void setPlaybackStateAuthority(PlaybackStateAuthority* authority) { playbackStateAuthority_ = authority; }
+
     PreferencesStore*& preferencesStoreSlot() { return preferencesStore_; }
     PreferencesStore* preferencesStore() const { return preferencesStore_; }
     void setPreferencesStore(PreferencesStore* store) { preferencesStore_ = store; }
@@ -166,6 +176,7 @@ private:
     TimelineSurface* timelineSurface_ = nullptr;
     PreviewSurface* previewSurface_ = nullptr;
     PlaybackControl* playbackControl_ = nullptr;
+    PlaybackStateAuthority* playbackStateAuthority_ = nullptr;
     PreferencesStore* preferencesStore_ = nullptr;
     DocumentBridge* documentBridge_ = nullptr;
     QObject* exportPageSession_ = nullptr;

@@ -2,6 +2,7 @@
 
 #include "LatencyTestChartBuilder.h"
 
+#include "app/v2/PlaybackStateAuthority.h"
 #include "common/ChartClockCount.h"
 #include "runtime/Session.h"
 #include "runtime/Shared.h"
@@ -269,15 +270,12 @@ void LatencySandboxController::applyPlayheadToScene(double seconds)
         return;
     }
     const double clamped = qMax(0.0, seconds);
-    // Goes through the single writer like every other write to this member: the
-    // sandbox's hot-apply path re-anchors the playhead when BPM / offset /
-    // subdivision change mid-session, so it can move the pause second BACKWARD
-    // while paused — exactly the move the log line exists to attribute.
-    miacode::runtime::shared::writePreviewPauseSecond(
-        owner_->state_.pauseSecond_,
-        clamped,
-        owner_->state_.playing_,
-        "latency_sandbox_apply_playhead");
+    // Non-command write: the sandbox's hot-apply path re-anchors the playhead
+    // when BPM / offset / subdivision change mid-session, which can move the
+    // pause second BACKWARD while paused — see PlaybackStateAuthority.h.
+    if (auto* authority = owner_->applicationServices_.playbackStateAuthority(); authority != nullptr) {
+        authority->repositionSilently(clamped, "latency_sandbox_apply_playhead");
+    }
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
         owner_->state_.timelineQuickStateBridge_->setPlayheadSeconds(clamped, false);
     }
