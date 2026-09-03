@@ -15,6 +15,8 @@ ComboBox {
     rightPadding: 28
     hoverEnabled: true
 
+    readonly property FontMetrics textMetrics: FontMetrics { font: root.font }
+
     contentItem: Text {
         leftPadding: 0
         rightPadding: 0
@@ -54,13 +56,12 @@ ComboBox {
     background: Rectangle {
         implicitHeight: root.implicitHeight
         radius: Theme.controlRadius
-        color: root.enabled
-               ? Theme.surfaceColor("input", Theme.colors.background.surface)
-               : Theme.colors.background.elevated
-        border.width: Theme.controlBorderWidth
-        border.color: !root.enabled ? Theme.colors.border.normal
-                     : (root.visualFocus || root.hovered || root.down) ? Theme.colors.accent.primary
-                     : Theme.colors.border.control
+        color: Theme.overlayColor(root.enabled
+               ? Theme.colors.background.surface
+               : Theme.colors.background.elevated)
+        border.width: root.enabled && (root.visualFocus || root.hovered || root.down)
+                      ? Theme.controlBorderWidth : 0
+        border.color: Theme.colors.accent.primary
     }
 
     delegate: ChromeRow {
@@ -74,10 +75,19 @@ ComboBox {
     }
 
     popup: AppDropdownPanel {
+        property real optionWidth: 0
+
         y: root.height + 2
-        width: Math.max(root.width, 100)
-        padding: Theme.menuPadding
+        implicitWidth: Math.max(root.width, 100, optionWidth + leftPadding + rightPadding)
+        width: Math.min(implicitWidth, Overlay.overlay ? Overlay.overlay.width : implicitWidth)
         implicitHeight: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, 260)
+
+        onAboutToShow: {
+            let widest = 0
+            for (let i = 0; i < root.count; ++i)
+                widest = Math.max(widest, root.textMetrics.advanceWidth(root.textAt(i)))
+            optionWidth = Math.ceil(widest) + 2 * Theme.rowPaddingX
+        }
 
         contentItem: ListView {
             clip: true

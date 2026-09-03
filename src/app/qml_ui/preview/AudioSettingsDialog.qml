@@ -10,13 +10,9 @@ import MiaCode.UI
 // starting playback. The model owns the sample runtime and the settle delay; the
 // page only has to say when a handle is down (audition waits for the release)
 // and when the panel is gone (the runtime goes with it).
-Dialog {
+AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     required property var audioSettings
 
     // The channel set is fixed, so the Repeater is driven by the key list and
@@ -50,19 +46,14 @@ Dialog {
     }
 
     title: UiText.text("音频设置")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(520, Overlay.overlay ? Overlay.overlay.width - 48 : 520)
+    preferredWidth: 520
+    preferredHeight: Theme.dialogHeight
     footer: DialogFooter {
         cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
-    closePolicy: Popup.CloseOnEscape
 
-    // Drag by the title bar: these change what the preview shows.
-    DialogDrag { dialog: root }
-
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 8
 
         Repeater {

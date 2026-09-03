@@ -109,9 +109,7 @@ Item {
             anchors.fill: parent
             anchors.margins: -4
             radius: 3
-            color: Theme.colors.background.elevated
-            border.width: 1
-            border.color: Theme.colors.border.control
+            color: Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
             z: -1
         }
     }

@@ -160,6 +160,7 @@ Item {
         }
 
         background: HoverChrome {
+            stateColors: root.panelTab ? Theme.colors.popupState : Theme.colors.state
             contentHeight: Math.ceil(tabMetrics.height)
             selected: root.active
             hovered: tabButton.hovered && !closeButton.hovered

@@ -375,7 +375,8 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     const miacode::preview::scene::PreviewFrameState& state,
     const QSize& renderSize,
     QQuickWindow* window,
-    PreviewTextureRepository* textures
+    PreviewTextureRepository* textures,
+    const QColor& backgroundColor
 ) const
 {
     Q_UNUSED(window);
@@ -416,7 +417,7 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     if (usesExternalMedia && state.media.stageMediaAvailable) {
         root->baseNode->setColor(Qt::transparent);
     } else {
-        root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : QColor(QStringLiteral("#191A1B")));
+        root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : backgroundColor);
     }
 
     if ((!hasMedia || usesExternalMedia) && textures != nullptr) {

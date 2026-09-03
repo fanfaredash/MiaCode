@@ -26,7 +26,8 @@ MenuItem {
     // insert it into Menu and render the binding.
     property string shortcutText: ""
     property int difficultyId: 0
-    readonly property real textWidth: label.contentWidth
+    implicitWidth: Math.ceil(label.implicitWidth + chromeWidth
+                             + (shortcutLabel.text.length > 0 ? shortcutLabel.implicitWidth + row.spacing : 0))
     readonly property real chromeWidth: leftPadding + rightPadding
                                         + (checkable ? 12 + row.spacing : 0)
                                         + (difficultyId > 0 ? Theme.difficultySwatchSize + row.spacing : 0)
@@ -64,7 +65,7 @@ MenuItem {
         ControlsImpl.MnemonicLabel {
             id: label
             Layout.fillWidth: true
-            Layout.preferredWidth: contentWidth
+            Layout.preferredWidth: implicitWidth
             text: root.text
             font: root.font
             color: root.labelColor
@@ -73,15 +74,16 @@ MenuItem {
         }
 
         Text {
+            id: shortcutLabel
+            Layout.minimumWidth: implicitWidth
             // Static rows receive their spelling from an Action; dynamic rows
             // provide shortcutText directly because Repeater must create a
             // visual MenuItem, not a non-visual Action.
-            readonly property string shortcutLabel:
+            text:
                 root.shortcutText.length > 0
                     ? root.shortcutText
                     : (root.action && root.action.shortcutText ? root.action.shortcutText : "")
-            visible: shortcutLabel.length > 0
-            text: shortcutLabel
+            visible: text.length > 0
             font: root.font
             color: Theme.colors.text.disabled
             opacity: root.enabled ? 1 : 0.55

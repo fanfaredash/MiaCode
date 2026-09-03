@@ -27,7 +27,7 @@ CheckBox {
         Rectangle {
             anchors.fill: parent
             radius: 4
-            color: root.checked ? Theme.colors.accent.primary : "transparent"
+            color: Theme.overlayColor(root.checked ? Theme.colors.accent.primary : "transparent")
             border.width: 1
             border.color: root.checked || root.hovered
                 ? Theme.colors.accent.primary

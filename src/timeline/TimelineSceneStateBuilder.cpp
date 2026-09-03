@@ -27,7 +27,6 @@ using miacode::timeline::TimelineThemeColors;
 constexpr int kPlayableLaneCount = 8;
 constexpr int kLaneCount = kPlayableLaneCount + 1;
 constexpr int kHeaderHeight = 26;
-constexpr int kTimelineBottomPadding = 8;
 constexpr int kLaneHeight = 20;
 constexpr int kTimelineLeftMargin = 32;
 constexpr int kTimelineRightPadding = 24;
@@ -360,7 +359,7 @@ TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& r
     double contentScale = normalizedContentScale(request.contentScale);
     if (request.fitViewportHeight) {
         const double viewportScale =
-            static_cast<double>(request.viewportSize.height() - kHeaderHeight - kTimelineBottomPadding)
+            static_cast<double>(request.viewportSize.height() - kHeaderHeight)
                 / (kLaneCount * kLaneHeight);
         contentScale = qBound(0.5, viewportScale, 1.0);
     }
@@ -371,7 +370,7 @@ TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& r
     if (request.fitViewportHeight) {
         metrics.timelineHeight = qMax<qreal>(
             0.0,
-            static_cast<qreal>(request.viewportSize.height() - metrics.timelineTop - kTimelineBottomPadding));
+            static_cast<qreal>(request.viewportSize.height() - metrics.timelineTop));
         metrics.laneHeight = metrics.timelineHeight / static_cast<qreal>(kLaneCount);
     } else {
         const double gridScale = gridContentScale(request.contentScale);
@@ -520,43 +519,21 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     const TimelineThemeColors theme = timelineThemeColors();
     const QFont laneLabelFont = timelineLaneLabelFont(request.headerLineNumberFont, state.contentScale);
     const QFontMetricsF laneLabelMetrics(laneLabelFont);
+    // Surface fills cover the full viewport below the header.
+    // Content layers keep their own timeline clips.
+    const qreal backgroundHeight = request.viewportSize.height() - state.timelineTop;
     state.baseBackgroundRects.append(TimelineSceneRect{
-        QRectF(0.0, 0.0, request.viewportSize.width(), request.viewportSize.height()),
-        theme.window,
+        QRectF(0.0, 0.0, request.viewportSize.width(), state.timelineTop),
+        theme.header,
     });
-    {
-        // Keep scrolling content below the opaque number strip.
-        QColor opaqueHeader = theme.header;
-        opaqueHeader.setAlpha(255);
-        state.baseBackgroundRects.append(TimelineSceneRect{
-            QRectF(0.0, 0.0, request.viewportSize.width(), state.timelineTop),
-            opaqueHeader,
-        });
-    }
-    {
-        // Phase 9a-fix4 — opaque sidebar (matches the frameRect below).
-        QColor opaqueSidebar = theme.sidebar;
-        opaqueSidebar.setAlpha(255);
-        state.baseBackgroundRects.append(TimelineSceneRect{
-            QRectF(0.0, state.timelineTop, state.timelineLeft, state.timelineHeight),
-            opaqueSidebar,
-        });
-    }
     state.baseBackgroundRects.append(TimelineSceneRect{
-        QRectF(state.timelineLeft, state.timelineTop, request.viewportSize.width() - state.timelineLeft, state.timelineHeight),
+        QRectF(0.0, state.timelineTop, state.timelineLeft, backgroundHeight),
+        theme.sidebar,
+    });
+    state.baseBackgroundRects.append(TimelineSceneRect{
+        QRectF(state.timelineLeft, state.timelineTop, request.viewportSize.width() - state.timelineLeft, backgroundHeight),
         theme.base,
     });
-    {
-        // Phase 9a-fix4 — force the sidebar fill to fully opaque alpha
-        // so notes that scroll-translate into viewport-X < timelineLeft
-        // can't bleed through during scroll.
-        QColor opaqueSidebar = theme.sidebar;
-        opaqueSidebar.setAlpha(255);
-        const QRectF sidebarRect(
-            0.0, state.timelineTop - 1.0,
-            state.timelineLeft + 1.0, state.timelineHeight + 2.0);
-        state.frameRects.append(TimelineSceneRect{sidebarRect, opaqueSidebar});
-    }
     // Outer 1px box (top/left/right/bottom) is omitted: the QML shell already
     // draws pane edges (SplitHandle, StatusBar). Keeping those strokes here
     // stacks two 1px lines at every embed seam.

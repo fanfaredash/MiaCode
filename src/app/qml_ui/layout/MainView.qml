@@ -6,6 +6,7 @@ Item {
     id: root
 
     required property var hostWindow
+    required property Item backgroundSource
     required property var applicationContext
     readonly property var documentSession: applicationContext.document
     readonly property var analysisSession: applicationContext.analysis
@@ -207,6 +208,9 @@ Item {
             MainSplitView {
                 id: splitView
                 anchors.fill: parent
+                backgroundSource: root.backgroundSource
+                backgroundOffset: root.mapToItem(root.backgroundSource,
+                                                 mainViewHost.x, mainViewHost.y)
                 viewState: state
         documentSession: root.documentSession
         analysisSession: root.analysisSession

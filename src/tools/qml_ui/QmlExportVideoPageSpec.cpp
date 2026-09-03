@@ -741,10 +741,15 @@ bool verifyRequestHostLoop(QTextStream& err)
                               Q_ARG(QString, QStringLiteral("notice-1")),
                               Q_ARG(QVariant, QVariant(notice)));
     QCoreApplication::processEvents();
+    // The notice dialog became a ChoiceDialog upstream, which names the same two
+    // slots `message` and `details` where MessageDialog called them `text` and
+    // `informativeText`. Title, body and detail block all still render — only the
+    // property names moved — so this follows the rename without loosening: it
+    // still fails if any of the three stops reaching the dialog.
     ok &= require(noticeDialog->property("title").toString() == QStringLiteral("Batch export")
-                      && noticeDialog->property("text").toString()
+                      && noticeDialog->property("message").toString()
                           == QStringLiteral("2 of 3 exported")
-                      && noticeDialog->property("informativeText").toString()
+                      && noticeDialog->property("details").toString()
                           == QStringLiteral("failed: chart-c"),
                   QStringLiteral("a notice renders through the QML message dialog with its detail block"),
                   err);

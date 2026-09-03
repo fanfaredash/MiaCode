@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QColor>
 #include <QMetaObject>
 #include <QMutex>
 #include <QPointer>
@@ -41,6 +42,7 @@ class PreviewQuickSceneRoot : public QQuickItem
 {
     Q_OBJECT
     Q_PROPERTY(QObject* runtime READ runtimeObject WRITE setRuntimeObject NOTIFY runtimeChanged)
+    Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY backgroundColorChanged)
 
 public:
     explicit PreviewQuickSceneRoot(QQuickItem* parent = nullptr);
@@ -51,12 +53,15 @@ public:
     void setRuntimeObject(QObject* runtimeObject);
     void setFrameState(const miacode::preview::scene::PreviewFrameState* frameState);
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
+    QColor backgroundColor() const { return backgroundColor_; }
+    void setBackgroundColor(const QColor& color);
 
     void invalidateTextureCache();
     PreviewTextureStats textureStats() const;
 
 signals:
     void runtimeChanged();
+    void backgroundColorChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData) override;
@@ -80,6 +85,7 @@ private:
     void noteFirstLayerDraws();
 
     QPointer<PreviewRuntime> runtime_;
+    QColor backgroundColor_{QStringLiteral("#191A1B")};
     Qt::MouseButton touchPadAuthoringPressedButton_ = Qt::NoButton;
     QMetaObject::Connection runtimeUpdateConnection_;
     QMetaObject::Connection frameSwapConnection_;

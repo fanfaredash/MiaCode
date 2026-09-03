@@ -17,8 +17,8 @@ Item {
 
     readonly property color fillColor: !root.enabled ? root.baseColor
         : root.pressed ? root.stateColors.pressed
-        : (root.selected || root.focused) ? root.stateColors.selected
         : root.hovered ? root.stateColors.hover
+        : (root.selected || root.focused) ? root.stateColors.selected
         : root.baseColor
 
     Rectangle {
@@ -29,6 +29,6 @@ Item {
         height: Math.min(root.height - 2 * Theme.chromeInsetY,
                          Math.max(Theme.chromeMinSize, root.contentHeight + 2 * Theme.chromePadding))
         radius: Theme.controlRadius
-        color: root.fillColor
+        color: Theme.overlayColor(root.fillColor)
     }
 }

@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property var documentSession
@@ -11,7 +11,6 @@ Rectangle {
     required property var timelineSession
 
     implicitHeight: Theme.compactControlHeight + 2
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
 
     RowLayout {
         anchors.fill: parent

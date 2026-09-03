@@ -9,6 +9,8 @@ import "qrc:/preview/runtime/qml" as Preview
 Item {
     id: root
 
+    required property Item backgroundSource
+    required property point backgroundOffset
     required property var viewState
     required property var documentSession
     required property var analysisSession
@@ -23,6 +25,8 @@ Item {
     required property var latency
     required property var coverSession
     property bool compact: false
+    property real sidebarDragWidth: 0
+    property bool sidebarResizing: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
     // User preference AND backend chart-bottom-tabs mode (export/metadata
@@ -85,7 +89,14 @@ Item {
     function persistSidebarWidth() {
         if (root.compact) return
         if (root.viewState.sidebarVisible)
-            root.preferences.sidebarWidth = Math.round(sidebar.width - sidebar.activityBarWidth)
+            root.preferences.sidebarWidth = Math.round(root.sidebarDragWidth)
+        root.preferences.sidebarVisible = root.viewState.sidebarVisible
+    }
+
+    function resizeSidebar(contentWidth) {
+        root.sidebarDragWidth = Math.max(root.preferences.sidebarMinimumContentWidth,
+            Math.min(root.preferences.sidebarMaximumContentWidth, contentWidth))
+        root.viewState.sidebarVisible = contentWidth >= root.preferences.sidebarMinimumContentWidth / 2
     }
 
     function persistPreviewWidthRatio() {
@@ -134,14 +145,10 @@ Item {
             fullscreenPreview.visible = false
     }
 
-    SplitView {
+    Item {
         id: horizontalSplit
         anchors.fill: parent
-        orientation: Qt.Horizontal
-
-        handle: SplitHandle {
-            onReleased: root.persistSidebarWidth()
-        }
+        readonly property int orientation: Qt.Horizontal
 
         Sidebar {
             id: sidebar
@@ -152,22 +159,18 @@ Item {
             pages: root.pages
             compact: false
             visible: !root.compact
-            SplitView.preferredWidth: root.viewState.sidebarVisible
-                                      ? root.preferences.sidebarWidth + sidebar.activityBarWidth
-                                      : sidebar.activityBarWidth
-            SplitView.minimumWidth: root.viewState.sidebarVisible
-                                    ? root.preferences.sidebarMinimumContentWidth + sidebar.activityBarWidth
-                                    : sidebar.activityBarWidth
-            SplitView.maximumWidth: root.viewState.sidebarVisible
-                                    ? root.preferences.sidebarMaximumContentWidth + sidebar.activityBarWidth
-                                    : sidebar.activityBarWidth
+            width: visible ? sidebar.activityBarWidth + (root.viewState.sidebarVisible
+                ? (root.sidebarResizing ? root.sidebarDragWidth : root.preferences.sidebarWidth) : 0) : 0
+            height: parent.height
             onSettingsRequested: root.settingsRequested()
         }
 
         SplitView {
             id: workspaceSplit
             orientation: Qt.Horizontal
-            SplitView.fillWidth: true
+            x: sidebar.width + sidebarHandle.width
+            width: parent.width - x
+            height: parent.height
             Component.onCompleted: root.syncWorkspacePanelOrder()
 
             handle: SplitHandle {
@@ -266,6 +269,54 @@ Item {
                 SplitView.maximumWidth: root.previewEditorAvailableWidth
                                         * root.preferences.previewMaximumWidthRatio
                 onFullscreenRequested: root.showFullscreenPreview()
+            }
+        }
+
+        CornerMask {
+            x: root.compact ? 0 : sidebar.activityBarWidth
+            backgroundSource: root.backgroundSource
+            backgroundOffset: Qt.point(root.backgroundOffset.x + x, root.backgroundOffset.y)
+        }
+
+        SplitHandle {
+            id: sidebarHandle
+            x: sidebar.width
+            width: visible && root.viewState.sidebarVisible ? Theme.splitDividerThickness : 0
+            height: parent.height
+            visible: !root.compact
+            showDivider: root.viewState.sidebarVisible
+            handlePressed: sidebarDrag.pressed
+            handleHovered: sidebarDrag.containsMouse
+
+            MouseArea {
+                id: sidebarDrag
+                anchors.centerIn: parent
+                width: Theme.splitHandleHitExtent
+                height: parent.height
+                hoverEnabled: true
+                cursorShape: Qt.SplitHCursor
+                preventStealing: true
+                property real startX: 0
+                property real startWidth: 0
+
+                onPressed: mouse => {
+                    startX = mapToItem(horizontalSplit, mouse.x, mouse.y).x
+                    startWidth = root.viewState.sidebarVisible ? root.preferences.sidebarWidth : 0
+                    root.sidebarDragWidth = root.preferences.sidebarWidth
+                    root.sidebarResizing = true
+                }
+                onPositionChanged: mouse => {
+                    if (pressed)
+                        root.resizeSidebar(startWidth + mapToItem(horizontalSplit, mouse.x, mouse.y).x - startX)
+                }
+                onReleased: {
+                    root.persistSidebarWidth()
+                    root.sidebarResizing = false
+                }
+                onCanceled: {
+                    root.persistSidebarWidth()
+                    root.sidebarResizing = false
+                }
             }
         }
     }

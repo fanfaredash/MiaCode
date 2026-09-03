@@ -600,6 +600,11 @@ qt_add_shaders(MiaCode "intro_shaders"
     FILES
         src/intro/shaders/bg_texture.frag
 )
+qt_add_shaders(MiaCode "ui_shaders"
+    PREFIX "/"
+    FILES
+        src/app/qml_ui/shaders/corner_mask.frag
+)
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.fanfaredash.MiaCode"
@@ -636,6 +641,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/DifficultySwatch.qml
     src/app/qml_ui/components/PanelHeader.qml
     src/app/qml_ui/components/SplitHandle.qml
+    src/app/qml_ui/components/CornerMask.qml
     src/app/qml_ui/components/Tooltip.qml
     src/app/qml_ui/components/HoverChrome.qml
     src/app/qml_ui/components/ChromeRow.qml
@@ -650,14 +656,16 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppMenu.qml
     src/app/qml_ui/components/AppMenuAction.qml
     src/app/qml_ui/components/FloatingCard.qml
+    src/app/qml_ui/components/BackdropBlur.qml
     src/app/qml_ui/components/FadeTransition.qml
+    src/app/qml_ui/components/PopupLifecycle.qml
+    src/app/qml_ui/components/AppDialog.qml
     src/app/qml_ui/components/AppStickyPopup.qml
     src/app/qml_ui/components/AppDropdownPanel.qml
     src/app/qml_ui/components/AppMenuItem.qml
     src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/components/UiRequestHost.qml
     src/app/qml_ui/components/DialogFooter.qml
-    src/app/qml_ui/components/DialogDrag.qml
     src/app/qml_ui/components/ChoiceDialog.qml
     src/app/qml_ui/components/EditableValue.qml
     src/app/qml_ui/components/LabeledCombo.qml

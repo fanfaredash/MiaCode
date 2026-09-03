@@ -5,27 +5,14 @@ import MiaCode.UI
 // Shared popup menu — geometry mirrors v1 styleRoundedMenu.
 Menu {
     id: root
+    popupType: Popup.Item
 
-    enter: FadeTransition {
-        id: fadeIn
+    readonly property PopupLifecycle lifecycle: PopupLifecycle {
+        popup: root
     }
-    exit: FadeTransition {
-        appearing: false
-        initialOpacity: root.opacity
-    }
-
-    property bool closing: false
-    readonly property bool active: visible && !closing
-
-    Connections {
-        target: root
-        function onAboutToShow() {
-            fadeIn.initialOpacity = root.closing ? root.opacity : 0
-            root.closing = false
-        }
-        function onAboutToHide() { root.closing = true }
-        function onClosed() { root.closing = false }
-    }
+    readonly property bool active: lifecycle.active
+    enter: lifecycle.enterTransition
+    exit: lifecycle.exitTransition
 
     property var anchorItem: null
     property bool openRightAligned: false
@@ -39,18 +26,22 @@ Menu {
     // Action-created rows and default Instantiator paths use this delegate.
     delegate: AppMenuItem {}
 
-    function popupWidthForAnchor(anchor) {
-        if (!root.hugContent)
-            return Math.max(root.implicitWidth, anchor ? anchor.width : 0)
+    implicitWidth: {
         let widest = 0
         for (let i = 0; i < root.count; i++) {
             const item = root.itemAt(i)
-            if (item && item.textWidth !== undefined)
-                widest = Math.max(widest, item.textWidth + item.chromeWidth)
+            if (item)
+                widest = Math.max(widest, item.implicitWidth)
         }
-        return widest > 0
-            ? Math.ceil(root.leftPadding + root.rightPadding + widest)
-            : root.implicitWidth
+        return Math.max(root.hugContent ? 0 : 180,
+                        Math.ceil(root.leftPadding + root.rightPadding + widest))
+    }
+    width: popupWidthForAnchor(root.anchorItem)
+
+    function popupWidthForAnchor(anchor) {
+        const preferred = Math.max(root.implicitWidth,
+                                   !root.hugContent && anchor ? anchor.width : 0)
+        return Math.min(preferred, Overlay.overlay ? Overlay.overlay.width : preferred)
     }
 
     function openAt(anchor) {
@@ -59,7 +50,6 @@ Menu {
         parent = anchor
         closePolicy = Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
         root.anchorItem = anchor
-        width = root.popupWidthForAnchor(anchor)
         open()
         Qt.callLater(root.reposition)
     }
@@ -67,17 +57,18 @@ Menu {
     function reposition() {
         if (!root.anchorItem || Overlay.overlay === null)
             return
-        width = root.popupWidthForAnchor(root.anchorItem)
         x = root.openRightAligned ? root.anchorItem.width - width : 0
         y = -height
     }
 
     onImplicitHeightChanged: if (visible)
         reposition()
+    onWidthChanged: if (visible)
+        reposition()
     onCountChanged: if (visible)
         reposition()
 
     background: FloatingCard {
-        implicitWidth: root.hugContent ? 1 : 180
+        popup: root
     }
 }

@@ -76,7 +76,7 @@ AbstractButton {
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
             font: root.font
-            color: Theme.colors.text.primary
+            color: root.enabled ? Theme.colors.text.primary : Theme.colors.text.disabled
             verticalAlignment: Text.AlignVCenter
         }
 
@@ -88,15 +88,17 @@ AbstractButton {
             height: root.chevronSize
             source: Qt.resolvedUrl("icons/chevron-down.svg")
             sourceSize: Qt.size(width, height)
-            color: root.expanded || root.hovered
+            color: !root.enabled ? Theme.colors.text.disabled
+                : root.expanded || root.hovered || root.visualFocus
                 ? Theme.colors.text.active
                 : Theme.colors.text.secondary
         }
     }
 
     background: HoverChrome {
+        stateColors: Theme.colors.buttonState
         contentHeight: Math.max(label.implicitHeight, root.chevronSize)
-        baseColor: Theme.surfaceColor("input", Theme.colors.background.elevated)
+        baseColor: Theme.colors.background.elevated
         selected: root.expanded
         hovered: root.hovered
         pressed: root.down

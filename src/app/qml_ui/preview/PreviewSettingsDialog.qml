@@ -8,13 +8,9 @@ import MiaCode.UI
 //
 // 视频、玩法和皮肤 all describe the running preview. 性能只含预览刷新率，仍放在
 // 偏好设置 → 性能，避免同一设置有两个入口。
-Dialog {
+AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     required property var previewSettings
 
     readonly property var values: root.previewSettings.values
@@ -23,17 +19,12 @@ Dialog {
     property int activePage: 0
 
     title: UiText.text("预览设置")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(640, Overlay.overlay ? Overlay.overlay.width - 48 : 640)
+    preferredWidth: 640
+    preferredHeight: Theme.dialogHeight
     footer: DialogFooter {
         cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
-    closePolicy: Popup.CloseOnEscape
-
-    // Drag by the title bar: these change what the preview shows.
-    DialogDrag { dialog: root }
 
     function put(key, value) { root.previewSettings.setValue(key, value) }
 
@@ -66,7 +57,7 @@ Dialog {
         return Math.abs(speed - oneDecimal) < 0.001 ? speed.toFixed(1) : speed.toFixed(2)
     }
 
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 10
 
         Row {
@@ -368,9 +359,7 @@ Dialog {
                 Layout.fillWidth: true
                 implicitHeight: previewHudFontSample.implicitHeight + 20
                 radius: Theme.controlRadius
-                color: Theme.colors.background.surface
-                border.width: Theme.controlBorderWidth
-                border.color: Theme.colors.border.control
+                color: Theme.overlayColor(Theme.colors.background.surface)
                 Text {
                     id: previewHudFontSample
                     anchors.fill: parent

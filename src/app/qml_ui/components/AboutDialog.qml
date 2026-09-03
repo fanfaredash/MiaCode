@@ -5,29 +5,22 @@ import MiaCode.UI
 
 // 关于 MiaCode. Everything shown is a fact about the build, read through
 // preferences.aboutInfo() so the version macro and UiText stay the sources.
-Dialog {
+AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     required property var preferences
 
     readonly property var info: preferences.aboutInfo()
 
     title: root.info.title
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(420, Overlay.overlay ? Overlay.overlay.width - 48 : 420)
+    preferredWidth: 420
     footer: DialogFooter {
         acceptText: UiText.text("确定")
         acceptEmphasized: true
         onAccepted: root.accept()
     }
-    closePolicy: Popup.CloseOnEscape
 
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 14
 
         RowLayout {

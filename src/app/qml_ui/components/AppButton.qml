@@ -6,7 +6,7 @@ import MiaCode.UI
 Button {
     id: root
 
-    // Primary actions use a stronger font weight.
+    // Primary actions use an accent fill and a stronger font weight.
     property bool emphasized: false
     property bool selected: false
 
@@ -37,7 +37,9 @@ Button {
     }
 
     background: HoverChrome {
-        baseColor: Theme.surfaceColor("input", Theme.colors.background.elevated)
+        baseColor: root.enabled && root.emphasized
+                   ? Theme.colors.accent.primary : Theme.colors.background.elevated
+        stateColors: root.emphasized ? Theme.colors.accentState : Theme.colors.buttonState
         selected: root.selected || root.checked
         hovered: root.hovered
         pressed: root.down

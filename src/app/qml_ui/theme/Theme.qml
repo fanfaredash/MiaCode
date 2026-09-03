@@ -6,6 +6,8 @@ QtObject {
     property var preferences: null
     property var appBackground: null
     readonly property bool darkTheme: preferences ? preferences.darkTheme : true
+    readonly property bool backgroundActive: appBackground
+        && appBackground.enabled && appBackground.imageReadable
 
     property var colors: ({
         background: {
@@ -40,7 +42,7 @@ QtObject {
             handleHover: "#7A7C7E"
         },
         state: {
-            // Solid UI state fills, independent of the surface underneath.
+            // Base UI state colors; HoverChrome applies the shared overlay alpha.
             hover: "#1E2021",
             pressed: "#282A2B",
             selected: "#232526",
@@ -57,6 +59,16 @@ QtObject {
             hover: "#2C2D2E",
             pressed: "#3A3B3C",
             selected: "#333536"
+        },
+        buttonState: {
+            hover: "#333536",
+            pressed: "#282A2B",
+            selected: "#3A3B3C"
+        },
+        accentState: {
+            hover: "#328EB8",
+            pressed: "#236888",
+            selected: "#307E9F"
         },
         syntax: {
             keyword: "#F5AE9C",
@@ -97,28 +109,61 @@ QtObject {
     readonly property int secondaryFontSize: uiFontSize - 1
     readonly property int captionFontSize: uiFontSize - 3
 
-    function overlayAlpha(token) {
-        const model = appBackground
-        if (!model || !model.imageReadable || token === "card")
-            return 1.0
-        const value = model[token + "Alpha" + (darkTheme ? "Dark" : "Light")]
-        return Math.max(0, Math.min(255, Number(value))) / 255.0
+    readonly property real surfaceOpacity: backgroundActive
+        ? (darkTheme ? appBackground.panelAlphaDark : appBackground.panelAlphaLight) / 255.0
+        : 1.0
+
+    // Fill alpha only: text/icons and popup transition opacity stay independent.
+    readonly property real overlayOpacity: 0.72
+    readonly property real popupOpacity: 0.96
+    // Frosted menu material is independent of wallpaper visibility.
+    readonly property real popupTintOpacity: 0.82
+    readonly property int popupBlurRadius: 64
+    readonly property real dialogTintOpacity: 0.94
+    readonly property int dialogBlurRadius: 96
+    readonly property real popupBlurScale: 0.5
+    readonly property color popupTintColor: {
+        const c = Qt.color(colors.background.elevated)
+        return Qt.rgba(c.r, c.g, c.b, popupTintOpacity)
+    }
+    readonly property color dialogTintColor: {
+        const c = Qt.color(colors.background.panel)
+        return Qt.rgba(c.r, c.g, c.b, dialogTintOpacity)
     }
 
-    function surfaceColor(token, baseColor) {
-        if (!appBackground || !appBackground.imageReadable || token === "card")
+    function overlayColor(baseColor, opacity = overlayOpacity) {
+        if (!backgroundActive)
             return baseColor
         const c = Qt.color(baseColor)
-        return Qt.rgba(c.r, c.g, c.b, overlayAlpha(token))
+        return Qt.rgba(c.r, c.g, c.b, c.a * opacity)
+    }
+
+    function surfaceColor(baseColor) {
+        if (!backgroundActive)
+            return baseColor
+        const c = Qt.color(baseColor)
+        const panel = Qt.color(colors.background.panel)
+        const shade = Math.min(1, (c.r + c.g + c.b) / (panel.r + panel.g + panel.b))
+        // Preserve the theme's dark/panel ratio over wallpaper. Fold the shared
+        // surface fill and the darkening into one color instead of two layers.
+        const alpha = 1 - (1 - surfaceOpacity) * shade
+        const scale = alpha > 0 ? surfaceOpacity / alpha : 0
+        return Qt.rgba(c.r * scale, c.g * scale, c.b * scale, alpha)
     }
 
     // Shared UI geometry.
     readonly property int controlRadius: 6
+    readonly property int popupRadius: 12
+    readonly property int workspaceRadius: 10
     readonly property int itemRadius: controlRadius
     readonly property int controlMinHeight: 30
     readonly property int compactControlHeight: 24
     readonly property int compactFontSize: uiFontSize - 2
     readonly property int panelPadding: 8
+    readonly property int dialogPadding: 16
+    readonly property int dialogMargin: 24
+    readonly property int dialogHeight: 560
+    readonly property int dialogCompactHeight: 280
     readonly property int controlBorderWidth: 1
     readonly property int menuPadding: 7
     // Default inset so adjacent HoverChrome pills do not touch.

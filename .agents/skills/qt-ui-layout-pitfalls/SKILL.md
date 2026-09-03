@@ -57,7 +57,9 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | Canvas 行号与 TextEdit 文字高低错位 | Canvas `middle` baseline differs from QTextLayout baseline | Q7 |
 | 编辑器滚动迟缓、滚动条消失、光标为箭头 | Full-area `MouseArea` consumes wheel/trackpad input and supplies its default cursor; Basic scrollbar fades while idle | Q8 |
 | 层叠关系错误 (element above/below the wrong thing) | QML: declaration order = paint order; widget: `paintEvent` draw order | Z1 |
+| 同色面板明暗不同 / 关闭壁纸后仍透明 | Parent/child surface fills compound alpha; wallpaper and surface alpha use different enable gates | Z1 |
 | 模态弹窗藏到主窗口下方 / clicks only play the task-dialog warning sound | QuickShell uses a hidden QWidget backend, so parentless application-modal dialogs lack a native owner and can fall behind the visible QQuickWindow | Z8 |
+| 下拉列表弹出为空白细条 (combo popup collapses to padding) | A base Popup's default contentData can force contentItem initialization before a derived ListView is installed | Z9 |
 | 点击区域错位 (hit area ≠ visual) | Hit geometry and visuals derived from different sources | Z2 |
 | 平台蓝色填充闪现 (platform blue-fill flashes) | Viewport default paint path fires on style/palette events | Z3 |
 | 取消关闭但弹窗已没了 (cancel close, popups already gone) | Side-effect sweep ran BEFORE the cancellable prompt | Z4 |
@@ -127,6 +129,10 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   to the visible QuickShell root and re-raise only blocking modals on app/root activation.
   Preserve visible owners for nested dialogs and never force-activate non-modal dialogs. Never use
   `WindowStaysOnTopHint`, which would incorrectly place it above other applications.
+
+- **Z9**: attach popup lifecycle helpers through explicit object properties. Keep base
+  popup infrastructure out of default `contentData`, which accesses deferred `contentItem`.
+  See `references/recipes.md` for the shared lifecycle pattern.
 
 ## Known rejected approaches — do not retry
 

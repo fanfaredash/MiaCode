@@ -31,7 +31,7 @@ Rectangle {
         return options && options.length > index ? options[index].family : ""
     }
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
+    color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
 
     ColumnLayout {
@@ -664,9 +664,7 @@ Rectangle {
                             Layout.fillWidth: true
                             implicitHeight: hudFontSample.implicitHeight + 20
                             radius: Theme.controlRadius
-                            color: Theme.colors.background.surface
-                            border.width: Theme.controlBorderWidth
-                            border.color: Theme.colors.border.control
+                            color: Theme.overlayColor(Theme.colors.background.surface)
                             Text {
                                 id: hudFontSample
                                 anchors.fill: parent
@@ -895,9 +893,7 @@ Rectangle {
                             Layout.fillWidth: true
                             implicitHeight: introFontPreviewColumn.implicitHeight + 20
                             radius: Theme.controlRadius
-                            color: Theme.colors.background.surface
-                            border.width: Theme.controlBorderWidth
-                            border.color: Theme.colors.border.control
+                            color: Theme.overlayColor(Theme.colors.background.surface)
                             Column {
                                 id: introFontPreviewColumn
                                 anchors.fill: parent

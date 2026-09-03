@@ -13,7 +13,7 @@ Rectangle {
     required property var latency
     required property var pages
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
+    color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
 
     onVisibleChanged: {
@@ -30,9 +30,7 @@ Rectangle {
         Layout.fillWidth: true
         implicitHeight: cardColumn.implicitHeight + 44
         radius: 8
-        color: Theme.colors.background.elevated
-        border.width: 1
-        border.color: Theme.colors.border.normal
+        color: Theme.overlayColor(Theme.colors.background.elevated)
         Text {
             id: cardTitle
             x: 16

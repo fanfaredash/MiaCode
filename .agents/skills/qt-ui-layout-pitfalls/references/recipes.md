@@ -274,6 +274,33 @@ discoverable use the same native `ScrollBar.vertical: ScrollBar {}` setup as oth
 
 ### Z1. Wrong stacking (层叠关系错误)
 
+- **Surface backgrounds:** use one background owner per region; structural children inherit
+  it through transparent Items. Wallpaper visibility and surface alpha share
+  `Theme.backgroundActive` (`enabled && imageReadable`). Independently shaded adjacent regions
+  paint disjoint rectangles; do not place a full-area background beneath them.
+  `Theme.surfaceColor` folds shared opacity and theme-derived darkening into one fill;
+  controls and interaction fills use `Theme.overlayColor` with the shared overlay alpha;
+  floating fills use its popup-alpha argument plus the shared floating border. Multiply
+  source alpha and leave text/icons and enter/exit opacity intact. `AppDialog` uses the
+  shared frosted `FloatingCard` and a transparent header in both wallpaper states.
+  Wallpaper-off returns the exact original fill. Native QSG backgrounds use region colors across the
+  full viewport, including content padding, and honor content clips rather than covering overflow
+  with opaque rectangles. The workspace preview's empty base is transparent to its panel;
+  export and chart media keep independent background ownership.
+- **Menu backdrop sampling:** `Main.sceneContent` holds the
+  background and UI while popups remain in `ApplicationWindow.Overlay`. `BackdropBlur`
+  captures a padded local rectangle from that scene and, for dialog dropdowns, the anchor's
+  owning overlay item. Exclude the current popup from its sources; sampling an ancestor
+  containing the effect creates a feedback loop. Keep tint, border and menu text after the
+  blurred backdrop. The menu Loader releases its sampling/effect subtree when closed.
+  Shared popup references must use `QtQuick.Templates.Popup`. `QtQuick.Controls.Popup`
+  resolves to a styled QML subtype; styled Menu is a separate branch over `Templates.Menu`,
+  so using the styled Popup type rejects Menu references and leaves its effects inactive.
+  This applies to `FloatingCard`, `BackdropBlur` and `PopupLifecycle` alike.
+  Declare wallpaper, main UI and drag hint directly inside `sceneContent`, in that order.
+  Declaring them in `ApplicationWindow.contentData` and assigning `parent: sceneContent`
+  mixes the window's content parenting with visual reparenting; the lost background order
+  produced wallpaper over the entire UI after the blur integration.
 - **QML:** declaration order = paint order. The intro card's required order is documented:
   frame plate → Tab → clipped jacket → thin frame stroke → LV pill. Comment the intended
   order; insert new layers by moving declarations, not by sprinkling `z:`.
@@ -292,6 +319,20 @@ One canonical source function (e.g. `handleCenterX()` derived from `displayedPro
 handle, fill, tooltip AND the hit test all read it. Constrain the interaction band with
 explicit anchors+height — `anchors.fill` on an oversized parent makes dead-looking zones
 clickable. Commit: e17c598.
+
+**Dialog placement:** `AppDialog.parent` is the window Overlay, which owns permanent
+centering and size bounds. Product policy keeps dialogs stationary; title drag handlers
+and remembered positions have been removed. Settings and compact prompts use stable
+preferred-height tiers; `ChoiceDialog` notices use their implicit height to keep actions
+close to short messages. All heights are capped to the window with scrolling overflow. All application
+dialogs inherit one header, scrollable body and stationary action footer.
+
+**QML form-page clipping:** a nested `Flickable` contributes no natural form height to
+its parent `ColumnLayout`. With `Layout.fillHeight` and a trailing stretch, it shares the
+remaining height with that stretch, clips mid-control, and hides overflow from the outer
+dialog ScrollView. Preferences form pages use natural-height ColumnLayouts and delegate
+scrolling to `AppDialog`. Virtualized ListViews (shortcuts and job queues) retain their own
+viewport and consume the remaining body height; do not turn them into full-height lists.
 
 ### Z3. Platform blue-fill fallback in custom-painted views
 
@@ -390,6 +431,20 @@ root-window activation, re-raise and activate only the visible blocking modal; s
 non-modal dialog must not steal focus. Keep the root in
 a `QPointer`, because QuickShell teardown destroys it before the application object. Do not
 use `Qt::WindowStaysOnTopHint`: the dialog should stay above MiaCode, not above other apps.
+
+---
+
+### Z9. Combo popup collapses to an empty padding strip
+
+When a reusable Popup declares a bare `Connections` child, it enters the default
+`contentData` list. Qt's `QQuickPopupPrivate::contentData()` accesses/creates the deferred
+content item during base construction, interfering with a derived popup's ListView.
+Keep lifecycle helpers on explicit object properties instead. `PopupLifecycle` owns
+enter/exit transitions and interrupted-close state; `AppDropdownPanel` and `AppMenu`
+reference it without inserting infrastructure into the content list. `AppStickyPopup`
+inherits the panel. Preserve ComboBox's delegateModel and Menu's item/action handling.
+Runtime acceptance: decoder/bitrate options appear and select, and rate menus still
+open, select and close, including reopening during a fade-out.
 
 ---
 

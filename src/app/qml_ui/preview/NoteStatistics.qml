@@ -7,7 +7,7 @@ import MiaCode.UI
 // Note counts under the preview. Column count follows whether six
 // value cells fit; never elide numeric values. Transport chrome is
 // independent — do not share a width threshold with PreviewTransport.
-Rectangle {
+Item {
     id: root
 
     required property var statistics
@@ -25,7 +25,6 @@ Rectangle {
 
     implicitHeight: wideLayout ? 55 : 96
     height: implicitHeight
-    color: Theme.colors.background.elevated
 
     Text {
         id: nameWidthProbe
@@ -41,14 +40,6 @@ Rectangle {
         text: "8888/8888"
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
-    }
-
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        height: 1
-        color: Theme.colors.border.normal
     }
 
     Grid {

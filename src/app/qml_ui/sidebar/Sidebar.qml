@@ -1,7 +1,7 @@
 import QtQuick
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property var viewState
@@ -15,7 +15,6 @@ Rectangle {
 
     signal settingsRequested()
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
     clip: true
 
     // Activity Bar 只负责功能域导航。再次选择当前功能时，桌面端切换

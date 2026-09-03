@@ -63,7 +63,7 @@ Rectangle {
         root.session.selectLayerKey(key)
     }
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
+    color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
 
     ColumnLayout {

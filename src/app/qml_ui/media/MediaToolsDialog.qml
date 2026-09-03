@@ -6,28 +6,22 @@ import MiaCode.UI
 // 音视频处理. A launcher for the single-file tools plus the PV batch queue;
 // every tool reports through the shell's shared notice and progress surfaces,
 // so this dialog owns no result UI of its own.
-Dialog {
+AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     required property var mediaTools
 
     title: UiText.text("音视频处理")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(560, Overlay.overlay ? Overlay.overlay.width - 48 : 560)
+    preferredWidth: 560
+    preferredHeight: Theme.dialogHeight
     footer: DialogFooter {
         cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
-    closePolicy: Popup.CloseOnEscape
 
     signal prependRequested(bool isTrack)
 
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 4
 
         component ToolRow: ChromeRow {
