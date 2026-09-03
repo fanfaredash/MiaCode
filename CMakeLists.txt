@@ -2727,6 +2727,48 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(pv_memory_host_contract_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # Regression spec for the paused-seek media handshake surviving
+    # clearMedia() (chart/difficulty switch mid-seek) — see
+    # PausedSeekHandshakeSpec.cpp's header comment for the full story. Links
+    # the real PreviewStageMediaHost*.cpp TUs, built against the
+    # HAVE_QT_MULTIMEDIA (QMediaPlayer) backend branch rather than this
+    # machine's shipped MIACODE_USE_QTAVPLAYER backend, so the dev-tool link
+    # graph stays Qt-Multimedia-only instead of pulling in the vendored
+    # QtAVPlayer/FFmpeg sources. clearMedia() itself is not `#ifdef`-split
+    # between the two backends, so the bug under test is backend-independent.
+    miacode_add_dev_tool(paused_seek_handshake_spec TEST
+        SOURCES
+            src/tools/preview/PausedSeekHandshakeSpec.cpp
+            src/preview/runtime/PreviewStageMediaHost.h
+            src/preview/runtime/PreviewStageMediaHost.cpp
+            src/preview/runtime/PreviewStageMediaHost_Backend.cpp
+            src/preview/runtime/PreviewStageMediaHost_Media.cpp
+            src/preview/runtime/PreviewStageMediaHost_Playback.cpp
+            src/preview/runtime/PreviewStageMediaHost_Diagnostics.cpp
+            src/preview/runtime/PreviewStageMediaHost_Timeout.cpp
+            src/preview/runtime/PreviewStageMediaHostInternal.h
+            src/preview/runtime/PreviewSharedD3D11Device.h
+            src/preview/runtime/PreviewSharedD3D11Device.cpp
+            src/preview/runtime/PvMemoryDiagnostics.h
+            src/preview/runtime/PvMemoryDiagnostics.cpp
+            src/common/ChartAssetPaths.h
+            src/common/DebugOptions.h
+            src/common/FileContentStamp.h
+            src/common/LayoutRingConfig.h
+            src/common/LogEmissionPolicy.h
+            src/common/PreviewVideoGeometryConfig.h
+            src/common/ProcessDiagnostics.h
+            src/common/ProcessDiagnostics.cpp
+            src/core/video/PreviewEndOfMediaPolicy.h
+            src/core/video/PreviewRenderSettings.h
+            ${_miacode_log_core}
+        LIBS Qt6::Core Qt6::Gui Qt6::Multimedia Qt6::Quick Qt6::Test
+        INCLUDES src
+    )
+    target_compile_definitions(paused_seek_handshake_spec PRIVATE
+        HAVE_QT_MULTIMEDIA=1
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     miacode_add_dev_tool(qtavplayer_platform_spec TEST
         SOURCES
             src/tools/preview/QtAVPlayerPlatformSpec.cpp

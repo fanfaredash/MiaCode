@@ -309,6 +309,20 @@ void PreviewStageMediaHost::clearMedia()
     loadedBackgroundImage_ = QImage();
     ++videoSourceGeneration_;
     mediaKind_ = MediaKind::None;
+    // A paused seek can be in flight when the media route is cleared (e.g.
+    // DocumentSessionHost::clearTimelineAndPreview() requests a paused seek
+    // and then clears the chart path ~9 lines later). This host owns that
+    // handshake, so abandoning it here must still TERMINATE it — the
+    // decoder that would have settled it via a frame/position update/timeout
+    // is going away with the rest of this reset. Without this ack,
+    // PlaybackCoordinator's own pausedSeekMediaPending_ gate
+    // (runtime/playback/Seek.cpp) never releases, since it is only cleared
+    // from handlePausedPreviewMediaSeekCompleted(). Mirrors the existing
+    // timeout fallback (schedulePausedSeekTimeout), which uses the same
+    // signal to mean "stop waiting for this seek".
+    const bool hadPendingPausedSeek = pausedSeekCompletionPending_;
+    const double abandonedPausedSeekSecond = pausedSeekTargetSecond_;
+    const quint64 abandonedPausedSeekGeneration = pausedSeekGeneration_;
     pausedSeekCompletionPending_ = false;
     pausedSeekTargetMs_ = -1;
     pausedSeekTargetSecond_ = 0.0;
@@ -335,6 +349,14 @@ void PreviewStageMediaHost::clearMedia()
     resetStaleEndOfMediaRecovery();
     if (shuttingDown_) {
         return;
+    }
+    if (hadPendingPausedSeek) {
+        appendPreviewStageMediaLog(
+            QStringLiteral("paused_seek_media_ack"),
+            QString("generation=%1 second=%2 source=clear_media")
+                .arg(abandonedPausedSeekGeneration)
+                .arg(abandonedPausedSeekSecond, 0, 'f', 6));
+        emit pausedSeekCompleted(abandonedPausedSeekSecond, abandonedPausedSeekGeneration);
     }
     emit imageSourceChanged();
     emit mediaStateChanged();
