@@ -77,10 +77,6 @@ bool miacode::runtime::DocumentSessionHost::updateDocumentField(
         }
         break;
     case Session::DocumentField::First:
-        if (ui_.firstEdit_ != nullptr) {
-            QSignalBlocker blocker(ui_.firstEdit_);
-            ui_.firstEdit_->setText(value);
-        }
         break;
     case Session::DocumentField::Designer:
         if (ui_.designerEdit_ != nullptr) {
@@ -126,17 +122,6 @@ bool miacode::runtime::DocumentSessionHost::updateDifficultyField(
     if (!workspace.updateDifficultyField(
             difficultyId, static_cast<miacode::v2::ChartWorkspaceDifficultyField>(field), value)) {
         return false;
-    }
-
-    if (difficultyId == state_.activeDifficultyId_) {
-        if (field == Session::DifficultyField::Level && ui_.difficultyLevelEdit_ != nullptr) {
-            QSignalBlocker blocker(ui_.difficultyLevelEdit_);
-            ui_.difficultyLevelEdit_->setText(value);
-        }
-        if (field == Session::DifficultyField::Designer && ui_.difficultyDesignerEdit_ != nullptr) {
-            QSignalBlocker blocker(ui_.difficultyDesignerEdit_);
-            ui_.difficultyDesignerEdit_->setText(value);
-        }
     }
 
     state_.documentDirty_ = workspace.snapshot().dirty;

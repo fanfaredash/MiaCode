@@ -24,11 +24,6 @@ using namespace miacode::runtime::shared;
 namespace {
 
 constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
-constexpr int kEditorFindBarMinWidth = 300;
-constexpr int kEditorFindBarMaxWidth = 500;
-constexpr int kEditorFindBarHorizontalMargin = 14;
-constexpr int kEditorFindBarTopMargin = 10;
-constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kBottomTabsResizeHotzonePx = 8;
 
 bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
@@ -172,17 +167,8 @@ void miacode::runtime::ShellHost::focusPreviewInteractionTarget(QObject* watched
 {
     QWidget* widget = qobject_cast<QWidget*>(watched);
     if (widget == nullptr || widget->focusPolicy() == Qt::NoFocus) {
-        if (session_.previewFullscreenActive_ && session_.previewFullscreenHost_ != nullptr
-            && session_.previewFullscreenHost_->focusPolicy() != Qt::NoFocus) {
-            widget = session_.previewFullscreenHost_;
-        } else if (session_.previewFullscreenWindow_ != nullptr && session_.previewFullscreenWindow_->focusPolicy() != Qt::NoFocus) {
+        if (session_.previewFullscreenWindow_ != nullptr && session_.previewFullscreenWindow_->focusPolicy() != Qt::NoFocus) {
             widget = session_.previewFullscreenWindow_;
-        } else if (session_.previewCanvasContainer_ != nullptr && session_.previewCanvasContainer_->focusPolicy() != Qt::NoFocus) {
-            widget = session_.previewCanvasContainer_;
-        } else if (session_.previewCanvasFrame_ != nullptr && session_.previewCanvasFrame_->focusPolicy() != Qt::NoFocus) {
-            widget = session_.previewCanvasFrame_;
-        } else if (session_.previewPanel_ != nullptr && session_.previewPanel_->focusPolicy() != Qt::NoFocus) {
-            widget = session_.previewPanel_;
         }
     }
     if (widget != nullptr) {
@@ -509,50 +495,10 @@ bool miacode::runtime::ShellHost::eventFilter(QObject* watched, QEvent* event)
         }
         QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     }
-    // Top header validation/muri summary icons + counts route a left-button
-    // press to the matching bottom panel tab so the user can jump straight
-    // from the "?" / "!" badge into the issue list. The icons are only
-    // visible (and thus event-deliverable) when their count > 0, so we
-    // don't need an extra emptiness gate here.
-    if (event != nullptr
-        && event->type() == QEvent::MouseButtonRelease
-        && watchedWidget != nullptr) {
-        auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent != nullptr
-            && mouseEvent->button() == Qt::LeftButton
-            && watchedWidget->rect().contains(mouseEvent->pos())) {
-            // The header summary icon/count labels are positional SLOTS — any
-            // badge kind (error/warning/muri) can be rendered into any of these
-            // six widgets depending on which kinds are present (see
-            // updateEditorValidationSummary). Route by the badge kind actually
-            // shown, stamped on the widget as "validationSummaryTab", NOT by the
-            // widget's name (red/yellow → 语法, purple → 无理).
-            const bool isSummaryBadge =
-                watched == session_.editorValidationErrorIconLabel_
-                || watched == session_.editorValidationErrorCountLabel_
-                || watched == session_.editorValidationWarningIconLabel_
-                || watched == session_.editorValidationWarningCountLabel_
-                || watched == session_.editorValidationMuriIconLabel_
-                || watched == session_.editorValidationMuriCountLabel_;
-            if (isSummaryBadge) {
-                const QString targetTab =
-                    watchedWidget->property("validationSummaryTab").toString();
-                if (!targetTab.isEmpty()) {
-                    session_.setCurrentBottomTabsTabId(targetTab);
-                    return true;
-                }
-            }
-        }
-    }
     if (session_.runtimeDebugOutputEnabled_
         && event != nullptr
         && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
         && (watched == session_.metadataExtraEdit_
-            || watched == session_.editorFindEdit_
-            || watched == session_.editorReplaceEdit_
-            || watched == session_.previewPanel_
-            || watched == session_.previewCanvasContainer_
-            || watched == session_.previewCanvasFrame_
             || watched == session_.previewSlider_)) {
         auto* focusEvent = static_cast<QFocusEvent*>(event);
         this->logFocusDebug(
@@ -661,16 +607,9 @@ bool miacode::runtime::ShellHost::eventFilter(QObject* watched, QEvent* event)
 
     if (event != nullptr && event->type() == QEvent::ToolTip) {
         const bool allowPreviewTooltip =
-            widgetMatchesOrDescendsFrom(watchedWidget, session_.previewPanel_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewLeftColumn_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewCanvasContainer_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewCanvasFrame_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewControlCard_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewStatsCard_)
+            widgetMatchesOrDescendsFrom(watchedWidget, session_.previewControlCard_)
             || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewFullscreenWindow_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewFullscreenHost_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewFullscreenControlsWindow_)
-            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewFullscreenHintWindow_);
+            || widgetMatchesOrDescendsFrom(watchedWidget, session_.previewFullscreenControlsWindow_);
         if (watchedWidget != nullptr && !allowPreviewTooltip) {
             QToolTip::hideText();
             event->ignore();
@@ -678,13 +617,6 @@ bool miacode::runtime::ShellHost::eventFilter(QObject* watched, QEvent* event)
         }
     }
 
-    if (session_.editorFindGeometryHost_ != nullptr
-        && watched == session_.editorFindGeometryHost_
-        && event != nullptr
-        && event->type() == QEvent::Resize) {
-        this->updateEditorFindBarGeometry();
-        this->applyFindOverlayInset();
-    }
     if (session_.bottomTabs_ != nullptr && event != nullptr && watchedWidget != nullptr) {
         const bool watchedBottomTabsTop =
             watched == session_.bottomTabs_
@@ -796,30 +728,18 @@ bool miacode::runtime::ShellHost::eventFilter(QObject* watched, QEvent* event)
     }
     const bool previewKeyScope =
         watched == session_.previewSlider_
-        || watched == session_.previewCanvasContainer_
-        || watched == session_.previewCanvasFrame_
-        || watched == session_.previewPanel_
         || watched == session_.previewFullscreenWindow_
-        || watched == session_.previewFullscreenHost_
         || watched == session_.previewFullscreenControlsWindow_
         || watched == session_.previewFullscreenButton_
         || (watched == previewVisibleWindow
             && (previewVisibleWindow != state_.rootWindow_
                 || !state_.rootWindow_->property("sourceEditorFocused").toBool()));
     const bool previewMouseFocusScope =
-        watched == session_.previewCanvasContainer_
-        || watched == session_.previewCanvasFrame_
-        || watched == session_.previewPanel_
-        || watched == session_.previewFullscreenWindow_
-        || watched == session_.previewFullscreenHost_
+        watched == session_.previewFullscreenWindow_
         || watched == previewVisibleWindow;
     const bool previewFullscreenOverlayScope =
         watched == session_.previewFullscreenWindow_
-        || watched == session_.previewFullscreenHost_
         || watched == session_.previewFullscreenControlsWindow_
-        || watched == session_.previewFullscreenHintWindow_
-        || watched == session_.previewCanvasContainer_
-        || watched == session_.previewCanvasFrame_
         || watched == session_.previewControlCard_
         || watched == session_.previewSlider_
         || watched == session_.stopPreviewButton_
@@ -1006,107 +926,37 @@ QTextEdit* miacode::runtime::ShellHost::activeFindTarget() const
 
     // The chart body's find/replace is the QML bar's; only the metadata extra
     // fields still have a QTextEdit on this side.
-    if (session_.editorStack_ != nullptr && session_.editorStack_->currentWidget() == session_.metadataPage_) {
-        return session_.metadataExtraEdit_;
-    }
     return session_.metadataExtraEdit_;
 }
 
 bool miacode::runtime::ShellHost::runFindInEditor(bool backward)
 {
-    QTextEdit* target = this->activeFindTarget();
-    if (target == nullptr || session_.editorFindEdit_ == nullptr) {
-        return false;
-    }
-    const QString pattern = session_.editorFindEdit_->text();
-    if (pattern.isEmpty()) {
-        return false;
-    }
-
-    QTextDocument::FindFlags flags;
-    if (backward) {
-        flags |= QTextDocument::FindBackward;
-    }
-    if (target->find(pattern, flags)) {
-        return true;
-    }
-
-    QTextCursor resetCursor = target->textCursor();
-    resetCursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
-    target->setTextCursor(resetCursor);
-    return target->find(pattern, flags);
+    // The find field (editorFindEdit_) never exists on this side of the QML
+    // migration, so there is never a pattern to search for.
+    Q_UNUSED(backward);
+    return false;
 }
 
 void miacode::runtime::ShellHost::updateEditorFindBarGeometry()
 {
-    QWidget* geometryHost = session_.editorFindGeometryHost_ != nullptr ? session_.editorFindGeometryHost_ : session_.editorStack_;
-    if (session_.editorFindBar_ == nullptr || geometryHost == nullptr) {
-        return;
-    }
-    const int availableWidth = qMax(0, geometryHost->width() - (kEditorFindBarHorizontalMargin * 2));
-    if (availableWidth <= 0) {
-        return;
-    }
-    int width = qMin(kEditorFindBarMaxWidth, availableWidth);
-    if (availableWidth >= kEditorFindBarMinWidth) {
-        width = qMax(kEditorFindBarMinWidth, width);
-    }
-    const int x = qMax(kEditorFindBarHorizontalMargin, geometryHost->width() - kEditorFindBarHorizontalMargin - width);
-    const int y = kEditorFindBarTopMargin;
-    const int height = session_.editorFindBar_->sizeHint().height();
-    session_.editorFindBar_->setGeometry(x, y, width, height);
-    session_.editorFindBar_->raise();
+    // editorFindBar_ / editorFindGeometryHost_ never exist on this side of
+    // the QML migration.
 }
 
 void miacode::runtime::ShellHost::applyFindOverlayInset()
 {
-    const int topInset =
-        (session_.editorFindBar_ != nullptr && session_.editorFindBar_->isVisible())
-        ? session_.editorFindBar_->height() + kEditorFindBarOverlayGap
-        : 0;
-    Q_UNUSED(topInset);
 }
 
 void miacode::runtime::ShellHost::hideFindReplaceBar()
 {
-    if (session_.editorFindBar_ == nullptr || !session_.editorFindBar_->isVisible()) {
-        return;
-    }
-    session_.editorFindBar_->hide();
-    this->applyFindOverlayInset();
-    if (QTextEdit* target = this->activeFindTarget(); target != nullptr) {
-        target->setFocus();
-    }
+    // editorFindBar_ never exists on this side of the QML migration.
 }
 
 void miacode::runtime::ShellHost::onToggleFindReplace()
 {
     MC_OP("miacode::runtime::ShellHost::onToggleFindReplace");
-    if (session_.editorFindBar_ == nullptr) {
-        _mc_op_.fail(QStringLiteral("editorFindBar_ null"));
-        return;
-    }
-    if (session_.editorFindBar_->isVisible()) {
-        this->hideFindReplaceBar();
-        return;
-    }
-
-    this->updateEditorFindBarGeometry();
-    session_.editorFindBar_->show();
-    session_.editorFindBar_->raise();
-    this->applyFindOverlayInset();
-    QTextEdit* target = this->activeFindTarget();
-    if (target != nullptr && session_.editorFindEdit_ != nullptr && session_.editorFindEdit_->text().isEmpty()) {
-        const QTextCursor cursor = target->textCursor();
-        const QString selected = cursor.selectedText();
-        if (!selected.isEmpty() && !selected.contains(QChar::ParagraphSeparator)) {
-            session_.editorFindEdit_->setText(selected);
-        }
-    }
-    if (session_.editorFindEdit_ != nullptr) {
-        session_.editorFindEdit_->setFocus();
-        session_.editorFindEdit_->selectAll();
-    }
+    // editorFindBar_ never exists on this side of the QML migration.
+    _mc_op_.fail(QStringLiteral("editorFindBar_ null"));
 }
 
 void miacode::runtime::ShellHost::onFindNext()
@@ -1124,58 +974,17 @@ void miacode::runtime::ShellHost::onFindPrevious()
 void miacode::runtime::ShellHost::onReplaceOne()
 {
     MC_OP("miacode::runtime::ShellHost::onReplaceOne");
-    QTextEdit* target = this->activeFindTarget();
-    if (target == nullptr || session_.editorFindEdit_ == nullptr || session_.editorReplaceEdit_ == nullptr) {
-        _mc_op_.fail(QStringLiteral("find/replace UI not initialised"));
-        return;
-    }
-    const QString findText = session_.editorFindEdit_->text();
-    if (findText.isEmpty()) {
-        _mc_op_.fail(QStringLiteral("empty findText"));
-        return;
-    }
-
-    QTextCursor cursor = target->textCursor();
-    if (cursor.hasSelection() && cursor.selectedText() == findText) {
-        cursor.insertText(session_.editorReplaceEdit_->text());
-        target->setTextCursor(cursor);
-    }
-    this->runFindInEditor(false);
+    // The find/replace fields (editorFindEdit_/editorReplaceEdit_) never
+    // exist on this side of the QML migration.
+    _mc_op_.fail(QStringLiteral("find/replace UI not initialised"));
 }
 
 void miacode::runtime::ShellHost::onReplaceAll()
 {
     MC_OP("miacode::runtime::ShellHost::onReplaceAll");
-    QTextEdit* target = this->activeFindTarget();
-    if (target == nullptr || session_.editorFindEdit_ == nullptr || session_.editorReplaceEdit_ == nullptr) {
-        _mc_op_.fail(QStringLiteral("find/replace UI not initialised"));
-        return;
-    }
-    const QString findText = session_.editorFindEdit_->text();
-    if (findText.isEmpty()) {
-        _mc_op_.fail(QStringLiteral("empty findText"));
-        return;
-    }
-    _mc_op_.note(QStringLiteral("findText_len=%1").arg(findText.size()));
-
-    QTextDocument* doc = target->document();
-    QTextCursor editCursor(doc);
-    editCursor.beginEditBlock();
-    const QString replaceText = session_.editorReplaceEdit_->text();
-    int replacedCount = 0;
-    QTextCursor searchCursor = doc->find(findText, 0);
-    while (true) {
-        if (searchCursor.isNull()) {
-            break;
-        }
-        searchCursor.insertText(replaceText);
-        ++replacedCount;
-        searchCursor = doc->find(findText, searchCursor);
-    }
-    editCursor.endEditBlock();
-    session_.noteStatus(
-        UiText::text(QStringLiteral("window.replaced_1_occurrence_s")).arg(replacedCount)
-    );
+    // The find/replace fields (editorFindEdit_/editorReplaceEdit_) never
+    // exist on this side of the QML migration.
+    _mc_op_.fail(QStringLiteral("find/replace UI not initialised"));
 }
 
 void miacode::runtime::ShellHost::resizeEvent(QResizeEvent* event)

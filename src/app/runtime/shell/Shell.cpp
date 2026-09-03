@@ -382,29 +382,6 @@ void miacode::runtime::ShellHost::applyUiTheme()
         UiTheme::applyApplicationTheme(*app);
     }
 
-    if (session_.outlineList_ != nullptr) {
-    }
-    if (session_.editorFindBar_ != nullptr) {
-        session_.editorFindBar_->setStyleSheet(UiTheme::editorFindBarStyleSheet());
-    }
-    if (session_.editorFindCloseButton_ != nullptr) {
-        // The ✕ is a baked QIcon, so unlike the QSS text color it doesn't follow
-        // the palette on its own — re-tint it to the find bar's button text
-        // color (textPrimary) so it tracks the light/dark theme.
-        session_.editorFindCloseButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().textPrimary));
-    }
-    if (session_.welcomePage_ != nullptr) {
-        session_.welcomePage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
-    }
-    if (session_.welcomeEmptyHintLabel_ != nullptr) {
-        session_.welcomeEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
-    }
-    if (session_.metadataPage_ != nullptr) {
-        session_.metadataPage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
-    }
-    if (session_.metadataEmptyHintLabel_ != nullptr) {
-        session_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
-    }
     if (session_.metadataExtraEdit_ != nullptr) {
         if (QScrollBar* vbar = session_.metadataExtraEdit_->verticalScrollBar()) {
             vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
@@ -426,96 +403,24 @@ void miacode::runtime::ShellHost::applyUiTheme()
             hbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
         }
     }
-    if (session_.outlineList_ != nullptr) {
-        session_.outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
-        // The scroll bar was styled once at construction — re-style it here or
-        // it keeps the previous theme's colors after a light/dark switch.
-        if (QScrollBar* vbar = session_.outlineList_->verticalScrollBar()) {
-            vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
-        }
-    }
     this->updateBottomTabsDeviceHeight();
-    if (session_.metadataBracketHighlighter_ != nullptr) {
-        session_.metadataBracketHighlighter_->rehighlight();
-    }
     if (QWidget* editorShell = session_.findChild<QWidget*>(QStringLiteral("EditorShell")); editorShell != nullptr) {
         editorShell->setStyleSheet(UiTheme::editorShellStyleSheet());
     }
-    const UiTheme::Colors& themeColors = UiTheme::colors();
-    if (session_.editorHeaderWidget_ != nullptr) {
-        session_.editorHeaderWidget_->setAttribute(Qt::WA_StyledBackground, true);
-        session_.editorHeaderWidget_->setStyleSheet(
-            QStringLiteral(
-                "QFrame#EditorHeader { background: %1; border-bottom: 1px solid %2; }"
-                "QLabel#EditorContext { color: %3; font-weight: 700; background: transparent; }"
-                "QLabel#EditorMeta { color: %4; background: transparent; }"
-                "QWidget#EditorDifficultyControls { background: transparent; }"
-                "QWidget#EditorDifficultyControls QLabel { color: %4; background: transparent; }"
-                "QWidget#EditorDifficultyControls QLineEdit { background: %5; color: %3; border: 1px solid %6; border-radius: 6px; padding: 4px 6px; selection-background-color: %7; selection-color: %8; }"
-                "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %9; }"
-            )
-                .arg(themeColors.cardBg.name(QColor::HexRgb))
-                .arg(themeColors.border.name(QColor::HexRgb))
-                .arg(themeColors.textPrimary.name(QColor::HexRgb))
-                .arg(themeColors.textSecondary.name(QColor::HexRgb))
-                .arg(themeColors.inputBg.name(QColor::HexRgb))
-                .arg(themeColors.borderSoft.name(QColor::HexRgb))
-                .arg(themeColors.selection.name(QColor::HexRgb))
-                .arg(themeColors.selectionText.name(QColor::HexRgb))
-                .arg(themeColors.accent.name(QColor::HexRgb))
-        );
-    }
-    const QString previewPanelStyle = UiTheme::previewPanelStyleSheet();
-    if (session_.previewPanel_ != nullptr) {
-        session_.previewPanel_->setStyleSheet(previewPanelStyle);
-    }
     QSet<QMenu*> refreshedMenus;
-    refreshMenuThemeRecursive(session_.toolboxMenu_, &refreshedMenus);
     const QList<QMenu*> menus = session_.findChildren<QMenu*>();
     for (QMenu* menu : menus) {
         refreshMenuThemeRecursive(menu, &refreshedMenus);
     }
 
-    const QColor iconColor = UiTheme::colors().iconPrimary;
-    const QColor previewControlIconColor =
-        session_.previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : iconColor;
-    const QColor secondaryIconColor = UiTheme::colors().iconSecondary;
-    if (session_.stopPreviewAction_ != nullptr) {
-        session_.stopPreviewAction_->setIcon(makePreviewStopIcon(previewControlIconColor));
-    }
-    if (session_.settingsPlaceholderAction_ != nullptr) {
-        session_.settingsPlaceholderAction_->setIcon(makeSettingsGearIcon(secondaryIconColor));
-    }
-    if (session_.previewAudioSettingsButton_ != nullptr) {
-        session_.previewAudioSettingsButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
-    }
-    if (session_.previewVideoSettingsButton_ != nullptr) {
-        session_.previewVideoSettingsButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
-    }
     session_.applyWorkspacePanelArrangement();
     this->applySystemWindowBackdrop();
-    if (session_.syntaxCheckButton_ != nullptr) {
-        session_.syntaxCheckButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
-    }
-    if (session_.exportVideoButton_ != nullptr) {
-        session_.exportVideoButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
-    }
-    if (session_.outlineCollapseButton_ != nullptr) {
-        session_.outlineCollapseButton_->setStyleSheet(outlineCollapseButtonStyleSheet());
-        this->updateOutlineDockCollapseButton();
-    }
-    if (session_.previewFullscreenHintLabel_ != nullptr) {
-        session_.previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
-    }
     if (session_.previewFullscreenActive_
         && session_.previewControlCard_ != nullptr
         && session_.previewControlCard_->parentWidget() == session_.previewFullscreenControlsWindow_) {
         session_.previewControlCard_->setStyleSheet(previewFullscreenControlCardStyleSheet());
     } else if (session_.previewControlCard_ != nullptr) {
         session_.previewControlCard_->setStyleSheet(QString());
-    }
-    if (session_.previewStatsCard_ != nullptr) {
-        session_.previewStatsCard_->setStyleSheet(QString());
     }
     session_.updateEditorValidationSummary();
     session_.updatePauseButtonAppearance();
@@ -524,47 +429,16 @@ void miacode::runtime::ShellHost::applyUiTheme()
 
 void miacode::runtime::ShellHost::updateOutlineDockCollapseButton()
 {
-    if (session_.outlineCollapseButton_ == nullptr) {
-        return;
-    }
-    session_.outlineCollapseButton_->setText(session_.outlineDockCollapsed_ ? QStringLiteral("▶") : QStringLiteral("◀"));
-    session_.outlineCollapseButton_->setToolTip(
-        session_.outlineDockCollapsed_
-            ? UiText::text(QStringLiteral("window.expand_left_sidebar"))
-            : UiText::text(QStringLiteral("window.collapse_left_sidebar"))
-    );
+    // outlineCollapseButton_ never exists on this side of the QML migration.
 }
 
 void miacode::runtime::ShellHost::setOutlineDockCollapsed(bool collapsed)
 {
-    if (session_.outlineDock_ == nullptr || session_.outlineList_ == nullptr) {
-        return;
-    }
-
-    constexpr int kCollapsedWidth = miacode::window_parity::kOutlineCollapsedWidth;
-    constexpr int kExpandedMinWidth = miacode::window_parity::kOutlineExpandedMinWidth;
-    if (collapsed) {
-        const int currentWidth = session_.outlineDock_->width();
-        if (currentWidth > kCollapsedWidth) {
-            session_.outlineDockExpandedWidth_ = currentWidth;
-        }
-    }
-
-    session_.outlineDockCollapsed_ = collapsed;
-    session_.outlineList_->setVisible(!collapsed);
-
-    const int targetWidth = collapsed ? kCollapsedWidth : qMax(kExpandedMinWidth, session_.outlineDockExpandedWidth_);
-    session_.outlineDock_->setMinimumWidth(targetWidth);
-    session_.outlineDock_->setMaximumWidth(targetWidth);
-    session_.outlineDock_->resize(targetWidth, session_.outlineDock_->height());
-    if (QWidget* widget = session_.outlineDock_->widget(); widget != nullptr) {
-        widget->updateGeometry();
-    }
-    session_.outlineDock_->updateGeometry();
-    this->updateOutlineDockCollapseButton();
-    if (session_.visualLayoutPersistTimer_ != nullptr) {
-        session_.visualLayoutPersistTimer_->start();
-    }
+    // outlineDock_ / outlineList_ never exist on this side of the QML
+    // migration. The sole call site (SessionBootstrapFinalize.cpp) passes
+    // the value just loaded from state_.outlineDockCollapsed_ itself, so
+    // there is no state to persist here either.
+    Q_UNUSED(collapsed);
 }
 
 void miacode::runtime::ShellHost::applySystemWindowBackdrop(QWidget* target) const
@@ -640,7 +514,4 @@ void miacode::runtime::ShellHost::updateBottomTabsDeviceHeight()
     session_.bottomTabs_->setMinimumHeight(targetHeight);
     session_.bottomTabs_->setMaximumHeight(targetHeight);
     session_.bottomTabs_->updateGeometry();
-    if (session_.previewLeftColumn_ != nullptr) {
-        session_.previewLeftColumn_->updateGeometry();
-    }
 }

@@ -37,24 +37,6 @@ void miacode::runtime::SettingsHost::showWelcomeDialog()
 
 void miacode::runtime::SettingsHost::applyConfiguredShortcuts()
 {
-    applyConfiguredShortcut(
-        session_.stopOrPlayPreviewShortcutAction_,
-        QStringLiteral("preview.stop_or_play"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+C")),
-        Qt::ApplicationShortcut);
-    applyConfiguredShortcut(
-        session_.playPausePreviewShortcutAction_,
-        QStringLiteral("preview.play_pause_global"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+X")),
-        Qt::ApplicationShortcut);
-    applyConfiguredShortcut(
-        session_.previewSlowerAction_,
-        QStringLiteral("preview.speed_down"),
-        QKeySequence(QStringLiteral("Ctrl+O")));
-    applyConfiguredShortcut(
-        session_.previewFasterAction_,
-        QStringLiteral("preview.speed_up"),
-        QKeySequence(QStringLiteral("Ctrl+P")));
     if (session_.timelineQuickStateBridge_ != nullptr) {
         session_.timelineQuickStateBridge_->setZoomWheelShortcuts(
             ShortcutRegistry::instance().shortcutTexts(

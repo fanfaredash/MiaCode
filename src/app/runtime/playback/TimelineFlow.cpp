@@ -538,10 +538,6 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorOffset(double se
     const QString serialized = QString::number(normalized, 'f', 3);
     miacode::v2::ChartWorkspace& workspace = services_.workspace();
     workspace.updateDocumentField(miacode::v2::ChartWorkspaceDocumentField::First, serialized);
-    if (ui_.firstEdit_ != nullptr) {
-        QSignalBlocker blocker(ui_.firstEdit_);
-        ui_.firstEdit_->setText(serialized);
-    }
     state_.documentDirty_ = workspace.snapshot().dirty;
     documents_.updateDirtyState();
     resetPreviewTrackTimelineOffsets();
@@ -704,7 +700,7 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
 void miacode::runtime::PlaybackCoordinator::updateWindowTitle()
 {
     QString titleText = services_.workspace().document().title;
-    if (ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.metadataPage_ && ui_.titleEdit_ != nullptr) {
+    if (ui_.titleEdit_ != nullptr) {
         titleText = ui_.titleEdit_->text();
     }
     if (titleText.trimmed().isEmpty()) {
@@ -720,14 +716,6 @@ void miacode::runtime::PlaybackCoordinator::updateWindowTitle()
 
 void miacode::runtime::PlaybackCoordinator::updateCurrentFileLabel()
 {
-    if (ui_.currentFileLabel_ == nullptr) {
-        return;
-    }
-    if (state_.currentFilePath_.isEmpty()) {
-        ui_.currentFileLabel_->setText("(unsaved)");
-    } else {
-        ui_.currentFileLabel_->setText(QDir::toNativeSeparators(state_.currentFilePath_));
-    }
 }
 
 QString miacode::runtime::PlaybackCoordinator::editorText() const

@@ -142,25 +142,10 @@ void Session::applyPreviewPlaybackRate(double rate)
 
 void Session::updatePreviewPlaybackRateToastGeometry()
 {
-    if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
-        return;
-    }
 }
 
 void Session::hidePreviewPlaybackRateToast()
 {
-    if (previewPlaybackRateToastTimer_ != nullptr) {
-        previewPlaybackRateToastTimer_->stop();
-    }
-    if (previewPlaybackRateToastOpacityAnimation_ != nullptr) {
-        previewPlaybackRateToastOpacityAnimation_->stop();
-    }
-    if (previewPlaybackRateToastOpacityEffect_ != nullptr) {
-        previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
-    }
-    if (previewPlaybackRateToast_ != nullptr) {
-        previewPlaybackRateToast_->hide();
-    }
 }
 
 bool Session::startQtPreviewPlayback(double second, bool resumeFromPause)

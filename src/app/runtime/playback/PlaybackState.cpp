@@ -1215,19 +1215,7 @@ void miacode::runtime::PlaybackCoordinator::updatePauseButtonAppearance()
         &services_.shellNotifications(),
         [this]() { emit services_.shellNotifications().presentationChanged(); },
         Qt::QueuedConnection);
-    if (ui_.pausePreviewAction_ == nullptr) {
-        return;
-    }
-    const QColor iconColor =
-        state_.previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : UiTheme::colors().iconPrimary;
     const bool previewPlaying = state_.playing_ || state_.exportIntroLeadInActive_;
-    if (previewPlaying) {
-        ui_.pausePreviewAction_->setIcon(makePreviewPauseIcon(iconColor));
-        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.pause")));
-    } else {
-        ui_.pausePreviewAction_->setIcon(makePreviewPlayIcon(iconColor));
-        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.play")));
-    }
     if (ui_.pausePreviewButton_ != nullptr) {
         ui_.pausePreviewButton_->setText(
             previewPlaying

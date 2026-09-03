@@ -78,19 +78,7 @@ void miacode::runtime::DocumentSessionHost::updatePauseButtonAppearance()
     // the middle of a transition.
     QMetaObject::invokeMethod(
         &session_, [this]() { emit session_.presentationChanged(); }, Qt::QueuedConnection);
-    if (ui_.pausePreviewAction_ == nullptr) {
-        return;
-    }
-    const QColor iconColor =
-        state_.previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : UiTheme::colors().iconPrimary;
     const bool previewPlaying = state_.playing_ || state_.exportIntroLeadInActive_;
-    if (previewPlaying) {
-        ui_.pausePreviewAction_->setIcon(makePreviewPauseIcon(iconColor));
-        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.pause")));
-    } else {
-        ui_.pausePreviewAction_->setIcon(makePreviewPlayIcon(iconColor));
-        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.play")));
-    }
     if (ui_.pausePreviewButton_ != nullptr) {
         ui_.pausePreviewButton_->setText(
             previewPlaying
@@ -138,20 +126,10 @@ quint64 miacode::runtime::DocumentSessionHost::appliedWorkspaceRevision() const
 bool miacode::runtime::DocumentSessionHost::currentFieldHasUndoChanges() const
 {
     if (session_.hasActiveDifficulty()) {
-        const SimaiDifficultyData* difficultyData = session_.applicationServices_.workspace().document().difficulty(state_.activeDifficultyId_);
-        const QString savedLevel = difficultyData != nullptr ? difficultyData->level : QString();
-        const bool levelDirty = ui_.difficultyLevelEdit_ != nullptr && ui_.difficultyLevelEdit_->text() != savedLevel;
-        // The header's offset field edits the chart-wide &first, not a
-        // per-difficulty value.
-        const bool offsetDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->text() != session_.applicationServices_.workspace().document().first;
-        // Header designer edit (顶部显示=谱师 mode). While hidden it mirrors the
-        // model, so this stays false outside that mode.
-        const QString savedDesigner = difficultyData != nullptr ? difficultyData->designer : QString();
-        const bool designerDirty =
-            ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != savedDesigner;
         // The chart body's dirty state is the workspace's save point, not a
-        // widget undo-step count; only the header fields are asked here.
-        return levelDirty || offsetDirty || designerDirty;
+        // widget undo-step count; only the header fields were ever asked
+        // here, and none of them exist on this side of the QML migration.
+        return false;
     }
 
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
@@ -171,15 +149,6 @@ bool miacode::runtime::DocumentSessionHost::currentFieldHasUndoChanges() const
 void miacode::runtime::DocumentSessionHost::anchorCurrentFieldCleanState()
 {
     if (session_.hasActiveDifficulty()) {
-        if (ui_.difficultyLevelEdit_ != nullptr) {
-            ui_.difficultyLevelEdit_->setModified(false);
-        }
-        if (ui_.firstEdit_ != nullptr) {
-            ui_.firstEdit_->setModified(false);
-        }
-        if (ui_.difficultyDesignerEdit_ != nullptr) {
-            ui_.difficultyDesignerEdit_->setModified(false);
-        }
         return;
     }
 

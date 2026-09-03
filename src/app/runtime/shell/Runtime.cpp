@@ -736,12 +736,6 @@ void miacode::runtime::ShellHost::appendOutput(const QString& title, const QStri
         miacode::debug_log::Channel::Runtime,
         timestampLine(title) + QStringLiteral("\n") + payload + QStringLiteral("\n")
     );
-    if (session_.outputView_ == nullptr) {
-        return;
-    }
-    session_.outputView_->appendPlainText(timestampLine(title));
-    session_.outputView_->appendPlainText(payload);
-    session_.outputView_->appendPlainText(QString());
 }
 
 QString miacode::runtime::ShellHost::describeFocusWidget(QWidget* widget) const
@@ -766,7 +760,7 @@ QString miacode::runtime::ShellHost::describeFocusWidget(QWidget* widget) const
     parts.append(QStringLiteral("policy=%1").arg(focusPolicyName(widget->focusPolicy())));
     parts.append(QStringLiteral("in_owner=%1").arg(0));
     parts.append(QStringLiteral("in_metadata=%1").arg(matchesOrDescendsFrom(widget, session_.metadataExtraEdit_) ? 1 : 0));
-    parts.append(QStringLiteral("in_preview=%1").arg(matchesOrDescendsFrom(widget, session_.previewPanel_) ? 1 : 0));
+    parts.append(QStringLiteral("in_preview=%1").arg(0));
 
     if (QWidget* focusProxy = widget->focusProxy(); focusProxy != nullptr) {
         parts.append(QStringLiteral("focus_proxy=%1").arg(pointerHex(focusProxy)));

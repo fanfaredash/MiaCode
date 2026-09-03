@@ -79,16 +79,8 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
 
     const bool deletingActiveDifficulty = (difficultyId == state_.activeDifficultyId_);
     const QString difficultyName = SimaiDocument::difficultyName(difficultyId);
-    const QString currentLevel =
-        deletingActiveDifficulty && ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData->level;
-    // The header designer edit (顶部显示=谱师 mode) mirrors the model whenever it
-    // isn't being typed in, so reading the live edit for the active difficulty
-    // captures any uncommitted designer text for undo; other difficulties (and
-    // a missing widget) fall back to the saved model value.
-    const QString currentDesigner =
-        deletingActiveDifficulty && ui_.difficultyDesignerEdit_ != nullptr
-            ? ui_.difficultyDesignerEdit_->text()
-            : difficultyData->designer;
+    const QString currentLevel = difficultyData->level;
+    const QString currentDesigner = difficultyData->designer;
     const QString currentChart = deletingActiveDifficulty ? session_.editorText() : difficultyData->chart;
     const bool emptyDifficulty = currentLevel.trimmed().isEmpty()
         && currentDesigner.trimmed().isEmpty()
@@ -139,9 +131,6 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
             populateMetadataPage();
             setChartBottomTabsMode(false);
             clearTimelineAndPreview();
-            if (ui_.outlineList_ != nullptr) {
-                ui_.outlineList_->setFocus();
-            }
             session_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
         } else {

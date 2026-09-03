@@ -810,32 +810,11 @@ QString miacode::runtime::PlaybackCoordinator::formatPreviewPlaybackRateToastTex
 // presentation, no Session-own state.
 void miacode::runtime::PlaybackCoordinator::showPreviewPlaybackRateToast(double rate)
 {
-    if (ui_.previewPlaybackRateToast_ == nullptr || ui_.previewPlaybackRateToastLabel_ == nullptr) {
-        return;
-    }
-    if (ui_.previewPlaybackRateToastTimer_ != nullptr) {
-        ui_.previewPlaybackRateToastTimer_->stop();
-    }
-    if (ui_.previewPlaybackRateToastOpacityAnimation_ != nullptr) {
-        ui_.previewPlaybackRateToastOpacityAnimation_->stop();
-    }
-    ui_.previewPlaybackRateToastLabel_->setText(formatPreviewPlaybackRateToastText(rate));
-    updatePreviewPlaybackRateToastGeometry();
-    if (ui_.previewPlaybackRateToastOpacityEffect_ != nullptr) {
-        ui_.previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
-    }
-    ui_.previewPlaybackRateToast_->show();
-    ui_.previewPlaybackRateToast_->raise();
-    if (ui_.previewPlaybackRateToastTimer_ != nullptr) {
-        ui_.previewPlaybackRateToastTimer_->start();
-    }
+    Q_UNUSED(rate);
 }
 
 void miacode::runtime::PlaybackCoordinator::updatePreviewPlaybackRateToastGeometry()
 {
-    if (ui_.previewPlaybackRateToast_ == nullptr || ui_.previewPlaybackRateToastLabel_ == nullptr) {
-        return;
-    }
 }
 
 // Session::startQtPreviewPlayback, Session::pauseQtPreviewPlaybackExact,

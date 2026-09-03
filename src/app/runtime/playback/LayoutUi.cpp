@@ -99,17 +99,6 @@ QString rehostPointerHex(const void* pointer)
 constexpr qint64 kRehostLayoutStepSlowMs = 50;
 constexpr qint64 kRehostLayoutTotalSlowMs = 80;
 
-// Stage 4.9d-3 (D-class): local copy of the find-bar geometry constants,
-// moved verbatim alongside ShellHost::updateEditorFindBarGeometry /
-// applyFindOverlayInset (shell/Interaction.cpp). Both bodies only ever
-// touch ui_.editorFindBar_ / ui_.editorFindGeometryHost_ / ui_.editorStack_,
-// so they carry over unchanged; ShellHost keeps its own copy since it is
-// still called internally (e.g. shell/Interaction.cpp's find/replace flow).
-constexpr int kEditorFindBarMinWidth = 300;
-constexpr int kEditorFindBarMaxWidth = 500;
-constexpr int kEditorFindBarHorizontalMargin = 14;
-constexpr int kEditorFindBarTopMargin = 10;
-constexpr int kEditorFindBarOverlayGap = 8;
 
 QString rehostWidgetSummary(QWidget* widget)
 {
@@ -311,164 +300,16 @@ void miacode::runtime::PlaybackCoordinator::clearPreviewObjectStats()
 
 int miacode::runtime::PlaybackCoordinator::updatePreviewStatsLayoutMode(int hostWidth)
 {
-    if (ui_.previewStatsCard_ == nullptr || ui_.previewStatsGridLayout_ == nullptr || ui_.previewStatsChips_.isEmpty()) {
-        return 0;
-    }
-
-    const int itemCount = ui_.previewStatsChips_.size();
-    const QWidget* gridHost = ui_.previewStatsGridLayout_->parentWidget();
-    const int horizontalSpacing = qMax(0, ui_.previewStatsGridLayout_->horizontalSpacing());
-    const int verticalSpacing = qMax(0, ui_.previewStatsGridLayout_->verticalSpacing());
-    const QMargins gridMargins = ui_.previewStatsGridLayout_->contentsMargins();
-    const int resolvedHostWidth =
-        (hostWidth >= 0)
-        ? hostWidth
-        : ((gridHost != nullptr) ? gridHost->contentsRect().width() : ui_.previewStatsCard_->contentsRect().width());
-    if (resolvedHostWidth <= 0) {
-        return ui_.previewStatsCard_->minimumHeight();
-    }
-    const int chipHeight = qMax(
-        miacode::window_parity::kPreviewStatsChipHeight,
-        !ui_.previewStatsChips_.isEmpty() && ui_.previewStatsChips_.constFirst() != nullptr
-            ? ui_.previewStatsChips_.constFirst()->sizeHint().height()
-            : miacode::window_parity::kPreviewStatsChipHeight
-    );
-    const miacode::window_parity::PreviewStatsLayout baseLayout = miacode::window_parity::computePreviewStatsLayout(
-        resolvedHostWidth,
-        itemCount,
-        horizontalSpacing,
-        verticalSpacing,
-        chipHeight,
-        gridMargins.top(),
-        gridMargins.bottom()
-    );
-    int cols = baseLayout.columns;
-    int rows = baseLayout.rows;
-
-    const QLabel* widthTemplateLabel =
-        ui_.previewTotalStatsLabel_ != nullptr ? ui_.previewTotalStatsLabel_ : ui_.previewStatsChips_.constFirst();
-    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : QGuiApplication::font());
-    constexpr int kPreviewStatsChipHorizontalPadding = 18;
-    const int maxChipHintWidth =
-        chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
-        + kPreviewStatsChipHorizontalPadding;
-
-    auto availableWidthForColumns = [&](int columnCount) {
-        const int totalSpacing = horizontalSpacing * qMax(0, columnCount - 1);
-        return qMax(0, resolvedHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
-    };
-
-    constexpr int kMinimumAllowedStatsColumns = 2;
-    while (cols > kMinimumAllowedStatsColumns) {
-        const int availableWidth = availableWidthForColumns(cols);
-        const int columnWidth = cols > 0 ? (availableWidth / cols) : 0;
-        if (columnWidth >= maxChipHintWidth) {
-            break;
-        }
-        --cols;
-    }
-    rows = qMax(1, (itemCount + cols - 1) / cols);
-    const bool structureChanged = (rows != state_.previewStatsLayoutRows_) || (cols != state_.previewStatsLayoutCols_);
-    state_.previewStatsLayoutRows_ = rows;
-    state_.previewStatsLayoutCols_ = cols;
-
-    const int cardHeight = 16
-        + qMax(0, gridMargins.top())
-        + qMax(0, gridMargins.bottom())
-        + rows * chipHeight
-        + qMax(0, rows - 1) * verticalSpacing;
-    ui_.previewStatsCard_->setMinimumHeight(cardHeight);
-
-    if (structureChanged) {
-        while (QLayoutItem* item = ui_.previewStatsGridLayout_->takeAt(0)) {
-            delete item;
-        }
-        for (int col = 0; col < 6; ++col) {
-            ui_.previewStatsGridLayout_->setColumnStretch(col, 0);
-            ui_.previewStatsGridLayout_->setColumnMinimumWidth(col, 0);
-        }
-        for (int row = 0; row < 6; ++row) {
-            ui_.previewStatsGridLayout_->setRowStretch(row, 0);
-        }
-
-        for (int i = 0; i < itemCount; ++i) {
-            const int row = i / cols;
-            const int col = i % cols;
-            ui_.previewStatsGridLayout_->addWidget(ui_.previewStatsChips_.at(i), row, col);
-        }
-        for (int col = 0; col < cols; ++col) {
-            ui_.previewStatsGridLayout_->setColumnStretch(col, 1);
-        }
-        for (int row = 0; row < rows; ++row) {
-            ui_.previewStatsGridLayout_->setRowStretch(row, 1);
-        }
-    }
-
-    // Keep chip widths column-driven and independent from text metrics.
-    const int totalSpacing = horizontalSpacing * qMax(0, cols - 1);
-    const int availableWidth = qMax(0, resolvedHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
-    const int columnWidth = (cols > 0) ? (availableWidth / cols) : 0;
-    for (QLabel* chip : ui_.previewStatsChips_) {
-        if (chip == nullptr) {
-            continue;
-        }
-        chip->setFixedWidth(qMax(0, columnWidth));
-    }
-
-    return cardHeight;
+    // previewStatsGridLayout_ / previewStatsChips_ never exist on this side
+    // of the QML migration.
+    Q_UNUSED(hostWidth);
+    return 0;
 }
 
 int miacode::runtime::PlaybackCoordinator::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
 {
     const int statsHostWidth = qMax(0, panelWidth - kPreviewPanelMarginX * 2 - 16);
-    if (ui_.previewStatsGridLayout_ == nullptr || ui_.previewStatsChips_.isEmpty()) {
-        return miacode::window_parity::computePreviewStatsLayout(statsHostWidth).minCardHeight;
-    }
-
-    const int itemCount = ui_.previewStatsChips_.size();
-    const int horizontalSpacing = qMax(0, ui_.previewStatsGridLayout_->horizontalSpacing());
-    const int verticalSpacing = qMax(0, ui_.previewStatsGridLayout_->verticalSpacing());
-    const QMargins gridMargins = ui_.previewStatsGridLayout_->contentsMargins();
-    const int chipHeight = qMax(
-        miacode::window_parity::kPreviewStatsChipHeight,
-        ui_.previewStatsChips_.constFirst() != nullptr
-            ? ui_.previewStatsChips_.constFirst()->sizeHint().height()
-            : miacode::window_parity::kPreviewStatsChipHeight
-    );
-    const QLabel* widthTemplateLabel =
-        ui_.previewTotalStatsLabel_ != nullptr ? ui_.previewTotalStatsLabel_ : ui_.previewStatsChips_.constFirst();
-    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : QGuiApplication::font());
-    constexpr int kPreviewStatsChipHorizontalPadding = 18;
-    const int minChipWidth =
-        chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
-        + kPreviewStatsChipHorizontalPadding;
-    int cols = qMin(
-        itemCount,
-        statsHostWidth >= minChipWidth * miacode::window_parity::kPreviewStatsWideLayoutCols
-                + horizontalSpacing * qMax(0, miacode::window_parity::kPreviewStatsWideLayoutCols - 1)
-            ? miacode::window_parity::kPreviewStatsWideLayoutCols
-            : miacode::window_parity::kPreviewStatsNarrowLayoutCols
-    );
-    constexpr int kMinimumAllowedStatsColumns = 2;
-    const auto availableWidthForColumns = [&](int columnCount) {
-        const int totalSpacing = horizontalSpacing * qMax(0, columnCount - 1);
-        return qMax(0, statsHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
-    };
-    while (cols > kMinimumAllowedStatsColumns) {
-        const int availableColumnWidth = availableWidthForColumns(cols);
-        const int columnWidth = cols > 0 ? (availableColumnWidth / cols) : 0;
-        if (columnWidth >= minChipWidth) {
-            break;
-        }
-        --cols;
-    }
-    cols = qMax(1, cols);
-    const int rows = qMax(1, (itemCount + cols - 1) / cols);
-    return 16
-        + qMax(0, gridMargins.top())
-        + qMax(0, gridMargins.bottom())
-        + rows * chipHeight
-        + qMax(0, rows - 1) * verticalSpacing;
+    return miacode::window_parity::computePreviewStatsLayout(statsHostWidth).minCardHeight;
 }
 
 double miacode::runtime::PlaybackCoordinator::normalizedPreviewCanvasAspectRatio(double ratio) const
@@ -493,41 +334,6 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasAspectRatio(double r
         updatePreviewPanelLayout();
     }
     refreshQuickShellPreviewCompositeSurfaceState(state_, owner_);
-    if (ui_.workspaceSplitter_ != nullptr && ui_.previewPanel_ != nullptr && ui_.previewLeftColumn_ != nullptr) {
-        const bool restoringToSquare = qAbs(normalized - 1.0) <= 1e-6 && previousRatio > 1.0 + 1e-6;
-        const int availableWidth = qMax(0, ui_.workspaceSplitter_->contentsRect().width());
-        const int availableHeight = qMax(0, ui_.workspaceSplitter_->contentsRect().height());
-        const int leftMinWidth = qMax(
-            miacode::window_parity::kWorkspaceContentMinWidth,
-            ui_.previewLeftColumn_->minimumWidth());
-        const int controlHeight =
-            ui_.previewControlCard_ != nullptr
-                ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
-                : 0;
-        const int targetRightWidth =
-            restoringToSquare
-                ? qMax(kEmbeddedPreviewPanelMinWidth, ui_.previewPanel_->width())
-                : miacode::window_parity::computePreviewPanelTargetWidthForAdaptiveStats(
-                    availableWidth,
-                    availableHeight,
-                    leftMinWidth,
-                    controlHeight,
-                    normalized
-                );
-        const int clampedRightWidth = qBound(
-            kEmbeddedPreviewPanelMinWidth,
-            targetRightWidth,
-            // Reserve the left column's minimum: a wider aspect ratio must
-            // letterbox the preview, never squeeze the content column below
-            // its design-width budget (spec: kWorkspaceContentMinWidth).
-            qMax(kEmbeddedPreviewPanelMinWidth, availableWidth - leftMinWidth)
-        );
-        ui_.previewPanel_->setMinimumWidth(clampedRightWidth);
-        if (availableWidth > 0) {
-            const int leftWidth = qMax(leftMinWidth, availableWidth - clampedRightWidth);
-            ui_.workspaceSplitter_->setSizes({leftWidth, clampedRightWidth});
-        }
-    }
     refreshLayoutAfterPageSwitch();
     if (persistState) {
         preferences_.savePortableState();
@@ -537,11 +343,9 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasAspectRatio(double r
 void miacode::runtime::PlaybackCoordinator::updatePreviewWorkspaceLayout()
 {
     updatePreviewPanelLayout();
-    refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
     refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
     refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
     refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
 }
@@ -550,34 +354,14 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewWorkspaceLayout()
 // (shell/Interaction.cpp) — pure ui_ widget geometry, no ShellHost-own state.
 void miacode::runtime::PlaybackCoordinator::updateEditorFindBarGeometry()
 {
-    QWidget* geometryHost = ui_.editorFindGeometryHost_ != nullptr ? ui_.editorFindGeometryHost_ : ui_.editorStack_;
-    if (ui_.editorFindBar_ == nullptr || geometryHost == nullptr) {
-        return;
-    }
-    const int availableWidth = qMax(0, geometryHost->width() - (kEditorFindBarHorizontalMargin * 2));
-    if (availableWidth <= 0) {
-        return;
-    }
-    int width = qMin(kEditorFindBarMaxWidth, availableWidth);
-    if (availableWidth >= kEditorFindBarMinWidth) {
-        width = qMax(kEditorFindBarMinWidth, width);
-    }
-    const int x = qMax(kEditorFindBarHorizontalMargin, geometryHost->width() - kEditorFindBarHorizontalMargin - width);
-    const int y = kEditorFindBarTopMargin;
-    const int height = ui_.editorFindBar_->sizeHint().height();
-    ui_.editorFindBar_->setGeometry(x, y, width, height);
-    ui_.editorFindBar_->raise();
+    // editorFindBar_ / editorFindGeometryHost_ never exist on this side of
+    // the QML migration.
 }
 
 // Stage 4.9d-3 (D-class): moved verbatim from ShellHost::applyFindOverlayInset
 // (shell/Interaction.cpp) — pure ui_ widget read, no ShellHost-own state.
 void miacode::runtime::PlaybackCoordinator::applyFindOverlayInset()
 {
-    const int topInset =
-        (ui_.editorFindBar_ != nullptr && ui_.editorFindBar_->isVisible())
-        ? ui_.editorFindBar_->height() + kEditorFindBarOverlayGap
-        : 0;
-    Q_UNUSED(topInset);
 }
 
 void miacode::runtime::PlaybackCoordinator::cacheWorkspaceLayoutSizes()
@@ -591,11 +375,6 @@ void miacode::runtime::PlaybackCoordinator::restoreWorkspaceLayoutSizes()
 void miacode::runtime::PlaybackCoordinator::setWorkspacePanelsSwapped(bool swapped, bool persistState)
 {
     if (state_.workspacePanelsSwapped_ == swapped) {
-        if (ui_.swapWorkspaceSidesAction_ != nullptr) {
-            ui_.swapWorkspaceSidesAction_->blockSignals(true);
-            ui_.swapWorkspaceSidesAction_->setChecked(state_.workspacePanelsSwapped_);
-            ui_.swapWorkspaceSidesAction_->blockSignals(false);
-        }
         return;
     }
 
@@ -609,14 +388,6 @@ void miacode::runtime::PlaybackCoordinator::setWorkspacePanelsSwapped(bool swapp
 
 void miacode::runtime::PlaybackCoordinator::applyWorkspacePanelArrangement()
 {
-    if (ui_.swapWorkspaceSidesAction_ != nullptr) {
-        ui_.swapWorkspaceSidesAction_->blockSignals(true);
-        ui_.swapWorkspaceSidesAction_->setChecked(state_.workspacePanelsSwapped_);
-        ui_.swapWorkspaceSidesAction_->setIcon(
-            makeMenuSelectionCheckIcon(UiTheme::colors().accent, state_.workspacePanelsSwapped_)
-        );
-        ui_.swapWorkspaceSidesAction_->blockSignals(false);
-    }
     refreshLayoutAfterPageSwitch();
 }
 
@@ -625,111 +396,17 @@ void miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch()
     MC_OP("miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch");
     QElapsedTimer totalTimer;
     totalTimer.start();
-    QWidget* currentPageForDiag = ui_.editorStack_ != nullptr ? ui_.editorStack_->currentWidget() : nullptr;
     MIACODE_HANG_PHASE(
         "TimelineSection::refreshLayoutAfterPageSwitch",
-        QStringLiteral("current_page=%1").arg(layoutWidgetSummary(currentPageForDiag)));
-    if (ui_.previewLeftColumn_ != nullptr) {
-        QElapsedTimer stepTimer;
-        stepTimer.start();
-        MIACODE_HANG_PHASE(
-            "TimelineSection::refreshLayoutAfterPageSwitch.previewLeftColumn",
-            layoutWidgetSummary(ui_.previewLeftColumn_));
-        ui_.previewLeftColumn_->updateGeometry();
-        if (QLayout* layout = ui_.previewLeftColumn_->layout(); layout != nullptr) {
-            layout->activate();
-        }
-        const qint64 elapsedMs = stepTimer.elapsed();
-        if (elapsedMs >= kPageLayoutStepSlowMs) {
-            appendPageLayoutDiag(
-                QStringLiteral("refresh_layout_step_slow"),
-                QStringLiteral("preview_left_column"),
-                ui_.previewLeftColumn_,
-                elapsedMs,
-                miacode::debug_log::Level::Warn);
-        }
-    }
-    if (ui_.editorStack_ != nullptr) {
-        QElapsedTimer stackTimer;
-        stackTimer.start();
-        MIACODE_HANG_PHASE(
-            "TimelineSection::refreshLayoutAfterPageSwitch.editorStack",
-            layoutWidgetSummary(ui_.editorStack_));
-        ui_.editorStack_->updateGeometry();
-        // updateGeometry() alone only marks the stack's size hint dirty — it does
-        // NOT re-lay-out the current page. The export page inserts a heavy embedded
-        // export page on entry, so its (and any freshly-shown page's)
-        // internal layout must be invalidated + activated here, or its children
-        // keep the geometry they were first built with. invalidate() clears cached
-        // sizeHints so the just-inserted panel is measured fresh; activate() does a
-        // full geometry pass that cascades into the panel's own nested layout.
-        if (QWidget* currentPage = ui_.editorStack_->currentWidget(); currentPage != nullptr) {
-            if (QLayout* pageLayout = currentPage->layout(); pageLayout != nullptr) {
-                QElapsedTimer pageTimer;
-                pageTimer.start();
-                MIACODE_HANG_PHASE(
-                    "TimelineSection::refreshLayoutAfterPageSwitch.currentPage.activate",
-                    layoutWidgetSummary(currentPage));
-                pageLayout->invalidate();
-                pageLayout->activate();
-                const qint64 elapsedMs = pageTimer.elapsed();
-                if (elapsedMs >= kPageLayoutStepSlowMs) {
-                    appendPageLayoutDiag(
-                        QStringLiteral("refresh_layout_step_slow"),
-                        QStringLiteral("current_page_layout_activate"),
-                        currentPage,
-                        elapsedMs,
-                        miacode::debug_log::Level::Warn);
-                }
-            }
-            currentPage->updateGeometry();
-            currentPage->update();
-        }
-        const qint64 elapsedMs = stackTimer.elapsed();
-        if (elapsedMs >= kPageLayoutStepSlowMs) {
-            appendPageLayoutDiag(
-                QStringLiteral("refresh_layout_step_slow"),
-                QStringLiteral("editor_stack"),
-                ui_.editorStack_,
-                elapsedMs,
-                miacode::debug_log::Level::Warn,
-                QStringLiteral("current_page=\"%1\"").arg(layoutWidgetSummary(ui_.editorStack_->currentWidget())));
-        }
-    }
-    if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->updateGeometry();
-    }
-    if (ui_.workspaceSplitter_ != nullptr) {
-        QElapsedTimer stepTimer;
-        stepTimer.start();
-        MIACODE_HANG_PHASE(
-            "TimelineSection::refreshLayoutAfterPageSwitch.workspaceSplitter",
-            layoutWidgetSummary(ui_.workspaceSplitter_));
-        ui_.workspaceSplitter_->updateGeometry();
-        if (QLayout* layout = ui_.workspaceSplitter_->layout(); layout != nullptr) {
-            layout->activate();
-        }
-        const qint64 elapsedMs = stepTimer.elapsed();
-        if (elapsedMs >= kPageLayoutStepSlowMs) {
-            appendPageLayoutDiag(
-                QStringLiteral("refresh_layout_step_slow"),
-                QStringLiteral("workspace_splitter"),
-                ui_.workspaceSplitter_,
-                elapsedMs,
-                miacode::debug_log::Level::Warn);
-        }
-    }
-    refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
+        QStringLiteral("current_page=%1").arg(layoutWidgetSummary(nullptr)));
     refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
-    refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
     refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
     const qint64 totalMs = totalTimer.elapsed();
     if (totalMs >= kPageLayoutTotalSlowMs) {
         appendPageLayoutDiag(
             QStringLiteral("refresh_layout_total_slow"),
             QStringLiteral("total"),
-            currentPageForDiag,
+            nullptr,
             totalMs,
             miacode::debug_log::Level::Warn);
     }
@@ -737,92 +414,15 @@ void miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch()
 
 void miacode::runtime::PlaybackCoordinator::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
 {
-    if (ui_.previewPanel_ != nullptr) {
-        const QRect panelRect = ui_.previewPanel_->contentsRect();
-        const int resolvedWidth = panelWidthOverride >= 0 ? panelWidthOverride : panelRect.width();
-        const int resolvedHeight = panelHeightOverride >= 0 ? panelHeightOverride : panelRect.height();
-        const int controlHeight =
-            ui_.previewControlCard_ != nullptr
-                ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
-                : 0;
-        const miacode::window_parity::PreviewPanelLayout layout =
-            miacode::window_parity::computePreviewPanelLayout(
-                resolvedWidth,
-                resolvedHeight,
-                controlHeight,
-                state_.previewCanvasAspectRatio_
-            );
-
-        if (ui_.previewCanvasFrame_ != nullptr) {
-            ui_.previewCanvasFrame_->setGeometry(
-                panelRect.x() + layout.previewX,
-                panelRect.y() + layout.previewY,
-                layout.previewWidth,
-                layout.previewHeight
-            );
-            ui_.previewCanvasFrame_->show();
-        }
-        if (ui_.previewCanvasContainer_ != nullptr && ui_.previewCanvasFrame_ != nullptr) {
-            ui_.previewCanvasContainer_->setGeometry(ui_.previewCanvasFrame_->contentsRect());
-            ui_.previewCanvasContainer_->show();
-        }
-        if (ui_.previewControlCard_ != nullptr) {
-            ui_.previewControlCard_->setGeometry(
-                panelRect.x() + layout.controlX,
-                panelRect.y() + layout.controlY,
-                layout.controlWidth,
-                controlHeight
-            );
-            ui_.previewControlCard_->show();
-        }
-        if (ui_.previewStatsCard_ != nullptr) {
-            const int statsHeight = qMax(layout.statsHeight, previewStatsMinimumHeightForPanelWidth(layout.statsWidth));
-            ui_.previewStatsCard_->setGeometry(
-                panelRect.x() + layout.statsX,
-                panelRect.y() + layout.statsY,
-                layout.statsWidth,
-                statsHeight
-            );
-            updatePreviewStatsLayoutMode(layout.statsHostWidth);
-            ui_.previewStatsCard_->show();
-        }
-    }
+    Q_UNUSED(panelWidthOverride);
+    Q_UNUSED(panelHeightOverride);
     refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
     updatePreviewPlaybackRateToastGeometry();
 }
 
 void miacode::runtime::PlaybackCoordinator::updatePreviewObjectStats(double second)
 {
-    if (ui_.previewTapStatsLabel_ == nullptr
-        || ui_.previewHoldStatsLabel_ == nullptr
-        || ui_.previewSlideStatsLabel_ == nullptr
-        || ui_.previewTouchStatsLabel_ == nullptr
-        || ui_.previewBreakStatsLabel_ == nullptr
-        || ui_.previewTotalStatsLabel_ == nullptr) {
-        return;
-    }
-
-    const miacode::preview::scene::PreviewObjectStatsSnapshot stats =
-        state_.previewProgressStatsCache_ != nullptr
-        ? state_.previewProgressStatsCache_->snapshotAt(second)
-        : miacode::preview::scene::PreviewObjectStatsSnapshot();
-
-    const auto fmt = [](const QString& name, int played, int total) {
-        return QString("%1  %2/%3")
-            .arg(name.leftJustified(5, QChar(' '), true))
-            .arg(played)
-            .arg(total);
-    };
-    ui_.previewTapStatsLabel_->setText(fmt("Tap", stats.tapPlayed, stats.tapTotal));
-    ui_.previewHoldStatsLabel_->setText(fmt("Hold", stats.holdPlayed, stats.holdTotal));
-    ui_.previewSlideStatsLabel_->setText(fmt("Slide", stats.slidePlayed, stats.slideTotal));
-    ui_.previewTouchStatsLabel_->setText(fmt("Touch", stats.touchPlayed, stats.touchTotal));
-    ui_.previewBreakStatsLabel_->setText(fmt("Break", stats.breakPlayed, stats.breakTotal));
-    ui_.previewTotalStatsLabel_->setText(fmt("Total", stats.totalPlayed, stats.totalCount));
-    updatePreviewStatsLayoutMode(-1);
-    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
-    refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    Q_UNUSED(second);
 }
 
 QString miacode::runtime::PlaybackCoordinator::formatPreviewTimestamp(double second) const

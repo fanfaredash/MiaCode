@@ -193,28 +193,6 @@ void miacode::runtime::ValidationHost::applyMuriRenderOptions()
     state_.muriRenderOptions_.showJudgeMarkers = state_.showJudgeMarkers_;
     state_.muriRenderOptions_.showTouchTrail = state_.showTouchTrail_;
 
-    if (ui_.renderModeNativeAction_ != nullptr) {
-        QSignalBlocker blocker(ui_.renderModeNativeAction_);
-        ui_.renderModeNativeAction_->setChecked(state_.muriRenderOptions_.renderMode == RenderMode::Native);
-        ui_.renderModeNativeAction_->setIcon(
-            makeMenuSelectionCheckIcon(UiTheme::colors().accent, ui_.renderModeNativeAction_->isChecked())
-        );
-    }
-    if (ui_.renderModeMaimuriDxAction_ != nullptr) {
-        QSignalBlocker blocker(ui_.renderModeMaimuriDxAction_);
-        ui_.renderModeMaimuriDxAction_->setChecked(state_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
-        ui_.renderModeMaimuriDxAction_->setIcon(
-            makeMenuSelectionCheckIcon(UiTheme::colors().accent, ui_.renderModeMaimuriDxAction_->isChecked())
-        );
-    }
-    if (ui_.renderModeEraseByAreaAction_ != nullptr) {
-        QSignalBlocker blocker(ui_.renderModeEraseByAreaAction_);
-        ui_.renderModeEraseByAreaAction_->setChecked(
-            state_.muriRenderOptions_.renderMode == RenderMode::EraseByArea);
-        ui_.renderModeEraseByAreaAction_->setIcon(
-            makeMenuSelectionCheckIcon(UiTheme::colors().accent, ui_.renderModeEraseByAreaAction_->isChecked())
-        );
-    }
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setShowSlideTracks(state_.muriRenderOptions_.showSlideTracks);
     }

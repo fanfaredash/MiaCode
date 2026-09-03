@@ -413,18 +413,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
     if (previewFullscreenButton_ != nullptr) {
         previewFullscreenButton_->installEventFilter(this);
     }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->setMouseTracking(true);
-        previewCanvasContainer_->installEventFilter(this);
-    }
-    if (previewCanvasFrame_ != nullptr) {
-        previewCanvasFrame_->setMouseTracking(true);
-        previewCanvasFrame_->installEventFilter(this);
-    }
-    if (previewPanel_ != nullptr) {
-        previewPanel_->setMouseTracking(true);
-        previewPanel_->installEventFilter(this);
-    }
     // Watch the rehosted workspace content for the async, QML-driven surface resize
     // that lands AFTER a page switch (export page aspect change + bottom-tabs
     // collapse). The filter re-runs the layout finalize so the just-switched page
@@ -433,50 +421,8 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
     if (workspaceContentWidget_ != nullptr) {
         workspaceContentWidget_->installEventFilter(this);
     }
-    if (editorFindEdit_ != nullptr) {
-        editorFindEdit_->installEventFilter(this);
-        connect(editorFindEdit_, &QLineEdit::returnPressed, this, &Session::onFindNext);
-    }
-    if (editorReplaceEdit_ != nullptr) {
-        editorReplaceEdit_->installEventFilter(this);
-    }
     if (QApplication::instance() != nullptr) {
         QApplication::instance()->installEventFilter(this);
-    }
-    if (editorFindPrevButton_ != nullptr) {
-        connect(editorFindPrevButton_, &QToolButton::clicked, this, &Session::onFindPrevious);
-    }
-    if (editorFindNextButton_ != nullptr) {
-        connect(editorFindNextButton_, &QToolButton::clicked, this, &Session::onFindNext);
-    }
-    if (editorFindCloseButton_ != nullptr) {
-        connect(editorFindCloseButton_, &QToolButton::clicked, this, [this]() {
-            shell_->hideFindReplaceBar();
-        });
-    }
-    if (editorReplaceButton_ != nullptr) {
-        connect(editorReplaceButton_, &QPushButton::clicked, this, &Session::onReplaceOne);
-    }
-    if (editorReplaceAllButton_ != nullptr) {
-        connect(editorReplaceAllButton_, &QPushButton::clicked, this, &Session::onReplaceAll);
-    }
-    if (editorFindBar_ != nullptr) {
-        auto* toggleFindBarShortcut = new QShortcut(editorFindBar_);
-        ShortcutRegistry::instance().applyShortcut(
-            toggleFindBarShortcut,
-            QStringLiteral("editor.find_bar.toggle"),
-            QKeySequence::Find);
-        toggleFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
-        connect(toggleFindBarShortcut, &QShortcut::activated, this, &Session::onToggleFindReplace);
-        auto* closeFindBarShortcut = new QShortcut(editorFindBar_);
-        ShortcutRegistry::instance().applyShortcut(
-            closeFindBarShortcut,
-            QStringLiteral("editor.find_bar.close"),
-            QKeySequence(Qt::Key_Escape));
-        closeFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
-        connect(closeFindBarShortcut, &QShortcut::activated, this, [this]() {
-            shell_->hideFindReplaceBar();
-        });
     }
     shell_->updateEditorFindBarGeometry();
     shell_->applyFindOverlayInset();

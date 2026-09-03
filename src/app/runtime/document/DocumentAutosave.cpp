@@ -322,16 +322,7 @@ QString miacode::runtime::DocumentSessionHost::currentDocumentTextForAutosave() 
     QString liveCanonicalDesigner = snapshot.designer;
     if (session_.hasActiveDifficulty()) {
         SimaiDifficultyData& difficultyData = snapshot.ensureDifficulty(state_.activeDifficultyId_);
-        difficultyData.level = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData.level;
         difficultyData.chart = session_.editorText();
-        // The header edits the chart-wide offset, plus — in 顶部显示=谱师 mode —
-        // this difficulty's designer (while hidden the edit mirrors the model,
-        // so capturing it unconditionally is safe).
-        snapshot.first = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : snapshot.first;
-        if (ui_.difficultyDesignerEdit_ != nullptr) {
-            difficultyData.designer = ui_.difficultyDesignerEdit_->text();
-            liveCanonicalDesigner = difficultyData.designer;
-        }
     } else if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         snapshot.title = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
         snapshot.artist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();

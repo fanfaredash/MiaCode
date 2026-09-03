@@ -280,10 +280,8 @@ void miacode::runtime::PlaybackCoordinator::hidePreviewFullscreenControls(bool a
 
 void miacode::runtime::PlaybackCoordinator::schedulePreviewFullscreenControlsAutoHide()
 {
-    if (!state_.previewFullscreenActive_ || ui_.previewFullscreenControlsTimer_ == nullptr) {
-        return;
-    }
-    ui_.previewFullscreenControlsTimer_->start(kPreviewFullscreenControlsAutoHideDelayMs);
+    // previewFullscreenControlsTimer_ never exists on this side of the QML
+    // migration.
 }
 
 void miacode::runtime::PlaybackCoordinator::pollPreviewFullscreenCursor()
@@ -326,23 +324,6 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewFullscreenOverlayGeomet
 {
     if (!state_.previewFullscreenActive_ || ui_.previewFullscreenWindow_ == nullptr) {
         return;
-    }
-
-    const QRect windowRect = ui_.previewFullscreenWindow_->contentsRect();
-    const QPoint globalTopLeft = ui_.previewFullscreenWindow_->mapToGlobal(windowRect.topLeft());
-
-    if (ui_.previewFullscreenHintWindow_ != nullptr
-        && ui_.previewFullscreenHintLabel_ != nullptr
-        && ui_.previewFullscreenHintLabel_->isVisible()) {
-        const QSize hintSize = ui_.previewFullscreenHintLabel_->sizeHint().expandedTo(QSize(220, 42));
-        ui_.previewFullscreenHintWindow_->resize(hintSize);
-        ui_.previewFullscreenHintWindow_->move(
-            globalTopLeft.x() + qMax(16, (windowRect.width() - hintSize.width()) / 2),
-            globalTopLeft.y() + kPreviewFullscreenHintTopMargin
-        );
-        ui_.previewFullscreenHintLabel_->resize(hintSize);
-        ui_.previewFullscreenHintLabel_->raise();
-        ui_.previewFullscreenHintWindow_->raise();
     }
 
     if (ui_.previewFullscreenControlsWindow_ != nullptr

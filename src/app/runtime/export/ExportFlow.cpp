@@ -444,7 +444,7 @@ VideoExportTask miacode::runtime::VideoExportHost::buildVideoExportSeedTask(int 
 
     const QFileInfo chartInfo(session_.currentFilePath_);
     QString chartTitle = session_.applicationServices_.workspace().document().title;
-    if (session_.editorStack_ != nullptr && session_.editorStack_->currentWidget() == session_.metadataPage_ && session_.titleEdit_ != nullptr) {
+    if (session_.titleEdit_ != nullptr) {
         chartTitle = session_.titleEdit_->text();
     }
     // Per-difficulty designer overrides the document-level &des field when
