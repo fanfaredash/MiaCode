@@ -20,7 +20,7 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
     // From the assembly's slot: MainWindow installs the session during its own
     // construction, which finishes before this context is built.
     , coverExport_(*qobject_cast<QmlExportSession*>(services.exportPageSession()),
-                   services.uiRequests(), this)
+                   services.uiRequests(), services.playbackControlSlot(), this)
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)

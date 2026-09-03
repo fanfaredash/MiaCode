@@ -24,6 +24,10 @@ class CoverFrameSceneBinder;
 class SceneFrameRenderer;
 }
 
+namespace miacode::v2 {
+class PlaybackControl;
+}
+
 // The v2 cover-export session owns no QWidget. It projects the reusable cover
 // layout model into CoverExportPage.qml and delegates all file/user feedback to
 // UiRequestService, while the final image stays an in-process Quick render.
@@ -70,6 +74,7 @@ class QmlCoverExportSession final : public QObject
 public:
     QmlCoverExportSession(QmlExportSession& exportSession,
                           miacode::v2::UiRequestService& uiRequests,
+                          miacode::v2::PlaybackControl*& playbackControlSlot,
                           QObject* parent = nullptr);
     ~QmlCoverExportSession() override;
 
@@ -219,9 +224,16 @@ private:
     void requestFont(bool displayFont, bool textLayerFont);
     void setBusy(bool busy);
     void notifyError(const QString& title, const QString& text, const QString& details = QString()) const;
+    // Bound to the assembly's slot, not a snapshot; same shape as the other
+    // v2 QML models that reach the coordinator's single playback authority.
+    miacode::v2::PlaybackControl* playbackControl() const
+    {
+        return playbackControlSlot_ != nullptr ? *playbackControlSlot_ : nullptr;
+    }
 
     QmlExportSession* exportSession_ = nullptr;
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
+    miacode::v2::PlaybackControl** playbackControlSlot_ = nullptr;
     std::unique_ptr<miacode::cover_export::CoverLayoutModel> layout_;
     std::unique_ptr<miacode::cover_export::SceneFrameRenderer> frameRenderer_;
     std::unique_ptr<miacode::cover_export::CoverFramePlaybackController> playback_;

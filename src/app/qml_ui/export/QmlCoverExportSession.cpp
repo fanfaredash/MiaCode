@@ -2,6 +2,7 @@
 
 #include "QmlExportSession.h"
 #include "UiText.h"
+#include "app/v2/PlaybackControl.h"
 #include "tools/cover_export/CoverCompositionState.h"
 #include "tools/cover_export/CoverFramePlaybackController.h"
 #include "tools/cover_export/CoverFrameExportPlan.h"
@@ -12,6 +13,7 @@
 #include "core/scene/PreviewLayerOrder.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -57,10 +59,12 @@ QString normalisedCoverOutputDirectory(const QString& chartPath)
 
 QmlCoverExportSession::QmlCoverExportSession(QmlExportSession& exportSession,
                                              miacode::v2::UiRequestService& uiRequests,
+                                             miacode::v2::PlaybackControl*& playbackControlSlot,
                                              QObject* parent)
     : QObject(parent)
     , exportSession_(&exportSession)
     , uiRequests_(&uiRequests)
+    , playbackControlSlot_(&playbackControlSlot)
     , layout_(std::make_unique<miacode::cover_export::CoverLayoutModel>())
     , playback_(std::make_unique<miacode::cover_export::CoverFramePlaybackController>(this))
     , sceneBinder_(std::make_unique<miacode::cover_export::CoverFrameSceneBinder>(this))
@@ -1173,8 +1177,40 @@ miacode::cover_export::CoverComposerInputs QmlCoverExportSession::buildInputs() 
 
 void QmlCoverExportSession::exportCover()
 {
-    if (layout_ == nullptr || outputDirectory_.isEmpty()) return;
+    if (layout_ == nullptr || busy_) {
+        return;
+    }
+    // v1's onExportCover refused the same way before it ever opened the
+    // Widgets cover dialog; the QML route dropped the user-visible half of
+    // that guard and just emitted regardless.
+    if (!containsDifficulty(selectedDifficultyId_)) {
+        notifyError(UiText::text(QStringLiteral("cover.export_cover")),
+                    UiText::text(QStringLiteral("cover.no_difficulty_selected")));
+        return;
+    }
+    if (outputDirectory_.isEmpty()) {
+        notifyError(UiText::text(QStringLiteral("cover.export_cover")),
+                    UiText::text(QStringLiteral("cover.no_output_directory")));
+        return;
+    }
+
+    // The coordinator is the single playback authority now; a preview left
+    // running under the synchronous render below would keep its audio going
+    // under a frozen UI. Only toggle when it is actually playing —
+    // togglePlayback() is a toggle, so calling it on a paused/stopped preview
+    // would start it instead.
+    if (miacode::v2::PlaybackControl* const control = playbackControl(); control != nullptr
+        && control->playbackSnapshot().transportState == miacode::v2::PlaybackTransportState::Playing) {
+        control->togglePlayback();
+    }
+
     setBusy(true);
+    // renderVisibleChartFramesForExport()/exportCoverComposite() below are
+    // synchronous in-process QSG work with no progress callback, so nothing
+    // yields back to the event loop once they start. Give it one turn here,
+    // purely so CoverExportPage's BusyIndicator gets to paint before the
+    // render blocks the UI thread.
+    QCoreApplication::processEvents();
     const auto plan = miacode::cover_export::CoverFrameExportPlan::fromVisibleLayers(
         *layout_, activeLayerKey_, activeChartFrameSeconds());
     const bool wasPlaying = chartFramePlaying();
