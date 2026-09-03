@@ -166,7 +166,7 @@ Rectangle {
         return result + 1
     }
 
-    color: Theme.surfaceColor("codeEditor", Theme.colors.background.surface)
+    color: Theme.surfaceColor(Theme.colors.background.surface)
     clip: true
 
     readonly property bool canUndo: editorController.canUndo
@@ -760,9 +760,7 @@ Rectangle {
             selectByMouse: true
             font: Theme.codeFont
 
-            background: Rectangle {
-                color: Theme.surfaceColor("codeEditor", Theme.colors.background.surface)
-            }
+            background: null
 
             Item {
                 visible: sourceArea.selectionStart === sourceArea.selectionEnd
@@ -780,7 +778,7 @@ Rectangle {
                         y: modelData.y + sourceArea.topPadding
                         width: editorScroll.width - sourceArea.leftPadding
                         height: modelData.height
-                        color: Theme.colors.state.focusLine
+                        color: Theme.overlayColor(Theme.colors.state.focusLine)
                     }
                 }
             }
@@ -789,7 +787,7 @@ Rectangle {
                 id: selectionHighlight
                 rangeStart: Math.min(sourceArea.selectionStart, sourceArea.selectionEnd)
                 rangeEnd: Math.max(sourceArea.selectionStart, sourceArea.selectionEnd)
-                fillColor: Theme.colors.state.selectionHighlight
+                fillColor: Theme.overlayColor(Theme.colors.state.selectionHighlight)
             }
 
             // Same stacking band as the current-line / selection fills (z: -1,

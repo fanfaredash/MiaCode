@@ -96,7 +96,7 @@ AbstractButton {
 
     background: HoverChrome {
         contentHeight: Math.max(label.implicitHeight, root.chevronSize)
-        baseColor: Theme.surfaceColor("input", Theme.colors.background.elevated)
+        baseColor: Theme.colors.background.elevated
         selected: root.expanded
         hovered: root.hovered
         pressed: root.down

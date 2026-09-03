@@ -6,26 +6,12 @@ import MiaCode.UI
 Menu {
     id: root
 
-    enter: FadeTransition {
-        id: fadeIn
+    readonly property PopupLifecycle lifecycle: PopupLifecycle {
+        popup: root
     }
-    exit: FadeTransition {
-        appearing: false
-        initialOpacity: root.opacity
-    }
-
-    property bool closing: false
-    readonly property bool active: visible && !closing
-
-    Connections {
-        target: root
-        function onAboutToShow() {
-            fadeIn.initialOpacity = root.closing ? root.opacity : 0
-            root.closing = false
-        }
-        function onAboutToHide() { root.closing = true }
-        function onClosed() { root.closing = false }
-    }
+    readonly property bool active: lifecycle.active
+    enter: lifecycle.enterTransition
+    exit: lifecycle.exitTransition
 
     property var anchorItem: null
     property bool openRightAligned: false

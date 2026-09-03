@@ -10,6 +10,7 @@ Item {
     property var mediaHost: null
     property var logger: null
     property string surfaceRole: "unknown"
+    property color backgroundColor: "#191A1B"
     property var attachedMediaHost: null
     property var attachedVideoOutputObject: null
     property var attachedInnerVideoOutputObject: null
@@ -172,6 +173,7 @@ Item {
         anchors.fill: parent
         z: 1
         runtime: root.runtime
+        backgroundColor: root.backgroundColor
     }
 
     PreviewQuickHudLayer {

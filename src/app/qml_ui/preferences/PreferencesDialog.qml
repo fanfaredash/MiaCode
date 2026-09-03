@@ -11,7 +11,7 @@ import MiaCode.UI
 // 快捷键 is a page here, not a dialog of its own: a modal opened from a modal
 // stacked two scrims over the same settings and put the key capture behind an
 // extra Escape.
-Dialog {
+AppDialog {
     id: root
 
     enter: FadeTransition {}
@@ -219,18 +219,8 @@ Dialog {
                     font.pixelSize: Theme.uiFontSize
                     font.bold: true
                 }
-                LabeledSlider { label: UiText.text("工具栏（深色）"); from: 0; to: 255; value: root.appBackground.toolbarAlphaDark; readout: root.appBackground.toolbarAlphaDark; onMoved: function(v) { root.appBackground.toolbarAlphaDark = Math.round(v) } }
-                LabeledSlider { label: UiText.text("工具栏（浅色）"); from: 0; to: 255; value: root.appBackground.toolbarAlphaLight; readout: root.appBackground.toolbarAlphaLight; onMoved: function(v) { root.appBackground.toolbarAlphaLight = Math.round(v) } }
-                LabeledSlider { label: UiText.text("状态栏（深色）"); from: 0; to: 255; value: root.appBackground.statusAlphaDark; readout: root.appBackground.statusAlphaDark; onMoved: function(v) { root.appBackground.statusAlphaDark = Math.round(v) } }
-                LabeledSlider { label: UiText.text("状态栏（浅色）"); from: 0; to: 255; value: root.appBackground.statusAlphaLight; readout: root.appBackground.statusAlphaLight; onMoved: function(v) { root.appBackground.statusAlphaLight = Math.round(v) } }
                 LabeledSlider { label: UiText.text("面板（深色）"); from: 0; to: 255; value: root.appBackground.panelAlphaDark; readout: root.appBackground.panelAlphaDark; onMoved: function(v) { root.appBackground.panelAlphaDark = Math.round(v) } }
                 LabeledSlider { label: UiText.text("面板（浅色）"); from: 0; to: 255; value: root.appBackground.panelAlphaLight; readout: root.appBackground.panelAlphaLight; onMoved: function(v) { root.appBackground.panelAlphaLight = Math.round(v) } }
-                LabeledSlider { label: UiText.text("编辑器标题（深色）"); from: 0; to: 255; value: root.appBackground.editorHeaderAlphaDark; readout: root.appBackground.editorHeaderAlphaDark; onMoved: function(v) { root.appBackground.editorHeaderAlphaDark = Math.round(v) } }
-                LabeledSlider { label: UiText.text("编辑器标题（浅色）"); from: 0; to: 255; value: root.appBackground.editorHeaderAlphaLight; readout: root.appBackground.editorHeaderAlphaLight; onMoved: function(v) { root.appBackground.editorHeaderAlphaLight = Math.round(v) } }
-                LabeledSlider { label: UiText.text("输入控件（深色）"); from: 0; to: 255; value: root.appBackground.inputAlphaDark; readout: root.appBackground.inputAlphaDark; onMoved: function(v) { root.appBackground.inputAlphaDark = Math.round(v) } }
-                LabeledSlider { label: UiText.text("输入控件（浅色）"); from: 0; to: 255; value: root.appBackground.inputAlphaLight; readout: root.appBackground.inputAlphaLight; onMoved: function(v) { root.appBackground.inputAlphaLight = Math.round(v) } }
-                LabeledSlider { label: UiText.text("代码编辑器（深色）"); from: 0; to: 255; value: root.appBackground.codeEditorAlphaDark; readout: root.appBackground.codeEditorAlphaDark; onMoved: function(v) { root.appBackground.codeEditorAlphaDark = Math.round(v) } }
-                LabeledSlider { label: UiText.text("代码编辑器（浅色）"); from: 0; to: 255; value: root.appBackground.codeEditorAlphaLight; readout: root.appBackground.codeEditorAlphaLight; onMoved: function(v) { root.appBackground.codeEditorAlphaLight = Math.round(v) } }
             }
         }
 

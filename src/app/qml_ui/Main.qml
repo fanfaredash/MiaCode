@@ -50,20 +50,20 @@ ApplicationWindow {
 
     palette.window: Theme.colors.background.surface
     palette.windowText: Theme.colors.text.primary
-    palette.base: Theme.colors.background.surface
-    palette.alternateBase: Theme.colors.background.elevated
+    palette.base: Theme.overlayColor(Theme.colors.background.surface)
+    palette.alternateBase: Theme.overlayColor(Theme.colors.background.elevated)
     palette.text: Theme.colors.text.primary
-    palette.button: Theme.colors.background.panel
+    palette.button: Theme.overlayColor(Theme.colors.background.panel)
     palette.buttonText: Theme.colors.text.primary
     palette.light: Theme.colors.border.control
     palette.midlight: Theme.colors.border.normal
     palette.mid: Theme.colors.border.control
     palette.dark: Theme.colors.background.surface
     palette.shadow: "#000000"
-    palette.highlight: Theme.colors.state.selected
+    palette.highlight: Theme.overlayColor(Theme.colors.state.selected)
     palette.highlightedText: Theme.colors.text.active
     palette.placeholderText: Theme.colors.text.secondary
-    palette.toolTipBase: Theme.colors.background.elevated
+    palette.toolTipBase: Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
     palette.toolTipText: Theme.colors.text.primary
     palette.disabled.text: Theme.colors.text.disabled
     palette.disabled.windowText: Theme.colors.text.disabled
@@ -119,8 +119,7 @@ ApplicationWindow {
             id: backgroundImage
             anchors.fill: parent
             source: window.applicationContext.appBackground.sourceUrl
-            visible: window.applicationContext.appBackground.enabled
-                     && window.applicationContext.appBackground.imageReadable
+            visible: Theme.backgroundActive
             opacity: window.applicationContext.appBackground.opacity
             asynchronous: false
             smooth: true
@@ -171,7 +170,7 @@ ApplicationWindow {
             width: Math.min(parent.width - 48, 420)
             height: 72
             radius: 8
-            color: Theme.colors.background.elevated
+            color: Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
             border.color: Theme.colors.text.active
             border.width: 1
 

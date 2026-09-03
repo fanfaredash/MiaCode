@@ -8,7 +8,7 @@ Rectangle {
     required property var pages
     property string selectedAction: ""
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
+    color: Theme.surfaceColor(Theme.colors.background.panel)
     topLeftRadius: 10
     clip: true
 

@@ -37,7 +37,7 @@ Button {
     }
 
     background: HoverChrome {
-        baseColor: Theme.surfaceColor("input", Theme.colors.background.elevated)
+        baseColor: Theme.colors.background.elevated
         selected: root.selected || root.checked
         hovered: root.hovered
         pressed: root.down

@@ -20,7 +20,7 @@ TextArea {
 
     background: Rectangle {
         radius: Theme.controlRadius
-        color: Theme.surfaceColor("input", Theme.colors.background.surface)
+        color: Theme.overlayColor(Theme.colors.background.surface)
         border.width: Theme.controlBorderWidth
         border.color: !root.enabled ? Theme.colors.border.normal
                      : (root.activeFocus || root.hovered) ? Theme.colors.accent.primary

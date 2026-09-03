@@ -21,7 +21,7 @@ Rectangle {
     property bool canRedo: false
 
     implicitHeight: 32
-    color: Theme.surfaceColor("toolbar", Theme.colors.background.surface)
+    color: Theme.surfaceColor(Theme.colors.background.surface)
 
     Row {
         anchors.left: parent.left

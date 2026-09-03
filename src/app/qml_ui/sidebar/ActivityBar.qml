@@ -11,7 +11,7 @@ Rectangle {
     signal settingsRequested()
 
     implicitWidth: Theme.activityButtonSize
-    color: Theme.surfaceColor("panel", Theme.colors.background.surface)
+    color: Theme.surfaceColor(Theme.colors.background.surface)
 
     Column {
         anchors.left: parent.left

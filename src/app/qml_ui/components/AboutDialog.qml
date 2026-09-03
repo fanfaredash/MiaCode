@@ -5,7 +5,7 @@ import MiaCode.UI
 
 // 关于 MiaCode. Everything shown is a fact about the build, read through
 // preferences.aboutInfo() so the version macro and UiText stay the sources.
-Dialog {
+AppDialog {
     id: root
 
     enter: FadeTransition {}

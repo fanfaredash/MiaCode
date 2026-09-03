@@ -22,7 +22,6 @@ AppDropdownPanel {
     modal: false
     focus: false
     closePolicy: Popup.NoAutoClose
-    padding: Theme.menuPadding
     visible: controller.completionActive && controller.completionCandidates.length > 0
 
     readonly property real maximumHeight: 260

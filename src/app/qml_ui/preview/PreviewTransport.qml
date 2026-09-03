@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property var previewSession
@@ -17,7 +17,6 @@ Rectangle {
 
 
     implicitHeight: 63
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
 
     Rectangle {
         anchors.left: parent.left

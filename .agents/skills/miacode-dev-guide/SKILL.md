@@ -37,6 +37,25 @@ same change.
   entry and must be used instead of `qsTr`. `QmlDocumentModel` submits body, metadata, difficulty and file operations
   to the v2 workspace; QML validation/Muri reads the workspace analysis service. Windows title
   bar: `QmlUiWindowChrome`.
+- QML popup ownership: `AppComboBox` retains ComboBox selection/model behavior;
+  `AppMenu` retains Menu actions/submenus. Both use `PopupLifecycle`, assigned through
+  an explicit property, for transitions and active state. `AppStickyPopup` inherits
+  `AppDropdownPanel`; floating backgrounds and row states use `FloatingCard` and
+  `HoverChrome`. `AppDialog` supplies the shared dialog fill with a transparent header
+  over wallpaper. Keep lifecycle objects out of Popup's default `contentData`.
+- QML background ownership: `Theme.backgroundActive` gates both the wallpaper and surface
+  alpha on `enabled && imageReadable`. `Theme.surfaceColor(baseColor)` combines shared
+  `surfaceOpacity` (persisted panel alpha) with the base/panel brightness ratio in a single
+  fill, preserving dark-region contrast over wallpaper. `Theme.overlayColor` applies
+  shared fill alpha to controls/states (0.72) and popups (0.96), preserving the source alpha;
+  wallpaper-off returns the original color. Floating cards/dialogs add the shared floating
+  border over wallpaper. Text, icons and transition opacity stay independent.
+  Structural children inherit their region background; preview
+  transport and statistics share `PreviewPane`. The workspace `PreviewSurface.backgroundColor`
+  is transparent so its empty canvas inherits that panel; media and export retain their own
+  backgrounds. Timeline header/sidebar/base fills are disjoint and use the same surface-color
+  function through the viewport bottom. Viewport-fit lanes use all height below the header;
+  its content clips stay separate.
 - Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` is UIv2's Widgets-free sole document,
   revision and complete-document save-point owner; `ChartWorkspaceFileService` owns BOM/system-
   encoding file I/O plus atomic saves; `AnalysisService` drives production QML validation/

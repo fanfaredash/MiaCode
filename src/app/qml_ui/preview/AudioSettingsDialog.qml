@@ -10,7 +10,7 @@ import MiaCode.UI
 // starting playback. The model owns the sample runtime and the settle delay; the
 // page only has to say when a handle is down (audition waits for the release)
 // and when the panel is gone (the runtime goes with it).
-Dialog {
+AppDialog {
     id: root
 
     enter: FadeTransition {}

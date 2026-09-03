@@ -6,7 +6,7 @@ import MiaCode.UI
 // Beats/BPM for the blank prepended to track.mp3 or the background video. The
 // summary is the point of the dialog: beats and BPM only mean something once
 // they are turned into the length that will actually be inserted.
-Dialog {
+AppDialog {
     id: root
 
     enter: FadeTransition {}

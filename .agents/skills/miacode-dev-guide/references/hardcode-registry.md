@@ -46,6 +46,12 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
+- `src/app/qml_ui/theme/Theme.qml` — `overlayOpacity` (0.72) for control/state fills,
+  `popupOpacity` (0.96) for floating fills, and `colors.border.floating` (white at 0.12 alpha).
+  `overlayColor` gates alpha multiplication on `backgroundActive`; keep text/icon opacity
+  separate. Structural region fills continue to use `surfaceColor`.
+- `src/timeline/TimelineSceneStateBuilder.cpp` — viewport-fit lanes divide the full height
+  below the header. The former 8px bottom padding has been removed.
 - `src/editor/SimaiCompletionCatalog.cpp` — bracket-completion suggestion lists. Fixed,
   product-decided order (do NOT sort): `[` durations `{8:1] 4:1] 16:3] 384:1]}`, `{`
   subdivisions `{16} 24} 32}}`. `(` BPM list is dynamic (scanned `(<n>)` markers +

@@ -274,6 +274,19 @@ discoverable use the same native `ScrollBar.vertical: ScrollBar {}` setup as oth
 
 ### Z1. Wrong stacking (层叠关系错误)
 
+- **Surface backgrounds:** use one background owner per region; structural children inherit
+  it through transparent Items. Wallpaper visibility and surface alpha share
+  `Theme.backgroundActive` (`enabled && imageReadable`). Independently shaded adjacent regions
+  paint disjoint rectangles; do not place a full-area background beneath them.
+  `Theme.surfaceColor` folds shared opacity and theme-derived darkening into one fill;
+  controls and interaction fills use `Theme.overlayColor` with the shared overlay alpha;
+  floating fills use its popup-alpha argument plus the shared floating border. Multiply
+  source alpha and leave text/icons and enter/exit opacity intact. `AppDialog` paints one
+  background and makes its header background transparent while wallpaper is active.
+  Wallpaper-off returns the exact original fill. Native QSG backgrounds use region colors across the
+  full viewport, including content padding, and honor content clips rather than covering overflow
+  with opaque rectangles. The workspace preview's empty base is transparent to its panel;
+  export and chart media keep independent background ownership.
 - **QML:** declaration order = paint order. The intro card's required order is documented:
   frame plate → Tab → clipped jacket → thin frame stroke → LV pill. Comment the intended
   order; insert new layers by moving declarations, not by sprinkling `z:`.
@@ -390,6 +403,20 @@ root-window activation, re-raise and activate only the visible blocking modal; s
 non-modal dialog must not steal focus. Keep the root in
 a `QPointer`, because QuickShell teardown destroys it before the application object. Do not
 use `Qt::WindowStaysOnTopHint`: the dialog should stay above MiaCode, not above other apps.
+
+---
+
+### Z9. Combo popup collapses to an empty padding strip
+
+When a reusable Popup declares a bare `Connections` child, it enters the default
+`contentData` list. Qt's `QQuickPopupPrivate::contentData()` accesses/creates the deferred
+content item during base construction, interfering with a derived popup's ListView.
+Keep lifecycle helpers on explicit object properties instead. `PopupLifecycle` owns
+enter/exit transitions and interrupted-close state; `AppDropdownPanel` and `AppMenu`
+reference it without inserting infrastructure into the content list. `AppStickyPopup`
+inherits the panel. Preserve ComboBox's delegateModel and Menu's item/action handling.
+Runtime acceptance: decoder/bitrate options appear and select, and rate menus still
+open, select and close, including reopening during a fade-out.
 
 ---
 

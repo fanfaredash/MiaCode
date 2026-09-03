@@ -5,7 +5,7 @@ import MiaCode.UI
 
 // Options for 整谱规范化. Opens over the editor, reports the chosen options and
 // leaves the actual transform to the caller — the dialog owns no document state.
-Dialog {
+AppDialog {
     id: root
 
     enter: FadeTransition {}

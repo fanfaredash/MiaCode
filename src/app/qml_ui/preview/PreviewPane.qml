@@ -27,7 +27,7 @@ Rectangle {
         return Math.max(1.0, (ratio > 0 && isFinite(ratio)) ? ratio : 1.0)
     }
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
+    color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
 
     function fittedFrameWidth(hostWidth, hostHeight) {
@@ -111,6 +111,7 @@ Rectangle {
                 mediaHost: root.previewSession.mediaHost
                 logger: root.previewSession
                 surfaceRole: "workspace"
+                backgroundColor: "transparent"
             }
         }
     }

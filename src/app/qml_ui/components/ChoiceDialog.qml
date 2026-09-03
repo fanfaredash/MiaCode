@@ -15,7 +15,7 @@ import MiaCode.UI
 // "accept" | "destructive" | "reject". Dismissing — Escape, the scrim — resolves
 // to `dismissChoiceId`, so a closed window can never stand for an answer the
 // caller did not offer.
-Dialog {
+AppDialog {
     id: root
 
     enter: FadeTransition {}

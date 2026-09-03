@@ -6,7 +6,7 @@ import QtQuick.Layouts
 import MiaCode.UI
 import MiaCode.Timeline
 
-Rectangle {
+Item {
     id: root
 
     required property var documentSession
@@ -17,7 +17,11 @@ Rectangle {
     required property var previewSession
     signal analysisRowActivated(int difficultyId, var revision, int line, int column, int endColumn, double second)
 
-    color: Theme.surfaceColor("panel", Theme.colors.background.panel)
+    Rectangle {
+        width: parent.width
+        height: timelineItem.visible ? tabs.height : parent.height
+        color: Theme.surfaceColor(Theme.colors.background.panel)
+    }
     clip: true
     readonly property int contentTopMargin: 0
 
@@ -27,9 +31,10 @@ Rectangle {
     TimelineThemeBridge {
         id: timelineTheme
         windowColor: Theme.colors.timeline.window
-        headerColor: Theme.colors.timeline.header
-        sidebarColor: Theme.colors.timeline.sidebar
-        baseColor: Theme.colors.timeline.base
+        headerColor: Theme.surfaceColor(Theme.colors.background.panel)
+        sidebarColor: Theme.surfaceColor(Theme.colors.background.panel)
+        baseColor: Theme.surfaceColor(Theme.colors.background.surface)
+        onBaseColorChanged: Qt.callLater(() => timelineItem.refreshTheme())
         borderColor: Theme.colors.timeline.border
         axisColor: Theme.colors.timeline.axis
         gridMajorColor: Theme.colors.timeline.gridMajor

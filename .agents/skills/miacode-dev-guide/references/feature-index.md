@@ -86,6 +86,14 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   aligned validation/marker/Muri values from the same revision. `EditorSyncController` owns editor
   navigation, follow, caret and authoring synchronization. Checklist:
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
+- QML popup components: `components/AppComboBox.qml` uses `AppDropdownPanel` with a
+  `ListView` bound to `delegateModel`; `AppMenu.qml` uses native Menu item/action behavior.
+  `PopupLifecycle.qml` shares transitions and active state via explicit object properties.
+  `AppStickyPopup.qml` inherits `AppDropdownPanel` and adds persistent interaction/anchoring.
+  `FloatingCard.qml` and `HoverChrome.qml` own shared popup backgrounds and row-state fills.
+  `AppDialog.qml` keeps Basic dialog geometry and applies one translucent card fill;
+  its header inherits the card over wallpaper. `Theme.overlayColor` owns shared control
+  and popup fill alpha while preserving wallpaper-off colors.
 - QuickShell compatibility: only preview-surface policy helpers remain under `src/app/quick_shell/`.
   `QuickShellController` is deleted, as are the v1 bootstrap, native surface host, style bridge,
   QML shell, `--ui=v1`, and `MIACODE_UI_SKIN`.

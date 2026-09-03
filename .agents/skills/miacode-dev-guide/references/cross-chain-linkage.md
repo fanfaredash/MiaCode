@@ -396,6 +396,13 @@ advances, and chart-info visible top.
 
 ## 9. Shared render state flows through preview and export
 
+Application wallpaper is shell-only. `PreviewSurface.backgroundColor` forwards to
+`PreviewQuickSceneRoot` and its stage-background layer: the workspace passes transparent to
+inherit `PreviewPane`, while other callers retain the default solid base. This changes the
+empty-media fallback, not chart image/video rendering or export snapshots. Timeline surface
+alpha comes through `TimelineThemeBridge`; header/sidebar/content backgrounds are disjoint,
+and existing QSG content clips provide separation without an opaque sidebar cover.
+
 Shared settings (background brightness outer/inner, layout square scale, outline diameter ratio
 from `src/common/LayoutRingConfig.h`, outline/judge-line variant, smooth brightness, scale mode
 `fill/fit/square_fit`, tap/touch flow speeds, chart-review overlay toggles, HUD flags, Muri render

@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property int lineCount
@@ -30,7 +30,6 @@ Rectangle {
     focus: false
 
     width: 36
-    color: Theme.surfaceColor("codeEditor", Theme.colors.background.surface)
     clip: true
 
     // 只为可见行建场景图文字，和正文同一套变换；整列贴图在窗口插值里会拉伸。

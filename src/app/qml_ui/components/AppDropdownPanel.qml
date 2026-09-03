@@ -8,24 +8,13 @@ import MiaCode.UI
 Popup {
     id: root
 
-    enter: FadeTransition { id: fadeIn }
-    exit: FadeTransition {
-        appearing: false
-        initialOpacity: root.opacity
+    readonly property PopupLifecycle lifecycle: PopupLifecycle {
+        popup: root
     }
+    readonly property bool active: lifecycle.active
+    enter: lifecycle.enterTransition
+    exit: lifecycle.exitTransition
 
-    property bool closing: false
-    readonly property bool active: visible && !closing
-
-    Connections {
-        target: root
-        function onAboutToShow() {
-            fadeIn.initialOpacity = root.closing ? root.opacity : 0
-            root.closing = false
-        }
-        function onAboutToHide() { root.closing = true }
-        function onClosed() { root.closing = false }
-    }
-
+    padding: Theme.menuPadding
     background: FloatingCard {}
 }

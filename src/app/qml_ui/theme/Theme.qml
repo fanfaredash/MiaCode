@@ -6,6 +6,8 @@ QtObject {
     property var preferences: null
     property var appBackground: null
     readonly property bool darkTheme: preferences ? preferences.darkTheme : true
+    readonly property bool backgroundActive: appBackground
+        && appBackground.enabled && appBackground.imageReadable
 
     property var colors: ({
         background: {
@@ -15,7 +17,8 @@ QtObject {
         },
         border: {
             normal: "#2A2B2C",
-            control: "#333536"
+            control: "#333536",
+            floating: Qt.rgba(1, 1, 1, 0.12)
         },
         text: {
             // Navigation: selected ≈ 1.0, idle ≈ 0.75 of active.
@@ -40,7 +43,7 @@ QtObject {
             handleHover: "#7A7C7E"
         },
         state: {
-            // Solid UI state fills, independent of the surface underneath.
+            // Base UI state colors; HoverChrome applies the shared overlay alpha.
             hover: "#1E2021",
             pressed: "#282A2B",
             selected: "#232526",
@@ -97,19 +100,32 @@ QtObject {
     readonly property int secondaryFontSize: uiFontSize - 1
     readonly property int captionFontSize: uiFontSize - 3
 
-    function overlayAlpha(token) {
-        const model = appBackground
-        if (!model || !model.imageReadable || token === "card")
-            return 1.0
-        const value = model[token + "Alpha" + (darkTheme ? "Dark" : "Light")]
-        return Math.max(0, Math.min(255, Number(value))) / 255.0
-    }
+    readonly property real surfaceOpacity: backgroundActive
+        ? (darkTheme ? appBackground.panelAlphaDark : appBackground.panelAlphaLight) / 255.0
+        : 1.0
 
-    function surfaceColor(token, baseColor) {
-        if (!appBackground || !appBackground.imageReadable || token === "card")
+    // Fill alpha only: text/icons and popup transition opacity stay independent.
+    readonly property real overlayOpacity: 0.72
+    readonly property real popupOpacity: 0.96
+
+    function overlayColor(baseColor, opacity = overlayOpacity) {
+        if (!backgroundActive)
             return baseColor
         const c = Qt.color(baseColor)
-        return Qt.rgba(c.r, c.g, c.b, overlayAlpha(token))
+        return Qt.rgba(c.r, c.g, c.b, c.a * opacity)
+    }
+
+    function surfaceColor(baseColor) {
+        if (!backgroundActive)
+            return baseColor
+        const c = Qt.color(baseColor)
+        const panel = Qt.color(colors.background.panel)
+        const shade = Math.min(1, (c.r + c.g + c.b) / (panel.r + panel.g + panel.b))
+        // Preserve the theme's dark/panel ratio over wallpaper. Fold the shared
+        // surface fill and the darkening into one color instead of two layers.
+        const alpha = 1 - (1 - surfaceOpacity) * shade
+        const scale = alpha > 0 ? surfaceOpacity / alpha : 0
+        return Qt.rgba(c.r * scale, c.g * scale, c.b * scale, alpha)
     }
 
     // Shared UI geometry.

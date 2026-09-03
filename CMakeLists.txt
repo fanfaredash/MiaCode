@@ -651,6 +651,8 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppMenuAction.qml
     src/app/qml_ui/components/FloatingCard.qml
     src/app/qml_ui/components/FadeTransition.qml
+    src/app/qml_ui/components/PopupLifecycle.qml
+    src/app/qml_ui/components/AppDialog.qml
     src/app/qml_ui/components/AppStickyPopup.qml
     src/app/qml_ui/components/AppDropdownPanel.qml
     src/app/qml_ui/components/AppMenuItem.qml

@@ -8,7 +8,7 @@ import MiaCode.UI
 //
 // 视频、玩法和皮肤 all describe the running preview. 性能只含预览刷新率，仍放在
 // 偏好设置 → 性能，避免同一设置有两个入口。
-Dialog {
+AppDialog {
     id: root
 
     enter: FadeTransition {}
@@ -368,7 +368,7 @@ Dialog {
                 Layout.fillWidth: true
                 implicitHeight: previewHudFontSample.implicitHeight + 20
                 radius: Theme.controlRadius
-                color: Theme.colors.background.surface
+                color: Theme.overlayColor(Theme.colors.background.surface)
                 border.width: Theme.controlBorderWidth
                 border.color: Theme.colors.border.control
                 Text {

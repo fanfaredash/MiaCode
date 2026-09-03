@@ -16,7 +16,7 @@ Switch {
         x: root.leftPadding
         y: parent.height / 2 - height / 2
         radius: height / 2
-        color: root.checked ? Theme.colors.accent.primary : Theme.colors.border.control
+        color: Theme.overlayColor(root.checked ? Theme.colors.accent.primary : Theme.colors.border.control)
         border.width: Theme.controlBorderWidth
         border.color: root.checked ? Theme.colors.accent.primary
                      : (root.hovered ? Theme.colors.border.normal : Theme.colors.border.control)

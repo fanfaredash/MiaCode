@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property var viewState
@@ -123,7 +123,14 @@ Rectangle {
         }
     }
 
-    color: Theme.surfaceColor("codeEditor", Theme.colors.background.panel)
+    // Header/form background stops where the independently shaded source begins.
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: tabs.height
+        height: (root.sourceVisible ? sourceEditor.y : root.height) - y
+        color: Theme.surfaceColor(Theme.colors.background.panel)
+    }
 
     EditorTabBar {
         id: tabs
@@ -135,14 +142,13 @@ Rectangle {
         commands: root.commands
     }
 
-    Rectangle {
+    Item {
         id: difficultyHeader
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
         height: 42
         visible: root.viewState.difficultyEditorActive
-        color: Theme.colors.background.panel
 
         RowLayout {
             anchors.fill: parent
@@ -197,14 +203,13 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    Item {
         id: metadataModeBar
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
         height: 42
         visible: root.viewState.metadataEditorActive
-        color: Theme.colors.background.panel
 
         AppButton {
             anchors.left: parent.left

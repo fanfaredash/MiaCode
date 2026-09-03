@@ -11,7 +11,9 @@ Item {
         id: card
         anchors.fill: parent
         radius: Theme.controlRadius
-        color: Theme.colors.background.elevated
+        color: Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
+        border.width: Theme.backgroundActive ? Theme.controlBorderWidth : 0
+        border.color: Theme.colors.border.floating
     }
 
     layer.enabled: true

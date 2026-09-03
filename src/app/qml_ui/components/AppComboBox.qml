@@ -54,9 +54,9 @@ ComboBox {
     background: Rectangle {
         implicitHeight: root.implicitHeight
         radius: Theme.controlRadius
-        color: root.enabled
-               ? Theme.surfaceColor("input", Theme.colors.background.surface)
-               : Theme.colors.background.elevated
+        color: Theme.overlayColor(root.enabled
+               ? Theme.colors.background.surface
+               : Theme.colors.background.elevated)
         border.width: Theme.controlBorderWidth
         border.color: !root.enabled ? Theme.colors.border.normal
                      : (root.visualFocus || root.hovered || root.down) ? Theme.colors.accent.primary
@@ -76,7 +76,6 @@ ComboBox {
     popup: AppDropdownPanel {
         y: root.height + 2
         width: Math.max(root.width, 100)
-        padding: Theme.menuPadding
         implicitHeight: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, 260)
 
         contentItem: ListView {

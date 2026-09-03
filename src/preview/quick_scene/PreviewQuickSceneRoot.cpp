@@ -625,6 +625,15 @@ void PreviewQuickSceneRoot::setLayerFlags(miacode::preview::scene::PreviewRender
     update();
 }
 
+void PreviewQuickSceneRoot::setBackgroundColor(const QColor& color)
+{
+    if (backgroundColor_ == color)
+        return;
+    backgroundColor_ = color;
+    emit backgroundColorChanged();
+    update();
+}
+
 void PreviewQuickSceneRoot::invalidateTextureCache()
 {
     const PreviewTextureStats statsBeforeClear = textureStats();
@@ -1028,7 +1037,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         "stage_background",
         layerStatsForFrame,
         [&](QSGNode* oldChild) {
-            return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
+            return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), textures, backgroundColor_);
         });
     updateCenterDisplaySlot(
         layerSlotAt(root, slotIndex++),

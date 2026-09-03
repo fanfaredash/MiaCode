@@ -39,9 +39,9 @@ Item {
         implicitHeight: layout.implicitHeight + 32
         height: implicitHeight
         radius: 8
-        color: Theme.colors.background.elevated
+        color: Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
         border.width: 1
-        border.color: Theme.colors.border.normal
+        border.color: Theme.backgroundActive ? Theme.colors.border.floating : Theme.colors.border.normal
 
         Column {
             id: layout
