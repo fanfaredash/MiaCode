@@ -100,13 +100,15 @@ void appendHudPaintDiag(const QString& action, DetailFn&& detailFn, bool durable
     appendHudPaintDiagLine(action, detailFn(), durable);
 }
 
-void drawHudText(
+void drawHudTextWithColors(
     QPainter& painter,
     const QString& tag,
     const QPointF& baseline,
     const QString& text,
     const QFont& font,
-    qreal shadowOffset)
+    qreal shadowOffset,
+    const QColor& textColor,
+    const QColor& shadowColor)
 {
     appendHudPaintDiag(
         QStringLiteral("draw_text_before"),
@@ -128,9 +130,9 @@ void drawHudText(
         /*durable=*/true);
     painter.save();
     painter.setFont(font);
-    painter.setPen(QColor(0, 0, 0, 190));
+    painter.setPen(shadowColor);
     painter.drawText(baseline + QPointF(shadowOffset, shadowOffset), text);
-    painter.setPen(QColor(QStringLiteral("#FFFFFF")));
+    painter.setPen(textColor);
     painter.drawText(baseline, text);
     painter.restore();
     appendHudPaintDiag(
@@ -486,6 +488,36 @@ void PreviewQuickHudLayer::setLayerFlags(miacode::preview::scene::PreviewRenderL
     update();
 }
 
+QColor PreviewQuickHudLayer::textColor() const
+{
+    return textColor_;
+}
+
+void PreviewQuickHudLayer::setTextColor(const QColor& color)
+{
+    if (textColor_ == color) {
+        return;
+    }
+    textColor_ = color;
+    emit textColorChanged();
+    update();
+}
+
+QColor PreviewQuickHudLayer::shadowColor() const
+{
+    return shadowColor_;
+}
+
+void PreviewQuickHudLayer::setShadowColor(const QColor& color)
+{
+    if (shadowColor_ == color) {
+        return;
+    }
+    shadowColor_ = color;
+    emit shadowColorChanged();
+    update();
+}
+
 void PreviewQuickHudLayer::paint(QPainter* painter)
 {
     if (painter == nullptr) {
@@ -558,7 +590,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         },
         /*durable=*/true);
     miacode::preview::hud::paintPreviewHudOverlay(
-        *painter, *state, canvasSize, layerFlags_);
+        *painter, *state, canvasSize, layerFlags_, textColor_, shadowColor_);
     appendHudPaintDiag(
         QStringLiteral("paint_exit"),
         [&] {
@@ -576,9 +608,20 @@ void paintPreviewHudOverlay(
     QPainter& painter,
     const miacode::preview::scene::PreviewFrameState& stateRef,
     const QSize& canvasSize,
-    miacode::preview::scene::PreviewRenderLayerFlags layerFlags)
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags,
+    const QColor& textColor,
+    const QColor& shadowColor)
 {
     const auto* state = &stateRef;
+    const auto drawHudText = [&](QPainter& target,
+                                 const QString& tag,
+                                 const QPointF& baseline,
+                                 const QString& text,
+                                 const QFont& font,
+                                 qreal shadowOffset) {
+        drawHudTextWithColors(
+            target, tag, baseline, text, font, shadowOffset, textColor, shadowColor);
+    };
     appendHudPaintDiag(
         QStringLiteral("overlay_enter"),
         [&] {

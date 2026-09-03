@@ -16,7 +16,7 @@ Rectangle {
     readonly property bool useCaptionButtons: root.platform.captionButtons
 
     implicitHeight: 32
-    color: Theme.surfaceColor(Theme.colors.background.surface)
+    color: Theme.surfaceColor(Theme.colors.background.titleBar)
 
     // Title stays window-centered. Menu only yields to the painted glyph width
     // (capped by the max title band), not the whole empty center band.
@@ -65,7 +65,7 @@ Rectangle {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: "MiaCode"
-            color: Theme.colors.text.secondary
+            color: Theme.colors.text.chrome
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
             font.bold: true
@@ -134,7 +134,7 @@ Rectangle {
         width: root.titleBandMax
         z: 1
         text: root.documentTitle
-        color: Theme.colors.text.secondary
+        color: Theme.colors.text.chrome
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         horizontalAlignment: Text.AlignHCenter

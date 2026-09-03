@@ -193,6 +193,13 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Key functions: `onExportCover`, `onBatchExportPreviewVideo`, `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `startQmlExportAudition`, `launchQmlVideoExport`, `handleVideoExportWorkerEvent`
   - Owns: toolbar/menu entry points and the v2 QML shell's ExportSection audition/worker path without hosting Widgets export dialogs. It exposes intro-sound selection/import plus its independent 0..2 volume, updates `preview_sfx` immediately, and preserves values across difficulty reseeding before the shared snapshot/worker path.
 - Cover export studio:
+  - Window lifetime: `src/app/qml_ui/export/QmlCoverExportWindow.*` and `CoverExportWindow.qml`
+    own a private QML engine, `QmlCoverExportSession`, `UiRequestService` and `coverchart` provider.
+    `QmlEditorPageHost::openCoverExport` requests this window through `QmlUiBootstrap`; the
+    main page stays active. Close persists layout, detaches live scenes, destroys the engine,
+    then releases the capture renderer, skin resources, images and chart task. Capture completion
+    precedes destruction; application shutdown waits for that boundary. Session seed data is
+    read directly from `ExportEngine`, independently of the video export page.
   - Files: `src/app/qml_ui/export/QmlCoverExportSession.*`, `src/app/qml_ui/export/CoverExportPage.qml`, `src/tools/cover_export/CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverFramePlaybackController.*`, `CoverFrameSceneBinder.*`, `CoverFrameExportPlan.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
   - Classes: `QmlCoverExportSession`, `CoverFramePlaybackController`, `CoverFrameSceneBinder`, `CoverFrameExportPlan`, `CoverLayoutModel`, `CoverCompositionState`, `SceneFrameRenderer`
   - Owns: v2 QML cover composition UI, multi chart-frame layer state, local-coordinate layer hit testing and drag/scale persistence, custom layer-list delegate and inline visibility/lock controls, v1/v2/v3 `.miacover` JSON migration, app-scoped layout presets/recent layout files, one active live chart scene backed by borrowed shared `PreviewFrameState`, cached still fallback and per-layer export-frame snapshots, chart-frame playback with fixed-step/accelerated key seeking, chart-frame inner background modes, and final PNG/JPG cover export beside the chart

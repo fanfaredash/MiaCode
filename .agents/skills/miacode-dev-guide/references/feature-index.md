@@ -56,9 +56,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Default UI (v2): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
   `MiaCode.UI`). It still owns a hidden `MainWindow` compatibility backend; the
   `QuickShellController` is deleted. Video export uses `QmlExportSession` + `ExportVideoPage.qml`;
-  cover export uses `export/QmlCoverExportSession` + `CoverExportPage.qml` and a pure Quick
-  off-screen compositor (`tools/cover_export/CoverCompositeRenderer`). `QmlEditorPageHost` routes
-  export/cover/latency and leave transitions, but those transitions still call
+  cover export uses `export/QmlCoverExportWindow` + `CoverExportWindow.qml`, owning a private QML
+  engine and `QmlCoverExportSession`, with `CoverExportPage.qml` as content and a pure Quick
+  off-screen compositor (`tools/cover_export/CoverCompositeRenderer`). `QmlEditorPageHost` emits
+  `coverWindowRequested` without changing the main page. It routes
+  export/latency and leave transitions, but those transitions still call
   `DocumentSection::switchTo*Field()` and therefore remain coupled to hidden `editorStack_` state.
   `QmlDocumentModel` submits body, metadata, difficulty and
   file transactions to `app/v2/ChartWorkspace` / `ChartWorkspaceFileService`; the public
@@ -93,7 +95,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   Separators follow the menu width. `AppComboBox` measures option strings with FontMetrics
   when opened and includes row/popup padding. Menu and combo-popup widths are capped to
   the window Overlay; action labels retain elision for window-limited overflow.
-  `PopupLifecycle.qml` shares transitions and active state via explicit object properties.
+  `AppDialog.qml`, `AppMenu.qml`, and `AppDropdownPanel.qml` own their popup transitions
+  and close-state lifecycle so callbacks cannot outlive the transition objects.
   `AppStickyPopup.qml` inherits `AppDropdownPanel` and adds persistent interaction/anchoring.
   `FloatingCard.qml` and `HoverChrome.qml` own shared popup backgrounds and row-state fills.
   `AppButton` and `AppDropDownButton` use `Theme.colors.buttonState`; emphasized push
@@ -124,8 +127,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   of wallpaper state, including dialog cards; tooltips retain their existing fill policy.
   Dialogs pass their own tint (0.94 alpha) and blur radius (96px) through `FloatingCard`
   to the shared effect; menu defaults remain 0.82 / 64px.
-  `FloatingCard`, `BackdropBlur` and `PopupLifecycle` type their popup reference as
-  `QtQuick.Templates.Popup`, so both Menu and Popup style branches are accepted.
+  `FloatingCard` and `BackdropBlur` type their popup reference as `QtQuick.Templates.Popup`,
+  so both Menu and Popup style branches are accepted. Popup transition state stays directly
+  on `AppDialog`, `AppMenu`, and `AppDropdownPanel`.
   Floating cards remain borderless in both wallpaper states, using tint, blur and shadow.
 - Workspace sidebar boundary: `layout/MainSplitView.qml` owns sidebar sizing and its drag
   handle independently of the editor/preview `SplitView`. Dragging past half the sidebar's
@@ -770,10 +774,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 8c. Cover (difficulty-card) export — `src/tools/cover_export/`
 
-> **Current implementation (2026-08-31; supersedes the historical Widget-host details below):**
-> `CoverExportPage.qml` is the only interactive cover surface. `QmlEditorPageHost::openCoverExport`
-> selects its `cover` page and `MainWindow::onExportCover` only emits `coverExportRequested`; neither
-> creates a window. `QmlCoverExportSession` owns the page-scoped layout model, composition/preset
+> **Current implementation (2026-09-04; supersedes the historical Widget-host details below):**
+> `QmlEditorPageHost::openCoverExport` emits `coverWindowRequested`; `QmlUiBootstrap` creates or
+> raises an independent `QmlCoverExportWindow`. `CoverExportWindow.qml` hosts `CoverExportPage.qml`
+> and a local `UiRequestHost`. The main page and preview stay in place. Each window owns its QML
+> engine, request callbacks, image provider and session. Close detaches playback and destroys the
+> QML engine before the session's capture window, skin repository, chart data and images. Active
+> capture finishes before teardown; application shutdown waits for this window's destruction.
+> `QmlCoverExportSession` reads chart inputs from `ExportEngine`, separately from the video page,
+> and owns the window-scoped layout model, composition/preset
 > persistence, selected difficulty, font/image/folder requests through `UiRequestService`, and chart
 > frame generation through `SceneFrameRenderer`. `CoverCompositeRenderer` registers the
 > `coverchart` image provider and grabs the same `CoverComposer.qml` in an in-process plain

@@ -8,7 +8,7 @@ import MiaCode.UI
 // Custom menubar
 // Overflow removes complete top-level entries (right → left)
 
-Item {
+Rectangle {
     id: root
 
     required property var commands
@@ -29,6 +29,7 @@ Item {
 
     implicitHeight: 34
     height: parent ? parent.height : implicitHeight
+    color: Theme.surfaceColor(Theme.colors.background.titleBar)
     // Shrink-wrap to whole visible controls
     width: barRow.width
     enabled: commandsEnabled
@@ -137,6 +138,7 @@ Item {
 
         required property var menu
         required property int menuIndex
+        stateColors: Theme.colors.activityState
 
         height: root.height
         padding: 0
@@ -157,7 +159,7 @@ Item {
             text: btn.menu ? btn.menu.title : ""
             mnemonicVisible: true
             color: (btn.hovered || btn.menuOpen) ? Theme.colors.text.active
-                                                 : Theme.colors.text.secondary
+                                                 : Theme.colors.text.chrome
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
             horizontalAlignment: Text.AlignHCenter
@@ -219,6 +221,7 @@ Item {
 
         IconButton {
             id: moreButton
+            stateColors: Theme.colors.activityState
             width: root.overflowButtonWidth
             height: root.height
             visible: root.visibleCount < 6

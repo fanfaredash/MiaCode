@@ -46,19 +46,30 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
-- `src/app/qml_ui/theme/Theme.qml` — `overlayOpacity` (0.72) for control/state fills,
-  `popupOpacity` (0.96) for floating fills. Cards and idle fields are borderless in both
+- `src/app/qml_ui/theme/Theme.qml` — dark/light `overlayOpacity` (0.72/0.92) for control/state
+  fills and `popupOpacity` (0.96/0.99) for floating fills. Cards and idle fields are borderless in both
   wallpaper states; field hover/focus states retain their accent outline.
+  The dark palette and the Quiet Light-derived light palette live here as complete semantic
+  role maps. `Theme.colors` selects between them from `QmlUiSettings::darkTheme`; syntax and
+  timeline colours follow the same selection. Light wallpaper surfaces apply the persisted
+  light panel alpha directly, while dark surfaces retain the panel-ratio shading calculation.
+  Window title, activity and status regions have dedicated background roles; navigation rows
+  use `listState`, keeping Quiet Light's green selection separate from neutral tab selection.
+  `background.previewCanvas` supplies `PreviewSurface.backdropColor` through `surfaceColor()` in
+  both application themes, retaining wallpaper visibility with the persisted panel alpha. That
+  rectangle is confined to the actual preview bounds and sits below stage media; letterbox
+  space, the surrounding header, transport and statistics continue to use the application surface.
   `overlayColor` gates alpha multiplication on `backgroundActive`; keep text/icon opacity
   separate. Structural region fills continue to use `surfaceColor`.
   `buttonState` owns filled-button hover/pressed/selected colors; `accentState` owns
   the corresponding emphasized-button colors over `accent.primary`. Both share
   `HoverChrome` geometry and overlay alpha; disabled buttons retain the neutral base.
-  Frosted menus use `popupTintOpacity` (0.82), `popupBlurRadius` (64 logical pixels,
+  Frosted menus use dark/light `popupTintOpacity` (0.82/0.94), `popupBlurRadius` (64 logical pixels,
   also the capture padding), and `popupBlurScale` (0.5 on each axis). These apply in
   both wallpaper states through `BackdropBlur` / `FloatingCard`; `popupOpacity` remains
   the fill policy for ordinary floating surfaces.
-  Dialogs use `dialogTintOpacity` (0.94) and `dialogBlurRadius` (96 logical pixels) through
+  Dialogs use dark/light `dialogTintOpacity` (0.94/0.98), theme-specific shadow opacity
+  (0.28/0.14), and `dialogBlurRadius` (96 logical pixels) through
   the same effect and half-resolution sampling. Radius also sets the sampling padding.
   Dialog tint uses `colors.background.panel` (#191A1B); menu tint uses
   `colors.background.elevated` (#202122), keeping large dialog surfaces darker.

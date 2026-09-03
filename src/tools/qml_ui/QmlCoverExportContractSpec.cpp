@@ -1,4 +1,4 @@
-// Static contract for the v2 cover-export page. It pins the page route, QML
+// Static contract for the v2 cover-export window. It pins the window route, QML
 // ownership and the permanent deletion of the former CoverStudio Widgets shell.
 
 #include <QCoreApplication>
@@ -107,6 +107,8 @@ int main(int argc, char** argv)
     const QString renderer = readSource(
         QStringLiteral("src/tools/cover_export/CoverCompositeRenderer.cpp"));
     const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));
+    const QString window = readSource(QStringLiteral("src/app/qml_ui/export/QmlCoverExportWindow.cpp"));
+    const QString windowQml = readSource(QStringLiteral("src/app/qml_ui/export/CoverExportWindow.qml"));
     const QString composer = readSource(QStringLiteral("src/intro/qml/CoverComposer.qml"));
     const QString mainSplitView = readSource(QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
     const QString labeledSlider = readSource(QStringLiteral("src/app/qml_ui/components/LabeledSlider.qml"));
@@ -182,14 +184,11 @@ int main(int argc, char** argv)
                && !session.contains(QStringLiteral("QMessageBox"))
                && !session.contains(QStringLiteral("QWidget")),
            QStringLiteral("cover session uses the QML request boundary and pure renderer"), out, &failed);
-    expect(pageHost.contains(QStringLiteral("coverPageRequested"))
-               && pageHost.contains(QStringLiteral("activePageId_ = QStringLiteral(\"cover\")"))
-               // The page host reads the export session through MainWindow's
-               // public read-only hand-off now, not its private member; the
-               // release contract is unchanged.
-               && pageHost.contains(QStringLiteral("exportSessionObject()->leave()"))
+    expect(pageHost.contains(QStringLiteral("coverWindowRequested"))
+               && !pageHost.contains(QStringLiteral("activePageId_ = QStringLiteral(\"cover\")"))
+               && bootstrap.contains(QStringLiteral("new QmlCoverExportWindow"))
                && !pageHost.contains(QStringLiteral("onExportCover()")),
-           QStringLiteral("cover export routes into the QML page and releases a prior video session"), out, &failed);
+           QStringLiteral("cover export opens an independent window while retaining the main page"), out, &failed);
     expect(mainWindow.contains(QStringLiteral("emit coverExportRequested"))
                && !mainWindow.contains(QStringLiteral("CoverStudioWindow")),
            QStringLiteral("all MainWindow cover entry points emit the QML route"), out, &failed);
@@ -201,17 +200,17 @@ int main(int argc, char** argv)
                && composer.contains(QStringLiteral("liveChartSceneBound"))
                && composer.contains(QStringLiteral("centroid.position"))
                && !composer.contains(QStringLiteral("centroid.scenePressPosition"))
-               && bootstrap.contains(QStringLiteral("registerCoverChartImageProvider")),
-           QStringLiteral("the application QML engine serves chart stills and the composer uses local live state"),
+               && window.contains(QStringLiteral("registerCoverChartImageProvider")),
+           QStringLiteral("the cover window engine serves chart stills and the composer uses local live state"),
            out, &failed);
     expect(labeledSlider.contains(QStringLiteral("signal released"))
                && labeledSlider.contains(QStringLiteral("onReleased")),
            QStringLiteral("the shared slider exposes a release boundary for hot scrubbing"), out, &failed);
-    expect(mainSplitView.contains(QStringLiteral("visible: !root.coverExportActive"))
-               && mainSplitView.contains(QStringLiteral("surfaceActive: !root.coverExportActive && !fullscreenPreview.visible"))
-               && mainSplitView.contains(QStringLiteral("if (root.coverExportActive)"))
-               && mainSplitView.contains(QStringLiteral("onCoverExportActiveChanged")),
-           QStringLiteral("cover export hides the editor preview and blocks fullscreen preview"), out, &failed);
+    expect(!mainSplitView.contains(QStringLiteral("CoverExportPage"))
+               && mainSplitView.contains(QStringLiteral("surfaceActive: !fullscreenPreview.visible"))
+               && windowQml.contains(QStringLiteral("CoverExportPage"))
+               && windowQml.contains(QStringLiteral("UiRequestHost")),
+           QStringLiteral("cover content and dialogs belong to the independent window"), out, &failed);
     expect(session.contains(QStringLiteral("CoverFrameSceneBinder"))
                && session.contains(QStringLiteral("renderVisibleChartFramesForExport"))
                && cmake.contains(QStringLiteral("CoverFramePlaybackController"))

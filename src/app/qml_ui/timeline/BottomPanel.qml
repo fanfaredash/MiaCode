@@ -24,6 +24,10 @@ Item {
     }
     clip: true
     readonly property int contentTopMargin: 0
+    readonly property int timelineHeaderLeftLimit:
+        zoomButton.x + zoomButton.width + Theme.panelPadding
+    readonly property int timelineHeaderRightLimit:
+        brightnessButton.x - Theme.panelPadding
 
     // 时间轴外壳颜色的唯一来源是 Theme.qml 的 colors.timeline 分组。
     // 桥接对象必须先于 TimelineQuickItem 创建，颜色才会在首次绘制前进入
@@ -67,10 +71,10 @@ Item {
         visible: root.timelineSession.currentTabId === "timeline"
         enabled: visible
         stateBridge: root.timelineSession.stateBridge
-        headerLeftLimit: zoomButton.x + zoomButton.width + Theme.panelPadding
-        headerRightLimit: brightnessButton.x - Theme.panelPadding
-        headerMarkerLeftLimit: headerLeftLimit
-        headerMarkerRightLimit: headerRightLimit
+        headerLeftLimit: root.timelineHeaderLeftLimit
+        headerRightLimit: root.timelineHeaderRightLimit
+        headerMarkerLeftLimit: root.timelineHeaderLeftLimit
+        headerMarkerRightLimit: root.timelineHeaderRightLimit
         onHeaderNavigateRequested: second => root.timelineSession.headerNavigate(second)
         onTimelineWheelNavigateRequested: second => root.timelineSession.wheelNavigate(second)
         onCenterNavigateRequested: second => root.timelineSession.centerNavigate(second)

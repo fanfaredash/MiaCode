@@ -30,6 +30,9 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
 
 ## 2. Targets
 
+- `QmlCoverExportWindow.*` and `CoverExportWindow.qml` are part of the app's `MiaCode.UI`
+  module. The window creates a private engine and registers its own `coverchart` provider;
+  the main engine has no cover provider or resident cover page.
 - `ui_shaders` embeds `src/app/qml_ui/shaders/corner_mask.frag.qsb` via `qt_add_shaders`
   for the shared workspace corner compositor; `CornerMask.qml` is in the `MiaCode.UI` module.
 - `BackdropBlur.qml` is registered in `MiaCode.UI` and uses Qt Quick Effects' built-in

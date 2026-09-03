@@ -24,7 +24,6 @@ Item {
     readonly property var mediaTools: applicationContext.mediaTools
     readonly property var preferencesModel: applicationContext.preferencesModel
     readonly property var latency: applicationContext.latency
-    readonly property var coverExport: applicationContext.coverExport
     readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
@@ -223,7 +222,6 @@ Item {
                 editorController: root.editorController
                 editorSync: root.editorSync
                 latency: root.latency
-                coverSession: root.coverExport
                 compact: root.compact
                 onSettingsRequested: root.commands.openPreferences()
             }

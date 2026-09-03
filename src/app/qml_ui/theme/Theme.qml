@@ -9,15 +9,21 @@ QtObject {
     readonly property bool backgroundActive: appBackground
         && appBackground.enabled && appBackground.imageReadable
 
-    property var colors: ({
+    readonly property var darkColors: ({
         background: {
             surface: "#121314",
             panel: "#191A1B",
-            elevated: "#202122"
+            elevated: "#202122",
+            control: "#121314",
+            controlDisabled: "#202122",
+            titleBar: "#121314",
+            activityBar: "#121314",
+            statusBar: "#121314"
         },
         border: {
             normal: "#2A2B2C",
-            control: "#333536"
+            control: "#333536",
+            status: "#2A2B2C"
         },
         text: {
             // Navigation: selected ≈ 1.0, idle ≈ 0.75 of active.
@@ -29,7 +35,13 @@ QtObject {
             editor: "#E8E8E8",
             lineNumber: "#858889",
             heading: "#FFFFFF",
-            onAccent: "#FFFFFF"
+            onAccent: "#FFFFFF",
+            status: "#AEAEAE",
+            chrome: "#AEAEAE"
+        },
+        previewHud: {
+            text: "#FFFFFF",
+            shadow: Qt.rgba(0, 0, 0, 190 / 255)
         },
         accent: {
             primary: "#297AA0",
@@ -55,6 +67,21 @@ QtObject {
             focusLine: "#232425",
             selectionHighlight: "#3E4042"
         },
+        listState: {
+            hover: "#1E2021",
+            pressed: "#282A2B",
+            selected: "#232526"
+        },
+        activityState: {
+            hover: "#1E2021",
+            pressed: "#282A2B",
+            selected: "#232526"
+        },
+        activityIcon: {
+            active: "#E8E8E8",
+            hover: "#E8E8E8",
+            idle: "#AEAEAE"
+        },
         popupState: {
             hover: "#2C2D2E",
             pressed: "#3A3B3C",
@@ -79,9 +106,8 @@ QtObject {
             warning: "#B07B00"
         },
         // 时间轴(QSG)外壳颜色。时间轴是原生绘制，由 TimelineThemeBridge
-        // 把这里的分组读入 C++ 快照；浅色第二套尚未实现，全部保持深色值。
-        // 与外壳同值的条目（window/base/border/label/textSecondary）须与
-        // 上方 background / border / text 各角色保持一致。
+        // 把这里的分组读入 C++ 快照。与外壳同值的条目
+        // （window/base/border/label/textSecondary）须与上方角色保持一致。
         timeline: {
             window: "#191A1B",
             header: "#191A1B",
@@ -100,6 +126,120 @@ QtObject {
         }
     })
 
+    // Adapted from VS Code's bundled Quiet Light theme. Product-specific
+    // surfaces keep MiaCode's existing semantic roles while using the source
+    // theme's editor, sidebar, selection, accent and syntax colours.
+    readonly property var lightColors: ({
+        background: {
+            surface: "#F4F6F8",
+            panel: "#EBEFF3",
+            elevated: "#FFFFFF",
+            control: "#FFFFFF",
+            controlDisabled: "#E5EAF0",
+            titleBar: "#D9E7F8",
+            activityBar: "#D9E7F8",
+            statusBar: "#526F98"
+        },
+        border: {
+            normal: "#C8D2DE",
+            control: "#AAB8C8",
+            status: "#405B80"
+        },
+        text: {
+            active: "#2F3B4A",
+            primary: "#3D4856",
+            secondary: "#5D6B7C",
+            disabled: "#9AA6B4",
+            editor: "#344050",
+            lineNumber: "#6D7A89",
+            heading: "#2F3B4A",
+            onAccent: "#FFFFFF",
+            status: "#FFFFFF",
+            chrome: "#3D4856"
+        },
+        previewHud: {
+            text: "#2F3B4A",
+            shadow: Qt.rgba(1, 1, 1, 210 / 255)
+        },
+        accent: {
+            primary: "#526F98",
+            badge: "#526F98",
+            soft: "#B9CBE3",
+            focus: Qt.rgba(0x52 / 255, 0x6F / 255, 0x98 / 255, 0xB3 / 255)
+        },
+        scroll: {
+            handle: "#A3AFBD",
+            handleHover: "#7E8DA0"
+        },
+        state: {
+            hover: "#E5E9E1",
+            pressed: "#C8D1C2",
+            selected: "#D3DBCD",
+            menuSelection: "#D3DBCD",
+            textSelection: "#C9D8EA",
+            followHighlight: "#78C5CF",
+            lineHighlight: "#DDE5D8",
+            focusLine: "#D8E1D2",
+            selectionHighlight: "#D3DEEB"
+        },
+        listState: {
+            hover: "#E5E9E1",
+            pressed: "#C8D1C2",
+            selected: "#D3DBCD"
+        },
+        activityState: {
+            hover: "#C4D8F3",
+            pressed: "#B8CEE9",
+            selected: "#F4F7FB"
+        },
+        activityIcon: {
+            active: "#405B80",
+            hover: "#526F98",
+            idle: "#718197"
+        },
+        popupState: {
+            hover: "#E5E9E1",
+            pressed: "#C8D1C2",
+            selected: "#D3DBCD"
+        },
+        buttonState: {
+            hover: "#E5E9E1",
+            pressed: "#C8D1C2",
+            selected: "#D3DBCD"
+        },
+        accentState: {
+            hover: "#627FA8",
+            pressed: "#405B80",
+            selected: "#526F98"
+        },
+        syntax: {
+            keyword: "#4B69C6",
+            comment: "#448C27",
+            duration: "#9C5D27",
+            modifier: "#7A3E9D",
+            error: "#CD3131",
+            warning: "#9C5D27"
+        },
+        timeline: {
+            window: "#EBEFF3",
+            header: "#EBEFF3",
+            sidebar: "#EBEFF3",
+            base: "#F4F6F8",
+            border: "#C8D2DE",
+            axis: "#7E8DA0",
+            gridMajor: "#A3AFBD",
+            gridSubdivision: Qt.rgba(0xA3 / 255, 0xAF / 255, 0xBD / 255, 140 / 255),
+            gridMinor: Qt.rgba(0xA3 / 255, 0xAF / 255, 0xBD / 255, 70 / 255),
+            laneEven: Qt.rgba(0, 0, 0, 11 / 255),
+            laneOdd: Qt.rgba(0, 0, 0, 5 / 255),
+            label: "#5D6B7C",
+            textSecondary: "#5D6B7C",
+            waveStroke: Qt.rgba(0x52 / 255, 0x6F / 255, 0x98 / 255, 166 / 255)
+        }
+    })
+
+    readonly property var colors: darkTheme ? darkColors : lightColors
+
     readonly property string uiFont: preferences ? preferences.uiFontFamily : ""
     readonly property font codeFont: preferences ? preferences.codeFont : Qt.font({})
     // 行距, in the pixels of bottom margin each text block carries.
@@ -114,14 +254,16 @@ QtObject {
         : 1.0
 
     // Fill alpha only: text/icons and popup transition opacity stay independent.
-    readonly property real overlayOpacity: 0.72
+    readonly property real overlayOpacity: darkTheme ? 0.72 : 0.82
     readonly property real popupOpacity: 0.96
     // Frosted menu material is independent of wallpaper visibility.
     readonly property real popupTintOpacity: 0.82
     readonly property int popupBlurRadius: 64
-    readonly property real dialogTintOpacity: 0.94
+    readonly property real dialogTintOpacity: darkTheme ? 0.94 : 0.90
     readonly property int dialogBlurRadius: 96
     readonly property real popupBlurScale: 0.5
+    readonly property real popupShadowOpacity: darkTheme ? 0.28 : 0.14
+    readonly property real followHighlightOpacity: darkTheme ? 0.5 : 0.65
     readonly property color popupTintColor: {
         const c = Qt.color(colors.background.elevated)
         return Qt.rgba(c.r, c.g, c.b, popupTintOpacity)
@@ -142,6 +284,8 @@ QtObject {
         if (!backgroundActive)
             return baseColor
         const c = Qt.color(baseColor)
+        if (!darkTheme)
+            return Qt.rgba(c.r, c.g, c.b, surfaceOpacity)
         const panel = Qt.color(colors.background.panel)
         const shade = Math.min(1, (c.r + c.g + c.b) / (panel.r + panel.g + panel.b))
         // Preserve the theme's dark/panel ratio over wallpaper. Fold the shared

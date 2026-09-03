@@ -11,7 +11,7 @@ Rectangle {
     signal settingsRequested()
 
     implicitWidth: Theme.activityButtonSize
-    color: Theme.surfaceColor(Theme.colors.background.surface)
+    color: Theme.surfaceColor(Theme.colors.background.activityBar)
 
     Column {
         anchors.left: parent.left
@@ -64,9 +64,9 @@ Rectangle {
             height: Theme.activityIconSize
             source: button.iconSource
             sourceSize: Qt.size(Theme.activityIconSize, Theme.activityIconSize)
-            color: button.selected || button.hovered
-                   ? Theme.colors.text.active
-                   : Theme.colors.text.secondary
+            color: button.selected ? Theme.colors.activityIcon.active
+                 : button.hovered ? Theme.colors.activityIcon.hover
+                 : Theme.colors.activityIcon.idle
         }
 
         background: Item {
@@ -74,8 +74,10 @@ Rectangle {
                 anchors.fill: parent
                 contentWidth: Theme.activityIconSize
                 contentHeight: Theme.activityIconSize
+                stateColors: Theme.colors.activityState
                 hovered: button.hovered
                 pressed: button.down
+                selected: button.selected
             }
 
             Rectangle {

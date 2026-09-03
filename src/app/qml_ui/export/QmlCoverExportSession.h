@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/v2/UiRequestService.h"
+#include "app/v2/ExportEngine.h"
 #include "tools/cover_export/CoverCompositeRenderer.h"
 #include "tools/video_export/VideoExportController.h"
 
@@ -14,8 +15,6 @@
 #include <memory>
 #include <iterator>
 
-class QmlExportSession;
-
 namespace miacode::cover_export {
 class CoverLayoutModel;
 class CoverLayer;
@@ -28,9 +27,8 @@ namespace miacode::v2 {
 class PlaybackControl;
 }
 
-// The v2 cover-export session owns no QWidget. It projects the reusable cover
-// layout model into CoverExportPage.qml and delegates all file/user feedback to
-// UiRequestService, while the final image stays an in-process Quick render.
+// Window-scoped composition and rendering state. ExportEngine supplies chart
+// inputs independently of the video page; the window owns the request service.
 class QmlCoverExportSession final : public QObject
 {
     Q_OBJECT
@@ -72,7 +70,7 @@ class QmlCoverExportSession final : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
 
 public:
-    QmlCoverExportSession(QmlExportSession& exportSession,
+    QmlCoverExportSession(miacode::v2::ExportEngine& exportEngine,
                           miacode::v2::UiRequestService& uiRequests,
                           miacode::v2::PlaybackControl*& playbackControlSlot,
                           QObject* parent = nullptr);
@@ -83,7 +81,7 @@ public:
     int selectedDifficultyId() const { return selectedDifficultyId_; }
     QVariantList difficulties() const { return difficulties_; }
     QObject* layoutModel() const;
-    // Typed hand-off for the application QML engine's `coverchart` image
+    // Typed hand-off for the window QML engine's `coverchart` image
     // provider, which serves the chart-frame stills the page displays. The
     // QML-facing property above stays QObject* for the page's bindings.
     miacode::cover_export::CoverLayoutModel* coverLayout() const { return layout_.get(); }
@@ -204,7 +202,7 @@ private:
     bool containsDifficulty(int difficultyId) const;
     int defaultDifficultyId(int preferredDifficultyId) const;
     void seedFromDifficulty(int difficultyId);
-    void rebuildFromExportSession();
+    void rebuildDifficultyList();
     void refreshSavedLists();
     bool renderChartFrame(miacode::cover_export::CoverLayer* layer, int sidePx = 0,
                           bool reportErrors = false);
@@ -231,7 +229,7 @@ private:
         return playbackControlSlot_ != nullptr ? *playbackControlSlot_ : nullptr;
     }
 
-    QmlExportSession* exportSession_ = nullptr;
+    miacode::v2::ExportEngine& exportEngine_;
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
     miacode::v2::PlaybackControl** playbackControlSlot_ = nullptr;
     std::unique_ptr<miacode::cover_export::CoverLayoutModel> layout_;

@@ -31,9 +31,12 @@ same change.
 - Main window orchestration: `src/app/mainwindow/` (+ `sections/<feature>/`)
 - Default UI (**v2**): `src/app/qml_ui/` (`QmlUiBootstrap`, phase-1 checklist:
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`). Export uses `QmlExportSession` +
-  `ExportVideoPage.qml`; cover export uses `export/QmlCoverExportSession` +
-  `CoverExportPage.qml` and the pure `tools/cover_export/CoverCompositeRenderer`. `QmlEditorPageHost`
-  routes both pages; `QuickShellController` is deleted. `UiText.qml` is QML's sole visible-string
+  `ExportVideoPage.qml`; cover export opens `export/QmlCoverExportWindow` + `CoverExportWindow.qml`.
+  Each window owns its QML engine, `QmlCoverExportSession`, UI requests, image provider and render
+  resources; closing destroys them after any active capture finishes. `CoverExportPage.qml` is
+  its content and `tools/cover_export/CoverCompositeRenderer` owns final composition.
+  `QmlEditorPageHost` emits the window request while retaining the main page.
+  `QuickShellController` is deleted. `UiText.qml` is QML's sole visible-string
   entry and must be used instead of `qsTr`. `QmlDocumentModel` submits body, metadata, difficulty and file operations
   to the v2 workspace; QML validation/Muri reads the workspace analysis service. Windows title
   bar: `QmlUiWindowChrome`.
@@ -41,11 +44,11 @@ same change.
   `AppMenu` retains Menu actions/submenus. Menu widths use complete row implicit widths (mnemonic label,
   shortcut, indicators and padding); separators follow the menu width. Combo popups
   measure the longest option on opening. Both cap width to the window Overlay.
-  Both use `PopupLifecycle`, assigned through an explicit property, for transitions
-  and active state. `AppStickyPopup` inherits
+  Both own their transitions and interrupted-close state directly, keeping lifecycle
+  callbacks within the popup object. `AppStickyPopup` inherits
   `AppDropdownPanel`; floating backgrounds and row states use `FloatingCard` and
   `HoverChrome`. `AppDialog` owns window-overlay placement, viewport-bounded preferred
-  sizing, permanent centering, shared lifecycle, a scrollable `body`, and frosted chrome.
+  sizing, permanent centering, direct transition lifecycle, a scrollable `body`, and frosted chrome.
   Dialogs are stationary. Settings panels use the shared 560px preferred height; compact
   dialogs use 280px; `ChoiceDialog` notices fit their natural content height. The window
   bounds cap all dialogs. `fillBody` is enabled for settings
@@ -79,14 +82,17 @@ same change.
   shared fill alpha to controls/states (0.72) and popups (0.96), preserving the source alpha;
   wallpaper-off returns the original color. Wallpaper does not add decorative borders.
   Text, icons and transition opacity stay independent.
-  Structural children inherit their region background; preview
-  transport and statistics share `PreviewPane`. The workspace `PreviewSurface.backgroundColor`
-  is transparent so its empty canvas inherits that panel; media and export retain their own
+  Structural children inherit their region background; preview transport and statistics share
+  `PreviewPane`. The workspace `PreviewSurface.backgroundColor` stays transparent so stage media
+  remains visible; `PreviewSurface.backdropColor` applies `surfaceColor(background.previewCanvas)`
+  inside the actual preview bounds, below its image/video layer, retaining wallpaper visibility
+  through the theme-specific persisted panel alpha.
+  Letterbox space remains part of the application surface. Media and export retain their own
   backgrounds. Timeline header/sidebar/base fills are disjoint and use the same surface-color
   function through the viewport bottom. Viewport-fit lanes use all height below the header;
   its content clips stay separate.
 - Workspace outer corner and sidebar resize: `MainSplitView.qml` owns the boundary next to
-  the activity bar. `CornerMask.qml` restores the actual wallpaper plus `surfaceColor(surface)`
+  the activity bar. `CornerMask.qml` restores the actual wallpaper plus `surfaceColor(activityBar)`
   outside its 10px arc using a corner-sized texture and `shaders/corner_mask.frag`; sidebar
   pages have square fills. The same stationary mask covers whichever editor/preview pane
   reaches the boundary after collapse or swapping. Sidebar dragging uses the shared minimum

@@ -23,7 +23,6 @@ Item {
     required property var editorController
     required property var editorSync
     required property var latency
-    required property var coverSession
     property bool compact: false
     property real sidebarDragWidth: 0
     property bool sidebarResizing: false
@@ -35,8 +34,6 @@ Item {
         root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
-    readonly property bool coverExportActive:
-        root.pages.activePageId === "cover"
     readonly property real previewEditorAvailableWidth:
         Math.max(1, workspaceSplit.width - (preview.visible ? Theme.splitDividerThickness : 0))
     signal settingsRequested()
@@ -79,8 +76,6 @@ Item {
 
     function showFullscreenPreview() {
         // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash.
-        if (root.coverExportActive)
-            return
         if (root.exportVideoActive)
             return
         fullscreenPreview.visible = true
@@ -138,10 +133,6 @@ Item {
     // page identity comes from the QML router rather than from the backend.
     onExportVideoActiveChanged: {
         if (root.exportVideoActive && fullscreenPreview.visible)
-            fullscreenPreview.visible = false
-    }
-    onCoverExportActiveChanged: {
-        if (root.coverExportActive && fullscreenPreview.visible)
             fullscreenPreview.visible = false
     }
 
@@ -213,13 +204,6 @@ Item {
                         previewSession: root.previewSession
                     }
 
-                    CoverExportPage {
-                        anchors.fill: parent
-                        visible: root.coverExportActive
-                        pages: root.pages
-                        coverSession: root.coverSession
-                    }
-
                     LatencyPage {
                         id: latencyPage
                         anchors.fill: parent
@@ -255,10 +239,7 @@ Item {
 
             PreviewPane {
                 id: preview
-                // Cover export owns the center workspace and must release both
-                // the preview pane and its live surface while that page is open.
-                visible: !root.coverExportActive
-                surfaceActive: !root.coverExportActive && !fullscreenPreview.visible
+                surfaceActive: !fullscreenPreview.visible
                 previewSession: root.previewSession
                 preferences: root.preferences
                 exportPageActive: root.exportVideoActive
@@ -326,7 +307,7 @@ Item {
         anchors.fill: parent
         visible: false
         z: 80
-        color: Theme.colors.background.surface
+        color: Theme.surfaceColor(Theme.colors.background.panel)
 
         Loader {
             anchors.centerIn: parent
@@ -344,6 +325,9 @@ Item {
                 mediaHost: root.previewSession.mediaHost
                 logger: root.previewSession
                 surfaceRole: "fullscreen"
+                backgroundColor: "transparent"
+                hudTextColor: Theme.colors.previewHud.text
+                hudShadowColor: Theme.colors.previewHud.shadow
             }
         }
 

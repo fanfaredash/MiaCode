@@ -422,6 +422,8 @@ bool PreviewQuickD3D11ExportSession::initialize(QString* errorMessage)
 
     hudLayer_ = new PreviewQuickHudLayer(rootItem_);
     hudLayer_->setZ(1.0);
+    hudLayer_->setTextColor(QColor(Qt::white));
+    hudLayer_->setShadowColor(QColor(0, 0, 0, 190));
 
     applyFrameSize();
     applyFrameState();

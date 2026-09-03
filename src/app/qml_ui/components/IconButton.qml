@@ -14,6 +14,7 @@ AbstractButton {
     property bool compact: false
     property int iconWidth: compact ? 14 : 16
     property int iconHeight: compact ? 14 : 16
+    property var stateColors: Theme.colors.buttonState
     property Item keyForwardTarget: null
     readonly property real horizontalInset: chrome.horizontalInset
 
@@ -63,6 +64,7 @@ AbstractButton {
         id: chrome
         contentWidth: root.glyph.length > 0 ? glyphLabel.implicitWidth : root.iconWidth
         contentHeight: root.glyph.length > 0 ? glyphLabel.implicitHeight : root.iconHeight
+        stateColors: root.stateColors
         selected: root.active || root.checked
         hovered: root.hovered
         pressed: root.down

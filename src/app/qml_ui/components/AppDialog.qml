@@ -25,9 +25,20 @@ Dialog {
     height: Math.min(preferredHeight, Math.max(0, parent.height - 2 * margins))
     anchors.centerIn: parent
 
-    readonly property PopupLifecycle lifecycle: PopupLifecycle { popup: root }
-    enter: lifecycle.enterTransition
-    exit: lifecycle.exitTransition
+    property bool closing: false
+    enter: FadeTransition {
+        id: enterTransition
+    }
+    exit: FadeTransition {
+        appearing: false
+        initialOpacity: root.opacity
+    }
+    onAboutToShow: {
+        enterTransition.initialOpacity = root.closing ? root.opacity : 0
+        root.closing = false
+    }
+    onAboutToHide: root.closing = true
+    onClosed: root.closing = false
 
     background: FloatingCard {
         popup: root

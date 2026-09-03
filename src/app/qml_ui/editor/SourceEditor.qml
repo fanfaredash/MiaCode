@@ -792,7 +792,7 @@ Rectangle {
                 rangeStart: root.followDecorationStart
                 rangeEnd: root.followDecorationEnd
                 fillColor: Theme.colors.state.followHighlight
-                opacity: 0.5
+                opacity: Theme.followHighlightOpacity
             }
 
             // Preview follow caret. Distinct from the real caret so a paused

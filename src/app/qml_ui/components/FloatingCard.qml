@@ -40,7 +40,7 @@ Item {
         shadowEnabled: true
         shadowBlur: 0.6
         shadowColor: "#000000"
-        shadowOpacity: 0.28
+        shadowOpacity: Theme.popupShadowOpacity
         shadowVerticalOffset: 2
         shadowHorizontalOffset: 0
     }

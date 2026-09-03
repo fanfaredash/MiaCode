@@ -16,7 +16,6 @@
 #include "preferences/QmlAppBackgroundModel.h"
 #include "preview/QmlAudioSettingsModel.h"
 #include "preview/QmlPreviewSettingsModel.h"
-#include "export/QmlCoverExportSession.h"
 #include "latency/QmlLatencyModel.h"
 #include "app/v2/ApplicationServices.h"
 
@@ -52,7 +51,6 @@ class QmlApplicationContext final : public QObject
     Q_PROPERTY(QObject* audioSettings READ audioSettings CONSTANT)
     Q_PROPERTY(QObject* previewSettings READ previewSettings CONSTANT)
     Q_PROPERTY(QObject* latency READ latency CONSTANT)
-    Q_PROPERTY(QObject* coverExport READ coverExport CONSTANT)
 
 public:
     // Stage 3.5 item 2 is complete here: the context takes the application
@@ -84,7 +82,6 @@ public:
     QObject* audioSettings();
     QObject* previewSettings();
     QObject* latency();
-    QObject* coverExport();
     void setWindowChrome(QObject* chrome);
     void setChartDropBridge(QObject* bridge);
 
@@ -101,7 +98,6 @@ private:
     miacode::qml_ui::QmlTimelineModel timeline_;
     QmlCommandService commands_;
     QmlEditorPageHost pages_;
-    QmlCoverExportSession coverExport_;
     miacode::qml_ui::QmlEditorController editor_;
     miacode::qml_ui::QmlShortcutModel shortcuts_;
     QmlUiPlatformChrome platform_;

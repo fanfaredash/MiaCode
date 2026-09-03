@@ -658,7 +658,6 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/FloatingCard.qml
     src/app/qml_ui/components/BackdropBlur.qml
     src/app/qml_ui/components/FadeTransition.qml
-    src/app/qml_ui/components/PopupLifecycle.qml
     src/app/qml_ui/components/AppDialog.qml
     src/app/qml_ui/components/AppStickyPopup.qml
     src/app/qml_ui/components/AppDropdownPanel.qml
@@ -691,6 +690,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/export/ExportRangeSelector.qml
     src/app/qml_ui/export/ExportVideoPage.qml
     src/app/qml_ui/export/CoverExportPage.qml
+    src/app/qml_ui/export/CoverExportWindow.qml
     src/app/qml_ui/editor/EditorPane.qml
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
@@ -802,6 +802,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/export/QmlExportSession.h
         src/app/qml_ui/export/QmlCoverExportSession.cpp
         src/app/qml_ui/export/QmlCoverExportSession.h
+        src/app/qml_ui/export/QmlCoverExportWindow.cpp
+        src/app/qml_ui/export/QmlCoverExportWindow.h
         src/app/qml_ui/QmlUiWindowChrome.cpp
         src/app/qml_ui/QmlUiWindowChrome.h
         src/app/qml_ui/QmlUiBootstrap.cpp

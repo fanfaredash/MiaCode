@@ -60,6 +60,7 @@ Row {
         }
 
         background: HoverChrome {
+            stateColors: Theme.colors.activityState
             hovered: button.hovered
             pressed: button.down
             focused: button.visualFocus

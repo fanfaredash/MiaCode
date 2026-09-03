@@ -262,6 +262,16 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
 
+**HUD content and HUD presentation have separate ownership.** HUD visibility, text content, fonts,
+and layout remain shared render state. The player-only text palette enters through
+`PreviewSurface.qml` → `PreviewQuickHudLayer::{textColor,shadowColor}` and may follow the app theme.
+When `PreviewStageMediaHost::{mediaVisible,hasResolvedMedia}` says that a cover or PV occupies the
+stage, `PreviewSurface.qml` selects its fixed white-text/black-shadow media palette; otherwise it
+uses the app-theme palette.
+Both `PreviewQuickExportSession` and `PreviewQuickD3D11ExportSession` create the HUD layer directly
+and must explicitly pin the export palette to white text with a black shadow; app theme state must
+not enter the export snapshot or frame state.
+
 **Free-aspect preview geometry and the playfield square are one cross-render contract:**
 
 - The v2 canvas menu persists `QmlUiSettings::previewCanvasFreeAspect`. In edit mode,

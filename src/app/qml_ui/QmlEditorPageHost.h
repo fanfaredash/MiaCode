@@ -49,7 +49,7 @@ signals:
     void mediaToolsRequested();
     void preferencesRequested();
     void activePageIdChanged();
-    void coverPageRequested(int difficultyId);
+    void coverWindowRequested(int difficultyId);
 
 private:
     void rememberResumeDifficulty();

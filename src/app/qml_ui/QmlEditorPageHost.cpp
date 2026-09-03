@@ -179,20 +179,11 @@ bool QmlEditorPageHost::openCoverExport(int difficultyId)
     if (router() == nullptr) {
         return false;
     }
-    // A direct export-page → cover-page navigation must release the video
-    // session before cover becomes the owner of the Tools-menu difficulty.
-    // Going through leaveOverlayPage already does this; sidebar and menu routes
-    // intentionally do not, so make the transition explicit here.
-    if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
-        exportSessionObject()->leave();
-    }
     rememberResumeDifficulty();
-    const int selectedDifficultyId = difficultyId > 0 ? difficultyId : resumeDifficultyId_;
-    if (activePageId_ != QLatin1String("cover")) {
-        activePageId_ = QStringLiteral("cover");
-        emit activePageIdChanged();
-    }
-    emit coverPageRequested(selectedDifficultyId);
+    const int selectedDifficultyId = difficultyId > 0 ? difficultyId
+        : activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr
+            ? exportSessionObject()->selectedDifficultyId() : resumeDifficultyId_;
+    emit coverWindowRequested(selectedDifficultyId);
     return true;
 }
 
