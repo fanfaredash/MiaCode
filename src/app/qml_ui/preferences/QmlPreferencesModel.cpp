@@ -197,15 +197,17 @@ double QmlPreferencesModel::displayRefreshRate() const
 QVariantList QmlPreferencesModel::frameRateOptions(bool includeDisplayRefresh) const
 {
     QVariantList rows;
+    // Read once: also gates the Fps120 option below (v1 parity, d5a604b7),
+    // not just the DisplayRefresh label.
+    const double refresh = displayRefreshRate();
     if (includeDisplayRefresh) {
-        const double refresh = displayRefreshRate();
         rows.append(option(
             static_cast<int>(PreviewCanvasFrameRateMode::DisplayRefresh),
             refresh > 0.0
                 ? QStringLiteral("%1 (%2 Hz)")
                       .arg(UiText::text(
                           QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.display")))
-                      .arg(refresh, 0, 'f', 0)
+                      .arg(refresh, 0, 'f', refresh >= 100.0 ? 0 : 1)
                 : UiText::text(
                       QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.display"))));
     }
@@ -215,9 +217,17 @@ QVariantList QmlPreferencesModel::frameRateOptions(bool includeDisplayRefresh) c
     rows.append(option(
         static_cast<int>(PreviewCanvasFrameRateMode::Fps60),
         UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.60"))));
-    rows.append(option(
-        static_cast<int>(PreviewCanvasFrameRateMode::Fps120),
-        UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120"))));
+    // Only expose 120 FPS on a display that can sustain it. The backend
+    // clamps Fps120 to display refresh at runtime (see
+    // PlaybackCoordinator::previewCanvasTargetFrameIntervalNs), so leaving
+    // it in the menu on a sub-120 Hz panel would advertise a setting that
+    // silently degrades to display refresh. Epsilon (119.5) tolerates
+    // panels that report 119.88 Hz (common OEM round-down of true 120 Hz).
+    if (refresh >= 119.5) {
+        rows.append(option(
+            static_cast<int>(PreviewCanvasFrameRateMode::Fps120),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120"))));
+    }
     return rows;
 }
 
