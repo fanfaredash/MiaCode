@@ -57,7 +57,7 @@ AppDialog {
         ToolRow {
             objectName: "mediaToolSampleRate"
             label: UiText.text("采样率")
-            description: UiText.text("将 track.mp3 转换为 44100Hz，并自动备份原文件。")
+            description: UiText.text("把 track.mp3 转换为 44100 Hz。")
             onClicked: {
                 root.close()
                 root.mediaTools.convertTrackTo44100Hz()
@@ -66,7 +66,7 @@ AppDialog {
         ToolRow {
             objectName: "mediaToolCompressVideo"
             label: UiText.text("压缩视频")
-            description: UiText.text("将背景视频压缩到 20 MiB 以内，并自动备份原文件。")
+            description: UiText.text("把背景视频压缩到 20 MiB 以内。")
             onClicked: {
                 root.close()
                 root.mediaTools.compressBackgroundVideo()
@@ -84,7 +84,7 @@ AppDialog {
         ToolRow {
             objectName: "mediaToolPrependTrack"
             label: UiText.text("音轨前置静音")
-            description: UiText.text("在 track.mp3 开头插入一段静音，并自动备份原文件。")
+            description: UiText.text("在 track.mp3 开头插入一段静音。")
             onClicked: {
                 root.close()
                 root.prependRequested(true)
@@ -93,7 +93,7 @@ AppDialog {
         ToolRow {
             objectName: "mediaToolPrependPv"
             label: UiText.text("PV 前置黑屏")
-            description: UiText.text("在背景视频开头插入一段黑幕，并自动备份原文件。")
+            description: UiText.text("在背景视频开头插入一段黑屏。")
             onClicked: {
                 root.close()
                 root.prependRequested(false)

@@ -312,7 +312,7 @@ Item {
             spacing: 12
 
             Label {
-                text: UiText.text("元数据")
+                text: UiText.text("谱面信息设置")
                 color: Theme.colors.text.primary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize + 2
@@ -326,7 +326,7 @@ Item {
             }
             MetadataField {
                 width: metadataColumn.width
-                label: UiText.text("艺术家")
+                label: UiText.text("曲师")
                 value: root.documentSession.metadataArtist
                 onCommitted: value => root.documentSession.metadataArtist = value
             }
@@ -338,19 +338,19 @@ Item {
             }
             MetadataField {
                 width: metadataColumn.width
-                label: UiText.text("初始偏移")
+                label: UiText.text("metadata.field.first")
                 value: root.documentSession.metadataFirst
                 onCommitted: value => root.documentSession.metadataFirst = value
             }
             MetadataField {
                 width: metadataColumn.width
-                label: UiText.text("视频路径")
-                value: root.documentSession.metadataVideoPath
-                onCommitted: value => root.documentSession.metadataVideoPath = value
+                label: UiText.text("clock_count")
+                value: root.documentSession.metadataClockCount
+                onCommitted: value => root.documentSession.metadataClockCount = value
             }
 
             Label {
-                text: UiText.text("其他字段")
+                text: UiText.text("其他 &xx 字段")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize

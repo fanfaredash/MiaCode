@@ -142,6 +142,20 @@ QString QmlDocumentModel::metadataArtist() const { return documentField(miacode:
 QString QmlDocumentModel::metadataFirst() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::First); }
 QString QmlDocumentModel::metadataDesigner() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::Designer); }
 QString QmlDocumentModel::metadataVideoPath() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::VideoPath); }
+// clock_count has no dedicated SimaiDocument member (unlike title/artist/first/
+// designer/videoPath above): it lives in the raw &field=value sequence and is
+// defaulted to 4 by SimaiDocument::ensureDefaultClockCount on load, so this
+// mirrors wholeBpm() below rather than routing through documentField().
+QString QmlDocumentModel::metadataClockCount() const
+{
+    if (workspace_ == nullptr) return {};
+    for (const SimaiRawField& field : workspace_->document().extraFields) {
+        if (field.key.compare(QStringLiteral("clock_count"), Qt::CaseInsensitive) == 0) {
+            return field.value.trimmed();
+        }
+    }
+    return {};
+}
 QString QmlDocumentModel::metadataExtraText() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::ExtraText); }
 QString QmlDocumentModel::wholeBpm() const
 {
@@ -230,6 +244,16 @@ void QmlDocumentModel::setMetadataVideoPath(const QString& value)
     if (!runWorkspaceMutation([&] {
             return workspace_->updateDocumentField(
                 miacode::v2::ChartWorkspaceDocumentField::VideoPath, value);
+        })) {
+        return;
+    }
+    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
+}
+void QmlDocumentModel::setMetadataClockCount(const QString& value)
+{
+    if (workspace_ == nullptr) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->upsertExtraField(QStringLiteral("clock_count"), value);
         })) {
         return;
     }

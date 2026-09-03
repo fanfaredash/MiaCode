@@ -29,6 +29,7 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QString metadataFirst READ metadataFirst WRITE setMetadataFirst NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataDesigner READ metadataDesigner WRITE setMetadataDesigner NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataVideoPath READ metadataVideoPath WRITE setMetadataVideoPath NOTIFY metadataChanged)
+    Q_PROPERTY(QString metadataClockCount READ metadataClockCount WRITE setMetadataClockCount NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataExtraText READ metadataExtraText WRITE setMetadataExtraText NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataSourceText READ metadataSourceText WRITE setMetadataSourceText NOTIFY metadataSourceChanged)
     Q_PROPERTY(QString metadataSourceError READ metadataSourceError NOTIFY metadataSourceChanged)
@@ -82,6 +83,7 @@ public:
     QString metadataFirst() const;
     QString metadataDesigner() const;
     QString metadataVideoPath() const;
+    QString metadataClockCount() const;
     QString metadataExtraText() const;
     QString wholeBpm() const;
     QString metadataSourceText() const;
@@ -95,6 +97,7 @@ public:
     void setMetadataFirst(const QString& value);
     void setMetadataDesigner(const QString& value);
     void setMetadataVideoPath(const QString& value);
+    void setMetadataClockCount(const QString& value);
     void setMetadataExtraText(const QString& value);
     void setMetadataSourceText(const QString& value);
 
