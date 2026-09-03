@@ -51,12 +51,12 @@ AppDialog {
             objectName: "prependBlankSummary"
             Layout.fillWidth: true
             text: root.isTrack
-                  ? UiText.text("在 %1 开头插入 %2 拍（BPM %3）静音，约 %4 秒。")
+                  ? UiText.text("在 %1 开头插入 %2 拍（BPM %3）静音，约 %4 秒，并自动备份原文件。")
                         .arg(root.inputName)
                         .arg(root.formatNumber(root.beats))
                         .arg(root.formatNumber(root.bpm))
                         .arg(root.formatNumber(root.blankSeconds))
-                  : UiText.text("在 %1 开头插入 %2 拍（BPM %3）黑屏，约 %4 秒。")
+                  : UiText.text("在 %1 开头插入 %2 拍（BPM %3）黑屏，约 %4 秒，并自动备份原文件。")
                         .arg(root.inputName)
                         .arg(root.formatNumber(root.beats))
                         .arg(root.formatNumber(root.bpm))
