@@ -6,13 +6,15 @@ Item {
     id: root
 
     signal released()
+    property bool showDivider: true
 
     implicitWidth: Theme.splitDividerThickness
     implicitHeight: Theme.splitDividerThickness
     // Paint above both panes so the thickened stroke is visible on each side.
     z: 1
-    readonly property bool handlePressed: Controls.SplitHandle.pressed
-    readonly property bool handleActive: handlePressed || Controls.SplitHandle.hovered
+    property bool handlePressed: Controls.SplitHandle.pressed
+    property bool handleHovered: Controls.SplitHandle.hovered
+    readonly property bool handleActive: handlePressed || handleHovered
     readonly property bool verticalDivider: parent !== null
                                             && parent.orientation === Qt.Horizontal
     readonly property real lineThickness: handleActive
@@ -33,6 +35,7 @@ Item {
 
     Rectangle {
         anchors.centerIn: parent
+        visible: root.showDivider || root.handleActive
         width: root.verticalDivider ? root.lineThickness : parent.width
         height: root.verticalDivider ? parent.height : root.lineThickness
         color: root.handleActive

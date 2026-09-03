@@ -267,28 +267,19 @@ Column {
         }
     }
 
-    Dialog {
+    ChoiceDialog {
         id: removeDifficultyDialog
 
-        enter: FadeTransition {}
-        exit: FadeTransition { appearing: false }
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.uiFontSize
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        modal: true
         title: UiText.text("删除当前难度")
-        footer: DialogFooter {
-            acceptText: UiText.text("确定")
-            cancelText: UiText.text("取消")
-            onAccepted: removeDifficultyDialog.accept()
-            onRejected: removeDifficultyDialog.reject()
-        }
-        onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
-
-        Label {
-            text: UiText.text("当前难度及其正文将从文档中删除。")
-            color: Theme.colors.text.primary
+        message: UiText.text("当前难度及其正文将从文档中删除。")
+        dismissChoiceId: "cancel"
+        choices: [
+            { id: "cancel", label: UiText.text("取消"), role: "reject" },
+            { id: "remove", label: UiText.text("确定"), role: "accept" }
+        ]
+        onChosen: function(choiceId) {
+            if (choiceId === "remove")
+                root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
         }
     }
 }

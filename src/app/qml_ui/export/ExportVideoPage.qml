@@ -665,8 +665,6 @@ Rectangle {
                             implicitHeight: hudFontSample.implicitHeight + 20
                             radius: Theme.controlRadius
                             color: Theme.overlayColor(Theme.colors.background.surface)
-                            border.width: Theme.controlBorderWidth
-                            border.color: Theme.colors.border.control
                             Text {
                                 id: hudFontSample
                                 anchors.fill: parent
@@ -896,8 +894,6 @@ Rectangle {
                             implicitHeight: introFontPreviewColumn.implicitHeight + 20
                             radius: Theme.controlRadius
                             color: Theme.overlayColor(Theme.colors.background.surface)
-                            border.width: Theme.controlBorderWidth
-                            border.color: Theme.colors.border.control
                             Column {
                                 id: introFontPreviewColumn
                                 anchors.fill: parent

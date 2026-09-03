@@ -3,7 +3,7 @@ import QtQuick.Controls
 import MiaCode.UI
 
 // 粘性菜单基类（Popup，点外部/按 Esc 关闭，聚焦但不会因点条目即关）。
-// 背景统一走 FloatingCard（无描边 + 微小阴影）。波形亮度、渲染模式菜单等
+// 背景统一走 FloatingCard 的磨砂、描边与阴影。波形亮度、渲染模式菜单等
 // 粘性操作弹窗都继承这里。
 AppDropdownPanel {
     id: root
@@ -23,5 +23,8 @@ AppDropdownPanel {
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
-    background: FloatingCard { implicitWidth: root.minimumWidth }
+    background: FloatingCard {
+        popup: root
+        implicitWidth: root.minimumWidth
+    }
 }

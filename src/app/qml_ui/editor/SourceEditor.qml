@@ -549,15 +549,9 @@ Rectangle {
         onRenameRequested: line => root.promptRenameBookmark(line)
     }
 
-    Dialog {
+    AppDialog {
         id: bookmarkTitleDialog
 
-        enter: FadeTransition {}
-        exit: FadeTransition { appearing: false }
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.uiFontSize
-        parent: Overlay.overlay
-        modal: true
         title: UiText.text("重命名书签")
         footer: DialogFooter {
             acceptText: UiText.text("确定")
@@ -566,9 +560,8 @@ Rectangle {
             onRejected: bookmarkTitleDialog.reject()
         }
         onAccepted: root.renameBookmarkAtLine(root.pendingBookmarkLine, bookmarkTitleField.text)
-        AppTextField {
+        body: AppTextField {
             id: bookmarkTitleField
-            width: 260
             Accessible.name: UiText.text("书签名称")
         }
     }

@@ -17,8 +17,7 @@ QtObject {
         },
         border: {
             normal: "#2A2B2C",
-            control: "#333536",
-            floating: Qt.rgba(1, 1, 1, 0.12)
+            control: "#333536"
         },
         text: {
             // Navigation: selected ≈ 1.0, idle ≈ 0.75 of active.
@@ -60,6 +59,16 @@ QtObject {
             hover: "#2C2D2E",
             pressed: "#3A3B3C",
             selected: "#333536"
+        },
+        buttonState: {
+            hover: "#333536",
+            pressed: "#282A2B",
+            selected: "#3A3B3C"
+        },
+        accentState: {
+            hover: "#328EB8",
+            pressed: "#236888",
+            selected: "#307E9F"
         },
         syntax: {
             keyword: "#F5AE9C",
@@ -107,6 +116,20 @@ QtObject {
     // Fill alpha only: text/icons and popup transition opacity stay independent.
     readonly property real overlayOpacity: 0.72
     readonly property real popupOpacity: 0.96
+    // Frosted menu material is independent of wallpaper visibility.
+    readonly property real popupTintOpacity: 0.82
+    readonly property int popupBlurRadius: 64
+    readonly property real dialogTintOpacity: 0.94
+    readonly property int dialogBlurRadius: 96
+    readonly property real popupBlurScale: 0.5
+    readonly property color popupTintColor: {
+        const c = Qt.color(colors.background.elevated)
+        return Qt.rgba(c.r, c.g, c.b, popupTintOpacity)
+    }
+    readonly property color dialogTintColor: {
+        const c = Qt.color(colors.background.panel)
+        return Qt.rgba(c.r, c.g, c.b, dialogTintOpacity)
+    }
 
     function overlayColor(baseColor, opacity = overlayOpacity) {
         if (!backgroundActive)
@@ -130,11 +153,17 @@ QtObject {
 
     // Shared UI geometry.
     readonly property int controlRadius: 6
+    readonly property int popupRadius: 12
+    readonly property int workspaceRadius: 10
     readonly property int itemRadius: controlRadius
     readonly property int controlMinHeight: 30
     readonly property int compactControlHeight: 24
     readonly property int compactFontSize: uiFontSize - 2
     readonly property int panelPadding: 8
+    readonly property int dialogPadding: 16
+    readonly property int dialogMargin: 24
+    readonly property int dialogHeight: 560
+    readonly property int dialogCompactHeight: 280
     readonly property int controlBorderWidth: 1
     readonly property int menuPadding: 7
     // Default inset so adjacent HoverChrome pills do not touch.

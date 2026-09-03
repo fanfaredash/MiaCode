@@ -9,10 +9,6 @@ import MiaCode.UI
 AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     required property var mediaTools
 
     property bool isTrack: true
@@ -24,16 +20,13 @@ AppDialog {
     readonly property real bpm: bpmField.value
     readonly property real blankSeconds: bpm > 0 ? beats * 60 / bpm : 0
 
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(440, Overlay.overlay ? Overlay.overlay.width - 48 : 440)
+    preferredWidth: 440
     footer: DialogFooter {
         acceptText: UiText.text("确定")
         cancelText: UiText.text("取消")
         onAccepted: root.accept()
         onRejected: root.reject()
     }
-    closePolicy: Popup.CloseOnEscape
 
     function loadContext(context) {
         root.isTrack = context.isTrack
@@ -51,7 +44,7 @@ AppDialog {
 
     onAccepted: root.mediaTools.applyPrepend(root.isTrack, root.beats, root.bpm)
 
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 12
 
         Text {

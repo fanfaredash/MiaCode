@@ -5,6 +5,7 @@ import MiaCode.UI
 // Shared popup menu — geometry mirrors v1 styleRoundedMenu.
 Menu {
     id: root
+    popupType: Popup.Item
 
     readonly property PopupLifecycle lifecycle: PopupLifecycle {
         popup: root
@@ -25,18 +26,22 @@ Menu {
     // Action-created rows and default Instantiator paths use this delegate.
     delegate: AppMenuItem {}
 
-    function popupWidthForAnchor(anchor) {
-        if (!root.hugContent)
-            return Math.max(root.implicitWidth, anchor ? anchor.width : 0)
+    implicitWidth: {
         let widest = 0
         for (let i = 0; i < root.count; i++) {
             const item = root.itemAt(i)
-            if (item && item.textWidth !== undefined)
-                widest = Math.max(widest, item.textWidth + item.chromeWidth)
+            if (item)
+                widest = Math.max(widest, item.implicitWidth)
         }
-        return widest > 0
-            ? Math.ceil(root.leftPadding + root.rightPadding + widest)
-            : root.implicitWidth
+        return Math.max(root.hugContent ? 0 : 180,
+                        Math.ceil(root.leftPadding + root.rightPadding + widest))
+    }
+    width: popupWidthForAnchor(root.anchorItem)
+
+    function popupWidthForAnchor(anchor) {
+        const preferred = Math.max(root.implicitWidth,
+                                   !root.hugContent && anchor ? anchor.width : 0)
+        return Math.min(preferred, Overlay.overlay ? Overlay.overlay.width : preferred)
     }
 
     function openAt(anchor) {
@@ -45,7 +50,6 @@ Menu {
         parent = anchor
         closePolicy = Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
         root.anchorItem = anchor
-        width = root.popupWidthForAnchor(anchor)
         open()
         Qt.callLater(root.reposition)
     }
@@ -53,17 +57,18 @@ Menu {
     function reposition() {
         if (!root.anchorItem || Overlay.overlay === null)
             return
-        width = root.popupWidthForAnchor(root.anchorItem)
         x = root.openRightAligned ? root.anchorItem.width - width : 0
         y = -height
     }
 
     onImplicitHeightChanged: if (visible)
         reposition()
+    onWidthChanged: if (visible)
+        reposition()
     onCountChanged: if (visible)
         reposition()
 
     background: FloatingCard {
-        implicitWidth: root.hugContent ? 1 : 180
+        popup: root
     }
 }

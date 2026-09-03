@@ -11,7 +11,6 @@ MenuSeparator {
     rightPadding: 6
 
     contentItem: Rectangle {
-        implicitWidth: 168
         implicitHeight: 1
         color: Theme.colors.border.normal
     }

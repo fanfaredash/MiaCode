@@ -14,27 +14,19 @@ import MiaCode.UI
 AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-
     required property var preferencesModel
     required property var shortcuts
     required property var preferences
     required property var appBackground
 
     title: UiText.text("偏好设置")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(700, Overlay.overlay ? Overlay.overlay.width - 48 : 700)
-    height: Math.min(560, Overlay.overlay ? Overlay.overlay.height - 48 : 560)
+    preferredWidth: 700
+    preferredHeight: Theme.dialogHeight
+    fillBody: true
     footer: DialogFooter {
         cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
-    closePolicy: Popup.CloseOnEscape
-
-    // Drag by the title bar: these change what the preview shows.
-    DialogDrag { dialog: root }
 
     property int activePage: 0
     // Id of the command whose binding is being recorded; "" when idle.
@@ -72,7 +64,7 @@ AppDialog {
         return parts.join("+")
     }
 
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 10
 
         Row {
@@ -135,93 +127,84 @@ AppDialog {
         }
 
         // ---- 背景 ----
-        Flickable {
+        ColumnLayout {
             objectName: "preferencesBackgroundPage"
             Layout.fillWidth: true
-            Layout.fillHeight: true
             visible: root.activePage === 1
-            clip: true
-            contentWidth: width
-            contentHeight: backgroundControls.implicitHeight
+            spacing: 10
 
-            ColumnLayout {
-                id: backgroundControls
-                width: parent.width
-                spacing: 10
-
-                AppSwitch {
-                    text: UiText.text("启用应用背景")
-                    checked: root.appBackground.enabled
-                    onToggled: root.appBackground.enabled = checked
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.appBackground.imagePath.length > 0
-                              ? root.appBackground.imagePath
-                              : UiText.text("未选择背景图片")
-                        color: root.appBackground.imageReadable
-                               ? Theme.colors.text.primary : Theme.colors.text.secondary
-                        elide: Text.ElideMiddle
-                        font.family: Theme.uiFont
-                    }
-                    AppButton {
-                        text: UiText.text("选择图片")
-                        onClicked: root.appBackground.chooseImage()
-                    }
-                    AppButton {
-                        text: UiText.text("清除")
-                        enabled: root.appBackground.imagePath.length > 0
-                        onClicked: root.appBackground.clearImage()
-                    }
-                }
-                Text {
-                    Layout.fillWidth: true
-                    visible: root.appBackground.errorMessage.length > 0
-                    text: root.appBackground.errorMessage
-                    color: Theme.colors.syntax.error
-                    font.family: Theme.uiFont
-                    wrapMode: Text.WordWrap
-                }
-                LabeledSlider {
-                    label: UiText.text("不透明度")
-                    from: 0; to: 1; stepSize: 0.01
-                    value: root.appBackground.opacity
-                    readout: Math.round(root.appBackground.opacity * 100) + "%"
-                    onMoved: function(value) { root.appBackground.opacity = value }
-                }
-                LabeledSlider {
-                    label: UiText.text("模糊")
-                    from: 0; to: 32; stepSize: 1
-                    value: root.appBackground.blur
-                    readout: Math.round(root.appBackground.blur)
-                    onMoved: function(value) { root.appBackground.blur = Math.round(value) }
-                }
-                LabeledCombo {
-                    label: UiText.text("缩放模式")
-                    options: root.appBackground.sizeModeOptions
-                    currentValue: root.appBackground.sizeMode
-                    onPicked: function(value) { root.appBackground.sizeMode = value }
-                }
-                LabeledCombo {
-                    label: UiText.text("位置")
-                    options: root.appBackground.positionOptions
-                    currentValue: root.appBackground.position
-                    onPicked: function(value) { root.appBackground.position = value }
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: UiText.text("背景覆盖层")
-                    color: Theme.colors.text.active
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.uiFontSize
-                    font.bold: true
-                }
-                LabeledSlider { label: UiText.text("面板（深色）"); from: 0; to: 255; value: root.appBackground.panelAlphaDark; readout: root.appBackground.panelAlphaDark; onMoved: function(v) { root.appBackground.panelAlphaDark = Math.round(v) } }
-                LabeledSlider { label: UiText.text("面板（浅色）"); from: 0; to: 255; value: root.appBackground.panelAlphaLight; readout: root.appBackground.panelAlphaLight; onMoved: function(v) { root.appBackground.panelAlphaLight = Math.round(v) } }
+            AppSwitch {
+                text: UiText.text("启用应用背景")
+                checked: root.appBackground.enabled
+                onToggled: root.appBackground.enabled = checked
             }
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    Layout.fillWidth: true
+                    text: root.appBackground.imagePath.length > 0
+                          ? root.appBackground.imagePath
+                          : UiText.text("未选择背景图片")
+                    color: root.appBackground.imageReadable
+                           ? Theme.colors.text.primary : Theme.colors.text.secondary
+                    elide: Text.ElideMiddle
+                    font.family: Theme.uiFont
+                }
+                AppButton {
+                    text: UiText.text("选择图片")
+                    onClicked: root.appBackground.chooseImage()
+                }
+                AppButton {
+                    text: UiText.text("清除")
+                    enabled: root.appBackground.imagePath.length > 0
+                    onClicked: root.appBackground.clearImage()
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: root.appBackground.errorMessage.length > 0
+                text: root.appBackground.errorMessage
+                color: Theme.colors.syntax.error
+                font.family: Theme.uiFont
+                wrapMode: Text.WordWrap
+            }
+            LabeledSlider {
+                label: UiText.text("不透明度")
+                from: 0; to: 1; stepSize: 0.01
+                value: root.appBackground.opacity
+                readout: Math.round(root.appBackground.opacity * 100) + "%"
+                onMoved: function(value) { root.appBackground.opacity = value }
+            }
+            LabeledSlider {
+                label: UiText.text("模糊")
+                from: 0; to: 32; stepSize: 1
+                value: root.appBackground.blur
+                readout: Math.round(root.appBackground.blur)
+                onMoved: function(value) { root.appBackground.blur = Math.round(value) }
+            }
+            LabeledCombo {
+                label: UiText.text("缩放模式")
+                options: root.appBackground.sizeModeOptions
+                currentValue: root.appBackground.sizeMode
+                onPicked: function(value) { root.appBackground.sizeMode = value }
+            }
+            LabeledCombo {
+                label: UiText.text("位置")
+                options: root.appBackground.positionOptions
+                currentValue: root.appBackground.position
+                onPicked: function(value) { root.appBackground.position = value }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: UiText.text("背景覆盖层")
+                color: Theme.colors.text.active
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                font.bold: true
+            }
+            LabeledSlider { label: UiText.text("面板（深色）"); from: 0; to: 255; value: root.appBackground.panelAlphaDark; readout: root.appBackground.panelAlphaDark; onMoved: function(v) { root.appBackground.panelAlphaDark = Math.round(v) } }
+            LabeledSlider { label: UiText.text("面板（浅色）"); from: 0; to: 255; value: root.appBackground.panelAlphaLight; readout: root.appBackground.panelAlphaLight; onMoved: function(v) { root.appBackground.panelAlphaLight = Math.round(v) } }
         }
 
         // ---- 编辑器 ----

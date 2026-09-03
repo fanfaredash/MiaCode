@@ -1,6 +1,4 @@
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
 import QtQuick.Dialogs
 import MiaCode.UI
 
@@ -75,8 +73,8 @@ Item {
         function onNoticeRequested(requestId, notice) {
             root.activeNoticeId = requestId
             noticeDialog.title = notice.title
-            noticeDialog.text = notice.text
-            noticeDialog.informativeText = notice.details
+            noticeDialog.message = notice.text
+            noticeDialog.details = notice.details
             noticeDialog.actionLabel = notice.actionLabel || ""
             noticeDialog.confirmation = !!notice.confirmation
             noticeDialog.open()
@@ -113,77 +111,29 @@ Item {
         }
     }
 
-    // Notices are an app-styled Dialog, not QtQuick.Dialogs.MessageDialog:
-    // that one renders as the platform's own alert (an NSAlert on macOS), which
-    // cannot take the shell's typography or buttons and read as a foreign
-    // window in the middle of the app.
-    Dialog {
+    ChoiceDialog {
         id: noticeDialog
-
-        enter: FadeTransition {}
-        exit: FadeTransition { appearing: false }
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.uiFontSize
         objectName: "uiRequestNoticeDialog"
 
         property string actionLabel: ""
         property bool confirmation: false
-        property string informativeText: ""
-        property string text: ""
+        dismissChoiceId: "reject"
+        choices: {
+            const actions = [{ id: "reject", label: confirmation ? UiText.text("否")
+                                : (actionLabel.length > 0 ? UiText.text("关闭") : UiText.text("确定")) }]
+            if (confirmation || actionLabel.length > 0)
+                actions.push({ id: "accept", label: confirmation ? UiText.text("是") : actionLabel,
+                               role: "accept" })
+            return actions
+        }
 
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(460, Overlay.overlay ? Overlay.overlay.width - 48 : 460)
-        closePolicy: Popup.CloseOnEscape
-
-        function resolve(actionChosen) {
+        onChosen: function(choiceId) {
             const requestId = root.activeNoticeId
             root.activeNoticeId = ""
-            if (requestId.length > 0 && root.requests)
-                root.requests.submitNoticeResult(requestId, actionChosen)
-        }
-
-        // Dismissing by Escape or the scrim answers the same as declining, so a
-        // closed window is never read as consent.
-        onRejected: noticeDialog.resolve(false)
-
-        footer: DialogFooter {
-            acceptText: noticeDialog.confirmation
-                        ? UiText.text("是")
-                        : (noticeDialog.actionLabel.length > 0 ? noticeDialog.actionLabel : "")
-            cancelText: noticeDialog.confirmation
-                        ? UiText.text("否")
-                        : (noticeDialog.actionLabel.length > 0 ? UiText.text("关闭") : UiText.text("确定"))
-            onAccepted: {
-                noticeDialog.resolve(true)
-                noticeDialog.close()
-            }
-            onRejected: {
-                noticeDialog.resolve(false)
-                noticeDialog.close()
-            }
-        }
-
-        contentItem: ColumnLayout {
-            spacing: 10
-            Text {
-                objectName: "uiRequestNoticeText"
-                Layout.fillWidth: true
-                text: noticeDialog.text
-                color: Theme.colors.text.active
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                Layout.fillWidth: true
-                Layout.maximumHeight: 220
-                visible: noticeDialog.informativeText.length > 0
-                text: noticeDialog.informativeText
-                color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.secondaryFontSize
-                wrapMode: Text.WordWrap
-                elide: Text.ElideRight
-            }
+            Qt.callLater(function() {
+                if (requestId.length > 0 && root.requests)
+                    root.requests.submitNoticeResult(requestId, choiceId === "accept")
+            })
         }
     }
 

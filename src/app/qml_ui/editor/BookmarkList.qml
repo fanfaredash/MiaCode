@@ -13,7 +13,6 @@ ListView {
         anchors.fill: parent
         z: -1
         color: Theme.overlayColor(Theme.colors.background.elevated)
-        border.color: Theme.colors.border.normal
     }
     model: bookmarks
     delegate: ChromeRow {

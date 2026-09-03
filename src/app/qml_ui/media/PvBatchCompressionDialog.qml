@@ -6,29 +6,23 @@ import MiaCode.UI
 // The PV batch queue. Progress and cancellation live on the shell's shared
 // overlay, so this page shows only what the overlay cannot: which folder each
 // job came from and how each one ended.
-Dialog {
+AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     required property var mediaTools
 
     title: UiText.text("批量压缩 PV")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(680, Overlay.overlay ? Overlay.overlay.width - 48 : 680)
-    height: Math.min(520, Overlay.overlay ? Overlay.overlay.height - 48 : 520)
+    preferredWidth: 680
+    preferredHeight: Theme.dialogHeight
+    fillBody: true
     footer: DialogFooter {
         cancelText: UiText.text("关闭")
         onRejected: root.reject()
     }
-    closePolicy: Popup.CloseOnEscape
 
     readonly property bool busy: !!root.mediaTools && root.mediaTools.batchRunning
 
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 10
 
         RowLayout {

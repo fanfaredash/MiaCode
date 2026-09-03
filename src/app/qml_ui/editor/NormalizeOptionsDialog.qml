@@ -8,10 +8,6 @@ import MiaCode.UI
 AppDialog {
     id: root
 
-    enter: FadeTransition {}
-    exit: FadeTransition { appearing: false }
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
     // Human-readable description of what will be normalized (whole chart, or a
     // line/column range), supplied by the caller.
     property string selectionDescription: ""
@@ -38,16 +34,13 @@ AppDialog {
     }
 
     title: UiText.text("整谱规范化")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(420, Overlay.overlay ? Overlay.overlay.width - 48 : 420)
+    preferredWidth: 420
     footer: DialogFooter {
         acceptText: UiText.text("确定")
         cancelText: UiText.text("取消")
         onAccepted: root.accept()
         onRejected: root.reject()
     }
-    closePolicy: Popup.CloseOnEscape
 
     onAccepted: {
         root.reduceTo384Grid = root.gridOptions[reduceCombo.currentIndex].value
@@ -61,7 +54,7 @@ AppDialog {
         syntaxCombo.currentIndex = root.indexOfValue(root.syntaxOptions, root.syntax)
     }
 
-    contentItem: ColumnLayout {
+    body: ColumnLayout {
         spacing: 12
 
         Text {

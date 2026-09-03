@@ -38,24 +38,60 @@ same change.
   to the v2 workspace; QML validation/Muri reads the workspace analysis service. Windows title
   bar: `QmlUiWindowChrome`.
 - QML popup ownership: `AppComboBox` retains ComboBox selection/model behavior;
-  `AppMenu` retains Menu actions/submenus. Both use `PopupLifecycle`, assigned through
-  an explicit property, for transitions and active state. `AppStickyPopup` inherits
+  `AppMenu` retains Menu actions/submenus. Menu widths use complete row implicit widths (mnemonic label,
+  shortcut, indicators and padding); separators follow the menu width. Combo popups
+  measure the longest option on opening. Both cap width to the window Overlay.
+  Both use `PopupLifecycle`, assigned through an explicit property, for transitions
+  and active state. `AppStickyPopup` inherits
   `AppDropdownPanel`; floating backgrounds and row states use `FloatingCard` and
-  `HoverChrome`. `AppDialog` supplies the shared dialog fill with a transparent header
-  over wallpaper. Keep lifecycle objects out of Popup's default `contentData`.
+  `HoverChrome`. `AppDialog` owns window-overlay placement, viewport-bounded preferred
+  sizing, permanent centering, shared lifecycle, a scrollable `body`, and frosted chrome.
+  Dialogs are stationary. Settings panels use the shared 560px preferred height; compact
+  dialogs use 280px; `ChoiceDialog` notices fit their natural content height. The window
+  bounds cap all dialogs. `fillBody` is enabled for settings
+  with stretch content and virtualized queues; ordinary forms retain natural body height.
+  `DialogFooter` owns wrapping action rows for settings, choices and progress. All app
+  notices use `ChoiceDialog`; file/folder pickers retain platform behavior.
+  Form pages expose natural content height to the dialog scroll owner; shortcut/queue
+  ListViews keep their virtualized viewports. Panel tabs use the higher-contrast popup
+  state palette. Cards and idle fields are borderless; field hover/focus outlines
+  remain interactive in both wallpaper states.
+  Push buttons and dropdown triggers use `buttonState`; emphasized push buttons use
+  the accent base and `accentState`. Shared chrome prioritizes pressed, hover, then
+  selected/focus fills, so selected controls retain hover feedback. Disabled dropdown
+  labels and arrows use the disabled text role.
+  Keep lifecycle objects out of Popup's default `contentData`.
+  Menus and dropdown panels use `Popup.Item` and pass their popup to `FloatingCard`.
+  Its visible-lifetime `BackdropBlur` samples the separate `Main.backdropSource` scene
+  and the anchor's owning overlay item (for dialog dropdowns), then blurs a padded,
+  half-resolution local region. Menu frost/tint works with wallpaper on or off;
+  dialogs reuse the effect with a denser 0.94 tint and 96px blur (menus: 0.82 / 64px);
+  tooltips retain the wallpaper-aware fill policy.
+  Shared popup references use `QtQuick.Templates.Popup`, the common C++ base of styled
+  Popup and Menu; the styled `QtQuick.Controls.Popup` type excludes the Menu style branch.
+  Floating cards use tint, blur and shadow for separation, with borderless chrome.
+  Menu, dropdown and dialog cards share `popupRadius` (12px) with their blur masks;
+  small controls and tooltips retain `controlRadius` (6px).
 - QML background ownership: `Theme.backgroundActive` gates both the wallpaper and surface
   alpha on `enabled && imageReadable`. `Theme.surfaceColor(baseColor)` combines shared
   `surfaceOpacity` (persisted panel alpha) with the base/panel brightness ratio in a single
   fill, preserving dark-region contrast over wallpaper. `Theme.overlayColor` applies
   shared fill alpha to controls/states (0.72) and popups (0.96), preserving the source alpha;
-  wallpaper-off returns the original color. Floating cards/dialogs add the shared floating
-  border over wallpaper. Text, icons and transition opacity stay independent.
+  wallpaper-off returns the original color. Wallpaper does not add decorative borders.
+  Text, icons and transition opacity stay independent.
   Structural children inherit their region background; preview
   transport and statistics share `PreviewPane`. The workspace `PreviewSurface.backgroundColor`
   is transparent so its empty canvas inherits that panel; media and export retain their own
   backgrounds. Timeline header/sidebar/base fills are disjoint and use the same surface-color
   function through the viewport bottom. Viewport-fit lanes use all height below the header;
   its content clips stay separate.
+- Workspace outer corner and sidebar resize: `MainSplitView.qml` owns the boundary next to
+  the activity bar. `CornerMask.qml` restores the actual wallpaper plus `surfaceColor(surface)`
+  outside its 10px arc using a corner-sized texture and `shaders/corner_mask.frag`; sidebar
+  pages have square fills. The same stationary mask covers whichever editor/preview pane
+  reaches the boundary after collapse or swapping. Sidebar dragging uses the shared minimum
+  content width's midpoint as the collapse/reopen threshold and persists on release. A collapsed
+  divider has zero layout width, retaining the shared hover/drag hit area and active stroke.
 - Staged v2 application layer: `src/app/v2/` (`ChartWorkspace` is UIv2's Widgets-free sole document,
   revision and complete-document save-point owner; `ChartWorkspaceFileService` owns BOM/system-
   encoding file I/O plus atomic saves; `AnalysisService` drives production QML validation/

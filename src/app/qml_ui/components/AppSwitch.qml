@@ -17,9 +17,6 @@ Switch {
         y: parent.height / 2 - height / 2
         radius: height / 2
         color: Theme.overlayColor(root.checked ? Theme.colors.accent.primary : Theme.colors.border.control)
-        border.width: Theme.controlBorderWidth
-        border.color: root.checked ? Theme.colors.accent.primary
-                     : (root.hovered ? Theme.colors.border.normal : Theme.colors.border.control)
         opacity: root.enabled ? 1 : 0.45
 
         Rectangle {

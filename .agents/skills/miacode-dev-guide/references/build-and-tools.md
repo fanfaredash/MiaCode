@@ -30,6 +30,11 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
 
 ## 2. Targets
 
+- `ui_shaders` embeds `src/app/qml_ui/shaders/corner_mask.frag.qsb` via `qt_add_shaders`
+  for the shared workspace corner compositor; `CornerMask.qml` is in the `MiaCode.UI` module.
+- `BackdropBlur.qml` is registered in `MiaCode.UI` and uses Qt Quick Effects' built-in
+  `MultiEffect` shaders for local menu backdrop blur and rounded masking.
+
 Default build (no options) produces only: **`MiaCode`** (the app), **`soundtouch`** (static lib
 linked into MiaCode), **`miniz`** (static lib, vendored `third_party/miniz/` single-file ZIP
 writer for "Export as ZIP" — no new DLL), and on Windows **`MiaCodeLauncher`** (the dist-root

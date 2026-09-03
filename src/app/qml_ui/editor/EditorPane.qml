@@ -386,17 +386,11 @@ Item {
         font.pixelSize: Theme.uiFontSize
     }
 
-    Dialog {
+    AppDialog {
         id: canonicalDesignerDialog
 
-        enter: FadeTransition {}
-        exit: FadeTransition { appearing: false }
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.uiFontSize
         property var candidates: []
 
-        anchors.centerIn: parent
-        modal: true
         title: UiText.text("选择统一谱师")
         footer: DialogFooter {
             acceptText: UiText.text("确定")
@@ -407,42 +401,36 @@ Item {
         onAccepted: root.commands.enableUnifiedDesigner(designerChoice.currentText)
         onRejected: unifiedDesignerSwitch.checked = root.documentSession.unifiedDesignerEnabled
 
-        Column {
+        body: ColumnLayout {
             spacing: 8
 
             Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
                 text: UiText.text("当前存在多个谱师名义，请选择要统一使用的值。")
                 color: Theme.colors.text.primary
             }
             AppComboBox {
                 id: designerChoice
-                width: 280
+                Layout.fillWidth: true
                 model: canonicalDesignerDialog.candidates
             }
         }
     }
 
-    Dialog {
+    ChoiceDialog {
         id: removeDifficultyDialog
 
-        enter: FadeTransition {}
-        exit: FadeTransition { appearing: false }
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.uiFontSize
-        anchors.centerIn: parent
-        modal: true
         title: UiText.text("删除当前难度")
-        footer: DialogFooter {
-            acceptText: UiText.text("确定")
-            cancelText: UiText.text("取消")
-            onAccepted: removeDifficultyDialog.accept()
-            onRejected: removeDifficultyDialog.reject()
-        }
-        onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
-
-        Label {
-            text: UiText.text("当前难度及其正文将从文档中删除。")
-            color: Theme.colors.text.primary
+        message: UiText.text("当前难度及其正文将从文档中删除。")
+        dismissChoiceId: "cancel"
+        choices: [
+            { id: "cancel", label: UiText.text("取消"), role: "reject" },
+            { id: "remove", label: UiText.text("确定"), role: "accept" }
+        ]
+        onChosen: function(choiceId) {
+            if (choiceId === "remove")
+                root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
         }
     }
 

@@ -88,12 +88,53 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QML popup components: `components/AppComboBox.qml` uses `AppDropdownPanel` with a
   `ListView` bound to `delegateModel`; `AppMenu.qml` uses native Menu item/action behavior.
+  `AppMenuItem.implicitWidth` includes the full mnemonic label, shortcut, indicators and
+  padding; `AppMenu` takes the widest row, with 180px as the ordinary-menu minimum.
+  Separators follow the menu width. `AppComboBox` measures option strings with FontMetrics
+  when opened and includes row/popup padding. Menu and combo-popup widths are capped to
+  the window Overlay; action labels retain elision for window-limited overflow.
   `PopupLifecycle.qml` shares transitions and active state via explicit object properties.
   `AppStickyPopup.qml` inherits `AppDropdownPanel` and adds persistent interaction/anchoring.
   `FloatingCard.qml` and `HoverChrome.qml` own shared popup backgrounds and row-state fills.
-  `AppDialog.qml` keeps Basic dialog geometry and applies one translucent card fill;
-  its header inherits the card over wallpaper. `Theme.overlayColor` owns shared control
-  and popup fill alpha while preserving wallpaper-off colors.
+  `AppButton` and `AppDropDownButton` use `Theme.colors.buttonState`; emphasized push
+  buttons use the accent base and `accentState`, reverting to neutral when disabled.
+  `HoverChrome` prioritizes pressed, hover, then selected/focus fills. Dropdown text
+  and arrows follow the enabled state.
+  `AppDialog.qml` parents dialogs to the window Overlay and owns preferred-size bounds,
+  permanent centering, shared transitions and a scrollable `body`. Title-bar drag handling
+  and stored positions are removed. Settings use a fixed 560px preferred height and compact
+  prompts use 280px; `ChoiceDialog` notices fit their natural content height. All are capped
+  to the window. `fillBody` gives stretch/virtualized content
+  the available height; ordinary forms retain natural height. Settings, media tools,
+  editor prompts, notices and job progress use this
+  shell. `DialogFooter` shares right-aligned wrapping actions; `ChoiceDialog` handles
+  notices and confirmations with explicit dismissal results. File/folder pickers stay native.
+  Preferences form pages use natural-height layouts inside the shared ScrollView;
+  the background page's nested Flickable was removed to expose its full form height.
+  Shortcut and queue ListViews retain their own viewport scrolling. `AppTab.panelTab`
+  uses `Theme.colors.popupState` for contrast against frosted cards. Form fields and
+  decorative cards are borderless at rest; field hover/focus outlines remain.
+  `Theme.overlayColor` owns shared control and ordinary popup fill alpha.
+  Menu/dropdown backgrounds additionally use `components/BackdropBlur.qml`, loaded by
+  `FloatingCard` for the popup's visible lifetime. `Main.backdropSource` exposes a scene
+  container containing wallpaper and main UI, separate from `ApplicationWindow.Overlay`.
+  Dialog dropdowns also sample their anchor's owning overlay item. Capture is local with
+  blur padding and half-resolution textures; rounded masking precedes the card tint.
+  `Popup.Item` keeps menus/dropdowns in that same window. Frosted-menu tint is independent
+  of wallpaper state, including dialog cards; tooltips retain their existing fill policy.
+  Dialogs pass their own tint (0.94 alpha) and blur radius (96px) through `FloatingCard`
+  to the shared effect; menu defaults remain 0.82 / 64px.
+  `FloatingCard`, `BackdropBlur` and `PopupLifecycle` type their popup reference as
+  `QtQuick.Templates.Popup`, so both Menu and Popup style branches are accepted.
+  Floating cards remain borderless in both wallpaper states, using tint, blur and shadow.
+- Workspace sidebar boundary: `layout/MainSplitView.qml` owns sidebar sizing and its drag
+  handle independently of the editor/preview `SplitView`. Dragging past half the sidebar's
+  minimum content width collapses/reopens it; preferences are saved on release. The collapsed
+  handle occupies zero layout width and retains hover/drag interaction. `components/CornerMask.qml`
+  and `shaders/corner_mask.frag` restore the actual background sample with the theme's dark surface
+  tint outside the top-left arc, in a 10px corner-sized pass. `Main.qml` supplies the wallpaper
+  source through `MainView`; the mask stays at the activity-bar boundary across sidebar visibility
+  and preview/editor order changes. Sidebar page fills no longer own the radius.
 - QuickShell compatibility: only preview-surface policy helpers remain under `src/app/quick_shell/`.
   `QuickShellController` is deleted, as are the v1 bootstrap, native surface host, style bridge,
   QML shell, `--ui=v1`, and `MIACODE_UI_SKIN`.

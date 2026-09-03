@@ -31,8 +31,6 @@ Rectangle {
         implicitHeight: cardColumn.implicitHeight + 44
         radius: 8
         color: Theme.overlayColor(Theme.colors.background.elevated)
-        border.width: 1
-        border.color: Theme.colors.border.normal
         Text {
             id: cardTitle
             x: 16

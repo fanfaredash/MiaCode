@@ -11,7 +11,6 @@ Rectangle {
     property var pages
 
     color: Theme.surfaceColor(Theme.colors.background.panel)
-    topLeftRadius: 10
     clip: true
 
     PanelHeader {

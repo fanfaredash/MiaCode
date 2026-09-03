@@ -110,8 +110,6 @@ Item {
             anchors.margins: -4
             radius: 3
             color: Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
-            border.width: 1
-            border.color: Theme.backgroundActive ? Theme.colors.border.floating : Theme.colors.border.control
             z: -1
         }
     }

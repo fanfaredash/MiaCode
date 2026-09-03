@@ -17,8 +17,8 @@ Item {
 
     readonly property color fillColor: !root.enabled ? root.baseColor
         : root.pressed ? root.stateColors.pressed
-        : (root.selected || root.focused) ? root.stateColors.selected
         : root.hovered ? root.stateColors.hover
+        : (root.selected || root.focused) ? root.stateColors.selected
         : root.baseColor
 
     Rectangle {

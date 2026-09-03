@@ -1,11 +1,11 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Templates as T
 
 // Assign to a property on the popup so these connections stay out of contentData.
 Connections {
     id: root
 
-    required property Popup popup
+    required property T.Popup popup
     target: root.popup
 
     property bool closing: false
