@@ -146,7 +146,7 @@ void miacode::runtime::PlaybackCoordinator::enterExportIntroRegion(double positi
         setupExportIntroOverlayData();
     }
     state_.exportIntroRegionActive_ = true;
-    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     state_.exportIntroPlayheadSeconds_ =
         qBound(-miacode::intro::kDurationSeconds, positionSeconds, 0.0);
     renderExportIntroFrame(state_.exportIntroPlayheadSeconds_);
@@ -171,7 +171,7 @@ void miacode::runtime::PlaybackCoordinator::exitExportIntroRegion()
         updatePauseButtonAppearance();
     }
     if (state_.previewTransportState_ == miacode::v2::PlaybackTransportState::Playing) {
-        state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+        playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     }
 }
 
@@ -196,7 +196,7 @@ void miacode::runtime::PlaybackCoordinator::pauseExportIntroAdvance()
         state_.exportIntroLeadInTimer_->stop();
     }
     // Keep the region + static frame so the paused intro stays on screen.
-    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     updatePauseButtonAppearance();
 }
 
@@ -228,7 +228,7 @@ void miacode::runtime::PlaybackCoordinator::startExportIntroAdvance(double fromP
         });
     }
     state_.exportIntroLeadInActive_ = true;
-    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Playing;
+    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Playing;
     state_.exportIntroLeadInElapsed_.restart();
     state_.exportIntroLeadInTimer_->start();
     updatePauseButtonAppearance();
@@ -280,7 +280,7 @@ void miacode::runtime::PlaybackCoordinator::refreshExportIntroState()
         if (state_.exportIntroRegionActive_ || state_.exportIntroLeadInActive_) {
             exitExportIntroRegion();
             miacode::runtime::shared::writePreviewPauseSecond(
-                state_.pauseSecond_, 0.0, state_.playing_, "refresh_export_intro_state");
+                playbackState_.pauseSecond_, 0.0, playbackState_.playing_, "refresh_export_intro_state");
             seekPreviewDiscreteToSecond(0.0, true);
         }
         updatePreviewSliderRange();

@@ -1048,9 +1048,12 @@ double probeAudioDurationSeconds(const QString& trackPath)
 // (Stage 4.9d-4b-2); the broadcast target changed from `Session::presentationChanged`
 // (which only forwarded it, see SessionBootstrap.cpp) to `notifications` directly,
 // the same retargeting PlaybackState.cpp's `updatePauseButtonAppearance` already did
-// for the sibling presentation announcement.
+// for the sibling presentation announcement. Stage 4.9e-4 retargeted the
+// parameter from RuntimeContext::State to RuntimeContext::PlaybackState (see
+// Shared.h) — kept the parameter NAME `state` so the `state_?\.playing_`
+// single-writer grep/spec pattern still matches this exact line.
 void writePreviewPlayingFlag(
-    RuntimeContext::State& state,
+    RuntimeContext::PlaybackState& state,
     miacode::v2::ShellNotifications& notifications,
     bool playing)
 {

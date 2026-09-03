@@ -38,6 +38,7 @@ class PlaybackCoordinator final : public miacode::v2::PlaybackControl,
 public:
     PlaybackCoordinator(QObject& owner, miacode::v2::ApplicationServices& services,
                         RuntimeContext::Ui& ui, RuntimeContext::State& state,
+                        RuntimeContext::PlaybackState& playbackState,
                         miacode::v2::PlaybackPreferencesPort& preferences,
                         miacode::v2::PlaybackValidationPort& validation,
                         miacode::v2::PlaybackDocumentPort& documents,
@@ -429,6 +430,10 @@ private:
     miacode::v2::ApplicationServices& services_;
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;
+    // Canonical playback-authority storage (see RuntimeContext.h). The
+    // coordinator is the only holder of a mutable reference to it; state_
+    // above only exposes a const& view for cross-domain readers.
+    RuntimeContext::PlaybackState& playbackState_;
     miacode::v2::PlaybackPreferencesPort& preferences_;
     miacode::v2::PlaybackValidationPort& validation_;
     miacode::v2::PlaybackDocumentPort& documents_;

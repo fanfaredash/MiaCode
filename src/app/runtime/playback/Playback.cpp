@@ -176,12 +176,12 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewDiscreteToSecond(double s
     pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, clampedSecond, state_.playing_, "seek_preview_discrete_to_second");
+        playbackState_.pauseSecond_, clampedSecond, playbackState_.playing_, "seek_preview_discrete_to_second");
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), false);
     services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);
@@ -299,13 +299,13 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate
             .arg(clampedRate, 0, 'f', 3)
             .arg(wasPlaying ? 1 : 0)
             .arg(chartNow, 0, 'f', 6));
-    state_.previewPlaybackRate_ = clampedRate;
+    playbackState_.previewPlaybackRate_ = clampedRate;
     // G2 Commit 2: re-anchor the wall-clock master to the captured chart-second
     // so the next tick reads chartNow + 0*newRate = chartNow (no jump), then
     // advances at the new rate.
     if (wasPlaying) {
-        state_.qtPreviewStartSecond_ = chartNow;
-        state_.qtPreviewElapsed_.restart();
+        playbackState_.qtPreviewStartSecond_ = chartNow;
+        playbackState_.qtPreviewElapsed_.restart();
         state_.qtPreviewTimelineStartSecond_ = chartNow;
         state_.qtPreviewTimelineElapsed_.restart();
         if (state_.previewSfxRuntime_ != nullptr) {
@@ -531,9 +531,9 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
         state_.previewStageMediaHost_->setPlaybackTransactionId(playbackTxn);
     }
     const auto applyPlaybackClockState = [this](double initialSecond) {
-        state_.qtPreviewStartSecond_ = initialSecond;
+        playbackState_.qtPreviewStartSecond_ = initialSecond;
         miacode::runtime::shared::writePreviewPauseSecond(
-            state_.pauseSecond_, initialSecond, state_.playing_, "start_qt_preview_playback");
+            playbackState_.pauseSecond_, initialSecond, playbackState_.playing_, "start_qt_preview_playback");
         state_.qtPreviewLastTimelineSecond_ = initialSecond;
         state_.qtPreviewPendingTimelineSecond_ = initialSecond;
         state_.qtPreviewPendingTimelineCenterView_ = true;
@@ -557,8 +557,8 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     state_.pausedSeekMediaPending_ = false;
     state_.pausedSeekMediaSubmittedGeneration_ = 0;
     state_.pausedSeekMediaAckGeneration_ = 0;
-    state_.previewStartupSyncPending_ = true;
-    state_.previewLateVideoStartPending_ = false;
+    playbackState_.previewStartupSyncPending_ = true;
+    playbackState_.previewLateVideoStartPending_ = false;
     state_.previewStartupAudioPrepared_ = false;
     state_.previewStartupCanvasPresented_ = state_.scene_ == nullptr;
     state_.previewStartupStrongGroupCommitted_ = false;
@@ -571,7 +571,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     state_.previewStartupPendingRetainedSequence_ = 0;
     state_.previewStartupRequestedSecond_ = 0.0;
     state_.previewStartupVisualSecond_ = 0.0;
-    state_.previewStartupPreparedSecond_ = 0.0;
+    playbackState_.previewStartupPreparedSecond_ = 0.0;
     appendPreviewPlaybackLog(
         QStringLiteral("start_request"),
         QString("txn=%1 requested=%2 resume=%3 rate=%4 has_video=%5 duration=%6")
@@ -655,7 +655,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     state_.previewStartupPendingRetainedSequence_ = pendingStartup.pendingRetainedSequence;
     state_.previewStartupRequestedSecond_ = pendingStartup.requestedVisualSecond;
     state_.previewStartupVisualSecond_ = pendingStartup.visualSecond;
-    state_.previewStartupPreparedSecond_ = pendingStartup.effectiveWorkerSecond;
+    playbackState_.previewStartupPreparedSecond_ = pendingStartup.effectiveWorkerSecond;
     applyPlaybackClockState(visualStartSecond);
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = visualStartSecond;
@@ -693,7 +693,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
 void miacode::runtime::PlaybackCoordinator::finishQtPreviewPlaybackAndReturnToEntry()
 {
     stopQtPreviewPlayback(true);
-    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
+    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
 }
 
 void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosition)
@@ -706,15 +706,15 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
         miacode::preview_audio::playback_flow::State pendingStartup;
         pendingStartup.visualSecond = state_.previewStartupVisualSecond_;
         miacode::runtime::shared::writePreviewPauseSecond(
-            state_.pauseSecond_,
+            playbackState_.pauseSecond_,
             miacode::preview_audio::playback_flow::visualSecondAfterStartupCancellation(pendingStartup),
-            state_.playing_,
+            playbackState_.playing_,
             "stop_qt_preview_playback");
         pauseSecondCaptured = true;
     }
     if (!pauseSecondCaptured) {
         miacode::runtime::shared::writePreviewPauseSecond(
-            state_.pauseSecond_, authoritativeAudioClockSecond(), state_.playing_, "stop_qt_preview_playback");
+            playbackState_.pauseSecond_, authoritativeAudioClockSecond(), playbackState_.playing_, "stop_qt_preview_playback");
         pauseSecondCaptured = true;
     }
     cancelPreviewStartupSync("stop_qt_preview_playback");
@@ -723,7 +723,7 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
     stopQtPreviewTimers();
     if (!keepPosition) {
         miacode::runtime::shared::writePreviewPauseSecond(
-            state_.pauseSecond_, 0.0, state_.playing_, "stop_qt_preview_playback");
+            playbackState_.pauseSecond_, 0.0, playbackState_.playing_, "stop_qt_preview_playback");
     }
     state_.pausedPreviewMediaSeekPending_ = false;
     if (wasPlaying || hadStartupSync) {
@@ -740,7 +740,7 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
         state_.qtPreviewPendingTimelineCenterView_ = true;
         state_.qtPreviewTimelineDirty_ = true;
     }
-    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), false);
     services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);

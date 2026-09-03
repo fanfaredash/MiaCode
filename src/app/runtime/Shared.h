@@ -62,7 +62,7 @@ namespace miacode::runtime::shared {
 //     --include="*.inc" | grep -v writePreviewPauseSecond
 //
 // which should match only the declaration and the reference alias in
-// MainWindowMemberStorage.inc. Any other hit is a hole: that writer can move the pause
+// SessionMembers.inc. Any other hit is a hole: that writer can move the pause
 // second backward without leaving a row, which defeats the whole point of the channel.
 // One such hole shipped and was missed by the original "every write is routed" claim —
 // `latency::LatencySandboxController::applyPlayheadToScene`, outside the Session
@@ -113,10 +113,18 @@ inline void writePreviewPauseSecond(
 //   grep -rn "playing_[[:space:]]*=[^=]" src --include="*.cpp" --include="*.h" \
 //     --include="*.inc" | grep -v writePreviewPlayingFlag
 //
-// which should match only the declaration and the reference alias in
-// SessionMembers.inc. Any other hit is a second writer.
+// which should match only the declaration in RuntimeContext.h and the
+// const-reference alias in SessionMembers.inc. Any other hit is a second
+// writer.
+//
+// Stage 4.9e-4: `playing_` and `previewTransportState_` moved from
+// RuntimeContext::State to RuntimeContext::PlaybackState (canonical
+// playback-authority storage, owned by PlaybackCoordinator). This writer
+// takes the mutable record directly — State only exposes a const& to it
+// now — so PlaybackCoordinator is the only caller that can compile a call
+// here.
 void writePreviewPlayingFlag(
-    RuntimeContext::State& state,
+    RuntimeContext::PlaybackState& state,
     miacode::v2::ShellNotifications& notifications,
     bool playing);
 

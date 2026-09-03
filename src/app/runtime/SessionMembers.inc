@@ -125,11 +125,11 @@
     };
 
     struct State {
-        explicit State(TimelineState& timeline)
-            : timeline_(timeline)
+        explicit State(TimelineState& timeline, const PlaybackState& playback)
+            : timeline_(timeline), playback_(playback)
         {}
 
-        // A copy would keep aliasing the source record's timeline storage.
+        // A copy would keep aliasing the source record's timeline/playback storage.
         State(const State&) = delete;
         State& operator=(const State&) = delete;
 
@@ -167,6 +167,25 @@
         quint64& waveformRefreshGeneration_ = timeline_.waveformRefreshGeneration_;
         PreviewCanvasFrameRateMode& timelineFrameRateMode_ = timeline_.timelineFrameRateMode_;
         bool& timelineSyncEnabled_ = timeline_.timelineSyncEnabled_;
+
+        // Canonical playback-authority storage is owned by PlaybackState (see
+        // RuntimeContext.h for which nine fields and why). The aliases below
+        // are READ-ONLY: State borrows a const& to the record, so nothing
+        // outside playback/ can write through these names any more — only
+        // PlaybackCoordinator holds a mutable PlaybackState& and only its own
+        // TUs assign these fields (directly, or through the single-writer
+        // primitives writePreviewPlayingFlag / writePreviewPauseSecond).
+        const PlaybackState& playback_;
+        const bool& playing_ = playback_.playing_;
+        const miacode::v2::PlaybackTransportState& previewTransportState_ =
+            playback_.previewTransportState_;
+        const double& pauseSecond_ = playback_.pauseSecond_;
+        const double& previewPlaybackRate_ = playback_.previewPlaybackRate_;
+        const double& qtPreviewStartSecond_ = playback_.qtPreviewStartSecond_;
+        const QElapsedTimer& qtPreviewElapsed_ = playback_.qtPreviewElapsed_;
+        const bool& previewStartupSyncPending_ = playback_.previewStartupSyncPending_;
+        const bool& previewLateVideoStartPending_ = playback_.previewLateVideoStartPending_;
+        const double& previewStartupPreparedSecond_ = playback_.previewStartupPreparedSecond_;
 
         // "All difficulties share one designer" preference (set via the
         // per-difficulty designer dialog, persisted per project). True ⇒
@@ -353,9 +372,8 @@
         int projectLastOpenedDifficultyId_ = 0;
         bool documentDirty_ = false;
         bool currentFieldDirty_ = false;
-        bool playing_ = false;
-        miacode::v2::PlaybackTransportState previewTransportState_ =
-            miacode::v2::PlaybackTransportState::Stopped;
+        // playing_ / previewTransportState_ moved to PlaybackState — see the
+        // const-ref alias block above.
         bool qtPreviewTimelineDirty_ = false;
         bool qtPreviewAwaitingFrameSwap_ = false;
         qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
@@ -413,8 +431,8 @@
         int previewSeekHeldArrowLastElapsedMs_ = 0;
         QElapsedTimer previewSeekHeldArrowElapsed_;
         QElapsedTimer previewScrubRenderElapsed_;
-        double qtPreviewStartSecond_ = 0.0;
-        double pauseSecond_ = 0.0;
+        // qtPreviewStartSecond_ / pauseSecond_ moved to PlaybackState — see the
+        // const-ref alias block above.
         double qtPreviewPlaybackReturnSecond_ = 0.0;
         double qtPreviewPlaybackEndSecond_ = 0.0;
         double qtPreviewLastTimelineSecond_ = -1.0;
@@ -461,8 +479,9 @@
         // kChartSwitchGaugeTxnBase) so a `timeline/leak_gauge txn=` value
         // unambiguously identifies which resource_gauge line armed it.
         quint64 chartSwitchGaugeTxnCounter_ = 0;
-        bool previewStartupSyncPending_ = false;
-        bool previewLateVideoStartPending_ = false;
+        // previewStartupSyncPending_ / previewLateVideoStartPending_ moved to
+        // PlaybackState — see the const-ref alias block above. The rest of this
+        // startup handshake cluster stays here.
         bool previewStartupAudioPrepared_ = false;
         bool previewStartupCanvasPresented_ = false;
         bool previewStartupStrongGroupCommitted_ = false;
@@ -478,10 +497,12 @@
         bool previewPlayingSeekCenterView_ = false;
         double previewStartupRequestedSecond_ = 0.0;
         double previewStartupVisualSecond_ = 0.0;
-        double previewStartupPreparedSecond_ = 0.0;
+        // previewStartupPreparedSecond_ moved to PlaybackState — see the
+        // const-ref alias block above.
         double previewPlayingSeekVisualSecond_ = 0.0;
         double previewPlayingSeekWorkerSecond_ = 0.0;
-        QElapsedTimer qtPreviewElapsed_;
+        // qtPreviewElapsed_ moved to PlaybackState — see the const-ref alias
+        // block above.
         QElapsedTimer qtPreviewWatchdogElapsed_;
         qint64 qtPreviewNextFixedTickDueNs_ = -1;
         qint64 qtPreviewFixedTickOriginNs_ = -1;
@@ -498,7 +519,8 @@
         bool previewPendingSeekCenterView_ = true;
         bool pausedPreviewMediaSeekPending_ = false;
         double pausedPreviewMediaSeekSecond_ = 0.0;
-        double previewPlaybackRate_ = 1.0;
+        // previewPlaybackRate_ moved to PlaybackState — see the const-ref
+        // alias block above.
         double previewTrackDurationSeconds_ = 0.0;
         bool showSlideTracks_ = true;
         bool showJudgeMarkers_ = false;
@@ -795,7 +817,7 @@
     bool& documentDirty_ = state_.documentDirty_;
     bool& currentFieldDirty_ = state_.currentFieldDirty_;
     bool& unifiedDesignerEnabled_ = state_.unifiedDesignerEnabled_;
-    bool& playing_ = state_.playing_;
+    const bool& playing_ = state_.playing_;
     bool& qtPreviewTimelineDirty_ = state_.qtPreviewTimelineDirty_;
     bool& qtPreviewAwaitingFrameSwap_ = state_.qtPreviewAwaitingFrameSwap_;
     qint64& qtPreviewAwaitingFrameSwapSinceMs_ = state_.qtPreviewAwaitingFrameSwapSinceMs_;
@@ -843,8 +865,8 @@
     int& previewSeekHeldArrowLastElapsedMs_ = state_.previewSeekHeldArrowLastElapsedMs_;
     QElapsedTimer& previewSeekHeldArrowElapsed_ = state_.previewSeekHeldArrowElapsed_;
     QElapsedTimer& previewScrubRenderElapsed_ = state_.previewScrubRenderElapsed_;
-    double& qtPreviewStartSecond_ = state_.qtPreviewStartSecond_;
-    double& pauseSecond_ = state_.pauseSecond_;
+    const double& qtPreviewStartSecond_ = state_.qtPreviewStartSecond_;
+    const double& pauseSecond_ = state_.pauseSecond_;
     double& qtPreviewPlaybackReturnSecond_ = state_.qtPreviewPlaybackReturnSecond_;
     double& qtPreviewPlaybackEndSecond_ = state_.qtPreviewPlaybackEndSecond_;
     double& qtPreviewLastTimelineSecond_ = state_.qtPreviewLastTimelineSecond_;
@@ -854,9 +876,9 @@
     qint64& qtPreviewLastTimelineCadenceFlushNs_ = state_.qtPreviewLastTimelineCadenceFlushNs_;
     bool& previewFollowBindingCacheValid_ = state_.previewFollowBindingCacheValid_;
     TimelineQuickModel::PreviewFollowBinding& previewFollowBindingCache_ = state_.previewFollowBindingCache_;
-    bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;
-    bool& previewLateVideoStartPending_ = state_.previewLateVideoStartPending_;
-    double& previewStartupPreparedSecond_ = state_.previewStartupPreparedSecond_;
+    const bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;
+    const bool& previewLateVideoStartPending_ = state_.previewLateVideoStartPending_;
+    const double& previewStartupPreparedSecond_ = state_.previewStartupPreparedSecond_;
     double& deferredEditorUiPreviewFollowSecond_ = state_.deferredEditorUiPreviewFollowSecond_;
     bool& pendingPreviewPlaybackStart_ = state_.pendingPreviewPlaybackStart_;
     bool& pendingPreviewPlaybackResumeFromPause_ = state_.pendingPreviewPlaybackResumeFromPause_;
@@ -880,7 +902,7 @@
     int& previewRetainedBgmState_ = state_.previewRetainedBgmState_;
     quint64& deferredPreviewUiTailGeneration_ = state_.deferredPreviewUiTailGeneration_;
     QString& previewPendingPlayInteractionSource_ = state_.previewPendingPlayInteractionSource_;
-    QElapsedTimer& qtPreviewElapsed_ = state_.qtPreviewElapsed_;
+    const QElapsedTimer& qtPreviewElapsed_ = state_.qtPreviewElapsed_;
     QElapsedTimer& qtPreviewWatchdogElapsed_ = state_.qtPreviewWatchdogElapsed_;
     qint64& qtPreviewNextFixedTickDueNs_ = state_.qtPreviewNextFixedTickDueNs_;
     qint64& qtPreviewFixedTickOriginNs_ = state_.qtPreviewFixedTickOriginNs_;
@@ -897,7 +919,7 @@
     bool& previewPendingSeekCenterView_ = state_.previewPendingSeekCenterView_;
     bool& pausedPreviewMediaSeekPending_ = state_.pausedPreviewMediaSeekPending_;
     double& pausedPreviewMediaSeekSecond_ = state_.pausedPreviewMediaSeekSecond_;
-    double& previewPlaybackRate_ = state_.previewPlaybackRate_;
+    const double& previewPlaybackRate_ = state_.previewPlaybackRate_;
     double& previewTrackDurationSeconds_ = state_.previewTrackDurationSeconds_;
     bool& showSlideTracks_ = state_.showSlideTracks_;
     bool& showJudgeMarkers_ = state_.showJudgeMarkers_;

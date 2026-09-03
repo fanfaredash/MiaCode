@@ -121,7 +121,7 @@ void miacode::runtime::PlaybackCoordinator::onStopPreview()
     state_.previewPendingPlayInteractionId_ = 0;
     state_.previewPendingPlayInteractionSource_.clear();
     seekPreviewDiscreteToSecond(returnSecond, true);
-    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
+    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
     appendPreviewInteractionLog(
         QStringLiteral("stop_complete"),
         QString("op=%1 source=stop_action final_second=%2")

@@ -126,15 +126,24 @@ bool verifyTimelineStorageIsConstructedBeforeItsAliases(QTextStream& err)
     // ORDER, and a reordered context would bind those aliases into storage that
     // has not been constructed yet. Same hazard class as the 4.9a host-order
     // check above, so it is guarded the same way.
+    //
+    // Stage 4.9e-4 added PlaybackState alongside TimelineState as a second
+    // record State borrows by reference (canonical playback-authority
+    // storage). Same hazard, same check, extended to the new record.
     const QString context = readSource(QStringLiteral("src/app/runtime/RuntimeContext.h"));
     const qsizetype timelinePosition =
         context.indexOf(QStringLiteral("    TimelineState timeline;"));
+    const qsizetype playbackPosition =
+        context.indexOf(QStringLiteral("    PlaybackState playback;"));
     const qsizetype statePosition = context.indexOf(QStringLiteral("    State state;"));
     bool ok = require(timelinePosition >= 0 && statePosition >= 0
                           && timelinePosition < statePosition,
                       QStringLiteral("TimelineState is declared before the State record aliasing it"), err);
-    ok &= require(context.contains(QStringLiteral(": state(timeline)")),
-                  QStringLiteral("RuntimeContext injects the timeline record into State"), err);
+    ok &= require(playbackPosition >= 0 && statePosition >= 0
+                      && playbackPosition < statePosition,
+                  QStringLiteral("PlaybackState is declared before the State record aliasing it"), err);
+    ok &= require(context.contains(QStringLiteral(": state(timeline, playback)")),
+                  QStringLiteral("RuntimeContext injects the timeline and playback records into State"), err);
     ok &= require(context.contains(QStringLiteral("RuntimeContext(const RuntimeContext&) = delete;")),
                   QStringLiteral("RuntimeContext is non-copyable so aliases cannot outlive their record"), err);
     return ok;

@@ -425,7 +425,12 @@ void Session::preparePreviewForShutdown()
         previewHeldSeekTimer_->stop();
     }
     setPreviewFixedTimerHighResolutionActive(false);
-    setPreviewPlayingFlag(false);
+    // Stage 4.9e-4: the playing_ flag flip moved to
+    // PlaybackCoordinator::prepareForShutdown() (SurfaceContract.cpp), which
+    // calls this function first and writes it only once this returns — see
+    // the ordering note there for why the split must stay in that order.
+    // Session no longer holds a mutable RuntimeContext::PlaybackState&, so it
+    // cannot write the flag itself any more.
     if (scene_ != nullptr) {
         scene_->setActivePlaybackProfilingEnabled(false);
     }

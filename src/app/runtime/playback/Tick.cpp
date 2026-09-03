@@ -48,7 +48,7 @@ void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second
     const double timelineCadenceSeconds =
         static_cast<double>(qMax<qint64>(1, timelineTargetFrameIntervalNs())) / 1000000000.0;
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, second, state_.playing_, "apply_qt_preview_position");
+        playbackState_.pauseSecond_, second, playbackState_.playing_, "apply_qt_preview_position");
     const bool timelineShouldCenter = centerView && (!state_.playing_ || state_.previewProgressFollowEnabled_);
     if (!state_.playing_
         && state_.timelineQuickStateBridge_ != nullptr

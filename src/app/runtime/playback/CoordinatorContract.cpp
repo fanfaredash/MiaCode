@@ -88,7 +88,7 @@ void PlaybackCoordinator::endScrub(double second)
 // yet when a portable-state load calls this.
 void PlaybackCoordinator::restorePlaybackRate(double rate)
 {
-    state_.previewPlaybackRate_ = qMax(0.25, rate);
+    playbackState_.previewPlaybackRate_ = qMax(0.25, rate);
 }
 
 // Moved from the previewStageMediaHost_ playbackPositionChanged handler
@@ -104,8 +104,8 @@ void PlaybackCoordinator::reanchorObservedSecond(double second)
     if (state_.playing_ || state_.pausedSeekMediaPending_) {
         return;
     }
-    state_.qtPreviewStartSecond_ = second;
-    state_.qtPreviewElapsed_.restart();
+    playbackState_.qtPreviewStartSecond_ = second;
+    playbackState_.qtPreviewElapsed_.restart();
 }
 
 // Moved from the five non-command writePreviewPauseSecond call sites
@@ -119,7 +119,7 @@ void PlaybackCoordinator::reanchorObservedSecond(double second)
 void PlaybackCoordinator::repositionSilently(double second, const char* reason)
 {
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, second, state_.playing_, reason);
+        playbackState_.pauseSecond_, second, playbackState_.playing_, reason);
 }
 
 }  // namespace miacode::runtime

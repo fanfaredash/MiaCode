@@ -37,11 +37,6 @@ void Session::attachRootWindow(QWindow* window)
     shell_->attachRootWindow(window);
 }
 
-void Session::setPreviewPlayingFlag(bool playing)
-{
-    miacode::runtime::shared::writePreviewPlayingFlag(state_, applicationServices_.shellNotifications(), playing);
-}
-
 void Session::setRootWindowFrameGeometry(const QRect& geometry)
 {
     shell_->setRootWindowFrameGeometry(geometry);

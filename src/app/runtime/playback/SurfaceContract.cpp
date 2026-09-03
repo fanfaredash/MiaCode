@@ -87,7 +87,7 @@ void miacode::runtime::PlaybackCoordinator::seek(double second)
     }
     seekPreviewToSecond(second, true);
     if (!state_.playing_ && !exportIntroLeadInPlaying()) {
-        state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+        playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     }
 }
 
@@ -107,7 +107,7 @@ void miacode::runtime::PlaybackCoordinator::beginScrub()
     if (state_.playing_) {
         pauseQtPreviewPlaybackExact();
     }
-    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Scrubbing;
+    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Scrubbing;
 }
 
 void miacode::runtime::PlaybackCoordinator::updateScrub(double second, bool centerView)
@@ -126,7 +126,7 @@ void miacode::runtime::PlaybackCoordinator::updateScrub(double second, bool cent
             .arg(clampedSecond, 0, 'f', 6)
             .arg(centerView ? 1 : 0));
     writePreviewPauseSecond(
-        state_.pauseSecond_, clampedSecond, state_.playing_, "update_preview_scrub");
+        playbackState_.pauseSecond_, clampedSecond, playbackState_.playing_, "update_preview_scrub");
     if (state_.previewFullscreenActive_) {
         showPreviewFullscreenControls(false);
     }
@@ -174,12 +174,12 @@ void miacode::runtime::PlaybackCoordinator::endScrub(double second, bool centerV
     state_.previewScrubDragging_ = false;
     state_.previewScrubRenderElapsed_.invalidate();
     writePreviewPauseSecond(
-        state_.pauseSecond_, clampedSecond, state_.playing_, "end_preview_scrub");
+        playbackState_.pauseSecond_, clampedSecond, playbackState_.playing_, "end_preview_scrub");
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
     seekPreviewToSecond(clampedSecond, centerView);
-    state_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
     const double appliedSecond = state_.pauseSecond_;
     const double misalignDelta = clampedSecond - appliedSecond;
     if (qAbs(misalignDelta) > kScrubMisalignWarnSeconds) {
@@ -443,16 +443,24 @@ void miacode::runtime::PlaybackCoordinator::applySfxLevels()
 void miacode::runtime::PlaybackCoordinator::prepareForShutdown()
 {
     // Order is load-bearing. preview_.preparePreviewForShutdown() (Session's
-    // own orchestration) stops the preview timers and flips the surface/
-    // playing flags first; those steps can themselves run direct-connected
-    // signal cascades that re-arm a fixed-gate awaiting/queued flag. Only
-    // after that settles do we zero the playback-domain fields below, so
-    // nothing downstream can set one back to true. A lingering singleShot
-    // tick callback that still fires later during teardown then reads them
-    // as already-cleared and takes the no-op branch instead of re-entering
-    // the request path. Clearing first would let a reentrant call triggered
-    // by the forwarded call re-arm a flag we had already zeroed.
+    // own orchestration) stops the preview timers and flips the surface
+    // flags first; those steps can themselves run direct-connected signal
+    // cascades that re-arm a fixed-gate awaiting/queued flag. Only after
+    // that settles do we zero the playback-domain fields below, so nothing
+    // downstream can set one back to true. A lingering singleShot tick
+    // callback that still fires later during teardown then reads them as
+    // already-cleared and takes the no-op branch instead of re-entering the
+    // request path. Clearing first would let a reentrant call triggered by
+    // the forwarded call re-arm a flag we had already zeroed.
     preview_.preparePreviewForShutdown();
+
+    // Stage 4.9e-4: the playing_ flip used to happen inside
+    // preview_.preparePreviewForShutdown() (Session::setPreviewPlayingFlag,
+    // called from Session::preparePreviewForShutdown before playing_ moved to
+    // PlaybackState). Session no longer holds a mutable PlaybackState&, so
+    // this coordinator writes it directly, in the same relative position —
+    // still after the forwarded call above, per the ordering note.
+    miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), false);
 
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
@@ -463,8 +471,8 @@ void miacode::runtime::PlaybackCoordinator::prepareForShutdown()
     state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
     state_.qtPreviewFixedFrameTickQueued_ = false;
     state_.qtPreviewLastVisualTickNs_ = -1;
-    state_.previewStartupSyncPending_ = false;
-    state_.previewLateVideoStartPending_ = false;
+    playbackState_.previewStartupSyncPending_ = false;
+    playbackState_.previewLateVideoStartPending_ = false;
     state_.previewStartupVideoPrepareStarted_ = false;
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.pendingPreviewPlaybackStart_ = false;

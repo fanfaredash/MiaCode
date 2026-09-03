@@ -2083,6 +2083,26 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/video_export
     )
 
+    # Stage 4.9e-4: same shape as runtime_context_boundary_spec above, but for
+    # the canonical playback-authority storage split (RuntimeContext::PlaybackState).
+    miacode_add_dev_tool(playback_storage_boundary_spec TEST
+        SOURCES
+            src/tools/v2/PlaybackStorageBoundarySpec.cpp
+            src/app/runtime/RuntimeContext.h
+            src/app/runtime/SessionMembers.inc
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES
+            src
+            src/app
+            src/audio
+            src/common
+            src/core/video
+            src/core/chart/document
+            src/core/chart/parser
+            src/timeline
+            src/tools/video_export
+    )
+
     miacode_add_dev_tool(qml_analysis_model_spec TEST
         SOURCES
             src/tools/qml_ui/QmlAnalysisModelSpec.cpp

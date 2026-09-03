@@ -77,8 +77,8 @@ void miacode::runtime::PlaybackCoordinator::cancelPreviewStartupSync(const char*
         if (state_.previewStageMediaHost_ != nullptr) {
             state_.previewStageMediaHost_->cancelPreparedPlaybackStart(playbackTxn);
         }
-        state_.previewStartupSyncPending_ = false;
-        state_.previewLateVideoStartPending_ = false;
+        playbackState_.previewStartupSyncPending_ = false;
+        playbackState_.previewLateVideoStartPending_ = false;
         state_.previewStartupAudioPrepared_ = false;
         state_.previewStartupCanvasPresented_ = false;
         state_.previewStartupStrongGroupCommitted_ = false;
@@ -91,7 +91,7 @@ void miacode::runtime::PlaybackCoordinator::cancelPreviewStartupSync(const char*
         state_.previewStartupPendingRetainedSequence_ = 0;
         state_.previewStartupRequestedSecond_ = 0.0;
         state_.previewStartupVisualSecond_ = 0.0;
-        state_.previewStartupPreparedSecond_ = 0.0;
+        playbackState_.previewStartupPreparedSecond_ = 0.0;
     }
     if (hadPendingPause) {
         appendPreviewPlaybackLog(
@@ -165,7 +165,7 @@ void miacode::runtime::PlaybackCoordinator::handlePreviewStartupVideoPrepared(do
         const double currentSecond = authoritativeAudioClockSecond();
         state_.previewStageMediaHost_->commitPreparedPlaybackStart(currentSecond);
         state_.previewStartupVideoStarted_ = true;
-        state_.previewLateVideoStartPending_ = false;
+        playbackState_.previewLateVideoStartPending_ = false;
         appendPreviewPlaybackLog(
             QStringLiteral("late_video_start_after_commit"),
             QString("txn=%1 second=%2")
@@ -385,7 +385,7 @@ void miacode::runtime::PlaybackCoordinator::handlePreviewAudioStartupCompletion(
     }
 
     state_.previewStartupAudioPrepared_ = decision.state.audioPrepared;
-    state_.previewStartupPreparedSecond_ = decision.state.effectiveWorkerSecond;
+    playbackState_.previewStartupPreparedSecond_ = decision.state.effectiveWorkerSecond;
     state_.previewStartupPendingPrepareSequence_ = decision.state.pendingPrepareSequence;
     state_.previewStartupPendingRetainedSequence_ = decision.state.pendingRetainedSequence;
     appendPreviewPlaybackLog(
@@ -460,10 +460,10 @@ void miacode::runtime::PlaybackCoordinator::handlePreviewPlayingRetainedSeekComp
     const double effectiveSecond = decision.state.transportAnchorSecond;
     const bool centerView = decision.state.pendingPlayingSeekCenterView;
     clearPreviewPlayingRetainedSeek();
-    state_.qtPreviewStartSecond_ = effectiveSecond;
+    playbackState_.qtPreviewStartSecond_ = effectiveSecond;
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, effectiveSecond, state_.playing_, "playing_seek_completion");
-    state_.qtPreviewElapsed_.restart();
+        playbackState_.pauseSecond_, effectiveSecond, playbackState_.playing_, "playing_seek_completion");
+    playbackState_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
@@ -497,7 +497,7 @@ void miacode::runtime::PlaybackCoordinator::tryCommitPreviewStartupSync()
     }
 
     state_.previewStartupStrongGroupCommitted_ = true;
-    state_.previewStartupSyncPending_ = false;
+    playbackState_.previewStartupSyncPending_ = false;
     const double effectiveStartSecond = state_.previewStartupPreparedSecond_;
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->commitPreparedPreviewPlayback();
@@ -507,14 +507,14 @@ void miacode::runtime::PlaybackCoordinator::tryCommitPreviewStartupSync()
         && state_.previewStartupVideoPrepared_) {
         state_.previewStageMediaHost_->commitPreparedPlaybackStart(effectiveStartSecond);
         state_.previewStartupVideoStarted_ = true;
-        state_.previewLateVideoStartPending_ = false;
+        playbackState_.previewLateVideoStartPending_ = false;
         appendPreviewPlaybackLog(
             QStringLiteral("weak_video_ready_before_commit"),
             QString("txn=%1 second=%2")
                 .arg(state_.activePreviewPlaybackTransactionId_)
                 .arg(effectiveStartSecond, 0, 'f', 6));
     } else {
-        state_.previewLateVideoStartPending_ = state_.previewStartupVideoPrepareStarted_;
+        playbackState_.previewLateVideoStartPending_ = state_.previewStartupVideoPrepareStarted_;
     }
     finalizeQtPreviewPlaybackStart(effectiveStartSecond);
     appendPreviewPlaybackLog(
@@ -557,12 +557,12 @@ void miacode::runtime::PlaybackCoordinator::finalizeQtPreviewPlaybackStart(doubl
     // the start second without replaying them; the downbeat at 0 fires on the first
     // tick after the 片头 hand-off).
     resetExportAuditionClockCursor(effectiveStartSecond);
-    state_.qtPreviewStartSecond_ = effectiveStartSecond;
+    playbackState_.qtPreviewStartSecond_ = effectiveStartSecond;
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, effectiveStartSecond, state_.playing_, "finalize_qt_preview_playback_start");
-    state_.qtPreviewElapsed_.restart();
+        playbackState_.pauseSecond_, effectiveStartSecond, playbackState_.playing_, "finalize_qt_preview_playback_start");
+    playbackState_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
-    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), true);
+    miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), true);
     services_.editorSync().setPlaybackActive(true);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->armDeviceChangeCutoffClock(
@@ -673,10 +673,10 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
     clearPreviewPlayingRetainedSeek();
     pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
-    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), false);
     services_.editorSync().setPlaybackActive(false);
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, wallClockPauseSecond, state_.playing_, "pause_qt_preview_playback_exact");
+        playbackState_.pauseSecond_, wallClockPauseSecond, playbackState_.playing_, "pause_qt_preview_playback_exact");
     state_.pausedPreviewMediaSeekPending_ = false;
     // This is deliberately inline with changing playing_.  Deferring the
     // visibility policy through the UI-tail QTimer made the pause-hide PV/BG setting
@@ -1078,7 +1078,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackForReanchor()
     // for rationale.
     const double wallClockPauseSecond = authoritativeAudioClockSecond();
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, wallClockPauseSecond, state_.playing_, "pause_qt_preview_playback_for_reanchor");
+        playbackState_.pauseSecond_, wallClockPauseSecond, playbackState_.playing_, "pause_qt_preview_playback_for_reanchor");
     cancelPreviewStartupSync("pause_qt_preview_playback_for_reanchor");
     clearPreviewPlayingRetainedSeek();
     pausePreviewStageMediaRoutePlayback();
@@ -1088,7 +1088,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackForReanchor()
     // Spec: pause-for-reanchor lands in 暂停-R, so request R-centring.
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
-    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), false);
     services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);
@@ -1146,12 +1146,12 @@ void miacode::runtime::PlaybackCoordinator::anchorQtPreviewPlaybackToSecond(doub
     pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, clampedSecond, state_.playing_, "anchor_qt_preview_playback_to_second");
+        playbackState_.pauseSecond_, clampedSecond, playbackState_.playing_, "anchor_qt_preview_playback_to_second");
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    miacode::runtime::shared::writePreviewPlayingFlag(state_, services_.shellNotifications(), false);
+    miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), false);
     services_.editorSync().setPlaybackActive(false);
     if (state_.scene_ != nullptr) {
         state_.scene_->setActivePlaybackProfilingEnabled(false);

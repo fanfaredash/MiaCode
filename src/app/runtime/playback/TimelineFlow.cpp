@@ -49,6 +49,7 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     miacode::v2::ApplicationServices& services,
     RuntimeContext::Ui& ui,
     RuntimeContext::State& state,
+    RuntimeContext::PlaybackState& playbackState,
     miacode::v2::PlaybackPreferencesPort& preferences,
     miacode::v2::PlaybackValidationPort& validation,
     miacode::v2::PlaybackDocumentPort& documents,
@@ -58,6 +59,7 @@ miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     , services_(services)
     , ui_(ui)
     , state_(state)
+    , playbackState_(playbackState)
     , preferences_(preferences)
     , validation_(validation)
     , documents_(documents)

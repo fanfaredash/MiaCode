@@ -185,9 +185,9 @@ void miacode::runtime::PlaybackCoordinator::requestPausedPreviewSeek(
 void miacode::runtime::PlaybackCoordinator::applyPausedPreviewVisualSecond(double second, bool centerView)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    state_.qtPreviewStartSecond_ = clampedSecond;
+    playbackState_.qtPreviewStartSecond_ = clampedSecond;
     miacode::runtime::shared::writePreviewPauseSecond(
-        state_.pauseSecond_, clampedSecond, state_.playing_, "apply_paused_preview_visual_second");
+        playbackState_.pauseSecond_, clampedSecond, playbackState_.playing_, "apply_paused_preview_visual_second");
     state_.qtPreviewTimelineStartSecond_ = clampedSecond;
     state_.qtPreviewTimelineElapsed_.restart();
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
@@ -251,8 +251,8 @@ void miacode::runtime::PlaybackCoordinator::handlePausedPreviewMediaSeekComplete
     state_.pausedSeekMediaPending_ = false;
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.pausedSeekMediaAckGeneration_ = generation;
-    state_.qtPreviewStartSecond_ = second;
-    state_.qtPreviewElapsed_.restart();
+    playbackState_.qtPreviewStartSecond_ = second;
+    playbackState_.qtPreviewElapsed_.restart();
     refreshPreviewStageMediaRouteDebugState(state_, false);
     if (generation < state_.pausedSeekGeneration_) {
         appendQuickShellBackendLog(

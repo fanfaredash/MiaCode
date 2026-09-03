@@ -160,22 +160,55 @@ public:
         bool timelineSyncEnabled_ = false;
     };
 
+    // Stage 4.9e-4: canonical playback-authority storage has a separate owner,
+    // same shape as TimelineState above. The nine fields here are exactly the
+    // ones that decide "where is the playhead right now / is it playing / at
+    // what rate" — the set PlaybackCoordinator::authoritativeAudioClockSecond
+    // itself reads to answer that question (Playback.cpp), plus
+    // previewTransportState_, which is written in lockstep with playing_ by
+    // the same single-writer primitive (writePreviewPlayingFlag). Every write
+    // site for every field below already lived inside playback/ before this
+    // move; the legacy State record keeps const-reference aliases for the many
+    // cross-domain readers, but it no longer owns these values and cannot
+    // write them.
+    struct PlaybackState {
+        bool playing_ = false;
+        miacode::v2::PlaybackTransportState previewTransportState_ =
+            miacode::v2::PlaybackTransportState::Stopped;
+        double pauseSecond_ = 0.0;
+        double previewPlaybackRate_ = 1.0;
+        double qtPreviewStartSecond_ = 0.0;
+        QElapsedTimer qtPreviewElapsed_;
+        // Startup handshake fields consulted directly by
+        // authoritativeAudioClockSecond() to decide the frozen "now" second
+        // while audio/video prepare asynchronously. The rest of the startup
+        // handshake cluster (previewStartupAudioPrepared_,
+        // previewStartupCanvasPresented_, ...) stays in State: those orchestrate
+        // the handshake's progress rather than answering "where is the
+        // playhead now".
+        bool previewStartupSyncPending_ = false;
+        bool previewLateVideoStartPending_ = false;
+        double previewStartupPreparedSecond_ = 0.0;
+    };
+
 #define MIACODE_RUNTIME_CONTEXT_TYPES 1
 #include "runtime/SessionMembers.inc"
 #undef MIACODE_RUNTIME_CONTEXT_TYPES
 
     // Declaration order is load-bearing: `state` binds compatibility references
-    // into `timeline`, so the timeline record must be declared (and therefore
-    // constructed) first. Copying is deleted because a copied `state` would
-    // still alias the source context's timeline storage.
+    // into `timeline` and `playback`, so both records must be declared (and
+    // therefore constructed) first. Copying is deleted because a copied
+    // `state` would still alias the source context's timeline/playback
+    // storage.
     RuntimeContext()
-        : state(timeline)
+        : state(timeline, playback)
     {}
 
     RuntimeContext(const RuntimeContext&) = delete;
     RuntimeContext& operator=(const RuntimeContext&) = delete;
 
     TimelineState timeline;
+    PlaybackState playback;
     Ui ui;
     State state;
 };
