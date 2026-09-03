@@ -436,7 +436,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: UiText.text("Layout 整图大小")
+                                text: UiText.text("Layout整图大小")
                                 color: Theme.colors.text.secondary
                                 Layout.preferredWidth: 120
                             }
@@ -501,7 +501,7 @@ Rectangle {
                         Layout.fillWidth: true
                         RowLayout {
                             Text {
-                                text: UiText.text("Tap 流速")
+                                text: UiText.text("Tap流速")
                                 color: Theme.colors.text.secondary
                                 Layout.preferredWidth: 120
                             }
@@ -518,7 +518,7 @@ Rectangle {
                         }
                         RowLayout {
                             Text {
-                                text: UiText.text("Touch 流速")
+                                text: UiText.text("Touch流速")
                                 color: Theme.colors.text.secondary
                                 Layout.preferredWidth: 120
                             }
