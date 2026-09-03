@@ -323,17 +323,14 @@ QString miacode::runtime::DocumentSessionHost::currentDocumentTextForAutosave() 
     if (session_.hasActiveDifficulty()) {
         SimaiDifficultyData& difficultyData = snapshot.ensureDifficulty(state_.activeDifficultyId_);
         difficultyData.chart = session_.editorText();
-    } else if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
-        snapshot.title = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
-        snapshot.artist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
-        snapshot.designer = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
-        snapshot.extraFields = SimaiDocument::parseUnmanagedFields(
-            ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
-            true
-        );
-        SimaiDocument::ensureDefaultClockCount(&snapshot.extraFields);
-        liveCanonicalDesigner = snapshot.designer;
     }
+    // The metadata page used to be scraped from hidden QLineEdits here. Those
+    // were never constructed once QML took the page over, so each ternary fell
+    // to QString() and every autosave taken with metadata open overwrote the
+    // snapshot's title, artist, designer and extra fields with empty ones —
+    // losing them from the backup. QML commits metadata edits straight into
+    // ChartWorkspace, so the values copied into `snapshot` above are already
+    // the live ones and need no second capture.
 
     // Under unified mode the metadata page (top &des) or the difficulty header
     // (&des_N) may hold an uncommitted designer edit that hasn't broadcast yet
