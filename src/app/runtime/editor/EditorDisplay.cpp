@@ -355,8 +355,6 @@ void miacode::runtime::EditorHost::loadPortableState()
     // key (the primary of the three) so existing users keep their setting.
     state_.editorAutoCompletionEnabled_ = ui.value("editor_auto_completion").toBool(
         ui.value("editor_auto_close_brackets").toBool(true));
-    bool importedLegacyBottomPanelHeight = false;
-    int legacyBottomPanelHeight = 0;
     QSettings legacySettings;
     const bool hasLegacyBottomPanelHeight =
         legacySettings.contains(QStringLiteral("ui/bottomPanelHeight"));
@@ -366,20 +364,12 @@ void miacode::runtime::EditorHost::loadPortableState()
         // height is re-applied below.
         state_.bottomTabsContentScale_ =
             ui.value("bottom_tabs_content_scale").toDouble(state_.bottomTabsContentScale_);
-    } else {
-        // QML v2 previously kept a competing pixel height in QSettings. Import
-        // it once only when the canonical shell scale has not been saved, then
-        // remove the legacy value so subsequent launches have one owner.
-        if (hasLegacyBottomPanelHeight) {
-            legacyBottomPanelHeight = qBound(
-                120,
-                legacySettings.value(QStringLiteral("ui/bottomPanelHeight")).toInt(),
-                340);
-            importedLegacyBottomPanelHeight = true;
-        }
     }
     // The shell's scale is canonical even when it already existed before this
-    // launch, so always retire the obsolete v2 pixel-height key.
+    // launch, so always retire the obsolete v2 pixel-height key. (The legacy
+    // pixel value itself is discarded rather than migrated — the migration
+    // path used to route it through ShellHost::setBottomTabsHeight(), which
+    // was deleted because it was a no-op: bottomTabs_ is never constructed.)
     if (hasLegacyBottomPanelHeight) {
         legacySettings.remove(QStringLiteral("ui/bottomPanelHeight"));
     }
@@ -464,9 +454,6 @@ void miacode::runtime::EditorHost::loadPortableState()
     // ran updateBottomTabsDeviceHeight() once with the default scale before this
     // load; push the persisted scale into the layout now (it also clamps it).
     if (session_.shell_ != nullptr) {
-        if (importedLegacyBottomPanelHeight) {
-            session_.shell_->setBottomTabsHeight(legacyBottomPanelHeight);
-        }
         session_.shell_->updateBottomTabsDeviceHeight();
     }
     session_.refreshPreviewFrameRateTimers();

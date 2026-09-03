@@ -18,7 +18,6 @@ public:
     void attachRootWindow(QWindow* window);
     void requestShellClose(std::function<void(bool)> onDecided);
     bool finishShellClose(QElapsedTimer totalTimer);
-    void setBottomTabsHeight(int height);
     void setRootWindowFrameGeometry(const QRect& geometry);
     void noteRootWindowReady();
 
@@ -51,9 +50,6 @@ public:
     void onReplaceOne();
     void onReplaceAll();
     void refreshQuickShellRehostedWidgetParent(QWidget* widget);
-    void setInvalidStarPreviewEasterEggEnabled(bool enabled);
-    void ensureInvalidStarPreviewEasterEggSounds();
-    void playInvalidStarPreviewEasterEggSound(bool enabled);
     bool eventFilter(QObject* watched, QEvent* event);
     void resizeEvent(QResizeEvent* event);
     void moveEvent(QMoveEvent* event);

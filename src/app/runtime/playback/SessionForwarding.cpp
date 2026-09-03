@@ -242,18 +242,6 @@ void Session::refreshLayoutAfterPageSwitch()
     playback_->refreshLayoutAfterPageSwitch();
 }
 
-void Session::armWorkspaceSurfaceSettleRelayout()
-{
-    // Arm the watch (handled in WindowSection::eventFilter on workspaceContentWidget_
-    // resize) and schedule a self-disarm. The grace covers the QML polish/layout
-    // burst that follows the page switch (aspect change + bottom-tabs collapse each
-    // drive a separate surface resize); a stale flag firing on a later, unrelated
-    // resize only costs one extra (correct) relayout, so the exact window is not
-    // critical.
-    workspaceSurfaceSettleRelayoutArmed_ = true;
-    QTimer::singleShot(400, this, [this]() { workspaceSurfaceSettleRelayoutArmed_ = false; });
-}
-
 void Session::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
 {
     playback_->updatePreviewPanelLayout(panelWidthOverride, panelHeightOverride);

@@ -413,14 +413,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
     if (previewFullscreenButton_ != nullptr) {
         previewFullscreenButton_->installEventFilter(this);
     }
-    // Watch the rehosted workspace content for the async, QML-driven surface resize
-    // that lands AFTER a page switch (export page aspect change + bottom-tabs
-    // collapse). The filter re-runs the layout finalize so the just-switched page
-    // settles + repaints instead of staying composited at its stale arrangement
-    // (see WindowSection::eventFilter + armWorkspaceSurfaceSettleRelayout).
-    if (workspaceContentWidget_ != nullptr) {
-        workspaceContentWidget_->installEventFilter(this);
-    }
     if (QApplication::instance() != nullptr) {
         QApplication::instance()->installEventFilter(this);
     }

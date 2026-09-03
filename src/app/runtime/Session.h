@@ -99,7 +99,6 @@ class QShortcut;
 class QStackedWidget;
 class QSlider;
 class QSplitter;
-class QSoundEffect;
 class QTimer;
 class QTextEdit;
 class QToolButton;

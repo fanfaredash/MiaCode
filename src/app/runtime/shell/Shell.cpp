@@ -321,49 +321,6 @@ bool miacode::runtime::ShellHost::finishShellClose(QElapsedTimer totalTimer)
     );
     return true;
 }
-void miacode::runtime::ShellHost::setBottomTabsHeight(int height)
-{
-    if (session_.bottomTabs_ == nullptr) {
-        return;
-    }
-    const int fullHeight = computeBottomTabsDeviceHeightForScale(kBottomTabsContentScaleMax);
-    const int minHeight = computeBottomTabsDeviceHeightForScale(kBottomTabsContentScaleMin);
-    if (fullHeight <= 0 || minHeight <= 0) {
-        return;
-    }
-    // Bound the bottom-tab height past 100% to a fraction of the whole window height so the
-    // preview area above always keeps roughly a third of the window. The scale-derived
-    // fullHeight is only an upper safety bound.
-    int effectiveMaxHeight = fullHeight;
-    const int windowHeight = session_.rootWindow_ != nullptr
-        ? session_.rootWindow_->height()
-        : 0;
-    if (windowHeight > 0) {
-        const int windowLimit =
-            static_cast<int>(static_cast<double>(windowHeight) * kBottomTabsMaxWindowHeightFraction);
-        if (windowLimit > minHeight) {
-            effectiveMaxHeight = qMin(effectiveMaxHeight, windowLimit);
-        }
-    }
-    const int clampedHeight =
-        qBound(qMin(minHeight, effectiveMaxHeight), height, qMax(minHeight, effectiveMaxHeight));
-    const int fullTimelineHeight = scaledBottomTabsTimelineContentHeight(kBottomTabsContentScaleMax);
-    const int chromeHeight = qMax(0, fullHeight - fullTimelineHeight);
-    const double nextScale =
-        bottomTabsContentScaleForTimelineContentHeight(qMax(0, clampedHeight - chromeHeight));
-    const double clampedScale = clampedBottomTabsContentScale(nextScale);
-    if (!qFuzzyCompare(session_.bottomTabsContentScale_ + 1.0, clampedScale + 1.0)) {
-        session_.bottomTabsContentScale_ = clampedScale;
-        applyBottomTabsContentScale();
-        // Persist the new divider height as an app-level preference. Stored as a
-        // content-scale ratio (not pixels) so it stays valid across DPI/layout
-        // changes; the write is debounced so a drag doesn't thrash the disk.
-        if (session_.bottomTabsContentScalePersistTimer_ != nullptr) {
-            session_.bottomTabsContentScalePersistTimer_->start();
-        }
-    }
-    updateBottomTabsDeviceHeight();
-}
 
 void miacode::runtime::ShellHost::setRootWindowFrameGeometry(const QRect& geometry)
 {

@@ -104,7 +104,6 @@
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSlider>
-#include <QSoundEffect>
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QSpinBox>

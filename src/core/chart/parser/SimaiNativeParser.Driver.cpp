@@ -1381,7 +1381,10 @@ SimaiNativeParseResult SimaiNativeParser::parseForTimeline(
 {
     MC_OP("SimaiNativeParser::parseForTimeline");
     _mc_op_.note(QStringLiteral("text_len=%1").arg(text.size()));
-    return parseInternal(text, false, g_invalidStarPreviewEnabled, timingMetadata);
+    // Invalid-star preview was only ever switched on by the About-icon easter egg,
+    // now removed, so this argument is false at both call sites and the branches
+    // it guards inside parseInternal are unreachable — see the TODO note.
+    return parseInternal(text, false, false, timingMetadata);
 }
 
 SimaiNativeParseResult SimaiNativeParser::validateSyntax(
@@ -1392,16 +1395,6 @@ SimaiNativeParseResult SimaiNativeParser::validateSyntax(
     _mc_op_.note(QStringLiteral("text_len=%1").arg(text.size()));
     SimaiNativeParseResult result = parseInternal(text, true, false, timingMetadata);
     return result;
-}
-
-void SimaiNativeParser::setInvalidStarPreviewEnabled(bool enabled)
-{
-    g_invalidStarPreviewEnabled = enabled;
-}
-
-bool SimaiNativeParser::invalidStarPreviewEnabled()
-{
-    return g_invalidStarPreviewEnabled;
 }
 
 void SimaiNativeParser::setAllowNegativeHsEnabled(bool enabled)

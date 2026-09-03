@@ -23,7 +23,6 @@ using namespace miacode::runtime::shared;
 
 namespace {
 
-constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
 constexpr int kBottomTabsResizeHotzonePx = 8;
 
 bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
@@ -465,36 +464,6 @@ void miacode::runtime::ShellHost::attachRootWindow(QWindow* window)
 bool miacode::runtime::ShellHost::eventFilter(QObject* watched, QEvent* event)
 {
     auto* watchedWidget = qobject_cast<QWidget*>(watched);
-    // Post-page-switch workspace-surface settle (armWorkspaceSurfaceSettleRelayout).
-    // A switch that changes the preview aspect (export page) or the bottom-tabs
-    // height drives the rehosted workspace surface to a new size ASYNCHRONOUSLY
-    // from QML — after the synchronous page-build + refresh already ran. This
-    // resize on the surface-filling workspace content is the reliable signal that
-    // the final geometry has landed; re-run the layout finalize queued (after the
-    // resize is fully processed) so the just-built page reflows + repaints instead
-    // of staying composited at its stale, scrambled pre-resize arrangement. Observe
-    // only — never consume the event.
-    if (event != nullptr
-        && event->type() == QEvent::Resize
-        && watched == session_.workspaceContentWidget_
-        && session_.workspaceSurfaceSettleRelayoutArmed_) {
-        if (session_.runtimeDebugOutputEnabled_) {
-            const QSize size = watchedWidget != nullptr ? watchedWidget->size() : QSize();
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Runtime,
-                QStringLiteral("layout/export_page"),
-                QStringLiteral("action=workspace_surface_settle_relayout_queued size=%1x%2 armed=1 watched_class=%3 watched_name=%4")
-                    .arg(size.width())
-                    .arg(size.height())
-                    .arg(watchedWidget != nullptr
-                        ? QString::fromUtf8(watchedWidget->metaObject()->className())
-                        : QStringLiteral("(null)"))
-                    .arg(watchedWidget != nullptr && !watchedWidget->objectName().isEmpty()
-                        ? watchedWidget->objectName()
-                        : QStringLiteral("(empty)")));
-        }
-        QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
-    }
     if (session_.runtimeDebugOutputEnabled_
         && event != nullptr
         && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
@@ -636,9 +605,14 @@ bool miacode::runtime::ShellHost::eventFilter(QObject* watched, QEvent* event)
             } else if (event->type() == QEvent::MouseMove) {
                 auto* mouseEvent = static_cast<QMouseEvent*>(event);
                 if (session_.bottomTabsResizeDragActive_) {
-                    const int deltaY =
-                        mouseEvent->globalPosition().toPoint().y() - session_.bottomTabsResizeStartGlobalY_;
-                    setBottomTabsHeight(session_.bottomTabsResizeStartHeight_ - deltaY);
+                    // ShellHost::setBottomTabsHeight() used to be called here to apply
+                    // the drag delta, but it was deleted (2026-09, "delete the 3
+                    // functional-dead-branch bodies" pass) because its whole body was
+                    // guarded by session_.bottomTabs_ == nullptr and bottomTabs_ is
+                    // never constructed, so the call was already permanently a no-op.
+                    // This whole outer block (guarded by the same bottomTabs_ != nullptr
+                    // at the top of this if-chain) is equally unreachable; still consume
+                    // the event to preserve the existing (already-dead) event contract.
                     event->accept();
                     return true;
                 }
@@ -663,35 +637,6 @@ bool miacode::runtime::ShellHost::eventFilter(QObject* watched, QEvent* event)
     }
     if (session_.bottomTabs_ != nullptr && watched == session_.bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
         return true;
-    }
-    if (session_.aboutIconLabel_ != nullptr && watched == session_.aboutIconLabel_) {
-        if (event->type() == QEvent::MouseButtonRelease) {
-            auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            if (mouseEvent->button() == Qt::LeftButton) {
-                if (session_.invalidStarPreviewEasterEggEnabled_) {
-                    session_.invalidStarPreviewAboutClickCount_ = 0;
-                    session_.invalidStarPreviewAboutClickElapsed_.invalidate();
-                    this->setInvalidStarPreviewEasterEggEnabled(false);
-                } else {
-                    if (!session_.invalidStarPreviewAboutClickElapsed_.isValid()
-                        || session_.invalidStarPreviewAboutClickElapsed_.elapsed() > kInvalidStarPreviewAboutClickWindowMs) {
-                        session_.invalidStarPreviewAboutClickCount_ = 0;
-                    }
-                    ++session_.invalidStarPreviewAboutClickCount_;
-                    if (session_.invalidStarPreviewAboutClickElapsed_.isValid()) {
-                        session_.invalidStarPreviewAboutClickElapsed_.restart();
-                    } else {
-                        session_.invalidStarPreviewAboutClickElapsed_.start();
-                    }
-                    if (session_.invalidStarPreviewAboutClickCount_ >= 3) {
-                        session_.invalidStarPreviewAboutClickCount_ = 0;
-                        session_.invalidStarPreviewAboutClickElapsed_.invalidate();
-                        this->setInvalidStarPreviewEasterEggEnabled(true);
-                    }
-                }
-                return true;
-            }
-        }
     }
     if ((session_.errorList_ != nullptr && watched == session_.errorList_->viewport())
         || (session_.muriList_ != nullptr && watched == session_.muriList_->viewport())) {

@@ -32,7 +32,6 @@ class PreviewStageMediaHost;
 class QmlExportSession;
 class QtPreviewSfxRuntime;
 class QuickShellPreviewCompositeSurface;
-class QSoundEffect;
 class TimelineQuickStateBridge;
 
 namespace miacode::preview::scene {

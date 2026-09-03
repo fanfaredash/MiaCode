@@ -356,13 +356,15 @@ Lenient 的存在意义现在只剩一件事：抽取一组可用的 timeline ma
 
 ### 1.4 隐藏的运行时开关 —— invalid-star 预览
 
-`SimaiNativeParser::setInvalidStarPreviewEnabled(bool)` /
-`invalidStarPreviewEnabled()`（`SimaiNativeParser.h:65-66`，
-Driver.cpp:976-984）控制一个仅 debug 用的预览路径，让用户在写谱时
+`SimaiNativeParser::invalidStarPreviewEnabled()`（`SimaiNativeParser.h`，
+`Driver.cpp`）读取一个仅 debug 用的预览开关，控制用户在写谱时是否能
 看到「非法」星 slide 长什么样。仅 `parseForTimeline` 尊重该 flag
 （通过 `parseInternal` 的第三个参数）；`validateSyntax` 始终传
-`false`。这个 flag 是设置项驱动的、不属于公共规格的一部分，但在分析
-两种模式下 marker 数量发散时会用到。
+`false`。原先的 setter（`setInvalidStarPreviewEnabled`）只有一个调用方
+——shell 里一个点击「关于」图标三次的隐藏彩蛋——该彩蛋已随死分支清理
+一起删除（2026-09），所以这个 flag 目前永远是默认值 `false`，没有任何
+运行时路径能再把它翻转为 `true`。这个 flag 不属于公共规格的一部分，
+但在分析两种模式下 marker 数量发散时会用到。
 
 ### 1.5 问题呈现
 

@@ -355,12 +355,6 @@ void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->enter(previousActiveDifficultyId);
     }
-    // Entering the export page changes the preview aspect (square → export video
-    // ratio) and collapses the bottom tabs; both drive the workspace surface to a
-    // new size ASYNCHRONOUSLY from QML, after the two refreshes below have already
-    // run. Arm the settle watch so that late resize re-runs the finalize and the
-    // page doesn't stay composited at its stale, scrambled pre-resize geometry.
-    session_.armWorkspaceSurfaceSettleRelayout();
     session_.refreshLayoutAfterPageSwitch();
     QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
 }
@@ -400,14 +394,6 @@ bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
     session_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    // setChartBottomTabsMode(false) above collapses the bottom tabs, which drives
-    // the rehosted workspace surface to a new size ASYNCHRONOUSLY from QML — after
-    // the two refreshes below have already run. Arm the settle watch so that late
-    // resize re-runs the finalize; without it the just-switched page can stay
-    // composited at its stale pre-resize geometry until an input event forces a
-    // repaint (same root cause as the export page, milder here: height-only change
-    // on a static, top-anchored layout rather than a preview-aspect width change).
-    session_.armWorkspaceSurfaceSettleRelayout();
     session_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     return true;
@@ -447,11 +433,6 @@ bool miacode::runtime::DocumentSessionHost::switchToWelcomePage()
     session_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    // Same async-resize settle as switchToMetadataField: setChartBottomTabsMode(false)
-    // above collapses the bottom tabs, resizing the rehosted workspace surface from
-    // QML after the refreshes below run. Arm the watch so the page repaints at its
-    // final geometry instead of a stale, pre-resize composite.
-    session_.armWorkspaceSurfaceSettleRelayout();
     session_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     return true;

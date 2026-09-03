@@ -18,7 +18,6 @@
         QTimer* timelineAnalysisIdleTimer_ = nullptr;
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QTimer* visualLayoutPersistTimer_ = nullptr;
-        QPointer<QLabel> aboutIconLabel_;
         QmlExportSession* qmlExportSession_ = nullptr;
         // Shared, Widgets-free UI boundary: any flow that needs a file pick,
         // a message or a progress bar goes through these and the single QML
@@ -142,8 +141,6 @@
         miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
         QThreadPool* previewWarmupPool_ = nullptr;
         QProcess* videoExportWorkerProcess_ = nullptr;
-        QSoundEffect* invalidStarPreviewEnableSound_ = nullptr;
-        QSoundEffect* invalidStarPreviewDisableSound_ = nullptr;
         QByteArray videoExportWorkerStdoutBuffer_;
         QByteArray videoExportWorkerStderrBuffer_;
         VideoExportSnapshot videoExportWorkerSnapshot_;
@@ -289,13 +286,6 @@
         int exportAuditionClockNextIndex_ = 0;
         bool restoreSquareAfterVideoExport_ = false;
         quint64 previewPaneRestoreGeneration_ = 0;
-        // Armed by armWorkspaceSurfaceSettleRelayout() right after a page switch
-        // that triggers an async QML-driven resize of the workspace surface (e.g.
-        // entering the export page: aspect change + bottom-tabs collapse). While
-        // armed, the workspaceContentWidget_ resize event re-runs the page-switch
-        // layout finalize so the page settles + repaints at its final geometry
-        // instead of staying composited at the stale pre-resize arrangement.
-        bool workspaceSurfaceSettleRelayoutArmed_ = false;
         int videoExportWorkerLastProgressPercent_ = 0;
         qint64 videoExportWorkerLastEtaSeconds_ = -1;
         int projectLastOpenedDifficultyId_ = 0;
@@ -352,9 +342,6 @@
         bool editorCtrlLeftJumpPending_ = false;
         bool editorCtrlLeftJumpDispatchActive_ = false;
         bool suppressPausedPreviewSecondaryUiUpdates_ = false;
-        bool invalidStarPreviewEasterEggEnabled_ = false;
-        int invalidStarPreviewAboutClickCount_ = 0;
-        QElapsedTimer invalidStarPreviewAboutClickElapsed_;
         int previewHeldSeekDirection_ = 0;
         int previewSeekHeldArrowKey_ = 0;
         int previewSeekHeldArrowLastElapsedMs_ = 0;
@@ -623,9 +610,6 @@
     QTimer*& bottomTabsContentScalePersistTimer_ = ui_.bottomTabsContentScalePersistTimer_;
     QTimer*& visualLayoutPersistTimer_ = ui_.visualLayoutPersistTimer_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
-    QPointer<QLabel>& aboutIconLabel_ = ui_.aboutIconLabel_;
-    QSoundEffect*& invalidStarPreviewEnableSound_ = state_.invalidStarPreviewEnableSound_;
-    QSoundEffect*& invalidStarPreviewDisableSound_ = state_.invalidStarPreviewDisableSound_;
     QByteArray& videoExportWorkerStdoutBuffer_ = state_.videoExportWorkerStdoutBuffer_;
     QByteArray& videoExportWorkerStderrBuffer_ = state_.videoExportWorkerStderrBuffer_;
     VideoExportSnapshot& videoExportWorkerSnapshot_ = state_.videoExportWorkerSnapshot_;
@@ -726,7 +710,6 @@
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
     quint64& previewPaneRestoreGeneration_ = state_.previewPaneRestoreGeneration_;
     double& previewPaneWidthRatio_ = state_.previewPaneWidthRatio_;
-    bool& workspaceSurfaceSettleRelayoutArmed_ = state_.workspaceSurfaceSettleRelayoutArmed_;
     int& videoExportWorkerLastProgressPercent_ = state_.videoExportWorkerLastProgressPercent_;
     qint64& videoExportWorkerLastEtaSeconds_ = state_.videoExportWorkerLastEtaSeconds_;
     int& projectLastOpenedDifficultyId_ = state_.projectLastOpenedDifficultyId_;
@@ -773,9 +756,6 @@
     bool& editorCtrlLeftJumpPending_ = state_.editorCtrlLeftJumpPending_;
     bool& editorCtrlLeftJumpDispatchActive_ = state_.editorCtrlLeftJumpDispatchActive_;
     bool& suppressPausedPreviewSecondaryUiUpdates_ = state_.suppressPausedPreviewSecondaryUiUpdates_;
-    bool& invalidStarPreviewEasterEggEnabled_ = state_.invalidStarPreviewEasterEggEnabled_;
-    int& invalidStarPreviewAboutClickCount_ = state_.invalidStarPreviewAboutClickCount_;
-    QElapsedTimer& invalidStarPreviewAboutClickElapsed_ = state_.invalidStarPreviewAboutClickElapsed_;
     int& previewHeldSeekDirection_ = state_.previewHeldSeekDirection_;
     int& previewSeekHeldArrowKey_ = state_.previewSeekHeldArrowKey_;
     int& previewSeekHeldArrowLastElapsedMs_ = state_.previewSeekHeldArrowLastElapsedMs_;

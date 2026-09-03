@@ -30,7 +30,6 @@
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
-#include <QSoundEffect>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -251,41 +250,6 @@ bool shouldTracePreviewHostWindowEvent(QEvent::Type type)
     default:
         return false;
     }
-}
-
-QString resolveInvalidStarPreviewReverseSoundPath()
-{
-    QStringList candidates;
-    const auto appendCandidate = [&candidates](const QString& candidate) {
-        if (candidate.isEmpty()) {
-            return;
-        }
-        const QString cleanPath = QDir::cleanPath(candidate);
-        if (!candidates.contains(cleanPath)) {
-            candidates.append(cleanPath);
-        }
-    };
-
-    const QString sfxDir = miacode::preview_sfx::resolveSfxDirectory();
-    if (!sfxDir.isEmpty()) {
-        appendCandidate(QDir(sfxDir).filePath(QStringLiteral("answer_reverse.wav")));
-    }
-
-    appendCandidate(miacode::assets::assetPath(QStringLiteral("SFX/answer_reverse.wav")));
-    appendCandidate(miacode::assets::assetPath(QStringLiteral("sfx/answer_reverse.wav")));
-
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    appendCandidate(appDir.filePath(QStringLiteral("assets/SFX/answer_reverse.wav")));
-    appendCandidate(appDir.filePath(QStringLiteral("SFX/answer_reverse.wav")));
-    appendCandidate(appDir.filePath(QStringLiteral("sfx/answer_reverse.wav")));
-    appendCandidate(appDir.filePath(QStringLiteral("../Resources/assets/SFX/answer_reverse.wav")));
-
-    for (const QString& candidate : candidates) {
-        if (QFileInfo::exists(candidate)) {
-            return candidate;
-        }
-    }
-    return QString();
 }
 
 QString timestampLine(const QString& title)
@@ -906,54 +870,4 @@ void miacode::runtime::ShellHost::refreshQuickShellRehostedWidgetParent(QWidget*
             totalMs,
             miacode::debug_log::Level::Warn);
     }
-}
-
-void miacode::runtime::ShellHost::setInvalidStarPreviewEasterEggEnabled(bool enabled)
-{
-    if (session_.invalidStarPreviewEasterEggEnabled_ == enabled) {
-        return;
-    }
-    session_.invalidStarPreviewEasterEggEnabled_ = enabled;
-    SimaiNativeParser::setInvalidStarPreviewEnabled(enabled);
-    session_.refreshTimelineMetadata();
-    this->playInvalidStarPreviewEasterEggSound(enabled);
-}
-
-void miacode::runtime::ShellHost::ensureInvalidStarPreviewEasterEggSounds()
-{
-    if (session_.invalidStarPreviewEnableSound_ == nullptr) {
-        session_.invalidStarPreviewEnableSound_ = new QSoundEffect(&session_);
-        session_.invalidStarPreviewEnableSound_->setLoopCount(1);
-        session_.invalidStarPreviewEnableSound_->setVolume(0.45f);
-    }
-    if (session_.invalidStarPreviewDisableSound_ == nullptr) {
-        session_.invalidStarPreviewDisableSound_ = new QSoundEffect(&session_);
-        session_.invalidStarPreviewDisableSound_->setLoopCount(1);
-        session_.invalidStarPreviewDisableSound_->setVolume(0.45f);
-    }
-
-    const QString sfxDir = miacode::preview_sfx::resolveSfxDirectory();
-    const QString forwardPath = miacode::preview_sfx::assetFilePathForKind(sfxDir, QStringLiteral("answer"));
-    const QString reversePath = resolveInvalidStarPreviewReverseSoundPath();
-
-    const QUrl forwardUrl = QFileInfo::exists(forwardPath) ? QUrl::fromLocalFile(forwardPath) : QUrl();
-    const QUrl reverseUrl = QFileInfo::exists(reversePath) ? QUrl::fromLocalFile(reversePath) : QUrl();
-
-    if (session_.invalidStarPreviewDisableSound_->source() != forwardUrl) {
-        session_.invalidStarPreviewDisableSound_->setSource(forwardUrl);
-    }
-    if (session_.invalidStarPreviewEnableSound_->source() != reverseUrl) {
-        session_.invalidStarPreviewEnableSound_->setSource(reverseUrl);
-    }
-}
-
-void miacode::runtime::ShellHost::playInvalidStarPreviewEasterEggSound(bool enabled)
-{
-    this->ensureInvalidStarPreviewEasterEggSounds();
-    QSoundEffect* effect = enabled ? session_.invalidStarPreviewEnableSound_ : session_.invalidStarPreviewDisableSound_;
-    if (effect == nullptr || effect->source().isEmpty()) {
-        return;
-    }
-    effect->stop();
-    effect->play();
 }
