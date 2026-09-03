@@ -509,6 +509,30 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 
 **未处理**：定位这个竞争需要 QML 加载路径的排查，不属当前架构主线范围。
 
+### 阶段 4.9f 结论与一处虚假信心（2026-09-04）
+
+**门槛第 1 项（协调器 fake-clock 七种转换）无法靠扩展纯策略模块满足。**
+`src/audio/PreviewAudioPlaybackFlowPolicy.h` 已纯函数化的只是 play/resume/pause/播放中 seek 的
+**完成协议**子决策（其 spec 确实已用字面秒数当假时钟）。七个命令入口的**分支选择**统一读
+`state_.previewSfxRuntime_`——具体类 `QtPreviewSfxRuntime*`，**不在协调器四个抽象端口之后**，
+伪造端口也换不掉它；stop / scrub / rate 三种全带副作用，策略模块无对应结构。
+两条出路：给 `previewSfxRuntime_` 也开第五个窄端口，或接受「完整转换测试＝链接协调器」
+（后者卡在链接闭包 246 文件不收敛，见 4.9d 记录）。
+
+**一处虚假信心（已核实，未修）**：`beginManualPause` / `beginDeviceChangePause` /
+`supersedePendingPauseForPlay` 三个策略函数**在 `src/` 生产代码里零调用**，
+全部调用点都在 `PreviewAudioPlaybackFlowPolicySpec.cpp` 与 `PreviewAudioDeviceChangePolicySpec.cpp`。
+生产侧在 `playback/PlaybackState.cpp:827-833` 手写了另一版：
+**策略函数设 6 个字段（多出 `currentGeneration`、`visualSecond`），生产只设 4 个。**
+所以不是「等价手写」，是两份不完全相同的实现，而**被测的是没人用的那一份**。
+
+后果：读到「有暂停策略 spec」的人会以为暂停身份/代次语义有覆盖，实际生产路径一行未被验证。
+**这比缺测试更糟**——缺测试至少不会给人信心。
+
+未修的原因：修它要把生产的暂停提交路径改成构造 `PauseRequest` → 调策略 → 写回 `state_`，
+且要先定夺那两个多出字段该不该设。暂停路径是热代码，本环境无 GUI 验证能力。
+**未验证**：生产是否在同一路径的别处设了那两个字段（若设了则只是形状不同，若没设则行为确实分叉）。
+
 ### 元数据页 UI 反馈待办（2026-09-04 所有者截图标注）
 
 来源：所有者在应用截图上标注的三组反馈（2026-09-04），照实记录，未做需求扩展。
