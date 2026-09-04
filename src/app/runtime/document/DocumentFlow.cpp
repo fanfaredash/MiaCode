@@ -393,11 +393,6 @@ bool Session::undoDeletedDifficultyField()
     return documents_->undoDeletedDifficultyField();
 }
 
-bool Session::deleteDifficultyField(int difficultyId)
-{
-    return documents_->deleteDifficultyField(difficultyId);
-}
-
 bool Session::switchToMetadataField()
 {
     return documents_->switchToMetadataField();

@@ -369,9 +369,7 @@ bool Session::addDocumentDifficulty(int difficultyId)
 
 bool Session::removeDocumentDifficulty(int difficultyId)
 {
-    // The shell asked before calling: DifficultyList.qml's own confirm dialog
-    // is the question, and this used to raise a second one behind it.
-    return documents_->deleteDifficultyField(difficultyId, /*alreadyConfirmed=*/true);
+    return documents_->deleteDifficultyField(difficultyId);
 }
 
 void Session::enableUnifiedDocumentDesigner(const QString& canonicalName)

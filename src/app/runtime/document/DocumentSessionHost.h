@@ -123,10 +123,9 @@ public:
         QElapsedTimer dropTimer,
         std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished);
     void onNormalizeWholeChart();
-    // `alreadyConfirmed` is what the v2 shell passes: DifficultyList.qml puts
-    // the question up itself, and asking again here was a second dialog on top
-    // of an answered one.
-    bool deleteDifficultyField(int difficultyId, bool alreadyConfirmed = false);
+    // DifficultyList.qml owns the confirmation; this method only applies the
+    // already-confirmed document mutation.
+    bool deleteDifficultyField(int difficultyId);
     bool switchToMetadataField();
     bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);

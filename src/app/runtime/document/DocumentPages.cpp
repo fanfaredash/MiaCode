@@ -5,10 +5,8 @@
 #include "app/v2/PlaybackStateAuthority.h"
 
 #include "BracketScopeHighlighter.h"
-#include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -27,13 +25,12 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QMessageBox>
 
 #include <initializer_list>
 
 using namespace miacode::runtime::shared;
 
-bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficultyId, bool alreadyConfirmed)
+bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficultyId)
 {
     const SimaiDifficultyData* difficultyData = session_.applicationServices_.workspace().document().difficulty(difficultyId);
     if (!SimaiDocument::isDifficultyId(difficultyId) || difficultyData == nullptr) {
@@ -41,27 +38,9 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
     }
 
     const bool deletingActiveDifficulty = (difficultyId == state_.activeDifficultyId_);
-    const QString difficultyName = SimaiDocument::difficultyName(difficultyId);
     const QString currentLevel = difficultyData->level;
     const QString currentDesigner = difficultyData->designer;
     const QString currentChart = deletingActiveDifficulty ? session_.editorText() : difficultyData->chart;
-    const bool emptyDifficulty = currentLevel.trimmed().isEmpty()
-        && currentDesigner.trimmed().isEmpty()
-        && currentChart.trimmed().isEmpty();
-
-    if (!emptyDifficulty && !alreadyConfirmed) {
-        const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
-            QMessageBox::Question,
-            nullptr,
-            UiText::text(QStringLiteral("document.delete_difficulty")),
-            UiText::text(QStringLiteral("document.delete_1")).arg(difficultyName),
-            QMessageBox::Yes | QMessageBox::No,
-            QMessageBox::No
-        );
-        if (choice != QMessageBox::Yes) {
-            return false;
-        }
-    }
 
     clearDeletedDifficultyUndoState();
     state_.deletedDifficultyUndoState_.valid = true;

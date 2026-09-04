@@ -3,7 +3,6 @@
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"
-#include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -30,7 +29,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QMessageBox>
 
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"
@@ -451,7 +449,13 @@ bool miacode::runtime::DocumentSessionHost::openFileAtPath(const QString& path, 
     const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
     if (!payload.success) {
         if (showErrors) {
-            UiDialogs::showMessageBox(QMessageBox::Critical, nullptr, "Open Failed", "Cannot open file:\n" + normalizedPath);
+            if (miacode::v2::UiRequestService* const requests = session_.uiRequestService()) {
+                requests->postNotice(
+                    miacode::v2::NoticeSeverity::Error,
+                    QStringLiteral("Open Failed"),
+                    QStringLiteral("Cannot open file:\n") + normalizedPath
+                );
+            }
         }
         _mc_op_.fail(QStringLiteral("prepareDocumentOpenPayload failed"));
         return false;

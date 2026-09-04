@@ -285,6 +285,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       对应转发、调用点和仅服务于旧 Widget 侧栏的折叠状态。QML 书签状态继续由 `ViewState.qml`
       维护，实际文档、媒体工具和页面切换流程未删除。Release 构建通过，相关测试 8/8 通过，
       全量 CTest 仍为 105/108，失败项与既有基线一致。
+- [x] **文档错误/确认回退**（2026-09-05，已收口）。打开失败改走
+      `UiRequestService::postNotice`，删除难度的确认由 QML `DifficultyList` 完成后再调用文档
+      变更；因此 `DocumentFileFlow.cpp` 与 `DocumentPages.cpp` 不再依赖 `QMessageBox`。
+      同步未保存确认仍是有实际行为的 native fallback，暂不删除。
 
 ## 6. 所有者已拍板（2026-08-30）
 

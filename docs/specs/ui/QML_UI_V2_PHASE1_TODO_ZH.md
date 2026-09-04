@@ -688,6 +688,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   删除的空 `noteStatus`，现从文件打开与文档应用链路的 Session/DocumentSessionHost 接口移除；
   `showErrors`、文件编码记录、启动恢复和真实 QML/native 错误处理保持不变。`MiaCode` Release
   编译通过，相关测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
+- **第 5 步本轮继续迁移文档错误/确认回退（2026-09-05）**：打开失败改由
+  `UiRequestService::postNotice(Error, ...)` 通知 QML，删除难度确认收口到 QML
+  `DifficultyList` 后再执行，移除 `DocumentFileFlow.cpp` / `DocumentPages.cpp` 的
+  `QMessageBox` 与 `DialogLocalization` 依赖；未保存同步确认仍保留在真实 fallback 中。`MiaCode`
+  Release 编译通过，相关测试 8/8 通过；全量 CTest 沿用上一轮 105/108 基线。
 
 #### 第 2 步：一处需要更正的既往判断
 

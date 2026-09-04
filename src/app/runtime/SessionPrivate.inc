@@ -95,7 +95,6 @@
     // after the intro hands off, mirroring the exported clock track).
     void setExportAuditionClockSchedule(int clockCount, double clockBpm);
     void clearExportAuditionClockSchedule();
-    bool deleteDifficultyField(int difficultyId);
     bool switchToMetadataField();
     bool switchToDifficultyField(int difficultyId);
     bool switchToLatencyField();
