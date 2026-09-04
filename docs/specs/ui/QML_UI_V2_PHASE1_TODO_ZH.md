@@ -627,6 +627,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   对这些空操作的调用。预览画布比例仍更新同一份状态并刷新 Quick 合成表面，左右面板互换仍
   保留状态和偏好持久化；布局翻译单元不再包含 Widgets 头。`MiaCode` Release 编译通过，
   针对性测试 7/7 通过，全量 CTest 仍为 105/108 通过，失败项与既有基线完全相同。
+- **第 5 步本轮继续清理传递依赖（2026-09-05）**：移除 6 个实际不使用 QWidget 类型的
+  runtime 翻译单元中的宽泛 `<QtWidgets>`（导出快照/worker、StageMedia、文档变换、播放
+  布局与 tick）；仍真实调用文件/消息对话框或 QApplication 弹窗状态查询的路径保持不动。
+  `MiaCode` Release 编译通过；此前完整 CTest 的 105/108 基线未改变。
 
 #### 第 2 步：一处需要更正的既往判断
 
