@@ -289,6 +289,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       `UiRequestService::postNotice`，删除难度的确认由 QML `DifficultyList` 完成后再调用文档
       变更；因此 `DocumentFileFlow.cpp` 与 `DocumentPages.cpp` 不再依赖 `QMessageBox`。
       同步未保存确认仍是有实际行为的 native fallback，暂不删除。
+- [x] **预览创作门控的 Widgets 查询**（2026-09-05，已收口）。
+      `StageMediaHost` 不再查询 `QApplication` 的 active modal/popup widget，改为检查
+      `QGuiApplication` 的 modal window 与可见 popup window；模态或 popup 窗口下仍禁止触控创作。
+      Release 构建通过，相关测试 6/6 通过，完整 CTest 为 105/108，既有三个失败项未变化。
 
 ## 6. 所有者已拍板（2026-08-30）
 

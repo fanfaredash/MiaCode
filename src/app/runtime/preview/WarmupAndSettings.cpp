@@ -26,11 +26,23 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QApplication>
 
 using namespace miacode::runtime::shared;
 
 namespace {
+
+bool hasBlockingPreviewWindow()
+{
+    if (QGuiApplication::modalWindow() != nullptr) {
+        return true;
+    }
+    for (QWindow* window : QGuiApplication::topLevelWindows()) {
+        if (window != nullptr && window->isVisible() && window->flags().testFlag(Qt::Popup)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // Project-preferences key holding the per-chart preview mixer
 // (<chartDir>/.miacode/preferences.json).
@@ -644,8 +656,7 @@ void miacode::runtime::StageMediaHost::applyEffectivePreviewOutlineVariantToCanv
     if (state_.scene_ != nullptr) {
         const bool editableAuthoringContext = session_.editorAuthoringContextActive()
             && !state_.exportPreviewActive_
-            && QApplication::activeModalWidget() == nullptr
-            && QApplication::activePopupWidget() == nullptr;
+            && !hasBlockingPreviewWindow();
         if (!editableAuthoringContext) {
             state_.touchPadAuthoringCtrlHoldActive_ = false;
         }

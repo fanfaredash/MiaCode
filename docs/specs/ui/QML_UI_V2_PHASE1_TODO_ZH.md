@@ -693,6 +693,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `DifficultyList` 后再执行，移除 `DocumentFileFlow.cpp` / `DocumentPages.cpp` 的
   `QMessageBox` 与 `DialogLocalization` 依赖；未保存同步确认仍保留在真实 fallback 中。`MiaCode`
   Release 编译通过，相关测试 8/8 通过；全量 CTest 沿用上一轮 105/108 基线。
+- **第 5 步本轮继续移除预览门控的 Widgets 查询（2026-09-05）**：`StageMediaHost` 的创作态
+  检查从 `QApplication::activeModalWidget/activePopupWidget` 改为
+  `QGuiApplication` 的 modal window 与可见 popup window 检查，模态或 popup 窗口出现时仍会
+  禁止触控创作输入。`MiaCode` Release 编译通过，相关测试 6/6 通过；完整 CTest 为
+  105/108 通过，失败项与既有基线完全相同。
 
 #### 第 2 步：一处需要更正的既往判断
 
