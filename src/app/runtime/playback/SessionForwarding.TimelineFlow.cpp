@@ -104,11 +104,6 @@ void Session::updateWindowTitle()
     playback_->updateWindowTitle();
 }
 
-void Session::updateCurrentFileLabel()
-{
-    playback_->updateCurrentFileLabel();
-}
-
 QString Session::editorText() const
 {
     return playback_->editorText();

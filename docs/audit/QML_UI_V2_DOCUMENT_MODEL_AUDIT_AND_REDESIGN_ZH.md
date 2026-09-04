@@ -277,6 +277,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       **缺的还有手动那一半**：v1 的 `refreshRestoreBackupMenu()` 是挂在隐藏 `MainWindow` 上的
       `QMenu`，v2 没有任何地方能列出并选择历史备份。
 
+- [x] **空的文件标签刷新桥**（2026-09-05，已清理）。`PlaybackCoordinator::updateCurrentFileLabel()`
+      没有实现内容，且唯一调用只发生在设置当前文件路径时；已删除其 coordinator/Session 声明、
+      转发、空实现和调用。文件路径变化后的真实窗口/QML 标题更新仍由 `updateWindowTitle()` 负责。
+
 ## 6. 所有者已拍板（2026-08-30）
 
 **A. 关闭一个脏标签时，"保存"和"放弃"分别意味着什么？**

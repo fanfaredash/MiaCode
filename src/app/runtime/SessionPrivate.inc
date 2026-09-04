@@ -73,7 +73,6 @@
     );
     void setCurrentFilePath(const QString& path, bool suppressImmediateRefresh = false);
     void updateWindowTitle();
-    void updateCurrentFileLabel();
     void updatePauseButtonAppearance();
     void updateDirtyState();
     void refreshCurrentFieldDirtyState();

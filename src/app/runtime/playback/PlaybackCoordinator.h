@@ -75,7 +75,6 @@ public:
     void applyLatencyDetectorClockCount(int clockCount);
     void setCurrentFilePath(const QString& path, bool suppressImmediateRefresh = false);
     void updateWindowTitle();
-    void updateCurrentFileLabel();
     QString editorText() const;
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();

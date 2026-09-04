@@ -567,7 +567,6 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
 #endif
     }
     updateWindowTitle();
-    updateCurrentFileLabel();
     if (pathChanged) {
         preferences_.loadProjectRenderState();
         // Rebind the project-scoped mixer BEFORE the SFX reload / level
@@ -610,10 +609,6 @@ void miacode::runtime::PlaybackCoordinator::updateWindowTitle()
     const QString elided = metrics.elidedText(titleText, Qt::ElideRight, 420);
     const bool dirty = state_.documentDirty_ || state_.currentFieldDirty_;
     state_.titleText_ = QString("MiaCode - %1%2").arg(elided, dirty ? QStringLiteral("[*]") : QString());
-}
-
-void miacode::runtime::PlaybackCoordinator::updateCurrentFileLabel()
-{
 }
 
 QString miacode::runtime::PlaybackCoordinator::editorText() const
@@ -1085,7 +1080,7 @@ miacode::waveform::WaveformCacheService* miacode::runtime::PlaybackCoordinator::
 // Session::latencyDocumentOffsetSeconds, Session::latencyDocumentClockCount,
 // Session::latencyTrackPath, Session::applyLatencyDetectorBpm,
 // Session::applyLatencyDetectorClockCount, Session::setCurrentFilePath,
-// Session::updateWindowTitle, Session::updateCurrentFileLabel, Session::editorText,
+// Session::updateWindowTitle, Session::editorText,
 // Session::scheduleTimelineRefresh, Session::refreshTimelineMetadata,
 // Session::refreshTimelineQuickModelFromCurrentText,
 // Session::applyLatestTimelinePreviewStateToPausedPreview,

@@ -674,6 +674,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   等 runtime 实现均为空，删除对应的 Session/DocumentSessionHost 转发、调用点及延迟 UI 刷新
   状态位；时间线游标、预览跟随、QML 状态发布和删除难度确认逻辑保持不变。`MiaCode` Release
   编译通过，相关测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
+- **第 5 步本轮继续移除空的文件标签刷新桥（2026-09-05）**：确认
+  `PlaybackCoordinator::updateCurrentFileLabel()` 实现为空，且全仓唯一调用仅在设置文件路径时；
+  删除 coordinator/Session 转发、空实现和调用，文件路径仍由 `updateWindowTitle()` 统一进入 QML
+  标题状态。`Qt6::Widgets` 仍保留给真实 native fallback。`MiaCode` Release 编译通过，相关
+  测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 
