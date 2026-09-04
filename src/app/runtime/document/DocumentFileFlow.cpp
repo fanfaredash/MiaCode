@@ -437,7 +437,7 @@ void miacode::runtime::DocumentSessionHost::finishChartsFromAudioDrop(
     }
 }
 
-bool miacode::runtime::DocumentSessionHost::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
+bool miacode::runtime::DocumentSessionHost::openFileAtPath(const QString& path, bool showErrors)
 {
     MC_OP("miacode::runtime::DocumentSessionHost::openFileAtPath");
     _mc_op_.note(QStringLiteral("path=%1").arg(path));
@@ -461,7 +461,6 @@ bool miacode::runtime::DocumentSessionHost::openFileAtPath(const QString& path, 
         payload.normalizedPath,
         payload.usedSystemEncoding ? Session::TextEncoding::System : Session::TextEncoding::Utf8,
         payload.document,
-        showStatusMessage,
         payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0
     );
     return true;
@@ -489,7 +488,6 @@ bool miacode::runtime::DocumentSessionHost::restoreLastSessionFile()
         payload.normalizedPath,
         payload.usedSystemEncoding ? Session::TextEncoding::System : Session::TextEncoding::Utf8,
         payload.document,
-        false,
         payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0
     );
     return true;
@@ -573,7 +571,6 @@ void miacode::runtime::DocumentSessionHost::applyPreparedStartupRestoreDocument(
         prepared.normalizedPath,
         prepared.encodingUsed,
         prepared.document,
-        false,
         prepared.hasTrackDuration ? prepared.trackDurationSeconds : -1.0
     );
     const qint64 applyElapsedMs = applyTimer.elapsed();
@@ -590,7 +587,6 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
     const QString& normalizedPath,
     Session::TextEncoding encodingUsed,
     const SimaiDocument& document,
-    bool showStatusMessage,
     double knownTrackDurationSeconds)
 {
     MC_OP("miacode::runtime::DocumentSessionHost::applyOpenedDocumentState");
@@ -647,8 +643,6 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
     if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
         schedulePendingAbnormalExitBackupRestore();
     }
-    Q_UNUSED(showStatusMessage);
-    Q_UNUSED(encodingUsed);
 }
 
 void miacode::runtime::DocumentSessionHost::syncRuntimeFromWorkspace()

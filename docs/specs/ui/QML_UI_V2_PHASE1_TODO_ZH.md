@@ -684,6 +684,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   汇报；同时删除仅服务于旧 Widget 侧栏折叠的状态位。QML 书签折叠状态仍由
   `ViewState.qml` 持有，真实媒体工具与文档切换/保存逻辑保持不变。`MiaCode` Release 编译通过，
   相关测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
+- **第 5 步本轮继续收口旧状态栏参数（2026-09-05）**：`showStatusMessage` 原先只透传到已
+  删除的空 `noteStatus`，现从文件打开与文档应用链路的 Session/DocumentSessionHost 接口移除；
+  `showErrors`、文件编码记录、启动恢复和真实 QML/native 错误处理保持不变。`MiaCode` Release
+  编译通过，相关测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 

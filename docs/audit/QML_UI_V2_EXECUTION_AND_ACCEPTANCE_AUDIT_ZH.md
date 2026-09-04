@@ -144,7 +144,7 @@ Task 10 当时没有把桌面 GUI 手工矩阵标记为通过；这是正确的�
 2. `quickShellStartupStageMediaLoadDeferred_` 是**一次性启动闩**（`FrameBootstrap.cpp` 置位，首次
    flush 清除），没有按文档重新置位，所以后续切换走的是立即分支而非被延迟吞掉。
 3. v2 的开档入口 `QmlDocumentModel::openFile()` → `MainWindow::openStartupTarget()`，对文件路径
-   直接转 `openFileAtPath(path, true, true)` —— 与 v1 `onOpenFile()` 落到同一个函数。
+   直接转 `openFileAtPath(path, true)` —— 与 v1 `onOpenFile()` 落到同一个函数。
 
    > **更正：** 早前记录过“v2 未走脏文档确认、会静默丢弃未保存修改”，这是错的。v2 的确认在 QML 层
    > （`MainView.requestOpenFile()` → `unsavedChangesDialog`，含 Save / Discard / Cancel 三个分支），

@@ -59,7 +59,7 @@
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void resetAutosaveState(const QString& referenceText);
     void setEditorText(const QString& text);
-    bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
+    bool openFileAtPath(const QString& path, bool showErrors = true);
     bool restoreLastSessionFile();
     void scheduleStartupRestoreLastSessionFile();
     void cancelPendingStartupRestore();
@@ -68,7 +68,6 @@
         const QString& normalizedPath,
         TextEncoding encodingUsed,
         const SimaiDocument& document,
-        bool showStatusMessage,
         double knownTrackDurationSeconds = -1.0
     );
     void setCurrentFilePath(const QString& path, bool suppressImmediateRefresh = false);

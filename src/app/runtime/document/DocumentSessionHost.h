@@ -49,7 +49,7 @@ public:
     // <chartDir>/.miacode/preferences.json; falls back to
     // SimaiDocument::inferUnifiedDesignerDefault() when the key is absent.
     void refreshUnifiedDesignerStateForLoadedDocument();
-    bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
+    bool openFileAtPath(const QString& path, bool showErrors = true);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     // Continuation of restoreBackupFilePath once the confirm is answered.
     void applyBackupFile(const QString& normalizedPath, const QString& title);
@@ -61,7 +61,6 @@ public:
         const QString& normalizedPath,
         Session::TextEncoding encodingUsed,
         const SimaiDocument& document,
-        bool showStatusMessage,
         double knownTrackDurationSeconds = -1.0
     );
     void resetAutosaveState(const QString& referenceText);

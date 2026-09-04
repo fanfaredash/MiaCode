@@ -350,7 +350,7 @@ bool Session::saveDocumentAs(const QString& path)
 bool Session::discardDocumentChanges()
 {
     return !currentFilePath_.isEmpty()
-        && documents_->openFileAtPath(currentFilePath_, true, true);
+        && documents_->openFileAtPath(currentFilePath_, true);
 }
 
 bool Session::selectDocumentDifficulty(int difficultyId)

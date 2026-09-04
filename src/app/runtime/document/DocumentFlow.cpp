@@ -221,9 +221,9 @@ void miacode::runtime::DocumentSessionHost::noteRecentDocument(const QString& pa
     session_.addRecentFilePath(path);
 }
 
-bool Session::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
+bool Session::openFileAtPath(const QString& path, bool showErrors)
 {
-    return documents_->openFileAtPath(path, showStatusMessage, showErrors);
+    return documents_->openFileAtPath(path, showErrors);
 }
 
 // openStartupTarget runs at launch and from the chart-drop switch prompt, both
@@ -246,7 +246,7 @@ bool Session::openStartupTarget(const QString& path)
     if (info.isDir()) {
         const QString maidataPath = QDir(info.absoluteFilePath()).filePath(QStringLiteral("maidata.txt"));
         if (QFileInfo::exists(maidataPath) && QFileInfo(maidataPath).isFile()) {
-            return openFileAtPath(maidataPath, true, true);
+            return openFileAtPath(maidataPath, true);
         }
 
         setCurrentFilePath(QString(), true);
@@ -261,7 +261,7 @@ bool Session::openStartupTarget(const QString& path)
     }
 
     if (info.exists() && info.isFile()) {
-        return openFileAtPath(info.absoluteFilePath(), true, true);
+        return openFileAtPath(info.absoluteFilePath(), true);
     }
 
     postShellNotice(
@@ -296,14 +296,12 @@ void Session::applyOpenedDocumentState(
     const QString& normalizedPath,
     TextEncoding encodingUsed,
     const SimaiDocument& document,
-    bool showStatusMessage,
     double knownTrackDurationSeconds)
 {
     documents_->applyOpenedDocumentState(
         normalizedPath,
         encodingUsed,
         document,
-        showStatusMessage,
         knownTrackDurationSeconds
     );
 }
