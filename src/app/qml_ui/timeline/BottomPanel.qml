@@ -82,6 +82,21 @@ Item {
         onPreviewPlayPauseRequested: root.previewSession.togglePlayback()
     }
 
+    Tooltip {
+        id: timelineMarkerTooltip
+        parent: Overlay.overlay
+        visible: timelineItem.hoverTooltipText.length > 0
+        text: timelineItem.hoverTooltipText
+        x: {
+            const position = timelineItem.mapToItem(null, timelineItem.hoverTooltipPosition)
+            return position.x + 12
+        }
+        y: {
+            const position = timelineItem.mapToItem(null, timelineItem.hoverTooltipPosition)
+            return position.y + 16
+        }
+    }
+
     AppDropDownButton {
         id: zoomButton
         compact: true

@@ -18,18 +18,11 @@ public:
 
     DocumentSessionHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
-    bool maybeSaveBeforeContinue();
-    // The same decision, asked without blocking. The v2 shell has no place to
-    // run a nested event loop from — a window's close handler least of all — so
-    // the answer arrives as a continuation and the prompt itself is a QML
-    // dialog. `onDecided(true)` means "the document may be left behind".
-    //
-    // A clean document decides immediately, in this call; only a prompt defers.
+    // The v2 shell has no place to run a nested event loop from — a window's
+    // close handler least of all — so the answer arrives as a continuation and
+    // the prompt itself is a QML dialog. `onDecided(true)` means "the document
+    // may be left behind".
     void requestLeaveDocument(std::function<void(bool)> onDecided) override;
-    // Everything that happens once the choice is in, shared by both forms so
-    // they cannot drift.
-    bool applyUnsavedChangesChoice(const QString& choiceId, const QString& logContext);
-    bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument() override;
     QString documentField(Session::DocumentField field) const;
     QString difficultyField(int difficultyId, Session::DifficultyField field) const;
@@ -76,8 +69,6 @@ public:
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void runAutosaveCheck(bool allowHistory = true);
-    bool onSaveFile();
-    bool onSaveFileAs();
     bool saveToPath(const QString& path);
     void updatePauseButtonAppearance();
     void updateDirtyState() override;

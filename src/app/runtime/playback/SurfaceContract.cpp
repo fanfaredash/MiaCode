@@ -13,8 +13,6 @@
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
-#include <QToolTip>
-
 using namespace miacode::runtime::shared;
 using namespace miacode::runtime::playback_detail;
 
@@ -96,7 +94,6 @@ void miacode::runtime::PlaybackCoordinator::beginScrub()
         return;
     }
     appendQuickShellBackendLog(QStringLiteral("preview_scrub_begin"));
-    QToolTip::hideText();
     stopPreviewHeldSeek();
     state_.previewScrubDragging_ = true;
     state_.previewScrubRenderElapsed_.invalidate();
@@ -115,7 +112,6 @@ void miacode::runtime::PlaybackCoordinator::updateScrub(double second, bool cent
         return;
     }
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    QToolTip::hideText();
     appendQuickShellBackendLog(
         QStringLiteral("preview_scrub_update"),
         QString("second=%1 center=%2")
@@ -157,7 +153,6 @@ void miacode::runtime::PlaybackCoordinator::endScrub(double second, bool centerV
         return;
     }
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    QToolTip::hideText();
     appendQuickShellBackendLog(
         QStringLiteral("preview_scrub_end"),
         QString("second=%1 center=%2")

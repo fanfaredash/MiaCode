@@ -33,8 +33,6 @@
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"
 
-using namespace miacode::runtime::document_detail;
-
 miacode::runtime::DocumentSessionHost::DocumentSessionHost(
     ::Session& session,
     RuntimeContext::Ui& ui,
@@ -43,88 +41,6 @@ miacode::runtime::DocumentSessionHost::DocumentSessionHost(
     , ui_(ui)
     , state_(state)
 {}
-
-bool miacode::runtime::DocumentSessionHost::maybeSaveCurrentFieldChanges()
-{
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-    if (!state_.currentFieldDirty_) {
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("maybe_save_current_field_changes"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=clean_field")
-        );
-        return true;
-    }
-
-    const QString fieldName = session_.hasActiveDifficulty()
-        ? SimaiDocument::difficultyName(state_.activeDifficultyId_)
-        : UiText::text(QStringLiteral("dialog.unsaved_field_changes.field.metadata"));
-    QElapsedTimer dialogTimer;
-    dialogTimer.start();
-    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.unsaved_field_changes.title")),
-        UiText::text(QStringLiteral("dialog.unsaved_field_changes.message")).arg(fieldName)
-    );
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/document"),
-        QStringLiteral("unsaved_field_changes_dialog"),
-        dialogTimer.elapsed(),
-        QStringLiteral("choice=%1 field=%2")
-            .arg(unsavedChangesChoiceName(choice), fieldName)
-    );
-    if (choice == UnsavedChangesChoice::Save) {
-        QElapsedTimer saveTimer;
-        saveTimer.start();
-        // "Save" must have the same durable meaning everywhere. Merely
-        // applying the active editor field to SimaiDocument and restoring the
-        // previous documentDirty flag made the UI look clean without writing
-        // the file, so a later close silently lost the edit. onSaveFile()
-        // commits the current field first and then atomically writes it.
-        const bool saved = onSaveFile();
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("on_save_file"),
-            saveTimer.elapsed(),
-            QStringLiteral("trigger=unsaved_field_changes result=%1 field=%2")
-                .arg(saved ? QStringLiteral("saved") : QStringLiteral("failed"), fieldName)
-        );
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("maybe_save_current_field_changes"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=%1 field=%2")
-                .arg(saved ? QStringLiteral("saved") : QStringLiteral("save_failed"), fieldName)
-        );
-        return saved;
-    }
-    if (choice == UnsavedChangesChoice::Discard) {
-        state_.currentFieldDirty_ = false;
-        updateDirtyState();
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("maybe_save_current_field_changes"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=discard field=%1").arg(fieldName)
-        );
-        return true;
-    }
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/document"),
-        QStringLiteral("maybe_save_current_field_changes"),
-        totalTimer.elapsed(),
-        QStringLiteral("result=cancel field=%1").arg(fieldName)
-    );
-    return false;
-}
 
 bool miacode::runtime::DocumentSessionHost::applyCurrentFieldToDocument()
 {
@@ -143,11 +59,6 @@ void miacode::runtime::DocumentSessionHost::cancelPendingStartupRestore()
     }
     state_.startupRestorePending_ = false;
     ++state_.startupRestoreGeneration_;
-}
-
-bool Session::maybeSaveCurrentFieldChanges()
-{
-    return documents_->maybeSaveCurrentFieldChanges();
 }
 
 bool Session::applyCurrentFieldToDocument()

@@ -9,6 +9,7 @@
 #include "app/v2/ShellNotifications.h"
 
 class QmlExportSession;
+class QmlDocumentModel;
 
 // Page routing for the v2 editor area. Every full-page surface is QML now, so
 // this only tracks which one is showing; no QWidget is ever adopted.
@@ -17,6 +18,7 @@ class QmlEditorPageHost final : public QObject
     Q_OBJECT
     Q_PROPERTY(QString activePageId READ activePageId NOTIFY activePageIdChanged)
     Q_PROPERTY(bool overlayActive READ overlayActive NOTIFY activePageIdChanged)
+    Q_PROPERTY(bool navigationPending READ navigationPending NOTIFY navigationPendingChanged)
     Q_PROPERTY(QObject* exportSession READ exportSession CONSTANT)
 
 public:
@@ -24,12 +26,14 @@ public:
     // every page switch goes through the router slot instead, so this host no
     // longer needs friend access to the window.
     explicit QmlEditorPageHost(miacode::v2::ShellNotifications& notifications,
+                               QmlDocumentModel& document,
                                miacode::v2::EditorPageRouter*& routerSlot,
                                QObject*& exportSessionSlot,
                                QObject* parent = nullptr);
 
     QString activePageId() const { return activePageId_; }
     bool overlayActive() const { return !activePageId_.isEmpty(); }
+    bool navigationPending() const { return navigationPending_; }
     QObject* exportSession() const;
 
     Q_INVOKABLE bool openVideoExportPage(const QString& tab = QStringLiteral("export"));
@@ -49,14 +53,20 @@ signals:
     void mediaToolsRequested();
     void preferencesRequested();
     void activePageIdChanged();
+    void navigationPendingChanged();
+    void navigationRejected();
+    void overlayPageLeft();
     void coverPageRequested(int difficultyId);
 
 private:
+    bool requestPageSwitch(std::function<bool()> action);
+    bool finishLeaveOverlay();
     void rememberResumeDifficulty();
     bool resumeChartOrMetadata();
     void markExportPageActive();
 
     miacode::v2::ShellNotifications* notifications_ = nullptr;
+    QmlDocumentModel* document_ = nullptr;
     // Bound to the assembly's slot, not to a snapshot: the window withdraws the
     // router before teardown and that has to be visible here at once.
     miacode::v2::EditorPageRouter** routerSlot_ = nullptr;
@@ -69,4 +79,5 @@ private:
     }
     QString activePageId_;
     int resumeDifficultyId_ = 0;
+    bool navigationPending_ = false;
 };

@@ -35,7 +35,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QToolTip>
 
 #include "runtime/playback/TimelineFlow.Internal.h"
 
@@ -669,7 +668,6 @@ void miacode::runtime::PlaybackCoordinator::onTimelineDragStarted()
             .arg(state_.playing_ ? 1 : 0)
             .arg(state_.pauseSecond_, 0, 'f', 6));
     stopPreviewHeldSeek();
-    QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
@@ -721,7 +719,6 @@ void miacode::runtime::PlaybackCoordinator::onTimelineDragFinished(double second
         QString("second=%1")
             .arg(second, 0, 'f', 6));
     stopPreviewHeldSeek();
-    QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
     if (!state_.previewProgressFollowEnabled_) {
         Q_UNUSED(second);

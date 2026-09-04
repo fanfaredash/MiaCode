@@ -11,41 +11,16 @@
 
 #include "runtime/Shared.h"
 
-#include "DialogLocalization.h"
-#include "UiText.h"
-
 #include <algorithm>
 
 #include <QtCore>
-#include <QtGui>
-#include <QMessageBox>
-#include <QPushButton>
 
 namespace miacode::runtime::document_detail {
 
-// centerDialogOnAnchor / resolveProjectDataDirectoryPath etc. live in the
+// resolveProjectDataDirectoryPath and the other filesystem helpers live in the
 // shared namespace; the original file resolved them via a file-level
 // using-directive, so mirror that here for the moved bodies.
 using namespace miacode::runtime::shared;
-
-enum class UnsavedChangesChoice {
-    Save,
-    Discard,
-    Cancel,
-};
-
-inline QString unsavedChangesChoiceName(UnsavedChangesChoice choice)
-{
-    switch (choice) {
-    case UnsavedChangesChoice::Save:
-        return QStringLiteral("save");
-    case UnsavedChangesChoice::Discard:
-        return QStringLiteral("discard");
-    case UnsavedChangesChoice::Cancel:
-    default:
-        return QStringLiteral("cancel");
-    }
-}
 
 struct BackupRestoreEntry {
     QString filePath;
@@ -53,52 +28,6 @@ struct BackupRestoreEntry {
     int priority = 0;
 };
 
-// The three answers as the QML shell shows them, in button order. Ids match
-// unsavedChangesChoiceName() so both prompts resolve into the same handler.
-inline QVariantList unsavedChangesChoices()
-{
-    const auto choice = [](const char* id, const char* labelKey, const char* role) {
-        return QVariantMap{
-            {QStringLiteral("id"), QLatin1String(id)},
-            {QStringLiteral("label"), UiText::text(QLatin1String(labelKey))},
-            {QStringLiteral("role"), QLatin1String(role)},
-        };
-    };
-    return QVariantList{
-        choice("save", "action.save", "accept"),
-        choice("discard", "action.discard", "destructive"),
-        choice("cancel", "action.cancel", "reject"),
-    };
-}
-
-inline UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& title, const QString& text)
-{
-    QMessageBox dialog(
-        QMessageBox::Warning,
-        title,
-        text,
-        QMessageBox::NoButton,
-        UiDialogs::effectiveParentWidget(parent)
-    );
-    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    UiDialogs::configureDialogPreviewShortcuts(&dialog);
-    UiDialogs::applyDetachedParentBehavior(&dialog, parent);
-    QPushButton* saveButton = dialog.addButton(UiText::text(QStringLiteral("action.save")), QMessageBox::AcceptRole);
-    QPushButton* discardButton = dialog.addButton(UiText::text(QStringLiteral("action.discard")), QMessageBox::DestructiveRole);
-    QPushButton* cancelButton = dialog.addButton(UiText::text(QStringLiteral("action.cancel")), QMessageBox::RejectRole);
-    dialog.setDefaultButton(saveButton);
-    dialog.setEscapeButton(cancelButton);
-    UiDialogs::localizeMessageBox(&dialog);
-    centerDialogOnAnchor(&dialog, parent);
-    dialog.exec();
-    if (dialog.clickedButton() == saveButton) {
-        return UnsavedChangesChoice::Save;
-    }
-    if (dialog.clickedButton() == discardButton) {
-        return UnsavedChangesChoice::Discard;
-    }
-    return UnsavedChangesChoice::Cancel;
-}
 
 inline QString autosaveEntryDirectoryPathForFile(const QString& filePath)
 {

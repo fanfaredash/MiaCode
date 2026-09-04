@@ -92,7 +92,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Multimedia Quick Qml QuickControls2 ShaderTools)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Multimedia Quick Qml QuickControls2 ShaderTools)
 
 qt_policy(SET QTP0001 NEW)
 
@@ -173,10 +173,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellPreviewCompositeSurface.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp
     src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
-    src/common/AdoptedWidgetCoordinates.h
-    src/common/AdoptedWidgetCoordinates.cpp
-    src/common/AdoptedSurfaceDragAutoScroll.h
-    src/common/AdoptedSurfaceDragAutoScroll.cpp
     src/app/runtime/Session.h
     src/app/runtime/SessionLifecycle.cpp
     src/app/runtime/RuntimeContext.h
@@ -855,7 +851,6 @@ target_link_libraries(MiaCode PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
-    Qt6::Widgets
     soundtouch
     miniz
 )
@@ -1221,14 +1216,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/muri/MuriStaticChecker.cpp
     )
 
-    # Qt Test is a dev-tools-only dependency: QML input regressions need a
-    # supported way to deliver real mouse/key events into a QQuickWindow.
+    # Qt Test and Qt Widgets are dev-tools-only dependencies: QML input
+    # regressions need a supported way to deliver real mouse/key events into a
+    # QQuickWindow, while a few legacy specs still exercise widget helpers.
+    # Neither component is part of the MiaCode product target.
     #
     # Qt Network is dev-tools-only for the same reason: the Net page was removed
     # from the v2 product runtime, so its engine lives on in net_client_spec
     # alone. See docs/ops/DEPENDENCY_ALLOWLIST.md — linking it into MiaCode is a
     # spec failure, not a style preference.
-    find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network Widgets)
 
     # MiaCode.UI is compiled into the app target, so a spec executable cannot
     # import it. Mirror the module into a plain file-system import directory so

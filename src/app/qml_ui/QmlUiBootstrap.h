@@ -26,9 +26,9 @@ class QmlChartDropBridge;
 // document domain, the UI-request boundary and the job-progress surface are no
 // longer among what it owns — they belong to ApplicationServices, which is
 // constructed before the window and destroyed after it. The Session backend
-// still contains the remaining legacy Widget-compatible runtime helpers; those
-// are the next source-set migration boundary before Qt6::Widgets can leave the
-// product target.
+// still contains non-visual migration state, but the product source set no
+// longer depends on Qt Widgets; QML owns file dialogs, unsaved-change choices,
+// and page navigation confirmations.
 class QmlUiBootstrap final : public QObject
 {
     Q_OBJECT

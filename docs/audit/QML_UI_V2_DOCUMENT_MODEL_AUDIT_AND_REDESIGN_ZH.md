@@ -262,7 +262,7 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       **2026-09-05 入口收口**：旧 `Session` 的新建、打开、最近文件及保存转发已删除；
       `DocumentFileFlow.cpp` 中只服务于旧菜单的 native 新建/打开文件对话框也已删除。QML
       新建链路由 `QmlDocumentModel` 负责音频选择、文件服务写入和普通打开，
-      `onSaveFileAs()` 仍仅作为无当前路径时的 native 保存 fallback 保留。
+      无当前路径保存统一走 `UiRequestService::requestFile`，`onSaveFileAs()` native fallback 已删除。
 - [x] **自动保存的「恢复备份」在 v2 没有入口**（2026-08-30 查证并补完）。
       `文件 → 恢复备份` 列出快照（时间戳标签，重名时附文件名，与 Widgets 菜单同规则），
       选中后走既有的 `restoreBackupFilePath()` 确认流程；因为恢复会替换文档，
@@ -288,7 +288,7 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
 - [x] **文档错误/确认回退**（2026-09-05，已收口）。打开失败改走
       `UiRequestService::postNotice`，删除难度的确认由 QML `DifficultyList` 完成后再调用文档
       变更；因此 `DocumentFileFlow.cpp` 与 `DocumentPages.cpp` 不再依赖 `QMessageBox`。
-      同步未保存确认仍是有实际行为的 native fallback，暂不删除。
+      页面切换的未保存确认也已迁移为 QML 异步请求，runtime 不再保留同步 native fallback。
 - [x] **预览创作门控的 Widgets 查询**（2026-09-05，已收口）。
       `StageMediaHost` 不再查询 `QApplication` 的 active modal/popup widget，改为检查
       `QGuiApplication` 的 modal window 与可见 popup window；模态或 popup 窗口下仍禁止触控创作。

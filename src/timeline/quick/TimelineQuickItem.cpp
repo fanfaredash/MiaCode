@@ -13,7 +13,6 @@
 #include <QSGNode>
 #include <QSGRendererInterface>
 #include <QStringList>
-#include <QToolTip>
 #include <QMetaObject>
 #include <QtMath>
 
@@ -1069,6 +1068,16 @@ int TimelineQuickItem::timelineTop() const
     return cachedTimelineTop_;
 }
 
+QString TimelineQuickItem::hoverTooltipText() const
+{
+    return hoverTooltipText_;
+}
+
+QPointF TimelineQuickItem::hoverTooltipPosition() const
+{
+    return hoverTooltipPosition_;
+}
+
 bool TimelineQuickItem::isReady() const
 {
     return ready_;
@@ -1783,18 +1792,24 @@ void TimelineQuickItem::hoverMoveEvent(QHoverEvent* event)
             break;
         }
     }
-    if (tooltipText.isEmpty()) {
-        QToolTip::hideText();
-    } else {
-        QToolTip::showText(window()->mapToGlobal(event->scenePosition().toPoint()), tooltipText);
-    }
+    updateHoverTooltip(tooltipText, event->position());
     QQuickItem::hoverMoveEvent(event);
 }
 
 void TimelineQuickItem::hoverLeaveEvent(QHoverEvent* event)
 {
-    QToolTip::hideText();
+    updateHoverTooltip(QString(), hoverTooltipPosition_);
     QQuickItem::hoverLeaveEvent(event);
+}
+
+void TimelineQuickItem::updateHoverTooltip(const QString& text, const QPointF& position)
+{
+    if (hoverTooltipText_ == text && hoverTooltipPosition_ == position) {
+        return;
+    }
+    hoverTooltipText_ = text;
+    hoverTooltipPosition_ = position;
+    emit hoverTooltipChanged();
 }
 
 void TimelineQuickItem::mouseReleaseEvent(QMouseEvent* event)

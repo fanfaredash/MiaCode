@@ -13,10 +13,8 @@
 #include "common/DebugOptions.h"
 #include "runtime/RuntimeContext.h"
 
-class QDialog;
 class QFileInfo;
 class QObject;
-class QWidget;
 
 namespace miacode::v2 {
 class ShellNotifications;
@@ -132,7 +130,6 @@ int nearestPreviewPlaybackRateIndex(double rate);
 double steppedPreviewPlaybackRate(double rate, int direction);
 // The parser validation locale matching the session UI language.
 SimaiNativeValidationLocale uiValidationLocale();
-void centerDialogOnAnchor(QDialog* dialog, QWidget* parent);
 QByteArray autosaveContentSignature(const QString& text);
 QString resolveProjectDataDirectoryPath(const QString& filePath);
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs);

@@ -396,8 +396,9 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
       但它掩盖了真正的原因：**这些对象根本构造不出来**。4.9d 之后应改为真的构造/析构观察。
       另外协调器的依赖检查漏了门槛原文要求的 "media UI" 一项，且 Timeline↔Preview 互不依赖
       目前没有任何断言，只是两个 spec 的 CMake SOURCES 恰好精简——是副作用不是设计。
-- [ ] `QApplication` / `Qt6::Widgets` 仍在入口与 CMake；宿主拆分后再清除 native fallback 与
-      Widgets 依赖，避免把 QWidget 生命周期藏进新宿主
+- [x] `QApplication` / `Qt6::Widgets` 已从产品入口、源集和 `MiaCode` 链接行清除；文件/未保存
+      选择与页面导航确认统一由 QML `UiRequestService` 承载。仅 dev-tool spec target 保留
+      Widgets 作为测试依赖，不进入产品运行时。
 
 ## 记录
 

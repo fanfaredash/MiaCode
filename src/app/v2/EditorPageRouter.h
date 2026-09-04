@@ -6,21 +6,13 @@ namespace miacode::v2 {
 
 // Switching the editor area between its full-page surfaces.
 //
-// Stage 3.5 items 2-3: QmlEditorPageHost holds the QML page id, but the switch
-// itself still has to run a pile of work only the window can do today — the
-// unsaved-changes guard, releasing the export session, stopping playback while
-// preserving the playhead, resetting the active difficulty, the bottom-tabs
-// mode, validation decorations and the window title.
+// Stage 3.5 items 2-3: QmlEditorPageHost holds the QML page id while this
+// interface keeps the runtime page-state transitions narrow. The host owns the
+// asynchronous QML leave guard; the router only commits the domain transition
+// after that guard succeeds.
 //
-// Those entry points live in MainWindowPrivateMethodsA.inc, so the page host
-// needed `friend class` to call them. Publishing them was the wrong fix: they
-// also drive a hidden QStackedWidget that exists only because the window has
-// not been deleted yet, and writing that into MainWindow's public interface
-// would formalize the very thing item 3 removes.
-//
-// So the page host names these seven operations instead. The window implements
-// them; when the widget stack goes, the implementation loses its dead half and
-// keeps the domain half, and the page host does not change.
+// The interface remains deliberately small so page navigation does not expose
+// the old window/widget implementation or recreate a second page owner.
 //
 // Deliberately Qt-free — not even QObject. `editor_page_router_spec` links
 // Qt6::Core+Test only.
@@ -35,10 +27,8 @@ public:
     virtual bool hasActiveDifficulty() const = 0;
     virtual int activeDifficultyId() const = 0;
 
-    // Each of these returns false when the switch was refused — most often
-    // because the unsaved-changes guard was declined. A caller that shows a page
-    // on a refused switch would leave the shell and the document disagreeing
-    // about where the user is, so the answer is not decorative.
+    // Each of these returns false when the domain switch cannot be committed.
+    // The page host only calls them after its QML leave decision succeeds.
     virtual bool enterDifficultyPage(int difficultyId) = 0;
     virtual bool enterMetadataPage() = 0;
     virtual bool enterLatencyPage() = 0;

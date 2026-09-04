@@ -107,9 +107,6 @@ void miacode::runtime::DocumentSessionHost::setChartBottomTabsMode(bool enabled)
 
 bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
 {
-    if (!maybeSaveCurrentFieldChanges()) {
-        return false;
-    }
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
@@ -143,9 +140,6 @@ bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
 
 bool miacode::runtime::DocumentSessionHost::switchToExportField()
 {
-    if (!maybeSaveCurrentFieldChanges()) {
-        return false;
-    }
     // This used to defer the switch one event-loop tick behind a busy spinner
     // drawn over the "Export" sidebar row, because building the embedded video
     // panel blocked the UI thread. Both halves of that are gone: the embedded
@@ -216,9 +210,6 @@ void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
 
 bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
 {
-    if (!maybeSaveCurrentFieldChanges()) {
-        return false;
-    }
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -248,9 +239,6 @@ bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
 
 bool miacode::runtime::DocumentSessionHost::switchToWelcomePage()
 {
-    if (!maybeSaveBeforeContinue()) {
-        return false;
-    }
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -313,9 +301,6 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
               ? session_.currentPreviewAuthoritativeAudioClockSecond()
               : state_.pauseSecond_)
         : 0.0;
-    if (!maybeSaveCurrentFieldChanges()) {
-        return false;
-    }
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites

@@ -1120,7 +1120,7 @@ bool miacode::runtime::VideoExportHost::exportPreviewVideoFromCli(
         task.clockBpm = miacode::chart_clock::clockBpmForChart(session_.applicationServices_.workspace().document(), difficulty->chart);
     }
 
-    const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, nullptr);
+    const VideoExportResult exportResult = VideoExportController::exportFullPreview(task);
     if (!exportResult.success) {
         return fail(exportResult.message, exportResult.details);
     }

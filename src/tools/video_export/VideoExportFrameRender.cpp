@@ -39,7 +39,6 @@
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QProcess>
-#include <QProgressDialog>
 #include <QRect>
 #include <QRegularExpression>
 #include <QSet>

@@ -257,6 +257,80 @@ bool verifyWorkspaceOwnsProductionDocumentAndDirty(QTextStream& err)
                    QStringLiteral("legacy close-save routing delegates durable writes to the workspace file service"), err);
 }
 
+bool verifyPageNavigationUsesTheQmlLeaveGuard(QTextStream& err)
+{
+    const QString documentModel = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
+    const QString pageHost = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlEditorPageHost.cpp"));
+    const QString pageHostHeader = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlEditorPageHost.h"));
+    const QString documentPages = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentPages.cpp"));
+    const QString documentFileFlow = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentFileFlow.cpp"));
+    const QString documentFlow = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentFlow.cpp"));
+    const QString internalFlow = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentFlow.Internal.h"));
+    const QString autosave = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentAutosave.cpp"));
+    const QString shared = sourceFile(QStringLiteral("src/app/runtime/Shared.cpp"));
+    const QString sharedHeader = sourceFile(QStringLiteral("src/app/runtime/Shared.h"));
+    const QString timelineItem = sourceFile(
+        QStringLiteral("src/timeline/quick/TimelineQuickItem.cpp"));
+    const QString timelineItemHeader = sourceFile(
+        QStringLiteral("src/timeline/quick/TimelineQuickItem.h"));
+    const QString bottomPanel = sourceFile(
+        QStringLiteral("src/app/qml_ui/timeline/BottomPanel.qml"));
+    const QString videoExportController = sourceFile(
+        QStringLiteral("src/tools/video_export/VideoExportController.cpp"));
+    const QString videoExportHeader = sourceFile(
+        QStringLiteral("src/tools/video_export/VideoExportController.h"));
+    const QString videoExportInternal = sourceFile(
+        QStringLiteral("src/tools/video_export/VideoExportControllerInternal.h"));
+
+    bool ok = true;
+    ok &= require(documentModel.contains(
+                       QStringLiteral("void QmlDocumentModel::requestLeaveCurrentField"))
+                       && documentModel.contains(QStringLiteral("uiRequests_->requestChoice"))
+                       && documentModel.contains(
+                           QStringLiteral("saveSectionOrAskForPath(difficultyId"))
+                       && documentModel.contains(
+                           QStringLiteral("workspace_->revertDifficultyChart(difficultyId)")),
+                   QStringLiteral("page navigation uses the QML choice/save/discard flow for the current field"), err);
+    ok &= require(pageHost.contains(QStringLiteral("requestPageSwitch"))
+                       && pageHost.contains(
+                           QStringLiteral("document_->requestLeaveCurrentField"))
+                       && pageHost.contains(QStringLiteral("documentGeneration"))
+                       && pageHost.contains(QStringLiteral("navigationPending_"))
+                       && pageHostHeader.contains(QStringLiteral("overlayPageLeft()")),
+                   QStringLiteral("the page host waits for one guarded continuation and rejects stale or repeated navigation"), err);
+    ok &= require(!documentPages.contains(QStringLiteral("maybeSaveCurrentFieldChanges"))
+                       && !documentFileFlow.contains(QStringLiteral("showUnsavedChangesDialog"))
+                       && !documentFileFlow.contains(QStringLiteral("applyUnsavedChangesChoice"))
+                       && !documentFlow.contains(QStringLiteral("showUnsavedChangesDialog"))
+                       && !internalFlow.contains(QStringLiteral("QMessageBox"))
+                       && !internalFlow.contains(QStringLiteral("QWidget")),
+                   QStringLiteral("runtime page and document flows contain no synchronous native unsaved dialog"), err);
+    ok &= require(!autosave.contains(QStringLiteral("QFileDialog"))
+                       && !autosave.contains(QStringLiteral("onSaveFileAs"))
+                       && !shared.contains(QStringLiteral("centerDialogOnAnchor"))
+                       && !sharedHeader.contains(QStringLiteral("centerDialogOnAnchor")),
+                   QStringLiteral("the document autosave and shared runtime layers contain no native dialog fallback"), err);
+    ok &= require(!timelineItem.contains(QStringLiteral("QToolTip"))
+                       && timelineItemHeader.contains(QStringLiteral("hoverTooltipText"))
+                       && timelineItemHeader.contains(QStringLiteral("hoverTooltipPosition"))
+                       && bottomPanel.contains(QStringLiteral("timelineMarkerTooltip"))
+                       && bottomPanel.contains(QStringLiteral("Overlay.overlay")),
+                   QStringLiteral("timeline marker tooltips use the QML Tooltip surface instead of QToolTip"), err);
+    ok &= require(!videoExportController.contains(QStringLiteral("QProgressDialog"))
+                       && !videoExportHeader.contains(QStringLiteral("QProgressDialog"))
+                       && !videoExportInternal.contains(QStringLiteral("QProgressDialog")),
+                   QStringLiteral("video export progress is callback/QML based and has no QProgressDialog boundary"), err);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -266,7 +340,8 @@ int main()
     const bool ok = verifyBackendReplacementPublishesOneQmlRefresh(err)
         && verifyQmlNewDocumentUsesRequestServices(err)
         && verifyV2AnalysisUsesWorkspaceSnapshot(err)
-        && verifyWorkspaceOwnsProductionDocumentAndDirty(err);
+        && verifyWorkspaceOwnsProductionDocumentAndDirty(err)
+        && verifyPageNavigationUsesTheQmlLeaveGuard(err);
     if (ok) {
         out << "qml_document_lifecycle_contract_spec ok" << Qt::endl;
     }

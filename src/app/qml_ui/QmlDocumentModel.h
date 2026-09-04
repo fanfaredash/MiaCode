@@ -119,6 +119,7 @@ public:
     int syntaxWarningCount() const;
     int parsedNoteCount() const;
     qulonglong documentRevision() const;
+    qulonglong documentGeneration() const { return documentGeneration_; }
     qulonglong validationRevision() const;
     bool validationPending() const;
     bool validationAvailable() const;
@@ -144,6 +145,10 @@ public:
     //
     // onDecided(false) means the user cancelled and nothing should continue.
     void requestLeaveDocument(std::function<void(bool)> onDecided);
+    // The page router uses the same QML-owned choice flow, but only for the
+    // section currently in front. A page switch must never block on a native
+    // dialog or save a different dirty difficulty by accident.
+    void requestLeaveCurrentField(std::function<void(bool)> onDecided);
 
     bool wholeSourceEditorActive() const;
     void setWholeSourceEditorActive(bool active);
@@ -283,6 +288,7 @@ private:
     miacode::qml_ui::DocumentValidationProjection validationSnapshot_;
     miacode::qml_ui::DocumentPresentationState presentationState_;
     quint64 documentRevision_ = 0;
+    qulonglong documentGeneration_ = 0;
     qulonglong bookmarkGeneration_ = 0;
     bool unifiedDesignerEnabled_ = false;
     bool wholeSourceEditorActive_ = false;

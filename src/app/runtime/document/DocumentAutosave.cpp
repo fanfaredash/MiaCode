@@ -29,7 +29,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QFileDialog>
 
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"
@@ -468,31 +467,6 @@ void miacode::runtime::DocumentSessionHost::runAutosaveCheck(bool allowHistory)
     }
 
     rebuildAutosaveMetadata(autosaveDirectoryPath);
-}
-
-bool miacode::runtime::DocumentSessionHost::onSaveFile()
-{
-    MC_OP("miacode::runtime::DocumentSessionHost::onSaveFile");
-    if (state_.currentFilePath_.isEmpty()) {
-        return onSaveFileAs();
-    }
-    return saveToPath(state_.currentFilePath_);
-}
-
-bool miacode::runtime::DocumentSessionHost::onSaveFileAs()
-{
-    MC_OP("miacode::runtime::DocumentSessionHost::onSaveFileAs");
-    const QString path = QFileDialog::getSaveFileName(
-        nullptr,
-        QStringLiteral("Save simai file"),
-        state_.currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : state_.currentFilePath_,
-        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
-    );
-    if (path.isEmpty()) {
-        return false;
-    }
-    session_.setLastOpenDirectory(path);
-    return saveToPath(path);
 }
 
 namespace {

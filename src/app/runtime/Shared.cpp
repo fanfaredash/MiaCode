@@ -8,13 +8,9 @@
 #include "common/WaveformCache.h"
 
 #include <QCryptographicHash>
-#include <QDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
-#include <QGuiApplication>
-#include <QScreen>
 #include <QStringList>
-#include <QWindow>
 #include <QtMath>
 
 namespace miacode::runtime::shared {
@@ -93,10 +89,8 @@ double steppedPreviewPlaybackRate(double rate, int direction)
 
 SimaiNativeValidationLocale uiValidationLocale()
 {
-    // One implementation, owned by the non-Widget application layer. This name
-    // stays because the widget-side call sites already use it, but the mapping
-    // itself must not live in a QtWidgets translation unit — asking "which
-    // locale does the parser validate in" should not require the widget layer.
+    // One implementation, owned by the non-Widget application layer. The name
+    // remains as the shared runtime entry point for the parser/UI locale map.
     return miacode::v2::uiValidationLocale();
 }
 
@@ -113,130 +107,6 @@ QString resolveProjectDataDirectoryPath(const QString& filePath)
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs)
 {
     miacode::debug_log::appendStartupTimingStage(stage, elapsedMs, deltaMs);
-}
-
-void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
-{
-    if (dialog == nullptr) {
-        return;
-    }
-    dialog->adjustSize();
-    const bool debugDialogAnchor = miacode::debug_options::runtimeDebugOutputEnabled();
-    const auto appendDialogAnchorLog = [debugDialogAnchor](const QString& text) {
-        if (!debugDialogAnchor) {
-            return;
-        }
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("dialog/anchor"),
-            text
-        );
-    };
-
-    QWidget* anchorWidget = parent != nullptr ? parent->window() : nullptr;
-    QRect anchorRect;
-    QScreen* targetScreen = nullptr;
-    QString anchorSource;
-    if (anchorWidget != nullptr
-        && !anchorRect.isValid()
-        && anchorWidget->isVisible()
-        && !anchorWidget->windowState().testFlag(Qt::WindowMinimized)
-        && !anchorWidget->windowFlags().testFlag(Qt::Tool)) {
-        anchorRect = anchorWidget->frameGeometry();
-        if (anchorWidget->windowHandle() != nullptr) {
-            targetScreen = anchorWidget->windowHandle()->screen();
-        }
-        anchorSource = QStringLiteral("parent_window");
-    }
-
-    const auto tryFindTopLevelWindow = [dialog](bool requireActive, bool allowToolWindows) -> QWindow* {
-        const auto windows = QGuiApplication::topLevelWindows();
-        for (QWindow* window : windows) {
-            if (window == nullptr
-                || window == dialog->windowHandle()
-                || !window->isVisible()
-                || window->visibility() == QWindow::Hidden
-                || window->visibility() == QWindow::Minimized) {
-                continue;
-            }
-            const Qt::WindowFlags flags = window->flags();
-            if (!allowToolWindows && (flags.testFlag(Qt::Tool) || flags.testFlag(Qt::Popup))) {
-                continue;
-            }
-            if (requireActive && !window->isActive()) {
-                continue;
-            }
-            return window;
-        }
-        return nullptr;
-    };
-
-    if (!anchorRect.isValid()) {
-        if (QWindow* topLevelWindow = tryFindTopLevelWindow(true, false); topLevelWindow != nullptr) {
-            anchorRect = topLevelWindow->frameGeometry();
-            targetScreen = topLevelWindow->screen();
-            anchorSource = QStringLiteral("active_non_tool_qwindow");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QWindow* topLevelWindow = tryFindTopLevelWindow(false, false); topLevelWindow != nullptr) {
-            anchorRect = topLevelWindow->frameGeometry();
-            targetScreen = topLevelWindow->screen();
-            anchorSource = QStringLiteral("visible_non_tool_qwindow");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QWindow* topLevelWindow = tryFindTopLevelWindow(false, true); topLevelWindow != nullptr) {
-            anchorRect = topLevelWindow->frameGeometry();
-            targetScreen = topLevelWindow->screen();
-            anchorSource = QStringLiteral("visible_tool_qwindow");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QScreen* screen = QGuiApplication::primaryScreen(); screen != nullptr) {
-            anchorRect = screen->availableGeometry();
-            targetScreen = screen;
-            anchorSource = QStringLiteral("primary_screen");
-        }
-    }
-    appendDialogAnchorLog(
-        QString("title=%1 source=%2 rect=[%3,%4 %5x%6] parent_vis=%7 parent_title=%8")
-            .arg(dialog->windowTitle())
-            .arg(anchorSource.isEmpty() ? QStringLiteral("none") : anchorSource)
-            .arg(anchorRect.x())
-            .arg(anchorRect.y())
-            .arg(anchorRect.width())
-            .arg(anchorRect.height())
-            .arg(parent != nullptr && parent->window() != nullptr && parent->window()->isVisible() ? 1 : 0)
-            .arg(parent != nullptr && parent->window() != nullptr ? parent->window()->windowTitle() : QStringLiteral("(null)"))
-    );
-    if (anchorRect.isValid()) {
-        QPoint targetTopLeft(
-            anchorRect.center().x() - dialog->width() / 2,
-            anchorRect.center().y() - dialog->height() / 2
-        );
-        if (targetScreen == nullptr) {
-            targetScreen = QGuiApplication::screenAt(anchorRect.center());
-        }
-        if (targetScreen == nullptr && anchorWidget != nullptr && anchorWidget->windowHandle() != nullptr) {
-            targetScreen = anchorWidget->windowHandle()->screen();
-        }
-        if (targetScreen != nullptr) {
-            const QRect avail = targetScreen->availableGeometry();
-            targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog->width() + 1));
-            targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog->height() + 1));
-        }
-        appendDialogAnchorLog(
-            QString("title=%1 target=[%2,%3 %4x%5] screen=%6")
-                .arg(dialog->windowTitle())
-                .arg(targetTopLeft.x())
-                .arg(targetTopLeft.y())
-                .arg(dialog->width())
-                .arg(dialog->height())
-                .arg(targetScreen != nullptr ? targetScreen->name() : QStringLiteral("(null)"))
-        );
-        dialog->move(targetTopLeft);
-    }
 }
 
 QFont editorFont(int pointSize)

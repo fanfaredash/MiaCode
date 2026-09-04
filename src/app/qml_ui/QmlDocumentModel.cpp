@@ -115,6 +115,7 @@ QmlDocumentModel::~QmlDocumentModel()
     if (bridge() != nullptr) {
         bridge()->setDocumentSaveHandler({});
         bridge()->setChartTextHandler({});
+        bridge()->setLeaveDocumentHandler({});
     }
 }
 
@@ -686,6 +687,81 @@ void QmlDocumentModel::requestLeaveDocument(std::function<void(bool)> onDecided)
     askNextDirtySection(std::move(onDecided));
 }
 
+void QmlDocumentModel::requestLeaveCurrentField(std::function<void(bool)> onDecided)
+{
+    const auto finish = [onDecided = std::move(onDecided)](bool mayLeave) {
+        if (onDecided) {
+            onDecided(mayLeave);
+        }
+    };
+    if (workspace_ == nullptr) {
+        finish(false);
+        return;
+    }
+
+    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
+    const int difficultyId = snapshot.activeDifficultyId;
+    const bool dirtyCurrentDifficulty = difficultyId > 0
+        && snapshot.dirtyDifficultyIds.contains(difficultyId);
+    // The metadata page represents the whole source. When a different
+    // difficulty is dirty, that is not a metadata edit and must not trigger a
+    // second prompt merely because an overlay is being left.
+    const bool dirtyCurrentDocument = difficultyId <= 0
+        && snapshot.dirty
+        && snapshot.dirtyDifficultyIds.isEmpty();
+    if (!dirtyCurrentDifficulty && !dirtyCurrentDocument) {
+        finish(true);
+        return;
+    }
+
+    if (uiRequests_ == nullptr) {
+        // Refuse rather than allowing a page switch to hide edits when the QML
+        // request host is unavailable.
+        finish(false);
+        return;
+    }
+
+    const QString fieldName = difficultyId > 0
+        ? SimaiDocument::difficultyName(difficultyId)
+        : UiText::text(QStringLiteral("dialog.unsaved_field_changes.field.metadata"));
+    uiRequests_->requestChoice(
+        UiText::text(QStringLiteral("dialog.unsaved_field_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_field_changes.message")).arg(fieldName),
+        unsavedSectionChoices(),
+        QStringLiteral("cancel"),
+        [this, difficultyId, finish](const QString& choiceId) mutable {
+            if (choiceId == QLatin1String("cancel")) {
+                finish(false);
+                return;
+            }
+            if (choiceId == QLatin1String("save")) {
+                saveSectionOrAskForPath(difficultyId, std::move(finish));
+                return;
+            }
+
+            if (difficultyId > 0) {
+                if (!runWorkspaceMutation([&] {
+                        return workspace_->revertDifficultyChart(difficultyId).accepted;
+                    })) {
+                    finish(false);
+                    return;
+                }
+                publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+                finish(true);
+                return;
+            }
+
+            // There is no durable save point to reload for a never-saved
+            // document. Refusing the discard is the only safe answer there.
+            if (workspace_->snapshot().filePath.isEmpty()) {
+                finish(false);
+                return;
+            }
+            discardChanges();
+            finish(!workspace_->snapshot().dirty);
+        });
+}
+
 void QmlDocumentModel::saveSectionOrAskForPath(
     int difficultyId, std::function<void(bool)> onSaved)
 {
@@ -1000,6 +1076,9 @@ void QmlDocumentModel::publishWorkspaceCommit(
     Q_UNUSED(kind);
     Q_UNUSED(usedSystemEncoding);
     if (workspace_ == nullptr) return;
+    if (replacement) {
+        ++documentGeneration_;
+    }
     emitDocumentStateChanged();
     if (replacement) emit documentReplaced();
 }
@@ -1056,6 +1135,7 @@ bool QmlDocumentModel::saveToPath(const QString& path)
 
 void QmlDocumentModel::adoptBackendDocumentReplacement()
 {
+    ++documentGeneration_;
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     emitDocumentStateChanged();

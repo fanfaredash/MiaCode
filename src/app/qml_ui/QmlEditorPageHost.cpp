@@ -1,32 +1,17 @@
 #include "QmlEditorPageHost.h"
 
 #include "common/DebugLog.h"
+#include "QmlDocumentModel.h"
 #include "app/qml_ui/export/QmlExportSession.h"
 
-#include <QTimer>
-
-namespace {
-
-void appendPageHostLog(const QString& action, const QString& detail = QString())
-{
-    QString text = QStringLiteral("action=%1").arg(action);
-    if (!detail.trimmed().isEmpty()) {
-        text += QStringLiteral(" ") + detail.trimmed();
-    }
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("qml_ui/page_host"),
-        text);
-}
-
-} // namespace
-
 QmlEditorPageHost::QmlEditorPageHost(miacode::v2::ShellNotifications& notifications,
+                                     QmlDocumentModel& document,
                                      miacode::v2::EditorPageRouter*& routerSlot,
                                      QObject*& exportSessionSlot,
                                      QObject* parent)
     : QObject(parent)
     , notifications_(&notifications)
+    , document_(&document)
     , routerSlot_(&routerSlot)
     , exportSessionSlot_(&exportSessionSlot)
 {
@@ -40,9 +25,16 @@ QmlEditorPageHost::QmlEditorPageHost(miacode::v2::ShellNotifications& notificati
     });
     connect(&notifications, &miacode::v2::ShellNotifications::preferencesRequested, this, [this]() {
         if (overlayActive()) {
-            leaveOverlayPage();
+            requestPageSwitch([this]() {
+                if (!finishLeaveOverlay()) {
+                    return false;
+                }
+                emit preferencesRequested();
+                return true;
+            });
+        } else if (!navigationPending_) {
+            emit preferencesRequested();
         }
-        emit preferencesRequested();
     });
     connect(&notifications, &miacode::v2::ShellNotifications::coverExportRequested, this, [this](int difficultyId) {
         openCoverExport(difficultyId);
@@ -93,6 +85,33 @@ bool QmlEditorPageHost::resumeChartOrMetadata()
     return pages->enterMetadataPage();
 }
 
+bool QmlEditorPageHost::requestPageSwitch(std::function<bool()> action)
+{
+    if (navigationPending_ || document_ == nullptr || !action) {
+        return false;
+    }
+
+    navigationPending_ = true;
+    emit navigationPendingChanged();
+    const qulonglong documentGeneration = document_->documentGeneration();
+    QPointer<QmlEditorPageHost> self(this);
+    document_->requestLeaveCurrentField(
+        [self, documentGeneration, action = std::move(action)](bool mayLeave) mutable {
+            if (!self) {
+                return;
+            }
+            self->navigationPending_ = false;
+            emit self->navigationPendingChanged();
+            if (!mayLeave || self->document_ == nullptr
+                || self->document_->documentGeneration() != documentGeneration
+                || !action()) {
+                emit self->navigationRejected();
+                return;
+            }
+        });
+    return true;
+}
+
 bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
 {
     miacode::v2::EditorPageRouter* const pages = router();
@@ -100,16 +119,18 @@ bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
         return false;
     }
     rememberResumeDifficulty();
-    if (tab == QLatin1String("batch")) {
-        exportSessionObject()->setActiveTab(QStringLiteral("batch"));
-    } else {
-        exportSessionObject()->setActiveTab(QStringLiteral("export"));
-    }
-    if (!pages->enterExportPage()) {
-        return false;
-    }
-    markExportPageActive();
-    return true;
+    return requestPageSwitch([this, tab]() {
+        if (exportSessionObject() == nullptr || router() == nullptr) {
+            return false;
+        }
+        exportSessionObject()->setActiveTab(
+            tab == QLatin1String("batch") ? QStringLiteral("batch") : QStringLiteral("export"));
+        if (!router()->enterExportPage()) {
+            return false;
+        }
+        markExportPageActive();
+        return true;
+    });
 }
 
 bool QmlEditorPageHost::openExportPage()
@@ -124,19 +145,21 @@ bool QmlEditorPageHost::openLatencyPage()
         return false;
     }
     rememberResumeDifficulty();
-    if (!pages->enterLatencyPage()) {
-        return false;
-    }
-    // The page is QML now; only the active id has to change so MainSplitView
-    // shows it.
-    if (activePageId_ != QLatin1String("latency")) {
-        activePageId_ = QStringLiteral("latency");
-        emit activePageIdChanged();
-    }
-    return true;
+    return requestPageSwitch([this]() {
+        if (router() == nullptr || !router()->enterLatencyPage()) {
+            return false;
+        }
+        // The page is QML now; only the active id has to change so MainSplitView
+        // shows it.
+        if (activePageId_ != QLatin1String("latency")) {
+            activePageId_ = QStringLiteral("latency");
+            emit activePageIdChanged();
+        }
+        return true;
+    });
 }
 
-bool QmlEditorPageHost::leaveOverlayPage()
+bool QmlEditorPageHost::finishLeaveOverlay()
 {
     if (router() == nullptr) {
         return false;
@@ -148,23 +171,58 @@ bool QmlEditorPageHost::leaveOverlayPage()
     if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
         exportSessionObject()->leave();
     }
+    if (!resumeChartOrMetadata()) {
+        return false;
+    }
     activePageId_.clear();
     emit activePageIdChanged();
-    return resumeChartOrMetadata();
+    emit overlayPageLeft();
+    return true;
+}
+
+bool QmlEditorPageHost::leaveOverlayPage()
+{
+    if (router() == nullptr) {
+        return false;
+    }
+    if (!overlayActive()) {
+        return true;
+    }
+    return requestPageSwitch([this]() { return finishLeaveOverlay(); });
 }
 
 void QmlEditorPageHost::openMediaProcessingTools()
 {
+    if (navigationPending_) {
+        return;
+    }
     if (overlayActive()) {
-        leaveOverlayPage();
+        requestPageSwitch([this]() {
+            if (!finishLeaveOverlay()) {
+                return false;
+            }
+            emit mediaToolsRequested();
+            return true;
+        });
+        return;
     }
     emit mediaToolsRequested();
 }
 
 void QmlEditorPageHost::openNormalizeWholeChart()
 {
+    if (navigationPending_) {
+        return;
+    }
     if (overlayActive()) {
-        leaveOverlayPage();
+        requestPageSwitch([this]() {
+            if (!finishLeaveOverlay()) {
+                return false;
+            }
+            emit normalizeWholeChartRequested();
+            return true;
+        });
+        return;
     }
     emit normalizeWholeChartRequested();
 }
@@ -179,21 +237,21 @@ bool QmlEditorPageHost::openCoverExport(int difficultyId)
     if (router() == nullptr) {
         return false;
     }
-    // A direct export-page → cover-page navigation must release the video
-    // session before cover becomes the owner of the Tools-menu difficulty.
-    // Going through leaveOverlayPage already does this; sidebar and menu routes
-    // intentionally do not, so make the transition explicit here.
-    if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
-        exportSessionObject()->leave();
-    }
     rememberResumeDifficulty();
     const int selectedDifficultyId = difficultyId > 0 ? difficultyId : resumeDifficultyId_;
-    if (activePageId_ != QLatin1String("cover")) {
-        activePageId_ = QStringLiteral("cover");
-        emit activePageIdChanged();
-    }
-    emit coverPageRequested(selectedDifficultyId);
-    return true;
+    return requestPageSwitch([this, selectedDifficultyId]() {
+        // A direct export-page → cover-page navigation must release the video
+        // session before cover becomes the owner of the Tools-menu difficulty.
+        if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
+            exportSessionObject()->leave();
+        }
+        if (activePageId_ != QLatin1String("cover")) {
+            activePageId_ = QStringLiteral("cover");
+            emit activePageIdChanged();
+        }
+        emit coverPageRequested(selectedDifficultyId);
+        return true;
+    });
 }
 
 void QmlEditorPageHost::packAsZip()

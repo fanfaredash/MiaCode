@@ -137,59 +137,6 @@ bool writeDocumentFileAtomically(
 
 }  // namespace
 
-bool miacode::runtime::DocumentSessionHost::applyUnsavedChangesChoice(
-    const QString& choiceId, const QString& logContext)
-{
-    if (choiceId == QLatin1String("save")) {
-        QElapsedTimer saveTimer;
-        saveTimer.start();
-        // "Save" must have the same durable meaning everywhere: onSaveFile()
-        // commits the current field first and then atomically writes it.
-        const bool saved = onSaveFile();
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("on_save_file"),
-            saveTimer.elapsed(),
-            QStringLiteral("trigger=%1 result=%2")
-                .arg(logContext, saved ? QStringLiteral("saved") : QStringLiteral("failed"))
-        );
-        return saved;
-    }
-    const bool shouldContinue = choiceId == QLatin1String("discard");
-    if (shouldContinue) {
-        anchorCurrentFieldCleanState();
-        state_.documentDirty_ = false;
-        state_.currentFieldDirty_ = false;
-        updateDirtyState();
-        session_.updateWindowTitle();
-    }
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/document"),
-        QStringLiteral("%1 result=%2").arg(logContext, choiceId)
-    );
-    return shouldContinue;
-}
-
-bool miacode::runtime::DocumentSessionHost::maybeSaveBeforeContinue()
-{
-    runAutosaveCheck(false);
-    if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
-        return true;
-    }
-    // This synchronous compatibility path remains only for the internal
-    // no-difficulty activation path. QML document replacement and shell close
-    // use requestLeaveDocument(), whose choice arrives asynchronously.
-    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
-        UiText::text(QStringLiteral("dialog.unsaved_changes.message"))
-    );
-    return applyUnsavedChangesChoice(
-        unsavedChangesChoiceName(choice), QStringLiteral("maybe_save_before_continue"));
-}
-
 void miacode::runtime::DocumentSessionHost::requestLeaveDocument(std::function<void(bool)> onDecided)
 {
     const auto decide = [onDecided = std::move(onDecided)](bool leave) {
@@ -212,22 +159,10 @@ void miacode::runtime::DocumentSessionHost::requestLeaveDocument(std::function<v
         return;
     }
 
-    miacode::v2::UiRequestService* const requests = session_.uiRequestService();
-    if (requests == nullptr) {
-        // No shell to ask. Refusing to leave is the answer that cannot lose
-        // work.
-        decide(false);
-        return;
-    }
-
-    requests->requestChoice(
-        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
-        UiText::text(QStringLiteral("dialog.unsaved_changes.message")),
-        unsavedChangesChoices(),
-        QStringLiteral("cancel"),
-        [this, decide](const QString& choiceId) {
-            decide(applyUnsavedChangesChoice(choiceId, QStringLiteral("request_leave_document")));
-        });
+    // The product shell always installs the QML handler. Refuse if it has
+    // disappeared so a teardown cannot turn an unresolved dirty document into
+    // an implicit discard.
+    decide(false);
 }
 
 namespace {

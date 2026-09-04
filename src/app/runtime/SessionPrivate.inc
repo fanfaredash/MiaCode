@@ -50,7 +50,6 @@
     );
     void finishFrameBootstrap(const std::function<void(const QString&)>& logStartupStage);
     void setPreviewFixedTimerHighResolutionActive(bool active);
-    bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     bool saveToPath(const QString& path);
     void runAutosaveCheck(bool allowHistory = true);

@@ -36,6 +36,8 @@ class TimelineQuickItem : public QQuickItem
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
     Q_PROPERTY(int timelineTop READ timelineTop NOTIFY sceneMetricsChanged)
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)
+    Q_PROPERTY(QString hoverTooltipText READ hoverTooltipText NOTIFY hoverTooltipChanged)
+    Q_PROPERTY(QPointF hoverTooltipPosition READ hoverTooltipPosition NOTIFY hoverTooltipChanged)
 
 public:
     explicit TimelineQuickItem(QQuickItem* parent = nullptr);
@@ -64,6 +66,8 @@ public:
     void setFollowProgressEnabled(bool enabled);
     int timelineTop() const;
     bool isReady() const;
+    QString hoverTooltipText() const;
+    QPointF hoverTooltipPosition() const;
 
     Q_INVOKABLE void cycleZoomPreset();
     Q_INVOKABLE void stepZoomPreset(int deltaSteps);
@@ -79,6 +83,7 @@ signals:
     void followProgressEnabledChanged();
     void sceneMetricsChanged();
     void readyChanged();
+    void hoverTooltipChanged();
     void timelineSurfaceReady();
     void playheadChanged(double second);
     void headerNavigateRequested(double second);
@@ -118,6 +123,7 @@ private:
     void stopHeldHorizontalKeyScroll(int key = 0);
     void applyHeldHorizontalKeyScrollTick();
     void bindRenderCadence(QQuickWindow* window);
+    void updateHoverTooltip(const QString& text, const QPointF& position);
     QPointer<TimelineQuickStateBridge> stateBridge_;
     QMetaObject::Connection bridgeRenderStateConnection_;
     QMetaObject::Connection bridgePlayheadConnection_;
@@ -135,6 +141,8 @@ private:
     bool cachedFollowProgressEnabled_ = true;
     int cachedTimelineTop_ = 0;
     bool ready_ = false;
+    QString hoverTooltipText_;
+    QPointF hoverTooltipPosition_;
     quint64 appearanceRevision_ = 0;
     qreal cachedDevicePixelRatio_ = 0.0;
     // Phase-4e-old-opt — was QString built via per-paint label-name

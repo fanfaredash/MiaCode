@@ -32,10 +32,10 @@
       `ApplicationServices&`，`QmlEditorPageHost` 经 `EditorPageRouter` 路由，且
       `src/app/mainwindow/` 已删除。root 拖放仍由 `QmlChartDropBridge`（单一 QWindow event
       filter）+ `Main.qml` 提示层承载，不再创建 `ChartDropOverlay(QWidget)`。
-- [ ] **运行时 Widgets 残留仍待清理**：`Session` / `RuntimeContext::Ui` / `RuntimeContext::State` 仍携带旧宿主状态，
-      `src/app/main.cpp` 已切换为 `QGuiApplication`，但 CMake 仍链接 `Qt6::Widgets`；隐藏的
-      `DocumentSessionHost` 还保留 native fallback 的旧切页方法。它们是阶段 4 的后续拆除项，
-      不能因为 `mainwindow/` 已删除就宣称 Widgets 已归零。
+- [x] **运行时 Widgets 残留已清理（2026-09-05）**：`src/app/main.cpp` 与产品 CMake 均不再
+      依赖 `QApplication` / `Qt6::Widgets`；文档页面切换的未保存确认、保存路径选择和关闭前
+      决策统一由 QML `UiRequestService` 处理。`Session` / `RuntimeContext` 中仍有迁移期状态，
+      但不再携带产品 Widgets 类型或生命周期。
 
       已核对的非误报项：ZIP 打包使用 `UiRequestService`，偏好设置只转发
       `preferencesRequested` 给 QML，音视频工具也经 QML 请求边界；这些不是 v1 UI 回接。
@@ -118,7 +118,7 @@
 
 | 项 | 实测（`4416596d`，2026-09-02） | 位置 |
 |---|---|---|
-| 链接声明 | `COMPONENTS … Widgets …` + `Qt6::Widgets` | `CMakeLists.txt:101`、`:844` |
+| 链接声明 | 产品 `MiaCode` 不再声明或链接 `Qt6::Widgets`；Widgets 只在 dev-tool spec 依赖中出现 | `CMakeLists.txt:95`、`:1232` |
 | 应用对象 | `QGuiApplication`（2026-09-04 起；CLI 与 GUI 共用） | `src/app/main.cpp:412` |
 | 隐藏 `MainWindow` | **已删除（0 文件）**；`Session`/runtime hosts 已接管装配 | `src/app/runtime/`、`src/app/runtime/SessionBootstrap.cpp` |
 | Preview/Timeline 当前宿主 | `PreviewHost` / `TimelineHost` 分别占据两个 surface 槽位；兼容投影由 `PlaybackSurfaceAdapters` 转到同一个 `PlaybackCoordinator`，实现体仍约 8,975 行并待 4.9 清理 | `src/app/runtime/{preview,timeline,playback}/` |
@@ -133,7 +133,7 @@
 | 位置 | 内容 |
 |---|---|
 | ~~`src/app/qml_ui/export/QmlExportSession.cpp`~~ | ~~`QFileDialog` ×5、`QMessageBox` ×5~~ —— **已清零（2026-08-29）**。`src/app/qml_ui` 全目录现已无 Widgets 对话框 |
-| `src/app/qml_ui/QmlEditorPageHost.*` | 已不再收养 `QWidget`，页面路由改走 `EditorPageRouter`；runtime 的 `DocumentSessionHost` 仍保留 native fallback 的旧切页方法，不能记作 Widgets 已归零（详见 §0） |
+| `src/app/qml_ui/QmlEditorPageHost.*` | 不收养 `QWidget`；页面路由经 `QmlDocumentModel::requestLeaveCurrentField()` 异步确认后再走 `EditorPageRouter`，runtime 不再保留 native 弹窗 fallback |
 | `src/app/qml_ui/drop/QmlChartDropBridge.*` | 仅负责 root `QWindow` 拖放事件、路径筛选、请求代次和 busy/late-callback 保护；视觉提示由 `Main.qml` 承载 |
 
 `MainView.qml` 的对话框已是 `QtQuick.Dialogs`（非 Widgets），这条不用改。
@@ -415,10 +415,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - [ ] **PlaybackHost 二次拆分（阶段 4.5–4.9，当前主线）**：目标仍是「一个时间域、一个播放权威、
       两个独立投影」；4.8 已完成协调器契约收缩和旧类型重命名，4.9a 已完成运行时上下文边界外置，
       后续继续清理按宿主共享状态与 Widgets 残留，之后才算本主线完成。
-- [ ] **runtime Widgets 残留清理**：拆掉 `RuntimeContext::Ui` / `RuntimeContext::State` 的共享状态袋（原 `HostUi` / `HostState`）及 native fallback
-      依赖；宿主与 CLI entry 已先切换为 `QGuiApplication`，唯一 `QQmlApplicationEngine` 由
-      `QmlUiBootstrap` 持有。完成源集迁移后，再从 CMake、生产 target 和全部 fallback 去除
-      `Qt6::Widgets` / `QWidget` / `QApplication` API。
+- [x] **runtime Widgets 残留清理（2026-09-05）**：宿主与 CLI entry 使用 `QGuiApplication`，唯一
+      `QQmlApplicationEngine` 由 `QmlUiBootstrap` 持有；页面/文档确认、保存路径、时间轴提示和
+      导出进度均由 QML/回调承载。产品源集、产品级 CMake 组件与 `MiaCode` 链接行已去除
+      `Qt6::Widgets` / `QWidget` / `QApplication` 依赖，Widgets 仅留给 dev-tool spec。
 - [ ] **4.5–4.9 后续主线（非 GUI 验收）**：
 
       > 统一边界原则：**一个时间域、一个播放权威、两个独立投影**。Preview 与 Timeline 可以
@@ -494,10 +494,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - [ ] `src/app/ui/` 的 widget 辅助件（`UiComponents` 等）
       随之删除或改为非 Widget 服务；同时替换
       `QStyleFactory`、`topLevelWidgets`、native Widget effect 等旧语义。
-- [ ] `main.cpp` 最后换为 `QGuiApplication` + `QQmlApplicationEngine`；不得机械替换后继续
-      依赖 `QApplication` API。
-- [ ] `CMakeLists.txt` 的 Qt components 与 `MiaCode` target 去掉 `Widgets`；生产代码、全部
-      构建 target 和隐藏 fallback 均不得重新引入 QWidget 类型。
+- [x] `main.cpp` 已换为 `QGuiApplication` + `QQmlApplicationEngine`；产品代码不再依赖
+      `QApplication` API。
+- [x] `CMakeLists.txt` 的产品 Qt components 与 `MiaCode` target 已去掉 `Widgets`；产品源集和
+      隐藏 fallback 不再引入 QWidget 类型，Widgets 只属于 dev-tool spec target。
 - [ ] `ShaderTools` 若仅为构建期工具，不计入运行时依赖；`Qt6::Svg`、`Qt6::OpenGL`、
       `Qt6::Network`、`Qt6::MultimediaQuickPrivate` 按实际功能和平台条件单独验收。
 - **Architecture Complete 完成标志**：隐藏 `MainWindow` / native QWidget 拖放 overlay 已清除，
@@ -557,7 +557,7 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 | **2** | **剪 `src/app/ui/` 的死表面** | **已完成（2026-09-04）** |
 | 3 | 齿轮图标渲染搬进 QML，摘掉 `Qt6::Svg` | 已完成（2026-09-04） |
 | 4 | `main.cpp` → `QGuiApplication` + `QQmlApplicationEngine` | **宿主切换与 GUI 初步验收通过（2026-09-04）**：CLI entry 已切换；唯一 engine 仍由 `QmlUiBootstrap` 持有；runtime backend 的 Widgets 剥离转入第 5 步继续 |
-| 5 | CMake 去掉 `Qt6::Widgets` / `Qt6::Svg`，移入 `dependency_allowlist_spec` 禁止表 | **进行中**：产品 `Qt6::Svg` 已移除；旧原生 shell 三组翻译单元及旧 C++ 全屏播放实现已移出产品源集；`Qt6::Widgets` 等待剩余 runtime 源集迁移后移除 |
+| 5 | CMake 去掉 `Qt6::Widgets` / `Qt6::Svg`，移入 `dependency_allowlist_spec` 禁止表 | **已完成（2026-09-05）**：产品目标与产品级 Qt 组件声明均已移除；真实 document/page fallback 已迁移到 QML async；Widgets 仅保留给 dev-tool spec target |
 | — | 补功能：缺陷 2（方向键 seek）、缺陷 5（全屏控件） | 未开始；#5 会产生新 UI，需所有者定夺 |
 
 累计：`Ui` 字段 104 → 34；三轮净删约 1530 行。
@@ -718,10 +718,19 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   边界保护保持不变。`MiaCode` Release 编译通过，相关测试 4/4 通过；完整 CTest 仍为
   105/108，三个既有失败项未变化。
 - **第 5 步本轮继续收窄对话框 guard 的应用类型（2026-09-05）**：
-  `PreviewShortcutOverrideGuard` 安装事件过滤器只需要 `QObject`，改用
-  `QCoreApplication::instance()`，`DialogLocalization.h` 不再直接依赖 `QApplication`；实际
-  `QDialog/QMessageBox/QWidget` fallback 行为保持不变。`MiaCode` Release 编译通过，相关测试
-  4/4 通过；完整 CTest 仍为 105/108，三个既有失败项未变化。
+      `PreviewShortcutOverrideGuard` 安装事件过滤器只需要 `QObject`，改用
+      `QCoreApplication::instance()`，`DialogLocalization.h` 不再直接依赖 `QApplication`；实际
+      `QDialog/QMessageBox/QWidget` fallback 行为保持不变。`MiaCode` Release 编译通过，相关测试
+      4/4 通过；完整 CTest 仍为 105/108，三个既有失败项未变化。
+- **第 5 步完成（2026-09-05）**：剩余真实 Widgets fallback 已迁移并清除。页面路由由
+  `QmlDocumentModel::requestLeaveCurrentField()` 统一处理当前字段的 Save/Discard/Cancel，
+  无路径保存走 `UiRequestService::requestFile`；`QmlEditorPageHost` 在异步确认成功且文档代际
+  未变化后才提交页面切换，并拒绝重复/过期回调。删除 `DocumentFlow` 的同步未保存弹窗、
+  `DocumentAutosave` 的 `QFileDialog` 保存路径、`Shared::centerDialogOnAnchor` 与
+  `DialogLocalization.h`。`MiaCode` 产品链接行和产品级 `find_package` 不再含 `Qt6::Widgets`，
+  `dependency_allowlist_spec` 已将其列入禁止表；Widgets 仅留在 dev-tool specs。Release 构建
+  通过，专项生命周期合约测试已扩展到异步页面守卫；完整 CTest 仍为 105/108，既有三个失败项
+  未变化。随后进入 Phase5 的构建/GUI/静态最终验收与远程同步。
 
 #### 第 2 步：一处需要更正的既往判断
 
@@ -1446,7 +1455,7 @@ PreviewHost / TimelineHost 的重复缓存放大。
 | 编辑器 | `src/app/qml_ui/QmlEditorController.*`、`QmlEditorInputBridge.*`、`editor/SourceEditor.qml`、`SimaiSyntaxHighlighter.*` |
 | 快捷键 | `src/app/qml_ui/QmlShortcutModel.*` ← `src/app/ui/ShortcutRegistry.*` |
 | 视频导出 | `src/app/qml_ui/export/QmlExportSession.*`、`export/ExportVideoPage.qml` |
-| 页面宿主 | `src/app/qml_ui/QmlEditorPageHost.*`（QML-only `EditorPageRouter`；native fallback 仍在 `DocumentSessionHost`，见 §0） |
+| 页面宿主 | `src/app/qml_ui/QmlEditorPageHost.*`（QML-only `EditorPageRouter`；异步离开守卫由 `QmlDocumentModel` 提供） |
 | 主壳 | `src/app/qml_ui/Main.qml`、`layout/MainView.qml` |
 | 设置页 | `preview/AudioSettingsDialog.qml` + `QmlAudioSettingsModel.*`、`preview/PreviewSettingsDialog.qml` + `QmlPreviewSettingsModel.*`、`preferences/PreferencesDialog.qml` + `QmlPreferencesModel.*` |
 | 表单控件 | `components/LabeledCombo.qml`、`LabeledSlider.qml`、`EditableValue.qml`、`DialogDrag.qml` |

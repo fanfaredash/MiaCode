@@ -334,10 +334,43 @@ Item {
         target: state
 
         function onDifficultyEditorActivationRequested(difficultyId) {
-            if (root.pages.overlayActive)
-                root.pages.leaveOverlayPage()
+            if (root.pages.overlayActive) {
+                // Overlay exit may need an asynchronous unsaved-field answer.
+                // Keep the requested difficulty until the page host confirms
+                // the exit; selecting it here would bypass a cancellation.
+                pendingDifficultyActivation = difficultyId
+                if (!root.pages.leaveOverlayPage())
+                    pendingDifficultyActivation = 0
+                return
+            }
             root.commands.selectDifficulty(difficultyId)
             state.activeSidebarView = "chart"
+        }
+    }
+
+    property int pendingDifficultyActivation: 0
+
+    Connections {
+        target: root.pages
+
+        function onOverlayPageLeft() {
+            if (root.pendingDifficultyActivation <= 0)
+                return
+            const difficultyId = root.pendingDifficultyActivation
+            root.pendingDifficultyActivation = 0
+            root.commands.selectDifficulty(difficultyId)
+            state.activeSidebarView = "chart"
+        }
+
+        function onNavigationRejected() {
+            root.pendingDifficultyActivation = 0
+            if (root.pages.activePageId === "export"
+                    || root.pages.activePageId === "cover")
+                state.activeSidebarView = "export"
+            else if (root.pages.activePageId === "latency")
+                state.activeSidebarView = "tools"
+            else
+                state.activeSidebarView = "chart"
         }
     }
 

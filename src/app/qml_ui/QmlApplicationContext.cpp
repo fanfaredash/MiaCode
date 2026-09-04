@@ -16,7 +16,8 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
     , timeline_(services.shellNotifications(), services.timelineSurfaceSlot(), this)
     , commands_(document_, services.editorPageRouterSlot(),
                 services.documentBridgeSlot(), this)
-    , pages_(services.shellNotifications(), services.editorPageRouterSlot(), services.exportPageSessionSlot(), this)
+    , pages_(services.shellNotifications(), document_, services.editorPageRouterSlot(),
+             services.exportPageSessionSlot(), this)
     // From the assembly's slot: MainWindow installs the session during its own
     // construction, which finishes before this context is built.
     , coverExport_(*qobject_cast<QmlExportSession*>(services.exportPageSession()),
