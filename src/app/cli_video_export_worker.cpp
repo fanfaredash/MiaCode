@@ -5,7 +5,7 @@
 #include "common/OperationLog.h"
 #include "common/WaveformCache.h"
 
-#include <QApplication>
+#include <QGuiApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -48,7 +48,7 @@ void writeWorkerJsonLine(const QJsonObject& object)
 
 namespace miacode::app::entry {
 
-int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
+int runCliVideoExportWorker(QGuiApplication& app, QString* errorMessage)
 {
     MC_OP("runCliVideoExportWorker");
     QString workerJobId;

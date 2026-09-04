@@ -6,7 +6,6 @@
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "UiText.h"
 #include "UiTheme.h"
-#include "UiNativeWindowTheme.h"
 #include "runtime/validation/ValidationHost.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "runtime/document/DocumentSessionHost.h"
@@ -400,15 +399,7 @@ void miacode::runtime::ShellHost::setOutlineDockCollapsed(bool collapsed)
 
 void miacode::runtime::ShellHost::applySystemWindowBackdrop(QWidget* target) const
 {
-#ifdef Q_OS_WIN
-    if (target != nullptr) {
-        UiNativeWindowTheme::applyToWidget(target);
-        return;
-    }
-    UiNativeWindowTheme::applyToAllTopLevelWidgets();
-#else
     Q_UNUSED(target);
-#endif
 }
 
 int miacode::runtime::ShellHost::computeBottomTabsDeviceHeight() const

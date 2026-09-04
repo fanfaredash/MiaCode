@@ -22,11 +22,13 @@ class QmlChartDropBridge;
 }
 
 // The single UI entry. Builds the non-Widget application services first, then
-// drives a hidden Session as its backend: the widgets layer still owns the
-// remaining actions and dialogs while the whole visible shell is QML. The
+// drives the runtime Session backend while the whole visible shell is QML. The
 // document domain, the UI-request boundary and the job-progress surface are no
 // longer among what it owns — they belong to ApplicationServices, which is
-// constructed before the window and destroyed after it.
+// constructed before the window and destroyed after it. The Session backend
+// still contains the remaining legacy Widget-compatible runtime helpers; those
+// are the next source-set migration boundary before Qt6::Widgets can leave the
+// product target.
 class QmlUiBootstrap final : public QObject
 {
     Q_OBJECT

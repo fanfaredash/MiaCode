@@ -155,7 +155,7 @@ QML 收到的第一眼就是终态，不存在"活动难度尚未设定"的可�
 | 2 ✅ | 建立 `PreviewSession` 与 `TimelineSession`，`QuickShellController` 退役 | **已完成 2026-08-30**（`TimelineQuickModel` 所有权除外，所有者决定延后）。落点是三个对象而非两个：`QmlTimelineModel` / `QmlPreviewModel` / `QmlShellLifecycle`。轮询定时器消失，离散状态由 `MainWindow::shellPresentationChanged` 推送、播放头由 `shellPreviewPlayheadChanged` 推送；`surfaceHost` 分支归零 |
 | 3 | `ExportService`：视频沿用，封面/ZIP/Net 重建为 QML 并去除其引擎层的 widgets 耦合 | Widgets 对话框归零 |
 | 3.5 | 应用宿主脱钩与依赖分层：抽出 `ApplicationServices`，让 QML context 不再依赖 `MainWindow`；明确 Net、SVG、OpenGL、Multimedia private bridge 的归属 | `QmlApplicationContext` 不再持有 `MainWindow&`；默认目标依赖 allowlist 可解释 |
-| 4 | 删除 `MainWindow`，从链接中移除 `Qt6::Widgets`，最后切换 `QGuiApplication` | **进行中（2026-09-04）：** 隐藏 `MainWindow` 已删除，Widgets 清理第 2 步已完成（剪除 runtime 的 55 个死 UI include 与 5 个无调用样式函数）；仍待第 3–5 步、`QGuiApplication` 切换及最终依赖验证。最终标志仍是无隐藏 `MainWindow` / QWidget、Widgets 清零、跨平台部署与运行时依赖验证通过。 |
+| 4 | 删除 `MainWindow`，从链接中移除 `Qt6::Widgets`，最后切换 `QGuiApplication` | **进行中（2026-09-04）：** 隐藏 `MainWindow` 已删除；齿轮 C++ SVG 路径已清理；`main.cpp` 与 CLI entry 已切换为 `QGuiApplication`，唯一 `QQmlApplicationEngine` 仍由 `QmlUiBootstrap` 持有。`Session` / document / validation / shell 的旧 runtime backend 仍在产品源集并继续需要 Widgets，因此尚未完成 Widgets 清零与最终部署/运行时验证。 |
 
 ## 9. 测试策略
 

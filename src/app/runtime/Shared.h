@@ -187,7 +187,6 @@ QIcon makePreviewEnterFullscreenIcon(const QColor& color);
 QIcon makePreviewExitFullscreenIcon(const QColor& color);
 QIcon makeDifficultyBadgeIcon(int difficultyId);
 QIcon makeOutlineCloseIcon(const QColor& color);
-QIcon makeSettingsGearIcon(const QColor& color);
 QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor);
 QIcon makeMusicNoteIcon(const QColor& color);
 QIcon makeExportAccessIcon(const QColor& color);

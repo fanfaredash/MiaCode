@@ -92,7 +92,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Multimedia Quick Qml QuickControls2 ShaderTools Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Multimedia Quick Qml QuickControls2 ShaderTools)
 
 qt_policy(SET QTP0001 NEW)
 
@@ -997,10 +997,6 @@ endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
-# Qt SVG — renders the Google Material "settings" gear toolbar icon
-# (makeSettingsGearIcon, MainWindowShared.cpp) via QSvgRenderer.
-target_link_libraries(MiaCode PRIVATE Qt6::Svg)
-
 # ---------------------------------------------------------------------------
 # QtAVPlayer (FFmpeg) — preview background-video decode backend.
 #
@@ -2041,7 +2037,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/timeline/TimelineSlowRefresh.cpp
             src/timeline/quick/TimelineQuickStateBridge.cpp
             src/tools/muri/MuriStaticChecker.cpp
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Svg Qt6::Quick
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Quick
         INCLUDES
             ${CMAKE_CURRENT_BINARY_DIR}/generated
             third_party/bass/include
@@ -2974,7 +2970,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     # Drift guard for docs/ops/DEPENDENCY_ALLOWLIST.md (stage 3.5, item 4).
     # Parses every target_link_libraries(MiaCode …) call plus the doc's
     # allow/forbid/media-adapter tables, so an undocumented dependency, a stale
-    # doc row, a forbidden link (Qt6::Network today, Qt6::Widgets after stage 4),
+    # doc row, a forbidden link (Qt6::Network today, Qt6::Widgets after the
+    # product source migration),
     # an unpinned Qt version, or QtAVPlayer headers leaking outside the media
     # adapter layer all fail the build's test suite.
     miacode_add_dev_tool(dependency_allowlist_spec TEST

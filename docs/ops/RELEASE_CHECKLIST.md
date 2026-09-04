@@ -11,7 +11,7 @@ This checklist documents the current local-release flow. GitHub Actions were rem
 ## Clean Build
 
 - [ ] Start from a clean clone or a clean working tree.
-- [ ] Confirm required Qt modules are available: `Core`, `Gui`, `Widgets`, `OpenGL`, `Qml`, `Quick`, `Multimedia`, `Svg`.
+- [ ] Confirm required Qt modules are available: `Core`, `Gui`, `Widgets`, `OpenGL`, `Qml`, `Quick`, `Multimedia`.
 - [ ] Confirm FFmpeg runtime/dev SDK provisioning scripts still point at the intended versions.
 
 ## Windows Package

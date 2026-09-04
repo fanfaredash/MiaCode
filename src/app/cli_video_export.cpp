@@ -6,7 +6,7 @@
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 
-#include <QApplication>
+#include <QGuiApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QDir>
@@ -60,7 +60,7 @@ bool parseCliResolutionToken(const QString& token, int* outputWidth, int* output
 
 namespace miacode::app::entry {
 
-int runCliVideoExport(QApplication& app, QString* errorMessage)
+int runCliVideoExport(QGuiApplication& app, QString* errorMessage)
 {
     MC_OP("runCliVideoExport");
     try {

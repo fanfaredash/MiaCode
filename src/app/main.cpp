@@ -1,10 +1,6 @@
 #include "AppVersion.h"
 #include "qml_ui/QmlUiBootstrap.h"
-#include "runtime/Session.h"
-#include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
-#include "UiTheme.h"
-#include "UiNativeWindowTheme.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -14,7 +10,7 @@
 #include "common/WaveformCache.h"
 #include "SimaiNativeParser.h"
 
-#include <QApplication>
+#include <QCoreApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QDateTime>
@@ -22,6 +18,7 @@
 #include <QFile>
 #include <QFont>
 #include <QFontInfo>
+#include <QGuiApplication>
 #include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -29,7 +26,6 @@
 #include <QTimer>
 #include <QStringList>
 #include <QSurfaceFormat>
-#include <QStyleFactory>
 #include <QDir>
 #include <QRegularExpression>
 #include <QQuickWindow>
@@ -112,27 +108,6 @@ void appendAppShutdownRuntimeLog(const QString& action, const QString& payload =
     );
 }
 
-QString summarizeTopLevelWidgets()
-{
-    const auto widgets = QApplication::topLevelWidgets();
-    QStringList items;
-    items.reserve(widgets.size());
-    for (QWidget* widget : widgets) {
-        if (widget == nullptr) {
-            continue;
-        }
-        items.append(
-            QStringLiteral("%1(vis=%2 hidden=%3 active=%4 title=%5)")
-                .arg(widget->metaObject() != nullptr ? widget->metaObject()->className() : QStringLiteral("unknown"))
-                .arg(widget->isVisible() ? 1 : 0)
-                .arg(widget->isHidden() ? 1 : 0)
-                .arg(widget->isActiveWindow() ? 1 : 0)
-                .arg(widget->windowTitle().trimmed().isEmpty() ? QStringLiteral("(empty)") : widget->windowTitle().trimmed())
-        );
-    }
-    return items.join(QStringLiteral("; "));
-}
-
 QString summarizeTopLevelWindows()
 {
     const auto windows = QGuiApplication::topLevelWindows();
@@ -165,7 +140,7 @@ int main(int argc, char* argv[])
     // process died in static init / DLL load (outside our reach), which
     // is a fundamentally different debug path than a crash inside our
     // code. Written before MC_OP, before crash_recovery::install, and
-    // before QApplication construction so a crash in any of those still
+    // before QGuiApplication construction so a crash in any of those still
     // leaves the breadcrumb behind.
     miacode::oplog::writeStartupBeacon(MIACODE_DISPLAY_VERSION_STRING);
 
@@ -201,7 +176,7 @@ int main(int argc, char* argv[])
 #endif
     // Install crash-time autosave handlers BEFORE anything else can fail.
     // This way an early-startup segfault (e.g. graphics driver bug during
-    // QApplication construction) still gets a chance to flush the
+    // QGuiApplication construction) still gets a chance to flush the
     // last-known document text — though in practice early crashes happen
     // before any document is loaded so the snapshot is empty / safe.
     //
@@ -312,14 +287,14 @@ int main(int argc, char* argv[])
     miacode::oplog::appendStartupBeaconLine("phase=before_set_qt_attributes");
 #endif
     if (dontCreateNativeWidgetSiblingsEnabled) {
-        QApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+        QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
     }
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=after_set_qt_attributes");
 #endif
 
     // Diagnostic: capture Qt's scene-graph render timings into our runtime log
-    // when the user opts in. Has to happen before QApplication construction
+    // when the user opts in. Has to happen before QGuiApplication construction
     // because Qt reads QSG_RENDER_TIMING / QT_LOGGING_RULES once at startup
     // and the categories are gated on those env vars. We append our category
     // override to whatever the user already has rather than overwriting, so
@@ -434,7 +409,7 @@ int main(int argc, char* argv[])
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=before_qapplication_construct");
 #endif
-    QApplication app(argc, argv);
+    QGuiApplication app(argc, argv);
     miacode::hang_watchdog::installGuiHeartbeat(&app);
     miacode::diag::installPeriodicProcessResourceGauge(&app);
 #ifdef Q_OS_WIN
@@ -520,7 +495,7 @@ int main(int argc, char* argv[])
             QStringLiteral("startup/qt_config"),
             QString("graphics_api=%1 dont_create_native_widget_siblings=%2 cli_export=%3 cli_export_worker=%4")
                 .arg(forceOpenGlGraphicsApi ? appliedGraphicsBackend : QStringLiteral("PlatformDefault"))
-                .arg(QApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) ? 1 : 0)
+                .arg(QCoreApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) ? 1 : 0)
                 .arg(cliVideoExportRequested ? 1 : 0)
                 .arg(cliVideoExportWorkerRequested ? 1 : 0)
         );
@@ -539,8 +514,7 @@ int main(int argc, char* argv[])
     app.setApplicationName("MiaCode");
     app.setApplicationVersion(MIACODE_DISPLAY_VERSION_STRING);
     // First-run detection. The preferences file is auto-created the first
-    // time a UiText/UiTheme preference is read (the UiTheme::applyApplicationTheme
-    // call just below is the first such read), so we must probe its existence
+    // time a UiText preference is read, so we must probe its existence
     // *here* — after the application name is set (AppConfigLocation depends on
     // it) but before anything reads a preference. "No preferences on this
     // machine" == show the welcome / initial-config dialog. The --welcome flag
@@ -551,8 +525,7 @@ int main(int argc, char* argv[])
     // current schema gets the welcome dialog once more so new first-run choices
     // (e.g. the Chinese-input mode) are surfaced and re-saved under the new
     // schema. Probe the RAW on-disk schema HERE — storedPreferencesSchema()
-    // does not normalize, and this must run before applyApplicationTheme() below
-    // auto-creates/rewrites the file with the current schema.
+    // does not normalize, and this must run before QML reads the preferences.
     const bool miacodePreferencesSchemaOutdated =
         UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema();
     const bool shouldShowWelcomeDialog =
@@ -563,13 +536,7 @@ int main(int argc, char* argv[])
 #ifndef Q_OS_MACOS
     app.setWindowIcon(appIcon);
 #endif
-    app.setStyle(QStyleFactory::create("Fusion"));
-    UiTheme::applyApplicationTheme(app);
-    // Keep the tooltip fade effect, but disable the slide/scroll animation (on
-    // Windows these mirror the OS tooltip fade/animate effects).
-    QApplication::setEffectEnabled(Qt::UI_FadeTooltip, true);
-    QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
-    logStartupStage("app_style_ready");
+    logStartupStage("gui_application_ready");
 
     {
         QStringList cjkUiFamilies;
@@ -621,12 +588,6 @@ int main(int argc, char* argv[])
     // charts through the same MainWindow code paths).
     miacode::crash_recovery::setSessionMarkerEnabled(true);
 
-    // Auto-theme native title bars of every QWidget top-level (dialogs,
-    // message boxes) as they show, including tools-layer dialogs that can't
-    // reach MainWindow::WindowSection. QML root windows are themed by
-    // QmlUiBootstrap. GUI-only: CLI runs above never show windows.
-    UiNativeWindowTheme::installAutoApplyFilter();
-
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QElapsedTimer appExecElapsed;
@@ -643,10 +604,8 @@ int main(int argc, char* argv[])
         postLastWindowClosedElapsed.restart();
         appendAppShutdownRuntimeLog(
             QStringLiteral("last_window_closed"),
-            QStringLiteral("quit_on_last_window_closed=%1 top_level_widgets=%2 widgets={%3} top_level_windows=%4 windows={%5}")
+            QStringLiteral("quit_on_last_window_closed=%1 top_level_windows=%2 windows={%3}")
                 .arg(app.quitOnLastWindowClosed() ? 1 : 0)
-                .arg(QApplication::topLevelWidgets().size())
-                .arg(summarizeTopLevelWidgets())
                 .arg(QGuiApplication::topLevelWindows().size())
                 .arg(summarizeTopLevelWindows())
         );
@@ -660,12 +619,10 @@ int main(int argc, char* argv[])
         const qint64 elapsedMs = postLastWindowClosedElapsed.isValid() ? postLastWindowClosedElapsed.elapsed() : -1;
         appendAppShutdownRuntimeLog(
             QStringLiteral("last_window_closed_heartbeat"),
-            QStringLiteral("count=%1 elapsed_ms=%2 closing_down=%3 top_level_widgets=%4 widgets={%5} top_level_windows=%6 windows={%7}")
+            QStringLiteral("count=%1 elapsed_ms=%2 closing_down=%3 top_level_windows=%4 windows={%5}")
                 .arg(shutdownHeartbeatCount)
                 .arg(elapsedMs)
                 .arg(QCoreApplication::closingDown() ? 1 : 0)
-                .arg(QApplication::topLevelWidgets().size())
-                .arg(summarizeTopLevelWidgets())
                 .arg(QGuiApplication::topLevelWindows().size())
                 .arg(summarizeTopLevelWindows())
         );
@@ -674,10 +631,8 @@ int main(int argc, char* argv[])
         shutdownHeartbeatTimer.stop();
         appendAppShutdownRuntimeLog(
             QStringLiteral("about_to_quit"),
-            QStringLiteral("after_last_window_closed_ms=%1 top_level_widgets=%2 widgets={%3} top_level_windows=%4 windows={%5}")
+            QStringLiteral("after_last_window_closed_ms=%1 top_level_windows=%2 windows={%3}")
                 .arg(postLastWindowClosedElapsed.isValid() ? postLastWindowClosedElapsed.elapsed() : -1)
-                .arg(QApplication::topLevelWidgets().size())
-                .arg(summarizeTopLevelWidgets())
                 .arg(QGuiApplication::topLevelWindows().size())
                 .arg(summarizeTopLevelWindows())
         );
@@ -732,8 +687,7 @@ int main(int argc, char* argv[])
         QStringLiteral("app_shutdown"),
         QStringLiteral("post_exec_object_teardown"),
         postExecObjectTeardownElapsed.isValid() ? postExecObjectTeardownElapsed.elapsed() : -1,
-        QStringLiteral("top_level_widgets=%1 top_level_windows=%2")
-            .arg(QApplication::topLevelWidgets().size())
+        QStringLiteral("top_level_windows=%1")
             .arg(QGuiApplication::topLevelWindows().size())
     );
     // Permanently shut down the async log writer last so any teardown logs above are

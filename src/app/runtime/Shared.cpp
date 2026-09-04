@@ -23,7 +23,6 @@
 #include <QPainterPath>
 #include <QPen>
 #include <QPixmap>
-#include <QSvgRenderer>
 #include <QPolygonF>
 #include <QScreen>
 #include <QSignalBlocker>
@@ -778,49 +777,6 @@ QIcon makeOutlineCloseIcon(const QColor& color)
     painter.setPen(pen);
     painter.drawLine(QPointF(3.0, 3.0), QPointF(9.0, 9.0));
     painter.drawLine(QPointF(9.0, 3.0), QPointF(3.0, 9.0));
-    return QIcon(pixmap);
-}
-
-QIcon makeSettingsGearIcon(const QColor& color)
-{
-    // Google Material Design "settings" gear (Apache-2.0 material-icons),
-    // rendered via QSvgRenderer so it matches the familiar Google glyph
-    // rather than a hand-drawn shape. The path lives in a 24x24 viewBox
-    // with built-in padding, so the gear reads at ~80% of the icon box —
-    // its displayed size is set by the toolbar's iconSize (matched to the
-    // menu-bar font in MainWindow.FrameBootstrap.cpp). Rendered into a
-    // generous base pixmap; the toolbar smoothly downscales to iconSize.
-    static const char kGearPath[] =
-        "M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61"
-        "l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81"
-        "c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29"
-        "L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58"
-        "C4.84,11.36,4.8,11.69,4.8,12c0,0.31,0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32"
-        "c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41"
-        "h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22"
-        "l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6c0-1.98,1.62-3.6,3.6-3.6"
-        "c1.98,0,3.6,1.62,3.6,3.6C15.6,13.98,13.98,15.6,12,15.6z";
-
-    const QString svg = QStringLiteral(
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>"
-        "<path fill='%1' d='%2'/></svg>")
-        .arg(color.name(QColor::HexRgb), QString::fromLatin1(kGearPath));
-
-    QSvgRenderer renderer(svg.toUtf8());
-    constexpr int kBasePx = 64;
-    // The toolbar's icon box is sized for the row height (the gear is its only
-    // icon), not for the gear, so the Material artwork — which already fills
-    // ~80% of its viewBox — looks oversized when it fills the whole box. Render
-    // it into an inset so the visible gear reads at ~60% of the icon box, in
-    // line with the adjacent menu text, without shrinking the box (= toolbar
-    // height).
-    constexpr qreal kInset = kBasePx * 0.135;
-    QPixmap pixmap(kBasePx, kBasePx);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    renderer.render(&painter, QRectF(kInset, kInset, kBasePx - 2.0 * kInset, kBasePx - 2.0 * kInset));
-    painter.end();
     return QIcon(pixmap);
 }
 

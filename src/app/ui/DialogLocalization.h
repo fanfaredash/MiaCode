@@ -1,6 +1,5 @@
 #pragma once
 
-#include "UiNativeWindowTheme.h"
 #include "UiText.h"
 
 #include <QAbstractButton>
@@ -479,11 +478,6 @@ inline void prepareDialogWindow(
 {
     if (dialog == nullptr) {
         return;
-    }
-    // Preparing a dialog also themes its native title bar, so call sites
-    // don't need a separate applySystemWindowBackdrop-style call.
-    if (UiNativeWindowTheme::isEligibleWidget(dialog)) {
-        UiNativeWindowTheme::applyToWidget(dialog);
     }
     configureDialogPreviewShortcuts(dialog, policy);
     applyDetachedParentBehavior(dialog, parent);
