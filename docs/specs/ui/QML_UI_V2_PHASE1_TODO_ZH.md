@@ -631,6 +631,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   runtime 翻译单元中的宽泛 `<QtWidgets>`（导出快照/worker、StageMedia、文档变换、播放
   布局与 tick）；仍真实调用文件/消息对话框或 QApplication 弹窗状态查询的路径保持不动。
   `MiaCode` Release 编译通过；此前完整 CTest 的 105/108 基线未改变。
+- **第 5 步本轮继续收口 Session 头文件（2026-09-05）**：删除 `Session.h` 中已无成员/签名
+  使用的旧 MainWindow 控件前置声明及无用 `QEvent` 头；保留字体 `QAction`、菜单/工具栏、
+  导出进程、滚轮事件和 QML 根窗口等仍实际构成边界的类型。Release 重编译通过，针对性
+  测试 7/7 通过。
 
 #### 第 2 步：一处需要更正的既往判断
 

@@ -10,7 +10,6 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
-#include <QEvent>
 #include <QObject>
 #include <functional>
 #include <QPointer>
@@ -47,11 +46,7 @@
 
 class QAction;
 class QByteArray;
-class QCloseEvent;
 class QChronoTimer;
-class QDialog;
-class QDockWidget;
-class QEvent;
 class PreviewStageMediaHost;
 class QmlEditorPageHost;
 class QmlExportSession;
@@ -63,12 +58,6 @@ namespace miacode::qml_ui {
 class QmlPreviewSettingsModel;
 }
 class QmlUiBootstrap;
-class QFrame;
-class QGraphicsOpacityEffect;
-class QGridLayout;
-class QHBoxLayout;
-class QHideEvent;
-class QLabel;
 namespace miacode::latency {
 class LatencySandboxController;
 }
@@ -76,24 +65,14 @@ namespace miacode::video_export {
 }
 class QJsonObject;
 class QMenu;
-class QMoveEvent;
 class QToolBar;
-class QPushButton;
-class QShowEvent;
 class QThreadPool;
 class BracketScopeHighlighter;
 class PreviewRuntime;
 class PreviewStageMediaHost;
 struct IntroBannerSpec;
-class QPlainTextEdit;
 class QProcess;
-class QPropertyAnimation;
-class QResizeEvent;
-class QShortcut;
-class QStackedWidget;
-class QSplitter;
 class QTimer;
-class QWidget;
 class QWheelEvent;
 class QWindow;
 class PreviewAudioDeviceWatcher;
