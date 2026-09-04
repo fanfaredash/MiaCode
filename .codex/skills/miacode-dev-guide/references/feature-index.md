@@ -30,7 +30,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Runtime session orchestration behind the QML shell:
   - Files: `src/app/runtime/Session.h`, `src/app/runtime/SessionBootstrap.cpp`, `src/app/runtime/SessionBootstrapFinalize.cpp`, `src/app/runtime/SessionLifecycle.cpp`, `src/app/runtime/shell/ShellHost.{h,cpp}`
   - Classes: `Session`, `miacode::runtime::ShellHost`
-  - Owns: service/host assembly, document/playback/preview/validation coordination, root-window bookkeeping, close transactions, and non-visual teardown. The product target no longer compiles the retired native-shell implementations `runtime/shell/Interaction.cpp`, `Runtime.cpp`, or `Shell.cpp`, nor the retired native playback fullscreen implementation; QML owns the visible fullscreen presentation. Remaining Widgets use in runtime hosts is the staged boundary for the Widgets removal work.
+  - Owns: service/host assembly, document/playback/preview/validation coordination, root-window bookkeeping, close transactions, and non-visual teardown. The product target no longer compiles the retired native-shell implementations `runtime/shell/Interaction.cpp`, `Runtime.cpp`, or `Shell.cpp`, nor the retired native playback fullscreen implementation; QML owns the visible fullscreen presentation. `RuntimeContext.h` keeps the transitional widget pointers as forward declarations rather than importing `<QtWidgets>` itself. Remaining Widgets use in runtime hosts is the staged boundary for the Widgets removal work.
 - Shared UI compatibility helpers:
   - Files: `src/app/ui/UiTheme.h`, `src/app/ui/UiTheme.cpp`, `src/app/ui/DialogLocalization.h`, `src/app/ui/UiNativeWindowTheme.*`
   - Namespace/classes: `miacode::ui`, `UiTheme`, `UiDialogs`, `UiNativeWindowTheme`

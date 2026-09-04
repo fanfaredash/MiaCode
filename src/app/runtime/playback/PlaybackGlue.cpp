@@ -7,8 +7,6 @@
 #include "tools/video_export/VideoExportController.h"  // IntroBannerSpec (export-page intro lead-in)
 
 #include <QtCore>
-#include <QtGui>
-#include <QtWidgets>
 
 namespace {
 

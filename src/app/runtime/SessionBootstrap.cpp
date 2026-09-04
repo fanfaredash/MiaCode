@@ -44,8 +44,6 @@
 #include "tools/muri/MuriStaticChecker.h"
 
 #include <QtCore>
-#include <QtGui>
-#include <QtWidgets>
 
 #include <algorithm>
 #include <functional>

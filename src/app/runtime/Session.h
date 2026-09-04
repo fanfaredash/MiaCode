@@ -18,7 +18,6 @@
 #include <QRect>
 #include <QSet>
 #include <QStringList>
-#include <QTextEdit>
 #include <QVariantMap>
 #include <QVector>
 

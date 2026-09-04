@@ -20,7 +20,6 @@
 #include <QUrl>
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 #include <algorithm>
 #include <cmath>

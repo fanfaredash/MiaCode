@@ -14,7 +14,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 bool Session::hasActiveDifficulty() const
 {

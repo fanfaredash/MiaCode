@@ -22,7 +22,6 @@
 #include <QUrl>
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 #include <algorithm>
 #include <cmath>
@@ -976,8 +975,7 @@ QVariantMap miacode::runtime::MediaJobsHost::prependMediaBlankContext(MediaBlank
         return context;
     }
 
-    const QVector<SimaiRawField> extraFields = SimaiDocument::parseRawFields(
-        ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(), true);
+    const QVector<SimaiRawField>& extraFields = session_.applicationServices_.workspace().document().extraFields;
     const int clockCount = mediaBlankClockCountFromFields(extraFields);
     const double wholeBpm = miacode::chart_clock::wholeBpmFromFields(extraFields);
     const double chartBpm = miacode::chart_clock::firstBpmFromChart(session_.activeChartText());

@@ -6,8 +6,6 @@
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
-#include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -33,7 +31,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
 #include "runtime/playback/Playback.Internal.h"
@@ -1206,23 +1203,10 @@ void miacode::runtime::PlaybackCoordinator::updatePauseButtonAppearance()
     // the same condition this one does — playing_ OR the export
     // intro's lead-in. setPreviewPlayingFlag announces the first; nothing
     // announced the second, so the intro played with the transport still
-    // showing a play button. Announced before the widget guard, because a v1
-    // action that no longer exists is not a reason to leave the shell stale,
-    // and queued for the same reason that writer is: callers reach here from
-    // the middle of a transition.
+    // showing a play button. The QML shell listens to the notification below;
+    // there is no legacy widget presentation to update here.
     QMetaObject::invokeMethod(
         &services_.shellNotifications(),
         [this]() { emit services_.shellNotifications().presentationChanged(); },
         Qt::QueuedConnection);
-    const bool previewPlaying = state_.playing_ || state_.exportIntroLeadInActive_;
-    if (ui_.pausePreviewButton_ != nullptr) {
-        ui_.pausePreviewButton_->setText(
-            previewPlaying
-                ? UiText::text(QStringLiteral("preview.pause"))
-                : UiText::text(QStringLiteral("preview.play"))
-        );
-        ui_.pausePreviewButton_->setStyleSheet(
-            UiTheme::pausePreviewButtonStyleSheet(previewPlaying)
-        );
-    }
 }

@@ -5,7 +5,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 #include "PreviewAudioSettings.h"
 #include "PreviewRenderSettings.h"
@@ -26,6 +25,13 @@
 
 class BracketScopeHighlighter;
 class IntroBannerSpec;
+class QAction;
+class QListWidget;
+class QLineEdit;
+class QTabWidget;
+class QTextEdit;
+class QToolButton;
+class QWidget;
 class PreviewAudioDeviceWatcher;
 class PreviewRuntime;
 class PreviewStageMediaHost;

@@ -30,7 +30,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
 #include "runtime/playback/Playback.Internal.h"

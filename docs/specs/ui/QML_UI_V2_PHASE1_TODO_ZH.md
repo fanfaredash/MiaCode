@@ -600,6 +600,12 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   测试 7/7 通过，全量 CTest 仍为 105/108 通过，失败项与既有基线完全相同。`Qt6::Widgets`
   仍不能移除：验证页仍有 `QSlider`，Session/document/editor/validation 的其余 Widgets
   源集仍未完成迁移。
+- **第 5 步继续削薄传递依赖**：`RuntimeContext.h` 不再直接包含 `<QtWidgets>`，共享上下文只对
+  尚存的迁移期指针使用前向声明；多个仅使用 Core/Gui 的 runtime 翻译单元同步移除宽泛的
+  `<QtWidgets>`。媒体工具的前置空白参数改从 `ChartWorkspace::document().extraFields` 读取，
+  不再依赖未构造的隐藏元数据编辑框；播放暂停的旧 QWidget 按钮呈现分支也已移除，QML 的
+  `ShellNotifications::presentationChanged` 推送保留。产品 Release 构建及上述 7 项针对性测试
+  均通过；Qt Widgets 仍只在确有旧控件实现的 runtime/UI 路径中保留。
 
 #### 第 2 步：一处需要更正的既往判断
 

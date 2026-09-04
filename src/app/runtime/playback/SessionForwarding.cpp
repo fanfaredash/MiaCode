@@ -25,8 +25,6 @@
 #include "tools/muri/MuriStaticChecker.h"
 
 #include <QtCore>
-#include <QtGui>
-#include <QtWidgets>
 
 #ifdef Q_OS_WIN
 #include <windows.h>

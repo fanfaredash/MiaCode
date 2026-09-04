@@ -29,8 +29,6 @@
 #include "tools/latency/LatencySandboxController.h"
 
 #include <QtCore>
-#include <QtGui>
-#include <QtWidgets>
 
 #include "runtime/playback/TimelineFlow.Internal.h"
 

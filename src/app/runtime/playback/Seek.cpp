@@ -28,7 +28,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
 #include "runtime/playback/Playback.Internal.h"
@@ -377,7 +376,6 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewHeldSeekTick()
             .arg(deltaSeconds, 0, 'f', 6)
             .arg(positionSeconds(), 0, 'f', 6)
     );
-    QToolTip::hideText();
     const double nextSecond = qBound(
         0.0,
         state_.pauseSecond_ + deltaSeconds,
