@@ -293,6 +293,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       `StageMediaHost` 不再查询 `QApplication` 的 active modal/popup widget，改为检查
       `QGuiApplication` 的 modal window 与可见 popup window；模态或 popup 窗口下仍禁止触控创作。
       Release 构建通过，相关测试 6/6 通过，完整 CTest 为 105/108，既有三个失败项未变化。
+- [x] **快捷键注册器的旧 Widgets 边界**（2026-09-05，已收口）。
+      `ShortcutRegistry` 的 `QAction/QShortcut` 应用重载全仓无调用方，已删除重载、前置声明、
+      Widgets include 及兼容快捷键展开逻辑；QML 继续使用同一套纯快捷键查询和编辑接口。
+      Release 构建通过，相关测试 4/4 通过，完整 CTest 为 105/108，既有三个失败项未变化。
 
 ## 6. 所有者已拍板（2026-08-30）
 

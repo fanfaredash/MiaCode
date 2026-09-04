@@ -698,6 +698,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `QGuiApplication` 的 modal window 与可见 popup window 检查，模态或 popup 窗口出现时仍会
   禁止触控创作输入。`MiaCode` Release 编译通过，相关测试 6/6 通过；完整 CTest 为
   105/108 通过，失败项与既有基线完全相同。
+- **第 5 步本轮继续清理快捷键注册器的旧 Widgets 边界（2026-09-05）**：确认
+  `ShortcutRegistry` 的 `QAction/QShortcut` 应用重载全仓没有调用方，QML 实际使用的是纯
+  `QKeySequence`、文本和编辑接口；删除三个旧重载、前置声明、Widgets include 及仅服务于
+  它们的兼容快捷键展开逻辑，QML 快捷键行为保持不变。`MiaCode` Release 编译通过，相关
+  测试 4/4 通过；完整 CTest 为 105/108 通过，失败项与既有基线完全相同。
 
 #### 第 2 步：一处需要更正的既往判断
 
