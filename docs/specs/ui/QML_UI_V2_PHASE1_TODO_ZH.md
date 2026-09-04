@@ -708,6 +708,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   独立定位实现和 `localizeButtonBox` 均无仓库调用方；保留未保存确认仍在使用的
   `QMessageBox` 本地化、预览快捷键保护和 detached-parent 行为，删除死工具及其专用 include。
   `MiaCode` Release 编译通过，相关测试 4/4 通过；完整 CTest 仍为 105/108，三个既有失败项未变化。
+- **第 5 步本轮继续清理对话框堆叠死代码（2026-09-05）**：确认全局 modal 对话框批量关闭、
+  对话框堆叠 guard、transient-parent 绑定及未使用的预览快捷键/模态查询辅助均无生产调用方；
+  保留当前未保存确认实际使用的快捷键保护和 parent 行为。`MiaCode` Release 编译通过，相关
+  测试 4/4 通过；完整 CTest 仍为 105/108，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 

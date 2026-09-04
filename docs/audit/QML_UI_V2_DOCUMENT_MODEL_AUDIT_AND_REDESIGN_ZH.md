@@ -301,6 +301,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       删除 `DialogLocalization.h` 中无仓库调用方的通用消息框、定位、激活和按钮盒工具；保留
       未保存确认实际使用的消息框本地化、预览快捷键保护和 detached-parent 行为。
       Release 构建通过，相关测试 4/4 通过，完整 CTest 仍为 105/108，既有三个失败项未变化。
+- [x] **对话框堆叠死代码**（2026-09-05，已收口）。
+      删除无生产调用方的全局 modal 批量关闭、堆叠 guard、transient-parent 绑定和旧查询辅助；
+      当前未保存确认所需的快捷键保护与 parent 行为保持不变。Release 构建通过，相关测试 4/4
+      通过，完整 CTest 仍为 105/108，既有三个失败项未变化。
 
 ## 6. 所有者已拍板（2026-08-30）
 
