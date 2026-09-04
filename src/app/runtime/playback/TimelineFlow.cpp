@@ -10,7 +10,6 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "MainEntrypoints.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
@@ -161,15 +160,6 @@ void appendPreviewWaveformLog(const QString& action, const QString& payload = QS
         QStringLiteral("preview/waveform"),
         text
     );
-}
-
-QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
-{
-    QString style = UiTheme::previewPanelStyleSheet();
-    if (swapped) {
-        style.replace(QStringLiteral("border-left: 1px solid"), QStringLiteral("border-right: 1px solid"));
-    }
-    return style;
 }
 
 std::pair<int, int> lineColForTextOffset(const QString& text, int offset)

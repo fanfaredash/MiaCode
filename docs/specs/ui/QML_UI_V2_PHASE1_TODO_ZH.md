@@ -205,8 +205,9 @@
 >
 > **（2026-09-04 更正）**「`src/app/ui/` 中与其共用的辅助件」这句话会误导：该目录 18 个文件里
 > `UiText` / `AppBackgroundSettings` / `ThemeVariantResolver` / `ShortcutRegistry` 都有 QML 路径
-> 生产消费者，**不是待删的 Widgets 辅助件**。真正的阻碍是 `DialogLocalization.h`（纯 Widgets）、
-> `UiTheme` 的样式表函数族、以及 `UiNativeWindowTheme` 的 `QWidget` 重载那一侧。
+> 生产消费者，**不是待删的 Widgets 辅助件**。真正的阻碍是 `DialogLocalization.h`（纯 Widgets）
+> 以及 `UiNativeWindowTheme` 的 `QWidget` 重载那一侧；`UiTheme` 的旧样式表函数族已在
+> 2026-09-05 后续批次删除。
 > 逐项证据与执行方案见 §「逐步移除 Widgets：进度与第 2 步交接（2026-09-04）」。
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
@@ -641,8 +642,14 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   门控保持不变，避免把 native fallback 误判成已迁移。`MiaCode` Release 构建通过，针对性
   测试 7/7 通过；完整 CTest 仍为 105/108 通过，3 个失败项与既有基线完全相同。
 - **第 5 步本轮继续清理共享菜单样式转发（2026-09-05）**：删除无调用方的
-  `runtime::shared::styleRoundedMenu(QMenu&)` 及其 `QMenu` 依赖；`UiTheme` 自身的样式源和
-  native 未保存对话框所需的 `centerDialogOnAnchor` 保持不变。
+  `runtime::shared::styleRoundedMenu(QMenu&)` 及其 `QMenu` 依赖；native 未保存对话框所需的
+  `centerDialogOnAnchor` 保持不变。
+- **第 5 步本轮继续清理死的 native 主题样式（2026-09-05）**：确认旧菜单、滚动条、编辑器、
+  预览和关于页的 `UiTheme` 样式函数均无生产调用方，删除对应 Widgets 样式源、QPalette/QIcon
+  依赖，以及两个未使用的播放布局样式 helper；`UiTheme::colors()` / `isDarkTheme()` 继续
+  作为 QML 与原生窗口共享的配色源。`MiaCode` Release 编译通过，针对性测试 7/7 通过；
+  全量 CTest 仍为 105/108 通过，三个既有失败项未变化：`timeline_model_spec`、
+  `qml_editor_controller_spec`、`qtavplayer_platform_spec`。
 - **第 5 步本轮继续移除隐藏快捷键 Actions（2026-09-05）**：QML 已直接绑定
   `ShortcutRegistry` 的字体快捷键，删除未被调用的 Session 字体 `QAction`、滚轮快捷键注入
   和 `SettingsHost::applyConfiguredShortcuts()` 转发；字体设置与 QML 快捷键入口保持不变。

@@ -7,7 +7,6 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -34,16 +33,3 @@
 #endif
 
 using namespace miacode::runtime::shared;
-
-namespace {
-
-QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
-{
-    QString style = UiTheme::previewPanelStyleSheet();
-    if (swapped) {
-        style.replace(QStringLiteral("border-left: 1px solid"), QStringLiteral("border-right: 1px solid"));
-    }
-    return style;
-}
-
-}  // namespace

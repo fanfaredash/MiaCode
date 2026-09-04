@@ -3,12 +3,7 @@
 #include "UiText.h"
 
 #include <QColor>
-#include <QIcon>
-#include <QPalette>
 #include <QString>
-
-class QApplication;
-class QMenu;
 
 namespace UiTheme {
 
@@ -56,16 +51,5 @@ struct Colors {
 ResolvedTheme resolvedTheme();
 bool isDarkTheme();
 const Colors& colors();
-QPalette applicationPalette();
-void applyApplicationTheme(QApplication& app);
-
-// Canonical checked-state indicator for QAction-backed menus. Pass visible=false
-// to preserve the icon slot without painting the checkmark.
-QIcon menuSelectionCheckIcon(bool visible = true);
-QString scrollBarStyleSheet();
-void styleRoundedMenu(QMenu& menu);
-QString editorShellStyleSheet();
-QString previewPanelStyleSheet();
-QString aboutDialogStyleSheet();
 
 }  // namespace UiTheme
