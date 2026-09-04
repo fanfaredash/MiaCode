@@ -703,6 +703,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `QKeySequence`、文本和编辑接口；删除三个旧重载、前置声明、Widgets include 及仅服务于
   它们的兼容快捷键展开逻辑，QML 快捷键行为保持不变。`MiaCode` Release 编译通过，相关
   测试 4/4 通过；完整 CTest 为 105/108 通过，失败项与既有基线完全相同。
+- **第 5 步本轮继续删除无调用方的对话框工具（2026-09-05）**：确认
+  `DialogLocalization.h` 中的通用 `showMessageBox`、`execMessageBox`、`prepareDialogWindow`、
+  独立定位实现和 `localizeButtonBox` 均无仓库调用方；保留未保存确认仍在使用的
+  `QMessageBox` 本地化、预览快捷键保护和 detached-parent 行为，删除死工具及其专用 include。
+  `MiaCode` Release 编译通过，相关测试 4/4 通过；完整 CTest 仍为 105/108，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 
