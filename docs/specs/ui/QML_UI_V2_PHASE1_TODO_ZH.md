@@ -643,6 +643,12 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 - **第 5 步本轮继续清理共享菜单样式转发（2026-09-05）**：删除无调用方的
   `runtime::shared::styleRoundedMenu(QMenu&)` 及其 `QMenu` 依赖；`UiTheme` 自身的样式源和
   native 未保存对话框所需的 `centerDialogOnAnchor` 保持不变。
+- **第 5 步本轮继续移除隐藏快捷键 Actions（2026-09-05）**：QML 已直接绑定
+  `ShortcutRegistry` 的字体快捷键，删除未被调用的 Session 字体 `QAction`、滚轮快捷键注入
+  和 `SettingsHost::applyConfiguredShortcuts()` 转发；字体设置与 QML 快捷键入口保持不变。
+  `MiaCode` Release 编译通过，针对性测试 7/7 通过；全量 CTest 仍为 105/108 通过，
+  三个既有失败项未变化：`timeline_model_spec`、`qml_editor_controller_spec`、
+  `qtavplayer_platform_spec`。
 
 #### 第 2 步：一处需要更正的既往判断
 

@@ -5,8 +5,6 @@
 
 #if !defined(MIACODE_SESSION_RUNTIME_MEMBERS)
     struct Ui {
-        QAction* fontDecreaseAction_ = nullptr;
-        QAction* fontIncreaseAction_ = nullptr;
         QTimer* autosaveTimer_ = nullptr;
         QTimer* autosaveIdleTimer_ = nullptr;
         QChronoTimer* qtPreviewTimer_ = nullptr;
@@ -564,8 +562,6 @@
     QThreadPool*& previewWarmupPool_ = state_.previewWarmupPool_;
     QThreadPool*& timelineSlowRefreshPool_ = state_.timelineSlowRefreshPool_;
     QThreadPool*& timelineAnalysisPool_ = state_.timelineAnalysisPool_;
-    QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
-    QAction*& fontIncreaseAction_ = ui_.fontIncreaseAction_;
     QTimer*& autosaveTimer_ = ui_.autosaveTimer_;
     QTimer*& autosaveIdleTimer_ = ui_.autosaveIdleTimer_;
     QChronoTimer*& qtPreviewTimer_ = ui_.qtPreviewTimer_;

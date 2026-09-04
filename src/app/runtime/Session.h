@@ -44,7 +44,6 @@
 #include "core/chart/transform/ChartNormalization.h"
 #include "runtime/RuntimeContext.h"
 
-class QAction;
 class QByteArray;
 class QChronoTimer;
 class PreviewStageMediaHost;
@@ -262,12 +261,8 @@ public:
     void setTouchPadAuthoringCtrlHold(bool active);
     bool applyTouchPadAuthoringPreviewAnchor(int difficultyId, int line, int column);
     bool seekPreviewToEditorLocation(int difficultyId, int line, int column);
-    // v2 has no QAction/QMenu layer, and the v1 chart-transform actions carry
-    // Qt::WindowShortcut context on a Session that is hidden and therefore
-    // never active — so none of them fire in v2. QML binds the same
-    // ShortcutRegistry ids and dispatches through here, which keeps one command
-    // table instead of nineteen new public methods. Returns false for an id
-    // this window does not own.
+    // v2 binds the same ShortcutRegistry ids directly in QML instead of using
+    // the hidden v1 window's shortcut action layer.
     bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
@@ -539,8 +534,6 @@ public:
     void applyLatencyDetectorBpm(double bpm);
     void applyLatencyDetectorOffset(double seconds);
     void applyLatencyDetectorClockCount(int clockCount);
-    // Re-applies shortcut bindings to the live QActions after an edit.
-    void applyConfiguredShortcuts();
     double currentPreviewCanvasRefreshRate() const;
     int currentEditorTextFontSize() const;
     double currentEditorLineSpacingFactor() const;

@@ -13,7 +13,6 @@
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
@@ -32,7 +31,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QAction>
 #include <QToolBar>
 
 using namespace miacode::runtime::shared;
@@ -255,28 +253,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
     connect(timelineAnalysisIdleTimer_, &QTimer::timeout, this, &Session::dispatchTimelineAnalysisRefresh);
     logStartupStage("timers_ready");
 
-    const auto applyEditorFontDelta = [this](int delta) {
-        settings_->applyEditorTextFontSize(editorTextFontPointSize_ + delta, true);
-        noteStatus(UiText::text(QStringLiteral("status.editor_text_display_updated")));
-    };
-    fontDecreaseAction_ = new QAction(QStringLiteral("Decrease Editor Font"), this);
-    ShortcutRegistry::instance().applyShortcut(
-        fontDecreaseAction_,
-        QStringLiteral("editor.font_decrease"),
-        QKeySequence(QStringLiteral("Ctrl+Alt+-")));
-    fontDecreaseAction_->setShortcutContext(Qt::ApplicationShortcut);
-    connect(fontDecreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
-        applyEditorFontDelta(-1);
-    });
-    fontIncreaseAction_ = new QAction(QStringLiteral("Increase Editor Font"), this);
-    ShortcutRegistry::instance().applyShortcut(
-        fontIncreaseAction_,
-        QStringLiteral("editor.font_increase"),
-        QKeySequence(QStringLiteral("Ctrl+Alt+=")));
-    fontIncreaseAction_->setShortcutContext(Qt::ApplicationShortcut);
-    connect(fontIncreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
-        applyEditorFontDelta(1);
-    });
     noteStatus("Editor ready.");
 
     loadPortableState();

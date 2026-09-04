@@ -25,7 +25,6 @@
 
 class BracketScopeHighlighter;
 class IntroBannerSpec;
-class QAction;
 class PreviewAudioDeviceWatcher;
 class PreviewRuntime;
 class PreviewStageMediaHost;
