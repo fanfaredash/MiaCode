@@ -148,10 +148,6 @@
         QString pendingAbnormalExitBackupRestoreChartPath_;
         bool pendingAbnormalExitBackupRestoreScheduled_ = false;
         QVector<EditorBookmark> editorBookmarks_;
-        // Sidebar bookmark-group fold state per difficulty id. Only explicit
-        // user toggles are recorded; an absent difficulty defaults to expanded
-        // when it is the active difficulty and collapsed otherwise.
-        QHash<int, bool> outlineBookmarkGroupExpanded_;
         // Set true while LatencySandboxController has hot-swapped the
         // timeline noteMarkers + audio settings for a sandbox audition.
         // Gates code paths that otherwise refresh from the real chart.
@@ -592,7 +588,6 @@
     QString& pendingAbnormalExitBackupRestoreChartPath_ = state_.pendingAbnormalExitBackupRestoreChartPath_;
     bool& pendingAbnormalExitBackupRestoreScheduled_ = state_.pendingAbnormalExitBackupRestoreScheduled_;
     QVector<EditorBookmark>& editorBookmarks_ = state_.editorBookmarks_;
-    QHash<int, bool>& outlineBookmarkGroupExpanded_ = state_.outlineBookmarkGroupExpanded_;
     int& lastTimelineParseDifficultyId_ = state_.lastTimelineParseDifficultyId_;
     QString& lastTimelineParseChartText_ = state_.lastTimelineParseChartText_;
     miacode::simai::SimaiTimingMetadata& lastTimelineParseTimingMetadata_ = state_.lastTimelineParseTimingMetadata_;

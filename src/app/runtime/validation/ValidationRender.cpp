@@ -90,11 +90,6 @@ void miacode::runtime::ValidationHost::onToggleJudgeMarkers(bool checked)
     state_.showJudgeMarkers_ = checked;
     applyMuriRenderOptions();
     session_.savePortableState();
-    session_.noteStatus(
-        state_.showJudgeMarkers_
-            ? UiText::text(QStringLiteral("status.judge_marker_enabled"))
-            : UiText::text(QStringLiteral("status.judge_marker_disabled"))
-    );
 }
 
 void miacode::runtime::ValidationHost::onToggleTouchTrail(bool checked)
@@ -102,11 +97,6 @@ void miacode::runtime::ValidationHost::onToggleTouchTrail(bool checked)
     state_.showTouchTrail_ = checked;
     applyMuriRenderOptions();
     session_.savePortableState();
-    session_.noteStatus(
-        state_.showTouchTrail_
-            ? UiText::text(QStringLiteral("status.touch_trail_enabled"))
-            : UiText::text(QStringLiteral("status.touch_trail_disabled"))
-    );
 }
 
 void miacode::runtime::ValidationHost::applyMuriRenderOptions()
@@ -138,13 +128,6 @@ void miacode::runtime::ValidationHost::setMuriRenderMode(RenderMode mode, bool p
     if (session_.hasActiveDifficulty() && !session_.scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
         session_.refreshTimelineMetadata();
     }
-    QString modeMessageKey = QStringLiteral("status.muri_render_mode_native");
-    if (mode == RenderMode::MaimuriDxStyle) {
-        modeMessageKey = QStringLiteral("status.muri_render_mode_dx");
-    } else if (mode == RenderMode::EraseByArea) {
-        modeMessageKey = QStringLiteral("status.muri_render_mode_erase_by_area");
-    }
-    session_.noteStatus(UiText::text(modeMessageKey));
 }
 
 const MuriAnalysisReport& Session::alignedMuriAnalysisReportForPreview() const

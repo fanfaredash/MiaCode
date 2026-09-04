@@ -206,26 +206,6 @@ void sortBookmarks(QVector<Bookmark>& bookmarks)
     });
 }
 
-bool editorBookmarkListsEqual(const QVector<Session::EditorBookmark>& left,
-                              const QVector<Session::EditorBookmark>& right)
-{
-    if (left.size() != right.size()) {
-        return false;
-    }
-    for (int i = 0; i < left.size(); ++i) {
-        const Session::EditorBookmark& a = left.at(i);
-        const Session::EditorBookmark& b = right.at(i);
-        if (a.difficultyId != b.difficultyId
-            || a.line != b.line
-            || a.title != b.title
-            || a.commentText != b.commentText
-            || a.commentFingerprint != b.commentFingerprint) {
-            return false;
-        }
-    }
-    return true;
-}
-
 QVector<Session::EditorBookmark> derivedBookmarksForChart(
     const QString& chartText,
     int difficultyId)
@@ -1017,12 +997,7 @@ void miacode::runtime::EditorHost::syncBookmarksFromEditorText(int changePositio
         derived.append(perDifficulty);
     }
     sortBookmarks(derived);
-    const bool mutated = !editorBookmarkListsEqual(state_.editorBookmarks_, derived);
     state_.editorBookmarks_ = derived;
-
-    if (mutated && session_.documents_ != nullptr) {
-        session_.documents_->rebuildFieldSidebar();
-    }
 }
 
 void Session::loadPortableState()

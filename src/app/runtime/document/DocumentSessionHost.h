@@ -44,11 +44,6 @@ public:
         const QString& sourceText, const QString& filePath, int activeDifficultyId,
         bool dirty, quint64 revision, Session::QmlDocumentCommitKind kind,
         bool usedSystemEncoding);
-    // Opens the modal "manage per-difficulty designers" dialog: seven rows for
-    // &des_1..7 plus the "all difficulties share one designer" toggle. Commits
-    // on OK (chart-less names become standalone &des_N — no phantom
-    // difficulty). See implementation in DocumentFlow.cpp.
-    void openPerDifficultyDesignerDialog();
     // Apply the saved-or-inferred unified-designer preference to the
     // runtime flag when a chart is opened. Reads
     // <chartDir>/.miacode/preferences.json; falls back to
@@ -133,18 +128,6 @@ public:
     // the question up itself, and asking again here was a second dialog on top
     // of an answered one.
     bool deleteDifficultyField(int difficultyId, bool alreadyConfirmed = false);
-    void rebuildFieldSidebar();
-    // Sidebar bookmark-group fold state. Only explicit toggles are recorded;
-    // an untouched difficulty defaults to expanded when active, collapsed
-    // otherwise (see the bookmark redesign spec).
-    bool isBookmarkGroupExpanded(int difficultyId) const;
-    void setBookmarkGroupExpanded(int difficultyId, bool expanded);
-    // Expands the difficulty's bookmark group, rebuilds the sidebar, selects
-    // and centers the bookmark row; beginRename additionally starts the
-    // inline name editor. Safe no-op when the bookmark does not exist.
-    void revealBookmarkInSidebar(int difficultyId, int line, bool beginRename);
-    void populateMetadataPage();
-    void populateDifficultyPage(int difficultyId);
     bool switchToMetadataField();
     bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);

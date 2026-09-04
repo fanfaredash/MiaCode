@@ -607,7 +607,6 @@ bool miacode::runtime::DocumentSessionHost::saveToPath(const QString& path)
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     session_.updateWindowTitle();
-    session_.noteStatus("Saved: " + QFileInfo(path).fileName());
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("close_timing/document"),

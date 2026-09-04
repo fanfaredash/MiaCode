@@ -65,7 +65,6 @@ bool miacode::runtime::DocumentSessionHost::updateDocumentField(
     markCurrentFieldDirty();
     updateDirtyState();
     session_.updateWindowTitle();
-    rebuildFieldSidebar();
     if (timingChanged) {
         session_.refreshWaveformCache();
         session_.refreshTimelineMetadata();
@@ -97,7 +96,6 @@ bool miacode::runtime::DocumentSessionHost::updateDifficultyField(
     state_.documentDirty_ = workspace.snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();
-    rebuildFieldSidebar();
     return true;
 }
 
@@ -181,7 +179,6 @@ bool miacode::runtime::DocumentSessionHost::addDocumentDifficulty(int difficulty
     }
     state_.documentDirty_ = session_.applicationServices_.workspace().snapshot().dirty;
     markCurrentFieldDirty();
-    rebuildFieldSidebar();
     const bool selected = switchToDifficultyField(difficultyId);
     updateDirtyState();
     return selected;

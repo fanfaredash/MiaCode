@@ -90,7 +90,6 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
         if (remainingIds.isEmpty()) {
             state_.activeDifficultyId_ = 0;
             state_.activeOutlineKey_ = "welcome";
-            populateMetadataPage();
             setChartBottomTabsMode(false);
             clearTimelineAndPreview();
         } else {
@@ -108,57 +107,13 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
         }
     }
 
-    rebuildFieldSidebar();
     updateDirtyState();
     if (state_.currentFilePath_.isEmpty()) {
-        session_.noteStatus(UiText::text(QStringLiteral("document.deleted_1")).arg(difficultyName));
         return true;
     }
-    if (!saveToPath(state_.currentFilePath_)) {
-        session_.noteStatus(UiText::text(QStringLiteral("document.deleted_1_changes_are_still")).arg(difficultyName));
-    }
+    saveToPath(state_.currentFilePath_);
     return true;
 }
-
-bool miacode::runtime::DocumentSessionHost::isBookmarkGroupExpanded(int difficultyId) const
-{
-    const auto it = state_.outlineBookmarkGroupExpanded_.constFind(difficultyId);
-    if (it != state_.outlineBookmarkGroupExpanded_.cend()) {
-        return it.value();
-    }
-    // Untouched groups: the active difficulty starts expanded, others folded.
-    return difficultyId == state_.activeDifficultyId_;
-}
-
-void miacode::runtime::DocumentSessionHost::setBookmarkGroupExpanded(int difficultyId, bool expanded)
-{
-    state_.outlineBookmarkGroupExpanded_.insert(difficultyId, expanded);
-    rebuildFieldSidebar();
-}
-
-void miacode::runtime::DocumentSessionHost::revealBookmarkInSidebar(int difficultyId, int line, bool beginRename)
-{
-    Q_UNUSED(difficultyId);
-    Q_UNUSED(line);
-    Q_UNUSED(beginRename);
-}
-
-
-void miacode::runtime::DocumentSessionHost::rebuildFieldSidebar()
-{
-}
-
-
-void miacode::runtime::DocumentSessionHost::populateMetadataPage()
-{
-}
-
-
-void miacode::runtime::DocumentSessionHost::populateDifficultyPage(int difficultyId)
-{
-    Q_UNUSED(difficultyId);
-}
-
 
 void miacode::runtime::DocumentSessionHost::setChartBottomTabsMode(bool enabled)
 {
@@ -199,12 +154,10 @@ bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
     }
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
-    populateMetadataPage();
     setChartBottomTabsMode(true);
     session_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
-    rebuildFieldSidebar();
     session_.updateWindowTitle();
     return true;
 }
@@ -270,12 +223,10 @@ void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
     state_.pendingPreviewPlaybackSecond_ = 0.0;
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "export";
-    populateMetadataPage();
     setChartBottomTabsMode(false);
     session_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
-    rebuildFieldSidebar();
     session_.updateWindowTitle();
     // The expensive part — building the embedded video panel — happens inside
     // onPageEntered.
@@ -308,12 +259,10 @@ bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
     state_.pendingPreviewPlaybackSecond_ = 0.0;
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "metadata";
-    populateMetadataPage();
     setChartBottomTabsMode(false);
     session_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
-    rebuildFieldSidebar();
     session_.updateWindowTitle();
     return true;
 }
@@ -346,7 +295,6 @@ bool miacode::runtime::DocumentSessionHost::switchToWelcomePage()
     session_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
-    rebuildFieldSidebar();
     session_.updateWindowTitle();
     return true;
 }
@@ -418,7 +366,6 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
         || state_.activeOutlineKey_ == QLatin1String("latency")) {
         state_.activeOutlineKey_ = QStringLiteral("chart");
     }
-    populateDifficultyPage(difficultyId);
     if (session_.editor_ != nullptr) {
         session_.editor_->syncBookmarksFromEditorText();
     }
@@ -473,7 +420,6 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
     session_.applyPreviewAudioSettingsToRuntime();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
-    rebuildFieldSidebar();
     QTimer::singleShot(0, &session_, [this, difficultyId]() {
         if (state_.activeDifficultyId_ != difficultyId || !session_.hasActiveDifficulty()) {
             return;

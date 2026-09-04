@@ -159,6 +159,10 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
       | F 时钟 | 1 | 14 | `currentPreviewAuthoritativeAudioClockSecond`，见下 |
       | G 平台条件 | 1 | 4 | `setPreviewFixedTimerHighResolutionActive` 全 body 在 `#ifdef Q_OS_WIN` 内；macOS 上为空操作但 Windows 有真行为，**不是死代码** |
 
+      **2026-09-05 follow-up**：上表是 2026-09-02 的归口快照；其中列作 B 类示例的空
+      `noteStatus` 已从 Session 及其调用方清理。`documentValidationChanged` 的 0 消费方
+      仍待产品决定，不能据此自行删除。
+
       **F 类不是正确性问题**：曾怀疑协调器自身的 `AudioClockSource` 与 Session 侧方法是两份真相，
       经查是"源与下游采样"——Session 侧按墙钟实时外推（数据全部来自协调器同样持有的
       `state_.qtPreviewElapsed_` / `qtPreviewStartSecond_` / `previewPlaybackRate_`），

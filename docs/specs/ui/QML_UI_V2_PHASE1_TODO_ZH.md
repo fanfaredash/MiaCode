@@ -679,6 +679,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   删除 coordinator/Session 转发、空实现和调用，文件路径仍由 `updateWindowTitle()` 统一进入 QML
   标题状态。`Qt6::Widgets` 仍保留给真实 native fallback。`MiaCode` Release 编译通过，相关
   测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
+- **第 5 步本轮继续清理空的 runtime UI 桥（2026-09-05）**：移除旧媒体工具/关于/设置槽的空
+  转发、文档侧栏与页面填充空方法、按难度设计师空对话框入口，以及无实现的 `noteStatus` 状态
+  汇报；同时删除仅服务于旧 Widget 侧栏折叠的状态位。QML 书签折叠状态仍由
+  `ViewState.qml` 持有，真实媒体工具与文档切换/保存逻辑保持不变。`MiaCode` Release 编译通过，
+  相关测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 
@@ -941,8 +946,8 @@ src/app/ui/UiTheme.h 声明的 17 个函数里，外部调用方计数为 0 的�
    而同一轮里刚证明自己会漏看因果链，不宜再凭一次对比就删 90 行；要删值得单开一轮逐个核对。
 
 2. **`documentValidationChanged` 有 6 个发射点、0 个消费方**——无任何 `connect` / `NOTIFY` /
-   QML 处理器。与此前 `noteStatus` 是空函数同类：不报错、不挂测试，只是什么都不发生。
-   本轮未删也未接线。
+   QML 处理器。与此前已清理的 `noteStatus` 空函数同类：不报错、不挂测试，只是什么都不发生。
+   本轮仍未删也未接线，保留待产品决定。
 3. **`appliedQmlWorkspaceRevision_` 应搬进文档域**。它语义上属文档域（写于
    `DocumentFileFlow`，文档域自读两处），挂在 `Session` 上是早于域拆分的历史。
    4.9d 只加了只读查询未搬字段，因为两个文本扫描 spec 钉着它作为 Session 成员的字面拼写。

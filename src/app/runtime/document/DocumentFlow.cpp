@@ -105,11 +105,6 @@ bool miacode::runtime::DocumentSessionHost::maybeSaveCurrentFieldChanges()
         return saved;
     }
     if (choice == UnsavedChangesChoice::Discard) {
-        if (session_.hasActiveDifficulty()) {
-            populateDifficultyPage(state_.activeDifficultyId_);
-        } else if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
-            populateMetadataPage();
-        }
         state_.currentFieldDirty_ = false;
         updateDirtyState();
         miacode::debug_log::appendTimingLine(
@@ -158,11 +153,6 @@ bool Session::maybeSaveCurrentFieldChanges()
 bool Session::applyCurrentFieldToDocument()
 {
     return documents_->applyCurrentFieldToDocument();
-}
-
-void Session::onManagePerDifficultyDesigners()
-{
-    documents_->openPerDifficultyDesignerDialog();
 }
 
 void Session::onOpenCurrentFolder()
@@ -408,21 +398,6 @@ bool Session::undoDeletedDifficultyField()
 bool Session::deleteDifficultyField(int difficultyId)
 {
     return documents_->deleteDifficultyField(difficultyId);
-}
-
-void Session::rebuildFieldSidebar()
-{
-    documents_->rebuildFieldSidebar();
-}
-
-void Session::populateMetadataPage()
-{
-    documents_->populateMetadataPage();
-}
-
-void Session::populateDifficultyPage(int difficultyId)
-{
-    documents_->populateDifficultyPage(difficultyId);
 }
 
 bool Session::switchToMetadataField()

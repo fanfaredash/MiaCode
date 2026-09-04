@@ -343,9 +343,7 @@ public:
     // PlaybackPreviewPort.h.
     void preparePreviewForShutdown() override;
     QString windowTitle() const;
-    void noteStatus(const QString& text);
 
-private slots:
     void onOpenCurrentFolder();
     void onNormalizeWholeChart();
     void onStopPreview();
@@ -356,22 +354,11 @@ private slots:
     void onExportCover();
     void onBatchExportPreviewVideo();
     void onPackAsZip();
-    void onPreviewAudioSettings();
-    void onPreviewVideoSettings();
-    void onSkinSettings();
     // Asks the QML shell to show the media tools page. Kept as a slot because
     // the latency page and the tools menu both still trigger it.
     void onMediaProcessingTools();
 
 private slots:
-    void onReadTitleFromTrack();
-    void onReadArtistFromTrack();
-    void onExtractBackgroundFromTrack();
-    // Opens the "manage per-difficulty designers" dialog (rows for &des_1..7
-    // plus the "all difficulties share one designer" toggle). See
-    // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
-    void onManagePerDifficultyDesigners();
-    void onAbout();
 public:
     // Public so callers outside Session (the preferences dialog)
     // can read the cached mode. Exposing the enum doesn't widen any

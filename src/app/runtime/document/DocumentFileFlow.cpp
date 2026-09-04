@@ -422,7 +422,6 @@ void miacode::runtime::DocumentSessionHost::finishChartsFromAudioDrop(
                     .arg(created).arg(failed));
         }
     }
-    session_.noteStatus(UiText::text(QStringLiteral("drop_chart.created_chart")).arg(created));
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/chart_drop"),
         QStringLiteral("batch_create_finished count=%1 elapsed_ms=%2")
@@ -648,13 +647,8 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
     if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
         schedulePendingAbnormalExitBackupRestore();
     }
-    if (showStatusMessage) {
-        session_.noteStatus(
-            QString("Opened: %1 (%2)")
-                .arg(QFileInfo(normalizedPath).fileName())
-                .arg(encodingUsed == Session::TextEncoding::Utf8 ? "UTF-8" : "System encoding")
-        );
-    }
+    Q_UNUSED(showStatusMessage);
+    Q_UNUSED(encodingUsed);
 }
 
 void miacode::runtime::DocumentSessionHost::syncRuntimeFromWorkspace()

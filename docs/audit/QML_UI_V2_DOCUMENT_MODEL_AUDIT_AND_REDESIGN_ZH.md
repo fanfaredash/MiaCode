@@ -280,6 +280,11 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
 - [x] **空的文件标签刷新桥**（2026-09-05，已清理）。`PlaybackCoordinator::updateCurrentFileLabel()`
       没有实现内容，且唯一调用只发生在设置当前文件路径时；已删除其 coordinator/Session 声明、
       转发、空实现和调用。文件路径变化后的真实窗口/QML 标题更新仍由 `updateWindowTitle()` 负责。
+- [x] **runtime 的空 UI 桥**（2026-09-05，已清理）。旧媒体工具/关于/设置槽、文档侧栏与页面
+      填充方法、按难度设计师空对话框入口和 `noteStatus` 均没有可见实现或生产消费方；已删除
+      对应转发、调用点和仅服务于旧 Widget 侧栏的折叠状态。QML 书签状态继续由 `ViewState.qml`
+      维护，实际文档、媒体工具和页面切换流程未删除。Release 构建通过，相关测试 8/8 通过，
+      全量 CTest 仍为 105/108，失败项与既有基线一致。
 
 ## 6. 所有者已拍板（2026-08-30）
 

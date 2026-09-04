@@ -140,11 +140,6 @@ void miacode::runtime::DocumentSessionHost::disableUnifiedDocumentDesigner()
     writeUnifiedDesignerPreference(state_.currentFilePath_, false);
 }
 
-void miacode::runtime::DocumentSessionHost::openPerDifficultyDesignerDialog()
-{
-}
-
-
 void miacode::runtime::DocumentSessionHost::applyUnifiedDesignerName(const QString& canonicalName)
 {
     const bool changed = session_.applicationServices_.workspace().unifyDesigners(canonicalName);
@@ -154,7 +149,6 @@ void miacode::runtime::DocumentSessionHost::applyUnifiedDesignerName(const QStri
         state_.currentFieldDirty_ = false;
         updateDirtyState();
         session_.updateWindowTitle();
-        rebuildFieldSidebar();
     }
 }
 

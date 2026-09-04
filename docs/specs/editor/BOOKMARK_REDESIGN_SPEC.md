@@ -500,6 +500,11 @@ struct SimaiBookmarkData {
 
 ### D4. 侧边栏
 
+> **实现状态（2026-09-05）**：本节保留的是旧 QWidget 侧栏的设计基线；v2 当前侧栏由
+> `src/app/qml_ui/sidebar/DifficultyList.qml` 与 `src/app/qml_ui/ViewState.qml` 持有，
+> runtime 已删除 `rebuildFieldSidebar()`、书签组折叠旧状态和 `revealBookmarkInSidebar()`
+> 等空 Widget 桥。以下 `QListWidget` / `QWidget` 细节不再是现行实现契约。
+
 `QListWidget` 保留；角色常量提升到 `MainWindowShared.h`
 （`kOutlineItemKindRole/DifficultyRole/LineRole/SecondRole/ExpandedRole/ActiveRole`）。
 

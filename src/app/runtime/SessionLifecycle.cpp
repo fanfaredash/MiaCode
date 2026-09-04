@@ -106,7 +106,3 @@ QString Session::windowTitle() const
 {
     return titleText_;
 }
-
-void Session::noteStatus(const QString&)
-{
-}

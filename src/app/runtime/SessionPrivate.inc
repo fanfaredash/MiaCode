@@ -79,7 +79,6 @@
     void markCurrentFieldDirty();
     bool undoDeletedDifficultyField();
     void clearDeletedDifficultyUndoState();
-    void rebuildFieldSidebar();
     // Export-page intro lead-in: returns true (and fills *outSpec) when the
     // embedded video panel has 添加片头 active, so the audition can play the
     // animated intro before the chart. cancelExportIntroLeadIn() forwards to the
@@ -98,8 +97,6 @@
     void setExportAuditionClockSchedule(int clockCount, double clockBpm);
     void clearExportAuditionClockSchedule();
     bool deleteDifficultyField(int difficultyId);
-    void populateMetadataPage();
-    void populateDifficultyPage(int difficultyId);
     bool switchToMetadataField();
     bool switchToDifficultyField(int difficultyId);
     bool switchToLatencyField();

@@ -143,10 +143,6 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
         return false;
     }
     if (session_.applicationServices_.workspace().document().difficulty(deletedState.difficultyId) != nullptr) {
-        session_.noteStatus(
-            QString("Cannot restore %1 because that difficulty already exists.")
-                .arg(SimaiDocument::difficultyName(deletedState.difficultyId))
-        );
         return false;
     }
 
@@ -179,20 +175,14 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
         if (!switchToDifficultyField(deletedState.difficultyId)) {
             return false;
         }
-    } else {
-        rebuildFieldSidebar();
     }
 
     clearDeletedDifficultyUndoState();
-    const QString difficultyName = SimaiDocument::difficultyName(deletedState.difficultyId);
     if (state_.currentFilePath_.isEmpty()) {
-        session_.noteStatus(QString("Restored %1.").arg(difficultyName));
         return true;
     }
     if (!saveToPath(state_.currentFilePath_)) {
-        session_.noteStatus(QString("Restored %1. Changes are still unsaved.").arg(difficultyName));
         return true;
     }
-    session_.noteStatus(QString("Restored %1.").arg(difficultyName));
     return true;
 }

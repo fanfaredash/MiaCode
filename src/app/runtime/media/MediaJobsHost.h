@@ -12,15 +12,8 @@ class MediaJobsHost final : public miacode::v2::MediaToolsEngine {
 public:
     MediaJobsHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
-    void onPreviewAudioSettings();
-    void onPreviewVideoSettings();
-    void onSkinSettings();
-    void onAbout();
     void onCompressBackgroundVideo();
     void onConvertTrackTo44100Hz();
-    void onReadTitleFromTrack();
-    void onReadArtistFromTrack();
-    void onExtractBackgroundFromTrack();
 
     enum class MediaBlankTarget {
         Track,

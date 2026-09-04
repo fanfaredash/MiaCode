@@ -127,37 +127,6 @@ void miacode::runtime::MediaJobsHost::reloadPreviewMediaAfterFileOperation(bool 
     }
 }
 
-void miacode::runtime::MediaJobsHost::onPreviewAudioSettings()
-{
-}
-
-
-void miacode::runtime::MediaJobsHost::onPreviewVideoSettings()
-{
-}
-
-
-void miacode::runtime::MediaJobsHost::onAbout()
-{
-}
-
-
-void miacode::runtime::MediaJobsHost::onSkinSettings()
-{
-}
-
-void miacode::runtime::MediaJobsHost::onReadTitleFromTrack()
-{
-}
-
-void miacode::runtime::MediaJobsHost::onReadArtistFromTrack()
-{
-}
-
-void miacode::runtime::MediaJobsHost::onExtractBackgroundFromTrack()
-{
-}
-
 void miacode::runtime::MediaJobsHost::showMediaOperationCompleteDialog(
     const QString& title,
     const QString& summary,

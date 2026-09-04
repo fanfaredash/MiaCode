@@ -250,8 +250,6 @@ void Session::finishFrameBootstrap(const std::function<void(const QString&)>& lo
     connect(timelineAnalysisIdleTimer_, &QTimer::timeout, this, &Session::dispatchTimelineAnalysisRefresh);
     logStartupStage("timers_ready");
 
-    noteStatus("Editor ready.");
-
     loadPortableState();
     logStartupStage("portable_state_loaded");
     // beta4: the preview debug HUD ("显示预览调试信息") is NO LONGER force-enabled in
