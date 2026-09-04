@@ -449,11 +449,6 @@ void miacode::runtime::EditorHost::loadPortableState()
         state_.timelineQuickStateBridge_->setTimelineSyncEnabled(state_.timelineSyncEnabled_);
     }
     // Re-apply the restored bottom-tabs divider height. The constructor already
-    // ran updateBottomTabsDeviceHeight() once with the default scale before this
-    // load; push the persisted scale into the layout now (it also clamps it).
-    if (session_.shell_ != nullptr) {
-        session_.shell_->updateBottomTabsDeviceHeight();
-    }
     session_.refreshPreviewFrameRateTimers();
     session_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "editor_display_apply_settings");
     if (state_.previewSfxRuntime_ != nullptr) {
@@ -958,9 +953,6 @@ void miacode::runtime::EditorHost::applyEditorTextFontSize(int pointSize, bool p
     const bool previousSuppress = state_.suppressTextDirtyTracking_;
     state_.suppressTextDirtyTracking_ = true;
     state_.editorTextFontPointSize_ = normalized;
-    if (state_.timelineQuickStateBridge_ != nullptr) {
-        session_.shell_->updateBottomTabsDeviceHeight();
-    }
     if (ui_.metadataExtraEdit_ != nullptr) {
         ui_.metadataExtraEdit_->setFont(editorFont(normalized));
         applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixels);

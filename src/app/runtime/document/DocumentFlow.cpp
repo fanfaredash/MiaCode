@@ -39,7 +39,7 @@ using namespace miacode::runtime::shared;
 using namespace miacode::runtime::document_detail;
 
 miacode::runtime::DocumentSessionHost::DocumentSessionHost(
-    Session& session,
+    ::Session& session,
     RuntimeContext::Ui& ui,
     RuntimeContext::State& state)
     : session_(session)

@@ -1,112 +1,102 @@
 #include "runtime/shell/ShellHost.h"
+
+#include "runtime/Session.h"
 #include "runtime/document/DocumentSessionHost.h"
+#include "runtime/export/VideoExportHost.h"
 
-#include "runtime/Shared.h"
-
+#include "common/CrashRecovery.h"
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
-#include <QApplication>
+#include <QString>
 
-miacode::runtime::ShellHost::ShellHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state)
+miacode::runtime::ShellHost::ShellHost(::Session& session)
     : session_(session)
-    , ui_(ui)
-    , state_(state)
-{
-    if (QApplication* app = qobject_cast<QApplication*>(QCoreApplication::instance()); app != nullptr) {
-        QObject::connect(app, &QApplication::focusChanged, &session_, [this](QWidget* old, QWidget* now) {
-            this->handleApplicationFocusChanged(old, now);
-        });
-        QObject::connect(app, &QGuiApplication::applicationStateChanged, &session_, [this](Qt::ApplicationState state) {
-            this->handleApplicationStateChanged(state);
-        });
-    }
-}
-
-bool Session::rootWindowFrameGeometryAvailable() const
-{
-    return shell_->rootWindowFrameGeometryAvailable();
-}
-
-QRect Session::rootWindowFrameGeometry() const
-{
-    return shell_->rootWindowFrameGeometry();
-}
+{}
 
 void Session::attachRootWindow(QWindow* window)
 {
-    shell_->attachRootWindow(window);
+    rootWindow_ = window;
 }
 
 void Session::setRootWindowFrameGeometry(const QRect& geometry)
 {
-    shell_->setRootWindowFrameGeometry(geometry);
+    rootWindowFrameGeometry_ = geometry;
+    setProperty("miacode.quick_root_window_frame_geometry", geometry);
+}
+
+bool Session::rootWindowFrameGeometryAvailable() const
+{
+    return rootWindowFrameGeometry_.isValid();
+}
+
+QRect Session::rootWindowFrameGeometry() const
+{
+    return rootWindowFrameGeometry_;
 }
 
 void Session::noteRootWindowReady()
 {
-    shell_->noteRootWindowReady();
+    noteQuickShellStartupUiReady();
 }
 
 void Session::configureRuntimeDebugOutput()
 {
-    if (shell_ == nullptr) {
-        runtimeDebugOutputEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
+    runtimeDebugOutputEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
+}
+
+void miacode::runtime::ShellHost::requestShellClose(std::function<void(bool)> onDecided)
+{
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    session_.documents_->requestLeaveDocument(
+        [this, onDecided = std::move(onDecided), totalTimer](bool canClose) mutable {
+            const bool confirmed = canClose && finishShellClose(totalTimer);
+            if (onDecided) {
+                onDecided(confirmed);
+            }
+        });
+}
+
+bool miacode::runtime::ShellHost::finishShellClose(QElapsedTimer totalTimer)
+{
+    session_.documents_->cleanupCrashRecoveryForCleanExit();
+    miacode::crash_recovery::clearSessionMarker();
+
+    QElapsedTimer savePortableTimer;
+    savePortableTimer.start();
+    session_.savePortableState();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("save_portable_state"),
+        savePortableTimer.elapsed());
+
+    QElapsedTimer exportCleanupTimer;
+    exportCleanupTimer.start();
+    session_.videoExport_->clearVideoExportWorkerState();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("clear_video_export_worker_state"),
+        exportCleanupTimer.elapsed());
+
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("confirm_shell_close"),
+        totalTimer.elapsed(),
+        QStringLiteral("result=confirmed"));
+    return true;
+}
+
+void miacode::runtime::ShellHost::appendOutput(const QString& scope, const QString& payload) const
+{
+    if (!session_.runtimeDebugOutputEnabled_) {
         return;
     }
-    shell_->configureRuntimeDebugOutput();
-}
-
-QString Session::windowTitle() const
-{
-    return titleText_;
-}
-
-void Session::noteStatus(const QString&)
-{
-}
-
-void Session::onToggleFindReplace()
-{
-    shell_->onToggleFindReplace();
-}
-
-void Session::onFindNext()
-{
-    shell_->onFindNext();
-}
-
-void Session::onFindPrevious()
-{
-    shell_->onFindPrevious();
-}
-
-void Session::onReplaceOne()
-{
-    shell_->onReplaceOne();
-}
-
-void Session::onReplaceAll()
-{
-    shell_->onReplaceAll();
-}
-
-void Session::refreshQuickShellRehostedWidgetParent(QWidget* widget)
-{
-    shell_->refreshQuickShellRehostedWidgetParent(widget);
-}
-
-bool Session::eventFilter(QObject* watched, QEvent* event)
-{
-    if (shell_ == nullptr) {
-        return QObject::eventFilter(watched, event);
-    }
-    return shell_->eventFilter(watched, event);
-}
-
-bool Session::event(QEvent* event)
-{
-    if (shell_ == nullptr) {
-        return QObject::event(event);
-    }
-    return shell_->event(event);
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        scope,
+        payload);
 }

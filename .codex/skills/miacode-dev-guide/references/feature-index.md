@@ -5,9 +5,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 1. App Boot And Process Modes
 
 - App startup and GUI entry:
-  - File: `src/app/main.cpp`
-  - Functions: `main`, `setWindowsAppUserModelId`, `wantsQuickShellBeta`, `startupOpenTargetFromArguments`
-  - Owns: Qt app startup, theme/font setup, window launch, startup timing log, `--quick-shell-beta` routing, and the first non-option startup path used when dragging a file/folder onto `MiaCode.exe` or a shortcut
+  - Files: `src/app/main.cpp`, `src/app/qml_ui/QmlUiBootstrap.{h,cpp}`
+  - Functions/classes: `main`, `setWindowsAppUserModelId`, `wantsQuickShellBeta`, `startupOpenTargetFromArguments`, `QmlUiBootstrap::start`
+  - Owns: `QGuiApplication` startup, CLI mode selection, QML root-window launch, startup timing log, `--quick-shell-beta` compatibility routing, and the first non-option startup path used when dragging a file/folder onto `MiaCode.exe` or a shortcut. `QmlUiBootstrap` owns the single `QQmlApplicationEngine` and the root-window shutdown lifetime.
 - CLI export entry:
   - File: `src/app/main.cpp`
   - Functions: `wantsCliVideoExport`, `runCliVideoExport`
@@ -17,37 +17,34 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Functions: `wantsCliVideoExportWorker`, `runCliVideoExportWorker`
   - Owns: snapshot ingestion, worker protocol, background export execution
 
-## 2. Main Window And Screen-Level Orchestration
+## 2. QML Shell And Screen-Level Orchestration
 
 - QML editor-tab workspace state:
   - Files: `src/app/qml_ui/ViewState.qml`, `src/app/qml_ui/editor/EditorTabBar.qml`
   - Owns: session-local open-editor tab ordering, MRU history, and active selection. Dragging exchanges any two open editor tabs, including metadata; the chart's difficulty order or serialized content is not changed.
 
-- Main window surface and shared state:
-  - Files: `src/app/mainwindow/MainWindow.h`, `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp`
-  - Class: `MainWindow`
-  - Owns: top-level state, shared widgets, preview runtime instances, export worker process, portable/project settings, the route-specific preview stage-media coordinator, and the hidden Quick-shell backend mode that rehosts legacy editor/timeline surfaces for QML
-- Quick shell beta bootstrap and controller bridge:
-  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellContracts.h`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`, `src/app/quick_shell/QuickShellNativeSurfaceHost.h`, `src/app/quick_shell/QuickShellNativeSurfaceHost.cpp`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.h`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp`, `src/app/quick_shell/QuickShellStyleBridge.h`, `src/app/quick_shell/QuickShellStyleBridge.cpp`, `src/app/quick_shell/qml/QuickShellMain.qml`, `src/app/quick_shell/qml/BottomTabsQuickHost.qml`, `src/app/quick_shell/qml/TimelineTabSurface.qml`, `src/app/quick_shell/qml/QuickShellPreviewSurface.qml`, `src/app/quick_shell/qml/QuickShellPreviewTransport.qml`, `src/app/quick_shell/qml/QuickShellPreviewStatsPanel.qml`, `src/app/quick_shell/qml/components/*.qml`, `src/app/ui/WindowParityMetrics.h`, `src/app/ui/WindowParityMetrics.cpp`
-  - Classes: `QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`
-  - Owns: `QQmlApplicationEngine` startup, hybrid-host beta window lifetime, coarse-grained native-region window exposure for top chrome/sidebar/workspace/bottom-tabs/status, preview transport/fullscreen bridge state, bottom-tabs current-tab plus tab-visibility bridge state, shared Quick shell QML controls (`Theme`, `ShellToolButton`, `ShellCheckBox`, `ShellSlider`), the pure-QML embedded/fullscreen preview transport and embedded stats panel, the phase-1 Quick bottom-tabs shell that drives the retained-native tab content surface, the quickshell-only inline preview surface that stacks background media plus scene plus HUD, the dedicated quickshell composite preview window used for video media, and host sizing/theme tokens shared with the `MainWindow` backend
-- Section map:
-  - File: `src/app/mainwindow/sections/README.md`
-  - Owns: where each MainWindow feature slice lives
-- Shared Widgets UI components:
-  - Files: `src/app/ui/UiComponents.h`, `src/app/ui/UiComponents.cpp`, `src/app/ui/UiTheme.h`, `src/app/ui/UiTheme.cpp`, `src/app/ui/DialogLocalization.h`
-  - Namespace/classes: `miacode::ui`, `miacode::ui::TabbedSettingsDialog`, `UiTheme`, `UiDialogs`
-  - Owns: shared QWidget dialog/card/form/slider-value row/slider option/button composition helpers, tabbed settings-dialog shell setup, dialog button-box helpers, dialog dropdown/list popup item helpers, common tab-width pinning, theme stylesheet entry points, and dialog localization/window-preparation behavior reused by MainWindow sections and tools.
+- QML visible shell and page routing:
+  - Files: `src/app/qml_ui/Main.qml`, `src/app/qml_ui/chrome/*.qml`, `src/app/qml_ui/editor/*.qml`, `src/app/qml_ui/preview/*.qml`, `src/app/qml_ui/timeline/*.qml`, `src/app/qml_ui/QmlEditorPageHost.*`, `src/app/qml_ui/QmlShellLifecycle.*`
+  - Classes: `QmlEditorPageHost`, `QmlShellLifecycle`, `QmlUiWindowChrome`
+  - Owns: the visible root window, chrome, document/editor pages, preview/timeline pages, fullscreen presentation, and semantic close/shutdown signals. The visible shell no longer depends on a hidden `MainWindow` or on native QWidget rehosting.
+- Runtime session orchestration behind the QML shell:
+  - Files: `src/app/runtime/Session.{h,cpp}`, `src/app/runtime/SessionBootstrap.cpp`, `src/app/runtime/SessionBootstrapFinalize.cpp`, `src/app/runtime/SessionLifecycle.cpp`, `src/app/runtime/shell/ShellHost.{h,cpp}`
+  - Classes: `Session`, `miacode::runtime::ShellHost`
+  - Owns: service/host assembly, document/playback/preview/validation coordination, root-window bookkeeping, close transactions, and non-visual teardown. The product target no longer compiles the retired native-shell implementations `runtime/shell/Interaction.cpp`, `Runtime.cpp`, or `Shell.cpp`; remaining Widgets use in runtime hosts is the staged boundary for the Widgets removal work.
+- Shared UI compatibility helpers:
+  - Files: `src/app/ui/UiTheme.h`, `src/app/ui/UiTheme.cpp`, `src/app/ui/DialogLocalization.h`, `src/app/ui/UiNativeWindowTheme.*`
+  - Namespace/classes: `miacode::ui`, `UiTheme`, `UiDialogs`, `UiNativeWindowTheme`
+  - Owns: the still-shared theme/color source, legacy dialog localization helpers used by remaining tool dialogs, and the QWindow-native theme/chrome policy used by QML startup. The former `UiComponents` composition files were removed; QWidget-only helpers remain transitional until the product target drops `Qt6::Widgets`.
   - Canonical dialog dropdown entry points (the fixed rounded-translucent popup): `miacode::ui::createDialogComboBox`/`applyDialogComboBoxStyle` — every single-select dropdown must be a real `QComboBox` through these (user decision 2026-07-10: pseudo-dropdown popups were rejected for width/height mismatch and missing native animation); `miacode::ui::createDialogDropdownButton` (QToolButton+QMenu) is only for popups a combobox cannot express, e.g. multi-select checkbox lists. Both route through `UiTheme::prepareDialogDropdownPopupWindow` (translucent popup window + single panel painter — never give the popup view an opaque QSS background, see qt-ui-layout-pitfalls W8).
 - QML preferences and application background:
   - Files: `src/app/qml_ui/preferences/PreferencesDialog.qml`, `src/app/qml_ui/preferences/QmlPreferencesModel.*`, `src/app/qml_ui/preferences/QmlAppBackgroundModel.*`, `src/app/ui/AppBackgroundSettings.*`, `src/app/ui/ThemeVariantResolver.*`, `src/app/qml_ui/theme/Theme.qml`, `src/app/qml_ui/Main.qml`
   - Owns: the five-page QML preferences surface, persisted background image/path and overlay-alpha settings, system/light/dark theme resolution, and the non-interactive root background image layer. Invalid persisted paths are reported without overwriting the current valid state; save failures are surfaced through the model instead of a blocking dialog.
 - Root chart drop flow:
-  - Files: `src/app/qml_ui/drop/QmlChartDropBridge.*`, `src/app/v2/ChartDropImportService.*`, `src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp`, `src/app/qml_ui/Main.qml`
+  - Files: `src/app/qml_ui/drop/QmlChartDropBridge.*`, `src/app/v2/ChartDropImportService.*`, `src/app/runtime/document/DocumentFileFlow.cpp`, `src/app/qml_ui/Main.qml`
   - Owns: the single `QWindow` drag/drop event filter, QML-only hover hint, request/generation and busy guards, document confirmation/create/final-switch continuation chain, and release-time invalidation of late callbacks. `ChartDropOverlay` is retired; the bridge has no QWidget visual surface.
 - Window frame, menus, toolbar, layout shell:
-  - File: `src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp`
-  - Owns: actions, menu wiring, splitter/dock/card composition, preview canvas bootstrap
+  - Files: `src/app/qml_ui/chrome/MainToolBar.qml`, `src/app/qml_ui/chrome/MainMenu.qml`, `src/app/qml_ui/chrome/WindowTitleBar.qml`, `src/app/qml_ui/QmlUiWindowChrome.*`
+  - Owns: QML actions/menu wiring, title-bar controls, native window chrome integration, and root-window presentation. Legacy QWidget layout implementations are no longer in the `MiaCode` product source set.
 
 ## 3. Document Model, Fields, And File Flow
 

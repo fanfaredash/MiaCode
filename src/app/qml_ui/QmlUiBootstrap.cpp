@@ -255,14 +255,6 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         }
     }
 
-    if (showWelcomeDialogOnStartup_ && backend_ != nullptr) {
-        QTimer::singleShot(0, backend_.get(), [backend = backend_.get()]() {
-            if (backend != nullptr) {
-                backend->showWelcomeDialog();
-            }
-        });
-    }
-
     appendQmlUiRuntimeLog(QStringLiteral("start_ok"));
     miacode::oplog::appendStartupBeaconLine("qml_ui/start_ok");
     return true;

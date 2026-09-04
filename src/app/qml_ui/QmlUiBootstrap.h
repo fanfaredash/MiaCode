@@ -38,7 +38,6 @@ public:
     ~QmlUiBootstrap() override;
 
     bool start(const QString& startupOpenTarget = QString());
-    void setShowWelcomeDialogOnStartup(bool show) { showWelcomeDialogOnStartup_ = show; }
 
 private:
     void beginAcceptedRootWindowShutdown(const QString& source);
@@ -59,5 +58,4 @@ private:
     miacode::qml_ui::RootLifecycle rootLifecycle_;
     bool acceptedRootWindowShutdownStarted_ = false;
     bool acceptedRootWindowDestroyStarted_ = false;
-    bool showWelcomeDialogOnStartup_ = false;
 };

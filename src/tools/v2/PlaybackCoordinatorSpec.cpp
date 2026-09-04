@@ -92,7 +92,6 @@ bool verifyRuntimeContextBoundary(QTextStream& err)
         QStringLiteral("src/app/runtime/media/MediaJobsHost.h"),
         QStringLiteral("src/app/runtime/preview/StageMediaHost.h"),
         QStringLiteral("src/app/runtime/settings/SettingsHost.h"),
-        QStringLiteral("src/app/runtime/shell/ShellHost.h"),
         QStringLiteral("src/app/runtime/validation/ValidationHost.h"),
     };
     for (const QString& hostPath : hostHeaders) {
@@ -104,6 +103,15 @@ bool verifyRuntimeContextBoundary(QTextStream& err)
                           && host.contains(QStringLiteral("RuntimeContext::State")),
                       hostPath + QStringLiteral(" uses explicit RuntimeContext types"), err);
     }
+
+    const QString shellHost = readSource(QStringLiteral("src/app/runtime/shell/ShellHost.h"));
+    ok &= require(!shellHost.isEmpty()
+                      && !shellHost.contains(QStringLiteral("RuntimeContext::Ui"))
+                      && !shellHost.contains(QStringLiteral("RuntimeContext::State"))
+                      && !shellHost.contains(QStringLiteral("QWidget"))
+                      && shellHost.contains(QStringLiteral("QWindow"))
+                      && shellHost.contains(QStringLiteral("requestShellClose")),
+                  QStringLiteral("ShellHost is a QML lifecycle bridge without Widget state"), err);
     return ok;
 }
 

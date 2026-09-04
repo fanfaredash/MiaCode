@@ -181,7 +181,7 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     settings_ = std::make_unique<miacode::runtime::SettingsHost>(*this, ui_, state_);
     stageMedia_ = std::make_unique<miacode::runtime::StageMediaHost>(*this, ui_, state_);
     validation_ = std::make_unique<miacode::runtime::ValidationHost>(*this, ui_, state_);
-    shell_ = std::make_unique<miacode::runtime::ShellHost>(*this, ui_, state_);
+    shell_ = std::make_unique<miacode::runtime::ShellHost>(*this);
     const quint64 sessionGeneration = miacode::v2::nextSessionGeneration();
     playback_ = std::make_unique<miacode::runtime::PlaybackCoordinator>(
         *this, applicationServices_, ui_, state_, runtimeContext_.playback, *this, *validation_,
@@ -234,13 +234,6 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     logStartupStage("timeline_analysis_pools_ready");
 
     updateWindowTitle();
-    if (QGuiApplication* guiApp = qobject_cast<QGuiApplication*>(QCoreApplication::instance()); guiApp != nullptr) {
-        if (QStyleHints* styleHints = guiApp->styleHints(); styleHints != nullptr) {
-            connect(styleHints, &QStyleHints::colorSchemeChanged, this, [this]() {
-                shell_->applyUiTheme();
-            });
-        }
-    }
 
     ui_.uiRequests_ = &applicationServices_.uiRequests();
     ui_.jobProgress_ = &applicationServices_.jobProgress();

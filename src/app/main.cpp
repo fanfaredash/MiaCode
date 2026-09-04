@@ -63,13 +63,6 @@ bool wantsCliVideoExportWorker(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--export-video-worker"));
 }
 
-// Force-show the first-run welcome / initial-config dialog even when
-// preferences already exist. Handy for debugging the onboarding flow.
-bool wantsWelcomeDialog(const QStringList& arguments)
-{
-    return arguments.contains(QStringLiteral("--welcome"));
-}
-
 QString startupOpenTargetFromArguments(const QStringList& arguments)
 {
     for (int index = 1; index < arguments.size(); ++index) {
@@ -513,25 +506,6 @@ int main(int argc, char* argv[])
 #endif
     app.setApplicationName("MiaCode");
     app.setApplicationVersion(MIACODE_DISPLAY_VERSION_STRING);
-    // First-run detection. The preferences file is auto-created the first
-    // time a UiText preference is read, so we must probe its existence
-    // *here* — after the application name is set (AppConfigLocation depends on
-    // it) but before anything reads a preference. "No preferences on this
-    // machine" == show the welcome / initial-config dialog. The --welcome flag
-    // force-shows it for debugging even when preferences already exist.
-    const bool miacodePreferencesExistedAtStartup = QFile::exists(UiText::preferencesFilePath());
-    // A preferences-schema bump (UiText kPreferencesSchema) intentionally
-    // re-runs onboarding: an existing user whose stored preferences predate the
-    // current schema gets the welcome dialog once more so new first-run choices
-    // (e.g. the Chinese-input mode) are surfaced and re-saved under the new
-    // schema. Probe the RAW on-disk schema HERE — storedPreferencesSchema()
-    // does not normalize, and this must run before QML reads the preferences.
-    const bool miacodePreferencesSchemaOutdated =
-        UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema();
-    const bool shouldShowWelcomeDialog =
-        !miacodePreferencesExistedAtStartup
-        || miacodePreferencesSchemaOutdated
-        || wantsWelcomeDialog(rawArgs);
     const QIcon appIcon(QStringLiteral(":/icons/app.png"));
 #ifndef Q_OS_MACOS
     app.setWindowIcon(appIcon);
@@ -647,7 +621,6 @@ int main(int argc, char* argv[])
         // Scope the bootstrap so it is destroyed before the teardown timing below.
         {
             QmlUiBootstrap qmlUiBootstrap(appIcon);
-            qmlUiBootstrap.setShowWelcomeDialogOnStartup(shouldShowWelcomeDialog);
             if (!qmlUiBootstrap.start(startupOpenTarget)) {
 #ifdef Q_OS_WIN
                 miacode::oplog::appendStartupBeaconLine("phase=qml_ui_bootstrap_failed");

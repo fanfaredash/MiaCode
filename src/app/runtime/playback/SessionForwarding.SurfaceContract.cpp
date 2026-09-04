@@ -12,7 +12,6 @@
 
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Session.h"
-#include "runtime/shell/ShellHost.h"
 
 #include "UiText.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -31,9 +30,6 @@ void Session::setBackendActive(bool active)
     pendingQuickTimelineCursorSecond_ = 0.0;
     pendingQuickTimelineCursorCenterView_ = false;
     syncQuickShellBottomTabsProxyRoute();
-    if (shell_ != nullptr) {
-        shell_->updateBottomTabsDeviceHeight();
-    }
 }
 
 miacode::chart_transform::ChartNormalizationOptions Session::chartNormalizeOptions() const

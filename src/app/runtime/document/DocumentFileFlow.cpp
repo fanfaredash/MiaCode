@@ -1,7 +1,6 @@
 ﻿#include "runtime/document/DocumentSessionHost.h"
 #include "app/v2/UiRequestService.h"
 #include "runtime/Shared.h"
-#include "runtime/shell/ShellHost.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -495,23 +494,17 @@ void miacode::runtime::DocumentSessionHost::finishChartsFromAudioDrop(
 void miacode::runtime::DocumentSessionHost::onOpenFile()
 {
     MC_OP("miacode::runtime::DocumentSessionHost::onOpenFile");
-    session_.shell_->logTopLevelWindowSnapshot("open_file_flow/begin");
     const bool canContinue = maybeSaveBeforeContinue();
     if (!canContinue) {
-        session_.shell_->logTopLevelWindowSnapshot("open_file_flow/cancelled_before_dialog");
         return;
     }
 
-    session_.shell_->logWindowGeometryDebug("open_file_before_dialog");
-    session_.shell_->logTopLevelWindowSnapshot("open_file_before_dialog");
     const QString path = QFileDialog::getOpenFileName(
         nullptr,
         QStringLiteral("Open simai file"),
         session_.resolveInitialOpenDirectory(),
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    session_.shell_->logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
-    session_.shell_->logTopLevelWindowSnapshot("open_file_after_dialog");
     if (path.isEmpty()) {
         return;
     }

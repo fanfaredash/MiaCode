@@ -228,7 +228,6 @@
     void applyWorkspacePanelArrangement();
     void cacheWorkspaceLayoutSizes();
     void restoreWorkspaceLayoutSizes();
-    void refreshQuickShellRehostedWidgetParent(QWidget* widget);
     void refreshLayoutAfterPageSwitch();
     int bottomTabsTabIndex(BottomTabsTabId tabId) const;
     BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId) const;

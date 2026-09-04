@@ -179,6 +179,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/AdoptedSurfaceDragAutoScroll.cpp
     src/app/runtime/Session.h
     src/app/runtime/Session.cpp
+    src/app/runtime/SessionLifecycle.cpp
     src/app/runtime/RuntimeContext.h
     src/app/runtime/Shared.h
     src/app/runtime/Shared.cpp
@@ -243,10 +244,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/validation/ValidationRuntime.cpp
     src/app/runtime/playback/SurfaceContract.cpp
     src/app/runtime/playback/SessionForwarding.SurfaceContract.cpp
-    src/app/runtime/shell/Interaction.cpp
-    src/app/runtime/shell/Runtime.cpp
     src/app/runtime/shell/ShellHost.cpp
-    src/app/runtime/shell/Shell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
     src/app/ui/AppBackgroundSettings.h

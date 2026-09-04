@@ -1,88 +1,30 @@
 #pragma once
 
-#include "runtime/Session.h"
+#include <functional>
 
-class QMouseEvent;
-class QPoint;
-class QPointF;
+#include <QElapsedTimer>
+#include <QRect>
+
+class QWindow;
 class QString;
+class Session;
 
 namespace miacode::runtime {
 
-class ShellHost {
+// QML owns the visible shell. This host now contains only the small lifecycle
+// bridge that still belongs to Session: root-window bookkeeping and the
+// asynchronous close transaction. Widget focus, layout and styling code was
+// part of the retired native shell and is no longer in the product target.
+class ShellHost final {
 public:
-    ShellHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
+    explicit ShellHost(::Session& session);
 
-    bool rootWindowFrameGeometryAvailable() const;
-    QRect rootWindowFrameGeometry() const;
-    void attachRootWindow(QWindow* window);
     void requestShellClose(std::function<void(bool)> onDecided);
     bool finishShellClose(QElapsedTimer totalTimer);
-    void setRootWindowFrameGeometry(const QRect& geometry);
-    void noteRootWindowReady();
-
-    void configureRuntimeDebugOutput();
-    void setupInitialWindowGeometry();
-    void applyUiTheme();
-    void updateOutlineDockCollapseButton();
-    void setOutlineDockCollapsed(bool collapsed);
-    void applySystemWindowBackdrop(QWidget* target = nullptr) const;
-    int computeBottomTabsDeviceHeight() const;
-    int computeBottomTabsDeviceHeightForScale(double contentScale) const;
-    void applyBottomTabsContentScale();
-    void updateBottomTabsDeviceHeight();
-    QString formatWindowStateFlags(Qt::WindowStates states) const;
-    void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
-    void logTopLevelWindowSnapshot(const QString& tag);
-    void closeEvent(QCloseEvent* event);
-    void appendOutput(const QString& title, const QString& payload);
-    QString describeFocusWidget(QWidget* widget) const;
-    QString formatFocusReason(Qt::FocusReason reason) const;
-    void logFocusDebug(const QString& reason, QWidget* oldWidget = nullptr, QWidget* nowWidget = nullptr, const QString& detail = QString());
-    QTextEdit* activeFindTarget() const;
-    bool runFindInEditor(bool backward);
-    void updateEditorFindBarGeometry();
-    void applyFindOverlayInset();
-    void hideFindReplaceBar();
-    void onToggleFindReplace();
-    void onFindNext();
-    void onFindPrevious();
-    void onReplaceOne();
-    void onReplaceAll();
-    void refreshQuickShellRehostedWidgetParent(QWidget* widget);
-    bool eventFilter(QObject* watched, QEvent* event);
-    void resizeEvent(QResizeEvent* event);
-    void moveEvent(QMoveEvent* event);
-    void showEvent(QShowEvent* event);
-    void hideEvent(QHideEvent* event);
-    bool event(QEvent* event);
-    void changeEvent(QEvent* event);
+    void appendOutput(const QString& scope, const QString& payload) const;
 
 private:
-    QTextEdit* resolveRestorableTextEdit(QWidget* widget) const;
-    bool isTextInputWidget(QWidget* widget) const;
-    bool hasActiveTextInputFocus() const;
-    bool shouldRespectFocusedWidgetOnRestore(QWidget* widget, QTextEdit* target) const;
-    bool quickShellFocusBridgeActive() const;
-    QWindow* previewVisibleHostWindow() const;
-    void focusPreviewInteractionTarget(QObject* watched, Qt::FocusReason reason);
-    bool touchPadAuthoringEditableContext() const;
-    void setHoveredTouchPad(const QString& pad);
-    void handleApplicationFocusChanged(QWidget* old, QWidget* now);
-    void handleApplicationStateChanged(Qt::ApplicationState state);
-    void recoverPreviewBackendsAfterApplicationResume();
-    void rememberFocusedTextEditState(QTextEdit* textEdit);
-    void rememberFocusedTextEditState();
-    void restoreFocusedTextEditState();
-    void restoreFocusedTextEditStateAttempt(QPointer<QTextEdit> target, int savedAnchor, int savedPosition, int attempt);
-    void clearFocusedTextEditState();
-
-    Session& session_;
-    RuntimeContext::Ui& ui_;
-    RuntimeContext::State& state_;
-    QPointer<QTextEdit> pendingTextFocusWidget_;
-    int pendingTextCursorAnchor_ = -1;
-    int pendingTextCursorPosition_ = -1;
+    ::Session& session_;
 };
 
 }  // namespace miacode::runtime

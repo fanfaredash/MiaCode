@@ -10,7 +10,6 @@ class SettingsHost final : public miacode::v2::PreferencesStore {
 public:
     SettingsHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
-    void showWelcomeDialog();
     void applyConfiguredShortcuts();
 
     int editorTextFontSize() const override;

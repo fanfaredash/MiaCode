@@ -1,6 +1,5 @@
 #include "runtime/validation/ValidationHost.h"
 #include "runtime/Shared.h"
-#include "runtime/shell/ShellHost.h"
 
 #include "DialogLocalization.h"
 #include "UiText.h"
@@ -121,7 +120,6 @@ void miacode::runtime::ValidationHost::onEditStaticTapOnSlideThreshold()
     dialog.setModal(true);
     dialog.setMinimumWidth(360);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
-    session_.shell_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, nullptr);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
@@ -259,4 +257,3 @@ void Session::setMuriRenderMode(RenderMode mode, bool persistState)
 {
     validation_->setMuriRenderMode(mode, persistState);
 }
-

@@ -2,7 +2,6 @@
 #include "runtime/document/DocumentSessionHost.h"
 #include "runtime/Shared.h"
 #include "runtime/editor/EditorHost.h"
-#include "runtime/shell/ShellHost.h"
 
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
@@ -520,16 +519,12 @@ bool miacode::runtime::DocumentSessionHost::onSaveFile()
 bool miacode::runtime::DocumentSessionHost::onSaveFileAs()
 {
     MC_OP("miacode::runtime::DocumentSessionHost::onSaveFileAs");
-    session_.shell_->logTopLevelWindowSnapshot("save_file_as_dialog/begin");
-    session_.shell_->logWindowGeometryDebug("save_file_as_before_dialog");
     const QString path = QFileDialog::getSaveFileName(
         nullptr,
         QStringLiteral("Save simai file"),
         state_.currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : state_.currentFilePath_,
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    session_.shell_->logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
-    session_.shell_->logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
     if (path.isEmpty()) {
         return false;
     }

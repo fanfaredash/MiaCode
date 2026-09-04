@@ -554,8 +554,8 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 | — | 移除所有者裁决为「移除」的缺陷 3 / 4 / 6 | 已完成 `825a63b6` |
 | **2** | **剪 `src/app/ui/` 的死表面** | **已完成（2026-09-04）** |
 | 3 | 齿轮图标渲染搬进 QML，摘掉 `Qt6::Svg` | 已完成（2026-09-04） |
-| 4 | `main.cpp` → `QGuiApplication` + `QQmlApplicationEngine` | 进行中（2026-09-04）：宿主与 CLI entry 已切换；唯一 engine 仍由 `QmlUiBootstrap` 持有；旧 runtime backend 尚未完成 Widgets 剥离 |
-| 5 | CMake 去掉 `Qt6::Widgets` / `Qt6::Svg`，移入 `dependency_allowlist_spec` 禁止表 | 进行中：已移除产品 `Qt6::Svg`；`Qt6::Widgets` 待第 4 步产品源集迁移后移除 |
+| 4 | `main.cpp` → `QGuiApplication` + `QQmlApplicationEngine` | **宿主切换与 GUI 初步验收通过（2026-09-04）**：CLI entry 已切换；唯一 engine 仍由 `QmlUiBootstrap` 持有；runtime backend 的 Widgets 剥离转入第 5 步继续 |
+| 5 | CMake 去掉 `Qt6::Widgets` / `Qt6::Svg`，移入 `dependency_allowlist_spec` 禁止表 | **进行中**：产品 `Qt6::Svg` 已移除；旧原生 shell 三组翻译单元已移出产品源集；`Qt6::Widgets` 等待剩余 runtime 源集迁移后移除 |
 | — | 补功能：缺陷 2（方向键 seek）、缺陷 5（全屏控件） | 未开始；#5 会产生新 UI，需所有者定夺 |
 
 累计：`Ui` 字段 104 → 34；三轮净删约 1530 行。
@@ -563,23 +563,26 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 第 4 步单列出来是因为它**没有自动化覆盖**：失败形态是「测试全绿但应用起不来」，
 本环境无 GUI 观察能力（见 §7.4），必须由所有者启动确认。
 
-#### 第 3–5 步执行结果（2026-09-04）
+#### 第 3–5 步执行结果（2026-09-04；截至本轮）
 
 - **第 3 步已完成**：删除 `Shared` 中无调用的 `makeSettingsGearIcon` 与 `QSvgRenderer`，
   保留 `src/app/qml_ui/resources/icons/settings.svg` 及其 QML 消费者；`MiaCode` 的
   `Qt6::Svg` 直链、顶层组件声明和 dev-tool 的冗余直链均已移除，产品 SVG 直接依赖已进入
   `docs/ops/DEPENDENCY_ALLOWLIST.md` 禁止表。这里的验收口径是 C++ 直接依赖；QML SVG
   image plugin 是否随安装包提供仍需打包走查。
-- **第 4 步进行中**：`main.cpp` 与两条 CLI entry 使用 `QGuiApplication`；主程序不再设置
+- **第 4 步宿主切换已完成，GUI 初步验收通过**：`main.cpp` 与两条 CLI entry 使用 `QGuiApplication`；主程序不再设置
   QWidget Fusion style、QWidget tooltip effect、top-level widget 诊断或 QWidget 全局主题过滤。
   `QmlUiBootstrap` 继续持有并加载唯一的 `QQmlApplicationEngine`，没有在 `main.cpp` 创建第二个
-  engine。由于 `Session`、document/validation/shell 的旧后端源码仍在 `MiaCode` 源集，尚未
-  宣称 GUI-only 启动完成。
-- **第 5 步未完成**：产品目标仍直接链接 `Qt6::Widgets`，且 `Session` / `SessionBootstrapFinalize`
-  / `runtime/shell` / document dialog / validation dialog 等翻译单元仍包含 Widgets 类型。
-  本轮仅完成 `Qt6::Svg` 清理与 Widgets 依赖边界审计；继续移除 Widgets 前必须先将这些后端
-  服务与 QML 展示层拆开，再做产品目标的无 Widgets Release 构建、CLI export/worker 运行和
-  打包验证。测试/dev-tool 的 Widgets 依赖暂不属于产品目标验收。
+  engine。所有者已启动 GUI 做初步验收，反馈“未发现问题”；这项人工验收不替代后续
+  runtime 源集与无 Widgets 构建验证。
+- **第 5 步进行中，本轮完成第一批产品源集拆分**：`CMakeLists.txt` 已将旧原生
+  `runtime/shell/Interaction.cpp`、`Runtime.cpp`、`Shell.cpp` 移出 `MiaCode`，保留的
+  `ShellHost` 只负责 QML 根窗口生命周期、关闭事务和运行时日志；`SessionLifecycle.cpp`
+  承接 Session 析构、预览停机与窗口标题等非可视生命周期。同步移除了 document/editor/
+  validation 中对原生 shell 布局、焦点和窗口诊断的调用。`MiaCode` Release 目标已通过编译。
+  产品目标仍直接链接 `Qt6::Widgets`，且 `Session` / `SessionBootstrapFinalize` / playback /
+  document dialog / validation 等剩余翻译单元仍包含 Widgets 类型，因此本轮不把第 5 步宣称为完成。
+  测试/dev-tool 的 Widgets 依赖暂不属于产品目标验收。
 
 #### 第 2 步：一处需要更正的既往判断
 

@@ -359,7 +359,6 @@ public:
                          quint64 requestId,
                          quint64 generation,
                          miacode::v2::ChartDropImportService::Completion completion);
-    void showWelcomeDialog();
     bool rootWindowFrameGeometryAvailable() const;
     QRect rootWindowFrameGeometry() const;
     void setBackendActive(bool active);
@@ -382,10 +381,6 @@ public:
     void preparePreviewForShutdown() override;
     QString windowTitle() const;
     void noteStatus(const QString& text);
-
-protected:
-    bool event(QEvent* event) override;
-    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
     void onNewFile();
@@ -421,11 +416,6 @@ private slots:
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
     void onManagePerDifficultyDesigners();
     void onAbout();
-    void onToggleFindReplace();
-    void onFindNext();
-    void onFindPrevious();
-    void onReplaceOne();
-    void onReplaceAll();
     void onErrorItemActivated(QListWidgetItem* item);
     void onMuriItemActivated(QListWidgetItem* item);
 public:

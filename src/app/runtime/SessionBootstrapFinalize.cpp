@@ -256,7 +256,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
 
     if (previewSlider_ != nullptr) {
         previewSlider_->setFocusPolicy(Qt::StrongFocus);
-        previewSlider_->installEventFilter(this);
         connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
             stopPreviewHeldSeek();
             const quint64 interactionId = ++previewInteractionSequence_;
@@ -396,26 +395,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
             previewScrubInteractionId_ = 0;
         });
     }
-    if (previewControlCard_ != nullptr) {
-        previewControlCard_->installEventFilter(this);
-    }
-    if (stopPreviewButton_ != nullptr) {
-        stopPreviewButton_->installEventFilter(this);
-    }
-    if (pausePreviewButton_ != nullptr) {
-        pausePreviewButton_->installEventFilter(this);
-    }
-    if (previewSpeedButton_ != nullptr) {
-        previewSpeedButton_->installEventFilter(this);
-    }
-    if (previewFullscreenButton_ != nullptr) {
-        previewFullscreenButton_->installEventFilter(this);
-    }
-    if (QApplication::instance() != nullptr) {
-        QApplication::instance()->installEventFilter(this);
-    }
-    shell_->updateEditorFindBarGeometry();
-    shell_->applyFindOverlayInset();
     const auto applyEditorFontDelta = [this](int delta) {
         settings_->applyEditorTextFontSize(editorTextFontPointSize_ + delta, true);
         noteStatus(UiText::text(QStringLiteral("status.editor_text_display_updated")));
@@ -442,7 +421,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
 
     loadPortableState();
     applyWorkspacePanelArrangement();
-    shell_->setOutlineDockCollapsed(outlineDockCollapsed_);
     logStartupStage("portable_state_loaded");
     // beta4: the preview debug HUD ("显示预览调试信息") is NO LONGER force-enabled in
     // --debug / diagnostic builds. It used to default ON whenever runtime debug output was
@@ -478,7 +456,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
         scene_->setCenterDisplayMode(previewCenterDisplayMode_);
     }
     applyMuriRenderOptions();
-    shell_->applyUiTheme();
     updatePauseButtonAppearance();
     const bool restoredStartupDocument = restoreLastSessionFile();
     if (!restoredStartupDocument) {

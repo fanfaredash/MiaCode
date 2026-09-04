@@ -203,8 +203,8 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          **已完成 2026-09-02**：`session_.` 计数 155 → **125**。8 项中 7 项函数体逐字搬入。
          `refreshQuickShellRehostedWidgetParent`（14 处）做成 `LayoutUi.cpp` 匿名命名空间里的
          自由函数——它不依赖任何成员状态，调用点又全在这一个文件里，不必给协调器公共接口增负担。
-         `updateEditorFindBarGeometry` / `applyFindOverlayInset` 只搬函数体，`ShellHost` 侧原方法
-         仍有 6 处内部调用因而保留。连带删除因此无人调用的
+         `updateEditorFindBarGeometry` / `applyFindOverlayInset` 只搬函数体；在 2026-09-04 的
+         QML shell 源集收口中，`ShellHost` 侧原方法随废弃原生 shell 一并移除。连带删除因此无人调用的
          `Session::showPreviewPlaybackRateToast` 与 `Session::clearValidationErrors` 转发壳。
 
          **裁决一：`setCurrentBottomTabsTabId` 移出 D 类，归入 E。** 它不是 Widgets 补妆——

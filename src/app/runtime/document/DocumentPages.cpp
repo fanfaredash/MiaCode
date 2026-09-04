@@ -221,15 +221,6 @@ void miacode::runtime::DocumentSessionHost::setChartBottomTabsMode(bool enabled)
     session_.setValidationTabVisible(enabled);
     session_.setBottomTabsTabVisible(Session::BottomTabsTabId::Muri, enabled);
 
-    if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->setVisible(enabled);
-        session_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
-    }
-    if (session_.quickShellBottomTabsProxy_ != nullptr) {
-        session_.quickShellBottomTabsProxy_->setVisible(enabled);
-        session_.refreshQuickShellRehostedWidgetParent(session_.quickShellBottomTabsProxy_);
-    }
-
     if (enabled) {
         session_.setCurrentBottomTabsTabId(Session::BottomTabsTabId::Timeline);
     }

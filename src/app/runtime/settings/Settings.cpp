@@ -31,10 +31,6 @@ miacode::runtime::SettingsHost::SettingsHost(
     , state_(state)
 {}
 
-void miacode::runtime::SettingsHost::showWelcomeDialog()
-{
-}
-
 void miacode::runtime::SettingsHost::applyConfiguredShortcuts()
 {
     if (session_.timelineQuickStateBridge_ != nullptr) {
@@ -66,9 +62,4 @@ void Session::onPreferences()
 void Session::applyConfiguredShortcuts()
 {
     settings_->applyConfiguredShortcuts();
-}
-
-void Session::showWelcomeDialog()
-{
-    settings_->showWelcomeDialog();
 }
