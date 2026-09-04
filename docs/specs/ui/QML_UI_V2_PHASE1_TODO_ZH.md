@@ -712,6 +712,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   对话框堆叠 guard、transient-parent 绑定及未使用的预览快捷键/模态查询辅助均无生产调用方；
   保留当前未保存确认实际使用的快捷键保护和 parent 行为。`MiaCode` Release 编译通过，相关
   测试 4/4 通过；完整 CTest 仍为 105/108，三个既有失败项未变化。
+- **第 5 步本轮继续削薄 native 对话框定位查询（2026-09-05）**：`Shared::centerDialogOnAnchor`
+  已先通过 `QGuiApplication` 的 active/visible top-level window 完成定位，后续重复的
+  `QApplication::activeWindow()` QWidget 查询删除；真实的 `QDialog/QWidget` parent 定位和屏幕
+  边界保护保持不变。`MiaCode` Release 编译通过，相关测试 4/4 通过；完整 CTest 仍为
+  105/108，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 

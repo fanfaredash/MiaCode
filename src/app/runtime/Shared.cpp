@@ -7,7 +7,6 @@
 #include "common/MiniaudioFileAccess.h"
 #include "common/WaveformCache.h"
 
-#include <QApplication>
 #include <QCryptographicHash>
 #include <QDialog>
 #include <QFileInfo>
@@ -184,21 +183,6 @@ void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
             anchorRect = topLevelWindow->frameGeometry();
             targetScreen = topLevelWindow->screen();
             anchorSource = QStringLiteral("visible_non_tool_qwindow");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QWidget* activeWidget = QApplication::activeWindow();
-            activeWidget != nullptr
-            && activeWidget != dialog
-            && activeWidget->isVisible()
-            && !activeWidget->windowState().testFlag(Qt::WindowMinimized)
-            && !activeWidget->windowFlags().testFlag(Qt::Tool)) {
-            anchorRect = activeWidget->frameGeometry();
-            anchorWidget = activeWidget;
-            if (activeWidget->windowHandle() != nullptr) {
-                targetScreen = activeWidget->windowHandle()->screen();
-            }
-            anchorSource = QStringLiteral("active_qwidget");
         }
     }
     if (!anchorRect.isValid()) {
