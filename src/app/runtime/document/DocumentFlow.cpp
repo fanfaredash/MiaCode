@@ -5,7 +5,6 @@
 #include "runtime/shell/ShellHost.h"
 
 #include "BracketScopeHighlighter.h"
-#include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -31,8 +30,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QMessageBox>
-
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"
 
@@ -153,11 +150,6 @@ void miacode::runtime::DocumentSessionHost::cancelPendingStartupRestore()
     ++state_.startupRestoreGeneration_;
 }
 
-bool Session::maybeSaveBeforeContinue()
-{
-    return documents_->maybeSaveBeforeContinue();
-}
-
 bool Session::maybeSaveCurrentFieldChanges()
 {
     return documents_->maybeSaveCurrentFieldChanges();
@@ -171,16 +163,6 @@ bool Session::applyCurrentFieldToDocument()
 void Session::onManagePerDifficultyDesigners()
 {
     documents_->openPerDifficultyDesignerDialog();
-}
-
-void Session::onNewFile()
-{
-    documents_->onNewFile();
-}
-
-void Session::onOpenFile()
-{
-    documents_->onOpenFile();
 }
 
 void Session::onOpenCurrentFolder()
@@ -247,30 +229,6 @@ void miacode::runtime::DocumentSessionHost::restoreBackupDocument(const QString&
 void miacode::runtime::DocumentSessionHost::noteRecentDocument(const QString& path)
 {
     session_.addRecentFilePath(path);
-}
-
-void Session::openRecentFilePath(const QString& path)
-{
-    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
-    if (normalizedPath.isEmpty()) {
-        return;
-    }
-    const QFileInfo fileInfo(normalizedPath);
-    if (!fileInfo.exists() || !fileInfo.isFile()) {
-        recentFilePaths_.removeAll(normalizedPath);
-        savePortableState();
-        UiDialogs::showMessageBox(QMessageBox::Warning, nullptr, UiText::text(QStringLiteral("action.open_recent")), "File no longer exists:\n" + normalizedPath);
-        return;
-    }
-    if (!maybeSaveBeforeContinue()) {
-        return;
-    }
-    openFileAtPath(normalizedPath, true, true);
-}
-
-void Session::restoreBackupFilePath(const QString& path)
-{
-    documents_->restoreBackupFilePath(path);
 }
 
 bool Session::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
@@ -383,16 +341,6 @@ void Session::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
 void Session::runAutosaveCheck(bool allowHistory)
 {
     documents_->runAutosaveCheck(allowHistory);
-}
-
-bool Session::onSaveFile()
-{
-    return documents_->onSaveFile();
-}
-
-bool Session::onSaveFileAs()
-{
-    return documents_->onSaveFileAs();
 }
 
 bool Session::saveToPath(const QString& path)
@@ -515,11 +463,6 @@ void Session::populateDifficultyPage(int difficultyId)
 bool Session::switchToMetadataField()
 {
     return documents_->switchToMetadataField();
-}
-
-bool Session::switchToWelcomePage()
-{
-    return documents_->switchToWelcomePage();
 }
 
 bool Session::switchToDifficultyField(int difficultyId)

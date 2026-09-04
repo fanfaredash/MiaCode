@@ -1,4 +1,3 @@
-    bool maybeSaveBeforeContinue();
     // A warning for the viewer, through the shell rather than a Widgets box.
     void postShellNotice(const QString& title, const QString& text);
     void configureRuntimeDebugOutput();
@@ -110,7 +109,6 @@
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
     bool switchToMetadataField();
-    bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);
     bool switchToLatencyField();
     bool switchToExportField();

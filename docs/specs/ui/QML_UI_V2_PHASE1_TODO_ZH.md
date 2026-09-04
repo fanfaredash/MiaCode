@@ -296,10 +296,11 @@
       还顺带修了一个双弹窗缺陷：删除难度时 `DifficultyList.qml` 已经问过一次，
       `deleteDifficultyField` 又在后面弹了一个 Widgets 确认——现在 v2 桥接传
       `alreadyConfirmed=true`。以及删掉了没有任何调用方的 `confirmDeleteBookmark`。
-      **留在树上的 `showMessageBox`**：`onNewFile` / `onOpenFile` / `openRecentFile` /
-      `switchToWelcomePage` / 扩展 `showMessage` / 删除难度的 v1 与扩展路径——全部只挂在隐藏
-      `MainWindow` 自己的 File 菜单 `QAction` 或扩展宿主上，QML 外壳没有任何入口能走到，
-      随阶段 4 一起消失。同理 `showUnsavedChangesDialog` 与 `maybeSaveBeforeContinue()` 同步版。
+      **当时留在树上的 `showMessageBox`**：`onNewFile` / `onOpenFile` / `openRecentFile` /
+      `switchToWelcomePage` / 扩展 `showMessage` / 删除难度的 v1 与扩展路径——其中前三者当时
+      只挂在隐藏 `MainWindow` 自己的 File 菜单 `QAction` 上，QML 外壳没有任何入口能走到。
+      2026-09-05 已删除旧新建、打开、最近文件的 Session 转发和 native 文件对话框入口；
+      `switchToWelcomePage` 仍保留为无难度文档初始化的内部路径，及其必要的同步 native fallback。
 - [x] **打开文件的未保存提示是平台原生弹窗**（2026-08-30 记录并修复）。`MainView.qml` 的三个
       `QtQuick.Dialogs.MessageDialog` 在 macOS 上渲染成 NSAlert——不是 Widgets，但同样不是
       应用自己的界面。现在都是 `components/ChoiceDialog.qml`，`src/app/qml_ui` 已无
@@ -660,6 +661,14 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `QToolBar*` 参数从未被使用，调用方始终传 `nullptr`；删除该参数、前置声明和 Widgets
   include，启动定时器与其余 bootstrap 行为不变。`MiaCode` Release 编译通过，针对性测试
   7/7 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
+- **第 5 步本轮继续移除死的 native 文件菜单入口（2026-09-05）**：确认 v2 的新建、打开、
+  最近文件、另存为和页面切换不经过旧 `Session` 菜单槽；QML 使用 `QmlDocumentModel` /
+  `DocumentBridge` / `UiRequestService`。删除旧 `Session` 新建、打开、最近文件、保存转发，
+  以及 `DocumentFileFlow.cpp` 中的 native 新建/打开文件对话框路径；保留 QML 实际使用的
+  文件服务、启动目标、备份恢复、空文档初始化和异步离开文档流程。同步更新
+  `qml_document_lifecycle_contract_spec`，使其守卫新的 QML 新建链路和旧入口缺失。`MiaCode`
+  Release 编译通过，针对性测试 7/7 通过；全量 CTest 仍为 105/108 通过，三个既有失败项
+  未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 

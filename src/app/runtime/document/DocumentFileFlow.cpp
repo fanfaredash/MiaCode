@@ -30,7 +30,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QFileDialog>
 #include <QMessageBox>
 
 using namespace miacode::runtime::shared;
@@ -181,11 +180,9 @@ bool miacode::runtime::DocumentSessionHost::maybeSaveBeforeContinue()
     if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
         return true;
     }
-    // Still the Widgets prompt, and deliberately so: the callers left on this
-    // overload are the hidden Session's own File-menu actions, which the QML
-    // shell has no way to reach. Everything the v2 shell can actually run goes
-    // through requestLeaveDocument below. This overload dies with
-    // src/app/runtime/ in stage 4.
+    // This synchronous compatibility path remains only for the internal
+    // no-difficulty activation path. QML document replacement and shell close
+    // use requestLeaveDocument(), whose choice arrives asynchronously.
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         nullptr,
         UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
@@ -233,57 +230,6 @@ void miacode::runtime::DocumentSessionHost::requestLeaveDocument(std::function<v
         [this, decide](const QString& choiceId) {
             decide(applyUnsavedChangesChoice(choiceId, QStringLiteral("request_leave_document")));
         });
-}
-
-void miacode::runtime::DocumentSessionHost::onNewFile()
-{
-    MC_OP("miacode::runtime::DocumentSessionHost::onNewFile");
-    if (!maybeSaveBeforeContinue()) {
-        return;
-    }
-
-    const QString targetDirectory = QFileDialog::getExistingDirectory(
-        nullptr,
-        UiText::text(QStringLiteral("document.select_chart_folder")),
-        session_.resolveInitialOpenDirectory(),
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
-    );
-    if (targetDirectory.isEmpty()) {
-        return;
-    }
-
-    const QString normalizedDirectory = QDir::cleanPath(targetDirectory);
-    const QString targetPath = QDir(normalizedDirectory).filePath(QStringLiteral("maidata.txt"));
-    if (QFileInfo::exists(targetPath)) {
-        const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            nullptr,
-            UiText::text(QStringLiteral("document.file_already_exists")),
-            UiText::text(QStringLiteral("document.maidata_txt_already_exists_in")),
-            QMessageBox::Yes | QMessageBox::No,
-            QMessageBox::No
-        );
-        if (choice != QMessageBox::Yes) {
-            return;
-        }
-    }
-
-    const SimaiDocument newDocument = SimaiDocument::createEmpty();
-    if (!writeDocumentFileAtomically(targetPath, newDocument)) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, nullptr, "Create Failed", "Cannot write file:\n" + targetPath);
-        return;
-    }
-
-    cancelPendingStartupRestore();
-    // loadDocument publishes the authoritative replacement notification.
-    // Install the new path first so its file/title consumers receive one
-    // coherent snapshot rather than the outgoing chart path.
-    session_.setCurrentFilePath(targetPath);
-    session_.applicationServices_.workspace().openSource(newDocument.toText(), targetPath);
-    loadDocument();
-    session_.clearValidationCache();
-    state_.currentEncoding_ = Session::TextEncoding::Utf8;
-    session_.noteStatus(QString("Created: %1").arg(targetPath));
 }
 
 namespace {
@@ -490,26 +436,6 @@ void miacode::runtime::DocumentSessionHost::finishChartsFromAudioDrop(
                 : QString(),
         });
     }
-}
-
-void miacode::runtime::DocumentSessionHost::onOpenFile()
-{
-    MC_OP("miacode::runtime::DocumentSessionHost::onOpenFile");
-    const bool canContinue = maybeSaveBeforeContinue();
-    if (!canContinue) {
-        return;
-    }
-
-    const QString path = QFileDialog::getOpenFileName(
-        nullptr,
-        QStringLiteral("Open simai file"),
-        session_.resolveInitialOpenDirectory(),
-        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
-    );
-    if (path.isEmpty()) {
-        return;
-    }
-    openFileAtPath(path, true, true);
 }
 
 bool miacode::runtime::DocumentSessionHost::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)

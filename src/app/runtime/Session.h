@@ -346,12 +346,7 @@ public:
     void noteStatus(const QString& text);
 
 private slots:
-    void onNewFile();
-    void onOpenFile();
     void onOpenCurrentFolder();
-    void restoreBackupFilePath(const QString& path);
-    bool onSaveFile();
-    bool onSaveFileAs();
     void onNormalizeWholeChart();
     void onStopPreview();
     void onTogglePreviewPause();
@@ -568,7 +563,6 @@ private:
     void setPauseDisplayAltHoldActive(bool active);
     void setTouchPadAuthoringCtrlHoldActive(bool active);
     void addRecentFilePath(const QString& path);
-    void openRecentFilePath(const QString& path);
     void persistEditorTextFontPreference() const;
     void saveProjectRenderState() const;
     void removeProjectRenderState() const;

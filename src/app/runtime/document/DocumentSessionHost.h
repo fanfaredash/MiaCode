@@ -54,8 +54,6 @@ public:
     // <chartDir>/.miacode/preferences.json; falls back to
     // SimaiDocument::inferUnifiedDesignerDefault() when the key is absent.
     void refreshUnifiedDesignerStateForLoadedDocument();
-    void onNewFile();
-    void onOpenFile();
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     // Continuation of restoreBackupFilePath once the confirm is answered.

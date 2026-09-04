@@ -64,22 +64,33 @@ bool verifyBackendReplacementPublishesOneQmlRefresh(QTextStream& err)
                    QStringLiteral("a QML replacement resets active editors so chart text and bookmarks are rederived"), err);
 }
 
-bool verifyNewDocumentPublishesFinalFileIdentity(QTextStream& err)
+bool verifyQmlNewDocumentUsesRequestServices(QTextStream& err)
 {
+    const QString commandService = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlCommandService.cpp"));
+    const QString documentModel = sourceFile(
+        QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
     const QString fileFlow = sourceFile(
         QStringLiteral("src/app/runtime/document/DocumentFileFlow.cpp"));
-    const int newDocument = fileFlow.indexOf(QStringLiteral("const SimaiDocument newDocument"));
-    const int end = fileFlow.indexOf(QStringLiteral("namespace {"), newDocument);
-    const QString createFlow = newDocument >= 0
-        ? fileFlow.mid(newDocument, (end >= 0 ? end : fileFlow.size()) - newDocument)
-        : QString();
-    return require(containsAfter(createFlow,
-                                 QStringLiteral("session_.setCurrentFilePath(targetPath)"),
-                                 QStringLiteral("workspace().openSource(newDocument.toText(), targetPath)"))
-                       && containsAfter(createFlow,
-                                        QStringLiteral("workspace().openSource(newDocument.toText(), targetPath)"),
-                                        QStringLiteral("loadDocument();")),
-                   QStringLiteral("new-document replacement opens the workspace then refreshes hidden UI after the file identity is installed"), err);
+    return require(containsAfter(commandService,
+                                 QStringLiteral("void QmlCommandService::newDocument()"),
+                                 QStringLiteral("document_->createDocumentFromPickedAudio()")),
+                   QStringLiteral("the new-document command enters the QML audio-picker flow"), err)
+        && require(containsAfter(documentModel,
+                                 QStringLiteral("void QmlDocumentModel::createDocumentFromPickedAudio()"),
+                                 QStringLiteral("requests->requestFile(request")),
+                   QStringLiteral("the QML new-document flow uses UiRequestService for file picking"), err)
+        && require(containsAfter(documentModel,
+                                 QStringLiteral("void QmlDocumentModel::createEmptyDocumentAt"),
+                                 QStringLiteral("fileService_->createEmptyDocument(targetPath)"))
+                       && containsAfter(documentModel,
+                                        QStringLiteral("fileService_->createEmptyDocument(targetPath)"),
+                                        QStringLiteral("openFile(QUrl::fromLocalFile(targetPath))")),
+                   QStringLiteral("the QML new-document flow writes through the file service then reopens the fresh file"), err)
+        && require(!fileFlow.contains(QStringLiteral("DocumentSessionHost::onNewFile"))
+                       && !fileFlow.contains(QStringLiteral("DocumentSessionHost::onOpenFile"))
+                       && !fileFlow.contains(QStringLiteral("<QFileDialog>")),
+                   QStringLiteral("the retired native new/open file dialog path is absent from DocumentFileFlow"), err);
 }
 
 bool verifyV2AnalysisUsesWorkspaceSnapshot(QTextStream& err)
@@ -253,7 +264,7 @@ int main()
     QTextStream err(stderr);
     QTextStream out(stdout);
     const bool ok = verifyBackendReplacementPublishesOneQmlRefresh(err)
-        && verifyNewDocumentPublishesFinalFileIdentity(err)
+        && verifyQmlNewDocumentUsesRequestServices(err)
         && verifyV2AnalysisUsesWorkspaceSnapshot(err)
         && verifyWorkspaceOwnsProductionDocumentAndDirty(err);
     if (ok) {

@@ -259,6 +259,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       **按打开一份普通谱面的方式打开它**，所以新文档从一个真实的 save point 开始，
       而不是一到手就是脏的。已存在时先确认覆盖。写入落在
       `ChartWorkspaceFileService::createEmptyDocument()`——文件边界的活，不该由 QML 层做。
+      **2026-09-05 入口收口**：旧 `Session` 的新建、打开、最近文件及保存转发已删除；
+      `DocumentFileFlow.cpp` 中只服务于旧菜单的 native 新建/打开文件对话框也已删除。QML
+      新建链路由 `QmlDocumentModel` 负责音频选择、文件服务写入和普通打开，
+      `onSaveFileAs()` 仍仅作为无当前路径时的 native 保存 fallback 保留。
 - [x] **自动保存的「恢复备份」在 v2 没有入口**（2026-08-30 查证并补完）。
       `文件 → 恢复备份` 列出快照（时间戳标签，重名时附文件名，与 Widgets 菜单同规则），
       选中后走既有的 `restoreBackupFilePath()` 确认流程；因为恢复会替换文档，
