@@ -309,6 +309,10 @@ QML 侧那份 `unsavedChangesDialog` 与 C++ 侧的 `requestChoice` 目前是**�
       `Shared::centerDialogOnAnchor` 保留真实的 QDialog/QWidget parent 定位，删除前面已有
       active/visible QWindow 扫描之后重复的 `QApplication::activeWindow()` 查询。Release 构建和
       相关测试 4/4 通过，完整 CTest 仍为 105/108，既有三个失败项未变化。
+- [x] **对话框 guard 的 QApplication 依赖**（2026-09-05，已收口）。
+      事件过滤器安装改用 `QCoreApplication::instance()`，保留当前 native dialog guard 行为，
+      `DialogLocalization.h` 不再直接依赖 `QApplication`。Release 构建和相关测试 4/4 通过，
+      完整 CTest 仍为 105/108，既有三个失败项未变化。
 
 ## 6. 所有者已拍板（2026-08-30）
 

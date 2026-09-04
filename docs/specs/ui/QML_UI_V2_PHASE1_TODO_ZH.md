@@ -717,6 +717,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `QApplication::activeWindow()` QWidget 查询删除；真实的 `QDialog/QWidget` parent 定位和屏幕
   边界保护保持不变。`MiaCode` Release 编译通过，相关测试 4/4 通过；完整 CTest 仍为
   105/108，三个既有失败项未变化。
+- **第 5 步本轮继续收窄对话框 guard 的应用类型（2026-09-05）**：
+  `PreviewShortcutOverrideGuard` 安装事件过滤器只需要 `QObject`，改用
+  `QCoreApplication::instance()`，`DialogLocalization.h` 不再直接依赖 `QApplication`；实际
+  `QDialog/QMessageBox/QWidget` fallback 行为保持不变。`MiaCode` Release 编译通过，相关测试
+  4/4 通过；完整 CTest 仍为 105/108，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 

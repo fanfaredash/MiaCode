@@ -3,7 +3,6 @@
 #include "UiText.h"
 
 #include <QAbstractButton>
-#include <QApplication>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QEvent>
@@ -68,7 +67,7 @@ public:
         : QObject(dialog)
         , dialog_(dialog)
     {
-        if (QApplication* app = qobject_cast<QApplication*>(QCoreApplication::instance()); app != nullptr) {
+        if (QCoreApplication* app = QCoreApplication::instance(); app != nullptr) {
             app->installEventFilter(this);
         }
     }
