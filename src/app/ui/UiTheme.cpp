@@ -286,85 +286,6 @@ QString editorShellStyleSheet()
         .arg(css(c.accent));
 }
 
-QString editorFindBarStyleSheet()
-{
-    const Colors& c = colors();
-    return QStringLiteral(
-        "QFrame#EditorFindBar { background: %1; border: 1px solid %2; border-radius: 10px; }"
-        "QFrame#EditorFindBar QLineEdit { background: %3; border: 1px solid %4; border-radius: 6px; min-height: 22px; padding: 1px 6px; selection-background-color: %5; selection-color: %6; color: %7; }"
-        "QFrame#EditorFindBar QLineEdit:focus { border-color: %8; }"
-        "QFrame#EditorFindBar QToolButton, QFrame#EditorFindBar QPushButton { color: %7; min-height: 22px; padding: 0 6px; border: 1px solid %2; border-radius: 6px; background: %3; font-weight: 400; }"
-        "QFrame#EditorFindBar QToolButton:hover, QFrame#EditorFindBar QPushButton:hover { background: %9; border-color: %8; }"
-        "QFrame#EditorFindBar QToolButton:pressed, QFrame#EditorFindBar QPushButton:pressed { background: %10; color: %11; }"
-        "QFrame#EditorFindBar QToolButton#EditorFindPrevButton, QFrame#EditorFindBar QToolButton#EditorFindNextButton { min-width: 24px; padding: 0; font-size: 12px; }"
-        "QFrame#EditorFindBar QToolButton#EditorFindCloseButton { min-width: 28px; padding: 0; font-size: 15px; font-weight: 400; }"
-    )
-        .arg(cssRgba(c.windowBg, c.dark ? 242 : 248))
-        .arg(css(c.border))
-        .arg(css(c.inputBg))
-        .arg(css(c.borderSoft))
-        .arg(css(c.selection))
-        .arg(css(c.selectionText))
-        .arg(css(c.textPrimary))
-        .arg(css(c.accent))
-        .arg(css(c.menuHoverBg))
-        .arg(css(c.accentPressed))
-        .arg(css(c.accentText));
-}
-
-QString metadataPageStyleSheet()
-{
-    const Colors& c = colors();
-    // The page canvas *outside* the metadata card uses the darker window
-    // background so the card reads as a distinct surface — matching the
-    // BPM & Latency page. The broad `QWidget` rule keeps inner widgets on the
-    // card background; the higher-specificity `#MetadataPage` id rule only
-    // repaints the page itself.
-    return QStringLiteral("QWidget#MetadataPage { background: %1; }").arg(css(c.windowBg))
-        + QStringLiteral(
-        "QWidget { background: %1; color: %2; }"
-        "QFrame#MetadataCard { background: %1; border: 1px solid %3; border-radius: 8px; }"
-        "QLabel#SectionTitle { color: %2; font-weight: 700; padding-left: 4px; }"
-        "QLabel#MetadataFieldLabel { color: %2; background: transparent; padding-left: 8px; }"
-        "QLineEdit, QTextEdit, QPlainTextEdit { background: %4; color: %2; border: 1px solid %5; border-radius: 6px; padding: 6px 8px; selection-background-color: %6; selection-color: %7; }"
-        "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: %8; }"
-        "QToolButton, QPushButton { color: %2; border: 1px solid %3; border-radius: 6px; background: %4; padding: 4px 8px; }"
-        "QToolButton:hover, QPushButton:hover { background: %9; border-color: %8; }"
-    )
-        .arg(css(c.cardBg))
-        .arg(css(c.textPrimary))
-        .arg(css(c.border))
-        .arg(css(c.inputBg))
-        .arg(css(c.borderSoft))
-        .arg(css(c.selection))
-        .arg(css(c.selectionText))
-        .arg(css(c.accent))
-        .arg(css(c.menuHoverBg));
-}
-
-QString metadataEmptyHintLabelStyleSheet()
-{
-    return QStringLiteral("color: %1; background: transparent; padding-left: 6px;").arg(css(colors().textMuted));
-}
-
-QString outlineListStyleSheet()
-{
-    const Colors& c = colors();
-    const QColor selectedBg = c.dark ? QColor("#263344") : QColor("#EDF4FF");
-    return QStringLiteral(
-        "QListWidget { background: %1; color: %2; border: 1px solid %3; padding: 6px; outline: none; }"
-        "QListWidget::item { min-height: 28px; padding: 4px 12px; border: 1px solid transparent; border-radius: 6px; }"
-        "QListWidget::item:selected { color: %2; background: %4; border-color: %5; }"
-        "QListWidget::item:hover { background: %6; }"
-    )
-        .arg(css(c.cardBg))
-        .arg(css(c.textPrimary))
-        .arg(css(c.border))
-        .arg(css(selectedBg))
-        .arg(css(c.accent))
-        .arg(css(c.menuHoverBg));
-}
-
 QString previewPanelStyleSheet()
 {
     const Colors& c = colors();
@@ -394,14 +315,6 @@ QString previewPanelStyleSheet()
         .arg(css(c.accent))
         .arg(css(c.accentPressed))
         .arg(css(c.accentText));
-}
-
-QString compactToolbarButtonStyleSheet()
-{
-    return QStringLiteral(
-        "QToolButton:disabled { background: transparent; border: none; }"
-        "QToolButton:disabled:hover { background: transparent; border: none; }"
-    );
 }
 
 QString pausePreviewButtonStyleSheet(bool active)

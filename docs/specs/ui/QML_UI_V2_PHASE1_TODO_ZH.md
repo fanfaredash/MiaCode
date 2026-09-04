@@ -202,6 +202,12 @@
 >
 > B 类已不再阻挡 `Qt6::Widgets` 的最终摘除；当前阶段仍保留的阻碍是隐藏 `MainWindow` 及
 > `src/app/ui/` 中与其共用的辅助件。拖放 bridge 已不再引入新的 Widgets 依赖。
+>
+> **（2026-09-04 更正）**「`src/app/ui/` 中与其共用的辅助件」这句话会误导：该目录 18 个文件里
+> `UiText` / `AppBackgroundSettings` / `ThemeVariantResolver` / `ShortcutRegistry` 都有 QML 路径
+> 生产消费者，**不是待删的 Widgets 辅助件**。真正的阻碍是 `DialogLocalization.h`（纯 Widgets）、
+> `UiTheme` 的样式表函数族、以及 `UiNativeWindowTheme` 的 `QWidget` 重载那一侧。
+> 逐项证据与执行方案见 §「逐步移除 Widgets：进度与第 2 步交接（2026-09-04）」。
 
 ### C. 已知功能缺失（v1 有、v2 尚未补）
 
@@ -532,6 +538,216 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 未修的原因：修它要把生产的暂停提交路径改成构造 `PauseRequest` → 调策略 → 写回 `state_`，
 且要先定夺那两个多出字段该不该设。暂停路径是热代码，本环境无 GUI 验证能力。
 **未验证**：生产是否在同一路径的别处设了那两个字段（若设了则只是形状不同，若没设则行为确实分叉）。
+
+### 逐步移除 Widgets：进度与第 2 步交接（2026-09-04）
+
+所有者 2026-09-04 指令：「4.9-f 先搁置。逐步移除 Widgets」。本节是该主线的**活动交接页**，
+接手者从这里读起。
+
+#### 五步计划与当前位置
+
+| 步 | 内容 | 状态 |
+|---|---|---|
+| 1 | 清 `RuntimeContext::Ui` 死指针 | 已完成 `46350fa9` |
+| — | 修自动保存吞元数据（顺手发现的数据丢失） | 已完成 `8e96fb33` |
+| — | 移除所有者裁决为「移除」的缺陷 3 / 4 / 6 | 已完成 `825a63b6` |
+| **2** | **剪 `src/app/ui/` 的死表面** | **已完成（2026-09-04）** |
+| 3 | 齿轮图标渲染搬进 QML，摘掉 `Qt6::Svg` | 未开始 |
+| 4 | `main.cpp` → `QGuiApplication` + `QQmlApplicationEngine` | 未开始，**需所有者在场** |
+| 5 | CMake 去掉 `Qt6::Widgets` / `Qt6::Svg`，移入 `dependency_allowlist_spec` 禁止表 | 未开始 |
+| — | 补功能：缺陷 2（方向键 seek）、缺陷 5（全屏控件） | 未开始；#5 会产生新 UI，需所有者定夺 |
+
+累计：`Ui` 字段 104 → 34；三轮净删约 1530 行。
+
+第 4 步单列出来是因为它**没有自动化覆盖**：失败形态是「测试全绿但应用起不来」，
+本环境无 GUI 观察能力（见 §7.4），必须由所有者启动确认。
+
+#### 第 2 步：一处需要更正的既往判断
+
+此前编排者向所有者描述第 2 步为「删 `src/app/ui/` 的 widget 辅助件（5 个文件）」。**这是错的**，
+两处都错：
+
+1. **目录是 18 个文件，不是 5 个。**
+2. **`src/app/ui/` 不是可整体删除的目录。** 其中四组有 QML 路径生产消费者，必须原样保留：
+
+| 文件 | QML 侧消费者 |
+|---|---|
+| `UiText.h/.cpp` | `QmlTimelineModel`、`QmlDocumentModel`、`QmlUiSettings`、`QmlPreferencesModel`、`QmlLatencyModel`、`QmlMediaToolsModel`、`QmlAppBackgroundModel`、`QmlPreviewSettingsModel`、`QmlAudioSettingsModel`、`v2/ApplicationServices.cpp` 等 12 处 |
+| `AppBackgroundSettings.h/.cpp` | `qml_ui/preferences/QmlAppBackgroundModel.h` + `AppBackgroundSettingsSpec` |
+| `ThemeVariantResolver.h/.cpp` | `qml_ui/QmlUiSettings.cpp` + `ThemeVariantResolverSpec` |
+| `ShortcutRegistry.h/.cpp` | `qml_ui/QmlShortcutModel.cpp` + 独立测试 target |
+
+所以第 2 步的真实内容**不是删文件，是剪死表面**。
+
+#### 一个会造成假结论的检索陷阱（务必记住）
+
+`src/app/ui/` 在 include path 上，这些头是**裸文件名**被引用的：
+
+```
+#include "UiTheme.h"            // 实际写法
+#include "ui/UiTheme.h"         // 不存在，按这个搜会得到全 0
+```
+
+编排者第一次用 `grep -rl "ui/UiTheme\.h"` 得到「零 includer」，据此差点判定
+`UiTheme` / `DialogLocalization` / `WindowParityMetrics` 全是死文件。**实际相反**：
+`UiTheme.h` 有 40 个 includer，`DialogLocalization.h` 有 35 个。搜索这批头一律用裸文件名形式。
+
+（另注：zsh 下 `grep --include=*.cpp` 不加引号会被 glob 吃掉并报 `no matches found`，
+必须写成 `--include='*.cpp'`。第一次统计就是这么静默失效的。）
+
+#### 第 2 步调查结论（已核实，可直接据此执行）
+
+**任务 A —— 75 个 include 里 55 个是死的**（引了头但正文一次都没用过对应命名空间）：
+
+- `UiTheme.h`：40 个 includer，**26 个零处 `UiTheme::`**
+- `DialogLocalization.h`：35 个 includer，**29 个零处 `UiDialogs::`**
+
+死 include 集中在 `src/app/runtime/` 下（document / playback / export / preview / media /
+validation / editor 各子目录），是 Widgets 时代共享 include 块的残留。
+
+**尚存的真实耦合**（这才是后续步骤要面对的）：
+
+- `UiDialogs::` 活调用点 6 个文件：`shell/Interaction.cpp`（3 处）、
+  `document/DocumentFileFlow.cpp`（3 处 `QMessageBox`）、`document/DocumentFlow.Internal.h`（4 处）、
+  `document/DocumentFlow.cpp`、`document/DocumentPages.cpp`、`validation/ValidationRender.cpp`（`QDialog`）。
+  `DialogLocalization.h` 本身是纯 Widgets（`QDialog` / `QApplication::topLevelWidgets` / `QWidget`）。
+- `UiTheme::` 活调用点 14 个文件；按符号统计：`colors` 32、`Colors` 12、`scrollBarStyleSheet` 5、
+  `isDarkTheme` 5、`styleRoundedMenu` 3、`applyApplicationTheme` 3、`previewPanelStyleSheet` 2、
+  `pausePreviewButtonStyleSheet` 2、`menuSelectionCheckIcon` / `editorShellStyleSheet` /
+  `applicationPalette` / `aboutDialogStyleSheet` 各 1。
+  注意 `colors()` / `isDarkTheme()` 连 `src/editor/BracketScopeHighlighter.cpp` 都在用，
+  **是 QML 路径也依赖的配色源，不能跟着 Widgets 一起摘**。
+- `UiNativeWindowTheme.h` 被 `qml_ui/QmlUiBootstrap.cpp` 引用（用的是 `QWindow` 重载那一侧），
+  `QWidget` 重载那一侧才是待摘的。
+
+**任务 B —— 6 个零外部调用方的 `UiTheme` 样式函数**：
+`resolvedTheme`、`editorFindBarStyleSheet`、`metadataPageStyleSheet`、
+`metadataEmptyHintLabelStyleSheet`、`outlineListStyleSheet`、`compactToolbarButtonStyleSheet`。
+
+**未核实**（执行者必须自己补上）：上述统计**排除了 `UiTheme.cpp` 自身**，
+所以看不到文件内部调用；也**没查 `src/tools/` 下是否有文本扫描 spec 按名字钉住这些函数**。
+两项任一命中都不能删。
+
+#### 当前测试基线（2026-09-04 实测，与 §「测试基线的一个噪声源」记录的旧基线不同）
+
+全量 CTest **108 项 / 105 通过**，3 个红：
+
+- `qtavplayer_platform_spec`（长期红）
+- `timeline_model_spec`、`qml_editor_controller_spec`（上游样式合并带入的布局断言）
+
+这 3 个与 Widgets 移除无关。判断某轮是否引入回归，看**红的数量与名字是否变化**。
+
+#### 第 2 步执行结果（2026-09-04）
+
+已按上面的调查执行，且没有扩大到仍有 QML 生产消费者的四组共享文件。
+
+- **任务 A**：删除 `UiTheme.h` 死 include 26 处、`DialogLocalization.h` 死 include 29 处，共 55 处；
+  与调查清单一致。删除后没有暴露传递包含缺口，因此没有补任何直接 Qt include。
+- **任务 B**：删除 `editorFindBarStyleSheet`、`metadataPageStyleSheet`、
+  `metadataEmptyHintLabelStyleSheet`、`outlineListStyleSheet`、`compactToolbarButtonStyleSheet` 的
+  `.h` 声明和 `.cpp` 定义。`resolvedTheme` 保留，因为 `UiTheme::isDarkTheme()` 仍在
+  `UiTheme.cpp` 内调用它；5 个删除名在 `src/tools/` 没有文本扫描命中。
+- **升级项**：没有触发“补直接 include”“真实行为耦合”或“修改既有 spec”升级规则。
+- **验证**：增量 Release 全目标构建通过；完整 CTest 为 108 项 / 105 通过，3 个既有红项仍为
+  `timeline_model_spec`、`qml_editor_controller_spec`、`qtavplayer_platform_spec`，没有新增红项。
+
+#### 交接：第 2 步的子代理 Execution Packet（原文保留，可直接下发）
+
+> 下面这份 packet 是执行前准备的原始版本，现保留作审计记录（此前所有者曾中断下发）。
+> 其中「执行前请自己复核」「升级规则」两段是本仓库多次踩坑后固化的要求，不要删减。
+
+```text
+仓库 /Users/caoyusen/Desktop/MiaCode，分支 feature/qml-ui，工作区干净。这是 Widgets 移除第 2 步。
+
+## 背景（不要重新调查，这些已核实）
+
+src/app/ui/ 不是可整体删除的目录——UiText / AppBackgroundSettings / ThemeVariantResolver /
+ShortcutRegistry 都有 QML 路径消费者，必须保留。真正能做的是剪掉死表面。
+
+注意：这些头文件是**裸文件名 include**（#include "UiTheme.h"），不是 ui/UiTheme.h。搜索时用裸形式。
+
+## 任务 A：删掉 55 处死 include
+
+UiTheme.h —— 26 个文件，全部零处 UiTheme::（src/app/runtime/ 下）：
+  SessionBootstrapFinalize.cpp, Session.cpp, SessionBootstrap.cpp,
+  document/{DocumentDesignerFlow,DocumentFileFlow,DocumentPages,DocumentFlow,
+             DocumentAutosave,DocumentTransforms}.cpp,
+  playback/{SessionForwarding,Playback,IntroRegion,LayoutUi,FramePacing,Tick,
+            QuickParse,Seek,AnalysisFlow}.cpp,
+  export/{ExportSnapshot,ExportFlow,ExportWorker}.cpp,
+  preview/{StageMediaRoute,WarmupAndSettings}.cpp,
+  editor/EditorDisplay.cpp, media/{MediaTools,MediaJobs}.cpp
+
+DialogLocalization.h —— 29 个文件，全部零处 UiDialogs::（src/app/runtime/ 下）：
+  SessionBootstrap.cpp, SessionBootstrapFinalize.cpp, Session.cpp,
+  document/{DocumentDesignerFlow,DocumentAutosave,DocumentTransforms}.cpp,
+  playback/{FramePacing,Layout,LayoutUi,SessionForwarding,Playback,QuickParse,Tick,
+            TimelineFlow,IntroRegion,Fullscreen,AnalysisFlow,Seek,PlaybackState}.cpp,
+  validation/{ValidationFlow,ValidationRuntime}.cpp,
+  media/{MediaJobs,MediaTools}.cpp,
+  export/{ExportSnapshot,ExportFlow,ExportWorker}.cpp,
+  preview/{StageMediaRoute,WarmupAndSettings}.cpp, editor/EditorDisplay.cpp
+
+执行前请自己复核：对每个文件重新 grep -c 'UiTheme::' / grep -c 'UiDialogs::' 确认为 0
+再删那一行 include。我的清单可能不全或有误——以你的复核为准，并在 Result Packet 里
+报告任何与我清单不符的地方。
+
+关键风险 —— 传递包含：DialogLocalization.h 和 UiTheme.h 会拉进 <QMessageBox>/<QDialog>/
+<QApplication>/<QPalette> 等 Qt Widgets 头。某个文件可能正在靠这条传递链用 Qt 类型
+而自己没有直接 include，删掉后会编译失败。
+
+处理办法：给那个文件补上它真正需要的那个直接 include（例如 #include <QMessageBox>），
+不要把 ui 头恢复回去。补直接 include 是改进，不是回退。在 Result Packet 里逐个列出
+你补了哪些直接 include 到哪些文件——这份清单本身就是"还剩多少真实 Widgets 耦合"的证据。
+
+## 任务 B：删掉零调用方的 UiTheme 样式函数
+
+src/app/ui/UiTheme.h 声明的 17 个函数里，外部调用方计数为 0 的有 6 个：
+  resolvedTheme, editorFindBarStyleSheet, metadataPageStyleSheet,
+  metadataEmptyHintLabelStyleSheet, outlineListStyleSheet, compactToolbarButtonStyleSheet
+
+删之前必须逐个确认两件事：
+1. 它在 UiTheme.cpp 内部是否被别的函数调用（我的统计排除了 UiTheme 自身文件，
+   所以看不到内部调用）。内部有调用方的不要删。
+2. src/tools/ 下是否有 spec 按名字扫描它。如果有 spec 提到这个名字，不要删，
+   直接在 Result Packet 里报告——本仓库的文本扫描 spec 是钉实现拼写的契约，
+   删除或削弱它们需要编排者裁决。
+
+确认干净的才删（.h 声明 + .cpp 定义一起删）。
+
+## 升级规则（务必遵守）
+
+1. 零调用方 ≠ 死代码：如果某个函数体除了返回字符串之外还碰了别的状态、或读写了
+   全局/单例，那它可能是"从未被接上的功能"而不是垃圾。报告，不要删。
+2. 如果删某处 include 后的编译错误暗示的不是缺 Qt 头、而是真实的行为耦合
+   （比如缺的是本仓库自己的类型），停下来报告。
+3. 任何需要改动既有 spec 断言的情况，一律停下来报告，不要自行改 spec。
+
+## 构建与测试约束（硬性）
+
+- 磁盘只剩 9.2Gi，build-macos 已占 5.2G。只做增量构建，绝对不要 clean/重新 configure。
+  构建前先 df -h /，低于 3Gi 就停下报告。
+- 并行度上限 -j4，更高会 OOM。
+- 跑测试要跑整个 ctest 套件，不要用 -R 只跑子集。
+- 已知 3 个红：qtavplayer_platform_spec、timeline_model_spec、qml_editor_controller_spec。
+  基线 108 项 / 105 通过。如果红的数量或名字变了，那才是你的问题。
+
+## Result Packet 需要包含
+
+- 任务 A：实际删除的 include 行数（分 UiTheme / DialogLocalization），与清单不符之处
+- 任务 A：为修传递包含而补上的直接 include 逐条清单（文件 → 补的头）
+- 任务 B：实际删掉哪几个，哪几个因内部调用/spec 扫描而保留（附证据）
+- 升级项：任何触发上面 3 条升级规则的东西
+- ctest 结果：总数 / 通过数 / 红的名字
+- commit hash 与 diffstat
+```
+
+#### 第 1 步遗留的一件未做事项
+
+`825a63b6` 删掉 `g_invalidStarPreviewEnabled` 后，`parseInternal` 的第三个参数在**两个调用点
+都恒为 `false`**，它守着的解析分支全部不可达。清理它要动解析器内部分支逻辑，
+未在无人监督时进行（解析器是本轮栽过跟头的模块——0 字节 qrc 伪装成解析错误那次）。
+**单独一轮处理。**
 
 ### 元数据页 UI 反馈待办（2026-09-04 所有者截图标注）
 

@@ -4,11 +4,9 @@
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/shell/ShellHost.h"
 
-#include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"

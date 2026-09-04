@@ -4,7 +4,6 @@
 #include "runtime/shell/ShellHost.h"
 
 #include "BracketScopeHighlighter.h"
-#include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"

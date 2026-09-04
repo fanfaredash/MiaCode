@@ -7,9 +7,7 @@
 
 #include "AppVersion.h"
 #include "QtPreviewSfxRuntime.h"
-#include "DialogLocalization.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/Id3TagReader.h"

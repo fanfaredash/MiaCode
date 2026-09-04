@@ -3,14 +3,12 @@
 
 #include "app/v2/PlaybackStateAuthority.h"
 
-#include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineQuickModel.h"
 #include "TimelineSlowRefresh.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "common/ChartClockCount.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ContentDurationConfig.h"

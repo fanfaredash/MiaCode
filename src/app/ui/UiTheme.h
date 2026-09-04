@@ -65,12 +65,7 @@ QIcon menuSelectionCheckIcon(bool visible = true);
 QString scrollBarStyleSheet();
 void styleRoundedMenu(QMenu& menu);
 QString editorShellStyleSheet();
-QString editorFindBarStyleSheet();
-QString metadataPageStyleSheet();
-QString metadataEmptyHintLabelStyleSheet();
-QString outlineListStyleSheet();
 QString previewPanelStyleSheet();
-QString compactToolbarButtonStyleSheet();
 QString pausePreviewButtonStyleSheet(bool active);
 QString aboutDialogStyleSheet();
 

@@ -15,13 +15,11 @@
 #include "runtime/shell/ShellHost.h"
 
 #include "BracketScopeHighlighter.h"
-#include "DialogLocalization.h"
 #include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "WindowParityMetrics.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
