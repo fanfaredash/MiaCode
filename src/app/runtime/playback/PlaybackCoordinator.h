@@ -171,13 +171,7 @@ public:
     void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
     void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
-    void updatePreviewWorkspaceLayout();
-    void cacheWorkspaceLayoutSizes();
-    void restoreWorkspaceLayoutSizes();
     void setWorkspacePanelsSwapped(bool swapped, bool persistState);
-    void applyWorkspacePanelArrangement();
-    void refreshLayoutAfterPageSwitch();
-    void updatePreviewPanelLayout(int panelWidthOverride = -1, int panelHeightOverride = -1);
     void updatePreviewObjectStats(double second);
     void requestPausedPreviewSeek(
         double second,

@@ -30,7 +30,6 @@
         // State::unifiedDesignerEnabled_.
         // Per-difficulty designer (`&des_N`) header field. Distinct from the
         // metadata page's document-level designer field (&des).
-        QWidget* workspaceContentWidget_ = nullptr;
         QTimer* previewHeldSeekTimer_ = nullptr;
     };
 
@@ -843,7 +842,6 @@
     QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
     miacode::v2::UiRequestService*& uiRequests_ = ui_.uiRequests_;
     miacode::v2::JobProgressService*& jobProgress_ = ui_.jobProgress_;
-    QWidget*& workspaceContentWidget_ = ui_.workspaceContentWidget_;
     QTimer*& previewHeldSeekTimer_ = ui_.previewHeldSeekTimer_;
     int& previewStatsLayoutRows_ = state_.previewStatsLayoutRows_;
     int& previewStatsLayoutCols_ = state_.previewStatsLayoutCols_;

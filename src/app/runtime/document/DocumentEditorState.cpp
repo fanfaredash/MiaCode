@@ -184,8 +184,6 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
         updateEditorHeader();
         updateEditorEmptyState();
         updateEditorStatus();
-        session_.refreshLayoutAfterPageSwitch();
-        QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     }
 
     clearDeletedDifficultyUndoState();

@@ -621,6 +621,12 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   Release 编译通过，针对性测试 7/7 通过，全量 CTest 仍为 105/108 通过，失败项与既有基线
   完全相同。剩余 `Qt6::Widgets` 依赖集中在尚未迁移的 runtime/document/shared/layout 路径，
   因此第 5 步仍未完成。
+- **第 5 步本轮继续移除空的 QWidget 布局桥（2026-09-05）**：确认
+  `workspaceContentWidget_` 从未被生产构造，删除 `RuntimeContext::Ui` 字段、旧 rehost 刷新
+  helper、PlaybackCoordinator / Session 的布局缓存与页面刷新空转发，以及 document 页面切换
+  对这些空操作的调用。预览画布比例仍更新同一份状态并刷新 Quick 合成表面，左右面板互换仍
+  保留状态和偏好持久化；布局翻译单元不再包含 Widgets 头。`MiaCode` Release 编译通过，
+  针对性测试 7/7 通过，全量 CTest 仍为 105/108 通过，失败项与既有基线完全相同。
 
 #### 第 2 步：一处需要更正的既往判断
 

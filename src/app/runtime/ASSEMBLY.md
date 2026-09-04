@@ -207,6 +207,12 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          QML shell 源集收口中，`ShellHost` 侧原方法随废弃原生 shell 一并移除。连带删除因此无人调用的
          `Session::clearValidationErrors` 转发壳。
 
+         **D 类后续收口（2026-09-05）**：核实 `workspaceContentWidget_` 从未被生产构造后，
+         删除 `RuntimeContext::Ui` 中的该 QWidget 指针、协调器内的 rehost 刷新 helper，以及
+         `PlaybackCoordinator` / `Session` 的布局缓存、页面刷新空转发和 document 页面切换调用。
+         `setPreviewCanvasAspectRatio` 现在只更新状态并刷新 Quick 合成表面，
+         `setWorkspacePanelsSwapped` 只保留 QML 所需的状态与偏好持久化。
+
          **裁决一：`setCurrentBottomTabsTabId` 移出 D 类，归入 E。** 它不是 Widgets 补妆——
          函数体除 `ui_`/`state_` 外还调用兄弟宿主 `validation_->flushPendingMuriDiagnosticsPanelRefresh()`
          （另有一句 `playback_->flushDeferredTimelineBridgeState()` 确属自指绕路）。
@@ -419,7 +425,9 @@ QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理�
 
 截至 2026-09-05，`ValidationHost` 已删除 `errorList_` / `muriList_` 投影及其底部
 `QTabWidget` 镜像；QML 直接消费 validation/Muri 快照和 validation decorations。
-`RuntimeContext::Ui` 仍保留其他迁移期空指针；这些不挡当前产品面，但属于后续 Widgets 清理范围。
+同日又删除了 `RuntimeContext::Ui` 中从未构造的 `workspaceContentWidget_` 及其页面切换空布局桥。
+`RuntimeContext::Ui` 仍保留其他非 Widgets 的迁移期空指针；这些不挡当前产品面，但属于后续
+运行时边界清理范围。
 
 ### 2026-09-01 语法错误点击跳到编辑器第一行
 

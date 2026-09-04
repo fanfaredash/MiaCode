@@ -121,7 +121,6 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
     state_.documentDirty_ = true;
 
     if (deletingActiveDifficulty) {
-        session_.cacheWorkspaceLayoutSizes();
         state_.currentFieldDirty_ = false;
         const QVector<int> remainingIds = session_.applicationServices_.workspace().document().difficultyIds();
         if (remainingIds.isEmpty()) {
@@ -130,8 +129,6 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
             populateMetadataPage();
             setChartBottomTabsMode(false);
             clearTimelineAndPreview();
-            session_.refreshLayoutAfterPageSwitch();
-        QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
         } else {
             int fallbackId = remainingIds.constFirst();
             int bestDistance = qAbs(fallbackId - difficultyId);
@@ -221,7 +218,6 @@ bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
-    session_.cacheWorkspaceLayoutSizes();
     // Preserve the current preview position across the switch, just like
     // switchToDifficultyField does, so entering the latency page keeps the
     // playhead instead of snapping to 0. installSandboxScene() consumes
@@ -251,8 +247,6 @@ bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
     session_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    session_.refreshLayoutAfterPageSwitch();
-    QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
@@ -309,7 +303,6 @@ void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
-    session_.cacheWorkspaceLayoutSizes();
     session_.stopQtPreviewPlayback(true);
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
@@ -332,8 +325,6 @@ void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->enter(previousActiveDifficultyId);
     }
-    session_.refreshLayoutAfterPageSwitch();
-    QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
 }
 
 bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
@@ -352,7 +343,6 @@ bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
-    session_.cacheWorkspaceLayoutSizes();
     session_.stopQtPreviewPlayback(true);
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
@@ -371,8 +361,6 @@ bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
     session_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    session_.refreshLayoutAfterPageSwitch();
-        QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
@@ -392,7 +380,6 @@ bool miacode::runtime::DocumentSessionHost::switchToWelcomePage()
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
-    session_.cacheWorkspaceLayoutSizes();
     session_.stopQtPreviewPlayback(true);
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
@@ -410,8 +397,6 @@ bool miacode::runtime::DocumentSessionHost::switchToWelcomePage()
     session_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
-    session_.refreshLayoutAfterPageSwitch();
-        QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
@@ -464,7 +449,6 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->leave();
     }
-    session_.cacheWorkspaceLayoutSizes();
     session_.stopQtPreviewPlayback(true);
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
@@ -552,8 +536,6 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
     // one call covers difficulty switches and file opens alike. No-ops outside
     // --debug. See emitChartSwitchResourceGauge() for what the sample means.
     session_.emitChartSwitchResourceGauge();
-    session_.refreshLayoutAfterPageSwitch();
-        QTimer::singleShot(0, &session_, [this]() { session_.refreshLayoutAfterPageSwitch(); });
     return true;
 }
 

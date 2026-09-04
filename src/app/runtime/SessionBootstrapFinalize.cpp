@@ -279,7 +279,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
     noteStatus("Editor ready.");
 
     loadPortableState();
-    applyWorkspacePanelArrangement();
     logStartupStage("portable_state_loaded");
     // beta4: the preview debug HUD ("显示预览调试信息") is NO LONGER force-enabled in
     // --debug / diagnostic builds. It used to default ON whenever runtime debug output was

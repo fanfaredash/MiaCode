@@ -217,10 +217,4 @@
     void emitChartSwitchResourceGauge();
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
-    void updatePreviewWorkspaceLayout();
-    void updatePreviewPanelLayout(int panelWidthOverride = -1, int panelHeightOverride = -1);
-    void applyWorkspacePanelArrangement();
-    void cacheWorkspaceLayoutSizes();
-    void restoreWorkspaceLayoutSizes();
-    void refreshLayoutAfterPageSwitch();
     BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId) const;

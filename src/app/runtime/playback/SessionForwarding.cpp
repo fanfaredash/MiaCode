@@ -153,36 +153,6 @@ void Session::setPreviewCanvasAspectRatio(double ratio, bool persistState)
     playback_->setPreviewCanvasAspectRatio(ratio, persistState);
 }
 
-void Session::updatePreviewWorkspaceLayout()
-{
-    playback_->updatePreviewWorkspaceLayout();
-}
-
-void Session::cacheWorkspaceLayoutSizes()
-{
-    playback_->cacheWorkspaceLayoutSizes();
-}
-
-void Session::restoreWorkspaceLayoutSizes()
-{
-    playback_->restoreWorkspaceLayoutSizes();
-}
-
-void Session::applyWorkspacePanelArrangement()
-{
-    playback_->applyWorkspacePanelArrangement();
-}
-
-void Session::refreshLayoutAfterPageSwitch()
-{
-    playback_->refreshLayoutAfterPageSwitch();
-}
-
-void Session::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
-{
-    playback_->updatePreviewPanelLayout(panelWidthOverride, panelHeightOverride);
-}
-
 void Session::updatePreviewObjectStats(double second)
 {
     playback_->updatePreviewObjectStats(second);
