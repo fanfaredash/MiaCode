@@ -2,7 +2,6 @@
 
 #include "app/v2/ApplicationServices.h"
 
-#include "UiTheme.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/MiniaudioFileAccess.h"
@@ -14,7 +13,6 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
-#include <QMenu>
 #include <QScreen>
 #include <QStringList>
 #include <QWindow>
@@ -282,11 +280,6 @@ int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor)
 {
     const int baseSpacing = qBound(1, qRound(static_cast<double>(pointSize) * 0.18), 6);
     return qMax(0, qRound(static_cast<double>(baseSpacing) * qMax(0.0, spacingFactor)));
-}
-
-void styleRoundedMenu(QMenu& menu)
-{
-    UiTheme::styleRoundedMenu(menu);
 }
 
 qint64 fileLastModifiedMs(const QFileInfo& fileInfo)
