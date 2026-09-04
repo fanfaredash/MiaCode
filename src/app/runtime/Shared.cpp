@@ -55,15 +55,6 @@ QString normalizeLanguageToken(QString token)
     return token;
 }
 
-QString cssRgba(const QColor& color, int alpha)
-{
-    return QStringLiteral("rgba(%1, %2, %3, %4)")
-        .arg(color.red())
-        .arg(color.green())
-        .arg(color.blue())
-        .arg(qBound(0, alpha, 255));
-}
-
 QString cssRgb(const QColor& color)
 {
     return color.name(QColor::HexRgb);
@@ -398,11 +389,6 @@ void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
     }
 }
 
-QColor previewFullscreenOverlayIconColor()
-{
-    return QColor(QStringLiteral("#F8FAFC"));
-}
-
 QFont editorFont(int pointSize)
 {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
@@ -475,76 +461,6 @@ QFont uiMonoFont(int pointSize, QFont::Weight weight)
     return font;
 }
 
-QString previewFullscreenControlCardStyleSheet()
-{
-    const QColor overlayText = previewFullscreenOverlayIconColor();
-    const QColor accent = UiTheme::colors().accent;
-    return QStringLiteral(
-        "QFrame#PreviewControlCard {"
-        " background: rgba(0, 0, 0, 188);"
-        " border: 1px solid rgba(255, 255, 255, 42);"
-        " border-radius: 18px;"
-        "}"
-        "QFrame#PreviewControls {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QToolButton#PreviewControlButton {"
-        " color: %1;"
-        " padding: 7px 10px;"
-        " min-height: 32px;"
-        " border: 1px solid rgba(255, 255, 255, 40);"
-        " border-radius: 9px;"
-        " background: rgba(255, 255, 255, 18);"
-        " font-weight: 600;"
-        "}"
-        "QToolButton#PreviewControlButton:hover {"
-        " background: rgba(255, 255, 255, 32);"
-        " border-color: rgba(255, 255, 255, 76);"
-        "}"
-        "QToolButton#PreviewControlButton:pressed {"
-        " background: rgba(255, 255, 255, 46);"
-        "}"
-        "QSlider::groove:horizontal {"
-        " height: 6px;"
-        " background: rgba(255, 255, 255, 42);"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::sub-page:horizontal {"
-        " background: %2;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::add-page:horizontal {"
-        " background: rgba(255, 255, 255, 22);"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        " width: 12px;"
-        " margin: -4px 0;"
-        " border-radius: 6px;"
-        " background: %1;"
-        " border: 1px solid rgba(15, 23, 42, 102);"
-        "}"
-    )
-        .arg(cssRgb(overlayText))
-        .arg(cssRgb(accent));
-}
-
-QString previewFullscreenHintStyleSheet()
-{
-    return QStringLiteral(
-        "QLabel {"
-        " background: rgba(0, 0, 0, 188);"
-        " color: #F8FAFC;"
-        " border: 1px solid rgba(255, 255, 255, 52);"
-        " border-radius: 16px;"
-        " padding: 10px 16px;"
-        " font-size: 14px;"
-        " font-weight: 600;"
-        "}"
-    );
-}
-
 QString previewPlaybackRateToastStyleSheet()
 {
     return QStringLiteral(
@@ -587,46 +503,6 @@ QString outlineCollapseButtonStyleSheet()
         .arg(cssRgb(colors.border))
         .arg(cssRgb(colors.menuHoverBg))
         .arg(cssRgb(colors.borderSoft));
-}
-
-QString previewFullscreenPauseButtonStyleSheet(bool active)
-{
-    const QColor overlayText = previewFullscreenOverlayIconColor();
-    const QColor accent = UiTheme::colors().accent;
-    if (active) {
-        return QStringLiteral(
-            "QToolButton {"
-            " color: %1;"
-            " padding: 7px 10px;"
-            " min-height: 32px;"
-            " border: 1px solid %2;"
-            " border-radius: 9px;"
-            " background: %3;"
-            " font-weight: 700;"
-            "}"
-            "QToolButton:hover { background: %4; }"
-        )
-            .arg(cssRgb(overlayText))
-            .arg(cssRgba(accent, 220))
-            .arg(cssRgba(accent, 208))
-            .arg(cssRgba(accent, 255));
-    }
-    return QStringLiteral(
-        "QToolButton {"
-        " color: %1;"
-        " padding: 7px 10px;"
-        " min-height: 32px;"
-        " border: 1px solid rgba(255, 255, 255, 40);"
-        " border-radius: 9px;"
-        " background: rgba(255, 255, 255, 18);"
-        " font-weight: 600;"
-        "}"
-        "QToolButton:hover {"
-        " background: rgba(255, 255, 255, 32);"
-        " border-color: rgba(255, 255, 255, 76);"
-        "}"
-    )
-        .arg(cssRgb(overlayText));
 }
 
 QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible)
@@ -704,50 +580,6 @@ QIcon makePreviewResumeIcon(const QColor& color)
         QPointF(16.5, 10.0),
         QPointF(7.5, 17.0),
     });
-    return QIcon(pixmap);
-}
-
-QIcon makePreviewEnterFullscreenIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.7);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawLine(QPointF(7.8, 4.8), QPointF(4.8, 4.8));
-    painter.drawLine(QPointF(4.8, 4.8), QPointF(4.8, 7.8));
-    painter.drawLine(QPointF(12.2, 4.8), QPointF(15.2, 4.8));
-    painter.drawLine(QPointF(15.2, 4.8), QPointF(15.2, 7.8));
-    painter.drawLine(QPointF(4.8, 12.2), QPointF(4.8, 15.2));
-    painter.drawLine(QPointF(4.8, 15.2), QPointF(7.8, 15.2));
-    painter.drawLine(QPointF(12.2, 15.2), QPointF(15.2, 15.2));
-    painter.drawLine(QPointF(15.2, 12.2), QPointF(15.2, 15.2));
-    return QIcon(pixmap);
-}
-
-QIcon makePreviewExitFullscreenIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.7);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawLine(QPointF(8.2, 4.8), QPointF(8.2, 8.2));
-    painter.drawLine(QPointF(4.8, 8.2), QPointF(8.2, 8.2));
-    painter.drawLine(QPointF(11.8, 4.8), QPointF(11.8, 8.2));
-    painter.drawLine(QPointF(11.8, 8.2), QPointF(15.2, 8.2));
-    painter.drawLine(QPointF(4.8, 11.8), QPointF(8.2, 11.8));
-    painter.drawLine(QPointF(8.2, 11.8), QPointF(8.2, 15.2));
-    painter.drawLine(QPointF(11.8, 11.8), QPointF(15.2, 11.8));
-    painter.drawLine(QPointF(11.8, 11.8), QPointF(11.8, 15.2));
     return QIcon(pixmap);
 }
 

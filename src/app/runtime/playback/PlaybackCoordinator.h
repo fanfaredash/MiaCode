@@ -172,17 +172,6 @@ public:
     void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
     void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
-    void togglePreviewFullscreen();
-    void enterPreviewFullscreen();
-    void exitPreviewFullscreen();
-    void updatePreviewFullscreenButtonAppearance();
-    bool shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const;
-    QRect previewFullscreenControlCardRect(bool visible) const;
-    void showPreviewFullscreenControls(bool animate = true);
-    void hidePreviewFullscreenControls(bool animate = true);
-    void schedulePreviewFullscreenControlsAutoHide();
-    void pollPreviewFullscreenCursor();
-    void updatePreviewFullscreenOverlayGeometry();
     void updatePreviewWorkspaceLayout();
     void cacheWorkspaceLayoutSizes();
     void restoreWorkspaceLayoutSizes();

@@ -172,46 +172,6 @@ QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
     return style;
 }
 
-void updatePreviewControlsLayout(
-    QHBoxLayout* previewControlsLayout,
-    QToolButton* stopPreviewButton,
-    QToolButton* pausePreviewButton,
-    QSlider* previewSlider,
-    QToolButton* previewSpeedButton,
-    QToolButton* previewFullscreenButton,
-    bool swapped
-)
-{
-    if (previewControlsLayout == nullptr
-        || stopPreviewButton == nullptr
-        || pausePreviewButton == nullptr
-        || previewSlider == nullptr
-        || previewSpeedButton == nullptr
-        || previewFullscreenButton == nullptr) {
-        return;
-    }
-
-    previewControlsLayout->removeWidget(stopPreviewButton);
-    previewControlsLayout->removeWidget(pausePreviewButton);
-    previewControlsLayout->removeWidget(previewSlider);
-    previewControlsLayout->removeWidget(previewSpeedButton);
-    previewControlsLayout->removeWidget(previewFullscreenButton);
-
-    if (swapped) {
-        previewControlsLayout->addWidget(previewSpeedButton, 0);
-        previewControlsLayout->addWidget(previewFullscreenButton, 0);
-        previewControlsLayout->addWidget(previewSlider, 1);
-        previewControlsLayout->addWidget(stopPreviewButton, 0);
-        previewControlsLayout->addWidget(pausePreviewButton, 0);
-    } else {
-        previewControlsLayout->addWidget(stopPreviewButton, 0);
-        previewControlsLayout->addWidget(pausePreviewButton, 0);
-        previewControlsLayout->addWidget(previewSlider, 1);
-        previewControlsLayout->addWidget(previewSpeedButton, 0);
-        previewControlsLayout->addWidget(previewFullscreenButton, 0);
-    }
-}
-
 std::pair<int, int> lineColForTextOffset(const QString& text, int offset)
 {
     const int boundedOffset = qBound(0, offset, text.size());
@@ -777,9 +737,6 @@ void miacode::runtime::PlaybackCoordinator::onTimelineDragStarted()
     stopPreviewHeldSeek();
     QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
-    if (state_.previewFullscreenActive_) {
-        showPreviewFullscreenControls(false);
-    }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
@@ -834,18 +791,12 @@ void miacode::runtime::PlaybackCoordinator::onTimelineDragFinished(double second
     state_.previewScrubRenderElapsed_.invalidate();
     if (!state_.previewProgressFollowEnabled_) {
         Q_UNUSED(second);
-        if (state_.previewFullscreenActive_) {
-            showPreviewFullscreenControls(false);
-        }
         if (ui_.previewSeekDebounceTimer_ != nullptr) {
             ui_.previewSeekDebounceTimer_->stop();
         }
         return;
     }
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    if (state_.previewFullscreenActive_) {
-        showPreviewFullscreenControls(false);
-    }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }

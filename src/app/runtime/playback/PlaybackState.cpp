@@ -1222,9 +1222,7 @@ void miacode::runtime::PlaybackCoordinator::updatePauseButtonAppearance()
                 : UiText::text(QStringLiteral("preview.play"))
         );
         ui_.pausePreviewButton_->setStyleSheet(
-            state_.previewFullscreenActive_
-                ? previewFullscreenPauseButtonStyleSheet(previewPlaying)
-                : UiTheme::pausePreviewButtonStyleSheet(previewPlaying)
+            UiTheme::pausePreviewButtonStyleSheet(previewPlaying)
         );
     }
 }

@@ -276,9 +276,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
             if (previewSlider_ != nullptr) {
                 previewSlider_->setFocus(Qt::MouseFocusReason);
             }
-            if (previewFullscreenActive_) {
-                showPreviewFullscreenControls(false);
-            }
             if (playing_) {
                 pauseQtPreviewPlaybackExact();
             }
@@ -300,9 +297,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
         connect(previewSlider_, &QSlider::sliderMoved, this, [this](int value) {
             if (previewSlider_ == nullptr) {
                 return;
-            }
-            if (previewFullscreenActive_) {
-                showPreviewFullscreenControls(false);
             }
             showPreviewSliderTimeHint(value);
             const double second = static_cast<double>(value) / 1000.0;
@@ -354,9 +348,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
             previewScrubRenderElapsed_.invalidate();
             if (previewSlider_ == nullptr) {
                 return;
-            }
-            if (previewFullscreenActive_) {
-                showPreviewFullscreenControls(false);
             }
             showPreviewSliderTimeHint(previewSlider_->value());
             if (previewSeekDebounceTimer_ != nullptr) {

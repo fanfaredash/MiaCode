@@ -343,7 +343,6 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewWorkspaceLayout()
     updatePreviewPanelLayout();
     refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
     refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
-    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
 }
@@ -398,7 +397,6 @@ void miacode::runtime::PlaybackCoordinator::refreshLayoutAfterPageSwitch()
         "TimelineSection::refreshLayoutAfterPageSwitch",
         QStringLiteral("current_page=%1").arg(layoutWidgetSummary(nullptr)));
     refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
-    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     const qint64 totalMs = totalTimer.elapsed();
     if (totalMs >= kPageLayoutTotalSlowMs) {
         appendPageLayoutDiag(
@@ -414,7 +412,6 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewPanelLayout(int panelWi
 {
     Q_UNUSED(panelWidthOverride);
     Q_UNUSED(panelHeightOverride);
-    refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     updatePreviewPlaybackRateToastGeometry();
 }
 

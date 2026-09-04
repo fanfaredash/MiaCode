@@ -160,61 +160,6 @@ void Session::setPreviewCanvasAspectRatio(double ratio, bool persistState)
     playback_->setPreviewCanvasAspectRatio(ratio, persistState);
 }
 
-void Session::togglePreviewFullscreen()
-{
-    playback_->togglePreviewFullscreen();
-}
-
-void Session::enterPreviewFullscreen()
-{
-    playback_->enterPreviewFullscreen();
-}
-
-void Session::exitPreviewFullscreen()
-{
-    playback_->exitPreviewFullscreen();
-}
-
-void Session::updatePreviewFullscreenButtonAppearance()
-{
-    playback_->updatePreviewFullscreenButtonAppearance();
-}
-
-bool Session::shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const
-{
-    return playback_->shouldRevealPreviewFullscreenControls(globalCursorPos);
-}
-
-QRect Session::previewFullscreenControlCardRect(bool visible) const
-{
-    return playback_->previewFullscreenControlCardRect(visible);
-}
-
-void Session::showPreviewFullscreenControls(bool animate)
-{
-    playback_->showPreviewFullscreenControls(animate);
-}
-
-void Session::hidePreviewFullscreenControls(bool animate)
-{
-    playback_->hidePreviewFullscreenControls(animate);
-}
-
-void Session::schedulePreviewFullscreenControlsAutoHide()
-{
-    playback_->schedulePreviewFullscreenControlsAutoHide();
-}
-
-void Session::pollPreviewFullscreenCursor()
-{
-    playback_->pollPreviewFullscreenCursor();
-}
-
-void Session::updatePreviewFullscreenOverlayGeometry()
-{
-    playback_->updatePreviewFullscreenOverlayGeometry();
-}
-
 void Session::updatePreviewWorkspaceLayout()
 {
     playback_->updatePreviewWorkspaceLayout();

@@ -47,43 +47,4 @@ QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
     return style;
 }
 
-void updatePreviewControlsLayout(
-    QHBoxLayout* previewControlsLayout,
-    QToolButton* stopPreviewButton,
-    QToolButton* pausePreviewButton,
-    QSlider* previewSlider,
-    QToolButton* previewSpeedButton,
-    QToolButton* previewFullscreenButton,
-    bool swapped)
-{
-    if (previewControlsLayout == nullptr
-        || stopPreviewButton == nullptr
-        || pausePreviewButton == nullptr
-        || previewSlider == nullptr
-        || previewSpeedButton == nullptr
-        || previewFullscreenButton == nullptr) {
-        return;
-    }
-
-    previewControlsLayout->removeWidget(stopPreviewButton);
-    previewControlsLayout->removeWidget(pausePreviewButton);
-    previewControlsLayout->removeWidget(previewSlider);
-    previewControlsLayout->removeWidget(previewSpeedButton);
-    previewControlsLayout->removeWidget(previewFullscreenButton);
-
-    if (swapped) {
-        previewControlsLayout->addWidget(previewSpeedButton, 0);
-        previewControlsLayout->addWidget(previewFullscreenButton, 0);
-        previewControlsLayout->addWidget(previewSlider, 1);
-        previewControlsLayout->addWidget(stopPreviewButton, 0);
-        previewControlsLayout->addWidget(pausePreviewButton, 0);
-    } else {
-        previewControlsLayout->addWidget(stopPreviewButton, 0);
-        previewControlsLayout->addWidget(pausePreviewButton, 0);
-        previewControlsLayout->addWidget(previewSlider, 1);
-        previewControlsLayout->addWidget(previewSpeedButton, 0);
-        previewControlsLayout->addWidget(previewFullscreenButton, 0);
-    }
-}
-
 }  // namespace

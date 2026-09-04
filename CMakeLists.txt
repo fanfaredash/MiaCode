@@ -215,7 +215,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/playback/Layout.cpp
     src/app/runtime/playback/FramePacing.cpp
     src/app/runtime/playback/SessionForwarding.FramePacing.cpp
-    src/app/runtime/playback/Fullscreen.cpp
     src/app/runtime/playback/LayoutUi.cpp
     src/app/runtime/playback/SessionForwarding.cpp
     src/app/runtime/playback/Playback.cpp
@@ -2011,7 +2010,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/runtime/document/DocumentFlow.cpp
             src/app/runtime/playback/AnalysisFlow.cpp
             src/app/runtime/playback/FollowSync.cpp
-            src/app/runtime/playback/Fullscreen.cpp
             src/app/runtime/playback/LayoutUi.cpp
             src/app/runtime/playback/Playback.cpp
             src/app/runtime/playback/PlaybackState.cpp

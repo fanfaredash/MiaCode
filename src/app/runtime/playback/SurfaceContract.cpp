@@ -101,9 +101,6 @@ void miacode::runtime::PlaybackCoordinator::beginScrub()
     stopPreviewHeldSeek();
     state_.previewScrubDragging_ = true;
     state_.previewScrubRenderElapsed_.invalidate();
-    if (state_.previewFullscreenActive_) {
-        showPreviewFullscreenControls(false);
-    }
     if (state_.playing_) {
         pauseQtPreviewPlaybackExact();
     }
@@ -127,9 +124,6 @@ void miacode::runtime::PlaybackCoordinator::updateScrub(double second, bool cent
             .arg(centerView ? 1 : 0));
     writePreviewPauseSecond(
         playbackState_.pauseSecond_, clampedSecond, playbackState_.playing_, "update_preview_scrub");
-    if (state_.previewFullscreenActive_) {
-        showPreviewFullscreenControls(false);
-    }
     const bool shouldRenderNow =
         !state_.previewScrubRenderElapsed_.isValid()
         || state_.previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;

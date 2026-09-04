@@ -555,7 +555,7 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
 | **2** | **剪 `src/app/ui/` 的死表面** | **已完成（2026-09-04）** |
 | 3 | 齿轮图标渲染搬进 QML，摘掉 `Qt6::Svg` | 已完成（2026-09-04） |
 | 4 | `main.cpp` → `QGuiApplication` + `QQmlApplicationEngine` | **宿主切换与 GUI 初步验收通过（2026-09-04）**：CLI entry 已切换；唯一 engine 仍由 `QmlUiBootstrap` 持有；runtime backend 的 Widgets 剥离转入第 5 步继续 |
-| 5 | CMake 去掉 `Qt6::Widgets` / `Qt6::Svg`，移入 `dependency_allowlist_spec` 禁止表 | **进行中**：产品 `Qt6::Svg` 已移除；旧原生 shell 三组翻译单元已移出产品源集；`Qt6::Widgets` 等待剩余 runtime 源集迁移后移除 |
+| 5 | CMake 去掉 `Qt6::Widgets` / `Qt6::Svg`，移入 `dependency_allowlist_spec` 禁止表 | **进行中**：产品 `Qt6::Svg` 已移除；旧原生 shell 三组翻译单元及旧 C++ 全屏播放实现已移出产品源集；`Qt6::Widgets` 等待剩余 runtime 源集迁移后移除 |
 | — | 补功能：缺陷 2（方向键 seek）、缺陷 5（全屏控件） | 未开始；#5 会产生新 UI，需所有者定夺 |
 
 累计：`Ui` 字段 104 → 34；三轮净删约 1530 行。
@@ -575,14 +575,21 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `QmlUiBootstrap` 继续持有并加载唯一的 `QQmlApplicationEngine`，没有在 `main.cpp` 创建第二个
   engine。所有者已启动 GUI 做初步验收，反馈“未发现问题”；这项人工验收不替代后续
   runtime 源集与无 Widgets 构建验证。
-- **第 5 步进行中，本轮完成第一批产品源集拆分**：`CMakeLists.txt` 已将旧原生
+- **第 5 步进行中，本轮完成第一批产品源集拆分并继续收口播放 UI**：`CMakeLists.txt` 已将旧原生
   `runtime/shell/Interaction.cpp`、`Runtime.cpp`、`Shell.cpp` 移出 `MiaCode`，保留的
   `ShellHost` 只负责 QML 根窗口生命周期、关闭事务和运行时日志；`SessionLifecycle.cpp`
   承接 Session 析构、预览停机与窗口标题等非可视生命周期。同步移除了 document/editor/
   validation 中对原生 shell 布局、焦点和窗口诊断的调用。`MiaCode` Release 目标已通过编译。
+- **第 5 步本轮继续收口播放 UI**：删除纯 QWidget 的
+  `runtime/playback/Fullscreen.cpp`，移除 `Session` / `PlaybackCoordinator` 的原生全屏
+  转发、控件状态、样式和图标实现；全屏显示与关闭按钮继续由
+  `src/app/qml_ui/layout/MainSplitView.qml` 持有。`Qt6::Widgets` 仍保留，因为
+  `Session` / document / validation / playback 的其余 runtime backend 尚未完成源集迁移。
   产品目标仍直接链接 `Qt6::Widgets`，且 `Session` / `SessionBootstrapFinalize` / playback /
   document dialog / validation 等剩余翻译单元仍包含 Widgets 类型，因此本轮不把第 5 步宣称为完成。
-  测试/dev-tool 的 Widgets 依赖暂不属于产品目标验收。
+  本轮 `MiaCode` Release 编译通过；针对性测试 5/5 通过，全量 CTest 为 105/108 通过，
+  仅保留既有的 `timeline_model_spec`、`qml_editor_controller_spec`、`qtavplayer_platform_spec`
+  三项失败。测试/dev-tool 的 Widgets 依赖暂不属于产品目标验收。
 
 #### 第 2 步：一处需要更正的既往判断
 
@@ -704,7 +711,7 @@ DialogLocalization.h —— 29 个文件，全部零处 UiDialogs::（src/app/ru
   SessionBootstrap.cpp, SessionBootstrapFinalize.cpp, Session.cpp,
   document/{DocumentDesignerFlow,DocumentAutosave,DocumentTransforms}.cpp,
   playback/{FramePacing,Layout,LayoutUi,SessionForwarding,Playback,QuickParse,Tick,
-            TimelineFlow,IntroRegion,Fullscreen,AnalysisFlow,Seek,PlaybackState}.cpp,
+            TimelineFlow,IntroRegion,AnalysisFlow,Seek,PlaybackState}.cpp,
   validation/{ValidationFlow,ValidationRuntime}.cpp,
   media/{MediaJobs,MediaTools}.cpp,
   export/{ExportSnapshot,ExportFlow,ExportWorker}.cpp,

@@ -472,18 +472,7 @@ private:
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
-    void togglePreviewFullscreen();
-    void enterPreviewFullscreen();
-    void exitPreviewFullscreen();
-    void updatePreviewFullscreenButtonAppearance();
-    void updatePreviewFullscreenOverlayGeometry();
     void updatePreviewPlaybackRateToastGeometry();
-    void showPreviewFullscreenControls(bool animate = true);
-    void hidePreviewFullscreenControls(bool animate = true);
-    void schedulePreviewFullscreenControlsAutoHide();
-    void pollPreviewFullscreenCursor();
-    bool shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const;
-    QRect previewFullscreenControlCardRect(bool visible) const;
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
     PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(

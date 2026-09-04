@@ -39,17 +39,11 @@
         QTabWidget* bottomTabs_ = nullptr;
         QTabWidget* quickShellBottomTabsProxy_ = nullptr;
         QWidget* workspaceContentWidget_ = nullptr;
-        QFrame* previewControlCard_ = nullptr;
         QToolButton* stopPreviewButton_ = nullptr;
         QToolButton* pausePreviewButton_ = nullptr;
         QSlider* previewSlider_ = nullptr;
         QToolButton* previewSpeedButton_ = nullptr;
-        QToolButton* previewFullscreenButton_ = nullptr;
         QTimer* previewHeldSeekTimer_ = nullptr;
-        QWidget* previewFullscreenWindow_ = nullptr;
-        QWidget* previewFullscreenControlsWindow_ = nullptr;
-        QPropertyAnimation* previewFullscreenControlsAnimation_ = nullptr;
-        QPropertyAnimation* previewFullscreenControlsOpacityAnimation_ = nullptr;
     };
 
     struct State {
@@ -543,10 +537,6 @@
         double pendingDifficultySwitchPreviewRestoreSecond_ = 0.0;
         int previewStatsLayoutRows_ = 0;
         int previewStatsLayoutCols_ = 0;
-        bool previewFullscreenActive_ = false;
-        bool previewFullscreenControlsVisible_ = false;
-        bool previewFullscreenCursorTrackingInitialized_ = false;
-        QPoint previewFullscreenLastCursorPos_;
         QPointer<QWindow> rootWindow_;
         QRect rootWindowFrameGeometry_;
         bool quickShellPreviewCompositeSurfaceActive_ = false;
@@ -889,23 +879,13 @@
     QTextEdit*& metadataExtraEdit_ = ui_.metadataExtraEdit_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
     QWidget*& workspaceContentWidget_ = ui_.workspaceContentWidget_;
-    QFrame*& previewControlCard_ = ui_.previewControlCard_;
     QToolButton*& stopPreviewButton_ = ui_.stopPreviewButton_;
     QToolButton*& pausePreviewButton_ = ui_.pausePreviewButton_;
     QSlider*& previewSlider_ = ui_.previewSlider_;
     QToolButton*& previewSpeedButton_ = ui_.previewSpeedButton_;
-    QToolButton*& previewFullscreenButton_ = ui_.previewFullscreenButton_;
     QTimer*& previewHeldSeekTimer_ = ui_.previewHeldSeekTimer_;
     int& previewStatsLayoutRows_ = state_.previewStatsLayoutRows_;
     int& previewStatsLayoutCols_ = state_.previewStatsLayoutCols_;
-    QWidget*& previewFullscreenWindow_ = ui_.previewFullscreenWindow_;
-    QWidget*& previewFullscreenControlsWindow_ = ui_.previewFullscreenControlsWindow_;
-    QPropertyAnimation*& previewFullscreenControlsAnimation_ = ui_.previewFullscreenControlsAnimation_;
-    QPropertyAnimation*& previewFullscreenControlsOpacityAnimation_ = ui_.previewFullscreenControlsOpacityAnimation_;
-    bool& previewFullscreenActive_ = state_.previewFullscreenActive_;
-    bool& previewFullscreenControlsVisible_ = state_.previewFullscreenControlsVisible_;
-    bool& previewFullscreenCursorTrackingInitialized_ = state_.previewFullscreenCursorTrackingInitialized_;
-    QPoint& previewFullscreenLastCursorPos_ = state_.previewFullscreenLastCursorPos_;
     QPointer<QWindow>& rootWindow_ = state_.rootWindow_;
     QRect& rootWindowFrameGeometry_ = state_.rootWindowFrameGeometry_;
     bool& quickShellPreviewCompositeSurfaceActive_ = state_.quickShellPreviewCompositeSurfaceActive_;

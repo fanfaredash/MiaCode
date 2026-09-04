@@ -24,13 +24,13 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Owns: session-local open-editor tab ordering, MRU history, and active selection. Dragging exchanges any two open editor tabs, including metadata; the chart's difficulty order or serialized content is not changed.
 
 - QML visible shell and page routing:
-  - Files: `src/app/qml_ui/Main.qml`, `src/app/qml_ui/chrome/*.qml`, `src/app/qml_ui/editor/*.qml`, `src/app/qml_ui/preview/*.qml`, `src/app/qml_ui/timeline/*.qml`, `src/app/qml_ui/QmlEditorPageHost.*`, `src/app/qml_ui/QmlShellLifecycle.*`
+  - Files: `src/app/qml_ui/Main.qml`, `src/app/qml_ui/chrome/*.qml`, `src/app/qml_ui/editor/*.qml`, `src/app/qml_ui/layout/*.qml`, `src/app/qml_ui/preview/*.qml`, `src/app/qml_ui/timeline/*.qml`, `src/app/qml_ui/QmlEditorPageHost.*`, `src/app/qml_ui/QmlShellLifecycle.*`
   - Classes: `QmlEditorPageHost`, `QmlShellLifecycle`, `QmlUiWindowChrome`
   - Owns: the visible root window, chrome, document/editor pages, preview/timeline pages, fullscreen presentation, and semantic close/shutdown signals. The visible shell no longer depends on a hidden `MainWindow` or on native QWidget rehosting.
 - Runtime session orchestration behind the QML shell:
   - Files: `src/app/runtime/Session.{h,cpp}`, `src/app/runtime/SessionBootstrap.cpp`, `src/app/runtime/SessionBootstrapFinalize.cpp`, `src/app/runtime/SessionLifecycle.cpp`, `src/app/runtime/shell/ShellHost.{h,cpp}`
   - Classes: `Session`, `miacode::runtime::ShellHost`
-  - Owns: service/host assembly, document/playback/preview/validation coordination, root-window bookkeeping, close transactions, and non-visual teardown. The product target no longer compiles the retired native-shell implementations `runtime/shell/Interaction.cpp`, `Runtime.cpp`, or `Shell.cpp`; remaining Widgets use in runtime hosts is the staged boundary for the Widgets removal work.
+  - Owns: service/host assembly, document/playback/preview/validation coordination, root-window bookkeeping, close transactions, and non-visual teardown. The product target no longer compiles the retired native-shell implementations `runtime/shell/Interaction.cpp`, `Runtime.cpp`, or `Shell.cpp`, nor the retired native playback fullscreen implementation; QML owns the visible fullscreen presentation. Remaining Widgets use in runtime hosts is the staged boundary for the Widgets removal work.
 - Shared UI compatibility helpers:
   - Files: `src/app/ui/UiTheme.h`, `src/app/ui/UiTheme.cpp`, `src/app/ui/DialogLocalization.h`, `src/app/ui/UiNativeWindowTheme.*`
   - Namespace/classes: `miacode::ui`, `UiTheme`, `UiDialogs`, `UiNativeWindowTheme`

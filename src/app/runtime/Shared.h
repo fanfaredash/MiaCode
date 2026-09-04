@@ -131,18 +131,6 @@ void writePreviewPlayingFlag(
 inline constexpr int kEmbeddedPreviewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
 inline constexpr int kPreviewPanelMarginX = miacode::window_parity::kPreviewPanelMarginX;
 inline constexpr int kPreviewControlStatsCardMinWidth = miacode::window_parity::kPreviewControlStatsCardMinWidth;
-inline constexpr int kPreviewFullscreenHintTopMargin = miacode::window_parity::kPreviewFullscreenHintTopMargin;
-inline constexpr int kPreviewFullscreenOverlaySideMargin =
-    miacode::window_parity::kPreviewFullscreenOverlaySideMargin;
-inline constexpr int kPreviewFullscreenOverlayBottomMargin =
-    miacode::window_parity::kPreviewFullscreenOverlayBottomMargin;
-inline constexpr int kPreviewFullscreenOverlayMaxWidth = miacode::window_parity::kPreviewFullscreenOverlayMaxWidth;
-inline constexpr int kPreviewFullscreenOverlayHideOffset =
-    miacode::window_parity::kPreviewFullscreenOverlayHideOffset;
-inline constexpr int kPreviewFullscreenControlsRevealHotzoneHeight =
-    miacode::window_parity::kPreviewFullscreenControlsRevealHotzoneHeight;
-inline constexpr int kPreviewFullscreenControlsAutoHideDelayMs =
-    miacode::window_parity::kPreviewFullscreenControlsAutoHideDelayMs;
 inline constexpr int kEditorTextFontSizeMin = 8;
 inline constexpr int kEditorTextFontSizeMax = 28;
 inline constexpr double kEditorLineSpacingFactorDefault = 3.0;
@@ -172,19 +160,13 @@ void applyBlockSpacingToTextEdit(QTextEdit* editor, int blockSpacingPixels);
 QFont uiOutputFont();
 QFont uiAccentFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QFont uiMonoFont(int pointSize, QFont::Weight weight = QFont::Medium);
-QString previewFullscreenControlCardStyleSheet();
-QString previewFullscreenHintStyleSheet();
 QString previewPlaybackRateToastStyleSheet();
 QString outlineCollapseButtonStyleSheet();
-QColor previewFullscreenOverlayIconColor();
-QString previewFullscreenPauseButtonStyleSheet(bool active);
 QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible = true);
 QIcon makePreviewPlayIcon(const QColor& color);
 QIcon makePreviewStopIcon(const QColor& color);
 QIcon makePreviewPauseIcon(const QColor& color);
 QIcon makePreviewResumeIcon(const QColor& color);
-QIcon makePreviewEnterFullscreenIcon(const QColor& color);
-QIcon makePreviewExitFullscreenIcon(const QColor& color);
 QIcon makeDifficultyBadgeIcon(int difficultyId);
 QIcon makeOutlineCloseIcon(const QColor& color);
 QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor);
