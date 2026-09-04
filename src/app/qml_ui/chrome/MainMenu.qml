@@ -16,6 +16,7 @@ Item {
     // Source of the 调整 menu's operation rows; see chartTransformMenu().
     required property var documentSession
     property bool commandsEnabled: true
+    property bool normalizationEnabled: true
     // Re-read each time the menu opens rather than kept live: the list only
     // changes when a document is opened, and a menu nobody is looking at has no
     // reason to hold a copy.
@@ -24,7 +25,7 @@ Item {
     property real availableWidth: Number.POSITIVE_INFINITY
 
     readonly property int overflowButtonWidth: 30
-    property int visibleCount: 6
+    property int visibleCount: 5
     property var _activeMenu: null
 
     implicitHeight: 34
@@ -41,11 +42,11 @@ Item {
     }
 
     function topButtons() {
-        return [fileButton, editButton, toolsButton, adjustButton, previewButton, helpButton]
+        return [fileButton, editButton, adjustButton, toolsButton, previewButton]
     }
 
     function topMenus() {
-        return [fileMenu, editMenu, toolsMenu, adjustMenu, previewMenu, helpMenu]
+        return [fileMenu, editMenu, adjustMenu, toolsMenu, previewMenu]
     }
 
     function closeActiveMenu() {
@@ -137,8 +138,10 @@ Item {
 
         required property var menu
         required property int menuIndex
+        stateColors: Theme.colors.activityState
 
-        height: root.height
+        y: (root.height - height) / 2
+        height: Theme.controlMinHeight
         padding: 0
         leftPadding: 8
         rightPadding: 8
@@ -157,7 +160,7 @@ Item {
             text: btn.menu ? btn.menu.title : ""
             mnemonicVisible: true
             color: (btn.hovered || btn.menuOpen) ? Theme.colors.text.active
-                                                 : Theme.colors.text.secondary
+                                                 : Theme.colors.text.chrome
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
             horizontalAlignment: Text.AlignHCenter
@@ -197,13 +200,13 @@ Item {
             menuIndex: 1
         }
         TopLevelItem {
-            id: toolsButton
-            menu: toolsMenu
+            id: adjustButton
+            menu: adjustMenu
             menuIndex: 2
         }
         TopLevelItem {
-            id: adjustButton
-            menu: adjustMenu
+            id: toolsButton
+            menu: toolsMenu
             menuIndex: 3
         }
         TopLevelItem {
@@ -211,17 +214,13 @@ Item {
             menu: previewMenu
             menuIndex: 4
         }
-        TopLevelItem {
-            id: helpButton
-            menu: helpMenu
-            menuIndex: 5
-        }
-
         IconButton {
             id: moreButton
+            stateColors: Theme.colors.activityState
             width: root.overflowButtonWidth
-            height: root.height
-            visible: root.visibleCount < 6
+            y: (root.height - height) / 2
+            height: Theme.controlMinHeight
+            visible: root.visibleCount < 5
             iconSource: Qt.resolvedUrl("icons/more.svg")
             iconWidth: 16
             iconHeight: 16
@@ -335,14 +334,6 @@ Item {
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.saveAsRequested()
             }
-            AppMenuSeparator {}
-            AppMenuAction {
-                text: UiText.text("退出")
-                shortcut: StandardKey.Quit
-                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Quit)
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.exitRequested()
-            }
         }
 
         AppMenu {
@@ -362,6 +353,29 @@ Item {
                 enabled: root.commandsEnabled && root.commands.canRedo
                 onTriggered: root.commands.redoRequested()
             }
+            AppMenuSeparator {}
+            AppMenuAction {
+                text: UiText.text("剪切")
+                shortcut: StandardKey.Cut
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Cut)
+                enabled: root.commandsEnabled && root.commands.canCut
+                onTriggered: root.commands.cutRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("复制")
+                shortcut: StandardKey.Copy
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Copy)
+                enabled: root.commandsEnabled && root.commands.canCopy
+                onTriggered: root.commands.copyRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("粘贴")
+                shortcut: StandardKey.Paste
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Paste)
+                enabled: root.commandsEnabled && root.commands.canPaste
+                onTriggered: root.commands.pasteRequested()
+            }
+            AppMenuSeparator {}
             AppMenuAction {
                 text: UiText.text("查找")
                 shortcut: StandardKey.Find
@@ -369,7 +383,6 @@ Item {
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.findRequested()
             }
-            AppMenuSeparator {}
             AppMenuAction {
                 text: UiText.text("全选")
                 shortcut: StandardKey.SelectAll
@@ -446,7 +459,7 @@ Item {
             }
             AppMenuAction {
                 text: UiText.text("整谱规范化")
-                enabled: root.commandsEnabled
+                enabled: root.commandsEnabled && root.normalizationEnabled
                 onTriggered: root.commands.normalizeChartRequested()
             }
 
@@ -467,19 +480,6 @@ Item {
                 }
             }
 
-            AppMenuSeparator {}
-            AppMenuAction {
-                text: UiText.text("切换侧栏")
-                shortcut: root.shortcuts.sequence("view.toggle_sidebar", "Ctrl+B")
-                shortcutText: root.shortcuts.displayText("view.toggle_sidebar", "Ctrl+B")
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.toggleSidebarRequested()
-            }
-            AppMenuAction {
-                text: UiText.text("切换时间轴")
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.toggleBottomPanelRequested()
-            }
         }
 
         AppMenu {
@@ -497,15 +497,6 @@ Item {
             }
         }
 
-        AppMenu {
-            id: helpMenu
-            title: UiText.text("帮助(&H)")
-            AppMenuAction {
-                text: UiText.text("关于 MiaCode")
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.aboutRequested()
-            }
-        }
     }
 
     // Overflowed top-level AppMenus are inserted via addMenu() as submenus.

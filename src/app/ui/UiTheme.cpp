@@ -15,38 +15,38 @@ const UiTheme::Colors& lightColors()
 {
     static const UiTheme::Colors theme{
         false,                              // dark
-        QColor("#F8FAFD"),                  // windowBg
-        QColor("#F5F7FA"),                  // windowAltBg
-        QColor("#F7F9FC"),                  // toolbarBg
-        QColor("#F7F9FC"),                  // statusBg
-        QColor("#F5F7FA"),                  // panelBg
+        QColor("#F4F6F8"),                  // windowBg
+        QColor("#EBEFF3"),                  // windowAltBg
+        QColor("#D9E7F8"),                  // toolbarBg
+        QColor("#526F98"),                  // statusBg
+        QColor("#EBEFF3"),                  // panelBg
         QColor("#FFFFFF"),                  // cardBg
-        QColor("#EDF2F8"),                  // cardAltBg
+        QColor("#D9E6F5"),                  // cardAltBg
         QColor("#FFFFFF"),                  // inputBg
-        QColor("#F2F5F9"),                  // inputDisabledBg
+        QColor("#E5EAF0"),                  // inputDisabledBg
         QColor("#000000"),                  // canvasBg
-        QColor("#203040"),                  // textPrimary
-        QColor("#5F6B7A"),                  // textSecondary
-        QColor("#7A8796"),                  // textMuted
+        QColor("#3D4856"),                  // textPrimary
+        QColor("#5D6B7C"),                  // textSecondary
+        QColor("#9AA6B4"),                  // textMuted
         QColor("#FFFFFF"),                  // textInverse
-        QColor("#D5E0EC"),                  // border
-        QColor("#CCD6E2"),                  // borderSoft
-        QColor("#B8C7DA"),                  // borderStrong
-        QColor("#2E77D0"),                  // accent
-        QColor("#3A86E8"),                  // accentHover
-        QColor("#2668B9"),                  // accentPressed
+        QColor("#C8D2DE"),                  // border
+        QColor("#C8D1C2"),                  // borderSoft
+        QColor("#AAB8C8"),                  // borderStrong
+        QColor("#526F98"),                  // accent
+        QColor("#627FA8"),                  // accentHover
+        QColor("#405B80"),                  // accentPressed
         QColor("#FFFFFF"),                  // accentText
-        QColor("#B8CCE5"),                  // selection
-        QColor("#1F1F1F"),                  // selectionText
-        QColor("#FFFFFF"),                  // menuBg
-        QColor("#D7E0EB"),                  // menuBorder
-        QColor("#EEF5FF"),                  // menuHoverBg
-        QColor("#9AA5B4"),                  // menuDisabledText
-        QColor("#F4F7FB"),                  // scrollTrack
-        QColor("#9CB5CE"),                  // scrollHandle
-        QColor("#81A2C3"),                  // scrollHandleHover
-        QColor("#2B3C4E"),                  // iconPrimary
-        QColor("#5D6E83"),                  // iconSecondary
+        QColor("#D3DBCD"),                  // selection
+        QColor("#2F3B4A"),                  // selectionText
+        QColor("#F4F6F8"),                  // menuBg
+        QColor("#C8D2DE"),                  // menuBorder
+        QColor("#E5E9E1"),                  // menuHoverBg
+        QColor("#9AA6B4"),                  // menuDisabledText
+        QColor("#EBEFF3"),                  // scrollTrack
+        QColor("#A3AFBD"),                  // scrollHandle
+        QColor("#7E8DA0"),                  // scrollHandleHover
+        QColor("#2F3B4A"),                  // iconPrimary
+        QColor("#5D6B7C"),                  // iconSecondary
     };
     return theme;
 }

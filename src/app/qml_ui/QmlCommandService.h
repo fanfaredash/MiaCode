@@ -7,7 +7,6 @@
 #include <functional>
 
 #include "app/v2/DocumentBridge.h"
-#include "app/v2/EditorPageRouter.h"
 
 class QmlDocumentModel;
 
@@ -16,7 +15,6 @@ class QmlCommandService final : public QObject
     Q_OBJECT
 public:
     QmlCommandService(QmlDocumentModel& document,
-                      miacode::v2::EditorPageRouter*& routerSlot,
                       miacode::v2::DocumentBridge*& bridgeSlot,
                       QObject* parent = nullptr);
 
@@ -44,9 +42,6 @@ public:
     Q_INVOKABLE bool removeDifficulty(int id);
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
     Q_INVOKABLE void disableUnifiedDesigner();
-    // MainWindow forwards this request to the QML preferences dialog; it does
-    // not construct a Widgets preferences page.
-    Q_INVOKABLE void openPreferences();
     // The registry ids v2 binds as window shortcuts, in one place so QML does
     // not carry a second copy of the command table. The shell binds them to the
     // editor, not back to the backend — see QmlDocumentModel::transformChartSelection.
@@ -55,12 +50,7 @@ public:
 private:
     void whenDocumentMayBeLeft(std::function<void()> proceed);
 
-    miacode::v2::EditorPageRouter** routerSlot_ = nullptr;
     miacode::v2::DocumentBridge** bridgeSlot_ = nullptr;
-    miacode::v2::EditorPageRouter* router() const
-    {
-        return routerSlot_ != nullptr ? *routerSlot_ : nullptr;
-    }
     miacode::v2::DocumentBridge* bridge() const
     {
         return bridgeSlot_ != nullptr ? *bridgeSlot_ : nullptr;

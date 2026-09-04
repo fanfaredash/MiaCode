@@ -14,6 +14,7 @@ class QQuickWindow;
 
 class Session;
 class QmlApplicationContext;
+class QmlCoverExportWindow;
 namespace miacode::v2 {
 class ApplicationServices;
 }
@@ -40,6 +41,7 @@ public:
     bool start(const QString& startupOpenTarget = QString());
 
 private:
+    void openCoverExportWindow(int difficultyId);
     void beginAcceptedRootWindowShutdown(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
     void releaseRootWindowResources();
@@ -55,6 +57,7 @@ private:
     std::unique_ptr<QmlUiWindowChrome> windowChrome_;
     std::unique_ptr<miacode::qml_ui::QmlChartDropBridge> chartDropBridge_;
     QPointer<QQuickWindow> rootWindow_;
+    QPointer<QmlCoverExportWindow> coverWindow_;
     miacode::qml_ui::RootLifecycle rootLifecycle_;
     bool acceptedRootWindowShutdownStarted_ = false;
     bool acceptedRootWindowDestroyStarted_ = false;

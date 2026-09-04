@@ -23,20 +23,20 @@ Item {
     required property var editorController
     required property var editorSync
     required property var latency
-    required property var coverSession
     property bool compact: false
     property real sidebarDragWidth: 0
     property bool sidebarResizing: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
+    readonly property bool canCut: editorPane.canCut
+    readonly property bool canCopy: editorPane.canCopy
+    readonly property bool canPaste: editorPane.canPaste
     // User preference AND backend chart-bottom-tabs mode (export/metadata
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
         root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
-    readonly property bool coverExportActive:
-        root.pages.activePageId === "cover"
     readonly property real previewEditorAvailableWidth:
         Math.max(1, workspaceSplit.width - (preview.visible ? Theme.splitDividerThickness : 0))
     signal settingsRequested()
@@ -55,6 +55,18 @@ Item {
         editorPane.redo()
     }
 
+    function cut() {
+        editorPane.cut()
+    }
+
+    function copy() {
+        editorPane.copy()
+    }
+
+    function paste() {
+        editorPane.paste()
+    }
+
     function selectAll() {
         editorPane.selectAll()
     }
@@ -65,6 +77,18 @@ Item {
 
     function selectCurrentLine() {
         editorPane.selectCurrentLine()
+    }
+
+    function canNormalizeChart() {
+        return editorPane.canNormalizeChart()
+    }
+
+    function normalizationSelectionDescription() {
+        return editorPane.normalizationSelectionDescription()
+    }
+
+    function applyNormalization(options) {
+        return editorPane.applyNormalization(options)
     }
 
     function applyChartTransform(opId) {
@@ -79,8 +103,6 @@ Item {
 
     function showFullscreenPreview() {
         // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash.
-        if (root.coverExportActive)
-            return
         if (root.exportVideoActive)
             return
         fullscreenPreview.visible = true
@@ -138,10 +160,6 @@ Item {
     // page identity comes from the QML router rather than from the backend.
     onExportVideoActiveChanged: {
         if (root.exportVideoActive && fullscreenPreview.visible)
-            fullscreenPreview.visible = false
-    }
-    onCoverExportActiveChanged: {
-        if (root.coverExportActive && fullscreenPreview.visible)
             fullscreenPreview.visible = false
     }
 
@@ -202,7 +220,6 @@ Item {
                         viewState: root.viewState
                         documentSession: root.documentSession
                         commands: root.commands
-                        pages: root.pages
                     }
 
                     // v2 video export center: QML chrome + ExportVideoController panel surface.
@@ -211,13 +228,6 @@ Item {
                         visible: root.exportVideoActive
                         pages: root.pages
                         previewSession: root.previewSession
-                    }
-
-                    CoverExportPage {
-                        anchors.fill: parent
-                        visible: root.coverExportActive
-                        pages: root.pages
-                        coverSession: root.coverSession
                     }
 
                     LatencyPage {
@@ -255,10 +265,7 @@ Item {
 
             PreviewPane {
                 id: preview
-                // Cover export owns the center workspace and must release both
-                // the preview pane and its live surface while that page is open.
-                visible: !root.coverExportActive
-                surfaceActive: !root.coverExportActive && !fullscreenPreview.visible
+                surfaceActive: !fullscreenPreview.visible
                 previewSession: root.previewSession
                 preferences: root.preferences
                 exportPageActive: root.exportVideoActive
@@ -326,7 +333,7 @@ Item {
         anchors.fill: parent
         visible: false
         z: 80
-        color: Theme.colors.background.surface
+        color: Theme.surfaceColor(Theme.colors.background.panel)
 
         Loader {
             anchors.centerIn: parent
@@ -344,6 +351,9 @@ Item {
                 mediaHost: root.previewSession.mediaHost
                 logger: root.previewSession
                 surfaceRole: "fullscreen"
+                backgroundColor: "transparent"
+                hudTextColor: Theme.colors.previewHud.text
+                hudShadowColor: Theme.colors.previewHud.shadow
             }
         }
 

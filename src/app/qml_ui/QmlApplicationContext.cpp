@@ -1,7 +1,5 @@
 #include "QmlApplicationContext.h"
 
-#include "export/QmlExportSession.h"
-
 QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& services,
                                              QObject* parent)
     : QObject(parent)
@@ -14,14 +12,9 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
                 services.timelineSurfaceSlot(), this)
     , preview_(services.shellNotifications(), services.previewSurfaceSlot(), services.playbackControlSlot(), this)
     , timeline_(services.shellNotifications(), services.timelineSurfaceSlot(), this)
-    , commands_(document_, services.editorPageRouterSlot(),
-                services.documentBridgeSlot(), this)
+    , commands_(document_, services.documentBridgeSlot(), this)
     , pages_(services.shellNotifications(), document_, services.editorPageRouterSlot(),
              services.exportPageSessionSlot(), this)
-    // From the assembly's slot: MainWindow installs the session during its own
-    // construction, which finishes before this context is built.
-    , coverExport_(*qobject_cast<QmlExportSession*>(services.exportPageSession()),
-                   services.uiRequests(), services.playbackControlSlot(), this)
     , editor_(this)
     , shortcuts_(this)
     , platform_(this)
@@ -60,13 +53,6 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
             &preferences_, &QmlUiSettings::reloadEditorSettings);
     connect(&services.shellNotifications(), &miacode::v2::ShellNotifications::muriPromptPreferenceChanged,
             &analysis_, &QmlAnalysisModel::refreshPreferences);
-    connect(&pages_, &QmlEditorPageHost::coverPageRequested,
-            &coverExport_, &QmlCoverExportSession::enter);
-    connect(&pages_, &QmlEditorPageHost::activePageIdChanged, this, [this] {
-        if (pages_.activePageId() != QLatin1String("cover")) {
-            coverExport_.leave();
-        }
-    });
     connect(&document_, &QmlDocumentModel::metadataChanged,
             this, [this] { editor_.setWholeBpm(document_.wholeBpm()); });
     applyEditorSettings();
@@ -103,7 +89,6 @@ QObject* QmlApplicationContext::audioSettings() { return &audioSettings_; }
 QObject* QmlApplicationContext::previewSettings() { return &previewSettings_; }
 
 QObject* QmlApplicationContext::latency() { return &latency_; }
-QObject* QmlApplicationContext::coverExport() { return &coverExport_; }
 
 void QmlApplicationContext::setWindowChrome(QObject* chrome)
 {

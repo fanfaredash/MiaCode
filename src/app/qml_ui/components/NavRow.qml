@@ -7,6 +7,7 @@ ChromeRow {
     id: root
 
     property int textLeftPadding: 20
+    stateColors: Theme.colors.listState
 
     implicitHeight: 30
     height: implicitHeight

@@ -32,6 +32,8 @@ Item {
     property url templateSource: Qt.resolvedUrl("../templates/maimai_banner.json")
     property url backgroundImage: ""
     property url jacketImage: ""
+    property bool cacheStaticImages: true
+    property bool cacheDynamicImages: true
     // Fallback art when no 曲绘 is available (see effectiveJacket).
     property url logoImage: "qrc:/icons/app.png"
     property var trackOverrides: ({})
@@ -557,6 +559,7 @@ Item {
     // on it stays hidden and feeds the MultiEffect below as the blur source.
     Image {
         id: backdropSource
+        cache: root.cacheDynamicImages
         anchors.fill: parent
         source: root.effectiveBackdrop
         fillMode: Image.PreserveAspectCrop
@@ -638,6 +641,7 @@ Item {
             anchors.fill: parent
             opacity: root.stageOpacity("frame")
             source: root.assetUrl(root.template.assets.frame[root.trackValue("difficulty")])
+            cache: root.cacheStaticImages
             smooth: true
             mipmap: true
         }
@@ -680,6 +684,7 @@ Item {
             Image {
                 anchors.fill: parent
                 source: root.effectiveJacket
+                cache: root.cacheDynamicImages
                 fillMode: Image.PreserveAspectCrop
                 visible: root.effectiveJacket.toString().length > 0
                 smooth: true
@@ -699,6 +704,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.tab[root.trackValue("difficulty")])
+            cache: root.cacheStaticImages
             // The prefab tab only ships a LEFT tall shoulder (the でらっくす seat).
             // For Standard (SD) charts mirror it so the shoulder moves to the
             // right and seats the スタンダード plate symmetrically.
@@ -714,6 +720,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.plateDeluxe)
+            cache: root.cacheStaticImages
             visible: root.trackValue("mode") !== "Standard"
             smooth: true
             mipmap: true
@@ -723,6 +730,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.plateStandard)
+            cache: root.cacheStaticImages
             visible: root.trackValue("mode") === "Standard"
             smooth: true
             mipmap: true
@@ -753,6 +761,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("level")
             source: root.assetUrl(root.template.assets.lvPill[root.trackValue("difficulty")])
+            cache: root.cacheStaticImages
             smooth: true
             mipmap: true
         }
@@ -802,6 +811,7 @@ Item {
 
                 Image {
                     id: lvLabelSprite
+                    cache: root.cacheStaticImages
                     height: 60
                     width: root.lvGlyphWidth(14)
                     source: root.lvAtlasUrl()
@@ -817,6 +827,7 @@ Item {
                     Repeater {
                         model: root.lvDigitSequence(root.trackValue("level"))
                         Image {
+                            cache: root.cacheStaticImages
                             height: 60
                             width: root.lvGlyphWidth(modelData)
                             source: root.lvAtlasUrl()

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import MiaCode.UI
 
 // Shared form field — geometry mirrors v1 dialogMenuLineEditStyleSheet.
@@ -17,14 +18,22 @@ TextField {
     topPadding: 4
     bottomPadding: 4
     implicitHeight: Theme.controlMinHeight
+    Layout.preferredHeight: implicitHeight
+    Layout.maximumHeight: implicitHeight
     hoverEnabled: true
 
     background: Rectangle {
-        implicitHeight: Theme.controlMinHeight
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: Theme.chromeInsetY
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.chromeInsetY
+        implicitHeight: root.implicitHeight
         radius: Theme.controlRadius
         color: Theme.overlayColor(root.enabled
-               ? Theme.colors.background.surface
-               : Theme.colors.background.elevated)
+               ? Theme.colors.background.control
+               : Theme.colors.background.controlDisabled)
         border.width: root.enabled && (root.activeFocus || root.hovered)
                       ? Theme.controlBorderWidth : 0
         border.color: Theme.colors.accent.primary

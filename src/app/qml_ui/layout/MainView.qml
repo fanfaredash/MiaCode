@@ -24,7 +24,6 @@ Item {
     readonly property var mediaTools: applicationContext.mediaTools
     readonly property var preferencesModel: applicationContext.preferencesModel
     readonly property var latency: applicationContext.latency
-    readonly property var coverExport: applicationContext.coverExport
     readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
@@ -44,14 +43,15 @@ Item {
         id: menuCommands
         canUndo: splitView.canUndo
         canRedo: splitView.canRedo
-        onToggleSidebarRequested: root.toggleSidebar()
-        onToggleBottomPanelRequested: {
-            state.bottomPanelVisible = !state.bottomPanelVisible
-            root.preferences.bottomPanelVisible = state.bottomPanelVisible
-        }
+        canCut: splitView.canCut
+        canCopy: splitView.canCopy
+        canPaste: splitView.canPaste
         onExitRequested: root.requestClose()
         onUndoRequested: root.undo()
         onRedoRequested: root.redo()
+        onCutRequested: splitView.cut()
+        onCopyRequested: splitView.copy()
+        onPasteRequested: splitView.paste()
         onSelectAllRequested: root.selectAll()
         onFindRequested: splitView.showFindReplace()
         onSelectCurrentLineRequested: splitView.selectCurrentLine()
@@ -64,6 +64,7 @@ Item {
         onChartTransformRequested: opId => root.applyChartTransform(opId)
         onNormalizeChartRequested: root.pages.openNormalizeWholeChart()
         onAboutRequested: aboutDialog.open()
+        onPreferencesRequested: preferencesDialog.open()
         onNewDocumentRequested: root.commands.newDocument()
         onOpenRecentRequested: path => root.commands.openRecentDocument(path)
         onRestoreBackupRequested: path => root.commands.restoreBackupDocument(path)
@@ -157,6 +158,7 @@ Item {
                 ? root.applicationContext.windowChrome.titleBarLeadingInset
                 : 0
             documentTitle: root.documentSession.documentTitle
+            normalizationEnabled: root.pages.activePageId !== "export"
         }
 
         Loader {
@@ -172,6 +174,7 @@ Item {
                 shortcuts: root.applicationContext.shortcuts
                 documentSession: root.documentSession
                 commandsEnabled: true
+                normalizationEnabled: root.pages.activePageId !== "export"
             }
         }
 
@@ -179,6 +182,7 @@ Item {
             id: mainToolBar
             width: parent.width
             height: implicitHeight
+            hostWindow: root.hostWindow
             sidebarActive: root.compact
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible
@@ -223,9 +227,8 @@ Item {
                 editorController: root.editorController
                 editorSync: root.editorSync
                 latency: root.latency
-                coverSession: root.coverExport
                 compact: root.compact
-                onSettingsRequested: root.commands.openPreferences()
+                onSettingsRequested: preferencesDialog.open()
             }
 
             CompactPanelLayer {
@@ -236,7 +239,7 @@ Item {
                 commands: root.commands
                 pages: root.pages
                 compact: root.compact
-                onSettingsRequested: root.commands.openPreferences()
+                onSettingsRequested: preferencesDialog.open()
             }
         }
 
@@ -388,8 +391,7 @@ Item {
         progress: root.jobProgress
     }
 
-    // 音视频处理 lives at shell level: the tools menu, the latency page and the
-    // tools sidebar all reach the same dialog.
+    // Window-level tool overlays keep the current center page mounted.
     MediaToolsDialog {
         id: mediaToolsDialog
         objectName: "shellMediaToolsDialog"
@@ -408,6 +410,22 @@ Item {
         id: prependBlankDialog
         objectName: "shellPrependBlankDialog"
         mediaTools: root.mediaTools
+    }
+
+    NormalizeOptionsDialog {
+        id: normalizeDialog
+        objectName: "shellNormalizeOptionsDialog"
+        documentSession: root.documentSession
+
+        onAccepted: {
+            const options = {
+                reduceTo384Grid: normalizeDialog.reduceTo384Grid,
+                sectionMeasureCount: normalizeDialog.sectionMeasureCount,
+                syntax: normalizeDialog.syntax
+            }
+            root.documentSession.setNormalizeOptions(options)
+            splitView.applyNormalization(options)
+        }
     }
 
     AudioSettingsDialog {
@@ -440,6 +458,16 @@ Item {
     Connections {
         target: root.pages
         function onMediaToolsRequested() { mediaToolsDialog.open() }
+        function onNormalizeWholeChartRequested() {
+            if (root.pages.activePageId === "export" || !splitView.canNormalizeChart())
+                return
+            const stored = root.documentSession.normalizeOptions()
+            normalizeDialog.reduceTo384Grid = stored.reduceTo384Grid
+            normalizeDialog.sectionMeasureCount = stored.sectionMeasureCount
+            normalizeDialog.syntax = stored.syntax
+            normalizeDialog.selectionDescription = splitView.normalizationSelectionDescription()
+            normalizeDialog.open()
+        }
         function onPreferencesRequested() { preferencesDialog.open() }
     }
 }

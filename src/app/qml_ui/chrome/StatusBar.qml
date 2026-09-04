@@ -11,14 +11,14 @@ Rectangle {
     property int cursorColumn: 1
 
     implicitHeight: 23
-    color: Theme.surfaceColor(Theme.colors.background.surface)
+    color: Theme.colors.background.statusBar
 
     Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         height: 1
-        color: Theme.colors.border.normal
+        color: Theme.colors.border.status
     }
 
     RowLayout {
@@ -51,7 +51,7 @@ Rectangle {
     }
 
     component StatusText: Text {
-        color: Theme.colors.text.secondary
+        color: Theme.colors.text.status
         font.family: Theme.uiFont
         font.pixelSize: Theme.secondaryFontSize
     }

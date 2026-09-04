@@ -71,6 +71,9 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
   `QmlCoverExportSession`, and `CoverFrameSceneBinder`: the QML composer receives the
   session facade so it can configure the live `PreviewQuickSceneRoot` and borrowed
   `PreviewFrameState`; the internal binder alone is not a complete binding API.
+  The page is hosted by `QmlCoverExportWindow` / `CoverExportWindow.qml`, with a private
+  engine, request service and image provider. Closing destroys that engine before the
+  session's render resources; application shutdown waits for active capture to finish.
 
 ## References
 

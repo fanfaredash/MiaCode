@@ -46,25 +46,38 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
-- `src/app/qml_ui/theme/Theme.qml` — `overlayOpacity` (0.72) for control/state fills,
-  `popupOpacity` (0.96) for floating fills. Cards and idle fields are borderless in both
+- `src/app/qml_ui/theme/Theme.qml` — dark/light `overlayOpacity` (0.72/0.92) for control/state
+  fills and `popupOpacity` (0.96/0.99) for floating fills. Cards and idle fields are borderless in both
   wallpaper states; field hover/focus states retain their accent outline.
+  The dark palette and the Quiet Light-derived light palette live here as complete semantic
+  role maps. `Theme.colors` selects between them from `QmlUiSettings::darkTheme`; syntax and
+  timeline colours follow the same selection. Light wallpaper surfaces apply the persisted
+  light panel alpha directly, while dark surfaces retain the panel-ratio shading calculation.
+  Window title, activity and status regions have dedicated background roles; navigation rows
+  use `listState`, keeping Quiet Light's green selection separate from neutral tab selection.
+  `background.previewCanvas` supplies `PreviewSurface.backdropColor` through `surfaceColor()` in
+  both application themes, retaining wallpaper visibility with the persisted panel alpha. That
+  rectangle is confined to the actual preview bounds and sits below stage media; letterbox
+  space, the surrounding header, transport and statistics continue to use the application surface.
   `overlayColor` gates alpha multiplication on `backgroundActive`; keep text/icon opacity
   separate. Structural region fills continue to use `surfaceColor`.
   `buttonState` owns filled-button hover/pressed/selected colors; `accentState` owns
   the corresponding emphasized-button colors over `accent.primary`. Both share
   `HoverChrome` geometry and overlay alpha; disabled buttons retain the neutral base.
-  Frosted menus use `popupTintOpacity` (0.82), `popupBlurRadius` (64 logical pixels,
+  Frosted menus use dark/light `popupTintOpacity` (0.82/0.94), `popupBlurRadius` (64 logical pixels,
   also the capture padding), and `popupBlurScale` (0.5 on each axis). These apply in
   both wallpaper states through `BackdropBlur` / `FloatingCard`; `popupOpacity` remains
   the fill policy for ordinary floating surfaces.
-  Dialogs use `dialogTintOpacity` (0.94) and `dialogBlurRadius` (96 logical pixels) through
+  Dialogs use dark/light `dialogTintOpacity`, their own `dialogShadowOpacity` (0.34/0.18),
+  and `dialogBlurRadius` (96 logical pixels) through
   the same effect and half-resolution sampling. Radius also sets the sampling padding.
   Dialog tint uses `colors.background.panel` (#191A1B); menu tint uses
   `colors.background.elevated` (#202122), keeping large dialog surfaces darker.
-  Dialog geometry uses `dialogPadding` (16) and `dialogMargin` (24); individual dialogs
-  declare preferred widths; `dialogHeight` (560) and `dialogCompactHeight` (280) provide
-  stable height tiers; `ChoiceDialog` uses its implicit height for content-fit notices.
+  Dialog geometry uses `dialogPadding` (16), `panelPadding` (8), and `dialogMargin` (24);
+  individual dialogs declare preferred widths; `dialogHeight` (560) and
+  `dialogCompactHeight` (280) provide stable height tiers; content-fit dialogs use their
+  implicit height. `modalScrimColor` owns the dimming fill, and `AppDialog` binds its opacity
+  to the dialog fade transition.
   `AppDialog` centers and bounds all dialogs to the window Overlay. Shared `popupRadius`
   (12) owns menu, dropdown and dialog card/blur-mask corners; `controlRadius` (6)
   remains the radius for small controls and tooltips.
@@ -74,6 +87,8 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   `workspaceRadius` (10 logical pixels) owns the shared workspace corner. Sidebar drag snapping
   uses half `sidebarMinimumContentWidth`; the hit area and active stroke reuse
   `splitHandleHitExtent` / `splitHandleActiveThickness`, including the collapsed boundary.
+  `titleBarBrandIconSize` (17 logical pixels) owns the compact application-menu icon size;
+  the raster source provides matching 1x/2x variants.
 - `src/timeline/TimelineSceneStateBuilder.cpp` — viewport-fit lanes divide the full height
   below the header. The former 8px bottom padding has been removed.
 - `src/editor/SimaiCompletionCatalog.cpp` — bracket-completion suggestion lists. Fixed,

@@ -61,7 +61,7 @@ ApplicationWindow {
     palette.mid: Theme.colors.border.control
     palette.dark: Theme.colors.background.surface
     palette.shadow: "#000000"
-    palette.highlight: Theme.overlayColor(Theme.colors.state.selected)
+    palette.highlight: Theme.overlayColor(Theme.colors.state.textSelection)
     palette.highlightedText: Theme.colors.text.active
     palette.placeholderText: Theme.colors.text.secondary
     palette.toolTipBase: Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)

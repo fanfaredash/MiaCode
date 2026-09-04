@@ -7,12 +7,21 @@ Menu {
     id: root
     popupType: Popup.Item
 
-    readonly property PopupLifecycle lifecycle: PopupLifecycle {
-        popup: root
+    property bool closing: false
+    readonly property bool active: root.visible && !root.closing
+    enter: FadeTransition {
+        id: enterTransition
     }
-    readonly property bool active: lifecycle.active
-    enter: lifecycle.enterTransition
-    exit: lifecycle.exitTransition
+    exit: FadeTransition {
+        appearing: false
+        initialOpacity: root.opacity
+    }
+    onAboutToShow: {
+        enterTransition.initialOpacity = root.closing ? root.opacity : 0
+        root.closing = false
+    }
+    onAboutToHide: root.closing = true
+    onClosed: root.closing = false
 
     property var anchorItem: null
     property bool openRightAligned: false

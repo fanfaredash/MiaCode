@@ -112,6 +112,8 @@ Rectangle {
                 logger: root.previewSession
                 surfaceRole: "workspace"
                 backgroundColor: "transparent"
+                hudTextColor: Theme.colors.previewHud.text
+                hudShadowColor: Theme.colors.previewHud.shadow
             }
         }
     }

@@ -21,9 +21,9 @@ import MiaCode.UI
 Rectangle {
     id: root
 
-    required property var pages
     required property var coverSession
     readonly property var session: root.coverSession
+    signal closeRequested()
 
     // 右栏分组。选中任意图层后都回到图层检查器，保证当前选择的属性可见。
     property string inspectorTab: "canvas"
@@ -65,8 +65,12 @@ Rectangle {
 
     color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
+    implicitWidth: layerPane.SplitView.minimumWidth + canvasPane.SplitView.minimumWidth
+                   + inspectorPane.SplitView.minimumWidth + 2 * Theme.splitDividerThickness
+                   + 2 * content.anchors.margins
 
     ColumnLayout {
+        id: content
         anchors.fill: parent
         anchors.margins: 16
         spacing: 8
@@ -104,7 +108,8 @@ Rectangle {
             AppButton {
                 objectName: "coverCloseButton"
                 text: UiText.text("cover.close")
-                onClicked: root.pages.leaveOverlayPage()
+                enabled: !!root.session && !root.session.busy
+                onClicked: root.closeRequested()
             }
         }
 

@@ -386,6 +386,7 @@ Item {
         visible: !canvas.transparentBg && !canvas.blurEnabled
                  && source.toString().length > 0 && status === Image.Ready
         asynchronous: false
+        cache: false
         smooth: true
         mipmap: true
     }
@@ -494,6 +495,7 @@ Item {
                     source: layerItem.isChartFrame ? canvas.backdropSourceUrl : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: false
+                    cache: false
                     smooth: true
                     mipmap: true
                 }
@@ -687,6 +689,8 @@ Item {
         id: cardComponent
         MaimaiBannerCard {
             anchors.fill: parent
+            cacheStaticImages: true
+            cacheDynamicImages: false
             externalTemplate: canvas.cardTemplate
             trackOverrides: canvas.trackOverrides
             jacketImage: canvas.jacketImage

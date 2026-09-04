@@ -10,7 +10,9 @@ ShaderEffect {
     required property Item backgroundSource
     required property point backgroundOffset
     property real radius: Theme.workspaceRadius
-    readonly property color baseColor: Theme.colors.background.surface
+    // This mask rounds the panel against the activity-bar strip, so its
+    // restored pixels must use that strip's theme role.
+    property color baseColor: Theme.colors.background.activityBar
     readonly property color surfaceColor: Theme.surfaceColor(baseColor)
     readonly property var source: ShaderEffectSource {
         sourceItem: root.visible ? root.backgroundSource : null

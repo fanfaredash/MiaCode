@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QElapsedTimer>
 #include <QMetaObject>
 #include <QPointer>
@@ -25,7 +26,9 @@ void paintPreviewHudOverlay(
     const miacode::preview::scene::PreviewFrameState& state,
     const QSize& canvasSize,
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags
-        = miacode::preview::scene::kPreviewAllRenderLayers);
+        = miacode::preview::scene::kPreviewAllRenderLayers,
+    const QColor& textColor = QColor(Qt::white),
+    const QColor& shadowColor = QColor(0, 0, 0, 190));
 
 void paintCenterDisplay(
     QPainter& painter,
@@ -38,6 +41,8 @@ class PreviewQuickHudLayer : public QQuickPaintedItem
 {
     Q_OBJECT
     Q_PROPERTY(QObject* runtime READ runtimeObject WRITE setRuntimeObject NOTIFY runtimeChanged)
+    Q_PROPERTY(QColor textColor READ textColor WRITE setTextColor NOTIFY textColorChanged)
+    Q_PROPERTY(QColor shadowColor READ shadowColor WRITE setShadowColor NOTIFY shadowColorChanged)
 
 public:
     explicit PreviewQuickHudLayer(QQuickItem* parent = nullptr);
@@ -47,10 +52,16 @@ public:
     void setRuntimeObject(QObject* runtimeObject);
     void setFrameState(const miacode::preview::scene::PreviewFrameState* frameState);
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
+    QColor textColor() const;
+    void setTextColor(const QColor& color);
+    QColor shadowColor() const;
+    void setShadowColor(const QColor& color);
     void paint(QPainter* painter) override;
 
 signals:
     void runtimeChanged();
+    void textColorChanged();
+    void shadowColorChanged();
 
 private:
     void requestThrottledUpdate();
@@ -60,6 +71,8 @@ private:
     const miacode::preview::scene::PreviewFrameState* frameState_ = nullptr;
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
         miacode::preview::scene::kPreviewAllRenderLayers;
+    QColor textColor_ = QColor(Qt::white);
+    QColor shadowColor_ = QColor(0, 0, 0, 190);
     // The HUD draws diagnostic text (FPS, max frame interval, stutter
     // counts, timestamps) — none of which the human eye benefits from at
     // 60Hz update rate. Each `update()` on a QQuickPaintedItem rasterises

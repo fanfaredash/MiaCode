@@ -45,7 +45,6 @@ Rectangle {
             NavRow {
                 width: parent.width
                 text: UiText.text("封面导出")
-                selected: root.pages.activePageId === "cover"
                 onClicked: root.pages.openCoverExport()
             }
             NavRow {

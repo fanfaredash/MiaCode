@@ -1,6 +1,6 @@
 #include "QmlCoverExportSession.h"
 
-#include "QmlExportSession.h"
+#include "core/chart/document/SimaiDocument.h"
 #include "UiText.h"
 #include "app/v2/PlaybackControl.h"
 #include "tools/cover_export/CoverCompositionState.h"
@@ -57,12 +57,12 @@ QString normalisedCoverOutputDirectory(const QString& chartPath)
 
 }  // namespace
 
-QmlCoverExportSession::QmlCoverExportSession(QmlExportSession& exportSession,
+QmlCoverExportSession::QmlCoverExportSession(miacode::v2::ExportEngine& exportEngine,
                                              miacode::v2::UiRequestService& uiRequests,
                                              miacode::v2::PlaybackControl*& playbackControlSlot,
                                              QObject* parent)
     : QObject(parent)
-    , exportSession_(&exportSession)
+    , exportEngine_(exportEngine)
     , uiRequests_(&uiRequests)
     , playbackControlSlot_(&playbackControlSlot)
     , layout_(std::make_unique<miacode::cover_export::CoverLayoutModel>())
@@ -80,8 +80,6 @@ QmlCoverExportSession::QmlCoverExportSession(QmlExportSession& exportSession,
             this, &QmlCoverExportSession::chartFramePlayingChanged);
     connect(sceneBinder_.get(), &miacode::cover_export::CoverFrameSceneBinder::liveChartSceneBoundChanged,
             this, &QmlCoverExportSession::liveChartSceneBoundChanged);
-    connect(&exportSession, &QmlExportSession::difficultiesChanged,
-            this, &QmlCoverExportSession::rebuildFromExportSession);
 }
 
 QmlCoverExportSession::~QmlCoverExportSession()
@@ -190,10 +188,7 @@ void QmlCoverExportSession::enter(int preferredDifficultyId)
         pageSessionActive_ = true;
         emit pageSessionActiveChanged();
     }
-    if (exportSession_ != nullptr) {
-        exportSession_->refreshFromDocument();
-    }
-    rebuildFromExportSession();
+    rebuildDifficultyList();
     selectDifficulty(defaultDifficultyId(preferredDifficultyId));
     refreshSavedLists();
     emit fontLibraryChanged();
@@ -238,9 +233,15 @@ int QmlCoverExportSession::defaultDifficultyId(int preferredDifficultyId) const
     return difficulties_.isEmpty() ? 0 : difficulties_.constFirst().toMap().value(QStringLiteral("id")).toInt();
 }
 
-void QmlCoverExportSession::rebuildFromExportSession()
+void QmlCoverExportSession::rebuildDifficultyList()
 {
-    const QVariantList next = exportSession_ != nullptr ? exportSession_->difficulties() : QVariantList{};
+    QVariantList next;
+    for (int id : exportEngine_.difficultyIds()) {
+        next.append(QVariantMap{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("name"), SimaiDocument::difficultyShortName(id)},
+        });
+    }
     if (difficulties_ != next) {
         difficulties_ = next;
         emit difficultiesChanged();
@@ -261,13 +262,10 @@ void QmlCoverExportSession::selectDifficulty(int difficultyId)
 
 void QmlCoverExportSession::seedFromDifficulty(int difficultyId)
 {
-    if (exportSession_ == nullptr) {
-        return;
-    }
     commitActiveLayerFrameSeconds();
     stopAndDetachLiveChartScene();
     setBusy(true);
-    task_ = exportSession_->coverTaskForDifficulty(difficultyId);
+    task_ = exportEngine_.buildSeedTask(difficultyId);
     // Output folder and canvas size are seeded from the chart once. Every later
     // call re-seeds because the user picked a different DIFFICULTY, and the
     // difficulty says nothing about where the image goes or how big it is —
@@ -328,7 +326,7 @@ void QmlCoverExportSession::seedFromDifficulty(int difficultyId)
     emit chartFrameAvailabilityChanged();
     emit inputsChanged();
     syncPlaybackFromActiveLayer();
-    // The cover page is already constructed while hidden. Restoring a saved
+    // The cover window is constructed before the session is seeded. Restoring a saved
     // frame can leave playback_->seconds() unchanged during this final sync,
     // so no secondsChanged signal would be emitted for the existing QML
     // binding. Republish the settled layer time after the active layer and

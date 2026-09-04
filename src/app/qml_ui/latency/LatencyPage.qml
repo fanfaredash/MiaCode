@@ -3,10 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-// 延迟校准. Three cards — BPM, offset, audition — over a sandbox controller that
-// swaps in a synthesized test chart while the page is open and restores the real
-// one on the way out. The page itself owns no playback state; enter/leave drive
-// that, so leaving by any route tears the sandbox down.
+// 延迟校准 keeps a synthesized test chart active only while this page is visible.
 Rectangle {
     id: root
 
@@ -23,51 +20,72 @@ Rectangle {
             root.latency.leave()
     }
 
-    component Card: Rectangle {
-        id: card
-        default property alias content: cardColumn.data
+    component SectionHeading: RowLayout {
+        id: heading
         required property string title
+
         Layout.fillWidth: true
-        implicitHeight: cardColumn.implicitHeight + 44
-        radius: 8
-        color: Theme.overlayColor(Theme.colors.background.elevated)
+        spacing: 10
+
         Text {
-            id: cardTitle
-            x: 16
-            y: 14
-            text: card.title
+            text: heading.title
             color: Theme.colors.text.active
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
             font.bold: true
         }
-        ColumnLayout {
-            id: cardColumn
-            anchors.top: cardTitle.bottom
-            anchors.topMargin: 10
-            x: 16
-            width: card.width - 32
-            spacing: 8
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Theme.colors.border.soft
         }
     }
 
-    ScrollView {
-        anchors.fill: parent
-        anchors.margins: 16
-        contentWidth: availableWidth
+    PanelHeader {
+        id: heading
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        title: UiText.text("延迟校准")
+        sidebarTitle: true
+        showMore: false
+    }
+
+    Flickable {
+        id: pageFlick
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: heading.bottom
+        anchors.bottom: parent.bottom
+        contentWidth: width
+        contentHeight: form.y + form.implicitHeight + 12
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
 
         ColumnLayout {
-            width: parent.width
-            spacing: 12
+            id: form
+            x: Math.max(16, (pageFlick.width - width) / 2)
+            y: 12
+            width: Math.max(0, Math.min(640, pageFlick.width - 32))
+            spacing: 24
 
-            Card {
+            ColumnLayout {
                 objectName: "latencyBpmCard"
-                title: UiText.text("BPM")
+                Layout.fillWidth: true
+                spacing: 10
+
+                SectionHeading {
+                    title: UiText.text("BPM")
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 8
+
                     AppTextField {
                         objectName: "latencyBpmField"
-                        Layout.preferredWidth: 120
+                        Layout.preferredWidth: 150
                         text: root.latency.bpm.toFixed(3)
                         onEditingFinished: {
                             const parsed = parseFloat(text)
@@ -78,6 +96,7 @@ Rectangle {
                     }
                     AppButton {
                         objectName: "latencyDetectBpmButton"
+                        Layout.preferredWidth: 88
                         text: UiText.text("自动检测")
                         enabled: root.latency.trackAvailable
                         onClicked: root.latency.detectBpm()
@@ -86,18 +105,25 @@ Rectangle {
                         Layout.fillWidth: true
                         text: root.latency.bpmDetectResult
                         color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
                         elide: Text.ElideRight
                     }
                 }
+
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 7
+
                     Text {
                         text: UiText.text("计数拍")
                         color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
                     }
                     AppTextField {
                         objectName: "latencyClockCountField"
-                        Layout.preferredWidth: 80
+                        Layout.preferredWidth: 64
                         text: String(root.latency.clockCount)
                         onEditingFinished: {
                             const parsed = parseInt(text)
@@ -109,10 +135,12 @@ Rectangle {
                     Text {
                         text: UiText.text("解码器")
                         color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
                     }
                     AppComboBox {
                         objectName: "latencyDecoderCombo"
-                        Layout.preferredWidth: 140
+                        Layout.preferredWidth: 138
                         textRole: "label"
                         model: root.latency.audioDecoderOptions
                         currentIndex: root.latency.audioDecoder === "bass" ? 1 : 0
@@ -124,14 +152,22 @@ Rectangle {
                 }
             }
 
-            Card {
+            ColumnLayout {
                 objectName: "latencyOffsetCard"
-                title: UiText.text("偏移")
+                Layout.fillWidth: true
+                spacing: 10
+
+                SectionHeading {
+                    title: UiText.text("偏移")
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 8
+
                     AppTextField {
                         objectName: "latencyOffsetField"
-                        Layout.preferredWidth: 120
+                        Layout.preferredWidth: 150
                         text: root.latency.offsetSeconds.toFixed(3)
                         onEditingFinished: {
                             const parsed = parseFloat(text)
@@ -142,6 +178,7 @@ Rectangle {
                     }
                     AppButton {
                         objectName: "latencyDetectOffsetButton"
+                        Layout.preferredWidth: 88
                         text: UiText.text("自动检测")
                         enabled: root.latency.trackAvailable
                         onClicked: root.latency.detectOffset()
@@ -150,18 +187,29 @@ Rectangle {
                         Layout.fillWidth: true
                         text: root.latency.offsetDetectResult
                         color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
                         elide: Text.ElideRight
                     }
                 }
             }
 
-            Card {
+            ColumnLayout {
                 objectName: "latencyAuditionCard"
-                title: UiText.text("试听")
+                Layout.fillWidth: true
+                spacing: 10
+
+                SectionHeading {
+                    title: UiText.text("试听")
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 8
+
                     AppButton {
                         objectName: "latencyAuditionButton"
+                        Layout.preferredWidth: 96
                         emphasized: !root.latency.auditionRunning
                         text: root.latency.auditionRunning ? UiText.text("暂停") : UiText.text("开始试听")
                         onClicked: root.latency.toggleAudition()
@@ -171,11 +219,14 @@ Rectangle {
                         text: root.latency.positionText
                         color: Theme.colors.text.active
                         font.family: Theme.codeFont.family
+                        font.pixelSize: Theme.uiFontSize + 1
                     }
                     Item { Layout.fillWidth: true }
                     Text {
                         text: UiText.text("细分")
                         color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
                     }
                     AppTab {
                         panelTab: true
@@ -190,11 +241,16 @@ Rectangle {
                         onClicked: root.latency.subdivision = 8
                     }
                 }
+
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 8
+
                     Text {
                         text: UiText.text("音效音量")
                         color: Theme.colors.text.secondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.secondaryFontSize
                     }
                     AppSlider {
                         objectName: "latencySfxVolumeSlider"
@@ -206,11 +262,16 @@ Rectangle {
                         onMoved: root.latency.sfxVolumePercent = Math.round(value)
                     }
                     Text {
+                        Layout.preferredWidth: 36
+                        horizontalAlignment: Text.AlignRight
                         text: root.latency.sfxVolumePercent + "%"
                         color: Theme.colors.text.active
+                        font.family: Theme.codeFont.family
                     }
                 }
             }
         }
+
+        ScrollBar.vertical: AppScrollBar {}
     }
 }

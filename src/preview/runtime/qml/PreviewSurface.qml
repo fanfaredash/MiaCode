@@ -11,11 +11,18 @@ Item {
     property var logger: null
     property string surfaceRole: "unknown"
     property color backgroundColor: "#191A1B"
+    property color hudTextColor: "#FFFFFF"
+    property color hudShadowColor: "#BE000000"
+    property color mediaHudTextColor: "#FFFFFF"
+    property color mediaHudShadowColor: "#BE000000"
     property var attachedMediaHost: null
     property var attachedVideoOutputObject: null
     property var attachedInnerVideoOutputObject: null
     readonly property string instanceTag: surfaceRole + ":" + Math.round(Math.random() * 1000000000)
     readonly property var hostWindow: root.Window.window ? root.Window.window : null
+    readonly property bool stageMediaVisible: root.mediaHost
+        && root.mediaHost.mediaVisible
+        && root.mediaHost.hasResolvedMedia
 
     function surfaceGeometryPayload() {
         let payload = "item_x=" + x
@@ -180,6 +187,8 @@ Item {
         anchors.fill: parent
         z: 2
         runtime: root.runtime
+        textColor: root.stageMediaVisible ? root.mediaHudTextColor : root.hudTextColor
+        shadowColor: root.stageMediaVisible ? root.mediaHudShadowColor : root.hudShadowColor
     }
 
     Item {

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import MiaCode.UI
 
 // Shared push button — geometry mirrors v1 dialogPushButtonStyleSheet.
@@ -19,6 +20,8 @@ Button {
     bottomPadding: 0
     implicitHeight: Theme.controlMinHeight
     implicitWidth: Math.max(92, contentItem.implicitWidth + leftPadding + rightPadding)
+    Layout.preferredHeight: implicitHeight
+    Layout.maximumHeight: implicitHeight
     hoverEnabled: true
 
     contentItem: Text {

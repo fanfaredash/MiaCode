@@ -2,7 +2,7 @@
 
 #include "QmlApplicationContext.h"
 #include "QmlNoteImageProvider.h"
-#include "export/QmlCoverExportSession.h"
+#include "export/QmlCoverExportWindow.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
@@ -15,7 +15,6 @@
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "timeline/quick/TimelineQuickItem.h"
-#include "tools/cover_export/CoverCompositeRenderer.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -63,6 +62,7 @@ QmlUiBootstrap::QmlUiBootstrap(const QIcon& appIcon, QObject* parent)
 
 QmlUiBootstrap::~QmlUiBootstrap()
 {
+    delete coverWindow_.data();
     releaseRootWindowResources();
     engine_.reset();
     windowChrome_.reset();
@@ -84,6 +84,8 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
     applicationContext_ = std::make_unique<QmlApplicationContext>(*applicationServices_, this);
+    QObject::connect(static_cast<QmlEditorPageHost*>(applicationContext_->pages()),
+        &QmlEditorPageHost::coverWindowRequested, this, &QmlUiBootstrap::openCoverExportWindow);
     QObject::connect(
         static_cast<miacode::qml_ui::QmlShellLifecycle*>(applicationContext_->shell()),
         &miacode::qml_ui::QmlShellLifecycle::rootCloseAccepted,
@@ -95,13 +97,6 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
     registerQmlNoteImageProvider(
         engine_.get(), static_cast<QmlPreviewModel*>(applicationContext_->preview()));
-    // CoverExportPage shows chart-frame layers through image://coverchart/<key>.
-    // The off-screen export renderer registers this provider on its own private
-    // engine; without the same registration here the live page renders every
-    // chart frame blank while the exported image still contains it.
-    miacode::cover_export::registerCoverChartImageProvider(
-        engine_.get(),
-        static_cast<QmlCoverExportSession*>(applicationContext_->coverExport())->coverLayout());
     ensurePreviewQuickTypesRegisteredForQmlUi();
 
     windowChrome_ = std::make_unique<QmlUiWindowChrome>(this);
@@ -260,6 +255,30 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     return true;
 }
 
+void QmlUiBootstrap::openCoverExportWindow(int difficultyId)
+{
+    if (coverWindow_) {
+        coverWindow_->raise();
+        return;
+    }
+    if (rootWindow_.isNull() || applicationServices_->exportEngine() == nullptr) {
+        return;
+    }
+    auto* preferences = static_cast<QmlUiSettings*>(applicationContext_->preferences());
+    auto* window = new QmlCoverExportWindow(*applicationServices_->exportEngine(),
+        applicationServices_->uiRequests(),
+        applicationServices_->playbackControlSlot(),
+        *preferences, appIcon_, this);
+    coverWindow_ = window;
+    if (!window->show(rootWindow_, difficultyId)) {
+        delete window;
+        applicationServices_->uiRequests().postNotice(miacode::v2::NoticeSeverity::Error,
+            preferences->localizedText(QStringLiteral("cover.export_cover")),
+            preferences->localizedText(QStringLiteral("cover.cover_export_failed_1"))
+                .arg(QStringLiteral("Failed to create the cover export window.")));
+    }
+}
+
 void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
 {
     if (acceptedRootWindowShutdownStarted_) {
@@ -288,6 +307,15 @@ void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
 void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& source)
 {
     if (acceptedRootWindowDestroyStarted_) {
+        return;
+    }
+    // Capture/export can be inside a nested event loop. Keep the application
+    // services alive until the independent window finishes and destroys itself.
+    if (coverWindow_) {
+        QObject::connect(coverWindow_, &QObject::destroyed, this, [this, source] {
+            destroyAcceptedRootWindowResourcesAndQuit(source);
+        }, Qt::QueuedConnection);
+        coverWindow_->close();
         return;
     }
     acceptedRootWindowDestroyStarted_ = true;

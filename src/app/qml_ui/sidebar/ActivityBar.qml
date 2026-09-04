@@ -7,11 +7,13 @@ Rectangle {
     id: root
 
     property string activeView: "chart"
+    property bool normalizationEnabled: true
     signal viewRequested(string viewId)
+    signal toolRequested(string toolId)
     signal settingsRequested()
 
     implicitWidth: Theme.activityButtonSize
-    color: Theme.surfaceColor(Theme.colors.background.surface)
+    color: Theme.surfaceColor(Theme.colors.background.activityBar)
 
     Column {
         anchors.left: parent.left
@@ -31,10 +33,35 @@ Rectangle {
             onClicked: root.viewRequested("export")
         }
         ActivityButton {
+            id: toolsButton
             iconSource: Qt.resolvedUrl("icons/tools.svg")
             tooltip: UiText.text("工具")
-            selected: root.activeView === "tools"
-            onClicked: root.viewRequested("tools")
+            selected: toolsPopup.active
+            onClicked: {
+                if (toolsPopup.active)
+                    toolsPopup.close()
+                else
+                    toolsPopup.popup(toolsButton, toolsButton.width, 0)
+            }
+        }
+    }
+
+    AppMenu {
+        id: toolsPopup
+        hugContent: true
+
+        AppMenuAction {
+            text: UiText.text("延迟校准")
+            onTriggered: root.toolRequested("latency")
+        }
+        AppMenuAction {
+            text: UiText.text("音视频处理")
+            onTriggered: root.toolRequested("media")
+        }
+        AppMenuAction {
+            text: UiText.text("整谱规范化")
+            enabled: root.normalizationEnabled
+            onTriggered: root.toolRequested("normalize")
         }
     }
 
@@ -64,9 +91,9 @@ Rectangle {
             height: Theme.activityIconSize
             source: button.iconSource
             sourceSize: Qt.size(Theme.activityIconSize, Theme.activityIconSize)
-            color: button.selected || button.hovered
-                   ? Theme.colors.text.active
-                   : Theme.colors.text.secondary
+            color: button.selected ? Theme.colors.activityIcon.active
+                 : button.hovered ? Theme.colors.activityIcon.hover
+                 : Theme.colors.activityIcon.idle
         }
 
         background: Item {
@@ -74,8 +101,10 @@ Rectangle {
                 anchors.fill: parent
                 contentWidth: Theme.activityIconSize
                 contentHeight: Theme.activityIconSize
+                stateColors: Theme.colors.activityState
                 hovered: button.hovered
                 pressed: button.down
+                selected: button.selected
             }
 
             Rectangle {

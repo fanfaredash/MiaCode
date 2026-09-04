@@ -650,7 +650,6 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/FloatingCard.qml
     src/app/qml_ui/components/BackdropBlur.qml
     src/app/qml_ui/components/FadeTransition.qml
-    src/app/qml_ui/components/PopupLifecycle.qml
     src/app/qml_ui/components/AppDialog.qml
     src/app/qml_ui/components/AppStickyPopup.qml
     src/app/qml_ui/components/AppDropdownPanel.qml
@@ -664,6 +663,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/LabeledSlider.qml
     src/app/qml_ui/components/AboutDialog.qml
     src/app/qml_ui/components/JobProgressOverlay.qml
+    src/app/qml_ui/chrome/WindowGestureArea.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml
@@ -679,10 +679,10 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/sidebar/ChartFieldSidebar.qml
     src/app/qml_ui/sidebar/DifficultyList.qml
     src/app/qml_ui/sidebar/ExportSidebarPage.qml
-    src/app/qml_ui/sidebar/ToolsSidebarPage.qml
     src/app/qml_ui/export/ExportRangeSelector.qml
     src/app/qml_ui/export/ExportVideoPage.qml
     src/app/qml_ui/export/CoverExportPage.qml
+    src/app/qml_ui/export/CoverExportWindow.qml
     src/app/qml_ui/editor/EditorPane.qml
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
@@ -741,6 +741,8 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/more.svg
     src/app/qml_ui/resources/icons/metadata.svg
     src/app/qml_ui/resources/icons/app-icon.svg
+    src/app/qml_ui/resources/icons/app-titlebar.png
+    src/app/qml_ui/resources/icons/app-titlebar@2x.png
     src/app/qml_ui/resources/icons/chevron-down.svg
     # Canonical MiaCode brand PNG (same asset as resources/app_icons.qrc).
     resources/icons/app.png
@@ -794,6 +796,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/export/QmlExportSession.h
         src/app/qml_ui/export/QmlCoverExportSession.cpp
         src/app/qml_ui/export/QmlCoverExportSession.h
+        src/app/qml_ui/export/QmlCoverExportWindow.cpp
+        src/app/qml_ui/export/QmlCoverExportWindow.h
         src/app/qml_ui/QmlUiWindowChrome.cpp
         src/app/qml_ui/QmlUiWindowChrome.h
         src/app/qml_ui/QmlUiBootstrap.cpp

@@ -1,5 +1,18 @@
 # Cross-Chain Linkage
 
+## Cover window lifetime
+
+- `QmlEditorPageHost::openCoverExport` → `QmlUiBootstrap::openCoverExportWindow` →
+  `QmlCoverExportWindow` / `CoverExportWindow.qml` is independent of main-page navigation.
+- The window owns its `QmlCoverExportSession`, `UiRequestService`, QML engine and `coverchart`
+  provider. Session chart inputs come from `ExportEngine`, independently of video audition.
+- Close persists composition and detaches borrowed frame state, destroys the QML engine, then
+  destroys the session's capture renderer, skin repository, layout images and chart task.
+  Application shutdown retains the shared services until an active capture completes and the
+  cover window is destroyed. Composer background images opt out of the image URL cache.
+  `MaimaiBannerCard.cacheImages` defaults to true for intro playback; `CoverComposer` sets it
+  to false so cover card images follow the window lifetime too.
+
 ## Timeline playback cadence
 
 - `TimelineQuickItem::bindRenderCadence` emits an opportunity from every
@@ -396,10 +409,12 @@ advances, and chart-info visible top.
 
 ## 9. Shared render state flows through preview and export
 
-Application wallpaper is shell-only. `PreviewSurface.backgroundColor` forwards to
-`PreviewQuickSceneRoot` and its stage-background layer: the workspace passes transparent to
-inherit `PreviewPane`, while other callers retain the default solid base. This changes the
-empty-media fallback, not chart image/video rendering or export snapshots. Timeline surface
+Application wallpaper is shell-only. Workspace letterbox space inherits `PreviewPane` so the
+wallpaper remains visible around a fitted canvas. Inside the actual canvas, `PreviewSurface`
+paints the translucent, wallpaper-preserving `backdropColor` first, stage image/video above it,
+and the chart scene above media;
+`backgroundColor` remains the scene-root fill and workspace/fullscreen pass it as transparent.
+This changes the empty-media fallback, not chart image/video rendering or export snapshots. Timeline surface
 alpha comes through `TimelineThemeBridge`; header/sidebar/content backgrounds are disjoint,
 and existing QSG content clips provide separation without an opaque sidebar cover.
 
@@ -426,6 +441,12 @@ Live: `requestTimelineSlowRefresh` → `parseForTimeline` → analysis refresh. 
 `buildVideoExportTaskFromSnapshot` → `MuriAnalyzer::analyze`. Normalization:
 `onNormalizeWholeChart` → `normalizeChartText` → `buildValidationReport`. A marker-field change
 affects both live diagnostics and exported overlays.
+
+QML normalization route: `ActivityBar` tools popup or `MainMenu` →
+`QmlEditorPageHost::openNormalizeWholeChart` → `MainView`'s window-level
+`NormalizeOptionsDialog` → `MainSplitView` / `EditorPane` → `SourceEditor::applyNormalization`.
+The page host rejects this route while video export is active; latency and editor pages stay
+mounted beneath the dialog.
 
 ## 11. Common "change here, check there" pairs
 
@@ -481,6 +502,13 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
 - Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's preview
   state, then re-dispatches audio levels (see below). `setOnPage` flips `onPage_` BEFORE running
   install/teardown, so the level dispatch reads the correct mode at both edges.
+- While `latencySandboxAuditionActive_` is true, `PlaybackCoordinator::scheduleTimelineRefresh`
+  rejects normal-difficulty rebuilds and the slow-refresh completion gate rejects an older
+  in-flight result. BPM/offset/clock-count writes still update `ChartWorkspace`; the sandbox's
+  own hot-apply rebuild remains the sole preview/timeline source until page exit.
+  `DocumentSessionHost::syncRuntimeFromWorkspace` also treats the workspace/session active-
+  difficulty mismatch as intentional while latency or export audition owns the source; otherwise
+  a metadata write would route through `switchToDifficultyField` and clear the audition scene.
 - **SFX-level isolation — two modes share ONE `previewSfxRuntime_`, and the runtime levels are a PURE
   FUNCTION of the current mode, NOT a snapshot that is restored on exit.** Single dispatch entry:
   `MainWindow::applyPreviewAudioSettingsToRuntime()`, which branches on

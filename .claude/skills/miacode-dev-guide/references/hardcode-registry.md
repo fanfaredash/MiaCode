@@ -43,6 +43,20 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
+- `src/app/qml_ui/theme/Theme.qml` — shared QML dialog geometry and material constants.
+  `dialogPadding`/`panelPadding` define the modal header and body insets; `dialogHeight` and
+  `dialogCompactHeight` are the stable height tiers. `modalScrimColor` owns the modal dimming
+  fill, while `AppDialog` binds the scrim opacity to the dialog fade transition. Small floating
+  surfaces use `popupShadowOpacity`; modal cards use the slightly stronger
+  `dialogShadowOpacity` plus their own blur and vertical offset.
+- `src/app/qml_ui/components/{AppButton,AppTextField,AppComboBox}.qml` — form controls cap
+  their layout height at the shared implicit control height so `RowLayout` cannot stretch fields
+  taller than buttons. Form controls and top-level menu buttons share `controlMinHeight` (30);
+  text-field/combo fills mirror `HoverChrome`'s vertical inset so their visible backgrounds are
+  the same 26-pixel height as buttons.
+  `EditorPane.qml` keeps the difficulty-header level/designer/offset fields at fixed widths
+  (`48/100/64`) and leaves a flexible region with a `2 * panelPadding` minimum between the fields
+  and the trailing delete action.
 - `src/editor/SimaiCompletionCatalog.cpp` — bracket-completion suggestion lists. Fixed,
   product-decided order (do NOT sort): `[` durations `{8:1] 4:1] 16:3] 384:1]}`, `{`
   subdivisions `{16} 24} 32}}`. `(` BPM list is dynamic (scanned `(<n>)` markers +

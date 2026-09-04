@@ -131,14 +131,6 @@ QVariantList QmlExportSession::backgroundScaleModeOptions() const
     };
 }
 
-VideoExportTask QmlExportSession::coverTaskForDifficulty(int difficultyId) const
-{
-    if (engine() == nullptr) {
-        return VideoExportTask{};
-    }
-    return engine()->buildSeedTask(difficultyId);
-}
-
 int QmlExportSession::presetIndex() const
 {
     return task_.preset == VideoExportPreset::Fast ? 0 : 1;

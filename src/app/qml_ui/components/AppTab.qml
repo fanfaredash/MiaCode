@@ -90,7 +90,9 @@ Item {
                     elide: Text.ElideRight
                     color: root.active ? Theme.colors.text.active : Theme.colors.text.secondary
                     font.family: Theme.uiFont
-                    font.pixelSize: root.compact ? Theme.compactFontSize : Theme.secondaryFontSize
+                    font.pixelSize: root.compact ? Theme.compactFontSize
+                                                 : root.panelTab ? Theme.uiFontSize
+                                                                 : Theme.secondaryFontSize
                     horizontalAlignment: Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                 }

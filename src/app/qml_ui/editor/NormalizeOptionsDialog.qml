@@ -35,6 +35,7 @@ AppDialog {
 
     title: UiText.text("整谱规范化")
     preferredWidth: 420
+    preferredHeight: implicitHeight
     footer: DialogFooter {
         acceptText: UiText.text("确定")
         cancelText: UiText.text("取消")

@@ -146,8 +146,12 @@ bool QmlEditorPageHost::openLatencyPage()
     }
     rememberResumeDifficulty();
     return requestPageSwitch([this]() {
+        const bool leavingExportPage = activePageId_ == QLatin1String("export");
         if (router() == nullptr || !router()->enterLatencyPage()) {
             return false;
+        }
+        if (leavingExportPage && exportSessionObject() != nullptr) {
+            exportSessionObject()->leave();
         }
         // The page is QML now; only the active id has to change so MainSplitView
         // shows it.
@@ -214,6 +218,9 @@ void QmlEditorPageHost::openNormalizeWholeChart()
     if (navigationPending_) {
         return;
     }
+    if (activePageId_ == QLatin1String("export")) {
+        return;
+    }
     if (overlayActive()) {
         requestPageSwitch([this]() {
             if (!finishLeaveOverlay()) {
@@ -238,18 +245,14 @@ bool QmlEditorPageHost::openCoverExport(int difficultyId)
         return false;
     }
     rememberResumeDifficulty();
-    const int selectedDifficultyId = difficultyId > 0 ? difficultyId : resumeDifficultyId_;
+    const int selectedDifficultyId = difficultyId > 0 ? difficultyId
+        : activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr
+            ? exportSessionObject()->selectedDifficultyId() : resumeDifficultyId_;
     return requestPageSwitch([this, selectedDifficultyId]() {
-        // A direct export-page → cover-page navigation must release the video
-        // session before cover becomes the owner of the Tools-menu difficulty.
         if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
             exportSessionObject()->leave();
         }
-        if (activePageId_ != QLatin1String("cover")) {
-            activePageId_ = QStringLiteral("cover");
-            emit activePageIdChanged();
-        }
-        emit coverPageRequested(selectedDifficultyId);
+        emit coverWindowRequested(selectedDifficultyId);
         return true;
     });
 }

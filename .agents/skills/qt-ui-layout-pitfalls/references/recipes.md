@@ -296,7 +296,7 @@ discoverable use the same native `ScrollBar.vertical: ScrollBar {}` setup as oth
   Shared popup references must use `QtQuick.Templates.Popup`. `QtQuick.Controls.Popup`
   resolves to a styled QML subtype; styled Menu is a separate branch over `Templates.Menu`,
   so using the styled Popup type rejects Menu references and leaves its effects inactive.
-  This applies to `FloatingCard`, `BackdropBlur` and `PopupLifecycle` alike.
+  This applies to `FloatingCard` and `BackdropBlur` alike.
   Declare wallpaper, main UI and drag hint directly inside `sceneContent`, in that order.
   Declaring them in `ApplicationWindow.contentData` and assigning `parent: sceneContent`
   mixes the window's content parenting with visual reparenting; the lost background order
@@ -439,10 +439,10 @@ use `Qt::WindowStaysOnTopHint`: the dialog should stay above MiaCode, not above 
 When a reusable Popup declares a bare `Connections` child, it enters the default
 `contentData` list. Qt's `QQuickPopupPrivate::contentData()` accesses/creates the deferred
 content item during base construction, interfering with a derived popup's ListView.
-Keep lifecycle helpers on explicit object properties instead. `PopupLifecycle` owns
-enter/exit transitions and interrupted-close state; `AppDropdownPanel` and `AppMenu`
-reference it without inserting infrastructure into the content list. `AppStickyPopup`
-inherits the panel. Preserve ComboBox's delegateModel and Menu's item/action handling.
+Keep transition objects and interrupted-close state directly on `AppDropdownPanel` and
+`AppMenu`; their lifecycle callbacks then end with the popup and stay outside contentData.
+`AppStickyPopup` inherits the panel. Preserve ComboBox's delegateModel and Menu's
+item/action handling.
 Runtime acceptance: decoder/bitrate options appear and select, and rate menus still
 open, select and close, including reopening during a fade-out.
 

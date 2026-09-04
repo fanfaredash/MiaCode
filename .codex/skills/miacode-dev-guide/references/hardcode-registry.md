@@ -54,6 +54,10 @@ Use this file to track where important constants live, what they mean, and wheth
 
 ## 2. Implementation-Local Hotspots
 
+- `src/app/qml_ui/theme/Theme.qml`
+  - Owns: shared QML dialog geometry/material constants, including modal header/body insets,
+    stable height tiers, `modalScrimColor`, and separate popup/dialog shadow opacity
+  - Contract: `AppDialog` binds modal scrim opacity to the same fade transition as the dialog
 - `src/core/scene/*.cpp`
   - Owns: large volume of render tuning constants
   - Examples:

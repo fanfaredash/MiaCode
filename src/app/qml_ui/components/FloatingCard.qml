@@ -12,6 +12,9 @@ Item {
     property T.Popup popup: null
     property color tintColor: Theme.popupTintColor
     property int blurRadius: Theme.popupBlurRadius
+    property real shadowBlur: 0.6
+    property real shadowOpacity: Theme.popupShadowOpacity
+    property real shadowVerticalOffset: 2
     readonly property Item backdropSource: root.Window.window?.backdropSource ?? null
 
     Loader {
@@ -38,10 +41,10 @@ Item {
     layer.effect: MultiEffect {
         autoPaddingEnabled: true
         shadowEnabled: true
-        shadowBlur: 0.6
+        shadowBlur: root.shadowBlur
         shadowColor: "#000000"
-        shadowOpacity: 0.28
-        shadowVerticalOffset: 2
+        shadowOpacity: root.shadowOpacity
+        shadowVerticalOffset: root.shadowVerticalOffset
         shadowHorizontalOffset: 0
     }
 }

@@ -5,11 +5,9 @@
 
 QmlCommandService::QmlCommandService(
     QmlDocumentModel& document,
-    miacode::v2::EditorPageRouter*& routerSlot,
     miacode::v2::DocumentBridge*& bridgeSlot,
     QObject* parent)
     : QObject(parent)
-    , routerSlot_(&routerSlot)
     , bridgeSlot_(&bridgeSlot)
     , document_(&document)
 {
@@ -68,13 +66,6 @@ bool QmlCommandService::addDifficulty(int id) { return document_->addDifficulty(
 bool QmlCommandService::removeDifficulty(int id) { return document_->removeDifficulty(id); }
 void QmlCommandService::enableUnifiedDesigner(const QString& name) { document_->enableUnifiedDesigner(name); }
 void QmlCommandService::disableUnifiedDesigner() { document_->disableUnifiedDesigner(); }
-
-void QmlCommandService::openPreferences()
-{
-    if (router() != nullptr) {
-        router()->openPreferences();
-    }
-}
 
 QStringList QmlCommandService::shortcutCommandIds() const
 {
