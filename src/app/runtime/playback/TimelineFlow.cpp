@@ -1066,12 +1066,6 @@ bool miacode::runtime::PlaybackCoordinator::moveEditorCursorToTimelineLocation(
 }
 
 
-// Session::scheduleDeferredEditorUiUpdate and Session::flushDeferredEditorUiUpdate
-// moved to SessionForwarding.TimelineFlow.cpp (stage 4.9d-6: TU boundary split so
-// this file holds only Coordinator:: methods).
-
-
-
 // Session::resetPreviewTrackTimelineOffsets moved to
 // SessionForwarding.TimelineFlow.cpp (stage 4.9d-6: TU boundary split).
 

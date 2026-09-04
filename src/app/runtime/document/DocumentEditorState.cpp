@@ -181,9 +181,6 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
         }
     } else {
         rebuildFieldSidebar();
-        updateEditorHeader();
-        updateEditorEmptyState();
-        updateEditorStatus();
     }
 
     clearDeletedDifficultyUndoState();

@@ -129,13 +129,6 @@ public:
         QElapsedTimer dropTimer,
         std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished);
     void onNormalizeWholeChart();
-    void updateEditorHeader();
-    void updateDifficultyScopedActionStates();
-    void updateEditorHeaderLayoutMode();
-    void syncEditorHeaderMinimumWidth();
-    void updateEditorStatus();
-    void updateEditorEmptyState();
-    void updateMetadataPageMode();
     // `alreadyConfirmed` is what the v2 shell passes: DifficultyList.qml puts
     // the question up itself, and asking again here was a second dialog on top
     // of an answered one.

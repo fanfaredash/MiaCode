@@ -521,9 +521,6 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
         0,
         miacode::chart_clock::clockBpmForChart(session_.applicationServices_.workspace().document(), difficulty->chart));
 
-    // Re-enable the preview play/pause/stop controls: they are difficulty-scoped
-    // (hasActiveDifficulty) by default, and the page now has a previewable chart.
-    session_.updateDifficultyScopedActionStates();
     // Set up the negative-time intro region (slider range + default playhead at
     // the intro head) when 添加片头 is on for this difficulty.
     session_.refreshExportIntroState();
@@ -555,8 +552,6 @@ void miacode::runtime::VideoExportHost::teardownExportPreviewAuditionScene()
     // preview from scratch (we deliberately don't cache/restore — leaving the
     // page reinstalls the destination field's preview anyway).
     session_.latestTimelinePreviewSnapshotReady_ = false;
-    // Return the playback controls to their difficulty-scoped state.
-    session_.updateDifficultyScopedActionStates();
 }
 
 bool miacode::runtime::VideoExportHost::buildVideoExportSnapshot(

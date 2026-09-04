@@ -405,41 +405,6 @@ bool Session::undoDeletedDifficultyField()
     return documents_->undoDeletedDifficultyField();
 }
 
-void Session::updateEditorHeader()
-{
-    documents_->updateEditorHeader();
-}
-
-void Session::updateDifficultyScopedActionStates()
-{
-    documents_->updateDifficultyScopedActionStates();
-}
-
-void Session::updateEditorHeaderLayoutMode()
-{
-    documents_->updateEditorHeaderLayoutMode();
-}
-
-void Session::syncEditorHeaderMinimumWidth()
-{
-    documents_->syncEditorHeaderMinimumWidth();
-}
-
-void Session::updateEditorStatus()
-{
-    documents_->updateEditorStatus();
-}
-
-void Session::updateEditorEmptyState()
-{
-    documents_->updateEditorEmptyState();
-}
-
-void Session::updateMetadataPageMode()
-{
-    documents_->updateMetadataPageMode();
-}
-
 bool Session::deleteDifficultyField(int difficultyId)
 {
     return documents_->deleteDifficultyField(difficultyId);

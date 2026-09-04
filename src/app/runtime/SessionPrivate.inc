@@ -81,12 +81,6 @@
     bool undoDeletedDifficultyField();
     void clearDeletedDifficultyUndoState();
     void rebuildFieldSidebar();
-    void updateEditorHeader();
-    void updateEditorHeaderLayoutMode();
-    void syncEditorHeaderMinimumWidth();
-    void updateEditorStatus();
-    void updateEditorEmptyState();
-    void updateDifficultyScopedActionStates();
     // Export-page intro lead-in: returns true (and fills *outSpec) when the
     // embedded video panel has 添加片头 active, so the audition can play the
     // animated intro before the chart. cancelExportIntroLeadIn() forwards to the
@@ -104,7 +98,6 @@
     // after the intro hands off, mirroring the exported clock track).
     void setExportAuditionClockSchedule(int clockCount, double clockBpm);
     void clearExportAuditionClockSchedule();
-    void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
@@ -143,15 +136,6 @@
     void applyAlignedMuriAnalysisReportToViews();
     void navigateTimelineToSecond(double second, bool focusEditor = true);
     void deferTimelineCursorBridgeUpdate(double second, bool centerView);
-    void scheduleDeferredEditorUiUpdate(
-        bool updateStatus = false,
-        bool updateEmptyState = false,
-        bool syncTimelineCursor = false,
-        bool centerView = false,
-        bool syncPreviewFollow = false,
-        double previewFollowSecond = 0.0,
-        bool ensurePreviewFollowVisible = false);
-    void flushDeferredEditorUiUpdate();
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,

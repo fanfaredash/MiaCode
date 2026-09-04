@@ -303,13 +303,6 @@
         qint64 qtPreviewVisualClockDiagLastLogMs_ = -1;
         bool previewScrubDragging_ = false;
         bool suppressTimelineCursorSync_ = false;
-        bool deferredEditorUiUpdatePending_ = false;
-        bool deferredEditorUiStatusPending_ = false;
-        bool deferredEditorUiEmptyStatePending_ = false;
-        bool deferredEditorUiTimelineCursorPending_ = false;
-        bool deferredEditorUiCenterView_ = false;
-        bool deferredEditorUiPreviewFollowPending_ = false;
-        bool deferredEditorUiEnsureFollowVisible_ = false;
         bool autoRestoreLastSessionFile_ = true;
         bool editorCtrlLeftJumpPending_ = false;
         bool editorCtrlLeftJumpDispatchActive_ = false;
@@ -334,7 +327,6 @@
         qint64 qtPreviewLastTimelineCadenceFlushNs_ = -1;
         bool previewFollowBindingCacheValid_ = false;
         TimelineQuickModel::PreviewFollowBinding previewFollowBindingCache_;
-        double deferredEditorUiPreviewFollowSecond_ = 0.0;
         bool pendingPreviewPlaybackStart_ = false;
         bool pendingPreviewPlaybackResumeFromPause_ = false;
         quint64 pendingPreviewPlaybackRevision_ = 0;
@@ -700,13 +692,6 @@
     qint64& qtPreviewVisualClockDiagLastLogMs_ = state_.qtPreviewVisualClockDiagLastLogMs_;
     bool& previewScrubDragging_ = state_.previewScrubDragging_;
     bool& suppressTimelineCursorSync_ = state_.suppressTimelineCursorSync_;
-    bool& deferredEditorUiUpdatePending_ = state_.deferredEditorUiUpdatePending_;
-    bool& deferredEditorUiStatusPending_ = state_.deferredEditorUiStatusPending_;
-    bool& deferredEditorUiEmptyStatePending_ = state_.deferredEditorUiEmptyStatePending_;
-    bool& deferredEditorUiTimelineCursorPending_ = state_.deferredEditorUiTimelineCursorPending_;
-    bool& deferredEditorUiCenterView_ = state_.deferredEditorUiCenterView_;
-    bool& deferredEditorUiPreviewFollowPending_ = state_.deferredEditorUiPreviewFollowPending_;
-    bool& deferredEditorUiEnsureFollowVisible_ = state_.deferredEditorUiEnsureFollowVisible_;
     bool& autoRestoreLastSessionFile_ = state_.autoRestoreLastSessionFile_;
     bool& editorCtrlLeftJumpPending_ = state_.editorCtrlLeftJumpPending_;
     bool& editorCtrlLeftJumpDispatchActive_ = state_.editorCtrlLeftJumpDispatchActive_;
@@ -730,7 +715,6 @@
     const bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;
     const bool& previewLateVideoStartPending_ = state_.previewLateVideoStartPending_;
     const double& previewStartupPreparedSecond_ = state_.previewStartupPreparedSecond_;
-    double& deferredEditorUiPreviewFollowSecond_ = state_.deferredEditorUiPreviewFollowSecond_;
     bool& pendingPreviewPlaybackStart_ = state_.pendingPreviewPlaybackStart_;
     bool& pendingPreviewPlaybackResumeFromPause_ = state_.pendingPreviewPlaybackResumeFromPause_;
     quint64& pendingPreviewPlaybackRevision_ = state_.pendingPreviewPlaybackRevision_;

@@ -6,137 +6,17 @@
 // own (see the Result Packet for the link-probe evidence). TimelineFlow.cpp
 // now holds only PlaybackCoordinator::-owned timeline-bridge/analysis logic
 // (plus the one interleaved ensureWaveformCacheService() Coordinator method
-// left in place); this file holds the Session::-owned deferred-UI-update
-// pair, the latency-sandbox document accessors, and the editor/timeline
-// cursor-sync group that used to share that TU.
+// left in place); this file holds the latency-sandbox document accessors and
+// the editor/timeline cursor-sync group that used to share that TU.
 
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Session.h"
 
 #include "common/ChartClockCount.h"
-#include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
 
 #include <QtCore>
-
-void Session::scheduleDeferredEditorUiUpdate(
-    bool updateStatus,
-    bool updateEmptyState,
-    bool syncTimelineCursor,
-    bool centerView,
-    bool syncPreviewFollow,
-    double previewFollowSecond,
-    bool ensurePreviewFollowVisible)
-{
-    const bool allowTimelineCursorSync =
-        !(state_.editorCtrlLeftJumpPending_ || state_.editorCtrlLeftJumpDispatchActive_);
-    const bool effectiveSyncTimelineCursor = syncTimelineCursor && allowTimelineCursorSync;
-    const bool effectiveCenterView = centerView && effectiveSyncTimelineCursor;
-    if (state_.runtimeDebugOutputEnabled_) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/deferred_ui"),
-            QStringLiteral(
-                "action=schedule status=%1 empty=%2 sync_timeline=%3 center=%4 sync_follow=%5 follow_second=%6 quick_ready=%7"
-            )
-                .arg(updateStatus ? 1 : 0)
-                .arg(updateEmptyState ? 1 : 0)
-                .arg(effectiveSyncTimelineCursor ? 1 : 0)
-                .arg(effectiveCenterView ? 1 : 0)
-                .arg(syncPreviewFollow ? 1 : 0)
-                .arg(previewFollowSecond, 0, 'f', 6)
-                .arg(state_.timelineReady_ ? 1 : 0)
-        );
-    }
-    deferredEditorUiStatusPending_ = deferredEditorUiStatusPending_ || updateStatus;
-    deferredEditorUiEmptyStatePending_ = deferredEditorUiEmptyStatePending_ || updateEmptyState;
-    deferredEditorUiTimelineCursorPending_ =
-        deferredEditorUiTimelineCursorPending_ || effectiveSyncTimelineCursor;
-    deferredEditorUiCenterView_ = deferredEditorUiCenterView_ || effectiveCenterView;
-    if (syncPreviewFollow) {
-        deferredEditorUiPreviewFollowPending_ = true;
-        deferredEditorUiPreviewFollowSecond_ = previewFollowSecond;
-        deferredEditorUiEnsureFollowVisible_ =
-            deferredEditorUiEnsureFollowVisible_ || ensurePreviewFollowVisible;
-    }
-    if (deferredEditorUiUpdatePending_) {
-        return;
-    }
-    deferredEditorUiUpdatePending_ = true;
-    QTimer::singleShot(0, this, [this]() { flushDeferredEditorUiUpdate(); });
-}
-
-void Session::flushDeferredEditorUiUpdate()
-{
-    if (!deferredEditorUiUpdatePending_) {
-        return;
-    }
-
-    deferredEditorUiUpdatePending_ = false;
-    const bool updateStatus = deferredEditorUiStatusPending_;
-    const bool updateEmptyState = deferredEditorUiEmptyStatePending_;
-    const bool syncTimelineCursor = deferredEditorUiTimelineCursorPending_;
-    const bool centerView = deferredEditorUiCenterView_;
-    const bool syncPreviewFollow = deferredEditorUiPreviewFollowPending_;
-    const double previewFollowSecond = deferredEditorUiPreviewFollowSecond_;
-    const bool ensurePreviewFollowVisible = deferredEditorUiEnsureFollowVisible_;
-
-    if (state_.runtimeDebugOutputEnabled_) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("timeline/deferred_ui"),
-            QStringLiteral(
-                "action=flush status=%1 empty=%2 sync_timeline=%3 center=%4 sync_follow=%5 follow_second=%6 ensure_follow_visible=%7 quick_ready=%8"
-            )
-                .arg(updateStatus ? 1 : 0)
-                .arg(updateEmptyState ? 1 : 0)
-                .arg(syncTimelineCursor ? 1 : 0)
-                .arg(centerView ? 1 : 0)
-                .arg(syncPreviewFollow ? 1 : 0)
-                .arg(previewFollowSecond, 0, 'f', 6)
-                .arg(ensurePreviewFollowVisible ? 1 : 0)
-                .arg(state_.timelineReady_ ? 1 : 0)
-        );
-    }
-
-    deferredEditorUiStatusPending_ = false;
-    deferredEditorUiEmptyStatePending_ = false;
-    deferredEditorUiTimelineCursorPending_ = false;
-    deferredEditorUiCenterView_ = false;
-    deferredEditorUiPreviewFollowPending_ = false;
-    deferredEditorUiEnsureFollowVisible_ = false;
-
-    if (updateEmptyState) {
-        updateEditorEmptyState();
-    }
-    if (updateStatus) {
-        updateEditorStatus();
-    }
-
-    bool previewFollowHandled = false;
-    if (syncPreviewFollow
-        && hasActiveDifficulty()
-        && state_.previewFollowEnabled_) {
-        previewFollowHandled = true;
-        syncEditorCursorToPreviewSecond(
-            previewFollowSecond,
-            centerView,
-            ensurePreviewFollowVisible);
-    }
-
-    const bool previewFollowOwnsPlaybackCursor =
-        previewFollowHandled
-        && (state_.playing_
-            || state_.previewStartupSyncPending_
-            || state_.previewLateVideoStartPending_);
-    // The editor→timeline cursor sync is published by EditorSyncController now
-    // (caretLocationPublished → publishEditorCaret); this branch read the hidden
-    // widget's cursor, which no QML selection ever reached.
-    Q_UNUSED(syncTimelineCursor);
-    Q_UNUSED(previewFollowOwnsPlaybackCursor);
-    Q_UNUSED(centerView);
-}
 
 void Session::resetPreviewTrackTimelineOffsets()
 {

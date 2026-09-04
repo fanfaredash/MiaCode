@@ -669,6 +669,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `qml_document_lifecycle_contract_spec`，使其守卫新的 QML 新建链路和旧入口缺失。`MiaCode`
   Release 编译通过，针对性测试 7/7 通过；全量 CTest 仍为 105/108 通过，三个既有失败项
   未变化。
+- **第 5 步本轮继续移除空的编辑器 UI 刷新桥（2026-09-05）**：确认
+  `updateEditorHeader`、`updateEditorStatus`、`updateEditorEmptyState`、`updateMetadataPageMode`
+  等 runtime 实现均为空，删除对应的 Session/DocumentSessionHost 转发、调用点及延迟 UI 刷新
+  状态位；时间线游标、预览跟随、QML 状态发布和删除难度确认逻辑保持不变。`MiaCode` Release
+  编译通过，相关测试 8/8 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 

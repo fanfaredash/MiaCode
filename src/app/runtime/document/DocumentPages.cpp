@@ -33,42 +33,6 @@
 
 using namespace miacode::runtime::shared;
 
-void miacode::runtime::DocumentSessionHost::updateEditorHeader()
-{
-    updateDifficultyScopedActionStates();
-}
-
-
-void miacode::runtime::DocumentSessionHost::updateDifficultyScopedActionStates()
-{
-}
-
-
-void miacode::runtime::DocumentSessionHost::updateEditorHeaderLayoutMode()
-{
-}
-
-
-void miacode::runtime::DocumentSessionHost::syncEditorHeaderMinimumWidth()
-{
-}
-
-
-void miacode::runtime::DocumentSessionHost::updateEditorStatus()
-{
-}
-
-
-void miacode::runtime::DocumentSessionHost::updateEditorEmptyState()
-{
-}
-
-
-void miacode::runtime::DocumentSessionHost::updateMetadataPageMode()
-{
-}
-
-
 bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficultyId, bool alreadyConfirmed)
 {
     const SimaiDifficultyData* difficultyData = session_.applicationServices_.workspace().document().difficulty(difficultyId);
@@ -145,9 +109,6 @@ bool miacode::runtime::DocumentSessionHost::deleteDifficultyField(int difficulty
     }
 
     rebuildFieldSidebar();
-    updateEditorHeader();
-    updateEditorEmptyState();
-    updateEditorStatus();
     updateDirtyState();
     if (state_.currentFilePath_.isEmpty()) {
         session_.noteStatus(UiText::text(QStringLiteral("document.deleted_1")).arg(difficultyName));
@@ -245,8 +206,6 @@ bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
     updateDirtyState();
     rebuildFieldSidebar();
     session_.updateWindowTitle();
-    updateEditorEmptyState();
-    updateEditorStatus();
     return true;
 }
 
@@ -318,8 +277,6 @@ void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
     updateDirtyState();
     rebuildFieldSidebar();
     session_.updateWindowTitle();
-    updateEditorEmptyState();
-    updateEditorStatus();
     // The expensive part — building the embedded video panel — happens inside
     // onPageEntered.
     if (ui_.qmlExportSession_ != nullptr) {
@@ -354,13 +311,10 @@ bool miacode::runtime::DocumentSessionHost::switchToMetadataField()
     populateMetadataPage();
     setChartBottomTabsMode(false);
     session_.clearValidationDecorations();
-    updateMetadataPageMode();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
     session_.updateWindowTitle();
-    updateEditorEmptyState();
-    updateEditorStatus();
     return true;
 }
 
@@ -393,10 +347,7 @@ bool miacode::runtime::DocumentSessionHost::switchToWelcomePage()
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
-    updateEditorHeader();
     session_.updateWindowTitle();
-    updateEditorEmptyState();
-    updateEditorStatus();
     return true;
 }
 

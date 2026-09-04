@@ -97,7 +97,6 @@ bool miacode::runtime::DocumentSessionHost::updateDifficultyField(
     state_.documentDirty_ = workspace.snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();
-    updateEditorHeader();
     rebuildFieldSidebar();
     return true;
 }
