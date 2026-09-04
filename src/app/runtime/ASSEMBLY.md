@@ -205,7 +205,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          自由函数——它不依赖任何成员状态，调用点又全在这一个文件里，不必给协调器公共接口增负担。
          `updateEditorFindBarGeometry` / `applyFindOverlayInset` 只搬函数体；在 2026-09-04 的
          QML shell 源集收口中，`ShellHost` 侧原方法随废弃原生 shell 一并移除。连带删除因此无人调用的
-         `Session::showPreviewPlaybackRateToast` 与 `Session::clearValidationErrors` 转发壳。
+         `Session::clearValidationErrors` 转发壳。
 
          **裁决一：`setCurrentBottomTabsTabId` 移出 D 类，归入 E。** 它不是 Widgets 补妆——
          函数体除 `ui_`/`state_` 外还调用兄弟宿主 `validation_->flushPendingMuriDiagnosticsPanelRefresh()`
@@ -218,8 +218,9 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          `DocumentSessionHost` 里就是这么写的，且 `PlaybackCoordinator` 早已是 `Session` 的
          friend（`Session.h:157-158`），属平移而非回退。但它和 `setPreviewPlayingFlag` 是同一类
          问题，**E 步必须把这两条信号路径一并改走 `ShellNotifications`**（已有等价契约）。
-         计数里那 2 处新增的 `session_.` 就是它和 `formatPreviewPlaybackRateToastText`，
-         是真实存量耦合，指标保持诚实。
+         历史计数里那 2 处新增的 `session_.` 分别来自该信号转发和旧的
+         `formatPreviewPlaybackRateToastText`；后者已随隐藏预览速率提示移除，前者仍待后续
+         信号路径收口。
       4a. ~~T 类薄转发：不需要端口~~
          **已完成 2026-09-02**：`session_.` 计数 125 → **79**（46 处，125−46=79 精确吻合）。
          一次逐成员实现体判定把剩余 125 处分成 T（薄转发，只碰协调器已持有的 `state_`/`ui_`，

@@ -606,6 +606,14 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   不再依赖未构造的隐藏元数据编辑框；播放暂停的旧 QWidget 按钮呈现分支也已移除，QML 的
   `ShellNotifications::presentationChanged` 推送保留。产品 Release 构建及上述 7 项针对性测试
   均通过；Qt Widgets 仍只在确有旧控件实现的 runtime/UI 路径中保留。
+- **第 5 步本轮继续收口隐藏编辑器与预览控件镜像**：移除旧预览倍速按钮/菜单、倍速提示
+  和停止/暂停按钮指针；QML 继续通过 `PreviewSurface::playbackRateLabel()` 与
+  `ShellNotifications::presentationChanged` 获取同一份后端状态。标题、艺术家、谱师和
+  Extra 字段不再回写未构造的 `QLineEdit`/`QTextEdit`，字体/行距偏好只更新 QML 所需的
+  设置状态，窗口标题与导出标题直接读取 `ChartWorkspace`。同时删除仅服务于这些隐藏编辑器
+  的 undo/clean-anchor、文本格式化 helper 与空同步 stub；验证列表的旧 `QListWidget` 清空仍
+  留待下一批 validation UI 收口。`MiaCode` Release 编译通过，针对性测试 7/7 通过，
+  全量 CTest 仍为 105/108 通过，红项与既有基线一致。
 
 #### 第 2 步：一处需要更正的既往判断
 
@@ -656,10 +664,10 @@ validation / editor 各子目录），是 Widgets 时代共享 include 块的残
   `document/DocumentFileFlow.cpp`（3 处 `QMessageBox`）、`document/DocumentFlow.Internal.h`（4 处）、
   `document/DocumentFlow.cpp`、`document/DocumentPages.cpp`、`validation/ValidationRender.cpp`（`QDialog`）。
   `DialogLocalization.h` 本身是纯 Widgets（`QDialog` / `QApplication::topLevelWidgets` / `QWidget`）。
-- `UiTheme::` 活调用点 14 个文件；按符号统计：`colors` 32、`Colors` 12、`scrollBarStyleSheet` 5、
+- `UiTheme::` 活调用点 13 个文件；按符号统计：`colors` 32、`Colors` 12、`scrollBarStyleSheet` 5、
   `isDarkTheme` 5、`styleRoundedMenu` 3、`applyApplicationTheme` 3、`previewPanelStyleSheet` 2、
-  `pausePreviewButtonStyleSheet` 2、`menuSelectionCheckIcon` / `editorShellStyleSheet` /
-  `applicationPalette` / `aboutDialogStyleSheet` 各 1。
+  `menuSelectionCheckIcon` / `editorShellStyleSheet` / `applicationPalette` /
+  `aboutDialogStyleSheet` 各 1；旧 `pausePreviewButtonStyleSheet` 已随隐藏暂停按钮分支删除。
   注意 `colors()` / `isDarkTheme()` 连 `src/editor/BracketScopeHighlighter.cpp` 都在用，
   **是 QML 路径也依赖的配色源，不能跟着 Widgets 一起摘**。
 - `UiNativeWindowTheme.h` 被 `qml_ui/QmlUiBootstrap.cpp` 引用（用的是 `QWindow` 重载那一侧），

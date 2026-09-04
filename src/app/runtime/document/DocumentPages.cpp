@@ -210,11 +210,6 @@ void miacode::runtime::DocumentSessionHost::populateDifficultyPage(int difficult
 }
 
 
-void miacode::runtime::DocumentSessionHost::syncHeaderDesignerEditFromModel()
-{
-}
-
-
 void miacode::runtime::DocumentSessionHost::setChartBottomTabsMode(bool enabled)
 {
     session_.setBottomTabsTabVisible(Session::BottomTabsTabId::Timeline, enabled);

@@ -317,28 +317,6 @@ QString previewPanelStyleSheet()
         .arg(css(c.accentText));
 }
 
-QString pausePreviewButtonStyleSheet(bool active)
-{
-    const Colors& c = colors();
-    if (active) {
-        return QStringLiteral(
-            "QToolButton { color: %1; padding: 5px 8px; min-height: 28px; border: 1px solid %2; border-radius: 6px; background: %2; font-weight: 600; }"
-            "QToolButton:hover { background: %3; }"
-        )
-            .arg(css(c.accentText))
-            .arg(css(c.accent))
-            .arg(css(c.accentHover));
-    }
-    return QStringLiteral(
-        "QToolButton { color: %1; padding: 5px 8px; min-height: 28px; border: 1px solid %2; border-radius: 6px; background: transparent; font-weight: 600; }"
-        "QToolButton:hover { background: %3; border-color: %4; }"
-    )
-        .arg(css(c.textPrimary))
-        .arg(css(c.border))
-        .arg(css(c.menuHoverBg))
-        .arg(css(c.accent));
-}
-
 QString aboutDialogStyleSheet()
 {
     const Colors& c = colors();

@@ -29,7 +29,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 using namespace miacode::runtime::shared;
 
@@ -949,15 +948,7 @@ void miacode::runtime::EditorHost::persistEditorTextFontPreference() const
 void miacode::runtime::EditorHost::applyEditorTextFontSize(int pointSize, bool persistPreference)
 {
     const int normalized = qBound(kEditorTextFontSizeMin, pointSize, kEditorTextFontSizeMax);
-    const int blockSpacingPixels = blockSpacingPixelsForPointSize(normalized, state_.editorLineSpacingFactor_);
-    const bool previousSuppress = state_.suppressTextDirtyTracking_;
-    state_.suppressTextDirtyTracking_ = true;
     state_.editorTextFontPointSize_ = normalized;
-    if (ui_.metadataExtraEdit_ != nullptr) {
-        ui_.metadataExtraEdit_->setFont(editorFont(normalized));
-        applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixels);
-    }
-    state_.suppressTextDirtyTracking_ = previousSuppress;
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
@@ -965,15 +956,7 @@ void miacode::runtime::EditorHost::applyEditorTextFontSize(int pointSize, bool p
 
 void miacode::runtime::EditorHost::applyEditorLineSpacingFactor(double factor, bool persistPreference)
 {
-    const bool previousSuppress = state_.suppressTextDirtyTracking_;
-    state_.suppressTextDirtyTracking_ = true;
     state_.editorLineSpacingFactor_ = normalizeEditorLineSpacingFactor(factor);
-    const int blockSpacingPixels =
-        blockSpacingPixelsForPointSize(state_.editorTextFontPointSize_, state_.editorLineSpacingFactor_);
-    if (ui_.metadataExtraEdit_ != nullptr) {
-        applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixels);
-    }
-    state_.suppressTextDirtyTracking_ = previousSuppress;
     if (persistPreference) {
         persistEditorTextFontPreference();
     }

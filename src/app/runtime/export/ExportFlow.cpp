@@ -24,24 +24,10 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 using namespace miacode::runtime::shared;
 
 namespace {
-QString exportFlowWidgetSummary(QWidget* widget)
-{
-    if (widget == nullptr) {
-        return QStringLiteral("(null)");
-    }
-    return QStringLiteral("class=%1 name=%2 size=%3x%4 visible=%5")
-        .arg(QString::fromUtf8(widget->metaObject()->className()))
-        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
-        .arg(widget->width())
-        .arg(widget->height())
-        .arg(widget->isVisible() ? 1 : 0);
-}
-
 QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLiteral("out"))
 {
     text = text.trimmed();
@@ -442,9 +428,6 @@ VideoExportTask miacode::runtime::VideoExportHost::buildVideoExportSeedTask(int 
 
     const QFileInfo chartInfo(session_.currentFilePath_);
     QString chartTitle = session_.applicationServices_.workspace().document().title;
-    if (session_.titleEdit_ != nullptr) {
-        chartTitle = session_.titleEdit_->text();
-    }
     // Per-difficulty designer overrides the document-level &des field when
     // populated; otherwise we fall back so projects using the shared-designer
     // convention still surface a name in the HUD. The trimmed() gate is the

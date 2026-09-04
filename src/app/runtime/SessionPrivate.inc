@@ -51,7 +51,6 @@
     );
     void finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage);
     void setPreviewFixedTimerHighResolutionActive(bool active);
-    void hidePreviewPlaybackRateToast();
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     bool saveToPath(const QString& path);
@@ -61,7 +60,6 @@
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
     void resetAutosaveState(const QString& referenceText);
     void setEditorText(const QString& text);
-    void setMetadataExtraText(const QString& text);
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
     bool restoreLastSessionFile();
     void scheduleStartupRestoreLastSessionFile();

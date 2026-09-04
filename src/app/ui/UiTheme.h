@@ -66,7 +66,6 @@ QString scrollBarStyleSheet();
 void styleRoundedMenu(QMenu& menu);
 QString editorShellStyleSheet();
 QString previewPanelStyleSheet();
-QString pausePreviewButtonStyleSheet(bool active);
 QString aboutDialogStyleSheet();
 
 }  // namespace UiTheme

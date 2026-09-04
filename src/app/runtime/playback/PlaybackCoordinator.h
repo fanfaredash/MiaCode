@@ -383,10 +383,7 @@ private:
     // former Session/ShellHost/DocumentSessionHost homes — see LayoutUi.cpp,
     // PlaybackState.cpp, TimelineFlow.cpp and Playback.cpp for the definitions.
     void updatePauseButtonAppearance();
-    void setMetadataExtraText(const QString& text);
     void clearValidationErrors();
-    void showPreviewPlaybackRateToast(double rate);
-    void updatePreviewPlaybackRateToastGeometry();
     void updateEditorFindBarGeometry();
     void applyFindOverlayInset();
     // Stage 4.9d-4a (T-class): thin StageMediaHost forwards whose bodies only touch
@@ -405,7 +402,6 @@ private:
     bool currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const;
     bool ensureAuditionSceneReady();
     miacode::waveform::WaveformCacheService* ensureWaveformCacheService();
-    QString formatPreviewPlaybackRateToastText(double rate) const;
     // Stage 4.9d-4b-1: Session::clearPreviewFollowDecoration's body only touched
     // the editor-sync controller, which is reachable directly through
     // services_.editorSync() — see FollowSync.cpp for the definition.

@@ -24,24 +24,17 @@
         // host renders it.
         miacode::v2::UiRequestService* uiRequests_ = nullptr;
         miacode::v2::JobProgressService* jobProgress_ = nullptr;
-        QLineEdit* titleEdit_ = nullptr;
-        QLineEdit* artistEdit_ = nullptr;
         // Chart-wide timing offset (`&first`). Lives in the difficulty-page
         // header (next to Lv), not the metadata page — see FrameBootstrap.
         // Per-difficulty designer state (`&des_N` + the "share one designer"
         // toggle) is managed by a dialog, not a persistent checkbox, so there
         // is no unifiedDesignerCheckbox_ widget; the runtime flag lives in
         // State::unifiedDesignerEnabled_.
-        QLineEdit* designerEdit_ = nullptr;
-        QTextEdit* metadataExtraEdit_ = nullptr;
         // Per-difficulty designer (`&des_N`) header field. Distinct from the
-        // metadata page's designerEdit_ (&des).
+        // metadata page's document-level designer field (&des).
         QTabWidget* bottomTabs_ = nullptr;
         QTabWidget* quickShellBottomTabsProxy_ = nullptr;
         QWidget* workspaceContentWidget_ = nullptr;
-        QToolButton* stopPreviewButton_ = nullptr;
-        QToolButton* pausePreviewButton_ = nullptr;
-        QToolButton* previewSpeedButton_ = nullptr;
         QTimer* previewHeldSeekTimer_ = nullptr;
     };
 
@@ -161,7 +154,6 @@
         QString pendingAbnormalExitBackupRestorePath_;
         QString pendingAbnormalExitBackupRestoreChartPath_;
         bool pendingAbnormalExitBackupRestoreScheduled_ = false;
-        int metadataExtraUndoSaveAnchor_ = 0;
         QVector<EditorBookmark> editorBookmarks_;
         // Sidebar bookmark-group fold state per difficulty id. Only explicit
         // user toggles are recorded; an absent difficulty defaults to expanded
@@ -319,7 +311,6 @@
         qint64 qtPreviewVisualClockDiagLastLogMs_ = -1;
         bool previewScrubDragging_ = false;
         bool suppressTimelineCursorSync_ = false;
-        bool suppressTextDirtyTracking_ = false;
         bool deferredEditorUiUpdatePending_ = false;
         bool deferredEditorUiStatusPending_ = false;
         bool deferredEditorUiEmptyStatePending_ = false;
@@ -622,7 +613,6 @@
     QString& pendingAbnormalExitBackupRestorePath_ = state_.pendingAbnormalExitBackupRestorePath_;
     QString& pendingAbnormalExitBackupRestoreChartPath_ = state_.pendingAbnormalExitBackupRestoreChartPath_;
     bool& pendingAbnormalExitBackupRestoreScheduled_ = state_.pendingAbnormalExitBackupRestoreScheduled_;
-    int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
     QVector<EditorBookmark>& editorBookmarks_ = state_.editorBookmarks_;
     QHash<int, bool>& outlineBookmarkGroupExpanded_ = state_.outlineBookmarkGroupExpanded_;
     int& lastTimelineParseDifficultyId_ = state_.lastTimelineParseDifficultyId_;
@@ -725,7 +715,6 @@
     qint64& qtPreviewVisualClockDiagLastLogMs_ = state_.qtPreviewVisualClockDiagLastLogMs_;
     bool& previewScrubDragging_ = state_.previewScrubDragging_;
     bool& suppressTimelineCursorSync_ = state_.suppressTimelineCursorSync_;
-    bool& suppressTextDirtyTracking_ = state_.suppressTextDirtyTracking_;
     bool& deferredEditorUiUpdatePending_ = state_.deferredEditorUiUpdatePending_;
     bool& deferredEditorUiStatusPending_ = state_.deferredEditorUiStatusPending_;
     bool& deferredEditorUiEmptyStatePending_ = state_.deferredEditorUiEmptyStatePending_;
@@ -864,15 +853,8 @@
     QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
     miacode::v2::UiRequestService*& uiRequests_ = ui_.uiRequests_;
     miacode::v2::JobProgressService*& jobProgress_ = ui_.jobProgress_;
-    QLineEdit*& titleEdit_ = ui_.titleEdit_;
-    QLineEdit*& artistEdit_ = ui_.artistEdit_;
-    QLineEdit*& designerEdit_ = ui_.designerEdit_;
-    QTextEdit*& metadataExtraEdit_ = ui_.metadataExtraEdit_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
     QWidget*& workspaceContentWidget_ = ui_.workspaceContentWidget_;
-    QToolButton*& stopPreviewButton_ = ui_.stopPreviewButton_;
-    QToolButton*& pausePreviewButton_ = ui_.pausePreviewButton_;
-    QToolButton*& previewSpeedButton_ = ui_.previewSpeedButton_;
     QTimer*& previewHeldSeekTimer_ = ui_.previewHeldSeekTimer_;
     int& previewStatsLayoutRows_ = state_.previewStatsLayoutRows_;
     int& previewStatsLayoutCols_ = state_.previewStatsLayoutCols_;

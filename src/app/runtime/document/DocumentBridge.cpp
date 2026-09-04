@@ -1,9 +1,7 @@
 #include "runtime/document/DocumentSessionHost.h"
 #include "runtime/Shared.h"
 
-
 #include <QtCore>
-#include <QtWidgets>
 
 #include <utility>
 
@@ -63,34 +61,6 @@ bool miacode::runtime::DocumentSessionHost::updateDocumentField(
 
     const bool timingChanged = field == Session::DocumentField::First
         || field == Session::DocumentField::ExtraText;
-    switch (field) {
-    case Session::DocumentField::Title:
-        if (ui_.titleEdit_ != nullptr) {
-            QSignalBlocker blocker(ui_.titleEdit_);
-            ui_.titleEdit_->setText(value);
-        }
-        break;
-    case Session::DocumentField::Artist:
-        if (ui_.artistEdit_ != nullptr) {
-            QSignalBlocker blocker(ui_.artistEdit_);
-            ui_.artistEdit_->setText(value);
-        }
-        break;
-    case Session::DocumentField::First:
-        break;
-    case Session::DocumentField::Designer:
-        if (ui_.designerEdit_ != nullptr) {
-            QSignalBlocker blocker(ui_.designerEdit_);
-            ui_.designerEdit_->setText(value);
-        }
-        break;
-    case Session::DocumentField::VideoPath:
-        break;
-    case Session::DocumentField::ExtraText:
-        setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
-        break;
-    }
-
     state_.documentDirty_ = workspace.snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();

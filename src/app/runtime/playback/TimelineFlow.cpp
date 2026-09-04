@@ -36,7 +36,8 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
+#include <QListWidget>
+#include <QToolTip>
 
 #include "runtime/playback/TimelineFlow.Internal.h"
 
@@ -186,17 +187,6 @@ std::pair<int, int> lineColForTextOffset(const QString& text, int offset)
         ++col;
     }
     return {line, col};
-}
-
-QVector<SimaiRawField> metadataExtraFieldsFromUi(
-    const QTextEdit* metadataExtraEdit,
-    const QVector<SimaiRawField>& fallbackFields
-)
-{
-    if (metadataExtraEdit != nullptr) {
-        return SimaiDocument::parseRawFields(metadataExtraEdit->toPlainText(), true);
-    }
-    return fallbackFields;
 }
 
 bool upsertMetadataField(QVector<SimaiRawField>* fields, const QString& key, const QString& value)
@@ -506,7 +496,6 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
     miacode::v2::ChartWorkspace& workspace = services_.workspace();
     const QString serializedBpm = QString::number(bpm, 'f', 3);
     workspace.upsertExtraField(QStringLiteral("wholebpm"), serializedBpm);
-    setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
     state_.documentDirty_ = workspace.snapshot().dirty;
     documents_.updateDirtyState();
 }
@@ -516,29 +505,9 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int c
     const int normalized = qMax(1, clockCount);
     miacode::v2::ChartWorkspace& workspace = services_.workspace();
     workspace.upsertExtraField(QStringLiteral("clock_count"), QString::number(normalized));
-    setMetadataExtraText(SimaiDocument::serializeRawFields(workspace.document().extraFields));
     state_.documentDirty_ = workspace.snapshot().dirty;
     documents_.updateDirtyState();
     refreshTimelineMetadata();
-}
-
-// Stage 4.9d-3 (D-class): moved verbatim from DocumentSessionHost::setMetadataExtraText
-// (document/DocumentEditorState.cpp) — pure ui_/state_ widget presentation, no
-// DocumentSessionHost-own state.
-void miacode::runtime::PlaybackCoordinator::setMetadataExtraText(const QString& text)
-{
-    if (ui_.metadataExtraEdit_ == nullptr) {
-        return;
-    }
-    const bool previousSuppress = state_.suppressTextDirtyTracking_;
-    state_.suppressTextDirtyTracking_ = true;
-    QSignalBlocker blocker(ui_.metadataExtraEdit_);
-    ui_.metadataExtraEdit_->setPlainText(text);
-    ui_.metadataExtraEdit_->document()->clearUndoRedoStacks();
-    ui_.metadataExtraEdit_->document()->setModified(false);
-    state_.metadataExtraUndoSaveAnchor_ = ui_.metadataExtraEdit_->document()->availableUndoSteps();
-    applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixelsForPointSize(state_.editorTextFontPointSize_, state_.editorLineSpacingFactor_));
-    state_.suppressTextDirtyTracking_ = previousSuppress;
 }
 
 // Stage 4.9d-3 (D-class): moved verbatim from ValidationHost::clearValidationErrors
@@ -654,9 +623,6 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
 void miacode::runtime::PlaybackCoordinator::updateWindowTitle()
 {
     QString titleText = services_.workspace().document().title;
-    if (ui_.titleEdit_ != nullptr) {
-        titleText = ui_.titleEdit_->text();
-    }
     if (titleText.trimmed().isEmpty()) {
         titleText = state_.currentFilePath_.isEmpty()
             ? QString("Untitled.simai")

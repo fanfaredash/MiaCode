@@ -476,12 +476,6 @@ void Session::releaseChartDropImportService()
     }
 }
 
-void Session::setMetadataExtraText(const QString& text)
-{
-    documents_->setMetadataExtraText(text);
-}
-
-
 void Session::updatePauseButtonAppearance()
 {
     documents_->updatePauseButtonAppearance();

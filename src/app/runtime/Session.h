@@ -78,7 +78,6 @@ namespace miacode::video_export {
 class QListWidget;
 class QListWidgetItem;
 class QJsonObject;
-class QLineEdit;
 class QMenu;
 class QMoveEvent;
 class QTabWidget;
@@ -98,8 +97,6 @@ class QShortcut;
 class QStackedWidget;
 class QSplitter;
 class QTimer;
-class QTextEdit;
-class QToolButton;
 class QWidget;
 class QWheelEvent;
 class QWindow;
@@ -470,7 +467,6 @@ private:
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
-    void updatePreviewPlaybackRateToastGeometry();
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
     PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(

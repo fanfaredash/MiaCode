@@ -1,13 +1,10 @@
-// Session::-owned playback forwarders and legacy widgets, split out of
-// Playback.cpp.
+// Session::-owned playback forwarders, split out of Playback.cpp.
 //
 // Stage 4.9d-6: PlaybackCoordinator's implementation TUs are being separated
 // from the Session assembly so the coordinator can eventually link on its
 // own (see the Result Packet for the link-probe evidence). Playback.cpp now
 // holds only PlaybackCoordinator::-owned seek/tick/transport logic; this
-// file holds the Session::-owned thin forwarders (and the two legacy
-// playback-rate-toast stubs still reachable from Widgets call sites) that
-// used to share that TU.
+// file holds the Session::-owned thin forwarders that used to share that TU.
 
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Session.h"
@@ -137,14 +134,6 @@ void Session::seekPreviewToSecond(double second, bool centerView)
 void Session::applyPreviewPlaybackRate(double rate)
 {
     playback_->applyPreviewPlaybackRate(rate);
-}
-
-void Session::updatePreviewPlaybackRateToastGeometry()
-{
-}
-
-void Session::hidePreviewPlaybackRateToast()
-{
 }
 
 bool Session::startQtPreviewPlayback(double second, bool resumeFromPause)

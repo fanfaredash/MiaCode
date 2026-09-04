@@ -16,11 +16,7 @@
 #include <QGuiApplication>
 #include <QMenu>
 #include <QScreen>
-#include <QSignalBlocker>
 #include <QStringList>
-#include <QTextBlockFormat>
-#include <QTextCursor>
-#include <QTextEdit>
 #include <QWindow>
 #include <QtMath>
 
@@ -286,21 +282,6 @@ int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor)
 {
     const int baseSpacing = qBound(1, qRound(static_cast<double>(pointSize) * 0.18), 6);
     return qMax(0, qRound(static_cast<double>(baseSpacing) * qMax(0.0, spacingFactor)));
-}
-
-void applyBlockSpacingToTextEdit(QTextEdit* editor, int blockSpacingPixels)
-{
-    if (editor == nullptr || editor->document() == nullptr) {
-        return;
-    }
-    QSignalBlocker blocker(editor);
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    cursor.select(QTextCursor::Document);
-    QTextBlockFormat format;
-    format.setBottomMargin(static_cast<qreal>(qMax(0, blockSpacingPixels)));
-    cursor.mergeBlockFormat(format);
-    cursor.endEditBlock();
 }
 
 void styleRoundedMenu(QMenu& menu)

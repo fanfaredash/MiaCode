@@ -17,7 +17,6 @@ class QDialog;
 class QFileInfo;
 class QMenu;
 class QObject;
-class QTextEdit;
 class QWidget;
 
 namespace miacode::v2 {
@@ -140,7 +139,6 @@ QString resolveProjectDataDirectoryPath(const QString& filePath);
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs);
 QFont editorFont(int pointSize = -1);
 int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor);
-void applyBlockSpacingToTextEdit(QTextEdit* editor, int blockSpacingPixels);
 void styleRoundedMenu(QMenu& menu);
 qint64 fileLastModifiedMs(const QFileInfo& fileInfo);
 double probeAudioDurationSeconds(const QString& trackPath);

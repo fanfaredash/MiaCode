@@ -2,15 +2,12 @@
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"
-#include "UiText.h"
-#include "UiTheme.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 using namespace miacode::runtime::shared;
 
@@ -28,17 +25,6 @@ QString cursorSummary(const QTextCursor& cursor)
         .arg(qAbs(cursor.position() - cursor.anchor()));
 }
 
-QString widgetSummary(QWidget* widget)
-{
-    if (widget == nullptr) {
-        return QStringLiteral("null");
-    }
-    return QStringLiteral("%1(name=%2 ptr=0x%3)")
-        .arg(widget->metaObject() != nullptr ? widget->metaObject()->className() : QStringLiteral("unknown"))
-        .arg(widget->objectName().isEmpty() ? QStringLiteral("(none)") : widget->objectName())
-        .arg(reinterpret_cast<quintptr>(widget), 0, 16);
-}
-
 void logSelectionRestore(const QString& scope, const QString& payload)
 {
     miacode::debug_log::appendLine(
@@ -51,45 +37,16 @@ void logSelectionRestore(const QString& scope, const QString& payload)
 
 }  // namespace
 
-void miacode::runtime::DocumentSessionHost::setMetadataExtraText(const QString& text)
-{
-    if (ui_.metadataExtraEdit_ == nullptr) {
-        return;
-    }
-    const bool previousSuppress = state_.suppressTextDirtyTracking_;
-    state_.suppressTextDirtyTracking_ = true;
-    QSignalBlocker blocker(ui_.metadataExtraEdit_);
-    ui_.metadataExtraEdit_->setPlainText(text);
-    ui_.metadataExtraEdit_->document()->clearUndoRedoStacks();
-    ui_.metadataExtraEdit_->document()->setModified(false);
-    state_.metadataExtraUndoSaveAnchor_ = ui_.metadataExtraEdit_->document()->availableUndoSteps();
-    applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixelsForPointSize(state_.editorTextFontPointSize_, state_.editorLineSpacingFactor_));
-    state_.suppressTextDirtyTracking_ = previousSuppress;
-}
-
 void miacode::runtime::DocumentSessionHost::updatePauseButtonAppearance()
 {
     // The play/pause presentation changed, and the QML transport's button reads
     // the same condition this one does — playing_ OR the export
     // intro's lead-in. setPreviewPlayingFlag announces the first; nothing
     // announced the second, so the intro played with the transport still
-    // showing a play button. Announced before the widget guard, because a v1
-    // action that no longer exists is not a reason to leave the shell stale,
-    // and queued for the same reason that writer is: callers reach here from
-    // the middle of a transition.
+    // showing a play button. The notification is queued for the same reason
+    // that writer is: callers reach here from the middle of a transition.
     QMetaObject::invokeMethod(
         &session_, [this]() { emit session_.presentationChanged(); }, Qt::QueuedConnection);
-    const bool previewPlaying = state_.playing_ || state_.exportIntroLeadInActive_;
-    if (ui_.pausePreviewButton_ != nullptr) {
-        ui_.pausePreviewButton_->setText(
-            previewPlaying
-                ? UiText::text(QStringLiteral("preview.pause"))
-                : UiText::text(QStringLiteral("preview.play"))
-        );
-        ui_.pausePreviewButton_->setStyleSheet(
-            UiTheme::pausePreviewButtonStyleSheet(previewPlaying)
-        );
-    }
 }
 
 void miacode::runtime::DocumentSessionHost::updateDirtyState()
@@ -124,48 +81,16 @@ quint64 miacode::runtime::DocumentSessionHost::appliedWorkspaceRevision() const
 
 bool miacode::runtime::DocumentSessionHost::currentFieldHasUndoChanges() const
 {
-    if (session_.hasActiveDifficulty()) {
-        // The chart body's dirty state is the workspace's save point, not a
-        // widget undo-step count; only the header fields were ever asked
-        // here, and none of them exist on this side of the QML migration.
-        return false;
-    }
-
-    if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
-        const bool titleDirty = ui_.titleEdit_ != nullptr && ui_.titleEdit_->text() != session_.applicationServices_.workspace().document().title;
-        const bool artistDirty = ui_.artistEdit_ != nullptr && ui_.artistEdit_->text() != session_.applicationServices_.workspace().document().artist;
-        const bool designerDirty = ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != session_.applicationServices_.workspace().document().designer;
-        bool extraDirty = false;
-        if (ui_.metadataExtraEdit_ != nullptr && ui_.metadataExtraEdit_->document() != nullptr) {
-            extraDirty = ui_.metadataExtraEdit_->document()->availableUndoSteps() != state_.metadataExtraUndoSaveAnchor_;
-        }
-        return titleDirty || artistDirty || designerDirty || extraDirty;
-    }
-
+    // QML commits document fields directly into ChartWorkspace. The chart
+    // body's dirty state is likewise workspace-owned, so there is no longer
+    // a hidden editor undo stack to inspect here.
     return false;
 }
 
 void miacode::runtime::DocumentSessionHost::anchorCurrentFieldCleanState()
 {
-    if (session_.hasActiveDifficulty()) {
-        return;
-    }
-
-    if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
-        if (ui_.titleEdit_ != nullptr) {
-            ui_.titleEdit_->setModified(false);
-        }
-        if (ui_.artistEdit_ != nullptr) {
-            ui_.artistEdit_->setModified(false);
-        }
-        if (ui_.designerEdit_ != nullptr) {
-            ui_.designerEdit_->setModified(false);
-        }
-        if (ui_.metadataExtraEdit_ != nullptr && ui_.metadataExtraEdit_->document() != nullptr) {
-            ui_.metadataExtraEdit_->document()->setModified(false);
-            state_.metadataExtraUndoSaveAnchor_ = ui_.metadataExtraEdit_->document()->availableUndoSteps();
-        }
-    }
+    // Kept as a compatibility hook for document-page transitions. QML has no
+    // per-widget clean anchor; ChartWorkspace owns the document save point.
 }
 
 void miacode::runtime::DocumentSessionHost::refreshCurrentFieldDirtyState()

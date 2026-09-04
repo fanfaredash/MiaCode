@@ -7,7 +7,6 @@
 #include "audio/PreviewAudioPlaybackFlowPolicy.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -31,7 +30,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
 #include "runtime/playback/Playback.Internal.h"
@@ -313,31 +311,6 @@ void miacode::runtime::PlaybackCoordinator::applyPreviewPlaybackRate(double rate
                 state_.activePreviewPlaybackTransactionId_);
         }
     }
-    if (ui_.previewSpeedButton_ != nullptr) {
-        QString rateText = QString::number(state_.previewPlaybackRate_, 'f', 2);
-        while (rateText.endsWith('0')) {
-            rateText.chop(1);
-        }
-        if (rateText.endsWith('.')) {
-            rateText.chop(1);
-        }
-        ui_.previewSpeedButton_->setText(QString("%1x").arg(rateText));
-        if (QMenu* speedMenu = ui_.previewSpeedButton_->menu(); speedMenu != nullptr) {
-            const int targetIndex = nearestPreviewPlaybackRateIndex(state_.previewPlaybackRate_);
-            const QList<QAction*> actions = speedMenu->actions();
-            for (int index = 0; index < actions.size(); ++index) {
-                QAction* action = actions[index];
-                const QVariant data = action != nullptr ? action->data() : QVariant();
-                const bool checked = data.isValid()
-                    ? qFuzzyCompare(data.toDouble() + 1.0, state_.previewPlaybackRate_ + 1.0)
-                    : (index == targetIndex);
-                if (action != nullptr) {
-                    action->setChecked(checked);
-                }
-            }
-        }
-    }
-    showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_about_to_call");
     applyPreviewStageMediaRoutePlaybackRate(state_, state_.previewPlaybackRate_, "ui_rate_change");
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_returned");
@@ -782,38 +755,9 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
 // Session::handlePausedPreviewMediaSeekCompleted, Session::stepPreviewBySeconds,
 // Session::handlePreviewSeekWheel, Session::beginPreviewHeldSeek,
 // Session::stopPreviewHeldSeek, Session::applyPreviewHeldSeekTick,
-// Session::seekPreviewToSecond, Session::applyPreviewPlaybackRate,
-// Session::updatePreviewPlaybackRateToastGeometry, and
-// Session::hidePreviewPlaybackRateToast moved to SessionForwarding.Playback.cpp
-// (stage 4.9d-6: TU boundary split so this file holds only Coordinator::
-// methods).
-
-// Pure value formatting, no state_/ui_ touched at all.
-QString miacode::runtime::PlaybackCoordinator::formatPreviewPlaybackRateToastText(double rate) const
-{
-    const int percent = qRound(rate * 100.0);
-    const QString title = UiText::text(QStringLiteral("timeline.playback_speed"));
-    return QStringLiteral(
-               "<div style='text-align:center;'>"
-               "<div style='font-size:14px;font-weight:600;line-height:1.2;'>%1</div>"
-               "<div style='margin-top:6px;font-size:28px;font-weight:700;line-height:1.1;'>%2%%</div>"
-               "</div>"
-           )
-        .arg(title.toHtmlEscaped())
-        .arg(percent);
-}
-
-// Stage 4.9d-3 (D-class): moved verbatim from Session::showPreviewPlaybackRateToast /
-// Session::updatePreviewPlaybackRateToastGeometry above — pure ui_ widget
-// presentation, no Session-own state.
-void miacode::runtime::PlaybackCoordinator::showPreviewPlaybackRateToast(double rate)
-{
-    Q_UNUSED(rate);
-}
-
-void miacode::runtime::PlaybackCoordinator::updatePreviewPlaybackRateToastGeometry()
-{
-}
+// Session::seekPreviewToSecond and Session::applyPreviewPlaybackRate moved to
+// SessionForwarding.Playback.cpp (stage 4.9d-6: TU boundary split so this file
+// holds only Coordinator:: methods).
 
 // Session::startQtPreviewPlayback, Session::pauseQtPreviewPlaybackExact,
 // Session::stopQtPreviewPlayback, Session::applyQtPreviewPosition,

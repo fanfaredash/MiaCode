@@ -382,7 +382,6 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewPanelLayout(int panelWi
 {
     Q_UNUSED(panelWidthOverride);
     Q_UNUSED(panelHeightOverride);
-    updatePreviewPlaybackRateToastGeometry();
 }
 
 void miacode::runtime::PlaybackCoordinator::updatePreviewObjectStats(double second)

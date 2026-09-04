@@ -28,7 +28,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
 
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"
@@ -149,11 +148,6 @@ void miacode::runtime::DocumentSessionHost::openPerDifficultyDesignerDialog()
 void miacode::runtime::DocumentSessionHost::applyUnifiedDesignerName(const QString& canonicalName)
 {
     const bool changed = session_.applicationServices_.workspace().unifyDesigners(canonicalName);
-    if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != canonicalName) {
-        QSignalBlocker block(ui_.designerEdit_);
-        ui_.designerEdit_->setText(canonicalName);
-    }
-    syncHeaderDesignerEditFromModel();
     if (changed) {
         state_.documentDirty_ = session_.applicationServices_.workspace().snapshot().dirty;
         anchorCurrentFieldCleanState();

@@ -88,7 +88,6 @@ public:
     bool onSaveFile();
     bool onSaveFileAs();
     bool saveToPath(const QString& path);
-    void setMetadataExtraText(const QString& text);
     void updatePauseButtonAppearance();
     void updateDirtyState() override;
     // The workspace revision QML last committed — see PlaybackDocumentPort.h
@@ -158,7 +157,6 @@ public:
     QListWidgetItem* findBookmarkSidebarItem(int difficultyId, int line) const;
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
-    void syncHeaderDesignerEditFromModel();
     bool switchToMetadataField();
     bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);
