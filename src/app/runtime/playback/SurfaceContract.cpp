@@ -11,10 +11,9 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-#include "UiText.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
-#include <QtWidgets>
+#include <QToolTip>
 
 using namespace miacode::runtime::shared;
 using namespace miacode::runtime::playback_detail;
@@ -589,53 +588,6 @@ void miacode::runtime::PlaybackCoordinator::setBottomTabsCurrentTabId(const QStr
     setCurrentBottomTabsTabId(bottomTabsTabIdFromString(tabId));
 }
 
-// Stage 4.9d-4b-2e: moved in verbatim from Session::syncBottomTabsCurrentTabToContainers
-// (used to be defined further down this file) — pure ui_/state_ widget sync, no
-// Session-own state. bottomTabsPageForTab's tabId->widget mapping is reproduced
-// inline since this is its only caller here.
-void miacode::runtime::PlaybackCoordinator::syncBottomTabsCurrentTabToContainers()
-{
-    if (ui_.bottomTabs_ == nullptr) {
-        return;
-    }
-
-    const auto pageForTab = [this](RuntimeContext::BottomTabsTabId tabId) -> QWidget* {
-        switch (tabId) {
-        case RuntimeContext::BottomTabsTabId::Timeline:
-            return nullptr;
-        case RuntimeContext::BottomTabsTabId::Validation:
-            return ui_.errorList_;
-        case RuntimeContext::BottomTabsTabId::Muri:
-            return ui_.muriList_;
-        case RuntimeContext::BottomTabsTabId::Unknown:
-            break;
-        }
-        return nullptr;
-    };
-
-    const bool quickShellBottomTabsProxyActive = state_.backendActive_ && ui_.quickShellBottomTabsProxy_ != nullptr;
-    if (!quickShellBottomTabsProxyActive) {
-        QWidget* targetPage = pageForTab(state_.currentBottomTabsTabId_);
-        const int index = targetPage != nullptr ? ui_.bottomTabs_->indexOf(targetPage) : -1;
-        if (index >= 0 && ui_.bottomTabs_->isTabVisible(index) && ui_.bottomTabs_->currentIndex() != index) {
-            ui_.bottomTabs_->setCurrentIndex(index);
-        }
-        return;
-    }
-
-    if (ui_.quickShellBottomTabsProxy_ != nullptr) {
-        QWidget* targetPage = pageForTab(state_.currentBottomTabsTabId_);
-        const int proxyIndex = targetPage != nullptr
-            ? ui_.quickShellBottomTabsProxy_->indexOf(targetPage)
-            : -1;
-        if (proxyIndex >= 0
-            && ui_.quickShellBottomTabsProxy_->isTabVisible(proxyIndex)
-            && ui_.quickShellBottomTabsProxy_->currentIndex() != proxyIndex) {
-            ui_.quickShellBottomTabsProxy_->setCurrentIndex(proxyIndex);
-        }
-    }
-}
-
 // Stage 4.9d-4b-2e: moved in verbatim from Session::setCurrentBottomTabsTabId
 // (BottomTabsTabId overload). The QString overload above now flows into this
 // one instead of the reverse (Session's setCurrentBottomTabsTabId(QString) used
@@ -653,30 +605,15 @@ void miacode::runtime::PlaybackCoordinator::setCurrentBottomTabsTabId(RuntimeCon
     if (tabId == RuntimeContext::BottomTabsTabId::Unknown) {
         return;
     }
-    // Issue #2 fix — in QuickShell mode the legacy QTabWidget is hidden
-    // (the QML BottomTabBar renders the tab bar instead) and the
-    // legacy widget's `isTabVisible(index)` may report false even when
-    // the QML controller reports the tab as user-visible. The early
-    // return on `!bottomTabsTabVisibleFromState(tabId)` then drops every
-    // click from the QML tab bar — which is exactly the symptom the user
-    // reported ("clicking validation/muri detect has no effect").
-    // Skip the legacy visibility gate when the QuickShell backend is
-    // active; visibility there is already gated at the QML level by
-    // the validationTabVisible / muriTabVisible properties.
+    // In the QML backend, the tab bar owns presentation while this state
+    // remains the single source of truth for the selected tab.
     if (!state_.backendActive_ && !bottomTabsTabVisibleFromState(tabId)) {
         return;
     }
     const RuntimeContext::BottomTabsTabId previousTabId = state_.currentBottomTabsTabId_;
     state_.currentBottomTabsTabId_ = tabId;
-    syncBottomTabsCurrentTabToContainers();
-    if (tabId == RuntimeContext::BottomTabsTabId::Muri) {
-        validation_.flushPendingMuriDiagnosticsPanelRefresh();
-    }
     if (tabId == RuntimeContext::BottomTabsTabId::Timeline) {
         flushDeferredTimelineBridgeState();
-    }
-    if (tabId != RuntimeContext::BottomTabsTabId::Timeline) {
-        validation_.scheduleBottomTabsIssueListRelayout();
     }
     if (previousTabId != tabId) {
         emit services_.shellNotifications().presentationChanged();
@@ -730,14 +667,9 @@ void miacode::runtime::PlaybackCoordinator::noteTimelineSurfaceReady()
 }
 
 
-// Session::quickShellBottomTabsProxyActive, Session::bottomTabsFallbackLabel,
-// Session::bottomTabsPageForTab, Session::bottomTabsContainerForTab,
-// Session::bottomTabsTabIndex, Session::bottomTabsTabIdFromString,
+// Session::bottomTabsTabIdFromString,
 // Session::currentBottomTabsTabId, Session::bottomTabsTabVisible,
-// Session::syncBottomTabsCurrentTabToContainers, Session::syncQuickShellBottomTabsProxyRoute,
 // Session::setCurrentBottomTabsTabId (both overloads), Session::setBottomTabsTabVisible,
 // and Session::restoreBottomTabsCurrentTabAfterRefresh moved to
 // SessionForwarding.SurfaceContract.cpp (stage 4.9d-6: TU boundary split so
-// this file holds only Coordinator:: methods; the legacy Session-side
-// bottom-tabs machinery has its own independent Coordinator:: mirror
-// above, e.g. PlaybackCoordinator::syncBottomTabsCurrentTabToContainers).
+// this file holds only Coordinator:: methods).

@@ -5,8 +5,6 @@
 
 #if !defined(MIACODE_SESSION_RUNTIME_MEMBERS)
     struct Ui {
-        QListWidget* errorList_ = nullptr;
-        QListWidget* muriList_ = nullptr;
         QAction* fontDecreaseAction_ = nullptr;
         QAction* fontIncreaseAction_ = nullptr;
         QTimer* autosaveTimer_ = nullptr;
@@ -32,8 +30,6 @@
         // State::unifiedDesignerEnabled_.
         // Per-difficulty designer (`&des_N`) header field. Distinct from the
         // metadata page's document-level designer field (&des).
-        QTabWidget* bottomTabs_ = nullptr;
-        QTabWidget* quickShellBottomTabsProxy_ = nullptr;
         QWidget* workspaceContentWidget_ = nullptr;
         QTimer* previewHeldSeekTimer_ = nullptr;
     };
@@ -197,7 +193,6 @@
         double deferredQuickShellStartupStageMediaPausedSecond_ = 0.0;
         bool pendingDeferredValidationUiRefresh_ = false;
         bool pendingDeferredMuriUiRefresh_ = false;
-        bool pendingMuriPanelRefresh_ = false;
         QString previewMediaWarmupChartPath_;
         QString previewMediaWarmupResolvedPath_;
         QString previewMediaWarmupTrackPath_;
@@ -528,7 +523,6 @@
         bool quickShellPreviewCompositeSurfaceActive_ = false;
         std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> previewProgressStatsCache_;
         QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
-        QHash<QString, QSet<QString>> ignoredHeaderIssueTypesByFile_;
         QVector<ValidationDecoration> validationDecorations_;
         DeletedDifficultyUndoState deletedDifficultyUndoState_;
         QString activeOutlineKey_ = "metadata";
@@ -571,9 +565,6 @@
     QThreadPool*& previewWarmupPool_ = state_.previewWarmupPool_;
     QThreadPool*& timelineSlowRefreshPool_ = state_.timelineSlowRefreshPool_;
     QThreadPool*& timelineAnalysisPool_ = state_.timelineAnalysisPool_;
-    QTabWidget*& quickShellBottomTabsProxy_ = ui_.quickShellBottomTabsProxy_;
-    QListWidget*& errorList_ = ui_.errorList_;
-    QListWidget*& muriList_ = ui_.muriList_;
     QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
     QAction*& fontIncreaseAction_ = ui_.fontIncreaseAction_;
     QTimer*& autosaveTimer_ = ui_.autosaveTimer_;
@@ -665,7 +656,6 @@
     quint64& waveformRefreshGeneration_ = state_.waveformRefreshGeneration_;
     bool& pendingDeferredValidationUiRefresh_ = state_.pendingDeferredValidationUiRefresh_;
     bool& pendingDeferredMuriUiRefresh_ = state_.pendingDeferredMuriUiRefresh_;
-    bool& pendingMuriPanelRefresh_ = state_.pendingMuriPanelRefresh_;
     QString& previewMediaWarmupChartPath_ = state_.previewMediaWarmupChartPath_;
     QString& previewMediaWarmupResolvedPath_ = state_.previewMediaWarmupResolvedPath_;
     QString& previewMediaWarmupTrackPath_ = state_.previewMediaWarmupTrackPath_;
@@ -853,7 +843,6 @@
     QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
     miacode::v2::UiRequestService*& uiRequests_ = ui_.uiRequests_;
     miacode::v2::JobProgressService*& jobProgress_ = ui_.jobProgress_;
-    QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
     QWidget*& workspaceContentWidget_ = ui_.workspaceContentWidget_;
     QTimer*& previewHeldSeekTimer_ = ui_.previewHeldSeekTimer_;
     int& previewStatsLayoutRows_ = state_.previewStatsLayoutRows_;
@@ -863,7 +852,6 @@
     bool& quickShellPreviewCompositeSurfaceActive_ = state_.quickShellPreviewCompositeSurfaceActive_;
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache>& previewProgressStatsCache_ = state_.previewProgressStatsCache_;
     QHash<int, ValidationCacheEntry>& validationCacheByDifficulty_ = state_.validationCacheByDifficulty_;
-    QHash<QString, QSet<QString>>& ignoredHeaderIssueTypesByFile_ = state_.ignoredHeaderIssueTypesByFile_;
     QVector<ValidationDecoration>& validationDecorations_ = state_.validationDecorations_;
     DeletedDifficultyUndoState& deletedDifficultyUndoState_ = state_.deletedDifficultyUndoState_;
     QString& activeOutlineKey_ = state_.activeOutlineKey_;

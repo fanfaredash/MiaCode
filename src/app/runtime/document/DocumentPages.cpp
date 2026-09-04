@@ -178,14 +178,6 @@ void miacode::runtime::DocumentSessionHost::setBookmarkGroupExpanded(int difficu
     rebuildFieldSidebar();
 }
 
-QListWidgetItem* miacode::runtime::DocumentSessionHost::findBookmarkSidebarItem(int difficultyId, int line) const
-{
-    Q_UNUSED(difficultyId);
-    Q_UNUSED(line);
-    return nullptr;
-}
-
-
 void miacode::runtime::DocumentSessionHost::revealBookmarkInSidebar(int difficultyId, int line, bool beginRename)
 {
     Q_UNUSED(difficultyId);
@@ -213,7 +205,7 @@ void miacode::runtime::DocumentSessionHost::populateDifficultyPage(int difficult
 void miacode::runtime::DocumentSessionHost::setChartBottomTabsMode(bool enabled)
 {
     session_.setBottomTabsTabVisible(Session::BottomTabsTabId::Timeline, enabled);
-    session_.setValidationTabVisible(enabled);
+    session_.setBottomTabsTabVisible(Session::BottomTabsTabId::Validation, enabled);
     session_.setBottomTabsTabVisible(Session::BottomTabsTabId::Muri, enabled);
 
     if (enabled) {
@@ -652,7 +644,6 @@ void miacode::runtime::DocumentSessionHost::clearTimelineAndPreview()
     }
     session_.clearPreviewFollowDecoration();
     session_.clearPreviewObjectStats();
-    session_.clearMuriDiagnostics();
     state_.previewTrackDurationSeconds_ = 0.0;
     state_.qtPreviewTimelineDirty_ = false;
     state_.qtPreviewPendingTimelineSecond_ = 0.0;

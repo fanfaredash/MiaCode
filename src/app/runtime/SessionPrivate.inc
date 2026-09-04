@@ -86,7 +86,6 @@
     void updateEditorHeaderLayoutMode();
     void syncEditorHeaderMinimumWidth();
     void updateEditorStatus();
-    void updateEditorValidationSummary();
     void updateEditorEmptyState();
     void updateDifficultyScopedActionStates();
     // Export-page intro lead-in: returns true (and fills *outSpec) when the
@@ -224,5 +223,4 @@
     void cacheWorkspaceLayoutSizes();
     void restoreWorkspaceLayoutSizes();
     void refreshLayoutAfterPageSwitch();
-    int bottomTabsTabIndex(BottomTabsTabId tabId) const;
     BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId) const;

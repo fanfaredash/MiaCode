@@ -26,8 +26,6 @@
 class BracketScopeHighlighter;
 class IntroBannerSpec;
 class QAction;
-class QListWidget;
-class QTabWidget;
 class QWidget;
 class PreviewAudioDeviceWatcher;
 class PreviewRuntime;
@@ -80,8 +78,6 @@ public:
         SimaiNativeValidationSeverity severity = SimaiNativeValidationSeverity::Error;
         QString rawMessage;
         QString displayMessage;
-        QString issueTypeKey;
-        QString issueTypeLabel;
     };
 
     struct ValidationDecoration {

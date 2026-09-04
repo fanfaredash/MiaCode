@@ -417,8 +417,9 @@ QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理�
 
 已修：`QmlAnalysisModel` 曾用 `ignoreMuriIssuePrompts` 清空 `muriRows`。该偏好只表示分析完成时不打断（时间线圆点、自动切页），无理页仍应列出结果。
 
-`ValidationHost` 仍向已删除的 `errorList_` / `muriList_` 写列表，QML 不读这两份控件。`RuntimeContext::Ui`
-仍保留大量迁移期空指针；这些不挡当前产品面，但属于后续 Widgets 清理范围。
+截至 2026-09-05，`ValidationHost` 已删除 `errorList_` / `muriList_` 投影及其底部
+`QTabWidget` 镜像；QML 直接消费 validation/Muri 快照和 validation decorations。
+`RuntimeContext::Ui` 仍保留其他迁移期空指针；这些不挡当前产品面，但属于后续 Widgets 清理范围。
 
 ### 2026-09-01 语法错误点击跳到编辑器第一行
 

@@ -153,8 +153,6 @@ public:
     // and centers the bookmark row; beginRename additionally starts the
     // inline name editor. Safe no-op when the bookmark does not exist.
     void revealBookmarkInSidebar(int difficultyId, int line, bool beginRename);
-    // The bookmark list item for (difficultyId, line), or nullptr.
-    QListWidgetItem* findBookmarkSidebarItem(int difficultyId, int line) const;
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
     bool switchToMetadataField();

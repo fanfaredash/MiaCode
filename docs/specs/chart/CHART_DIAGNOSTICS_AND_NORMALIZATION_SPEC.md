@@ -457,9 +457,9 @@ UI 上的呈现：
 - `wifiNeedC` —— wifi 几何规则是否需要中心 C
 - `excludeTouchFromMultiTouch` —— 把 touch 从 hand-count 中排除
 
-用户可配置的静态阈值通过 Validation 菜单 →
-`onEditStaticTapOnSlideThreshold()`（`MainWindow.ValidationSection.h:63`）触发，
-范围 `[kStaticTapOnSlideThresholdMinMs, kStaticTapOnSlideThresholdMaxMs]`。
+静态阈值仍由 `staticTapOnSlideThresholdMs` 状态读取并进入分析请求，范围为
+`[kStaticTapOnSlideThresholdMinMs, kStaticTapOnSlideThresholdMaxMs]`；旧 Validation 菜单的
+Widget 配置入口已随 native shell 退役，当前 QML 产品面不暴露该设置入口。
 
 ### 已有详细规格
 

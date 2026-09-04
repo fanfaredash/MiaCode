@@ -34,18 +34,17 @@
 - [ ] Preview 暂停时，editor cursor sync 仍然更新 Timeline `C`。
 - [ ] Validation 与 Muri 的发布仍然留在 Timeline renderer 外部。
 - [ ] Paused preview snapshot 的语义仍与当前路径一致。
-- [ ] 显式 validation run 仍可把共享 tab 宿主切到 error tab，并激活第一个 issue。
-- [ ] Muri item activation 仍可跳转 editor、seek preview，并更新 Timeline markers。
+- [ ] 显式 validation run 仍发布最新 validation snapshot，供 QML syntax/analysis rows 消费。
+- [ ] QML Muri row activation 仍可跳转 editor、seek preview，并更新 Timeline markers。
 
 ## 3. Quick 底部标签宿主一致性
 
-- [ ] 底部标签集群已经运行在 Quick 中，并继续将 Timeline、Validation 和 Muri 作为一个协调单元承载。
+- [ ] 底部标签集群已经运行在 Quick 中，并由共享 state 将 Timeline、Validation 和 Muri 作为一个协调单元承载。
 - [ ] 进入 chart mode 时，仍会强制 Timeline tab current。
 - [ ] 切换到 metadata 或 welcome mode 时，仍会隐藏整个 bottom-tabs 集群。
 - [ ] Validation tab 的可见性仍与 chart-page 状态保持正确联动。
-- [ ] 在 ignore/unignore issue-list refresh 路径中，当前 tab index 仍能保留。
-- [ ] Validation 和 Muri rows 在 tab 切换与尺寸变化后仍能正确 relayout。
-- [ ] Quick tab selection 与 Quick focus routing 保持与当前共享 `QTabWidget` 路径相同的可见行为。
+- [ ] Validation/Muri rows 由 QML model 从 snapshot 重建，不依赖 tab 切换或尺寸变化时的 Widget relayout。
+- [ ] Quick tab selection 与 Quick focus routing 通过 coordinator 的 state 路径保持可见行为。
 
 ## 4. 渲染一致性
 

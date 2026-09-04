@@ -50,10 +50,6 @@ public:
 
     void applyDeferredAnalysisUiUpdates() override { ++applyDeferredAnalysisUiUpdatesCount; }
 
-    void flushPendingMuriDiagnosticsPanelRefresh() override { ++flushPendingMuriDiagnosticsPanelRefreshCount; }
-
-    void scheduleBottomTabsIssueListRelayout() override { ++scheduleBottomTabsIssueListRelayoutCount; }
-
     void notifyDocumentValidationChanged() override { ++notifyDocumentValidationChangedCount; }
 
     RenderMode lastMode = RenderMode::Native;
@@ -63,8 +59,6 @@ public:
     int clearValidationDecorationsCount = 0;
     int applyAlignedMuriAnalysisReportToViewsCount = 0;
     int applyDeferredAnalysisUiUpdatesCount = 0;
-    int flushPendingMuriDiagnosticsPanelRefreshCount = 0;
-    int scheduleBottomTabsIssueListRelayoutCount = 0;
     int notifyDocumentValidationChangedCount = 0;
 };
 
@@ -94,14 +88,6 @@ bool verifyImplementableWithoutSessionOrAWindow(QTextStream& err)
     contract.applyDeferredAnalysisUiUpdates();
     ok &= require(validation.applyDeferredAnalysisUiUpdatesCount == 1,
                   QStringLiteral("applyDeferredAnalysisUiUpdates reaches the implementation"), err);
-
-    contract.flushPendingMuriDiagnosticsPanelRefresh();
-    ok &= require(validation.flushPendingMuriDiagnosticsPanelRefreshCount == 1,
-                  QStringLiteral("flushPendingMuriDiagnosticsPanelRefresh reaches the implementation"), err);
-
-    contract.scheduleBottomTabsIssueListRelayout();
-    ok &= require(validation.scheduleBottomTabsIssueListRelayoutCount == 1,
-                  QStringLiteral("scheduleBottomTabsIssueListRelayout reaches the implementation"), err);
 
     contract.notifyDocumentValidationChanged();
     ok &= require(validation.notifyDocumentValidationChangedCount == 1,

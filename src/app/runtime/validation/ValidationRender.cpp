@@ -1,16 +1,12 @@
 #include "runtime/validation/ValidationHost.h"
 #include "runtime/Shared.h"
 
-#include "DialogLocalization.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriPanelEntries.h"
 
 #include <QtCore>
-#include <QtGui>
-#include <QtWidgets>
 
 using namespace miacode::runtime::shared;
 
@@ -113,78 +109,6 @@ void miacode::runtime::ValidationHost::onToggleTouchTrail(bool checked)
     );
 }
 
-void miacode::runtime::ValidationHost::onEditStaticTapOnSlideThreshold()
-{
-    QDialog dialog(UiDialogs::effectiveParentWidget(nullptr));
-    dialog.setWindowTitle(UiText::text(QStringLiteral("validation.tap_on_slide_threshold")));
-    dialog.setModal(true);
-    dialog.setMinimumWidth(360);
-    dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
-    UiDialogs::prepareDialogWindow(&dialog, nullptr);
-
-    auto* rootLayout = new QVBoxLayout(&dialog);
-    rootLayout->setContentsMargins(16, 14, 16, 14);
-    rootLayout->setSpacing(10);
-
-    auto* hintLabel = new QLabel(
-        UiText::text(QStringLiteral("validation.adjust_the_static_tap_on")),
-        &dialog);
-    hintLabel->setWordWrap(true);
-    rootLayout->addWidget(hintLabel);
-
-    auto* valueRow = new QWidget(&dialog);
-    auto* valueLayout = new QHBoxLayout(valueRow);
-    valueLayout->setContentsMargins(0, 0, 0, 0);
-    valueLayout->setSpacing(10);
-
-    auto* slider = new QSlider(Qt::Horizontal, valueRow);
-    slider->setRange(
-        miacode::muri::kStaticTapOnSlideThresholdMinMs,
-        miacode::muri::kStaticTapOnSlideThresholdMaxMs);
-    slider->setValue(state_.staticTapOnSlideThresholdMs_);
-
-    auto* spinBox = new QSpinBox(valueRow);
-    spinBox->setRange(
-        miacode::muri::kStaticTapOnSlideThresholdMinMs,
-        miacode::muri::kStaticTapOnSlideThresholdMaxMs);
-    spinBox->setSuffix(QStringLiteral(" ms"));
-    spinBox->setValue(state_.staticTapOnSlideThresholdMs_);
-
-    QObject::connect(slider, &QSlider::valueChanged, spinBox, &QSpinBox::setValue);
-    QObject::connect(spinBox, qOverload<int>(&QSpinBox::valueChanged), slider, &QSlider::setValue);
-
-    valueLayout->addWidget(slider, 1);
-    valueLayout->addWidget(spinBox, 0);
-    rootLayout->addWidget(valueRow);
-
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    QObject::connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    rootLayout->addWidget(buttonBox);
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    const int newThresholdMs = spinBox->value();
-    if (newThresholdMs == state_.staticTapOnSlideThresholdMs_) {
-        return;
-    }
-
-    state_.staticTapOnSlideThresholdMs_ = newThresholdMs;
-    session_.savePortableState();
-    if (session_.hasActiveDifficulty()) {
-        if (!session_.scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
-            session_.refreshTimelineMetadata();
-        }
-    } else {
-        state_.muriStaticReferences_.clear();
-        refreshMuriDiagnosticsPanel();
-    }
-    session_.noteStatus(
-        UiText::text(QStringLiteral("validation.tap_on_slide_threshold_set")).arg(state_.staticTapOnSlideThresholdMs_));
-}
-
 void miacode::runtime::ValidationHost::applyMuriRenderOptions()
 {
     state_.muriRenderOptions_.showSlideTracks = state_.showSlideTracks_;
@@ -241,11 +165,6 @@ void Session::onToggleJudgeMarkers(bool checked)
 void Session::onToggleTouchTrail(bool checked)
 {
     validation_->onToggleTouchTrail(checked);
-}
-
-void Session::onEditStaticTapOnSlideThreshold()
-{
-    validation_->onEditStaticTapOnSlideThreshold();
 }
 
 void Session::applyMuriRenderOptions()

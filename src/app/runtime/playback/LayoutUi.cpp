@@ -312,7 +312,6 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewWorkspaceLayout()
 {
     updatePreviewPanelLayout();
     refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
-    refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
 }

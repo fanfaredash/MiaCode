@@ -611,9 +611,16 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `ShellNotifications::presentationChanged` 获取同一份后端状态。标题、艺术家、谱师和
   Extra 字段不再回写未构造的 `QLineEdit`/`QTextEdit`，字体/行距偏好只更新 QML 所需的
   设置状态，窗口标题与导出标题直接读取 `ChartWorkspace`。同时删除仅服务于这些隐藏编辑器
-  的 undo/clean-anchor、文本格式化 helper 与空同步 stub；验证列表的旧 `QListWidget` 清空仍
-  留待下一批 validation UI 收口。`MiaCode` Release 编译通过，针对性测试 7/7 通过，
+  的 undo/clean-anchor、文本格式化 helper 与空同步 stub。`MiaCode` Release 编译通过，针对性测试 7/7 通过，
   全量 CTest 仍为 105/108 通过，红项与既有基线一致。
+- **第 5 步本轮完成 validation UI 的旧 Widget 投影收口（2026-09-05）**：删除验证与 Muri
+  的 `QListWidget` 投影、包装 delegate、重排、激活/右键菜单和底部 `QTabWidget` 容器镜像；
+  `RuntimeContext::Ui` 不再持有这些列表/容器指针，`PlaybackValidationPort` 不再暴露列表刷新
+  方法。保留校验缓存、错误装饰、QML `QmlAnalysisSnapshot`、Muri 时间线装饰和底部 tab 的
+  状态投影；同时删除无生产调用方的旧撞尾阈值 `QDialog` 路径与空书签列表查询。`MiaCode`
+  Release 编译通过，针对性测试 7/7 通过，全量 CTest 仍为 105/108 通过，失败项与既有基线
+  完全相同。剩余 `Qt6::Widgets` 依赖集中在尚未迁移的 runtime/document/shared/layout 路径，
+  因此第 5 步仍未完成。
 
 #### 第 2 步：一处需要更正的既往判断
 

@@ -344,9 +344,6 @@ private:
     bool bottomTabsTabVisibleFromState(RuntimeContext::BottomTabsTabId tabId) const;
     static QString bottomTabsTabIdToString(RuntimeContext::BottomTabsTabId tabId);
     static RuntimeContext::BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId);
-    // Stage 4.9d-4b-2e: moved in verbatim from Session::syncBottomTabsCurrentTabToContainers
-    // (SurfaceContract.cpp) — pure ui_/state_ widget sync, no Session-own state.
-    void syncBottomTabsCurrentTabToContainers();
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredTimelineBridgeFlush();
     void invalidatePreviewFollowBindingCache();
@@ -383,7 +380,6 @@ private:
     // former Session/ShellHost/DocumentSessionHost homes — see LayoutUi.cpp,
     // PlaybackState.cpp, TimelineFlow.cpp and Playback.cpp for the definitions.
     void updatePauseButtonAppearance();
-    void clearValidationErrors();
     void updateEditorFindBarGeometry();
     void applyFindOverlayInset();
     // Stage 4.9d-4a (T-class): thin StageMediaHost forwards whose bodies only touch

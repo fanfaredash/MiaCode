@@ -13,14 +13,6 @@ namespace miacode::v2 {
 // be an alias for "everything ValidationHost does that playback/ touches",
 // with no independent boundary to justify it.
 //
-// flushPendingMuriDiagnosticsPanelRefresh and scheduleBottomTabsIssueListRelayout
-// (stage 4.9d-4b-2e) were added so PlaybackCoordinator::setCurrentBottomTabsTabId
-// (moved in from Session::setCurrentBottomTabsTabId) never needs a session_
-// reference to reach ValidationHost. scheduleBottomTabsIssueListRelayout takes no
-// QListWidget* — ValidationHost already holds the same ui_ the coordinator does,
-// so it re-derives errorList_/muriList_ itself rather than the port naming a
-// QWidget type.
-//
 // Deliberately free of Session, QWidget, and QML/QSG types: ValidationPortSpec
 // proves that at link time, by implementing this port with a fake that pulls
 // in neither.
@@ -41,8 +33,6 @@ public:
     virtual void clearValidationDecorations() = 0;
     virtual void applyAlignedMuriAnalysisReportToViews() = 0;
     virtual void applyDeferredAnalysisUiUpdates() = 0;
-    virtual void flushPendingMuriDiagnosticsPanelRefresh() = 0;
-    virtual void scheduleBottomTabsIssueListRelayout() = 0;
     // Stage 4.9d-4c: lets PlaybackCoordinator's async analysis-apply callback
     // signal documentValidationChanged without holding a Session reference of
     // its own. ValidationHost is one of documentValidationChanged's existing

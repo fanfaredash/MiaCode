@@ -54,8 +54,6 @@ public:
     void clearValidationDecorations() override {}
     void applyAlignedMuriAnalysisReportToViews() override {}
     void applyDeferredAnalysisUiUpdates() override {}
-    void flushPendingMuriDiagnosticsPanelRefresh() override {}
-    void scheduleBottomTabsIssueListRelayout() override {}
     void notifyDocumentValidationChanged() override {}
 };
 

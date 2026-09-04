@@ -1,22 +1,16 @@
-// Session::-owned surface-contract accessors, split out of SurfaceContract.cpp.
+// Session-owned surface-contract accessors, split out of SurfaceContract.cpp.
 //
 // Stage 4.9d-6: PlaybackCoordinator's implementation TUs are being separated
 // from the Session assembly so the coordinator can eventually link on its
 // own (see the Result Packet for the link-probe evidence). SurfaceContract.cpp
-// now holds only PlaybackCoordinator::-owned surface/bottom-tabs logic (which
-// has its own independent state_/ui_-backed implementation of the bottom-tabs
-// machinery); this file holds the Session::-owned mirror — chart-normalize
-// settings, the two narrow service accessors, and the legacy bottom-tabs
-// group that Widgets call sites still reach through Session — that used to
-// share that TU.
+// now holds only PlaybackCoordinator-owned surface/bottom-tabs state logic;
+// this file holds the Session-owned chart-normalize settings and the two
+// narrow service accessors that used to share that TU.
 
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Session.h"
 
-#include "UiText.h"
 #include "core/chart/transform/ChartNormalization.h"
-
-#include <QtWidgets>
 
 void Session::setBackendActive(bool active)
 {
@@ -29,7 +23,6 @@ void Session::setBackendActive(bool active)
     pendingQuickTimelineCursorSync_ = false;
     pendingQuickTimelineCursorSecond_ = 0.0;
     pendingQuickTimelineCursorCenterView_ = false;
-    syncQuickShellBottomTabsProxyRoute();
 }
 
 miacode::chart_transform::ChartNormalizationOptions Session::chartNormalizeOptions() const
@@ -61,65 +54,6 @@ miacode::v2::UiRequestService* Session::uiRequestService() const
 miacode::v2::JobProgressService* Session::jobProgressService() const
 {
     return jobProgress_;
-}
-
-bool Session::quickShellBottomTabsProxyActive() const
-{
-    return backendActive_ && quickShellBottomTabsProxy_ != nullptr;
-}
-
-QString Session::bottomTabsFallbackLabel(BottomTabsTabId tabId) const
-{
-    switch (tabId) {
-    case BottomTabsTabId::Timeline:
-        return UiText::text(QStringLiteral("window.timeline"));
-    case BottomTabsTabId::Validation:
-        return UiText::text(QStringLiteral("window.syntax"));
-    case BottomTabsTabId::Muri:
-        return UiText::text(QStringLiteral("window.muri"));
-    case BottomTabsTabId::Unknown:
-        break;
-    }
-    return QString();
-}
-
-QWidget* Session::bottomTabsPageForTab(BottomTabsTabId tabId) const
-{
-    switch (tabId) {
-    case BottomTabsTabId::Timeline:
-        return nullptr;
-    case BottomTabsTabId::Validation:
-        return errorList_;
-    case BottomTabsTabId::Muri:
-        return muriList_;
-    case BottomTabsTabId::Unknown:
-        break;
-    }
-    return nullptr;
-}
-
-QTabWidget* Session::bottomTabsContainerForTab(BottomTabsTabId tabId) const
-{
-    if (tabId == BottomTabsTabId::Unknown) {
-        return nullptr;
-    }
-    if (tabId == BottomTabsTabId::Timeline) {
-        return nullptr;
-    }
-    if (quickShellBottomTabsProxyActive() && tabId != BottomTabsTabId::Timeline) {
-        return quickShellBottomTabsProxy_;
-    }
-    return bottomTabs_;
-}
-
-int Session::bottomTabsTabIndex(BottomTabsTabId tabId) const
-{
-    const QTabWidget* container = bottomTabsContainerForTab(tabId);
-    const QWidget* targetWidget = bottomTabsPageForTab(tabId);
-    if (container == nullptr || targetWidget == nullptr) {
-        return -1;
-    }
-    return container->indexOf(const_cast<QWidget*>(targetWidget));
 }
 
 Session::BottomTabsTabId Session::bottomTabsTabIdFromString(const QString& tabId) const
@@ -156,113 +90,6 @@ bool Session::bottomTabsTabVisible(BottomTabsTabId tabId) const
     }
     return false;
 }
-
-void Session::syncBottomTabsCurrentTabToContainers()
-{
-    if (bottomTabs_ == nullptr) {
-        return;
-    }
-
-    if (!quickShellBottomTabsProxyActive()) {
-        const QWidget* targetPage = bottomTabsPageForTab(currentBottomTabsTabId_);
-        const int index = targetPage != nullptr ? bottomTabs_->indexOf(const_cast<QWidget*>(targetPage)) : -1;
-        if (index >= 0 && bottomTabs_->isTabVisible(index) && bottomTabs_->currentIndex() != index) {
-            bottomTabs_->setCurrentIndex(index);
-        }
-        return;
-    }
-
-    if (quickShellBottomTabsProxy_ != nullptr) {
-        const QWidget* targetPage = bottomTabsPageForTab(currentBottomTabsTabId_);
-        const int proxyIndex = targetPage != nullptr
-            ? quickShellBottomTabsProxy_->indexOf(const_cast<QWidget*>(targetPage))
-            : -1;
-        if (proxyIndex >= 0
-            && quickShellBottomTabsProxy_->isTabVisible(proxyIndex)
-            && quickShellBottomTabsProxy_->currentIndex() != proxyIndex) {
-            quickShellBottomTabsProxy_->setCurrentIndex(proxyIndex);
-        }
-    }
-}
-
-void Session::syncQuickShellBottomTabsProxyRoute()
-{
-    if (bottomTabs_ == nullptr
-        || quickShellBottomTabsProxy_ == nullptr
-        || errorList_ == nullptr
-        || muriList_ == nullptr) {
-        return;
-    }
-
-    const int validationIndexInBottomTabs = bottomTabs_->indexOf(errorList_);
-    const int muriIndexInBottomTabs = bottomTabs_->indexOf(muriList_);
-    const bool validationVisible = validationIndexInBottomTabs >= 0
-        ? bottomTabs_->isTabVisible(validationIndexInBottomTabs)
-        : (quickShellBottomTabsProxy_ != nullptr
-               && quickShellBottomTabsProxy_->indexOf(errorList_) >= 0
-               && quickShellBottomTabsProxy_->isTabVisible(quickShellBottomTabsProxy_->indexOf(errorList_)));
-    const bool muriVisible = muriIndexInBottomTabs >= 0
-        ? bottomTabs_->isTabVisible(muriIndexInBottomTabs)
-        : (quickShellBottomTabsProxy_ != nullptr
-               && quickShellBottomTabsProxy_->indexOf(muriList_) >= 0
-               && quickShellBottomTabsProxy_->isTabVisible(quickShellBottomTabsProxy_->indexOf(muriList_)));
-    const QString validationLabel = validationIndexInBottomTabs >= 0
-        ? bottomTabs_->tabText(validationIndexInBottomTabs)
-        : bottomTabsFallbackLabel(BottomTabsTabId::Validation);
-    const QString muriLabel = muriIndexInBottomTabs >= 0
-        ? bottomTabs_->tabText(muriIndexInBottomTabs)
-        : bottomTabsFallbackLabel(BottomTabsTabId::Muri);
-
-    if (quickShellBottomTabsProxyActive()) {
-        if (validationIndexInBottomTabs >= 0) {
-            bottomTabs_->removeTab(validationIndexInBottomTabs);
-        }
-        const int muriIndexAfterValidationRemoval = bottomTabs_->indexOf(muriList_);
-        if (muriIndexAfterValidationRemoval >= 0) {
-            bottomTabs_->removeTab(muriIndexAfterValidationRemoval);
-        }
-        if (quickShellBottomTabsProxy_->indexOf(errorList_) < 0) {
-            quickShellBottomTabsProxy_->addTab(errorList_, validationLabel);
-        }
-        if (quickShellBottomTabsProxy_->indexOf(muriList_) < 0) {
-            quickShellBottomTabsProxy_->addTab(muriList_, muriLabel);
-        }
-        const int validationIndexInProxy = quickShellBottomTabsProxy_->indexOf(errorList_);
-        if (validationIndexInProxy >= 0) {
-            quickShellBottomTabsProxy_->setTabVisible(validationIndexInProxy, validationVisible);
-        }
-        const int muriIndexInProxy = quickShellBottomTabsProxy_->indexOf(muriList_);
-        if (muriIndexInProxy >= 0) {
-            quickShellBottomTabsProxy_->setTabVisible(muriIndexInProxy, muriVisible);
-        }
-    } else {
-        const int validationIndexInProxy = quickShellBottomTabsProxy_->indexOf(errorList_);
-        if (validationIndexInProxy >= 0) {
-            quickShellBottomTabsProxy_->removeTab(validationIndexInProxy);
-        }
-        const int muriIndexInProxy = quickShellBottomTabsProxy_->indexOf(muriList_);
-        if (muriIndexInProxy >= 0) {
-            quickShellBottomTabsProxy_->removeTab(muriIndexInProxy);
-        }
-        if (bottomTabs_->indexOf(errorList_) < 0) {
-            bottomTabs_->addTab(errorList_, validationLabel);
-        }
-        if (bottomTabs_->indexOf(muriList_) < 0) {
-            bottomTabs_->addTab(muriList_, muriLabel);
-        }
-        const int restoredValidationIndex = bottomTabs_->indexOf(errorList_);
-        if (restoredValidationIndex >= 0) {
-            bottomTabs_->setTabVisible(restoredValidationIndex, validationVisible);
-        }
-        const int restoredMuriIndex = bottomTabs_->indexOf(muriList_);
-        if (restoredMuriIndex >= 0) {
-            bottomTabs_->setTabVisible(restoredMuriIndex, muriVisible);
-        }
-    }
-
-    syncBottomTabsCurrentTabToContainers();
-}
-
 
 // Stage 4.9d-4b-2e: function body moved to
 // PlaybackCoordinator::setCurrentBottomTabsTabId (SurfaceContract.cpp, near

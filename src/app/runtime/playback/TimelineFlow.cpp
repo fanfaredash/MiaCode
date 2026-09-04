@@ -36,7 +36,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QListWidget>
 #include <QToolTip>
 
 #include "runtime/playback/TimelineFlow.Internal.h"
@@ -510,16 +509,6 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int c
     refreshTimelineMetadata();
 }
 
-// Stage 4.9d-3 (D-class): moved verbatim from ValidationHost::clearValidationErrors
-// (validation/ValidationFlow.cpp) — pure ui_ widget clear, no ValidationHost-own state.
-void miacode::runtime::PlaybackCoordinator::clearValidationErrors()
-{
-    if (ui_.errorList_ == nullptr) {
-        return;
-    }
-    ui_.errorList_->clear();
-}
-
 void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
@@ -533,7 +522,6 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
     if (pathChanged) {
         invalidatePreviewFollowBindingCache();
         validation_.clearValidationCache();
-        clearValidationErrors();
         validation_.clearValidationDecorations();
         stopQtPreviewPlayback(false);
         if (auto* latency = services_.latencyEngine(); latency != nullptr) {

@@ -16,7 +16,6 @@
 #include <QPointer>
 #include <QPoint>
 #include <QRect>
-#include <QSet>
 #include <QStringList>
 #include <QVariantMap>
 #include <QVector>
@@ -75,12 +74,9 @@ class LatencySandboxController;
 }
 namespace miacode::video_export {
 }
-class QListWidget;
-class QListWidgetItem;
 class QJsonObject;
 class QMenu;
 class QMoveEvent;
-class QTabWidget;
 class QToolBar;
 class QPushButton;
 class QShowEvent;
@@ -390,7 +386,6 @@ private slots:
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);
     void onToggleTouchTrail(bool checked);
-    void onEditStaticTapOnSlideThreshold();
     int resolveToolsMenuExportDifficultyId() const;
     void onExportCover();
     void onBatchExportPreviewVideo();
@@ -411,8 +406,6 @@ private slots:
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
     void onManagePerDifficultyDesigners();
     void onAbout();
-    void onErrorItemActivated(QListWidgetItem* item);
-    void onMuriItemActivated(QListWidgetItem* item);
 public:
     // Public so callers outside Session (the preferences dialog)
     // can read the cached mode. Exposing the enum doesn't widen any
@@ -503,7 +496,6 @@ private:
     void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
     double timelineSecondForCursor(int line, int col) const;
     bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
-    void jumpToLocation(int line, int col);
     QString editorText() const;
     QString resolveDefaultTrackPath() const;
     void applyPreviewSkinDirectoryToSurfaces();
@@ -613,44 +605,18 @@ private:
     void saveProjectRenderState() const;
     void removeProjectRenderState() const;
     void saveProjectAudioPreferences() const;
-    bool runValidateSimaiSilently(bool focusFirstIssue = false);
+    bool runValidateSimaiSilently();
     void clearPreviewFollowDecoration();
     void clearValidationDecorations();
-    void addValidationError(
-        int line,
-        int col,
-        const QString& rawMessage,
-        const QString& displayMessage,
-        const QString& issueTypeKey = QString(),
-        const QString& issueTypeLabel = QString(),
-        bool ignoredInHeader = false
-    );
     void addValidationDecoration(int line, int col, const QString& message, int endCol = -1);
-    void clearMuriDiagnostics();
-    QListWidgetItem* addWrappedListEntry(
-        QListWidget* list,
-        const QString& html,
-        const QString& plainText,
-        int line = 1,
-        int col = 1,
-        double second = -1.0,
-        bool enabled = true
-    );
-    void relayoutWrappedListRows(QListWidget* list);
-    void scheduleWrappedListRelayout(QListWidget* list);
-    void refreshMuriDiagnosticsPanel();
     QString currentValidationIgnoreScopeKey() const;
-    bool isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const;
-    void setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored);
     void loadProjectValidationPreferences();
     void saveProjectValidationPreferences(const QString& chartFilePath = QString()) const;
     void applyIgnoreMuriIssuePrompts(bool enabled, bool persistPreference);
-    void showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList);
     void rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearValidationCache();
     void refreshValidationPanelForActiveField();
     void applyDeferredAnalysisUiUpdates();
-    void setValidationTabVisible(bool visible);
     BottomTabsTabId currentBottomTabsTabId() const;
     void setCurrentBottomTabsTabId(BottomTabsTabId tabId);
     void setCurrentBottomTabsTabId(const QString& tabId);
@@ -688,13 +654,6 @@ private:
     std::unique_ptr<miacode::runtime::PlaybackTimelineSurfaceAdapter> playbackTimelineSurface_;
     std::unique_ptr<miacode::runtime::TimelineHost> timelineHost_;
     std::unique_ptr<miacode::runtime::PreviewHost> previewHost_;
-
-    bool quickShellBottomTabsProxyActive() const;
-    QString bottomTabsFallbackLabel(BottomTabsTabId tabId) const;
-    QWidget* bottomTabsPageForTab(BottomTabsTabId tabId) const;
-    QTabWidget* bottomTabsContainerForTab(BottomTabsTabId tabId) const;
-    void syncBottomTabsCurrentTabToContainers();
-    void syncQuickShellBottomTabsProxyRoute();
 
     #define MIACODE_SESSION_RUNTIME_MEMBERS 1
     #include "SessionMembers.inc"
