@@ -64,7 +64,6 @@ class LatencySandboxController;
 namespace miacode::video_export {
 }
 class QJsonObject;
-class QMenu;
 class QToolBar;
 class QThreadPool;
 class BracketScopeHighlighter;
@@ -356,7 +355,6 @@ private slots:
     void onNewFile();
     void onOpenFile();
     void onOpenCurrentFolder();
-    void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
     void restoreBackupFilePath(const QString& path);
     bool onSaveFile();
     bool onSaveFileAs();
@@ -579,7 +577,6 @@ private:
     void setTouchPadAuthoringCtrlHoldActive(bool active);
     void addRecentFilePath(const QString& path);
     void openRecentFilePath(const QString& path);
-    void refreshRecentFilesMenu(QMenu* recentFilesMenu);
     void persistEditorTextFontPreference() const;
     void saveProjectRenderState() const;
     void removeProjectRenderState() const;

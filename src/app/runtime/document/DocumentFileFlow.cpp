@@ -30,7 +30,8 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
+#include <QFileDialog>
+#include <QMessageBox>
 
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"

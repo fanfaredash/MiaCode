@@ -26,7 +26,7 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
+#include <QApplication>
 
 using namespace miacode::runtime::shared;
 

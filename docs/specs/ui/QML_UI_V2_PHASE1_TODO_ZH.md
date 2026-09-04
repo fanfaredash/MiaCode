@@ -635,6 +635,11 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   使用的旧 MainWindow 控件前置声明及无用 `QEvent` 头；保留字体 `QAction`、菜单/工具栏、
   导出进程、滚轮事件和 QML 根窗口等仍实际构成边界的类型。Release 重编译通过，针对性
   测试 7/7 通过。
+- **第 5 步本轮继续清理原生菜单投影与宽泛头（2026-09-05）**：删除无调用方的最近文件/
+  恢复备份 `QMenu` 投影及 Session/Document 转发；runtime 中所有宽泛 `<QtWidgets>` include
+  均改为精确头或删除。真实的文件/消息对话框、字体 QAction/工具栏和 QApplication 弹窗状态
+  门控保持不变，避免把 native fallback 误判成已迁移。`MiaCode` Release 构建通过，针对性
+  测试 7/7 通过；完整 CTest 仍为 105/108 通过，3 个失败项与既有基线完全相同。
 
 #### 第 2 步：一处需要更正的既往判断
 

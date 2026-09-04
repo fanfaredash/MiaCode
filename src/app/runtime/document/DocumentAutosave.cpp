@@ -29,7 +29,7 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
+#include <QFileDialog>
 
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"
@@ -152,43 +152,6 @@ QVariantList miacode::runtime::DocumentSessionHost::backupDocumentEntries()
         });
     }
     return rows;
-}
-
-void miacode::runtime::DocumentSessionHost::refreshRestoreBackupMenu(QMenu* restoreBackupMenu)
-{
-    if (restoreBackupMenu == nullptr) {
-        return;
-    }
-    restoreBackupMenu->clear();
-    const QRect screenRect = restoreBackupMenu->screen() != nullptr
-        ? restoreBackupMenu->screen()->availableGeometry()
-        : QRect();
-    const int screenBound = screenRect.isValid() ? qMax(240, screenRect.height() - 120) : 640;
-    restoreBackupMenu->setMaximumHeight(qMin(520, screenBound));
-
-    const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();
-    const QList<BackupRestoreEntry> entries = backupRestoreEntriesForAutosaveDirectory(autosaveDirectoryPath);
-    if (entries.isEmpty()) {
-        QAction* emptyAction = restoreBackupMenu->addAction(UiText::text(QStringLiteral("action.restore_backup.empty")));
-        emptyAction->setEnabled(false);
-        return;
-    }
-
-    QSet<QString> usedLabels;
-    for (const BackupRestoreEntry& entry : entries) {
-        QString label = backupRestoreEntryLabel(entry);
-        if (usedLabels.contains(label)) {
-            label = QStringLiteral("%1  %2").arg(label, QFileInfo(entry.filePath).fileName());
-        }
-        usedLabels.insert(label);
-
-        QAction* action = restoreBackupMenu->addAction(label);
-        action->setToolTip(QDir::toNativeSeparators(entry.filePath));
-        action->setStatusTip(QDir::toNativeSeparators(entry.filePath));
-        QObject::connect(action, &QAction::triggered, &session_, [this, path = entry.filePath]() {
-            restoreBackupFilePath(path);
-        });
-    }
 }
 
 void miacode::runtime::DocumentSessionHost::restoreBackupFilePath(const QString& path, bool mentionAbnormalExit)

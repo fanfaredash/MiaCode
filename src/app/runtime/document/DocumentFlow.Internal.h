@@ -18,7 +18,8 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
+#include <QMessageBox>
+#include <QPushButton>
 
 namespace miacode::runtime::document_detail {
 

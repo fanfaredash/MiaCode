@@ -31,7 +31,7 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
+#include <QMessageBox>
 
 using namespace miacode::runtime::shared;
 #include "runtime/document/DocumentFlow.Internal.h"
@@ -271,55 +271,6 @@ void Session::openRecentFilePath(const QString& path)
 void Session::restoreBackupFilePath(const QString& path)
 {
     documents_->restoreBackupFilePath(path);
-}
-
-void Session::refreshRecentFilesMenu(QMenu* recentFilesMenu)
-{
-    if (recentFilesMenu == nullptr) {
-        return;
-    }
-    recentFilesMenu->clear();
-    QStringList existingPaths;
-    QSet<QString> seenPaths;
-    for (const QString& path : recentFilePaths_) {
-        const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
-        if (normalizedPath.isEmpty() || seenPaths.contains(normalizedPath)) {
-            continue;
-        }
-        const QFileInfo fileInfo(normalizedPath);
-        if (!fileInfo.exists() || !fileInfo.isFile()) {
-            continue;
-        }
-        seenPaths.insert(normalizedPath);
-        existingPaths.append(normalizedPath);
-    }
-    if (existingPaths != recentFilePaths_) {
-        recentFilePaths_ = existingPaths;
-        savePortableState();
-    }
-    if (existingPaths.isEmpty()) {
-        QAction* emptyAction = recentFilesMenu->addAction(UiText::text(QStringLiteral("action.open_recent.empty")));
-        emptyAction->setEnabled(false);
-        return;
-    }
-    for (const QString& path : existingPaths) {
-        const QFileInfo fileInfo(path);
-        const QString folderName = fileInfo.absoluteDir().dirName().trimmed();
-        const QString displayName = folderName.isEmpty()
-            ? QDir::toNativeSeparators(fileInfo.absoluteFilePath())
-            : folderName;
-        QAction* action = recentFilesMenu->addAction(displayName);
-        action->setToolTip(QDir::toNativeSeparators(path));
-        action->setStatusTip(QDir::toNativeSeparators(path));
-        connect(action, &QAction::triggered, this, [this, path]() {
-            openRecentFilePath(path);
-        });
-    }
-}
-
-void Session::refreshRestoreBackupMenu(QMenu* restoreBackupMenu)
-{
-    documents_->refreshRestoreBackupMenu(restoreBackupMenu);
 }
 
 bool Session::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)

@@ -32,7 +32,8 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QtWidgets>
+#include <QAction>
+#include <QToolBar>
 
 using namespace miacode::runtime::shared;
 
