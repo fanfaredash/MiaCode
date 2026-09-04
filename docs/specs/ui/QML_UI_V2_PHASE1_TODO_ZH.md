@@ -656,6 +656,10 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   `MiaCode` Release 编译通过，针对性测试 7/7 通过；全量 CTest 仍为 105/108 通过，
   三个既有失败项未变化：`timeline_model_spec`、`qml_editor_controller_spec`、
   `qtavplayer_platform_spec`。
+- **第 5 步本轮继续移除空的工具栏边界（2026-09-05）**：`finishFrameBootstrap()` 的
+  `QToolBar*` 参数从未被使用，调用方始终传 `nullptr`；删除该参数、前置声明和 Widgets
+  include，启动定时器与其余 bootstrap 行为不变。`MiaCode` Release 编译通过，针对性测试
+  7/7 通过；全量 CTest 仍为 105/108 通过，三个既有失败项未变化。
 
 #### 第 2 步：一处需要更正的既往判断
 

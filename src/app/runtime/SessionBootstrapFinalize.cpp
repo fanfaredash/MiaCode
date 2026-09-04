@@ -31,7 +31,6 @@
 
 #include <QtCore>
 #include <QtGui>
-#include <QToolBar>
 
 using namespace miacode::runtime::shared;
 
@@ -77,10 +76,8 @@ int previewFrameSwapWatchdogTimeoutMs(qint64 frameIntervalNs)
 
 }  // namespace
 
-void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage)
+void Session::finishFrameBootstrap(const std::function<void(const QString&)>& logStartupStage)
 {
-    Q_UNUSED(toolBar);
-
     autosaveTimer_ = new QTimer(this);
     autosaveTimer_->setInterval(kAutosaveIntervalMs);
     connect(autosaveTimer_, &QTimer::timeout, this, [this]() { runAutosaveCheck(true); });

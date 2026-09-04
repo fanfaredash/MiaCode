@@ -63,7 +63,6 @@ class LatencySandboxController;
 namespace miacode::video_export {
 }
 class QJsonObject;
-class QToolBar;
 class QThreadPool;
 class BracketScopeHighlighter;
 class PreviewRuntime;

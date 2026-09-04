@@ -451,7 +451,7 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     });
     logStartupStage("timeline_ready");
 
-    finishFrameBootstrap(nullptr, logStartupStage);
+    finishFrameBootstrap(logStartupStage);
 }
 
 miacode::latency::LatencySandboxController* Session::latencySandboxController() const

@@ -49,7 +49,7 @@
         const QString& sfxDir,
         qint64 workerElapsedMs
     );
-    void finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage);
+    void finishFrameBootstrap(const std::function<void(const QString&)>& logStartupStage);
     void setPreviewFixedTimerHighResolutionActive(bool active);
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
