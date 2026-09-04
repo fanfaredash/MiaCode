@@ -12,8 +12,7 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
                 services.timelineSurfaceSlot(), this)
     , preview_(services.shellNotifications(), services.previewSurfaceSlot(), services.playbackControlSlot(), this)
     , timeline_(services.shellNotifications(), services.timelineSurfaceSlot(), this)
-    , commands_(document_, services.editorPageRouterSlot(),
-                services.documentBridgeSlot(), this)
+    , commands_(document_, services.documentBridgeSlot(), this)
     , pages_(services.shellNotifications(), services.editorPageRouterSlot(), services.exportPageSessionSlot(), this)
     , editor_(this)
     , shortcuts_(this)

@@ -321,6 +321,7 @@ QtObject {
     // control but never the content, so ChromeRow spends this on padding to
     // keep text off the highlight edge.
     readonly property int rowPaddingX: 10
+    readonly property int titleBarBrandIconSize: 17
     // SplitView handle: 1px layout (same as non-interactive dividers),
     // wider invisible hit, thicker stroke only while hovered/pressed.
     readonly property int splitDividerThickness: 1

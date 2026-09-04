@@ -18,6 +18,9 @@ Item {
         || metadataSourceActive
     readonly property bool canUndo: sourceVisible && sourceEditor.canUndo
     readonly property bool canRedo: sourceVisible && sourceEditor.canRedo
+    readonly property bool canCut: sourceVisible && sourceEditor.canCut
+    readonly property bool canCopy: sourceVisible && sourceEditor.canCopy
+    readonly property bool canPaste: sourceVisible && sourceEditor.canPaste
     property double pendingActivationSequence: 0
     property var pendingActivationCompletion: null
     property var pendingActivationCancellation: null
@@ -30,6 +33,21 @@ Item {
     function redo() {
         if (sourceVisible)
             sourceEditor.redo()
+    }
+
+    function cut() {
+        if (sourceVisible)
+            sourceEditor.cut()
+    }
+
+    function copy() {
+        if (sourceVisible)
+            sourceEditor.copy()
+    }
+
+    function paste() {
+        if (sourceVisible)
+            sourceEditor.paste()
     }
 
     function selectAll() {

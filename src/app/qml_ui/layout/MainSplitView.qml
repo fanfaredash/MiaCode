@@ -28,6 +28,9 @@ Item {
     property bool sidebarResizing: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
+    readonly property bool canCut: editorPane.canCut
+    readonly property bool canCopy: editorPane.canCopy
+    readonly property bool canPaste: editorPane.canPaste
     // User preference AND backend chart-bottom-tabs mode (export/metadata
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
@@ -50,6 +53,18 @@ Item {
 
     function redo() {
         editorPane.redo()
+    }
+
+    function cut() {
+        editorPane.cut()
+    }
+
+    function copy() {
+        editorPane.copy()
+    }
+
+    function paste() {
+        editorPane.paste()
     }
 
     function selectAll() {

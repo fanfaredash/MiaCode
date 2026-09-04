@@ -65,16 +65,6 @@ Rectangle {
             enabled: root.canRedo
             onClicked: root.redoRequested()
         }
-        ToolBarButton {
-            iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
-            tooltip: UiText.text("音频设置")
-            onClicked: root.audioSettingsRequested()
-        }
-        ToolBarButton {
-            iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
-            tooltip: UiText.text("预览设置")
-            onClicked: root.previewSettingsRequested()
-        }
     }
 
     Row {
@@ -86,8 +76,20 @@ Rectangle {
         z: 1
 
         ToolBarButton {
+            iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
+            label: UiText.text("音频设置")
+            tooltip: UiText.text("音频设置")
+            onClicked: root.audioSettingsRequested()
+        }
+        ToolBarButton {
+            iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
+            label: UiText.text("预览设置")
+            tooltip: UiText.text("预览设置")
+            onClicked: root.previewSettingsRequested()
+        }
+        ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/panel-left.svg")
-            tooltip: UiText.text("切换侧栏 (Ctrl+B)")
+            tooltip: UiText.text("切换侧栏")
             active: root.sidebarActive
             onClicked: root.toggleSidebarRequested()
         }

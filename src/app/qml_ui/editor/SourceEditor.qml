@@ -171,6 +171,9 @@ Rectangle {
 
     readonly property bool canUndo: editorController.canUndo
     readonly property bool canRedo: editorController.canRedo
+    readonly property bool canCut: sourceArea.selectedText.length > 0
+    readonly property bool canCopy: sourceArea.selectedText.length > 0
+    readonly property bool canPaste: true
 
     function undo() {
         applyEditorTransaction(editorController.undoQmlTransaction(), true)
@@ -178,6 +181,18 @@ Rectangle {
 
     function redo() {
         applyEditorTransaction(editorController.redoQmlTransaction(), true)
+    }
+
+    function cut() {
+        sourceArea.cut()
+    }
+
+    function copy() {
+        sourceArea.copy()
+    }
+
+    function paste() {
+        return applyPastePayload(editorController.clipboardText())
     }
 
     function selectAll() {
@@ -580,16 +595,16 @@ Rectangle {
         AppMenuItem {
             text: UiText.text("剪切")
             enabled: sourceArea.selectedText.length > 0
-            onTriggered: sourceArea.cut()
+            onTriggered: root.cut()
         }
         AppMenuItem {
             text: UiText.text("复制")
             enabled: sourceArea.selectedText.length > 0
-            onTriggered: sourceArea.copy()
+            onTriggered: root.copy()
         }
         AppMenuItem {
             text: UiText.text("粘贴")
-            onTriggered: root.applyPastePayload(root.editorController.clipboardText())
+            onTriggered: root.paste()
         }
         AppMenuSeparator {}
         AppMenuItem {

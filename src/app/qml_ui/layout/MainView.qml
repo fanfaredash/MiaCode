@@ -43,14 +43,15 @@ Item {
         id: menuCommands
         canUndo: splitView.canUndo
         canRedo: splitView.canRedo
-        onToggleSidebarRequested: root.toggleSidebar()
-        onToggleBottomPanelRequested: {
-            state.bottomPanelVisible = !state.bottomPanelVisible
-            root.preferences.bottomPanelVisible = state.bottomPanelVisible
-        }
+        canCut: splitView.canCut
+        canCopy: splitView.canCopy
+        canPaste: splitView.canPaste
         onExitRequested: root.requestClose()
         onUndoRequested: root.undo()
         onRedoRequested: root.redo()
+        onCutRequested: splitView.cut()
+        onCopyRequested: splitView.copy()
+        onPasteRequested: splitView.paste()
         onSelectAllRequested: root.selectAll()
         onFindRequested: splitView.showFindReplace()
         onSelectCurrentLineRequested: splitView.selectCurrentLine()
@@ -63,6 +64,7 @@ Item {
         onChartTransformRequested: opId => root.applyChartTransform(opId)
         onNormalizeChartRequested: root.pages.openNormalizeWholeChart()
         onAboutRequested: aboutDialog.open()
+        onPreferencesRequested: preferencesDialog.open()
         onNewDocumentRequested: root.commands.newDocument()
         onOpenRecentRequested: path => root.commands.openRecentDocument(path)
         onRestoreBackupRequested: path => root.commands.restoreBackupDocument(path)
@@ -226,7 +228,7 @@ Item {
                 editorSync: root.editorSync
                 latency: root.latency
                 compact: root.compact
-                onSettingsRequested: root.commands.openPreferences()
+                onSettingsRequested: preferencesDialog.open()
             }
 
             CompactPanelLayer {
@@ -237,7 +239,7 @@ Item {
                 commands: root.commands
                 pages: root.pages
                 compact: root.compact
-                onSettingsRequested: root.commands.openPreferences()
+                onSettingsRequested: preferencesDialog.open()
             }
         }
 

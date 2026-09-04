@@ -168,6 +168,12 @@ Rules going forward:
   arrays are stored in reverse travel order (a C area lists its outbound arrows first),
   rotation is uniform per straight leg.
 - Qt resources: `resources/{app_icons,fonts,preview_runtime_qml,quick_shell_qml}.qrc`.
+  `resources/icons/app.png` is the rounded 2048px application artwork used by Linux and
+  as the Windows icon source; `app.ico` contains its 16/24/32/48/64/128/256px variants.
+  The unmasked source artwork is retained as `resources/icons/app-original.png` and stays
+  outside the shipped resource collection. The QML title bar
+  uses the focal crop and rounded 1x/2x rasters in
+  `src/app/qml_ui/resources/icons/app-titlebar{,@2x}.png`.
 - Chart-directory conventions: `maidata.txt`, `track.mp3` (`track_bak.mp3`), background
   `bg.mp4`/`pv.mp4`/`bg.{jpg,png,jpeg}` (or `&video=` target; `<stem>_bak.mp4`), project sidecar
   `.miacode/` (`miacode_settings.json`, `waveform/`, `.autosave/<chart>/`, `logs/`).

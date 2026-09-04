@@ -93,6 +93,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - QML popup components: `components/AppComboBox.qml` uses `AppDropdownPanel` with a
   `ListView` bound to `delegateModel`; `AppMenu.qml` uses native Menu item/action behavior.
+  `WindowTitleBar.qml` owns the clickable MiaCode application menu (About, Preferences,
+  Quit). Its compact brand artwork uses the rounded 17px/34px title-bar raster pair rather
+  than runtime-downsampling the canonical 2048px artwork. The activity bar keeps its bottom Preferences button as the second entry.
+  The adjacent top-level order is File, Edit, Adjust, Tools, Preview; the former
+  Help menu is gone. Edit exposes the standard cut/copy/paste commands, while editor
+  context rows omit shortcut spellings; bindings remain discoverable in the main menus.
+  Sidebar and bottom-panel visibility live exclusively in
+  the toolbar's two right-side icon buttons and carry no shortcut. The audio and preview
+  settings toolbar buttons keep their icons and visible labels in the right action group,
+  immediately before the sidebar and bottom-panel toggles.
   `AppMenuItem.implicitWidth` includes the full mnemonic label, shortcut, indicators and
   padding; `AppMenu` takes the widest row, with 180px as the ordinary-menu minimum.
   Separators follow the menu width. `AppComboBox` measures option strings with FontMetrics

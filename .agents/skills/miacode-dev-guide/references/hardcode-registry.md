@@ -87,6 +87,8 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   `workspaceRadius` (10 logical pixels) owns the shared workspace corner. Sidebar drag snapping
   uses half `sidebarMinimumContentWidth`; the hit area and active stroke reuse
   `splitHandleHitExtent` / `splitHandleActiveThickness`, including the collapsed boundary.
+  `titleBarBrandIconSize` (17 logical pixels) owns the compact application-menu icon size;
+  the raster source provides matching 1x/2x variants.
 - `src/timeline/TimelineSceneStateBuilder.cpp` — viewport-fit lanes divide the full height
   below the header. The former 8px bottom padding has been removed.
 - `src/editor/SimaiCompletionCatalog.cpp` — bracket-completion suggestion lists. Fixed,
