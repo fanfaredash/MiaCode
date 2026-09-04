@@ -148,7 +148,7 @@ void miacode::runtime::PlaybackCoordinator::enterExportIntroRegion(double positi
     state_.exportIntroPlayheadSeconds_ =
         qBound(-miacode::intro::kDurationSeconds, positionSeconds, 0.0);
     renderExportIntroFrame(state_.exportIntroPlayheadSeconds_);
-    updatePreviewSliderPosition(state_.exportIntroPlayheadSeconds_);
+    publishPreviewPlayhead();
 }
 
 void miacode::runtime::PlaybackCoordinator::exitExportIntroRegion()
@@ -247,7 +247,7 @@ void miacode::runtime::PlaybackCoordinator::tickExportIntroLeadIn()
     }
     state_.exportIntroPlayheadSeconds_ = position;
     renderExportIntroFrame(position);
-    updatePreviewSliderPosition(position);
+    publishPreviewPlayhead();
 }
 
 bool miacode::runtime::PlaybackCoordinator::handleExportIntroSliderSeek(double second)
@@ -281,11 +281,9 @@ void miacode::runtime::PlaybackCoordinator::refreshExportIntroState()
                 playbackState_.pauseSecond_, 0.0, playbackState_.playing_, "refresh_export_intro_state");
             seekPreviewDiscreteToSecond(0.0, true);
         }
-        updatePreviewSliderRange();
-        updatePreviewSliderPosition(qMax(0.0, state_.pauseSecond_));
+        publishPreviewPlayhead();
         return;
     }
-    updatePreviewSliderRange();
     if (state_.exportIntroRegionActive_) {
         // Refresh the overlay with the new 片头 settings, keep the position.
         setupExportIntroOverlayData();

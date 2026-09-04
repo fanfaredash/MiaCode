@@ -254,138 +254,6 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
     connect(timelineAnalysisIdleTimer_, &QTimer::timeout, this, &Session::dispatchTimelineAnalysisRefresh);
     logStartupStage("timers_ready");
 
-    if (previewSlider_ != nullptr) {
-        previewSlider_->setFocusPolicy(Qt::StrongFocus);
-        connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
-            stopPreviewHeldSeek();
-            const quint64 interactionId = ++previewInteractionSequence_;
-            const bool wasPlaying = playing_;
-            const double authoritativeSecond = currentPreviewAuthoritativeAudioClockSecond();
-            previewScrubInteractionId_ = interactionId;
-            previewScrubMoveCount_ = 0;
-            previewScrubStartSliderValue_ = previewSlider_ != nullptr ? previewSlider_->value() : 0;
-            previewScrubLastSliderValue_ = previewScrubStartSliderValue_;
-            appendPreviewInteractionLog(
-                QStringLiteral("scrub_press"),
-                QString("op=%1 slider_ms=%2 slider_second=%3 playing_before=%4 authoritative_second=%5")
-                    .arg(interactionId)
-                    .arg(previewScrubStartSliderValue_)
-                    .arg(static_cast<double>(previewScrubStartSliderValue_) / 1000.0, 0, 'f', 6)
-                    .arg(wasPlaying ? 1 : 0)
-                    .arg(authoritativeSecond, 0, 'f', 6));
-            if (previewSlider_ != nullptr) {
-                previewSlider_->setFocus(Qt::MouseFocusReason);
-            }
-            if (playing_) {
-                pauseQtPreviewPlaybackExact();
-            }
-            appendPreviewInteractionLog(
-                QStringLiteral("scrub_pause_transition"),
-                QString("op=%1 playing_after=%2 pause_second=%3 manual_generation=%4 manual_txn=%5 manual_sequence=%6")
-                    .arg(interactionId)
-                    .arg(playing_ ? 1 : 0)
-                    .arg(pauseSecond_, 0, 'f', 6)
-                    .arg(previewPendingManualPauseGeneration_)
-                    .arg(previewPendingManualPauseTransactionId_)
-                    .arg(previewPendingManualPauseSequence_));
-            previewScrubDragging_ = true;
-            previewScrubRenderElapsed_.invalidate();
-            if (previewSlider_ != nullptr) {
-                showPreviewSliderTimeHint(previewSlider_->value());
-            }
-        });
-        connect(previewSlider_, &QSlider::sliderMoved, this, [this](int value) {
-            if (previewSlider_ == nullptr) {
-                return;
-            }
-            showPreviewSliderTimeHint(value);
-            const double second = static_cast<double>(value) / 1000.0;
-            const quint64 interactionId = previewScrubInteractionId_;
-            const int moveIndex = ++previewScrubMoveCount_;
-            const int previousValue = previewScrubLastSliderValue_;
-            previewScrubLastSliderValue_ = value;
-            // Negative-time intro region: a drag into [-duration, 0) renders a
-            // static intro frame instead of a chart seek.
-            if (handleExportIntroSliderSeek(second)) {
-                appendPreviewInteractionLog(
-                    QStringLiteral("scrub_move_intro"),
-                    QString("op=%1 index=%2 from_ms=%3 target_ms=%4 target_second=%5")
-                        .arg(interactionId)
-                        .arg(moveIndex)
-                        .arg(previousValue)
-                        .arg(value)
-                        .arg(second, 0, 'f', 6));
-                return;
-            }
-            const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
-                || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
-            const quint64 generationBefore = pausedSeekGeneration_;
-            if (shouldRenderNow) {
-                requestPausedPreviewSeek(second, true, false, false);
-                previewScrubRenderElapsed_.restart();
-            } else {
-                schedulePreviewSeek(second, true);
-            }
-            appendPreviewInteractionLog(
-                QStringLiteral("scrub_move"),
-                QString("op=%1 index=%2 from_ms=%3 target_ms=%4 target_second=%5 render_now=%6 "
-                        "seek_generation_before=%7 seek_generation_after=%8 visual_pause_second=%9 "
-                        "manual_pause_sequence=%10")
-                    .arg(interactionId)
-                    .arg(moveIndex)
-                    .arg(previousValue)
-                    .arg(value)
-                    .arg(second, 0, 'f', 6)
-                    .arg(shouldRenderNow ? 1 : 0)
-                    .arg(generationBefore)
-                    .arg(pausedSeekGeneration_)
-                    .arg(pauseSecond_, 0, 'f', 6)
-                    .arg(previewPendingManualPauseSequence_));
-        });
-        connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
-            stopPreviewHeldSeek();
-            previewScrubDragging_ = false;
-            previewScrubRenderElapsed_.invalidate();
-            if (previewSlider_ == nullptr) {
-                return;
-            }
-            showPreviewSliderTimeHint(previewSlider_->value());
-            if (previewSeekDebounceTimer_ != nullptr) {
-                previewSeekDebounceTimer_->stop();
-            }
-            const double releasedSecond = static_cast<double>(previewSlider_->value()) / 1000.0;
-            const quint64 interactionId = previewScrubInteractionId_;
-            appendPreviewInteractionLog(
-                QStringLiteral("scrub_release"),
-                QString("op=%1 moves=%2 start_ms=%3 target_ms=%4 target_second=%5 pause_second=%6 "
-                        "manual_generation=%7 manual_txn=%8 manual_sequence=%9")
-                    .arg(interactionId)
-                    .arg(previewScrubMoveCount_)
-                    .arg(previewScrubStartSliderValue_)
-                    .arg(previewSlider_->value())
-                    .arg(releasedSecond, 0, 'f', 6)
-                    .arg(pauseSecond_, 0, 'f', 6)
-                    .arg(previewPendingManualPauseGeneration_)
-                    .arg(previewPendingManualPauseTransactionId_)
-                    .arg(previewPendingManualPauseSequence_));
-            if (handleExportIntroSliderSeek(releasedSecond)) {
-                appendPreviewInteractionLog(
-                    QStringLiteral("scrub_release_intro"),
-                    QString("op=%1 target_second=%2").arg(interactionId).arg(releasedSecond, 0, 'f', 6));
-                previewScrubInteractionId_ = 0;
-                return;
-            }
-            seekPreviewToSecond(releasedSecond, true);
-            appendPreviewInteractionLog(
-                QStringLiteral("scrub_release_dispatched"),
-                QString("op=%1 target_second=%2 final_pause_second=%3 manual_sequence_after=%4")
-                    .arg(interactionId)
-                    .arg(releasedSecond, 0, 'f', 6)
-                    .arg(pauseSecond_, 0, 'f', 6)
-                    .arg(previewPendingManualPauseSequence_));
-            previewScrubInteractionId_ = 0;
-        });
-    }
     const auto applyEditorFontDelta = [this](int delta) {
         settings_->applyEditorTextFontSize(editorTextFontPointSize_ + delta, true);
         noteStatus(UiText::text(QStringLiteral("status.editor_text_display_updated")));
@@ -456,8 +324,7 @@ void Session::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(c
     } else {
         logStartupStage("initial_last_session_document_applied");
     }
-    updatePreviewSliderRange();
-    updatePreviewSliderPosition(0.0);
+    publishPreviewPlayhead();
     logStartupStage("initial_document_loaded");
     qtPreviewWatchdogElapsed_.start();
     logStartupStage("preview_media_controller_lazy_init_deferred");

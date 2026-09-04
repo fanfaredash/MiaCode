@@ -128,26 +128,22 @@ int main(int argc, char** argv)
 
     // 3. 发布播放头的那**一个**地方会广播出去。
     //
-    // 它是 updatePreviewSliderPosition 而不是 applyQtPreviewPosition：后者只是
+    // 它是 publishPreviewPlayhead 而不是 applyQtPreviewPosition：后者只是
     // 众多调用方之一，而导出片头的 lead-in 会移动播放头却从不经过它——那正是
     // 「片头在放、QML 滑块停在 0」的成因。
     const QString layoutUi = readSource(
         QStringLiteral("src/app/runtime/playback/LayoutUi.cpp"));
     const int publishAt = layoutUi.indexOf(
-        QStringLiteral("void miacode::runtime::PlaybackCoordinator::updatePreviewSliderPosition"));
-    expect(publishAt >= 0, QStringLiteral("updatePreviewSliderPosition exists"), out, &failed);
+        QStringLiteral("void miacode::runtime::PlaybackCoordinator::publishPreviewPlayhead"));
+    expect(publishAt >= 0, QStringLiteral("publishPreviewPlayhead exists"), out, &failed);
     if (publishAt >= 0) {
         const int nextFunctionAt = layoutUi.indexOf(QStringLiteral("\nvoid miacode::runtime::"), publishAt + 1);
         const QString publishBody = layoutUi.mid(
             publishAt, nextFunctionAt > publishAt ? nextFunctionAt - publishAt : -1);
         const int emitAt = publishBody.indexOf(
             QStringLiteral("emit services_.shellNotifications().previewPlayheadChanged()"));
-        const int guardAt = publishBody.indexOf(QStringLiteral("ui_.previewSlider_ == nullptr"));
-        expect(emitAt >= 0, QStringLiteral("updatePreviewSliderPosition announces the playhead"),
+        expect(emitAt >= 0, QStringLiteral("publishPreviewPlayhead announces the playhead"),
                out, &failed);
-        // Before the guard: the guard is about a v1 widget that may be gone.
-        expect(emitAt >= 0 && guardAt > emitAt,
-               QStringLiteral("it announces before the v1 widget guard"), out, &failed);
     }
 
     // 4. 片头 lead-in 走的是同一个发布点。
@@ -160,7 +156,7 @@ int main(int argc, char** argv)
         const int nextFunctionAt = introRegion.indexOf(QStringLiteral("\nbool miacode::runtime::"), tickAt + 1);
         const QString tickBody = introRegion.mid(
             tickAt, nextFunctionAt > tickAt ? nextFunctionAt - tickAt : -1);
-        expect(tickBody.contains(QStringLiteral("updatePreviewSliderPosition(")),
+        expect(tickBody.contains(QStringLiteral("publishPreviewPlayhead(")),
                QStringLiteral("the export intro publishes its playhead the same way"), out, &failed);
     }
 

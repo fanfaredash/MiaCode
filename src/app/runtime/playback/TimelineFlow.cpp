@@ -271,18 +271,15 @@ void miacode::runtime::PlaybackCoordinator::applyWaveformData(
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setWaveformData(waveformData);
     }
-    updatePreviewSliderRange();
     const double chartDurationSeconds = state_.timelineQuickStateBridge_ != nullptr
         ? state_.timelineQuickStateBridge_->durationSeconds()
         : 0.0;
-    const int sliderMinimum = ui_.previewSlider_ != nullptr ? ui_.previewSlider_->minimum() : 0;
-    const int sliderMaximum = ui_.previewSlider_ != nullptr ? ui_.previewSlider_->maximum() : 0;
     const QString summary = waveformData
         ? miacode::waveform::waveformDataDebugSummary(*waveformData)
         : QStringLiteral("data=0");
     appendPreviewWaveformLog(
         QStringLiteral("apply"),
-        QStringLiteral("generation=%1 current_track_id=%2 old_track_duration=%3 new_track_duration=%4 chart_duration=%5 preview_duration=%6 slider_min_ms=%7 slider_max_ms=%8 bridge=%9 %10")
+        QStringLiteral("generation=%1 current_track_id=%2 old_track_duration=%3 new_track_duration=%4 chart_duration=%5 preview_duration=%6 bridge=%7 %8")
             .arg(state_.waveformRefreshGeneration_)
             .arg(miacode::waveform::waveformTrackDebugId(
                 miacode::waveform::normalizeTrackPath(state_.lastTrackPath_)))
@@ -290,8 +287,6 @@ void miacode::runtime::PlaybackCoordinator::applyWaveformData(
             .arg(state_.previewTrackDurationSeconds_, 0, 'f', 6)
             .arg(chartDurationSeconds, 0, 'f', 6)
             .arg(previewDurationSeconds(), 0, 'f', 6)
-            .arg(sliderMinimum)
-            .arg(sliderMaximum)
             .arg(state_.timelineQuickStateBridge_ != nullptr ? 1 : 0)
             .arg(summary));
 }

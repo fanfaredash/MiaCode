@@ -73,7 +73,7 @@ void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second
         refreshPreviewStageMediaRouteDebugState(state_, true);
     }
     // Publishes to the v1 slider and the v2 transport both.
-    updatePreviewSliderPosition(second);
+    publishPreviewPlayhead();
     if (!state_.playing_ && !suppressPausedSecondaryUi) {
         updatePreviewObjectStats(second);
     }

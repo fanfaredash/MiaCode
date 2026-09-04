@@ -516,15 +516,6 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
         state_.pendingDifficultySwitchPreviewRestoreRevision_ = state_.timelineRevision_ + 1;
         state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = difficultyId;
         state_.pendingDifficultySwitchPreviewRestoreSecond_ = restorePreviewSecond;
-        if (ui_.previewSlider_ != nullptr) {
-            QSignalBlocker blocker(ui_.previewSlider_);
-            ui_.previewSlider_->setMaximum(qMax(ui_.previewSlider_->maximum(), qMax(1, qRound(restorePreviewSecond * 1000.0))));
-        }
-        if (ui_.previewSlider_ != nullptr && !state_.previewScrubDragging_) {
-            const int value = qBound(0, qRound(restorePreviewSecond * 1000.0), ui_.previewSlider_->maximum());
-            QSignalBlocker blocker(ui_.previewSlider_);
-            ui_.previewSlider_->setValue(value);
-        }
         if (state_.timelineQuickStateBridge_ != nullptr) {
             state_.timelineQuickStateBridge_->setPlayheadSeconds(restorePreviewSecond, false);
         }
@@ -541,7 +532,6 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
         session_.applyWaveformData(previousWaveformData);
     } else if (previousPreviewTrackDurationSeconds > 0.0) {
         state_.previewTrackDurationSeconds_ = previousPreviewTrackDurationSeconds;
-        session_.updatePreviewSliderRange();
     }
     if (!state_.currentFilePath_.isEmpty()) {
         session_.syncPreviewStageMediaRouteChartPath(
@@ -699,6 +689,5 @@ void miacode::runtime::DocumentSessionHost::clearTimelineAndPreview()
         state_.scene_->setMuriAnalysisReport(state_.muriAnalysisReport_);
     }
     session_.clearPreviewStageMediaRoute();
-    session_.updatePreviewSliderRange();
-    session_.updatePreviewSliderPosition(0.0);
+    session_.publishPreviewPlayhead();
 }

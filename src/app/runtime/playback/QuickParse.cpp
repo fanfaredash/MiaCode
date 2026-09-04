@@ -48,7 +48,6 @@ void miacode::runtime::PlaybackCoordinator::refreshTimelineQuickModelFromCurrent
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setTimelineData(state_.timelineQuickModel_.snapshot());
     }
-    updatePreviewSliderRange();
     if (state_.runtimeDebugOutputEnabled_) {
         appendTimelinePerfLog(
             QStringLiteral("edit/quick_timeline_perf"),

@@ -45,14 +45,9 @@ double Session::previewPlaybackEndSeconds() const
     return playback_->previewPlaybackEndSeconds();
 }
 
-void Session::updatePreviewSliderRange()
+void Session::publishPreviewPlayhead()
 {
-    playback_->updatePreviewSliderRange();
-}
-
-void Session::updatePreviewSliderPosition(double second)
-{
-    playback_->updatePreviewSliderPosition(second);
+    playback_->publishPreviewPlayhead();
 }
 
 void Session::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
@@ -193,16 +188,6 @@ void Session::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOv
 void Session::updatePreviewObjectStats(double second)
 {
     playback_->updatePreviewObjectStats(second);
-}
-
-QString Session::formatPreviewTimestamp(double second) const
-{
-    return playback_->formatPreviewTimestamp(second);
-}
-
-void Session::showPreviewSliderTimeHint(int sliderValue)
-{
-    playback_->showPreviewSliderTimeHint(sliderValue);
 }
 
 // Moved from AnalysisFlow.cpp (stage 4.9d-6: TU boundary split — AnalysisFlow.cpp

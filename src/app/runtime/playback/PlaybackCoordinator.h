@@ -137,8 +137,7 @@ public:
     void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
-    void updatePreviewSliderRange();
-    void updatePreviewSliderPosition(double second);
+    void publishPreviewPlayhead();
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearPreviewObjectStats();
     void emitChartSwitchResourceGauge();
@@ -180,8 +179,6 @@ public:
     void refreshLayoutAfterPageSwitch();
     void updatePreviewPanelLayout(int panelWidthOverride = -1, int panelHeightOverride = -1);
     void updatePreviewObjectStats(double second);
-    QString formatPreviewTimestamp(double second) const;
-    void showPreviewSliderTimeHint(int sliderValue);
     void requestPausedPreviewSeek(
         double second,
         bool centerView,

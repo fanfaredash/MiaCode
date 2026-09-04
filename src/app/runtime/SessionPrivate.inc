@@ -213,10 +213,7 @@
     void beginPreviewHeldSeek(int direction, int key);
     void stopPreviewHeldSeek(int key = 0);
     void applyPreviewHeldSeekTick();
-    void updatePreviewSliderRange();
-    void updatePreviewSliderPosition(double second);
-    QString formatPreviewTimestamp(double second) const;
-    void showPreviewSliderTimeHint(int sliderValue);
+    void publishPreviewPlayhead();
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();

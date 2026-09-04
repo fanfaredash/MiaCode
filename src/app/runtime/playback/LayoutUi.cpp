@@ -241,39 +241,9 @@ double miacode::runtime::PlaybackCoordinator::previewPlaybackEndSeconds() const
         chartEndSeconds, state_.previewTrackDurationSeconds_);
 }
 
-void miacode::runtime::PlaybackCoordinator::updatePreviewSliderRange()
+void miacode::runtime::PlaybackCoordinator::publishPreviewPlayhead()
 {
-    if (ui_.previewSlider_ == nullptr) {
-        return;
-    }
-    const int maximum = qMax(1, qRound(previewDurationSeconds() * 1000.0));
-    // Negative-time intro region (export page, 添加片头 on): the slider extends
-    // left to -introDuration so the intro can be scrubbed/played; otherwise 0.
-    const int minimum = qMin(0, qRound(exportIntroLowerBoundSeconds() * 1000.0));
-    QSignalBlocker blocker(ui_.previewSlider_);
-    ui_.previewSlider_->setMinimum(minimum);
-    ui_.previewSlider_->setMaximum(maximum);
-}
-
-void miacode::runtime::PlaybackCoordinator::updatePreviewSliderPosition(double second)
-{
-    // The v2 transport's twin of the slider below, and announced before the
-    // guards rather than after: the guards are about a v1 widget that may not
-    // exist and about a v1 drag, neither of which is a reason to leave the QML
-    // transport behind. This is the one place the playhead is published from,
-    // which is why the export intro — whose lead-in moves the playhead without
-    // ever reaching applyQtPreviewPosition — is now visible to the shell at
-    // all. Before this, the intro played while the QML thumb sat at 0.
     emit services_.shellNotifications().previewPlayheadChanged();
-    if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
-        return;
-    }
-    // The slider minimum is negative while the intro region is shown, so clamp to
-    // the slider's own minimum (not 0) to let the playhead sit in the intro.
-    const int value = qBound(
-        ui_.previewSlider_->minimum(), qRound(second * 1000.0), ui_.previewSlider_->maximum());
-    QSignalBlocker blocker(ui_.previewSlider_);
-    ui_.previewSlider_->setValue(value);
 }
 
 void miacode::runtime::PlaybackCoordinator::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
@@ -418,41 +388,4 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewPanelLayout(int panelWi
 void miacode::runtime::PlaybackCoordinator::updatePreviewObjectStats(double second)
 {
     Q_UNUSED(second);
-}
-
-QString miacode::runtime::PlaybackCoordinator::formatPreviewTimestamp(double second) const
-{
-    const int totalCentiseconds = qMax(0, qRound(second * 100.0));
-    const int minutes = totalCentiseconds / 6000;
-    const int secondsPart = (totalCentiseconds / 100) % 60;
-    const int centiseconds = totalCentiseconds % 100;
-    return QString("%1:%2.%3")
-        .arg(minutes, 2, 10, QChar('0'))
-        .arg(secondsPart, 2, 10, QChar('0'))
-        .arg(centiseconds, 2, 10, QChar('0'));
-}
-
-void miacode::runtime::PlaybackCoordinator::showPreviewSliderTimeHint(int sliderValue)
-{
-    if (ui_.previewSlider_ == nullptr) {
-        return;
-    }
-    const double second = static_cast<double>(sliderValue) / 1000.0;
-    QStyleOptionSlider option;
-    option.initFrom(ui_.previewSlider_);
-    option.subControls = QStyle::SC_SliderHandle;
-    option.orientation = ui_.previewSlider_->orientation();
-    option.minimum = ui_.previewSlider_->minimum();
-    option.maximum = ui_.previewSlider_->maximum();
-    option.sliderPosition = sliderValue;
-    option.sliderValue = sliderValue;
-    option.upsideDown = false;
-    const QRect handleRect = ui_.previewSlider_->style()->subControlRect(
-        QStyle::CC_Slider,
-        &option,
-        QStyle::SC_SliderHandle,
-        ui_.previewSlider_
-    );
-    const QPoint global = ui_.previewSlider_->mapToGlobal(handleRect.center() + QPoint(0, -18));
-    QToolTip::showText(global, formatPreviewTimestamp(second), ui_.previewSlider_, ui_.previewSlider_->rect(), 600);
 }

@@ -115,8 +115,7 @@ void miacode::runtime::MediaJobsHost::reloadPreviewMediaAfterFileOperation(bool 
             session_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(qMax(0.0, session_.pauseSecond_));
         }
         session_.refreshWaveformCache();
-        session_.updatePreviewSliderRange();
-        session_.updatePreviewSliderPosition(qMax(0.0, session_.pauseSecond_));
+        session_.publishPreviewPlayhead();
     }
     session_.syncPreviewStageMediaRouteChartPath(
         session_.currentFilePath_,

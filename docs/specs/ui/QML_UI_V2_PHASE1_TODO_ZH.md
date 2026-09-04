@@ -590,6 +590,16 @@ Widgets 架构清理，但在 Release Complete 前必须完成。不得回接任
   本轮 `MiaCode` Release 编译通过；针对性测试 5/5 通过，全量 CTest 为 105/108 通过，
   仅保留既有的 `timeline_model_spec`、`qml_editor_controller_spec`、`qtavplayer_platform_spec`
   三项失败。测试/dev-tool 的 Widgets 依赖暂不属于产品目标验收。
+- **第 5 步本轮继续收口旧播放控件边界**：删除已无调用方的 `runtime/Session.cpp`，清理
+  `Shared.h/.cpp` 中未被使用的 outline delegate、图标和样式辅助；删除从未实例化的旧
+  QWidget 预览滑条同步、tooltip、回调和滑条专属状态。QML 的
+  `PreviewTransport.qml` / `ExportRangeSelector.qml` 继续使用通用
+  `beginScrub()` / `updateScrub()`，播放头通知改名为明确的
+  `PlaybackCoordinator::publishPreviewPlayhead()`，因此没有削弱 QML 播放头推送。
+  延迟试听、时间线、媒体加载和导出安装路径均已迁移；`MiaCode` Release 编译通过，针对性
+  测试 7/7 通过，全量 CTest 仍为 105/108 通过，失败项与既有基线完全相同。`Qt6::Widgets`
+  仍不能移除：验证页仍有 `QSlider`，Session/document/editor/validation 的其余 Widgets
+  源集仍未完成迁移。
 
 #### 第 2 步：一处需要更正的既往判断
 

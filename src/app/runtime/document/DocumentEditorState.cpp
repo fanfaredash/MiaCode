@@ -3,6 +3,7 @@
 
 #include "BracketScopeHighlighter.h"
 #include "UiText.h"
+#include "UiTheme.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"

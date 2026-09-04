@@ -97,7 +97,6 @@ class QPropertyAnimation;
 class QResizeEvent;
 class QShortcut;
 class QStackedWidget;
-class QSlider;
 class QSplitter;
 class QTimer;
 class QTextEdit;

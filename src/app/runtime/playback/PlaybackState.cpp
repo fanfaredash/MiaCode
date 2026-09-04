@@ -614,7 +614,7 @@ void miacode::runtime::PlaybackCoordinator::finalizeQtPreviewPlaybackStart(doubl
     }
     invalidatePreviewFollowBindingCache();
     syncEditorCursorToPreviewSecond(effectiveStartSecond, false);
-    updatePreviewSliderPosition(effectiveStartSecond);
+    publishPreviewPlayhead();
     scheduleDeferredPreviewUiTail(
         true,
         false,
@@ -734,7 +734,7 @@ void miacode::runtime::PlaybackCoordinator::pauseQtPreviewPlaybackExact(PauseSec
         state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
-    updatePreviewSliderPosition(state_.pauseSecond_);
+    publishPreviewPlayhead();
     // beta4 leak gauge (LOW-FREQUENCY — once per user pause, never per frame): sample
     // process resource counters so a monotonic climb across edit→play→pause cycles localises
     // the reported "改多了就掉帧" leak. Gated on runtime debug output so it only costs the

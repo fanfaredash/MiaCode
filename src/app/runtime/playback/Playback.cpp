@@ -112,7 +112,7 @@ void miacode::runtime::PlaybackCoordinator::seekPreviewToSecond(double second, b
             state_.scene_->setPlayheadSeconds(clampedSecond, false);
         }
         syncPreviewStageMediaRoutePlayback(clampedSecond);
-        updatePreviewSliderPosition(clampedSecond);
+        publishPreviewPlayhead();
         appendPreviewPlaybackLog(
             QStringLiteral("playing_seek_requested"),
             QString("txn=%1 generation=%2 sequence=%3 visual=%4 fallback=%5")
@@ -763,7 +763,7 @@ void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosit
         state_.previewSfxRuntime_->disarmDeviceChangeCutoffClock();
         state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(state_.pauseSecond_);
     }
-    updatePreviewSliderPosition(state_.pauseSecond_);
+    publishPreviewPlayhead();
     scheduleDeferredPreviewUiTail(
         true,
         true,

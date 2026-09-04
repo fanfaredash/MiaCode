@@ -282,7 +282,7 @@ void LatencySandboxController::applyPlayheadToScene(double seconds)
     if (owner_->state_.scene_ != nullptr) {
         owner_->state_.scene_->setPlayheadSeconds(clamped, true);
     }
-    owner_->updatePreviewSliderPosition(clamped);
+    owner_->publishPreviewPlayhead();
 }
 
 void LatencySandboxController::setupSandboxPreviewState()
@@ -321,7 +321,6 @@ void LatencySandboxController::setupSandboxPreviewState()
         owner_->state_.timelineQuickStateBridge_->setTimelineData(
             owner_->state_.timelineQuickModel_.snapshot());
     }
-    owner_->updatePreviewSliderRange();
 
     // SFX timeline for the test taps.
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
@@ -356,7 +355,6 @@ void LatencySandboxController::restoreOriginalTimeline()
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
         owner_->state_.timelineQuickStateBridge_->setTimelineData(cachedSnapshot_);
     }
-    owner_->updatePreviewSliderRange();
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
         owner_->state_.previewSfxRuntime_->configureTimeline(
             cachedNoteMarkers_,

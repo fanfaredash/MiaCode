@@ -41,7 +41,6 @@
         QWidget* workspaceContentWidget_ = nullptr;
         QToolButton* stopPreviewButton_ = nullptr;
         QToolButton* pausePreviewButton_ = nullptr;
-        QSlider* previewSlider_ = nullptr;
         QToolButton* previewSpeedButton_ = nullptr;
         QTimer* previewHeldSeekTimer_ = nullptr;
     };
@@ -319,10 +318,6 @@
         bool qtPreviewVisualClockInitialized_ = false;
         qint64 qtPreviewVisualClockDiagLastLogMs_ = -1;
         bool previewScrubDragging_ = false;
-        quint64 previewScrubInteractionId_ = 0;
-        int previewScrubMoveCount_ = 0;
-        int previewScrubStartSliderValue_ = 0;
-        int previewScrubLastSliderValue_ = 0;
         bool suppressTimelineCursorSync_ = false;
         bool suppressTextDirtyTracking_ = false;
         bool deferredEditorUiUpdatePending_ = false;
@@ -729,10 +724,6 @@
     bool& qtPreviewVisualClockInitialized_ = state_.qtPreviewVisualClockInitialized_;
     qint64& qtPreviewVisualClockDiagLastLogMs_ = state_.qtPreviewVisualClockDiagLastLogMs_;
     bool& previewScrubDragging_ = state_.previewScrubDragging_;
-    quint64& previewScrubInteractionId_ = state_.previewScrubInteractionId_;
-    int& previewScrubMoveCount_ = state_.previewScrubMoveCount_;
-    int& previewScrubStartSliderValue_ = state_.previewScrubStartSliderValue_;
-    int& previewScrubLastSliderValue_ = state_.previewScrubLastSliderValue_;
     bool& suppressTimelineCursorSync_ = state_.suppressTimelineCursorSync_;
     bool& suppressTextDirtyTracking_ = state_.suppressTextDirtyTracking_;
     bool& deferredEditorUiUpdatePending_ = state_.deferredEditorUiUpdatePending_;
@@ -881,7 +872,6 @@
     QWidget*& workspaceContentWidget_ = ui_.workspaceContentWidget_;
     QToolButton*& stopPreviewButton_ = ui_.stopPreviewButton_;
     QToolButton*& pausePreviewButton_ = ui_.pausePreviewButton_;
-    QSlider*& previewSlider_ = ui_.previewSlider_;
     QToolButton*& previewSpeedButton_ = ui_.previewSpeedButton_;
     QTimer*& previewHeldSeekTimer_ = ui_.previewHeldSeekTimer_;
     int& previewStatsLayoutRows_ = state_.previewStatsLayoutRows_;

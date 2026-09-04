@@ -504,8 +504,7 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
         session_.timelineQuickStateBridge_->setPlayheadSeconds(startSecond, false);
     }
     session_.scene_->setPlayheadSeconds(startSecond, true);
-    session_.updatePreviewSliderRange();
-    session_.updatePreviewSliderPosition(startSecond);
+    session_.publishPreviewPlayhead();
 
     // SFX timeline for this difficulty's notes.
     if (session_.previewSfxRuntime_ != nullptr) {

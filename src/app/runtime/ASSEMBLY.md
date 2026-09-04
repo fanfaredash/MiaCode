@@ -282,7 +282,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          `Session&` 作答。**字段搬迁另记为文档域待办。**
          **本 stage 第 5 次文本扫描 spec 需跟随代码移动**（前四次：`refreshPreviewSurfaces`、
          `Session::refreshPreviewSurfaces`、`ensureAuditionSceneReady`、
-         `updatePreviewSliderPosition` 的 emit 写法）。这次两条断言钉的是
+         `publishPreviewPlayhead` 的 emit 写法）。这次两条断言钉的是
          `FollowSync.cpp` 里调用点的确切拼写，改端口必然打断它们——**与字段搬没搬无关**。
          判据是不变量有没有变：两条要保护的是「跟随状态携带已提交的工作区 revision」与
          「`FollowSync` 走值投影」，换取值途径两者都没变，所以字面串跟随更新、强度不变。
