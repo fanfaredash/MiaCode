@@ -2,6 +2,7 @@
 #include "ChartTransformCommands.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "core/chart/selection/ChartSelectionBeatSummary.h"
 #include "QmlDocumentModel.h"
 
 #include "editor/BookmarkCommentSyntax.h"
@@ -1348,7 +1349,9 @@ QVariantMap QmlDocumentModel::transformChartSelection(
         replacement = spec->apply(selected, text.mid(end), &changed);
     } else {
         const QString transformedFull =
-            miacode::chart_transform::clearCompleteElementsInSelection(text, begin, end, &changed);
+            opId == QStringLiteral("transform.reset_tap_notes")
+                ? miacode::chart_transform::resetTapNotesInSelection(text, begin, end, &changed)
+                : miacode::chart_transform::clearCompleteElementsInSelection(text, begin, end, &changed);
         // The transform rewrites the whole text; the selection's new extent is
         // whatever is left once the untouched tail is accounted for.
         const int untouchedSuffix = text.size() - end;
@@ -1370,6 +1373,25 @@ QVariantMap QmlDocumentModel::transformChartSelection(
     transaction.insert(QStringLiteral("anchor"), forward ? begin : transformedEnd);
     transaction.insert(QStringLiteral("position"), forward ? transformedEnd : begin);
     return transaction;
+}
+
+QVariantMap QmlDocumentModel::selectionBeatSummary(
+    const QString& text, int anchor, int position) const
+{
+    const miacode::chart_selection::ChartSelectionBeatSummary summary =
+        miacode::chart_selection::summarizeChartSelectionBeats(text, anchor, position);
+    QVariantList parts;
+    for (const miacode::chart_selection::ChartSelectionBeatPart& part : summary.parts) {
+        parts.append(QVariantMap{
+            {QStringLiteral("count"), part.count},
+            {QStringLiteral("denominator"), part.denominator},
+        });
+    }
+    return QVariantMap{
+        {QStringLiteral("totalCommaCount"), summary.totalCommaCount},
+        {QStringLiteral("parts"), parts},
+        {QStringLiteral("exact"), summary.exact},
+    };
 }
 
 QVariantMap QmlDocumentModel::normalizeChartSelection(

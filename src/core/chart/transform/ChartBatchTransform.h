@@ -43,4 +43,12 @@ QString clearCompleteElementsInSelection(
     int selectionEnd,
     int* changedCount = nullptr);
 
+// Reduces every complete note element in the selection to one lane-1 tap while
+// retaining timing controls, whitespace, empty beats, and comments.
+QString resetTapNotesInSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    int* changedCount = nullptr);
+
 }  // namespace miacode::chart_transform

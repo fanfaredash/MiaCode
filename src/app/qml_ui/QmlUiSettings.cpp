@@ -24,6 +24,8 @@ constexpr auto kBottomPanelHeightRatio = "bottom_panel_height_ratio";
 constexpr auto kPreviewWidthRatio = "preview_width_ratio";
 constexpr auto kPreviewCanvasFreeAspect = "preview_canvas_free_aspect";
 constexpr auto kFontSize = "ui_font_size";
+constexpr auto kEditorScrollPastEnd = "editor_scroll_past_end";
+constexpr auto kEditorSelectionBeatDisplay = "editor_selection_beat_display";
 
 constexpr auto kLegacySidebarVisible = "ui/sidebarVisible";
 constexpr auto kLegacySidebarWidth = "ui/sidebarWidth";
@@ -206,6 +208,8 @@ bool QmlUiSettings::editorHalfWidthInputEnabled() const { return editorHalfWidth
 bool QmlUiSettings::editorOverwriteModeEnabled() const { return editorOverwriteModeEnabled_; }
 bool QmlUiSettings::editorAutoCompletionEnabled() const { return editorAutoCompletionEnabled_; }
 bool QmlUiSettings::editorImeInputDisabled() const { return editorImeInputDisabled_; }
+bool QmlUiSettings::editorScrollPastEnd() const { return editorScrollPastEnd_; }
+bool QmlUiSettings::editorSelectionBeatDisplay() const { return editorSelectionBeatDisplay_; }
 
 void QmlUiSettings::reloadEditorSettings()
 {
@@ -225,12 +229,17 @@ void QmlUiSettings::reloadEditorSettings()
     const bool overwrite = editorUi.value(QStringLiteral("editor_overwrite_mode")).toBool(false);
     const bool autoCompletion = editorUi.value(QStringLiteral("editor_auto_completion")).toBool(true);
     const bool imeDisabled = editorUi.value(QStringLiteral("editor_ime_input_disabled")).toBool(true);
+    const bool scrollPastEnd = editorUi.value(QLatin1String(kEditorScrollPastEnd)).toBool(true);
+    const bool selectionBeatDisplay =
+        editorUi.value(QLatin1String(kEditorSelectionBeatDisplay)).toBool(true);
     if (codeFont_ == codeFont
         && editorBlockSpacing_ == blockSpacing
         && editorHalfWidthInputEnabled_ == halfWidth
         && editorOverwriteModeEnabled_ == overwrite
         && editorAutoCompletionEnabled_ == autoCompletion
-        && editorImeInputDisabled_ == imeDisabled) {
+        && editorImeInputDisabled_ == imeDisabled
+        && editorScrollPastEnd_ == scrollPastEnd
+        && editorSelectionBeatDisplay_ == selectionBeatDisplay) {
         return;
     }
     codeFont_ = codeFont;
@@ -239,6 +248,8 @@ void QmlUiSettings::reloadEditorSettings()
     editorOverwriteModeEnabled_ = overwrite;
     editorAutoCompletionEnabled_ = autoCompletion;
     editorImeInputDisabled_ = imeDisabled;
+    editorScrollPastEnd_ = scrollPastEnd;
+    editorSelectionBeatDisplay_ = selectionBeatDisplay;
     emit editorSettingsChanged();
 }
 
@@ -335,6 +346,26 @@ void QmlUiSettings::setEditorAppearance(int pointSize, double lineSpacingFactor)
     }
     codeFont_ = font;
     editorBlockSpacing_ = blockSpacing;
+    emit editorSettingsChanged();
+}
+
+void QmlUiSettings::setEditorScrollPastEnd(bool enabled)
+{
+    if (editorScrollPastEnd_ == enabled) {
+        return;
+    }
+    editorScrollPastEnd_ = enabled;
+    storeUiValue(kEditorScrollPastEnd, enabled);
+    emit editorSettingsChanged();
+}
+
+void QmlUiSettings::setEditorSelectionBeatDisplay(bool enabled)
+{
+    if (editorSelectionBeatDisplay_ == enabled) {
+        return;
+    }
+    editorSelectionBeatDisplay_ = enabled;
+    storeUiValue(kEditorSelectionBeatDisplay, enabled);
     emit editorSettingsChanged();
 }
 

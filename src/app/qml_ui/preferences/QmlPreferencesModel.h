@@ -37,6 +37,8 @@ class QmlPreferencesModel final : public QObject
     Q_PROPERTY(bool editorAutoCompletion READ editorAutoCompletion WRITE setEditorAutoCompletion NOTIFY editorChanged)
     Q_PROPERTY(bool editorHalfWidthInput READ editorHalfWidthInput WRITE setEditorHalfWidthInput NOTIFY editorChanged)
     Q_PROPERTY(bool editorImeDisabled READ editorImeDisabled WRITE setEditorImeDisabled NOTIFY editorChanged)
+    Q_PROPERTY(bool editorScrollPastEnd READ editorScrollPastEnd WRITE setEditorScrollPastEnd NOTIFY editorChanged)
+    Q_PROPERTY(bool editorSelectionBeatDisplay READ editorSelectionBeatDisplay WRITE setEditorSelectionBeatDisplay NOTIFY editorChanged)
 
     // Performance
     Q_PROPERTY(bool videoDecodePrefersSoftware READ videoDecodePrefersSoftware WRITE setVideoDecodePrefersSoftware NOTIFY performanceChanged)
@@ -78,6 +80,10 @@ public:
     void setEditorHalfWidthInput(bool enabled);
     bool editorImeDisabled() const;
     void setEditorImeDisabled(bool disabled);
+    bool editorScrollPastEnd() const;
+    void setEditorScrollPastEnd(bool enabled);
+    bool editorSelectionBeatDisplay() const;
+    void setEditorSelectionBeatDisplay(bool enabled);
 
     bool videoDecodePrefersSoftware() const;
     void setVideoDecodePrefersSoftware(bool preferSoftware);

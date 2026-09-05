@@ -253,6 +253,8 @@ Item {
                 : state.difficultyEditorActive ? root.documentSession.currentFilePath : ""
             cursorLine: state.editorCursorLine
             cursorColumn: state.editorCursorColumn
+            selectionBeatText: splitView.selectionBeatStatusText
+            selectionBeatTooltip: splitView.selectionBeatTooltipText
         }
     }
 

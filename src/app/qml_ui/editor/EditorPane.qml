@@ -11,6 +11,7 @@ Item {
     required property var commands
     required property var editorController
     required property var editorSync
+    required property var preferences
 
     readonly property bool metadataSourceActive: viewState.metadataEditorActive
         && viewState.metadataEditorMode === 1
@@ -21,6 +22,10 @@ Item {
     readonly property bool canCut: sourceVisible && sourceEditor.canCut
     readonly property bool canCopy: sourceVisible && sourceEditor.canCopy
     readonly property bool canPaste: sourceVisible && sourceEditor.canPaste
+    readonly property string selectionBeatStatusText:
+        sourceVisible ? sourceEditor.selectionBeatStatusText : ""
+    readonly property string selectionBeatTooltipText:
+        sourceVisible ? sourceEditor.selectionBeatTooltipText : ""
     property double pendingActivationSequence: 0
     property var pendingActivationCompletion: null
     property var pendingActivationCancellation: null
@@ -339,6 +344,7 @@ Item {
         documentSession: root.documentSession
         editorController: root.editorController
         syncController: root.editorSync
+        preferences: root.preferences
     }
 
     Flickable {

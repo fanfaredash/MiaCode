@@ -529,6 +529,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/core/chart/parser/SimaiNativeParser.cpp
     src/core/chart/parser/SimaiCommentScan.h
     src/core/chart/parser/SimaiCommentScan.cpp
+    src/core/chart/selection/ChartSelectionBeatSummary.h
+    src/core/chart/selection/ChartSelectionBeatSummary.cpp
     src/timeline/TimelineData.h
     src/timeline/TimelineRenderData.h
     src/timeline/TimelineQuickModel.h
@@ -768,6 +770,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlShortcutCommands.h
         src/app/qml_ui/QmlDocumentModel.cpp
         src/app/qml_ui/QmlDocumentModel.h
+        src/core/chart/selection/ChartSelectionBeatSummary.h
+        src/core/chart/selection/ChartSelectionBeatSummary.cpp
         src/app/qml_ui/QmlDocumentProjection.cpp
         src/app/qml_ui/QmlDocumentProjection.h
         src/app/qml_ui/QmlAnalysisProjection.cpp
@@ -1457,6 +1461,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES
             src src/app/ui src/common src/core/chart
             src/core/chart/document src/core/chart/parser src/core/chart/transform src/timeline
+    )
+
+    miacode_add_dev_tool(chart_selection_beat_summary_spec TEST
+        SOURCES
+            src/tools/chart_selection/ChartSelectionBeatSummarySpec.cpp
+            src/core/chart/selection/ChartSelectionBeatSummary.h
+            src/core/chart/selection/ChartSelectionBeatSummary.cpp
+            src/core/chart/parser/SimaiCommentScan.h
+            src/core/chart/parser/SimaiCommentScan.cpp
+        LIBS Qt6::Core
+        INCLUDES src
     )
 
     miacode_add_dev_tool(extension_manifest_spec TEST

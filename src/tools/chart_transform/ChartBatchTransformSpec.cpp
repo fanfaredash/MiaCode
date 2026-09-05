@@ -788,6 +788,28 @@ void expectClearCompleteElementsReplacement(
         err);
 }
 
+void expectResetTapNotes(
+    const QString& input,
+    int selectionStart,
+    int selectionEnd,
+    const QString& expected,
+    int expectedChanged,
+    const QString& message,
+    int* failed,
+    QTextStream& err)
+{
+    int changed = -1;
+    const QString actual = miacode::chart_transform::resetTapNotesInSelection(
+        input, selectionStart, selectionEnd, &changed);
+    expectTrue(
+        actual == expected && changed == expectedChanged,
+        QStringLiteral("%1 (actual='%2', changed=%3)")
+            .arg(message, actual)
+            .arg(changed),
+        failed,
+        err);
+}
+
 void runInlineSpecs(QTextStream& err, int* failed)
 {
     // 一键清空 (moved here with clearCompleteElementsInSelection when it left
@@ -800,6 +822,24 @@ void runInlineSpecs(QTextStream& err, int* failed)
         QStringLiteral("{16},,,,"),
         4,
         QStringLiteral("Ctrl+Q clears every complete selected element and keeps subdivision prefix"),
+        failed,
+        err);
+    expectResetTapNotes(
+        QStringLiteral("{16}7,7,E1,A1,,8/2,,3,3^6[8:1]*^8[8:1],4,C,,3b,,,,"),
+        0,
+        QStringLiteral("{16}7,7,E1,A1,,8/2,,3,3^6[8:1]*^8[8:1],4,C,,3b,,,,").size(),
+        QStringLiteral("{16}1,1,1,1,,1,,1,1,1,1,,1,,,,"),
+        10,
+        QStringLiteral("reset tap notes reduces each occupied beat to one lane-1 tap"),
+        failed,
+        err);
+    expectResetTapNotes(
+        QStringLiteral("(120){8}1, 2,|| keep 3,4,\n{16}A1,,"),
+        0,
+        QStringLiteral("(120){8}1, 2,|| keep 3,4,\n{16}A1,,").size(),
+        QStringLiteral("(120){8}1, 1,|| keep 3,4,\n{16}1,,"),
+        2,
+        QStringLiteral("reset tap notes preserves timing, whitespace, and comments"),
         failed,
         err);
     expectClearCompleteElements(

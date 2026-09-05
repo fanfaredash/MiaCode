@@ -247,6 +247,18 @@ AppDialog {
                 checked: root.preferencesModel.editorImeDisabled
                 onToggled: root.preferencesModel.editorImeDisabled = checked
             }
+            AppSwitch {
+                objectName: "preferencesScrollPastEndSwitch"
+                text: UiText.text("preferences.editor_scroll_past_end")
+                checked: root.preferencesModel.editorScrollPastEnd
+                onToggled: root.preferencesModel.editorScrollPastEnd = checked
+            }
+            AppSwitch {
+                objectName: "preferencesSelectionBeatDisplaySwitch"
+                text: UiText.text("preferences.editor_selection_beat_display")
+                checked: root.preferencesModel.editorSelectionBeatDisplay
+                onToggled: root.preferencesModel.editorSelectionBeatDisplay = checked
+            }
         }
 
         // ---- 性能 ----

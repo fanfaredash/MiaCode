@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
@@ -9,6 +10,8 @@ Rectangle {
     property string documentName: ""
     property int cursorLine: 1
     property int cursorColumn: 1
+    property string selectionBeatText: ""
+    property string selectionBeatTooltip: ""
 
     implicitHeight: 23
     color: Theme.colors.background.statusBar
@@ -45,14 +48,30 @@ Rectangle {
             Layout.preferredWidth: implicitWidth
         }
         StatusText {
+            text: root.selectionBeatText
+            tooltipText: root.selectionBeatTooltip
+            visible: text.length > 0
+            Layout.preferredWidth: implicitWidth
+        }
+        StatusText {
             text: "simai"
             Layout.preferredWidth: implicitWidth
         }
     }
 
     component StatusText: Text {
+        id: statusText
+        property string tooltipText: ""
         color: Theme.colors.text.status
         font.family: Theme.uiFont
         font.pixelSize: Theme.secondaryFontSize
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            visible: statusText.tooltipText.length > 0
+            ToolTip.visible: containsMouse
+            ToolTip.text: statusText.tooltipText
+        }
     }
 }

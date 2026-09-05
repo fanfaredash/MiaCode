@@ -37,6 +37,8 @@ class QmlUiSettings final : public QObject
     Q_PROPERTY(bool editorOverwriteModeEnabled READ editorOverwriteModeEnabled NOTIFY editorSettingsChanged)
     Q_PROPERTY(bool editorAutoCompletionEnabled READ editorAutoCompletionEnabled NOTIFY editorSettingsChanged)
     Q_PROPERTY(bool editorImeInputDisabled READ editorImeInputDisabled NOTIFY editorSettingsChanged)
+    Q_PROPERTY(bool editorScrollPastEnd READ editorScrollPastEnd WRITE setEditorScrollPastEnd NOTIFY editorSettingsChanged)
+    Q_PROPERTY(bool editorSelectionBeatDisplay READ editorSelectionBeatDisplay WRITE setEditorSelectionBeatDisplay NOTIFY editorSettingsChanged)
 
 public:
     // Localized lookup for QML that holds a UiText key rather than a string.
@@ -68,6 +70,8 @@ public:
     bool editorOverwriteModeEnabled() const;
     bool editorAutoCompletionEnabled() const;
     bool editorImeInputDisabled() const;
+    bool editorScrollPastEnd() const;
+    bool editorSelectionBeatDisplay() const;
 
     void setSidebarVisible(bool value);
     void setSidebarWidth(int value);
@@ -80,6 +84,8 @@ public:
     void reloadTheme();
     void setThemeToken(const QString& token);
     void setEditorAppearance(int pointSize, double lineSpacingFactor);
+    void setEditorScrollPastEnd(bool enabled);
+    void setEditorSelectionBeatDisplay(bool enabled);
 
 signals:
     void sidebarVisibleChanged();
@@ -114,5 +120,7 @@ private:
     bool editorOverwriteModeEnabled_ = false;
     bool editorAutoCompletionEnabled_ = true;
     bool editorImeInputDisabled_ = true;
+    bool editorScrollPastEnd_ = true;
+    bool editorSelectionBeatDisplay_ = true;
     bool darkTheme_ = true;
 };

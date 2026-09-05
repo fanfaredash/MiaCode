@@ -19,7 +19,9 @@ namespace miacode::qml_ui {
 // selection ends can only be adjusted correctly if the tail it applies to is
 // visible. An empty `apply` marks the one operation that must see the whole
 // text and the range instead (一键清空), because whether an element is complete
-// depends on the line it sits in.
+// depends on the line it sits in. The same whole-text path is used by reset
+// tap notes, which preserves directives and timing skeletons while replacing
+// each complete selected element.
 struct ChartTransformSpec {
     QString id;
     std::function<QString(const QString& selection, const QString& suffix, int* changed)> apply;
@@ -81,6 +83,9 @@ inline QVector<ChartTransformSpec> chartTransformSpecs()
         {QStringLiteral("transform.clear_complete_elements"),
          {},
          QStringLiteral("menu.clear_elements"), 2},
+        {QStringLiteral("transform.reset_tap_notes"),
+         {},
+         QStringLiteral("menu.reset_tap_notes"), 2},
         {QStringLiteral("transform.toggle_break"),
          selectionOnly(&transform::toggleBreakForSelection),
          QStringLiteral("action.transform.toggle_break"), 3},

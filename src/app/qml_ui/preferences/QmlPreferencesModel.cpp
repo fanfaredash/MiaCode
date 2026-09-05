@@ -175,6 +175,34 @@ void QmlPreferencesModel::setEditorImeDisabled(bool disabled)
     emit editorChanged();
 }
 
+bool QmlPreferencesModel::editorScrollPastEnd() const
+{
+    return settings_ != nullptr && settings_->editorScrollPastEnd();
+}
+
+void QmlPreferencesModel::setEditorScrollPastEnd(bool enabled)
+{
+    if (settings_ == nullptr || enabled == editorScrollPastEnd()) {
+        return;
+    }
+    settings_->setEditorScrollPastEnd(enabled);
+    emit editorChanged();
+}
+
+bool QmlPreferencesModel::editorSelectionBeatDisplay() const
+{
+    return settings_ != nullptr && settings_->editorSelectionBeatDisplay();
+}
+
+void QmlPreferencesModel::setEditorSelectionBeatDisplay(bool enabled)
+{
+    if (settings_ == nullptr || enabled == editorSelectionBeatDisplay()) {
+        return;
+    }
+    settings_->setEditorSelectionBeatDisplay(enabled);
+    emit editorChanged();
+}
+
 bool QmlPreferencesModel::videoDecodePrefersSoftware() const
 {
     return store() != nullptr && store()->videoDecodePrefersSoftware();

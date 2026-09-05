@@ -11,6 +11,7 @@ Rectangle {
     required property var documentSession
     required property var editorController
     required property var syncController
+    property var preferences: null
     property bool metadataMode: false
     // EditorPane must provide effective visibility (including its own host),
     // so an editor retained behind an overlay cannot acknowledge navigation.
@@ -22,6 +23,7 @@ Rectangle {
     property bool pendingNavigationApplied: false
     property var bookmarks: []
     property int pendingBookmarkLine: -1
+    property var selectionBeatSummary: ({ totalCommaCount: 0, parts: [], exact: true })
     // Read-only projection of preview follow while paused or with 代码跟随 off.
     // It paints where the playhead is; it must never move the real caret.
     property bool followDecorationActive: false
@@ -39,6 +41,44 @@ Rectangle {
         publishNavigationReadiness()
         scheduleEditorContext(false)
         applyFollowProjection()
+    }
+
+    function refreshSelectionBeatSummary() {
+        if (root.metadataMode || !root.preferences
+                || !root.preferences.editorSelectionBeatDisplay
+                || !root.documentSession || !root.documentSession.selectionBeatSummary
+                || !sourceArea) {
+            root.selectionBeatSummary = ({ totalCommaCount: 0, parts: [], exact: true })
+            return
+        }
+        root.selectionBeatSummary = root.documentSession.selectionBeatSummary(
+            sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd)
+    }
+
+    function beatSummaryDetail() {
+        const parts = root.selectionBeatSummary.parts || []
+        let values = []
+        for (let index = 0; index < parts.length; ++index)
+            values.push(parts[index].count + "/" + parts[index].denominator)
+        return values.join(" + ")
+    }
+
+    readonly property string selectionBeatStatusText: {
+        const total = Number(root.selectionBeatSummary.totalCommaCount || 0)
+        if (total <= 0)
+            return ""
+        const detail = root.beatSummaryDetail()
+        const value = (root.selectionBeatSummary.parts || []).length > 1
+            ? total + " (" + detail + ")" : detail
+        return UiText.text("document.selection_beats").arg(
+            root.selectionBeatSummary.exact ? value : "~ " + value)
+    }
+    readonly property string selectionBeatTooltipText: {
+        if (root.selectionBeatStatusText.length === 0)
+            return ""
+        return root.selectionBeatSummary.exact
+            ? root.beatSummaryDetail()
+            : UiText.text("document.selection_beats_inexact").arg(root.beatSummaryDetail())
     }
 
     function publishNavigationReadiness() {
@@ -700,6 +740,11 @@ Rectangle {
         // Left-button drag would steal the press TextArea needs to place the
         // caret. Wheel and trackpad still flick, including overshoot.
         acceptedButtons: Qt.NoButton
+        readonly property bool scrollPastEndEnabled:
+            root.preferences ? root.preferences.editorScrollPastEnd : true
+        readonly property real virtualTailHeight:
+            scrollPastEndEnabled ? Math.max(0, height - root.codeLineHeight) : 0
+        contentHeight: sourceArea.contentHeight + virtualTailHeight
         ScrollBar.vertical: AppScrollBar {
             id: editorVScroll
         }
@@ -846,7 +891,10 @@ Rectangle {
                 historyText = text
                 historyAnchor = selectionStart
                 historyPosition = selectionEnd
+                root.refreshSelectionBeatSummary()
             }
+            onSelectionStartChanged: root.refreshSelectionBeatSummary()
+            onSelectionEndChanged: root.refreshSelectionBeatSummary()
             onCursorPositionChanged: {
                 editorScroll.allowScroll = true
                 root.updateCursorPosition()
@@ -1086,6 +1134,11 @@ Rectangle {
     }
 
     Connections {
+        target: root.preferences
+        function onEditorSettingsChanged() { root.refreshSelectionBeatSummary() }
+    }
+
+    Connections {
         target: root.documentSession
         function onChartTextChanged() {
             if (!root.metadataMode)
@@ -1152,6 +1205,7 @@ Rectangle {
     Component.onCompleted: {
         publishNavigationReadiness()
         scheduleEditorContext(false)
+        refreshSelectionBeatSummary()
         applyFollowProjection()
         Qt.callLater(root.bumpFollowLayout)
     }

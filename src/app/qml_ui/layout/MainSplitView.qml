@@ -31,6 +31,8 @@ Item {
     readonly property bool canCut: editorPane.canCut
     readonly property bool canCopy: editorPane.canCopy
     readonly property bool canPaste: editorPane.canPaste
+    readonly property string selectionBeatStatusText: editorPane.selectionBeatStatusText
+    readonly property string selectionBeatTooltipText: editorPane.selectionBeatTooltipText
     // User preference AND backend chart-bottom-tabs mode (export/metadata
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
@@ -224,6 +226,7 @@ Item {
                         viewState: root.viewState
                         documentSession: root.documentSession
                         commands: root.commands
+                        preferences: root.preferences
                     }
 
                     // v2 video export center: QML chrome + ExportVideoController panel surface.

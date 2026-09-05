@@ -216,6 +216,8 @@ public:
     // every one of them found an empty selection and did nothing.
     Q_INVOKABLE QVariantMap transformChartSelection(
         const QString& text, int anchor, int position, const QString& opId) const;
+    Q_INVOKABLE QVariantMap selectionBeatSummary(
+        const QString& text, int anchor, int position) const;
     Q_INVOKABLE QStringList chartTransformIds() const;
     // The same table as rows a menu can render: { id, label, section }. Both
     // the menubar's 调整 menu and the editor's context menu build from this, so
