@@ -1,5 +1,6 @@
 #include "core/scene/PreviewJudgeFireworkLayerState.h"
 
+#include "core/scene/PreviewFireworkWarmupPolicy.h"
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSceneMath.h"
 
@@ -148,7 +149,10 @@ PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
         const qreal triggerSecond = marker.type == QLatin1String("touch")
             ? static_cast<qreal>(marker.second + kJudgeEffectFireworkTouchTriggerDelaySeconds)
             : static_cast<qreal>(marker.endSecond);
-        if (triggerSecond < 0.0) {
+        // At chart start the warm-up is centred at playhead 0, so its deliberate
+        // lead makes the synthetic trigger negative. Keep rejecting real
+        // negative-time notes while allowing the unique off-screen synthetic.
+        if (triggerSecond < 0.0 && !isFireworkWarmupMarker(marker)) {
             continue;
         }
 

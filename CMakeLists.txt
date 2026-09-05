@@ -2375,6 +2375,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/scene/PreviewPreparedSceneCache.cpp
             src/core/scene/PreviewChartReviewLayerState.h
             src/core/scene/PreviewChartReviewLayerState.cpp
+            src/core/scene/PreviewMaimuriDxJudgeLayerState.h
+            src/core/scene/PreviewMaimuriDxJudgeLayerState.cpp
             src/core/scene/PreviewHeadLayerState.h
             src/core/scene/PreviewHeadLayerState.cpp
             src/core/scene/PreviewMarkerDrawOrder.h

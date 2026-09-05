@@ -158,7 +158,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             event.placement = buildJudgeOverlayCircleCwPlacement(lane);
         } else {
             bool useRightImage = false;
-            appendEvent = buildJudgeOverlayStraightPlacement(marker, false, &event.placement, &useRightImage);
+            appendEvent = buildJudgeOverlayStraightPlacement(marker, &event.placement, &useRightImage);
             event.kind = useRightImage
                 ? PreviewChartReviewPreparedKind::StraightRight
                 : PreviewChartReviewPreparedKind::StraightLeft;

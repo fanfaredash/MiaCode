@@ -23,7 +23,9 @@ const float kSectorAlphaScale = 0.9;
 const float kSectorSpanDegrees = 12.0;
 const float kSectorStepDegrees = 24.0;
 const float kSectorPhaseDegrees = -102.0;
-const float kCoreBloomDurationSeconds = 1.0;
+const float kCoreFadeTailStartSeconds = 0.5;
+const float kCoreFadeTailStartAlpha = 0.5;
+const float kCoreFadeEndSeconds = 0.8;
 const int kRenderFlagDrawStripe = 0x1;
 const int kRenderFlagDrawBigBall = 0x2;
 const int kRenderFlagDrawSmallBall = 0x4;
@@ -398,17 +400,27 @@ void main()
     vec4 layerColor = rayLayer * holeMask;
 
     float clipTime = timing.x;
-    // The one-second extension belongs to the coloured spokes. Keep the centre bloom on its
-    // established absolute clock so lengthening the rays does not alter the other effect layer.
-    float coreBloomLife = clamp(clipTime / kCoreBloomDurationSeconds, 0.0, 1.0);
-    float coreRadius = max(7.0, clipRadius * mix(0.045, 0.105, smoothstep(0.0, 0.18, coreBloomLife)));
+    // Match the spokes through 0.5 s, then run the same smooth tail to zero
+    // 0.2 s earlier.
+    float coreLife = timing.y;
+    float coreFade = clamp(fireworkAlpha, 0.0, 1.0);
+    if (clipTime > kCoreFadeTailStartSeconds) {
+        float coreTail01 = clamp(
+            (clipTime - kCoreFadeTailStartSeconds)
+                / (kCoreFadeEndSeconds - kCoreFadeTailStartSeconds),
+            0.0,
+            1.0
+        );
+        coreFade = kCoreFadeTailStartAlpha * (1.0 - smoothstep(0.0, 1.0, coreTail01));
+    }
+    float coreRadius = max(7.0, clipRadius * mix(0.045, 0.105, smoothstep(0.0, 0.18, coreLife)));
     float coreDistance = radius / coreRadius;
     float rayStarted = drawFirework ? 1.0 : 0.0;
-    float bloom = exp(-coreDistance * coreDistance * 1.55)
-        * (1.0 - smoothstep(0.68, 1.0, coreBloomLife)) * rayStarted;
-    float whiteCore = 1.0 - smoothstep(0.0, 0.32, coreDistance);
-    float glowAlpha = clamp(bloom * 0.92 + whiteCore * rayStarted, 0.0, 1.0);
-    vec3 glowColor = mix(vec3(1.0, 0.72, 0.08), vec3(1.0, 1.0, 0.86), whiteCore);
+    float bloom = exp(-coreDistance * coreDistance * 1.55) * coreFade * rayStarted;
+    float whiteCoreShape = 1.0 - smoothstep(0.0, 0.32, coreDistance);
+    float whiteCore = whiteCoreShape * coreFade * rayStarted;
+    float glowAlpha = clamp(bloom * 0.92 + whiteCore, 0.0, 1.0);
+    vec3 glowColor = mix(vec3(1.0, 0.72, 0.08), vec3(1.0, 1.0, 0.86), whiteCoreShape);
     layerColor = compositeSourceOver(vec4(glowColor * glowAlpha, glowAlpha), layerColor);
 
     vec4 stars = rainbowStarLayer(localPos, clipTime, clipRadius, timing.z);
