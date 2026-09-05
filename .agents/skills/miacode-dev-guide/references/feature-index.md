@@ -299,9 +299,6 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   to the legacy auto-close key. Single setter `PlainCodeEditor::setAutoCompletionEnabled`, apply
   `applyEditorAutoCompletionEnabled`, one checkbox ("自动补全") in `MainWindow.PreferencesDialog.cpp`.
   Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the newline), Esc/keep-typing dismiss.
-  Popup anchors use `common/AdoptedWidgetCoordinates`: in ordinary QWidget windows this falls
-  back to `mapToGlobal`; in the macOS QuickShell workspace it maps the caret through the bound
-  bridge surface and adopted `QWindow`, avoiding the stale orphan-NSPanel coordinate origin.
 - **Offset (`&first`) field location:** UIv2 exposes the chart-wide timing offset in the metadata
   form's staged `metadataFirst` field and the difficulty header's immediate
   `currentDifficultyOffset` field in `EditorPane.qml`. Owner is
