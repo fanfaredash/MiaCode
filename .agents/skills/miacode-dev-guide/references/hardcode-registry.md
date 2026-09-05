@@ -20,6 +20,9 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 - `ChartClockCount.h` — shared `&clock_count=` parsing + BPM fallback order; a missing value is materialized as `4` by `SimaiDocument::ensureDefaultClockCount`; consumed by chart metadata, the latency settings UI, and export count-in.
 - `PreviewTimingSettings.h` — persisted preview timing offset layers (`audioOffset`,
   `displayOffset`, `judgeOffset`, `answerOffset`).
+- `src/app/ui/AppBackgroundSettings.h` — application-background opacity range (`10%..80%`),
+  unified panel overlay alpha (`0..255`, default `200`), and the QML blur range
+  (`0..64`, default `0`); `Main.qml` maps this range to `MultiEffect.blur`.
 - `PreviewAudioMixConfig.h` — shared offline mix format (`48 kHz`, stereo).
 - `PreviewSfxTiming.h` — shared runtime/export SFX timing formulas + `1/60 s` pre-trigger.
 - `src/audio/PreviewAudioSettings.h` — SFX aggregation policy + bucket-to-kind gain map. Defaults:

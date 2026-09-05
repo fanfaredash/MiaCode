@@ -155,7 +155,8 @@ ApplicationWindow {
                 layer.enabled: window.applicationContext.appBackground.blur > 0
                 layer.effect: MultiEffect {
                     blurEnabled: true
-                    blur: Math.min(1.0, window.applicationContext.appBackground.blur / 32.0)
+                    blurMax: 64
+                    blur: Math.min(1.0, window.applicationContext.appBackground.blur / 64.0)
                 }
             }
         }

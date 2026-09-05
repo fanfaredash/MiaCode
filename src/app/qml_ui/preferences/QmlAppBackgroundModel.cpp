@@ -169,8 +169,7 @@ int QmlAppBackgroundModel::toolbarAlphaDark() const { return settings_.overlays.
 int QmlAppBackgroundModel::toolbarAlphaLight() const { return settings_.overlays.toolbarAlphaLight; }
 int QmlAppBackgroundModel::statusAlphaDark() const { return settings_.overlays.statusAlphaDark; }
 int QmlAppBackgroundModel::statusAlphaLight() const { return settings_.overlays.statusAlphaLight; }
-int QmlAppBackgroundModel::panelAlphaDark() const { return settings_.overlays.panelAlphaDark; }
-int QmlAppBackgroundModel::panelAlphaLight() const { return settings_.overlays.panelAlphaLight; }
+int QmlAppBackgroundModel::panelAlpha() const { return settings_.overlays.panelAlpha; }
 int QmlAppBackgroundModel::cardAlphaDark() const { return settings_.overlays.cardAlphaDark; }
 int QmlAppBackgroundModel::cardAlphaLight() const { return settings_.overlays.cardAlphaLight; }
 int QmlAppBackgroundModel::editorHeaderAlphaDark() const { return settings_.overlays.editorHeaderAlphaDark; }
@@ -191,8 +190,7 @@ BACKGROUND_ALPHA_SETTER(setToolbarAlphaDark, toolbarAlphaDark)
 BACKGROUND_ALPHA_SETTER(setToolbarAlphaLight, toolbarAlphaLight)
 BACKGROUND_ALPHA_SETTER(setStatusAlphaDark, statusAlphaDark)
 BACKGROUND_ALPHA_SETTER(setStatusAlphaLight, statusAlphaLight)
-BACKGROUND_ALPHA_SETTER(setPanelAlphaDark, panelAlphaDark)
-BACKGROUND_ALPHA_SETTER(setPanelAlphaLight, panelAlphaLight)
+BACKGROUND_ALPHA_SETTER(setPanelAlpha, panelAlpha)
 BACKGROUND_ALPHA_SETTER(setEditorHeaderAlphaDark, editorHeaderAlphaDark)
 BACKGROUND_ALPHA_SETTER(setEditorHeaderAlphaLight, editorHeaderAlphaLight)
 BACKGROUND_ALPHA_SETTER(setInputAlphaDark, inputAlphaDark)
@@ -275,8 +273,7 @@ bool QmlAppBackgroundModel::commit(const Settings& candidate)
         || old.overlays.toolbarAlphaLight != settings_.overlays.toolbarAlphaLight
         || old.overlays.statusAlphaDark != settings_.overlays.statusAlphaDark
         || old.overlays.statusAlphaLight != settings_.overlays.statusAlphaLight
-        || old.overlays.panelAlphaDark != settings_.overlays.panelAlphaDark
-        || old.overlays.panelAlphaLight != settings_.overlays.panelAlphaLight
+        || old.overlays.panelAlpha != settings_.overlays.panelAlpha
         || old.overlays.editorHeaderAlphaDark != settings_.overlays.editorHeaderAlphaDark
         || old.overlays.editorHeaderAlphaLight != settings_.overlays.editorHeaderAlphaLight
         || old.overlays.inputAlphaDark != settings_.overlays.inputAlphaDark

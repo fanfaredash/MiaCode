@@ -24,13 +24,12 @@ bool near(double actual, double expected)
 bool testDefaultsAndNormalization(QTextStream& out)
 {
     const miacode::ui::AppBackgroundSettings defaults;
-    if (!require(!defaults.enabled && near(defaults.opacity, 0.2)
+    if (!require(!defaults.enabled && near(defaults.opacity, 0.2) && defaults.blur == 0
                      && defaults.overlays.toolbarAlphaDark == 200
                      && defaults.overlays.toolbarAlphaLight == 210
                      && defaults.overlays.statusAlphaDark == 210
                      && defaults.overlays.statusAlphaLight == 220
-                     && defaults.overlays.panelAlphaDark == 200
-                     && defaults.overlays.panelAlphaLight == 200
+                     && defaults.overlays.panelAlpha == 200
                      && defaults.overlays.cardAlphaDark == 255
                      && defaults.overlays.cardAlphaLight == 255
                      && defaults.overlays.editorHeaderAlphaDark == 190
@@ -67,14 +66,16 @@ bool testJsonContract(QTextStream& out)
         {QStringLiteral("overlay_alpha"), QJsonObject{
             {QStringLiteral("toolbar_dark"), 42},
             {QStringLiteral("toolbar_light"), 43},
+            {QStringLiteral("panel"), 180},
             {QStringLiteral("card_dark"), 12},
             {QStringLiteral("card_light"), 13},
         }},
     };
     const auto settings = miacode::ui::appBackgroundSettingsFromJson(object);
     if (!require(settings.enabled && settings.imagePath == QStringLiteral("/tmp/background.png")
-                     && near(settings.opacity, 0.0)
-                     && settings.blur == 0
+                     && near(settings.opacity, 0.1)
+                     && settings.blur == 12
+                     && settings.overlays.panelAlpha == 180
                      && settings.sizeMode == miacode::ui::AppBackgroundSizeMode::Cover
                      && settings.position == miacode::ui::AppBackgroundPosition::LeftTop
                      && settings.overlays.toolbarAlphaDark == 42

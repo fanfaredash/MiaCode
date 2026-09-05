@@ -169,15 +169,22 @@ AppDialog {
                 wrapMode: Text.WordWrap
             }
             LabeledSlider {
-                label: UiText.text("不透明度")
-                from: 0; to: 1; stepSize: 0.01
+                label: UiText.text("图片不透明度")
+                from: 0.1; to: 0.8; stepSize: 0.01
                 value: root.appBackground.opacity
                 readout: Math.round(root.appBackground.opacity * 100) + "%"
                 onMoved: function(value) { root.appBackground.opacity = value }
             }
             LabeledSlider {
-                label: UiText.text("模糊")
-                from: 0; to: 32; stepSize: 1
+                label: UiText.text("背景蒙版不透明度")
+                from: 0; to: 1; stepSize: 0.01
+                value: root.appBackground.panelAlpha / 255.0
+                readout: Math.round(root.appBackground.panelAlpha / 255.0 * 100) + "%"
+                onMoved: function(value) { root.appBackground.panelAlpha = Math.round(value * 255) }
+            }
+            LabeledSlider {
+                label: UiText.text("模糊半径")
+                from: 0; to: 64; stepSize: 1
                 value: root.appBackground.blur
                 readout: Math.round(root.appBackground.blur)
                 onMoved: function(value) { root.appBackground.blur = Math.round(value) }
@@ -195,16 +202,6 @@ AppDialog {
                 onPicked: function(value) { root.appBackground.position = value }
             }
 
-            Text {
-                Layout.fillWidth: true
-                text: UiText.text("背景覆盖层")
-                color: Theme.colors.text.active
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.uiFontSize
-                font.bold: true
-            }
-            LabeledSlider { label: UiText.text("面板（深色）"); from: 0; to: 255; value: root.appBackground.panelAlphaDark; readout: root.appBackground.panelAlphaDark; onMoved: function(v) { root.appBackground.panelAlphaDark = Math.round(v) } }
-            LabeledSlider { label: UiText.text("面板（浅色）"); from: 0; to: 255; value: root.appBackground.panelAlphaLight; readout: root.appBackground.panelAlphaLight; onMoved: function(v) { root.appBackground.panelAlphaLight = Math.round(v) } }
         }
 
         // ---- 编辑器 ----
