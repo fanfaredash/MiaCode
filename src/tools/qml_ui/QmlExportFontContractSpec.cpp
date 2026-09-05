@@ -43,11 +43,17 @@ bool verifyQmlFontContract(QTextStream& err)
         QStringLiteral("src/tools/video_export/FontLibrary.h"));
     const QString fontLibraryImplementation = readSource(
         QStringLiteral("src/tools/video_export/FontLibrary.cpp"));
+    const QString previewHudStateHeader = readSource(
+        QStringLiteral("src/core/scene/PreviewHudState.h"));
+    const QString previewHudStateImplementation = readSource(
+        QStringLiteral("src/core/scene/PreviewHudState.cpp"));
     bool ok = require(!header.isEmpty() && !implementation.isEmpty() && !page.isEmpty()
                           && !previewSettingsHeader.isEmpty()
                           && !previewSettingsImplementation.isEmpty()
                           && !previewSettingsDialog.isEmpty() && !fontLibraryHeader.isEmpty()
-                          && !fontLibraryImplementation.isEmpty(),
+                          && !fontLibraryImplementation.isEmpty()
+                          && !previewHudStateHeader.isEmpty()
+                          && !previewHudStateImplementation.isEmpty(),
                       QStringLiteral("the QML font settings sources are readable"), err);
 
     for (const QString& contract : {
@@ -82,6 +88,21 @@ bool verifyQmlFontContract(QTextStream& err)
                 QStringLiteral("void miacode::runtime::PlaybackCoordinator::refreshSurfaces()"))
             && playbackSurfaceContract.contains(QStringLiteral("scene_->update()")),
         QStringLiteral("the export session uses the shared library and redraws the live preview"),
+        err);
+    ok &= require(
+        implementation.contains(QStringLiteral("previewHudFontAreaChoices()"))
+            && previewSettingsImplementation.contains(
+                QStringLiteral("previewHudFontAreaChoices()"))
+            && implementation.contains(QStringLiteral("QStringLiteral(\"areaId\")"))
+            && previewSettingsImplementation.contains(QStringLiteral("QStringLiteral(\"areaId\")"))
+            && previewHudStateHeader.contains(QStringLiteral("CenterDisplay"))
+            && previewHudStateImplementation.contains(
+                QStringLiteral("hud_font_area.center_display"))
+            && !implementation.contains(
+                QStringLiteral("static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_)"))
+            && !previewSettingsImplementation.contains(
+                QStringLiteral("static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_)")),
+        QStringLiteral("export and preview settings share areaId mapping, including CenterDisplay, without index-to-enum casts"),
         err);
     ok &= require(
         !implementation.contains(QStringLiteral("QFileDialog"))

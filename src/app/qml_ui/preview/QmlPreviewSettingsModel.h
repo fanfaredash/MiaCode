@@ -85,7 +85,7 @@ public:
     int outlineIndex() const;
     QVariantList fontLibraryOptions() const;
     QVariantList hudFontAreaOptions() const;
-    int hudFontAreaIndex() const { return hudFontAreaIndex_; }
+    int hudFontAreaIndex() const;
     QString hudFontPath() const;
     QString hudFontSample() const;
 
@@ -120,7 +120,7 @@ private:
     {
         return surfaceSlot_ != nullptr ? *surfaceSlot_ : nullptr;
     }
-    int hudFontAreaIndex_ = 0;
+    int hudFontAreaId_ = 0;
 };
 
 }  // namespace miacode::qml_ui

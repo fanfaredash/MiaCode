@@ -45,6 +45,8 @@ QString hudFontAreaKey(miacode::preview::scene::PreviewHudFontArea area)
         return QStringLiteral("chart_info");
     case PreviewHudFontArea::Timestamp:
         return QStringLiteral("timestamp");
+    case PreviewHudFontArea::CenterDisplay:
+        return QStringLiteral("center_display");
     case PreviewHudFontArea::ObjectStats:
         return QStringLiteral("object_stats");
     case PreviewHudFontArea::DebugInfo:
@@ -381,6 +383,54 @@ QString previewHudFontDisplayName(PreviewHudFontArea area)
 QString previewHudFontDisplayName()
 {
     return previewHudFontDisplayName(PreviewHudFontArea::Timestamp);
+}
+
+QVector<PreviewHudFontAreaChoice> previewHudFontAreaChoices()
+{
+    return {
+        {PreviewHudFontArea::ChartInfo,
+         "dialog.video_export.option.hud_font_area.chart_info",
+         "Title / Artist / MASTER 13+ / Designer"},
+        {PreviewHudFontArea::Timestamp,
+         "dialog.video_export.option.hud_font_area.timestamp",
+         "12:34:567"},
+        {PreviewHudFontArea::CenterDisplay,
+         "dialog.video_export.option.hud_font_area.center_display",
+         "ACHIEVEMENT DX  100.0000%"},
+        {PreviewHudFontArea::ObjectStats,
+         "dialog.video_export.option.hud_font_area.object_stats",
+         "DELUXE Rate: 101.0000%  TAP: 128/128"},
+        {PreviewHudFontArea::DebugInfo,
+         "dialog.video_export.option.hud_font_area.debug",
+         "Present: 60.0 FPS  max=17ms"},
+    };
+}
+
+int previewHudFontAreaId(PreviewHudFontArea area)
+{
+    return static_cast<int>(area);
+}
+
+PreviewHudFontArea previewHudFontAreaFromId(int areaId)
+{
+    const QVector<PreviewHudFontAreaChoice> choices = previewHudFontAreaChoices();
+    for (const PreviewHudFontAreaChoice& choice : choices) {
+        if (previewHudFontAreaId(choice.area) == areaId) {
+            return choice.area;
+        }
+    }
+    return PreviewHudFontArea::ChartInfo;
+}
+
+int previewHudFontAreaIndex(PreviewHudFontArea area)
+{
+    const QVector<PreviewHudFontAreaChoice> choices = previewHudFontAreaChoices();
+    for (int index = 0; index < choices.size(); ++index) {
+        if (choices.at(index).area == area) {
+            return index;
+        }
+    }
+    return 0;
 }
 
 void setPreviewHudCustomFontPath(PreviewHudFontArea area, const QString& fontPath)

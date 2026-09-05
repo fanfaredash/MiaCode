@@ -33,8 +33,15 @@ struct PreviewHudStats {
 enum class PreviewHudFontArea {
     ChartInfo,
     Timestamp,
+    CenterDisplay,
     ObjectStats,
     DebugInfo,
+};
+
+struct PreviewHudFontAreaChoice {
+    PreviewHudFontArea area;
+    const char* labelKey;
+    const char* sample;
 };
 
 PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMarkers, double second);
@@ -54,5 +61,9 @@ QFont previewHudMonoFontForArea(
     QFont::Weight weight = QFont::Medium);
 QString previewHudFontDisplayName(PreviewHudFontArea area);
 void setPreviewHudCustomFontPath(PreviewHudFontArea area, const QString& fontPath);
+QVector<PreviewHudFontAreaChoice> previewHudFontAreaChoices();
+int previewHudFontAreaId(PreviewHudFontArea area);
+PreviewHudFontArea previewHudFontAreaFromId(int areaId);
+int previewHudFontAreaIndex(PreviewHudFontArea area);
 
 }  // namespace miacode::preview::scene

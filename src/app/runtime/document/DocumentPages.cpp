@@ -155,28 +155,17 @@ bool miacode::runtime::DocumentSessionHost::switchToExportField()
 void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
 {
     const int previousActiveDifficultyId = state_.activeDifficultyId_;
-    // Carry the current preview position INTO the export audition so it doesn't
-    // snap to 0 — matching the difficulty-tab switch (which preserves progress
-    // when a difficulty / the latency page was active before the switch). Read
-    // the authoritative clock while it is still live (before stopQtPreviewPlayback
-    // below); installExportPreviewAuditionScene consumes this one-shot seed.
-    // The metadata (谱面信息) page keeps no audition, but leaving a difficulty for
-    // it stopped playback with keepPosition=true, so pauseSecond_ still
-    // holds the last position — carry it into the export page too. Source detected
-    // from the stack (currentWidget is still the page we're LEAVING; the switch to
-    // the export field happens later), because activeOutlineKey_ was already overwritten
-    // with the destination by the sidebar handler. A stale cross-file value is
-    // guarded by loadDocument resetting pauseSecond_ to 0.
-    const bool leavingMetadataPage = state_.activeOutlineKey_ == QLatin1String("metadata");
-    const bool restoreEntryPreview = session_.hasActiveDifficulty()
-        || state_.latencySandboxAuditionActive_
-        || state_.exportPreviewAuditionActive_   // re-entering export from export (sidebar re-click)
-        || leavingMetadataPage;
-    state_.exportPreviewEntrySeedSecond_ = restoreEntryPreview
+    // A first export-page entry is a WYSIWYG preview of the complete export and
+    // therefore starts at chart time zero (the intro policy may then move it to
+    // the negative intro head). Only an export-page re-entry carries the live
+    // position; ExportSnapshot consumes this one-shot seed exactly once, while
+    // same-page panel rebuilds use their existing pause-position branch.
+    const bool reenteringExport = state_.exportPreviewAuditionActive_;
+    state_.exportPreviewEntrySeedSecond_ = reenteringExport
         ? qMax(0.0, state_.playing_
               ? session_.currentPreviewAuthoritativeAudioClockSecond()
               : state_.pauseSecond_)
-        : -1.0;
+        : 0.0;
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites

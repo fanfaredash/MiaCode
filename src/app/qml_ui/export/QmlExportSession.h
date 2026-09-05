@@ -169,7 +169,7 @@ public:
     QVariantList outlineOptions() const;
     int outlineIndex() const;
     QVariantList hudFontAreaOptions() const;
-    int hudFontAreaIndex() const { return hudFontAreaIndex_; }
+    int hudFontAreaIndex() const;
     QString hudFontPath() const;
     QString hudFontSample() const;
 
@@ -342,7 +342,7 @@ private:
     VideoExportTask task_;
     double chartDurationSeconds_ = 0.0;
     int resolutionIndex_ = 1;
-    int hudFontAreaIndex_ = 0;
+    int hudFontAreaId_ = 0;
     QStringList chartDirectories_;
     QList<int> batchSelectedDifficultyIds_;
     QString batchOutputDirectory_;

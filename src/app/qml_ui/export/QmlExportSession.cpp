@@ -320,36 +320,33 @@ int QmlExportSession::outlineIndex() const
 
 QVariantList QmlExportSession::hudFontAreaOptions() const
 {
-    return QVariantList{
-        QVariantMap{
-            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.chart_info"))},
-            {QStringLiteral("sample"), QStringLiteral("Title / Artist / MASTER 13+ / Designer")},
-        },
-        QVariantMap{
-            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.timestamp"))},
-            {QStringLiteral("sample"), QStringLiteral("12:34:567")},
-        },
-        QVariantMap{
-            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.object_stats"))},
-            {QStringLiteral("sample"), QStringLiteral("DELUXE Rate: 101.0000%  TAP: 128/128")},
-        },
-        QVariantMap{
-            {QStringLiteral("label"), UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.debug"))},
-            {QStringLiteral("sample"), QStringLiteral("Present: 60.0 FPS  max=17ms")},
-        },
-    };
+    QVariantList result;
+    for (const auto& choice : miacode::preview::scene::previewHudFontAreaChoices()) {
+        result.append(QVariantMap{
+            {QStringLiteral("label"), UiText::text(QLatin1String(choice.labelKey))},
+            {QStringLiteral("sample"), QLatin1String(choice.sample)},
+            {QStringLiteral("areaId"), miacode::preview::scene::previewHudFontAreaId(choice.area)},
+        });
+    }
+    return result;
+}
+
+int QmlExportSession::hudFontAreaIndex() const
+{
+    return miacode::preview::scene::previewHudFontAreaIndex(
+        miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_));
 }
 
 QString QmlExportSession::hudFontPath() const
 {
     return miacode::preview::scene::previewHudCustomFontPath(
-        static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_));
+        miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_));
 }
 
 QString QmlExportSession::hudFontSample() const
 {
     const QVariantList areas = hudFontAreaOptions();
-    return areas.at(qBound(0, hudFontAreaIndex_, static_cast<int>(areas.size()) - 1))
+    return areas.at(qBound(0, hudFontAreaIndex(), static_cast<int>(areas.size()) - 1))
         .toMap().value(QStringLiteral("sample")).toString();
 }
 
@@ -1349,17 +1346,21 @@ void QmlExportSession::setOutlineIndex(int index)
 
 void QmlExportSession::setHudFontAreaIndex(int index)
 {
-    const int normalized = qBound(0, index, 3);
-    if (hudFontAreaIndex_ == normalized) {
+    const auto choices = miacode::preview::scene::previewHudFontAreaChoices();
+    if (choices.isEmpty()) return;
+    const int normalized = qBound(0, index, choices.size() - 1);
+    const int nextAreaId = miacode::preview::scene::previewHudFontAreaId(
+        choices.at(normalized).area);
+    if (hudFontAreaId_ == nextAreaId) {
         return;
     }
-    hudFontAreaIndex_ = normalized;
+    hudFontAreaId_ = nextAreaId;
     emit hudFontChanged();
 }
 
 void QmlExportSession::setHudFontPath(const QString& path)
 {
-    const auto area = static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_);
+    const auto area = miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_);
     if (miacode::preview::scene::previewHudCustomFontPath(area) == path) {
         return;
     }

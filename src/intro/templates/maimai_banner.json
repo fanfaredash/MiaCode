@@ -120,9 +120,9 @@
   "colors": {
     "titleOnDark":      "#FFFFFF",
     "artistOnDark":     "#E8E4F5",
-    "designerOnWhite":  "#8091AE",
+    "designerOnWhite":  "#365B84",
     "bpmOnWhite":       "#4F4F4F",
-    "labelOnWhite":     "#0E2A60",
+    "labelOnWhite":     "#244A78",
     "lvNumber":         "#FFFFFF",
     "lvNumberShadow":   "#3A1060",
     "placeholderFill":  "#DDD9D2",
