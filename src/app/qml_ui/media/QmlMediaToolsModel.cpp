@@ -183,7 +183,7 @@ void QmlMediaToolsModel::startBatchCompression()
     const bool hasCompressibleVideo = std::any_of(
         jobs_.cbegin(), jobs_.cend(), [](const miacode::media::PvCompressionJob& job) {
             return !job.videoPath.isEmpty()
-                && job.originalBytes > miacode::media::kPvCompressionTargetBytes;
+                && job.originalBytes >= miacode::media::kPvCompressionHardLimitBytes;
         });
     if (!hasCompressibleVideo) {
         requests->postNotice(

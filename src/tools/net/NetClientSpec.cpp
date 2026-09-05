@@ -138,11 +138,11 @@ int main(int argc, char** argv)
     QDir().mkpath(nestedBgChart);
     QFile largePv(QDir(largePvChart).filePath(QStringLiteral("PV.MP4")));
     ok &= check(largePv.open(QIODevice::WriteOnly), "large PV fixture opens");
-    ok &= check(largePv.resize(miacode::media::kPvCompressionTargetBytes + 1), "large PV fixture is over target");
+    ok &= check(largePv.resize(miacode::media::kPvCompressionHardLimitBytes + 1), "large PV fixture is over target");
     largePv.close();
     QFile smallPv(QDir(smallPvChart).filePath(QStringLiteral("pv.mp4")));
     ok &= check(smallPv.open(QIODevice::WriteOnly), "small PV fixture opens");
-    ok &= check(smallPv.resize(miacode::media::kPvCompressionTargetBytes), "small PV fixture is at target");
+    ok &= check(smallPv.resize(miacode::media::kPvCompressionHardLimitBytes), "small PV fixture is at target");
     smallPv.close();
     ok &= check(writeFixtureFile(QDir(nestedBgChart).filePath(QStringLiteral("bg.mp4"))), "nested bg fixture");
     ok &= check(writeFixtureFile(QDir(nestedBgChart).filePath(QStringLiteral("pv.mp4"))), "nested pv fixture");

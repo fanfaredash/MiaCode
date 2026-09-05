@@ -75,13 +75,13 @@ AppDialog {
         ToolRow {
             objectName: "mediaToolCompressVideo"
             label: UiText.text("压缩视频")
-            description: UiText.text("将背景视频压缩至 20 MiB 以内，并自动备份原文件。")
+            description: UiText.text("media_tools.compress_the_background_video_under")
             onClicked: root.mediaTools.compressBackgroundVideo()
         }
         ToolRow {
             objectName: "mediaToolBatchPv"
             label: UiText.text("批量压缩视频")
-            description: UiText.text("选择目录并批量压缩其中的背景视频。")
+            description: UiText.text("media_tools.batch_pv_description")
             onClicked: batchPage.open()
         }
     }

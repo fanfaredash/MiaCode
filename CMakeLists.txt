@@ -358,6 +358,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/zip_export/ChartZipPackager.cpp
     src/tools/media/PvBatchCompressionScanner.h
     src/tools/media/PvBatchCompressionScanner.cpp
+    src/tools/media/PvCompressionPolicy.h
+    src/tools/media/PvCompressionPolicy.cpp
     src/tools/media/PvBatchCompressionWorker.h
     src/tools/media/PvBatchCompressionWorker.cpp
     src/tools/cover_export/CoverLayoutModel.h
@@ -2957,6 +2959,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/ChartAssetPaths.h
         LIBS Qt6::Core Qt6::Network miniz
         INCLUDES src src/common src/tools src/app/ui
+    )
+
+    miacode_add_dev_tool(pv_compression_policy_spec TEST
+        SOURCES
+            src/tools/media/PvCompressionPolicySpec.cpp
+            src/tools/media/PvCompressionPolicy.h
+            src/tools/media/PvCompressionPolicy.cpp
+        LIBS Qt6::Core
+        INCLUDES src
     )
 
     # Drift guard: every MIACODE_* env flag read in src/ must be documented in
