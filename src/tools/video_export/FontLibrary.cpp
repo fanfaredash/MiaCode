@@ -60,6 +60,39 @@ QString fontFamilyForFile(const QString& path)
 
 QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault, const QString& defaultLabel)
 {
+    QDir dir(fontLibraryDirPath());
+    const QFileInfoList files = dir.entryInfoList(
+        QStringList{QStringLiteral("*.ttf"), QStringLiteral("*.otf")},
+        QDir::Files | QDir::Readable,
+        QDir::Name | QDir::IgnoreCase
+    );
+
+    // The QML export page asks for the same model from several independent
+    // combo-box bindings. Keep the directory enumeration as the cheap change
+    // detector, but avoid rebuilding and re-registering the same entry list
+    // for every getter call. mtime/size invalidates the cache after an import
+    // or an edited library file; the localized default label is part of the
+    // key because the application can switch languages without restarting in
+    // tests and embedded shells.
+    QString signature;
+    signature.reserve(files.size() * 48);
+    for (const QFileInfo& file : files) {
+        signature += file.absoluteFilePath();
+        signature += QLatin1Char('\0');
+        signature += QString::number(file.lastModified().toMSecsSinceEpoch());
+        signature += QLatin1Char(':');
+        signature += QString::number(file.size());
+        signature += QLatin1Char('\n');
+    }
+    static QString cachedSignature;
+    static QString cachedDefaultLabel;
+    static bool cachedIncludeDefault = false;
+    static QVector<FontLibraryEntry> cachedEntries;
+    if (cachedSignature == signature && cachedIncludeDefault == includeDefault
+        && cachedDefaultLabel == defaultLabel) {
+        return cachedEntries;
+    }
+
     QVector<FontLibraryEntry> entries;
     if (includeDefault) {
         entries.push_back({
@@ -68,13 +101,6 @@ QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault, const QString&
             QString()
         });
     }
-
-    QDir dir(fontLibraryDirPath());
-    const QFileInfoList files = dir.entryInfoList(
-        QStringList{QStringLiteral("*.ttf"), QStringLiteral("*.otf")},
-        QDir::Files | QDir::Readable,
-        QDir::Name | QDir::IgnoreCase
-    );
     for (const QFileInfo& file : files) {
         const QString path = file.absoluteFilePath();
         const QString family = fontFamilyForFile(path);
@@ -87,6 +113,10 @@ QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault, const QString&
             family
         });
     }
+    cachedSignature = signature;
+    cachedIncludeDefault = includeDefault;
+    cachedDefaultLabel = defaultLabel;
+    cachedEntries = entries;
     return entries;
 }
 

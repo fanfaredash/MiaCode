@@ -532,6 +532,10 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
     _mc_op_.note(QStringLiteral("path=%1 dur=%2")
                      .arg(normalizedPath)
                      .arg(knownTrackDurationSeconds, 0, 'f', 3));
+    // Unified-designer preference persistence is detached pending a v1
+    // behavior review. A newly opened document therefore starts with the
+    // explicit runtime mode off, without touching the loaded save point.
+    state_.unifiedDesignerEnabled_ = false;
     state_.currentEncoding_ = encodingUsed;
     session_.applyWaveformData(
         miacode::waveform::makeWaveformPlaceholder(

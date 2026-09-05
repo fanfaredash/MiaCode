@@ -126,6 +126,10 @@ int main(int argc, char** argv)
                && page.contains(QStringLiteral("chartSceneBinder"))
                && page.contains(QStringLiteral("toggleActiveLayerPlayback"))
                && page.contains(QStringLiteral("exportCover()"))
+               && page.contains(QStringLiteral("canvasZoom"))
+               && page.contains(QStringLiteral("Ctrl+0"))
+               && page.contains(QStringLiteral("Ctrl++"))
+               && page.contains(QStringLiteral("Ctrl+-"))
                && !page.contains(QStringLiteral("qsTr(")),
            QStringLiteral("the QML page owns composer interaction, chart playback, export and localization"), out, &failed);
     // The session used to export nine invokables the page never called, so the
@@ -142,6 +146,8 @@ int main(int argc, char** argv)
              QStringLiteral("setActiveLayerFrameBackgroundBrightness("),
              QStringLiteral("setActiveLayerFrameBackgroundTransparency("),
              QStringLiteral("longTextMode"),
+             QStringLiteral("applyBuiltinPreset("),
+             QStringLiteral("renamePreset("),
          }) {
         if (!page.contains(call)) unreachable.append(call);
     }
@@ -174,6 +180,9 @@ int main(int argc, char** argv)
              QStringLiteral("Q_INVOKABLE void beginActiveLayerKeySeek("),
              QStringLiteral("Q_INVOKABLE void endActiveLayerKeySeek()"),
              QStringLiteral("Q_INVOKABLE void bindLiveChartScene("),
+             QStringLiteral("Q_INVOKABLE void applyBuiltinPreset("),
+             QStringLiteral("Q_INVOKABLE void renamePreset("),
+             QStringLiteral("Q_PROPERTY(QVariantList builtinPresets"),
          }) {
         expect(sessionHeader.contains(contract),
                QStringLiteral("cover session exposes %1").arg(contract), out, &failed);
@@ -254,7 +263,7 @@ int main(int argc, char** argv)
            out, &failed);
 
     const int applyStart = session.indexOf(
-        QStringLiteral("bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool reportErrors)"));
+        QStringLiteral("bool QmlCoverExportSession::applyCompositionJsonInternal(const QJsonObject& root,"));
     const int applyOpen = session.indexOf(QLatin1Char('{'), applyStart);
     const int applyClose = matchingBrace(session, applyOpen);
     const QString applyBody = applyOpen >= 0 && applyClose > applyOpen
@@ -265,6 +274,19 @@ int main(int argc, char** argv)
                && applyBody.contains(QStringLiteral("firstVisibleFrameKey"))
                && applyBody.contains(QStringLiteral("activeLayerKey_ = firstVisibleFrameKey")),
            QStringLiteral("layout restore promotes the first visible chart frame to the live active layer"),
+           out, &failed);
+
+    const int applyWrapperStart = session.indexOf(
+        QStringLiteral("bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool reportErrors)"));
+    const int applyWrapperOpen = session.indexOf(QLatin1Char('{'), applyWrapperStart);
+    const int applyWrapperClose = matchingBrace(session, applyWrapperOpen);
+    const QString applyWrapperBody = applyWrapperOpen >= 0 && applyWrapperClose > applyWrapperOpen
+                                         ? session.mid(applyWrapperOpen, applyWrapperClose - applyWrapperOpen)
+                                         : QString();
+    expect(applyWrapperBody.contains(QStringLiteral("previousFrameImages"))
+               && applyWrapperBody.contains(QStringLiteral("applyCompositionJsonInternal(previous, false, false)"))
+               && applyWrapperBody.contains(QStringLiteral("return false")),
+           QStringLiteral("failed cover layout application restores the previous composition atomically"),
            out, &failed);
 
     const int renderStart = session.indexOf(
@@ -338,6 +360,16 @@ int main(int argc, char** argv)
                && canvasTab >= 0 && canvasTab < layerTab && layerTab < presetTab
                && !page.contains(QStringLiteral("text: UiText.text(\"cover.difficulty_card\")")),
            QStringLiteral("the inspector exposes exactly canvas, layer and preset tabs in order"), out,
+           &failed);
+    expect(session.contains(QStringLiteral("card_chart_frame"))
+               && session.contains(QStringLiteral("dual_chart_frames"))
+               && session.contains(QStringLiteral("pure_chart_frame"))
+               && session.contains(QStringLiteral("0.64"))
+               && session.contains(QStringLiteral("0.30"))
+               && session.contains(QStringLiteral("0.92"))
+               && page.contains(QStringLiteral("builtinPresets"))
+               && page.contains(QStringLiteral("cover.rename_preset")),
+           QStringLiteral("cover exposes the four built-in layouts and user preset rename"), out,
            &failed);
 
     const int layerSection = page.indexOf(QStringLiteral("// ---- 图层 ----"));

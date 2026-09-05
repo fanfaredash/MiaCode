@@ -267,6 +267,20 @@ void runSpecs(QTextStream& out, int* failed)
         expectTrue(!inUnmanaged, "parseUnmanagedFields hides miacode_bookmarks", failed, out);
     }
 
+    // --- Dedicated &clock_count is not shown again in "Other &xx Fields". ---
+    {
+        const QVector<SimaiRawField> unmanaged = SimaiDocument::parseUnmanagedFields(
+            "&title=Song\n&first=0\n&clock_count=6\n&custom=value\n");
+        bool hasClockCount = false;
+        bool hasCustom = false;
+        for (const SimaiRawField& field : unmanaged) {
+            hasClockCount = hasClockCount || field.key == QLatin1String("clock_count");
+            hasCustom = hasCustom || field.key == QLatin1String("custom");
+        }
+        expectTrue(!hasClockCount, "parseUnmanagedFields hides dedicated clock_count", failed, out);
+        expectTrue(hasCustom, "parseUnmanagedFields keeps unrelated extra fields", failed, out);
+    }
+
     // --- Bad/empty obsolete bookmark payload never blocks parsing and is never emitted. ---
     {
         const QString src =

@@ -258,12 +258,12 @@ Item {
 
     Shortcut {
         sequence: StandardKey.Close
-        onActivated: state.closeActiveEditor()
+        onActivated: splitView.requestCloseActiveEditor()
     }
 
     Shortcut {
         sequence: "Ctrl+F4"
-        onActivated: state.closeActiveEditor()
+        onActivated: splitView.requestCloseActiveEditor()
     }
 
     FileDialog {

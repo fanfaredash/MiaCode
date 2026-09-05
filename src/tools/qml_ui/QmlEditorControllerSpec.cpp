@@ -916,6 +916,7 @@ bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
 
             QtObject {
                 id: documentSession
+                objectName: "fakeDocumentSession"
                 property var difficulties: [
                     { id: 5, label: "BASIC", designer: "" },
                     { id: 6, label: "ADVANCED", designer: "" },
@@ -924,8 +925,14 @@ bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
                 property var dirtyEditorKeys: []
                 property string currentFilePath: ""
                 property string currentFileName: ""
+                property int revertCalls: 0
+                property int lastRevertDifficultyId: -1
                 function saveDifficultySection(difficultyId) { return true }
-                function revertDifficultyChart(difficultyId) { return true }
+                function revertDifficultyChart(difficultyId) {
+                    revertCalls += 1
+                    lastRevertDifficultyId = difficultyId
+                    return true
+                }
             }
 
             QtObject { id: commands }
@@ -982,7 +989,8 @@ bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, QPoint(240, 17));
     QCoreApplication::processEvents();
 
-    return expect(state->property("openEditorTabs").toStringList()
+    const QStringList swappedTabs = state->property("openEditorTabs").toStringList();
+    bool ok = expect(swappedTabs
                       == QStringList{QStringLiteral("difficulty:5"),
                                      QStringLiteral("metadata"),
                                      QStringLiteral("difficulty:6")}
@@ -990,6 +998,41 @@ bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
                           == QStringLiteral("difficulty:6"),
                   QStringLiteral("dragging metadata onto a difficulty swaps only their order"),
                   out, failed);
+
+    QObject* tabBar = window->findChild<QObject*>(QStringLiteral("editorTabBar"));
+    QObject* documentSession = window->findChild<QObject*>(QStringLiteral("fakeDocumentSession"));
+    QObject* closeDialog = window->findChild<QObject*>(QStringLiteral("editorTabCloseDialog"));
+    ok &= expect(tabBar != nullptr && documentSession != nullptr && closeDialog != nullptr,
+                 QStringLiteral("editor-tab harness exposes the close guard and document stub"),
+                 out, failed);
+    if (tabBar != nullptr && documentSession != nullptr && closeDialog != nullptr) {
+        documentSession->setProperty("dirtyEditorKeys", QStringList{QStringLiteral("metadata")});
+        QMetaObject::invokeMethod(tabBar, "requestCloseTab",
+                                  Q_ARG(QVariant, QVariant(QStringLiteral("metadata"))));
+        QCoreApplication::processEvents();
+        ok &= expect(closeDialog->property("visible").toBool(),
+                     QStringLiteral("a dirty metadata tab opens the close confirmation"),
+                     out, failed);
+        QMetaObject::invokeMethod(closeDialog, "resolve",
+                                  Q_ARG(QVariant, QVariant(QStringLiteral("cancel"))));
+        QTest::qWait(120);
+        QCoreApplication::processEvents();
+        ok &= expect(state->property("openEditorTabs").toStringList().contains(QStringLiteral("metadata")),
+                     QStringLiteral("cancelling a metadata-tab close keeps the tab open"), out, failed);
+
+        QMetaObject::invokeMethod(tabBar, "requestCloseTab",
+                                  Q_ARG(QVariant, QVariant(QStringLiteral("metadata"))));
+        QTest::qWait(120);
+        QMetaObject::invokeMethod(closeDialog, "resolve",
+                                  Q_ARG(QVariant, QVariant(QStringLiteral("discard"))));
+        QCoreApplication::processEvents();
+        ok &= expect(documentSession->property("revertCalls").toInt() == 1
+                         && documentSession->property("lastRevertDifficultyId").toInt() == 0
+                         && !state->property("openEditorTabs").toStringList().contains(QStringLiteral("metadata")),
+                     QStringLiteral("discarding a metadata-tab close restores section 0 before closing"),
+                     out, failed);
+    }
+    return ok;
 }
 } // namespace
 

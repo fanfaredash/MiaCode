@@ -159,7 +159,7 @@ public:
     Q_INVOKABLE bool openFile(const QUrl& fileUrl);
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAs(const QUrl& fileUrl);
-    Q_INVOKABLE void discardChanges();
+    Q_INVOKABLE bool discardChanges();
     // Leaves the shell with no document: no difficulties, so no tabs and no
     // source. The guard that asks about unsaved work lives at the command
     // boundary, not here.

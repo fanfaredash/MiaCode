@@ -722,6 +722,10 @@ const QHash<QString, QString>& enMap()
         {"dialog.unsaved_field_changes.title", "Unsaved Field Changes"},
         {"dialog.unsaved_field_changes.message", "%1 has unsaved changes. Save before switch?"},
         {"dialog.unsaved_field_changes.field.metadata", "Metadata"},
+        {"dialog.unsaved_tab_changes.title", "Unsaved Tab Changes"},
+        {"dialog.unsaved_tab_changes.message", "%1 has unsaved changes. Save before closing this tab?"},
+        {"dialog.unsaved_tab_changes.details.difficulty", "Save writes this difficulty only; discard restores it to its last saved content."},
+        {"dialog.unsaved_tab_changes.details.document", "Save writes the whole document; discard restores it to its last saved content."},
         {"dialog.audio_settings.title", "Audio Settings"},
         {"dialog.video_settings.title", "Preview Settings"},
         {"dialog.render_settings.audio_group", "Audio"},
@@ -1925,6 +1929,10 @@ const QHash<QString, QString>& zhMap()
         {"dialog.unsaved_field_changes.title", "未保存的字段更改"},
         {"dialog.unsaved_field_changes.message", "%1 有未保存的更改。切换前是否保存？"},
         {"dialog.unsaved_field_changes.field.metadata", "谱面信息"},
+        {"dialog.unsaved_tab_changes.title", "标签有未保存的更改"},
+        {"dialog.unsaved_tab_changes.message", "%1 有未保存的更改。关闭此标签前是否保存？"},
+        {"dialog.unsaved_tab_changes.details.difficulty", "保存只写入这个难度；放弃将其还原到上次保存时的内容。"},
+        {"dialog.unsaved_tab_changes.details.document", "保存会写入整个文档；放弃将文档还原到上次保存时的内容。"},
 
         {"dialog.audio_settings.title", "音频设置"},
         {"dialog.video_settings.title", "预览设置"},
@@ -3111,6 +3119,10 @@ const QHash<QString, QString>& jaMap()
         {"dialog.unsaved_field_changes.title", "未保存の欄があります"},
         {"dialog.unsaved_field_changes.message", "%1 に未保存の変更があります。切り替える前に保存しますか？"},
         {"dialog.unsaved_field_changes.field.metadata", "譜面情報"},
+        {"dialog.unsaved_tab_changes.title", "タブに未保存の変更があります"},
+        {"dialog.unsaved_tab_changes.message", "%1 に未保存の変更があります。このタブを閉じる前に保存しますか？"},
+        {"dialog.unsaved_tab_changes.details.difficulty", "保存するのはこの難易度だけです。破棄すると前回保存時の内容に戻します。"},
+        {"dialog.unsaved_tab_changes.details.document", "文書全体を保存します。破棄すると前回保存時の内容に戻します。"},
 
         {"dialog.audio_settings.title", "音量調整"},
         {"dialog.video_settings.title", "表示設定"},
@@ -4298,7 +4310,6 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("Muri"), {QStringLiteral("Muri"), QStringLiteral("無理")}},
         {QStringLiteral("PV 帧率"), {QStringLiteral("PV frame rate"), QStringLiteral("PV フレームレート")}},
         {QStringLiteral("Simai 文件 (*.txt *.simai)"), {QStringLiteral("Simai files (*.txt *.simai)"), QStringLiteral("Simai ファイル (*.txt *.simai)")}},
-        {QStringLiteral("clock_count"), {QStringLiteral("clock_count"), QStringLiteral("clock_count")}},
         {QStringLiteral("「%1」有未保存的更改。"), {QStringLiteral("\"%1\" has unsaved changes."), QStringLiteral("「%1」には未保存の変更があります。")}},
         {QStringLiteral("上一个"), {QStringLiteral("Previous"), QStringLiteral("前へ")}},
         {QStringLiteral("下一个"), {QStringLiteral("Next"), QStringLiteral("次へ")}},
@@ -4311,8 +4322,6 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("保存 simai 文件"), {QStringLiteral("Save Simai file"), QStringLiteral("Simai ファイルを保存")}},
         {QStringLiteral("保存只写入这个难度，其他难度在文件里保持原样；放弃把这个难度还原到上次保存时的内容。"), {QStringLiteral("Save writes only this difficulty and leaves the others unchanged; discard restores this difficulty to its last saved content."), QStringLiteral("保存はこの難易度だけを書き込み、他の難易度は変更しません。破棄するとこの難易度を前回保存時の内容に戻します。")}},
         {QStringLiteral("修正 HUD 文本布局"), {QStringLiteral("Fix HUD text layout"), QStringLiteral("HUD テキスト配置を補正")}},
-        {QStringLiteral("偏好设置"), {QStringLiteral("Preferences"), QStringLiteral("環境設定")}},
-        {QStringLiteral("元数据"), {QStringLiteral("Metadata"), QStringLiteral("メタデータ")}},
         {QStringLiteral("入口会保留，功能完成后将在此处提供。"), {QStringLiteral("This entry will remain here and become available when the feature is complete."), QStringLiteral("この入口は残し、機能の完成後にここで提供します。")}},
         {QStringLiteral("全词"), {QStringLiteral("Whole words"), QStringLiteral("単語全体")}},
         {QStringLiteral("全部恢复默认"), {QStringLiteral("Restore all defaults"), QStringLiteral("すべて既定値に戻す")}},
@@ -4466,7 +4475,6 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("静音"), {QStringLiteral("Mute"), QStringLiteral("ミュート")}},
         {QStringLiteral("静音 Break 星星尾判音"), {QStringLiteral("Mute Break star-tail judgement sound"), QStringLiteral("Break 星の終端判定音をミュート")}},
         {QStringLiteral("音效音量"), {QStringLiteral("Sound-effect volume"), QStringLiteral("効果音の音量")}},
-        {QStringLiteral("音视频处理"), {QStringLiteral("Audio and video processing"), QStringLiteral("音声・動画処理")}},
 
     };
     return map;

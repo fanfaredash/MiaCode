@@ -66,6 +66,9 @@ QmlDocumentModel::QmlDocumentModel(
         setChartText(text);
         return chartText() == text;
     });
+    if (bridge() != nullptr) {
+        unifiedDesignerEnabled_ = bridge()->unifiedDocumentDesignerEnabled();
+    }
     // The workspace already has a document from window startup, or a fresh empty
     // chart opened above. Publish that first committed identity so later
     // navigation values are stamped with the workspace revision.
@@ -622,9 +625,11 @@ void QmlDocumentModel::closeDocument()
 {
     if (workspace_ == nullptr) return;
     if (!runWorkspaceMutation([&] { return workspace_->closeDocument().accepted; })) return;
+    const bool wasUnified = unifiedDesignerEnabled_;
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     publishWorkspaceCommit(WorkspaceCommitKind::Open, true);
+    if (wasUnified) emit unifiedDesignerEnabledChanged();
 }
 
 bool QmlDocumentModel::saveDifficultySection(int difficultyId)
@@ -671,10 +676,14 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
                 .arg(path)
                 .arg(result.error));
     }
+    const bool wasUnified = unifiedDesignerEnabled_;
     unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     publishWorkspaceCommit(
         WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
+    if (wasUnified) {
+        emit unifiedDesignerEnabledChanged();
+    }
     return true;
 }
 
@@ -751,14 +760,7 @@ void QmlDocumentModel::requestLeaveCurrentField(std::function<void(bool)> onDeci
                 return;
             }
 
-            // There is no durable save point to reload for a never-saved
-            // document. Refusing the discard is the only safe answer there.
-            if (workspace_->snapshot().filePath.isEmpty()) {
-                finish(false);
-                return;
-            }
-            discardChanges();
-            finish(!workspace_->snapshot().dirty);
+            finish(discardChanges());
         });
 }
 
@@ -896,10 +898,7 @@ void QmlDocumentModel::askAboutRemainingDocument(std::function<void(bool)> onDec
                 });
                 return;
             }
-            if (!workspace_->snapshot().filePath.isEmpty()) {
-                discardChanges();
-            }
-            if (onDecided) onDecided(true);
+            if (onDecided) onDecided(discardChanges());
         });
 }
 
@@ -935,21 +934,28 @@ bool QmlDocumentModel::saveAs(const QUrl& fileUrl)
     const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
     return saveToPath(path);
 }
-void QmlDocumentModel::discardChanges()
+bool QmlDocumentModel::discardChanges()
 {
-    if (fileService_ == nullptr || workspace_ == nullptr) return;
-    const QString path = workspace_->snapshot().filePath;
-    if (path.isEmpty()) return;
-    miacode::v2::ChartWorkspaceFileResult result;
+    if (workspace_ == nullptr) return false;
+    // Discard must restore the in-memory save point, rather than reopening the
+    // file. Reopening would create a new load transaction and would make the
+    // close path depend on the still-unsettled v1 unified-designer semantics.
     if (!runWorkspaceMutation([&] {
-            result = fileService_->open(path);
-            return result.accepted;
+            return workspace_->revertDifficultyChart(0).accepted;
         })) {
-        return;
+        return false;
     }
     clearMetadataSourceRejection();
-    publishWorkspaceCommit(
-        WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
+    if (bridge() != nullptr) {
+        bridge()->disableUnifiedDocumentDesigner();
+    }
+    const bool wasUnified = unifiedDesignerEnabled_;
+    unifiedDesignerEnabled_ = bridge() != nullptr
+        ? bridge()->unifiedDocumentDesignerEnabled() : false;
+    if (wasUnified)
+        emit unifiedDesignerEnabledChanged();
+    publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+    return true;
 }
 void QmlDocumentModel::selectDifficulty(int id)
 {
@@ -991,6 +997,15 @@ int QmlDocumentModel::chartPosition(int line, int column) const
 void QmlDocumentModel::enableUnifiedDesigner(const QString& canonicalName)
 {
     if (workspace_ == nullptr) return;
+    if (bridge() != nullptr) {
+        bridge()->enableUnifiedDocumentDesigner(canonicalName);
+        const bool nextUnified = bridge()->unifiedDocumentDesignerEnabled();
+        if (nextUnified != unifiedDesignerEnabled_) {
+            unifiedDesignerEnabled_ = nextUnified;
+            emit unifiedDesignerEnabledChanged();
+        }
+        return;
+    }
     unifiedDesignerEnabled_ = true;
     runWorkspaceMutation([&] { return workspace_->unifyDesigners(canonicalName); });
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
@@ -998,6 +1013,15 @@ void QmlDocumentModel::enableUnifiedDesigner(const QString& canonicalName)
 }
 void QmlDocumentModel::disableUnifiedDesigner()
 {
+    if (bridge() != nullptr) {
+        bridge()->disableUnifiedDocumentDesigner();
+        const bool nextUnified = bridge()->unifiedDocumentDesignerEnabled();
+        if (nextUnified != unifiedDesignerEnabled_) {
+            unifiedDesignerEnabled_ = nextUnified;
+            emit unifiedDesignerEnabledChanged();
+        }
+        return;
+    }
     if (!unifiedDesignerEnabled_) return;
     unifiedDesignerEnabled_ = false;
     emit unifiedDesignerEnabledChanged();
@@ -1136,10 +1160,12 @@ bool QmlDocumentModel::saveToPath(const QString& path)
 void QmlDocumentModel::adoptBackendDocumentReplacement()
 {
     ++documentGeneration_;
-    unifiedDesignerEnabled_ = false;
+    const bool wasUnified = unifiedDesignerEnabled_;
+    unifiedDesignerEnabled_ = bridge() != nullptr
+        ? bridge()->unifiedDocumentDesignerEnabled() : false;
     clearMetadataSourceRejection();
     emitDocumentStateChanged();
-    emit unifiedDesignerEnabledChanged();
+    if (wasUnified != unifiedDesignerEnabled_) emit unifiedDesignerEnabledChanged();
     emit documentReplaced();
 }
 

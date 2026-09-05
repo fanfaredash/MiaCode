@@ -27,6 +27,39 @@ Rectangle {
 
     // 右栏分组。选中任意图层后都回到图层检查器，保证当前选择的属性可见。
     property string inspectorTab: "canvas"
+    property real canvasZoom: 1.0
+
+    function setCanvasZoom(value) {
+        root.canvasZoom = Math.max(0.5, Math.min(2.0, value))
+    }
+
+    function resetCanvasZoom() {
+        root.setCanvasZoom(1.0)
+    }
+
+    function zoomCanvasIn() {
+        root.setCanvasZoom(root.canvasZoom * 1.25)
+    }
+
+    function zoomCanvasOut() {
+        root.setCanvasZoom(root.canvasZoom / 1.25)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+0"
+        enabled: !!root.session && !root.session.busy
+        onActivated: root.resetCanvasZoom()
+    }
+    Shortcut {
+        sequence: "Ctrl++"
+        enabled: !!root.session && !root.session.busy
+        onActivated: root.zoomCanvasIn()
+    }
+    Shortcut {
+        sequence: "Ctrl+-"
+        enabled: !!root.session && !root.session.busy
+        onActivated: root.zoomCanvasOut()
+    }
 
     readonly property var activeLayer: root.session ? root.session.activeLayer : null
     readonly property string activeLayerKind: root.activeLayer ? root.activeLayer.kind : ""
@@ -379,6 +412,7 @@ Rectangle {
                     Loader {
                         id: composer
                         anchors.centerIn: parent
+                        scale: root.canvasZoom
                         width: Math.max(1, Math.min(canvasFrame.width,
                                                     canvasFrame.height * ((root.session && root.session.outputWidth)
                                                                           ? root.session.outputWidth / root.session.outputHeight : 1)))
@@ -1036,15 +1070,15 @@ Rectangle {
                                 }
 
                                 Repeater {
-                                    model: root.session ? root.session.presets : []
+                                    model: root.session ? root.session.builtinPresets : []
                                     delegate: RowLayout {
-                                        id: presetRow
+                                        id: builtinPresetRow
                                         required property var modelData
                                         Layout.fillWidth: true
                                         spacing: 4
                                         Text {
                                             Layout.fillWidth: true
-                                            text: presetRow.modelData.name
+                                            text: builtinPresetRow.modelData.label
                                             color: Theme.colors.text.secondary
                                             font.family: Theme.uiFont
                                             font.pixelSize: Theme.uiFontSize
@@ -1052,11 +1086,70 @@ Rectangle {
                                         }
                                         AppButton {
                                             text: UiText.text("cover.apply_preset")
+                                            enabled: !!root.session
+                                                     && (!builtinPresetRow.modelData.requiresChartFrame
+                                                         || root.session.chartFrameAvailable)
+                                            onClicked: root.session.applyBuiltinPreset(
+                                                           builtinPresetRow.modelData.id)
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: root.session ? root.session.presets : []
+                                    delegate: RowLayout {
+                                        id: presetRow
+                                        required property var modelData
+                                        property bool renaming: false
+                                        property string editingName: modelData.name
+                                        Layout.fillWidth: true
+                                        spacing: 4
+                                        AppTextField {
+                                            id: presetNameEdit
+                                            Layout.fillWidth: true
+                                            visible: presetRow.renaming
+                                            text: presetRow.editingName
+                                            onTextChanged: {
+                                                if (activeFocus)
+                                                    presetRow.editingName = text
+                                            }
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: !presetRow.renaming
+                                            text: presetRow.modelData.name
+                                            color: Theme.colors.text.secondary
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.uiFontSize
+                                            elide: Text.ElideRight
+                                        }
+                                        AppButton {
+                                            visible: !presetRow.renaming
+                                            text: UiText.text("cover.apply_preset")
                                             onClicked: root.session.applyPreset(presetRow.modelData.name)
                                         }
                                         AppButton {
+                                            visible: !presetRow.renaming
+                                            text: UiText.text("cover.rename_preset")
+                                            onClicked: {
+                                                presetRow.editingName = presetRow.modelData.name
+                                                presetRow.renaming = true
+                                            }
+                                        }
+                                        AppButton {
+                                            visible: !presetRow.renaming
                                             text: UiText.text("cover.delete_preset")
                                             onClicked: root.session.removePreset(presetRow.modelData.name)
+                                        }
+                                        AppButton {
+                                            visible: presetRow.renaming
+                                            text: UiText.text("cover.rename_preset")
+                                            enabled: presetNameEdit.text.trim().length > 0
+                                            onClicked: {
+                                                root.session.renamePreset(presetRow.modelData.name,
+                                                                           presetRow.editingName)
+                                                presetRow.renaming = false
+                                            }
                                         }
                                     }
                                 }

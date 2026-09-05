@@ -110,10 +110,10 @@ public:
     // 关闭文档: no document at all, rather than an empty one. A chart with no
     // difficulties is still a chart; this is the state before any chart.
     ChartWorkspaceResult closeDocument();
-    // Put one difficulty's chart back to the last save point, leaving every
-    // other difficulty alone. Refused for a difficulty that did not exist at
-    // that save point: there is no earlier text for it, and dropping it
-    // entirely would be a structural edit, not a discard.
+    // Put one difficulty's complete editable section (chart, level, and
+    // designer) back to the last save point, leaving every other difficulty
+    // alone. A difficulty added after that save point is removed, because it
+    // has no earlier section to restore.
     ChartWorkspaceResult revertDifficultyChart(int difficultyId);
     bool rebindSavePoint(const QString& savedSourceText);
 

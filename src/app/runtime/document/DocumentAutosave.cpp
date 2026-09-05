@@ -275,10 +275,6 @@ void miacode::runtime::DocumentSessionHost::runPendingAbnormalExitBackupRestore(
 QString miacode::runtime::DocumentSessionHost::currentDocumentTextForAutosave() const
 {
     SimaiDocument snapshot = session_.applicationServices_.workspace().document();
-    // Tracks where a live (possibly uncommitted) designer edit was captured
-    // from, so the unified-mode mirror below broadcasts what the user is
-    // actually typing rather than a stale committed value.
-    QString liveCanonicalDesigner = snapshot.designer;
     if (session_.hasActiveDifficulty()) {
         SimaiDifficultyData& difficultyData = snapshot.ensureDifficulty(state_.activeDifficultyId_);
         difficultyData.chart = session_.editorText();
@@ -291,24 +287,10 @@ QString miacode::runtime::DocumentSessionHost::currentDocumentTextForAutosave() 
     // ChartWorkspace, so the values copied into `snapshot` above are already
     // the live ones and need no second capture.
 
-    // Under unified mode the metadata page (top &des) or the difficulty header
-    // (&des_N) may hold an uncommitted designer edit that hasn't broadcast yet
-    // (broadcast only happens on field commit in applyCurrentFieldToDocument).
-    // Mirror it across &des and every per-difficulty name — charted and
-    // standalone alike — so the autosaved backup is never internally
-    // out-of-sync with what the user is typing.
-    const bool capturedDesignerFromUi = session_.hasActiveDifficulty()
-        || state_.activeOutlineKey_ == QLatin1String("metadata");
-    if (state_.unifiedDesignerEnabled_ && capturedDesignerFromUi) {
-        const QString canonical = liveCanonicalDesigner;
-        snapshot.designer = canonical;
-        const QVector<QPair<int, QString>> designerSlots = snapshot.perDifficultyDesigners();
-        for (const QPair<int, QString>& slot : designerSlots) {
-            if (slot.second != canonical) {
-                snapshot.setDesignerForSlot(slot.first, canonical);
-            }
-        }
-    }
+    // QML commits metadata and difficulty fields directly into ChartWorkspace.
+    // Autosave must serialize that snapshot verbatim; the unified-designer
+    // policy is applied by the explicit edit command, not inferred here from
+    // the active view or used to rewrite unrelated fields.
     return snapshot.toText();
 }
 

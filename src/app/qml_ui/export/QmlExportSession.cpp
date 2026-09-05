@@ -227,10 +227,14 @@ int QmlExportSession::introSoundIndex() const
 
 QVariantList QmlExportSession::fontLibraryOptions() const
 {
+    const QString defaultLabel = UiText::text(QStringLiteral("card_font.default"));
+    if (fontLibraryOptionsCacheValid_
+        && fontLibraryOptionsCacheDefaultLabel_ == defaultLabel) {
+        return fontLibraryOptionsCache_;
+    }
     QVariantList list;
     const QVector<miacode::video_export::FontLibraryEntry> entries =
-        miacode::video_export::fontLibraryEntries(
-            true, UiText::text(QStringLiteral("card_font.default")));
+        miacode::video_export::fontLibraryEntries(true, defaultLabel);
     for (const miacode::video_export::FontLibraryEntry& entry : entries) {
         list.append(QVariantMap{
             {QStringLiteral("label"), entry.label},
@@ -238,7 +242,10 @@ QVariantList QmlExportSession::fontLibraryOptions() const
             {QStringLiteral("family"), entry.family},
         });
     }
-    return list;
+    fontLibraryOptionsCache_ = list;
+    fontLibraryOptionsCacheDefaultLabel_ = defaultLabel;
+    fontLibraryOptionsCacheValid_ = true;
+    return fontLibraryOptionsCache_;
 }
 
 QVariantList QmlExportSession::skinOptions() const
@@ -443,8 +450,18 @@ void QmlExportSession::enter(int previousActiveDifficultyId)
         pageSessionActive_ = true;
         emit pageSessionActiveChanged();
     }
-    selectDifficulty(resolveDefaultDifficultyId(previousActiveDifficultyId));
-    refreshFromDocument();
+    const int nextDifficultyId = resolveDefaultDifficultyId(previousActiveDifficultyId);
+    if (selectedDifficultyId_ != nextDifficultyId) {
+        selectedDifficultyId_ = nextDifficultyId;
+        emit selectedDifficultyIdChanged();
+    }
+    rebuildDifficultyList();
+    seedFromDifficulty(selectedDifficultyId_);
+    syncAudition();
+    // Re-scan once per real page entry so imports made by another QML surface
+    // are visible, while repeated property reads during this entry share the
+    // materialized option list.
+    fontLibraryOptionsCacheValid_ = false;
     emit fontLibraryChanged();
     emit skinChanged();
     emit hudFontChanged();
@@ -857,6 +874,7 @@ void QmlExportSession::applyFontImport(const QString& selectedPath)
         return;
     }
 
+    fontLibraryOptionsCacheValid_ = false;
     emit fontLibraryChanged();
     // Match the established card-font picker: an imported font becomes the
     // title/display choice while the body selection remains independent.
@@ -894,6 +912,7 @@ void QmlExportSession::applyHudFontImport(const QString& selectedPath)
         }
         return;
     }
+    fontLibraryOptionsCacheValid_ = false;
     emit fontLibraryChanged();
     setHudFontPath(result.path);
 }

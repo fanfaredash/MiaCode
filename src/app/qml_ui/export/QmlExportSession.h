@@ -331,6 +331,9 @@ private:
     bool hasSeededTask_ = false;
     bool batchExportRunning_ = false;
     bool batchCancellationRequested_ = false;
+    mutable QVariantList fontLibraryOptionsCache_;
+    mutable QString fontLibraryOptionsCacheDefaultLabel_;
+    mutable bool fontLibraryOptionsCacheValid_ = false;
     int selectedDifficultyId_ = 0;
     QString activeTab_ = QStringLiteral("export");
     QString settingsTab_ = QStringLiteral("output");

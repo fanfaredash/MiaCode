@@ -11,7 +11,7 @@ AppDialog {
 
     required property var mediaTools
 
-    title: UiText.text("音视频处理")
+    title: UiText.text("media_tools.audio_video_processing")
     preferredWidth: 560
     preferredHeight: implicitHeight
     footer: DialogFooter {

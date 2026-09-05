@@ -17,6 +17,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QImage>
 #include <QJsonDocument>
 #include <QUrl>
 
@@ -180,6 +182,24 @@ double QmlCoverExportSession::activeChartFrameSeconds() const
     auto* layer = activeCoverLayer();
     return layer != nullptr && layer->kind() == QStringLiteral("chartFrame")
         ? layer->frameSeconds() : 0.0;
+}
+
+QVariantList QmlCoverExportSession::builtinPresets() const
+{
+    return {
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("card")},
+                    {QStringLiteral("label"), UiText::text(QStringLiteral("cover.centered_card_default"))},
+                    {QStringLiteral("requiresChartFrame"), false}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("card_chart_frame")},
+                    {QStringLiteral("label"), UiText::text(QStringLiteral("cover.card_chart_frame"))},
+                    {QStringLiteral("requiresChartFrame"), true}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("dual_chart_frames")},
+                    {QStringLiteral("label"), UiText::text(QStringLiteral("cover.dual_chart_frame_collage"))},
+                    {QStringLiteral("requiresChartFrame"), true}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("pure_chart_frame")},
+                    {QStringLiteral("label"), UiText::text(QStringLiteral("cover.pure_chart_frame"))},
+                    {QStringLiteral("requiresChartFrame"), true}},
+    };
 }
 
 void QmlCoverExportSession::enter(int preferredDifficultyId)
@@ -980,7 +1000,61 @@ QJsonObject QmlCoverExportSession::presetCompositionJson() const
     return root;
 }
 
-bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool reportErrors)
+QJsonObject QmlCoverExportSession::builtinPresetComposition(const QString& id) const
+{
+    if (id != QStringLiteral("card")
+        && id != QStringLiteral("card_chart_frame")
+        && id != QStringLiteral("dual_chart_frames")
+        && id != QStringLiteral("pure_chart_frame")) {
+        return {};
+    }
+
+    miacode::cover_export::CoverLayoutModel model;
+    auto* card = model.layer(miacode::cover_export::CoverLayoutModel::cardKey());
+    if (card == nullptr) {
+        return {};
+    }
+    auto setGeometry = [](miacode::cover_export::CoverLayer* layer,
+                          double nx, double ny, double size, int z, bool visible) {
+        if (layer == nullptr) return;
+        layer->setNx(nx);
+        layer->setNy(ny);
+        layer->setSizeFraction(size);
+        layer->setZ(z);
+        layer->setVisible(visible);
+    };
+
+    setGeometry(card, 0.5, 0.5, 0.85, 1, true);
+    if (id == QStringLiteral("card")) {
+        model.normalizeZOrder();
+    } else if (id == QStringLiteral("card_chart_frame")) {
+        auto* frame = model.addChartFrameLayer(0.0);
+        setGeometry(card, 0.64, 0.5, 0.78, 1, true);
+        setGeometry(frame, 0.32, 0.5, 0.82, 0, true);
+        model.normalizeZOrder();
+    } else if (id == QStringLiteral("dual_chart_frames")) {
+        auto* first = model.addChartFrameLayer(0.0);
+        auto* second = model.addChartFrameLayer(0.0);
+        setGeometry(card, 0.5, 0.5, 0.85, 0, false);
+        setGeometry(first, 0.30, 0.40, 0.56, 1, true);
+        setGeometry(second, 0.66, 0.60, 0.56, 0, true);
+        model.normalizeZOrder();
+    } else {
+        auto* frame = model.addChartFrameLayer(0.0);
+        setGeometry(card, 0.5, 0.5, 0.85, 0, false);
+        setGeometry(frame, 0.5, 0.5, 0.92, 1, true);
+        model.normalizeZOrder();
+    }
+
+    QJsonObject root = presetCompositionJson();
+    root.remove(QStringLiteral("size"));
+    root.insert(QStringLiteral("layout"), model.toJson());
+    return root;
+}
+
+bool QmlCoverExportSession::applyCompositionJsonInternal(const QJsonObject& root,
+                                                         bool reportErrors,
+                                                         bool renderChartFrames)
 {
     miacode::cover_export::CoverCompositionState state;
     QString error;
@@ -1026,6 +1100,22 @@ bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool r
     }
     if (layout_ != nullptr) {
         layout_->fromJson(state.layout);
+        for (auto* frame : layout_->chartFrameLayers()) {
+            layout_->clearLayerImage(frame->key());
+        }
+        if (!chartFrameAvailable_) {
+            for (auto* frame : layout_->chartFrameLayers()) {
+                frame->setVisible(false);
+            }
+        } else if (renderChartFrames) {
+            bool framesReady = true;
+            for (auto* frame : layout_->visibleChartFrameLayers()) {
+                framesReady = renderChartFrame(frame, 0, reportErrors) && framesReady;
+            }
+            if (!framesReady) {
+                return false;
+            }
+        }
         const auto visibleChartFrames = layout_->visibleChartFrameLayers();
         const QString firstVisibleFrameKey = !visibleChartFrames.isEmpty()
             ? visibleChartFrames.constFirst()->key() : QString();
@@ -1048,6 +1138,45 @@ bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool r
     emit inputsChanged();
     emit outputChanged();
     return true;
+}
+
+bool QmlCoverExportSession::applyCompositionJson(const QJsonObject& root, bool reportErrors)
+{
+    // Applying a layout also swaps the live chart-frame stills. Keep the old
+    // composition and images until every new frame has rendered successfully;
+    // a transient Quick capture failure must not leave the editor half-applied.
+    const QJsonObject previous = compositionJson();
+    const QString previousActiveLayerKey = activeLayerKey_;
+    QHash<QString, QImage> previousFrameImages;
+    if (layout_ != nullptr) {
+        for (auto* frame : layout_->chartFrameLayers()) {
+            previousFrameImages.insert(frame->key(), frame->frameImage());
+        }
+    }
+
+    if (applyCompositionJsonInternal(root, reportErrors, true)) {
+        return true;
+    }
+
+    if (!previous.isEmpty()) {
+        applyCompositionJsonInternal(previous, false, false);
+        if (layout_ != nullptr) {
+            for (auto* frame : layout_->chartFrameLayers()) {
+                const QImage image = previousFrameImages.value(frame->key());
+                if (!image.isNull()) {
+                    layout_->setLayerImage(frame->key(), image);
+                }
+            }
+            if (layout_->layer(previousActiveLayerKey) != nullptr) {
+                activeLayerKey_ = previousActiveLayerKey;
+                emit activeLayerChanged();
+                syncPlaybackFromActiveLayer();
+                rebindLiveChartScene();
+                emit activeChartFrameSecondsChanged();
+            }
+        }
+    }
+    return false;
 }
 
 void QmlCoverExportSession::persistComposition()
@@ -1127,6 +1256,30 @@ void QmlCoverExportSession::clearRecentLayouts()
 void QmlCoverExportSession::savePreset(const QString& name)
 {
     miacode::cover_export::CoverCompositionState::saveUserPreset(name, presetCompositionJson());
+    refreshSavedLists();
+}
+
+void QmlCoverExportSession::applyBuiltinPreset(const QString& id)
+{
+    if (id != QStringLiteral("card") && !chartFrameAvailable_) {
+        notifyError(UiText::text(QStringLiteral("cover.apply_preset")),
+                    UiText::text(QStringLiteral("cover.this_preset_needs_a_renderable")));
+        return;
+    }
+    const QJsonObject composition = builtinPresetComposition(id);
+    if (!composition.isEmpty() && applyCompositionJson(composition, true)) {
+        persistComposition();
+    }
+}
+
+void QmlCoverExportSession::renamePreset(const QString& oldName, const QString& newName)
+{
+    const QString trimmedOld = oldName.trimmed();
+    const QString trimmedNew = newName.trimmed();
+    if (trimmedOld.isEmpty() || trimmedNew.isEmpty() || trimmedOld == trimmedNew) {
+        return;
+    }
+    miacode::cover_export::CoverCompositionState::renameUserPreset(trimmedOld, trimmedNew);
     refreshSavedLists();
 }
 void QmlCoverExportSession::applyPreset(const QString& name)

@@ -31,17 +31,16 @@ public:
     bool updateActiveChartText(const QString& value);
     Session::DocumentSourceReplaceResult replaceDocumentSourceText(const QString& value);
     bool addDocumentDifficulty(int difficultyId);
-    void enableUnifiedDocumentDesigner(const QString& canonicalName);
-    void disableUnifiedDocumentDesigner();
+    bool unifiedDocumentDesignerEnabled() const override;
+    void enableUnifiedDocumentDesigner(const QString& canonicalName) override;
+    void disableUnifiedDocumentDesigner() override;
     bool applyCommittedQmlDocument(
         const QString& sourceText, const QString& filePath, int activeDifficultyId,
         bool dirty, quint64 revision, Session::QmlDocumentCommitKind kind,
         bool usedSystemEncoding);
-    // Apply the saved-or-inferred unified-designer preference to the
-    // runtime flag when a chart is opened. Reads
-    // <chartDir>/.miacode/preferences.json; falls back to
-    // SimaiDocument::inferUnifiedDesignerDefault() when the key is absent.
-    void refreshUnifiedDesignerStateForLoadedDocument();
+    // Unified-designer preference persistence is currently detached. The v1
+    // load/save behavior must be re-investigated before this mode is wired to
+    // project preferences again.
     bool openFileAtPath(const QString& path, bool showErrors = true);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     // Continuation of restoreBackupFilePath once the confirm is answered.

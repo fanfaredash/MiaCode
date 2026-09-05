@@ -54,7 +54,8 @@ QString serializeField(const QString& key, const QString& value)
 // line alongside the model-owned one.
 bool isReservedMetadataKey(const QString& key)
 {
-    if (key == QLatin1String("title") || key == QLatin1String("artist")
+    if (key.compare(QLatin1String("clock_count"), Qt::CaseInsensitive) == 0
+        || key == QLatin1String("title") || key == QLatin1String("artist")
         || key == QLatin1String("first") || key == QLatin1String("des")
         || key == QLatin1String("video") || key == kBookmarksFieldKey) {
         return true;
@@ -523,10 +524,9 @@ bool SimaiDocument::isUnifiedDesignerTriviallySafe() const
     //   &des="",  &des_5="X"                            → false (5 disagrees)
     //   &des="X", &des_5="X", &des_6="Y"                → false (6 disagrees)
     //
-    // Currently unused by the load-time default (see
-    // inferUnifiedDesignerDefault). Preserved for a future
-    // suggestion-style UI that might prompt the user "this project
-    // looks unified, enable the option?".
+    // Currently not wired to document loading. Preserved for a future
+    // suggestion-style UI that might prompt the user "this project looks
+    // unified, enable the option?" after the v1 behavior is understood.
     for (auto it = difficulties_.cbegin(); it != difficulties_.cend(); ++it) {
         if (it.value().designer != designer) {
             return false;

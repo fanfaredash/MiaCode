@@ -141,10 +141,6 @@ QtObject {
             recordEditorUse(nextKey)
     }
 
-    function closeActiveEditor() {
-        closeEditor(activeEditorKey)
-    }
-
     function resetEditorTabs(currentDifficultyId) {
         const tabs = currentDifficultyId > 0
             ? [difficultyEditorKey(currentDifficultyId)]

@@ -74,13 +74,9 @@ public:
     // survey / broadcast so chart-less names participate too.
     QVector<QPair<int, QString>> perDifficultyDesigners() const;
 
-    // Default for the "all difficulties share the same designer name"
-    // project preference when no explicit value is recorded yet.
-    // Currently *always false* — auto-enabling has no entirely-safe
-    // fallback, so we require the user to opt in. The heuristic that
-    // detects "this project is already trivially unified" lives in
-    // isUnifiedDesignerTriviallySafe() below and is preserved for a
-    // future preferences/onboarding flow that might surface a suggestion.
+    // Legacy default helper for the "all difficulties share the same designer
+    // name" mode. Project-preference wiring is currently detached pending a
+    // v1 behavior review; the helper remains available for that investigation.
     bool inferUnifiedDesignerDefault() const;
 
     // Returns true when every &des_N already matches the top-level &des

@@ -8,6 +8,26 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - `docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md` and other notes are guidance and memory aids.
 - When docs and code diverge, trust code first, then update the docs.
 
+## 1.1 QML editor discard contract
+
+- A dirty editor tab must not close without an explicit save, discard, or
+  cancel decision. The metadata tab represents the complete document and uses
+  section id `0`; a difficulty tab uses its complete section (`chart`, `level`,
+  and `designer`). A failed save or discard keeps the tab open.
+- `ChartWorkspace::computeDirtyDifficultyIds()` and the corresponding revert
+  operation must describe the same section. Restoring only chart text is not a
+  valid discard because unified-designer and level edits can leave the same tab
+  dirty and repeat the close prompt.
+
+## 1.2 Unified-designer load purity
+
+- Unified-designer project-preference loading and saving are currently detached
+  pending a v1 behavior review. Opening, reopening, and startup recovery start
+  the runtime mode off; they must not rewrite `&des` or `&des_N`, advance a save
+  point, or create a dirty document. Reconciliation is an explicit user
+  edit/enable operation; autosave serializes the current workspace snapshot
+  verbatim.
+
 ## 2. Must-Keep Contracts
 
 - `MainWindow` is orchestration, not the long-term home for every feature body.
@@ -53,6 +73,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Net batch download and upload are paired top-level Tools menu items, separated from the export actions, and both remain available from the outline Toolbox entry. Each upload-folder browse appends the selected directory itself plus valid immediate child folders to a path-deduplicated queue; a valid bundle requires `maidata.txt`, `track.mp3`, and a `bg.jpg` / `bg.jpeg` / `bg.png`, accepts optional `pv.mp4` / `bg.mp4`, and sends one authenticated multipart request per queued chart. Uploads are sequential with a cancellable 5-second pause between completed non-fatal items. Failures expose complete copyable diagnostics without credentials/cookies; when a batch ends with unsuccessful charts, the result prompt reports their count and offers Cancel or Upload Failed Again, with retry limited to unsuccessful rows so successful charts are never resent. Rows left unattempted by a fatal batch stop count as unsuccessful retry candidates. HTTP 413 is an oversized-request/chart failure and takes precedence over Cloudflare markers injected into its HTML error page, so it advises video compression and does not stop later charts. 429/Cloudflare 1015 observes `Retry-After` and retries once, while repeated limiting, authentication/access failures, and genuine Cloudflare challenges stop the batch. Majdata credentials are persisted in application preferences only when the user explicitly enables the remember-credentials checkbox; retry can reuse them only in memory for the current open-dialog session.
 - Batch video compression uses the same cumulative-list and folder-depth interaction as Net batch upload: each browse appends the selected directory and its readable immediate child directories only, duplicate directory paths are ignored, selected rows are only for list removal, and every scanned folder remains visible even when it has no video. Each folder resolves `bg.mp4` before `pv.mp4` case-insensitively. Rows explicitly report `No video`, `Already under 20 MiB; not compressed`, `Compression succeeded`, or `Compression failed`; only videos over 20 MiB are transcoded and counted as successes/failures. Compression keeps `<video-stem>_bak.mp4`, rejects outputs that are not both smaller than the input and at most 20 MiB, and preserves a `_compressed` output when in-place replacement is blocked.
 - Cover export uses the v2 QML `CoverExportPage` as the fixed three-pane workbench (layer list, `CoverComposer.qml`, Inspector). It keeps the existing user-visible cover-export entry wording, owns no QWidget, and uses MiaCode's in-process Quick scene plus `SceneFrameRenderer` for still commits/final composition.
+- Cover export's editor canvas zoom is presentation-only: `CoverExportPage.qml` scales the live composer for `Ctrl+0`, `Ctrl++`, and `Ctrl+-`, while normalized layer geometry and the headless export scene remain unchanged. The four built-in layouts are non-persisted session entries; user preset rename and application go through `QmlCoverExportSession` / `CoverCompositionState`, and a failed chart-frame capture restores the previous composition atomically.
 - Cover chart-frame layers are first-class composition layers. Multiple chart frames can be visible, but only the active visible chart-frame hosts a live `PreviewQuickSceneRoot`; non-active frames use cached stills and all visible frames are refreshed at export resolution before final PNG/JPG composition. Every frame keeps its own `frameSeconds`; exporting one frame must not overwrite another frame's time or the restored active playhead.
 - Cover Studio chart-frame inner background is per layer. `Jacket` mode uses the cover background with the brightness slider; `Transparent` mode draws a black disk whose transparency slider runs from solid black at 0% to no background at 100%. The chart-frame layer opacity only fades the note/ring overlay, not this inner background.
 - Cover Studio and export intro share the `MaimaiBannerCard` template; the `NOTES DESIGNER` label stays blue, the designer value uses the sampled muted blue-gray `#8091AE`, and the `BPM` text uses a neutral gray.
@@ -67,7 +88,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Application background settings are now QML-owned again: `QmlAppBackgroundModel` validates readable image paths and merges only `ui.app_background`, while `Main.qml` presents the non-interactive image layer and `Theme.qml` applies the persisted light/dark overlay-alpha tokens. Invalid paths and save failures remain model errors rather than blocking dialogs.
 - Background media naming is currently limited to `bg.*` or `pv.mp4` style conventions.
 - Project editing currently anchors field-dirty state to explicit save points instead of relying on Qt's generic modified flag alone: chart text uses the document undo position as the save anchor, while line edits compare against the last applied document values.
-- Chart metadata now treats `&clock_count=` as a defaulted extra metadata field. New or loaded documents without an explicit value surface `&clock_count=4` in the metadata page's "Other &xx Fields", and serialization/save paths preserve or restore that default. The latency settings page exposes the same field next to BPM/Offset and writes it through the metadata extra-field store.
+- Chart metadata now treats `&clock_count=` as a defaulted extra metadata field. New or loaded documents without an explicit value preserve or restore `&clock_count=4`, while the metadata page exposes it through the dedicated “拍数” field rather than the generic “Other &xx Fields” list. The latency settings page exposes the same field next to BPM/Offset and writes it through the metadata extra-field store.
 - Autosave side effects now live under `<chart dir>/.miacode/`: project state uses `miacode_settings.json` for chart-local navigation metadata such as the last opened difficulty, default logs resolve to `.miacode/logs/` once a chart is bound, and per-chart autosave uses `.miacode/.autosave/<chart file>/`. Preview/video/audio/timeline/render preferences are application-scoped and must not be overwritten when switching chart folders.
 - The main-window size preference records only the normal-window width/height ratio as `app.window_aspect_ratio` in application preferences. Startup applies that ratio to the default 1280x800 area and current screen bounds, instead of restoring absolute pixels, so cross-screen and DPI changes keep the app usable. This is separate from preview/export canvas aspect-ratio settings.
 - Dragging a folder onto `MiaCode.exe` or its shortcut is treated as a startup open request for `<folder>/maidata.txt`. If that file is missing, the app clears any restored last-session chart back to the default welcome page and shows a localized warning naming the dropped folder. Dragging a file still opens that file directly.

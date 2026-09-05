@@ -355,11 +355,35 @@ ChartWorkspaceResult ChartWorkspace::closeDocument()
 ChartWorkspaceResult ChartWorkspace::revertDifficultyChart(int difficultyId)
 {
     if (!hasDocument_) return reject();
+    if (difficultyId <= 0) {
+        if (sourceText_ == savedSourceText_) return acceptWithoutChange();
+        document_ = savedDocument_;
+        activeDifficultyId_ = resolveOpenDifficultyId(document_, activeDifficultyId_);
+        refreshSourceAndDirty();
+        return commit();
+    }
     SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
     const SimaiDifficultyData* saved = savedDocument_.difficulty(difficultyId);
-    if (difficulty == nullptr || saved == nullptr) return reject();
-    if (difficulty->chart == saved->chart) return acceptWithoutChange();
-    difficulty->chart = saved->chart;
+    if (difficulty == nullptr) return reject();
+
+    if (saved == nullptr) {
+        // The current difficulty was added after the save point. Restore a
+        // possible chart-less designer slot from that save point before
+        // removing the materialized difficulty, otherwise discard would
+        // silently lose a standalone &des_N record.
+        document_.removeDifficulty(difficultyId);
+        document_.setDesignerForSlot(
+            difficultyId, savedDocument_.designerForSlot(difficultyId));
+    } else if (difficulty->level == saved->level
+               && difficulty->designer == saved->designer
+               && difficulty->chart == saved->chart) {
+        return acceptWithoutChange();
+    } else {
+        // A unified-designer edit changes the section designer without
+        // touching chart text. Restoring only `chart` leaves the section dirty
+        // and makes the shell-close prompt repeat forever.
+        *difficulty = *saved;
+    }
     refreshSourceAndDirty();
     return commit();
 }

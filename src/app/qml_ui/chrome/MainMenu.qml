@@ -401,7 +401,7 @@ Item {
             id: toolsMenu
             title: UiText.text("工具(&T)")
             AppMenuAction {
-                text: UiText.text("元数据")
+                text: UiText.text("dialog.unsaved_field_changes.field.metadata")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.metadataRequested()
             }

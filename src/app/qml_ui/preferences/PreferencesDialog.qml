@@ -19,7 +19,7 @@ AppDialog {
     required property var preferences
     required property var appBackground
 
-    title: UiText.text("偏好设置")
+    title: UiText.text("dialog.preferences.title")
     preferredWidth: 700
     preferredHeight: Theme.dialogHeight
     fillBody: true

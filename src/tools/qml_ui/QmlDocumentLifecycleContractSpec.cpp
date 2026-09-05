@@ -35,9 +35,21 @@ bool verifyBackendReplacementPublishesOneQmlRefresh(QTextStream& err)
     const QString mainWindow = sourceFile(QStringLiteral("src/app/runtime/Session.h"));
     const QString documentUi = sourceFile(
         QStringLiteral("src/app/runtime/document/DocumentPages.cpp"));
+    const QString documentFileFlow = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentFileFlow.cpp"));
     const QString documentModel = sourceFile(
         QStringLiteral("src/app/qml_ui/QmlDocumentModel.cpp"));
     const QString mainView = sourceFile(QStringLiteral("src/app/qml_ui/layout/MainView.qml"));
+    const QString mainSplitView = sourceFile(
+        QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
+    const QString editorPane = sourceFile(
+        QStringLiteral("src/app/qml_ui/editor/EditorPane.qml"));
+    const QString viewState = sourceFile(QStringLiteral("src/app/qml_ui/ViewState.qml"));
+    const QString autosaveFlow = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentAutosave.cpp"));
+    const QString designerFlow = sourceFile(
+        QStringLiteral("src/app/runtime/document/DocumentDesignerFlow.cpp"));
+    const QString documentBridge = sourceFile(QStringLiteral("src/app/v2/DocumentBridge.h"));
 
     return require(mainWindow.contains(QStringLiteral("void documentReplaced();")),
                    QStringLiteral("Session exposes a backend document replacement notification"), err)
@@ -61,7 +73,23 @@ bool verifyBackendReplacementPublishesOneQmlRefresh(QTextStream& err)
         && require(containsAfter(mainView,
                                  QStringLiteral("function onDocumentReplaced()"),
                                  QStringLiteral("state.resetEditorTabs(root.documentSession.currentDifficultyId)")),
-                   QStringLiteral("a QML replacement resets active editors so chart text and bookmarks are rederived"), err);
+                   QStringLiteral("a QML replacement resets active editors so chart text and bookmarks are rederived"), err)
+        && require(mainView.contains(QStringLiteral("onActivated: splitView.requestCloseActiveEditor()"))
+                       && !mainView.contains(QStringLiteral("onActivated: state.closeActiveEditor()"))
+                       && mainSplitView.contains(QStringLiteral("function requestCloseActiveEditor()"))
+                       && editorPane.contains(QStringLiteral("tabs.requestCloseTab(viewState.activeEditorKey)"))
+                       && !viewState.contains(QStringLiteral("function closeActiveEditor()")),
+                   QStringLiteral("keyboard tab-close routes through EditorTabBar's dirty guard instead of closing the ViewState directly"), err)
+        && require(!documentUi.contains(QStringLiteral("refreshUnifiedDesignerStateForLoadedDocument"))
+                       && !documentModel.contains(QStringLiteral("refreshUnifiedDesignerStateForLoadedDocument"))
+                       && !designerFlow.contains(QStringLiteral("unified_designer_enabled"))
+                       && !documentBridge.contains(QStringLiteral("refreshUnifiedDesignerStateForLoadedDocument"))
+                       && documentFileFlow.contains(QStringLiteral("state_.unifiedDesignerEnabled_ = false")),
+                   QStringLiteral("unified-designer preference load wiring stays detached pending v1 review"), err)
+        && require(autosaveFlow.contains(QStringLiteral("snapshot.ensureDifficulty(state_.activeDifficultyId_)"))
+                       && !autosaveFlow.contains(QStringLiteral("capturedDesignerFromUi"))
+                       && !autosaveFlow.contains(QStringLiteral("state_.unifiedDesignerEnabled_ &&")),
+                   QStringLiteral("autosave serializes the workspace snapshot without silently re-unifying designers"), err);
 }
 
 bool verifyQmlNewDocumentUsesRequestServices(QTextStream& err)

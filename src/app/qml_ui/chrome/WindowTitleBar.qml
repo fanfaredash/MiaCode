@@ -113,7 +113,7 @@ Rectangle {
             onTriggered: root.menuCommands.aboutRequested()
         }
         AppMenuAction {
-            text: UiText.text("偏好设置")
+            text: UiText.text("dialog.preferences.title")
             enabled: root.visible
             onTriggered: root.menuCommands.preferencesRequested()
         }

@@ -65,6 +65,7 @@ class QmlCoverExportSession final : public QObject
     Q_PROPERTY(bool chartFramePlaying READ chartFramePlaying NOTIFY chartFramePlayingChanged)
     Q_PROPERTY(bool liveChartSceneBound READ liveChartSceneBound NOTIFY liveChartSceneBoundChanged)
     Q_PROPERTY(double activeChartFrameSeconds READ activeChartFrameSeconds NOTIFY activeChartFrameSecondsChanged)
+    Q_PROPERTY(QVariantList builtinPresets READ builtinPresets CONSTANT)
     Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
     Q_PROPERTY(QStringList recentLayoutFiles READ recentLayoutFiles NOTIFY recentLayoutFilesChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
@@ -113,6 +114,7 @@ public:
     bool chartFramePlaying() const;
     bool liveChartSceneBound() const;
     double activeChartFrameSeconds() const;
+    QVariantList builtinPresets() const;
     QVariantList presets() const { return presets_; }
     QStringList recentLayoutFiles() const { return recentLayoutFiles_; }
     bool busy() const { return busy_; }
@@ -165,6 +167,8 @@ public:
     Q_INVOKABLE void clearRecentLayouts();
     Q_INVOKABLE void savePreset(const QString& name);
     Q_INVOKABLE void applyPreset(const QString& name);
+    Q_INVOKABLE void applyBuiltinPreset(const QString& id);
+    Q_INVOKABLE void renamePreset(const QString& oldName, const QString& newName);
     Q_INVOKABLE void removePreset(const QString& name);
     Q_INVOKABLE void browseOutputDirectory();
     Q_INVOKABLE void exportCover();
@@ -217,6 +221,9 @@ private:
     QJsonObject compositionJson() const;
     QJsonObject sharedCompositionJson() const;
     QJsonObject presetCompositionJson() const;
+    QJsonObject builtinPresetComposition(const QString& id) const;
+    bool applyCompositionJsonInternal(const QJsonObject& root, bool reportErrors,
+                                      bool renderChartFrames);
     bool applyCompositionJson(const QJsonObject& root, bool reportErrors);
     void persistComposition();
     void requestFont(bool displayFont, bool textLayerFont);

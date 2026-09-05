@@ -67,6 +67,10 @@ Item {
         editorPane.paste()
     }
 
+    function requestCloseActiveEditor() {
+        editorPane.requestCloseActiveEditor()
+    }
+
     function selectAll() {
         editorPane.selectAll()
     }

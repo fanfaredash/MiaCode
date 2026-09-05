@@ -40,7 +40,7 @@ Rectangle {
 
             NavRow {
                 width: parent.width
-                text: UiText.text("元数据")
+                text: UiText.text("dialog.unsaved_field_changes.field.metadata")
                 selected: root.viewState.metadataEditorActive
                 onClicked: {
                     if (root.pages && root.pages.overlayActive)

@@ -13,7 +13,6 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
-#include "common/ProjectPreferences.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -34,100 +33,14 @@ using namespace miacode::runtime::shared;
 
 using namespace miacode::runtime::document_detail;
 
-namespace {
-
-constexpr const char* kUnifiedDesignerPrefKey = "unified_designer_enabled";
-
-// Collect every distinct non-empty designer name across the top &des and
-// each per-difficulty &des_N. Used by the OFF→ON popup flows so the user
-// can pick which name to canonicalize, or so we know whether anything is
-// at risk of being overwritten silently.
-struct DesignerSurvey {
-    QString topDesigner;
-    QVector<QPair<int, QString>> perDifficulty;  // (id, designer)
-    QStringList distinctNonEmpty;                // de-duped, preserves insert order
-};
-
-DesignerSurvey surveyDesigners(const SimaiDocument& doc)
+bool miacode::runtime::DocumentSessionHost::unifiedDocumentDesignerEnabled() const
 {
-    DesignerSurvey survey;
-    survey.topDesigner = doc.designer;
-    if (!doc.designer.isEmpty()) {
-        survey.distinctNonEmpty.append(doc.designer);
-    }
-    // Includes chart-less standalone &des_N so the unify picker can offer (and
-    // overwrite) names that belong to slots without a chart.
-    survey.perDifficulty = doc.perDifficultyDesigners();
-    for (const QPair<int, QString>& slot : survey.perDifficulty) {
-        if (!slot.second.isEmpty() && !survey.distinctNonEmpty.contains(slot.second)) {
-            survey.distinctNonEmpty.append(slot.second);
-        }
-    }
-    return survey;
-}
-
-void writeUnifiedDesignerPreference(const QString& chartPath, bool enabled)
-{
-    if (chartPath.isEmpty()) {
-        return;
-    }
-    QJsonObject prefs = miacode::project_preferences::load(chartPath);
-    prefs[QLatin1String(kUnifiedDesignerPrefKey)] = enabled;
-    miacode::project_preferences::save(chartPath, prefs);
-}
-
-}  // namespace
-
-void miacode::runtime::DocumentSessionHost::refreshUnifiedDesignerStateForLoadedDocument()
-{
-    bool enabled = false;
-    const QString chartPath = state_.currentFilePath_;
-    bool decisionFromPreference = false;
-    if (!chartPath.isEmpty()) {
-        const QJsonObject prefs = miacode::project_preferences::load(chartPath);
-        const QJsonValue stored = prefs.value(QLatin1String(kUnifiedDesignerPrefKey));
-        if (stored.isBool()) {
-            enabled = stored.toBool();
-            decisionFromPreference = true;
-        }
-    }
-    if (!decisionFromPreference) {
-        enabled = session_.applicationServices_.workspace().document().inferUnifiedDesignerDefault();
-    }
-    state_.unifiedDesignerEnabled_ = enabled;
-
-    // The preference claims "all difficulties share one designer", but the file
-    // we just loaded may disagree (it could have been hand-edited, merged, or
-    // touched by another tool since unified mode was last on). Without this,
-    // the box would read as "synced" while &des and the &des_N silently
-    // diverge until the next manual designer edit broadcasts. Reconcile now so
-    // the on-screen promise holds the moment the document opens.
-    if (!enabled) {
-        return;
-    }
-    const DesignerSurvey survey = surveyDesigners(session_.applicationServices_.workspace().document());
-    // Only auto-reconcile when there's an unambiguous canonical name:
-    //   - 0/1 distinct non-empty name → fill blanks, no data loss; or
-    //   - &des is non-empty → it is the declared source of truth.
-    // When &des is empty AND the per-difficulty names genuinely conflict
-    // there is no winner to pick without asking, and silently guessing on
-    // load would destroy data with no undo — so leave it for the user.
-    if (survey.distinctNonEmpty.size() >= 2 && survey.topDesigner.isEmpty()) {
-        return;
-    }
-    QString canonical = survey.topDesigner;
-    if (canonical.isEmpty() && !survey.distinctNonEmpty.isEmpty()) {
-        canonical = survey.distinctNonEmpty.first();
-    }
-    // applyUnifiedDesignerName is a no-op (no dirty, no UI churn) when the
-    // document is already consistent, which is the common case.
-    applyUnifiedDesignerName(canonical);
+    return state_.unifiedDesignerEnabled_;
 }
 
 void miacode::runtime::DocumentSessionHost::enableUnifiedDocumentDesigner(const QString& canonicalName)
 {
     state_.unifiedDesignerEnabled_ = true;
-    writeUnifiedDesignerPreference(state_.currentFilePath_, true);
     applyUnifiedDesignerName(canonicalName);
 }
 
@@ -137,7 +50,6 @@ void miacode::runtime::DocumentSessionHost::disableUnifiedDocumentDesigner()
         return;
     }
     state_.unifiedDesignerEnabled_ = false;
-    writeUnifiedDesignerPreference(state_.currentFilePath_, false);
 }
 
 void miacode::runtime::DocumentSessionHost::applyUnifiedDesignerName(const QString& canonicalName)

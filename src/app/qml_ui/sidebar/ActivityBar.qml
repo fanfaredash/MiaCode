@@ -55,7 +55,7 @@ Rectangle {
             onTriggered: root.toolRequested("latency")
         }
         AppMenuAction {
-            text: UiText.text("音视频处理")
+            text: UiText.text("media_tools.audio_video_processing")
             onTriggered: root.toolRequested("media")
         }
         AppMenuAction {

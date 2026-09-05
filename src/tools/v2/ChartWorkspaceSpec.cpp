@@ -214,6 +214,62 @@ bool verifyDifficultyFieldsDirtyTheirSection(QTextStream& out)
     return ok;
 }
 
+bool verifyDifficultyDiscardRestoresTheCompleteSection(QTextStream& out)
+{
+    using miacode::v2::ChartWorkspaceDifficultyField;
+
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    const QString savedChart = workspace.document().difficulty(5)->chart;
+    const QString savedLevel = workspace.document().difficulty(5)->level;
+    const QString savedDesigner = workspace.document().difficulty(5)->designer;
+
+    bool ok = expect(workspace.updateDifficultyField(
+                         5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12+"))
+                     && workspace.updateDifficultyField(
+                         5, ChartWorkspaceDifficultyField::Designer, QStringLiteral("shared"))
+                     && workspace.replaceDifficultyChart(5, QStringLiteral("(120){4}3,"))
+                     && workspace.snapshot().dirtyDifficultyIds == QVector<int>{5},
+                 QStringLiteral("a difficulty section can be dirty in chart, level, and designer together"), out);
+
+    const auto reverted = workspace.revertDifficultyChart(5);
+    const SimaiDifficultyData* restored = workspace.document().difficulty(5);
+    ok &= expect(reverted.accepted && restored != nullptr
+                     && restored->chart == savedChart
+                     && restored->level == savedLevel
+                     && restored->designer == savedDesigner
+                     && workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                 QStringLiteral("discard restores the complete difficulty section and clears its dirty marker"), out);
+
+    workspace.unifyDesigners(QStringLiteral("shared"));
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{5, 6},
+                 QStringLiteral("unified designer marks every affected difficulty"), out);
+    workspace.revertDifficultyChart(5);
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{6}
+                     && workspace.document().difficulty(5)->designer == savedDesigner,
+                 QStringLiteral("discard clears a designer-only unified edit instead of looping"), out);
+
+    workspace.addDifficulty(4);
+    ok &= expect(workspace.document().difficulty(4) != nullptr
+                     && workspace.snapshot().dirtyDifficultyIds.contains(4),
+                 QStringLiteral("a newly added difficulty becomes a dirty section"), out);
+    workspace.revertDifficultyChart(4);
+    ok &= expect(workspace.document().difficulty(4) == nullptr
+                     && !workspace.snapshot().dirtyDifficultyIds.contains(4),
+                 QStringLiteral("discard removes a difficulty that did not exist at the save point"), out);
+
+    miacode::v2::ChartWorkspace metadataWorkspace;
+    metadataWorkspace.openSource(sourceWithTwoDifficulties());
+    metadataWorkspace.updateDocumentField(
+        miacode::v2::ChartWorkspaceDocumentField::Title, QStringLiteral("changed"));
+    const auto metadataReverted = metadataWorkspace.revertDifficultyChart(0);
+    ok &= expect(metadataReverted.accepted
+                     && metadataWorkspace.document().title == QLatin1String("workspace")
+                     && !metadataWorkspace.snapshot().dirty,
+                 QStringLiteral("metadata discard restores the whole document save point"), out);
+    return ok;
+}
+
 bool verifyOpenAcceptsEmptyInoteSlots(QTextStream& out)
 {
     miacode::v2::ChartWorkspace workspace;
@@ -289,6 +345,7 @@ int main()
         && verifyDocumentAndDifficultyTransactions(out)
         && verifyIncrementalChartAllowsIntermediateText(out)
         && verifyDifficultyFieldsDirtyTheirSection(out)
+        && verifyDifficultyDiscardRestoresTheCompleteSection(out)
         && verifyOpenAcceptsEmptyInoteSlots(out)
         && verifyInlineSourceSpanWinsOverLaterLevel(out)
         && verifyOwnedFieldMutationsAndSavePointRebind(out);

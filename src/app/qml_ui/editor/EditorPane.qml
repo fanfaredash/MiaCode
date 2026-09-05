@@ -50,6 +50,14 @@ Item {
             sourceEditor.paste()
     }
 
+    // Keyboard tab-close must use the same three-way guard as the tab's x
+    // button. Calling ViewState.closeEditor directly would discard a dirty
+    // metadata or difficulty view without asking.
+    function requestCloseActiveEditor() {
+        if (viewState.activeEditorKey.length > 0)
+            tabs.requestCloseTab(viewState.activeEditorKey)
+    }
+
     function selectAll() {
         if (sourceVisible)
             sourceEditor.selectAll()
@@ -373,7 +381,7 @@ Item {
             spacing: 12
 
             Label {
-                text: UiText.text("谱面信息设置")
+                text: UiText.text("dialog.unsaved_field_changes.field.metadata")
                 color: Theme.colors.text.primary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize + 2
@@ -405,7 +413,7 @@ Item {
             }
             MetadataField {
                 width: metadataColumn.width
-                label: UiText.text("clock_count")
+                label: UiText.text("media_tools.beats")
                 value: root.documentSession.metadataClockCount
                 onCommitted: value => root.documentSession.metadataClockCount = value
             }

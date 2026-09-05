@@ -118,13 +118,21 @@ bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
     if (pages == nullptr || exportSessionObject() == nullptr) {
         return false;
     }
+    const QString requestedTab = tab == QLatin1String("batch")
+        ? QStringLiteral("batch") : QStringLiteral("export");
+    if (activePageId_ == QLatin1String("export")) {
+        // The export page is a resident QML surface. Re-clicking its sidebar
+        // entry only changes the single/batch tab; tearing down and rebuilding
+        // the audition here made an otherwise harmless navigation expensive.
+        exportSessionObject()->setActiveTab(requestedTab);
+        return true;
+    }
     rememberResumeDifficulty();
-    return requestPageSwitch([this, tab]() {
+    return requestPageSwitch([this, requestedTab]() {
         if (exportSessionObject() == nullptr || router() == nullptr) {
             return false;
         }
-        exportSessionObject()->setActiveTab(
-            tab == QLatin1String("batch") ? QStringLiteral("batch") : QStringLiteral("export"));
+        exportSessionObject()->setActiveTab(requestedTab);
         if (!router()->enterExportPage()) {
             return false;
         }

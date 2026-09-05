@@ -31,22 +31,24 @@ Rectangle {
         return null
     }
 
-    // Closing a tab whose difficulty has unsaved edits asks first. The metadata
-    // tab shows the whole file's source, so what it would discard is the whole
-    // document — that decision belongs to the file-level prompt, not to closing
-    // a view of it, and closing it here never asks.
+    // Closing any dirty editor view asks first. A difficulty tab discards only
+    // that saved section; metadata is the whole-file view, so its discard uses
+    // section id 0 and restores the complete document save point.
     function requestCloseTab(key) {
         const difficultyId = root.difficultyIdForKey(key)
-        const sectionDirty = difficultyId > 0
-            && root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
+        const sectionDirty = root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
         if (!sectionDirty) {
             root.viewState.closeEditor(key)
             return
         }
         root.closingKey = key
         root.closingDifficultyId = difficultyId
-        closeTabDialog.title = UiText.text("关闭「%1」").arg(root.titleForKey(key))
-        closeTabDialog.message = UiText.text("「%1」有未保存的更改。").arg(root.titleForKey(key))
+        closeTabDialog.title = UiText.text("dialog.unsaved_tab_changes.title")
+        closeTabDialog.message = UiText.text("dialog.unsaved_tab_changes.message")
+            .arg(root.titleForKey(key))
+        closeTabDialog.details = difficultyId > 0
+            ? UiText.text("dialog.unsaved_tab_changes.details.difficulty")
+            : UiText.text("dialog.unsaved_tab_changes.details.document")
         closeTabDialog.open()
     }
 
@@ -58,7 +60,7 @@ Rectangle {
 
     function titleForKey(key) {
         if (key === viewState.metadataEditorKey)
-            return UiText.text("元数据")
+            return UiText.text("dialog.unsaved_field_changes.field.metadata")
         const difficulty = difficultyData(difficultyIdForKey(key))
         return difficulty ? difficulty.label : UiText.text("难度")
     }
@@ -212,14 +214,13 @@ Rectangle {
     }
     property string draggingEditorKey: ""
 
-    // 保存 stores the whole file, because the file is what gets written — the
-    // message says so rather than letting the button imply it saved only this
-    // difficulty. 放弃 puts this difficulty back and leaves every other one
-    // exactly as it is.
+    // 保存 writes the requested section through the file service. For
+    // difficulty tabs it preserves every other dirty section; for metadata
+    // (section id 0) it writes the whole document.
     ChoiceDialog {
         id: closeTabDialog
         objectName: "editorTabCloseDialog"
-        details: UiText.text("保存只写入这个难度，其他难度在文件里保持原样；放弃把这个难度还原到上次保存时的内容。")
+        details: ""
         choices: [
             { id: "save", label: UiText.text("保存"), role: "accept" },
             { id: "discard", label: UiText.text("放弃"), role: "destructive" },

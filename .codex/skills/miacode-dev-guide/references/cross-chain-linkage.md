@@ -1,5 +1,28 @@
 # Cross-Chain Linkage
 
+## QML editor tabs, document save points, and export-page entry
+
+- Editor-tab close is a QML choice flow owned by
+  `src/app/qml_ui/editor/EditorTabBar.qml`. Both the tab x button and keyboard
+  close (`MainView` → `MainSplitView` → `EditorPane`) must call
+  `EditorTabBar.requestCloseTab()`, never `ViewState.closeEditor()` directly.
+  Its dirty keys come from `QmlDocumentProjection`; difficulty discard is
+  implemented by `ChartWorkspace::revertDifficultyChart()` and metadata discard
+  uses section id `0` to restore the complete save point. Keep save/discard
+  failure paths from closing the view.
+- Unified-designer mode crosses `QmlDocumentModel` → `DocumentBridge` →
+  `DocumentSessionHost` → `ChartWorkspace`. Project-preference persistence and
+  load-time restoration are currently detached pending a v1 behavior review;
+  opening a document starts the runtime mode off. Loading must not reconcile or
+  mutate `&des`/`&des_N`. Only an explicit enable/edit command may mutate the
+  workspace, and QML must not perform a second direct mutation.
+- Export entry crosses `QmlEditorPageHost::openVideoExportPage()` →
+  `DocumentSessionHost::enterExportPage()` → `QmlExportSession::enter()`. A
+  real page entry installs one audition; clicking the already-active export
+  sidebar item only switches single/batch mode. `ExportVideoPage` is resident,
+  and the font-library option model is materialized/cached with invalidation on
+  entry or font import.
+
 Use this file before changing behavior that crosses parser, preview, audio, export, or tooling boundaries.
 
 ## Current Runtime Host Migration (2026-09-02)
@@ -157,7 +180,7 @@ Shared concerns:
 - firework timing offsets
 - partial export timing: when the export request is not marked as full-range, export uses a 1.0-second preload; full-range exports use a 2.0-second lead-in. PV/BGM start from `timelineOriginSecond = segmentStart - preload`. Lead-in / preload frames clamp the renderer playhead to `segmentStart` (`qMax(0.0, ...)` for full-range) so the playfield and HUD render the chart frozen at segment-start time, not a black/transparent pre-roll; the HUD timestamp instead reads the unclamped `rawChartSecond` via `hudPlayheadSecondsOverride` so it counts up through the lead-in (e.g. `-2s → 0s` for full-range, `segmentStart-1s → segmentStart` for partial). The exported marker set is still filtered up front by `marker.second` within the simulated frame window `[timelineOriginSecond, R]`, and preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
 - v2 export-range editing: `ExportRangeSelector` must change a range through `QmlExportSession::setExportRangeSeconds(start, end)`, not independent property writes, because `VideoExportTask` stores `exportStartSeconds` plus `contentDurationSeconds`. The session enforces the `min(5s, chart duration)` floor and publishes it to the selector. Grip drags move one endpoint, selected-body drags translate both endpoints, and both drive `QmlPreviewModel`'s one shared `beginScrub` / `updateScrub` / `endScrub` lifecycle; the selector never owns a second playhead.
-- `&clock_count=` is stored in `SimaiDocument::extraFields`, defaults to `4` when missing, is editable from both metadata "Other &xx Fields" and the latency settings page, and is consumed by export count-in scheduling. Export resolves BPM from `&wholebpm=` first and then the first inline `(BPM)`, and schedules `clock.wav` only for full-range exports starting at chart time `0` (mix time = full-export lead-in seconds, the HUD `00:00:000` instant) and then every quarter note, so the first tick lines up with the moment the chart begins playing rather than during the lead-in.
+- `&clock_count=` is stored in `SimaiDocument::extraFields`, defaults to `4` when missing, is editable through the dedicated metadata “拍数” field and the latency settings page (not the generic “Other &xx Fields” list), and is consumed by export count-in scheduling. Export resolves BPM from `&wholebpm=` first and then the first inline `(BPM)`, and schedules `clock.wav` only for full-range exports starting at chart time `0` (mix time = full-export lead-in seconds, the HUD `00:00:000` instant) and then every quarter note, so the first tick lines up with the moment the chart begins playing rather than during the lead-in.
 - While `latencySandboxAuditionActive_` is true, `PlaybackCoordinator::scheduleTimelineRefresh` rejects normal-difficulty rebuilds and the slow-refresh completion gate rejects older in-flight results. BPM/offset/clock-count writes still update `ChartWorkspace`; `LatencySandboxController` remains the sole preview/timeline source until page exit. `DocumentSessionHost::syncRuntimeFromWorkspace` treats the workspace/session active-difficulty mismatch as intentional while latency or export audition owns the source, so metadata writes cannot route through `switchToDifficultyField` and clear the audition scene.
 - same-second collapse, latest-wins scheduling, and partial-export answer clamping are shared in `src/common/PreviewSfxTimeline.h`; keep runtime `drainEvents(...)`, export render-plan building, and export backend rendering on that common path, and pass the same playback-rate / timing-settings inputs into both sides
 

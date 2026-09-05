@@ -72,6 +72,13 @@ public:
     // Asks whatever handler is installed; the continuation runs once.
     virtual void requestLeaveDocument(std::function<void(bool)> onDecided) = 0;
 
+    // Unified-designer mode is a workspace editing mode. Its persistence and
+    // load semantics are intentionally detached until the v1 behavior is
+    // re-investigated; QML must not perform a second direct workspace mutation.
+    virtual bool unifiedDocumentDesignerEnabled() const = 0;
+    virtual void enableUnifiedDocumentDesigner(const QString& canonicalName) = 0;
+    virtual void disableUnifiedDocumentDesigner() = 0;
+
     // ---- chart drop ----
     //
     // Dropping audio onto the root window creates a chart beside it. This is
