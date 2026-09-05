@@ -63,6 +63,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.media.stageMediaAvailable = stageMediaAvailable;
     frameState_.render.backgroundBrightnessOuter = task.backgroundBrightnessOuter;
     frameState_.render.backgroundBrightnessInner = task.backgroundBrightnessInner;
+    frameState_.render.configuredBackgroundBrightnessActive = true;
     frameState_.render.layoutSquareScale = normalizedLayoutScale(task.layoutSquareScale);
     frameState_.render.smoothBrightness = task.smoothBrightness;
     frameState_.render.backgroundScaleMode = task.backgroundScaleMode;

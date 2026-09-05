@@ -250,7 +250,7 @@ QtObject {
     readonly property int captionFontSize: uiFontSize - 3
 
     readonly property real surfaceOpacity: backgroundActive
-        ? (darkTheme ? appBackground.panelAlphaDark : appBackground.panelAlphaLight) / 255.0
+        ? appBackground.panelAlpha / 255.0
         : 1.0
 
     // Fill alpha only: text/icons and popup transition opacity stay independent.

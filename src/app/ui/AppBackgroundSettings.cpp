@@ -14,8 +14,7 @@ AppBackgroundOverlaySettings normalizedOverlay(const AppBackgroundOverlaySetting
     normalized.toolbarAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.toolbarAlphaLight, kAppBackgroundOverlayAlphaMax);
     normalized.statusAlphaDark = qBound(kAppBackgroundOverlayAlphaMin, normalized.statusAlphaDark, kAppBackgroundOverlayAlphaMax);
     normalized.statusAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.statusAlphaLight, kAppBackgroundOverlayAlphaMax);
-    normalized.panelAlphaDark = qBound(kAppBackgroundOverlayAlphaMin, normalized.panelAlphaDark, kAppBackgroundOverlayAlphaMax);
-    normalized.panelAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.panelAlphaLight, kAppBackgroundOverlayAlphaMax);
+    normalized.panelAlpha = qBound(kAppBackgroundOverlayAlphaMin, normalized.panelAlpha, kAppBackgroundOverlayAlphaMax);
     normalized.cardAlphaDark = kAppBackgroundOverlayAlphaMax;
     normalized.cardAlphaLight = kAppBackgroundOverlayAlphaMax;
     normalized.editorHeaderAlphaDark = qBound(kAppBackgroundOverlayAlphaMin, normalized.editorHeaderAlphaDark, kAppBackgroundOverlayAlphaMax);
@@ -34,8 +33,13 @@ AppBackgroundOverlaySettings overlayFromJson(const QJsonObject& object)
     settings.toolbarAlphaLight = object.value(QStringLiteral("toolbar_light")).toInt(settings.toolbarAlphaLight);
     settings.statusAlphaDark = object.value(QStringLiteral("status_dark")).toInt(settings.statusAlphaDark);
     settings.statusAlphaLight = object.value(QStringLiteral("status_light")).toInt(settings.statusAlphaLight);
-    settings.panelAlphaDark = object.value(QStringLiteral("panel_dark")).toInt(settings.panelAlphaDark);
-    settings.panelAlphaLight = object.value(QStringLiteral("panel_light")).toInt(settings.panelAlphaLight);
+    if (object.contains(QStringLiteral("panel"))) {
+        settings.panelAlpha = object.value(QStringLiteral("panel")).toInt(settings.panelAlpha);
+    } else if (object.contains(QStringLiteral("panel_dark"))) {
+        settings.panelAlpha = object.value(QStringLiteral("panel_dark")).toInt(settings.panelAlpha);
+    } else {
+        settings.panelAlpha = object.value(QStringLiteral("panel_light")).toInt(settings.panelAlpha);
+    }
     settings.cardAlphaDark = object.value(QStringLiteral("card_dark")).toInt(settings.cardAlphaDark);
     settings.cardAlphaLight = object.value(QStringLiteral("card_light")).toInt(settings.cardAlphaLight);
     settings.editorHeaderAlphaDark = object.value(QStringLiteral("editor_header_dark")).toInt(settings.editorHeaderAlphaDark);
@@ -55,8 +59,7 @@ QJsonObject overlayToJson(const AppBackgroundOverlaySettings& settings)
         {QStringLiteral("toolbar_light"), normalized.toolbarAlphaLight},
         {QStringLiteral("status_dark"), normalized.statusAlphaDark},
         {QStringLiteral("status_light"), normalized.statusAlphaLight},
-        {QStringLiteral("panel_dark"), normalized.panelAlphaDark},
-        {QStringLiteral("panel_light"), normalized.panelAlphaLight},
+        {QStringLiteral("panel"), normalized.panelAlpha},
         {QStringLiteral("card_dark"), normalized.cardAlphaDark},
         {QStringLiteral("card_light"), normalized.cardAlphaLight},
         {QStringLiteral("editor_header_dark"), normalized.editorHeaderAlphaDark},

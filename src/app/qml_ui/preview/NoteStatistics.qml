@@ -55,11 +55,14 @@ Item {
         rowSpacing: 0
 
         Repeater {
-            model: root.statistics
+            // 统计值刷新会替换 QVariantList；数量保持稳定时复用现有单元，
+            // 让数值绑定更新，保持图标、文字与布局对象的生命周期连续。
+            model: root.statistics.length
 
             delegate: Item {
                 id: cell
-                required property var modelData
+                required property int index
+                readonly property var modelData: root.statistics[index]
 
                 width: grid.width / root.columns
                 height: grid.height / root.rows
@@ -67,6 +70,7 @@ Item {
                 Row {
                     anchors.centerIn: parent
                     width: Math.min(root.contentWidth, cell.width - 8)
+                    height: Math.max(24, textColumn.implicitHeight)
                     spacing: root.contentSpacing
 
                     Item {
@@ -95,6 +99,7 @@ Item {
                     }
 
                     Column {
+                        id: textColumn
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
                         width: parent.width - root.iconSlotWidth - parent.spacing
@@ -112,11 +117,14 @@ Item {
                         Text {
                             id: valueLabel
                             width: parent.width
+                            // 数值水平缩字时维持行槽高度，名称和图标的中心位置稳定。
+                            height: valueWidthProbe.implicitHeight
                             text: cell.modelData.value
                             color: Theme.colors.text.primary
                             font.family: Theme.uiFont
                             font.pixelSize: root.wideLayout ? Theme.uiFontSize : Theme.secondaryFontSize
                             horizontalAlignment: Text.AlignLeft
+                            verticalAlignment: Text.AlignVCenter
                             fontSizeMode: Text.HorizontalFit
                             minimumPixelSize: Math.max(1, Theme.secondaryFontSize - 1)
                         }

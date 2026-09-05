@@ -80,7 +80,7 @@ bool EditorSyncController::requestTouchPadAuthoring(
 
 bool EditorSyncController::editorContextActive() const
 {
-    return editorVisible_ && !metadataMode_ && editorFocused_ && !imeComposing_
+    return editorVisible_ && editorFocused_ && !imeComposing_
         && contextDifficultyId_ > 0
         && contextDifficultyId_ == readyDifficultyId_
         && contextRevision_ == readyRevision_;
@@ -94,23 +94,21 @@ EditorSelectionState EditorSyncController::editorSelection() const
     selection.anchor = contextAnchor_;
     selection.position = contextPosition_;
     selection.focused = editorFocused_;
-    selection.valid = editorVisible_ && !metadataMode_ && contextDifficultyId_ > 0
+    selection.valid = editorVisible_ && contextDifficultyId_ > 0
         && contextDifficultyId_ == readyDifficultyId_ && contextRevision_ == readyRevision_;
     return selection;
 }
 
 void EditorSyncController::setEditorReadiness(
-    int difficultyId, qulonglong revision, bool visible, bool metadataMode)
+    int difficultyId, qulonglong revision, bool visible)
 {
     const bool changed = readyDifficultyId_ != difficultyId
         || readyRevision_ != revision
-        || editorVisible_ != visible
-        || metadataMode_ != metadataMode;
+        || editorVisible_ != visible;
     readyDifficultyId_ = difficultyId;
     readyRevision_ = revision;
     editorVisible_ = visible;
-    metadataMode_ = metadataMode;
-    if (!editorVisible_ || metadataMode_) {
+    if (!editorVisible_) {
         if (navigationPending_) {
             scheduleNavigationFinished(pendingNavigation_.sequence, false);
         }
@@ -138,7 +136,7 @@ void EditorSyncController::setEditorReadiness(
     }
     if (changed) {
         scheduleEditorContextDelivery();
-        if (editorVisible_ && !metadataMode_) {
+        if (editorVisible_) {
             scheduleFollowDelivery();
         }
     }
@@ -238,7 +236,7 @@ bool EditorSyncController::seekPreviewToEditorLocation(
 
 bool EditorSyncController::readinessAccepts(int difficultyId, quint64 revision) const
 {
-    return editorVisible_ && !metadataMode_ && difficultyId > 0
+    return editorVisible_ && difficultyId > 0
         && difficultyId == readyDifficultyId_ && revision == readyRevision_;
 }
 

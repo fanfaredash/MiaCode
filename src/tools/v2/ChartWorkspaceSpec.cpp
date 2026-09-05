@@ -284,7 +284,7 @@ bool verifyIncrementalChartAllowsIntermediateText(QTextStream& out)
                   QStringLiteral("incremental chart edits accept an incomplete token for later analysis"), out);
 }
 
-bool verifyDifficultyFieldsDirtyTheirSection(QTextStream& out)
+bool verifyDifficultyHeadersStayOutsideSectionDirtyState(QTextStream& out)
 {
     using miacode::v2::ChartWorkspaceDifficultyField;
 
@@ -296,33 +296,31 @@ bool verifyDifficultyFieldsDirtyTheirSection(QTextStream& out)
     ok &= expect(workspace.updateDifficultyField(
                      5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12+"))
                      && workspace.snapshot().dirty
-                     && workspace.snapshot().dirtyDifficultyIds == QVector<int>{5},
-                 QStringLiteral("a level edit marks that difficulty immediately"), out);
+                     && workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                 QStringLiteral("a level edit updates the document without marking the tab"), out);
 
     workspace.selectDifficulty(6);
-    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{5},
-                 QStringLiteral("switching away keeps the edited difficulty marked"), out);
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                 QStringLiteral("switching away keeps header edits outside tab dirtiness"), out);
 
     ok &= expect(workspace.updateDifficultyField(
                      6, ChartWorkspaceDifficultyField::Designer, QStringLiteral("other"))
-                     && workspace.snapshot().dirtyDifficultyIds == (QVector<int>{5, 6}),
-                 QStringLiteral("a designer edit marks that difficulty without clearing the other"), out);
+                     && workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                 QStringLiteral("a designer edit updates the document without marking the tab"), out);
 
     workspace.updateDifficultyField(5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12"));
-    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{6},
-                 QStringLiteral("restoring the saved level clears only that difficulty"), out);
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                 QStringLiteral("restoring a level keeps the tab clean"), out);
     return ok;
 }
 
-bool verifyDifficultyDiscardRestoresTheCompleteSection(QTextStream& out)
+bool verifyDifficultyDiscardRestoresChartBody(QTextStream& out)
 {
     using miacode::v2::ChartWorkspaceDifficultyField;
 
     miacode::v2::ChartWorkspace workspace;
     workspace.openSource(sourceWithTwoDifficulties());
     const QString savedChart = workspace.document().difficulty(5)->chart;
-    const QString savedLevel = workspace.document().difficulty(5)->level;
-    const QString savedDesigner = workspace.document().difficulty(5)->designer;
 
     bool ok = expect(workspace.updateDifficultyField(
                          5, ChartWorkspaceDifficultyField::Level, QStringLiteral("12+"))
@@ -336,18 +334,18 @@ bool verifyDifficultyDiscardRestoresTheCompleteSection(QTextStream& out)
     const SimaiDifficultyData* restored = workspace.document().difficulty(5);
     ok &= expect(reverted.accepted && restored != nullptr
                      && restored->chart == savedChart
-                     && restored->level == savedLevel
-                     && restored->designer == savedDesigner
+                     && restored->level == QLatin1String("12+")
+                     && restored->designer == QLatin1String("shared")
                      && workspace.snapshot().dirtyDifficultyIds.isEmpty(),
-                 QStringLiteral("discard restores the complete difficulty section and clears its dirty marker"), out);
+                 QStringLiteral("discard restores the chart body and keeps immediate header edits"), out);
 
     workspace.unifyDesigners(QStringLiteral("shared"));
-    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{5, 6},
-                 QStringLiteral("unified designer marks every affected difficulty"), out);
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds.isEmpty(),
+                 QStringLiteral("unified designer stays outside tab dirtiness"), out);
     workspace.revertDifficultyChart(5);
-    ok &= expect(workspace.snapshot().dirtyDifficultyIds == QVector<int>{6}
-                     && workspace.document().difficulty(5)->designer == savedDesigner,
-                 QStringLiteral("discard clears a designer-only unified edit instead of looping"), out);
+    ok &= expect(workspace.snapshot().dirtyDifficultyIds.isEmpty()
+                     && workspace.document().difficulty(5)->designer == QLatin1String("shared"),
+                 QStringLiteral("tab discard keeps an immediate designer edit"), out);
 
     workspace.addDifficulty(4);
     ok &= expect(workspace.document().difficulty(4) != nullptr
@@ -481,8 +479,8 @@ int main()
         && verifyUnifyLeavesUntouchedSlotsAlone(out)
         && verifyAddedDifficultyAdoptsAChartlessName(out)
         && verifyIncrementalChartAllowsIntermediateText(out)
-        && verifyDifficultyFieldsDirtyTheirSection(out)
-        && verifyDifficultyDiscardRestoresTheCompleteSection(out)
+        && verifyDifficultyHeadersStayOutsideSectionDirtyState(out)
+        && verifyDifficultyDiscardRestoresChartBody(out)
         && verifyOpenAcceptsEmptyInoteSlots(out)
         && verifyInlineSourceSpanWinsOverLaterLevel(out)
         && verifyOwnedFieldMutationsAndSavePointRebind(out)

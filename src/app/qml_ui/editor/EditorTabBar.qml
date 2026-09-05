@@ -31,9 +31,7 @@ Rectangle {
         return null
     }
 
-    // Closing any dirty editor view asks first. A difficulty tab discards only
-    // that saved section; metadata is the whole-file view, so its discard uses
-    // section id 0 and restores the complete document save point.
+    // Closing a dirty editor asks about that editor's staged content.
     function requestCloseTab(key) {
         const difficultyId = root.difficultyIdForKey(key)
         const sectionDirty = root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
@@ -48,7 +46,7 @@ Rectangle {
             .arg(root.titleForKey(key))
         closeTabDialog.details = difficultyId > 0
             ? UiText.text("dialog.unsaved_tab_changes.details.difficulty")
-            : UiText.text("dialog.unsaved_tab_changes.details.document")
+            : UiText.text("dialog.unsaved_tab_changes.details.metadata")
         closeTabDialog.open()
     }
 
@@ -214,9 +212,7 @@ Rectangle {
     }
     property string draggingEditorKey: ""
 
-    // 保存 writes the requested section through the file service. For
-    // difficulty tabs it preserves every other dirty section; for metadata
-    // (section id 0) it writes the whole document.
+    // Save writes the requested editor section through the file service.
     ChoiceDialog {
         id: closeTabDialog
         objectName: "editorTabCloseDialog"
@@ -244,10 +240,15 @@ Rectangle {
                 // only in memory, and closing is the one thing that loses them.
                 root.pendingSaveCloseKey = key
                 root.pendingSaveCloseDifficultyId = difficultyId
-                root.documentSession.requestSaveDifficultySection(difficultyId)
+                if (difficultyId > 0)
+                    root.documentSession.requestSaveDifficultySection(difficultyId)
+                else
+                    root.documentSession.requestSaveMetadataSection()
                 return
-            } else {
+            } else if (difficultyId > 0) {
                 root.documentSession.revertDifficultyChart(difficultyId)
+            } else {
+                root.documentSession.discardMetadataDraft()
             }
             root.viewState.closeEditor(key)
         }

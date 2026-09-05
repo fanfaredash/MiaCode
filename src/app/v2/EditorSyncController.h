@@ -63,7 +63,7 @@ public:
     EditorSelectionState editorSelection() const;
 
     Q_INVOKABLE void setEditorReadiness(int difficultyId, qulonglong revision,
-                                        bool visible, bool metadataMode);
+                                        bool visible);
     Q_INVOKABLE void setEditorContext(int difficultyId, qulonglong revision,
                                      int anchor, int position, bool focused,
                                      bool imeComposing, int line, int column,
@@ -136,7 +136,6 @@ private:
     int readyDifficultyId_ = -1;
     quint64 readyRevision_ = 0;
     bool editorVisible_ = false;
-    bool metadataMode_ = false;
 
     int contextDifficultyId_ = -1;
     quint64 contextRevision_ = 0;

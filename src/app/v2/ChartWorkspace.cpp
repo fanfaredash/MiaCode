@@ -199,13 +199,6 @@ bool ChartWorkspace::updateDocumentField(
         changed = document_.videoPath != value;
         document_.videoPath = value;
         break;
-    case ChartWorkspaceDocumentField::ExtraText: {
-        QVector<SimaiRawField> fields = SimaiDocument::parseUnmanagedFields(value, true);
-        SimaiDocument::ensureDefaultClockCount(&fields);
-        changed = document_.extraFields != fields;
-        document_.extraFields = std::move(fields);
-        break;
-    }
     }
     if (!changed) return false;
     refreshSourceAndDirty();
@@ -430,15 +423,10 @@ ChartWorkspaceResult ChartWorkspace::revertDifficultyChart(int difficultyId)
         document_.removeDifficulty(difficultyId);
         document_.setDesignerForSlot(
             difficultyId, savedDocument_.designerForSlot(difficultyId));
-    } else if (difficulty->level == saved->level
-               && difficulty->designer == saved->designer
-               && difficulty->chart == saved->chart) {
+    } else if (difficulty->chart == saved->chart) {
         return acceptWithoutChange();
     } else {
-        // A unified-designer edit changes the section designer without
-        // touching chart text. Restoring only `chart` leaves the section dirty
-        // and makes the shell-close prompt repeat forever.
-        *difficulty = *saved;
+        difficulty->chart = saved->chart;
     }
     refreshSourceAndDirty();
     return commit();
@@ -462,12 +450,7 @@ QVector<int> ChartWorkspace::computeDirtyDifficultyIds() const
         const SimaiDifficultyData* current = document_.difficulty(id);
         const SimaiDifficultyData* saved = savedDocument_.difficulty(id);
         if (current == nullptr) continue;
-        // A difficulty added since the save point has no earlier record;
-        // chart, level, and designer are all new, so it is changed.
-        if (saved == nullptr
-            || saved->chart != current->chart
-            || saved->level != current->level
-            || saved->designer != current->designer) {
+        if (saved == nullptr || saved->chart != current->chart) {
             ids.append(id);
         }
     }

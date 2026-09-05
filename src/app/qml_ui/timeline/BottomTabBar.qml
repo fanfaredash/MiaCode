@@ -11,8 +11,11 @@ Item {
     required property var timelineSession
 
     implicitHeight: Theme.compactControlHeight + 2
+    readonly property real minimumWidth: tabLayout.implicitWidth
+        + tabLayout.anchors.leftMargin + tabLayout.anchors.rightMargin
 
     RowLayout {
+        id: tabLayout
         anchors.fill: parent
         anchors.leftMargin: Theme.panelPadding - Theme.chromeInsetX
         anchors.rightMargin: Theme.panelPadding

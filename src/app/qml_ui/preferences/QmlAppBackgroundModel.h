@@ -30,8 +30,7 @@ class QmlAppBackgroundModel final : public QObject
     Q_PROPERTY(int toolbarAlphaLight READ toolbarAlphaLight WRITE setToolbarAlphaLight NOTIFY overlayChanged)
     Q_PROPERTY(int statusAlphaDark READ statusAlphaDark WRITE setStatusAlphaDark NOTIFY overlayChanged)
     Q_PROPERTY(int statusAlphaLight READ statusAlphaLight WRITE setStatusAlphaLight NOTIFY overlayChanged)
-    Q_PROPERTY(int panelAlphaDark READ panelAlphaDark WRITE setPanelAlphaDark NOTIFY overlayChanged)
-    Q_PROPERTY(int panelAlphaLight READ panelAlphaLight WRITE setPanelAlphaLight NOTIFY overlayChanged)
+    Q_PROPERTY(int panelAlpha READ panelAlpha WRITE setPanelAlpha NOTIFY overlayChanged)
     Q_PROPERTY(int cardAlphaDark READ cardAlphaDark CONSTANT)
     Q_PROPERTY(int cardAlphaLight READ cardAlphaLight CONSTANT)
     Q_PROPERTY(int editorHeaderAlphaDark READ editorHeaderAlphaDark WRITE setEditorHeaderAlphaDark NOTIFY overlayChanged)
@@ -72,8 +71,7 @@ public:
     int toolbarAlphaLight() const;
     int statusAlphaDark() const;
     int statusAlphaLight() const;
-    int panelAlphaDark() const;
-    int panelAlphaLight() const;
+    int panelAlpha() const;
     int cardAlphaDark() const;
     int cardAlphaLight() const;
     int editorHeaderAlphaDark() const;
@@ -86,8 +84,7 @@ public:
     void setToolbarAlphaLight(int value);
     void setStatusAlphaDark(int value);
     void setStatusAlphaLight(int value);
-    void setPanelAlphaDark(int value);
-    void setPanelAlphaLight(int value);
+    void setPanelAlpha(int value);
     void setEditorHeaderAlphaDark(int value);
     void setEditorHeaderAlphaLight(int value);
     void setInputAlphaDark(int value);

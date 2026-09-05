@@ -89,6 +89,10 @@ private:
     Qt::MouseButton touchPadAuthoringPressedButton_ = Qt::NoButton;
     QMetaObject::Connection runtimeUpdateConnection_;
     QMetaObject::Connection frameSwapConnection_;
+#ifdef Q_OS_MACOS
+    QMetaObject::Connection framePresentedCaptureConnection_;
+    QMetaObject::Connection guiFrameConnection_;
+#endif
     QMetaObject::Connection fireworkPresentConnection_;
     QMetaObject::Connection windowVisibilityConnection_;
     QMetaObject::Connection renderBeforeSyncConnection_;

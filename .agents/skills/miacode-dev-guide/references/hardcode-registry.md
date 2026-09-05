@@ -13,13 +13,16 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   (`kPreviewSlideEarlierSecondAndTextOnTop`).
 - `PreviewSkinConfig.h` — tap-head scale, hold-width / hold-cap-slice / slide-track ratios (preview
   ↔ timeline skin parity).
-- `PreviewVideoGeometryConfig.h` — background brightness defaults, layout square scale (default
-  `0.95`), dimming geometry, smooth brightness.
+- `PreviewVideoGeometryConfig.h` — background brightness defaults, the fixed opaque-black inactive
+  inner-circle level, layout square scale (default `0.95`), dimming geometry, smooth brightness.
 - `LayoutRingConfig.h` — fixed outline-to-playfield diameter ratio (preview ↔ export dim mask).
 - `PreviewSfxAssets.h` — SFX kind→filename mapping + SFX dir resolution.
 - `ChartClockCount.h` — shared `&clock_count=` parsing + BPM fallback order; a missing value is materialized as `4` by `SimaiDocument::ensureDefaultClockCount`; consumed by chart metadata, the latency settings UI, and export count-in.
 - `PreviewTimingSettings.h` — persisted preview timing offset layers (`audioOffset`,
   `displayOffset`, `judgeOffset`, `answerOffset`).
+- `src/app/ui/AppBackgroundSettings.h` — application-background opacity range (`10%..80%`),
+  unified panel overlay alpha (`0..255`, default `200`), and the QML blur range
+  (`0..64`, default `0`); `Main.qml` maps this range to `MultiEffect.blur`.
 - `PreviewAudioMixConfig.h` — shared offline mix format (`48 kHz`, stereo).
 - `PreviewSfxTiming.h` — shared runtime/export SFX timing formulas + `1/60 s` pre-trigger.
 - `src/audio/PreviewAudioSettings.h` — SFX aggregation policy + bucket-to-kind gain map. Defaults:
@@ -46,6 +49,9 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
+- `src/app/runtime/Shared.{h,cpp}` — editor line-spacing factors (`1.0`, `1.5`, `2.0`,
+  `3.0`, `5.0`) and the default factor (`1.0`). The QML preferences list and runtime
+  normalization both consume this shared set.
 - `src/app/qml_ui/theme/Theme.qml` — dark/light `overlayOpacity` (0.72/0.92) for control/state
   fills and `popupOpacity` (0.96/0.99) for floating fills. Cards and idle fields are borderless in both
   wallpaper states; field hover/focus states retain their accent outline.

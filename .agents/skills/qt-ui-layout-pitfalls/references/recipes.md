@@ -388,30 +388,6 @@ the host window with an event filter so a click on the preview can't swallow Esc
 `QGuiApplication::topLevelWindows()` before/after the repro step — a surface whose
 `global == geom` and a new visible `QWidgetWindow <surface>Window` entry = de-embedded.
 
-### Z7. macOS popup displaced from its QWidget anchor inside QuickShell
-
-**Symptom:** text and caret render in the correct place, but a top-level popup opened from
-the embedded editor/menu appears offset by the old bridge-panel origin. Moving the main
-window preserves the wrong delta or makes it obvious.
-
-**Root cause:** QuickShell adopts a bridge surface's content `NSView` into its `QQuickWindow`,
-but Qt's QWidget hierarchy still belongs logically to the orphan `NSPanel`. Local QWidget
-coordinates remain correct; `QWidget::mapToGlobal()` crosses the stale top-level boundary and
-returns the wrong screen point. This is the same mechanism previously found in first-level
-menu placement, not a font metric, DPR, or caret-rectangle error.
-
-**Recipe:** associate the bridge `QWidget` with the adopted `QWindow`. For any child popup
-anchor, first use `child->mapTo(bridgeSurface, localPoint)`, then use
-`adoptedWindow->mapToGlobal(surfacePoint)`. MiaCode centralizes this in
-`common/AdoptedWidgetCoordinates`; callers fall back to ordinary `QWidget::mapToGlobal()` when
-no adopted ancestor exists. Both initial popup opening and subsequent re-anchoring must use
-the same mapper. Do not add a platform-specific pixel delta: it breaks when the main window,
-screen, scale factor, or workspace geometry changes.
-
-**Regression:** `PlainCodeEditorSpec` verifies that a nested widget resolves through its
-bound bridge surface. The macOS build additionally proves that `QuickShellNativeSurfaceHost`
-binds the workspace surface and the completion popup uses the shared mapper.
-
 ### Z8. Application-modal dialog falls behind the visible QuickShell window
 
 **Symptom:** the dialog is no longer visible, but every click on the application only plays

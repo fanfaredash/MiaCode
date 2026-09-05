@@ -2279,17 +2279,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(qml_document_replacement_sequence_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
-    miacode_add_dev_tool(adopted_surface_geometry_spec TEST
-        SOURCES
-            src/tools/ui/AdoptedSurfaceGeometrySpec.cpp
-            src/common/AdoptedWidgetCoordinates.h
-            src/common/AdoptedWidgetCoordinates.cpp
-            src/common/AdoptedSurfaceDragAutoScroll.h
-            src/common/AdoptedSurfaceDragAutoScroll.cpp
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/common
-    )
-
     miacode_add_dev_tool(touch_pad_authoring_edit_spec TEST
         SOURCES
             src/tools/editor/TouchPadAuthoringEditSpec.cpp

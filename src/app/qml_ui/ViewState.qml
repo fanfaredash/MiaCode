@@ -16,7 +16,6 @@ QtObject {
     readonly property int activeDifficultyId: difficultyEditorActive
         ? Number(activeEditorKey.substring("difficulty:".length))
         : 0
-    property int metadataEditorMode: 0
     property int editorCursorLine: 1
     property int editorCursorColumn: 1
     property bool sidebarVisible: true

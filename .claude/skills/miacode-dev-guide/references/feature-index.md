@@ -175,20 +175,6 @@ names are assembly forwards.
   `[|]` in one undo step). All gated by the single auto-completion pref; hold shortcut
   `tryHoldExpand` (typing `h` inserts a bare `h` and pops the `[8:1]`-style suggestions — it
   inserts NO bracket itself, so a following `[` yields `h[]`, never the old `h[[]]`).
-- Drag-selection autoscroll on adopted surfaces: `src/common/AdoptedSurfaceDragAutoScroll.{h,cpp}`
-  (`miacode::ui::installAdoptedSurfaceDragAutoScroll(QAbstractScrollArea*)`, **macOS-only body**,
-  no-op elsewhere; geometry helper `planDragAutoScrollStep` compiled everywhere and specced in
-  `plain_code_editor_spec`). Reason: Qt's own autoscroll re-derives the held pointer from
-  `QCursor::pos()` through `QWidget::mapFromGlobal()`, which on the adopted QuickShell surface
-  still resolves through the neutralized orphan NSPanel (see `common/AdoptedWidgetCoordinates.h`),
-  so its synthesized move lands on the wrong line and fights the real drag — the selection strobes
-  whenever the pointer leaves the viewport (the gutter and top overlay inset are viewport margins,
-  so dragging left/up is enough). The installed viewport event filter swallows out-of-viewport
-  moves, re-sends them clamped (which is also what keeps Qt's timer from arming), and steps the
-  scrollbars from a timer fed by real event coordinates. **Install it on every scroll area that
-  supports drag-selection on the workspace/sidebar surfaces** — today `PlainCodeEditor`'s ctor
-  (covers the chart editor + copy area) and `metadataExtraEdit_` (plain `QTextEdit`,
-  `SessionBootstrap.cpp`).
 - Bracket-completion dropdown ("tab 补全"): typing `( [ {` pops a simai-aware suggestion list under
   the caret; typing `h` pops the full-bracket hold durations (`[8:1]` …). Candidate
   data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure — `candidatesForOpening` for the

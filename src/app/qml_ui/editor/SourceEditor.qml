@@ -12,7 +12,6 @@ Rectangle {
     required property var editorController
     required property var syncController
     property var preferences: null
-    property bool metadataMode: false
     // EditorPane must provide effective visibility (including its own host),
     // so an editor retained behind an overlay cannot acknowledge navigation.
     property bool navigationVisible: false
@@ -31,12 +30,6 @@ Rectangle {
     property int followDecorationEnd: 0
     property int followDecorationCursor: 0
     property int followLayoutTick: 0
-    onMetadataModeChanged: {
-        syncTextFromController()
-        publishNavigationReadiness()
-        scheduleEditorContext(false)
-        root.followDecorationActive = false
-    }
     onNavigationVisibleChanged: {
         publishNavigationReadiness()
         scheduleEditorContext(false)
@@ -44,7 +37,7 @@ Rectangle {
     }
 
     function refreshSelectionBeatSummary() {
-        if (root.metadataMode || !root.preferences
+        if (!root.preferences
                 || !root.preferences.editorSelectionBeatDisplay
                 || !root.documentSession || !root.documentSession.selectionBeatSummary
                 || !sourceArea) {
@@ -86,7 +79,7 @@ Rectangle {
             return
         root.syncController.setEditorReadiness(
             root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
-            root.navigationVisible, root.metadataMode)
+            root.navigationVisible)
     }
 
     function scheduleEditorContext(publishCaret) {
@@ -158,15 +151,11 @@ Rectangle {
     // its history. Ctrl+Z in one difficulty then replayed another's edits.
     // Reading the property directly gets the value that is already correct.
     function currentHistoryScopeId() {
-        return root.metadataMode
-            ? "metadata"
-            : "difficulty:" + root.documentSession.currentDifficultyId
+        return "difficulty:" + root.documentSession.currentDifficultyId
     }
 
     function syncTextFromController() {
-        const controllerText = root.metadataMode
-            ? root.documentSession.metadataSourceText
-            : root.documentSession.chartText
+        const controllerText = root.documentSession.chartText
         // Named before the text moves: the swap below must not be able to land
         // a recording in the outgoing view's history.
         root.editorController.setHistoryScope(root.currentHistoryScopeId())
@@ -261,7 +250,7 @@ Rectangle {
         interval: 0
         repeat: false
         onTriggered: {
-            if (!root.documentSession || root.metadataMode || !sourceArea)
+            if (!root.documentSession || !sourceArea)
                 return
             const flickable = editorScroll
             if (!flickable)
@@ -269,8 +258,7 @@ Rectangle {
             const target = sourceArea.y + sourceArea.cursorRectangle.y
                 + sourceArea.cursorRectangle.height / 2 - flickable.height / 2
             flickable.allowScroll = true
-            flickable.contentY = Math.max(0, Math.min(
-                Math.max(0, flickable.contentHeight - flickable.height), target))
+            flickable.contentY = flickable.clampViewportY(target)
             flickable.allowScroll = false
         }
     }
@@ -280,7 +268,7 @@ Rectangle {
     }
 
     function applyNavigation(sequence, difficultyId, revision, start, end, focusEditor, reveal) {
-        const accepted = root.navigationVisible && !root.metadataMode
+        const accepted = root.navigationVisible
             && difficultyId === root.documentSession.currentDifficultyId
             && revision === root.documentSession.documentRevision
             && start >= 0 && end >= start && end <= sourceArea.text.length
@@ -324,7 +312,7 @@ Rectangle {
     }
 
     function applyFollowProjection() {
-        if (!root.syncController || !root.syncController.followActive || root.metadataMode
+        if (!root.syncController || !root.syncController.followActive
                 || root.syncController.followDifficultyId
                    !== root.documentSession.currentDifficultyId
                 || root.syncController.followRevision
@@ -477,9 +465,8 @@ Rectangle {
             if (top >= flickable.contentY && bottom <= flickable.contentY + flickable.height)
                 return
             flickable.allowScroll = true
-            flickable.contentY = Math.max(0, Math.min(
-                Math.max(0, flickable.contentHeight - flickable.height),
-                top + rect.height / 2 - flickable.height / 2))
+            flickable.contentY = flickable.clampViewportY(
+                top + rect.height / 2 - flickable.height / 2)
             flickable.allowScroll = false
         }
     }
@@ -498,7 +485,7 @@ Rectangle {
     // caret by the time the click completes, so the caret is the location —
     // no separate hit-test, and it matches what the user sees.
     function seekPreviewToCaret() {
-        if (root.metadataMode || sourceArea.selectedText.length > 0)
+        if (sourceArea.selectedText.length > 0)
             return false
         return root.syncController.seekPreviewToEditorLocation(
             root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
@@ -535,8 +522,6 @@ Rectangle {
     // subdivision step lands on the undo stack as one step and the selection
     // survives it. Returns false when there is nothing selected to act on.
     function applyChartTransform(opId) {
-        if (root.metadataMode)
-            return false
         const transaction = root.documentSession.transformChartSelection(
             sourceArea.text, sourceArea.selectionStart, sourceArea.selectionEnd, opId)
         if (!transaction.consumed || !transaction.hasEdit)
@@ -566,10 +551,7 @@ Rectangle {
             sourceArea.historyText = sourceArea.text
             sourceArea.historyAnchor = sourceArea.selectionStart
             sourceArea.historyPosition = sourceArea.selectionEnd
-            if (root.metadataMode)
-                root.documentSession.metadataSourceText = sourceArea.text
-            else
-                root.documentSession.chartText = sourceArea.text
+            root.documentSession.chartText = sourceArea.text
         }
         if (centerCursor)
             root.centerCursorInView()
@@ -629,8 +611,7 @@ Rectangle {
         readonly property var transformRows: root.documentSession.chartTransformMenu()
         // sourceArea keeps its selection while the popup holds focus
         // (persistentSelection), so this can bind live like 剪切 / 复制 above.
-        readonly property bool hasSelection:
-            sourceArea.selectedText.length > 0 && !root.metadataMode
+        readonly property bool hasSelection: sourceArea.selectedText.length > 0
 
         AppMenuItem {
             text: UiText.text("剪切")
@@ -742,17 +723,48 @@ Rectangle {
         acceptedButtons: Qt.NoButton
         readonly property bool scrollPastEndEnabled:
             root.preferences ? root.preferences.editorScrollPastEnd : true
-        readonly property real virtualTailHeight:
-            scrollPastEndEnabled ? Math.max(0, height - root.codeLineHeight) : 0
-        contentHeight: sourceArea.contentHeight + virtualTailHeight
+        // TextArea.flickable 在每次文本布局更新时写入自然内容高度。
+        // 尾部空间由 Flickable 的滚动边距持有，与文本尺寸更新各自独立。
+        contentHeight: sourceArea.implicitHeight
+        readonly property real finalLineTop: {
+            root.followLayoutTick
+            sourceArea.contentHeight
+            sourceArea.width
+            sourceArea.font
+            return sourceArea.positionToRectangle(sourceArea.length).y
+        }
+        // 使用末尾实际显示行的顶部，涵盖行距、字体和自动换行。
+        bottomMargin: scrollPastEndEnabled
+            ? Math.max(0, finalLineTop + height - contentHeight) : 0
+        readonly property real maximumViewportY:
+            Math.max(0, contentHeight + bottomMargin - height)
         ScrollBar.vertical: AppScrollBar {
             id: editorVScroll
+            onPressedChanged: {
+                if (!pressed)
+                    Qt.callLater(editorScroll.reconcileViewport)
+            }
         }
         property real userViewportY: 0
         property bool allowScroll: false
         property bool applyingViewport: false
         function clampViewportY(y) {
-            return Math.max(0, Math.min(y, Math.max(0, contentHeight - height)))
+            return Math.max(0, Math.min(y, maximumViewportY))
+        }
+        function reconcileViewport() {
+            if (moving || editorVScroll.pressed)
+                return
+            // 等本轮布局完成再收敛，保留重排过程中的原始视口位置。
+            const kept = clampViewportY(userViewportY)
+            applyingViewport = true
+            userViewportY = kept
+            contentY = kept
+            applyingViewport = false
+        }
+        onMaximumViewportYChanged: Qt.callLater(reconcileViewport)
+        onMovingChanged: {
+            if (!moving)
+                Qt.callLater(reconcileViewport)
         }
         onContentYChanged: {
             if (applyingViewport)
@@ -881,10 +893,7 @@ Rectangle {
                     root.editorController.recordQmlTransaction(historyText, text,
                                                                historyAnchor, historyPosition,
                                                                selectionStart, selectionEnd)
-                    if (root.metadataMode)
-                        root.documentSession.metadataSourceText = text
-                    else
-                        root.documentSession.chartText = text
+                    root.documentSession.chartText = text
                 }
                 root.updateCursorPosition()
                 root.bookmarks = root.collectBookmarks()
@@ -1015,7 +1024,7 @@ Rectangle {
                 modifierColor: Theme.colors.syntax.modifier
                 errorColor: Theme.colors.syntax.error
                 warningColor: Theme.colors.syntax.warning
-                diagnostics: root.metadataMode || root.documentSession.validationPending
+                diagnostics: root.documentSession.validationPending
                     || root.documentSession.validationRevision !== root.documentSession.documentRevision
                     ? [] : root.documentSession.syntaxIssues
             }
@@ -1093,7 +1102,7 @@ Rectangle {
                 target: null
                 onActiveChanged: {
                     sourceArea.selectionHeld = (point.pressedButtons & Qt.LeftButton) !== 0
-                    if (active && !root.metadataMode)
+                    if (active)
                         root.syncController.beginPointerInteraction(
                             root.documentSession.currentDifficultyId,
                             root.documentSession.documentRevision)
@@ -1141,15 +1150,10 @@ Rectangle {
     Connections {
         target: root.documentSession
         function onChartTextChanged() {
-            if (!root.metadataMode)
-                root.syncTextFromController()
+            root.syncTextFromController()
             root.documentSession.logEditorDocumentState(
                 "chart_text_changed", root.documentSession.currentDifficultyId,
-                root.documentSession.documentRevision, sourceArea.text.length, root.metadataMode)
-        }
-        function onMetadataSourceChanged() {
-            if (root.metadataMode)
-                root.syncTextFromController()
+                root.documentSession.documentRevision, sourceArea.text.length)
         }
         function onDocumentReplaced() {
             // A different chart is a different history, even when it happens to
@@ -1158,7 +1162,7 @@ Rectangle {
             root.syncTextFromController()
             root.documentSession.logEditorDocumentState(
                 "document_replaced", root.documentSession.currentDifficultyId,
-                root.documentSession.documentRevision, sourceArea.text.length, root.metadataMode)
+                root.documentSession.documentRevision, sourceArea.text.length)
         }
         function onDocumentStateChanged() {
             // Every commit re-asserts the scope. syncTextFromController already
@@ -1185,7 +1189,7 @@ Rectangle {
         }
         function onTouchPadAuthoringRequested(pad, separator, difficultyId,
                                                revision, anchor, position) {
-            if (root.metadataMode || !sourceArea.activeFocus || root.imeComposing
+            if (!sourceArea.activeFocus || root.imeComposing
                     || difficultyId !== root.documentSession.currentDifficultyId
                     || revision !== root.documentSession.documentRevision)
                 return
@@ -1211,7 +1215,7 @@ Rectangle {
     }
     Component.onDestruction: {
         if (root.syncController)
-            root.syncController.setEditorReadiness(-1, 0, false, true)
+            root.syncController.setEditorReadiness(-1, 0, false)
     }
 
     onImeComposingChanged: {

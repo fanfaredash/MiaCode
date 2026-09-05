@@ -6,6 +6,7 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariantList>
+#include <QVector>
 
 #include "QmlDocumentProjection.h"
 #include "app/v2/AnalysisService.h"
@@ -32,19 +33,8 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QString metadataDesigner READ metadataDesigner WRITE setMetadataDesigner NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataVideoPath READ metadataVideoPath WRITE setMetadataVideoPath NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataClockCount READ metadataClockCount WRITE setMetadataClockCount NOTIFY metadataChanged)
-    Q_PROPERTY(QString metadataExtraText READ metadataExtraText WRITE setMetadataExtraText NOTIFY metadataChanged)
-    Q_PROPERTY(QVariantList metadataExtraIssues READ metadataExtraIssues NOTIFY metadataChanged)
-    Q_PROPERTY(QString metadataExtraError READ metadataExtraError NOTIFY metadataChanged)
-    Q_PROPERTY(bool metadataNeedsAttention READ metadataNeedsAttention NOTIFY metadataChanged)
-    Q_PROPERTY(QString metadataAttentionText READ metadataAttentionText NOTIFY metadataChanged)
-    Q_PROPERTY(QString metadataSourceText READ metadataSourceText WRITE setMetadataSourceText NOTIFY metadataSourceChanged)
-    Q_PROPERTY(QString metadataSourceError READ metadataSourceError NOTIFY metadataSourceChanged)
-    Q_PROPERTY(QVariantList metadataSourceIssues READ metadataSourceIssues NOTIFY metadataSourceChanged)
-    Q_PROPERTY(bool metadataSourceValid READ metadataSourceValid NOTIFY metadataSourceChanged)
     Q_PROPERTY(bool unifiedDesignerEnabled READ unifiedDesignerEnabled NOTIFY unifiedDesignerEnabledChanged)
-    // Every &des_N slot the designer-management dialog edits, charted or not:
-    // { id, name, designer, hasChart }.
-    Q_PROPERTY(QVariantList designerSlots READ designerSlots NOTIFY metadataChanged)
+    Q_PROPERTY(QVariantList designerSlots READ designerSlots NOTIFY documentStateChanged)
     Q_PROPERTY(QString documentTitle READ documentTitle NOTIFY documentTitleChanged)
     Q_PROPERTY(QString currentFilePath READ currentFilePath NOTIFY currentFilePathChanged)
     Q_PROPERTY(QString currentFileName READ currentFileName NOTIFY currentFilePathChanged)
@@ -55,7 +45,10 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QVariantList availableDifficulties READ availableDifficulties NOTIFY difficultiesChanged)
     Q_PROPERTY(QString currentDifficultyLevel READ currentDifficultyLevel WRITE setCurrentDifficultyLevel NOTIFY currentDifficultyFieldsChanged)
     Q_PROPERTY(QString currentDifficultyDesigner READ currentDifficultyDesigner WRITE setCurrentDifficultyDesigner NOTIFY currentDifficultyFieldsChanged)
+    Q_PROPERTY(QString currentDifficultyOffset READ currentDifficultyOffset WRITE setCurrentDifficultyOffset NOTIFY metadataChanged)
     Q_PROPERTY(bool currentDifficultyLevelMissing READ currentDifficultyLevelMissing NOTIFY currentDifficultyFieldsChanged)
+    Q_PROPERTY(bool metadataNeedsAttention READ metadataNeedsAttention NOTIFY metadataChanged)
+    Q_PROPERTY(QString metadataAttentionText READ metadataAttentionText NOTIFY metadataChanged)
     Q_PROPERTY(QVariantList syntaxIssues READ syntaxIssues NOTIFY syntaxIssuesChanged)
     Q_PROPERTY(int syntaxIssueCount READ syntaxIssueCount NOTIFY syntaxIssuesChanged)
     Q_PROPERTY(int syntaxErrorCount READ syntaxErrorCount NOTIFY syntaxIssuesChanged)
@@ -66,10 +59,11 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(bool validationPending READ validationPending NOTIFY documentStateChanged)
     Q_PROPERTY(bool validationAvailable READ validationAvailable NOTIFY documentStateChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
+    Q_PROPERTY(bool metadataDraftDirty READ metadataDraftDirty NOTIFY dirtyEditorKeysChanged)
     // Which section a save writes. A tab is what a person works in, so 保存
     // means "save what I am doing" — the active difficulty, leaving the other
-    // difficulties on disk as they are. The whole-source view's section is the
-    // whole file, which is why the shell has to say when that view is in front.
+    // difficulties on disk as they are. The metadata form writes the whole-file
+    // section, which is why the shell has to say when that tab is in front.
     Q_PROPERTY(bool wholeSourceEditorActive READ wholeSourceEditorActive
                    WRITE setWholeSourceEditorActive NOTIFY wholeSourceEditorActiveChanged)
     Q_PROPERTY(QStringList dirtyEditorKeys READ dirtyEditorKeys NOTIFY dirtyEditorKeysChanged)
@@ -94,16 +88,7 @@ public:
     QString metadataDesigner() const;
     QString metadataVideoPath() const;
     QString metadataClockCount() const;
-    QString metadataExtraText() const;
-    QVariantList metadataExtraIssues() const;
-    QString metadataExtraError() const;
-    bool metadataNeedsAttention() const;
-    QString metadataAttentionText() const;
     QString wholeBpm() const;
-    QString metadataSourceText() const;
-    QString metadataSourceError() const;
-    QVariantList metadataSourceIssues() const;
-    bool metadataSourceValid() const;
     bool unifiedDesignerEnabled() const;
     QVariantList designerSlots() const;
     void setMetadataTitle(const QString& value);
@@ -112,12 +97,9 @@ public:
     void setMetadataDesigner(const QString& value);
     void setMetadataVideoPath(const QString& value);
     void setMetadataClockCount(const QString& value);
-    void setMetadataExtraText(const QString& value);
-    Q_INVOKABLE QVariantMap applyMetadataExtraText(const QString& value);
     Q_INVOKABLE void importChartBackgroundImage();
     Q_INVOKABLE void importChartBackgroundVideo();
     Q_INVOKABLE void removeChartPv();
-    void setMetadataSourceText(const QString& value);
 
     QString documentTitle() const;
     QString currentFilePath() const;
@@ -129,9 +111,13 @@ public:
     QVariantList availableDifficulties() const;
     QString currentDifficultyLevel() const;
     QString currentDifficultyDesigner() const;
+    QString currentDifficultyOffset() const;
     bool currentDifficultyLevelMissing() const;
+    bool metadataNeedsAttention() const;
+    QString metadataAttentionText() const;
     void setCurrentDifficultyLevel(const QString& value);
     void setCurrentDifficultyDesigner(const QString& value);
+    void setCurrentDifficultyOffset(const QString& value);
     QVariantList syntaxIssues() const;
     int syntaxIssueCount() const;
     int syntaxErrorCount() const;
@@ -143,6 +129,7 @@ public:
     bool validationPending() const;
     bool validationAvailable() const;
     bool dirty() const;
+    bool metadataDraftDirty() const;
     // Put one difficulty's chart back to the last save point, leaving the rest
     // of the document alone. This is what "放弃" means when the thing being
     // closed is one tab rather than the file.
@@ -153,6 +140,8 @@ public:
     // The same save, allowed to ask for a path. The answer arrives on
     // sectionSaveFinished because a file pick cannot be waited for.
     Q_INVOKABLE void requestSaveDifficultySection(int difficultyId);
+    Q_INVOKABLE void requestSaveMetadataSection();
+    Q_INVOKABLE void discardMetadataDraft();
     // The unsaved-changes flow, asked one section at a time.
     //
     // 保存 writes one difficulty, so a single question about "the document"
@@ -205,16 +194,11 @@ public:
     // visible editor actually ended up showing. The two together identify
     // whether a stale editor is a projection problem or a QML one.
     Q_INVOKABLE void logEditorDocumentState(const QString& reason, int difficultyId,
-                                            qulonglong revision, int shownChars,
-                                            bool metadataMode);
+                                            qulonglong revision, int shownChars);
     Q_INVOKABLE QVariantList bookmarksForDifficulty(int difficultyId) const;
     Q_INVOKABLE void navigateToBookmark(int difficultyId, int line);
-    // The designer-management dialog's whole result, applied as one
-    // transaction: `slotValues` is a list of { id, designer } for every row the
-    // dialog showed, `unified` is the "all difficulties share one name"
-    // checkbox, and `canonicalName` the name it settled on (empty clears).
     Q_INVOKABLE bool applyDesignerSlots(const QVariantList& slotValues, bool unified,
-                                        const QString& canonicalName);
+                                      const QString& canonicalName);
 
     // Normalizes the selected range (or the whole text when nothing is
     // selected) and returns the result as a value: { ok, changed, text,
@@ -254,7 +238,6 @@ public:
 signals:
     void chartTextChanged();
     void metadataChanged();
-    void metadataSourceChanged();
     void unifiedDesignerEnabledChanged();
     void documentTitleChanged();
     void currentFilePathChanged();
@@ -272,6 +255,17 @@ signals:
     void operationFailed(const QString& title, const QString& message);
 
 private:
+    struct MetadataDraft {
+        QString title;
+        QString artist;
+        QString first;
+        QString designer;
+        QString videoPath;
+        QString clockCount;
+        QVector<QString> designerSlots = QVector<QString>(8);
+        bool unifiedDesigner = false;
+    };
+
     enum class WorkspaceCommitKind {
         Incremental,
         DifficultySelection,
@@ -286,23 +280,22 @@ private:
         bool usedSystemEncoding = false);
     bool saveToPath(const QString& path);
     void adoptBackendDocumentReplacement();
+    void refreshUnifiedDesignerState();
+    MetadataDraft captureMetadataState() const;
+    void resetMetadataDraft();
+    void rebaseMetadataDraft();
+    void notifyMetadataDraftChanged();
+    bool applyMetadataDraft();
+    static bool metadataDraftsEqual(const MetadataDraft& left, const MetadataDraft& right);
     QString documentField(miacode::v2::ChartWorkspaceDocumentField field) const;
     QString difficultyField(
         int difficultyId, miacode::v2::ChartWorkspaceDifficultyField field) const;
     void emitDocumentStateChanged();
     void refreshDocumentState();
-    void clearMetadataSourceRejection();
-    void clearMetadataExtraRejection();
     bool runWorkspaceMutation(const std::function<bool()>& mutate);
-    // The workspace half of applyDesignerSlots() for assemblies with no shell
-    // bridge (specs, headless hosts): no project preference is written there.
     bool applyDesignerSlotsWithoutBridge(const QVector<QPair<int, QString>>& slotValues,
-                                         bool unified, const QString& canonicalName);
-    // Re-checks the shared-designer mode against the document after a whole
-    // -source replacement (source editing, discard, backup restore).
+                                        bool unified, const QString& canonicalName);
     void reconcileUnifiedDesignerAfterSourceReplacement();
-    QVariantList sourceIssuesToVariantList() const;
-    QVariantList extraIssuesToVariantList() const;
     QStringList metadataAttentionItems() const;
     void requestChartMediaImport(miacode::v2::ChartMediaService::Kind kind);
     void applyChartMediaImport(const QString& sourcePath,
@@ -326,21 +319,14 @@ private:
     {
         return previewSlot_ != nullptr ? *previewSlot_ : nullptr;
     }
-    QString metadataSourceError_;
-    QString metadataSourceAttemptText_;
-    QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataSourceIssues_;
-    QString metadataExtraError_;
-    QString metadataExtraAttemptText_;
-    QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataExtraIssues_;
-    bool metadataExtraAttemptActive_ = false;
     miacode::qml_ui::DocumentValidationProjection validationSnapshot_;
     miacode::qml_ui::DocumentPresentationState presentationState_;
     quint64 documentRevision_ = 0;
     qulonglong documentGeneration_ = 0;
     qulonglong bookmarkGeneration_ = 0;
-    // Mirror of ChartWorkspace's session mode, refreshed in
-    // refreshDocumentState() purely so the property can report a change.
     bool unifiedDesignerEnabled_ = false;
+    MetadataDraft metadataDraft_;
+    MetadataDraft metadataDraftBaseline_;
     bool wholeSourceEditorActive_ = false;
     bool suppressWorkspaceChanged_ = false;
     // Saving needs a path. A document that has never been written has none, so

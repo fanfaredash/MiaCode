@@ -26,7 +26,10 @@ Item {
     readonly property var latency: applicationContext.latency
     readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
-    readonly property bool compact: width < 720
+    readonly property real minimumWidth: splitView.minimumWorkspaceWidth
+    readonly property real minimumHeight: titleBar.height + platformMenuLoader.height
+        + mainToolBar.height + statusBar.height + splitView.minimumHeight
+    readonly property bool compact: width < minimumWidth + splitView.expandedSidebarWidth
 
     ViewState { id: state }
 

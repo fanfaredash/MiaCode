@@ -70,6 +70,7 @@ struct TimelineSceneBuildRequest {
 class TimelineSceneStateBuilder
 {
 public:
+    static int minimumViewportHeight();
     static TimelineSceneLayoutMetrics layoutMetrics(const TimelineSceneBuildRequest& request);
     static int maxHorizontalScrollValue(const TimelineSceneLayoutMetrics& metrics);
     static int secondToSceneX(const TimelineSceneLayoutMetrics& metrics, double second);

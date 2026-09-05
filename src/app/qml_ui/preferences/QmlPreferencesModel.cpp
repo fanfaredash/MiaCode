@@ -1,6 +1,7 @@
 #include "QmlPreferencesModel.h"
 
 #include "../QmlUiSettings.h"
+#include "runtime/Shared.h"
 #include "ui/UiText.h"
 
 #include <QVariantMap>
@@ -113,15 +114,18 @@ void QmlPreferencesModel::setEditorFontSize(int pointSize)
 QVariantList QmlPreferencesModel::lineSpacingOptions() const
 {
     QVariantList rows;
-    for (double factor : {1.0, 1.15, 1.3, 1.5, 1.75, 2.0}) {
-        rows.append(option(factor, QStringLiteral("%1x").arg(factor, 0, 'g', 3)));
+    for (double factor : miacode::runtime::shared::kEditorLineSpacingFactorOptions) {
+        rows.append(option(
+            factor, miacode::runtime::shared::editorLineSpacingFactorLabel(factor)));
     }
     return rows;
 }
 
 double QmlPreferencesModel::editorLineSpacing() const
 {
-    return store() != nullptr ? store()->editorLineSpacingFactor() : 1.5;
+    return store() != nullptr
+        ? store()->editorLineSpacingFactor()
+        : miacode::runtime::shared::kEditorLineSpacingFactorDefault;
 }
 
 void QmlPreferencesModel::setEditorLineSpacing(double factor)

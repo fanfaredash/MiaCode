@@ -163,7 +163,6 @@ public:
         First,
         Designer,
         VideoPath,
-        ExtraText,
     };
 
     enum class DifficultyField {

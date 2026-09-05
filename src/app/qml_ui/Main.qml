@@ -17,8 +17,8 @@ ApplicationWindow {
 
     width: 1280
     height: 720
-    minimumWidth: 620
-    minimumHeight: 480
+    minimumWidth: Math.ceil(mainView.minimumWidth)
+    minimumHeight: Math.max(480, Math.ceil(mainView.minimumHeight))
     // C++ explicitly shows this only after MainWindow has registered the root
     // and installed the shared chart-audio drop route.
     visible: false
@@ -106,7 +106,10 @@ ApplicationWindow {
             if (!accepted)
                 return
             window.closeApproved = true
-            window.close()
+            // A clean document can answer synchronously while onClosing is
+            // still on the stack. Close on the next event-loop turn so Qt
+            // receives a fresh request instead of dropping a reentrant one.
+            Qt.callLater(function() { window.close() })
         }
     }
 
@@ -152,7 +155,8 @@ ApplicationWindow {
                 layer.enabled: window.applicationContext.appBackground.blur > 0
                 layer.effect: MultiEffect {
                     blurEnabled: true
-                    blur: Math.min(1.0, window.applicationContext.appBackground.blur / 32.0)
+                    blurMax: 64
+                    blur: Math.min(1.0, window.applicationContext.appBackground.blur / 64.0)
                 }
             }
         }

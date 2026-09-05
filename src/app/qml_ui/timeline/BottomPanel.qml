@@ -24,6 +24,8 @@ Item {
     }
     clip: true
     readonly property int contentTopMargin: 0
+    readonly property real minimumHeight: tabs.implicitHeight + timelineItem.minimumViewportHeight
+    readonly property real minimumWidth: tabs.minimumWidth
     readonly property int timelineHeaderLeftLimit:
         zoomButton.x + zoomButton.width + Theme.panelPadding
     readonly property int timelineHeaderRightLimit:

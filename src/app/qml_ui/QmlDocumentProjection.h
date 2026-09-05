@@ -61,6 +61,7 @@ struct DocumentValidationProjection {
 struct DocumentPresentationInput {
     int activeDifficultyId = 0;
     bool dirty = false;
+    bool metadataDirty = false;
     // The difficulties whose charts differ from the last save point, from the
     // workspace. Not derived from `dirty` and the active tab — that was the
     // defect: the file's one flag drawn as if it were the tab's.

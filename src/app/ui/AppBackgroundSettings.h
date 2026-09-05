@@ -10,8 +10,7 @@ struct AppBackgroundOverlaySettings {
     int toolbarAlphaLight = 210;
     int statusAlphaDark = 210;
     int statusAlphaLight = 220;
-    int panelAlphaDark = 200;
-    int panelAlphaLight = 200;
+    int panelAlpha = 200;
     int cardAlphaDark = 255;
     int cardAlphaLight = 255;
     int editorHeaderAlphaDark = 190;
@@ -37,11 +36,11 @@ struct AppBackgroundSettings {
     AppBackgroundPosition position = AppBackgroundPosition::Center;
 };
 
-constexpr double kAppBackgroundOpacityMin = 0.0;
+constexpr double kAppBackgroundOpacityMin = 0.1;
 constexpr double kAppBackgroundOpacityMax = 0.8;
 constexpr double kAppBackgroundOpacityDefault = 0.2;
 constexpr int kAppBackgroundBlurMin = 0;
-constexpr int kAppBackgroundBlurMax = 0;
+constexpr int kAppBackgroundBlurMax = 64;
 constexpr int kAppBackgroundBlurDefault = 0;
 constexpr int kAppBackgroundOverlayAlphaMin = 0;
 constexpr int kAppBackgroundOverlayAlphaMax = 255;
