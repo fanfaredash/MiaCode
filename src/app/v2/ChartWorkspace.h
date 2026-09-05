@@ -36,9 +36,8 @@ struct ChartWorkspaceSnapshot {
     quint64 revision = 0;
     bool dirty = false;
     bool hasDocument = false;
-    // Which difficulties differ from the last save point in chart, level, or
-    // designer. `dirty` is the file; this is the tab, whose save writes that
-    // whole difficulty record.
+    // Which difficulty bodies differ from the last save point. Header fields
+    // update the document immediately without marking an editor tab dirty.
     QVector<int> dirtyDifficultyIds;
 };
 
@@ -54,7 +53,6 @@ enum class ChartWorkspaceDocumentField {
     First,
     Designer,
     VideoPath,
-    ExtraText,
 };
 
 enum class ChartWorkspaceDifficultyField {
@@ -114,8 +112,7 @@ public:
     // other difficulties at their on-disk text is the difference between
     // "save what I am doing" and "save everything I have open".
     //
-    // difficultyId 0 means the whole document (the metadata tab is a view of
-    // the entire file, so its section is the file).
+    // difficultyId 0 means the whole-document metadata section.
     QString textForSectionSave(int difficultyId) const;
     // Advance the save point for that section only. Callers write
     // textForSectionSave() first; this records that it landed.

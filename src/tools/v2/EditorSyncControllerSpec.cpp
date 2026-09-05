@@ -41,7 +41,7 @@ void flush()
 
 void makeReady(EditorSyncController& controller)
 {
-    controller.setEditorReadiness(kDifficulty, kRevision, true, false);
+    controller.setEditorReadiness(kDifficulty, kRevision, true);
     flush();
 }
 
@@ -83,7 +83,7 @@ bool verifyIdentityIsRecheckedAtDelivery(QTextStream& err)
     // document moves on before the queued delivery runs. Delivering it would
     // place a caret using positions measured in the previous revision's text.
     const qulonglong sequence = controller.requestNavigation(kDifficulty, kRevision, 2, 6, false, false);
-    controller.setEditorReadiness(kDifficulty, kRevision + 1, true, false);
+    controller.setEditorReadiness(kDifficulty, kRevision + 1, true);
     flush();
 
     return require(sequence != 0 && requested.isEmpty(),
@@ -103,20 +103,13 @@ bool verifyLosingTheEditorCancelsPendingWork(QTextStream& err)
 
     const qulonglong sequence = controller.requestNavigation(kDifficulty, kRevision, 2, 6, false, false);
     // The editor is hidden (a tab closed, or an overlay page took the pane).
-    controller.setEditorReadiness(kDifficulty, kRevision, false, false);
+    controller.setEditorReadiness(kDifficulty, kRevision, false);
     flush();
 
     bool ok = require(sequence != 0 && requested.isEmpty() && finished.count() >= 1
                           && !finished.first().at(1).toBool(),
                       QStringLiteral("hiding the editor finishes the pending navigation instead of stranding it"), err);
 
-    // Metadata mode is not the chart editor, so chart identities cannot match it.
-    controller.setEditorReadiness(kDifficulty, kRevision, true, true);
-    flush();
-    ok = ok
-        && require(controller.requestNavigation(kDifficulty, kRevision, 0, 4, false, false) == 0
-                       && !controller.editorContextActive(),
-                   QStringLiteral("metadata mode never accepts a chart navigation or reports chart context"), err);
     return ok;
 }
 
@@ -150,7 +143,7 @@ bool verifyLocationPublishersShareTheGate(QTextStream& err)
     // Same submission, invalidated before the queue runs.
     QSignalSpy lateSeeks(&controller, &EditorSyncController::previewSeekPublished);
     const bool submitted = controller.seekPreviewToEditorLocation(kDifficulty, kRevision, 2, 2);
-    controller.setEditorReadiness(kDifficulty, kRevision + 2, true, false);
+    controller.setEditorReadiness(kDifficulty, kRevision + 2, true);
     flush();
     ok = ok && require(submitted && lateSeeks.isEmpty(),
                        QStringLiteral("a preview seek invalidated before delivery is dropped, not published late"), err);

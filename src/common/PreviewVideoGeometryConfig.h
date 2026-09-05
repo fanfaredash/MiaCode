@@ -11,6 +11,7 @@ namespace miacode::preview_video {
 
 inline constexpr double kBackgroundBrightnessDefault = 0.50;
 inline constexpr double kBackgroundBrightnessInnerDefault = 0.20;
+inline constexpr double kInactiveBackgroundBrightnessInner = 0.0;
 inline constexpr double kLayoutSquareScaleDefault = 0.95;
 inline constexpr double kLayoutSquareScaleMin = 0.5;
 inline constexpr double kLayoutSquareScaleMax = 1.0;

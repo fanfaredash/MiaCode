@@ -302,56 +302,57 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   Popup anchors use `common/AdoptedWidgetCoordinates`: in ordinary QWidget windows this falls
   back to `mapToGlobal`; in the macOS QuickShell workspace it maps the caret through the bound
   bridge surface and adopted `QWindow`, avoiding the stale orphan-NSPanel coordinate origin.
-- **Offset (`&first`) field location:** UIv2 edits the chart-wide timing offset from the metadata
-  form's `metadataFirst` field in `EditorPane.qml`. Owner is `ChartWorkspace::document().first`.
+- **Offset (`&first`) field location:** UIv2 exposes the chart-wide timing offset in the metadata
+  form's staged `metadataFirst` field and the difficulty header's immediate
+  `currentDifficultyOffset` field in `EditorPane.qml`. Owner is
+  `ChartWorkspace::document().first`.
   Latency writes it with `updateDocumentField(First)`. Timeline and export read
   `applicationServices_.workspace().document()`. Hidden `firstEdit_` is display only.
-- **Per-difficulty designers + unified designer:** managed from a modal QML dialog, NOT a
-  toolbar switch. `src/app/qml_ui/editor/DesignerSlotsDialog.qml` (single entry point: the metadata
-  mode bar's 谱师名义管理 button in `EditorPane.qml`, reachable from 表单 and 字段源码 alike)
-  edits seven `&des_1..7` rows plus the "所有难度采用相同名义" checkbox on a
-  local copy; 取消 writes nothing. Turning the checkbox on with ≤1 distinct non-empty name
-  unifies silently, otherwise an in-dialog picker offers each candidate plus `document.clear_all`
-  ("直接清除" = empty shared name). 确定 submits everything as ONE transaction:
-  `QmlCommandService::applyDesignerSlots` → `QmlDocumentModel::applyDesignerSlots` →
-  `DocumentBridge::applyDocumentDesignerSlots` → `DocumentSessionHost::applyDocumentDesignerSlots`
-  (`DocumentDesignerFlow.cpp`), which writes the rows with the mode OFF (a write under the mode is
-  a broadcast, so seven rows would collapse into the last one), then re-enables and unifies, then
-  records the preference.
-  - **The mode is a `ChartWorkspace` session invariant**, not a flag each call site must remember:
-    `setUnifiedDesignerEnabled` / `unifiedDesignerEnabled`. While it is on,
-    `updateDocumentField(Designer)`, `updateDifficultyField(Designer)` and `setDesignerForSlot`
-    all route into `unifyDesigners`, and `addDifficulty` seeds the new difficulty with `&des`.
-    `openSource` / `closeDocument` reset it — the mode dies with the document.
-  - **Preference (per project, key `unified_designer_enabled`, v1-compatible):** written in exactly
-    two places — the dialog transaction, and the load-time self-heal. Opening a chart calls
-    `DocumentBridge::reconcileUnifiedDocumentDesigner(DocumentOpened)`: if the stored value is true
-    AND `SimaiDocument::isUnifiedDesignerTriviallySafe()` agrees, the mode is restored; if the
-    document diverged, the PREFERENCE is silently lowered to false and the document is left
-    untouched. **Nothing on the load path may write a document field** — that is what keeps a
-    freshly opened chart clean (rewriting `&des_N` at load is what made v1 report unsaved changes
-    at startup), and `QmlDocumentLifecycleContractSpec` enforces it. An untitled document parks the
-    choice in `State::pendingUnifiedDesignerPreference_` until a save gives it a directory
-    (flushed from `syncRuntimeFromWorkspace`). A wholesale source replacement (字段源码 edit,
-    discard/restore, backup restore) calls the same entry point with `SourceReplaced`: if the new
-    content no longer satisfies the mode, the mode steps down instead of broadcasting over it.
+- **UIv2 responsive editor controls:** `qml_ui/editor/EditorPane.qml` keeps each difficulty
+  label vertically centered with its field, moves complete field groups between rows, and
+  right-aligns the delete action on every layout width;
+  `qml_ui/editor/FindReplaceBar.qml` uses a full-width responsive search area above a responsive
+  action area with equal-width buttons and Close at the right edge. These bars move complete
+  controls between rows and derive their height from the resulting rows, without layout
+  minimum/maximum constraints.
+  Metadata forms follow their viewport width.
+- **Metadata form:** `qml_ui/editor/EditorPane.qml` presents the extracted title, artist,
+  top-level designer, initial offset, `clock_count`, and video path. Raw metadata/source editing is absent from
+  this page; unmanaged fields remain preserved by `SimaiDocument` during parse/serialize.
+  `QmlDocumentModel::MetadataDraft` stages the form and designer-management values. Its editor key
+  becomes dirty independently from the workspace; closing the metadata tab asks Save / Discard /
+  Cancel. Save applies changed draft fields and writes the whole metadata section, while Discard
+  restores the committed workspace values. Difficulty-header level, timing offset and designer
+  write through to `ChartWorkspace` immediately and stay outside editor-tab dirty keys; chart-body
+  comparison alone populates `ChartWorkspaceSnapshot::dirtyDifficultyIds`, and difficulty-tab
+  discard restores that body while retaining immediate header edits. Draft rebasing carries
+  those immediate writes into metadata fields that the user has not staged, preventing a later
+  metadata save from overwriting them.
+- **各难度谱师与统一谱师：** `EditorPane.qml` 的谱师表项打开
+  `qml_ui/editor/DesignerSlotsDialog.qml`，编辑七个 `&des_1..7` 和统一名义选项。
+  确定通过 `QmlCommandService::applyDesignerSlots` → `QmlDocumentModel::applyDesignerSlots`
+  更新元数据草稿；保存表单时，`applyMetadataDraft` 调用
+  `DocumentBridge::applyDocumentDesignerSlots` → `DocumentSessionHost::applyDocumentDesignerSlots`。
+  事务先关闭统一模式并写入各难度名义，再按选项统一并记录项目偏好
+  `unified_designer_enabled`。取消对话框保持原草稿。
+  - 统一模式由 `ChartWorkspace::setUnifiedDesignerEnabled` / `unifiedDesignerEnabled` 管理。
+    模式开启时，文档谱师、难度谱师及独立名义的写入都通过 `unifyDesigners` 广播，
+    新增难度继承顶层谱师。`openSource` / `closeDocument` 重置模式。
+  - 打开文档通过 `reconcileUnifiedDocumentDesigner(DocumentOpened)` 读取项目偏好，
+    结合 `isUnifiedDesignerTriviallySafe()` 恢复模式；名义存在差异时将偏好降为关闭，
+    保持载入文档的字段和保存状态。未命名文档将偏好保存在
+    `State::pendingUnifiedDesignerPreference_`，取得路径后由 `syncRuntimeFromWorkspace` 写入。
+    放弃修改和备份恢复通过 `SourceReplaced` 协调模式。
   - **Chart-less `&des_N` (standalone designers):** a slot 1..7 can hold a designer name without a
     chart. `SimaiDocument` keeps these in `standaloneDesigners_` (disjoint from `difficulties_`),
     API `designerForSlot` / `setDesignerForSlot` / `standaloneDesignerIds` / `perDifficultyDesigners`.
     `fromText` post-pass moves a designer-only difficulty (empty level+chart, non-empty designer)
     into the standalone map; `toText` emits a bare `&des_N=` for it (no phantom `&lv_N`/`&inote_N`,
-    no sidebar entry). The dialog, the candidate list and every broadcast include these slots;
-    `addDifficulty` adopts the slot's recorded name so materializing a difficulty cannot drop it.
-  **Unified sync invariant — the sites that still carry their own rule** (sync set): the dialog
-  transaction (above); the undo-delete restore in `DocumentEditorState.cpp`, which must re-seed the
-  restored section from the current `&des` (restoring the snapshot's stale name would broadcast it
-  everywhere); and the load/replace reconcile. Autosave deliberately does NOT re-unify: QML commits
-  edits straight into `ChartWorkspace`, so `currentDocumentTextForAutosave` serializes the snapshot
-  verbatim (v1's `capturedDesignerFromUi` guess-by-active-view is gone, and autosave never touches
-  the preference). The free-form "Other &xx Fields" editor must parse via
-  `SimaiDocument::parseUnmanagedFields` (not `parseRawFields`) so a manually typed managed key
-  (`des`/`des_N`/`lv_N`/`inote_N`/title/artist/first/video) can't bypass the model and emit a
-  duplicate/divergent line.
+    no sidebar entry). The dialog writes chart-less names via `setDesignerForSlot`.
+  统一模式的跨模块同步点包括草稿保存事务、`DocumentEditorState.cpp` 中撤销删除后的名义恢复，
+  以及文档载入和替换后的模式协调。`refreshUnifiedDesignerState` 读取工作区模式，
+  草稿重整保留用户尚未保存的表单修改。自动保存序列化工作区快照；独立 `&des_N`
+  通过 `perDifficultyDesigners()` 和工作区接口参与广播。
   **Export-side fallback contract (sync set):** the exported "谱师名义" (intro banner designer +
   chart-info-HUD `chartDesigner`) uses per-difficulty `&des_N`, falling back to top `&des` when
   the per-difficulty name is **blank including whitespace** — gate on `designer.trimmed().isEmpty()`,

@@ -61,11 +61,13 @@ bool verifyDirtyEditorKeys(QTextStream& err)
                           && !state.dirtyEditorKeys.contains(QStringLiteral("difficulty:5")),
                       QStringLiteral("the edited difficulty is marked, not the shown one"), err);
 
-    // The metadata tab renders the whole file's source, so it answers the
-    // file's question — dirty whenever the document is, whichever difficulty
-    // moved.
-    ok &= require(state.dirtyEditorKeys.contains(QStringLiteral("metadata")),
-                  QStringLiteral("the whole-source tab follows the document"), err);
+    ok &= require(!state.dirtyEditorKeys.contains(QStringLiteral("metadata")),
+                  QStringLiteral("document changes do not mark the metadata draft"), err);
+
+    input.metadataDirty = true;
+    const auto metadataState = miacode::qml_ui::projectDocumentPresentation(input);
+    ok &= require(metadataState.dirtyEditorKeys.contains(QStringLiteral("metadata")),
+                  QStringLiteral("a metadata draft marks the metadata tab"), err);
 
     miacode::qml_ui::DocumentPresentationInput clean;
     clean.activeDifficultyId = 5;
@@ -75,6 +77,7 @@ bool verifyDirtyEditorKeys(QTextStream& err)
 
     miacode::qml_ui::DocumentPresentationInput many;
     many.dirty = true;
+    many.metadataDirty = true;
     many.dirtyDifficultyIds = {2, 3, 4};
     many.activeDifficultyId = 2;
     const auto manyState = miacode::qml_ui::projectDocumentPresentation(many);

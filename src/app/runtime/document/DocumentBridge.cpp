@@ -18,8 +18,6 @@ QString miacode::runtime::DocumentSessionHost::documentField(Session::DocumentFi
         return session_.applicationServices_.workspace().document().designer;
     case Session::DocumentField::VideoPath:
         return session_.applicationServices_.workspace().document().videoPath;
-    case Session::DocumentField::ExtraText:
-        return SimaiDocument::serializeRawFields(session_.applicationServices_.workspace().document().extraFields);
     }
     return {};
 }
@@ -53,8 +51,7 @@ bool miacode::runtime::DocumentSessionHost::updateDocumentField(
         return false;
     }
 
-    const bool timingChanged = field == Session::DocumentField::First
-        || field == Session::DocumentField::ExtraText;
+    const bool timingChanged = field == Session::DocumentField::First;
     state_.documentDirty_ = workspace.snapshot().dirty;
     markCurrentFieldDirty();
     updateDirtyState();

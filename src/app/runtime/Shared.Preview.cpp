@@ -117,6 +117,11 @@ void applyPreviewStageMediaRouteVisualSettings(RuntimeContext::State& state)
         state.previewStageMediaHost_->setMediaVisible(mediaVisible);
     }
     if (state.scene_ != nullptr) {
+        const bool configuredBackgroundBrightnessActive =
+            state.playing_
+            || state.exportPreviewActive_
+            || (state.pauseDisplayAltHoldActive_ && mediaVisible);
+        state.scene_->setConfiguredBackgroundBrightnessActive(configuredBackgroundBrightnessActive);
         const bool stageMediaVisible =
             mediaVisible
             && state.previewStageMediaHost_ != nullptr

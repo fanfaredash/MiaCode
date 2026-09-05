@@ -165,6 +165,7 @@ public:
     void setBackgroundBrightness(double brightness);
     void setBackgroundBrightnessOuter(double brightness);
     void setBackgroundBrightnessInner(double brightness);
+    void setConfiguredBackgroundBrightnessActive(bool active);
     void setLayoutSquareScale(double scale);
     void setSmoothBrightness(bool smooth);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);

@@ -13,8 +13,8 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   (`kPreviewSlideEarlierSecondAndTextOnTop`).
 - `PreviewSkinConfig.h` — tap-head scale, hold-width / hold-cap-slice / slide-track ratios (preview
   ↔ timeline skin parity).
-- `PreviewVideoGeometryConfig.h` — background brightness defaults, layout square scale (default
-  `0.95`), dimming geometry, smooth brightness.
+- `PreviewVideoGeometryConfig.h` — background brightness defaults, the fixed opaque-black inactive
+  inner-circle level, layout square scale (default `0.95`), dimming geometry, smooth brightness.
 - `LayoutRingConfig.h` — fixed outline-to-playfield diameter ratio (preview ↔ export dim mask).
 - `PreviewSfxAssets.h` — SFX kind→filename mapping + SFX dir resolution.
 - `ChartClockCount.h` — shared `&clock_count=` parsing + BPM fallback order; a missing value is materialized as `4` by `SimaiDocument::ensureDefaultClockCount`; consumed by chart metadata, the latency settings UI, and export count-in.

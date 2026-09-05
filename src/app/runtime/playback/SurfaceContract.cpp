@@ -449,6 +449,9 @@ void miacode::runtime::PlaybackCoordinator::prepareForShutdown()
     // this coordinator writes it directly, in the same relative position —
     // still after the forwarded call above, per the ordering note.
     miacode::runtime::shared::writePreviewPlayingFlag(playbackState_, services_.shellNotifications(), false);
+    if (state_.scene_ != nullptr) {
+        state_.scene_->setConfiguredBackgroundBrightnessActive(false);
+    }
 
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;

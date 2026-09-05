@@ -168,8 +168,9 @@ Rules going forward:
   arrays are stored in reverse travel order (a C area lists its outbound arrows first),
   rotation is uniform per straight leg.
 - Qt resources: `resources/{app_icons,fonts,preview_runtime_qml,quick_shell_qml}.qrc`.
-  `resources/icons/app.png` is the rounded 2048px application artwork used by Linux and
-  as the Windows icon source; `app.ico` contains its 16/24/32/48/64/128/256px variants.
+  `resources/icons/app.png` is the rounded 2048px application artwork used by Linux.
+  Windows `app.ico` uses the focal title-bar crop at 16/24/32px and the complete rounded
+  artwork at 48/64/128/256px.
   The unmasked source artwork is retained as `resources/icons/app-original.png` and stays
   outside the shipped resource collection. The QML title bar
   uses the focal crop and rounded 1x/2x rasters in

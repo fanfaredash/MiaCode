@@ -106,7 +106,10 @@ ApplicationWindow {
             if (!accepted)
                 return
             window.closeApproved = true
-            window.close()
+            // A clean document can answer synchronously while onClosing is
+            // still on the stack. Close on the next event-loop turn so Qt
+            // receives a fresh request instead of dropping a reentrant one.
+            Qt.callLater(function() { window.close() })
         }
     }
 

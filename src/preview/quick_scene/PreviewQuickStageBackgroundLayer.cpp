@@ -393,10 +393,15 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     const QImage mediaImage = usesExternalMedia ? QImage() : media.image;
     const bool hasMedia = !mediaImage.isNull();
     const bool hasVisibleStageMedia = hasMedia || (usesExternalMedia && state.media.stageMediaAvailable);
+    const bool fixedInactiveBrightness =
+        !state.render.configuredBackgroundBrightnessActive || !hasVisibleStageMedia;
+    const double innerBrightness = fixedInactiveBrightness
+        ? miacode::preview_video::kInactiveBackgroundBrightnessInner
+        : state.render.backgroundBrightnessInner;
     const double outerDarkAlpha = hasVisibleStageMedia
         ? qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0)
         : 0.0;
-    const double innerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessInner, 1.0);
+    const double innerDarkAlpha = qBound(0.0, 1.0 - innerBrightness, 1.0);
     if (!usesExternalMedia
         && media.sourceKind == StageMediaSourceKind::ResolvedFrame
         && state.media.stageMediaSerial > 0

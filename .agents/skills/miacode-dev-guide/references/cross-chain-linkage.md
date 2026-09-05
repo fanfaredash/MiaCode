@@ -426,6 +426,12 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 `MainWindow::load/savePortableState` (app-scoped shared), `load/saveProjectRenderState` (chart-local
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
+The live preview paints the inner circle opaque black while playback is paused or stage media is
+unavailable, so shell theme and wallpaper cannot change judge-area contrast. The outer area keeps
+its existing media-visibility and brightness behavior. Smooth brightness keeps the existing ring
+transition in every playback/media state. Active playback and video export continue to use the
+configured brightness values. Holding Alt to reveal paused media also restores configured inner
+and outer brightness for that temporary background view.
 
 Global preview skin, judge-line variant, judge effect, and per-area HUD font are deliberately exposed
 from two v2 entry points: `ExportVideoPage.qml` → `QmlExportSession` and

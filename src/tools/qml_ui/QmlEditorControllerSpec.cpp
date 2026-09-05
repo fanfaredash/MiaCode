@@ -525,14 +525,12 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
             QtObject {
                 id: session
                 property string chartText: "1,2,3,4,\n5,6,7,8,\n"
-                property string metadataSourceText: ""
                 property int currentDifficultyId: 3
                 property real documentRevision: 42
                 property bool validationPending: false
                 property real validationRevision: 42
                 property var syntaxIssues: []
                 signal chartTextChanged2()
-                signal metadataSourceChanged()
                 signal documentStateChanged()
                 signal documentReplaced()
                 function chartPosition(line, column) {
@@ -543,7 +541,7 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                     return offset + Math.max(0, column - 1)
                 }
                 function selectDifficulty(a) {}
-                function logEditorDocumentState(a, b, c, d, e) {}
+                function logEditorDocumentState(a, b, c, d) {}
                 property int seekRequests: 0
                 property int seekLine: -1
                 property int seekColumn: -1
@@ -568,7 +566,7 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                 signal touchPadAuthoringRequested(string pad, string separator,
                                                   int difficultyId, real revision,
                                                   int anchor, int position)
-                function setEditorReadiness(a, b, c, d) {}
+                function setEditorReadiness(a, b, c) {}
                 function setEditorContext(a, b, c, d, e, f, g, h, i) {}
                 function acknowledgeNavigation(a, b) {}
                 function setTouchPadControlHold(a) {}
@@ -927,7 +925,18 @@ bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
                 property string currentFileName: ""
                 property int revertCalls: 0
                 property int lastRevertDifficultyId: -1
+                property int metadataDiscardCalls: 0
+                signal sectionSaveFinished(int difficultyId, bool saved)
                 function saveDifficultySection(difficultyId) { return true }
+                function requestSaveDifficultySection(difficultyId) {
+                    sectionSaveFinished(difficultyId, true)
+                }
+                function requestSaveMetadataSection() {
+                    sectionSaveFinished(0, true)
+                }
+                function discardMetadataDraft() {
+                    metadataDiscardCalls += 1
+                }
                 function revertDifficultyChart(difficultyId) {
                     revertCalls += 1
                     lastRevertDifficultyId = difficultyId
@@ -1026,10 +1035,10 @@ bool verifyEditorTabsCanBeDraggedToSwap(QTextStream& out, int* failed)
         QMetaObject::invokeMethod(closeDialog, "resolve",
                                   Q_ARG(QVariant, QVariant(QStringLiteral("discard"))));
         QCoreApplication::processEvents();
-        ok &= expect(documentSession->property("revertCalls").toInt() == 1
-                         && documentSession->property("lastRevertDifficultyId").toInt() == 0
+        ok &= expect(documentSession->property("metadataDiscardCalls").toInt() == 1
+                         && documentSession->property("revertCalls").toInt() == 0
                          && !state->property("openEditorTabs").toStringList().contains(QStringLiteral("metadata")),
-                     QStringLiteral("discarding a metadata-tab close restores section 0 before closing"),
+                     QStringLiteral("discarding a metadata-tab close restores its draft before closing"),
                      out, failed);
     }
     return ok;

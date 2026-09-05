@@ -698,6 +698,15 @@ void PreviewRuntime::setBackgroundBrightnessInner(double brightness)
     update();
 }
 
+void PreviewRuntime::setConfiguredBackgroundBrightnessActive(bool active)
+{
+    if (frameState_.render.configuredBackgroundBrightnessActive == active) {
+        return;
+    }
+    frameState_.render.configuredBackgroundBrightnessActive = active;
+    update();
+}
+
 void PreviewRuntime::setLayoutSquareScale(double scale)
 {
     frameState_.render.layoutSquareScale = miacode::preview_video::normalizedLayoutSquareScale(scale);
