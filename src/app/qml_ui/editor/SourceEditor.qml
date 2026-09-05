@@ -258,8 +258,7 @@ Rectangle {
             const target = sourceArea.y + sourceArea.cursorRectangle.y
                 + sourceArea.cursorRectangle.height / 2 - flickable.height / 2
             flickable.allowScroll = true
-            flickable.contentY = Math.max(0, Math.min(
-                Math.max(0, flickable.contentHeight - flickable.height), target))
+            flickable.contentY = flickable.clampViewportY(target)
             flickable.allowScroll = false
         }
     }
@@ -466,9 +465,8 @@ Rectangle {
             if (top >= flickable.contentY && bottom <= flickable.contentY + flickable.height)
                 return
             flickable.allowScroll = true
-            flickable.contentY = Math.max(0, Math.min(
-                Math.max(0, flickable.contentHeight - flickable.height),
-                top + rect.height / 2 - flickable.height / 2))
+            flickable.contentY = flickable.clampViewportY(
+                top + rect.height / 2 - flickable.height / 2)
             flickable.allowScroll = false
         }
     }
@@ -725,17 +723,48 @@ Rectangle {
         acceptedButtons: Qt.NoButton
         readonly property bool scrollPastEndEnabled:
             root.preferences ? root.preferences.editorScrollPastEnd : true
-        readonly property real virtualTailHeight:
-            scrollPastEndEnabled ? Math.max(0, height - root.codeLineHeight) : 0
-        contentHeight: sourceArea.contentHeight + virtualTailHeight
+        // TextArea.flickable 在每次文本布局更新时写入自然内容高度。
+        // 尾部空间由 Flickable 的滚动边距持有，与文本尺寸更新各自独立。
+        contentHeight: sourceArea.implicitHeight
+        readonly property real finalLineTop: {
+            root.followLayoutTick
+            sourceArea.contentHeight
+            sourceArea.width
+            sourceArea.font
+            return sourceArea.positionToRectangle(sourceArea.length).y
+        }
+        // 使用末尾实际显示行的顶部，涵盖行距、字体和自动换行。
+        bottomMargin: scrollPastEndEnabled
+            ? Math.max(0, finalLineTop + height - contentHeight) : 0
+        readonly property real maximumViewportY:
+            Math.max(0, contentHeight + bottomMargin - height)
         ScrollBar.vertical: AppScrollBar {
             id: editorVScroll
+            onPressedChanged: {
+                if (!pressed)
+                    Qt.callLater(editorScroll.reconcileViewport)
+            }
         }
         property real userViewportY: 0
         property bool allowScroll: false
         property bool applyingViewport: false
         function clampViewportY(y) {
-            return Math.max(0, Math.min(y, Math.max(0, contentHeight - height)))
+            return Math.max(0, Math.min(y, maximumViewportY))
+        }
+        function reconcileViewport() {
+            if (moving || editorVScroll.pressed)
+                return
+            // 等本轮布局完成再收敛，保留重排过程中的原始视口位置。
+            const kept = clampViewportY(userViewportY)
+            applyingViewport = true
+            userViewportY = kept
+            contentY = kept
+            applyingViewport = false
+        }
+        onMaximumViewportYChanged: Qt.callLater(reconcileViewport)
+        onMovingChanged: {
+            if (!moving)
+                Qt.callLater(reconcileViewport)
         }
         onContentYChanged: {
             if (applyingViewport)

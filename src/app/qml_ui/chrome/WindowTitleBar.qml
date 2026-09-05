@@ -39,15 +39,6 @@ Rectangle {
         ? Math.max(0, titleBandLeft - menuGap - menuLeft)
         : 0
 
-    function scheduleMainMenuReflow() {
-        if (mainMenuLoader.item)
-            mainMenuLoader.item.scheduleReflow()
-    }
-
-    onWidthChanged: root.scheduleMainMenuReflow()
-    onMenuAvailableWidthChanged: root.scheduleMainMenuReflow()
-    onDocumentTitleChanged: root.scheduleMainMenuReflow()
-
     WindowGestureArea {
         anchors.fill: parent
         hostWindow: root.hostWindow
@@ -97,15 +88,22 @@ Rectangle {
         }
 
         onClicked: {
-            if (brandMenu.active)
+            if (mainMenuLoader.item)
+                mainMenuLoader.item.toggleAnchoredMenu(brandMenu, brand)
+            else if (brandMenu.active)
                 brandMenu.close()
             else
                 brandMenu.popup(brand, 0, brand.height)
+        }
+        onHoveredChanged: {
+            if (hovered && mainMenuLoader.item)
+                mainMenuLoader.item.hoverAnchoredMenu(brandMenu, brand)
         }
     }
 
     AppMenu {
         id: brandMenu
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
         AppMenuAction {
             text: UiText.text("关于 MiaCode")
@@ -151,7 +149,6 @@ Rectangle {
                 commandsEnabled: root.visible
                 normalizationEnabled: root.normalizationEnabled
             }
-            onLoaded: root.scheduleMainMenuReflow()
         }
     }
 
@@ -170,7 +167,6 @@ Rectangle {
         // Let drag / menu hit-testing win under the label.
         enabled: false
 
-        onImplicitWidthChanged: root.scheduleMainMenuReflow()
     }
 
     WindowCaptionButtons {

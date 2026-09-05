@@ -17,8 +17,8 @@ ApplicationWindow {
 
     width: 1280
     height: 720
-    minimumWidth: 620
-    minimumHeight: 480
+    minimumWidth: Math.ceil(mainView.minimumWidth)
+    minimumHeight: Math.max(480, Math.ceil(mainView.minimumHeight))
     // C++ explicitly shows this only after MainWindow has registered the root
     // and installed the shared chart-audio drop route.
     visible: false

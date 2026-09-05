@@ -387,6 +387,10 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
 
 PreviewQuickSceneRoot::~PreviewQuickSceneRoot()
 {
+#ifdef Q_OS_MACOS
+    QObject::disconnect(framePresentedCaptureConnection_);
+    QObject::disconnect(guiFrameConnection_);
+#endif
     if (frameSwapConnection_) {
         QObject::disconnect(frameSwapConnection_);
     }
@@ -591,6 +595,10 @@ void PreviewQuickSceneRoot::setRuntimeObject(QObject* runtimeObject)
 
 void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
 {
+#ifdef Q_OS_MACOS
+    QObject::disconnect(framePresentedCaptureConnection_);
+    QObject::disconnect(guiFrameConnection_);
+#endif
     if (runtime_ != nullptr && boundWindow_ != nullptr) {
         runtime_->clearVisibleHostWindow(boundWindow_);
     }
@@ -682,6 +690,10 @@ PreviewTextureStats PreviewQuickSceneRoot::takePendingTextureStatsForPresentatio
 
 void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
 {
+#ifdef Q_OS_MACOS
+    QObject::disconnect(framePresentedCaptureConnection_);
+    QObject::disconnect(guiFrameConnection_);
+#endif
     const QString reasonText = QString::fromLatin1(reason != nullptr ? reason : "unspecified");
     if (frameSwapConnection_) {
         QObject::disconnect(frameSwapConnection_);
@@ -806,7 +818,23 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
             }
         },
         Qt::DirectConnection);
-    frameSwapConnection_ = QObject::connect(boundWindow_, &QQuickWindow::frameSwapped, this, [this]() {
+#ifdef Q_OS_MACOS
+    // 原生窗口动画期间，绘制仍可继续，界面线程的排队通知可能延迟。
+    // 每次绑定独立保存待处理状态，两种界面线程回调共享一次性通知。
+    const auto pendingPresent = std::make_shared<std::atomic<bool>>(false);
+    framePresentedCaptureConnection_ = QObject::connect(
+        boundWindow_, &QQuickWindow::frameSwapped, this,
+        [pendingPresent]() { pendingPresent->store(true, std::memory_order_release); },
+        Qt::DirectConnection);
+    const auto notifyPresented = [this, pendingPresent,
+                                  host = boundWindow_, runtime = runtime_]() {
+        if (host != boundWindow_ || runtime != runtime_
+            || !pendingPresent->exchange(false, std::memory_order_acquire)) {
+            return;
+        }
+#else
+    const auto notifyPresented = [this]() {
+#endif
         if (runtime_ == nullptr || boundWindow_ == nullptr || window() != boundWindow_) {
             return;
         }
@@ -814,7 +842,16 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
             runtime_->notePresentedTextureStats(takePendingTextureStatsForPresentation());
         }
         runtime_->notifyVisibleFramePresented();
-    });
+    };
+    frameSwapConnection_ = QObject::connect(
+        boundWindow_, &QQuickWindow::frameSwapped, this, notifyPresented);
+#ifdef Q_OS_MACOS
+    // afterAnimating 在界面线程、场景同步之前执行；复用原有播放帧率控制。
+    // 与排队通知共用一次性标记，每个待处理呈现最多推进一次播放。
+    guiFrameConnection_ = QObject::connect(
+        boundWindow_, &QQuickWindow::afterAnimating, this,
+        notifyPresented, Qt::DirectConnection);
+#endif
     // Register Qt's QSG render thread with Windows MMCSS (Multimedia Class Scheduler
     // Service) under the "Games" task class. This asks the OS scheduler to protect the
     // thread from being preempted by background work — the standard fix used by every

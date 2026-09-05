@@ -48,6 +48,7 @@ Item {
 
     ActivityBar {
         id: activityBar
+        color: root.compact ? "transparent" : Theme.surfaceColor(Theme.colors.background.activityBar)
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -74,6 +75,7 @@ Item {
         visible: root.primarySidebarVisible
 
         ChartFieldSidebar {
+            color: root.compact ? "transparent" : Theme.surfaceColor(Theme.colors.background.panel)
             anchors.fill: parent
             visible: root.viewState.activeSidebarView === "chart"
             viewState: root.viewState
@@ -83,6 +85,7 @@ Item {
         }
 
         ExportSidebarPage {
+            color: root.compact ? "transparent" : Theme.surfaceColor(Theme.colors.background.panel)
             anchors.fill: parent
             visible: root.viewState.activeSidebarView === "export"
             pages: root.pages

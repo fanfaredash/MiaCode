@@ -26,6 +26,7 @@ Item {
 
     readonly property int overflowButtonWidth: 30
     property int visibleCount: 5
+    property bool layoutReady: false
     property var _activeMenu: null
 
     implicitHeight: 34
@@ -34,11 +35,10 @@ Item {
     width: barRow.width
     enabled: commandsEnabled
 
-    onAvailableWidthChanged: root.scheduleReflow()
-    Component.onCompleted: root.scheduleReflow()
-
-    function scheduleReflow() {
-        Qt.callLater(root.reflow)
+    onAvailableWidthChanged: root.reflow()
+    Component.onCompleted: {
+        root.layoutReady = true
+        root.reflow()
     }
 
     function topButtons() {
@@ -53,6 +53,18 @@ Item {
         if (root._activeMenu && root._activeMenu.visible)
             root._activeMenu.close()
         root._activeMenu = null
+    }
+
+    function toggleAnchoredMenu(menu, anchor) {
+        if (root._activeMenu === menu)
+            root.closeActiveMenu()
+        else
+            root.openAnchoredMenu(menu, anchor)
+    }
+
+    function hoverAnchoredMenu(menu, anchor) {
+        if (root._activeMenu && root._activeMenu !== menu)
+            root.openAnchoredMenu(menu, anchor)
     }
 
     function openAnchoredMenu(menu, anchor) {
@@ -106,8 +118,8 @@ Item {
     }
 
     function reflow() {
-        root.closeActiveMenu()
-        root.detachAllOverflowMenus()
+        if (!root.layoutReady)
+            return
 
         const buttons = root.topButtons()
         const menus = root.topMenus()
@@ -125,6 +137,12 @@ Item {
             --n
         }
 
+        // 尺寸变化当下更新折叠状态，原生窗口动画期间也使用当前宽度。
+        // 跨过折叠阈值时才迁移菜单，保留同一布局内的活动菜单。
+        if (root.visibleCount === n)
+            return
+        root.closeActiveMenu()
+        root.detachAllOverflowMenus()
         root.visibleCount = n
 
         // Register overflowed entries as real Menu submenus (parent= alone does nothing).
@@ -154,6 +172,7 @@ Item {
         readonly property bool menuOpen: btn.menu.active
 
         implicitWidth: Math.ceil(label.implicitWidth) + leftPadding + rightPadding
+        onImplicitWidthChanged: root.reflow()
 
         contentItem: ControlsImpl.MnemonicLabel {
             id: label
@@ -168,19 +187,13 @@ Item {
         }
 
 
-        onClicked: {
-            if (btn.menuOpen)
-                root.closeActiveMenu()
-            else
-                root.openAnchoredMenu(btn.menu, btn)
-        }
+        onClicked: root.toggleAnchoredMenu(btn.menu, btn)
 
         // Menubar-style: while a menu is open, hovering another top item switches it.
         onHoveredChanged: {
             if (!btn.hovered || !btn.visible || !btn.menu)
                 return
-            if (root._activeMenu && root._activeMenu !== btn.menu)
-                root.openAnchoredMenu(btn.menu, btn)
+            root.hoverAnchoredMenu(btn.menu, btn)
         }
     }
 
@@ -226,15 +239,10 @@ Item {
             iconHeight: 16
             tooltip: UiText.text("更多")
             active: overflowMenu.active
-            onClicked: {
-                if (root._activeMenu === overflowMenu)
-                    root.closeActiveMenu()
-                else
-                    root.openAnchoredMenu(overflowMenu, moreButton)
-            }
+            onClicked: root.toggleAnchoredMenu(overflowMenu, moreButton)
             onHoveredChanged: {
-                if (hovered && root._activeMenu && root._activeMenu !== overflowMenu)
-                    root.openAnchoredMenu(overflowMenu, moreButton)
+                if (hovered)
+                    root.hoverAnchoredMenu(overflowMenu, moreButton)
             }
         }
     }

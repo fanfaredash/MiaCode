@@ -14,6 +14,9 @@ Rectangle {
     // exactly one PreviewSurface may subscribe to the runtime at a time. The
     // compact and fullscreen owners use the same rule.
     property bool surfaceActive: true
+    readonly property real minimumHeight: heading.implicitHeight + transport.implicitHeight
+                                          + statistics.implicitHeight + 64
+    readonly property real minimumWidth: transport.minimumWidth
     signal fullscreenRequested()
 
     // Export page still uses the backend ratio. Edit mode defaults to 1:1;

@@ -26,6 +26,15 @@ Item {
     property bool compact: false
     property real sidebarDragWidth: 0
     property bool sidebarResizing: false
+    // 现有紧凑工作区的可用宽度；展开侧栏所需空间单独计算。
+    readonly property real minimumWorkspaceWidth: Math.max(620,
+        bottomPanel.minimumWidth + preview.minimumWidth + Theme.splitDividerThickness)
+    readonly property real expandedSidebarWidth:
+        sidebar.activityBarWidth + root.preferences.sidebarWidth + Theme.splitDividerThickness
+    readonly property real minimumHeight: Math.max(
+        editorHost.SplitView.minimumHeight + (root.bottomPanelEffectivelyVisible
+            ? bottomPanel.minimumHeight + Theme.splitDividerThickness : 0),
+        preview.minimumHeight)
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
     readonly property bool canCut: editorPane.canCut
@@ -44,9 +53,16 @@ Item {
     signal settingsRequested()
 
     function persistBottomPanelHeightRatio() {
-        if (!root.bottomPanelEffectivelyVisible || centerSplit.height <= 0)
+        if (!root.bottomPanelEffectivelyVisible || centerSplit.height <= 0
+                || !centerSplit.resizing || bottomPanel.height === centerSplit.panelHeightAtPress)
             return
-        root.preferences.bottomPanelHeightRatio = bottomPanel.height / centerSplit.height
+        // 拖到边界表达比例的最小/最大值，临时的绝对高度约束留在布局层。
+        root.preferences.bottomPanelHeightRatio =
+            bottomPanel.height <= bottomPanel.SplitView.minimumHeight
+                ? root.preferences.bottomPanelMinimumHeightRatio
+                : bottomPanel.height >= bottomPanel.SplitView.maximumHeight
+                    ? root.preferences.bottomPanelMaximumHeightRatio
+                    : bottomPanel.height / centerSplit.height
     }
 
     function undo() {
@@ -204,9 +220,15 @@ Item {
             SplitView {
                 id: centerSplit
                 orientation: Qt.Vertical
+                property real panelHeightAtPress: 0
+                onResizingChanged: {
+                    if (resizing)
+                        panelHeightAtPress = bottomPanel.height
+                }
                 SplitView.fillWidth: true
-                SplitView.minimumWidth: root.previewEditorAvailableWidth
-                                        * (1.0 - root.preferences.previewMaximumWidthRatio)
+                SplitView.minimumWidth: Math.max(bottomPanel.minimumWidth,
+                    Math.min(root.previewEditorAvailableWidth * (1.0 - root.preferences.previewMaximumWidthRatio),
+                             root.previewEditorAvailableWidth - preview.minimumWidth))
 
                 handle: SplitHandle {
                     onReleased: root.persistBottomPanelHeightRatio()
@@ -255,14 +277,15 @@ Item {
                     commands: root.commands
                     timelineSession: root.timelineSession
                     previewSession: root.previewSession
-                    SplitView.preferredHeight: root.bottomPanelEffectivelyVisible
-                                               ? centerSplit.height * root.preferences.bottomPanelHeightRatio
-                                               : 0
                     SplitView.minimumHeight: root.bottomPanelEffectivelyVisible
-                                             ? centerSplit.height * root.preferences.bottomPanelMinimumHeightRatio
+                                             ? Math.max(bottomPanel.minimumHeight,
+                                                 centerSplit.height * root.preferences.bottomPanelMinimumHeightRatio)
                                              : 0
                     SplitView.maximumHeight: root.bottomPanelEffectivelyVisible
-                                             ? centerSplit.height * root.preferences.bottomPanelMaximumHeightRatio
+                                             ? Math.max(bottomPanel.minimumHeight, Math.min(
+                                                 centerSplit.height * root.preferences.bottomPanelMaximumHeightRatio,
+                                                 centerSplit.height - editorHost.SplitView.minimumHeight
+                                                     - Theme.splitDividerThickness))
                                              : 0
                     onAnalysisRowActivated: (difficultyId, revision, line, column, endColumn, second) =>
                         editorPane.revealAnalysisRow(
@@ -278,10 +301,12 @@ Item {
                 exportPageActive: root.exportVideoActive
                 SplitView.preferredWidth: root.previewEditorAvailableWidth
                                           * root.preferences.previewWidthRatio
-                SplitView.minimumWidth: root.previewEditorAvailableWidth
-                                        * root.preferences.previewMinimumWidthRatio
-                SplitView.maximumWidth: root.previewEditorAvailableWidth
-                                        * root.preferences.previewMaximumWidthRatio
+                SplitView.minimumWidth: Math.max(preview.minimumWidth,
+                    Math.min(root.previewEditorAvailableWidth * root.preferences.previewMinimumWidthRatio,
+                             root.previewEditorAvailableWidth - bottomPanel.minimumWidth))
+                SplitView.maximumWidth: Math.max(preview.minimumWidth,
+                    Math.min(root.previewEditorAvailableWidth * root.preferences.previewMaximumWidthRatio,
+                             root.previewEditorAvailableWidth - bottomPanel.minimumWidth))
                 onFullscreenRequested: root.showFullscreenPreview()
             }
         }
@@ -333,6 +358,17 @@ Item {
                 }
             }
         }
+    }
+
+    // SplitView 拖动时会写入首选高度；松开后重新接回持久比例绑定。
+    // 缩小窗口触及高度下限后，放大仍按用户原有比例计算。
+    Binding {
+        target: bottomPanel.SplitView
+        property: "preferredHeight"
+        value: root.bottomPanelEffectivelyVisible
+            ? centerSplit.height * root.preferences.bottomPanelHeightRatio : 0
+        when: !centerSplit.resizing
+        restoreMode: Binding.RestoreNone
     }
 
     Rectangle {

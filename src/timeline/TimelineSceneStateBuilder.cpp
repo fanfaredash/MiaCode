@@ -28,6 +28,7 @@ constexpr int kPlayableLaneCount = 8;
 constexpr int kLaneCount = kPlayableLaneCount + 1;
 constexpr int kHeaderHeight = 26;
 constexpr int kLaneHeight = 20;
+constexpr double kMinimumContentScale = 0.5;
 constexpr int kTimelineLeftMargin = 32;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kTimelineHeaderLineLabelMinSpacingPx = 22;
@@ -105,7 +106,7 @@ QFont timelineHeaderLabelFont(const QFont& sourceFont)
 // Note assets and markers scale with the grid, up to their native size.
 double normalizedContentScale(double scale)
 {
-    return qBound(0.5, scale, 1.0);
+    return qBound(kMinimumContentScale, scale, 1.0);
 }
 
 QFont timelineLaneLabelFont(const QFont& sourceFont, double contentScale)
@@ -122,7 +123,7 @@ constexpr double kMaxContentScale = 4.0;
 
 double gridContentScale(double scale)
 {
-    return qBound(0.5, scale, kMaxContentScale);
+    return qBound(kMinimumContentScale, scale, kMaxContentScale);
 }
 
 double headerContentScale(double scale)
@@ -361,7 +362,7 @@ TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& r
         const double viewportScale =
             static_cast<double>(request.viewportSize.height() - kHeaderHeight)
                 / (kLaneCount * kLaneHeight);
-        contentScale = qBound(0.5, viewportScale, 1.0);
+        contentScale = qBound(kMinimumContentScale, viewportScale, 1.0);
     }
     TimelineSceneLayoutMetrics metrics;
     metrics.viewportSize = request.viewportSize;
@@ -435,6 +436,12 @@ void applyLayoutMetrics(TimelineSceneState* state, const TimelineSceneLayoutMetr
 }  // namespace
 
 namespace miacode::timeline {
+
+int TimelineSceneStateBuilder::minimumViewportHeight()
+{
+    // 外层分栏与文字、贴图共用缩放下限，九条轨道均保有完整的行高。
+    return kHeaderHeight + qCeil(kLaneCount * kLaneHeight * kMinimumContentScale);
+}
 
 TimelineSceneLayoutMetrics TimelineSceneStateBuilder::layoutMetrics(const TimelineSceneBuildRequest& request)
 {

@@ -35,6 +35,7 @@ class TimelineQuickItem : public QQuickItem
     Q_PROPERTY(bool viewportLockEnabled READ viewportLockEnabled WRITE setViewportLockEnabled NOTIFY viewportLockEnabledChanged)
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
     Q_PROPERTY(int timelineTop READ timelineTop NOTIFY sceneMetricsChanged)
+    Q_PROPERTY(int minimumViewportHeight READ minimumViewportHeight CONSTANT)
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)
     Q_PROPERTY(QString hoverTooltipText READ hoverTooltipText NOTIFY hoverTooltipChanged)
     Q_PROPERTY(QPointF hoverTooltipPosition READ hoverTooltipPosition NOTIFY hoverTooltipChanged)
@@ -65,6 +66,7 @@ public:
     bool followProgressEnabled() const;
     void setFollowProgressEnabled(bool enabled);
     int timelineTop() const;
+    int minimumViewportHeight() const;
     bool isReady() const;
     QString hoverTooltipText() const;
     QPointF hoverTooltipPosition() const;

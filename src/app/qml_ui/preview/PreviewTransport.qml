@@ -48,10 +48,10 @@ Item {
 
     // Shorten "pos / dur" only when the control row would actually collide —
     // independent of NoteStatistics column switching.
-    readonly property int _fixedChromeWidth: {
-        const fullscreenW = exportPageActive ? 0 : 28
-        return 28 + 5 + 28 + 5 + rateButton.implicitWidth + 5 + fullscreenW
-    }
+    readonly property real _fixedChromeWidth: stopButton.implicitWidth + playButton.implicitWidth
+        + rateButton.implicitWidth + (canvasMenuButton.visible ? canvasMenuButton.implicitWidth : 0)
+        + transportRow.spacing * (canvasMenuButton.visible ? 4 : 3)
+    readonly property real minimumWidth: _fixedChromeWidth + 16 + 40
     readonly property bool timeFitsFull: {
         const margins = 16
         const fullTimeW = fullTimeMetrics.width + 8
@@ -105,6 +105,7 @@ Item {
     }
 
     RowLayout {
+        id: transportRow
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -114,6 +115,7 @@ Item {
         spacing: 5
 
         IconButton {
+            id: stopButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl("icons/stop.svg")
@@ -121,6 +123,7 @@ Item {
             onClicked: root.previewSession.stop()
         }
         IconButton {
+            id: playButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl(root.previewSession.playing ? "icons/pause.svg" : "icons/play.svg")

@@ -1068,6 +1068,11 @@ int TimelineQuickItem::timelineTop() const
     return cachedTimelineTop_;
 }
 
+int TimelineQuickItem::minimumViewportHeight() const
+{
+    return miacode::timeline::TimelineSceneStateBuilder::minimumViewportHeight();
+}
+
 QString TimelineQuickItem::hoverTooltipText() const
 {
     return hoverTooltipText_;
