@@ -58,7 +58,7 @@ public:
     void setPlaybackActive(bool active);
     Q_INVOKABLE qulonglong requestNavigation(int difficultyId, qulonglong revision,
                                              int start, int end, bool focus, bool reveal);
-    bool requestTouchPadAuthoring(const QString& pad, bool useBacktickSeparator);
+    bool requestTouchPadAuthoring(const QString& pad, QChar separator);
     bool editorContextActive() const;
     EditorSelectionState editorSelection() const;
 
@@ -81,7 +81,7 @@ signals:
     void navigationRequested(qulonglong sequence, int difficultyId, qulonglong revision,
                              int start, int end, bool focus, bool reveal);
     void navigationFinished(qulonglong sequence, bool applied);
-    void touchPadAuthoringRequested(const QString& pad, bool useBacktickSeparator,
+    void touchPadAuthoringRequested(const QString& pad, QChar separator,
                                     int difficultyId, qulonglong revision,
                                     int anchor, int position);
     void caretLocationPublished(int difficultyId, qulonglong revision, int line, int column);
@@ -111,7 +111,7 @@ private:
 
     struct TouchPadRequest {
         QString pad;
-        bool useBacktickSeparator = false;
+        QChar separator = QLatin1Char('/');
         int difficultyId = -1;
         quint64 revision = 0;
         int anchor = 0;

@@ -62,14 +62,14 @@ qulonglong EditorSyncController::requestNavigation(
 }
 
 bool EditorSyncController::requestTouchPadAuthoring(
-    const QString& pad, bool useBacktickSeparator)
+    const QString& pad, QChar separator)
 {
     if (!editorContextActive() || pad.trimmed().isEmpty()) {
         return false;
     }
     pendingTouchPadRequests_.enqueue({
         pad,
-        useBacktickSeparator,
+        separator,
         contextDifficultyId_,
         contextRevision_,
         contextAnchor_,
@@ -421,7 +421,7 @@ void EditorSyncController::scheduleTouchPadDelivery()
         if (readinessAccepts(request.difficultyId, request.revision)
             && editorFocused_ && !imeComposing_) {
             emit touchPadAuthoringRequested(
-                request.pad, request.useBacktickSeparator,
+                request.pad, request.separator,
                 request.difficultyId, request.revision,
                 request.anchor, request.position);
         }

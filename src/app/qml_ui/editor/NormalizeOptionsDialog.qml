@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import MiaCode.UI
 
 // Options for 整谱规范化. Opens over the editor, reports the chosen options and
-// leaves the actual transform to the caller — the dialog owns no document state.
+    // leaves the actual transform to the caller — the dialog owns no document state.
 AppDialog {
     id: root
 
@@ -12,14 +12,14 @@ AppDialog {
     // line/column range), supplied by the caller.
     property string selectionDescription: ""
 
-    // Option lists come from the document model so the labels stay the ones the
-    // Widgets dialog used ("每 4 小节" / "不分段" / "日向").
+    // Option lists come from the document model so the labels stay neutral
+    // (“分段保留” / “单行紧凑”) rather than exposing implementation versions.
     required property var documentSession
 
     // Seed values; the caller reads the same-named properties back on accept.
     property bool reduceTo384Grid: true
     property int sectionMeasureCount: 4
-    property string syntax: "fpd"
+    property string syntax: "segment_preserving"
 
     readonly property var gridOptions: documentSession.normalizeGridOptions()
     readonly property var sectionOptions: documentSession.normalizeSectionOptions()

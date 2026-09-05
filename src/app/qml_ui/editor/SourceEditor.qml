@@ -1130,7 +1130,7 @@ Rectangle {
         function onFollowChanged() {
             root.applyFollowProjection()
         }
-        function onTouchPadAuthoringRequested(pad, useBacktickSeparator, difficultyId,
+        function onTouchPadAuthoringRequested(pad, separator, difficultyId,
                                                revision, anchor, position) {
             if (root.metadataMode || !sourceArea.activeFocus || root.imeComposing
                     || difficultyId !== root.documentSession.currentDifficultyId
@@ -1140,7 +1140,7 @@ Rectangle {
             sourceArea.select(anchor, position)
             root.endProgrammaticSelection()
             const tx = root.editorController.touchPadAuthoringForQml(
-                sourceArea.text, anchor, position, pad, useBacktickSeparator)
+                sourceArea.text, anchor, position, pad, separator)
             if (root.applyEditorTransaction(tx)) {
                 root.syncController.setTouchPadPreviewAnchor(
                     difficultyId, root.documentSession.documentRevision,

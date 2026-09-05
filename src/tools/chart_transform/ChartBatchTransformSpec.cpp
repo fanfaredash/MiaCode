@@ -2119,6 +2119,56 @@ void runInlineSpecs(QTextStream& err, int* failed)
             failed,
             err
         );
+
+        QJsonObject legacyFpd;
+        legacyFpd.insert(QStringLiteral("chart_normalize_syntax"), QStringLiteral("fpd"));
+        QJsonObject canonicalSegment;
+        canonicalSegment.insert(
+            QStringLiteral("chart_normalize_syntax"), QStringLiteral("segment_preserving"));
+        QJsonObject legacyHinata;
+        legacyHinata.insert(QStringLiteral("chart_normalize_syntax"), QStringLiteral("hinata"));
+        QJsonObject canonicalCompact;
+        canonicalCompact.insert(
+            QStringLiteral("chart_normalize_syntax"), QStringLiteral("compact_single_line"));
+        const QString normalizationFixture = QStringLiteral("{4}1,2,3,4,\nE");
+        const auto legacySegmentResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(legacyFpd, defaults));
+        const auto canonicalSegmentResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(canonicalSegment, defaults));
+        const auto legacyCompactResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(legacyHinata, defaults));
+        const auto canonicalCompactResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(canonicalCompact, defaults));
+        expectTrue(
+            legacySegmentResult.ok && canonicalSegmentResult.ok
+                && legacySegmentResult.text == canonicalSegmentResult.text,
+            QStringLiteral("legacy fpd and canonical segment-preserving preferences normalize identically"),
+            failed,
+            err);
+        expectTrue(
+            legacyCompactResult.ok && canonicalCompactResult.ok
+                && legacyCompactResult.text == canonicalCompactResult.text,
+            QStringLiteral("legacy hinata and canonical compact-single-line preferences normalize identically"),
+            failed,
+            err);
+        QJsonObject saved;
+        miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
+            &saved, miacode::chart_transform::ChartNormalizationOptions{
+                true, true, true, miacode::chart_transform::ChartNormalizationSyntax::CompactSingleLine, 4});
+        expectTrue(
+            saved.value(QStringLiteral("chart_normalize_syntax")).toString()
+                == QStringLiteral("compact_single_line"),
+            QStringLiteral("normalization writes the canonical compact-single-line token"),
+            failed,
+            err);
     }
 
     {

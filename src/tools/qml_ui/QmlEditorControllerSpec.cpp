@@ -565,7 +565,7 @@ bool verifyEditorPointerRoutes(QTextStream& out, int* failed)
                                            int start, int end, bool focusEditor, bool reveal)
                 signal navigationFinished(real sequence, bool applied)
                 signal followChanged()
-                signal touchPadAuthoringRequested(string pad, bool useBacktickSeparator,
+                signal touchPadAuthoringRequested(string pad, string separator,
                                                   int difficultyId, real revision,
                                                   int anchor, int position)
                 function setEditorReadiness(a, b, c, d) {}
@@ -1157,7 +1157,7 @@ int main(int argc, char** argv)
                && controller.acceptsTouchAuthoring(3, 42, false, true),
            QStringLiteral("caret and Ctrl touch authoring reject stale revisions and IME composition"), out, &failed);
     const auto touchTransaction = controller.touchPadAuthoringForQml(
-        QStringLiteral("1,,"), 2, 2, QStringLiteral("A1"), false);
+        QStringLiteral("1,,"), 2, 2, QStringLiteral("A1"), QLatin1Char('/'));
     expect(touchTransaction.value(QStringLiteral("consumed")).toBool()
                && touchTransaction.value(QStringLiteral("hasEdit")).toBool()
                && touchTransaction.value(QStringLiteral("undoGroup")).toBool()

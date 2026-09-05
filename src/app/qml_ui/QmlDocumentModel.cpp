@@ -1277,9 +1277,10 @@ miacode::chart_transform::ChartNormalizationOptions normalizeOptionsFromVariant(
     // carrying it separately; keeping it derived stops QML producing a
     // combination the engine never saw from that path.
     parsed.splitEveryFourMeasures = parsed.sectionMeasureCount == 4;
-    parsed.syntax = options.value(QStringLiteral("syntax")).toString() == QStringLiteral("hinata")
-        ? miacode::chart_transform::ChartNormalizationSyntax::Hinata
-        : miacode::chart_transform::ChartNormalizationSyntax::Fpd;
+    const QString syntax = options.value(QStringLiteral("syntax")).toString().trimmed().toLower();
+    parsed.syntax = syntax == QStringLiteral("hinata") || syntax == QStringLiteral("compact_single_line")
+        ? miacode::chart_transform::ChartNormalizationSyntax::CompactSingleLine
+        : miacode::chart_transform::ChartNormalizationSyntax::SegmentPreserving;
     return parsed;
 }
 
@@ -1433,9 +1434,9 @@ QVariantMap QmlDocumentModel::normalizeOptions() const
     map.insert(QStringLiteral("sectionMeasureCount"), options.sectionMeasureCount);
     map.insert(
         QStringLiteral("syntax"),
-        options.syntax == miacode::chart_transform::ChartNormalizationSyntax::Hinata
-            ? QStringLiteral("hinata")
-            : QStringLiteral("fpd"));
+        options.syntax == miacode::chart_transform::ChartNormalizationSyntax::CompactSingleLine
+            ? QStringLiteral("compact_single_line")
+            : QStringLiteral("segment_preserving"));
     return map;
 }
 
@@ -1485,7 +1486,7 @@ QVariantList QmlDocumentModel::normalizeSyntaxOptions() const
         return QVariant(option);
     };
     return QVariantList{
-        row(QStringLiteral("fpd"), QStringLiteral("v1")),
-        row(QStringLiteral("hinata"), QStringLiteral("v2")),
+        row(QStringLiteral("segment_preserving"), QStringLiteral("分段保留")),
+        row(QStringLiteral("compact_single_line"), QStringLiteral("单行紧凑")),
     };
 }

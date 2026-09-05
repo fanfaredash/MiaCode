@@ -39,7 +39,8 @@ int main(int argc, char** argv)
     const auto expectTouchPlan = [&out, &failed](const QString& text, int pos, bool backtick,
                                                  int expectedStart, int expectedInsert,
                                                  const QString& expectedText, const QString& message) {
-        const auto plan = miacode::editor::planTouchPadAuthoringEdit(text, pos, QStringLiteral("A1"), backtick);
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(
+            text, pos, QStringLiteral("A1"), backtick ? QLatin1Char('`') : QLatin1Char('/'));
         expect(plan.valid && plan.tokenStart == expectedStart && plan.insertionPosition == expectedInsert
                    && plan.insertionText == expectedText,
                message, out, &failed);
@@ -63,6 +64,14 @@ int main(int argc, char** argv)
     expectTouchPlan(QStringLiteral("1,2"), 3, false, 2, 3, QStringLiteral("/A1"),
                     QStringLiteral("document-end caret appends to the final token"));
 
+    {
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(
+            QStringLiteral("1,2,"), 3, QStringLiteral("A1"), QLatin1Char(','));
+        expect(plan.valid && plan.insertionPosition == 3
+                   && plan.insertionText == QStringLiteral(",A1"),
+               QStringLiteral("comma separator appends even when the beat is empty"), out, &failed);
+    }
+
     const auto expectTouchPadEdit = [&out, &failed](const QString& text, int pos, bool backtick,
                                                     const QString& pad, const QString& expected,
                                                     const QString& message) {
@@ -70,7 +79,8 @@ int main(int argc, char** argv)
         QTextCursor cursor(&document);
         cursor.setPosition(pos);
         const auto plan = miacode::editor::planTouchPadAuthoringEdit(
-            document.toPlainText(), cursor.position(), pad, backtick);
+            document.toPlainText(), cursor.position(), pad,
+            backtick ? QLatin1Char('`') : QLatin1Char('/'));
         const bool applied = miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan);
         expect(applied && document.toPlainText() == expected, message, out, &failed);
     };
@@ -176,7 +186,7 @@ int main(int argc, char** argv)
         cursor.setPosition(0);
         cursor.setPosition(3, QTextCursor::KeepAnchor);
         const auto plan = miacode::editor::planTouchPadAuthoringEdit(
-            document.toPlainText(), cursor.position(), QStringLiteral("B2"), false);
+            document.toPlainText(), cursor.position(), QStringLiteral("B2"), QLatin1Char('/'));
         expect(miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan)
                    && document.toPlainText() == QLatin1String("1,2/B2,"),
                QStringLiteral("active selection uses position and does not delete selected text"), out, &failed);

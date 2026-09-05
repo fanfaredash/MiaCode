@@ -32,9 +32,11 @@ int main(int argc, char** argv)
     if (!touchPadAuthoringMouseButtonSupported(Qt::LeftButton)
         || !touchPadAuthoringMouseButtonSupported(Qt::RightButton)
         || touchPadAuthoringMouseButtonSupported(Qt::MiddleButton)
-        || touchPadAuthoringUsesBacktickSeparator(Qt::LeftButton)
-        || !touchPadAuthoringUsesBacktickSeparator(Qt::RightButton)) {
-        err << "FAIL: left/right button routing should select slash/right-backtick only\n";
+        || touchPadAuthoringSeparator(Qt::LeftButton, Qt::ControlModifier) != QLatin1Char('/')
+        || touchPadAuthoringSeparator(
+               Qt::LeftButton, Qt::ControlModifier | Qt::ShiftModifier) != QLatin1Char('`')
+        || touchPadAuthoringSeparator(Qt::RightButton, Qt::ControlModifier) != QLatin1Char(',')) {
+        err << "FAIL: left/right/modifier routing should select slash/backtick/comma\n";
         return 1;
     }
 
@@ -70,13 +72,15 @@ int main(int argc, char** argv)
         return 1;
     }
     const QString sceneSource = readSource(QStringLiteral("src/preview/quick_scene/PreviewQuickSceneRoot.cpp"));
+    const QString authoringStateSource = readSource(QStringLiteral("src/core/scene/TouchPadAuthoringState.h"));
     if (!sceneSource.contains(QStringLiteral("setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton)"))
         || !sceneSource.contains(QStringLiteral("touchPadAuthoringMouseButtonSupported(event->button())"))
-        || !sceneSource.contains(QStringLiteral("touchPadAuthoringUsesBacktickSeparator(event->button())"))
+        || !sceneSource.contains(QStringLiteral("touchPadAuthoringSeparator("))
+        || !sceneSource.contains(QStringLiteral("event->button(), event->modifiers()"))
         || !sceneSource.contains(QStringLiteral("touchPadAuthoringPressedButton_ = event->button()"))
         || !sceneSource.contains(QStringLiteral("event->button() == touchPadAuthoringPressedButton_"))
-        || sceneSource.contains(QStringLiteral("ShiftModifier"))) {
-        err << "FAIL: scene source should consume matching left/right gestures and ignore Shift\n";
+        || !authoringStateSource.contains(QStringLiteral("Qt::ShiftModifier"))) {
+        err << "FAIL: scene source should route left/right gestures and Ctrl+Shift pseudo-double\n";
         return 1;
     }
     // The gutter is QML now; the assertion is the same one, re-pointed. A

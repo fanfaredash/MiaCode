@@ -102,7 +102,7 @@ public:
     // undo, while the token start is used to park preview follow safely.
     Q_INVOKABLE QVariantMap touchPadAuthoringForQml(const QString& text, int anchor,
                                                     int position, const QString& pad,
-                                                    bool useBacktickSeparator) const;
+                                                    QChar separator) const;
     // Undo history belongs to a view, not to the document.
     //
     // It used to be one stack that was cleared whenever the editor's identity

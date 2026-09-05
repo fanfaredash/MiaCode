@@ -249,9 +249,9 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     logStartupStage("runtime_pages_ready");
 
     scene_ = new PreviewRuntime(this);
-    connect(scene_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, bool backtickSeparator) {
+    connect(scene_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, QChar separator) {
         if (editorSyncController_ != nullptr) {
-            editorSyncController_->requestTouchPadAuthoring(pad, backtickSeparator);
+            editorSyncController_->requestTouchPadAuthoring(pad, separator);
         }
     });
     logStartupStage("preview_canvas_created");

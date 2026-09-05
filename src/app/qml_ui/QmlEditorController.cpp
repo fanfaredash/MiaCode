@@ -472,10 +472,10 @@ QVariantMap QmlEditorController::deleteBookmarkForQml(const QString& text, int l
 
 QVariantMap QmlEditorController::touchPadAuthoringForQml(
     const QString& text, int anchor, int position, const QString& pad,
-    bool useBacktickSeparator) const
+    QChar separator) const
 {
     const miacode::editor::TouchPadAuthoringEditPlan plan =
-        miacode::editor::planTouchPadAuthoringEdit(text, position, pad, useBacktickSeparator);
+        miacode::editor::planTouchPadAuthoringEdit(text, position, pad, separator);
     auto result = untouched(text, anchor, position);
     if (!plan.valid) {
         return toQmlTransaction(result);
