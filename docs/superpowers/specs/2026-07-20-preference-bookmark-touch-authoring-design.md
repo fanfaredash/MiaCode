@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Preference Persistence, Bookmark Underline, and Touch Authoring Design
 
 Date: 2026-07-20

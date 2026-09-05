@@ -1,13 +1,20 @@
+---
+lifecycle: reusable-verification
+canonical_id: verify.muri
+owner: src/tools/muri
+test_targets: ["muri_spec"]
+---
+
 # 无理检测测试清单
 
-依据：`MURI_DETECTION_SPEC.md`
+依据：[无理检测规格](../specs/muri/MURI_DETECTION_SPEC.md)
 
 目标：确认当前无理检测在运行时分析、静态参考、面板锚点、点击跳转、文案、叠键去重和多押折叠上的行为与规格一致。
 
 ## 0. 测试准备
 
-- [ ] 已完成 `cmake --build build_codex --config Debug --target MiaCode muri_spec miacode_muri_dump`
-- [ ] 已运行 `build_codex\\Debug\\muri_spec.exe`
+- [ ] 已完成 `cmake --build <dev-build> --config Release --target muri_spec --parallel 4`
+- [ ] 已运行 `ctest --test-dir <dev-build> -C Release -R '^muri_spec$' --output-on-failure`
 - [ ] `muri_spec` 输出为 `Muri spec passed.`
 - [ ] 可以在应用内打开无理面板并点击条目跳转
 

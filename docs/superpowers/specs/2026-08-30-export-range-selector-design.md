@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Export Range Selector Design
 
 ## Goal

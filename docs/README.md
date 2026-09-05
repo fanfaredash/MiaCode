@@ -1,39 +1,65 @@
-# MiaCode 文档目录
+# MiaCode 文档
 
-本目录只保留适合随公开仓库发布的文档。内部交接、调查原始材料、英文对照和未脱敏开发记录保留在维护者本地 `docs/_private/`，不进入 Git 跟踪。
+从 [文档索引](INDEX.md) 查当前规范、验收清单和历史资料；从 [Spec 目录](tests/SPEC_CATALOG.md)
+查可执行契约的 owner、target 和验证方式。目录名不决定文档是否仍然有效，frontmatter 的生命周期才是分类依据。
 
-## 目录结构
+## 常用入口
 
-| 目录                               | 用途                          |
-| -------------------------------- | --------------------------- |
-| [specs/chart](specs/chart)       | 谱面诊断、规范化、slide / 头材质等谱面行为规格 |
-| [specs/editor](specs/editor)     | 编辑器交互、侧边栏与书签行为规格 |
-| [specs/muri](specs/muri)         | 无理检测规则与行为规格                 |
-| [specs/preview](specs/preview)   | 预览与导出架构规格                   |
-| [specs/timeline](specs/timeline) | Timeline 坐标、聚焦、图层顺序等规格      |
-| [tests](tests)                   | 与公开规格配套的测试/验收清单             |
-| [ops](ops)                       | 调试、日志排障、开源检查和发布检查           |
-| [archive](archive)               | 明确标注为历史归档的旧设计说明             |
-| [audit](audit)                   | docs 公开发布审计记录               |
+- [当前应用架构](specs/ui/CURRENT_ARCHITECTURE_ZH.md)、[QML/Session 边界](specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md)
+- [当前预览与导出](specs/preview/CURRENT_RENDER_EXPORT_CONTRACT_ZH.md)
+- [Slide 与头材质](specs/chart/SLIDE_DELAY_AND_HEAD_MATERIAL_SPEC.md)、[无理检测](specs/muri/MURI_DETECTION_SPEC.md)
+- [Timeline 坐标与聚焦](specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md)
+- [调试索引](ops/DEBUG_INDEX.md)、[日志模式](ops/OPERATION_LOG_PATTERNS_SPEC.md)、[发布检查](ops/RELEASE_CHECKLIST.md)
+- [仓库开发 skill](../.agents/skills/miacode-dev-guide/SKILL.md)、[贡献指南](../CONTRIBUTING.md)
 
-## 阅读入口
+## 分类与维护
 
-- 调试与日志：[ops/DEBUG_INDEX.md](ops/DEBUG_INDEX.md)、[ops/OPERATION_LOG_PATTERNS_SPEC.md](ops/OPERATION_LOG_PATTERNS_SPEC.md)
-- 发布准备：[ops/OPEN_SOURCE_CHECKLIST.md](ops/OPEN_SOURCE_CHECKLIST.md)、[ops/RELEASE_CHECKLIST.md](ops/RELEASE_CHECKLIST.md)
-- 预览/导出架构：[specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md](specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md)
-- 谱面诊断：[specs/chart/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md](specs/chart/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md)
-- 编辑器/书签：[specs/editor/BOOKMARK_REDESIGN_SPEC.md](specs/editor/BOOKMARK_REDESIGN_SPEC.md)
-- UI 菜单指示：[specs/ui/UI_MENU_SELECTION_INDICATOR_SPEC_ZH.md](specs/ui/UI_MENU_SELECTION_INDICATOR_SPEC_ZH.md)
-- QML UI v2 目标架构（现行阶段划分）：[specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md](specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md)
-- QML UI v2 一阶段工作清单（历史实施记录，2026-08-24 起由目标架构取代）：[specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md](specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md)
-- QML UI v2 功能缺口：[specs/ui/QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md](specs/ui/QML_UI_V2_CAPABILITY_GAP_RESEARCH_ZH.md)
-- 无理检测：[specs/muri/MURI_DETECTION_SPEC.md](specs/muri/MURI_DETECTION_SPEC.md)
-- Timeline 行为：[specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md](specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md)
+| lifecycle | 用途 | 必填元数据 |
+| --- | --- | --- |
+| `stable-current` | 已与当前代码核对的规范 | owner、canonical_id、last_verified、code_anchors |
+| `reusable-verification` | 可重复验收清单，未勾选不代表已通过 | owner、canonical_id、test_targets |
+| `archive-legacy` | 历史设计和退役实现 | lifecycle；正文注明历史性质并指向当前入口 |
+| `working` | 计划、研究、审计，或混有待复核旧描述的材料 | lifecycle |
 
-## 维护规则
+新增当前规范放 `specs/<domain>/`，验收清单放 `tests/`。旧文件先标明状态，不为整理目录破坏既有链接。
+`canonical_id` 是稳定的契约标识，文件重命名时保留；当前规范/验收清单间不得重复。
+`owner` 是仓库相对模块路径；`code_anchors` 使用真实文件或目录，不维护易漂移的行号。
+`last_verified` 记录源代码复核日期，不等于全平台测试通过日期。具体测试结果另行记录。
 
-- 公开规格和测试清单使用中文；如果只有英文草案，先整理为中文公开版再加入本目录。
-- 新增规格时放入对应 `specs/*` 子目录，并在本 README 增加入口。
-- 新增测试或验收清单时放入 `tests/`，并在对应规格中互相引用。
-- 历史资料只有在明确标注“历史归档”且指向当前事实来源时，才放入 `archive/`。
-- 含本机路径、dump、日志证据、未公开素材来源或内部交接上下文的文档不得直接公开。
+元数据使用简单 frontmatter：单行字符串，列表使用 JSON 数组（不需要 YAML 依赖）。例如：
+
+```yaml
+---
+lifecycle: stable-current
+owner: src/app
+canonical_id: ui.runtime-ownership
+last_verified: 2026-09-06
+code_anchors: ["src/app/v2/ApplicationServices.h", "src/app/runtime/Session.h"]
+---
+```
+
+验收清单的 `test_targets` 列出已注册 spec target；纯手动清单填写 `[]`。
+历史/工作记录不强制补齐 owner、日期或失效代码锚点，避免制造虚假的复核记录。
+
+## 生成与检查
+
+工具要求 Python 3.9+、Git 和仓库要求的 CMake；索引与镜像工具只依赖 Python 标准库。
+
+```sh
+python3 scripts/governance/docs_index.py --sync
+python3 scripts/governance/sync_guides.py --sync
+cmake -P cmake/devtools/SpecCatalog.cmake
+
+python3 scripts/governance/docs_index.py --check
+python3 scripts/governance/sync_guides.py --check
+cmake -DMIACODE_SPEC_CATALOG_CHECK=ON -P cmake/devtools/SpecCatalog.cmake
+```
+
+文档工具检查 `specs/`、`tests/`、`archive/`、`audit/`、`superpowers/plans/` 和
+`superpowers/specs/` 中所有 Git 跟踪或未忽略的 Markdown；新增公开文件缺少生命周期会失败。
+当前文档检查 canonical ID、owner、代码锚点和本地文件链接；历史路径不当作当前事实验证。
+`INDEX.md` 与 `SPEC_CATALOG.md` 各由自己的生成工具检查，不另建手写清单或豁免表。
+`ops/` 保留各自的运维索引与检查规则，不在本次生命周期迁移范围。
+
+公开规范/验收清单使用中文；生成表格中的源码标识保留原样。内部交接、日志、dump、素材来源和
+未脱敏记录留在 Git 忽略的本地位置（如 `docs/_private/`），不要为生成索引将其公开。

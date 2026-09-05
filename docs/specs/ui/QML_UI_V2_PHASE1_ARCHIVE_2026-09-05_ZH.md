@@ -1,3 +1,9 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](CURRENT_ARCHITECTURE_ZH.md) 和 [文档索引](../../INDEX.md)。
+
 # QML UI v2 已解决事项归档（2026-09-05）
 
 本文件承接 `QML_UI_V2_PHASE1_TODO_ZH.md` 中已经完成、无需继续排期的内容。

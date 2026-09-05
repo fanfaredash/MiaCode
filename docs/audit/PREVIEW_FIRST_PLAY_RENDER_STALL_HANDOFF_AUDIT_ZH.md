@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # PV 首播画面掉帧审计与交接报告
 
 - 审计日期：2026-08-19（Asia/Shanghai）

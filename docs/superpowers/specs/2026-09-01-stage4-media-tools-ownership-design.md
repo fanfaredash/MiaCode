@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # 阶段 4：MediaTools 非 Widget 所有权迁移设计
 
 日期：2026-09-01

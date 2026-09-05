@@ -1,3 +1,9 @@
+---
+lifecycle: working
+---
+
+> 工作资料：包含待复核的实现描述或阶段目标，不能整体视为当前规范；以代码和 [文档索引](../../INDEX.md) 中的现行契约为准。
+
 # QML v2 中文文案 vs v1 全量比对表
 
 本文档记录一次针对 `src/app/ui/UiText.cpp::qmlOnlyEntries()`（QML v2 重构中新增、v1 主表

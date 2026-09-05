@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # 分支代码审计报告 — `codex/windows-idle-freeze-diagnostics`
 
 - 审计基线：`dev`（merge-base `677a9625`）→ 分支 HEAD `f82cfa64`

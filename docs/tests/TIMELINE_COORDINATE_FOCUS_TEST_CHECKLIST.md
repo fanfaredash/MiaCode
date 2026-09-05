@@ -1,6 +1,13 @@
+---
+lifecycle: reusable-verification
+canonical_id: verify.timeline-focus
+owner: src/timeline
+test_targets: ["timeline_model_spec"]
+---
+
 # Timeline 坐标与聚焦测试清单
 
-依据：`TIMELINE_COORDINATE_FOCUS_SPEC.md`
+依据：[坐标与聚焦规格](../specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md)
 
 目标：验证 Timeline 的 `L(Left) / R(Right) / C(Cursor)`、聚焦切换、文本联动、播放快照、Follow 和停止位行为是否符合规格。
 

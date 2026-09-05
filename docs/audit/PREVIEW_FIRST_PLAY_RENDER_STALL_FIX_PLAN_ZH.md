@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # PV 首播画面掉帧：复核结论与修复方案
 
 - 日期：2026-08-19（Asia/Shanghai）

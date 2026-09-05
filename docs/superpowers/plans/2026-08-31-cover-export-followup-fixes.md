@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Cover Export Follow-up Fixes Implementation Plan
 
 > **For agentic workers:** Use the task-by-task workflow from `superpowers:executing-plans` or `superpowers:subagent-driven-development` when the execution environment permits it. This task is an explicit exception: the user requires direct edits in the existing `feature/qml-ui` workspace, so do not create a worktree, reset, stash, or overwrite unrelated changes. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -1,3 +1,11 @@
+---
+lifecycle: stable-current
+canonical_id: muri.detection
+owner: src/tools/muri
+last_verified: 2026-09-06
+code_anchors: ["src/tools/muri/MuriAnalyzer.cpp", "src/tools/muri/MuriStaticChecker.cpp", "src/tools/muri/MuriSpec.cpp"]
+---
+
 # 无理检测规则与行为规格
 
 本文档汇总当前 `MiaCode` 无理检测的输入、判定类型、阈值、锚点、列表合并与去重行为，作为实现、回归测试和后续补充样例时的统一依据。

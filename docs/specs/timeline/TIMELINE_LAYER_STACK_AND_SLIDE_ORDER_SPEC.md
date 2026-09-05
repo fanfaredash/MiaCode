@@ -1,3 +1,9 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](../ui/CURRENT_ARCHITECTURE_ZH.md) 和 [文档索引](../../INDEX.md)。
+
 # Timeline 图层栈与滑动条堆叠顺序规格
 
 本文档记录 beta21 期间确定的两条相关运行时不变量，期间经历了多轮调试才稳定：

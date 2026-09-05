@@ -1,3 +1,9 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](../specs/preview/CURRENT_RENDER_EXPORT_CONTRACT_ZH.md) 和 [文档索引](../INDEX.md)。
+
 状态：实施检查清单草案
 
 # Timeline Qt Quick + GPU 一致性检查清单

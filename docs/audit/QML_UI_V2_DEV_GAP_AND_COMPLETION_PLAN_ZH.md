@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # `feature/qml-ui` 相对 `dev` 的功能差距与补完清单（初版）
 
 > **⚠️ 本文已作废（2026-08-29）。**

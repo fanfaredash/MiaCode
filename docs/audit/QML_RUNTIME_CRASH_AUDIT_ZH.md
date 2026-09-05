@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # QML 运行期意外退出排查记录
 
 ## 1. 文档目的

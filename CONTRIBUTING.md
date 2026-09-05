@@ -8,18 +8,14 @@
 
 ## 先读哪些文档
 
-代码永远是最终事实来源；当文档和代码冲突时，以代码为准，并在同一个改动里修正文档。
+代码是最终事实来源。建议从 `README.md`、`src/README.md`、
+`.agents/skills/miacode-dev-guide/SKILL.md` 和 `docs/INDEX.md` 开始。
+开发 skill 提供模块、复用组件和跨模块同步地图；当前规范、验收清单、工作记录与历史方案在索引中分开。
 
-建议阅读顺序：
-
-1. `README.md` / `README_EN.md`：项目功能、依赖、基础构建入口。
-2. `src/README.md`：`src/` 目录结构和当前默认实现路径。
-3. `.codex/skills/miacode-dev-guide/SKILL.md`：当前维护用索引入口。
-4. `.codex/skills/miacode-dev-guide/references/feature-index.md`：按用户功能定位负责文件、类和函数。
-5. `.codex/skills/miacode-dev-guide/references/cross-chain-linkage.md`：检查 parser、timeline、preview、audio、export、Muri 的同步面。
-6. `docs/README.md`：公开规格、测试清单、调试和发布文档入口。
-
-`.claude/skills/` 保留了更细的历史经验和 UI/布局问题排查知识，尤其是 `miacode-dev-guide`、`qt-ui-layout-pitfalls`、`qt-ui-design`。如果 `.claude`、`.codex`、`src/README.md` 的路径或架构描述互相冲突，以当前代码和 `.codex/skills/miacode-dev-guide/` 为准；同时修掉被证伪的旧说明。
+`miacode-dev-guide` 只维护 `.agents/skills/miacode-dev-guide/`。
+`.claude/skills/miacode-dev-guide/` 与 `.codex/skills/miacode-dev-guide/` 是生成镜像，禁止单独改正文。
+修改后运行 `python3 scripts/governance/sync_guides.py --sync`，提交前运行 `--check`。
+其他 skill 不属于此同步工具的范围。
 
 ## 开发环境与构建
 
@@ -56,61 +52,49 @@ cmake --build --preset release
 ctest --test-dir build -C Release
 ```
 
-新增 spec 目标时，应使用 `CMakeLists.txt` 里的 `miacode_add_dev_tool(NAME TEST ...)` 约定，让目标自动注册到 CTest；不要手写重复的 `add_executable` / `target_link_libraries` / `add_test` 样板。
+新增规格放入 `src/tools/<domain>/`，在 `cmake/devtools/specs/` 的相应 manifest 用
+`miacode_add_spec` 注册 owner、稳定 contract ID、类别及执行方式，复用现有 SOURCES/LIBS 分组。
+CTest 自动获得 domain/kind/risk/platform 标签；诊断 helper 继续用 `miacode_add_dev_tool`。
+源码必须恰好登记一次，具体必填字段见 `cmake/devtools/MiaCodeSpecRegistry.cmake`。
+生成目录：`cmake -P cmake/devtools/SpecCatalog.cmake`。
 
-## 代码结构原则
+日常只构建与运行相关规格（将占位符替换成实际值）：
 
-`src/` 按模块职责组织。除入口文件外，源码应放在已有二级职责目录中，避免创建平行别名目录。
+```sh
+cmake --build <dev-build> --config Release --target <spec-target> --parallel 4
+ctest --test-dir <dev-build> -C Release -R '^<spec-target>$' --output-on-failure
+```
 
-核心分层：
+保持独立编译、链接、进程边界；没有逐断言覆盖证据，不按名称相近删除或合并规格。
+`playback_coordinator_construction_spec` 是既有的未闭合链接实验，排除默认构建、无 CTest；目录
+明确标为 `blocked-link`，不能把它当成已通过的 compile-only 契约。
 
-- `src/app/`：应用入口、窗口编排、QuickShell 胶水。`MainWindow` 只做 orchestration，新窗口功能优先落到 `src/app/mainwindow/sections/<feature>/`。
-- `src/core/chart/`：simai 文档、解析、转换、规范化。不要依赖 scene 或 runtime。
-- `src/core/scene/`：纯 frame-state 数学和图层描述。不得依赖 QSG / D3D11。
-- `src/audio/`：BASS / miniaudio 后端与 SFX runtime。其他模块不要直接链接 BASS 或 miniaudio。
-- `src/preview/runtime/` 和 `src/preview/quick_scene/`：当前默认 Qt Quick/QSG 预览与导出渲染路径。
-- `src/timeline/quick/`：当前 QuickShell 时间轴 QSG 表面。
-- `src/render/` 和 `src/sources/`：保留的 D3D11 / DirectComposition 诊断路径，默认关闭。
-- `src/tools/`：独立工具、spec、probe、导出和分析辅助。
+## 代码结构与同步面
 
-当前默认实现路径：
+- `src/app/qml_ui/`：产品前端、C++ models 和共享 QML 组件。
+- `src/app/v2/`：ChartWorkspace、ApplicationServices、共享服务与 typed ports。
+- `src/app/runtime/`：Session 装配与各领域 host；按领域归属扩展已有宿主。
+- `src/core/chart/`：文档、解析和变换；`src/core/scene/`：无 GPU 依赖的场景数学。
+- `src/preview/`、`src/audio/`、`src/timeline/`：QSG 预览、音频运行时和时间轴。
+- `src/tools/`：导出/分析能力以及独立规格、probe；`src/common/`：共享配置与 helper。
 
-- GUI：`QuickShellBootstrap` 是正常 GUI 启动路径。
-- 预览渲染：`PreviewRuntime` + `preview/quick_scene/*` 是主路径。
-- 时间轴：`timeline/quick/TimelineQuickItem` 和相关 QSG layers 是 QuickShell 主路径。
-- 预览音频：`QtPreviewSfxRuntime` 选择 Windows BASS 或非 Windows miniaudio。
-- 导出音频：Windows 走 BASS export backend，非 Windows 保留 legacy export backend。
+具体所有权见 `docs/specs/ui/CURRENT_ARCHITECTURE_ZH.md`。新功能先找 owner 和可复用组件，
+不要重建 MainWindow/v1 外壳或旧 DComp 图表渲染路径。现行 D3D11/QRhi、OpenGL 导出和导出 worker
+仍保留，见 `docs/specs/preview/CURRENT_RENDER_EXPORT_CONTRACT_ZH.md`。
 
-可以只更新默认路径，但如果保留路径仍是用户可见或该行为确实影响诊断路径，必须同步更新。若保留路径未更新，请在 PR 说明里明确写出原因。
-
-## 修改前的定位流程
-
-开始写代码前，请先定位：
-
-1. 用户可见能力是什么？
-2. 负责入口在哪个文件、类、函数？查 `feature-index.md`。
-3. 这个行为是否存在 preview/export、runtime/export audio、widget/Quick、parser/timeline 等镜像路径？查 `cross-chain-linkage.md`。
-4. 是否涉及持久化、导出 snapshot、worker 协议、资源查找、调试 flag 或文档规格？
-5. 是否已有共享配置头或 helper 可以复用？
-
-常见高风险同步面：
-
-- `SimaiNativeParser` 的解析、时值、note 字段变化通常影响 timeline、preview、audio、export、Muri 和 normalization。
-- `&first`、timing offset、`SimaiTimingMetadata` 会影响解析、预览定位、导出、延迟检测和工具。
-- Runtime SFX 与 export SFX 必须保持一致。
-- 背景媒体解析、track 路径解析、skin/SFX 查找在预览和导出都有消费者。
-- 新增导出设置必须跨过 `VideoExportSnapshot::toJson/fromJson`、worker task 重建和 UI/偏好保存。
-- 新增渲染设置要同时考虑实时预览、导出、封面导出和持久化。
+修改 note 属性、BPM、`&first` 或时值时，检查 parser、timeline、scene、audio、export、Muri 和
+transform/normalization。文档变化需检查 revision、异步结果与保存点；导出设置需贯穿偏好、snapshot、
+JSON 和 worker task。详见 skill 的 `references/cross-chain-linkage.md`。
 
 ## UI 和布局贡献规则
 
-触碰 Qt Widgets / QML 对话框、窗口布局、主题、图层顺序或 hit area 时，请先参考 `.claude/skills/qt-ui-layout-pitfalls/SKILL.md`。
+触碰 QML 对话框、窗口布局、主题、图层顺序或 hit area 时，请先参考 `.agents/skills/qt-ui-layout-pitfalls/SKILL.md`。
 
 基本规则：
 
 - 不要靠单个控件的像素微调修布局。先判断根因，再用结构性修复。
-- 不要信任 styled widget 的 `sizeHint()`；QSS border/padding 经常被低估。必要时 `ensurePolished()` 后测量，或用 live geometry。
-- 新增 styled dialog/page 必须能响应主题重应用，颜色来自 `UiTheme::colors()` 或现有主题 token，不要硬编码浅色/深色。
+- 优先复用 `src/app/qml_ui/components/` 的表单、对话框、菜单与滚动组件，并检查隐式尺寸和实际几何。
+- QML 页面与控件使用 `theme/Theme.qml` 的 token 和 `UiText.qml` 的文案入口，不复制颜色或本地化逻辑。
 - QML 图层顺序优先靠声明/绘制顺序表达，不要随手加局部 `z` hack。
 - hit test 和视觉位置必须来自同一套 canonical geometry。
 - 所有可交互控件应可键盘访问，文本输入获得焦点时不要让预览快捷键劫持普通方向键。
@@ -138,7 +122,7 @@ scripts\debug\Start_MiaCode_Debug.bat
 - Runtime、Audio、StartupTiming、PreviewProfile 的详细输出由 `--debug` 控制。
 - Fatal 不受 `--debug` gate。
 - Export 即使非 debug 也保留简要阶段/失败摘要；详细诊断仍需 `--debug`。
-- 新增、删除或改变 `MIACODE_*` 调试 flag 时，同步更新 `.codex/skills/miacode-dev-guide/references/debug-flags.md` 和 `docs/ops/DEBUG_INDEX.md`。
+- 新增、删除或改变 `MIACODE_*` 调试 flag 时，同步更新 `docs/ops/DEBUG_INDEX.md`；skill 不维护第二份 flag 表。
 - 尽量不要新增新的环境变量。现有 `MIACODE_*` 已很多，优先复用或收敛。
 
 常见日志路径：
@@ -156,7 +140,7 @@ scripts\debug\Start_MiaCode_Debug.bat
 
 共享常量优先放在 `src/common/*.h`，尤其是 preview/export、timeline/preview、工具/spec 或文档都需要引用的值。只有纯局部实现细节才留在 `.cpp`。
 
-当你新增、移动、删除或改变常量语义时，检查 `.codex/skills/miacode-dev-guide/references/hardcode-registry.md`。
+当你改变常量语义时，查找所有使用者并更新相关规格；仅模块归属或共享入口变化时才更新开发 skill。
 
 资源和文件约定：
 
@@ -168,20 +152,23 @@ scripts\debug\Start_MiaCode_Debug.bat
 
 ## 文档维护规则
 
-公开文档只放适合随仓库发布的内容。不要提交本机路径、dump、日志原始证据、未公开素材来源、内部交接上下文或未脱敏记录。
+公开文档不提交本机路径、dump、原始日志、素材来源或未脱敏交接材料。被 Git 忽略的本地工作记录不进入索引。
 
-变更后请同步维护：
+- 当前规范放 `docs/specs/`，复用验收清单放 `docs/tests/`；阶段计划和审计标为 `working`。
+- 历史方案标 `archive-legacy` 并指向当前入口，不能把其中的目标架构当作当前实现。
+- 元数据格式、生成命令见 `docs/README.md`；索引从 frontmatter 生成，不手写第二份目录。
+- skill 只在模块、复用入口、长期边界或同步面变化时更新，不随函数改名、像素调整、flag 增删频繁扩充。
 
-- 文件移动、类/函数入口变化：更新 `.codex/skills/miacode-dev-guide/references/feature-index.md`。
-- 跨模块行为变化：更新 `cross-chain-linkage.md`。
-- 产品行为、默认值、决策边界变化：更新 `design-ledger.md`。
-- 常量、阈值、magic number 归属变化：更新 `hardcode-registry.md`。
-- 资源文件名、查找规则、打包依赖、脚本变化：更新 `assets-and-tools.md`。
-- 调试 flag、日志 channel、诊断开关变化：更新 `debug-flags.md` 和 `docs/ops/DEBUG_INDEX.md`。
-- 新增公开规格：放入 `docs/specs/*` 并在 `docs/README.md` 增加入口。
-- 新增测试/验收清单：放入 `docs/tests/`，并和对应规格互相引用。
+提交前运行：
 
-`.codex/skills/miacode-dev-guide/` 的英文文件是维护用事实源，不要创建平行翻译树。`docs/` 的公开规格和测试清单当前使用中文。
+```sh
+python3 scripts/governance/sync_guides.py --check
+python3 scripts/governance/docs_index.py --check
+cmake -DMIACODE_SPEC_CATALOG_CHECK=ON -P cmake/devtools/SpecCatalog.cmake
+```
+
+治理工具改动另运行 `python3 -m unittest discover -s scripts/governance -p '*_test.py'`。
+公开规范与验收清单使用中文；生成目录的代码标识保持原样。
 
 ## 许可证与第三方内容
 

@@ -6,11 +6,27 @@ last_verified: 2026-09-06
 
 # MiaCode 规格与指引技能治理重整设计
 
-> 状态：已获初步方案批准，等待书面规格审查与用户复核
+> 状态：已按 2026-09-06 用户授权实施精简方案；原始详细设计保留作背景，以下实施取舍优先。
 >
 > 日期：2026-09-05
 >
 > 基线：`feature/qml-ui`，`HEAD 7202e5fd`
+
+## 实施取舍（2026-09-06）
+
+用户明确允许按实际判断调整本设计，并要求 skill 简单、避免频繁更新。本次采用以下落地边界：
+
+- 保留全部现有 Spec 的源码、target、链接依赖、CTest 名称与独立进程；按域迁移注册，增加轻量分类、唯一性/漏登记校验和生成目录。CTest 枚举顺序随域分组变化，按名称和标签定向执行。
+- 不为了减少 executable 删除或合并断言；没有实际退役或 bundle 时，不提前实现 history、waiver、case runner 和性能基准框架。
+- 现有 `playback_coordinator_construction_spec` 实际是 `EXCLUDE_FROM_ALL` 的未闭合链接实验；如实登记为 `compile-only / blocked-link`，不把“有目标”当成通过编译验证。
+- skill 采用短入口加三份参考（仓库与复用地图、跨模块同步、开发与验证）；删除逐函数、参数、flag、硬编码值的平行清单。`.agents` 唯一维护源，两个客户端生成同内容镜像。
+- 文档 current/verification 才要求稳定 ID 与可验证引用；working/archive 不补造复核日期。代码锚点用文件/目录，不维护行号；索引扫描公开文件，遵循 Git 忽略规则保护本地记录。
+- 显式过时方案标历史；混有待复核领域规则的材料标 working。当前应用/渲染规范独立编写；原 backend 清册重写为 Session 边界并保持现有 Spec 的格式兼容。
+- 生成文件由各自工具检查，不增加豁免登记框架。原设计中的全量元数据、跨平台 skip wrapper、束化试点与三轮 clean build 门槛不作为本次验收要求。
+
+维护规则见 [文档入口](../../README.md) 与 [贡献指南](../../../CONTRIBUTING.md)，
+验证及已知基线问题见 [实施结果](../../audit/SPEC_AND_GUIDE_GOVERNANCE_RESULT_ZH.md)。
+本节之后保留的是原设计，不是另一份实施规范。
 
 ## 1. 目标与范围
 
@@ -471,4 +487,4 @@ history ledger 的 `entry_type=history` 永不生成 target，也不要求 sourc
 - 只对同 owner、同依赖的小型策略规格做合并试点；
 - 暂定 `.agents` 为唯一技能维护源，`.claude/.codex` 为生成镜像。
 
-本文件通过规格审查和用户复核后，才进入实施计划阶段。
+本设计已由用户在 2026-09-06 授权实施，并允许按判断简化；实际范围以上方「实施取舍」及实施结果为准。

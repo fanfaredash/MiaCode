@@ -1,3 +1,9 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](CURRENT_RENDER_EXPORT_CONTRACT_ZH.md) 和 [文档索引](../../INDEX.md)。
+
 # GPU 渲染设备策略与 QRhi 导出计划
 
 > 2026-07-04 update: after dual-GPU, forced-iGPU, visual-consistency, and full-export validation,

@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Remove Watchdog GUI Stack Capture
 
 ## Goal

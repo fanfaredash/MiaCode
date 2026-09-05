@@ -1,3 +1,9 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](../ui/CURRENT_ARCHITECTURE_ZH.md) 和 [文档索引](../../INDEX.md)。
+
 # MiaCode Extension System v1
 
 > **Archive status (2026-09-01):** The extension host, embedded runtime, Open Bridge, watcher,

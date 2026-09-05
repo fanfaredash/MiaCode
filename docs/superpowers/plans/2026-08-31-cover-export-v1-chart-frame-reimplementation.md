@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # 封面导出谱面帧 v1 复刻实施计划
 
 > 当前工作区直接实施，不创建新的 git worktree。

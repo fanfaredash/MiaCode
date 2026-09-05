@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Preview Audio Worker, Device Auto-Pause, And Log Pruning Design
 
 - Date: 2026-08-08
