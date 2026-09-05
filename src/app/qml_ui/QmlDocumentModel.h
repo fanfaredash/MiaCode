@@ -9,9 +9,11 @@
 
 #include "QmlDocumentProjection.h"
 #include "app/v2/AnalysisService.h"
+#include "app/v2/ChartMediaService.h"
 #include "app/v2/ChartWorkspace.h"
 #include "app/v2/ChartWorkspaceFileService.h"
 #include "app/v2/DocumentBridge.h"
+#include "app/v2/PreviewSurface.h"
 #include "app/v2/UiRequestService.h"
 
 #include "app/v2/ShellNotifications.h"
@@ -80,6 +82,7 @@ public:
         miacode::v2::AnalysisService& analysisService,
         miacode::v2::UiRequestService& uiRequests,
         miacode::v2::DocumentBridge*& bridgeSlot,
+        miacode::v2::PreviewSurface*& previewSlot,
         QObject* parent = nullptr);
     ~QmlDocumentModel() override;
 
@@ -111,6 +114,9 @@ public:
     void setMetadataClockCount(const QString& value);
     void setMetadataExtraText(const QString& value);
     Q_INVOKABLE QVariantMap applyMetadataExtraText(const QString& value);
+    Q_INVOKABLE void importChartBackgroundImage();
+    Q_INVOKABLE void importChartBackgroundVideo();
+    Q_INVOKABLE void removeChartPv();
     void setMetadataSourceText(const QString& value);
 
     QString documentTitle() const;
@@ -298,6 +304,9 @@ private:
     QVariantList sourceIssuesToVariantList() const;
     QVariantList extraIssuesToVariantList() const;
     QStringList metadataAttentionItems() const;
+    void requestChartMediaImport(miacode::v2::ChartMediaService::Kind kind);
+    void applyChartMediaImport(const QString& sourcePath,
+                               miacode::v2::ChartMediaService::Kind kind);
     miacode::v2::ShellNotifications* notifications_ = nullptr;
     // Bound to the assembly's slot, not a snapshot.
     miacode::v2::DocumentBridge** bridgeSlot_ = nullptr;
@@ -311,6 +320,12 @@ private:
     // From the application assembly, not from the hidden window: the window is
     // not the owner of this boundary and must not be asked for it.
     miacode::v2::UiRequestService* uiRequests_ = nullptr;
+    miacode::v2::ChartMediaService mediaService_;
+    miacode::v2::PreviewSurface** previewSlot_ = nullptr;
+    miacode::v2::PreviewSurface* preview() const
+    {
+        return previewSlot_ != nullptr ? *previewSlot_ : nullptr;
+    }
     QString metadataSourceError_;
     QString metadataSourceAttemptText_;
     QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataSourceIssues_;

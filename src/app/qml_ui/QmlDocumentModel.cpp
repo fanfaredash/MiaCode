@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <functional>
 
+#include <QDir>
 #include <QFileInfo>
 #include <QVariantMap>
 
@@ -45,7 +46,8 @@ QmlDocumentModel::QmlDocumentModel(
     miacode::v2::ChartWorkspaceFileService& fileService,
     miacode::v2::AnalysisService& analysisService,
     miacode::v2::UiRequestService& uiRequests,
-    miacode::v2::DocumentBridge*& bridgeSlot, QObject* parent)
+    miacode::v2::DocumentBridge*& bridgeSlot,
+    miacode::v2::PreviewSurface*& previewSlot, QObject* parent)
     : QObject(parent)
     , notifications_(&notifications)
     , workspace_(&workspace)
@@ -53,6 +55,7 @@ QmlDocumentModel::QmlDocumentModel(
     , analysisService_(&analysisService)
     , uiRequests_(&uiRequests)
     , bridgeSlot_(&bridgeSlot)
+    , previewSlot_(&previewSlot)
 {
     if (!workspace_->snapshot().hasDocument) {
         workspace_->openSource(SimaiDocument::createEmpty().toText());
@@ -334,6 +337,165 @@ QVariantMap QmlDocumentModel::applyMetadataExtraText(const QString& value)
     }
     return resultMap;
 }
+
+void QmlDocumentModel::importChartBackgroundImage()
+{
+    requestChartMediaImport(miacode::v2::ChartMediaService::Kind::Image);
+}
+
+void QmlDocumentModel::importChartBackgroundVideo()
+{
+    requestChartMediaImport(miacode::v2::ChartMediaService::Kind::Video);
+}
+
+void QmlDocumentModel::removeChartPv()
+{
+    if (uiRequests_ == nullptr || workspace_ == nullptr) return;
+    const QString chartPath = currentFilePath();
+    if (chartPath.isEmpty()) {
+        uiRequests_->postNotice(
+            miacode::v2::NoticeSeverity::Warning,
+            UiText::text(QStringLiteral("metadata.field.background_video")),
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart")));
+        return;
+    }
+    uiRequests_->requestConfirmation(
+        UiText::text(QStringLiteral("track_metadata.delete_pv")),
+        UiText::text(QStringLiteral("track_metadata.delete_pv_confirm")),
+        UiText::text(QStringLiteral("action.yes")),
+        [this, chartPath](bool accepted) {
+            if (!accepted || workspace_ == nullptr || uiRequests_ == nullptr) return;
+            if (preview() != nullptr) preview()->prepareForMediaFileOperation();
+            const auto result = mediaService_.removePv(chartPath, metadataVideoPath());
+            if (!result.ok) {
+                if (preview() != nullptr) preview()->refreshMediaAfterFileOperation();
+                uiRequests_->postNotice(
+                    miacode::v2::NoticeSeverity::Error,
+                    UiText::text(QStringLiteral("track_metadata.delete_pv")),
+                    UiText::text(QStringLiteral("track_metadata.failed_to_remove_media"))
+                        .arg(result.errorCode));
+                return;
+            }
+            const bool documentChanged = runWorkspaceMutation([this] {
+                return workspace_->updateDocumentField(
+                    miacode::v2::ChartWorkspaceDocumentField::VideoPath, QString());
+            });
+            if (documentChanged) {
+                publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
+            }
+            if (preview() != nullptr) preview()->refreshMediaAfterFileOperation();
+            uiRequests_->postNotice(
+                miacode::v2::NoticeSeverity::Information,
+                UiText::text(QStringLiteral("track_metadata.delete_pv")),
+                UiText::text(QStringLiteral("track_metadata.deleted_pv")));
+        });
+}
+
+void QmlDocumentModel::requestChartMediaImport(miacode::v2::ChartMediaService::Kind kind)
+{
+    if (uiRequests_ == nullptr || workspace_ == nullptr) return;
+    const QString chartPath = currentFilePath();
+    if (chartPath.isEmpty()) {
+        uiRequests_->postNotice(
+            miacode::v2::NoticeSeverity::Warning,
+            UiText::text(QStringLiteral("metadata.field.background_video")),
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart")));
+        return;
+    }
+
+    const bool video = kind == miacode::v2::ChartMediaService::Kind::Video;
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(video
+        ? QStringLiteral("track_metadata.import_background_video")
+        : QStringLiteral("track_metadata.import_background_image"));
+    request.startPath = chartPath;
+    request.nameFilters = QStringList{
+        UiText::text(video ? QStringLiteral("track_metadata.video_file_filter")
+                           : QStringLiteral("track_metadata.image_file_filter")),
+        UiText::text(QStringLiteral("track_metadata.all_files")),
+    };
+    uiRequests_->requestFile(request, [this, kind](const QString& sourcePath) {
+        if (sourcePath.trimmed().isEmpty() || uiRequests_ == nullptr) return;
+        if (!miacode::v2::ChartMediaService::sourceIsSupported(sourcePath, kind)) {
+            uiRequests_->postNotice(
+                miacode::v2::NoticeSeverity::Warning,
+                UiText::text(QStringLiteral("track_metadata.unsupported_media_file")),
+                kind == miacode::v2::ChartMediaService::Kind::Image
+                    ? UiText::text(QStringLiteral("track_metadata.failed_to_read_image"))
+                    : UiText::text(QStringLiteral("track_metadata.unsupported_media_file")));
+            return;
+        }
+        const QString target = miacode::v2::ChartMediaService::targetPath(
+            currentFilePath(), sourcePath, kind);
+        bool replacesExisting = false;
+        for (const QString& candidate : miacode::v2::ChartMediaService::existingCandidates(
+                 currentFilePath(), kind)) {
+            if (miacode::v2::ChartMediaService::isConflictingCandidate(
+                    candidate, sourcePath, target)) {
+                replacesExisting = true;
+                break;
+            }
+        }
+        if (!replacesExisting) {
+            applyChartMediaImport(sourcePath, kind);
+            return;
+        }
+        const bool replacingVideo = kind == miacode::v2::ChartMediaService::Kind::Video;
+        uiRequests_->requestConfirmation(
+            UiText::text(replacingVideo ? QStringLiteral("track_metadata.import_background_video")
+                               : QStringLiteral("track_metadata.import_background_image")),
+            UiText::text(replacingVideo
+                ? QStringLiteral("track_metadata.background_video_exists_overwrite")
+                : QStringLiteral("track_metadata.background_image_exists_overwrite")),
+            UiText::text(QStringLiteral("action.yes")),
+            [this, sourcePath, kind](bool accepted) {
+                if (accepted) applyChartMediaImport(sourcePath, kind);
+            });
+    });
+}
+
+void QmlDocumentModel::applyChartMediaImport(
+    const QString& sourcePath, miacode::v2::ChartMediaService::Kind kind)
+{
+    if (workspace_ == nullptr || uiRequests_ == nullptr) return;
+    const QString chartPath = currentFilePath();
+    if (preview() != nullptr) preview()->prepareForMediaFileOperation();
+    const auto result = mediaService_.importMedia(chartPath, sourcePath, kind);
+    if (!result.ok) {
+        if (preview() != nullptr) preview()->refreshMediaAfterFileOperation();
+        uiRequests_->postNotice(
+            miacode::v2::NoticeSeverity::Error,
+            UiText::text(QStringLiteral("track_metadata.failed_to_import_media")),
+            UiText::text(QStringLiteral("track_metadata.failed_to_import_media"))
+                .arg(result.errorCode));
+        return;
+    }
+    if (kind == miacode::v2::ChartMediaService::Kind::Video) {
+        if (runWorkspaceMutation([this] {
+                return workspace_->updateDocumentField(
+                    miacode::v2::ChartWorkspaceDocumentField::VideoPath,
+                    QStringLiteral("pv.mp4"));
+            })) {
+            publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
+        }
+    }
+    if (preview() != nullptr) preview()->refreshMediaAfterFileOperation();
+    const bool video = kind == miacode::v2::ChartMediaService::Kind::Video;
+    if (!result.warnings.isEmpty()) {
+        uiRequests_->postNotice(
+            miacode::v2::NoticeSeverity::Warning,
+            UiText::text(QStringLiteral("track_metadata.import_background_image")),
+            result.warnings.join(QLatin1Char('\n')));
+    }
+    uiRequests_->postNotice(
+        miacode::v2::NoticeSeverity::Information,
+        UiText::text(video ? QStringLiteral("track_metadata.import_background_video")
+                           : QStringLiteral("track_metadata.import_background_image")),
+        UiText::text(video ? QStringLiteral("track_metadata.imported_background_video")
+                           : QStringLiteral("track_metadata.imported_background_image"))
+            .arg(result.targetPath));
+}
+
 void QmlDocumentModel::setMetadataSourceText(const QString& value)
 {
     if (workspace_ == nullptr) return;

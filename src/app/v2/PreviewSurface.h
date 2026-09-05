@@ -77,6 +77,10 @@ public:
     virtual void setRenderSetting(const QString& key, const QVariant& value) = 0;
     // Pushes whatever changed onto the live surfaces.
     virtual void refreshSurfaces() = 0;
+    // File operations must release a decoder before replacing a media file;
+    // the matching refresh re-resolves the chart folder after the transaction.
+    virtual void prepareForMediaFileOperation() {}
+    virtual void refreshMediaAfterFileOperation() { refreshSurfaces(); }
     // Pushes the current mixer levels into the live SFX runtime. A no-op until
     // the audio engine is up, which is the guard callers used to repeat.
     virtual void applySfxLevels() = 0;

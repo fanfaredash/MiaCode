@@ -41,6 +41,8 @@ public:
     QVariantMap renderSettings() const override;
     void setRenderSetting(const QString& key, const QVariant& value) override;
     void refreshSurfaces() override;
+    void prepareForMediaFileOperation() override;
+    void refreshMediaAfterFileOperation() override;
     void applySfxLevels() override;
     void prepareForShutdown() override;
     PreviewAudioSettings audioSettings() const override;

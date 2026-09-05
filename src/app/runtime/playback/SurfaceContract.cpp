@@ -416,6 +416,24 @@ void miacode::runtime::PlaybackCoordinator::refreshSurfaces()
     }
 }
 
+void miacode::runtime::PlaybackCoordinator::prepareForMediaFileOperation()
+{
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setChartPath(QString());
+        state_.previewStageMediaHost_->releaseDecoderForFileReplace();
+    }
+}
+
+void miacode::runtime::PlaybackCoordinator::refreshMediaAfterFileOperation()
+{
+    if (state_.previewStageMediaHost_ != nullptr && !state_.currentFilePath_.isEmpty()) {
+        state_.previewStageMediaHost_->setChartPath(
+            state_.currentFilePath_, services_.workspace().document().videoPath);
+        state_.previewStageMediaHost_->setPlayheadSeconds(qMax(0.0, state_.pauseSecond_));
+    }
+    refreshSurfaces();
+}
+
 void miacode::runtime::PlaybackCoordinator::applySfxLevels()
 {
     // Stage 4.9d-4a (T-class): Session::applyPreviewSfxLevels(bool reloadAssets =

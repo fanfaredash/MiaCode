@@ -142,6 +142,20 @@ void PlaybackPreviewSurfaceAdapter::refreshSurfaces()
     }
 }
 
+void PlaybackPreviewSurfaceAdapter::prepareForMediaFileOperation()
+{
+    if (coordinator_ != nullptr) {
+        coordinator_->prepareForMediaFileOperation();
+    }
+}
+
+void PlaybackPreviewSurfaceAdapter::refreshMediaAfterFileOperation()
+{
+    if (coordinator_ != nullptr) {
+        coordinator_->refreshMediaAfterFileOperation();
+    }
+}
+
 void PlaybackPreviewSurfaceAdapter::applySfxLevels()
 {
     if (coordinator_ != nullptr) {

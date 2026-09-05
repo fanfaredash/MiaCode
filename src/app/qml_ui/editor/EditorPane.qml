@@ -430,6 +430,37 @@ Item {
             }
 
             Label {
+                text: UiText.text("metadata.field.background_video")
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+            }
+            Label {
+                width: metadataColumn.width
+                text: root.documentSession.metadataVideoPath.length > 0
+                    ? root.documentSession.metadataVideoPath
+                    : UiText.text("metadata.no_video")
+                color: Theme.colors.text.primary
+                elide: Text.ElideMiddle
+            }
+            Row {
+                spacing: 8
+                Button {
+                    text: UiText.text("track_metadata.import_background_image")
+                    onClicked: root.documentSession.importChartBackgroundImage()
+                }
+                Button {
+                    text: UiText.text("track_metadata.import_background_video")
+                    onClicked: root.documentSession.importChartBackgroundVideo()
+                }
+                Button {
+                    text: UiText.text("track_metadata.delete_pv")
+                    enabled: root.documentSession.metadataVideoPath.length > 0
+                    onClicked: root.documentSession.removeChartPv()
+                }
+            }
+
+            Label {
                 text: UiText.text("其他 &xx 字段")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont

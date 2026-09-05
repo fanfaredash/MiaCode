@@ -137,6 +137,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/v2/PreviewAppearanceState.h
     src/app/v2/ChartWorkspace.cpp
     src/app/v2/ChartWorkspace.h
+    src/app/v2/ChartMediaService.cpp
+    src/app/v2/ChartMediaService.h
+    src/common/ChartMediaImport.cpp
+    src/common/ChartMediaImport.h
     src/app/v2/ChartWorkspaceFileService.cpp
     src/app/v2/ChartWorkspaceFileService.h
     src/app/v2/AnalysisService.cpp
@@ -1669,6 +1673,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/v2/ChartWorkspace.cpp
             src/app/v2/ChartWorkspace.h
         LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(chart_media_service_spec TEST
+        SOURCES
+            src/tools/v2/ChartMediaServiceSpec.cpp
+            src/app/v2/ChartMediaService.cpp
+            src/app/v2/ChartMediaService.h
+            src/common/ChartMediaImport.cpp
+            src/common/ChartMediaImport.h
+        LIBS Qt6::Core Qt6::Gui
         INCLUDES src
     )
 

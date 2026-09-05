@@ -296,6 +296,8 @@ public:
     QVariantMap renderSettings() const;
     void setRenderSetting(const QString& key, const QVariant& value);
     void refreshSurfaces();
+    void prepareForMediaFileOperation();
+    void refreshMediaAfterFileOperation();
     void applySfxLevels();
     void prepareForShutdown();
     PreviewAudioSettings audioSettings() const;

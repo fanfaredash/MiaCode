@@ -155,6 +155,20 @@ void PreviewHost::refreshSurfaces()
     }
 }
 
+void PreviewHost::prepareForMediaFileOperation()
+{
+    if (legacySurface_ != nullptr) {
+        legacySurface_->prepareForMediaFileOperation();
+    }
+}
+
+void PreviewHost::refreshMediaAfterFileOperation()
+{
+    if (legacySurface_ != nullptr) {
+        legacySurface_->refreshMediaAfterFileOperation();
+    }
+}
+
 void PreviewHost::applySfxLevels()
 {
     if (legacySurface_ != nullptr) {
