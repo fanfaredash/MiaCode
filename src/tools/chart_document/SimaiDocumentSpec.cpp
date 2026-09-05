@@ -308,6 +308,30 @@ void runSpecs(QTextStream& out, int* failed)
         expectTrue(hasCustom, "parseUnmanagedFields keeps unrelated extra fields", failed, out);
     }
 
+    // --- Extra-field validation reports the exact property-looking line. ---
+    {
+        const QVector<SimaiPropertyIssue> issues =
+            SimaiDocument::invalidPropertyLineNumbers(
+                "  &missing_equals\r\n&=empty_key\r\n&dummy=value\r\n");
+        expectTrue(issues.size() == 2, "invalid extra fields are reported without rejecting valid fields",
+                   failed, out);
+        if (issues.size() == 2) {
+            expectTrue(issues.at(0).line == 1 && issues.at(0).column == 3
+                           && issues.at(0).endColumn == 17
+                           && issues.at(0).code == QLatin1String("invalid_property"),
+                       "indented missing-equals field reports its line and ampersand column",
+                       failed, out);
+            expectTrue(issues.at(1).line == 2 && issues.at(1).column == 1
+                           && issues.at(1).endColumn == 11,
+                       "empty-key field reports the full property span", failed, out);
+        }
+        expectTrue(SimaiDocument::invalidPropertyLineNumbers(
+                       "  &dummy=value\r\n  &empty=\r\n").isEmpty(),
+                   "indented fields with empty values remain valid", failed, out);
+        expectTrue(SimaiDocument::invalidPropertyLineNumbers("plain text").size() == 1,
+                   "non-property text is rejected instead of being silently discarded", failed, out);
+    }
+
     // --- Bad/empty obsolete bookmark payload never blocks parsing and is never emitted. ---
     {
         const QString src =

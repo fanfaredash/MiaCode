@@ -130,6 +130,11 @@ Item {
                     cancellation()
                 return
             }
+            if (line <= 0) {
+                if (completion)
+                    completion()
+                return
+            }
             const start = root.documentSession.chartPosition(line, column)
             const end = Math.max(start + 1, root.documentSession.chartPosition(
                 line, Math.max(column, endColumn + 1)))
@@ -217,6 +222,16 @@ Item {
                         root.documentSession.currentDifficultyLevel = text
                     userEdited = false
                 }
+            }
+
+            Label {
+                visible: root.documentSession.currentDifficultyLevelMissing
+                text: UiText.text("validation.difficulty_level_missing")
+                color: Theme.colors.syntax.error
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+                elide: Text.ElideRight
+                Layout.maximumWidth: 220
             }
 
             Label {
@@ -373,6 +388,16 @@ Item {
                 font.pixelSize: Theme.uiFontSize + 2
             }
 
+            Label {
+                visible: root.documentSession.metadataNeedsAttention
+                width: metadataColumn.width
+                text: root.documentSession.metadataAttentionText
+                color: Theme.colors.syntax.warning
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+                wrapMode: Text.WordWrap
+            }
+
             MetadataField {
                 width: metadataColumn.width
                 label: UiText.text("标题")
@@ -424,10 +449,20 @@ Item {
                 }
                 onActiveFocusChanged: {
                     if (!activeFocus && extraFieldsEdit.userEdited) {
-                        root.documentSession.metadataExtraText = text
+                        root.documentSession.applyMetadataExtraText(text)
                         extraFieldsEdit.userEdited = false
                     }
                 }
+            }
+
+            Label {
+                visible: root.documentSession.metadataExtraError.length > 0
+                width: metadataColumn.width
+                text: root.documentSession.metadataExtraError
+                color: Theme.colors.syntax.error
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+                wrapMode: Text.WordWrap
             }
         }
     }

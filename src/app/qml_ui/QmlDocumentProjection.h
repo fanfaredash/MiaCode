@@ -23,6 +23,7 @@ struct DocumentValidationProjectionIssue {
     int endColumn = 1;
     DocumentValidationIssueSeverity severity = DocumentValidationIssueSeverity::Error;
     QString message;
+    QString code;
 };
 
 struct DocumentValidationProjectionInput {

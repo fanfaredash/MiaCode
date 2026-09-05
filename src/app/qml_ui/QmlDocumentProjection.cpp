@@ -64,6 +64,7 @@ DocumentValidationProjection projectDocumentValidation(
                 ? DocumentValidationIssueSeverity::Warning
                 : DocumentValidationIssueSeverity::Error,
             issue.displayMessage,
+            QString(),
         });
     }
     return projection;
@@ -125,7 +126,8 @@ DocumentSourcePreflightResult preflightDocumentSource(
         result.issues.append({issue.line, issue.column, issue.endColumn,
             issue.severity == miacode::v2::ChartWorkspaceIssueSeverity::Warning
                 ? DocumentValidationIssueSeverity::Warning : DocumentValidationIssueSeverity::Error,
-            issue.message});
+            issue.message,
+            issue.code});
     }
     return result;
 }

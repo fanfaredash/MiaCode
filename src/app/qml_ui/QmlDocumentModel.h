@@ -31,6 +31,10 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QString metadataVideoPath READ metadataVideoPath WRITE setMetadataVideoPath NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataClockCount READ metadataClockCount WRITE setMetadataClockCount NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataExtraText READ metadataExtraText WRITE setMetadataExtraText NOTIFY metadataChanged)
+    Q_PROPERTY(QVariantList metadataExtraIssues READ metadataExtraIssues NOTIFY metadataChanged)
+    Q_PROPERTY(QString metadataExtraError READ metadataExtraError NOTIFY metadataChanged)
+    Q_PROPERTY(bool metadataNeedsAttention READ metadataNeedsAttention NOTIFY metadataChanged)
+    Q_PROPERTY(QString metadataAttentionText READ metadataAttentionText NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataSourceText READ metadataSourceText WRITE setMetadataSourceText NOTIFY metadataSourceChanged)
     Q_PROPERTY(QString metadataSourceError READ metadataSourceError NOTIFY metadataSourceChanged)
     Q_PROPERTY(QVariantList metadataSourceIssues READ metadataSourceIssues NOTIFY metadataSourceChanged)
@@ -49,6 +53,7 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QVariantList availableDifficulties READ availableDifficulties NOTIFY difficultiesChanged)
     Q_PROPERTY(QString currentDifficultyLevel READ currentDifficultyLevel WRITE setCurrentDifficultyLevel NOTIFY currentDifficultyFieldsChanged)
     Q_PROPERTY(QString currentDifficultyDesigner READ currentDifficultyDesigner WRITE setCurrentDifficultyDesigner NOTIFY currentDifficultyFieldsChanged)
+    Q_PROPERTY(bool currentDifficultyLevelMissing READ currentDifficultyLevelMissing NOTIFY currentDifficultyFieldsChanged)
     Q_PROPERTY(QVariantList syntaxIssues READ syntaxIssues NOTIFY syntaxIssuesChanged)
     Q_PROPERTY(int syntaxIssueCount READ syntaxIssueCount NOTIFY syntaxIssuesChanged)
     Q_PROPERTY(int syntaxErrorCount READ syntaxErrorCount NOTIFY syntaxIssuesChanged)
@@ -87,6 +92,10 @@ public:
     QString metadataVideoPath() const;
     QString metadataClockCount() const;
     QString metadataExtraText() const;
+    QVariantList metadataExtraIssues() const;
+    QString metadataExtraError() const;
+    bool metadataNeedsAttention() const;
+    QString metadataAttentionText() const;
     QString wholeBpm() const;
     QString metadataSourceText() const;
     QString metadataSourceError() const;
@@ -101,6 +110,7 @@ public:
     void setMetadataVideoPath(const QString& value);
     void setMetadataClockCount(const QString& value);
     void setMetadataExtraText(const QString& value);
+    Q_INVOKABLE QVariantMap applyMetadataExtraText(const QString& value);
     void setMetadataSourceText(const QString& value);
 
     QString documentTitle() const;
@@ -113,6 +123,7 @@ public:
     QVariantList availableDifficulties() const;
     QString currentDifficultyLevel() const;
     QString currentDifficultyDesigner() const;
+    bool currentDifficultyLevelMissing() const;
     void setCurrentDifficultyLevel(const QString& value);
     void setCurrentDifficultyDesigner(const QString& value);
     QVariantList syntaxIssues() const;
@@ -275,6 +286,7 @@ private:
     void emitDocumentStateChanged();
     void refreshDocumentState();
     void clearMetadataSourceRejection();
+    void clearMetadataExtraRejection();
     bool runWorkspaceMutation(const std::function<bool()>& mutate);
     // The workspace half of applyDesignerSlots() for assemblies with no shell
     // bridge (specs, headless hosts): no project preference is written there.
@@ -284,6 +296,8 @@ private:
     // -source replacement (source editing, discard, backup restore).
     void reconcileUnifiedDesignerAfterSourceReplacement();
     QVariantList sourceIssuesToVariantList() const;
+    QVariantList extraIssuesToVariantList() const;
+    QStringList metadataAttentionItems() const;
     miacode::v2::ShellNotifications* notifications_ = nullptr;
     // Bound to the assembly's slot, not a snapshot.
     miacode::v2::DocumentBridge** bridgeSlot_ = nullptr;
@@ -300,6 +314,10 @@ private:
     QString metadataSourceError_;
     QString metadataSourceAttemptText_;
     QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataSourceIssues_;
+    QString metadataExtraError_;
+    QString metadataExtraAttemptText_;
+    QVector<miacode::qml_ui::DocumentValidationProjectionIssue> metadataExtraIssues_;
+    bool metadataExtraAttemptActive_ = false;
     miacode::qml_ui::DocumentValidationProjection validationSnapshot_;
     miacode::qml_ui::DocumentPresentationState presentationState_;
     quint64 documentRevision_ = 0;

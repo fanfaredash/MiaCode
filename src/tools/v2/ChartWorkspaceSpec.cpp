@@ -433,6 +433,40 @@ bool verifyOwnedFieldMutationsAndSavePointRebind(QTextStream& out)
     return ok;
 }
 
+bool verifyExtraFieldTransactionIsAtomic(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    const auto before = workspace.snapshot();
+    const QString beforeText = workspace.document().toText();
+    const auto rejected = workspace.replaceExtraFields(
+        QStringLiteral("  &missing_equals\r\n&=empty_key\r\n"));
+    const auto after = workspace.snapshot();
+
+    bool ok = expect(!rejected.accepted && rejected.issues.size() == 2
+                         && rejected.issues.at(0).line == 1
+                         && rejected.issues.at(0).column == 3
+                         && rejected.issues.at(0).code == QLatin1String("invalid_property")
+                         && before.revision == after.revision
+                         && before.sourceText == after.sourceText
+                         && before.dirty == after.dirty
+                         && workspace.document().toText() == beforeText,
+                     QStringLiteral("rejected extra fields retain source, revision, dirty state, and save point"), out);
+
+    const auto accepted = workspace.replaceExtraFields(
+        QStringLiteral("  &dummy=\r\n  &empty=\r\n"));
+    bool hasDummy = false;
+    bool hasEmpty = false;
+    for (const SimaiRawField& field : workspace.document().extraFields) {
+        hasDummy = hasDummy || (field.key == QLatin1String("dummy") && field.value.isEmpty());
+        hasEmpty = hasEmpty || (field.key == QLatin1String("empty") && field.value.isEmpty());
+    }
+    ok &= expect(accepted.accepted && accepted.revision == before.revision + 1
+                     && workspace.snapshot().dirty && hasDummy && hasEmpty,
+                 QStringLiteral("valid indented CRLF fields, including empty values, commit atomically"), out);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -451,7 +485,8 @@ int main()
         && verifyDifficultyDiscardRestoresTheCompleteSection(out)
         && verifyOpenAcceptsEmptyInoteSlots(out)
         && verifyInlineSourceSpanWinsOverLaterLevel(out)
-        && verifyOwnedFieldMutationsAndSavePointRebind(out);
+        && verifyOwnedFieldMutationsAndSavePointRebind(out)
+        && verifyExtraFieldTransactionIsAtomic(out);
     if (!ok) return 1;
     QTextStream result(stdout);
     result << "Chart workspace checks passed." << Qt::endl;

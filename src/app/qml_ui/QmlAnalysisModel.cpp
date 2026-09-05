@@ -2,6 +2,7 @@
 
 #include "common/MuriTypes.h"
 #include "tools/muri/MuriPanelEntries.h"
+#include "ui/UiText.h"
 
 #include <QVariantMap>
 
@@ -147,6 +148,24 @@ void QmlAnalysisModel::refresh()
         analysisSnapshot, workspaceSnapshot.activeDifficultyId, workspaceSnapshot.revision,
         current ? muriRowsForSnapshot(analysisSnapshot)
                 : QVector<miacode::qml_ui::AnalysisRow>());
+    if (current && workspace_ != nullptr) {
+        const SimaiDifficultyData* difficulty =
+            workspace_->document().difficulty(workspaceSnapshot.activeDifficultyId);
+        if (difficulty != nullptr && difficulty->level.trimmed().isEmpty()) {
+            miacode::qml_ui::AnalysisRow row;
+            row.line = 0;
+            row.column = 0;
+            row.endColumn = 0;
+            row.severity = QStringLiteral("error");
+            row.alert = QStringLiteral("metadata");
+            row.code = QStringLiteral("missing_difficulty_level");
+            row.title = UiText::text(QStringLiteral("validation.difficulty_level_missing_type"));
+            row.detail = UiText::text(QStringLiteral("validation.difficulty_level_missing"));
+            row.difficultyId = workspaceSnapshot.activeDifficultyId;
+            row.revision = workspaceSnapshot.revision;
+            projection_.validationRows.append(std::move(row));
+        }
+    }
     if (activationState_.hasPending() && !miacode::qml_ui::analysisRowCanActivate(
             projection_, activationState_.pending(), workspaceSnapshot.activeDifficultyId)) {
         activationState_.cancel(activationState_.pending());
@@ -166,6 +185,7 @@ QVariantList QmlAnalysisModel::rowsToVariantList(
             {QStringLiteral("second"), row.second},
             {QStringLiteral("severity"), row.severity},
             {QStringLiteral("alert"), row.alert},
+            {QStringLiteral("code"), row.code},
             {QStringLiteral("title"), row.title},
             {QStringLiteral("detail"), row.detail},
             {QStringLiteral("difficultyId"), row.difficultyId},

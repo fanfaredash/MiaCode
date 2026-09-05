@@ -232,6 +232,38 @@ QVector<SimaiRawField> SimaiDocument::parseRawFields(const QString& text, bool p
     return fields;
 }
 
+QVector<SimaiPropertyIssue> SimaiDocument::invalidPropertyLineNumbers(const QString& text)
+{
+    QVector<SimaiPropertyIssue> issues;
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        QString line = lines.at(lineIndex);
+        if (line.endsWith(QLatin1Char('\r'))) {
+            line.chop(1);
+        }
+        const int firstNonSpace = line.indexOf(QRegularExpression(QStringLiteral("\\S")));
+        if (firstNonSpace < 0) {
+            continue;
+        }
+        if (line.at(firstNonSpace) != QLatin1Char('&')) {
+            issues.append({lineIndex + 1, firstNonSpace + 1,
+                           qMax(firstNonSpace + 1, static_cast<int>(line.size())),
+                           QStringLiteral("invalid_property")});
+            continue;
+        }
+        const int equals = line.indexOf(QLatin1Char('='), firstNonSpace + 1);
+        const QString key = equals >= 0
+            ? line.mid(firstNonSpace + 1, equals - firstNonSpace - 1).trimmed()
+            : QString();
+        if (equals <= firstNonSpace + 1 || key.isEmpty()) {
+            issues.append({lineIndex + 1, firstNonSpace + 1,
+                           qMax(firstNonSpace + 1, static_cast<int>(line.size())),
+                           QStringLiteral("invalid_property")});
+        }
+    }
+    return issues;
+}
+
 QVector<SimaiRawField> SimaiDocument::parseUnmanagedFields(const QString& text, bool prefixDummyIfNeeded)
 {
     const QVector<SimaiRawField> all = parseRawFields(text, prefixDummyIfNeeded);

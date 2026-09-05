@@ -24,6 +24,7 @@ struct AnalysisRow {
     QString detail;
     int difficultyId = 0;
     quint64 revision = 0;
+    QString code;
 };
 
 struct AnalysisProjectionInput {

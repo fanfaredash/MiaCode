@@ -216,9 +216,11 @@ Item {
                     Label {
                         id: issueLocation
                         Layout.preferredWidth: Math.max(implicitWidth, 100)
-                        text: "%1 · L%2:C%3".arg(issueDelegate.modelData.severity === "error"
-                            ? UiText.text("错误") : UiText.text("警告"))
-                            .arg(issueDelegate.modelData.line).arg(issueDelegate.modelData.column)
+                        text: issueDelegate.modelData.code === "missing_difficulty_level"
+                            ? UiText.text("validation.difficulty_header")
+                            : "%1 · L%2:C%3".arg(issueDelegate.modelData.severity === "error"
+                                ? UiText.text("错误") : UiText.text("警告"))
+                                .arg(issueDelegate.modelData.line).arg(issueDelegate.modelData.column)
                         color: issueDelegate.modelData.severity === "error"
                                ? Theme.colors.syntax.error
                                : Theme.colors.syntax.warning

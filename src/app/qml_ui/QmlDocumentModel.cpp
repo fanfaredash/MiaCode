@@ -158,7 +158,25 @@ QString QmlDocumentModel::metadataClockCount() const
     }
     return {};
 }
-QString QmlDocumentModel::metadataExtraText() const { return documentField(miacode::v2::ChartWorkspaceDocumentField::ExtraText); }
+QString QmlDocumentModel::metadataExtraText() const
+{
+    return metadataExtraAttemptActive_
+        ? metadataExtraAttemptText_
+        : documentField(miacode::v2::ChartWorkspaceDocumentField::ExtraText);
+}
+QVariantList QmlDocumentModel::metadataExtraIssues() const { return extraIssuesToVariantList(); }
+QString QmlDocumentModel::metadataExtraError() const { return metadataExtraError_; }
+bool QmlDocumentModel::metadataNeedsAttention() const
+{
+    return !metadataAttentionItems().isEmpty();
+}
+QString QmlDocumentModel::metadataAttentionText() const
+{
+    const QStringList items = metadataAttentionItems();
+    return items.isEmpty()
+        ? QString()
+        : UiText::text(QStringLiteral("metadata.needs_attention")).arg(items.join(QStringLiteral(", ")));
+}
 QString QmlDocumentModel::wholeBpm() const
 {
     if (workspace_ == nullptr) return {};
@@ -265,14 +283,56 @@ void QmlDocumentModel::setMetadataClockCount(const QString& value)
 }
 void QmlDocumentModel::setMetadataExtraText(const QString& value)
 {
-    if (workspace_ == nullptr) return;
-    if (!runWorkspaceMutation([&] {
-            return workspace_->updateDocumentField(
-                miacode::v2::ChartWorkspaceDocumentField::ExtraText, value);
-        })) {
-        return;
+    applyMetadataExtraText(value);
+}
+QVariantMap QmlDocumentModel::applyMetadataExtraText(const QString& value)
+{
+    QVariantMap resultMap;
+    resultMap.insert(QStringLiteral("accepted"), false);
+    resultMap.insert(QStringLiteral("changed"), false);
+    if (workspace_ == nullptr) return resultMap;
+
+    const quint64 beforeRevision = workspace_->snapshot().revision;
+    const bool wasRejected = metadataExtraAttemptActive_;
+    miacode::v2::ChartWorkspaceResult result;
+    runWorkspaceMutation([&] {
+        result = workspace_->replaceExtraFields(value);
+        return true;
+    });
+    if (!result.accepted) {
+        metadataExtraAttemptActive_ = true;
+        metadataExtraAttemptText_ = value;
+        metadataExtraIssues_.clear();
+        metadataExtraIssues_.reserve(result.issues.size());
+        QStringList messages;
+        for (const miacode::v2::ChartWorkspaceIssue& issue : result.issues) {
+            metadataExtraIssues_.append({
+                issue.line, issue.column, issue.endColumn,
+                issue.severity == miacode::v2::ChartWorkspaceIssueSeverity::Warning
+                    ? miacode::qml_ui::DocumentValidationIssueSeverity::Warning
+                    : miacode::qml_ui::DocumentValidationIssueSeverity::Error,
+                issue.message, issue.code});
+            messages.append(UiText::text(QStringLiteral("metadata.invalid_property"))
+                .arg(issue.line).arg(issue.column));
+        }
+        metadataExtraError_ = UiText::text(QStringLiteral("metadata.extra_not_committed"))
+            .arg(messages.join(QLatin1Char('\n')));
+        resultMap.insert(QStringLiteral("issues"), extraIssuesToVariantList());
+        emit metadataChanged();
+        return resultMap;
     }
-    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
+
+    clearMetadataExtraRejection();
+    const bool changed = result.revision != beforeRevision;
+    resultMap.insert(QStringLiteral("accepted"), true);
+    resultMap.insert(QStringLiteral("changed"), changed);
+    resultMap.insert(QStringLiteral("issues"), QVariantList());
+    if (changed) {
+        publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
+    } else if (wasRejected) {
+        emit metadataChanged();
+    }
+    return resultMap;
 }
 void QmlDocumentModel::setMetadataSourceText(const QString& value)
 {
@@ -306,6 +366,7 @@ void QmlDocumentModel::setMetadataSourceText(const QString& value)
         return;
     }
     clearMetadataSourceRejection();
+    clearMetadataExtraRejection();
     reconcileUnifiedDesignerAfterSourceReplacement();
     publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
 }
@@ -388,6 +449,10 @@ QString QmlDocumentModel::currentDifficultyDesigner() const
     return difficultyField(
         currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Designer);
 }
+bool QmlDocumentModel::currentDifficultyLevelMissing() const
+{
+    return currentDifficultyId() > 0 && currentDifficultyLevel().trimmed().isEmpty();
+}
 void QmlDocumentModel::setCurrentDifficultyLevel(const QString& value)
 {
     if (workspace_ == nullptr) return;
@@ -417,7 +482,7 @@ QVariantList QmlDocumentModel::syntaxIssues() const
 {
     const miacode::qml_ui::DocumentValidationProjection& snapshot = validationSnapshot_;
     QVariantList result;
-    result.reserve(snapshot.issues.size());
+    result.reserve(snapshot.issues.size() + (currentDifficultyLevelMissing() ? 1 : 0));
     for (const miacode::qml_ui::DocumentValidationProjectionIssue& issue : snapshot.issues) {
         result.append(QVariantMap{
             {QStringLiteral("line"), issue.line},
@@ -428,19 +493,34 @@ QVariantList QmlDocumentModel::syntaxIssues() const
                  ? QStringLiteral("warning")
                  : QStringLiteral("error")},
             {QStringLiteral("message"), issue.message},
+            {QStringLiteral("code"), issue.code},
             {QStringLiteral("difficultyId"), presentationState_.activeDifficultyId},
             {QStringLiteral("revision"), QVariant::fromValue<qulonglong>(presentationState_.validationRevision)},
+        });
+    }
+    if (currentDifficultyLevelMissing() && snapshot.available) {
+        result.append(QVariantMap{
+            {QStringLiteral("line"), 0},
+            {QStringLiteral("column"), 0},
+            {QStringLiteral("endColumn"), 0},
+            {QStringLiteral("severity"), QStringLiteral("error")},
+            {QStringLiteral("message"), UiText::text(
+                QStringLiteral("validation.difficulty_level_missing"))},
+            {QStringLiteral("code"), QStringLiteral("missing_difficulty_level")},
+            {QStringLiteral("difficultyId"), presentationState_.activeDifficultyId},
+            {QStringLiteral("revision"), QVariant::fromValue<qulonglong>(
+                presentationState_.validationRevision)},
         });
     }
     return result;
 }
 int QmlDocumentModel::syntaxIssueCount() const
 {
-    return validationSnapshot_.issues.size();
+    return validationSnapshot_.issues.size() + (currentDifficultyLevelMissing() ? 1 : 0);
 }
 int QmlDocumentModel::syntaxErrorCount() const
 {
-    return validationSnapshot_.errorCount;
+    return validationSnapshot_.errorCount + (currentDifficultyLevelMissing() ? 1 : 0);
 }
 int QmlDocumentModel::syntaxWarningCount() const
 {
@@ -626,6 +706,7 @@ void QmlDocumentModel::closeDocument()
     if (workspace_ == nullptr) return;
     if (!runWorkspaceMutation([&] { return workspace_->closeDocument().accepted; })) return;
     clearMetadataSourceRejection();
+    clearMetadataExtraRejection();
     publishWorkspaceCommit(WorkspaceCommitKind::Open, true);
 }
 
@@ -675,6 +756,7 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
                 .arg(result.error));
     }
     clearMetadataSourceRejection();
+    clearMetadataExtraRejection();
     // The opened document decides whether the project's stored preference
     // still holds. This reads the sidecar and may lower it; it never writes a
     // document field, so the freshly opened chart stays clean.
@@ -951,6 +1033,7 @@ bool QmlDocumentModel::discardChanges()
         return false;
     }
     clearMetadataSourceRejection();
+    clearMetadataExtraRejection();
     reconcileUnifiedDesignerAfterSourceReplacement();
     publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
     return true;
@@ -1196,6 +1279,7 @@ void QmlDocumentModel::adoptBackendDocumentReplacement()
 {
     ++documentGeneration_;
     clearMetadataSourceRejection();
+    clearMetadataExtraRejection();
     // The shared-designer mode arrives with the replacement: the backend
     // already reconciled it against the new document, and refreshDocumentState
     // picks it up off the workspace.
@@ -1247,6 +1331,56 @@ void QmlDocumentModel::clearMetadataSourceRejection()
     metadataSourceIssues_.clear();
 }
 
+void QmlDocumentModel::clearMetadataExtraRejection()
+{
+    metadataExtraError_.clear();
+    metadataExtraAttemptText_.clear();
+    metadataExtraIssues_.clear();
+    metadataExtraAttemptActive_ = false;
+}
+
+QVariantList QmlDocumentModel::extraIssuesToVariantList() const
+{
+    QVariantList result;
+    result.reserve(metadataExtraIssues_.size());
+    for (const auto& issue : metadataExtraIssues_) {
+        result.append(QVariantMap{
+            {QStringLiteral("line"), issue.line},
+            {QStringLiteral("column"), issue.column},
+            {QStringLiteral("endColumn"), issue.endColumn},
+            {QStringLiteral("severity"), issue.severity
+                == miacode::qml_ui::DocumentValidationIssueSeverity::Warning
+                ? QStringLiteral("warning") : QStringLiteral("error")},
+            {QStringLiteral("message"), issue.message},
+            {QStringLiteral("code"), issue.code},
+        });
+    }
+    return result;
+}
+
+QStringList QmlDocumentModel::metadataAttentionItems() const
+{
+    QStringList items;
+    if (metadataTitle().trimmed().isEmpty()) {
+        items.append(UiText::text(QStringLiteral("metadata.field.title")));
+    }
+    if (metadataArtist().trimmed().isEmpty()) {
+        items.append(UiText::text(QStringLiteral("metadata.field.artist")));
+    }
+    if (metadataDesigner().trimmed().isEmpty()) {
+        items.append(UiText::text(QStringLiteral("metadata.field.des")));
+    }
+    const SimaiDocument* document = workspace_ != nullptr ? &workspace_->document() : nullptr;
+    if (document == nullptr || !miacode::chart_assets::hasChartBackgroundMedia(
+            currentFilePath(), document->videoPath)) {
+        items.append(UiText::text(QStringLiteral("metadata.field.cover")));
+    }
+    if (!metadataExtraIssues_.isEmpty()) {
+        items.append(UiText::text(QStringLiteral("metadata.other_fields")));
+    }
+    return items;
+}
+
 QVariantList QmlDocumentModel::sourceIssuesToVariantList() const
 {
     QVariantList result;
@@ -1260,6 +1394,7 @@ QVariantList QmlDocumentModel::sourceIssuesToVariantList() const
                 == miacode::qml_ui::DocumentValidationIssueSeverity::Warning
                 ? QStringLiteral("warning") : QStringLiteral("error")},
             {QStringLiteral("message"), issue.message},
+            {QStringLiteral("code"), issue.code},
         });
     }
     return result;

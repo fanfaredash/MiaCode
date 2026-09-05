@@ -20,6 +20,7 @@ struct ChartWorkspaceIssue {
     int endColumn = 1;
     ChartWorkspaceIssueSeverity severity = ChartWorkspaceIssueSeverity::Error;
     QString message;
+    QString code;
 };
 
 struct ChartWorkspacePreflightResult {
@@ -85,6 +86,7 @@ public:
     ChartWorkspaceResult replaceSource(const QString& source);
     ChartWorkspaceResult replaceActiveDifficultyChart(const QString& chartText);
     bool updateDocumentField(ChartWorkspaceDocumentField field, const QString& value);
+    ChartWorkspaceResult replaceExtraFields(const QString& value);
     bool updateDifficultyField(
         int difficultyId, ChartWorkspaceDifficultyField field, const QString& value);
     bool selectDifficulty(int difficultyId);

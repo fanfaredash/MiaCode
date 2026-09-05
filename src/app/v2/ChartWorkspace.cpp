@@ -213,6 +213,32 @@ bool ChartWorkspace::updateDocumentField(
     return true;
 }
 
+ChartWorkspaceResult ChartWorkspace::replaceExtraFields(const QString& value)
+{
+    if (!hasDocument_) return reject();
+
+    const QVector<SimaiPropertyIssue> propertyIssues =
+        SimaiDocument::invalidPropertyLineNumbers(value);
+    if (!propertyIssues.isEmpty()) {
+        QVector<ChartWorkspaceIssue> issues;
+        issues.reserve(propertyIssues.size());
+        for (const SimaiPropertyIssue& issue : propertyIssues) {
+            issues.append({issue.line, issue.column, issue.endColumn,
+                ChartWorkspaceIssueSeverity::Error,
+                QStringLiteral("Expected an extra field in the form &key=value."),
+                issue.code});
+        }
+        return reject(issues);
+    }
+
+    QVector<SimaiRawField> fields = SimaiDocument::parseUnmanagedFields(value, true);
+    SimaiDocument::ensureDefaultClockCount(&fields);
+    if (fields == document_.extraFields) return acceptWithoutChange();
+    document_.extraFields = std::move(fields);
+    refreshSourceAndDirty();
+    return commit();
+}
+
 bool ChartWorkspace::updateDifficultyField(
     int difficultyId, ChartWorkspaceDifficultyField field, const QString& value)
 {

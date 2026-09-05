@@ -32,6 +32,7 @@ AnalysisProjection projectAnalysis(const AnalysisProjectionInput& input)
         row.endColumn = issue.endColumn;
         row.severity = issue.severity == DocumentValidationIssueSeverity::Warning
             ? QStringLiteral("warning") : QStringLiteral("error");
+        row.code = issue.code;
         row.title = row.severity == QLatin1String("warning")
             ? QStringLiteral("Warning") : QStringLiteral("Error");
         row.detail = issue.message;
@@ -81,6 +82,7 @@ AnalysisProjection projectAnalysis(
         row.title = row.severity == QLatin1String("warning")
             ? QStringLiteral("Warning") : QStringLiteral("Error");
         row.detail = issue.displayMessage;
+        row.code = QString();
         row.difficultyId = activeDifficultyId;
         row.revision = documentRevision;
         row.second = -1.0;

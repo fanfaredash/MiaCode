@@ -10,6 +10,13 @@ struct SimaiRawField {
     QString value;
 };
 
+struct SimaiPropertyIssue {
+    int line = 1;
+    int column = 1;
+    int endColumn = 1;
+    QString code;
+};
+
 inline bool operator==(const SimaiRawField& lhs, const SimaiRawField& rhs)
 {
     return lhs.key == rhs.key && lhs.value == rhs.value;
@@ -34,6 +41,10 @@ public:
     static SimaiDocument fromText(const QString& text);
 
     static QVector<SimaiRawField> parseRawFields(const QString& text, bool prefixDummyIfNeeded = false);
+    // Returns structured locations for property-looking lines that are not a
+    // complete `&key=value` assignment. Lines are one-based and CRLF is
+    // treated as one line terminator.
+    static QVector<SimaiPropertyIssue> invalidPropertyLineNumbers(const QString& text);
     // Like parseRawFields, but drops keys that already have dedicated model
     // storage and editor UI (title/artist/first/des/video and the
     // per-difficulty lv_/des_/inote_). Used by the free-form "Other &xx
