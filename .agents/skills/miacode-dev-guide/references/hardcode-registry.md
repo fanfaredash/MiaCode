@@ -46,6 +46,9 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
+- `src/app/runtime/Shared.{h,cpp}` — editor line-spacing factors (`1.0`, `1.5`, `2.0`,
+  `3.0`, `5.0`) and the default factor (`1.0`). The QML preferences list and runtime
+  normalization both consume this shared set.
 - `src/app/qml_ui/theme/Theme.qml` — dark/light `overlayOpacity` (0.72/0.92) for control/state
   fills and `popupOpacity` (0.96/0.99) for floating fills. Cards and idle fields are borderless in both
   wallpaper states; field hover/focus states retain their accent outline.

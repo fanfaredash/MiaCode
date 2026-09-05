@@ -485,7 +485,7 @@
         PreviewTimingSettings softwarePreviewTimingSettings_;
         PreviewTimingSettings previewTimingSettings_;
         int editorTextFontPointSize_ = 0;
-        double editorLineSpacingFactor_ = 1.5;
+        double editorLineSpacingFactor_ = 1.0;
         bool editorHalfWidthInputEnabled_ = true;
         bool editorOverwriteModeEnabled_ = false;
         // Unified "auto-completion" preference: bracket auto-close + type-over +
