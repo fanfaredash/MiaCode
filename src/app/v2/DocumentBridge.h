@@ -3,8 +3,10 @@
 #include "ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
 
+#include <QPair>
 #include <QString>
 #include <QVariantList>
+#include <QVector>
 
 #include <functional>
 
@@ -72,12 +74,33 @@ public:
     // Asks whatever handler is installed; the continuation runs once.
     virtual void requestLeaveDocument(std::function<void(bool)> onDecided) = 0;
 
-    // Unified-designer mode is a workspace editing mode. Its persistence and
-    // load semantics are intentionally detached until the v1 behavior is
-    // re-investigated; QML must not perform a second direct workspace mutation.
-    virtual bool unifiedDocumentDesignerEnabled() const = 0;
-    virtual void enableUnifiedDocumentDesigner(const QString& canonicalName) = 0;
-    virtual void disableUnifiedDocumentDesigner() = 0;
+    // ---- designer names ----
+    //
+    // "All difficulties share one designer" is a ChartWorkspace session mode;
+    // this is the application side of it. The per-project preference is only
+    // ever written here — opening a document may lower it to match the file,
+    // but never rewrites the document to match the preference.
+    // The designer-management dialog's single transaction: per-slot names
+    // first, then the shared name when `unified` is set, then the preference.
+    // `slotValues` carries every id the dialog showed, including chart-less ones;
+    // an empty name clears that slot.
+    virtual bool applyDocumentDesignerSlots(const QVector<QPair<int, QString>>& slotValues,
+                                            bool unified, const QString& canonicalName) = 0;
+    // Why the mode is being re-checked against the document.
+    enum class UnifiedDesignerReconcileReason {
+        // A document was just loaded: read the project preference, and trust
+        // it only if the file already satisfies it.
+        DocumentOpened,
+        // The whole source was replaced (source editing, discard, backup
+        // restore), which can introduce a divergent &des_N behind the mode's
+        // back. What the document now says wins.
+        SourceReplaced,
+    };
+    // Never writes a document field — reconciling adjusts the mode and the
+    // stored preference only, which is why an open can never arrive dirty.
+    // Call it only between transactions: a half-applied designer edit looks
+    // exactly like a document that diverged.
+    virtual void reconcileUnifiedDocumentDesigner(UnifiedDesignerReconcileReason reason) = 0;
 
     // ---- chart drop ----
     //

@@ -92,6 +92,17 @@ public:
     bool removeDifficulty(int difficultyId);
     bool unifyDesigners(const QString& canonicalName);
     bool setDesignerForSlot(int difficultyId, const QString& name);
+    // "All difficulties share one designer" is a session mode, never a
+    // document field. It is turned on by an explicit user action and dies with
+    // the document (openSource / closeDocument reset it). While it is on every
+    // designer write is kept identical — the top &des, a difficulty's &des_N,
+    // a chart-less slot, and a freshly added difficulty alike — so no call
+    // site can forget to broadcast, which is how the names diverged in v1.
+    // Loading a document never turns it on by itself: the per-project
+    // preference is read by the application layer, which trusts it only when
+    // the opened document already satisfies it.
+    bool setUnifiedDesignerEnabled(bool enabled);
+    bool unifiedDesignerEnabled() const { return unifiedDesignerEnabled_; }
     bool upsertExtraField(const QString& key, const QString& value);
     bool replaceDifficultyChart(int difficultyId, const QString& chartText);
     bool markSaved(const QString& filePath = QString());
@@ -144,6 +155,7 @@ private:
     quint64 revision_ = 0;
     bool hasDocument_ = false;
     bool dirty_ = false;
+    bool unifiedDesignerEnabled_ = false;
 };
 
 }  // namespace miacode::v2

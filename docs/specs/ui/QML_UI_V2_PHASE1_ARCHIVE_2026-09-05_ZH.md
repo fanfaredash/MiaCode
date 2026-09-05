@@ -5,6 +5,16 @@
 
 ## 2026-09-05 新发现缺陷与修复
 
+- **统一谱师 preference 与名义管理对话框（2026-09-05 定案）**：模式下沉为 `ChartWorkspace`
+  的会话不变量（`setUnifiedDesignerEnabled` / `designerSlots`），开启期间顶层 `&des`、每个
+  `&des_N`（含 chart-less slot）与新建难度的名义由 workspace 统一维护，调用点不再各自记得
+  广播。preference 保留并沿用 v1 键名，但方向反转：加载时只读文档、只写 preference——文档
+  满足统一状态才恢复模式，不满足则静默降级 preference 且不改文档，因此 save point 恒等于
+  磁盘内容，也不会出现启动即脏。整源替换（字段源码、放弃、备份恢复）用同一入口重新核对，
+  不一致就让模式退位而不是覆盖用户刚写的内容。UI 上「统一谱师」开关由
+  `DesignerSlotsDialog.qml`（7 行 `&des_1..7` + 「所有难度采用相同名义」+ 候选选择含
+  「直接清除」）取代，确定才提交一次事务，取消无副作用。autosave 不再镜像/持久化任何统一
+  逻辑，逐字序列化 workspace 快照。
 - **统一谱师导致无法关闭窗口**：这是 v1→v2 迁移时关闭/撤销语义未跟上造成的缺失。
   `ChartWorkspace::revertDifficultyChart()` 原来只恢复 chart，统一谱师修改的 level/designer
   仍保持 dirty，导致放弃后重复询问同一难度；现在恢复完整 difficulty section，并让新建难度

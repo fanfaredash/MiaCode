@@ -45,15 +45,9 @@ bool miacode::runtime::DocumentSessionHost::updateDocumentField(
     Session::DocumentField field,
     const QString& value)
 {
+    // A designer write under the unified mode fans out to every &des_N inside
+    // ChartWorkspace, so this path stays the same shape for every field.
     miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
-    if (field == Session::DocumentField::Designer && state_.unifiedDesignerEnabled_) {
-        if (workspace.document().designer == value) {
-            return false;
-        }
-        applyUnifiedDesignerName(value);
-        return true;
-    }
-
     if (!workspace.updateDocumentField(
             static_cast<miacode::v2::ChartWorkspaceDocumentField>(field), value)) {
         return false;
@@ -79,15 +73,6 @@ bool miacode::runtime::DocumentSessionHost::updateDifficultyField(
     const QString& value)
 {
     miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
-    if (field == Session::DifficultyField::Designer && state_.unifiedDesignerEnabled_) {
-        if (workspace.document().designerForSlot(difficultyId) == value
-            && workspace.document().designer == value) {
-            return false;
-        }
-        applyUnifiedDesignerName(value);
-        return true;
-    }
-
     if (!workspace.updateDifficultyField(
             difficultyId, static_cast<miacode::v2::ChartWorkspaceDifficultyField>(field), value)) {
         return false;
@@ -159,6 +144,10 @@ Session::DocumentSourceReplaceResult miacode::runtime::DocumentSessionHost::repl
         result.accepted = false;
         return result;
     }
+    // Hand-written &des_N can now disagree with the shared name; the text the
+    // user submitted wins and the mode steps down if it does.
+    reconcileUnifiedDocumentDesigner(
+        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced);
     loadDocument();
     state_.documentDirty_ = session_.applicationServices_.workspace().snapshot().dirty;
     markCurrentFieldDirty();
@@ -309,11 +298,6 @@ int Session::documentActiveDifficultyId() const
     return activeDifficultyId_;
 }
 
-bool Session::documentUnifiedDesignerEnabled() const
-{
-    return unifiedDesignerEnabled_;
-}
-
 bool Session::updateDocumentField(DocumentField field, const QString& value)
 {
     return documents_->updateDocumentField(field, value);
@@ -372,14 +356,10 @@ bool Session::removeDocumentDifficulty(int difficultyId)
     return documents_->deleteDifficultyField(difficultyId);
 }
 
-void Session::enableUnifiedDocumentDesigner(const QString& canonicalName)
+bool Session::applyDocumentDesignerSlots(
+    const QVector<QPair<int, QString>>& slotValues, bool unified, const QString& canonicalName)
 {
-    documents_->enableUnifiedDocumentDesigner(canonicalName);
-}
-
-void Session::disableUnifiedDocumentDesigner()
-{
-    documents_->disableUnifiedDocumentDesigner();
+    return documents_->applyDocumentDesignerSlots(slotValues, unified, canonicalName);
 }
 
 bool miacode::runtime::DocumentSessionHost::applyCommittedQmlDocument(

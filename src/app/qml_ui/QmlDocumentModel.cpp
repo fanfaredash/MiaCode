@@ -66,9 +66,6 @@ QmlDocumentModel::QmlDocumentModel(
         setChartText(text);
         return chartText() == text;
     });
-    if (bridge() != nullptr) {
-        unifiedDesignerEnabled_ = bridge()->unifiedDocumentDesignerEnabled();
-    }
     // The workspace already has a document from window startup, or a fresh empty
     // chart opened above. Publish that first committed identity so later
     // navigation values are stamped with the workspace revision.
@@ -182,19 +179,20 @@ QVariantList QmlDocumentModel::metadataSourceIssues() const { return sourceIssue
 bool QmlDocumentModel::metadataSourceValid() const { return metadataSourceError_.isEmpty(); }
 bool QmlDocumentModel::unifiedDesignerEnabled() const { return unifiedDesignerEnabled_; }
 
-QStringList QmlDocumentModel::designerCandidates() const
+QVariantList QmlDocumentModel::designerSlots() const
 {
-    QStringList values;
-    const auto append = [&values](const QString& value) {
-        const QString normalized = value.trimmed();
-        if (!normalized.isEmpty() && !values.contains(normalized)) values.append(normalized);
-    };
-    append(metadataDesigner());
-    if (workspace_ == nullptr) return values;
-    for (int id : workspace_->document().difficultyIds()) {
-        append(difficultyField(id, miacode::v2::ChartWorkspaceDifficultyField::Designer));
+    QVariantList result;
+    if (workspace_ == nullptr) return result;
+    const SimaiDocument& document = workspace_->document();
+    for (int id = 1; id <= 7; ++id) {
+        result.append(QVariantMap{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("name"), SimaiDocument::difficultyName(id)},
+            {QStringLiteral("designer"), document.designerForSlot(id)},
+            {QStringLiteral("hasChart"), document.difficulty(id) != nullptr},
+        });
     }
-    return values;
+    return result;
 }
 
 void QmlDocumentModel::setMetadataTitle(const QString& value)
@@ -233,13 +231,14 @@ void QmlDocumentModel::setMetadataFirst(const QString& value)
 void QmlDocumentModel::setMetadataDesigner(const QString& value)
 {
     if (workspace_ == nullptr) return;
-    const bool changed = runWorkspaceMutation([&] {
-        return unifiedDesignerEnabled_
-            ? workspace_->unifyDesigners(value)
-            : workspace_->updateDocumentField(
-                  miacode::v2::ChartWorkspaceDocumentField::Designer, value);
-    });
-    if (!changed) return;
+    // Under the unified mode ChartWorkspace fans this out to every &des_N; the
+    // decision is not repeated here.
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDocumentField(
+                miacode::v2::ChartWorkspaceDocumentField::Designer, value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 void QmlDocumentModel::setMetadataVideoPath(const QString& value)
@@ -306,6 +305,7 @@ void QmlDocumentModel::setMetadataSourceText(const QString& value)
         return;
     }
     clearMetadataSourceRejection();
+    reconcileUnifiedDesignerAfterSourceReplacement();
     publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
 }
 
@@ -402,14 +402,13 @@ void QmlDocumentModel::setCurrentDifficultyLevel(const QString& value)
 void QmlDocumentModel::setCurrentDifficultyDesigner(const QString& value)
 {
     if (workspace_ == nullptr) return;
-    const bool changed = runWorkspaceMutation([&] {
-        return unifiedDesignerEnabled_
-            ? workspace_->unifyDesigners(value)
-            : workspace_->updateDifficultyField(
-                  currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Designer,
-                  value);
-    });
-    if (!changed) return;
+    if (!runWorkspaceMutation([&] {
+            return workspace_->updateDifficultyField(
+                currentDifficultyId(), miacode::v2::ChartWorkspaceDifficultyField::Designer,
+                value);
+        })) {
+        return;
+    }
     publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
 }
 
@@ -625,11 +624,8 @@ void QmlDocumentModel::closeDocument()
 {
     if (workspace_ == nullptr) return;
     if (!runWorkspaceMutation([&] { return workspace_->closeDocument().accepted; })) return;
-    const bool wasUnified = unifiedDesignerEnabled_;
-    unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
     publishWorkspaceCommit(WorkspaceCommitKind::Open, true);
-    if (wasUnified) emit unifiedDesignerEnabledChanged();
 }
 
 bool QmlDocumentModel::saveDifficultySection(int difficultyId)
@@ -651,6 +647,7 @@ bool QmlDocumentModel::revertDifficultyChart(int difficultyId)
         })) {
         return false;
     }
+    reconcileUnifiedDesignerAfterSourceReplacement();
     publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
     return true;
 }
@@ -676,14 +673,21 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
                 .arg(path)
                 .arg(result.error));
     }
-    const bool wasUnified = unifiedDesignerEnabled_;
-    unifiedDesignerEnabled_ = false;
     clearMetadataSourceRejection();
+    // The opened document decides whether the project's stored preference
+    // still holds. This reads the sidecar and may lower it; it never writes a
+    // document field, so the freshly opened chart stays clean.
+    if (bridge() != nullptr) {
+        // Inside the mutation guard so the mode restore does not publish a
+        // second, half-open document state before the Open commit below.
+        runWorkspaceMutation([&] {
+            bridge()->reconcileUnifiedDocumentDesigner(
+                miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::DocumentOpened);
+            return true;
+        });
+    }
     publishWorkspaceCommit(
         WorkspaceCommitKind::Open, true, result.usedSystemEncoding);
-    if (wasUnified) {
-        emit unifiedDesignerEnabledChanged();
-    }
     return true;
 }
 
@@ -946,14 +950,7 @@ bool QmlDocumentModel::discardChanges()
         return false;
     }
     clearMetadataSourceRejection();
-    if (bridge() != nullptr) {
-        bridge()->disableUnifiedDocumentDesigner();
-    }
-    const bool wasUnified = unifiedDesignerEnabled_;
-    unifiedDesignerEnabled_ = bridge() != nullptr
-        ? bridge()->unifiedDocumentDesignerEnabled() : false;
-    if (wasUnified)
-        emit unifiedDesignerEnabledChanged();
+    reconcileUnifiedDesignerAfterSourceReplacement();
     publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
     return true;
 }
@@ -994,37 +991,67 @@ int QmlDocumentModel::chartPosition(int line, int column) const
     }
     return qBound(position, position + qMax(0, column - 1), text.size());
 }
-void QmlDocumentModel::enableUnifiedDesigner(const QString& canonicalName)
+bool QmlDocumentModel::applyDesignerSlots(
+    const QVariantList& slotValues, bool unified, const QString& canonicalName)
 {
-    if (workspace_ == nullptr) return;
-    if (bridge() != nullptr) {
-        bridge()->enableUnifiedDocumentDesigner(canonicalName);
-        const bool nextUnified = bridge()->unifiedDocumentDesignerEnabled();
-        if (nextUnified != unifiedDesignerEnabled_) {
-            unifiedDesignerEnabled_ = nextUnified;
-            emit unifiedDesignerEnabledChanged();
-        }
-        return;
+    if (workspace_ == nullptr) return false;
+    QVector<QPair<int, QString>> parsed;
+    parsed.reserve(slotValues.size());
+    for (const QVariant& entry : slotValues) {
+        const QVariantMap row = entry.toMap();
+        const int id = row.value(QStringLiteral("id")).toInt();
+        if (!SimaiDocument::isDifficultyId(id)) continue;
+        parsed.append(qMakePair(id, row.value(QStringLiteral("designer")).toString()));
     }
-    unifiedDesignerEnabled_ = true;
-    runWorkspaceMutation([&] { return workspace_->unifyDesigners(canonicalName); });
-    publishWorkspaceCommit(WorkspaceCommitKind::Incremental);
-    emit unifiedDesignerEnabledChanged();
+    bool changed = false;
+    if (!runWorkspaceMutation([&] {
+            // The whole dialog result — rows, mode, and the project preference
+            // — is one backend transaction; a cancelled dialog writes nothing.
+            changed = bridge() != nullptr
+                ? bridge()->applyDocumentDesignerSlots(parsed, unified, canonicalName)
+                : applyDesignerSlotsWithoutBridge(parsed, unified, canonicalName);
+            return changed;
+        })) {
+        return false;
+    }
+    publishWorkspaceCommit(WorkspaceCommitKind::Structure);
+    return changed;
 }
-void QmlDocumentModel::disableUnifiedDesigner()
+
+void QmlDocumentModel::reconcileUnifiedDesignerAfterSourceReplacement()
 {
-    if (bridge() != nullptr) {
-        bridge()->disableUnifiedDocumentDesigner();
-        const bool nextUnified = bridge()->unifiedDocumentDesignerEnabled();
-        if (nextUnified != unifiedDesignerEnabled_) {
-            unifiedDesignerEnabled_ = nextUnified;
-            emit unifiedDesignerEnabledChanged();
+    // Only between transactions: a restored section can leave &des_N and the
+    // shared name disagreeing, and the document that is now on screen wins.
+    if (bridge() == nullptr) {
+        if (workspace_ != nullptr && workspace_->unifiedDesignerEnabled()
+            && !workspace_->document().isUnifiedDesignerTriviallySafe()) {
+            workspace_->setUnifiedDesignerEnabled(false);
         }
         return;
     }
-    if (!unifiedDesignerEnabled_) return;
-    unifiedDesignerEnabled_ = false;
-    emit unifiedDesignerEnabledChanged();
+    runWorkspaceMutation([&] {
+        bridge()->reconcileUnifiedDocumentDesigner(
+            miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced);
+        return true;
+    });
+}
+
+bool QmlDocumentModel::applyDesignerSlotsWithoutBridge(
+    const QVector<QPair<int, QString>>& slotValues, bool unified, const QString& canonicalName)
+{
+    // Bridge-less assemblies (specs, headless hosts) get the workspace half of
+    // the transaction; the project preference has no home without the shell.
+    const bool modeWas = workspace_->unifiedDesignerEnabled();
+    if (modeWas) workspace_->setUnifiedDesignerEnabled(false);
+    bool changed = false;
+    for (const QPair<int, QString>& slot : slotValues) {
+        changed = workspace_->setDesignerForSlot(slot.first, slot.second) || changed;
+    }
+    if (unified) {
+        workspace_->setUnifiedDesignerEnabled(true);
+        changed = workspace_->unifyDesigners(canonicalName) || changed;
+    }
+    return changed || modeWas != unified;
 }
 
 void QmlDocumentModel::logEditorDocumentState(const QString& reason, int difficultyId,
@@ -1144,6 +1171,13 @@ void QmlDocumentModel::refreshDocumentState()
     input.documentRevision = documentRevision_;
     input.validation = validationSnapshot_;
     presentationState_ = miacode::qml_ui::projectDocumentPresentation(input);
+    // ChartWorkspace owns the shared-designer mode; this is the one place the
+    // property mirror follows it, so no flow has to remember to emit.
+    const bool unified = workspace_ != nullptr && workspace_->unifiedDesignerEnabled();
+    if (unified != unifiedDesignerEnabled_) {
+        unifiedDesignerEnabled_ = unified;
+        emit unifiedDesignerEnabledChanged();
+    }
 }
 
 bool QmlDocumentModel::saveToPath(const QString& path)
@@ -1160,12 +1194,11 @@ bool QmlDocumentModel::saveToPath(const QString& path)
 void QmlDocumentModel::adoptBackendDocumentReplacement()
 {
     ++documentGeneration_;
-    const bool wasUnified = unifiedDesignerEnabled_;
-    unifiedDesignerEnabled_ = bridge() != nullptr
-        ? bridge()->unifiedDocumentDesignerEnabled() : false;
     clearMetadataSourceRejection();
+    // The shared-designer mode arrives with the replacement: the backend
+    // already reconciled it against the new document, and refreshDocumentState
+    // picks it up off the workspace.
     emitDocumentStateChanged();
-    if (wasUnified != unifiedDesignerEnabled_) emit unifiedDesignerEnabledChanged();
     emit documentReplaced();
 }
 

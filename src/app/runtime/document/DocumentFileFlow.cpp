@@ -532,10 +532,6 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
     _mc_op_.note(QStringLiteral("path=%1 dur=%2")
                      .arg(normalizedPath)
                      .arg(knownTrackDurationSeconds, 0, 'f', 3));
-    // Unified-designer preference persistence is detached pending a v1
-    // behavior review. A newly opened document therefore starts with the
-    // explicit runtime mode off, without touching the loaded save point.
-    state_.unifiedDesignerEnabled_ = false;
     state_.currentEncoding_ = encodingUsed;
     session_.applyWaveformData(
         miacode::waveform::makeWaveformPlaceholder(
@@ -581,6 +577,11 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
         || workspace.document().toText() != source) {
         workspace.openSource(source, normalizedPath);
     }
+    // Reads the project preference and reconciles it with what was just
+    // loaded. Never writes a document field: the chart stays byte for byte
+    // what is on disk, so this open cannot arrive dirty.
+    reconcileUnifiedDocumentDesigner(
+        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::DocumentOpened);
     loadDocument();
     session_.refreshWaveformCache(knownTrackDurationSeconds);
     if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
@@ -609,6 +610,9 @@ void miacode::runtime::DocumentSessionHost::syncRuntimeFromWorkspace()
     if (pathChanged) {
         session_.setCurrentFilePath(snapshot.filePath, true);
         if (!snapshot.filePath.isEmpty()) {
+            // An untitled document had nowhere to record a shared-designer
+            // choice; the save that just gave it a path also gives it one.
+            flushPendingUnifiedDesignerPreference();
             session_.addRecentFilePath(snapshot.filePath);
             miacode::crash_recovery::prepareForChart(snapshot.filePath);
             const bool previousSessionAbandoned =

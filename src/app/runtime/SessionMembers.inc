@@ -24,8 +24,8 @@
         // header (next to Lv), not the metadata page — see FrameBootstrap.
         // Per-difficulty designer state (`&des_N` + the "share one designer"
         // toggle) is managed by a dialog, not a persistent checkbox, so there
-        // is no unifiedDesignerCheckbox_ widget; the runtime flag lives in
-        // State::unifiedDesignerEnabled_.
+        // is no unifiedDesignerCheckbox_ widget; the mode itself lives in
+        // ChartWorkspace.
         // Per-difficulty designer (`&des_N`) header field. Distinct from the
         // metadata page's document-level designer field (&des).
         QTimer* previewHeldSeekTimer_ = nullptr;
@@ -94,11 +94,13 @@
         const bool& previewLateVideoStartPending_ = playback_.previewLateVideoStartPending_;
         const double& previewStartupPreparedSecond_ = playback_.previewStartupPreparedSecond_;
 
-        // "All difficulties share one designer" preference (set via the
-        // per-difficulty designer dialog, persisted per project). True ⇒
-        // broadcast designer edits between top &des and every &des_N inside
-        // applyCurrentFieldToDocument.
-        bool unifiedDesignerEnabled_ = false;
+        // "All difficulties share one designer" is a ChartWorkspace session
+        // mode, not a runtime flag — ask workspace().unifiedDesignerEnabled().
+        // What lives here is only the choice an untitled document could not
+        // persist yet: the project preference needs a chart directory, so the
+        // value waits until the first save produces one.
+        bool pendingUnifiedDesignerPreference_ = false;
+        bool pendingUnifiedDesignerPreferenceValid_ = false;
         PreviewRuntime* scene_ = nullptr;
         PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
@@ -662,7 +664,6 @@
     int& projectLastOpenedDifficultyId_ = state_.projectLastOpenedDifficultyId_;
     bool& documentDirty_ = state_.documentDirty_;
     bool& currentFieldDirty_ = state_.currentFieldDirty_;
-    bool& unifiedDesignerEnabled_ = state_.unifiedDesignerEnabled_;
     const bool& playing_ = state_.playing_;
     bool& qtPreviewTimelineDirty_ = state_.qtPreviewTimelineDirty_;
     bool& qtPreviewAwaitingFrameSwap_ = state_.qtPreviewAwaitingFrameSwap_;

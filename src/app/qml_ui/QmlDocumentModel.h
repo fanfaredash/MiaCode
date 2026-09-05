@@ -36,7 +36,9 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QVariantList metadataSourceIssues READ metadataSourceIssues NOTIFY metadataSourceChanged)
     Q_PROPERTY(bool metadataSourceValid READ metadataSourceValid NOTIFY metadataSourceChanged)
     Q_PROPERTY(bool unifiedDesignerEnabled READ unifiedDesignerEnabled NOTIFY unifiedDesignerEnabledChanged)
-    Q_PROPERTY(QStringList designerCandidates READ designerCandidates NOTIFY metadataChanged)
+    // Every &des_N slot the designer-management dialog edits, charted or not:
+    // { id, name, designer, hasChart }.
+    Q_PROPERTY(QVariantList designerSlots READ designerSlots NOTIFY metadataChanged)
     Q_PROPERTY(QString documentTitle READ documentTitle NOTIFY documentTitleChanged)
     Q_PROPERTY(QString currentFilePath READ currentFilePath NOTIFY currentFilePathChanged)
     Q_PROPERTY(QString currentFileName READ currentFileName NOTIFY currentFilePathChanged)
@@ -91,7 +93,7 @@ public:
     QVariantList metadataSourceIssues() const;
     bool metadataSourceValid() const;
     bool unifiedDesignerEnabled() const;
-    QStringList designerCandidates() const;
+    QVariantList designerSlots() const;
     void setMetadataTitle(const QString& value);
     void setMetadataArtist(const QString& value);
     void setMetadataFirst(const QString& value);
@@ -190,8 +192,12 @@ public:
                                             bool metadataMode);
     Q_INVOKABLE QVariantList bookmarksForDifficulty(int difficultyId) const;
     Q_INVOKABLE void navigateToBookmark(int difficultyId, int line);
-    Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
-    Q_INVOKABLE void disableUnifiedDesigner();
+    // The designer-management dialog's whole result, applied as one
+    // transaction: `slotValues` is a list of { id, designer } for every row the
+    // dialog showed, `unified` is the "all difficulties share one name"
+    // checkbox, and `canonicalName` the name it settled on (empty clears).
+    Q_INVOKABLE bool applyDesignerSlots(const QVariantList& slotValues, bool unified,
+                                        const QString& canonicalName);
 
     // Normalizes the selected range (or the whole text when nothing is
     // selected) and returns the result as a value: { ok, changed, text,
@@ -268,6 +274,13 @@ private:
     void refreshDocumentState();
     void clearMetadataSourceRejection();
     bool runWorkspaceMutation(const std::function<bool()>& mutate);
+    // The workspace half of applyDesignerSlots() for assemblies with no shell
+    // bridge (specs, headless hosts): no project preference is written there.
+    bool applyDesignerSlotsWithoutBridge(const QVector<QPair<int, QString>>& slotValues,
+                                         bool unified, const QString& canonicalName);
+    // Re-checks the shared-designer mode against the document after a whole
+    // -source replacement (source editing, discard, backup restore).
+    void reconcileUnifiedDesignerAfterSourceReplacement();
     QVariantList sourceIssuesToVariantList() const;
     miacode::v2::ShellNotifications* notifications_ = nullptr;
     // Bound to the assembly's slot, not a snapshot.
@@ -290,6 +303,8 @@ private:
     quint64 documentRevision_ = 0;
     qulonglong documentGeneration_ = 0;
     qulonglong bookmarkGeneration_ = 0;
+    // Mirror of ChartWorkspace's session mode, refreshed in
+    // refreshDocumentState() purely so the property can report a change.
     bool unifiedDesignerEnabled_ = false;
     bool wholeSourceEditorActive_ = false;
     bool suppressWorkspaceChanged_ = false;

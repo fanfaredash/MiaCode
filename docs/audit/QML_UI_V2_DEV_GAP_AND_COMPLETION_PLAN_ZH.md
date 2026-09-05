@@ -56,7 +56,7 @@ v2 已经不是空壳：基础打开/保存、难度切换、QML 文本编辑、
 | P0 | `&first` 的 v2 编辑位置和实时读值冲突 | v2 表单把 `metadataFirst` 放在元数据页；`dev` 的权威交互是难度页 `firstEdit_`。`parsedRawFirstSeconds()` 在有活动难度时优先读旧的 `firstEdit_`，而 v2 setter 只改 `document_.first`，所以时间轴/预览可继续使用旧偏移。 | 统一到 `MainWindow` 的 offset 更新 API：同步 document、隐藏 v1 header、latency 页、时间轴快/慢刷新、SFX/媒体偏移；v2 UI 再决定是否在难度 header 展示。 |
 | P0 | 原始元数据/完整源码编辑缺少原子校验与错误反馈 | `setMetadataSourceText()` 直接 `SimaiDocument::fromText()` 并清空错误；`metadataSourceError` 没有真正的失败路径。 | 引入“解析→验证→原子替换/保留旧文档”的事务结果；向 QML 返回结构化错误与位置，并覆盖不合法源码、未保存修改、外部重载。 |
 | P0 | 编辑后的下游刷新没有契约化 | 正文当前只 `setEditorText()` + `scheduleTimelineRefresh()`；元数据各 setter 又各自处理。`dev` 的链是编辑→quick 增量/重建→slow parse→预览快照→校验/Muri。 | 把字段按影响面分类（正文、`&first`、timing metadata、媒体路径、展示性元数据），每类由一个后端入口完成所有必要更新；用 revision 防止 QML 回写循环和过期慢刷新覆盖。 |
-| P1 | 统一谱师只覆盖已有难度 | QML `designerCandidates()` 和 `enableUnifiedDesigner()` 遍历 `difficultyIds()`；`dev` 还支持 chart-less `&des_N`/`standaloneDesigners_`，并要求统一名义广播到所有 slot。 | 公开 per-difficulty-designer model（包括 standalone slot）并复用现有统一名义规则；不要在 QML 复制序列化规则。 |
+| P1 ✅ | 统一谱师只覆盖已有难度 | ~~QML `designerCandidates()` 和 `enableUnifiedDesigner()` 遍历 `difficultyIds()`~~ | 已完成：模式下沉为 `ChartWorkspace` 会话不变量（`setUnifiedDesignerEnabled`/`designerSlots`），候选与广播都走 `perDifficultyDesigners()`（含 chart-less slot）；UI 换成 `DesignerSlotsDialog.qml`，偏好只在对话框提交与加载自愈两处写盘。 |
 | P1 | 文档状态投影不完整 | QML tab 的 dirty 只按当前 active difficulty/metadata 粗略标记，且缺少完整的 autosave、光标/选择、动作可用性投影。 | 建立只读 `DocumentUiState`（活动难度、dirty 原因、可预览/可导出、undo/redo、selection/cursor）；所有按钮都绑定它。 |
 
 ### C. 文本编辑器

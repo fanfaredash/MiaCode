@@ -157,7 +157,10 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
         deletedState.difficultyId,
         miacode::v2::ChartWorkspaceDifficultyField::Level,
         deletedState.difficultyData.level);
-    const QString designer = state_.unifiedDesignerEnabled_
+    // Under the unified mode the snapshot's designer may be a name the shared
+    // one has since moved past. Restoring it verbatim would broadcast that
+    // stale name across every difficulty, so the current &des wins.
+    const QString designer = workspace.unifiedDesignerEnabled()
         ? workspace.document().designer
         : deletedState.difficultyData.designer;
     workspace.updateDifficultyField(

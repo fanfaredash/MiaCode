@@ -174,6 +174,106 @@ bool verifyDocumentAndDifficultyTransactions(QTextStream& out)
     return ok;
 }
 
+// The shared-designer mode is a workspace invariant, not a rule each call site
+// has to remember: while it is on, every route into a designer name — the top
+// &des, a difficulty's &des_N, a chart-less slot, a difficulty that did not
+// exist yet — has to come out identical.
+bool verifyUnifiedDesignerModeIsAWorkspaceInvariant(QTextStream& out)
+{
+    using miacode::v2::ChartWorkspaceDifficultyField;
+    using miacode::v2::ChartWorkspaceDocumentField;
+
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    bool ok = expect(!workspace.unifiedDesignerEnabled(),
+                     QStringLiteral("an opened document starts with the shared-designer mode off"), out);
+
+    workspace.setDesignerForSlot(3, QStringLiteral("chartless"));
+    ok &= expect(workspace.document().difficulty(3) == nullptr
+                     && workspace.document().perDifficultyDesigners().size() == 3,
+                 QStringLiteral("a chart-less designer slot is listed without materializing a difficulty"), out);
+
+    const auto beforeFlip = workspace.snapshot();
+    const bool flipped = workspace.setUnifiedDesignerEnabled(true);
+    const auto afterFlip = workspace.snapshot();
+    ok &= expect(flipped && workspace.unifiedDesignerEnabled()
+                     && afterFlip.sourceText == beforeFlip.sourceText
+                     && afterFlip.dirty == beforeFlip.dirty
+                     && afterFlip.dirtyDifficultyIds == beforeFlip.dirtyDifficultyIds,
+                 QStringLiteral("turning the mode on is a mode change, not a document change"), out);
+
+    ok &= expect(workspace.updateDocumentField(
+                     ChartWorkspaceDocumentField::Designer, QStringLiteral("one"))
+                     && workspace.document().designerForSlot(5) == QLatin1String("one")
+                     && workspace.document().designerForSlot(6) == QLatin1String("one")
+                     && workspace.document().designerForSlot(3) == QLatin1String("one"),
+                 QStringLiteral("a top &des edit broadcasts to charted and chart-less slots alike"), out);
+
+    ok &= expect(workspace.updateDifficultyField(
+                     6, ChartWorkspaceDifficultyField::Designer, QStringLiteral("two"))
+                     && workspace.document().designer == QLatin1String("two")
+                     && workspace.document().designerForSlot(5) == QLatin1String("two"),
+                 QStringLiteral("a per-difficulty designer edit broadcasts back to every other slot"), out);
+
+    ok &= expect(workspace.addDifficulty(4)
+                     && workspace.document().difficulty(4) != nullptr
+                     && workspace.document().difficulty(4)->designer == QLatin1String("two"),
+                 QStringLiteral("a difficulty added under the mode is born with the shared name"), out);
+
+    ok &= expect(workspace.document().isUnifiedDesignerTriviallySafe(),
+                 QStringLiteral("every write under the mode leaves the document satisfying it"), out);
+
+    ok &= expect(workspace.setDesignerForSlot(2, QString())
+                     && workspace.document().designer.isEmpty()
+                     && workspace.document().designerForSlot(5).isEmpty()
+                     && !workspace.document().toText().contains(QLatin1String("&des_3=")),
+                 QStringLiteral("an empty shared name clears every slot, chart-less entries included"), out);
+
+    workspace.setUnifiedDesignerEnabled(false);
+    ok &= expect(workspace.updateDifficultyField(
+                     5, ChartWorkspaceDifficultyField::Designer, QStringLiteral("solo"))
+                     && workspace.document().designerForSlot(6).isEmpty()
+                     && workspace.document().designer.isEmpty(),
+                 QStringLiteral("with the mode off a designer edit stays on its own difficulty"), out);
+
+    workspace.setUnifiedDesignerEnabled(true);
+    workspace.openSource(sourceWithTwoDifficulties());
+    ok &= expect(!workspace.unifiedDesignerEnabled(),
+                 QStringLiteral("opening another document drops the mode with the session it belonged to"), out);
+    return ok;
+}
+
+// Unifying must not invent a `&des_N` line for a slot that has neither a chart
+// nor a name: the file would grow entries for difficulties nobody authored.
+bool verifyUnifyLeavesUntouchedSlotsAlone(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    workspace.setUnifiedDesignerEnabled(true);
+    workspace.updateDocumentField(
+        miacode::v2::ChartWorkspaceDocumentField::Designer, QStringLiteral("solo"));
+    const QString text = workspace.document().toText();
+    return expect(text.contains(QLatin1String("&des_5=solo"))
+                      && text.contains(QLatin1String("&des_6=solo"))
+                      && !text.contains(QLatin1String("&des_1="))
+                      && !text.contains(QLatin1String("&des_7=")),
+                  QStringLiteral("unifying names the slots that exist and no others"), out);
+}
+
+// Materializing a difficulty over a chart-less `&des_N` has to adopt that name:
+// toText() stops emitting the standalone record once the difficulty owns the id.
+bool verifyAddedDifficultyAdoptsAChartlessName(QTextStream& out)
+{
+    miacode::v2::ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties());
+    workspace.setDesignerForSlot(4, QStringLiteral("recorded"));
+    workspace.addDifficulty(4);
+    return expect(workspace.document().difficulty(4) != nullptr
+                      && workspace.document().difficulty(4)->designer == QLatin1String("recorded")
+                      && workspace.document().toText().contains(QLatin1String("&des_4=recorded")),
+                  QStringLiteral("adding a difficulty keeps the name its slot already recorded"), out);
+}
+
 bool verifyIncrementalChartAllowsIntermediateText(QTextStream& out)
 {
     miacode::v2::ChartWorkspace workspace;
@@ -343,6 +443,9 @@ int main()
         && verifyExplicitSavePoint(out)
         && verifyCompleteDocumentSaveAnchor(out)
         && verifyDocumentAndDifficultyTransactions(out)
+        && verifyUnifiedDesignerModeIsAWorkspaceInvariant(out)
+        && verifyUnifyLeavesUntouchedSlotsAlone(out)
+        && verifyAddedDifficultyAdoptsAChartlessName(out)
         && verifyIncrementalChartAllowsIntermediateText(out)
         && verifyDifficultyFieldsDirtyTheirSection(out)
         && verifyDifficultyDiscardRestoresTheCompleteSection(out)

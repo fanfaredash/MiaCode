@@ -124,6 +124,10 @@ ChartWorkspaceResult ChartWorkspace::openSource(
     activeDifficultyId_ = resolveOpenDifficultyId(document_, requestedDifficulty);
     filePath_ = filePath;
     hasDocument_ = true;
+    // A new document arrives with the mode off. Whether the project's stored
+    // preference may turn it back on is the application layer's decision, and
+    // it is made without writing a single byte into the document.
+    unifiedDesignerEnabled_ = false;
     sourceText_ = document_.toText();
     savedSourceText_ = sourceText_;
     savedDocument_ = document_;
@@ -170,6 +174,9 @@ bool ChartWorkspace::updateDocumentField(
     ChartWorkspaceDocumentField field, const QString& value)
 {
     if (!hasDocument_) return false;
+    if (field == ChartWorkspaceDocumentField::Designer && unifiedDesignerEnabled_) {
+        return unifyDesigners(value);
+    }
     bool changed = false;
     switch (field) {
     case ChartWorkspaceDocumentField::Title:
@@ -212,6 +219,9 @@ bool ChartWorkspace::updateDifficultyField(
     if (!hasDocument_) return false;
     SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
     if (difficulty == nullptr) return false;
+    if (field == ChartWorkspaceDifficultyField::Designer && unifiedDesignerEnabled_) {
+        return unifyDesigners(value);
+    }
     switch (field) {
     case ChartWorkspaceDifficultyField::Level:
         if (difficulty->level == value) return false;
@@ -244,7 +254,15 @@ bool ChartWorkspace::addDifficulty(int difficultyId)
         || document_.difficulty(difficultyId) != nullptr) {
         return false;
     }
-    document_.ensureDifficulty(difficultyId);
+    // Read the slot's chart-less &des_N before materializing the difficulty:
+    // once difficulties_ owns the id, toText() stops emitting the standalone
+    // record, so an unadopted name would silently vanish from the file.
+    const QString recordedDesigner = document_.designerForSlot(difficultyId);
+    SimaiDifficultyData& created = document_.ensureDifficulty(difficultyId);
+    // Under the unified mode a new difficulty joins the shared name at birth.
+    // The broadcast only fires on an edit, so without this seed the difficulty
+    // would sit blank until the next designer edit — the v1 gap this replaces.
+    created.designer = unifiedDesignerEnabled_ ? document_.designer : recordedDesigner;
     activeDifficultyId_ = difficultyId;
     refreshSourceAndDirty();
     commit();
@@ -280,9 +298,20 @@ bool ChartWorkspace::unifyDesigners(const QString& canonicalName)
     return true;
 }
 
+bool ChartWorkspace::setUnifiedDesignerEnabled(bool enabled)
+{
+    if (unifiedDesignerEnabled_ == enabled) return false;
+    unifiedDesignerEnabled_ = enabled;
+    // Mode only: no document field moves here, so dirty state must not move
+    // either. The commit exists so the shell can repaint the checkbox.
+    commit();
+    return true;
+}
+
 bool ChartWorkspace::setDesignerForSlot(int difficultyId, const QString& name)
 {
     if (!hasDocument_ || !SimaiDocument::isDifficultyId(difficultyId)) return false;
+    if (unifiedDesignerEnabled_) return unifyDesigners(name);
     if (document_.designerForSlot(difficultyId) == name) return false;
     document_.setDesignerForSlot(difficultyId, name);
     refreshSourceAndDirty();
@@ -349,6 +378,7 @@ ChartWorkspaceResult ChartWorkspace::closeDocument()
     activeDifficultyId_ = 0;
     hasDocument_ = false;
     dirty_ = false;
+    unifiedDesignerEnabled_ = false;
     return commit();
 }
 

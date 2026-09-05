@@ -210,45 +210,56 @@ names are assembly forwards.
   Latency writes it with `updateDocumentField(First)`. Timeline and export read
   `applicationServices_.workspace().document()`. Hidden `firstEdit_` is display only.
   `applyCurrentFieldToDocument` only clears the widget dirty latch.
-- **Header 顶部显示 preference (offset vs designer):** the header field pair next to Lv is
-  switchable — `Session::EditorHeaderTopDisplay` (`Offset` default / `Designer`), state
-  `editorHeaderTopDisplay_`, persisted as `ui.editor_header_top_display` (`"offset"`/`"designer"`),
-  preference row at the top of Preferences → 编辑器. In Designer mode the header shows
-  `difficultyDesignerLabel_` + `difficultyDesignerEdit_` (`&des_N` of the active difficulty,
-  re-added in `SessionBootstrap.cpp`); visibility is applied by
-  `updateEditorHeaderLayoutMode`, apply chain `Session::applyEditorHeaderTopDisplay` →
-  `EditorSection::applyEditorHeaderTopDisplay`. The hidden pair's edit is still populated
-  (`populateDifficultyPage`) and recaptured on commit/autosave, so reads are unconditional; any
-  code that rewrites designers behind the header's back must call
-  `DocumentSection::syncHeaderDesignerEditFromModel` (designer dialog commit, unified reconcile,
-  unified broadcast, preference flip all do).
-- **Per-difficulty designers + unified designer:** managed from a modal dialog, NOT a persistent
-  checkbox. The metadata designer row has a "管理多个难度名义" button →
-  `Session::onManagePerDifficultyDesigners` → `DocumentSection::openPerDifficultyDesignerDialog`
-  (`DocumentFlow.cpp`): seven rows for `&des_1..7` plus the "所有难度采用相同名义"
-  toggle, committed on OK. When the toggle is turned ON, ≤1 distinct non-empty name unifies
-  silently; otherwise `promptCanonicalDesignerName` lets the user pick the canonical name or
-  "clear all". Per-project pref key `unified_designer_enabled`;
-  `SimaiDocument::inferUnifiedDesignerDefault()` is **always false** (never auto-enable).
+- **Difficulty header fields:** the header row above the editor (`EditorPane.qml`) shows 等级,
+  谱师 (`&des_N` of the active difficulty) and 延迟 (`&first`) side by side, each committing on
+  `editingFinished` through `QmlDocumentModel`. v1's 顶部显示 preference
+  (`ui.editor_header_top_display`, offset-vs-designer swap on one shared slot) and the hidden
+  `difficultyDesignerEdit_` / `syncHeaderDesignerEditFromModel` widget-mirroring chain are gone
+  with the Widgets shell: there is one model, so nothing has to be re-synced behind the header's
+  back after a designer rewrite.
+- **Per-difficulty designers + unified designer:** managed from a modal QML dialog, NOT a
+  toolbar switch. `src/app/qml_ui/editor/DesignerSlotsDialog.qml` (single entry point: the metadata
+  mode bar's 谱师名义管理 button in `EditorPane.qml`, reachable from 表单 and 字段源码 alike)
+  edits seven `&des_1..7` rows plus the "所有难度采用相同名义" checkbox on a
+  local copy; 取消 writes nothing. Turning the checkbox on with ≤1 distinct non-empty name
+  unifies silently, otherwise an in-dialog picker offers each candidate plus `document.clear_all`
+  ("直接清除" = empty shared name). 确定 submits everything as ONE transaction:
+  `QmlCommandService::applyDesignerSlots` → `QmlDocumentModel::applyDesignerSlots` →
+  `DocumentBridge::applyDocumentDesignerSlots` → `DocumentSessionHost::applyDocumentDesignerSlots`
+  (`DocumentDesignerFlow.cpp`), which writes the rows with the mode OFF (a write under the mode is
+  a broadcast, so seven rows would collapse into the last one), then re-enables and unifies, then
+  records the preference.
+  - **The mode is a `ChartWorkspace` session invariant**, not a flag each call site must remember:
+    `setUnifiedDesignerEnabled` / `unifiedDesignerEnabled`. While it is on,
+    `updateDocumentField(Designer)`, `updateDifficultyField(Designer)` and `setDesignerForSlot`
+    all route into `unifyDesigners`, and `addDifficulty` seeds the new difficulty with `&des`.
+    `openSource` / `closeDocument` reset it — the mode dies with the document.
+  - **Preference (per project, key `unified_designer_enabled`, v1-compatible):** written in exactly
+    two places — the dialog transaction, and the load-time self-heal. Opening a chart calls
+    `DocumentBridge::reconcileUnifiedDocumentDesigner(DocumentOpened)`: if the stored value is true
+    AND `SimaiDocument::isUnifiedDesignerTriviallySafe()` agrees, the mode is restored; if the
+    document diverged, the PREFERENCE is silently lowered to false and the document is left
+    untouched. **Nothing on the load path may write a document field** — that is what keeps a
+    freshly opened chart clean (rewriting `&des_N` at load is what made v1 report unsaved changes
+    at startup), and `QmlDocumentLifecycleContractSpec` enforces it. An untitled document parks the
+    choice in `State::pendingUnifiedDesignerPreference_` until a save gives it a directory
+    (flushed from `syncRuntimeFromWorkspace`). A wholesale source replacement (字段源码 edit,
+    discard/restore, backup restore) calls the same entry point with `SourceReplaced`: if the new
+    content no longer satisfies the mode, the mode steps down instead of broadcasting over it.
   - **Chart-less `&des_N` (standalone designers):** a slot 1..7 can hold a designer name without a
     chart. `SimaiDocument` keeps these in `standaloneDesigners_` (disjoint from `difficulties_`),
     API `designerForSlot` / `setDesignerForSlot` / `standaloneDesignerIds` / `perDifficultyDesigners`.
     `fromText` post-pass moves a designer-only difficulty (empty level+chart, non-empty designer)
     into the standalone map; `toText` emits a bare `&des_N=` for it (no phantom `&lv_N`/`&inote_N`,
-    no sidebar entry). The dialog writes chart-less names via `setDesignerForSlot`.
-  **Unified sync invariant — every designer-touching path must preserve it** (sync set): edit-time
-  broadcast `applyCurrentFieldToDocument` (both the metadata top-`&des` branch AND the difficulty
-  branch's header `difficultyDesignerEdit_` — see the 顶部显示 preference above); apply
-  `applyUnifiedDesignerName`; load reconcile
-  `refreshUnifiedDesignerStateForLoadedDocument`; new-difficulty seed
-  (`SessionBootstrap.cpp`); undo-delete restore re-seed
-  (`DocumentEditorState.cpp`); autosave snapshot mirror (`currentDocumentTextForAutosave`,
-  which captures the live header designer text and treats it as canonical under unified mode).
-  All broadcast/apply sites iterate `perDifficultyDesigners()` + `setDesignerForSlot` so standalone
-  `&des_N` participate too. Cross-page UI sync = mirror `designerEdit_` (metadata) and call
-  `syncHeaderDesignerEditFromModel` (header) after model-side rewrites — the broadcast block,
-  dialog commit, and `applyUnifiedDesignerName` all do both. The free-form "Other &xx Fields"
-  editor must parse via
+    no sidebar entry). The dialog, the candidate list and every broadcast include these slots;
+    `addDifficulty` adopts the slot's recorded name so materializing a difficulty cannot drop it.
+  **Unified sync invariant — the sites that still carry their own rule** (sync set): the dialog
+  transaction (above); the undo-delete restore in `DocumentEditorState.cpp`, which must re-seed the
+  restored section from the current `&des` (restoring the snapshot's stale name would broadcast it
+  everywhere); and the load/replace reconcile. Autosave deliberately does NOT re-unify: QML commits
+  edits straight into `ChartWorkspace`, so `currentDocumentTextForAutosave` serializes the snapshot
+  verbatim (v1's `capturedDesignerFromUi` guess-by-active-view is gone, and autosave never touches
+  the preference). The free-form "Other &xx Fields" editor must parse via
   `SimaiDocument::parseUnmanagedFields` (not `parseRawFields`) so a manually typed managed key
   (`des`/`des_N`/`lv_N`/`inote_N`/title/artist/first/video) can't bypass the model and emit a
   duplicate/divergent line.

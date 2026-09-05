@@ -14,7 +14,6 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
-#include "common/ProjectPreferences.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -220,6 +219,10 @@ void miacode::runtime::DocumentSessionHost::applyBackupFile(const QString& norma
         workspace.openSource(backupText, state_.currentFilePath_);
         workspace.rebindSavePoint(diskReferenceText);
     }
+    // A backup can carry designer names the live document had unified; the
+    // restored content decides whether the mode still holds.
+    reconcileUnifiedDocumentDesigner(
+        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced);
     loadDocument();
     state_.autosaveReferenceContentSignature_ = autosaveContentSignature(diskReferenceText);
     state_.autosaveLastLatestContentSignature_.clear();

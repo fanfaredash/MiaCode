@@ -31,16 +31,21 @@ public:
     bool updateActiveChartText(const QString& value);
     Session::DocumentSourceReplaceResult replaceDocumentSourceText(const QString& value);
     bool addDocumentDifficulty(int difficultyId);
-    bool unifiedDocumentDesignerEnabled() const override;
-    void enableUnifiedDocumentDesigner(const QString& canonicalName) override;
-    void disableUnifiedDocumentDesigner() override;
+    bool applyDocumentDesignerSlots(const QVector<QPair<int, QString>>& slotValues,
+                                    bool unified, const QString& canonicalName) override;
     bool applyCommittedQmlDocument(
         const QString& sourceText, const QString& filePath, int activeDifficultyId,
         bool dirty, quint64 revision, Session::QmlDocumentCommitKind kind,
         bool usedSystemEncoding);
-    // Unified-designer preference persistence is currently detached. The v1
-    // load/save behavior must be re-investigated before this mode is wired to
-    // project preferences again.
+    // Reconciles the project's "all difficulties share one designer"
+    // preference with the document that was just opened. The document is the
+    // source of truth: when it no longer satisfies the preference the
+    // PREFERENCE is lowered (silently, on disk), never the document. Nothing
+    // here may write a document field — that is what keeps a freshly opened
+    // chart clean. Also used after a whole-source replacement, where the user
+    // can hand-edit &des_N past the mode's back.
+    void reconcileUnifiedDocumentDesigner(
+        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason reason) override;
     bool openFileAtPath(const QString& path, bool showErrors = true);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     // Continuation of restoreBackupFilePath once the confirm is answered.
@@ -169,17 +174,19 @@ public:
 private:
     void schedulePendingAbnormalExitBackupRestore();
     void runPendingAbnormalExitBackupRestore();
-    // Broadcast the chosen designer name into the top &des, every
-    // per-difficulty designer (charted and standalone), and the metadata-page
-    // designer line edit. Used by the load-time reconcile.
-    void applyUnifiedDesignerName(const QString& canonicalName);
-    // Modal picker shown when the user enables the option but no single
-    // canonical name exists yet. Lists every distinct non-empty designer
-    // found in the document plus a "Clear all" option, and writes the
-    // user's selection (or an empty string for "Clear all") to *out.
-    // Returns false if the user cancels — callers should revert the
-    // checkbox to OFF in that case.
-    bool promptCanonicalDesignerName(const QStringList& candidates, QString* out);
+    // Records the mode in the chart project's preferences sidecar. A document
+    // with no path yet keeps the value in State::pendingUnifiedDesignerPreference_
+    // until the first save gives it somewhere to live.
+    void writeUnifiedDesignerPreference(bool enabled);
+    // Steps the mode down when a wholesale source replacement left the
+    // document no longer satisfying it.
+    void demoteUnifiedDesignerAfterSourceReplacement();
+    // Writes the choice an untitled document could not record, once a save has
+    // given the project a directory.
+    void flushPendingUnifiedDesignerPreference();
+    // Applies the mode the workspace now reports to the dirty state, window
+    // title and field-commit anchor after a designer transaction.
+    void refreshAfterDesignerTransaction();
     // The heavy body of switchToExportField(), run one event-loop tick later so
     // the busy spinner can paint before the build blocks the UI thread.
     void performSwitchToExportField();

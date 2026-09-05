@@ -262,7 +262,6 @@ public:
     bool seekPreviewToEditorLocation(int difficultyId, int line, int column);
     // v2 binds the same ShortcutRegistry ids directly in QML instead of using
     // the hidden v1 window's shortcut action layer.
-    bool documentUnifiedDesignerEnabled() const;
     bool updateDocumentField(DocumentField field, const QString& value);
     bool updateDifficultyField(int difficultyId, DifficultyField field, const QString& value);
     bool updateActiveChartText(const QString& value);
@@ -273,8 +272,8 @@ public:
     bool selectDocumentDifficulty(int difficultyId);
     bool addDocumentDifficulty(int difficultyId);
     bool removeDocumentDifficulty(int difficultyId);
-    void enableUnifiedDocumentDesigner(const QString& canonicalName);
-    void disableUnifiedDocumentDesigner();
+    bool applyDocumentDesignerSlots(const QVector<QPair<int, QString>>& slotValues,
+                                    bool unified, const QString& canonicalName);
     // ChartWorkspace has already committed. The window refreshes hidden widgets,
     // timeline, and preview from that workspace. It does not keep a SimaiDocument.
     bool applyCommittedQmlDocument(

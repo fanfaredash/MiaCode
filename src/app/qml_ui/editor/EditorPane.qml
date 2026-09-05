@@ -291,37 +291,17 @@ Item {
                 = root.viewState.metadataEditorMode === 0 ? 1 : 0
         }
 
-        AppSwitch {
-            id: unifiedDesignerSwitch
+        // 谱师名义管理 replaces the old 统一谱师 switch: the seven &des_N slots and
+        // the shared-name checkbox live in one dialog, so a toggle can never
+        // rewrite names without showing what it is about to overwrite. It sits
+        // on this bar rather than in the form so it is reachable from 字段源码
+        // mode too.
+        AppButton {
             anchors.right: parent.right
             anchors.rightMargin: Theme.panelPadding
             anchors.verticalCenter: parent.verticalCenter
-            text: UiText.text("统一谱师")
-
-            onToggled: {
-                if (checked === root.documentSession.unifiedDesignerEnabled)
-                    return
-                if (!checked) {
-                    root.commands.disableUnifiedDesigner()
-                    return
-                }
-                const candidates = root.documentSession.designerCandidates
-                if (candidates.length > 1) {
-                    canonicalDesignerDialog.candidates = candidates
-                    designerChoice.currentIndex = 0
-                    checked = root.documentSession.unifiedDesignerEnabled
-                    canonicalDesignerDialog.open()
-                    return
-                }
-                root.commands.enableUnifiedDesigner(
-                    candidates.length === 1 ? candidates[0] : "")
-            }
-
-            Binding {
-                target: unifiedDesignerSwitch
-                property: "checked"
-                value: root.documentSession.unifiedDesignerEnabled
-            }
+            text: UiText.text("document.designer_management")
+            onClicked: designerSlotsDialog.open()
         }
     }
 
@@ -455,36 +435,11 @@ Item {
         font.pixelSize: Theme.uiFontSize
     }
 
-    AppDialog {
-        id: canonicalDesignerDialog
+    DesignerSlotsDialog {
+        id: designerSlotsDialog
 
-        property var candidates: []
-
-        title: UiText.text("选择统一谱师")
-        footer: DialogFooter {
-            acceptText: UiText.text("确定")
-            cancelText: UiText.text("取消")
-            onAccepted: canonicalDesignerDialog.accept()
-            onRejected: canonicalDesignerDialog.reject()
-        }
-        onAccepted: root.commands.enableUnifiedDesigner(designerChoice.currentText)
-        onRejected: unifiedDesignerSwitch.checked = root.documentSession.unifiedDesignerEnabled
-
-        body: ColumnLayout {
-            spacing: 8
-
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: UiText.text("当前存在多个谱师名义，请选择要统一使用的值。")
-                color: Theme.colors.text.primary
-            }
-            AppComboBox {
-                id: designerChoice
-                Layout.fillWidth: true
-                model: canonicalDesignerDialog.candidates
-            }
-        }
+        documentSession: root.documentSession
+        commands: root.commands
     }
 
     ChoiceDialog {

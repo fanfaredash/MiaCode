@@ -80,16 +80,49 @@ bool verifyBackendReplacementPublishesOneQmlRefresh(QTextStream& err)
                        && editorPane.contains(QStringLiteral("tabs.requestCloseTab(viewState.activeEditorKey)"))
                        && !viewState.contains(QStringLiteral("function closeActiveEditor()")),
                    QStringLiteral("keyboard tab-close routes through EditorTabBar's dirty guard instead of closing the ViewState directly"), err)
-        && require(!documentUi.contains(QStringLiteral("refreshUnifiedDesignerStateForLoadedDocument"))
-                       && !documentModel.contains(QStringLiteral("refreshUnifiedDesignerStateForLoadedDocument"))
-                       && !designerFlow.contains(QStringLiteral("unified_designer_enabled"))
-                       && !documentBridge.contains(QStringLiteral("refreshUnifiedDesignerStateForLoadedDocument"))
-                       && documentFileFlow.contains(QStringLiteral("state_.unifiedDesignerEnabled_ = false")),
-                   QStringLiteral("unified-designer preference load wiring stays detached pending v1 review"), err)
+        // Opening a chart reads the project's shared-designer preference and may
+        // lower it, but must never write a document field: rewriting &des_N at
+        // load is what made a freshly opened chart report unsaved changes.
+        // Everything below the reconcile entry point is the load/self-heal half
+        // of the flow, so "no document write appears after it" is the ban,
+        // stated the only way a source contract can state it. Keep
+        // applyDocumentDesignerSlots — the one document writer — above it.
+        && require(designerFlow.contains(QStringLiteral("unified_designer_enabled"))
+                       && containsAfter(designerFlow,
+                                        QStringLiteral("::reconcileUnifiedDocumentDesigner("),
+                                        QStringLiteral("isUnifiedDesignerTriviallySafe()"))
+                       && containsAfter(designerFlow,
+                                        QStringLiteral("::reconcileUnifiedDocumentDesigner("),
+                                        QStringLiteral("project_preferences::save"))
+                       && !containsAfter(designerFlow,
+                                         QStringLiteral("::reconcileUnifiedDocumentDesigner("),
+                                         QStringLiteral("unifyDesigners"))
+                       && !containsAfter(designerFlow,
+                                         QStringLiteral("::reconcileUnifiedDocumentDesigner("),
+                                         QStringLiteral("setDesignerForSlot"))
+                       && !designerFlow.contains(QStringLiteral("rebindSavePoint"))
+                       && !designerFlow.contains(QStringLiteral("markSaved")),
+                   QStringLiteral("the unified-designer preference reconcile adjusts the mode and the sidecar, never the document"), err)
+        && require(containsAfter(documentFileFlow,
+                                 QStringLiteral("workspace.openSource(source, normalizedPath);"),
+                                 QStringLiteral("reconcileUnifiedDocumentDesigner("))
+                       && containsAfter(documentModel,
+                                        QStringLiteral("result = fileService_->open(path);"),
+                                        QStringLiteral("UnifiedDesignerReconcileReason::DocumentOpened"))
+                       && !documentFileFlow.contains(QStringLiteral("state_.unifiedDesignerEnabled_")),
+                   QStringLiteral("both open routes reconcile the preference through the one bridge entry point"), err)
+        && require(documentBridge.contains(QStringLiteral("applyDocumentDesignerSlots"))
+                       && !documentBridge.contains(QStringLiteral("enableUnifiedDocumentDesigner"))
+                       // The label of the switch this replaced, not the word:
+                       // a comment explaining the change is not a regression.
+                       && !editorPane.contains(QStringLiteral("UiText.text(\"统一谱师\")"))
+                       && !editorPane.contains(QStringLiteral("AppSwitch"))
+                       && editorPane.contains(QStringLiteral("designerSlotsDialog.open()")),
+                   QStringLiteral("the designer dialog is the only way into the shared-designer mode"), err)
         && require(autosaveFlow.contains(QStringLiteral("snapshot.ensureDifficulty(state_.activeDifficultyId_)"))
                        && !autosaveFlow.contains(QStringLiteral("capturedDesignerFromUi"))
-                       && !autosaveFlow.contains(QStringLiteral("state_.unifiedDesignerEnabled_ &&")),
-                   QStringLiteral("autosave serializes the workspace snapshot without silently re-unifying designers"), err);
+                       && !autosaveFlow.contains(QStringLiteral("project_preferences")),
+                   QStringLiteral("autosave serializes the workspace snapshot and never touches the designer preference"), err);
 }
 
 bool verifyQmlNewDocumentUsesRequestServices(QTextStream& err)

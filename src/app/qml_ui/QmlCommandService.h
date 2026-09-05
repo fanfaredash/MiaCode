@@ -40,8 +40,10 @@ public:
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);
-    Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
-    Q_INVOKABLE void disableUnifiedDesigner();
+    // 谱师名义管理 dialog result: per-slot names, the shared-name checkbox, and
+    // the name it settled on, applied as one transaction.
+    Q_INVOKABLE bool applyDesignerSlots(const QVariantList& slotValues, bool unified,
+                                        const QString& canonicalName);
     // The registry ids v2 binds as window shortcuts, in one place so QML does
     // not carry a second copy of the command table. The shell binds them to the
     // editor, not back to the backend — see QmlDocumentModel::transformChartSelection.

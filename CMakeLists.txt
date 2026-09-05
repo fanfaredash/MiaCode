@@ -688,6 +688,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/editor/SourceEditor.qml
     src/app/qml_ui/editor/CompletionPopup.qml
     src/app/qml_ui/editor/NormalizeOptionsDialog.qml
+    src/app/qml_ui/editor/DesignerSlotsDialog.qml
     src/app/qml_ui/media/MediaToolsDialog.qml
     src/app/qml_ui/media/PvBatchCompressionDialog.qml
     src/app/qml_ui/media/PrependBlankDialog.qml

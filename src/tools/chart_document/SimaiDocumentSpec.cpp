@@ -126,6 +126,33 @@ void runSpecs(QTextStream& out, int* failed)
         expectEqual(rendered.join(','), "2:Two,4:Four,6:", "perDifficultyDesigners merges & sorts", failed, out);
     }
 
+    // --- isUnifiedDesignerTriviallySafe: the load-time judgement. ---
+    //
+    // Opening a chart asks this whether the project's stored "all difficulties
+    // share one designer" preference still matches the file. True restores the
+    // mode; false silently lowers the PREFERENCE and leaves the document
+    // untouched, which is why a freshly opened chart is never dirty. Every
+    // designer-bearing slot counts, chart-less `&des_N` included.
+    {
+        const auto verdict = [](const char* text) {
+            return SimaiDocument::fromText(QString::fromUtf8(text)).isUnifiedDesignerTriviallySafe();
+        };
+        expectTrue(verdict("&des=X\n&lv_5=12\n&des_5=X\n&inote_5=(120){1}1,\n"
+                           "&lv_6=13\n&des_6=X\n&inote_6=(120){1}2,\n"),
+                   "every &des_N matching &des satisfies the shared-designer mode", failed, out);
+        expectTrue(verdict("&des=X\n&title=Song\n"),
+                   "a chart with no difficulties satisfies it", failed, out);
+        expectTrue(verdict("&title=Song\n&lv_5=12\n&des_5=\n&inote_5=(120){1}1,\n"),
+                   "an all-blank project satisfies it", failed, out);
+        expectTrue(!verdict("&des=X\n&lv_5=12\n&des_5=\n&inote_5=(120){1}1,\n"),
+                   "a difficulty with no name of its own does not satisfy it", failed, out);
+        expectTrue(!verdict("&des=X\n&lv_5=12\n&des_5=X\n&inote_5=(120){1}1,\n"
+                            "&lv_6=13\n&des_6=Y\n&inote_6=(120){1}2,\n"),
+                   "a second distinct name does not satisfy it", failed, out);
+        expectTrue(!verdict("&des=X\n&des_3=Y\n&lv_5=12\n&des_5=X\n&inote_5=(120){1}1,\n"),
+                   "a chart-less &des_N that disagrees does not satisfy it either", failed, out);
+    }
+
     // --- A fully-empty difficulty (no name) is NOT swept into standalone. ---
     {
         // An empty &inote_7 with no name is a freshly-added blank difficulty;
