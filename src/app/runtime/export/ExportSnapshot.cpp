@@ -440,8 +440,7 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
     }
 
     session_.ensurePreviewSfxRuntimePrepared();
-    // Drop any retained pause transaction the previously-installed difficulty
-    // left behind so the first Play starts clean from 0.
+    // 清理上一难度的音效事务，目标场景使用继承的进度建立播放状态。
     if (session_.previewSfxRuntime_ != nullptr) {
         session_.previewSfxRuntime_->stopAll();
         session_.previewSfxRuntime_->clearRetainedPreviewPlaybackTransaction();
@@ -476,24 +475,14 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
     const auto clampToDuration = [durationSeconds](double second) {
         return durationSeconds > 0.0 ? qBound(0.0, second, durationSeconds) : qMax(0.0, second);
     };
-    double startSecond = 0.0;
+    double startSecond = clampToDuration(qMax(0.0, session_.pauseSecond_));
     if (session_.exportPreviewEntrySeedSecond_ >= 0.0) {
         // One-shot seed carried in on page entry / re-entry
         // (performSwitchToExportField) so switching to the export page preserves
         // progress like a difficulty-tab switch does.
         startSecond = clampToDuration(session_.exportPreviewEntrySeedSecond_);
-    } else if (session_.lastExportAuditionDifficultyId_ == difficultyId) {
-        // Re-installing the SAME difficulty WITHOUT a page switch — the 视频导出 →
-        // 封面 → 视频导出 sub-tab dance destroys and recreates the panel. The old
-        // teardown stopped playback with keepPosition, so pauseSecond_ still
-        // holds the position; preserve it instead of snapping to 0 (which would let
-        // refreshExportIntroState default the playhead to the 片头 head, -kDuration).
-        startSecond = clampToDuration(qMax(0.0, session_.pauseSecond_));
     }
-    // else: genuine first install for this difficulty (or a badge switch to a
-    // different one) → start at 0; 片头-on then shows the intro head as intended.
     session_.exportPreviewEntrySeedSecond_ = -1.0;
-    session_.lastExportAuditionDifficultyId_ = difficultyId;
     // Non-command write: installing the audition scene at a carried-over or
     // default position, not a seek — see PlaybackStateAuthority.h.
     if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
@@ -503,6 +492,7 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
         session_.timelineQuickStateBridge_->setPlayheadSeconds(startSecond, false);
     }
     session_.scene_->setPlayheadSeconds(startSecond, true);
+    session_.refreshPreviewObjectStatsTotals(previewState.shiftedNoteMarkers);
     session_.publishPreviewPlayhead();
 
     // SFX timeline for this difficulty's notes.
@@ -524,6 +514,10 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
     // Set up the negative-time intro region (slider range + default playhead at
     // the intro head) when 添加片头 is on for this difficulty.
     session_.refreshExportIntroState();
+    if (!session_.exportIntroRegionActive_) {
+        // 场景、进度条、时间轴与视频定位通过暂停 seek 流程同步。
+        session_.requestPausedPreviewSeek(startSecond, false, true);
+    }
 
     // The scene is playable, and this is what it was built from. Comparing the
     // chart text is a truer staleness test than the timeline revision counter

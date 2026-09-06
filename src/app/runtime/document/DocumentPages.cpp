@@ -155,17 +155,10 @@ bool miacode::runtime::DocumentSessionHost::switchToExportField()
 void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
 {
     const int previousActiveDifficultyId = state_.activeDifficultyId_;
-    // A first export-page entry is a WYSIWYG preview of the complete export and
-    // therefore starts at chart time zero (the intro policy may then move it to
-    // the negative intro head). Only an export-page re-entry carries the live
-    // position; ExportSnapshot consumes this one-shot seed exactly once, while
-    // same-page panel rebuilds use their existing pause-position branch.
-    const bool reenteringExport = state_.exportPreviewAuditionActive_;
-    state_.exportPreviewEntrySeedSecond_ = reenteringExport
-        ? qMax(0.0, state_.playing_
+    // 编辑与导出页面继承当前谱面时间，安装目标场景时消费此位置。
+    state_.exportPreviewEntrySeedSecond_ = qMax(0.0, state_.playing_
               ? session_.currentPreviewAuthoritativeAudioClockSecond()
-              : state_.pauseSecond_)
-        : 0.0;
+              : state_.pauseSecond_);
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -371,6 +364,7 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
     // mode-aware dispatch entry pushes the user's real mix (see
     // applyPreviewAudioSettingsToRuntime) — not a special-cased override.
     session_.applyPreviewAudioSettingsToRuntime();
+    session_.publishPreviewPlayhead();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     QTimer::singleShot(0, &session_, [this, difficultyId]() {
@@ -430,7 +424,6 @@ void miacode::runtime::DocumentSessionHost::loadDocument()
     if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
         authority->repositionSilently(0.0, "load_document");
     }
-    state_.lastExportAuditionDifficultyId_ = 0;
     state_.activeDifficultyId_ = snapshot.activeDifficultyId;
     if (SimaiDocument::isDifficultyId(state_.activeDifficultyId_)) {
         state_.projectLastOpenedDifficultyId_ = state_.activeDifficultyId_;

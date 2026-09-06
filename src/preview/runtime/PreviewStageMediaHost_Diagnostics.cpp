@@ -629,9 +629,8 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
     // A D3D11VA hardware frame stays a zero-copy RhiTexture handle here.
     lastVideoFrame_ = frame;
     observePvMemoryFrame(frame, {});
-    if (ptsSeconds >= 0.0) {
-        lastFramePtsSeconds_ = ptsSeconds;
-    }
+    lastFramePtsSeconds_ = ptsSeconds;
+    lastFrameDurationSeconds_ = qMax(0.0, durationSeconds);
     if (videoSink_ != nullptr) {
         videoSink_->setVideoFrame(frame);
     }

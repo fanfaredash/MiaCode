@@ -106,6 +106,10 @@ quint64 miacode::runtime::PlaybackCoordinator::requestPausedPreviewVisualSeek(
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     const quint64 generation = ++state_.pausedSeekGeneration_;
     state_.pausedSeekTargetSecond_ = clampedSecond;
+    if (state_.pendingDifficultySwitchPreviewRestore_) {
+        // 谱面解析期间的用户定位成为恢复目标，保持异步刷新与当前进度一致。
+        state_.pendingDifficultySwitchPreviewRestoreSecond_ = clampedSecond;
+    }
     state_.previewPendingSeekSecond_ = clampedSecond;
     state_.previewPendingSeekCenterView_ = centerView;
     if (logHotPath) {
@@ -173,7 +177,10 @@ void miacode::runtime::PlaybackCoordinator::requestPausedPreviewSeek(
         return;
     }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
-        ui_.previewSeekDebounceTimer_->start();
+        // 固定窗口合并拖动目标，连续输入保持当前提交期限。
+        if (!ui_.previewSeekDebounceTimer_->isActive()) {
+            ui_.previewSeekDebounceTimer_->start();
+        }
     } else {
         maybeSubmitLatestPausedMediaSeek();
     }
@@ -248,8 +255,6 @@ void miacode::runtime::PlaybackCoordinator::handlePausedPreviewMediaSeekComplete
     state_.pausedSeekMediaPending_ = false;
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.pausedSeekMediaAckGeneration_ = generation;
-    playbackState_.qtPreviewStartSecond_ = second;
-    playbackState_.qtPreviewElapsed_.restart();
     refreshPreviewStageMediaRouteDebugState(state_, false);
     if (generation < state_.pausedSeekGeneration_) {
         appendQuickShellBackendLog(

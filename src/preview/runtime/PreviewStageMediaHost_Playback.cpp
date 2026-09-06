@@ -666,7 +666,8 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
     }
 
     lastTimelineSecond_ = clampedSecond;
-    const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
+    const qint64 requestedMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
+    const qint64 targetMs = player_->duration() > 0 ? qMin(requestedMs, player_->duration()) : requestedMs;
     pausedSeekGeneration_ = generation;
     pausedSeekTargetMs_ = targetMs;
     pausedSeekTargetSecond_ = clampedSecond;
@@ -677,8 +678,13 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
             .arg(generation)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(targetMs));
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
-        // Already showing this frame — ack on the next event-loop turn.
+    // 复用条件取自显示帧的时间范围，seek 请求位置无法证明画面到达。
+    const bool displayedFrameCoversTarget = lastVideoFrame_.isValid()
+        && lastFramePtsSeconds_ >= 0.0
+        && targetMs >= qRound64(lastFramePtsSeconds_ * 1000.0)
+        && (targetMs < qRound64((lastFramePtsSeconds_ + lastFrameDurationSeconds_) * 1000.0)
+            || targetMs == qRound64(lastFramePtsSeconds_ * 1000.0));
+    if (displayedFrameCoversTarget) {
         QMetaObject::invokeMethod(this, [this, generation, clampedSecond]() {
             if (!pausedSeekCompletionPending_ || pausedSeekGeneration_ != generation) {
                 return;
@@ -713,7 +719,8 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
     }
 
     lastTimelineSecond_ = clampedSecond;
-    const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
+    const qint64 requestedMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
+    const qint64 targetMs = player_->duration() > 0 ? qMin(requestedMs, player_->duration()) : requestedMs;
     pausedSeekGeneration_ = generation;
     pausedSeekTargetMs_ = targetMs;
     pausedSeekTargetSecond_ = clampedSecond;
@@ -725,7 +732,13 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
             .arg(clampedSecond, 0, 'f', 6)
             .arg(targetMs)
     );
-    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < kSeekCoalesceToleranceMs) {
+    const QVideoFrame displayedFrame = videoSink_ != nullptr ? videoSink_->videoFrame() : QVideoFrame();
+    const qint64 targetUs = targetMs * 1000;
+    const bool displayedFrameCoversTarget = displayedFrame.isValid()
+        && displayedFrame.startTime() >= 0
+        && targetUs >= displayedFrame.startTime()
+        && (targetUs < displayedFrame.endTime() || targetUs == displayedFrame.startTime());
+    if (displayedFrameCoversTarget) {
         QMetaObject::invokeMethod(
             this,
             [this, generation, clampedSecond]() {
@@ -903,11 +916,7 @@ void PreviewStageMediaHost::pausePlayback()
     if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
         player_->pause();
     }
-    pausedSeekCompletionPending_ = false;
-    pausedSeekTargetMs_ = -1;
-    pausedSeekTargetSecond_ = 0.0;
-    pausedSeekGeneration_ = 0;
-    ++pausedSeekTimeoutSerial_;
+    // 暂停保留执行中的 seek 及其超时确认，上层等待完成后提交最新目标。
     // A stale-EndOfMedia recovery seek may still be in flight; its `seeked` handler
     // would otherwise resume playback and undo this pause.
     staleEndOfMediaResumePending_ = false;
