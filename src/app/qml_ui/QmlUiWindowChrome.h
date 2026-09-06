@@ -33,6 +33,7 @@ private:
     void extendDwmFrame() const;
     void applyMacOs(QWindow* window);
     void setTitleBarLeadingInset(qreal inset);
+    void handleWindowVisibleChanged(bool visible);
 
     QPointer<QWindow> window_;
     quintptr nativeHandle_ = 0;
