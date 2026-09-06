@@ -75,6 +75,8 @@ public:
                                                const QString& text, int tokenStart);
     Q_INVOKABLE bool seekPreviewToEditorLocation(int difficultyId, qulonglong revision,
                                                   int line, int column);
+    Q_INVOKABLE bool requestSelectionRangeExport(int difficultyId, qulonglong revision,
+                                                  int selectionStart, int selectionEnd);
 
 signals:
     void followChanged();
@@ -89,6 +91,7 @@ signals:
     void touchPadControlHoldChanged(bool active);
     void touchPadPreviewAnchorPublished(int difficultyId, int line, int column);
     void previewSeekPublished(int difficultyId, int line, int column);
+    void selectionRangeExportRequested(int difficultyId, int selectionStart, int selectionEnd);
     void editorContextChanged();
 
 private:
@@ -109,6 +112,13 @@ private:
         int column = 1;
     };
 
+    struct SelectionRangeExportState {
+        int difficultyId = -1;
+        quint64 revision = 0;
+        int selectionStart = 0;
+        int selectionEnd = 0;
+    };
+
     struct TouchPadRequest {
         QString pad;
         QChar separator = QLatin1Char('/');
@@ -126,6 +136,7 @@ private:
     void scheduleTouchPadControlHoldDelivery();
     void scheduleTouchPadPreviewAnchorDelivery();
     void schedulePreviewSeekDelivery();
+    void scheduleSelectionRangeExportDelivery();
     void scheduleNavigationDelivery();
     void scheduleNavigationFinished(quint64 sequence, bool applied);
     void scheduleTouchPadDelivery();
@@ -167,6 +178,10 @@ private:
     EditorLocationState pendingPreviewSeek_;
     bool previewSeekPending_ = false;
     bool previewSeekDeliveryQueued_ = false;
+
+    SelectionRangeExportState pendingSelectionRangeExport_;
+    bool selectionRangeExportPending_ = false;
+    bool selectionRangeExportDeliveryQueued_ = false;
 
     quint64 nextNavigationSequence_ = 0;
     NavigationState pendingNavigation_;

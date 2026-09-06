@@ -77,6 +77,15 @@ public:
         int selectionEnd,
         double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed,
         double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed) const;
+    // Text-based overload for callers (e.g. runtime hosts) that already hold
+    // the current plain text and should not construct a QTextDocument just to
+    // reach this resolver. Equivalent to the QTextDocument overload above.
+    TimelineExportRange resolveExportRangeForSelection(
+        const QString& text,
+        int selectionStart,
+        int selectionEnd,
+        double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed,
+        double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed) const;
     bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool resolvePreviewFollowSelectionRange(int line, int anchorCol, int* startCol, int* endCol) const;

@@ -118,6 +118,7 @@ void EditorSyncController::setEditorReadiness(
         pointerInteractionPending_ = false;
         touchPadPreviewAnchorPending_ = false;
         previewSeekPending_ = false;
+        selectionRangeExportPending_ = false;
         pendingTouchPadControlHold_ = false;
         scheduleTouchPadControlHoldDelivery();
     }
@@ -231,6 +232,18 @@ bool EditorSyncController::seekPreviewToEditorLocation(
     pendingPreviewSeek_ = {difficultyId, revision, qMax(1, line), qMax(1, column)};
     previewSeekPending_ = true;
     schedulePreviewSeekDelivery();
+    return true;
+}
+
+bool EditorSyncController::requestSelectionRangeExport(
+    int difficultyId, qulonglong revision, int selectionStart, int selectionEnd)
+{
+    if (!readinessAccepts(difficultyId, revision)) {
+        return false;
+    }
+    pendingSelectionRangeExport_ = {difficultyId, revision, selectionStart, selectionEnd};
+    selectionRangeExportPending_ = true;
+    scheduleSelectionRangeExportDelivery();
     return true;
 }
 
@@ -373,6 +386,27 @@ void EditorSyncController::schedulePreviewSeekDelivery()
             return;
         }
         emit previewSeekPublished(request.difficultyId, request.line, request.column);
+    }, Qt::QueuedConnection);
+}
+
+void EditorSyncController::scheduleSelectionRangeExportDelivery()
+{
+    if (selectionRangeExportDeliveryQueued_) {
+        return;
+    }
+    selectionRangeExportDeliveryQueued_ = true;
+    QMetaObject::invokeMethod(this, [this] {
+        selectionRangeExportDeliveryQueued_ = false;
+        if (!selectionRangeExportPending_) {
+            return;
+        }
+        const SelectionRangeExportState request = pendingSelectionRangeExport_;
+        selectionRangeExportPending_ = false;
+        if (!readinessAccepts(request.difficultyId, request.revision)) {
+            return;
+        }
+        emit selectionRangeExportRequested(
+            request.difficultyId, request.selectionStart, request.selectionEnd);
     }, Qt::QueuedConnection);
 }
 

@@ -195,6 +195,19 @@ miacode_add_spec(qml_export_font_contract_spec
 target_compile_definitions(qml_export_font_contract_spec PRIVATE
     "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+miacode_add_spec(qml_selection_range_export_contract_spec
+    OWNER src/app/qml_ui
+    CONTRACT qml-ui.qml-selection-range-export-contract
+    DOMAIN qml_ui KIND source-contract RISK normal
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/qml_ui/QmlSelectionRangeExportContractSpec.cpp
+    LIBS Qt6::Core
+    INCLUDES src
+)
+target_compile_definitions(qml_selection_range_export_contract_spec PRIVATE
+    "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
 miacode_add_spec(qml_cover_export_contract_spec
     OWNER src/app/qml_ui
     CONTRACT qml-ui.qml-cover-export-contract

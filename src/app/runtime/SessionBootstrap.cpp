@@ -94,6 +94,8 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
             this, &Session::applyTouchPadAuthoringPreviewAnchor);
     connect(editorSyncController_, &miacode::v2::EditorSyncController::previewSeekPublished,
             this, &Session::seekPreviewToEditorLocation);
+    connect(editorSyncController_, &miacode::v2::EditorSyncController::selectionRangeExportRequested,
+            this, &Session::requestSelectionRangeExport);
 
     // The preview appearance values live in the application assembly; this
     // window owns the live surfaces and the settings file, so it is what reacts
@@ -173,6 +175,8 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
                 &notify, &miacode::v2::ShellNotifications::preferencesRequested);
         connect(this, &Session::coverExportRequested,
                 &notify, &miacode::v2::ShellNotifications::coverExportRequested);
+        connect(this, &Session::selectionRangeExportPageRequested,
+                &notify, &miacode::v2::ShellNotifications::selectionRangeExportPageRequested);
     }
     settings_ = std::make_unique<miacode::runtime::SettingsHost>(*this, ui_, state_);
     stageMedia_ = std::make_unique<miacode::runtime::StageMediaHost>(*this, ui_, state_);

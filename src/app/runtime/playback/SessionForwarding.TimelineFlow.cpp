@@ -15,6 +15,7 @@
 #include "common/ChartClockCount.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
+#include "app/qml_ui/export/QmlExportSession.h"
 
 #include <QtCore>
 
@@ -250,6 +251,27 @@ bool Session::seekPreviewToEditorLocation(int difficultyId, int line, int column
     }
     suppressTimelineCursorSync_ = previousSuppressTimelineCursorSync;
     return true;
+}
+
+void Session::requestSelectionRangeExport(int difficultyId, int selectionStart, int selectionEnd)
+{
+    if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_) {
+        return;
+    }
+    double startSecond = 0.0;
+    double endSecond = 0.0;
+    if (!playback_->resolveExportRangeForSelection(selectionStart, selectionEnd, &startSecond, &endSecond)) {
+        return;
+    }
+    if (qmlExportSession_ == nullptr) {
+        return;
+    }
+    // Stash the range on the export session before asking QmlEditorPageHost to
+    // switch pages: seedFromDifficulty() (run on page entry) resets the whole
+    // task including the range, so the range must be pending state that is
+    // applied after that seed rather than a value set here directly.
+    qmlExportSession_->requestSelectionRangeExport(startSecond, endSecond);
+    emit selectionRangeExportPageRequested();
 }
 
 bool Session::editorAuthoringContextActive() const

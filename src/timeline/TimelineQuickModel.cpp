@@ -207,12 +207,25 @@ TimelineExportRange TimelineQuickModel::resolveExportRangeForSelection(
     double tapFlowSpeed,
     double touchFlowSpeed) const
 {
+    if (document == nullptr) {
+        return TimelineExportRange();
+    }
+    return resolveExportRangeForSelection(
+        document->toPlainText(), selectionStart, selectionEnd, tapFlowSpeed, touchFlowSpeed);
+}
+
+TimelineExportRange TimelineQuickModel::resolveExportRangeForSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    double tapFlowSpeed,
+    double touchFlowSpeed) const
+{
     TimelineExportRange result;
-    if (document == nullptr || selectionEnd <= selectionStart || lines_.isEmpty()) {
+    if (selectionEnd <= selectionStart || lines_.isEmpty()) {
         return result;
     }
 
-    const QString text = document->toPlainText();
     const int textLength = text.size();
     int start = qBound(0, selectionStart, textLength);
     int end = qBound(start, selectionEnd, textLength);

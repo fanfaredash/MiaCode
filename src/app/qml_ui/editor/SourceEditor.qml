@@ -504,6 +504,19 @@ Rectangle {
             root.viewState.editorCursorLine, root.viewState.editorCursorColumn)
     }
 
+    // Context-menu-only entry point: the runtime resolves the selection to an
+    // export range and switches to the video export page itself, once it has
+    // seeded that range onto QmlExportSession — see requestSelectionRangeExport.
+    function exportSelectionRange() {
+        if (!root.syncController || !root.documentSession)
+            return
+        if (sourceArea.selectionStart === sourceArea.selectionEnd)
+            return
+        root.syncController.requestSelectionRangeExport(
+            root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+            sourceArea.selectionStart, sourceArea.selectionEnd)
+    }
+
     function updateCursorPosition() {
         const text = sourceArea.text
         const pos = Math.max(0, Math.min(text.length, sourceArea.cursorPosition))
@@ -689,6 +702,12 @@ Rectangle {
         AppMenuItem {
             text: UiText.text("查找与替换")
             onTriggered: root.openFindReplace()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: UiText.text("导出选区")
+            enabled: editorContextMenu.hasSelection
+            onTriggered: root.exportSelectionRange()
         }
         AppMenuSeparator {}
 

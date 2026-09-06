@@ -619,6 +619,9 @@ void QmlExportSession::seedFromDifficulty(int difficultyId)
     emit introChanged();
     emit rangeChanged();
     emit batchChanged();
+    // Applied last: this may re-emit rangeChanged()/introChanged() with the
+    // requested range, overriding the full-range default just seeded above.
+    applyPendingSelectionRangeExport();
 }
 
 void QmlExportSession::syncAudition()
@@ -1071,6 +1074,30 @@ void QmlExportSession::setExportRangeSeconds(double start, double end)
     task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
     emit rangeChanged();
     emit introChanged();
+}
+
+void QmlExportSession::requestSelectionRangeExport(double startSecond, double endSecond)
+{
+    if (!qIsFinite(startSecond) || !qIsFinite(endSecond) || endSecond <= startSecond) {
+        return;
+    }
+    hasPendingSelectionRangeExport_ = true;
+    pendingRangeStartSeconds_ = startSecond;
+    pendingRangeEndSeconds_ = endSecond;
+}
+
+void QmlExportSession::applyPendingSelectionRangeExport()
+{
+    if (!hasPendingSelectionRangeExport_) {
+        return;
+    }
+    hasPendingSelectionRangeExport_ = false;
+    setExportRangeSeconds(pendingRangeStartSeconds_, pendingRangeEndSeconds_);
+}
+
+void QmlExportSession::clearPendingSelectionRangeExport()
+{
+    hasPendingSelectionRangeExport_ = false;
 }
 
 QString QmlExportSession::setExportStartText(const QString& text)

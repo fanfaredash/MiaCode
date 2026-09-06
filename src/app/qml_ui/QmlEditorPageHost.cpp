@@ -39,6 +39,17 @@ QmlEditorPageHost::QmlEditorPageHost(miacode::v2::ShellNotifications& notificati
     connect(&notifications, &miacode::v2::ShellNotifications::coverExportRequested, this, [this](int difficultyId) {
         openCoverExport(difficultyId);
     });
+    connect(&notifications, &miacode::v2::ShellNotifications::selectionRangeExportPageRequested, this, [this]() {
+        openVideoExportPage();
+    });
+    // requestPageSwitch() is asynchronous: openVideoExportPage() returns true
+    // once the switch is queued, and a refusal arrives here instead. Drop the
+    // staged range then, so it cannot be applied by a later unrelated entry.
+    connect(this, &QmlEditorPageHost::navigationRejected, this, [this]() {
+        if (QmlExportSession* const session = exportSessionObject(); session != nullptr) {
+            session->clearPendingSelectionRangeExport();
+        }
+    });
 }
 
 QmlExportSession* QmlEditorPageHost::exportSessionObject() const

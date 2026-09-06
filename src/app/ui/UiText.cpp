@@ -4447,6 +4447,7 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("在背景视频开头插入一段黑屏。"), {QStringLiteral("Insert black screen at the start of the background video."), QStringLiteral("背景動画の先頭に黒画面を挿入します。")}},
         {QStringLiteral("外圈亮度"), {QStringLiteral("Outer brightness"), QStringLiteral("外側の明るさ")}},
         {QStringLiteral("对齐到 384 分网格"), {QStringLiteral("Align to the 1/384 grid"), QStringLiteral("384 分グリッドに整列")}},
+        {QStringLiteral("导出选区"), {QStringLiteral("Export selection"), QStringLiteral("選択範囲をエクスポート")}},
         {QStringLiteral("导入 HUD 字体"), {QStringLiteral("Import HUD font"), QStringLiteral("HUD フォントを読み込む")}},
         {QStringLiteral("导入片头难度卡字体"), {QStringLiteral("Import intro difficulty-card fonts"), QStringLiteral("イントロ難度カードのフォントを読み込む")}},
         {QStringLiteral("将规范化整份谱面正文。"), {QStringLiteral("Normalize the entire chart source."), QStringLiteral("譜面ソース全体を正規化します。")}},

@@ -225,6 +225,18 @@ public:
     Q_INVOKABLE void setExportStartToCurrentPreview();
     Q_INVOKABLE void setExportEndToCurrentPreview();
     Q_INVOKABLE void setExportRangeSeconds(double start, double end);
+    // Runtime-only entry point (not Q_INVOKABLE): a chart selection was
+    // resolved to an export range before the page switch that will make this
+    // session active. seedFromDifficulty() resets the whole task, including
+    // the range, on every page entry/difficulty switch, so the range cannot be
+    // applied here directly — it is staged and consumed once, right after the
+    // next seed completes.
+    void requestSelectionRangeExport(double startSecond, double endSecond);
+    // Dropped when the page switch that was meant to consume the staged range
+    // is rejected: requestPageSwitch() is asynchronous, so a failure surfaces
+    // through navigationRejected() rather than a return value, and without
+    // this the range would survive to ambush an unrelated later page entry.
+    void clearPendingSelectionRangeExport();
     Q_INVOKABLE QString setExportStartText(const QString& text);
     Q_INVOKABLE QString setExportEndText(const QString& text);
     Q_INVOKABLE void startExport();
@@ -290,6 +302,7 @@ signals:
 
 private:
     void seedFromDifficulty(int difficultyId);
+    void applyPendingSelectionRangeExport();
     void rebuildDifficultyList();
     void syncAudition();
     void applyLivePreviewSettings();
@@ -341,6 +354,12 @@ private:
     QVariantList difficulties_;
     VideoExportTask task_;
     double chartDurationSeconds_ = 0.0;
+    // Staged by requestSelectionRangeExport(); consumed once by the next
+    // seedFromDifficulty() and cleared, so a later plain page entry/switch
+    // does not silently reapply a stale selection's range.
+    bool hasPendingSelectionRangeExport_ = false;
+    double pendingRangeStartSeconds_ = 0.0;
+    double pendingRangeEndSeconds_ = 0.0;
     int resolutionIndex_ = 1;
     int hudFontAreaId_ = 0;
     QStringList chartDirectories_;

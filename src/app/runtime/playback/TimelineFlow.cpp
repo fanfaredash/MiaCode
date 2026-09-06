@@ -1031,6 +1031,27 @@ bool miacode::runtime::PlaybackCoordinator::resolveNearestTimelineNote(double se
     return state_.timelineQuickModel_.resolveNearestTimelineNote(second, lane, line, col, noteSecond);
 }
 
+bool miacode::runtime::PlaybackCoordinator::resolveExportRangeForSelection(
+    int selectionStart, int selectionEnd, double* startSecond, double* endSecond) const
+{
+    const TimelineExportRange range = state_.timelineQuickModel_.resolveExportRangeForSelection(
+        activeChartText(),
+        selectionStart,
+        selectionEnd,
+        state_.previewTapFlowSpeed_,
+        state_.previewTouchFlowSpeed_);
+    if (!range.resolved) {
+        return false;
+    }
+    if (startSecond != nullptr) {
+        *startSecond = range.startSecond;
+    }
+    if (endSecond != nullptr) {
+        *endSecond = range.endSecond;
+    }
+    return true;
+}
+
 bool miacode::runtime::PlaybackCoordinator::moveEditorCursorToTimelineLocation(
     int line,
     int col,

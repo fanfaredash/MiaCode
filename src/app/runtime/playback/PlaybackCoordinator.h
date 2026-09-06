@@ -110,6 +110,8 @@ public:
     void navigateTimelineToSecond(double second, bool focusEditor = true);
     void deferTimelineCursorBridgeUpdate(double second, bool centerView);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
+    bool resolveExportRangeForSelection(
+        int selectionStart, int selectionEnd, double* startSecond, double* endSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,
         int col,

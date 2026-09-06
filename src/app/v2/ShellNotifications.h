@@ -48,6 +48,10 @@ signals:
     void mediaToolsRequested();
     void preferencesRequested();
     void coverExportRequested(int difficultyId);
+    // The active editor's selection was exported to a range and the export
+    // page should now become the visible surface. QmlExportSession already
+    // holds the pending range by the time this fires.
+    void selectionRangeExportPageRequested();
 };
 
 }  // namespace miacode::v2
