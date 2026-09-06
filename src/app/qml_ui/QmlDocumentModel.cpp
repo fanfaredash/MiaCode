@@ -215,7 +215,7 @@ QString QmlDocumentModel::metadataAttentionText() const
 {
     const QStringList items = metadataAttentionItems();
     return items.isEmpty() ? QString()
-        : UiText::text(QStringLiteral("metadata.needs_attention")).arg(items.join(QStringLiteral(", ")));
+        : UiText::text(QStringLiteral("metadata.needs_attention")).arg(items.join(QStringLiteral("、")));
 }
 QStringList QmlDocumentModel::metadataAttentionItems() const
 {

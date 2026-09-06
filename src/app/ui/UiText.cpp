@@ -1777,7 +1777,7 @@ const QHash<QString, QString>& zhMap()
 
         {"metadata.information", "基础信息"},
         {"metadata.other_fields", "其他 &xx 字段"},
-        {"metadata.needs_attention", "需要注意：%1。"},
+        {"metadata.needs_attention", "以下信息尚未填写：%1。"},
         {"metadata.extra_not_committed", "其他字段未提交，原值仍保留。%1"},
         {"metadata.invalid_property", "应为 &key=value（第 %1 行，第 %2 列）。"},
         {"metadata.field.title", "标题"},

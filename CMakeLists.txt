@@ -754,6 +754,8 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/app-titlebar.png
     src/app/qml_ui/resources/icons/app-titlebar@2x.png
     src/app/qml_ui/resources/icons/chevron-down.svg
+    src/app/qml_ui/resources/icons/add.svg
+    src/app/qml_ui/resources/icons/remove.svg
     # Canonical MiaCode brand PNG (same asset as resources/app_icons.qrc).
     resources/icons/app.png
 )

@@ -81,13 +81,19 @@ Column {
             spacing: 2
 
             IconButton {
-                glyph: "+"
+                // Fixed-metric vector icons, not a "+"/"−" text glyph: the
+                // U+2212 minus sign falls back to a different font on
+                // machines where Theme.uiFont lacks that glyph, and the
+                // fallback font's advance width inflates this button's
+                // implicitWidth relative to "+" (glyphLabel.implicitWidth
+                // drives IconButton sizing) — machine-dependent bug.
+                iconSource: Qt.resolvedUrl("icons/add.svg")
                 tooltip: UiText.text("添加难度")
                 enabled: root.documentSession.availableDifficulties.length > 0
                 onClicked: addDifficultyMenu.open()
             }
             IconButton {
-                glyph: "−"
+                iconSource: Qt.resolvedUrl("icons/remove.svg")
                 tooltip: UiText.text("删除当前难度")
                 enabled: root.documentSession.currentDifficultyId > 0
                 onClicked: removeDifficultyDialog.open()

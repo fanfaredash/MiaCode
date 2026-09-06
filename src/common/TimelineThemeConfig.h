@@ -88,12 +88,21 @@ inline QColor adjustedTimelineMeasureLineColor(QColor color, double brightness)
         return color;
     }
     if (clamped > 1.0) {
-        // Timeline chrome is a single dark scheme; brighten toward white with
-        // the legacy dark-theme factor.
+        // The three grid tiers ship with very different base alphas (major
+        // ~255, subdivision ~140, comma ~70 — see Theme.qml gridMajor/
+        // gridSubdivision/gridMinor). Capping alpha at the tier's own base
+        // (the old behaviour: lighten RGB only, `setAlpha(baseAlpha)`) means
+        // a low-alpha thin line can NEVER become fully bright no matter how
+        // high the slider goes — 70/255 stays translucent even painted pure
+        // white. Drive alpha toward opaque first (mirrors
+        // adjustedTimelineWaveformColor), then layer a lighter RGB lighten on
+        // top for the tiers that are already opaque (gridMajor) and so get
+        // little from the alpha step alone.
         const double t = (clamped - 1.0) / (kTimelineMeasureLineBrightnessMax - 1.0);
-        const int factor = qRound(100.0 + 80.0 * t);
+        const double alpha = baseAlpha + (255.0 - baseAlpha) * t;
+        const int factor = qRound(100.0 + 60.0 * t);
         color = color.lighter(factor);
-        color.setAlpha(baseAlpha);
+        color.setAlpha(qBound(0, qRound(alpha), 255));
     }
     return color;
 }

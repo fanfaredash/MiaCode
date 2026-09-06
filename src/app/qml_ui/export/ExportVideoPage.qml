@@ -165,8 +165,15 @@ Rectangle {
                     }
                 }
                 ListView {
+                    // Fixed cap (not root.height * 0.2): a percentage of the
+                    // pane height competes with the settings tabs below for
+                    // the same shrinking budget, so on a short pane — or once
+                    // this list grows past a few entries — the tab content
+                    // area was squeezed toward zero. A flat cap keeps this
+                    // list's footprint predictable regardless of pane size or
+                    // entry count; its own scrollbar covers the overflow.
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, root.height * 0.2)
+                    Layout.preferredHeight: Math.min(contentHeight, 112)
                     clip: true
                     model: root.session ? root.session.chartDirectories : []
                     ScrollBar.vertical: AppScrollBar {}
@@ -209,12 +216,25 @@ Rectangle {
             }
 
             Flickable {
+                id: settingsFlickable
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                // Never let the per-tab viewport collapse toward zero when
+                // the batch-only inputs above (chart-folder list, difficulty
+                // switches...) grow: it must stay tall enough to read as "a
+                // panel with a scrollbar", not as content that vanished.
+                Layout.minimumHeight: 200
                 clip: true
                 contentHeight: settingsBody.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: AppScrollBar {}
+                ScrollBar.vertical: AppScrollBar {
+                    // Default AsNeeded fades out when idle; on a squeezed
+                    // pane that reads as "the rest of the content is gone"
+                    // rather than "scroll for more". Keep it visible for as
+                    // long as there is anything to scroll to.
+                    policy: settingsFlickable.contentHeight > settingsFlickable.height
+                        ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
+                }
 
                 ColumnLayout {
                     id: settingsBody
@@ -406,48 +426,30 @@ Rectangle {
                         spacing: 10
                         Layout.fillWidth: true
 
-                        RowLayout {
-                            Text {
-                                text: UiText.text("外圈亮度")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppSlider {
-                                Layout.fillWidth: true
-                                from: 0
-                                to: 100
-                                value: root.session ? root.session.backgroundBrightnessOuter * 100 : 50
-                                onMoved: if (root.session) root.session.backgroundBrightnessOuter = value / 100
-                            }
+                        LabeledSlider {
+                            objectName: "exportBrightnessOuterSlider"
+                            label: UiText.text("外圈亮度")
+                            from: 0
+                            to: 100
+                            value: root.session ? root.session.backgroundBrightnessOuter * 100 : 50
+                            onMoved: function(v) { if (root.session) root.session.backgroundBrightnessOuter = v / 100 }
                         }
-                        RowLayout {
-                            Text {
-                                text: UiText.text("内圈亮度")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppSlider {
-                                Layout.fillWidth: true
-                                from: 0
-                                to: 100
-                                value: root.session ? root.session.backgroundBrightnessInner * 100 : 20
-                                onMoved: if (root.session) root.session.backgroundBrightnessInner = value / 100
-                            }
+                        LabeledSlider {
+                            objectName: "exportBrightnessInnerSlider"
+                            label: UiText.text("内圈亮度")
+                            from: 0
+                            to: 100
+                            value: root.session ? root.session.backgroundBrightnessInner * 100 : 20
+                            onMoved: function(v) { if (root.session) root.session.backgroundBrightnessInner = v / 100 }
                         }
-                        RowLayout {
-                            Text {
-                                text: UiText.text("Layout整图大小")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppSlider {
-                                Layout.fillWidth: true
-                                from: 50
-                                to: 100
-                                stepSize: 5
-                                value: root.session ? root.session.layoutSquareScale * 100 : 95
-                                onMoved: if (root.session) root.session.layoutSquareScale = value / 100
-                            }
+                        LabeledSlider {
+                            objectName: "exportLayoutSquareScaleSlider"
+                            label: UiText.text("Layout整图大小")
+                            from: 50
+                            to: 100
+                            stepSize: 5
+                            value: root.session ? root.session.layoutSquareScale * 100 : 95
+                            onMoved: function(v) { if (root.session) root.session.layoutSquareScale = v / 100 }
                         }
                         RowLayout {
                             Text {
