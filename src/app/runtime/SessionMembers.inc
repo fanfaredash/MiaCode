@@ -455,7 +455,7 @@
         // Transient (not persisted): true while Alt is held with the preview
         // paused. Inverts the effective "暂停时显示判定区" option so the paused view
         // flips judge area ⇄ PV/BG until Alt is released (or the app
-        // deactivates, e.g. Alt+Tab). Set from WindowSection::eventFilter via
+        // deactivates, e.g. Alt+Tab). Set from Session::eventFilter via
         // Session::setPauseDisplayAltHoldActive.
         bool pauseDisplayAltHoldActive_ = false;
         bool previewShowDebugInfo_ = false;

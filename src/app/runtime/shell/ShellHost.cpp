@@ -4,11 +4,51 @@
 #include "runtime/document/DocumentSessionHost.h"
 #include "runtime/export/VideoExportHost.h"
 
+#include "app/ui/ShortcutRegistry.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
+#include <QCoreApplication>
+#include <QEvent>
+#include <QKeyEvent>
 #include <QString>
+
+namespace {
+
+struct PauseDisplayHoldKey {
+    int key = Qt::Key_Alt;
+    Qt::KeyboardModifiers pressModifiers = Qt::AltModifier;
+};
+
+PauseDisplayHoldKey pauseDisplayHoldKey()
+{
+    const QKeySequence sequence = ShortcutRegistry::instance().sequence(
+        QStringLiteral("preview.pause_display_hold"), QKeySequence(Qt::Key_Alt));
+    const QKeyCombination combination = sequence[0];
+    PauseDisplayHoldKey hold;
+    hold.key = combination.key();
+    switch (hold.key) {
+    case Qt::Key_Alt:
+        hold.pressModifiers = Qt::AltModifier;
+        break;
+    case Qt::Key_Control:
+        hold.pressModifiers = Qt::ControlModifier;
+        break;
+    case Qt::Key_Shift:
+        hold.pressModifiers = Qt::ShiftModifier;
+        break;
+    case Qt::Key_Meta:
+        hold.pressModifiers = Qt::MetaModifier;
+        break;
+    default:
+        hold.pressModifiers = combination.keyboardModifiers();
+        break;
+    }
+    return hold;
+}
+
+}  // namespace
 
 miacode::runtime::ShellHost::ShellHost(::Session& session)
     : session_(session)
@@ -16,7 +56,37 @@ miacode::runtime::ShellHost::ShellHost(::Session& session)
 
 void Session::attachRootWindow(QWindow* window)
 {
+    QCoreApplication::instance()->removeEventFilter(this);
+    setPauseDisplayAltHoldActive(false);
     rootWindow_ = window;
+
+    if (window != nullptr) {
+        QCoreApplication::instance()->installEventFilter(this);
+    }
+}
+
+bool Session::eventFilter(QObject*, QEvent* event)
+{
+    if (event->type() == QEvent::ApplicationDeactivate) {
+        setPauseDisplayAltHoldActive(false);
+        return false;
+    }
+
+    if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+        const auto* keyEvent = static_cast<const QKeyEvent*>(event);
+        const PauseDisplayHoldKey hold = pauseDisplayHoldKey();
+        if (keyEvent->key() == hold.key) {
+            if (event->type() == QEvent::KeyPress
+                && !keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == hold.pressModifiers) {
+                setPauseDisplayAltHoldActive(true);
+            } else if (event->type() == QEvent::KeyRelease && !keyEvent->isAutoRepeat()) {
+                setPauseDisplayAltHoldActive(false);
+            }
+        }
+    }
+
+    return false;
 }
 
 void Session::setRootWindowFrameGeometry(const QRect& geometry)

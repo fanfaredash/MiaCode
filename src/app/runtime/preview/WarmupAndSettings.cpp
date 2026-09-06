@@ -406,7 +406,7 @@ PreviewOutlineVariant miacode::runtime::StageMediaHost::effectivePreviewOutlineV
 void miacode::runtime::StageMediaHost::setPauseDisplayAltHoldActive(bool active)
 {
     // Transient Alt-hold inversion of the "暂停时显示判定区" option (see
-    // WindowSection::eventFilter). Engaging is pointless while the preview is
+    // Session::eventFilter). Engaging is pointless while the preview is
     // playing or while the export-preview dialog pins PV visible — both paths
     // ignore the pause-hide option entirely — so only the release/clear is
     // accepted unconditionally.

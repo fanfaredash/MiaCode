@@ -315,6 +315,7 @@ public:
     void invalidateDocumentValidationRevision();
     bool validateActiveDocument();
     void attachRootWindow(QWindow* window);
+    bool eventFilter(QObject* watched, QEvent* event) override;
     void releaseChartDropImportService();
     void handleAudioDrop(const QStringList& audioPaths,
                          quint64 requestId,
