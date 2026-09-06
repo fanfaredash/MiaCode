@@ -399,10 +399,8 @@ QVariantMap QmlEditorController::findForQml(const QString& text, int anchor, int
 QVariantMap QmlEditorController::replaceSelectionForQml(const QString& text, int anchor, int position, const QString& needle, const QString& replacement, bool caseSensitive, bool wholeWord) const { return toQmlTransaction(replaceSelection(text, anchor, position, needle, replacement, caseSensitive, wholeWord)); }
 QVariantMap QmlEditorController::replaceAllForQml(const QString& text, const QString& needle, const QString& replacement, bool caseSensitive, bool wholeWord) const { return toQmlTransaction(replaceAll(text, needle, replacement, caseSensitive, wholeWord)); }
 void QmlEditorController::setDocumentContextForQml(int difficultyId, qulonglong revision) { setDocumentContext(difficultyId, revision); }
-bool QmlEditorController::publishCaretForQml(int difficultyId, qulonglong revision, int anchor, int position, bool imeComposing)
+bool QmlEditorController::publishCaretForQml(int difficultyId, qulonglong revision, bool imeComposing)
 {
-    Q_UNUSED(anchor);
-    Q_UNUSED(position);
     return acceptsCaret(difficultyId, revision, imeComposing);
 }
 bool QmlEditorController::acceptsTouchAuthoringForQml(int difficultyId, qulonglong revision, bool imeComposing, bool editorHasFocus) const { return acceptsTouchAuthoring(difficultyId, revision, imeComposing, editorHasFocus); }
@@ -534,20 +532,15 @@ void QmlEditorController::dropHistoryScope(const QString& scopeId)
     }
 }
 
-void QmlEditorController::recordQmlTransaction(const QString& before, const QString& after,
-                                               int beforeAnchor, int beforePosition,
-                                               int afterAnchor, int afterPosition)
+void QmlEditorController::recordQmlTransaction(const QString& before, const QString& after)
 {
     if (before == after) return;
     const TextDelta delta = computeTextDelta(before, after);
     QmlHistory& history = activeHistory();
     history.undo.append({delta.start,
                          before.mid(delta.start, delta.fromEnd - delta.start),
-                         after.mid(delta.start, delta.toEnd - delta.start),
-                         beforeAnchor, beforePosition, afterAnchor, afterPosition});
-    // Every step keeps two full copies of the source, so an unbounded stack is
-    // an unbounded leak over a long session. The oldest step is the one the
-    // user is least likely to reach for.
+                         after.mid(delta.start, delta.toEnd - delta.start)});
+    // 每步保存修改区间内的原文和新文；达到历史上限后移除最早的记录。
     if (history.undo.size() > kMaxHistorySteps) {
         history.undo.remove(0, history.undo.size() - kMaxHistorySteps);
     }

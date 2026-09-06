@@ -99,7 +99,6 @@ Rectangle {
                 && root.editorController.publishCaretForQml(
                     root.documentSession.currentDifficultyId,
                     root.documentSession.documentRevision,
-                    sourceArea.selectionStart, sourceArea.selectionEnd,
                     root.imeComposing)
             root.contextCaretPending = false
             root.syncController.setEditorContext(
@@ -167,8 +166,6 @@ Rectangle {
             sourceArea.syncingFromController = false
             root.endProgrammaticSelection()
             sourceArea.historyText = controllerText
-            sourceArea.historyAnchor = sourceArea.selectionStart
-            sourceArea.historyPosition = sourceArea.selectionEnd
             updateCursorPosition()
         }
     }
@@ -205,10 +202,13 @@ Rectangle {
     readonly property bool canPaste: true
 
     function undo() {
+        // 先提交输入法文字，再从与当前正文一致的历史中取出撤销步骤。
+        Qt.inputMethod.commit()
         applyEditorTransaction(editorController.undoQmlTransaction(), true)
     }
 
     function redo() {
+        Qt.inputMethod.commit()
         applyEditorTransaction(editorController.redoQmlTransaction(), true)
     }
 
@@ -534,8 +534,6 @@ Rectangle {
             return false
         if (transaction.hasEdit) {
             const before = sourceArea.text
-            const beforeAnchor = sourceArea.selectionStart
-            const beforePosition = sourceArea.selectionEnd
             sourceArea.syncingFromController = true
             // TextEdit's mutation API keeps its native undo stack. A complete
             // replacement remains one logical controller transaction rather
@@ -545,13 +543,13 @@ Rectangle {
             sourceArea.select(transaction.anchor, transaction.position)
             sourceArea.syncingFromController = false
             if (transaction.undoGroup)
-                root.editorController.recordQmlTransaction(before, sourceArea.text,
-                                                           beforeAnchor, beforePosition,
-                                                           transaction.anchor, transaction.position)
+                root.editorController.recordQmlTransaction(before, sourceArea.text)
             sourceArea.historyText = sourceArea.text
-            sourceArea.historyAnchor = sourceArea.selectionStart
-            sourceArea.historyPosition = sourceArea.selectionEnd
             root.documentSession.chartText = sourceArea.text
+        } else if (transaction.anchor !== sourceArea.selectionStart
+                   || transaction.position !== sourceArea.selectionEnd) {
+            // 跳过已有括号属于光标移动，正文和撤销历史保持原值。
+            sourceArea.select(transaction.anchor, transaction.position)
         }
         if (centerCursor)
             root.centerCursorInView()
@@ -607,6 +605,50 @@ Rectangle {
         id: editorContextMenu
         objectName: "editorContextMenu"
         parent: Overlay.overlay
+
+        property point requestedPosition: Qt.point(0, 0)
+        readonly property rect caretBounds: {
+            editorScroll.contentY
+            return sourceArea.mapToItem(parent, sourceArea.cursorRectangle)
+        }
+        // 鼠标位置、光标和菜单统一使用浮层坐标；窗口边界收敛后再处理遮挡。
+        readonly property var placement: {
+            const viewportWidth = parent ? parent.width : 0
+            const viewportHeight = parent ? parent.height : 0
+            let menuWidth = Math.min(implicitWidth, viewportWidth)
+            const menuHeight = Math.min(implicitHeight, viewportHeight)
+            let menuX = Math.max(0, Math.min(requestedPosition.x, viewportWidth - menuWidth))
+            let menuY = Math.max(0, Math.min(requestedPosition.y, viewportHeight - menuHeight))
+            const gap = Theme.menuPadding
+            const left = Math.max(0, caretBounds.x - gap)
+            const right = Math.min(viewportWidth, caretBounds.x + caretBounds.width + gap)
+            const top = Math.max(0, caretBounds.y - gap)
+            const bottom = Math.min(viewportHeight, caretBounds.y + caretBounds.height + gap)
+            const overlaps = menuX < right && menuX + menuWidth > left
+                && menuY < bottom && menuY + menuHeight > top
+            if (overlaps) {
+                const rightSpace = viewportWidth - right
+                if (rightSpace >= menuWidth) {
+                    menuX = right
+                } else if (left >= menuWidth) {
+                    menuX = left - menuWidth
+                } else if (viewportHeight - bottom >= menuHeight) {
+                    menuY = bottom
+                } else if (top >= menuHeight) {
+                    menuY = top - menuHeight
+                } else {
+                    // 狭窄窗口按光标两侧的实际空间限制菜单宽度。
+                    const useRight = rightSpace >= left
+                    menuWidth = Math.min(menuWidth, useRight ? rightSpace : left)
+                    menuX = useRight ? right : left - menuWidth
+                }
+            }
+            return { x: menuX, y: menuY, width: menuWidth, height: menuHeight }
+        }
+        x: placement.x
+        y: placement.y
+        width: placement.width
+        height: placement.height
 
         readonly property var transformRows: root.documentSession.chartTransformMenu()
         // sourceArea keeps its selection while the popup holds focus
@@ -688,8 +730,8 @@ Rectangle {
     // and the keyboard route (Menu key / Shift+F10) passes the caret.
     function openContextMenuAt(x, y) {
         sourceArea.forceActiveFocus()
-        const point = sourceArea.mapToItem(editorContextMenu.parent, x, y)
-        editorContextMenu.popup(point.x, point.y)
+        editorContextMenu.requestedPosition = sourceArea.mapToItem(editorContextMenu.parent, x, y)
+        editorContextMenu.open()
     }
 
     function openContextMenuAtCaret() {
@@ -798,9 +840,7 @@ Rectangle {
             property bool syncingFromController: false
             property bool readyForUserEdits: false
             property string historyText: ""
-            property int historyAnchor: 0
-            property int historyPosition: 0
-            property bool selectionHeld: false
+            readonly property bool selectionHeld: editorPointer.selecting
 
             wrapMode: TextArea.Wrap
             width: editorScroll.width
@@ -822,7 +862,7 @@ Rectangle {
             inputMethodHints: root.editorController.halfWidthInputEnabled
                 ? Qt.ImhLatinOnly : Qt.ImhNone
             persistentSelection: true
-            selectByMouse: true
+            selectByMouse: false
             font: Theme.codeFont
 
             background: null
@@ -884,28 +924,28 @@ Rectangle {
             }
             onContentHeightChanged: root.bumpFollowLayout()
             onTextChanged: {
+                const before = historyText
+                const after = text
+                // 发布文档变化会同步触发重高亮；先推进快照，使重入通知看到当前正文。
+                historyText = after
                 root.bumpFollowLayout()
                 // Rehighlighting is a formatting pass over the same characters,
                 // but TextEdit still reports it as textChanged. Writing that
                 // back would push an identical document through the backend on
                 // every highlight, so only a real change is published.
-                if (readyForUserEdits && !syncingFromController && text !== historyText) {
-                    root.editorController.recordQmlTransaction(historyText, text,
-                                                               historyAnchor, historyPosition,
-                                                               selectionStart, selectionEnd)
-                    root.documentSession.chartText = text
+                if (readyForUserEdits && !syncingFromController && after !== before) {
+                    root.editorController.recordQmlTransaction(before, after)
+                    root.documentSession.chartText = after
                 }
                 root.updateCursorPosition()
                 root.bookmarks = root.collectBookmarks()
-                historyText = text
-                historyAnchor = selectionStart
-                historyPosition = selectionEnd
                 root.refreshSelectionBeatSummary()
             }
             onSelectionStartChanged: root.refreshSelectionBeatSummary()
             onSelectionEndChanged: root.refreshSelectionBeatSummary()
             onCursorPositionChanged: {
-                editorScroll.allowScroll = true
+                // 鼠标选择期间由指针组件决定滚动，词尾换行不推动视口。
+                editorScroll.allowScroll = !sourceArea.selectionHeld
                 root.updateCursorPosition()
                 root.scheduleEditorContext(root.programmaticSelectionDepth === 0)
                 if (!syncingFromController)
@@ -1002,8 +1042,6 @@ Rectangle {
                 root.syncTextFromController()
                 readyForUserEdits = true
                 historyText = text
-                historyAnchor = selectionStart
-                historyPosition = selectionEnd
                 root.editorController.setDocumentContextForQml(
                     root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
                 root.updateCursorPosition()
@@ -1061,6 +1099,16 @@ Rectangle {
                 }
             }
 
+            // 菜单持有焦点时，独立于 TextArea 的焦点光标显示实际插入位置。
+            Rectangle {
+                x: sourceArea.cursorRectangle.x
+                y: sourceArea.cursorRectangle.y
+                width: 2
+                height: sourceArea.cursorRectangle.height
+                color: Theme.colors.text.editor
+                visible: editorContextMenu.visible && !sourceArea.readOnly
+            }
+
             CompletionPopup {
                 id: completionPopup
                 editor: sourceArea
@@ -1093,46 +1141,19 @@ Rectangle {
                 sourceArea.forceActiveFocus()
             }
 
-            // PointHandler only ever takes a passive grab, so TextArea still
-            // receives the press and places the caret; a TapHandler would have
-            // to take the exclusive grab TextArea already owns and never fires
-            // inside one. A Ctrl+drag is a selection, not a jump.
-            PointHandler {
-                acceptedButtons: Qt.LeftButton
-                target: null
-                onActiveChanged: {
-                    sourceArea.selectionHeld = (point.pressedButtons & Qt.LeftButton) !== 0
-                    if (active)
-                        root.syncController.beginPointerInteraction(
-                            root.documentSession.currentDifficultyId,
-                            root.documentSession.documentRevision)
-                }
-                onPointChanged: sourceArea.selectionHeld = (point.pressedButtons & Qt.LeftButton) !== 0
-            }
-
-            PointHandler {
-                acceptedButtons: Qt.LeftButton
-                acceptedModifiers: Qt.ControlModifier
-                target: null
-                onActiveChanged: {
-                    // TextArea finishes placing the caret before the release
-                    // dispatch, so the seek uses the final location.
-                    if (!active)
-                        Qt.callLater(() => root.seekPreviewToCaret())
-                }
-            }
-
-            // TextArea takes the mouse grab on press, so a TapHandler's
-            // release-within-bounds gesture never completes inside one and the
-            // context menu never opened. A right-button MouseArea does get the
-            // click, and leaves left-button selection to TextArea untouched —
-            // the same pattern the line-number gutter menu already uses.
-            MouseArea {
+            EditorPointerArea {
+                id: editorPointer
                 anchors.fill: parent
-                acceptedButtons: Qt.RightButton
-                scrollGestureEnabled: false
-                cursorShape: Qt.IBeamCursor
-                onClicked: mouse => root.openContextMenuAt(mouse.x, mouse.y)
+                editor: sourceArea
+                viewport: editorScroll
+                inputBridge: editorInputBridge
+                onInteractionStarted: {
+                    root.syncController.beginPointerInteraction(
+                        root.documentSession.currentDifficultyId,
+                        root.documentSession.documentRevision)
+                }
+                onContextMenuRequested: (x, y) => root.openContextMenuAt(x, y)
+                onSeekRequested: root.seekPreviewToCaret()
             }
         }
     }

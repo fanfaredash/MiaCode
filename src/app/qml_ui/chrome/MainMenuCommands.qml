@@ -16,6 +16,7 @@ QtObject {
 
     signal openRequested()
     signal saveRequested()
+    signal saveWholeDocumentRequested()
     signal saveAsRequested()
     signal exitRequested()
     signal undoRequested()

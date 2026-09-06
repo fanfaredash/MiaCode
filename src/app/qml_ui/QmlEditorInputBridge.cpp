@@ -2,12 +2,17 @@
 
 #include "common/DebugLog.h"
 
+#include <QAbstractTextDocumentLayout>
 #include <QGuiApplication>
 #include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QQuickItem>
 #include <QQuickTextDocument>
 #include <QStringList>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextDocument>
+#include <QTextLayout>
 
 namespace miacode::qml_ui {
 namespace {
@@ -78,9 +83,57 @@ void QmlEditorInputBridge::applyInputMethodState()
     }
 }
 
+QPointF QmlEditorInputBridge::textHitPoint(qreal x, qreal y) const
+{
+    const QPointF point(x, y);
+    QTextDocument* document = textDocument_ ? textDocument_->textDocument() : nullptr;
+    if (!target_ || !document) return point;
+    const qreal topPadding = target_->property("topPadding").toReal();
+    const qreal documentY = y - topPadding;
+    // 按实际段落几何定位，行距空隙也有明确归属。
+    int firstBlock = 0;
+    int lastBlock = document->blockCount() - 1;
+    while (firstBlock < lastBlock) {
+        const int middle = (firstBlock + lastBlock + 1) / 2;
+        const QTextBlock candidate = document->findBlockByNumber(middle);
+        if (document->documentLayout()->blockBoundingRect(candidate).top() <= documentY)
+            firstBlock = middle;
+        else
+            lastBlock = middle - 1;
+    }
+    const QTextBlock block = document->findBlockByNumber(firstBlock);
+    const QTextLayout* layout = block.layout();
+    if (!layout || layout->lineCount() == 0) return point;
+
+    // 行距空隙仍归属于所在显示行；把纵坐标移到文字中部，横坐标保持原值。
+    // 自动换行使用实际 QTextLine，不能用字体高度推算行号。
+    const qreal localY = documentY - layout->position().y();
+    int low = 0;
+    int high = layout->lineCount() - 1;
+    while (low < high) {
+        const int middle = (low + high + 1) / 2;
+        if (layout->lineAt(middle).y() <= localY)
+            low = middle;
+        else
+            high = middle - 1;
+    }
+    const QTextLine line = layout->lineAt(low);
+    return QPointF(x, topPadding + layout->position().y() + line.y() + line.height() / 2);
+}
+
+QVariantMap QmlEditorInputBridge::wordRange(int position) const
+{
+    QTextCursor cursor(textDocument_->textDocument());
+    cursor.setPosition(position);
+    cursor.select(QTextCursor::WordUnderCursor);
+    return {{QStringLiteral("start"), cursor.selectionStart()},
+            {QStringLiteral("end"), cursor.selectionEnd()}};
+}
+
 bool QmlEditorInputBridge::eventFilter(QObject* watched, QEvent* event)
 {
-    if (watched != target_ || event->type() != QEvent::InputMethod) return QObject::eventFilter(watched, event);
+    if (watched != target_ || event->type() != QEvent::InputMethod)
+        return QObject::eventFilter(watched, event);
     auto* input = static_cast<QInputMethodEvent*>(event);
     const quint64 sequence = ++imeEventSequence_;
     miacode::debug_log::appendLine(

@@ -1,9 +1,11 @@
 #pragma once
 
 #include <QObject>
+#include <QImage>
 
 #include <functional>
 #include <QStringList>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QVector>
@@ -32,7 +34,9 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(QString metadataFirst READ metadataFirst WRITE setMetadataFirst NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataDesigner READ metadataDesigner WRITE setMetadataDesigner NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataVideoPath READ metadataVideoPath WRITE setMetadataVideoPath NOTIFY metadataChanged)
+    Q_PROPERTY(bool metadataHasVideo READ metadataHasVideo NOTIFY metadataChanged)
     Q_PROPERTY(QString metadataClockCount READ metadataClockCount WRITE setMetadataClockCount NOTIFY metadataChanged)
+    Q_PROPERTY(QString metadataExtraText READ metadataExtraText WRITE setMetadataExtraText NOTIFY metadataChanged)
     Q_PROPERTY(bool unifiedDesignerEnabled READ unifiedDesignerEnabled NOTIFY unifiedDesignerEnabledChanged)
     Q_PROPERTY(QVariantList designerSlots READ designerSlots NOTIFY documentStateChanged)
     Q_PROPERTY(QString documentTitle READ documentTitle NOTIFY documentTitleChanged)
@@ -59,11 +63,7 @@ class QmlDocumentModel final : public QObject
     Q_PROPERTY(bool validationPending READ validationPending NOTIFY documentStateChanged)
     Q_PROPERTY(bool validationAvailable READ validationAvailable NOTIFY documentStateChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
-    Q_PROPERTY(bool metadataDraftDirty READ metadataDraftDirty NOTIFY dirtyEditorKeysChanged)
-    // Which section a save writes. A tab is what a person works in, so 保存
-    // means "save what I am doing" — the active difficulty, leaving the other
-    // difficulties on disk as they are. The metadata form writes the whole-file
-    // section, which is why the shell has to say when that tab is in front.
+    // 保存命令按当前标签选择难度正文，或谱面信息字段。
     Q_PROPERTY(bool wholeSourceEditorActive READ wholeSourceEditorActive
                    WRITE setWholeSourceEditorActive NOTIFY wholeSourceEditorActiveChanged)
     Q_PROPERTY(QStringList dirtyEditorKeys READ dirtyEditorKeys NOTIFY dirtyEditorKeysChanged)
@@ -87,7 +87,9 @@ public:
     QString metadataFirst() const;
     QString metadataDesigner() const;
     QString metadataVideoPath() const;
+    bool metadataHasVideo() const;
     QString metadataClockCount() const;
+    QString metadataExtraText() const;
     QString wholeBpm() const;
     bool unifiedDesignerEnabled() const;
     QVariantList designerSlots() const;
@@ -97,6 +99,10 @@ public:
     void setMetadataDesigner(const QString& value);
     void setMetadataVideoPath(const QString& value);
     void setMetadataClockCount(const QString& value);
+    void setMetadataExtraText(const QString& value);
+    Q_INVOKABLE void readTitleFromAudioFile();
+    Q_INVOKABLE void readArtistFromAudioFile();
+    Q_INVOKABLE void extractCoverFromAudioFile();
     Q_INVOKABLE void importChartBackgroundImage();
     Q_INVOKABLE void importChartBackgroundVideo();
     Q_INVOKABLE void removeChartPv();
@@ -129,7 +135,6 @@ public:
     bool validationPending() const;
     bool validationAvailable() const;
     bool dirty() const;
-    bool metadataDraftDirty() const;
     // Put one difficulty's chart back to the last save point, leaving the rest
     // of the document alone. This is what "放弃" means when the thing being
     // closed is one tab rather than the file.
@@ -140,8 +145,6 @@ public:
     // The same save, allowed to ask for a path. The answer arrives on
     // sectionSaveFinished because a file pick cannot be waited for.
     Q_INVOKABLE void requestSaveDifficultySection(int difficultyId);
-    Q_INVOKABLE void requestSaveMetadataSection();
-    Q_INVOKABLE void discardMetadataDraft();
     // The unsaved-changes flow, asked one section at a time.
     //
     // 保存 writes one difficulty, so a single question about "the document"
@@ -166,6 +169,7 @@ public:
 
     Q_INVOKABLE bool openFile(const QUrl& fileUrl);
     Q_INVOKABLE bool save();
+    Q_INVOKABLE bool saveWholeDocument();
     Q_INVOKABLE bool saveAs(const QUrl& fileUrl);
     Q_INVOKABLE bool discardChanges();
     // Leaves the shell with no document: no difficulties, so no tabs and no
@@ -236,6 +240,7 @@ public:
     Q_INVOKABLE QVariantList normalizeSyntaxOptions() const;
 
 signals:
+    void editingFinishedRequested();
     void chartTextChanged();
     void metadataChanged();
     void unifiedDesignerEnabledChanged();
@@ -255,17 +260,6 @@ signals:
     void operationFailed(const QString& title, const QString& message);
 
 private:
-    struct MetadataDraft {
-        QString title;
-        QString artist;
-        QString first;
-        QString designer;
-        QString videoPath;
-        QString clockCount;
-        QVector<QString> designerSlots = QVector<QString>(8);
-        bool unifiedDesigner = false;
-    };
-
     enum class WorkspaceCommitKind {
         Incremental,
         DifficultySelection,
@@ -281,12 +275,6 @@ private:
     bool saveToPath(const QString& path);
     void adoptBackendDocumentReplacement();
     void refreshUnifiedDesignerState();
-    MetadataDraft captureMetadataState() const;
-    void resetMetadataDraft();
-    void rebaseMetadataDraft();
-    void notifyMetadataDraftChanged();
-    bool applyMetadataDraft();
-    static bool metadataDraftsEqual(const MetadataDraft& left, const MetadataDraft& right);
     QString documentField(miacode::v2::ChartWorkspaceDocumentField field) const;
     QString difficultyField(
         int difficultyId, miacode::v2::ChartWorkspaceDifficultyField field) const;
@@ -298,6 +286,10 @@ private:
     void reconcileUnifiedDesignerAfterSourceReplacement();
     QStringList metadataAttentionItems() const;
     void requestChartMediaImport(miacode::v2::ChartMediaService::Kind kind);
+    void requestMetadataAudio(std::function<void(const QString&)> onSelected);
+    bool saveMetadataImmediately();
+    void writeExtractedCover(const QImage& cover, const QString& bgPath,
+                             const QString& existingBgPath, const QString& title);
     void applyChartMediaImport(const QString& sourcePath,
                                miacode::v2::ChartMediaService::Kind kind);
     miacode::v2::ShellNotifications* notifications_ = nullptr;
@@ -325,10 +317,9 @@ private:
     qulonglong documentGeneration_ = 0;
     qulonglong bookmarkGeneration_ = 0;
     bool unifiedDesignerEnabled_ = false;
-    MetadataDraft metadataDraft_;
-    MetadataDraft metadataDraftBaseline_;
     bool wholeSourceEditorActive_ = false;
     bool suppressWorkspaceChanged_ = false;
+    QTimer metadataSaveTimer_;
     // Saving needs a path. A document that has never been written has none, so
     // the save asks for one first — through the shell's file request, which
     // makes it a continuation like the rest of this flow. Without this, 保存 on

@@ -5,8 +5,7 @@ import MiaCode.UI
 
 // 谱师名义管理: the seven &des_1..7 slots plus the "all difficulties share one
 // name" mode, replacing v1's per-difficulty designer dialog and the v2 toolbar
-// switch. Nothing reaches the document until 确定 — the rows and the checkbox
-// are edited on a local copy, so 取消 is a clean no-op.
+// switch. Each completed field is committed to the document.
 AppDialog {
     id: root
 
@@ -30,7 +29,7 @@ AppDialog {
     }
 
     onAboutToShow: root.reloadSlots()
-    onAccepted: {
+    function commitSlots() {
         const slots = []
         for (let i = 0; i < slotModel.count; ++i) {
             const entry = slotModel.get(i)
@@ -38,6 +37,8 @@ AppDialog {
         }
         root.commands.applyDesignerSlots(slots, root.unified, root.canonicalName)
     }
+
+    onAccepted: root.commitSlots()
 
     // Seeds the rows from the document every time the dialog opens, so a
     // cancelled edit never survives into the next visit.
@@ -153,6 +154,7 @@ AppDialog {
                     enabled: !root.unified
                     placeholderText: "&des_%1=".arg(slotRow.slotId)
                     onTextEdited: slotModel.setProperty(slotRow.index, "designer", text)
+                    onEditingFinished: root.commitSlots()
                 }
             }
         }
@@ -167,6 +169,7 @@ AppDialog {
                     return
                 if (!checked) {
                     root.unified = false
+                    root.commitSlots()
                     return
                 }
                 // The picker answers asynchronously, so the box follows
@@ -203,9 +206,12 @@ AppDialog {
         }
 
         onAboutToShow: designerChoice.currentIndex = 0
-        onAccepted: root.applyUnifiedName(
-            designerChoice.currentIndex === canonicalPicker.clearAllIndex
-                ? "" : canonicalPicker.candidates[designerChoice.currentIndex])
+        onAccepted: {
+            root.applyUnifiedName(
+                designerChoice.currentIndex === canonicalPicker.clearAllIndex
+                    ? "" : canonicalPicker.candidates[designerChoice.currentIndex])
+            root.commitSlots()
+        }
 
         body: ColumnLayout {
             spacing: 8

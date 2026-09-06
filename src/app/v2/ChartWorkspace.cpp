@@ -208,6 +208,12 @@ bool ChartWorkspace::updateDocumentField(
 
 ChartWorkspaceResult ChartWorkspace::replaceExtraFields(const QString& value)
 {
+    return replaceExtraFields(value, QString());
+}
+
+ChartWorkspaceResult ChartWorkspace::replaceExtraFields(
+    const QString& value, const QString& clockCount)
+{
     if (!hasDocument_) return reject();
 
     const QVector<SimaiPropertyIssue> propertyIssues =
@@ -225,6 +231,9 @@ ChartWorkspaceResult ChartWorkspace::replaceExtraFields(const QString& value)
     }
 
     QVector<SimaiRawField> fields = SimaiDocument::parseUnmanagedFields(value, true);
+    if (!clockCount.isNull()) {
+        fields.append({QStringLiteral("clock_count"), clockCount});
+    }
     SimaiDocument::ensureDefaultClockCount(&fields);
     if (fields == document_.extraFields) return acceptWithoutChange();
     document_.extraFields = std::move(fields);
@@ -460,26 +469,51 @@ QVector<int> ChartWorkspace::computeDirtyDifficultyIds() const
 QString ChartWorkspace::textForSectionSave(int difficultyId) const
 {
     if (!hasDocument_) return QString();
-    if (difficultyId <= 0) return sourceText_;
-    const SimaiDifficultyData* current = document_.difficulty(difficultyId);
-    if (current == nullptr) return savedSourceText_;
+    return documentForSectionSave(difficultyId).toText();
+}
+
+SimaiDocument ChartWorkspace::documentForSectionSave(int difficultyId) const
+{
+    if (difficultyId == 0) return document_;
     SimaiDocument merged = savedDocument_;
+    if (difficultyId == MetadataSection) {
+        merged.title = document_.title;
+        merged.artist = document_.artist;
+        merged.first = document_.first;
+        merged.designer = document_.designer;
+        merged.videoPath = document_.videoPath;
+        merged.extraFields = document_.extraFields;
+        for (int id = 1; id <= 7; ++id) {
+            const auto* current = document_.difficulty(id);
+            const auto* saved = savedDocument_.difficulty(id);
+            if (current == nullptr && saved != nullptr)
+                continue;
+            if (current != nullptr && (saved != nullptr || !current->level.isEmpty()))
+                merged.ensureDifficulty(id).level = current->level;
+            merged.setDesignerForSlot(id, document_.designerForSlot(id));
+        }
+        return merged;
+    }
+    const SimaiDifficultyData* current = document_.difficulty(difficultyId);
+    if (current == nullptr) return merged;
     // ensureDifficulty, not difficulty(): a difficulty created since the save
     // point has nothing on disk yet, and saving it must add it rather than
     // silently drop the work.
     merged.ensureDifficulty(difficultyId) = *current;
-    return merged.toText();
+    const auto* saved = savedDocument_.difficulty(difficultyId);
+    merged.difficulty(difficultyId)->level = saved != nullptr ? saved->level : QString();
+    merged.difficulty(difficultyId)->designer = savedDocument_.designerForSlot(difficultyId);
+    return merged;
 }
 
 bool ChartWorkspace::markSectionSaved(int difficultyId, const QString& filePath)
 {
     if (!hasDocument_) return false;
     const QString nextFilePath = filePath.isEmpty() ? filePath_ : filePath;
-    if (difficultyId <= 0) return markSaved(nextFilePath);
+    if (difficultyId == 0) return markSaved(nextFilePath);
 
-    const SimaiDifficultyData* current = document_.difficulty(difficultyId);
-    if (current == nullptr) return false;
-    savedDocument_.ensureDifficulty(difficultyId) = *current;
+    if (difficultyId != MetadataSection && document_.difficulty(difficultyId) == nullptr) return false;
+    savedDocument_ = documentForSectionSave(difficultyId);
     savedSourceText_ = savedDocument_.toText();
     filePath_ = nextFilePath;
     // The document as a whole can still differ: other sections keep whatever
@@ -487,6 +521,25 @@ bool ChartWorkspace::markSectionSaved(int difficultyId, const QString& filePath)
     dirty_ = sourceText_ != savedSourceText_;
     commit();
     return true;
+}
+
+bool ChartWorkspace::metadataDirty() const
+{
+    if (!hasDocument_) return false;
+    if (document_.title != savedDocument_.title || document_.artist != savedDocument_.artist
+        || document_.first != savedDocument_.first || document_.designer != savedDocument_.designer
+        || document_.videoPath != savedDocument_.videoPath || document_.extraFields != savedDocument_.extraFields)
+        return true;
+    for (int id = 1; id <= 7; ++id) {
+        const auto* current = document_.difficulty(id);
+        const auto* saved = savedDocument_.difficulty(id);
+        if (current == nullptr && saved != nullptr)
+            continue;
+        if (current != nullptr && current->level != (saved != nullptr ? saved->level : QString()))
+            return true;
+        if (document_.designerForSlot(id) != savedDocument_.designerForSlot(id)) return true;
+    }
+    return false;
 }
 
 ChartWorkspaceSnapshot ChartWorkspace::snapshot() const

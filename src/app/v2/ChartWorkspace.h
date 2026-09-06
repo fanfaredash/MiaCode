@@ -36,8 +36,7 @@ struct ChartWorkspaceSnapshot {
     quint64 revision = 0;
     bool dirty = false;
     bool hasDocument = false;
-    // Which difficulty bodies differ from the last save point. Header fields
-    // update the document immediately without marking an editor tab dirty.
+    // 正文与保存点不同的难度。
     QVector<int> dirtyDifficultyIds;
 };
 
@@ -69,6 +68,7 @@ class ChartWorkspace final : public QObject
 
 public:
     explicit ChartWorkspace(QObject* parent = nullptr);
+    static constexpr int MetadataSection = -1;
 
     static ChartWorkspacePreflightResult preflightSource(
         const QString& source, SimaiNativeValidationLocale locale);
@@ -85,6 +85,10 @@ public:
     ChartWorkspaceResult replaceActiveDifficultyChart(const QString& chartText);
     bool updateDocumentField(ChartWorkspaceDocumentField field, const QString& value);
     ChartWorkspaceResult replaceExtraFields(const QString& value);
+    // Metadata-form replacement: parse unmanaged fields and carry the dedicated
+    // clock_count value in the same workspace transaction.
+    ChartWorkspaceResult replaceExtraFields(
+        const QString& value, const QString& clockCount);
     bool updateDifficultyField(
         int difficultyId, ChartWorkspaceDifficultyField field, const QString& value);
     bool selectDifficulty(int difficultyId);
@@ -112,7 +116,7 @@ public:
     // other difficulties at their on-disk text is the difference between
     // "save what I am doing" and "save everything I have open".
     //
-    // difficultyId 0 means the whole-document metadata section.
+    // 0 表示全文档；MetadataSection 表示全局字段、等级与谱师；正数表示难度正文。
     QString textForSectionSave(int difficultyId) const;
     // Advance the save point for that section only. Callers write
     // textForSectionSave() first; this records that it landed.
@@ -120,11 +124,9 @@ public:
     // 关闭文档: no document at all, rather than an empty one. A chart with no
     // difficulties is still a chart; this is the state before any chart.
     ChartWorkspaceResult closeDocument();
-    // Put one difficulty's complete editable section (chart, level, and
-    // designer) back to the last save point, leaving every other difficulty
-    // alone. A difficulty added after that save point is removed, because it
-    // has no earlier section to restore.
+    // 将对应难度的正文恢复至保存点。保存点中缺少该难度时移除该难度。
     ChartWorkspaceResult revertDifficultyChart(int difficultyId);
+    bool metadataDirty() const;
     bool rebindSavePoint(const QString& savedSourceText);
 
     ChartWorkspaceSnapshot snapshot() const;
@@ -140,6 +142,7 @@ private:
     ChartWorkspaceResult commit();
     ChartWorkspaceResult acceptWithoutChange() const;
     void refreshSourceAndDirty();
+    SimaiDocument documentForSectionSave(int difficultyId) const;
 
     SimaiDocument document_;
     QVector<int> computeDirtyDifficultyIds() const;

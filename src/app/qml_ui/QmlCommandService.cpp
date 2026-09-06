@@ -58,6 +58,7 @@ void QmlCommandService::closeDocument()
 }
 
 bool QmlCommandService::saveDocument() { return document_->save(); }
+bool QmlCommandService::saveWholeDocument() { return document_->saveWholeDocument(); }
 bool QmlCommandService::saveDocumentAs(const QUrl& fileUrl) { return document_->saveAs(fileUrl); }
 void QmlCommandService::discardDocumentChanges() { document_->discardChanges(); }
 void QmlCommandService::validateDocument() { document_->validateChart(); }

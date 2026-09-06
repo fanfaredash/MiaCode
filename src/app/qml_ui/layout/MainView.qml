@@ -63,6 +63,7 @@ Item {
         onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         onOpenRequested: openFileDialog.open()
         onSaveRequested: root.saveDocument()
+        onSaveWholeDocumentRequested: root.commands.saveWholeDocument()
         onSaveAsRequested: saveFileDialog.open()
         onChartTransformRequested: opId => root.applyChartTransform(opId)
         onNormalizeChartRequested: root.pages.openNormalizeWholeChart()

@@ -157,7 +157,7 @@ Rectangle {
         anchors.centerIn: parent
         width: root.titleBandMax
         z: 1
-        text: root.documentTitle
+        text: root.documentTitle + (root.documentSession.dirty ? " [未保存]" : "")
         color: Theme.colors.text.chrome
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize

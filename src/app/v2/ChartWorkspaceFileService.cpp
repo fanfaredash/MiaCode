@@ -91,6 +91,9 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::writeToPath(
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const ChartWorkspaceSnapshot before = workspace_->snapshot();
     if (!before.hasDocument) return {false, before.revision, QStringLiteral("document_unavailable"), {}};
+    if (difficultyId != 0 && difficultyId != ChartWorkspace::MetadataSection
+        && workspace_->document().difficulty(difficultyId) == nullptr)
+        return {false, before.revision, QStringLiteral("difficulty_unavailable"), {}};
     if (normalizedPath.isEmpty()) return {false, before.revision, QStringLiteral("path_empty"), {}};
 
     // Not document().toText(): that is everything open, and a section save is

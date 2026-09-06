@@ -131,7 +131,8 @@ bool ChartMediaService::isConflictingCandidate(const QString& candidatePath,
                                                const QString& sourcePath,
                                                const QString& targetPath)
 {
-    return !samePath(candidatePath, sourcePath) && !samePath(candidatePath, targetPath);
+    Q_UNUSED(targetPath);
+    return !samePath(candidatePath, sourcePath);
 }
 
 }  // namespace miacode::v2

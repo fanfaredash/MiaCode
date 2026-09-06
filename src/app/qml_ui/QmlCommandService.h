@@ -34,6 +34,7 @@ public:
     // 恢复备份: restoring replaces the document, so it is guarded too.
     Q_INVOKABLE void restoreBackupDocument(const QString& path);
     Q_INVOKABLE bool saveDocument();
+    Q_INVOKABLE bool saveWholeDocument();
     Q_INVOKABLE bool saveDocumentAs(const QUrl& fileUrl);
     Q_INVOKABLE void discardDocumentChanges();
     Q_INVOKABLE void validateDocument();

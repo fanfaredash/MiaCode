@@ -34,6 +34,10 @@ Rectangle {
     // Closing a dirty editor asks about that editor's staged content.
     function requestCloseTab(key) {
         const difficultyId = root.difficultyIdForKey(key)
+        if (key === root.viewState.metadataEditorKey) {
+            root.viewState.closeEditor(key)
+            return
+        }
         const sectionDirty = root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
         if (!sectionDirty) {
             root.viewState.closeEditor(key)
@@ -44,9 +48,7 @@ Rectangle {
         closeTabDialog.title = UiText.text("dialog.unsaved_tab_changes.title")
         closeTabDialog.message = UiText.text("dialog.unsaved_tab_changes.message")
             .arg(root.titleForKey(key))
-        closeTabDialog.details = difficultyId > 0
-            ? UiText.text("dialog.unsaved_tab_changes.details.difficulty")
-            : UiText.text("dialog.unsaved_tab_changes.details.metadata")
+        closeTabDialog.details = UiText.text("dialog.unsaved_tab_changes.details.difficulty")
         closeTabDialog.open()
     }
 
@@ -240,15 +242,10 @@ Rectangle {
                 // only in memory, and closing is the one thing that loses them.
                 root.pendingSaveCloseKey = key
                 root.pendingSaveCloseDifficultyId = difficultyId
-                if (difficultyId > 0)
-                    root.documentSession.requestSaveDifficultySection(difficultyId)
-                else
-                    root.documentSession.requestSaveMetadataSection()
+                root.documentSession.requestSaveDifficultySection(difficultyId)
                 return
-            } else if (difficultyId > 0) {
-                root.documentSession.revertDifficultyChart(difficultyId)
             } else {
-                root.documentSession.discardMetadataDraft()
+                root.documentSession.revertDifficultyChart(difficultyId)
             }
             root.viewState.closeEditor(key)
         }

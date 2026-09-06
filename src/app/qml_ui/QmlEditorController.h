@@ -89,8 +89,7 @@ public:
                                              const QString& replacement, bool caseSensitive,
                                              bool wholeWord) const;
     Q_INVOKABLE void setDocumentContextForQml(int difficultyId, qulonglong revision);
-    Q_INVOKABLE bool publishCaretForQml(int difficultyId, qulonglong revision, int anchor,
-                                        int position, bool imeComposing);
+    Q_INVOKABLE bool publishCaretForQml(int difficultyId, qulonglong revision, bool imeComposing);
     Q_INVOKABLE bool acceptsTouchAuthoringForQml(int difficultyId, qulonglong revision,
                                                  bool imeComposing, bool editorHasFocus) const;
     Q_INVOKABLE QVariantList bookmarksForQml(const QString& text) const;
@@ -118,9 +117,7 @@ public:
     Q_INVOKABLE void clearAllHistory();
     // A closed tab takes its history with it.
     Q_INVOKABLE void dropHistoryScope(const QString& scopeId);
-    Q_INVOKABLE void recordQmlTransaction(const QString& before, const QString& after,
-                                          int beforeAnchor, int beforePosition,
-                                          int afterAnchor, int afterPosition);
+    Q_INVOKABLE void recordQmlTransaction(const QString& before, const QString& after);
     Q_INVOKABLE QVariantMap undoQmlTransaction();
     Q_INVOKABLE QVariantMap redoQmlTransaction();
     Q_INVOKABLE void updateCompletionForQml(const QString& text, int position);
@@ -170,10 +167,6 @@ private:
         int start = 0;
         QString removed;
         QString inserted;
-        int beforeAnchor = 0;
-        int beforePosition = 0;
-        int afterAnchor = 0;
-        int afterPosition = 0;
     };
     struct QmlHistory {
         QVector<QmlUndoEntry> undo;

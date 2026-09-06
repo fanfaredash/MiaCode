@@ -1,15 +1,16 @@
 #pragma once
 
 #include <QObject>
+#include <QPointF>
 #include <QPointer>
 #include <QQuickTextDocument>
+#include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 namespace miacode::qml_ui {
 
-// Owns the QInputMethodEvent boundary for the QML TextArea. Preedit events are
-// deliberately forwarded to Qt; commit strings are consumed and handed to the
-// QML transaction adapter exactly once.
+// 处理 TextArea 的输入法事件，并提供鼠标选择使用的文字命中坐标和单词边界。
+// 预编辑事件交给 Qt；提交文字由 QML 事务适配器处理一次。
 class QmlEditorInputBridge : public QObject
 {
     Q_OBJECT
@@ -26,6 +27,8 @@ public:
     void setImeInputDisabled(bool disabled);
     QQuickTextDocument* textDocument() const;
     void setTextDocument(QQuickTextDocument* document);
+    Q_INVOKABLE QPointF textHitPoint(qreal x, qreal y) const;
+    Q_INVOKABLE QVariantMap wordRange(int position) const;
 
 signals:
     void targetChanged();

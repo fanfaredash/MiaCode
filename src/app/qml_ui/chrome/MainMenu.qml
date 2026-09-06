@@ -336,6 +336,11 @@ Item {
                 onTriggered: root.commands.saveRequested()
             }
             AppMenuAction {
+                text: UiText.text("保存整个文档")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.saveWholeDocumentRequested()
+            }
+            AppMenuAction {
                 text: UiText.text("另存为")
                 shortcut: StandardKey.SaveAs
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.SaveAs)

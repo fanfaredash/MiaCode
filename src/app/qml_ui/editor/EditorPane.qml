@@ -23,6 +23,9 @@ Item {
         sourceVisible ? sourceEditor.selectionBeatStatusText : ""
     readonly property string selectionBeatTooltipText:
         sourceVisible ? sourceEditor.selectionBeatTooltipText : ""
+    // Metadata actions use one shared column width so the button geometry does
+    // not change with translated label length or with the input-field width.
+    readonly property int metadataActionButtonWidth: 168
     property double pendingActivationSequence: 0
     property var pendingActivationCompletion: null
     property var pendingActivationCancellation: null
@@ -193,6 +196,7 @@ Item {
         required property string value
         required property real editorWidth
         property bool stacked: false
+        property bool commitOnEditingFinished: false
         signal committed(string value)
 
         implicitWidth: fieldLabel.implicitWidth + 8 + fieldEditor.editorWidth
@@ -218,7 +222,8 @@ Item {
             y: fieldGroup.stacked ? fieldLabel.height + 8 : 0
             width: fieldGroup.stacked ? fieldGroup.width : editorWidth
             text: fieldGroup.value
-            onTextEdited: fieldGroup.committed(text)
+            onTextEdited: if (!fieldGroup.commitOnEditingFinished) fieldGroup.committed(text)
+            onEditingFinished: if (fieldGroup.commitOnEditingFinished) fieldGroup.committed(text)
         }
     }
 
@@ -295,6 +300,7 @@ Item {
                 labelText: UiText.text("延迟")
                 value: root.documentSession.currentDifficultyOffset
                 editorWidth: 64
+                commitOnEditingFinished: true
                 onCommitted: value => root.documentSession.currentDifficultyOffset = value
             }
 
@@ -367,13 +373,17 @@ Item {
                 width: metadataColumn.width
                 label: UiText.text("标题")
                 value: root.documentSession.metadataTitle
+                actionText: UiText.text("track_metadata.read_from_audio")
                 onCommitted: value => root.documentSession.metadataTitle = value
+                onActionRequested: root.documentSession.readTitleFromAudioFile()
             }
             MetadataField {
                 width: metadataColumn.width
                 label: UiText.text("曲师")
                 value: root.documentSession.metadataArtist
+                actionText: UiText.text("track_metadata.read_from_audio")
                 onCommitted: value => root.documentSession.metadataArtist = value
+                onActionRequested: root.documentSession.readArtistFromAudioFile()
             }
             MetadataField {
                 width: metadataColumn.width
@@ -395,29 +405,62 @@ Item {
                 value: root.documentSession.metadataClockCount
                 onCommitted: value => root.documentSession.metadataClockCount = value
             }
-            MetadataField {
+            MetadataMediaField {
                 width: metadataColumn.width
-                label: UiText.text("视频路径")
-                value: root.documentSession.metadataVideoPath
-                onCommitted: value => root.documentSession.metadataVideoPath = value
+                label: UiText.text("metadata.field.cover")
+                firstActionText: UiText.text("track_metadata.read_from_audio")
+                secondActionText: UiText.text("track_metadata.import_file")
+                onFirstActionRequested: root.documentSession.extractCoverFromAudioFile()
+                onSecondActionRequested: root.documentSession.importChartBackgroundImage()
             }
-            Row {
-                spacing: 8
-                Button {
-                    text: UiText.text("track_metadata.import_background_image")
-                    onClicked: root.documentSession.importChartBackgroundImage()
-                }
-                Button {
-                    text: UiText.text("track_metadata.import_background_video")
-                    onClicked: root.documentSession.importChartBackgroundVideo()
-                }
-                Button {
-                    text: UiText.text("track_metadata.delete_pv")
-                    enabled: root.documentSession.metadataVideoPath.length > 0
-                    onClicked: root.documentSession.removeChartPv()
-                }
+            MetadataMediaField {
+                width: metadataColumn.width
+                label: UiText.text("metadata.field.background_video")
+                firstActionText: UiText.text("track_metadata.import_pv")
+                secondActionText: UiText.text("track_metadata.remove_pv")
+                secondActionEnabled: root.documentSession.metadataHasVideo
+                onFirstActionRequested: root.documentSession.importChartBackgroundVideo()
+                onSecondActionRequested: root.documentSession.removeChartPv()
             }
 
+            Label {
+                text: UiText.text("其他字段")
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+            }
+            AppTextArea {
+                id: extraFieldsEdit
+                property bool userEdited: false
+
+                width: metadataColumn.width
+                height: 150
+                text: root.documentSession.metadataExtraText
+                placeholderText: UiText.text("每行一个 &字段=值")
+                onTextChanged: {
+                    if (activeFocus && text !== root.documentSession.metadataExtraText)
+                        extraFieldsEdit.userEdited = true
+                }
+                onActiveFocusChanged: {
+                    if (!activeFocus && extraFieldsEdit.userEdited) {
+                        root.documentSession.metadataExtraText = text
+                        extraFieldsEdit.userEdited = false
+                    }
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: root.documentSession
+        function onEditingFinishedRequested() {
+            root.forceActiveFocus()
+        }
+        function onMetadataChanged() {
+            if (extraFieldsEdit.activeFocus)
+                return
+            extraFieldsEdit.userEdited = false
+            extraFieldsEdit.text = root.documentSession.metadataExtraText
         }
     }
 
@@ -457,6 +500,7 @@ Item {
         required property string label
         required property string value
         property string actionText: ""
+        readonly property int actionWidth: root.metadataActionButtonWidth
         signal committed(string value)
         signal actionRequested()
         spacing: 4
@@ -467,18 +511,65 @@ Item {
             font.family: Theme.uiFont
             font.pixelSize: Theme.secondaryFontSize
         }
-        RowLayout {
+        Item {
             width: field.width
+            implicitHeight: Math.max(Theme.controlMinHeight, actionButton.implicitHeight)
+            height: implicitHeight
 
             AppTextField {
-                Layout.fillWidth: true
+                id: metadataInput
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: actionButton.visible ? actionButton.left : parent.right
+                anchors.rightMargin: actionButton.visible ? 8 : 0
                 text: field.value
-                onTextEdited: field.committed(text)
+                onEditingFinished: field.committed(text)
             }
             AppButton {
+                id: actionButton
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: field.actionWidth
                 visible: field.actionText.length > 0
                 text: field.actionText
                 onClicked: field.actionRequested()
+            }
+        }
+    }
+
+    component MetadataMediaField: Column {
+        id: mediaField
+        required property string label
+        required property string firstActionText
+        required property string secondActionText
+        readonly property int actionWidth: root.metadataActionButtonWidth
+        property bool secondActionEnabled: true
+        signal firstActionRequested()
+        signal secondActionRequested()
+        spacing: 4
+
+        Label {
+            text: mediaField.label
+            color: Theme.colors.text.secondary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.secondaryFontSize
+        }
+        Row {
+            width: mediaField.width
+            spacing: 8
+
+            AppButton {
+                width: mediaField.actionWidth
+                text: mediaField.firstActionText
+                onClicked: mediaField.firstActionRequested()
+            }
+            AppButton {
+                width: mediaField.actionWidth
+                enabled: mediaField.secondActionEnabled
+                text: mediaField.secondActionText
+                onClicked: mediaField.secondActionRequested()
             }
         }
     }

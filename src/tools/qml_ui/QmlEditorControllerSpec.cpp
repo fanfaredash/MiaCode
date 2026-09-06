@@ -250,7 +250,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
 
     controller.clearAllHistory();
     controller.recordQmlTransaction(
-        openedChart, editedChart, 0, 0, editedChart.size(), editedChart.size());
+        openedChart, editedChart);
     workspace.replaceActiveDifficultyChart(editedChart);
     QString restored = applyRestoredTransaction(
         editedChart, controller.undoQmlTransaction());
@@ -264,7 +264,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
     const QString postSaveEdit = QStringLiteral("(120){4}3,");
     controller.clearAllHistory();
     controller.recordQmlTransaction(
-        editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
+        editedChart, postSaveEdit);
     workspace.replaceActiveDifficultyChart(postSaveEdit);
     restored = applyRestoredTransaction(
         postSaveEdit, controller.undoQmlTransaction());
@@ -277,7 +277,7 @@ bool verifyWorkspaceSavePointFollowsQmlUndo(
         ChartWorkspaceDocumentField::Title, QStringLiteral("metadata-dirty"));
     controller.clearAllHistory();
     controller.recordQmlTransaction(
-        editedChart, postSaveEdit, 0, 0, postSaveEdit.size(), postSaveEdit.size());
+        editedChart, postSaveEdit);
     workspace.replaceActiveDifficultyChart(postSaveEdit);
     restored = applyRestoredTransaction(
         postSaveEdit, controller.undoQmlTransaction());
@@ -1117,8 +1117,7 @@ int main(int argc, char** argv)
                && replaceAll.transaction.undoGroup,
            QStringLiteral("replace all honors whole words in one undo transaction"), out, &failed);
     controller.clearAllHistory();
-    controller.recordQmlTransaction(QStringLiteral("foo foo"), QStringLiteral("bar bar"),
-                                    0, 0, 7, 7);
+    controller.recordQmlTransaction(QStringLiteral("foo foo"), QStringLiteral("bar bar"));
     const auto restored = controller.undoQmlTransaction();
     const auto repeated = controller.redoQmlTransaction();
     expect(restored.value(QStringLiteral("replacementText")).toString() == QStringLiteral("foo foo")
@@ -1132,7 +1131,7 @@ int main(int argc, char** argv)
     // changed. Replaying the whole document left the caret parked at a stale
     // offset with nothing selected.
     controller.clearAllHistory();
-    controller.recordQmlTransaction(QStringLiteral("1,2,3,4,"), QStringLiteral("1,2,9,4,"), 4, 4, 5, 5);
+    controller.recordQmlTransaction(QStringLiteral("1,2,3,4,"), QStringLiteral("1,2,9,4,"));
     const auto narrowUndo = controller.undoQmlTransaction();
     expect(narrowUndo.value(QStringLiteral("replacementStart")).toInt() == 4
                && narrowUndo.value(QStringLiteral("replacementEnd")).toInt() == 5
@@ -1151,7 +1150,7 @@ int main(int argc, char** argv)
     // Undoing an insertion restores nothing, so the caret collapses at the
     // point the inserted text used to start rather than selecting a neighbour.
     controller.clearAllHistory();
-    controller.recordQmlTransaction(QStringLiteral("1,,"), QStringLiteral("1,A1,"), 2, 2, 4, 4);
+    controller.recordQmlTransaction(QStringLiteral("1,,"), QStringLiteral("1,A1,"));
     const auto insertionUndo = controller.undoQmlTransaction();
     expect(insertionUndo.value(QStringLiteral("replacementStart")).toInt() == 2
                && insertionUndo.value(QStringLiteral("replacementEnd")).toInt() == 4
