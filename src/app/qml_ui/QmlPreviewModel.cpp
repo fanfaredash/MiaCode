@@ -196,11 +196,11 @@ void QmlPreviewModel::refreshFromBackend(bool force)
         rebuildStatistics();
     }
 
-    if (positionChangedValue) {
-        emit positionChanged();
-    }
     if (transportChangedValue) {
         emit transportChanged();
+    }
+    if (positionChangedValue) {
+        emit positionChanged();
     }
     if (playingChangedValue) {
         emit playingChanged();

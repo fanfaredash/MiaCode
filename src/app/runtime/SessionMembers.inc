@@ -221,20 +221,8 @@
         bool auditionSceneReady_ = false;
         std::function<bool()> auditionSceneStillCurrent_;
         std::function<void()> auditionSceneReinstall_;
-        // One-shot preview position carried INTO the export page from the field
-        // that was active before entering (difficulty tab / latency page), so the
-        // export audition seeds the playhead there instead of snapping to 0 —
-        // matching the difficulty-tab switch behavior. < 0 means "no seed, start
-        // at 0"; installExportPreviewAuditionScene consumes it and resets it to
-        // -1 so later badge switches on the page still start their new difficulty
-        // from 0.
+        // 进入导出页面时携带的谱面进度；消费后设为 -1，页面内场景重建继承 pauseSecond_。
         double exportPreviewEntrySeedSecond_ = -1.0;
-        // The difficulty id the export audition was last installed for. PERSISTS
-        // across teardown/destroy, so a re-install of the SAME difficulty —
-        // e.g. the 视频导出 → 封面 → 视频导出 sub-tab dance — can preserve the current
-        // pauseSecond_ instead of snapping to 0 (and thence to the 片头 head
-        // via refreshExportIntroState). Reset only on document load. 0 = none.
-        int lastExportAuditionDifficultyId_ = 0;
         // Export-page intro lead-in: while it runs, the animated 片头 plays in the
         // preview before the chart (添加片头 on, playing from 0). Self-contained
         // QTimer-driven phase; the chart audition starts when it finishes.
@@ -653,7 +641,6 @@
     bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
     bool& auditionSceneReady_ = state_.auditionSceneReady_;
     double& exportPreviewEntrySeedSecond_ = state_.exportPreviewEntrySeedSecond_;
-    int& lastExportAuditionDifficultyId_ = state_.lastExportAuditionDifficultyId_;
     bool& exportIntroRegionActive_ = state_.exportIntroRegionActive_;
     double& exportIntroPlayheadSeconds_ = state_.exportIntroPlayheadSeconds_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;

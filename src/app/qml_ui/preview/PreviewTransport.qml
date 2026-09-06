@@ -100,7 +100,8 @@ Item {
     Binding {
         target: progress
         property: "value"
-        value: root.previewSession.positionSeconds
+        // 范围重建时按当前进度定位，涵盖位置数值保持不变的页面切换。
+        value: Math.max(progress.from, Math.min(progress.to, root.previewSession.positionSeconds))
         when: !progress.pressed
     }
 

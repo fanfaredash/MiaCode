@@ -106,6 +106,10 @@ quint64 miacode::runtime::PlaybackCoordinator::requestPausedPreviewVisualSeek(
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     const quint64 generation = ++state_.pausedSeekGeneration_;
     state_.pausedSeekTargetSecond_ = clampedSecond;
+    if (state_.pendingDifficultySwitchPreviewRestore_) {
+        // 谱面解析期间的用户定位成为恢复目标，保持异步刷新与当前进度一致。
+        state_.pendingDifficultySwitchPreviewRestoreSecond_ = clampedSecond;
+    }
     state_.previewPendingSeekSecond_ = clampedSecond;
     state_.previewPendingSeekCenterView_ = centerView;
     if (logHotPath) {
