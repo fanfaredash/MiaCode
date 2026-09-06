@@ -15,6 +15,7 @@
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
+#include "common/ContentDurationConfig.h"
 #include "common/CrashRecovery.h"
 #include "common/OperationLog.h"
 #include "common/DebugLog.h"
@@ -252,6 +253,14 @@ void miacode::runtime::PlaybackCoordinator::applyWaveformData(
     const double chartDurationSeconds = state_.timelineQuickStateBridge_ != nullptr
         ? state_.timelineQuickStateBridge_->durationSeconds()
         : 0.0;
+    if (state_.playing_ && state_.qtPreviewPlaybackEndSecond_ > 0.0
+        && state_.previewTrackDurationSeconds_ > 0.0) {
+        const double resolvedEndSecond =
+            miacode::content_duration::totalContentDurationSeconds(
+                chartDurationSeconds, state_.previewTrackDurationSeconds_);
+        state_.qtPreviewPlaybackEndSecond_ =
+            qMax(state_.qtPreviewPlaybackEndSecond_, resolvedEndSecond);
+    }
     const QString summary = waveformData
         ? miacode::waveform::waveformDataDebugSummary(*waveformData)
         : QStringLiteral("data=0");
@@ -267,6 +276,11 @@ void miacode::runtime::PlaybackCoordinator::applyWaveformData(
             .arg(previewDurationSeconds(), 0, 'f', 6)
             .arg(state_.timelineQuickStateBridge_ != nullptr ? 1 : 0)
             .arg(summary));
+    if (previousTrackDurationSeconds != state_.previewTrackDurationSeconds_) {
+        // Audio length is a discrete transport-state change. Notify the QML
+        // projection when the async waveform result replaces the placeholder.
+        emit services_.shellNotifications().presentationChanged();
+    }
 }
 
 void miacode::runtime::PlaybackCoordinator::refreshWaveformCache()
@@ -512,7 +526,12 @@ void miacode::runtime::PlaybackCoordinator::setCurrentFilePath(const QString& pa
         invalidatePreviewFollowBindingCache();
         validation_.clearValidationCache();
         validation_.clearValidationDecorations();
-        stopQtPreviewPlayback(false);
+        // A file switch pauses at the outgoing chart's position. The incoming
+        // chart gets an independent playhead.
+        stopQtPreviewPlayback(true);
+        if (auto* authority = services_.playbackStateAuthority(); authority != nullptr) {
+            authority->repositionSilently(0.0, "set_current_file_path");
+        }
         if (auto* latency = services_.latencyEngine(); latency != nullptr) {
             latency->exitSandboxIfActive();
         }

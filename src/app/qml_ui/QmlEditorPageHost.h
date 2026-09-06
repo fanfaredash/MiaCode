@@ -40,6 +40,9 @@ public:
     Q_INVOKABLE bool openExportPage();
     Q_INVOKABLE bool openLatencyPage();
     Q_INVOKABLE bool leaveOverlayPage();
+    Q_INVOKABLE bool ensureDifficultyPageActive(int difficultyId);
+    Q_INVOKABLE bool clearEditorPresentation();
+    Q_INVOKABLE void rememberEditorReturnTarget(const QString& editorKey);
     Q_INVOKABLE void openMediaProcessingTools();
     // Normalize remains an editor-owned overlay and is unavailable while the
     // video export page owns the center workspace.
@@ -79,5 +82,7 @@ private:
     }
     QString activePageId_;
     int resumeDifficultyId_ = 0;
+    QString resumeEditorKey_;
+    bool resumeEditorKeyExplicit_ = false;
     bool navigationPending_ = false;
 };

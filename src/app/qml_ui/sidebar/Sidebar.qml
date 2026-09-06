@@ -42,8 +42,10 @@ Item {
             root.preferences.sidebarVisible = true
         }
 
-        if (viewId === "export")
+        if (viewId === "export") {
+            root.pages.rememberEditorReturnTarget(root.viewState.activeEditorKey)
             root.pages.openVideoExportPage()
+        }
     }
 
     ActivityBar {
@@ -56,8 +58,10 @@ Item {
         normalizationEnabled: root.pages.activePageId !== "export"
         onViewRequested: viewId => root.activateView(viewId)
         onToolRequested: function(toolId) {
-            if (toolId === "latency")
+            if (toolId === "latency") {
+                root.pages.rememberEditorReturnTarget(root.viewState.activeEditorKey)
                 root.pages.openLatencyPage()
+            }
             else if (toolId === "media")
                 root.pages.openMediaProcessingTools()
             else if (toolId === "normalize")

@@ -1902,14 +1902,6 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
 void TimelineQuickItem::keyPressEvent(QKeyEvent* event)
 {
     if (event != nullptr
-        && !event->isAutoRepeat()
-        && event->modifiers() == Qt::NoModifier
-        && event->key() == Qt::Key_Space) {
-        emit previewPlayPauseRequested();
-        event->accept();
-        return;
-    }
-    if (event != nullptr
         && stateBridge_ != nullptr
         && event->modifiers() == Qt::NoModifier
         && (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right)) {
@@ -1929,12 +1921,6 @@ void TimelineQuickItem::keyPressEvent(QKeyEvent* event)
 
 void TimelineQuickItem::keyReleaseEvent(QKeyEvent* event)
 {
-    if (event != nullptr
-        && event->modifiers() == Qt::NoModifier
-        && event->key() == Qt::Key_Space) {
-        event->accept();
-        return;
-    }
     if (event != nullptr
         && event->modifiers() == Qt::NoModifier
         && !event->isAutoRepeat()

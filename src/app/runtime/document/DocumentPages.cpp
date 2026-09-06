@@ -248,6 +248,26 @@ bool miacode::runtime::DocumentSessionHost::switchToWelcomePage()
     return true;
 }
 
+bool miacode::runtime::DocumentSessionHost::clearEditorPresentation()
+{
+    if (ui_.qmlExportSession_ != nullptr) {
+        ui_.qmlExportSession_->leave();
+    }
+    state_.activeDifficultyId_ = 0;
+    state_.activeOutlineKey_ = QStringLiteral("chart");
+    state_.pendingDifficultySwitchPreviewRestore_ = false;
+    state_.pendingDifficultySwitchPreviewRestoreRevision_ = 0;
+    state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;
+    state_.pendingDifficultySwitchPreviewRestoreSecond_ = 0.0;
+    setChartBottomTabsMode(false);
+    session_.clearValidationDecorations();
+    state_.currentFieldDirty_ = false;
+    clearTimelineAndPreview();
+    updateDirtyState();
+    session_.updateWindowTitle();
+    return true;
+}
+
 bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficultyId)
 {
     if (!SimaiDocument::isDifficultyId(difficultyId) || session_.applicationServices_.workspace().document().difficulty(difficultyId) == nullptr) {
@@ -411,16 +431,13 @@ void miacode::runtime::DocumentSessionHost::activateInitialField()
 void miacode::runtime::DocumentSessionHost::loadDocument()
 {
     clearDeletedDifficultyUndoState();
+    // Stop the outgoing document before installing the new document state.
+    session_.stopQtPreviewPlayback(true);
     const miacode::v2::ChartWorkspaceSnapshot snapshot =
         session_.applicationServices_.workspace().snapshot();
     resetAutosaveState(snapshot.sourceText);
     state_.documentDirty_ = snapshot.dirty;
     state_.currentFieldDirty_ = false;
-    // Non-command write: a fresh document starts the playhead at 0 — see
-    // PlaybackStateAuthority.h.
-    if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
-        authority->repositionSilently(0.0, "load_document");
-    }
     state_.activeDifficultyId_ = snapshot.activeDifficultyId;
     if (SimaiDocument::isDifficultyId(state_.activeDifficultyId_)) {
         state_.projectLastOpenedDifficultyId_ = state_.activeDifficultyId_;
@@ -440,7 +457,12 @@ void miacode::runtime::DocumentSessionHost::clearTimelineAndPreview(bool preserv
     state_.timelineSlowRunningRevision_ = 0;
     state_.timelineAnalysisRequestedRevision_ = 0;
     state_.timelineAnalysisRunningRevision_ = 0;
-    state_.lastPreviewNoteMarkerSignature_.clear();
+    // The signature describes the markers still installed in the scene. A
+    // preserved scene keeps its outgoing markers until the incoming parse is
+    // ready, including when that parse produces an empty marker set.
+    if (!preservePresentation) {
+        state_.lastPreviewNoteMarkerSignature_.clear();
+    }
     state_.latestTimelineNoteMarkers_.clear();
     state_.latestTimelineNoteMarkerSignature_.clear();
     state_.latestTimelinePreviewRevision_ = 0;

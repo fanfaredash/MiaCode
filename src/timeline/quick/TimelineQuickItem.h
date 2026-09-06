@@ -97,7 +97,6 @@ signals:
     void followPreviewToggled(bool enabled);
     void viewportLockToggled(bool enabled);
     void followProgressToggled(bool enabled);
-    void previewPlayPauseRequested();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;

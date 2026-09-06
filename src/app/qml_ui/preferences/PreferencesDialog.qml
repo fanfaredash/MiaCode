@@ -317,6 +317,7 @@ AppDialog {
             ListView {
                 id: shortcutList
                 objectName: "shortcutList"
+                property bool reservesPlainSpace: root.capturingId.length > 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true

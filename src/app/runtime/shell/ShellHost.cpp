@@ -3,6 +3,7 @@
 #include "runtime/Session.h"
 #include "runtime/document/DocumentSessionHost.h"
 #include "runtime/export/VideoExportHost.h"
+#include "runtime/playback/PlaybackCoordinator.h"
 
 #include "app/ui/ShortcutRegistry.h"
 #include "common/CrashRecovery.h"
@@ -11,10 +12,15 @@
 
 #include <QCoreApplication>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QKeyEvent>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QString>
 
 namespace {
+
+constexpr char kReservesPlainSpaceProperty[] = "reservesPlainSpace";
 
 struct PauseDisplayHoldKey {
     int key = Qt::Key_Alt;
@@ -48,6 +54,30 @@ PauseDisplayHoldKey pauseDisplayHoldKey()
     return hold;
 }
 
+bool objectReservesPlainSpace(QObject* object)
+{
+    for (QObject* current = object; current != nullptr; current = current->parent()) {
+        if (current->property(kReservesPlainSpaceProperty).toBool()) {
+            return true;
+        }
+    }
+
+    auto* item = qobject_cast<QQuickItem*>(object);
+    for (QQuickItem* current = item; current != nullptr; current = current->parentItem()) {
+        if (current->property(kReservesPlainSpaceProperty).toBool()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool rootWindowReservesPlainSpace(QQuickWindow* window)
+{
+    return window->property("sourceEditorFocused").toBool()
+        || objectReservesPlainSpace(QGuiApplication::focusObject())
+        || objectReservesPlainSpace(window->activeFocusItem());
+}
+
 }  // namespace
 
 miacode::runtime::ShellHost::ShellHost(::Session& session)
@@ -72,8 +102,25 @@ bool Session::eventFilter(QObject*, QEvent* event)
         return false;
     }
 
-    if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+    if (event->type() == QEvent::ShortcutOverride
+        || event->type() == QEvent::KeyPress
+        || event->type() == QEvent::KeyRelease) {
         const auto* keyEvent = static_cast<const QKeyEvent*>(event);
+        auto* rootWindow = qobject_cast<QQuickWindow*>(rootWindow_.data());
+        if (rootWindow != nullptr
+            && QGuiApplication::focusWindow() == rootWindow
+            && keyEvent->key() == Qt::Key_Space
+            && keyEvent->modifiers() == Qt::NoModifier
+            && !rootWindowReservesPlainSpace(rootWindow)) {
+            if (event->type() == QEvent::KeyPress
+                && !keyEvent->isAutoRepeat()
+                && playback_ != nullptr) {
+                playback_->togglePlayback();
+            }
+            event->accept();
+            return true;
+        }
+
         const PauseDisplayHoldKey hold = pauseDisplayHoldKey();
         if (keyEvent->key() == hold.key) {
             if (event->type() == QEvent::KeyPress

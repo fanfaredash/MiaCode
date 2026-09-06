@@ -266,8 +266,9 @@ Column {
                 text: modelData.label
                 difficultyId: modelData.id
                 onTriggered: {
-                    if (root.commands.addDifficulty(modelData.id))
-                        root.viewState.openDifficultyEditor(modelData.id)
+                    const addedDifficultyId = modelData.id
+                    if (root.commands.addDifficulty(addedDifficultyId))
+                        root.viewState.openDifficultyEditor(addedDifficultyId)
                 }
             }
         }

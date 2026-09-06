@@ -353,7 +353,12 @@ Item {
                 return
             }
             root.commands.selectDifficulty(difficultyId)
+            root.pages.ensureDifficultyPageActive(difficultyId)
             state.activeSidebarView = "chart"
+        }
+
+        function onEditorPresentationCleared() {
+            root.pages.clearEditorPresentation()
         }
     }
 
@@ -368,6 +373,7 @@ Item {
             const difficultyId = root.pendingDifficultyActivation
             root.pendingDifficultyActivation = 0
             root.commands.selectDifficulty(difficultyId)
+            root.pages.ensureDifficultyPageActive(difficultyId)
             state.activeSidebarView = "chart"
         }
 

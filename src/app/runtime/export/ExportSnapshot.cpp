@@ -463,6 +463,11 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
     session_.latestTimelinePreviewRevision_ = session_.timelineRevision_;
     session_.latestTimelinePreviewSnapshotReady_ = true;
     session_.scene_->setNoteMarkers(previewState.shiftedNoteMarkers);
+    // The export audition installs these markers itself, outside the editor
+    // timeline refresh path. Keep the cache aligned with the scene owner so
+    // returning to the editor compares its target markers against B, not the
+    // chart that was open before export.
+    session_.lastPreviewNoteMarkerSignature_ = previewState.noteMarkerSignature;
 
     // Bottom-timeline model feeds previewDurationSeconds() (slider range) even
     // though the strip itself is hidden on the export page (bottom-tab OFF).

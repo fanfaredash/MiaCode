@@ -2,6 +2,7 @@ import QtQuick
 
 QtObject {
     signal difficultyEditorActivationRequested(int difficultyId)
+    signal editorPresentationCleared()
     // A closed tab is a view that no longer exists; whatever it accumulated —
     // its undo history above all — goes with it.
     signal editorClosed(string key)
@@ -10,6 +11,7 @@ QtObject {
     property var openEditorTabs: []
     property var editorHistory: []
     property string activeEditorKey: ""
+    property bool editorPresentationClearedByUser: false
     readonly property bool hasActiveEditor: activeEditorKey.length > 0
     readonly property bool metadataEditorActive: activeEditorKey === metadataEditorKey
     readonly property bool difficultyEditorActive: activeEditorKey.startsWith("difficulty:")
@@ -77,6 +79,7 @@ QtObject {
     }
 
     function openEditor(key) {
+        editorPresentationClearedByUser = false
         if (!containsEditor(key)) {
             const tabs = openEditorTabs.slice()
             tabs.push(key)
@@ -136,11 +139,16 @@ QtObject {
         if (nextKey.length === 0 && tabs.length > 0)
             nextKey = tabs[Math.min(closingIndex, tabs.length - 1)]
         setActiveEditor(nextKey)
-        if (nextKey.length > 0)
+        if (nextKey.length > 0) {
             recordEditorUse(nextKey)
+        } else {
+            editorPresentationClearedByUser = true
+            editorPresentationCleared()
+        }
     }
 
     function resetEditorTabs(currentDifficultyId) {
+        editorPresentationClearedByUser = false
         const tabs = currentDifficultyId > 0
             ? [difficultyEditorKey(currentDifficultyId)]
             : []
@@ -174,11 +182,13 @@ QtObject {
             : (difficultyKeys.length > 0 ? difficultyKeys[0] : "")
 
         let tabs = openEditorTabs.filter(key => key === metadataEditorKey || validKeys[key])
-        if (tabs.length === 0 && preferredKey.length > 0)
-            tabs = [preferredKey]
-        else if (preferredKey.length > 0 && tabs.indexOf(preferredKey) < 0
-                 && activeKey.length > 0 && preferredKey === activeKey)
-            tabs = tabs.concat([preferredKey])
+        if (!editorPresentationClearedByUser) {
+            if (tabs.length === 0 && preferredKey.length > 0)
+                tabs = [preferredKey]
+            else if (preferredKey.length > 0 && tabs.indexOf(preferredKey) < 0
+                     && activeKey.length > 0 && preferredKey === activeKey)
+                tabs = tabs.concat([preferredKey])
+        }
 
         const unchanged = tabs.length === openEditorTabs.length
             && tabs.every((key, index) => key === openEditorTabs[index])

@@ -6,6 +6,8 @@ import MiaCode.UI
 TextArea {
     id: root
 
+    property bool reservesPlainSpace: true
+
     font: Theme.codeFont
     color: Theme.colors.text.editor
     placeholderTextColor: Theme.colors.text.secondary

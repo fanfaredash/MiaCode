@@ -7,6 +7,8 @@ import MiaCode.UI
 TextField {
     id: root
 
+    property bool reservesPlainSpace: true
+
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     color: Theme.colors.text.primary

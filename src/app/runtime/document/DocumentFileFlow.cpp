@@ -624,7 +624,13 @@ void miacode::runtime::DocumentSessionHost::syncRuntimeFromWorkspace()
                 }
             }
         }
-        session_.refreshWaveformCache();
+        // The workspace path is authoritative for the document, while the
+        // preview duration still needs the media length before the user can
+        // start playback. Keep the same eager duration handoff as the native
+        // open path; waveform extraction remains asynchronous below it.
+        const double knownTrackDurationSeconds =
+            probeAudioDurationSeconds(state_.lastTrackPath_);
+        session_.refreshWaveformCache(knownTrackDurationSeconds);
         resetAutosaveState(snapshot.sourceText);
     }
 

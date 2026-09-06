@@ -6,6 +6,7 @@ import MiaCode.UI
 Dialog {
     id: root
 
+    property bool reservesPlainSpace: true
     property real preferredWidth: 460
     property real preferredHeight: Theme.dialogCompactHeight
     property Item body

@@ -791,6 +791,7 @@ Rectangle {
                                             Layout.fillWidth: true
                                             implicitHeight: frameTimeRow.implicitHeight
                                             activeFocusOnTab: true
+                                            property bool reservesPlainSpace: true
                                             readonly property bool inputEnabled: root.chartFrameInteractive
 
                                             function focusTransport() {

@@ -872,6 +872,7 @@ Rectangle {
         TextArea.flickable: TextArea {
             id: sourceArea
             objectName: "sourceArea"
+            property bool reservesPlainSpace: true
             property bool syncingFromController: false
             property bool readyForUserEdits: false
             property string historyText: ""

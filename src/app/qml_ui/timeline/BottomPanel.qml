@@ -85,7 +85,6 @@ Item {
         onTimelineUserInteractionStarted: root.timelineSession.userInteractionStarted()
         onTimelineSurfaceReady: root.timelineSession.surfaceReady()
         onFollowPreviewToggled: enabled => root.timelineSession.followPreviewToggled(enabled)
-        onPreviewPlayPauseRequested: root.previewSession.togglePlayback()
     }
 
     Tooltip {

@@ -34,6 +34,10 @@ public:
     virtual bool enterLatencyPage() = 0;
     virtual bool enterExportPage() = 0;
 
+    // Closing the final editor view leaves the document loaded while removing
+    // its runtime presentation: transport, timeline, SFX and preview scene.
+    virtual bool clearEditorPresentation() { return false; }
+
     // 打包为 ZIP. Routed here rather than through a command bus because it is
     // reached from the page host's own menu entry.
     virtual void packChartAsZip() = 0;

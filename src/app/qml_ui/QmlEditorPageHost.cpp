@@ -75,13 +75,25 @@ void QmlEditorPageHost::markExportPageActive()
 
 void QmlEditorPageHost::rememberResumeDifficulty()
 {
+    if (resumeEditorKeyExplicit_) {
+        return;
+    }
     miacode::v2::EditorPageRouter* const pages = router();
     if (pages == nullptr) {
         return;
     }
     if (pages->hasActiveDifficulty() && pages->activeDifficultyId() > 0) {
         resumeDifficultyId_ = pages->activeDifficultyId();
+    } else {
+        resumeDifficultyId_ = 0;
     }
+}
+
+void QmlEditorPageHost::rememberEditorReturnTarget(const QString& editorKey)
+{
+    resumeEditorKey_ = editorKey;
+    resumeEditorKeyExplicit_ = true;
+    resumeDifficultyId_ = 0;
 }
 
 bool QmlEditorPageHost::resumeChartOrMetadata()
@@ -90,10 +102,36 @@ bool QmlEditorPageHost::resumeChartOrMetadata()
     if (pages == nullptr) {
         return false;
     }
-    if (resumeDifficultyId_ > 0 && pages->enterDifficultyPage(resumeDifficultyId_)) {
+    if (resumeEditorKeyExplicit_ && resumeEditorKey_.isEmpty()) {
+        resumeEditorKey_.clear();
+        resumeEditorKeyExplicit_ = false;
+        return pages->clearEditorPresentation();
+    }
+    int difficultyId = resumeDifficultyId_;
+    if (resumeEditorKeyExplicit_ && resumeEditorKey_.startsWith(QStringLiteral("difficulty:"))) {
+        difficultyId = resumeEditorKey_.mid(QStringLiteral("difficulty:").size()).toInt();
+    }
+    if (difficultyId > 0) {
+        // The export session owns its selected difficulty independently from
+        // the document workspace. Restore the editor data source before
+        // restoring the runtime page, so the tab and editor text use one id.
+        if (document_ != nullptr) {
+            document_->selectDifficulty(difficultyId);
+        }
+    }
+    if (difficultyId > 0 && pages->enterDifficultyPage(difficultyId)) {
+        resumeEditorKey_.clear();
+        resumeEditorKeyExplicit_ = false;
+        resumeDifficultyId_ = 0;
         return true;
     }
-    return pages->enterMetadataPage();
+    const bool restored = !resumeEditorKeyExplicit_ || resumeEditorKey_ == QLatin1String("metadata")
+        ? pages->enterMetadataPage()
+        : pages->clearEditorPresentation();
+    resumeEditorKey_.clear();
+    resumeEditorKeyExplicit_ = false;
+    resumeDifficultyId_ = 0;
+    return restored;
 }
 
 bool QmlEditorPageHost::requestPageSwitch(std::function<bool()> action)
@@ -212,6 +250,27 @@ bool QmlEditorPageHost::leaveOverlayPage()
         return true;
     }
     return requestPageSwitch([this]() { return finishLeaveOverlay(); });
+}
+
+bool QmlEditorPageHost::ensureDifficultyPageActive(int difficultyId)
+{
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr || difficultyId <= 0) {
+        return false;
+    }
+    if (pages->hasActiveDifficulty() && pages->activeDifficultyId() == difficultyId) {
+        return true;
+    }
+    return pages->enterDifficultyPage(difficultyId);
+}
+
+bool QmlEditorPageHost::clearEditorPresentation()
+{
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr || overlayActive() || navigationPending_) {
+        return false;
+    }
+    return pages->clearEditorPresentation();
 }
 
 void QmlEditorPageHost::openMediaProcessingTools()
