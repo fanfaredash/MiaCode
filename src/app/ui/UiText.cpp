@@ -4488,6 +4488,7 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("视频前置黑幕"), {QStringLiteral("Prepend black screen"), QStringLiteral("動画の先頭に黒画面を追加")}},
         {QStringLiteral("在背景视频开头插入指定时长的黑幕，并自动备份原文件。"), {QStringLiteral("Insert a black screen of the specified duration at the beginning of the background video and automatically back up the original file."), QStringLiteral("背景動画の先頭に指定した長さの黒画面を挿入し、元のファイルを自動的にバックアップします。")}},
         {QStringLiteral("将背景视频压缩至 20 MiB 以内，并自动备份原文件。"), {QStringLiteral("Compress the background video to 20 MiB or less and automatically back up the original file."), QStringLiteral("背景動画を 20 MiB 以下に圧縮し、元のファイルを自動的にバックアップします。")}},
+        {QStringLiteral("批量"), {QStringLiteral("Batch"), QStringLiteral("バッチ")}},
         {QStringLiteral("批量压缩视频"), {QStringLiteral("Batch-compress videos"), QStringLiteral("動画を一括圧縮")}},
         {QStringLiteral("选择目录并批量压缩其中的背景视频。"), {QStringLiteral("Choose a folder and batch-compress the background videos it contains."), QStringLiteral("フォルダーを選択し、その中の背景動画を一括圧縮します。")}},
         {QStringLiteral("折叠书签"), {QStringLiteral("Collapse bookmarks"), QStringLiteral("ブックマークを折りたたむ")}},

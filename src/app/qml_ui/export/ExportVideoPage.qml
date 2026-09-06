@@ -16,6 +16,35 @@ Rectangle {
                                                   && (root.session.activeTab === "batch"
                                                       || root.session.fullRangeExport)
 
+    // The batch-only inputs used to sit above the settings tab row and eat the
+    // height the tab body needed. They are a settings tab of their own now, so
+    // this list simply gains one entry while batch mode is active.
+    readonly property var settingsTabs: {
+        const tabs = []
+        if (root.session && root.session.activeTab === "batch")
+            tabs.push({ id: "batch", label: UiText.text("批量") })
+        tabs.push({ id: "output", label: UiText.text("输出") })
+        tabs.push({ id: "video", label: UiText.text("视频") })
+        tabs.push({ id: "gameplay", label: UiText.text("游戏") })
+        tabs.push({ id: "skin", label: UiText.text("皮肤") })
+        tabs.push({ id: "intro", label: UiText.text("片头") })
+        return tabs
+    }
+
+    // A settings tab the current export mode does not offer would leave the tab
+    // body blank, so the two ends are kept in step: entering batch opens the
+    // batch tab (its output folder and chart folders gate the run, and nothing
+    // else advertises that they are required), and leaving batch falls back to
+    // the output tab instead of stranding the page on a tab that just vanished.
+    function normalizeSettingsTab() {
+        if (!root.session)
+            return
+        if (root.session.activeTab === "batch")
+            root.session.settingsTab = "batch"
+        else if (root.session.settingsTab === "batch")
+            root.session.settingsTab = "output"
+    }
+
     function fontIndexForPath(options, path) {
         if (!options)
             return 0
@@ -106,107 +135,13 @@ Rectangle {
             visible: root.session && !(root.session && root.session.unavailableReason)
             spacing: 8
 
-            // Batch-only inputs stay above the shared settings tabs. The
-            // settings form below is the single source for both export modes.
-            ColumnLayout {
-                Layout.fillWidth: true
-                visible: root.session && root.session.activeTab === "batch"
-                spacing: 10
-
-                Text {
-                    text: UiText.text("难度")
-                    color: Theme.colors.text.secondary
-                }
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    Repeater {
-                        model: root.session ? root.session.batchDifficultyChecks : []
-                        delegate: AppSwitch {
-                            required property var modelData
-                            text: modelData.name
-                            checked: modelData.checked
-                            onToggled: if (root.session) root.session.setBatchDifficultyChecked(modelData.id, checked)
-                        }
-                    }
-                }
-
-                Text {
-                    text: UiText.text("输出文件夹")
-                    color: Theme.colors.text.secondary
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    AppTextField {
-                        Layout.fillWidth: true
-                        text: root.session ? root.session.batchOutputDirectory : ""
-                        onEditingFinished: if (root.session) root.session.batchOutputDirectory = text
-                    }
-                    AppButton {
-                        text: UiText.text("浏览...")
-                        onClicked: if (root.session) root.session.browseBatchOutputDirectory()
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        text: UiText.text("谱面文件夹")
-                        color: Theme.colors.text.secondary
-                        Layout.fillWidth: true
-                    }
-                    AppButton {
-                        text: UiText.text("添加")
-                        onClicked: if (root.session) root.session.addChartDirectories()
-                    }
-                    AppButton {
-                        text: UiText.text("清空")
-                        onClicked: if (root.session) root.session.clearChartDirectories()
-                    }
-                }
-                ListView {
-                    // Fixed cap (not root.height * 0.2): a percentage of the
-                    // pane height competes with the settings tabs below for
-                    // the same shrinking budget, so on a short pane — or once
-                    // this list grows past a few entries — the tab content
-                    // area was squeezed toward zero. A flat cap keeps this
-                    // list's footprint predictable regardless of pane size or
-                    // entry count; its own scrollbar covers the overflow.
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 112)
-                    clip: true
-                    model: root.session ? root.session.chartDirectories : []
-                    ScrollBar.vertical: AppScrollBar {}
-                    delegate: RowLayout {
-                        width: ListView.view.width
-                        required property int index
-                        required property string modelData
-                        Text {
-                            Layout.fillWidth: true
-                            text: modelData
-                            elide: Text.ElideMiddle
-                            color: Theme.colors.text.active
-                        }
-                        AppButton {
-                            text: UiText.text("移除")
-                            onClicked: if (root.session) root.session.removeChartDirectory(index)
-                        }
-                    }
-                }
-            }
-
             Row {
                 spacing: 4
                 Repeater {
-                    model: [
-                        { id: "output", label: UiText.text("输出") },
-                        { id: "video", label: UiText.text("视频") },
-                        { id: "gameplay", label: UiText.text("游戏") },
-                        { id: "skin", label: UiText.text("皮肤") },
-                        { id: "intro", label: UiText.text("片头") }
-                    ]
+                    model: root.settingsTabs
                     delegate: AppTab {
                         required property var modelData
+                        objectName: "exportSettingsTab_" + modelData.id
                         panelTab: true
                         text: modelData.label
                         active: root.session && root.session.settingsTab === modelData.id
@@ -217,12 +152,14 @@ Rectangle {
 
             Flickable {
                 id: settingsFlickable
+                objectName: "exportSettingsFlickable"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                // Never let the per-tab viewport collapse toward zero when
-                // the batch-only inputs above (chart-folder list, difficulty
-                // switches...) grow: it must stay tall enough to read as "a
-                // panel with a scrollbar", not as content that vanished.
+                // Nothing mode-specific sits above this any more, so every
+                // tab now opens on the same viewport. The floor stays as the
+                // short-window guard: squeezed down to a couple of rows the
+                // pane reads as content that vanished rather than as a panel
+                // with a scrollbar.
                 Layout.minimumHeight: 200
                 clip: true
                 contentHeight: settingsBody.implicitHeight
@@ -240,6 +177,99 @@ Rectangle {
                     id: settingsBody
                     width: parent.width
                     spacing: 12
+
+                    // Batch (only reachable while batch export is the active mode)
+                    ColumnLayout {
+                        objectName: "exportBatchSettingsPage"
+                        visible: root.session && root.session.activeTab === "batch"
+                                 && root.session.settingsTab === "batch"
+                        spacing: 10
+                        Layout.fillWidth: true
+
+                        Text {
+                            text: UiText.text("难度")
+                            color: Theme.colors.text.secondary
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Repeater {
+                                model: root.session ? root.session.batchDifficultyChecks : []
+                                delegate: AppSwitch {
+                                    required property var modelData
+                                    text: modelData.name
+                                    checked: modelData.checked
+                                    onToggled: if (root.session) root.session.setBatchDifficultyChecked(modelData.id, checked)
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: UiText.text("输出文件夹")
+                            color: Theme.colors.text.secondary
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            AppTextField {
+                                objectName: "batchOutputDirectoryField"
+                                Layout.fillWidth: true
+                                text: root.session ? root.session.batchOutputDirectory : ""
+                                onEditingFinished: if (root.session) root.session.batchOutputDirectory = text
+                            }
+                            AppButton {
+                                text: UiText.text("浏览...")
+                                onClicked: if (root.session) root.session.browseBatchOutputDirectory()
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: UiText.text("谱面文件夹")
+                                color: Theme.colors.text.secondary
+                                Layout.fillWidth: true
+                            }
+                            AppButton {
+                                text: UiText.text("添加")
+                                onClicked: if (root.session) root.session.addChartDirectories()
+                            }
+                            AppButton {
+                                text: UiText.text("清空")
+                                onClicked: if (root.session) root.session.clearChartDirectories()
+                            }
+                        }
+                        // This was a ListView capped at 112px because it shared
+                        // a column with the settings tabs and would otherwise
+                        // starve them. On its own tab there is nothing left to
+                        // starve, so the rows lay out at full height and the
+                        // tab's own Flickable scrolls them — which also keeps a
+                        // second scrollable from nesting inside that one.
+                        ColumnLayout {
+                            objectName: "batchChartDirectoryList"
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: root.session ? root.session.chartDirectories : []
+                                delegate: RowLayout {
+                                    id: chartDirectoryRow
+                                    required property int index
+                                    required property string modelData
+                                    Layout.fillWidth: true
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: chartDirectoryRow.modelData
+                                        elide: Text.ElideMiddle
+                                        color: Theme.colors.text.active
+                                    }
+                                    AppButton {
+                                        text: UiText.text("移除")
+                                        onClicked: if (root.session)
+                                            root.session.removeChartDirectory(chartDirectoryRow.index)
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Output (single-export range lives on this tab)
                     ColumnLayout {
@@ -968,8 +998,14 @@ Rectangle {
 
     }
 
+    Component.onCompleted: root.normalizeSettingsTab()
+
     Connections {
         target: root.session
+
+        function onActiveTabChanged() {
+            root.normalizeSettingsTab()
+        }
 
         function onRangeChanged() {
             if (!exportRangeStartField.activeFocus)

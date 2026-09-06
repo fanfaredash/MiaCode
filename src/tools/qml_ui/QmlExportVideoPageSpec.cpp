@@ -25,6 +25,25 @@ bool require(bool condition, const QString& message, QTextStream& err)
     return condition;
 }
 
+// Repeater delegates are parented visually but not as QObject children, so
+// findChild() cannot see a tab that the settings tab row generated. This walks
+// the item tree the way the viewer sees it.
+QQuickItem* findVisualItem(QQuickItem* item, const QString& objectName)
+{
+    if (item == nullptr) {
+        return nullptr;
+    }
+    if (item->objectName() == objectName) {
+        return item;
+    }
+    for (QQuickItem* child : item->childItems()) {
+        if (QQuickItem* found = findVisualItem(child, objectName)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 std::unique_ptr<QObject> createHarness(QQmlEngine& engine, QTextStream& err)
 {
     QQmlComponent component(&engine);
@@ -466,6 +485,90 @@ bool verifyRealExportPageControls(QTextStream& err)
     return ok;
 }
 
+// The batch-only inputs (difficulty switches, output folder, chart folders) used
+// to sit above the settings tab row and eat the height the tab body needed, so
+// batch mode rendered the shared settings form in a sliver. They own a settings
+// tab of their own now: batch mode hands the tab body exactly the viewport that
+// single-export mode gets, and a long chart-folder list scrolls in the same
+// viewport instead of pushing the form out of the way.
+bool verifyBatchInputsOwnASettingsTab(QTextStream& err)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    const std::unique_ptr<QObject> root = createHarness(engine, err);
+    auto* window = root ? qobject_cast<QQuickWindow*>(root.get()) : nullptr;
+    if (!require(window != nullptr,
+                 QStringLiteral("the batch settings harness creates a real QML window"), err)) {
+        return false;
+    }
+    window->show();
+    Q_UNUSED(QTest::qWaitForWindowExposed(window));
+    QCoreApplication::processEvents();
+
+    QObject* session = root->findChild<QObject*>(QStringLiteral("fakeExportSession"));
+    auto* flickable = root->findChild<QQuickItem*>(QStringLiteral("exportSettingsFlickable"));
+    if (!require(session != nullptr && flickable != nullptr,
+                 QStringLiteral("the export page exposes its shared settings viewport"), err)) {
+        return false;
+    }
+
+    QQuickItem* const contentItem = window->contentItem();
+    bool ok = require(findVisualItem(contentItem, QStringLiteral("exportSettingsTab_output")) != nullptr,
+                      QStringLiteral("the settings tab row renders its shared tabs"), err);
+    ok &= require(findVisualItem(contentItem, QStringLiteral("exportSettingsTab_batch")) == nullptr,
+                  QStringLiteral("single-export mode offers no batch settings tab"), err);
+    const qreal singleExportViewportHeight = flickable->height();
+
+    session->setProperty("activeTab", QStringLiteral("batch"));
+    QCoreApplication::processEvents();
+
+    ok &= require(session->property("settingsTab").toString() == QStringLiteral("batch"),
+                  QStringLiteral("entering batch mode opens the batch settings tab"), err);
+    ok &= require(findVisualItem(contentItem, QStringLiteral("exportSettingsTab_batch")) != nullptr,
+                  QStringLiteral("batch mode adds a batch tab to the settings tab row"), err);
+    ok &= require(qAbs(flickable->height() - singleExportViewportHeight) < 0.001,
+                  QStringLiteral("batch mode leaves the settings viewport its full height "
+                                 "(batch=%1 single=%2)")
+                      .arg(flickable->height(), 0, 'f', 3)
+                      .arg(singleExportViewportHeight, 0, 'f', 3), err);
+
+    auto* batchPage = root->findChild<QQuickItem*>(QStringLiteral("exportBatchSettingsPage"));
+    auto* outputField = root->findChild<QQuickItem*>(QStringLiteral("batchOutputDirectoryField"));
+    if (!require(batchPage != nullptr && outputField != nullptr,
+                 QStringLiteral("the batch tab creates the batch-only inputs"), err)) {
+        return false;
+    }
+    ok &= require(batchPage->isVisible() && outputField->isVisible(),
+                  QStringLiteral("the batch tab renders the batch-only inputs"), err);
+
+    bool insideViewport = false;
+    for (QQuickItem* item = batchPage; item != nullptr; item = item->parentItem()) {
+        if (item == flickable) {
+            insideViewport = true;
+            break;
+        }
+    }
+    ok &= require(insideViewport,
+                  QStringLiteral("the batch inputs scroll inside the shared settings viewport"), err);
+
+    session->setProperty("settingsTab", QStringLiteral("video"));
+    QCoreApplication::processEvents();
+    ok &= require(!batchPage->isVisible(),
+                  QStringLiteral("another settings tab hides the batch inputs"), err);
+
+    session->setProperty("settingsTab", QStringLiteral("batch"));
+    session->setProperty("activeTab", QStringLiteral("export"));
+    QCoreApplication::processEvents();
+    ok &= require(session->property("settingsTab").toString() == QStringLiteral("output"),
+                  QStringLiteral("leaving batch mode falls back to a settings tab that still exists"),
+                  err);
+    ok &= require(findVisualItem(contentItem, QStringLiteral("exportSettingsTab_batch")) == nullptr,
+                  QStringLiteral("the batch settings tab disappears with batch mode"), err);
+    ok &= require(!batchPage->isVisible(),
+                  QStringLiteral("single-export mode never shows the batch-only inputs"), err);
+    return ok;
+}
+
 bool verifyVisualRangeSelectorDragsTheSharedPreview(QTextStream& err)
 {
     QQmlEngine engine;
@@ -842,7 +945,8 @@ int main(int argc, char** argv)
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QGuiApplication app(argc, argv);
     QTextStream err(stderr);
-    const bool ok = verifyRealExportPageControls(err) && verifyVisualRangeSelectorDragsTheSharedPreview(err)
+    const bool ok = verifyRealExportPageControls(err) && verifyBatchInputsOwnASettingsTab(err)
+        && verifyVisualRangeSelectorDragsTheSharedPreview(err)
         && verifyVisualRangeSelectorSeparatesPointerTargetsAndLayout(err)
         && verifyRequestHostLoop(err)
         && verifySynchronousChoiceSequenceKeepsTheNextDialogOpen(err);
