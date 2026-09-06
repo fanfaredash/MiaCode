@@ -107,8 +107,10 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
   in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
   clamps — change all together. See `cross-chain-linkage.md`.
-- `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp` — toolbox media-prepend ffmpeg
-  defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz` libmp3lame `-q:a 2`).
+- `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp` — toolbox media-prepend
+  ffmpeg defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz`); audio
+  output encoders follow the resolved track format (`libmp3lame -q:a 2`, `pcm_s16le`, `flac`,
+  or `libvorbis -q:a 6`).
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp` — issue-row padding /
   min height / ignored-row opacity.
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp` —

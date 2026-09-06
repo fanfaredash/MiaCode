@@ -113,7 +113,8 @@ Rules going forward:
   arrays are stored in reverse travel order (a C area lists its outbound arrows first),
   rotation is uniform per straight leg.
 - Qt resources: `resources/{app_icons,fonts,preview_runtime_qml,quick_shell_qml}.qrc`.
-- Chart-directory conventions: `maidata.txt`, `track.mp3` (`track_bak.mp3`), background
+- Chart-directory conventions: `maidata.txt`, `track.{mp3,wav,flac,ogg}`
+  (`track_bak.<extension>`), background
   `bg.mp4`/`pv.mp4`/`bg.{jpg,png,jpeg}` (or `&video=` target; `<stem>_bak.mp4`), project sidecar
   `.miacode/` (`miacode_settings.json`, `waveform/`, `.autosave/<chart>/`, `logs/`).
 - SFX kind→filename map: `src/common/PreviewSfxAssets.h` (kinds: answer, judge, judge_break,

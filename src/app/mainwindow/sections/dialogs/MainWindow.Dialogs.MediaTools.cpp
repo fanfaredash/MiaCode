@@ -165,6 +165,34 @@ QString resolveMediaToolFfmpegExecutable()
     return QString();
 }
 
+QString audioTrackBackupPath(const QFileInfo& trackInfo)
+{
+    return trackInfo.dir().filePath(
+        QStringLiteral("track_bak.%1").arg(trackInfo.suffix().toLower()));
+}
+
+QString audioTrackTempPath(const QFileInfo& trackInfo, const QString& operation)
+{
+    return trackInfo.dir().filePath(
+        QStringLiteral(".miacode_track_%1_tmp.%2")
+            .arg(operation, trackInfo.suffix().toLower()));
+}
+
+void appendAudioEncoderArguments(QStringList& args, const QString& suffix)
+{
+    if (suffix.compare(QStringLiteral("mp3"), Qt::CaseInsensitive) == 0) {
+        args << QStringLiteral("-c:a") << QStringLiteral("libmp3lame")
+             << QStringLiteral("-q:a") << QStringLiteral("2");
+    } else if (suffix.compare(QStringLiteral("wav"), Qt::CaseInsensitive) == 0) {
+        args << QStringLiteral("-c:a") << QStringLiteral("pcm_s16le");
+    } else if (suffix.compare(QStringLiteral("flac"), Qt::CaseInsensitive) == 0) {
+        args << QStringLiteral("-c:a") << QStringLiteral("flac");
+    } else if (suffix.compare(QStringLiteral("ogg"), Qt::CaseInsensitive) == 0) {
+        args << QStringLiteral("-c:a") << QStringLiteral("libvorbis")
+             << QStringLiteral("-q:a") << QStringLiteral("6");
+    }
+}
+
 // Windows can briefly refuse a rename/remove while the file is still held by a
 // just-released decoder handle, an antivirus on-write scan, or Explorer's
 // preview/thumbnail handler. Retry with a short backoff (~2s max) so these
@@ -617,8 +645,8 @@ bool convertTrackTo44100Hz(
     bool* cancelled = nullptr)
 {
     const QFileInfo trackInfo(trackPath);
-    const QString backupPath = trackInfo.dir().filePath(QStringLiteral("track_bak.mp3"));
-    const QString tempPath = trackInfo.dir().filePath(QStringLiteral(".miacode_track_44100_tmp.mp3"));
+    const QString backupPath = audioTrackBackupPath(trackInfo);
+    const QString tempPath = audioTrackTempPath(trackInfo, QStringLiteral("44100"));
     QFile::remove(tempPath);
     if (!copyFileReplacing(trackPath, backupPath, error)) {
         return false;
@@ -634,10 +662,9 @@ bool convertTrackTo44100Hz(
          << QStringLiteral("-y")
          << QStringLiteral("-i") << backupPath
          << QStringLiteral("-vn")
-         << QStringLiteral("-ar") << QStringLiteral("44100")
-         << QStringLiteral("-c:a") << QStringLiteral("libmp3lame")
-         << QStringLiteral("-q:a") << QStringLiteral("2")
-         << tempPath;
+         << QStringLiteral("-ar") << QStringLiteral("44100");
+    appendAudioEncoderArguments(args, trackInfo.suffix());
+    args << tempPath;
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
@@ -661,8 +688,8 @@ bool prependTrackSilence(
     bool* cancelled = nullptr)
 {
     const QFileInfo trackInfo(trackPath);
-    const QString backupPath = trackInfo.dir().filePath(QStringLiteral("track_bak.mp3"));
-    const QString tempPath = trackInfo.dir().filePath(QStringLiteral(".miacode_track_prepend_tmp.mp3"));
+    const QString backupPath = audioTrackBackupPath(trackInfo);
+    const QString tempPath = audioTrackTempPath(trackInfo, QStringLiteral("prepend"));
     QFile::remove(tempPath);
     if (!copyFileReplacing(trackPath, backupPath, error)) {
         return false;
@@ -684,15 +711,14 @@ bool prependTrackSilence(
          << QStringLiteral("-i") << backupPath
          << QStringLiteral("-filter_complex")
          << QStringLiteral("[0:a]atrim=duration=%1,asetpts=PTS-STARTPTS[s];[1:a]aresample=44100,aformat=channel_layouts=stereo,asetpts=PTS-STARTPTS[a];[s][a]concat=n=2:v=0:a=1[out]").arg(silenceDuration)
-         << QStringLiteral("-map") << QStringLiteral("[out]")
-         << QStringLiteral("-c:a") << QStringLiteral("libmp3lame")
-         << QStringLiteral("-q:a") << QStringLiteral("2")
-         << tempPath;
+         << QStringLiteral("-map") << QStringLiteral("[out]");
+    appendAudioEncoderArguments(args, trackInfo.suffix());
+    args << tempPath;
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
             parent,
-            UiText::text(QStringLiteral("media_tools.processing_track_mp3")),
+            UiText::text(QStringLiteral("media_tools.processing_track_mp3")).arg(trackInfo.fileName()),
             totalDurationSeconds,
             error,
             cancelled)) {
@@ -874,8 +900,8 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
         return;
     }
 
-    const QString trackPath = QDir(chartDirPath).filePath(QStringLiteral("track.mp3"));
-    if (!QFileInfo::exists(trackPath)) {
+    const QString trackPath = miacode::chart_assets::resolveTrackPathForDirectory(chartDirPath);
+    if (trackPath.isEmpty()) {
         QMessageBox::warning(
             UiDialogs::effectiveParentWidget(&owner_),
             title,
@@ -884,10 +910,13 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
         return;
     }
 
+    const QFileInfo trackInfo(trackPath);
+    const QString backupName = QFileInfo(audioTrackBackupPath(trackInfo)).fileName();
     if (QMessageBox::question(
             UiDialogs::effectiveParentWidget(&owner_),
             title,
             UiText::text(QStringLiteral("media_tools.convert_track_mp3_to_44100"))
+                .arg(trackInfo.fileName(), backupName)
         ) != QMessageBox::Yes) {
         return;
     }
@@ -919,12 +948,14 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
     }
     reloadPreviewMediaAfterFileOperation(true);
     owner_.statusBar()->showMessage(
-        UiText::text(QStringLiteral("media_tools.converted_track_mp3_to_44100")),
+        UiText::text(QStringLiteral("media_tools.converted_track_mp3_to_44100"))
+            .arg(trackInfo.fileName()),
         6000
     );
     showMediaOperationCompleteDialog(
         title,
-        UiText::text(QStringLiteral("media_tools.converted_track_mp3_to_44100_2")),
+        UiText::text(QStringLiteral("media_tools.converted_track_mp3_to_44100_2"))
+            .arg(trackInfo.fileName(), backupName),
         trackPath
     );
 }
@@ -951,7 +982,7 @@ void MainWindow::DialogsSection::onMediaProcessingTools()
     };
     const QVector<MediaToolEntry> entries = {
         { UiText::text(QStringLiteral("media_tools.sample_rate")),
-          UiText::text(QStringLiteral("media_tools.convert_track_mp3_to_44100_2")),
+          UiText::text(QStringLiteral("media_tools.sample_rate_description")),
           &MainWindow::DialogsSection::onConvertTrackTo44100Hz },
         { UiText::text(QStringLiteral("media_tools.compress_video")),
           UiText::text(QStringLiteral("media_tools.compress_the_background_video_under")),
@@ -1063,14 +1094,13 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
         return;
     }
 
-    const QDir chartDir(chartDirPath);
-    const QString trackPath = chartDir.filePath(QStringLiteral("track.mp3"));
+    const QString trackPath = miacode::chart_assets::resolveTrackPathForDirectory(chartDirPath);
     const QString videoPath = miacode::chart_assets::resolveChartVideoPath(owner_.currentFilePath_, owner_.document_.videoPath);
     const QString inputPath = isTrack ? trackPath : videoPath;
     const QFileInfo inputInfo(inputPath);
-    const QString inputName = isTrack ? QStringLiteral("track.mp3") : inputInfo.fileName();
+    const QString inputName = inputInfo.fileName();
     const QString backupName = isTrack
-        ? QStringLiteral("track_bak.mp3")
+        ? QFileInfo(audioTrackBackupPath(inputInfo)).fileName()
         : QStringLiteral("%1_bak.%2").arg(inputInfo.completeBaseName(), inputInfo.suffix());
     const QString backupPath = inputPath.isEmpty()
         ? QString()
@@ -1081,7 +1111,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
             title,
             UiText::text(QStringLiteral("media_tools.1_was_not_found_next"))
                 .arg(isTrack
-                    ? inputName
+                    ? UiText::text(QStringLiteral("media_tools.supported_track_audio"))
                     : UiText::text(QStringLiteral("media_tools.background_mp4_video")))
         );
         return;
@@ -1193,7 +1223,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
             ? UiText::text(QStringLiteral("media_tools.silence"))
             : UiText::text(QStringLiteral("media_tools.a_black_screen"));
         const QString target = isTrack
-            ? QStringLiteral("track.mp3")
+            ? inputName
             : UiText::text(QStringLiteral("media_tools.the_background_video"));
         summaryLabel->setText(UiText::text(QStringLiteral("media_tools.prepends_1_to_2_3"))
             .arg(mediaKind, target, formatNumber(beats), formatNumber(bpm), formatNumber(seconds)));
@@ -1264,11 +1294,11 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
         if (cancelled) {
             QMessageBox::information(
                 UiDialogs::effectiveParentWidget(&owner_), title,
-                UiText::text(QStringLiteral("media_tools.track_mp3_processing_canceled")));
+                UiText::text(QStringLiteral("media_tools.track_mp3_processing_canceled")).arg(inputName));
         } else {
             QMessageBox::critical(
                 UiDialogs::effectiveParentWidget(&owner_),
-                UiText::text(QStringLiteral("media_tools.track_mp3_failed")),
+                UiText::text(QStringLiteral("media_tools.track_mp3_failed")).arg(inputName),
                 error
             );
         }

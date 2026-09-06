@@ -1162,6 +1162,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `onPrependPvBlack`, `onCompressBackgroundVideo`, `onConvertTrackTo44100Hz`). These four open
   from a single popup, `onMediaProcessingTools()` (one button + one-line description each),
   reached via the toolbox's "音频/视频处理 / Audio/Video Processing" entry — not a hover submenu.
+  The two track-audio operations resolve the canonical `track.{mp3,wav,flac,ogg}` candidates and
+  preserve the selected input format in both the processed file and `track_bak.<extension>`.
   The shared `runFfmpegBlocking(... totalDurationSeconds, error)` helper drives a determinate
   progress bar by parsing ffmpeg `-progress pipe:1` `out_time_us=` against the expected output
   duration (falls back to an indeterminate bar when duration is unknown).
