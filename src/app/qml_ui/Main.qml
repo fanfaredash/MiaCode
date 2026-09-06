@@ -38,11 +38,10 @@ ApplicationWindow {
         }
         return value
     }
-    title: Qt.application.name
+    title: (mainView.documentSession.dirty ? "* " : "") + Qt.application.name
            + (mainView.documentTitle.length > 0
               ? " — " + mainView.documentTitle
               : "")
-           + (mainView.documentSession.dirty ? " [未保存]" : "")
     font.family: Theme.uiFont
     font.pixelSize: Theme.uiFontSize
     color: Theme.colors.background.surface

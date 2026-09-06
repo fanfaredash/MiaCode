@@ -23,21 +23,16 @@ Rectangle {
     implicitHeight: 32
     color: Theme.surfaceColor(Theme.colors.background.titleBar)
 
-    // Title stays window-centered. Menu only yields to the painted glyph width
-    // (capped by the max title band), not the whole empty center band.
-    readonly property real titleBandMax: Math.min(320, width * 0.3)
-    readonly property real titleGlyphWidth: {
-        const glyph = titleLabel.implicitWidth
-        if (glyph <= 1)
-            return 0
-        return Math.min(glyph, root.titleBandMax)
-    }
-    readonly property real titleBandLeft: (width - titleGlyphWidth) / 2
+    // 标题以窗口中心为轴，左右留白取菜单与窗口按钮所需空间的较大值。
     readonly property real menuGap: 16
     readonly property real menuLeft: brand.x + brand.width
     readonly property real menuAvailableWidth: root.useEmbeddedMenu
-        ? Math.max(0, titleBandLeft - menuGap - menuLeft)
+        ? Math.max(0, width / 2 - menuGap - menuLeft)
         : 0
+    readonly property real titleAreaLeft: menuHost.x + menuHost.width + menuGap
+    readonly property real titleAreaRight: width - captionButtons.width - menuGap
+    readonly property real titleAvailableWidth: Math.max(0,
+        2 * Math.min(width / 2 - titleAreaLeft, titleAreaRight - width / 2))
 
     WindowGestureArea {
         anchors.fill: parent
@@ -155,18 +150,20 @@ Rectangle {
     Text {
         id: titleLabel
         anchors.centerIn: parent
-        width: root.titleBandMax
+        width: Math.min(implicitWidth, root.titleAvailableWidth)
         z: 1
-        text: root.documentTitle + (root.documentSession.dirty ? " [未保存]" : "")
+        text: (root.documentSession.dirty ? "* " : "") + root.documentTitle
         color: Theme.colors.text.chrome
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
-        // Let drag / menu hit-testing win under the label.
-        enabled: false
-
+        HoverHandler { id: titleHover }
+        Tooltip {
+            visible: titleHover.hovered && titleLabel.truncated
+            text: titleLabel.text
+        }
     }
 
     WindowCaptionButtons {

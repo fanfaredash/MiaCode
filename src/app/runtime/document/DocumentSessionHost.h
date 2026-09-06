@@ -133,7 +133,7 @@ public:
     void activateInitialField();
     void loadDocument();
     void syncRuntimeFromWorkspace();
-    void clearTimelineAndPreview();
+    void clearTimelineAndPreview(bool preservePresentation = false);
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
     QString sourceText() const override;

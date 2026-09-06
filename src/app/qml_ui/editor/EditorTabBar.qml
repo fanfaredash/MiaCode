@@ -38,18 +38,7 @@ Rectangle {
             root.viewState.closeEditor(key)
             return
         }
-        const sectionDirty = root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
-        if (!sectionDirty) {
-            root.viewState.closeEditor(key)
-            return
-        }
-        root.closingKey = key
-        root.closingDifficultyId = difficultyId
-        closeTabDialog.title = UiText.text("dialog.unsaved_tab_changes.title")
-        closeTabDialog.message = UiText.text("dialog.unsaved_tab_changes.message")
-            .arg(root.titleForKey(key))
-        closeTabDialog.details = UiText.text("dialog.unsaved_tab_changes.details.difficulty")
-        closeTabDialog.open()
+        root.documentSession.requestCloseDifficulty(difficultyId)
     }
 
     function difficultyIdForKey(key) {
@@ -194,62 +183,13 @@ Rectangle {
         }
     }
 
-    property string closingKey: ""
-    property int closingDifficultyId: 0
-    property string pendingSaveCloseKey: ""
-    property int pendingSaveCloseDifficultyId: 0
-
     Connections {
         target: root.documentSession
-        function onSectionSaveFinished(difficultyId, saved) {
-            if (root.pendingSaveCloseKey.length === 0
-                    || difficultyId !== root.pendingSaveCloseDifficultyId)
-                return
-            const key = root.pendingSaveCloseKey
-            root.pendingSaveCloseKey = ""
-            root.pendingSaveCloseDifficultyId = 0
-            if (saved)
-                root.viewState.closeEditor(key)
+        function onDifficultyCloseAccepted(difficultyId) {
+            root.viewState.closeEditor(root.viewState.difficultyEditorKey(difficultyId))
         }
     }
     property string draggingEditorKey: ""
-
-    // Save writes the requested editor section through the file service.
-    ChoiceDialog {
-        id: closeTabDialog
-        objectName: "editorTabCloseDialog"
-        details: ""
-        choices: [
-            { id: "save", label: UiText.text("保存"), role: "accept" },
-            { id: "discard", label: UiText.text("放弃"), role: "destructive" },
-            { id: "cancel", label: UiText.text("取消"), role: "reject" }
-        ]
-        dismissChoiceId: "cancel"
-
-        onChosen: function(choiceId) {
-            const key = root.closingKey
-            const difficultyId = root.closingDifficultyId
-            root.closingKey = ""
-            root.closingDifficultyId = 0
-            if (choiceId === "cancel" || key.length === 0)
-                return
-            if (choiceId === "save") {
-                // Saves this difficulty, because that is the thing being
-                // closed. A never-saved chart has no path yet, so the save may
-                // have to ask for one — the answer arrives on
-                // sectionSaveFinished, and only a save that landed closes the
-                // tab. A failed or cancelled one keeps it: the edits are still
-                // only in memory, and closing is the one thing that loses them.
-                root.pendingSaveCloseKey = key
-                root.pendingSaveCloseDifficultyId = difficultyId
-                root.documentSession.requestSaveDifficultySection(difficultyId)
-                return
-            } else {
-                root.documentSession.revertDifficultyChart(difficultyId)
-            }
-            root.viewState.closeEditor(key)
-        }
-    }
 
     IconButton {
         id: overflowButton

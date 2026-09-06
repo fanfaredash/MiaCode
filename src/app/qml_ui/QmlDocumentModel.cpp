@@ -994,14 +994,13 @@ bool QmlDocumentModel::saveDifficultySection(int difficultyId)
 
 bool QmlDocumentModel::revertDifficultyChart(int difficultyId)
 {
-    if (workspace_ == nullptr) return false;
+    if (workspace_ == nullptr || !SimaiDocument::isDifficultyId(difficultyId)) return false;
     if (!runWorkspaceMutation([&] {
             return workspace_->revertDifficultyChart(difficultyId).accepted;
         })) {
         return false;
     }
-    reconcileUnifiedDesignerAfterSourceReplacement();
-    publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
+    publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement);
     return true;
 }
 
@@ -1041,71 +1040,14 @@ bool QmlDocumentModel::openFile(const QUrl& fileUrl)
 
 void QmlDocumentModel::requestLeaveDocument(std::function<void(bool)> onDecided)
 {
-    emit editingFinishedRequested();
-    if (!saveMetadataImmediately()) {
-        if (onDecided) onDecided(false);
-        return;
-    }
-    if (workspace_ == nullptr || !workspace_->snapshot().dirty) {
-        if (onDecided) onDecided(true);
-        return;
-    }
-    askNextDirtySection(std::move(onDecided));
+    requestLeaveSection(0, std::move(onDecided));
 }
 
 void QmlDocumentModel::requestLeaveCurrentField(std::function<void(bool)> onDecided)
 {
-    const auto finish = [onDecided = std::move(onDecided)](bool mayLeave) {
-        if (onDecided) {
-            onDecided(mayLeave);
-        }
-    };
-    if (workspace_ == nullptr) {
-        finish(false);
-        return;
-    }
-
-    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
-    const int difficultyId = snapshot.activeDifficultyId;
-    const bool dirtyCurrentDifficulty = difficultyId > 0
-        && snapshot.dirtyDifficultyIds.contains(difficultyId);
-    if (!dirtyCurrentDifficulty) {
-        finish(true);
-        return;
-    }
-
-    if (uiRequests_ == nullptr) {
-        // Refuse rather than allowing a page switch to hide edits when the QML
-        // request host is unavailable.
-        finish(false);
-        return;
-    }
-
-    const QString fieldName = SimaiDocument::difficultyName(difficultyId);
-    uiRequests_->requestChoice(
-        UiText::text(QStringLiteral("dialog.unsaved_field_changes.title")),
-        UiText::text(QStringLiteral("dialog.unsaved_field_changes.message")).arg(fieldName),
-        unsavedSectionChoices(),
-        QStringLiteral("cancel"),
-        [this, difficultyId, finish](const QString& choiceId) mutable {
-            if (choiceId == QLatin1String("cancel")) {
-                finish(false);
-                return;
-            }
-            if (choiceId == QLatin1String("save")) {
-                saveSectionOrAskForPath(difficultyId, std::move(finish));
-                return;
-            }
-
-            if (!runWorkspaceMutation([&] {
-                    return workspace_->revertDifficultyChart(difficultyId).accepted;
-                })) {
-                finish(false);
-                return;
-            }
-            publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
-            finish(true);
-        });
+    // 页面导航保留工作区中的修改，提交当前输入后切换视图。
+    if (!closeDecisionPending_) emit editingFinishedRequested();
+    if (onDecided) onDecided(workspace_ != nullptr && !closeDecisionPending_);
 }
 
 void QmlDocumentModel::saveSectionOrAskForPath(
@@ -1141,17 +1083,17 @@ void QmlDocumentModel::saveSectionOrAskForPath(
     request.title = UiText::text(QStringLiteral("action.save_as"));
     request.saveMode = true;
     request.nameFilters = QStringList{tr("Simai 文件 (*.txt *.simai)"), tr("所有文件 (*.*)")};
-    requests->requestFile(request, [this, finish](const QString& path) {
-        if (path.trimmed().isEmpty()) {
+    const qulonglong generation = documentGeneration_;
+    requests->requestFile(request, [this, difficultyId, generation, finish](const QString& path) {
+        if (generation != documentGeneration_ || path.trimmed().isEmpty()) {
             // Cancelling the pick cancels the save, which cancels whatever the
             // save was a step of. Nothing was written.
             finish(false);
             return;
         }
-        // A file that does not exist yet has no earlier content for the other
-        // difficulties to be left at, so the first write is the whole document.
+        // 首次保存遵守请求范围，其他难度的修改保留在工作区。
         const bool saved = runWorkspaceMutation(
-            [&] { return fileService_->saveAs(path, 0).accepted; });
+            [&] { return fileService_->saveAs(path, difficultyId).accepted; });
         if (saved) {
             writeUnifiedDesignerPreference(currentFilePath(), unifiedDesignerEnabled_);
             publishWorkspaceCommit(WorkspaceCommitKind::SavePoint);
@@ -1162,16 +1104,10 @@ void QmlDocumentModel::saveSectionOrAskForPath(
     });
 }
 
-void QmlDocumentModel::requestSaveDifficultySection(int difficultyId)
-{
-    saveSectionOrAskForPath(difficultyId, [this, difficultyId](bool saved) {
-        emit sectionSaveFinished(difficultyId, saved);
-    });
-}
-
 bool QmlDocumentModel::saveMetadataImmediately()
 {
     metadataSaveTimer_.stop();
+    if (closeDecisionPending_) return true;
     if (workspace_ == nullptr || !workspace_->metadataDirty()
         || currentFilePath().isEmpty()) return true;
     if (fileService_ == nullptr || !runWorkspaceMutation([&] {
@@ -1185,88 +1121,68 @@ bool QmlDocumentModel::saveMetadataImmediately()
     return true;
 }
 
-void QmlDocumentModel::askNextDirtySection(std::function<void(bool)> onDecided)
+void QmlDocumentModel::requestCloseDifficulty(int difficultyId)
 {
-    miacode::v2::UiRequestService* const requests = uiRequests_;
-    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace_->snapshot();
-    if (snapshot.dirtyDifficultyIds.isEmpty() || requests == nullptr) {
-        askAboutRemainingDocument(std::move(onDecided));
-        return;
-    }
-
-    const int difficultyId = snapshot.dirtyDifficultyIds.constFirst();
-    // Show it before asking about it. A prompt naming a difficulty the user
-    // cannot see is a prompt they have to answer from memory.
-    selectDifficulty(difficultyId);
-
-    const QString label = SimaiDocument::difficultyName(difficultyId);
-    requests->requestChoice(
-        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
-        tr("「%1」有未保存的更改。").arg(label),
-        unsavedSectionChoices(),
-        QStringLiteral("cancel"),
-        [this, difficultyId, onDecided = std::move(onDecided)](const QString& choiceId) mutable {
-            if (choiceId == QLatin1String("cancel")) {
-                if (onDecided) onDecided(false);
-                return;
-            }
-            if (choiceId == QLatin1String("save")) {
-                saveSectionOrAskForPath(
-                    difficultyId, [this, onDecided = std::move(onDecided)](bool saved) mutable {
-                        if (!saved) {
-                            // Nothing was written, so leaving would lose it.
-                            if (onDecided) onDecided(false);
-                            return;
-                        }
-                        askNextDirtySection(std::move(onDecided));
-                    });
-                return;
-            }
-            if (!runWorkspaceMutation([&] {
-                    return workspace_->revertDifficultyChart(difficultyId).accepted;
-                })) {
-                if (onDecided) onDecided(false);
-                return;
-            }
-            publishWorkspaceCommit(WorkspaceCommitKind::SourceReplacement, true);
-            // That difficulty is no longer among the dirty ones, so this walks
-            // the list down rather than around it.
-            askNextDirtySection(std::move(onDecided));
-        });
+    if (!SimaiDocument::isDifficultyId(difficultyId)) return;
+    requestLeaveSection(difficultyId, [this, difficultyId](bool mayClose) {
+        if (mayClose) emit difficultyCloseAccepted(difficultyId);
+    });
 }
 
-void QmlDocumentModel::askAboutRemainingDocument(std::function<void(bool)> onDecided)
+void QmlDocumentModel::requestLeaveSection(int difficultyId, std::function<void(bool)> onDecided)
 {
-    miacode::v2::UiRequestService* const requests = uiRequests_;
-    const auto snapshot = workspace_->snapshot();
-    if (!snapshot.dirty) {
-        if (onDecided) onDecided(true);
-        return;
-    }
-    if (requests == nullptr) {
+    if (closeDecisionPending_ || workspace_ == nullptr) {
         if (onDecided) onDecided(false);
         return;
     }
-    // What is left is not any one difficulty: metadata, or a difficulty added
-    // or removed. That is a change to the file, so the file is what it asks
-    // about.
-    requests->requestChoice(
-        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
-        UiText::text(QStringLiteral("dialog.unsaved_changes.message")),
+    closeDecisionPending_ = true;
+    metadataSaveTimer_.stop();
+    const auto finish = [this, onDecided = std::move(onDecided)](bool mayLeave) {
+        closeDecisionPending_ = false;
+        if (workspace_ != nullptr && workspace_->metadataDirty() && !currentFilePath().isEmpty()) {
+            metadataSaveTimer_.start();
+        }
+        if (onDecided) onDecided(mayLeave);
+    };
+    emit editingFinishedRequested();
+    const auto snapshot = workspace_->snapshot();
+    const bool wholeDocument = difficultyId == 0;
+    if (!wholeDocument && workspace_->document().difficulty(difficultyId) == nullptr) {
+        finish(false);
+        return;
+    }
+    const bool dirty = wholeDocument ? snapshot.dirty : snapshot.dirtyDifficultyIds.contains(difficultyId);
+    if (!dirty) {
+        finish(true);
+        return;
+    }
+    if (uiRequests_ == nullptr) {
+        finish(false);
+        return;
+    }
+    const qulonglong generation = documentGeneration_;
+    uiRequests_->requestChoice(
+        UiText::text(wholeDocument ? QStringLiteral("dialog.unsaved_changes.title")
+                                  : QStringLiteral("dialog.unsaved_tab_changes.title")),
+        wholeDocument ? UiText::text(QStringLiteral("dialog.unsaved_changes.message"))
+                      : UiText::text(QStringLiteral("dialog.unsaved_tab_changes.message"))
+                            .arg(SimaiDocument::difficultyName(difficultyId)),
         unsavedSectionChoices(),
         QStringLiteral("cancel"),
-        [this, onDecided = std::move(onDecided)](const QString& choiceId) {
-            if (choiceId == QLatin1String("cancel")) {
-                if (onDecided) onDecided(false);
+        [this, difficultyId, wholeDocument, generation, finish](const QString& choiceId) {
+            if (generation != documentGeneration_) {
+                finish(false);
                 return;
             }
             if (choiceId == QLatin1String("save")) {
-                saveSectionOrAskForPath(0, [onDecided](bool saved) {
-                    if (onDecided) onDecided(saved);
-                });
+                saveSectionOrAskForPath(difficultyId, finish);
                 return;
             }
-            if (onDecided) onDecided(discardChanges());
+            if (choiceId == QLatin1String("discard")) {
+                finish(wholeDocument ? discardChanges() : revertDifficultyChart(difficultyId));
+                return;
+            }
+            finish(false);
         });
 }
 
@@ -1505,7 +1421,7 @@ void QmlDocumentModel::publishWorkspaceCommit(
 {
     Q_UNUSED(usedSystemEncoding);
     if (workspace_ == nullptr) return;
-    if (kind != WorkspaceCommitKind::SavePoint && workspace_->metadataDirty()
+    if (!closeDecisionPending_ && kind != WorkspaceCommitKind::SavePoint && workspace_->metadataDirty()
         && !currentFilePath().isEmpty()) {
         // 同一事件中的字段修改合并为一次写入，覆盖页面与运行时入口。
         metadataSaveTimer_.start();

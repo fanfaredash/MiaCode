@@ -146,23 +146,14 @@ void miacode::runtime::DocumentSessionHost::requestLeaveDocument(std::function<v
     };
 
     runAutosaveCheck(false);
-    if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
-        decide(true);
-        return;
-    }
-
-    // The shell knows which difficulties changed; this object knows only that
-    // the file did. Saving is per section now, so a single question here could
-    // save at most one of them and would leave with the rest.
+    // 由工作区提交当前输入并判断整文修改，运行时脏标记可能尚未同步。
     if (session_.qmlLeaveDocumentHandler_) {
         session_.qmlLeaveDocumentHandler_([decide](bool mayLeave) { decide(mayLeave); });
         return;
     }
 
-    // The product shell always installs the QML handler. Refuse if it has
-    // disappeared so a teardown cannot turn an unresolved dirty document into
-    // an implicit discard.
-    decide(false);
+    // 缺少处理器时，未保存的文档保留在窗口内。
+    decide(!state_.documentDirty_ && !state_.currentFieldDirty_);
 }
 
 namespace {

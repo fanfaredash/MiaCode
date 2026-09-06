@@ -142,23 +142,10 @@ public:
     // Write one difficulty to the file, leaving the others at their on-disk
     // text. Used where the thing being saved is named rather than implied.
     Q_INVOKABLE bool saveDifficultySection(int difficultyId);
-    // The same save, allowed to ask for a path. The answer arrives on
-    // sectionSaveFinished because a file pick cannot be waited for.
-    Q_INVOKABLE void requestSaveDifficultySection(int difficultyId);
-    // The unsaved-changes flow, asked one section at a time.
-    //
-    // 保存 writes one difficulty, so a single question about "the document"
-    // could only ever save one of them and would drop the rest on the way out.
-    // Each changed difficulty is therefore asked about in turn, with the editor
-    // switched to it first so the question is about something visible; whatever
-    // is left over (metadata, added or removed difficulties) is asked about
-    // last, as the file.
-    //
-    // onDecided(false) means the user cancelled and nothing should continue.
+    Q_INVOKABLE void requestCloseDifficulty(int difficultyId);
+    // 关闭文档处理整文，关闭标签处理指定难度；决策期间拒绝重入。
     void requestLeaveDocument(std::function<void(bool)> onDecided);
-    // The page router uses the same QML-owned choice flow, but only for the
-    // section currently in front. A page switch must never block on a native
-    // dialog or save a different dirty difficulty by accident.
+    // 页面导航提交当前输入并保留修改，关闭决策期间拒绝导航。
     void requestLeaveCurrentField(std::function<void(bool)> onDecided);
 
     bool wholeSourceEditorActive() const;
@@ -251,7 +238,7 @@ signals:
     void currentDifficultyFieldsChanged();
     void syntaxIssuesChanged();
     void dirtyChanged();
-    void sectionSaveFinished(int difficultyId, bool saved);
+    void difficultyCloseAccepted(int difficultyId);
     void wholeSourceEditorActiveChanged();
     void dirtyEditorKeysChanged();
     void documentStateChanged();
@@ -329,6 +316,6 @@ private:
     void ensureTrackCopyThenCreate(const QString& audioPath, const QString& targetPath);
     void createEmptyDocumentAt(const QString& targetPath);
     void saveSectionOrAskForPath(int difficultyId, std::function<void(bool)> onSaved);
-    void askNextDirtySection(std::function<void(bool)> onDecided);
-    void askAboutRemainingDocument(std::function<void(bool)> onDecided);
+    void requestLeaveSection(int difficultyId, std::function<void(bool)> onDecided);
+    bool closeDecisionPending_ = false;
 };

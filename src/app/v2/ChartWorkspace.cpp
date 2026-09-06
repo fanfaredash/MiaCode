@@ -432,6 +432,7 @@ ChartWorkspaceResult ChartWorkspace::revertDifficultyChart(int difficultyId)
         document_.removeDifficulty(difficultyId);
         document_.setDesignerForSlot(
             difficultyId, savedDocument_.designerForSlot(difficultyId));
+        activeDifficultyId_ = resolveOpenDifficultyId(document_, activeDifficultyId_);
     } else if (difficulty->chart == saved->chart) {
         return acceptWithoutChange();
     } else {

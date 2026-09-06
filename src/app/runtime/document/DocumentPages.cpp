@@ -318,12 +318,9 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
     const double previousPreviewTrackDurationSeconds = state_.previewTrackDurationSeconds_;
     const std::shared_ptr<const miacode::waveform::WaveformData> previousWaveformData =
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->waveformData() : nullptr;
-    clearTimelineAndPreview();
+    clearTimelineAndPreview(restoreSwitchView);
     if (restoreSwitchView) {
-        // Non-command write: clearTimelineAndPreview() just cleared
-        // pauseSecond_ implicitly to 0 via the timeline reset above; this
-        // overwrites it with the position carried across the switch. Must
-        // stay a plain, unconditional write — see PlaybackStateAuthority.h.
+        // 页面切换保留视口与画面，目标谱面解析完成后替换内容。
         if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {
             authority->repositionSilently(restorePreviewSecond, "switch_to_difficulty_field");
         }
@@ -434,7 +431,7 @@ void miacode::runtime::DocumentSessionHost::loadDocument()
     emit session_.documentReplaced();
 }
 
-void miacode::runtime::DocumentSessionHost::clearTimelineAndPreview()
+void miacode::runtime::DocumentSessionHost::clearTimelineAndPreview(bool preservePresentation)
 {
     state_.timelineQuickModel_.clear();
     state_.pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
@@ -490,15 +487,23 @@ void miacode::runtime::DocumentSessionHost::clearTimelineAndPreview()
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->clearTimeline();
     }
-    session_.stopQtPreviewPlayback(false);
+    session_.stopQtPreviewPlayback(preservePresentation);
     if (state_.timelineQuickStateBridge_ != nullptr) {
-        state_.timelineQuickStateBridge_->clear();
+        if (!preservePresentation) {
+            state_.timelineQuickStateBridge_->clear();
+        } else {
+            state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(-1.0);
+        }
         state_.timelineQuickStateBridge_->setMuriAnalysisReport(state_.muriAnalysisReport_);
     }
     if (state_.scene_ != nullptr) {
-        state_.scene_->reset();
+        if (!preservePresentation) {
+            state_.scene_->reset();
+        }
         state_.scene_->setMuriAnalysisReport(state_.muriAnalysisReport_);
     }
-    session_.clearPreviewStageMediaRoute();
+    if (!preservePresentation || state_.currentFilePath_.isEmpty()) {
+        session_.clearPreviewStageMediaRoute();
+    }
     session_.publishPreviewPlayhead();
 }
