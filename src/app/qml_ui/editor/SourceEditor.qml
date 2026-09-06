@@ -454,7 +454,9 @@ Rectangle {
         }
     }
 
-    // Scrolls the decoration into view without touching the caret or selection.
+    // Playing follow keeps the visual caret centered, matching the editor's
+    // viewport contract. Paused reveal only brings an off-screen caret back
+    // into view. Neither path touches the real caret or selection.
     Timer {
         id: decorationCenterTimer
         interval: 0
@@ -468,7 +470,11 @@ Rectangle {
             const rect = sourceArea.positionToRectangle(root.followDecorationCursor)
             const top = sourceArea.y + rect.y
             const bottom = top + rect.height
-            if (top >= flickable.contentY && bottom <= flickable.contentY + flickable.height)
+            const centerDuringPlayback = root.syncController
+                && root.syncController.followPlaybackActive
+            if (!centerDuringPlayback
+                    && top >= flickable.contentY
+                    && bottom <= flickable.contentY + flickable.height)
                 return
             flickable.allowScroll = true
             flickable.contentY = flickable.clampViewportY(
