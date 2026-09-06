@@ -38,12 +38,7 @@ namespace psmh_detail {
 
 inline constexpr qint64 kPausedSeekAckToleranceMs = 80;
 
-// A seek request this close to the last one already submitted is a no-op: the
-// decoder is parked on (or within a frame of) the target, so the frame on screen
-// is already the right one. Re-issuing it costs a full decoder flush plus a
-// re-decode from the nearest keyframe, which is exactly the work a play/seek is
-// trying to avoid. Every site that programs a decode position coalesces against
-// `lastSeekMs_` with this tolerance.
+// 播放控制中的相邻定位请求使用此容差；暂停拖动的复用依据为显示帧时间范围。
 inline constexpr qint64 kSeekCoalesceToleranceMs = 40;
 
 inline unsigned long currentBeaconTid() noexcept

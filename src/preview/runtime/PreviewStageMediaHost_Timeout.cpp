@@ -430,7 +430,7 @@ bool PreviewStageMediaHost::trySoftRecoverVideoPlayback(const QString& reason,
 
 
 #ifdef MIACODE_USE_QTAVPLAYER
-void PreviewStageMediaHost::settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd)
+void PreviewStageMediaHost::settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd, bool frameDelivered)
 {
     const qint64 startMs = qRound64(mediaSecondStart * 1000.0);
     const qint64 endMs = qRound64(qMax(mediaSecondStart, mediaSecondEnd) * 1000.0);
@@ -438,7 +438,7 @@ void PreviewStageMediaHost::settlePendingSeekAcks(double mediaSecondStart, doubl
         return targetMs >= startMs - kPausedSeekAckToleranceMs
             && targetMs <= endMs + kPausedSeekAckToleranceMs;
     };
-    if (pausedSeekCompletionPending_ && pausedSeekTargetMs_ >= 0 && reaches(pausedSeekTargetMs_)) {
+    if (frameDelivered && pausedSeekCompletionPending_ && pausedSeekTargetMs_ >= 0 && reaches(pausedSeekTargetMs_)) {
         pausedSeekCompletionPending_ = false;
         ++pausedSeekTimeoutSerial_;
         appendPreviewStageMediaLog(

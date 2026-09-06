@@ -393,11 +393,11 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     const QImage mediaImage = usesExternalMedia ? QImage() : media.image;
     const bool hasMedia = !mediaImage.isNull();
     const bool hasVisibleStageMedia = hasMedia || (usesExternalMedia && state.media.stageMediaAvailable);
-    const bool fixedInactiveBrightness =
-        !state.render.configuredBackgroundBrightnessActive || !hasVisibleStageMedia;
-    const double innerBrightness = fixedInactiveBrightness
-        ? miacode::preview_video::kInactiveBackgroundBrightnessInner
-        : state.render.backgroundBrightnessInner;
+    // 媒体显示状态决定内圈亮度，涵盖暂停设置、Alt 切换和导出。
+    // 缺少可见媒体时使用不透明黑色圆盘，隔离主题与窗口背景。
+    const double innerBrightness = hasVisibleStageMedia
+        ? state.render.backgroundBrightnessInner
+        : miacode::preview_video::kInactiveBackgroundBrightnessInner;
     const double outerDarkAlpha = hasVisibleStageMedia
         ? qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0)
         : 0.0;

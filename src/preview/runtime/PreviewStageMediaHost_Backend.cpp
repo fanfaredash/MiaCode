@@ -241,17 +241,14 @@ void PreviewStageMediaHost::initializeBackendObjects()
             .arg(QString::fromLatin1(prefName)));
 #endif
 
-    // Seek landing (frame-accurate). Backs up the pts match in
-    // handleDecodedVideoFrame for the paused-seek / prepared-start handshakes —
-    // it covers low-fps sources where the decoded frame pts can sit a whole
-    // frame interval before the requested target.
+    // 定位通知用于播放准备与末尾恢复；暂停 seek 等待视频帧送入显示端。
     seekedConnection_ = connect(player_, &QAVPlayer::seeked, this, [this](qint64 posMs) {
         if (mediaKind_ != MediaKind::Video) {
             return;
         }
         const double mediaSecond = static_cast<double>(posMs) / 1000.0;
         lastTimelineSecond_ = qMax(0.0, mediaSecond - timelineOffsetSeconds_);
-        settlePendingSeekAcks(mediaSecond, mediaSecond);
+        settlePendingSeekAcks(mediaSecond, mediaSecond, false);
         if (staleEndOfMediaResumePending_) {
             // The stale-EndOfMedia recovery seek landed, so the player's end-of-file
             // latch is cleared and play() will resume here instead of restarting the

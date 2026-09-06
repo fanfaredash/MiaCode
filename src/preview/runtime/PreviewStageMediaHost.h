@@ -209,11 +209,8 @@ private:
     // to the QML sink here and used to settle the paused-seek /
     // prepared-start handshakes by pts.
     void handleDecodedVideoFrame(const QVideoFrame& frame, double ptsSeconds, double durationSeconds, quint64 sourceGeneration);
-    // Settle the paused-seek / prepared-start acks once the decoded media time
-    // [start,end] (frame pts..pts+dur, or the seeked() position as a point)
-    // reaches the pending seek target. Mirrors the QMediaPlayer path's
-    // frame-covers-target / position-ack logic, keyed on pts instead of µs.
-    void settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd);
+    // 暂停 seek 由送入显示端的视频帧确认；播放准备允许位置通知确认。
+    void settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd, bool frameDelivered = true);
     // One-shot fallback: if platform hardware decode reports InvalidMedia,
     // re-open the source forcing FFmpeg software decode before giving up.
     void maybeRetryWithSoftwareDecode();
@@ -296,6 +293,7 @@ private:
     bool videoBackendLoaded_ = false;
     bool softwareDecodeFallbackTried_ = false;
     double lastFramePtsSeconds_ = -1.0;
+    double lastFrameDurationSeconds_ = 0.0;
     // Latest decoded frame, replayed into the QML sink when a VideoOutput
     // attaches after decoding has already produced frames (e.g. paused bg) —
     // the push model has no continuous source to re-pull from like
