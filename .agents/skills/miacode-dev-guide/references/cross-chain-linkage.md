@@ -36,8 +36,9 @@ Implications:
 - Head-material flags `$ $$ @ ? !` are mirrored data — keep `SimaiNativeParser`,
   `TimelineQuickModel`, `core/scene/PreviewSkinSelectors`, timeline icons, and chart-transform
   token preservation aligned in one patch.
-- The mine modifier `m` (note property `isMine` tap/hold/touch/touch_hold + `trackMine`/`headMine`
-  slide; timeline flags `TimelineRenderFlagIsMine`/`TrackMine`) is the same mirrored-data set as
+- The mine modifier `m` (note property `isMine` tap/hold/touch/touch_hold; slide head/path are
+  independent: `1m-5[...]` → `headMine`, `1-5m[...]` → `trackMine`; timeline flags
+  `TimelineRenderFlagIsMine`/`TrackMine`) is the same mirrored-data set as
   above PLUS suppression: parser (`SimaiNativeParser.{cpp,TouchTap,Slide}`) ↔ mirror
   (`TimelineQuickModel`) ↔ `ChartBatchTransform` (must accept+emit it, not `return false`) ↔
   `ChartNormalization` round-trip ↔ skin selectors (`PreviewSkinSelectors` + the touch/touch-hold
@@ -50,6 +51,9 @@ Implications:
   through the bundled extension, so every preview selector/layer must fall back to normal art when
   it is false without clearing the mine flags. In that normal-art mode, EX mine heads must also
   restore the normal EX overlay (`3xm` renders like `3x`, not `3`).
+- `PreviewRenderState::showJudgeEffects` is a presentation-only master switch for the ordinary
+  judge-hit layers (`PreviewJudgeEffectLayerState` plus the touch sparkle layer). The extension API method
+  `preview/setJudgeEffectsEnabled` controls it; note judgment and `f` firework visuals are unchanged.
 - Negative HS (`<HS*-N>`, ON by default — `SimaiNativeParser::g_allowNegativeHs` defaults true;
   opt-out `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` at boot sets it false): sign lives in `PreviewTapTiming.directionSign`
   (magnitude/sign split in `previewTapTimingForEffectiveFlowSpeed`); `sampleTapApproach` reverse

@@ -77,10 +77,8 @@ struct TimelineNoteMarker {
     bool headEx = false;
     bool slideHeadUsesTapMaterial = false;
     bool trackBreak = false;
-    // Mine slide (simai `m` suffix on a slide token, = MajdataPlay
-    // IsMineSlide). `trackMine` flags the slide track while the head star
-    // keeps the ordinary star material; `headMine` is reserved for a future
-    // head-only mine route and is not set by slide `m`.
+    // Slide mine components are independent: `1m-5` sets `headMine`, while
+    // `1-5m[...]` sets `trackMine`; both modifiers may be present together.
     bool trackMine = false;
     bool headMine = false;
     bool hasHeadStar = true;

@@ -957,6 +957,20 @@ bool PreviewRuntime::showChartInfoHud() const
     return frameState_.render.showChartInfoHud;
 }
 
+void PreviewRuntime::setShowJudgeEffects(bool enabled)
+{
+    if (frameState_.render.showJudgeEffects == enabled) {
+        return;
+    }
+    frameState_.render.showJudgeEffects = enabled;
+    update();
+}
+
+bool PreviewRuntime::showJudgeEffects() const
+{
+    return frameState_.render.showJudgeEffects;
+}
+
 void PreviewRuntime::setUseMineSkin(bool enabled)
 {
     if (frameState_.render.useMineSkin == enabled) {

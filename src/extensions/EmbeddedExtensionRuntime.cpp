@@ -745,6 +745,13 @@ public:
             QJsonObject{{QStringLiteral("enabled"), enabled}});
     }
 
+    Q_INVOKABLE QJSValue setJudgeEffectsEnabled(bool enabled)
+    {
+        return hostCall(
+            QStringLiteral("preview/setJudgeEffectsEnabled"),
+            QJsonObject{{QStringLiteral("enabled"), enabled}});
+    }
+
     Q_INVOKABLE QJSValue setMineSfxEnabled(bool enabled)
     {
         return hostCall(

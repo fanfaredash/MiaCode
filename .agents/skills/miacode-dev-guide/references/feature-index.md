@@ -320,7 +320,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `TimelineRenderData.h` flags) → transform (`ChartBatchTransform.cpp`, must NOT `return false` on
   unknowns) + normalization round-trip (`ChartNormalization.cpp`) → skin selectors + timeline icons
   → specs (`SimaiParserSpec`, `ChartBatchTransformSpec`, `TimelineModelSpec`) + diagnostics docs.
-- **Mine notes** (`m` suffix): `isMine`/`trackMine`/`headMine`; mine OVERRIDES break/each (one
+- **Mine notes** (`m` modifier): `isMine` for ordinary notes; slide head/path are independent
+  (`1m-5[...]` → `headMine`, `1-5m[...]` → `trackMine`, both modifiers → both flags). Mine
+  OVERRIDES break/each (one
   `<base>_mine.png` per type, skinSTD only); suppressed in SFX (`PreviewSfxTimeline.buildTimeline`) +
   Muri (`MuriAnalyzer`, `MuriRuntimeModelBuilder`); counted in stats. Docs:
   `docs/MINE_NOTE_RESEARCH_AND_MIACODE_PORT_HANDOFF_ZH.md` §7.

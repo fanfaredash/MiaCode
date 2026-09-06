@@ -1480,6 +1480,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/scene/PreviewChartReviewLayerState.cpp
             src/core/scene/PreviewHeadLayerState.h
             src/core/scene/PreviewHeadLayerState.cpp
+            src/core/scene/PreviewJudgeEffectLayerState.h
+            src/core/scene/PreviewJudgeEffectLayerState.cpp
             src/core/scene/PreviewMarkerDrawOrder.h
             src/core/scene/PreviewMarkerDrawOrder.cpp
             src/core/scene/PreviewAnimatedSpriteHelpers.h
@@ -1493,6 +1495,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/scene/PreviewSceneMath.cpp
             src/core/scene/PreviewSkinSelectors.h
             src/core/scene/PreviewSkinSelectors.cpp
+            src/core/scene/PreviewTouchJudgeLayerState.h
+            src/core/scene/PreviewTouchJudgeLayerState.cpp
             src/common/MuriTypes.h
             src/common/MuriTypes.cpp
             src/timeline/TimelineData.h

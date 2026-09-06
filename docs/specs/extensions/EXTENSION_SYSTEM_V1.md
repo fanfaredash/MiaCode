@@ -218,7 +218,8 @@ Validation/timeline/preview/UI:
 - timeline markers, bands, vertical lines, and clear
 - preview playback controls and speed
 - preview render-state query
-- preview mine-note skin selection (`setMineSkinEnabled`), without changing mine semantics
+- preview mine-note skin and SFX selection (`setMineSkinEnabled`, `setMineSfxEnabled`), without changing mine semantics
+- preview judge-hit effect visibility (`setJudgeEffectsEnabled`), without changing note judgment or firework-note visuals
 - preview text overlays: add/update/remove/clear/list/render/hit-test
 - controlled pet overlays with extension-local resources
 - bottom-tab extension views

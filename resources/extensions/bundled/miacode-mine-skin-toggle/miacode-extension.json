@@ -1,7 +1,7 @@
 {
   "id": "miacode-mine-skin-toggle",
-  "name": "地雷皮肤切换",
-  "version": "1.0.0",
+  "name": "地雷显示切换",
+  "version": "1.1.0",
   "publisher": "miacode",
   "engines": {
     "miacode": ">=1.0.0"
@@ -29,6 +29,11 @@
         "command": "miacode-mine-skin-toggle.toggle-sfx",
         "title": "切换地雷音效",
         "category": "预览"
+      },
+      {
+        "command": "miacode-mine-skin-toggle.toggle-effects",
+        "title": "切换击中特效",
+        "category": "预览"
       }
     ],
     "menus": {
@@ -38,6 +43,9 @@
         },
         {
           "command": "miacode-mine-skin-toggle.toggle-sfx"
+        },
+        {
+          "command": "miacode-mine-skin-toggle.toggle-effects"
         }
       ]
     }

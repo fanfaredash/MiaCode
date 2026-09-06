@@ -229,7 +229,7 @@ quint32 flagsForMarker(const TimelineNoteMarker& marker)
     if (marker.headlessImmediate) {
         flags |= TimelineRenderFlagHeadlessImmediate;
     }
-    if (marker.isMine) {
+    if (marker.isMine || marker.headMine) {
         flags |= TimelineRenderFlagIsMine;
     }
     if (marker.trackMine) {
@@ -1800,19 +1800,28 @@ int main(int argc, char** argv)
 
     {
         TimelineQuickModel model;
-        model.rebuildFromText(QStringLiteral("1m/A1m/1-3[2:1]m,\n1M/A1M/1-3[2:1]M,\nE"), 0.0);
+        model.rebuildFromText(
+            QStringLiteral("1m/A1m/1m-5[8:1]/2-6m[8:1]/3m-7m[8:1],\n1M/A1M/1M-3[2:1],\nE"),
+            0.0);
         const TimelineRenderSnapshot snapshot = model.snapshot();
         expect(snapshot.lines.size() >= 2, QStringLiteral("quick model builds snapshot for mine case-sensitivity repro"));
         if (snapshot.lines.size() >= 2) {
             const QVector<TimelineRenderNote>& lowerNotes = snapshot.lines.at(0).notes;
-            expect(lowerNotes.size() == 3, QStringLiteral("quick model keeps lowercase mine tap, touch, and slide"));
-            if (lowerNotes.size() == 3) {
+            expect(lowerNotes.size() == 5, QStringLiteral("quick model keeps lowercase mine notes and slide variants"));
+            if (lowerNotes.size() == 5) {
                 expect(timelineRenderFlagSet(lowerNotes.at(0), TimelineRenderFlagIsMine),
                        QStringLiteral("quick model marks lowercase tap mine"));
                 expect(timelineRenderFlagSet(lowerNotes.at(1), TimelineRenderFlagIsMine),
                        QStringLiteral("quick model marks lowercase touch mine"));
-                expect(timelineRenderFlagSet(lowerNotes.at(2), TimelineRenderFlagTrackMine),
-                       QStringLiteral("quick model marks lowercase slide track mine"));
+                expect(timelineRenderFlagSet(lowerNotes.at(2), TimelineRenderFlagIsMine)
+                           && !timelineRenderFlagSet(lowerNotes.at(2), TimelineRenderFlagTrackMine),
+                       QStringLiteral("quick model marks only the slide head mine"));
+                expect(!timelineRenderFlagSet(lowerNotes.at(3), TimelineRenderFlagIsMine)
+                           && timelineRenderFlagSet(lowerNotes.at(3), TimelineRenderFlagTrackMine),
+                       QStringLiteral("quick model marks only the slide track mine"));
+                expect(timelineRenderFlagSet(lowerNotes.at(4), TimelineRenderFlagIsMine)
+                           && timelineRenderFlagSet(lowerNotes.at(4), TimelineRenderFlagTrackMine),
+                       QStringLiteral("quick model marks both slide mine components"));
             }
             expect(snapshot.lines.at(1).notes.isEmpty(),
                    QStringLiteral("quick model rejects uppercase M mine variants"));

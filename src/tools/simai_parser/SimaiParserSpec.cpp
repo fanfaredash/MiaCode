@@ -1103,9 +1103,8 @@ int main(int argc, char** argv)
     }
 
     {
-        // Mine notes (simai `m`). The `m` is accepted on tap / hold / touch /
-        // touch-hold / slide; slides set trackMine while keeping the head star normal. Mines must NOT
-        // turn the chart unparseable (the historical motivation for this work).
+        // Mine notes (simai `m`). Slide head and track modifiers are
+        // independent: after the start lane = head, later in the body = track.
         const SimaiNativeParseResult tap = SimaiNativeParser::parseForTimeline(QStringLiteral("1m,2bm,3xm,\nE"));
         expect(tap.ok, QStringLiteral("mine taps `1m` / `2bm` / `3xm` parse ok"));
         expect(tap.noteMarkers.size() == 3, QStringLiteral("mine tap chart emits three markers"));
@@ -1131,15 +1130,27 @@ int main(int argc, char** argv)
         expect(touchHoldMarker != nullptr && touchHoldMarker->isMine,
                QStringLiteral("`C2hm` sets isMine on a touch-hold"));
 
-        const SimaiNativeParseResult slide = SimaiNativeParser::parseForTimeline(QStringLiteral("1-3[2:1]m,\nE"));
-        expect(slide.ok, QStringLiteral("mine slide `1-3[2:1]m` parses ok"));
-        const TimelineNoteMarker* slideMarker = firstSlideLikeMarker(slide);
-        expect(slideMarker != nullptr, QStringLiteral("mine slide emits a slide marker"));
-        if (slideMarker != nullptr) {
-            expect(slideMarker->trackMine, QStringLiteral("`1-3[2:1]m` sets trackMine on the slide"));
-            expect(!slideMarker->headMine, QStringLiteral("`1-3[2:1]m` keeps the slide head star non-mine"));
-            expect(!slideMarker->slideDisplayKey.contains(QLatin1Char('m')),
-                   QStringLiteral("mine `m` is stripped from the slide shape lookup key"));
+        const SimaiNativeParseResult slide = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1m-5[8:1],2-6m[8:1],3m-7m[8:1],4-8[8:1]m,\nE"));
+        expect(slide.ok, QStringLiteral("head-only, track-only, combined, and trailing mine slides parse ok"));
+        expect(slide.noteMarkers.size() == 4, QStringLiteral("mine slide chart emits four markers"));
+        if (slide.noteMarkers.size() == 4) {
+            const TimelineNoteMarker& headOnly = slide.noteMarkers.at(0);
+            const TimelineNoteMarker& trackOnly = slide.noteMarkers.at(1);
+            const TimelineNoteMarker& combined = slide.noteMarkers.at(2);
+            const TimelineNoteMarker& trailingTrack = slide.noteMarkers.at(3);
+            expect(headOnly.headMine && !headOnly.trackMine,
+                   QStringLiteral("`1m-5[8:1]` sets only headMine"));
+            expect(!trackOnly.headMine && trackOnly.trackMine,
+                   QStringLiteral("`2-6m[8:1]` sets only trackMine"));
+            expect(combined.headMine && combined.trackMine,
+                   QStringLiteral("`3m-7m[8:1]` sets both mine components"));
+            expect(!trailingTrack.headMine && trailingTrack.trackMine,
+                   QStringLiteral("trailing `m` remains a track modifier"));
+            for (const TimelineNoteMarker& marker : slide.noteMarkers) {
+                expect(!marker.slideDisplayKey.contains(QLatin1Char('m')),
+                       QStringLiteral("mine `m` is stripped from slide shape lookup keys"));
+            }
         }
 
         const QVector<QString> uppercaseMineCharts = {

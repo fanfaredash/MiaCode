@@ -123,7 +123,7 @@ module.exports = { activate, deactivate };
 | Editor / 编辑器 | `getText`, `getSelection`, `getVisibleRange`, `revealRange`, `getParsedSnapshot`, `getCurrentToken`, `insertText`, `replaceSelection`, `replaceRange`, `undo`, `redo`, `showHover`, `showCompletions`, `showCodeActions` |
 | Providers / 提供器 | `miacode.providers.registerHoverProvider`, `registerCompletionProvider`, `registerCodeActionProvider`, `collectHover`, `collectCompletions`, `collectCodeActions`, `showHover`, `showCompletions`, `showCodeActions` |
 | Timeline / 时间轴 | `getSnapshot`, `getZoomState`, `getVisibleRange`, `getMarkersAtSecond`, `seek`, `zoomIn`, `zoomOut`, `stepZoomPreset`, `setZoomScale`, `scrollToSecond`, `setFollowPreview`, `setFollowProgress` |
-| Preview / 预览 | `getState`, `getRenderState`, `play`, `pause`, `stop`, `seek`, `setSpeed`, `setMineSkinEnabled`, `addOverlay`, `clearOverlays` |
+| Preview / 预览 | `getState`, `getRenderState`, `play`, `pause`, `stop`, `seek`, `setSpeed`, `setMineSkinEnabled`, `setMineSfxEnabled`, `setJudgeEffectsEnabled`, `addOverlay`, `clearOverlays` |
 | Input / 输入 | `miacode.input.registerWheelGesture`, `registerKeyGesture`, `registerMouseGesture`, `getGestures` |
 | Shortcuts / 快捷键 | `getEditableShortcuts`, `getKeybinding`, `registerShortcut`, `registerCommandShortcut` |
 | UI / 界面 | `registerToolbarButton`, `registerBottomTabView`, `registerSidebarView`, `registerPreferencesPage`, `registerFloatingPanel`, `registerPetOverlay`, `registerSceneOverlay`, `renderWebView`, `renderCanvasView`, `getViews` |
