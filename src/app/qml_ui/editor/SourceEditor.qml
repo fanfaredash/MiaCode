@@ -267,6 +267,12 @@ Rectangle {
         cursorCenterTimer.restart()
     }
 
+    function beginUserViewportInteraction() {
+        root.syncController.beginPointerInteraction(
+            root.documentSession.currentDifficultyId,
+            root.documentSession.documentRevision)
+    }
+
     function applyNavigation(sequence, difficultyId, revision, start, end, focusEditor, reveal) {
         const accepted = root.navigationVisible
             && difficultyId === root.documentSession.currentDifficultyId
@@ -783,7 +789,9 @@ Rectangle {
         ScrollBar.vertical: AppScrollBar {
             id: editorVScroll
             onPressedChanged: {
-                if (!pressed)
+                if (pressed)
+                    root.beginUserViewportInteraction()
+                else
                     Qt.callLater(editorScroll.reconcileViewport)
             }
         }
@@ -805,7 +813,9 @@ Rectangle {
         }
         onMaximumViewportYChanged: Qt.callLater(reconcileViewport)
         onMovingChanged: {
-            if (!moving)
+            if (moving)
+                root.beginUserViewportInteraction()
+            else
                 Qt.callLater(reconcileViewport)
         }
         onContentYChanged: {
@@ -974,6 +984,8 @@ Rectangle {
             // controller can apply its transaction.
             Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown)
+                    root.beginUserViewportInteraction()
                 if (event.key === Qt.Key_Control) {
                     root.syncController.setTouchPadControlHold(true)
                     return
@@ -1147,11 +1159,7 @@ Rectangle {
                 editor: sourceArea
                 viewport: editorScroll
                 inputBridge: editorInputBridge
-                onInteractionStarted: {
-                    root.syncController.beginPointerInteraction(
-                        root.documentSession.currentDifficultyId,
-                        root.documentSession.documentRevision)
-                }
+                onInteractionStarted: root.beginUserViewportInteraction()
                 onContextMenuRequested: (x, y) => root.openContextMenuAt(x, y)
                 onSeekRequested: root.seekPreviewToCaret()
             }
