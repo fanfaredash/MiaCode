@@ -669,6 +669,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/EditableValue.qml
     src/app/qml_ui/components/LabeledCombo.qml
     src/app/qml_ui/components/LabeledSlider.qml
+    src/app/qml_ui/components/SettingsSection.qml
     src/app/qml_ui/components/AboutDialog.qml
     src/app/qml_ui/components/JobProgressOverlay.qml
     src/app/qml_ui/chrome/WindowGestureArea.qml

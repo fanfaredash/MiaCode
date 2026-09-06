@@ -4522,6 +4522,7 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("片头标题字体"), {QStringLiteral("Intro title font"), QStringLiteral("イントロタイトルフォント")}},
         {QStringLiteral("片头正文字体"), {QStringLiteral("Intro body font"), QStringLiteral("イントロ本文フォント")}},
         {QStringLiteral("画布帧率"), {QStringLiteral("Canvas frame rate"), QStringLiteral("キャンバスのフレームレート")}},
+        {QStringLiteral("画面"), {QStringLiteral("Visuals"), QStringLiteral("画面")}},
         {QStringLiteral("界面"), {QStringLiteral("Interface"), QStringLiteral("インターフェース")}},
         {QStringLiteral("硬件解码"), {QStringLiteral("Hardware decoding"), QStringLiteral("ハードウェアデコード")}},
         {QStringLiteral("禁用输入法"), {QStringLiteral("Disable IME"), QStringLiteral("IME を無効化")}},
@@ -4572,6 +4573,7 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("难度卡字体"), {QStringLiteral("Difficulty-card fonts"), QStringLiteral("難度カードのフォント")}},
         {QStringLiteral("静音"), {QStringLiteral("Mute"), QStringLiteral("ミュート")}},
         {QStringLiteral("静音 Break 星星尾判音"), {QStringLiteral("Mute Break star-tail judgement sound"), QStringLiteral("Break 星の終端判定音をミュート")}},
+        {QStringLiteral("音效"), {QStringLiteral("Sound effects"), QStringLiteral("効果音")}},
         {QStringLiteral("音效音量"), {QStringLiteral("Sound-effect volume"), QStringLiteral("効果音の音量")}},
 
     };

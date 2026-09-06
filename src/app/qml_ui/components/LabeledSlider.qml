@@ -27,6 +27,10 @@ RowLayout {
     property alias pressed: slider.pressed
     property Item keyForwardTarget: null
     readonly property bool valueEditing: valueEditor.editing
+    // A page that used to set this on a bare AppSlider (e.g. to make a combo's
+    // neighboring slider keyboard-reachable in the same tab order) still needs
+    // the knob after switching to this wrapper.
+    property alias focusPolicy: slider.focusPolicy
 
     Layout.fillWidth: true
 
@@ -42,6 +46,11 @@ RowLayout {
         from: root.from
         to: root.to
         stepSize: root.stepSize
+        // The label and read-out live on sibling items, not this Slider, so a
+        // screen reader needs its own copy rather than one inherited from the
+        // enclosing RowLayout (which carries no accessible role at all).
+        Accessible.name: root.label
+        Accessible.description: root.readout
         onMoved: root.moved(value)
         onPressedChanged: if (!pressed) root.released()
         Keys.priority: Keys.BeforeItem

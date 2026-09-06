@@ -408,7 +408,9 @@ bool verifyRealExportPageControls(QTextStream& err)
         err);
 
     volumeSlider->setProperty("value", 175.0);
-    QMetaObject::invokeMethod(volumeSlider, "moved");
+    // LabeledSlider's moved(real) signal carries the dragged value, unlike the
+    // bare AppSlider it replaced, so the harness has to pass it explicitly.
+    QMetaObject::invokeMethod(volumeSlider, "moved", Q_ARG(double, 175.0));
     ok &= require(
         qAbs(session->property("introSoundVolume").toDouble() - 1.75) <= 1e-9,
         QStringLiteral("moving the real slider writes the independent 0..2 volume multiplier"),

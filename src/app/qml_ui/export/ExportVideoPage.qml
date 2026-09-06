@@ -165,6 +165,7 @@ Rectangle {
                 contentHeight: settingsBody.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: AppScrollBar {
+                    id: settingsScrollBar
                     // Default AsNeeded fades out when idle; on a squeezed
                     // pane that reads as "the rest of the content is gone"
                     // rather than "scroll for more". Keep it visible for as
@@ -175,7 +176,9 @@ Rectangle {
 
                 ColumnLayout {
                     id: settingsBody
-                    width: parent.width
+                    // Leave room for the scrollbar so it rides beside the
+                    // content instead of overlapping the text underneath it.
+                    width: settingsFlickable.width - settingsScrollBar.width - 4
                     spacing: 12
 
                     // Batch (only reachable while batch export is the active mode)
@@ -186,85 +189,155 @@ Rectangle {
                         spacing: 10
                         Layout.fillWidth: true
 
-                        Text {
-                            text: UiText.text("难度")
-                            color: Theme.colors.text.secondary
-                        }
-                        Flow {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            Repeater {
-                                model: root.session ? root.session.batchDifficultyChecks : []
-                                delegate: AppSwitch {
-                                    required property var modelData
-                                    text: modelData.name
-                                    checked: modelData.checked
-                                    onToggled: if (root.session) root.session.setBatchDifficultyChecked(modelData.id, checked)
+                        SettingsSection {
+                            title: UiText.text("难度")
+                            first: true
+
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Repeater {
+                                    model: root.session ? root.session.batchDifficultyChecks : []
+                                    delegate: AppSwitch {
+                                        required property var modelData
+                                        text: modelData.name
+                                        checked: modelData.checked
+                                        onToggled: if (root.session) root.session.setBatchDifficultyChecked(modelData.id, checked)
+                                    }
                                 }
                             }
                         }
 
-                        Text {
-                            text: UiText.text("输出文件夹")
-                            color: Theme.colors.text.secondary
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            AppTextField {
-                                objectName: "batchOutputDirectoryField"
+                        SettingsSection {
+                            title: UiText.text("输出文件夹")
+
+                            RowLayout {
                                 Layout.fillWidth: true
-                                text: root.session ? root.session.batchOutputDirectory : ""
-                                onEditingFinished: if (root.session) root.session.batchOutputDirectory = text
-                            }
-                            AppButton {
-                                text: UiText.text("浏览...")
-                                onClicked: if (root.session) root.session.browseBatchOutputDirectory()
+                                AppTextField {
+                                    objectName: "batchOutputDirectoryField"
+                                    Layout.fillWidth: true
+                                    text: root.session ? root.session.batchOutputDirectory : ""
+                                    onEditingFinished: if (root.session) root.session.batchOutputDirectory = text
+                                }
+                                AppButton {
+                                    text: UiText.text("浏览...")
+                                    onClicked: if (root.session) root.session.browseBatchOutputDirectory()
+                                }
                             }
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text {
-                                text: UiText.text("谱面文件夹")
-                                color: Theme.colors.text.secondary
+                        SettingsSection {
+                            title: UiText.text("谱面文件夹")
+
+                            // SettingsSection's title row has no slot for trailing
+                            // controls, so Add/Clear sit on their own right-aligned
+                            // row directly above the list instead of riding the
+                            // caption itself.
+                            RowLayout {
                                 Layout.fillWidth: true
+                                Item { Layout.fillWidth: true }
+                                AppButton {
+                                    text: UiText.text("添加")
+                                    onClicked: if (root.session) root.session.addChartDirectories()
+                                }
+                                AppButton {
+                                    text: UiText.text("清空")
+                                    onClicked: if (root.session) root.session.clearChartDirectories()
+                                }
                             }
-                            AppButton {
-                                text: UiText.text("添加")
-                                onClicked: if (root.session) root.session.addChartDirectories()
-                            }
-                            AppButton {
-                                text: UiText.text("清空")
-                                onClicked: if (root.session) root.session.clearChartDirectories()
-                            }
-                        }
-                        // This was a ListView capped at 112px because it shared
-                        // a column with the settings tabs and would otherwise
-                        // starve them. On its own tab there is nothing left to
-                        // starve, so the rows lay out at full height and the
-                        // tab's own Flickable scrolls them — which also keeps a
-                        // second scrollable from nesting inside that one.
-                        ColumnLayout {
-                            objectName: "batchChartDirectoryList"
-                            Layout.fillWidth: true
-                            spacing: 6
-                            Repeater {
-                                model: root.session ? root.session.chartDirectories : []
-                                delegate: RowLayout {
-                                    id: chartDirectoryRow
-                                    required property int index
-                                    required property string modelData
-                                    Layout.fillWidth: true
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: chartDirectoryRow.modelData
-                                        elide: Text.ElideMiddle
-                                        color: Theme.colors.text.active
-                                    }
-                                    AppButton {
-                                        text: UiText.text("移除")
-                                        onClicked: if (root.session)
-                                            root.session.removeChartDirectory(chartDirectoryRow.index)
+
+                            // This was a ListView capped at 112px because it shared
+                            // a column with the settings tabs and would otherwise
+                            // starve them. On its own tab there is nothing left to
+                            // starve, so the rows lay out at full height and the
+                            // tab's own Flickable scrolls them — which also keeps a
+                            // second scrollable from nesting inside that one.
+                            Rectangle {
+                                id: chartDirectoryGroove
+                                objectName: "batchChartDirectoryList"
+                                Layout.fillWidth: true
+                                color: Theme.overlayColor(Theme.colors.background.surface)
+                                radius: Theme.controlRadius
+                                border.width: 1
+                                border.color: Theme.colors.border.normal
+
+                                readonly property var directories: root.session ? root.session.chartDirectories : []
+                                // An empty groove that collapsed to zero height would
+                                // read as the section vanishing, so it holds a floor
+                                // and stays visible as an empty list.
+                                implicitHeight: chartDirectoryGroove.directories.length > 0
+                                                 ? directoryColumn.implicitHeight
+                                                 : Theme.controlMinHeight * 3
+
+                                ColumnLayout {
+                                    id: directoryColumn
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    spacing: 0
+
+                                    Repeater {
+                                        model: chartDirectoryGroove.directories
+                                        delegate: ColumnLayout {
+                                            id: chartDirectoryDelegate
+                                            required property int index
+                                            required property string modelData
+                                            Layout.fillWidth: true
+                                            spacing: 0
+
+                                            Rectangle {
+                                                // Inset to match the row's own padding rather
+                                                // than running edge-to-edge, so it reads as a
+                                                // row separator and not a second groove border.
+                                                visible: chartDirectoryDelegate.index > 0
+                                                Layout.fillWidth: true
+                                                Layout.leftMargin: Theme.rowPaddingX
+                                                Layout.rightMargin: Theme.rowPaddingX
+                                                height: 1
+                                                color: Theme.colors.border.normal
+                                            }
+
+                                            ChromeRow {
+                                                id: chartDirectoryRow
+                                                Layout.fillWidth: true
+                                                implicitHeight: Theme.controlMinHeight
+
+                                                contentItem: RowLayout {
+                                                    spacing: 8
+
+                                                    Text {
+                                                        id: chartDirectoryPath
+                                                        Layout.fillWidth: true
+                                                        text: chartDirectoryDelegate.modelData
+                                                        elide: Text.ElideMiddle
+                                                        color: Theme.colors.text.active
+                                                        font.family: Theme.uiFont
+                                                        font.pixelSize: Theme.uiFontSize
+                                                        verticalAlignment: Text.AlignVCenter
+
+                                                        HoverHandler { id: chartDirectoryPathHover }
+                                                        Tooltip {
+                                                            visible: chartDirectoryPathHover.hovered
+                                                            text: chartDirectoryDelegate.modelData
+                                                        }
+                                                    }
+
+                                                    IconButton {
+                                                        compact: true
+                                                        iconSource: Qt.resolvedUrl("icons/remove.svg")
+                                                        tooltip: UiText.text("移除")
+                                                        // Left to IconButton's own resting/hover
+                                                        // glyphColor: `active` would be wrong here
+                                                        // because it also drives HoverChrome's
+                                                        // selected background, so brightening the
+                                                        // glyph on row hover would paint the
+                                                        // button as if it were toggled on.
+                                                        onClicked: if (root.session)
+                                                            root.session.removeChartDirectory(chartDirectoryDelegate.index)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -575,161 +648,155 @@ Rectangle {
                         spacing: 10
                         Layout.fillWidth: true
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text {
-                                text: UiText.text("皮肤")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                id: exportSkinCombo
-                                objectName: "exportSkinCombo"
+                        SettingsSection {
+                            title: UiText.text("皮肤")
+                            first: true
+
+                            RowLayout {
                                 Layout.fillWidth: true
-                                model: root.session ? root.session.skinOptions : []
-                                textRole: "label"
-                                currentIndex: root.session ? root.session.skinIndex : -1
-                                Accessible.name: UiText.text("皮肤")
-                                onActivated: if (root.session) root.session.skinIndex = currentIndex
+                                Text {
+                                    text: UiText.text("皮肤")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: exportSkinCombo
+                                    objectName: "exportSkinCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.skinOptions : []
+                                    textRole: "label"
+                                    currentIndex: root.session ? root.session.skinIndex : -1
+                                    Accessible.name: UiText.text("皮肤")
+                                    onActivated: if (root.session) root.session.skinIndex = currentIndex
+                                }
+                                AppButton {
+                                    text: UiText.text("打开目录")
+                                    onClicked: if (root.session) root.session.openSkinDirectory()
+                                }
                             }
-                            AppButton {
-                                text: UiText.text("打开目录")
-                                onClicked: if (root.session) root.session.openSkinDirectory()
-                            }
-                        }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text {
-                                text: UiText.text("判定效果")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                id: exportSkinJudgeEffectCombo
-                                objectName: "exportSkinJudgeEffectCombo"
+                            RowLayout {
                                 Layout.fillWidth: true
-                                model: root.session ? root.session.skinJudgeEffectOptions : []
-                                currentIndex: root.session ? root.session.skinJudgeEffectIndex : 0
-                                Accessible.name: UiText.text("判定效果")
-                                onActivated: if (root.session) root.session.skinJudgeEffectIndex = currentIndex
+                                Text {
+                                    text: UiText.text("判定效果")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: exportSkinJudgeEffectCombo
+                                    objectName: "exportSkinJudgeEffectCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.skinJudgeEffectOptions : []
+                                    currentIndex: root.session ? root.session.skinJudgeEffectIndex : 0
+                                    Accessible.name: UiText.text("判定效果")
+                                    onActivated: if (root.session) root.session.skinJudgeEffectIndex = currentIndex
+                                }
                             }
-                        }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text {
-                                text: UiText.text("判定线")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                id: exportOutlineCombo
-                                objectName: "exportOutlineCombo"
+                            RowLayout {
                                 Layout.fillWidth: true
-                                model: root.session ? root.session.outlineOptions : []
-                                currentIndex: root.session ? root.session.outlineIndex : 1
-                                Accessible.name: UiText.text("判定线")
-                                onActivated: if (root.session) root.session.outlineIndex = currentIndex
-                            }
-                            AppButton {
-                                text: UiText.text("打开目录")
-                                onClicked: if (root.session) root.session.openJudgeLineDirectory()
+                                Text {
+                                    text: UiText.text("判定线")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: exportOutlineCombo
+                                    objectName: "exportOutlineCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.outlineOptions : []
+                                    currentIndex: root.session ? root.session.outlineIndex : 1
+                                    Accessible.name: UiText.text("判定线")
+                                    onActivated: if (root.session) root.session.outlineIndex = currentIndex
+                                }
+                                AppButton {
+                                    text: UiText.text("打开目录")
+                                    onClicked: if (root.session) root.session.openJudgeLineDirectory()
+                                }
                             }
                         }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 2
-                            height: 1
-                            color: Theme.colors.border.normal
-                        }
+                        SettingsSection {
+                            title: UiText.text("HUD 字体")
 
-                        Text {
-                            text: UiText.text("HUD 字体")
-                            color: Theme.colors.text.active
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                            font.bold: true
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text {
-                                text: UiText.text("区域")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                id: hudFontAreaCombo
-                                objectName: "hudFontAreaCombo"
+                            RowLayout {
                                 Layout.fillWidth: true
-                                model: root.session ? root.session.hudFontAreaOptions : []
-                                textRole: "label"
-                                currentIndex: root.session ? root.session.hudFontAreaIndex : 0
-                                Accessible.name: UiText.text("HUD 字体区域")
-                                onActivated: if (root.session) root.session.hudFontAreaIndex = currentIndex
+                                Text {
+                                    text: UiText.text("区域")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: hudFontAreaCombo
+                                    objectName: "hudFontAreaCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.hudFontAreaOptions : []
+                                    textRole: "label"
+                                    currentIndex: root.session ? root.session.hudFontAreaIndex : 0
+                                    Accessible.name: UiText.text("HUD 字体区域")
+                                    onActivated: if (root.session) root.session.hudFontAreaIndex = currentIndex
+                                }
                             }
-                        }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Text {
-                                text: UiText.text("字体")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                id: hudFontCombo
-                                objectName: "hudFontCombo"
+                            RowLayout {
                                 Layout.fillWidth: true
-                                model: root.session ? root.session.fontLibraryOptions : []
-                                textRole: "label"
-                                currentIndex: root.fontIndexForPath(model,
-                                                                   root.session ? root.session.hudFontPath : "")
-                                Accessible.name: UiText.text("HUD 字体")
-                                onActivated: if (root.session) root.session.hudFontPath = model[currentIndex].path
+                                Text {
+                                    text: UiText.text("字体")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: hudFontCombo
+                                    objectName: "hudFontCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.fontLibraryOptions : []
+                                    textRole: "label"
+                                    currentIndex: root.fontIndexForPath(model,
+                                                                       root.session ? root.session.hudFontPath : "")
+                                    Accessible.name: UiText.text("HUD 字体")
+                                    onActivated: if (root.session) root.session.hudFontPath = model[currentIndex].path
+                                }
                             }
-                        }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: hudFontSample.implicitHeight + 20
-                            radius: Theme.controlRadius
-                            color: Theme.overlayColor(Theme.colors.background.surface)
-                            Text {
-                                id: hudFontSample
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                text: root.session ? root.session.hudFontSample : ""
-                                color: Theme.colors.text.primary
-                                font.family: root.fontFamilyForPath(
-                                                 root.session ? root.session.fontLibraryOptions : [],
-                                                 root.session ? root.session.hudFontPath : "") || Theme.uiFont
-                                font.pixelSize: Theme.uiFontSize
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: hudFontSample.implicitHeight + 20
+                                radius: Theme.controlRadius
+                                color: Theme.overlayColor(Theme.colors.background.surface)
+                                Text {
+                                    id: hudFontSample
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    text: root.session ? root.session.hudFontSample : ""
+                                    color: Theme.colors.text.primary
+                                    font.family: root.fontFamilyForPath(
+                                                     root.session ? root.session.fontLibraryOptions : [],
+                                                     root.session ? root.session.hudFontPath : "") || Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
                             }
-                        }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            AppButton {
-                                id: hudFontImportButton
-                                objectName: "hudFontImportButton"
-                                text: UiText.text("导入字体…")
-                                Accessible.name: UiText.text("导入 HUD 字体")
-                                onClicked: if (root.session) root.session.importHudFont()
+                            RowLayout {
+                                Layout.fillWidth: true
+                                AppButton {
+                                    id: hudFontImportButton
+                                    objectName: "hudFontImportButton"
+                                    text: UiText.text("导入字体…")
+                                    Accessible.name: UiText.text("导入 HUD 字体")
+                                    onClicked: if (root.session) root.session.importHudFont()
+                                }
+                                AppButton {
+                                    id: hudFontResetButton
+                                    objectName: "hudFontResetButton"
+                                    text: UiText.text("还原")
+                                    Accessible.name: UiText.text("还原 HUD 字体")
+                                    onClicked: if (root.session) root.session.resetHudFont()
+                                }
+                                Item { Layout.fillWidth: true }
                             }
-                            AppButton {
-                                id: hudFontResetButton
-                                objectName: "hudFontResetButton"
-                                text: UiText.text("还原")
-                                Accessible.name: UiText.text("还原 HUD 字体")
-                                onClicked: if (root.session) root.session.resetHudFont()
-                            }
-                            Item { Layout.fillWidth: true }
                         }
                     }
 
@@ -738,6 +805,9 @@ Rectangle {
                         visible: root.session && root.session.settingsTab === "intro"
                         spacing: 10
                         Layout.fillWidth: true
+
+                        // Kept outside every section: gating this on `introEnabled`
+                        // itself would let it disable its own switch.
                         AppSwitch {
                             text: UiText.text("添加片头")
                             checked: root.session ? root.session.introEnabled : false
@@ -746,233 +816,210 @@ Rectangle {
                                      : false
                             onToggled: if (root.session) root.session.introEnabled = checked
                         }
-                        RowLayout {
-                            Layout.fillWidth: true
+
+                        SettingsSection {
+                            title: UiText.text("画面")
                             enabled: root.introSettingsEnabled
 
-                            Text {
-                                text: root.session ? root.session.introSoundLabel : ""
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
+                            RowLayout {
+                                Text {
+                                    text: UiText.text("背景")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: [UiText.text("曲绘"), UiText.text("自定义")]
+                                    currentIndex: root.session ? root.session.introBackgroundModeIndex : 0
+                                    onActivated: if (root.session) root.session.introBackgroundModeIndex = currentIndex
+                                }
                             }
-                            AppComboBox {
-                                id: introSoundCombo
-                                objectName: "introSoundCombo"
-                                Layout.fillWidth: true
-                                model: root.session ? root.session.introSoundOptions : []
-                                textRole: "label"
-                                currentIndex: root.session ? root.session.introSoundIndex : 0
-                                focusPolicy: Qt.StrongFocus
-                                Accessible.name: root.session ? root.session.introSoundLabel : ""
-                                onActivated: if (root.session) root.session.introSoundIndex = currentIndex
+                            RowLayout {
+                                visible: root.session && root.session.introBackgroundModeIndex === 1
+                                AppTextField {
+                                    Layout.fillWidth: true
+                                    text: root.session ? root.session.introCustomBackgroundPath : ""
+                                    onEditingFinished: if (root.session) root.session.introCustomBackgroundPath = text
+                                }
+                                AppButton {
+                                    text: UiText.text("浏览...")
+                                    onClicked: if (root.session) root.session.browseIntroBackground()
+                                }
                             }
-                            AppButton {
-                                id: introSoundImportButton
-                                objectName: "introSoundImportButton"
-                                text: root.session ? root.session.introSoundImportLabel : ""
-                                focusPolicy: Qt.StrongFocus
-                                Accessible.name: root.session
-                                                 ? root.session.introSoundImportLabel + " "
-                                                   + root.session.introSoundLabel
-                                                 : ""
-                                onClicked: if (root.session) root.session.importIntroSound()
+                            AppSwitch {
+                                text: UiText.text("背景虚化")
+                                checked: root.session ? root.session.introBlurBackground : true
+                                onToggled: if (root.session) root.session.introBlurBackground = checked
+                            }
+                            RowLayout {
+                                Text {
+                                    text: UiText.text("谱面类型")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: [UiText.text("自动"), "DX", "SD"]
+                                    currentIndex: root.session ? root.session.introModeIndex : 0
+                                    onActivated: if (root.session) root.session.introModeIndex = currentIndex
+                                }
+                            }
+                            AppSwitch {
+                                text: UiText.text("难度卡阴影")
+                                checked: root.session ? root.session.introCardShadow : false
+                                onToggled: if (root.session) root.session.introCardShadow = checked
+                            }
+                            AppSwitch {
+                                text: UiText.text("等级文本渲染")
+                                checked: root.session ? root.session.introLevelTextRender : false
+                                onToggled: if (root.session) root.session.introLevelTextRender = checked
                             }
                         }
-                        RowLayout {
-                            Layout.fillWidth: true
+
+                        SettingsSection {
+                            title: UiText.text("难度卡字体")
                             enabled: root.introSettingsEnabled
 
-                            Text {
-                                text: root.session ? root.session.introSoundVolumeLabel : ""
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: UiText.text("标题字体")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: introDisplayFontCombo
+                                    objectName: "introDisplayFontCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.fontLibraryOptions : []
+                                    textRole: "label"
+                                    currentIndex: root.fontIndexForPath(
+                                                      model, root.session ? root.session.introFontDisplayPath : "")
+                                    Accessible.name: UiText.text("片头标题字体")
+                                    onActivated: if (root.session)
+                                        root.session.introFontDisplayPath = model[currentIndex].path
+                                }
                             }
-                            AppSlider {
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: UiText.text("正文字体")
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: introBodyFontCombo
+                                    objectName: "introBodyFontCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.fontLibraryOptions : []
+                                    textRole: "label"
+                                    currentIndex: root.fontIndexForPath(
+                                                      model, root.session ? root.session.introFontBodyPath : "")
+                                    Accessible.name: UiText.text("片头正文字体")
+                                    onActivated: if (root.session)
+                                        root.session.introFontBodyPath = model[currentIndex].path
+                                }
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: introFontPreviewColumn.implicitHeight + 20
+                                radius: Theme.controlRadius
+                                color: Theme.overlayColor(Theme.colors.background.surface)
+                                Column {
+                                    id: introFontPreviewColumn
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 3
+                                    Text {
+                                        id: introFontSample
+                                        width: parent.width
+                                        text: UiText.text("标题字体预览")
+                                        color: Theme.colors.text.primary
+                                        font.family: root.fontFamilyForPath(
+                                                         root.session ? root.session.fontLibraryOptions : [],
+                                                         root.session ? root.session.introFontDisplayPath : "") || Theme.uiFont
+                                        font.pixelSize: Theme.uiFontSize
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        width: parent.width
+                                        text: UiText.text("正文字体预览")
+                                        color: Theme.colors.text.secondary
+                                        font.family: root.fontFamilyForPath(
+                                                         root.session ? root.session.fontLibraryOptions : [],
+                                                         root.session ? root.session.introFontBodyPath : "") || Theme.uiFont
+                                        font.pixelSize: Theme.secondaryFontSize
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                AppButton {
+                                    id: introFontImportButton
+                                    objectName: "introFontImportButton"
+                                    text: UiText.text("导入字体…")
+                                    Accessible.name: UiText.text("导入片头难度卡字体")
+                                    onClicked: if (root.session) root.session.importIntroFont()
+                                }
+                                AppButton {
+                                    id: introFontResetButton
+                                    objectName: "introFontResetButton"
+                                    text: UiText.text("重置")
+                                    Accessible.name: UiText.text("重置片头难度卡字体")
+                                    onClicked: if (root.session) root.session.resetIntroFonts()
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+                        }
+
+                        SettingsSection {
+                            title: UiText.text("音效")
+                            enabled: root.introSettingsEnabled
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: root.session ? root.session.introSoundLabel : ""
+                                    color: Theme.colors.text.secondary
+                                    Layout.preferredWidth: 120
+                                }
+                                AppComboBox {
+                                    id: introSoundCombo
+                                    objectName: "introSoundCombo"
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.introSoundOptions : []
+                                    textRole: "label"
+                                    currentIndex: root.session ? root.session.introSoundIndex : 0
+                                    focusPolicy: Qt.StrongFocus
+                                    Accessible.name: root.session ? root.session.introSoundLabel : ""
+                                    onActivated: if (root.session) root.session.introSoundIndex = currentIndex
+                                }
+                                AppButton {
+                                    id: introSoundImportButton
+                                    objectName: "introSoundImportButton"
+                                    text: root.session ? root.session.introSoundImportLabel : ""
+                                    focusPolicy: Qt.StrongFocus
+                                    Accessible.name: root.session
+                                                     ? root.session.introSoundImportLabel + " "
+                                                       + root.session.introSoundLabel
+                                                     : ""
+                                    onClicked: if (root.session) root.session.importIntroSound()
+                                }
+                            }
+                            LabeledSlider {
                                 id: introSoundVolumeSlider
                                 objectName: "introSoundVolumeSlider"
-                                Layout.fillWidth: true
+                                label: root.session ? root.session.introSoundVolumeLabel : ""
                                 from: 0
                                 to: 200
                                 stepSize: 1
+                                suffix: "%"
                                 value: root.session ? root.session.introSoundVolume * 100 : 100
                                 focusPolicy: Qt.StrongFocus
-                                Accessible.name: root.session ? root.session.introSoundVolumeLabel : ""
-                                Accessible.description: Math.round(value) + "%"
-                                onMoved: if (root.session) root.session.introSoundVolume = value / 100
+                                onMoved: function(v) { if (root.session) root.session.introSoundVolume = v / 100 }
                             }
-                            Text {
-                                Layout.preferredWidth: 52
-                                text: Math.round(introSoundVolumeSlider.value) + "%"
-                                color: Theme.colors.text.active
-                                horizontalAlignment: Text.AlignRight
-                            }
-                        }
-                        RowLayout {
-                            enabled: root.introSettingsEnabled
-                            Text {
-                                text: UiText.text("背景")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                Layout.fillWidth: true
-                                model: [UiText.text("曲绘"), UiText.text("自定义")]
-                                currentIndex: root.session ? root.session.introBackgroundModeIndex : 0
-                                onActivated: if (root.session) root.session.introBackgroundModeIndex = currentIndex
-                            }
-                        }
-                        RowLayout {
-                            visible: root.session && root.session.introBackgroundModeIndex === 1
-                            enabled: root.introSettingsEnabled
-                            AppTextField {
-                                Layout.fillWidth: true
-                                text: root.session ? root.session.introCustomBackgroundPath : ""
-                                onEditingFinished: if (root.session) root.session.introCustomBackgroundPath = text
-                            }
-                            AppButton {
-                                text: UiText.text("浏览...")
-                                onClicked: if (root.session) root.session.browseIntroBackground()
-                            }
-                        }
-                        AppSwitch {
-                            enabled: root.introSettingsEnabled
-                            text: UiText.text("背景虚化")
-                            checked: root.session ? root.session.introBlurBackground : true
-                            onToggled: if (root.session) root.session.introBlurBackground = checked
-                        }
-                        RowLayout {
-                            enabled: root.introSettingsEnabled
-                            Text {
-                                text: UiText.text("谱面类型")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                Layout.fillWidth: true
-                                model: [UiText.text("自动"), "DX", "SD"]
-                                currentIndex: root.session ? root.session.introModeIndex : 0
-                                onActivated: if (root.session) root.session.introModeIndex = currentIndex
-                            }
-                        }
-                        AppSwitch {
-                            enabled: root.introSettingsEnabled
-                            text: UiText.text("难度卡阴影")
-                            checked: root.session ? root.session.introCardShadow : false
-                            onToggled: if (root.session) root.session.introCardShadow = checked
-                        }
-                        AppSwitch {
-                            enabled: root.introSettingsEnabled
-                            text: UiText.text("等级文本渲染")
-                            checked: root.session ? root.session.introLevelTextRender : false
-                            onToggled: if (root.session) root.session.introLevelTextRender = checked
-                        }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 2
-                            height: 1
-                            color: Theme.colors.border.normal
-                        }
-                        Text {
-                            text: UiText.text("难度卡字体")
-                            color: Theme.colors.text.active
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                            font.bold: true
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            enabled: root.introSettingsEnabled
-                            Text {
-                                text: UiText.text("标题字体")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                id: introDisplayFontCombo
-                                objectName: "introDisplayFontCombo"
-                                Layout.fillWidth: true
-                                model: root.session ? root.session.fontLibraryOptions : []
-                                textRole: "label"
-                                currentIndex: root.fontIndexForPath(
-                                                  model, root.session ? root.session.introFontDisplayPath : "")
-                                Accessible.name: UiText.text("片头标题字体")
-                                onActivated: if (root.session)
-                                    root.session.introFontDisplayPath = model[currentIndex].path
-                            }
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            enabled: root.introSettingsEnabled
-                            Text {
-                                text: UiText.text("正文字体")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                id: introBodyFontCombo
-                                objectName: "introBodyFontCombo"
-                                Layout.fillWidth: true
-                                model: root.session ? root.session.fontLibraryOptions : []
-                                textRole: "label"
-                                currentIndex: root.fontIndexForPath(
-                                                  model, root.session ? root.session.introFontBodyPath : "")
-                                Accessible.name: UiText.text("片头正文字体")
-                                onActivated: if (root.session)
-                                    root.session.introFontBodyPath = model[currentIndex].path
-                            }
-                        }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: introFontPreviewColumn.implicitHeight + 20
-                            radius: Theme.controlRadius
-                            color: Theme.overlayColor(Theme.colors.background.surface)
-                            Column {
-                                id: introFontPreviewColumn
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 3
-                                Text {
-                                    id: introFontSample
-                                    width: parent.width
-                                    text: UiText.text("标题字体预览")
-                                    color: Theme.colors.text.primary
-                                    font.family: root.fontFamilyForPath(
-                                                     root.session ? root.session.fontLibraryOptions : [],
-                                                     root.session ? root.session.introFontDisplayPath : "") || Theme.uiFont
-                                    font.pixelSize: Theme.uiFontSize
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                }
-                                Text {
-                                    width: parent.width
-                                    text: UiText.text("正文字体预览")
-                                    color: Theme.colors.text.secondary
-                                    font.family: root.fontFamilyForPath(
-                                                     root.session ? root.session.fontLibraryOptions : [],
-                                                     root.session ? root.session.introFontBodyPath : "") || Theme.uiFont
-                                    font.pixelSize: Theme.secondaryFontSize
-                                    elide: Text.ElideRight
-                                }
-                            }
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            enabled: root.introSettingsEnabled
-                            AppButton {
-                                id: introFontImportButton
-                                objectName: "introFontImportButton"
-                                text: UiText.text("导入字体…")
-                                Accessible.name: UiText.text("导入片头难度卡字体")
-                                onClicked: if (root.session) root.session.importIntroFont()
-                            }
-                            AppButton {
-                                id: introFontResetButton
-                                objectName: "introFontResetButton"
-                                text: UiText.text("重置")
-                                Accessible.name: UiText.text("重置片头难度卡字体")
-                                onClicked: if (root.session) root.session.resetIntroFonts()
-                            }
-                            Item { Layout.fillWidth: true }
                         }
                     }
                 }
