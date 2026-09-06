@@ -306,6 +306,18 @@ Item {
                 enabled: root.commandsEnabled
                 onAboutToShow: root.backupDocuments = root.documentSession.backupDocuments()
 
+                contentItem: ListView {
+                    readonly property real averageItemHeight:
+                        count > 0 ? contentHeight / count : 0
+                    implicitHeight: Math.min(contentHeight, averageItemHeight * 10)
+                    model: restoreBackupMenu.contentModel
+                    delegate: restoreBackupMenu.delegate
+                    clip: true
+                    interactive: contentHeight > height
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: AppScrollBar {}
+                }
+
                 Repeater {
                     model: root.backupDocuments.length > 0
                            ? root.backupDocuments
