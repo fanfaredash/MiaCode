@@ -43,7 +43,7 @@
 | [阶段 0a：移除 v1 QuickShell 外壳与其入口 — 实施计划](specs/ui/plans/2026-08-25-v2-stage0a-remove-v1-shell.md) | — |
 | [Timeline Qt Quick + GPU 一致性检查清单](tests/TIMELINE_QTQUICK_GPU_PARITY_CHECKLIST.md) | — |
 
-## working（54）
+## working（55）
 
 | 文档 | Canonical ID |
 | --- | --- |
@@ -55,6 +55,7 @@
 | [代码审计：多语言处理分布 & UI 组件复用（2026-07-07）](audit/I18N_AND_UI_COMPONENT_AUDIT_ZH.md) | — |
 | [i18n 收敛第二阶段方案：统一到键值路径 + Muri 详情多语言（2026-07-07）](audit/I18N_KEY_MIGRATION_PLAN_ZH.md) | — |
 | [OBS 推流下预览播放卡顿审查（问题 2）+ 与空闲冻结的关联重构](audit/OBS_CONTENTION_PLAYBACK_STUTTER_AUDIT_ZH.md) | — |
+| [MiaCode 预览音频模块只读代码审查报告](audit/PREVIEW_AUDIO_MASTER_MIXER_STALL_REVIEW_ZH.md) | — |
 | [部分谱面预览自动暂停：初步诊断与交接](audit/PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md) | — |
 | [PV 首播画面掉帧：复核结论与修复方案](audit/PREVIEW_FIRST_PLAY_RENDER_STALL_FIX_PLAN_ZH.md) | — |
 | [PV 首播画面掉帧审计与交接报告](audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md) | — |
