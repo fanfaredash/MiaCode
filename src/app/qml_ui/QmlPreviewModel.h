@@ -89,6 +89,9 @@ signals:
 
 private:
     void refreshFromBackend(bool force = false);
+    // Pull the rate back out of the backend after a rate command and record
+    // what landed; see the note at the definition.
+    void applyRateCommandResult(const QString& action, const QString& request);
     void rebuildStatistics();
     void refreshSkinDirectory();
     void updateV2UiProbePlaybackState();

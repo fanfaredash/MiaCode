@@ -309,6 +309,20 @@ Item {
         }
     }
 
+    // The playback-rate HUD sits over the timeline, not over the preview stage:
+    // while editing, the timeline is where the eyes already are, and the canvas
+    // stays unobscured. Declared last so it paints above every bottom tab —
+    // QML stacking is declaration order — and anchored to the panel body rather
+    // than to timelineItem so it still shows while 语法 or 无理 is in front.
+    // Fullscreen preview keeps its own copy; the timeline is not on screen there.
+    PreviewRateToast {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: tabs.bottom
+        anchors.bottom: parent.bottom
+        previewSession: root.previewSession
+    }
+
     Connections {
         target: root.analysisSession
         function onRowActivated(difficultyId, revision, line, column, endColumn, second) {

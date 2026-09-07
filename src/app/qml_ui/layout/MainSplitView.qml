@@ -400,6 +400,14 @@ Item {
             }
         }
 
+        // Over the stage, under the exit button: QML stacking is declaration
+        // order. Fullscreen is where the rate HUD matters most — the transport
+        // that spells the rate out is not on screen at all.
+        PreviewRateToast {
+            anchors.fill: parent
+            previewSession: root.previewSession
+        }
+
         IconButton {
             anchors.right: parent.right
             anchors.top: parent.top

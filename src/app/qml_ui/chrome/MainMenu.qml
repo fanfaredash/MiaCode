@@ -256,17 +256,27 @@ Item {
         AppMenu {
             id: fileMenu
             title: UiText.text("文件(&F)")
+            // 新建 / 打开 keep v1's Ctrl+Shift+N / Ctrl+Shift+O rather than the
+            // platform standard keys. StandardKey.New and StandardKey.Open are
+            // Ctrl+N and Ctrl+O, which the registry already hands to
+            // transform.toggle_ex and preview.speed_down; two window-context
+            // shortcuts on one sequence are ambiguous to Qt, which then fires
+            // NEITHER. qml_shortcut_binding_spec guards the whole class.
             AppMenuAction {
                 text: UiText.text("新建")
-                shortcut: StandardKey.New
-                shortcutText: root.shortcuts.standardDisplayText(StandardKey.New)
+                shortcut: root.shortcuts.revision >= 0
+                    ? root.shortcuts.sequence("file.new", "Ctrl+Shift+N")
+                    : ""
+                shortcutText: root.shortcuts.displayText("file.new", "Ctrl+Shift+N")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.newDocumentRequested()
             }
             AppMenuAction {
                 text: UiText.text("打开")
-                shortcut: StandardKey.Open
-                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Open)
+                shortcut: root.shortcuts.revision >= 0
+                    ? root.shortcuts.sequence("file.open", "Ctrl+Shift+O")
+                    : ""
+                shortcutText: root.shortcuts.displayText("file.open", "Ctrl+Shift+O")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.openRequested()
             }
@@ -510,6 +520,23 @@ Item {
         AppMenu {
             id: previewMenu
             title: UiText.text("预览(&P)")
+            // Display-only spellings: ShortcutBindings.qml owns these two
+            // bindings, and a `shortcut:` here would be the second claim on the
+            // same sequence — the very ambiguity that killed them in the File
+            // menu. The rows exist so the binding is discoverable, as in v1.
+            AppMenuAction {
+                text: UiText.text("action.preview_speed_down")
+                shortcutText: root.shortcuts.displayText("preview.speed_down", "Ctrl+O")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.previewRateStepRequested(-1)
+            }
+            AppMenuAction {
+                text: UiText.text("action.preview_speed_up")
+                shortcutText: root.shortcuts.displayText("preview.speed_up", "Ctrl+P")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.previewRateStepRequested(1)
+            }
+            AppMenuSeparator {}
             AppMenuAction {
                 text: UiText.text("音频设置")
                 enabled: root.commandsEnabled

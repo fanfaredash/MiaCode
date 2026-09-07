@@ -39,5 +39,7 @@ QtObject {
     signal closeDocumentRequested()
     signal audioSettingsRequested()
     signal previewSettingsRequested()
+    // -1 / +1 along the preview's playback-rate ladder.
+    signal previewRateStepRequested(int direction)
     signal unavailableFeatureRequested(string featureName)
 }

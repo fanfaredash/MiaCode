@@ -256,7 +256,30 @@ double QmlPreviewModel::canvasAspectRatio() const
 }
 
 void QmlPreviewModel::setPositionSeconds(double value) { playbackControl()->seek(value); }
-void QmlPreviewModel::setRate(double value) { playbackControl()->setPlaybackRate(value); }
+
+// The rate commands announce nothing. PlaybackCoordinator::applyPreviewPlaybackRate
+// writes the new rate and drives the audio and media route, but emits no shell
+// notification, and while the preview is paused no playhead tick arrives either
+// — so the shell keeps reporting the OLD rate indefinitely, and the menu tick,
+// the transport label and the rate HUD all read from that. Pulling the value
+// back here is what the render-mode commands below already do for the same
+// reason. Without it the rate menu and Ctrl+O / Ctrl+P look completely dead
+// from the outside even though the backend took the command.
+void QmlPreviewModel::applyRateCommandResult(const QString& action, const QString& request)
+{
+    refreshFromBackend();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("qml_ui/preview_rate"),
+        QStringLiteral("action=%1 %2 rate=%3").arg(action, request).arg(rate_),
+        true);
+}
+
+void QmlPreviewModel::setRate(double value)
+{
+    playbackControl()->setPlaybackRate(value);
+    applyRateCommandResult(QStringLiteral("set"), QStringLiteral("requested=%1").arg(value));
+}
 void QmlPreviewModel::setPlaying(bool value)
 {
     if (value != playing()) playbackControl()->togglePlayback();
@@ -304,7 +327,11 @@ void QmlPreviewModel::stop() { playbackControl()->stop(); }
 
 void QmlPreviewModel::togglePlayback() { playbackControl()->togglePlayback(); }
 
-void QmlPreviewModel::adjustRate(int direction) { playbackControl()->nudgePlaybackRate(direction); }
+void QmlPreviewModel::adjustRate(int direction)
+{
+    playbackControl()->nudgePlaybackRate(direction);
+    applyRateCommandResult(QStringLiteral("nudge"), QStringLiteral("direction=%1").arg(direction));
+}
 
 void QmlPreviewModel::logPreviewInteraction(const QString& action, const QString& payload)
 {

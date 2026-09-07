@@ -92,6 +92,9 @@ miacode_add_spec(qml_shortcut_binding_spec
     LIBS Qt6::Core Qt6::Gui
     INCLUDES src src/app/ui src/app/qml_ui src/core/chart src/core/chart/transform
 )
+target_compile_definitions(qml_shortcut_binding_spec PRIVATE
+    "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
 miacode_add_spec(v1_shell_removal_spec
     OWNER src/app/qml_ui
     CONTRACT qml-ui.v1-shell-removal
@@ -233,6 +236,37 @@ miacode_add_spec(qml_export_video_page_spec
 )
 target_compile_definitions(qml_export_video_page_spec PRIVATE
     "MIACODE_QML_SPEC_IMPORT_ROOT=\"${MIACODE_QML_SPEC_IMPORT_ROOT}\"")
+
+miacode_add_spec(qml_preview_rate_spec
+    OWNER src/app/qml_ui
+    CONTRACT qml-ui.qml-preview-rate
+    DOMAIN qml_ui KIND integration RISK normal
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/qml_ui/QmlPreviewRateSpec.cpp
+    LIBS Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    INCLUDES src
+)
+target_compile_definitions(qml_preview_rate_spec PRIVATE
+    "MIACODE_QML_SPEC_IMPORT_ROOT=\"${MIACODE_QML_SPEC_IMPORT_ROOT}\"")
+
+miacode_add_spec(qml_preview_rate_feedback_spec
+    OWNER src/app/qml_ui
+    CONTRACT qml-ui.qml-preview-rate-feedback
+    DOMAIN qml_ui KIND behavior RISK high
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/qml_ui/QmlPreviewRateFeedbackSpec.cpp
+        src/app/qml_ui/QmlPreviewModel.cpp
+        src/app/qml_ui/QmlPreviewModel.h
+        src/app/v2/ShellNotifications.cpp
+        src/app/v2/ShellNotifications.h
+        src/app/v2/PlaybackControl.h
+        src/app/v2/PreviewSurface.h
+        ${_miacode_log_core}
+    LIBS Qt6::Core Qt6::Gui Qt6::Test
+    INCLUDES src src/app
+)
 
 miacode_add_spec(qml_main_menu_spec
     OWNER src/app/qml_ui

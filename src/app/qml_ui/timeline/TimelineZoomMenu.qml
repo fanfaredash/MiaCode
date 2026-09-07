@@ -20,14 +20,22 @@ AppMenu {
         model: root.stateBridge ? root.stateBridge.zoomPresetValues : []
 
         delegate: AppMenuItem {
+            id: zoomItem
             required property var modelData
             compact: true
 
+            readonly property bool current: root.stateBridge
+                     && Math.abs(root.stateBridge.zoomScale - modelData) <= 1e-6
+
             text: UiText.text("%1%").arg(Math.round(modelData * 100))
             checkable: true
-            checked: root.stateBridge
-                     && Math.abs(root.stateBridge.zoomScale - modelData) <= 1e-6
-            onTriggered: root.stateBridge.applyZoomPreset(modelData)
+            checked: zoomItem.current
+            // Single-choice, same as PreviewRateMenu — see the note there for
+            // why the binding has to be reinstated after AbstractButton.toggle().
+            onTriggered: {
+                root.stateBridge.applyZoomPreset(modelData)
+                checked = Qt.binding(() => zoomItem.current)
+            }
         }
     }
 }

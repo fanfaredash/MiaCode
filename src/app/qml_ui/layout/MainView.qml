@@ -75,6 +75,7 @@ Item {
         onCloseDocumentRequested: root.commands.closeDocument()
         onAudioSettingsRequested: audioSettingsDialog.open()
         onPreviewSettingsRequested: previewSettingsDialog.open()
+        onPreviewRateStepRequested: direction => root.previewSession.adjustRate(direction)
     }
 
     function toggleSidebar() {

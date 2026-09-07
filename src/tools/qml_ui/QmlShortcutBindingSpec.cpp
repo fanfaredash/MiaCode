@@ -3,10 +3,18 @@
 #include "app/qml_ui/QmlShortcutModel.h"
 #include "ShortcutRegistry.h"
 
+#include <QDirIterator>
+#include <QFile>
 #include <QGuiApplication>
 #include <QKeySequence>
+#include <QMetaEnum>
+#include <QRegularExpression>
 #include <QSet>
 #include <QTextStream>
+
+#ifndef MIACODE_SOURCE_ROOT
+#error "MIACODE_SOURCE_ROOT must be defined"
+#endif
 
 namespace {
 
@@ -18,7 +26,47 @@ bool expect(bool condition, const QString& message, QTextStream& out, int* faile
     return condition;
 }
 
+struct MenuStandardKey {
+    QString file;
+    QString keyName;
+    QKeySequence sequence;
+};
 
+// Every `shortcut: StandardKey.X` / `sequence: StandardKey.X` a v2 QML source
+// declares. An Action or Shortcut spelled that way registers a real
+// window-context binding, not just a menu label.
+QList<MenuStandardKey> menuStandardKeys()
+{
+    static const QRegularExpression pattern(
+        QStringLiteral("(?:shortcut|sequence)\\s*:\\s*StandardKey\\.(\\w+)"));
+    const QMetaEnum meta = QMetaEnum::fromType<QKeySequence::StandardKey>();
+    QList<MenuStandardKey> keys;
+    QDirIterator it(
+        QStringLiteral(MIACODE_SOURCE_ROOT "/src/app/qml_ui"),
+        {QStringLiteral("*.qml")},
+        QDir::Files,
+        QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        QFile file(it.next());
+        if (!file.open(QIODevice::ReadOnly)) {
+            continue;
+        }
+        const QString source = QString::fromUtf8(file.readAll());
+        auto match = pattern.globalMatch(source);
+        while (match.hasNext()) {
+            const QString name = match.next().captured(1);
+            bool known = false;
+            const int value = meta.keyToValue(name.toUtf8().constData(), &known);
+            if (!known) {
+                continue;
+            }
+            keys.append({it.fileName(),
+                         name,
+                         QKeySequence(static_cast<QKeySequence::StandardKey>(value))});
+        }
+    }
+    return keys;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -101,6 +149,36 @@ int main(int argc, char** argv)
     }
     expect(mirrored > 0 && mirrorResult != sample,
            QStringLiteral("a table entry reaches the shared chart transform"), out, &failed);
+
+    // A menu row bound to a QKeySequence::StandardKey registers a window-context
+    // shortcut of its own. When that lands on a sequence the registry also hands
+    // to a Shortcut in ShortcutBindings.qml, Qt matches both and dispatches
+    // neither — it reports the pair as ambiguous — so BOTH commands go dead.
+    // Porting v1's File menu to standard keys is what silently took Ctrl+O
+    // (播放速度降低) out of v2: v1 spelled 打开 as Ctrl+Shift+O and left Ctrl+O
+    // to the preview.
+    QStringList clashes;
+    for (const MenuStandardKey& key : menuStandardKeys()) {
+        for (const auto& definition : ShortcutRegistry::instance().editableShortcuts()) {
+            for (const QKeySequence& bound :
+                 ShortcutRegistry::instance().sequences(definition.id)) {
+                if (bound.isEmpty() || bound != key.sequence) {
+                    continue;
+                }
+                clashes.append(QStringLiteral("%1 StandardKey.%2 (%3) == %4")
+                                   .arg(key.file,
+                                        key.keyName,
+                                        bound.toString(QKeySequence::PortableText),
+                                        definition.id));
+            }
+        }
+    }
+    if (!clashes.isEmpty()) {
+        for (const QString& clash : clashes) out << "  ambiguous: " << clash << '\n';
+    }
+    expect(clashes.isEmpty(),
+           QStringLiteral("no menu standard key collides with a rebindable command"),
+           out, &failed);
 
     if (failed != 0) {
         out << "QmlShortcutBinding spec failed: " << failed << '\n';

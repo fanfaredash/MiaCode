@@ -714,6 +714,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/preview/PreviewPane.qml
     src/app/qml_ui/preview/PreviewRenderModeMenu.qml
     src/app/qml_ui/preview/PreviewRateMenu.qml
+    src/app/qml_ui/preview/PreviewRateToast.qml
     src/app/qml_ui/preview/PreviewCanvasMenu.qml
     src/app/qml_ui/preview/PreviewTransport.qml
     src/app/qml_ui/preview/NoteStatistics.qml
