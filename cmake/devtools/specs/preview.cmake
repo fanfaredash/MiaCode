@@ -465,6 +465,19 @@ miacode_add_spec(preview_audio_health_spec
     INCLUDES src src/common src/preview src/audio
 )
 
+miacode_add_spec(preview_audio_output_glitch_probe_spec
+    OWNER src/audio
+    CONTRACT preview.preview-audio-output-glitch-probe
+    DOMAIN preview KIND behavior RISK high
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/preview/PreviewAudioOutputGlitchProbeSpec.cpp
+        src/audio/PreviewAudioOutputGlitchProbe.h
+        src/audio/PreviewAudioOutputGlitchRing.h
+    LIBS Qt6::Core
+    INCLUDES src src/common src/preview src/audio
+)
+
 miacode_add_spec(preview_audio_device_change_policy_spec
     OWNER src/audio
     CONTRACT preview.preview-audio-device-change-policy

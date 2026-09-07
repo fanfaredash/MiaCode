@@ -3,7 +3,7 @@
 Generated from `cmake/devtools/specs/` by `cmake -P cmake/devtools/SpecCatalog.cmake`.
 Check without writing: `cmake -DMIACODE_SPEC_CATALOG_CHECK=ON -P cmake/devtools/SpecCatalog.cmake`.
 
-111 independent specs; source lists and link dependencies are maintained only in CMake.
+115 independent specs; source lists and link dependencies are maintained only in CMake.
 All existing assertions and target/CTest names are retained. No bundles or retirements.
 
 `platform:all` means the target is registered on every platform, not that all platforms
@@ -48,6 +48,7 @@ Owners name production modules; kinds describe the checked boundary, not runtime
 | `src/tools/preview/PreviewAudioDeviceChangePolicySpec.cpp` | `preview_audio_device_change_policy_spec` | `src/audio` | `preview.preview-audio-device-change-policy` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewAudioHealthSpec.cpp` | `preview_audio_health_spec` | `src/audio` | `preview.preview-audio-health` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewAudioNonGuiBarrierSpec.cpp` | `preview_audio_non_gui_barrier_spec` | `src/audio` | `preview.preview-audio-non-gui-barrier` | preview | integration | high | all | ctest | active |
+| `src/tools/preview/PreviewAudioOutputGlitchProbeSpec.cpp` | `preview_audio_output_glitch_probe_spec` | `src/audio` | `preview.preview-audio-output-glitch-probe` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewAudioPlaybackFlowPolicySpec.cpp` | `preview_audio_playback_flow_policy_spec` | `src/audio` | `preview.preview-audio-playback-flow-policy` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewAudioSettingsSpec.cpp` | `preview_audio_settings_spec` | `src/audio` | `preview.preview-audio-settings` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewAudioWorkerProtocolSpec.cpp` | `preview_audio_worker_protocol_spec` | `src/audio` | `preview.preview-audio-worker-protocol` | preview | behavior | high | all | ctest | active |
@@ -63,7 +64,7 @@ Owners name production modules; kinds describe the checked boundary, not runtime
 | `src/tools/preview/PreviewRealtimeObjectHotPathSpec.cpp` | `preview_realtime_object_hot_path_spec` | `src/core/scene` | `preview.preview-realtime-object-hot-path` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewSceneAssetLoaderSpec.cpp` | `preview_asset_loader_spec` | `src/preview/runtime` | `preview.preview-asset-loader` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewSfxTimelineSpec.cpp` | `preview_sfx_timeline_spec` | `src/common` | `preview.preview-sfx-timeline` | preview | behavior | high | all | ctest | active |
-| `src/tools/preview/PreviewSlideVanillaTrimSpec.cpp` | `preview_slide_vanilla_trim_spec` | `src/core/scene` | `preview.preview-slide-vanilla-trim` | preview | behavior | high | all | ctest | active |
+| `src/tools/preview/PreviewSlideEraseByAreaSpec.cpp` | `preview_slide_erase_by_area_spec` | `src/core/scene` | `preview.preview-slide-erase-by-area` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PreviewTextureGenerationPolicySpec.cpp` | `preview_texture_generation_policy_spec` | `src/preview/quick_scene` | `preview.preview-texture-generation-policy` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PvMemoryDiagnosticsSpec.cpp` | `pv_memory_diagnostics_spec` | `src/preview/runtime` | `preview.pv-memory-diagnostics` | preview | behavior | high | all | ctest | active |
 | `src/tools/preview/PvMemoryHostContractSpec.cpp` | `pv_memory_host_contract_spec` | `src/preview/runtime` | `preview.pv-memory-host-contract` | preview | source-contract | high | all | ctest | active |
@@ -83,6 +84,9 @@ Owners name production modules; kinds describe the checked boundary, not runtime
 | `src/tools/qml_ui/QmlExportIntroSoundContractSpec.cpp` | `qml_export_intro_sound_contract_spec` | `src/app/qml_ui` | `qml-ui.qml-export-intro-sound-contract` | qml_ui | source-contract | normal | all | ctest | active |
 | `src/tools/qml_ui/QmlExportVideoPageSpec.cpp` | `qml_export_video_page_spec` | `src/app/qml_ui` | `qml-ui.qml-export-video-page` | qml_ui | integration | normal | all | ctest | active |
 | `src/tools/qml_ui/QmlMainMenuSpec.cpp` | `qml_main_menu_spec` | `src/app/qml_ui` | `qml-ui.qml-main-menu` | qml_ui | source-contract | normal | all | ctest | active |
+| `src/tools/qml_ui/QmlPreviewRateFeedbackSpec.cpp` | `qml_preview_rate_feedback_spec` | `src/app/qml_ui` | `qml-ui.qml-preview-rate-feedback` | qml_ui | behavior | high | all | ctest | active |
+| `src/tools/qml_ui/QmlPreviewRateSpec.cpp` | `qml_preview_rate_spec` | `src/app/qml_ui` | `qml-ui.qml-preview-rate` | qml_ui | integration | normal | all | ctest | active |
+| `src/tools/qml_ui/QmlSelectionRangeExportContractSpec.cpp` | `qml_selection_range_export_contract_spec` | `src/app/qml_ui` | `qml-ui.qml-selection-range-export-contract` | qml_ui | source-contract | normal | all | ctest | active |
 | `src/tools/qml_ui/QmlShortcutBindingSpec.cpp` | `qml_shortcut_binding_spec` | `src/app/qml_ui` | `qml-ui.qml-shortcut-binding` | qml_ui | integration | normal | all | ctest | active |
 | `src/tools/qml_ui/QmlUiBackendSurfaceSpec.cpp` | `qml_ui_backend_surface_spec` | `src/app/qml_ui` | `qml-ui.qml-ui-backend-surface` | qml_ui | source-contract | normal | all | ctest | active |
 | `src/tools/qml_ui/QmlUiBootstrapLifecycleSpec.cpp` | `qml_ui_bootstrap_lifecycle_spec` | `src/app/qml_ui` | `qml-ui.qml-ui-bootstrap-lifecycle` | qml_ui | behavior | normal | all | ctest | active |

@@ -239,10 +239,47 @@ void BassPreviewAudioBackend::stopAudioHealthSampler()
     // No independent producer remains to stop or join.
 }
 
+// Drains the lock-free ring the output-glitch DSP callback (masterMixer_, see
+// PreviewAudioOutputGlitchProbe.h / attachOutputGlitchProbe) fills, formatting each
+// event into the audio debug log. Runs on PreviewAudioWorker's thread, called from
+// sampleHealth() below on its existing ~1 Hz cadence -- the master mixer stays
+// ACTIVE_PLAYING (and so the DSP callback keeps firing) for the engine's whole
+// lifetime, independent of whether a playback session is active, so this drains
+// unconditionally whenever the engine is initialized rather than gating on
+// audioHealthPlaybackRunning_ like the rest of this function does.
+void BassPreviewAudioBackend::drainOutputGlitchEvents()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    namespace glitch = miacode::preview_audio::output_glitch;
+    const bool debugEnabled = runtimeAudioDebugEnabled();
+    glitch::GlitchEvent event;
+    // Bounded by the ring's own capacity so this cannot spin longer than one full
+    // ring's worth of events even if the producer is (implausibly, at a ~1 Hz drain
+    // cadence) still pushing as fast as this pops.
+    for (std::size_t drained = 0;
+         drained < glitch::GlitchRing::kCapacity && outputGlitchProbeState_.ring.tryPop(&event);
+         ++drained) {
+        if (debugEnabled) {
+            appendAudioDebugLog(glitch::glitchEventPayload(
+                playbackTransactionId_, outputGlitchProbeState_.sampleRateHz, event));
+        }
+    }
+    const quint64 dropped = outputGlitchProbeState_.ring.takeDroppedCount();
+    if (dropped > 0 && debugEnabled) {
+        appendAudioDebugLog(glitch::glitchDroppedPayload(playbackTransactionId_, dropped));
+    }
+#endif
+}
+
 miacode::preview_audio::PreviewAudioHealthSample BassPreviewAudioBackend::sampleHealth()
 {
     miacode::preview_audio::PreviewAudioHealthSample sample;
 #ifdef MIACODE_HAS_BASS_AUDIO
+    // See drainOutputGlitchEvents()'s own comment for why this runs unconditionally
+    // rather than after the early-return below.
+    if (engineInitialized_) {
+        drainOutputGlitchEvents();
+    }
     if (!engineInitialized_ || !audioHealthPlaybackRunning_.load(std::memory_order_acquire)) {
         // A2: this used to return before latestHealthSample_ was ever assigned below, so
         // the member stayed frozen on whatever it read last while playing -- up to a
