@@ -104,9 +104,13 @@ int main()
 
     health::StallTracker payloadTracker;
     health::updateStall(&payloadTracker, true, 40.0);
+    health::AdvanceProbe underrunProbe;
+    underrunProbe.valid = true;
+    underrunProbe.advanceRatio = 0.5;
+    underrunProbe.underrunEstimate = true;
     const QString payload = health::healthPayload(
         7, 41.0, ChannelActivity::Stalled, ChannelActivity::Playing, payloadTracker, buffers,
-        /*mmcssRegisteredOnAudioThreads=*/false, QStringLiteral("Games"));
+        /*mmcssRegisteredOnAudioThreads=*/false, QStringLiteral("Games"), underrunProbe);
     ok &= require(payload.startsWith(QStringLiteral("bass_audio_health ")),
                   QStringLiteral("health line has a greppable prefix"), err);
     ok &= require(payload.contains(QStringLiteral("txn=7"))
@@ -129,15 +133,58 @@ int main()
     ok &= require(payload.contains(QStringLiteral("bass_mmcss_registered_by_app=0"))
                       && payload.contains(QStringLiteral("app_mmcss_task_class=Games")),
                   QStringLiteral("health line records BASS MMCSS coverage"), err);
+    // A1: the advance-rate probe is the underrun signal NONSTOP makes isUnderrun blind to.
+    ok &= require(payload.contains(QStringLiteral("advance_ratio=0.500"))
+                      && payload.contains(QStringLiteral("underrun_est=1")),
+                  QStringLiteral("health line reports the advance-rate probe"), err);
 
     const QString noMmcss = health::healthPayload(
         0, 0.0, ChannelActivity::Playing, ChannelActivity::Unknown, fresh, health::BufferSnapshot(),
-        false, QString());
+        false, QString(), health::AdvanceProbe());
     ok &= require(noMmcss.contains(QStringLiteral("app_mmcss_task_class=(none)"))
                       && noMmcss.contains(QStringLiteral("underrun=0")),
                   QStringLiteral("unregistered MMCSS renders as (none)"), err);
     ok &= require(noMmcss.contains(QStringLiteral("buffered_ms=-1")),
                   QStringLiteral("unreadable buffer fields render as -1"), err);
+    // A default-constructed AdvanceProbe (not comparable) must not silently read as "no
+    // underrun measured" via a 0 that looks like a real ratio.
+    ok &= require(noMmcss.contains(QStringLiteral("advance_ratio=-1.000"))
+                      && noMmcss.contains(QStringLiteral("underrun_est=0")),
+                  QStringLiteral("a not-comparable probe renders as the -1 sentinel"), err);
+
+    // ---- advance-rate probe (A1) ------------------------------------------------
+    // Same segment, healthy delivery: bgm_raw kept pace with wall-clock * rate.
+    const health::AdvanceProbe healthy = health::computeAdvanceProbe(
+        ChannelActivity::Playing, 10.0, 1000, /*epoch=*/1,
+        ChannelActivity::Playing, 11.0, 2000, /*epoch=*/1,
+        /*playbackRate=*/1.0);
+    ok &= require(healthy.valid && qFuzzyCompare(healthy.advanceRatio, 1.0)
+                      && !healthy.underrunEstimate,
+                  QStringLiteral("full delivery over 1s at rate 1 is advance_ratio=1"), err);
+
+    // Under-delivery: only 0.5s of content arrived over a 1s wall-clock interval.
+    const health::AdvanceProbe underDelivered = health::computeAdvanceProbe(
+        ChannelActivity::Playing, 10.0, 1000, /*epoch=*/1,
+        ChannelActivity::Playing, 10.5, 2000, /*epoch=*/1,
+        /*playbackRate=*/1.0);
+    ok &= require(underDelivered.valid && underDelivered.underrunEstimate,
+                  QStringLiteral("under-delivery below the threshold is flagged"), err);
+
+    // A live rate change bumps continuityEpoch; the pair must not be compared.
+    const health::AdvanceProbe acrossRateChange = health::computeAdvanceProbe(
+        ChannelActivity::Playing, 10.0, 1000, /*epoch=*/1,
+        ChannelActivity::Playing, 10.5, 2000, /*epoch=*/2,
+        /*playbackRate=*/1.0);
+    ok &= require(!acrossRateChange.valid,
+                  QStringLiteral("a continuity-epoch change is never compared"), err);
+
+    // A pause reports Unknown/Paused activity, not Playing; the pair must not be compared.
+    const health::AdvanceProbe acrossPause = health::computeAdvanceProbe(
+        ChannelActivity::Unknown, -1.0, 1000, /*epoch=*/1,
+        ChannelActivity::Playing, 10.5, 2000, /*epoch=*/1,
+        /*playbackRate=*/1.0);
+    ok &= require(!acrossPause.valid,
+                  QStringLiteral("a non-running previous sample is never compared"), err);
 
     const QString beginLine = health::stallEdgePayload(
         StallEdge::Begin, 7, 40.0, ChannelActivity::Stalled, ChannelActivity::Playing,

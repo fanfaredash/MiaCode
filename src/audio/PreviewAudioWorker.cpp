@@ -844,8 +844,13 @@ void PreviewAudioWorker::sampleHealth(PreviewAudioBackend& backend, RuntimeState
     }
 
     PreviewAudioSnapshot publishedSnapshot;
+    // A1: captured before this call's sample overwrites it, so the advance-rate probe
+    // below compares against the immediately preceding sample rather than an arbitrary
+    // earlier one.
+    PreviewAudioHealthSample previousSample;
     {
         std::lock_guard lock(snapshotMutex_);
+        previousSample = snapshot_.healthSample;
         sample.sequence = nextSnapshotSequence(snapshot_.healthSample.sequence);
         snapshot_.sequence = nextSnapshotSequence(snapshot_.sequence);
         snapshot_.healthSample = sample;
@@ -861,6 +866,20 @@ void PreviewAudioWorker::sampleHealth(PreviewAudioBackend& backend, RuntimeState
 
     const bool underrun = health::isUnderrun(sample.mixerActivity)
         || health::isUnderrun(sample.backgroundActivity);
+    // A1: substitute underrun signal for BASS_MIXER_NONSTOP, which makes `underrun` above
+    // architecturally unable to trip (see PreviewAudioHealth.h). Not comparable across a
+    // pause/seek/live-rate-change boundary -- computeAdvanceProbe reports valid=false then
+    // and this only logs the raw ratio, without asserting underrunEstimate.
+    const health::AdvanceProbe advanceProbe = health::computeAdvanceProbe(
+        previousSample.backgroundActivity,
+        previousSample.bgmRawSecond,
+        previousSample.sampledAtMs,
+        previousSample.continuityEpoch,
+        sample.backgroundActivity,
+        sample.bgmRawSecond,
+        sample.sampledAtMs,
+        sample.continuityEpoch,
+        sample.bgmPlaybackRate);
     const double authoritativeSecond = publishedSnapshot.authoritativeSecond;
     const health::StallEdge edge = health::updateStall(
         &state.healthStallTracker,
@@ -889,7 +908,8 @@ void PreviewAudioWorker::sampleHealth(PreviewAudioBackend& backend, RuntimeState
         state.healthStallTracker,
         sample.buffer,
         /*mmcssRegisteredOnAudioThreads=*/false,
-        mmcss.everRegistered ? mmcss.lastTaskClass : QString()));
+        mmcss.everRegistered ? mmcss.lastTaskClass : QString(),
+        advanceProbe));
 }
 
 void PreviewAudioWorker::publishLifecycle(

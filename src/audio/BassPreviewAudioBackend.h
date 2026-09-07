@@ -261,6 +261,11 @@ private:
     PreparedPlaybackState preparedPlayback_;
     PlaybackSessionState playbackSession_;
     quint64 playbackTransactionId_ = 0;
+    // A1: bumped whenever the BGM cursor is discontinuously repositioned (seek, live rate
+    // change) -- see configureBackgroundTrackForSecond and applyPlaybackRateAtChartSecond.
+    // Stamped onto every PreviewAudioHealthSample so the underrun advance-rate probe can
+    // tell whether two samples came from the same continuous playback segment.
+    quint64 backgroundTrackContinuityEpoch_ = 0;
     quint32 deviceSampleRate_ = static_cast<quint32>(miacode::preview_audio::kMixSampleRate);
     double preparedTimelinePlaybackRate_ = 1.0;
     bool engineInitialized_ = false;
