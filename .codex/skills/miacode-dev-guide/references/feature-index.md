@@ -86,7 +86,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Timeline quick model:
   - Files: `src/timeline/TimelineQuickModel.h`, `src/timeline/TimelineQuickModel.cpp`, `src/timeline/TimelineRenderData.h`
   - Class: `TimelineQuickModel`
-  - Owns: lightweight timeline parsing, cursor anchors, preview-follow lookup, and incremental edit application for the editor fast path
+  - Owns: lightweight timeline parsing, cursor anchors, preview-follow lookup, selection-to-export-range resolution, and incremental edit application for the editor fast path. The export-range resolver is export-only and must not alter the global timeline timing/visibility semantics.
 - Timeline data model and widget:
   - Files: `src/common/WaveformCache.h`, `src/common/WaveformCache.cpp`, `src/timeline/TimelineView.h`, `src/timeline/TimelineView.cpp`, `src/timeline/TimelineView.Core.cpp`, `src/timeline/TimelineView.Interaction.cpp`, `src/timeline/TimelineView.Paint.cpp`
   - Class: `TimelineView`
@@ -156,7 +156,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Export dialog:
   - Files: `src/tools/video_export/VideoExportDialog.h`, `src/tools/video_export/VideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`, `src/tools/video_export/HudFontSettings.{h,cpp}`
   - Class: `VideoExportDialog`
-  - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, the export-dialog live preview controls that reuse `MainWindow` preview transport callbacks so pause/seek behavior stays aligned with the main preview route, and the owner-wired settings injection points for the Gameplay and Skin tabs. Skin / judge-line / HUD-font controls are supplied by `DialogsSection::buildSkinSettings(...)`; the old standalone export Font tab and modal HUD-font settings dialog were removed in favor of `miacode::video_export::createHudFontSettingsWidget(...)`.
+  - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, selection-export initial range/page activation, the export-dialog live preview controls that reuse `MainWindow` preview transport callbacks so pause/seek behavior stays aligned with the main preview route, and the owner-wired settings injection points for the Gameplay and Skin tabs. Skin / judge-line / HUD-font controls are supplied by `DialogsSection::buildSkinSettings(...)`; the old standalone export Font tab and modal HUD-font settings dialog were removed in favor of `miacode::video_export::createHudFontSettingsWidget(...)`.
 - Batch export dialog:
   - Files: `src/tools/video_export/BatchVideoExportDialog.h`, `src/tools/video_export/BatchVideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
   - Class: `BatchVideoExportDialog`

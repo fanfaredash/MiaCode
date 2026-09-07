@@ -1114,6 +1114,30 @@ bool MainWindow::DocumentSection::switchToExportField()
     return true;
 }
 
+bool MainWindow::DocumentSection::switchToExportFieldWithoutSave(
+    int difficultyId, double rangeStart, double rangeEnd, int documentRevision)
+{
+    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr
+        || !SimaiDocument::isDifficultyId(difficultyId)
+        || rangeStart < 0.0 || rangeEnd <= rangeStart) {
+        return false;
+    }
+    state_.pendingSelectionExport_ = true;
+    state_.pendingSelectionExportDifficultyId_ = difficultyId;
+    state_.pendingSelectionExportStartSecond_ = rangeStart;
+    state_.pendingSelectionExportEndSecond_ = rangeEnd;
+    state_.pendingSelectionExportDocumentRevision_ = documentRevision;
+    if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
+        return true;
+    }
+    showOutlineExportBusySpinner();
+    QTimer::singleShot(0, &owner_, [this]() {
+        performSwitchToExportField();
+        hideOutlineExportBusySpinner();
+    });
+    return true;
+}
+
 bool MainWindow::DocumentSection::positionOutlineExportBusySpinner()
 {
     if (ui_.outlineBusySpinner_ == nullptr || ui_.outlineList_ == nullptr) {
@@ -1175,7 +1199,25 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     }
     // Captured BEFORE the reset below: seeds the page's difficulty badge
     // default (decision D4 — "the difficulty that was active on entry").
-    const int previousActiveDifficultyId = state_.activeDifficultyId_;
+    const bool selectionExport = state_.pendingSelectionExport_;
+    const int previousActiveDifficultyId = selectionExport
+        ? state_.pendingSelectionExportDifficultyId_
+        : state_.activeDifficultyId_;
+    const double selectionExportStart = state_.pendingSelectionExportStartSecond_;
+    const double selectionExportEnd = state_.pendingSelectionExportEndSecond_;
+    const int selectionExportDocumentRevision = state_.pendingSelectionExportDocumentRevision_;
+    auto* selectionExportEditor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (selectionExport && selectionExportEditor != nullptr
+        && selectionExportEditor->document() != nullptr
+        && selectionExportDocumentRevision >= 0
+        && selectionExportEditor->document()->revision() != selectionExportDocumentRevision) {
+        state_.pendingSelectionExport_ = false;
+        clearExportSelectionContext();
+        owner_.statusBar()->showMessage(
+            UiText::text(QStringLiteral("video_export.export_selection_changed")));
+        return;
+    }
+    const bool preserveDirtyState = state_.currentFieldDirty_;
     // Entering the export page is a fresh WYSIWYG audition: seed chart time 0.
     // installExportPreviewAuditionScene consumes this one-shot seed, then
     // refreshExportIntroState moves the playhead to the negative-time intro head
@@ -1211,7 +1253,7 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     ui_.editorStack_->setCurrentWidget(ui_.exportPage_);
     setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
-    state_.currentFieldDirty_ = false;
+    state_.currentFieldDirty_ = preserveDirtyState;
     updateDirtyState();
     rebuildFieldSidebar();
     owner_.updateWindowTitle();
@@ -1221,7 +1263,12 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // The expensive part — building the embedded video panel — happens inside
     // onPageEntered. It ticks the spinner at its own sub-step boundaries so the
     // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
-    ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
+    ui_.exportPage_->onPageEntered(
+        previousActiveDifficultyId,
+        selectionExport ? selectionExportStart : -1.0,
+        selectionExport ? selectionExportEnd : -1.0);
+    state_.pendingSelectionExport_ = false;
+    state_.pendingSelectionExportDocumentRevision_ = -1;
     owner_.tickOutlineBusySpinner();
     // Entering the export page changes the preview aspect (square → export video
     // ratio) and collapses the bottom tabs; both drive the workspace surface to a
@@ -1233,11 +1280,27 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
 }
 
+void MainWindow::DocumentSection::clearExportSelectionContext()
+{
+    state_.exportSelectionContextActive_ = false;
+    state_.exportSelectionContextDifficultyId_ = 0;
+    state_.exportSelectionContextStartPosition_ = 0;
+    state_.exportSelectionContextEndPosition_ = 0;
+    state_.exportSelectionContextDocumentRevision_ = -1;
+    state_.exportSelectionContextChartText_.clear();
+    state_.exportOriginDocumentSnapshotValid_ = false;
+    state_.exportOriginDocumentSnapshot_ = SimaiDocument::createEmpty();
+    state_.exportOriginDifficultyId_ = 0;
+    state_.exportOriginFieldDirty_ = false;
+    state_.exportOriginDocumentDirty_ = false;
+}
+
 bool MainWindow::DocumentSection::switchToMetadataField()
 {
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
+    clearExportSelectionContext();
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -1292,6 +1355,7 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     if (!maybeSaveBeforeContinue()) {
         return false;
     }
+    clearExportSelectionContext();
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -1361,6 +1425,16 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     const bool leavingMetadataPage = ui_.editorStack_ != nullptr
         && ui_.metadataPage_ != nullptr
         && ui_.editorStack_->currentWidget() == ui_.metadataPage_;
+    const bool leavingExportPage = ui_.editorStack_ != nullptr
+        && ui_.exportPage_ != nullptr
+        && ui_.editorStack_->currentWidget() == ui_.exportPage_;
+    const bool restoreExportSelection = leavingExportPage
+        && state_.exportSelectionContextActive_
+        && state_.exportSelectionContextDifficultyId_ == difficultyId
+        && state_.exportSelectionContextDocumentRevision_ >= 0;
+    const int exportSelectionStart = state_.exportSelectionContextStartPosition_;
+    const int exportSelectionEnd = state_.exportSelectionContextEndPosition_;
+    const QString exportSelectionChartText = state_.exportSelectionContextChartText_;
     const bool restoreSwitchView = owner_.hasActiveDifficulty()
         || state_.latencySandboxAuditionActive_
         || state_.exportPreviewAuditionActive_
@@ -1382,7 +1456,8 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
             }
         }
     }
-    if (!maybeSaveCurrentFieldChanges()) {
+    const bool returningToExportOrigin = restoreExportSelection;
+    if (!returningToExportOrigin && !maybeSaveCurrentFieldChanges()) {
         return false;
     }
     // Navigating away always tears down the latency audition. onPageLeft() is
@@ -1471,6 +1546,46 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     }
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
+    }
+    if (restoreExportSelection) {
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+            editor != nullptr && editor->document() != nullptr
+            && editor->toPlainText() == exportSelectionChartText) {
+            const QPointer<PlainCodeEditor> editorGuard(editor);
+            const QPointer<QListWidget> focusGuard(ui_.outlineList_);
+            const auto restoreSelection = [editorGuard, exportSelectionStart,
+                                           exportSelectionEnd, exportSelectionChartText,
+                                           focusGuard]() {
+                if (editorGuard.isNull() || editorGuard->document() == nullptr
+                    || editorGuard->toPlainText() != exportSelectionChartText
+                    || !editorGuard->isVisible()) {
+                    return;
+                }
+                QTextCursor cursor(editorGuard->document());
+                const int documentEnd = qMax(0, editorGuard->document()->characterCount() - 1);
+                const int start = qBound(0, exportSelectionStart, documentEnd);
+                const int end = qBound(start, exportSelectionEnd, documentEnd);
+                cursor.setPosition(start);
+                cursor.setPosition(end, QTextCursor::KeepAnchor);
+                editorGuard->setTextCursor(cursor);
+                // Showing the chart page can make Qt restore the editor's
+                // previous focus asynchronously. Keep the restored selection
+                // visible, but leave keyboard focus on the page navigation.
+                if (!focusGuard.isNull() && focusGuard->isVisible() && focusGuard->isEnabled()) {
+                    focusGuard->setFocus(Qt::OtherFocusReason);
+                }
+            };
+            // The editor is repopulated/relaid out during page switching. Restore
+            // after the switch settles so the selection is applied to the final
+            // document/cursor state, not an intermediate page state.
+            // Focus is intentionally not changed here: page navigation retains
+            // the original application's non-editor focus behavior.
+            QTimer::singleShot(0, &owner_, restoreSelection);
+            QTimer::singleShot(50, &owner_, restoreSelection);
+        }
+        clearExportSelectionContext();
+    } else if (leavingExportPage) {
+        clearExportSelectionContext();
     }
     setChartBottomTabsMode(true);
     // Entering a difficulty re-asserts the correct preview levels. With the latency

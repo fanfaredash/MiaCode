@@ -103,6 +103,7 @@ signals:
     void lineNumberBookmarkRenameRequested(int line);
     void lineNumberBookmarkDeleteRequested(int line);
     void lineNumberBookmarkContextMenuRequested(int line, const QPoint& globalPos);
+    void exportRangeRequested(int selectionStart, int selectionEnd);
 
 protected:
     bool event(QEvent* event) override;

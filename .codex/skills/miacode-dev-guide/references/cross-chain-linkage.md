@@ -320,6 +320,8 @@ Implication:
   - Check `MainWindow.ValidationFlow.cpp`
   - Check `MuriSpec.cpp`
 
+Selection-to-range export flows from `PlainCodeEditor` through `MainWindow::ExportSection` and `TimelineQuickModel::resolveExportRangeForSelection` into `VideoExportDialog`'s existing range page. The resolver snaps to comma-delimited objects, preserves slash/chained-slide tokens, includes explicitly selected comma timing, uses preview flow speed for the pre-render lead-in, and ends one frame after selected visual/judge tails reported by the export-only `timelineRenderNoteExportVisualEndSecond`. The global timeline snapshot keeps the pre-existing `timelineRenderLineVisualEndSecond` semantics unchanged.
+
 ## Update This File When
 
 - A behavior starts or stops being mirrored across two code paths.

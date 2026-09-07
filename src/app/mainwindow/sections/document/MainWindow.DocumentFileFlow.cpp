@@ -250,7 +250,14 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
     if (choice == UnsavedChangesChoice::Save) {
         QElapsedTimer saveTimer;
         saveTimer.start();
-        const bool saved = onSaveFile();
+        const bool exportOriginSave = !owner_.hasActiveDifficulty()
+            && state_.exportSelectionContextActive_
+            && SimaiDocument::isDifficultyId(state_.exportOriginDifficultyId_)
+            && state_.exportOriginFieldDirty_;
+        const bool saved = exportOriginSave ? saveExportOriginFieldToDisk() : onSaveFile();
+        if (saved && exportOriginSave) {
+            clearExportSelectionContext();
+        }
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
@@ -270,11 +277,18 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
     }
     const bool shouldContinue = choice == UnsavedChangesChoice::Discard;
     if (shouldContinue) {
-        anchorCurrentFieldCleanState();
-        state_.documentDirty_ = false;
-        state_.currentFieldDirty_ = false;
-        updateDirtyState();
-        owner_.updateWindowTitle();
+        if (!owner_.hasActiveDifficulty()
+            && state_.exportSelectionContextActive_
+            && SimaiDocument::isDifficultyId(state_.exportOriginDifficultyId_)
+            && state_.exportOriginFieldDirty_) {
+            discardExportOriginChanges();
+        } else {
+            anchorCurrentFieldCleanState();
+            state_.documentDirty_ = false;
+            state_.currentFieldDirty_ = false;
+            updateDirtyState();
+            owner_.updateWindowTitle();
+        }
     }
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,

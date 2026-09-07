@@ -601,6 +601,17 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     pasteAction->setEnabled(canPaste());
     connect(pasteAction, &QAction::triggered, this, &QTextEdit::paste);
 
+    menu->addSeparator();
+    auto* exportRangeAction = menu->addAction(
+        translated(QStringLiteral("video_export.export_range_from_selection"), QStringLiteral("Export Selected Range")));
+    exportRangeAction->setEnabled(textCursor().hasSelection());
+    connect(exportRangeAction, &QAction::triggered, this, [this]() {
+        const QTextCursor cursor = textCursor();
+        if (cursor.hasSelection() && cursor.selectionEnd() > cursor.selectionStart()) {
+            emit exportRangeRequested(cursor.selectionStart(), cursor.selectionEnd());
+        }
+    });
+
     const auto addStyledSubmenu = [&](const QString& title, const QList<QAction*>& actions) {
         auto* submenu = menu->addMenu(title);
         UiTheme::styleRoundedMenu(*submenu);

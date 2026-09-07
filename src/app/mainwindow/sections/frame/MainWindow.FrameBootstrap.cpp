@@ -1165,7 +1165,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                 return;
             }
             activeOutlineKey_ = "chart";
-            if (switchToDifficultyField(difficultyId) && editorWidget_ != nullptr) {
+            const bool returningToExportOrigin = state_.exportSelectionContextActive_
+                && state_.exportSelectionContextDifficultyId_ == difficultyId;
+            if (switchToDifficultyField(difficultyId)
+                && editorWidget_ != nullptr
+                && !returningToExportOrigin) {
                 editorWidget_->setFocus();
             }
         }
@@ -1836,6 +1840,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             0.0,
             false
         );
+    });
+    connect(editor, &PlainCodeEditor::exportRangeRequested, this, [this](int start, int end) {
+        if (exportSection_ != nullptr) {
+            exportSection_->onExportSelectedRange(start, end);
+        }
     });
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();

@@ -48,6 +48,78 @@ MainWindow::DocumentSection::DocumentSection(
     , state_(state)
 {}
 
+bool MainWindow::DocumentSection::saveExportOriginFieldToDisk()
+{
+    const SimaiDocument documentBeforeSave = state_.document_;
+    const bool documentDirtyBeforeSave = state_.documentDirty_;
+    const bool currentFieldDirtyBeforeSave = state_.currentFieldDirty_;
+    const int editorUndoSaveAnchorBeforeSave = state_.editorUndoSaveAnchor_;
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    const bool editorModifiedBeforeSave = editor != nullptr && editor->document() != nullptr
+        ? editor->document()->isModified()
+        : false;
+    const int previousDifficultyId = state_.activeDifficultyId_;
+    const QString previousOutlineKey = state_.activeOutlineKey_;
+    state_.activeDifficultyId_ = state_.exportOriginDifficultyId_;
+    state_.activeOutlineKey_ = QStringLiteral("chart");
+    const bool saved = onSaveFile();
+    state_.activeDifficultyId_ = previousDifficultyId;
+    state_.activeOutlineKey_ = previousOutlineKey;
+    if (!saved) {
+        state_.document_ = documentBeforeSave;
+        state_.documentDirty_ = documentDirtyBeforeSave;
+        state_.currentFieldDirty_ = currentFieldDirtyBeforeSave;
+        state_.editorUndoSaveAnchor_ = editorUndoSaveAnchorBeforeSave;
+        if (editor != nullptr && editor->document() != nullptr) {
+            editor->document()->setModified(editorModifiedBeforeSave);
+        }
+        updateDirtyState();
+        owner_.updateWindowTitle();
+    }
+    return saved;
+}
+
+void MainWindow::DocumentSection::discardExportOriginChanges()
+{
+    if (state_.exportOriginDocumentSnapshotValid_) {
+        state_.document_ = state_.exportOriginDocumentSnapshot_;
+    }
+    state_.currentFieldDirty_ = false;
+    state_.documentDirty_ = state_.exportOriginDocumentDirty_;
+    updateDirtyState();
+    owner_.updateWindowTitle();
+    clearExportSelectionContext();
+}
+
+bool MainWindow::DocumentSection::maybeSaveExportOriginFieldChanges()
+{
+    if (!state_.exportSelectionContextActive_
+        || !SimaiDocument::isDifficultyId(state_.exportOriginDifficultyId_)
+        || !state_.exportOriginFieldDirty_) {
+        return true;
+    }
+
+    const QString fieldName = SimaiDocument::difficultyName(state_.exportOriginDifficultyId_);
+    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
+        &owner_,
+        UiText::text(QStringLiteral("dialog.unsaved_field_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_field_changes.message")).arg(fieldName)
+    );
+    if (choice == UnsavedChangesChoice::Cancel) {
+        return false;
+    }
+    if (choice == UnsavedChangesChoice::Discard) {
+        discardExportOriginChanges();
+        return true;
+    }
+
+    const bool saved = saveExportOriginFieldToDisk();
+    if (saved) {
+        clearExportSelectionContext();
+    }
+    return saved;
+}
+
 bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
 {
     QElapsedTimer totalTimer;
@@ -61,6 +133,13 @@ bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
             QStringLiteral("result=clean_field")
         );
         return true;
+    }
+
+    // The export page clears activeDifficultyId_ while retaining the dirty
+    // state from the chart that opened it. Keep the save prompt attached to
+    // that originating difficulty instead of treating it as metadata.
+    if (!owner_.hasActiveDifficulty() && state_.exportSelectionContextActive_) {
+        return maybeSaveExportOriginFieldChanges();
     }
 
     const QString fieldName = owner_.hasActiveDifficulty()

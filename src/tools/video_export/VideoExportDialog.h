@@ -148,6 +148,11 @@ public:
     // rebuilt per open so it never needs it, but calling it there is harmless.
     void applyThemeStyles();
 
+    // Applies an initial interval after the dialog has built its full-chart
+    // timeline, keeping the range scale independent from the selected span.
+    void setInitialExportRange(double startSecond, double endSecond);
+    void showExportRangePage();
+
 signals:
     // Embedded mode only: the user confirmed the export (settings already
     // validated + persisted; requestedExportTask() carries the task).
@@ -195,6 +200,7 @@ private:
     void setRangeStartFromPreview();
     void setRangeEndFromPreview();
     void toggleRangePreview();
+    void toggleExportRangePreview();
     void stopRangePreview(bool seekToCurrent);
     void stopRangePreviewToStart();
     void updatePreviewPlayPauseUi();
@@ -294,6 +300,7 @@ private:
     // gate actually flips, so a stranded negative-time intro region gets torn down.
     bool introActiveForPreviewLast_ = false;
     bool rangePreviewPlaying_ = false;
+    bool exportRangePreviewActive_ = false;
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
     // Shared gate for all combo/spin controls on this export surface.
@@ -362,6 +369,7 @@ private:
     QPushButton* outputBrowseButton_ = nullptr;
     QPushButton* setStartButton_ = nullptr;
     QPushButton* setEndButton_ = nullptr;
+    QPushButton* playExportRangeButton_ = nullptr;
     // Stored as QWidget* (the concrete ExportRangeTrack is a file-local type in
     // the .cpp); cast where its API is needed.
     QWidget* rangeTrack_ = nullptr;
@@ -371,6 +379,7 @@ private:
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;
     QWidget* rangeContent_ = nullptr;
+    QWidget* rangePage_ = nullptr;
     QWidget* gameplayPage_ = nullptr;
     QWidget* skinPage_ = nullptr;
     QVBoxLayout* visualsPageLayout_ = nullptr;

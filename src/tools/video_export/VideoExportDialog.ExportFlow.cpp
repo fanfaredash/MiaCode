@@ -212,8 +212,9 @@ void VideoExportDialog::setEmbeddedPanelMode(bool embedded, bool retainIntroPrev
     // viewport is genuinely too short. Horizontal scrolling is forbidden —
     // content must compress into the available width.
 
-    // The in-panel transport strip is gone: the preview-area transport on the
-    // right is the single seek/play surface; the range tab mirrors its clock.
+    // The general in-panel transport strip is gone: the preview-area transport
+    // on the right remains the shared seek/play surface. The range tab mirrors
+    // its clock and offers one scoped action that previews exactly [start, end].
     if (previewStrip_ != nullptr) {
         previewStrip_->hide();
     }
@@ -553,7 +554,8 @@ void VideoExportDialog::applyThemeStyles()
     }
 
     // Plain push buttons.
-    for (QPushButton* button : {cancelButton_, saveVideoPresetButton_, applyVideoPresetButton_}) {
+    for (QPushButton* button : {cancelButton_, saveVideoPresetButton_, applyVideoPresetButton_,
+                                playExportRangeButton_}) {
         if (button != nullptr) {
             miacode::ui::applyDialogPushButtonStyle(button);
         }

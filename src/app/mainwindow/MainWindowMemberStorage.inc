@@ -402,6 +402,25 @@
         int projectLastOpenedDifficultyId_ = 0;
         bool documentDirty_ = false;
         bool currentFieldDirty_ = false;
+        bool pendingSelectionExport_ = false;
+        int pendingSelectionExportDifficultyId_ = 0;
+        double pendingSelectionExportStartSecond_ = 0.0;
+        double pendingSelectionExportEndSecond_ = 0.0;
+        int pendingSelectionExportDocumentRevision_ = -1;
+        // Survives navigation inside the Export hub. Cleared only when the
+        // user leaves that hub for another main page, or after restoration to
+        // the originating chart editor.
+        bool exportSelectionContextActive_ = false;
+        int exportSelectionContextDifficultyId_ = 0;
+        int exportSelectionContextStartPosition_ = 0;
+        int exportSelectionContextEndPosition_ = 0;
+        int exportSelectionContextDocumentRevision_ = -1;
+        QString exportSelectionContextChartText_;
+        bool exportOriginDocumentSnapshotValid_ = false;
+        SimaiDocument exportOriginDocumentSnapshot_;
+        int exportOriginDifficultyId_ = 0;
+        bool exportOriginFieldDirty_ = false;
+        bool exportOriginDocumentDirty_ = false;
         bool qtPreviewPlaying_ = false;
         bool qtPreviewTimelineDirty_ = false;
         bool qtPreviewAwaitingFrameSwap_ = false;

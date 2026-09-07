@@ -625,7 +625,8 @@ VideoExportDialog::VideoExportDialog(
     skinPageLayout_->setContentsMargins(4, 6, 4, 6);
     skinPageLayout_->setSpacing(8);
 
-    auto* rangePage = new QWidget(settingsTabs_);
+    rangePage_ = new QWidget(settingsTabs_);
+    auto* rangePage = rangePage_;
     auto* rangePageLayout = new QVBoxLayout(rangePage);
     rangePageLayout->setContentsMargins(4, 6, 4, 6);
     rangePageLayout->setSpacing(8);
@@ -965,6 +966,12 @@ VideoExportDialog::VideoExportDialog(
         QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     rangeLayout->addWidget(rangeSummaryLabel_, 0);
     refreshRangeSummaryLabel();
+
+    playExportRangeButton_ = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.video_export.range.play_clip")), rangeContent_);
+    playExportRangeButton_->setObjectName(QStringLiteral("PlayExportRangeButton"));
+    playExportRangeButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    rangeLayout->addWidget(playExportRangeButton_, 0);
 
     // Width budget for the modal transport's time label below (the embedded
     // panel hides that strip); no longer derived from fixed control widths.
@@ -1643,6 +1650,8 @@ VideoExportDialog::VideoExportDialog(
     });
     connect(setStartButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeStartFromPreview);
     connect(setEndButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeEndFromPreview);
+    connect(playExportRangeButton_, &QPushButton::clicked,
+            this, &VideoExportDialog::toggleExportRangePreview);
     connect(previewRangeButton_, &QToolButton::clicked, this, &VideoExportDialog::toggleRangePreview);
     connect(stopPreviewButton_, &QToolButton::clicked, this, &VideoExportDialog::stopRangePreviewToStart);
     connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool checked) {
@@ -1940,6 +1949,38 @@ void VideoExportDialog::toggleRangePreview()
     }
 }
 
+void VideoExportDialog::toggleExportRangePreview()
+{
+    if (exportRangePreviewActive_) {
+        stopRangePreview(false);
+        return;
+    }
+
+    if (rangePreviewPlaying_ || isPreviewPlaying()) {
+        stopRangePreview(false);
+    }
+
+    const double start = qBound(0.0, rangeStartSeconds(), totalDurationSeconds_);
+    const double end = qBound(start, rangeEndSeconds(), totalDurationSeconds_);
+    if (end <= start) {
+        return;
+    }
+
+    previewCursorSecond_ = start;
+    rangePreviewPlaying_ = true;
+    exportRangePreviewActive_ = true;
+    // Anchor the host before asking it to play. This is essential at chart 0:
+    // the host can then enter the negative-time intro lead-in when enabled,
+    // rather than resuming from an unrelated paused chart position.
+    seekPreview(start);
+    playPreview(start);
+    syncRangeUi();
+    updatePreviewPlayPauseUi();
+    if (previewTimer_ != nullptr && !previewTimer_->isActive()) {
+        previewTimer_->start();
+    }
+}
+
 void VideoExportDialog::stopRangePreview(bool seekToCurrent)
 {
     // Embedded mode keeps the timer alive — it is the range tab's clock
@@ -1952,6 +1993,7 @@ void VideoExportDialog::stopRangePreview(bool seekToCurrent)
         previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
     }
     rangePreviewPlaying_ = false;
+    exportRangePreviewActive_ = false;
     updatePreviewPlayPauseUi();
     if (stopPreviewButton_ != nullptr) {
         stopPreviewButton_->setEnabled(previewCursorSecond_ > 0.0005);
@@ -1989,31 +2031,35 @@ void VideoExportDialog::stopRangePreviewToStart()
 
 void VideoExportDialog::updatePreviewPlayPauseUi()
 {
-    if (previewRangeButton_ == nullptr) {
-        return;
-    }
-    const QColor iconColor = UiTheme::colors().iconPrimary;
     const bool previewPlaying = rangePreviewPlaying_ || isPreviewPlaying();
-    if (previewPlaying) {
-        previewRangeButton_->setIcon(makePreviewPauseIcon(iconColor));
-        previewRangeButton_->setToolTip(UiText::text(QStringLiteral("dialog.video_export.preview.pause")));
-        previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet(true));
-    } else {
-        previewRangeButton_->setIcon(makePreviewPlayIcon(iconColor));
-        previewRangeButton_->setToolTip(UiText::text(QStringLiteral("dialog.video_export.preview.play")));
-        previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
+    if (previewRangeButton_ != nullptr) {
+        const QColor iconColor = UiTheme::colors().iconPrimary;
+        if (previewPlaying) {
+            previewRangeButton_->setIcon(makePreviewPauseIcon(iconColor));
+            previewRangeButton_->setToolTip(UiText::text(QStringLiteral("dialog.video_export.preview.pause")));
+            previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet(true));
+        } else {
+            previewRangeButton_->setIcon(makePreviewPlayIcon(iconColor));
+            previewRangeButton_->setToolTip(UiText::text(QStringLiteral("dialog.video_export.preview.play")));
+            previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
+        }
+    }
+    if (playExportRangeButton_ != nullptr) {
+        playExportRangeButton_->setText(UiText::text(
+            exportRangePreviewActive_
+                ? QStringLiteral("dialog.video_export.range.stop_clip")
+                : QStringLiteral("dialog.video_export.range.play_clip")));
     }
 }
 
 void VideoExportDialog::onRangePreviewTick()
 {
-    // Embedded panel: there is no in-panel transport — the timer runs for the
-    // panel's whole life and simply mirrors the main preview's authoritative
-    // clock into the range tab's current-time readout (and the cursor that
-    // seeds 设为起点/终点). Play/stop/seek all live on the preview-area
-    // transport to the right.
-    if (embeddedPanelMode_) {
-        previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
+    // Embedded panel: the timer normally mirrors the main preview's
+    // authoritative clock into the range tab. The one in-panel playback action
+    // (Play Export Clip) also uses that clock, but keeps running below so it can
+    // stop precisely at the selected export end.
+    previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
+    if (embeddedPanelMode_ && !rangePreviewPlaying_) {
         if (rangeTrack_ != nullptr) {
             static_cast<ExportRangeTrack*>(rangeTrack_)->setPlayheadSeconds(previewCursorSecond_);
         }
@@ -2027,10 +2073,12 @@ void VideoExportDialog::onRangePreviewTick()
         return;
     }
 
-    previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
-    if (previewCursorSecond_ >= totalDurationSeconds_) {
-        previewCursorSecond_ = totalDurationSeconds_;
+    const double stopSecond = exportRangePreviewActive_
+        ? qBound(0.0, rangeEndSeconds(), totalDurationSeconds_)
+        : totalDurationSeconds_;
+    if (previewCursorSecond_ >= stopSecond) {
         stopRangePreview(false);
+        previewCursorSecond_ = stopSecond;
         seekPreview(previewCursorSecond_);
         syncRangeUi();
         return;
@@ -2076,6 +2124,38 @@ void VideoExportDialog::syncRangeUi()
     }
 
     syncingRangeUi_ = false;
+}
+
+void VideoExportDialog::setInitialExportRange(double startSecond, double endSecond)
+{
+    if (startSecondSpin_ == nullptr || endSecondSpin_ == nullptr
+        || endSecond <= startSecond || totalDurationSeconds_ <= 0.0) {
+        return;
+    }
+    const double start = qBound(0.0, startSecond, totalDurationSeconds_);
+    const double end = qBound(start, endSecond, totalDurationSeconds_);
+    if (end <= start) {
+        return;
+    }
+    {
+        const QSignalBlocker startBlocker(*startSecondSpin_);
+        const QSignalBlocker endBlocker(*endSecondSpin_);
+        startSecondSpin_->setValue(start);
+        endSecondSpin_->setValue(end);
+    }
+    syncRangeUi();
+    refreshAddIntroEnabledState();
+}
+
+void VideoExportDialog::showExportRangePage()
+{
+    if (settingsTabs_ == nullptr || rangePage_ == nullptr) {
+        return;
+    }
+    const int rangePageIndex = settingsTabs_->indexOf(rangePage_);
+    if (rangePageIndex >= 0) {
+        settingsTabs_->setCurrentIndex(rangePageIndex);
+    }
 }
 
 void VideoExportDialog::refreshRangeSummaryLabel()

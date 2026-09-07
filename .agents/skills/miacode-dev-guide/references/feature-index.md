@@ -336,7 +336,21 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 ## 5. Timeline, cursor mapping, preview sync
 
 - Quick model: `src/timeline/TimelineQuickModel.{h,cpp}` (lightweight parse, cursor anchors,
-  preview-follow buckets, incremental edit apply; owns comma-only `C` anchor lookup).
+  preview-follow buckets, incremental edit apply; owns comma-only `C` anchor lookup and chart-editor
+  selection range export resolution. The selection export action is available only for a non-empty
+  chart-editor selection and opens the existing export dialog's 导出区间 page with calculated values.
+  Its resolver supports tap/touch, hold, slide/wifi, touch hold, firework touch effects, comma timing,
+  multi-line and mixed-subdivision selections, chained slide expressions, and incremental `<HS*N>`
+  state. Selection edges snap to complete comma-delimited objects and complete segment expressions;
+  the range includes preview lead-in, object body, judge/effect tail, and explicitly selected empty
+  comma intervals, then ends one frame after the final selected visual. The action applies the in-memory chart to export
+  without silently writing it, and restores the originating selection without taking editor focus.
+  The context-menu entry is a standalone group immediately below Cut/Copy/Paste. Its wiring is in
+  `src/editor/PlainCodeEditor.{h,Input.cpp}` and
+  `src/app/mainwindow/sections/{frame/MainWindow.FrameBootstrap.cpp,export/MainWindow.ExportFlow.cpp}`;
+  export-page integration is in `src/tools/export_page/ExportLauncherPage.{h,cpp}` and
+  `src/tools/video_export/VideoExportDialog.{h,cpp}`. No separate logging scope is introduced;
+  existing document/export/status and diagnostic channels are reused.
 - Widget timeline: `src/timeline/TimelineView.{h,cpp}` + `.Core/.Interaction/.Paint.cpp`
   (include-split). Visible-range paint, playhead/cursor, waveform, follow-preview.
 - Scene-state + Quick surface: `src/timeline/TimelineSceneState*`, `TimelineSceneStateBuilder.*`,
@@ -492,7 +506,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `exportConfirmed()` and the panel STAYS OPEN; the export button doubles as 取消导出 while
   running via `setEmbeddedExportRunning`). **Embedded fixed-frame internals (2026-06-12):** the
   in-panel transport strip (`previewStrip_`) is HIDDEN — the preview-area transport on the right
-  is the only seek surface; `previewTimer_` runs for the panel's whole life and
+  remains the general seek surface; the 导出区间 tab additionally owns a full-width
+  `PlayExportRangeButton` that starts at the selected export start, shares the same host preview
+  callbacks, honors the negative-time intro lead-in when a full-range export enables it, and
+  auto-pauses/seeks exactly at the selected export end (no second media backend);
+  `previewTimer_` runs for the panel's whole life and
   `onRangePreviewTick`'s embedded branch mirrors the main preview's authoritative clock into the
   range tab's current-time readout + the 设为起点/终点 seed (those also re-read the clock at
   click time); each tab page is re-hosted in a vertical-only `QScrollArea`
