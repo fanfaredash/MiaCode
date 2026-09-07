@@ -16,8 +16,8 @@ lifecycle: working
 
 | 编号 | 问题 | 类型 | 严重度 | 置信度 | 与 H2（BGM 单拍少走 60-150 ms）关联 |
 |---|---|---|---|---|---|
-| A1 | `BASS_MIXER_NONSTOP` 让 `bass_audio_health` 的 underrun 探针在架构上失明（master 与每个 resampler 都 NONSTOP） | 已确认的诊断盲区 | 高（诊断） | 确凿 | 强：这是 H2 至今没有任何 `bass_audio_stall` 行的原因 |
-| A2 | 暂停期间 `latestHealthSample_` 不刷新，恢复后最长 1 s 内 `bass_status.bgm_raw` 是**暂停前**的旧值 | 日志伪影（非音频故障） | 中（误导分析） | 确凿 | 无：解释了"恢复后第一拍 ±36/-145/-75/+3.7 s"现象，与 H2 无关 |
+| A1 | `BASS_MIXER_NONSTOP` 让 `bass_audio_health` 的 underrun 探针在架构上失明（master 与每个 resampler 都 NONSTOP） | 已确认的诊断盲区 | 高（诊断） | 确凿 | 强：这是 H2 至今没有任何 `bass_audio_stall` 行的原因。**已修复，见 §7.1** |
+| A2 | 暂停期间 `latestHealthSample_` 不刷新，恢复后最长 1 s 内 `bass_status.bgm_raw` 是**暂停前**的旧值 | 日志伪影（非音频故障） | 中（误导分析） | 确凿 | 无：解释了"恢复后第一拍 ±36/-145/-75/+3.7 s"现象，与 H2 无关。**已修复，见 §7.1** |
 | A3 | `bass_status.bgm_raw` 与 `auth` 时基不同步（bgm_raw 最多陈旧 1 s，auth 是现场值）→ `bgm_delta_ms` 本身带 0~+1000 ms 的采样相位噪声 | 分析方法层面 | 中 | 确凿 | 中：H2 的"单拍 0.85-0.94 s"必须用相邻两次 worker 样本的 `sampledAtMs` 差归一化后才可信（当前 bass_status 不打印 sampledAtMs） |
 | A4 | 现有日志**无法区分**"BGM 源单独断供"与"整条 master 混音停顿"；SFX 的触发是按 master 混音位置（`BASS_SYNC_POS|MIXTIME`）驱动的，master 停顿时 SFX 触发行照样"正常"出现 | 分析框架 | 高 | 高 | 强：H2 的"BGM-only"结论目前证据不足；见 §2.4 的判别方法 |
 | A5 | master mixer 以 `BASS_ATTRIB_BUFFER=0`（零播放缓冲）+ `BASS_ATTRIB_MIXER_THREADS=8` 运行，且从未设置 `BASS_CONFIG_DEV_BUFFER/UPDATEPERIOD`；任何 >1 个设备周期的处理抖动都会直接掉音 | 架构隐患 | 高 | 高（机制确定，是否为本次根因未证） | 强候选：仓库历史（Tick.cpp:216-220、PREVIEW_PLAYBACK_STUTTER_AUDIT_ZH.md:68）明确记录过 master 游标 "~50-100 ms stalls"，量级与 H2 一致；G1 只是把视觉时钟改成墙钟，把这个抖动从视觉里"藏"起来，没有修 |
@@ -233,3 +233,79 @@ lifecycle: working
 - A9 的实际触发顺序（波形解码与预览引擎初始化谁先）——需要看启动日志里 `bass_engine_ready` 与波形任务的先后。
 - 内存压力/页错误（§2.1 变体）是否在复现机器上存在——需要 `vm_stat`/`memory_pressure` 与缺口时刻对齐。
 - 复现日志中缺口拍前是否出现过 `bass_live_rate_change`（A12）。
+
+---
+
+## 7. 追加进展（2026-09-07 后续会话）
+
+本节记录报告提交之后、同一轮排查里发生的三件事：A1/A2 落地修复、§2.4 判别方法的实测验证、以及一次独立的第二类症状（click/pop）调查。三者均已提交或即将随本次提交落地，编号延续用 `B` 前缀，避免与上面的 A1-A14 混淆。
+
+### 7.1 A1、A2 已修复（commit `f9ab122b`）
+
+- **A2**：`sampleHealth()`（`BassPreviewAudioBackend_PlaybackClock.cpp`）的早退分支现在也会发布一个新鲜的哨兵快照（`bgmRawSecond=-1`），不再让暂停前的旧值原地冻结；`bass_status` 新增 `bgm_raw_age_ms` 字段，直接标出该行 `bgm_raw` 陈旧了多久。
+- **A1**：新增 `computeAdvanceProbe()`（`PreviewAudioHealth.h`），用相邻两次 worker 采样的 `bgm_raw` 推进量对比实际经过的墙钟时间（×rate），`<0.97` 判定为欠载，写入 `bass_audio_health` 的 `advance_ratio=`/`underrun_est=` 字段；新增 `backgroundTrackContinuityEpoch_`，在 seek/anchor/reposition（`configureBackgroundTrackForSecond`）和现场变速（`applyPlaybackRateAtChartSecond`）两处递增，避免跨越这些边界的两次采样被误判为欠载。
+- 实测验证（2026-09-07 会话 `pid=28325`）：暂停 3 秒后恢复，`bass_status` 第一拍 `bgm_raw=-1.000000 bgm_raw_age_ms=189`（不再是历史脏值），下一拍 `bgm_raw=59.839002` 且位置正确——修复行为符合预期。
+
+### 7.2 §2.4 判别方法已实测：H2 是"整条混音停顿"（A5 路线），不是 BGM-only
+
+报告 §2.4 提出的判别法（比较缺口前后 `bass_sfx_mixer_trigger` 的"墙钟时间戳 − group_second/rate"是否同步跳变）用一次新会话实测坐实：
+
+- 会话 `pid=12557`、`txn=3`（谱面 84.0s→101.28s 连续播放，无 seek）：`bass_status` 在谱面 ~98.2s→100.1s 出现两拍连续缺口（`bgm_raw` 单拍推进 0.94s、0.92s，累计少走约 152ms，且缺口未在下一拍被追回，`bgm_raw_delta_ms` 从 -872 永久性跳到 -1053 附近并稳定），同一时刻 `bass_sfx_mixer_trigger` 的实际触发墙钟时间也出现两次异常超额延迟（`+62.7ms`、`+81.8ms`，累计约 149ms，与 BGM 缺口量级一致）。
+- 结论：SFX 触发同步延迟，说明不是"BGM 源单独断供"，而是**master 混音整体短暂停顿了约 150ms**，之后 BGM 和 SFX 调度相对墙钟一起永久落后。此前"打击音完全不受影响"的说法是被日志形式误导——`bass_sfx_mixer_trigger` 打印的是排期表值 `group_second`，不是触发时刻，看起来正常，实际触发墙钟时刻确实晚了。
+- 这条结论把 A5（零缓冲 master + 8 线程混音）从"强候选"确认为**当时已知证据下最直接的根因**。
+
+### 7.3 第二类症状：click/pop（与 H2 的"卡顿感"是不同的表现）
+
+用户后续报告的"跳变"里，至少有一次的听感是**瞬间的啪/嗒（click/pop）**，明确不是"音乐拖一下"的卡顿感。核实当时的实测会话（83 段快速 play/pause 循环）后，两种既有判别方法（`bass_status` 逐拍对比、`bass_sfx_mixer_trigger` 细粒度时间戳对比）均未检测到任何异常——说明这类瞬时波形不连续不一定伴随可测量的位置漂移，需要新的诊断角度。
+
+**排除的方向**（均已问过用户确认）：
+- 暂停/恢复/seek 附近的无淡化硬切拼接 —— 用户确认这次的啪音**不在 play/pause 附近，是播放过程中自然出现的**。
+- Touchhold 声道复用 —— 用户确认该谱面段落**没有 touchhold 音符**。
+- 一开始怀疑的 `BASS_MIXER_NONSTOP` 静音硬切填补欠载 —— **前提有误，已订正**：`bassmix.h:41` 的语义是"没有源时不停摆"，不是逐 buffer 的静音替代；本工程所有源都是内存解码流（`BassPreviewAudioBackendSample.h:226-232`），不存在"无源"场景，NONSTOP 在这里跟稳态播放的波形连续性无关。
+
+**保留/上调的候选**：
+- **设备级极短欠载**（沿用 A5）：master `BASS_ATTRIB_BUFFER=0` + `MIXER_THREADS=8`，所有解码（含 BGM 的 BASS_FX SoundTouch 变速处理）都在输出线程的硬实时期限内完成，任何调度抖动都可能在 buffer 粒度上掉一拍，且现有 `advance_ratio`（5 秒窗口聚合）在数值上根本看不见几毫秒级的瞬时问题。
+- SoundTouch/tempo 流的 overlap-add 拼接边界（`compact40` 预设，sequence 40ms/seek 15ms/overlap 8ms）——仅当播放倍速 ≠1.0 时适用。
+- 削波（`Sample.h:291-293` normalize 增益上限 4.0，`clampSampleVolume` 上限 2.0，全链路无 limiter）。
+
+### 7.4 新增诊断：输出端不连续性探针（本次一并提交）
+
+为把"用户听到啪"变成可测量、可定位的日志事实，新增一个只读诊断探针（不改动任何播放/混音逻辑）：
+
+- **原理**：在 `masterMixer_` 上挂一个只读 BASS DSP 回调（`BASS_ChannelSetDSPEx(..., BASS_DSP_READONLY)`），直接扫描输出端交错 float32 波形，检测三类事件：
+  - `kind=step`：相邻采样跳变 `>0.25`（跨 block 边界保留上一个尾样本）——同时能捕捉设备欠载拼接和 SoundTouch 拼接缝。
+  - `kind=clip`：连续采样 `|x|>=0.999`——捕捉削波。
+  - `kind=late_callback`：本次 DSP 回调到达时刻，相对"上次到达 + 上个 block 应有时长"的延迟 `>2ms`——buffer 粒度的欠载探针，比 `advance_ratio` 的 5 秒窗口精细得多。
+- **实时安全**：回调跑在 BASS 自己拉取 mixer 数据的线程上（不是 MiaCode 另起的线程），因此严格无锁、无日志、无堆分配，只写 POD 状态并 `tryPush` 进一个无锁 SPSC 环形缓冲（`kCapacity=512`）；由 `PreviewAudioWorker` 线程按既有 ~1Hz 节奏排空，格式化成 `bass_output_glitch kind=... mixer_pos=... ...` 日志行（环形缓冲满时只丢弃+计数，不阻塞生产者）。
+- **代码定位**：
+  - 纯函数与阈值：`src/audio/PreviewAudioOutputGlitchProbe.h`
+  - 无锁环形缓冲：`src/audio/PreviewAudioOutputGlitchRing.h`
+  - DSP 回调独占状态：`src/audio/BassPreviewOutputGlitchProbeState.h`
+  - DSP 回调本体 + 挂载/卸载：`src/audio/BassPreviewAudioBackend_EngineInit.cpp`（`outputGlitchDspProc`、`attachOutputGlitchProbe`/`detachOutputGlitchProbe`）
+  - worker 侧排空落日志：`src/audio/BassPreviewAudioBackend_PlaybackClock.cpp` 的 `drainOutputGlitchEvents()`
+  - 单测：`src/tools/preview/PreviewAudioOutputGlitchProbeSpec.cpp`（跳变/削波/回调延迟/日志格式/环形缓冲的纯逻辑覆盖）
+- `mixer_pos` 是"master mixer 引擎初始化以来的累计秒数"（因为 master 全生命周期保持 `ACTIVE_PLAYING`，与播放会话是否运行无关），不是谱面内位置，读日志时需要用同一时刻的 `bass_status`/操作日志换算回谱面秒。
+
+### 7.5 实测确认：探针捕获到与 click/pop 症状精确对应的真实事件
+
+会话 `pid=64120`（2026-09-07 `13:52:52`–`14:12:47` UTC，全程 `rate=1.000`，约 20 分钟）：
+
+- 全场 1412 条 `bass_output_glitch`，**全部是 `kind=late_callback`**，一次 `kind=step`/`kind=clip` 都没有。
+- 分布：约 99.7%（1369 条）迟到量级在 3-9ms（持续存在的背景抖动，说明当前零缓冲配置常年运行在临界边缘，只是平时几毫秒的迟到听不出来）；例外的 3 个离群值——14ms、46ms、**94ms**。
+- 后两个离群值精确对应用户报告的一次"啪"：
+  ```
+  14:12:41.488  late_ms=46   （落在 txn=1020 播放窗口内，谱面 ~37s 附近）
+  14:12:42.493  late_ms=94   （全场最大值）
+  14:12:42.273  用户暂停（txn=1020 pause_exact）
+  14:12:47.199  应用关闭
+  ```
+  从第一次离群值到关闭 5.71 秒，从最大值到关闭 4.7 秒，与用户描述的"出现后 5 秒内暂停并关闭"精确吻合。
+- **`step`/`clip` 全场零命中，即使在 94ms 那次也没有**，是这次最值得注意的反常点：说明这次 click/pop 大概率不是"波形本身出现了超过 0.25 幅度的采样跳变"，而是回调迟到本身导致设备层面插入了重复/静音数据造成的听感断裂——这个环节发生在 BASS mixer 往外吐数据"之后"的设备缓冲层，当前探针挂载点（mixer 的 DSP 点）看得到"这一拍来晚了"，看不到"来晚之后设备具体怎么补的这个空档"。
+
+**结论**：设备级极短欠载（A5 的具体表现）现在有了跟症状精确对应的实测时间戳和量级证据，从"理论候选"升级为**当前证据下最直接的根因**，且这条证据同时适用于 H2（卡顿型）和本节的 click/pop 型两种症状——两者很可能同源，只是欠载时长不同导致听感不同（更长的欠载表现为卡顿，更短的表现为一声啪）。
+
+### 7.6 下一步（未执行，留给后续会话）
+
+- 若要验证"给 master 一点缓冲余量能否消除 click/pop"：按 §4 建议 4 给 `BASS_ATTRIB_BUFFER`/`MIXER_THREADS` 加 env 覆盖做 A/B 对比，用本节的探针做验收（复测后 `kind=late_callback` 的离群值计数应显著下降）。
+- 若要进一步定位"迟到之后设备具体怎么补空档"：`step` 阈值 0.25 可能偏高，可以尝试调低阈值再测一轮，或者在设备输出更靠后的位置（如果 BASS/CoreAudio 允许）再加一层探针。
+- A6（混音线程回调内的锁/堆分配/日志）仍未处理，是 A5/欠载的一个具体触发源，可以独立立项。
