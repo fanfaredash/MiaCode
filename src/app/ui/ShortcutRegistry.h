@@ -6,9 +6,6 @@
 #include <QString>
 #include <QStringList>
 
-class QAction;
-class QShortcut;
-
 class ShortcutRegistry
 {
 public:
@@ -34,9 +31,6 @@ public:
         const QString& id,
         const QString& label,
         const QList<QKeySequence>& defaultSequences);
-    void applyShortcut(QAction* action, const QString& id, const QKeySequence& fallback = QKeySequence()) const;
-    void applyShortcuts(QAction* action, const QString& id, const QList<QKeySequence>& fallback = {}) const;
-    void applyShortcut(QShortcut* shortcut, const QString& id, const QKeySequence& fallback = QKeySequence()) const;
     bool setUserShortcut(const QString& id, const QKeySequence& sequence);
     bool setUserShortcutText(const QString& id, const QString& shortcutText);
     bool resetUserShortcut(const QString& id);

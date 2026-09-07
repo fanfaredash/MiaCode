@@ -1,6 +1,6 @@
 <RCC>
     <qresource prefix="/">
-        <file alias="fonts/consola.ttf">../assets/fonts/consola.ttf</file>
+        <file alias="fonts/maple_mono_cn.ttf">../assets/fonts/MapleMonoNormalNL-CN-Regular.ttf</file>
         <file alias="fonts/xiaolai_mono.ttf">../assets/fonts/XiaolaiMono-Regular.subset.ttf</file>
     </qresource>
 </RCC>

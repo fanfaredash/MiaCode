@@ -4,28 +4,66 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import MiaCode.UI
-import "qrc:/quick_shell/qml" as Shell
+import "qrc:/preview/runtime/qml" as Preview
 
 Item {
     id: root
 
+    required property Item backgroundSource
+    required property point backgroundOffset
     required property var viewState
     required property var documentSession
+    required property var analysisSession
     required property var preferences
     required property var previewSession
     required property var commands
-    required property var shellController
+    required property var timelineSession
+    required property var preferencesModel
     required property var pages
+    required property var editorController
+    required property var editorSync
+    required property var latency
     property bool compact: false
+    property real sidebarDragWidth: 0
+    property bool sidebarResizing: false
+    // 现有紧凑工作区的可用宽度；展开侧栏所需空间单独计算。
+    readonly property real minimumWorkspaceWidth: Math.max(620,
+        bottomPanel.minimumWidth + preview.minimumWidth + Theme.splitDividerThickness)
+    readonly property real expandedSidebarWidth:
+        sidebar.activityBarWidth + root.preferences.sidebarWidth + Theme.splitDividerThickness
+    readonly property real minimumHeight: Math.max(
+        editorHost.SplitView.minimumHeight + (root.bottomPanelEffectivelyVisible
+            ? bottomPanel.minimumHeight + Theme.splitDividerThickness : 0),
+        preview.minimumHeight)
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
+    readonly property bool canCut: editorPane.canCut
+    readonly property bool canCopy: editorPane.canCopy
+    readonly property bool canPaste: editorPane.canPaste
+    readonly property string selectionBeatStatusText: editorPane.selectionBeatStatusText
+    readonly property string selectionBeatTooltipText: editorPane.selectionBeatTooltipText
     // User preference AND backend chart-bottom-tabs mode (export/metadata
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
-        root.viewState.bottomPanelVisible && root.shellController.bottomTabsVisible
+        root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
+    readonly property real previewEditorAvailableWidth:
+        Math.max(1, workspaceSplit.width - (preview.visible ? Theme.splitDividerThickness : 0))
     signal settingsRequested()
+
+    function persistBottomPanelHeightRatio() {
+        if (!root.bottomPanelEffectivelyVisible || centerSplit.height <= 0
+                || !centerSplit.resizing || bottomPanel.height === centerSplit.panelHeightAtPress)
+            return
+        // 拖到边界表达比例的最小/最大值，临时的绝对高度约束留在布局层。
+        root.preferences.bottomPanelHeightRatio =
+            bottomPanel.height <= bottomPanel.SplitView.minimumHeight
+                ? root.preferences.bottomPanelMinimumHeightRatio
+                : bottomPanel.height >= bottomPanel.SplitView.maximumHeight
+                    ? root.preferences.bottomPanelMaximumHeightRatio
+                    : bottomPanel.height / centerSplit.height
+    }
 
     function undo() {
         editorPane.undo()
@@ -35,68 +73,122 @@ Item {
         editorPane.redo()
     }
 
+    function cut() {
+        editorPane.cut()
+    }
+
+    function copy() {
+        editorPane.copy()
+    }
+
+    function paste() {
+        editorPane.paste()
+    }
+
+    function requestCloseActiveEditor() {
+        editorPane.requestCloseActiveEditor()
+    }
+
     function selectAll() {
         editorPane.selectAll()
+    }
+
+    function showFindReplace() {
+        editorPane.openFindReplace()
+    }
+
+    function selectCurrentLine() {
+        editorPane.selectCurrentLine()
+    }
+
+    function canNormalizeChart() {
+        return editorPane.canNormalizeChart()
+    }
+
+    function normalizationSelectionDescription() {
+        return editorPane.normalizationSelectionDescription()
+    }
+
+    function applyNormalization(options) {
+        return editorPane.applyNormalization(options)
+    }
+
+    function applyChartTransform(opId) {
+        return editorPane.applyChartTransform(opId)
     }
 
     function validateChart() {
         root.commands.validateDocument()
         root.viewState.bottomPanelVisible = true
-        root.viewState.activeBottomTab = 1
+        root.timelineSession.setCurrentTabId("validation")
     }
 
     function showFullscreenPreview() {
-        if (root.shellController.exportPageActive)
+        // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash.
+        if (root.exportVideoActive)
             return
         fullscreenPreview.visible = true
     }
 
-    function persistHorizontalLayout() {
+    function persistSidebarWidth() {
         if (root.compact) return
         if (root.viewState.sidebarVisible)
-            root.preferences.sidebarWidth = Math.round(sidebar.width - 48)
-        if (root.viewState.previewVisible) {
-            const available = Math.max(1, root.width
-                - sidebar.width - 4
-                - 4)
-            root.preferences.previewWidthRatio = Math.min(0.5, preview.width / available)
-        }
+            root.preferences.sidebarWidth = Math.round(root.sidebarDragWidth)
+        root.preferences.sidebarVisible = root.viewState.sidebarVisible
     }
 
-    function persistVerticalLayout() {
-        if (root.bottomPanelEffectivelyVisible)
-            root.preferences.bottomPanelHeight = Math.round(bottomPanel.height)
+    function resizeSidebar(contentWidth) {
+        root.sidebarDragWidth = Math.max(root.preferences.sidebarMinimumContentWidth,
+            Math.min(root.preferences.sidebarMaximumContentWidth, contentWidth))
+        root.viewState.sidebarVisible = contentWidth >= root.preferences.sidebarMinimumContentWidth / 2
     }
+
+    function persistPreviewWidthRatio() {
+        if (root.compact) return
+        root.preferences.previewWidthRatio = preview.width / root.previewEditorAvailableWidth
+    }
+
+    function syncWorkspacePanelOrder() {
+        const targetPreviewIndex = root.preferencesModel.previewOnLeft ? 0 : 1
+        const currentPreviewIndex = workspaceSplit.itemAt(0) === preview ? 0 : 1
+        if (currentPreviewIndex !== targetPreviewIndex)
+            workspaceSplit.moveItem(currentPreviewIndex, targetPreviewIndex)
+    }
+
+    readonly property bool freeAspectActive:
+        root.preferences && root.preferences.previewCanvasFreeAspect
 
     function fittedFullscreenWidth(hostWidth, hostHeight) {
-        const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
+        const aspect = Math.max(1.0, root.previewSession.canvasAspectRatio || 1.0)
         const safeWidth = Math.max(1, hostWidth)
         const safeHeight = Math.max(1, hostHeight)
         return Math.max(1, Math.min(safeWidth, safeHeight * aspect))
     }
 
     function fittedFullscreenHeight(hostWidth, hostHeight) {
-        const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
+        const aspect = Math.max(1.0, root.previewSession.canvasAspectRatio || 1.0)
         const frameWidth = fittedFullscreenWidth(hostWidth, hostHeight)
         return Math.max(1, Math.min(hostHeight, frameWidth / aspect))
     }
 
     Connections {
-        target: root.shellController
-        function onShellStateChanged() {
-            if (root.shellController.exportPageActive && fullscreenPreview.visible)
-                fullscreenPreview.visible = false
+        target: root.preferencesModel
+        function onInterfaceChanged() {
+            root.syncWorkspacePanelOrder()
         }
     }
 
-    SplitView {
+    // Leaving fullscreen on the export page is the same stop-gap as above; the
+    // page identity comes from the QML router rather than from the backend.
+    onExportVideoActiveChanged: {
+        if (root.exportVideoActive && fullscreenPreview.visible)
+            fullscreenPreview.visible = false
+    }
+
+    Item {
         id: horizontalSplit
         anchors.fill: parent
-        orientation: Qt.Horizontal
-
-        handle: SplitHandle {
-            onReleased: root.persistHorizontalLayout()
-        }
+        readonly property int orientation: Qt.Horizontal
 
         Sidebar {
             id: sidebar
@@ -107,98 +199,176 @@ Item {
             pages: root.pages
             compact: false
             visible: !root.compact
-            SplitView.preferredWidth: root.viewState.sidebarVisible
-                                      ? root.preferences.sidebarWidth + 48
-                                      : 48
-            SplitView.minimumWidth: root.viewState.sidebarVisible ? 168 : 48
-            SplitView.maximumWidth: root.viewState.sidebarVisible ? 368 : 48
+            width: visible ? sidebar.activityBarWidth + (root.viewState.sidebarVisible
+                ? (root.sidebarResizing ? root.sidebarDragWidth : root.preferences.sidebarWidth) : 0) : 0
+            height: parent.height
             onSettingsRequested: root.settingsRequested()
         }
 
         SplitView {
-            id: centerSplit
-            orientation: Qt.Vertical
-            SplitView.fillWidth: true
-            SplitView.minimumWidth: 280
+            id: workspaceSplit
+            orientation: Qt.Horizontal
+            x: sidebar.width + sidebarHandle.width
+            width: parent.width - x
+            height: parent.height
+            Component.onCompleted: root.syncWorkspacePanelOrder()
 
             handle: SplitHandle {
-                onReleased: root.persistVerticalLayout()
+                onReleased: root.persistPreviewWidthRatio()
             }
 
-            Item {
-                id: editorHost
-                SplitView.fillHeight: true
-                SplitView.minimumHeight: 180
+            SplitView {
+                id: centerSplit
+                orientation: Qt.Vertical
+                property real panelHeightAtPress: 0
+                onResizingChanged: {
+                    if (resizing)
+                        panelHeightAtPress = bottomPanel.height
+                }
+                SplitView.fillWidth: true
+                SplitView.minimumWidth: Math.max(bottomPanel.minimumWidth,
+                    Math.min(root.previewEditorAvailableWidth * (1.0 - root.preferences.previewMaximumWidthRatio),
+                             root.previewEditorAvailableWidth - preview.minimumWidth))
 
-                EditorPane {
-                    id: editorPane
-                    anchors.fill: parent
-                    visible: !root.pages.overlayActive && !root.exportVideoActive
-                    viewState: root.viewState
-                    documentSession: root.documentSession
-                    commands: root.commands
+                handle: SplitHandle {
+                    onReleased: root.persistBottomPanelHeightRatio()
                 }
 
-                // v2 video export center: QML chrome + ExportVideoController panel surface.
-                ExportVideoPage {
-                    anchors.fill: parent
-                    visible: root.exportVideoActive
-                    pages: root.pages
-                }
+                Item {
+                    id: editorHost
+                    SplitView.fillHeight: true
+                    SplitView.minimumHeight: 180
 
-                // LatencyDetectionPage (and any remaining full-page widget host).
-                WindowContainer {
-                    id: nativePageHost
-                    anchors.fill: parent
-                    visible: root.pages.activePageId === "latency" && root.pages.pageWindow !== null
-                    window: root.pages.pageWindow
-                    function syncNativeSize() {
-                        if (visible && width > 0 && height > 0)
-                            root.pages.syncPageSize(width, height)
+                    EditorPane {
+                        id: editorPane
+                        anchors.fill: parent
+                        visible: !root.pages.overlayActive && !root.exportVideoActive
+                        editorController: root.editorController
+                        editorSync: root.editorSync
+                        viewState: root.viewState
+                        documentSession: root.documentSession
+                        commands: root.commands
+                        preferences: root.preferences
                     }
-                    onVisibleChanged: syncNativeSize()
-                    onWidthChanged: syncNativeSize()
-                    onHeightChanged: syncNativeSize()
-                    Component.onCompleted: syncNativeSize()
+
+                    // v2 video export center: QML chrome + ExportVideoController panel surface.
+                    ExportVideoPage {
+                        anchors.fill: parent
+                        visible: root.exportVideoActive
+                        pages: root.pages
+                        previewSession: root.previewSession
+                    }
+
+                    LatencyPage {
+                        id: latencyPage
+                        anchors.fill: parent
+                        visible: root.pages.activePageId === "latency"
+                        latency: root.latency
+                        pages: root.pages
+                    }
+                }
+
+                BottomPanel {
+                    id: bottomPanel
+                    visible: root.bottomPanelEffectivelyVisible
+                    documentSession: root.documentSession
+                    analysisSession: root.analysisSession
+                    preferences: root.preferences
+                    commands: root.commands
+                    timelineSession: root.timelineSession
+                    previewSession: root.previewSession
+                    SplitView.minimumHeight: root.bottomPanelEffectivelyVisible
+                                             ? Math.max(bottomPanel.minimumHeight,
+                                                 centerSplit.height * root.preferences.bottomPanelMinimumHeightRatio)
+                                             : 0
+                    SplitView.maximumHeight: root.bottomPanelEffectivelyVisible
+                                             ? Math.max(bottomPanel.minimumHeight, Math.min(
+                                                 centerSplit.height * root.preferences.bottomPanelMaximumHeightRatio,
+                                                 centerSplit.height - editorHost.SplitView.minimumHeight
+                                                     - Theme.splitDividerThickness))
+                                             : 0
+                    onAnalysisRowActivated: (difficultyId, revision, line, column, endColumn, second) =>
+                        editorPane.revealAnalysisRow(
+                            difficultyId, revision, line, column, endColumn, second, root.analysisSession)
                 }
             }
 
-            BottomPanel {
-                id: bottomPanel
-                visible: root.bottomPanelEffectivelyVisible
-                viewState: root.viewState
-                documentSession: root.documentSession
+            PreviewPane {
+                id: preview
+                surfaceActive: !fullscreenPreview.visible
+                previewSession: root.previewSession
                 preferences: root.preferences
-                commands: root.commands
-                shellController: root.shellController
-                SplitView.preferredHeight: root.bottomPanelEffectivelyVisible
-                                           ? root.preferences.bottomPanelHeight
-                                           : 0
-                SplitView.minimumHeight: root.bottomPanelEffectivelyVisible ? 120 : 0
-                SplitView.maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0
-                onSyntaxIssueActivated: (line, column, endColumn) =>
-                    editorPane.revealSyntaxIssue(line, column, endColumn)
+                exportPageActive: root.exportVideoActive
+                SplitView.preferredWidth: root.previewEditorAvailableWidth
+                                          * root.preferences.previewWidthRatio
+                SplitView.minimumWidth: Math.max(preview.minimumWidth,
+                    Math.min(root.previewEditorAvailableWidth * root.preferences.previewMinimumWidthRatio,
+                             root.previewEditorAvailableWidth - bottomPanel.minimumWidth))
+                SplitView.maximumWidth: Math.max(preview.minimumWidth,
+                    Math.min(root.previewEditorAvailableWidth * root.preferences.previewMaximumWidthRatio,
+                             root.previewEditorAvailableWidth - bottomPanel.minimumWidth))
+                onFullscreenRequested: root.showFullscreenPreview()
             }
         }
 
-        PreviewPane {
-            id: preview
-            visible: !root.compact && root.viewState.previewVisible
-            previewSession: root.previewSession
-            shellController: root.shellController
-            SplitView.preferredWidth: Math.max(
-                220,
-                (root.width - 48
-                    - (root.viewState.sidebarVisible ? root.preferences.sidebarWidth + 4 : 0) - 4)
-                * root.preferences.previewWidthRatio
-            )
-            SplitView.minimumWidth: 220
-            SplitView.maximumWidth: Math.max(
-                220,
-                (root.width - sidebar.width - 4) * 0.5
-            )
-            onFullscreenRequested: root.showFullscreenPreview()
+        CornerMask {
+            x: root.compact ? 0 : sidebar.activityBarWidth
+            backgroundSource: root.backgroundSource
+            backgroundOffset: Qt.point(root.backgroundOffset.x + x, root.backgroundOffset.y)
         }
+
+        SplitHandle {
+            id: sidebarHandle
+            x: sidebar.width
+            width: visible && root.viewState.sidebarVisible ? Theme.splitDividerThickness : 0
+            height: parent.height
+            visible: !root.compact
+            showDivider: root.viewState.sidebarVisible
+            handlePressed: sidebarDrag.pressed
+            handleHovered: sidebarDrag.containsMouse
+
+            MouseArea {
+                id: sidebarDrag
+                anchors.centerIn: parent
+                width: Theme.splitHandleHitExtent
+                height: parent.height
+                hoverEnabled: true
+                cursorShape: Qt.SplitHCursor
+                preventStealing: true
+                property real startX: 0
+                property real startWidth: 0
+
+                onPressed: mouse => {
+                    startX = mapToItem(horizontalSplit, mouse.x, mouse.y).x
+                    startWidth = root.viewState.sidebarVisible ? root.preferences.sidebarWidth : 0
+                    root.sidebarDragWidth = root.preferences.sidebarWidth
+                    root.sidebarResizing = true
+                }
+                onPositionChanged: mouse => {
+                    if (pressed)
+                        root.resizeSidebar(startWidth + mapToItem(horizontalSplit, mouse.x, mouse.y).x - startX)
+                }
+                onReleased: {
+                    root.persistSidebarWidth()
+                    root.sidebarResizing = false
+                }
+                onCanceled: {
+                    root.persistSidebarWidth()
+                    root.sidebarResizing = false
+                }
+            }
+        }
+    }
+
+    // SplitView 拖动时会写入首选高度；松开后重新接回持久比例绑定。
+    // 缩小窗口触及高度下限后，放大仍按用户原有比例计算。
+    Binding {
+        target: bottomPanel.SplitView
+        property: "preferredHeight"
+        value: root.bottomPanelEffectivelyVisible
+            ? centerSplit.height * root.preferences.bottomPanelHeightRatio : 0
+        when: !centerSplit.resizing
+        restoreMode: Binding.RestoreNone
     }
 
     Rectangle {
@@ -206,16 +376,36 @@ Item {
         anchors.fill: parent
         visible: false
         z: 80
-        color: Theme.colors.background.editor
+        color: Theme.surfaceColor(Theme.colors.background.panel)
 
-        Shell.QuickShellPreviewSurface {
+        Loader {
             anchors.centerIn: parent
-            width: root.fittedFullscreenWidth(parent.width * 0.94, parent.height * 0.94)
-            height: root.fittedFullscreenHeight(parent.width * 0.94, parent.height * 0.94)
-            runtime: root.previewSession.runtime
-            mediaHost: root.previewSession.mediaHost
-            logger: root.shellController
-            surfaceRole: "fullscreen"
+            width: root.freeAspectActive
+                   ? parent.width
+                   : root.fittedFullscreenWidth(parent.width, parent.height)
+            height: root.freeAspectActive
+                    ? parent.height
+                    : root.fittedFullscreenHeight(parent.width, parent.height)
+            active: fullscreenPreview.visible && width >= 64 && height >= 64
+
+            sourceComponent: Preview.PreviewSurface {
+                anchors.fill: parent
+                runtime: root.previewSession.runtime
+                mediaHost: root.previewSession.mediaHost
+                logger: root.previewSession
+                surfaceRole: "fullscreen"
+                backgroundColor: "transparent"
+                hudTextColor: Theme.colors.previewHud.text
+                hudShadowColor: Theme.colors.previewHud.shadow
+            }
+        }
+
+        // Over the stage, under the exit button: QML stacking is declaration
+        // order. Fullscreen is where the rate HUD matters most — the transport
+        // that spells the rate out is not on screen at all.
+        PreviewRateToast {
+            anchors.fill: parent
+            previewSession: root.previewSession
         }
 
         IconButton {
@@ -223,7 +413,7 @@ Item {
             anchors.top: parent.top
             anchors.margins: 12
             iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
-            tooltip: qsTr("退出全屏预览")
+            tooltip: UiText.text("退出全屏预览")
             onClicked: fullscreenPreview.visible = false
         }
     }

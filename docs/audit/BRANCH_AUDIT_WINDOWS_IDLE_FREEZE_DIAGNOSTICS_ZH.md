@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # 分支代码审计报告 — `codex/windows-idle-freeze-diagnostics`
 
 - 审计基线：`dev`（merge-base `677a9625`）→ 分支 HEAD `f82cfa64`
@@ -13,9 +17,9 @@
 >
 > 其余结论经实施与编译/测试验证后成立。
 
-> **后续变更（2026-09-08）**：L-14 已补充按事件类型累计的 DevTools
-> `skippedNoSubscriber` 计数，高频预览事件在构造 payload 前的预检早退也计入；共享
-> `&first` 解析现在拒绝 `inf` / `nan`，导出 worker 对无效值明确失败，不再生成 NaN marker。
+> **后续变更（2026-09-08）**：L-14 所属的扩展运行时与 DevTools 产品面已随
+> QML v2 迁移退役，不再是当前产品路径；共享 `&first` 解析现在拒绝 `inf` / `nan`，
+> 导出 worker 对无效值明确失败，不再生成 NaN marker。
 
 ## 处理状态总表（截至 2026-08-07）
 
@@ -29,7 +33,7 @@
 | L-2 调度器自我禁用无日志 | 已修复 | `9b6ba7fb` |
 | L-3 mixer sync 丢弃分支静默 | 已修复 | `1ab03a41` |
 | L-13 `bass_status` 不报实际布防组 + 失效注释 | 已修复 | `94db28bc` |
-| L-14 扩展事件被跳过时不可见 | 已修复（DevTools 按事件类型计数） | 2026-09-08 后续修复 |
+| L-14 扩展事件被跳过时不可见 | 已退役（扩展运行时与 DevTools 已删除） | QML v2 迁移 |
 | L-7 原生 COM 注册无日志 | 已修复 | `7168745d` |
 | L-8 设备变更被忽略分支静默 | 已修复 | `b6cf8eba` |
 | L-9 `unregisterWindow()` 不记录 | 已修复 | `16afb366` |
@@ -184,9 +188,9 @@
 
 ### L-14（低）扩展事件被跳过时不可见
 
-> **已修复（2026-09-08）**：`EmbeddedExtensionRuntime` 现在按事件类型累计
-> `skippedNoSubscriber`，并由扩展 DevTools 快照暴露。`onQtPreviewTick()` 在构造高频
-> payload 前的订阅预检也走同一计数入口，因此不会只统计进入 `dispatchEvent()` 的低频事件。
+> **当前状态（2026-09-08）**：该扩展运行时、宿主与 DevTools 产品面已随 QML v2
+> 迁移删除，当前产品不再发布这组扩展事件；本条因此按功能退役关闭，而非继续维护
+> 已删除运行时的计数器。
 
 - 位置：`EmbeddedExtensionRuntime::dispatchEvent()` 新增的 `if (!hasEventSubscriber(kind)) return;`
 - 无订阅者时事件被静默丢弃，扩展作者报"我的订阅不触发"时无法区分"事件没发"与"发了但没匹配上"。附带行为变化：`nextEventSequence_` 不再为被跳过的事件自增（`sequence` 语义从"发布序号"变成"投递序号"）。

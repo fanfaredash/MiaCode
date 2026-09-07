@@ -38,6 +38,9 @@ namespace psmh_detail {
 
 inline constexpr qint64 kPausedSeekAckToleranceMs = 80;
 
+// 播放控制中的相邻定位请求使用此容差；暂停拖动的复用依据为显示帧时间范围。
+inline constexpr qint64 kSeekCoalesceToleranceMs = 40;
+
 inline unsigned long currentBeaconTid() noexcept
 {
 #ifdef Q_OS_WIN

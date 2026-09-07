@@ -24,7 +24,9 @@ struct VideoExportSizePolicy {
     double bufferMultiplier = 1.0;
     int gopSeconds = 2;
     int maxAudioBitrateKbps = 320;
-    int x264Crf = -1;
+    // A size preset adjusts the quality tier selected by Fast/HighQuality;
+    // it never replaces that tier's base CRF.
+    int x264CrfAdjustment = 0;
     bool disableVideoBackground = false;
     bool usePeakConstrainedVbr = false;
 };
@@ -32,6 +34,7 @@ struct VideoExportSizePolicy {
 VideoExportSizePolicy videoExportSizePolicy(VideoExportSizePreset preset);
 QString videoExportSizePresetToken(VideoExportSizePreset preset);
 int effectiveVideoExportAudioBitrateKbps(VideoExportSizePreset preset, int requestedKbps);
+int effectiveVideoExportX264Crf(VideoExportSizePreset preset, int baseCrf);
 
 bool shouldRequestOffscreenPboReadback(
     const std::optional<bool>& enableOverride,

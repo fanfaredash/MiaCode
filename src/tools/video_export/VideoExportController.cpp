@@ -36,7 +36,6 @@
 #include <QMutexLocker>
 #include <QPainter>
 #include <QProcess>
-#include <QProgressDialog>
 #include <QRect>
 #include <QRegularExpression>
 #include <QSet>
@@ -70,25 +69,10 @@
 using namespace miacode::video_export::detail;
 
 VideoExportResult VideoExportController::exportFullPreview(
-    const VideoExportTask& task,
-    QProgressDialog* progress
+    const VideoExportTask& task
 )
 {
     MC_OP("VideoExportController::exportFullPreview");
     _mc_op_.note(QStringLiteral("output=%1").arg(task.outputPath));
-    const auto progressCallback = [progress](int percent, const QString& text) {
-        if (progress == nullptr) {
-            return false;
-        }
-        if (percent >= 0) {
-            progress->setMaximum(100);
-            progress->setValue(qBound(0, percent, 100));
-        }
-        if (!text.isEmpty()) {
-            progress->setLabelText(text);
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-        return progress->wasCanceled();
-    };
-    return exportPreparedTask(task, progressCallback);
+    return exportPreparedTask(task);
 }

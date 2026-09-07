@@ -1,0 +1,31 @@
+# Offline metadata validation: evaluate the same manifests without Qt or a build.
+cmake_minimum_required(VERSION 3.21)
+get_filename_component(CMAKE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+set(CMAKE_CURRENT_SOURCE_DIR "${CMAKE_SOURCE_DIR}")
+set(MIACODE_SPEC_CATALOG_OUTPUT "${CMAKE_SOURCE_DIR}/docs/tests/SPEC_CATALOG.md")
+
+# Only catalog metadata is consumed here. Normal configure uses real target
+# commands; this path deliberately makes no claim about compile/link validity.
+function(miacode_add_dev_tool)
+endfunction()
+function(add_library)
+endfunction()
+function(target_sources)
+endfunction()
+function(target_link_libraries)
+endfunction()
+function(target_include_directories)
+endfunction()
+function(target_compile_definitions)
+endfunction()
+function(set_target_properties)
+endfunction()
+function(set_tests_properties)
+endfunction()
+function(add_custom_command)
+endfunction()
+
+include("${CMAKE_CURRENT_LIST_DIR}/SharedSources.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/MiaCodeSpecRegistry.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/specs/index.cmake")
+miacode_finalize_spec_registry()

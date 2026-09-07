@@ -17,8 +17,6 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/PreviewGameplayConfig.h"
 #include "tools/video_export/VideoExportRuntimePolicy.h"
-class QProgressDialog;
-
 enum class VideoExportPreset {
     Fast,
     HighQuality,
@@ -261,8 +259,7 @@ class VideoExportController
 {
 public:
     static VideoExportResult exportFullPreview(
-        const VideoExportTask& task,
-        QProgressDialog* progress
+        const VideoExportTask& task
     );
     static VideoExportResult exportPreparedTask(
         const VideoExportTask& task,

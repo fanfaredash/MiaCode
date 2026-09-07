@@ -55,7 +55,7 @@ QString resolveSfxDirectory()
     return normalizePath(miacode::preview_sfx::resolveSfxDirectory());
 }
 
-QVector<miacode::video_export::TouchholdSpanRenderPlan> buildMergedTouchholdSpans(
+QVector<miacode::video_export::TouchholdSpanRenderPlan> buildTouchholdSpanPlaybacks(
     const QVector<miacode::preview_sfx_timeline::TouchholdSpan>& spans,
     double timelineOriginSecond,
     double totalSeconds,
@@ -66,73 +66,41 @@ QVector<miacode::video_export::TouchholdSpanRenderPlan> buildMergedTouchholdSpan
         return {};
     }
 
-    struct ActiveSpan {
-        double startSecond = 0.0;
-        double endSecond = 0.0;
-    };
+    // Preview owns ONE riser voice and reconciles it to the latest-wins owner
+    // (reconcileTouchholdVoice in both audio backends). Export has no voice, so it
+    // mixes one clip per ownership segment, entering the sample at the same offset
+    // the voice would have seeked to. That makes a seamless join, an overlap and a
+    // nesting all restart/resume identically on both sides. Do NOT collapse these
+    // back into one merged span: that made the second of two adjacent touch-holds
+    // sound like a continuation of the first instead of its own riser.
+    const auto segments = miacode::preview_sfx_timeline::buildTouchholdOwnershipSegments(spans);
 
-    QVector<ActiveSpan> activeSpans;
-    activeSpans.reserve(spans.size());
-    for (const auto& span : spans) {
-        if (span.endSecond <= span.startSecond) {
-            continue;
+    QVector<miacode::video_export::TouchholdSpanRenderPlan> playbacks;
+    playbacks.reserve(segments.size());
+    for (const auto& segment : segments) {
+        double mixSecond = segment.startSecond - timelineOriginSecond;
+        double sourceStartSecond = segment.sourceOffsetSecond;
+        if (mixSecond < 0.0) {
+            // Already running when the exported timeline opens — same as seeking
+            // into the middle of the touch-hold in preview.
+            sourceStartSecond += -mixSecond;
+            mixSecond = 0.0;
         }
-        if (span.startSecond + kTimelineEpsilonSeconds < timelineOriginSecond) {
-            continue;
-        }
-        const double mixStartSecond = span.startSecond - timelineOriginSecond;
-        const double mixEndSecond = qMin(span.endSecond - timelineOriginSecond, totalSeconds);
-        if (mixStartSecond < 0.0 || mixEndSecond <= mixStartSecond + kTimelineEpsilonSeconds) {
+        const double mixEndSecond = qMin(segment.endSecond - timelineOriginSecond, totalSeconds);
+        if (mixEndSecond <= mixSecond + kTimelineEpsilonSeconds) {
             continue;
         }
 
-        ActiveSpan active;
-        active.startSecond = mixStartSecond;
-        active.endSecond = mixEndSecond;
-        activeSpans.append(active);
+        miacode::video_export::TouchholdSpanRenderPlan playback;
+        playback.kind = QStringLiteral("touchhold");
+        playback.assetKind = QStringLiteral("touchhold");
+        playback.mixSecond = mixSecond;
+        playback.sourceStartSecond = sourceStartSecond;
+        playback.durationSeconds = mixEndSecond - mixSecond;
+        playback.gain = gain;
+        playbacks.append(playback);
     }
-
-    if (activeSpans.isEmpty()) {
-        return {};
-    }
-
-    std::sort(activeSpans.begin(), activeSpans.end(), [](const ActiveSpan& left, const ActiveSpan& right) {
-        if (!qFuzzyCompare(left.startSecond + 1.0, right.startSecond + 1.0)) {
-            return left.startSecond < right.startSecond;
-        }
-        return left.endSecond < right.endSecond;
-    });
-
-    QVector<miacode::video_export::TouchholdSpanRenderPlan> merged;
-    double mergedStart = activeSpans.first().startSecond;
-    double mergedEnd = activeSpans.first().endSecond;
-    for (int index = 1; index < activeSpans.size(); ++index) {
-        const ActiveSpan& span = activeSpans.at(index);
-        if (span.startSecond <= mergedEnd + kTimelineEpsilonSeconds) {
-            mergedEnd = qMax(mergedEnd, span.endSecond);
-            continue;
-        }
-
-        miacode::video_export::TouchholdSpanRenderPlan plan;
-        plan.kind = QStringLiteral("touchhold");
-        plan.assetKind = QStringLiteral("touchhold");
-        plan.mixSecond = mergedStart;
-        plan.durationSeconds = mergedEnd - mergedStart;
-        plan.gain = gain;
-        merged.append(plan);
-
-        mergedStart = span.startSecond;
-        mergedEnd = span.endSecond;
-    }
-
-    miacode::video_export::TouchholdSpanRenderPlan plan;
-    plan.kind = QStringLiteral("touchhold");
-    plan.assetKind = QStringLiteral("touchhold");
-    plan.mixSecond = mergedStart;
-    plan.durationSeconds = mergedEnd - mergedStart;
-    plan.gain = gain;
-    merged.append(plan);
-    return merged;
+    return playbacks;
 }
 
 void suppressSfxBeforePreRangeEnd(
@@ -172,7 +140,7 @@ void suppressSfxBeforePreRangeEnd(
         scheduled.end()
     );
 
-    auto& spans = plan->mergedTouchholdSpans;
+    auto& spans = plan->touchholdSpanPlaybacks;
     spans.erase(
         std::remove_if(
             spans.begin(),
@@ -186,6 +154,9 @@ void suppressSfxBeforePreRangeEnd(
     for (miacode::video_export::TouchholdSpanRenderPlan& span : spans) {
         if (span.mixSecond + kTimelineEpsilonSeconds < preRangeEndSecond) {
             const double endSecond = span.mixSecond + span.durationSeconds;
+            // Enter the riser where the preview voice would be after seeking to the
+            // segment boundary, not back at the sample start.
+            span.sourceStartSecond += preRangeEndSecond - span.mixSecond;
             span.mixSecond = preRangeEndSecond;
             span.durationSeconds = qMax(0.0, endSecond - preRangeEndSecond);
         }
@@ -405,7 +376,7 @@ bool buildVideoExportAudioRenderPlan(
     }
     appendClockCountPlaybacks(task, normalizedAudioSettings, &built);
 
-    built.mergedTouchholdSpans = buildMergedTouchholdSpans(
+    built.touchholdSpanPlaybacks = buildTouchholdSpanPlaybacks(
         touchholdSpans,
         built.timelineOriginSecond,
         built.alignedTotalSeconds,

@@ -1,0 +1,57 @@
+<h2>封面工作台：谱面帧播放控件放在哪里？</h2>
+<p class="subtitle">比较播放条的空间位置；三种方案都保留中央封面合成画布，导出时仍只输出封面。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">封面导出</div>
+        <div style="display:grid;grid-template-columns:120px 1fr 150px;min-height:190px">
+          <div class="mock-sidebar">图层<br><br>卡片<br>谱面帧</div>
+          <div class="mock-content" style="display:flex;flex-direction:column;gap:8px">
+            <div class="placeholder" style="flex:1">封面合成画布<br><small>谱面帧在画布中实时变化</small></div>
+            <div class="mock-button" style="text-align:center">▶ / ❚❚　━━●━━　00:12.34</div>
+          </div>
+          <div class="mock-sidebar">检查器<br><br>时间<br>背景</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A · 画布底部播放条</h3><p>播放/暂停、时间滑杆、当前时间紧贴画布；最容易发现，操作距离短。</p></div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">封面导出</div>
+        <div style="display:grid;grid-template-columns:120px 1fr 150px;min-height:190px">
+          <div class="mock-sidebar">图层<br><br>卡片<br>谱面帧</div>
+          <div class="mock-content"><div class="placeholder" style="height:100%">封面合成画布<br><small>画布保持最大可视面积</small></div></div>
+          <div class="mock-sidebar">检查器<br><br><div class="mock-button">▶ 播放</div><br>时间滑杆<br>背景</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>B · 检查器内播放</h3><p>播放控件和“帧时间”属性同组；右侧集中编辑，但画布下方空间更完整。</p></div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">封面导出</div>
+        <div style="display:grid;grid-template-columns:120px 1fr 150px;min-height:190px">
+          <div class="mock-sidebar">图层<br><br>卡片<br>谱面帧</div>
+          <div class="mock-content"><div class="placeholder" style="height:100%">封面合成画布<br><small>时间滑杆悬浮在画布下缘</small><br><br>　　　▶　━━●━━</div></div>
+          <div class="mock-sidebar">检查器<br><br>时间<br>背景</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>C · 画布内悬浮播放条</h3><p>更接近视频编辑器；可用空格播放、左右键逐帧/小步移动，控件不占固定高度。</p></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>共同交互约定</h3>
+  <div class="pros-cons">
+    <div class="pros"><h4>会支持</h4><ul><li>单个播放/暂停按钮</li><li>拖动时间滑杆改变帧时间</li><li>Left/Right 改变时间</li></ul></div>
+    <div class="cons"><h4>需要确认</h4><ul><li>“隐藏谱面预览”是隐藏主编辑器预览，还是不显示封面里的谱面帧？</li><li>播放是否循环，还是到末尾停住？</li></ul></div>
+  </div>
+</div>

@@ -19,7 +19,7 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
     const QString& text,
     int cursorPosition,
     const QString& pad,
-    bool useBacktickSeparator);
+    QChar separator);
 
 bool applyTouchPadAuthoringEdit(
     QTextDocument* document,

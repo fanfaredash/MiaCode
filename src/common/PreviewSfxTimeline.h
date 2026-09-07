@@ -244,6 +244,70 @@ inline int touchholdOwnerSpanIndexAt(const QVector<TouchholdSpan>& spans, double
     return owner;
 }
 
+// One stretch of time during which a single span owns the shared touch-hold
+// voice. `sourceOffsetSecond` is where the voice sits inside the riser sample at
+// `startSecond`: 0 when the owning span begins here (it restarts the sample),
+// and > 0 when ownership falls back to an older span that has been running
+// underneath a newer one — exactly the offset reconcileTouchholdVoice() seeks to.
+struct TouchholdOwnershipSegment {
+    double startSecond = 0.0;
+    double endSecond = 0.0;
+    int spanIndex = -1;
+    double sourceOffsetSecond = 0.0;
+};
+
+// Flattens latest-wins ownership into the piecewise playback the preview voice
+// actually produces. Ownership can only change at a span boundary, so evaluating
+// touchholdOwnerSpanIndexAt() once per boundary interval reproduces the runtime
+// exactly. Preview reconciles a live voice against that same helper event by
+// event; export has no voice, so it mixes one clip per segment from here
+// (buildTouchholdSpanPlaybacks in VideoExportAudioRenderPlan.cpp). Both sides
+// must keep resolving ownership through touchholdOwnerSpanIndexAt() so a
+// seamless join, overlap or nesting sounds the same in the preview and the file.
+inline QVector<TouchholdOwnershipSegment> buildTouchholdOwnershipSegments(
+    const QVector<TouchholdSpan>& spans)
+{
+    QVector<double> boundaries;
+    boundaries.reserve(spans.size() * 2);
+    for (const TouchholdSpan& span : spans) {
+        if (span.endSecond <= span.startSecond + kTimelineEpsilonSeconds) {
+            continue;
+        }
+        boundaries.append(span.startSecond);
+        boundaries.append(span.endSecond);
+    }
+    std::sort(boundaries.begin(), boundaries.end());
+
+    QVector<TouchholdOwnershipSegment> segments;
+    segments.reserve(boundaries.size());
+    for (int i = 0; i + 1 < boundaries.size(); ++i) {
+        const double startSecond = boundaries[i];
+        const double endSecond = boundaries[i + 1];
+        if (endSecond <= startSecond + kTimelineEpsilonSeconds) {
+            continue;  // duplicate boundary, e.g. both sides of a seamless join
+        }
+        const int owner = touchholdOwnerSpanIndexAt(spans, startSecond);
+        if (owner < 0) {
+            continue;  // gap between spans — the voice is stopped here
+        }
+        if (!segments.isEmpty()
+            && segments.last().spanIndex == owner
+            && segments.last().endSecond + kTimelineEpsilonSeconds >= startSecond) {
+            // A boundary the owner took no part in (some other span started or
+            // ended underneath it) — keep it as one uninterrupted playback.
+            segments.last().endSecond = endSecond;
+            continue;
+        }
+        TouchholdOwnershipSegment segment;
+        segment.startSecond = startSecond;
+        segment.endSecond = endSecond;
+        segment.spanIndex = owner;
+        segment.sourceOffsetSecond = qMax(0.0, startSecond - spans[owner].startSecond);
+        segments.append(segment);
+    }
+    return segments;
+}
+
 inline void buildTimeline(
     const QVector<TimelineNoteMarker>& noteMarkers,
     double playbackRate,

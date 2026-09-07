@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Preview Audio Device Auto-Pause Design
 
 - Date: 2026-08-06

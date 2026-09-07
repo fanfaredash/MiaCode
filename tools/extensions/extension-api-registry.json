@@ -1,0 +1,1381 @@
+{
+  "version": "v1-archive",
+  "apis": [
+    {
+      "id": "app.getInfo",
+      "method": "app/getInfo",
+      "permission": "app.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get MiaCode version, platform, install roots, locale, and runtime information."
+    },
+    {
+      "id": "app.openPreferences",
+      "method": "app/openPreferences",
+      "permission": "ui.prompt",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Open Preferences."
+    },
+    {
+      "id": "app.openAboutDialog",
+      "method": "app/openAboutDialog",
+      "permission": "ui.prompt",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Open About dialog."
+    },
+    {
+      "id": "app.reloadExtensions",
+      "method": "app/reloadExtensions",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Reload local extensions."
+    },
+    {
+      "id": "capabilities.list",
+      "method": "api/list",
+      "permission": "",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List public v1 extension capabilities."
+    },
+    {
+      "id": "capabilities.has",
+      "method": "api/has",
+      "permission": "",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Check whether a public capability exists."
+    },
+    {
+      "id": "capabilities.describe",
+      "method": "api/describe",
+      "permission": "",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Describe a public capability."
+    },
+    {
+      "id": "capabilities.describeNamespace",
+      "method": "api/describeNamespace",
+      "permission": "",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Describe capabilities in a namespace."
+    },
+    {
+      "id": "capabilities.call",
+      "method": "api/call",
+      "permission": "",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Call an implemented public capability by id."
+    },
+    {
+      "id": "capabilities.invokePublicMethod",
+      "method": "api/invoke",
+      "permission": "",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Invoke an implemented public host method."
+    },
+    {
+      "id": "capabilities.request",
+      "method": "api/request",
+      "permission": "",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Record a structured request for a missing extension capability."
+    },
+    {
+      "id": "devtools.snapshot",
+      "method": "devtools/snapshot",
+      "permission": "open.inspect",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Inspect extension host state, diagnostics, registered callbacks, and recent calls."
+    },
+    {
+      "id": "devtools.diagnose",
+      "method": "devtools/diagnose",
+      "permission": "open.inspect",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Diagnose one API id or public host method for route, permission, and block status."
+    },
+    {
+      "id": "devtools.recentCalls",
+      "method": "devtools/recentCalls",
+      "permission": "open.inspect",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Read recent extension host API calls."
+    },
+    {
+      "id": "open.list",
+      "method": "open/list",
+      "permission": "open.inspect",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "List Open Bridge facade objects."
+    },
+    {
+      "id": "open.describe",
+      "method": "open/describe",
+      "permission": "open.inspect",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Describe one Open Bridge facade object."
+    },
+    {
+      "id": "open.call",
+      "method": "open/call",
+      "permission": "open.call",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Call an implemented Open Bridge facade method."
+    },
+    {
+      "id": "open.forbiddenTargets",
+      "method": "open/forbiddenTargets",
+      "permission": "open.inspect",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Legacy name: list experimental raw Open Bridge targets."
+    },
+    {
+      "id": "open.describeForbiddenTarget",
+      "method": "open/describeForbiddenTarget",
+      "permission": "open.inspect",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Legacy name: describe one experimental raw Open Bridge target."
+    },
+    {
+      "id": "extensions.list",
+      "method": "extensions/all",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "List discovered extensions."
+    },
+    {
+      "id": "extensions.get",
+      "method": "extensions/get",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Get extension information."
+    },
+    {
+      "id": "extensions.reload",
+      "method": "app/reloadExtensions",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Reload extensions."
+    },
+    {
+      "id": "extensions.enable",
+      "method": "extensions/enable",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Enable an extension."
+    },
+    {
+      "id": "extensions.disable",
+      "method": "extensions/disable",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Disable an extension."
+    },
+    {
+      "id": "extensions.installFromFolder",
+      "method": "extensions/installFromFolder",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Install an extension from a local folder."
+    },
+    {
+      "id": "extensions.remove",
+      "method": "extensions/remove",
+      "permission": "extensions.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Remove a user-installed extension."
+    },
+    {
+      "id": "commands.list",
+      "method": "commands/getCommands",
+      "permission": "commands.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List extension commands."
+    },
+    {
+      "id": "commands.describe",
+      "method": "commands/describe",
+      "permission": "commands.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Describe an extension command."
+    },
+    {
+      "id": "commands.register",
+      "method": "commands/register",
+      "permission": "",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Register a command callback from the owning extension."
+    },
+    {
+      "id": "commands.execute",
+      "method": "commands/execute",
+      "permission": "commands.execute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Execute an extension command."
+    },
+    {
+      "id": "commands.setChecked",
+      "method": "commands/setChecked",
+      "permission": "commands.execute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Set the checked state of an extension's own menu command."
+    },
+    {
+      "id": "commands.executeInternal",
+      "method": "commands/executeInternal",
+      "permission": "commands.execute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Execute an allowlisted MiaCode internal command."
+    },
+    {
+      "id": "commands.getInternalCommands",
+      "method": "commands/getInternalCommands",
+      "permission": "commands.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List allowlisted MiaCode internal commands."
+    },
+    {
+      "id": "window.showInformationMessage",
+      "method": "window/showMessage",
+      "permission": "ui.message",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show an information message."
+    },
+    {
+      "id": "window.showWarningMessage",
+      "method": "window/showMessage",
+      "permission": "ui.message",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show a warning message."
+    },
+    {
+      "id": "window.showErrorMessage",
+      "method": "window/showMessage",
+      "permission": "ui.message",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show an error message."
+    },
+    {
+      "id": "window.showInputBox",
+      "method": "window/showInputBox",
+      "permission": "ui.prompt",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Show a text input dialog."
+    },
+    {
+      "id": "window.showQuickPick",
+      "method": "window/showQuickPick",
+      "permission": "ui.prompt",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Show a simple selection dialog."
+    },
+    {
+      "id": "window.createStatusBarItem",
+      "method": "window/createStatusBarItem",
+      "permission": "ui.status",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show a temporary status bar message."
+    },
+    {
+      "id": "window.focusEditor",
+      "method": "window/focusEditor",
+      "permission": "ui.prompt",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Focus the active chart editor."
+    },
+    {
+      "id": "workspace.getActiveDocument",
+      "method": "workspace/getActiveDocument",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get the active document snapshot."
+    },
+    {
+      "id": "workspace.applyDocumentEdit",
+      "method": "workspace/applyDocumentEdit",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Replace active document text."
+    },
+    {
+      "id": "workspace.getCurrentFilePath",
+      "method": "workspace/getCurrentFilePath",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get current file path."
+    },
+    {
+      "id": "workspace.getChartFolder",
+      "method": "workspace/getChartFolder",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get the current chart folder."
+    },
+    {
+      "id": "workspace.getChartMetadata",
+      "method": "workspace/getChartMetadata",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get chart metadata."
+    },
+    {
+      "id": "workspace.updateChartMetadata",
+      "method": "workspace/updateChartMetadata",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Update chart metadata."
+    },
+    {
+      "id": "workspace.getMediaFiles",
+      "method": "workspace/getMediaFiles",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List media files in the chart folder."
+    },
+    {
+      "id": "workspace.getDirtyState",
+      "method": "workspace/getDirtyState",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get dirty state."
+    },
+    {
+      "id": "workspace.save",
+      "method": "workspace/save",
+      "permission": "workspace.write",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Save the current chart."
+    },
+    {
+      "id": "workspace.saveAs",
+      "method": "workspace/saveAs",
+      "permission": "workspace.write",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Save the current chart to a path."
+    },
+    {
+      "id": "document.query",
+      "method": "document/query",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Query active chart data with a selector."
+    },
+    {
+      "id": "document.edit",
+      "method": "document/edit",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Apply chart edit operations."
+    },
+    {
+      "id": "document.getText",
+      "method": "workspace/getActiveDocument",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get active chart text."
+    },
+    {
+      "id": "document.setText",
+      "method": "workspace/applyDocumentEdit",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Replace active chart text."
+    },
+    {
+      "id": "document.getDifficulties",
+      "method": "document/getDifficulties",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List difficulties."
+    },
+    {
+      "id": "document.getActiveDifficulty",
+      "method": "document/getActiveDifficulty",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get active difficulty."
+    },
+    {
+      "id": "document.setActiveDifficulty",
+      "method": "document/setActiveDifficulty",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Set active difficulty."
+    },
+    {
+      "id": "document.replaceActiveDifficultyText",
+      "method": "document/replaceActiveDifficultyText",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Replace active difficulty text."
+    },
+    {
+      "id": "document.getParsedNotes",
+      "method": "document/getParsedNoteMarkers",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get parsed note markers."
+    },
+    {
+      "id": "document.getTimingMetadata",
+      "method": "document/getTimingMetadata",
+      "permission": "workspace.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get timing metadata."
+    },
+    {
+      "id": "document.applyTextEdits",
+      "method": "document/applyTextEdits",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Apply text edits."
+    },
+    {
+      "id": "document.format",
+      "method": "document/format",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Normalize the active chart."
+    },
+    {
+      "id": "document.createDifficulty",
+      "method": "document/createDifficulty",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Create a difficulty."
+    },
+    {
+      "id": "document.deleteDifficulty",
+      "method": "document/deleteDifficulty",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Delete a difficulty."
+    },
+    {
+      "id": "document.renameDifficulty",
+      "method": "document/renameDifficulty",
+      "permission": "document.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Rename a difficulty."
+    },
+    {
+      "id": "editor.getSelection",
+      "method": "editor/getSelection",
+      "permission": "editor.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get editor selection."
+    },
+    {
+      "id": "editor.getCursor",
+      "method": "editor/getCursor",
+      "permission": "editor.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get editor cursor."
+    },
+    {
+      "id": "editor.getText",
+      "method": "editor/getText",
+      "permission": "editor.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get active editor text."
+    },
+    {
+      "id": "editor.revealRange",
+      "method": "editor/revealRange",
+      "permission": "editor.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Reveal an editor range."
+    },
+    {
+      "id": "editor.getParsedSnapshot",
+      "method": "editor/getParsedSnapshot",
+      "permission": "editor.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get editor text and parsed-marker summary."
+    },
+    {
+      "id": "editor.setSelection",
+      "method": "editor/setSelection",
+      "permission": "editor.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Set editor selection."
+    },
+    {
+      "id": "editor.getLine",
+      "method": "editor/getLine",
+      "permission": "editor.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get a line of text."
+    },
+    {
+      "id": "editor.getCurrentLine",
+      "method": "editor/getCurrentLine",
+      "permission": "editor.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get current line."
+    },
+    {
+      "id": "editor.getCurrentToken",
+      "method": "editor/getCurrentToken",
+      "permission": "editor.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get current token."
+    },
+    {
+      "id": "editor.insertText",
+      "method": "editor/insertText",
+      "permission": "editor.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Insert text."
+    },
+    {
+      "id": "editor.replaceSelection",
+      "method": "editor/replaceSelection",
+      "permission": "editor.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Replace selection."
+    },
+    {
+      "id": "editor.replaceRange",
+      "method": "editor/replaceRange",
+      "permission": "editor.edit",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Replace a text range."
+    },
+    {
+      "id": "editor.showCompletions",
+      "method": "editor/showCompletions",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show registered completion providers in host UI."
+    },
+    {
+      "id": "editor.showCodeActions",
+      "method": "editor/showCodeActions",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show registered code actions in host UI."
+    },
+    {
+      "id": "validation.run",
+      "method": "validation/run",
+      "permission": "diagnostics.run",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Run chart validation."
+    },
+    {
+      "id": "validation.getLastResult",
+      "method": "validation/getLastResult",
+      "permission": "diagnostics.run",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Get last validation result."
+    },
+    {
+      "id": "validation.addDiagnostics",
+      "method": "validation/addDiagnostics",
+      "permission": "diagnostics.run",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Add extension diagnostics."
+    },
+    {
+      "id": "validation.clearDiagnostics",
+      "method": "validation/clearDiagnostics",
+      "permission": "diagnostics.run",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Clear extension diagnostics."
+    },
+    {
+      "id": "diagnostics.validateDocument",
+      "method": "diagnostics/validateDocument",
+      "permission": "diagnostics.run",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Validate the active document."
+    },
+    {
+      "id": "timeline.getSnapshot",
+      "method": "timeline/getSnapshot",
+      "permission": "timeline.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get timeline snapshot."
+    },
+    {
+      "id": "timeline.getCurrentSecond",
+      "method": "timeline/getCurrentSecond",
+      "permission": "timeline.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get current preview/timeline second."
+    },
+    {
+      "id": "timeline.getZoomState",
+      "method": "timeline/getZoomState",
+      "permission": "timeline.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get timeline zoom state."
+    },
+    {
+      "id": "timeline.getVisibleRange",
+      "method": "timeline/getVisibleRange",
+      "permission": "timeline.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get approximate visible timeline seconds."
+    },
+    {
+      "id": "timeline.getMarkersAtSecond",
+      "method": "timeline/getMarkersAtSecond",
+      "permission": "timeline.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get parsed note markers near a second."
+    },
+    {
+      "id": "timeline.seek",
+      "method": "timeline/seek",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Seek timeline."
+    },
+    {
+      "id": "timeline.zoomIn",
+      "method": "timeline/zoomIn",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Increase timeline zoom by one preset."
+    },
+    {
+      "id": "timeline.zoomOut",
+      "method": "timeline/zoomOut",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Decrease timeline zoom by one preset."
+    },
+    {
+      "id": "timeline.stepZoomPreset",
+      "method": "timeline/stepZoomPreset",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Move timeline zoom by a preset delta."
+    },
+    {
+      "id": "timeline.setZoomScale",
+      "method": "timeline/setZoomScale",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Set timeline zoom scale when the active host supports anchored scaling."
+    },
+    {
+      "id": "timeline.scrollToSecond",
+      "method": "timeline/scrollToSecond",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Scroll or seek the timeline to a second."
+    },
+    {
+      "id": "timeline.setFollowPreview",
+      "method": "timeline/setFollowPreview",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Enable or disable timeline follow-preview mode."
+    },
+    {
+      "id": "timeline.setFollowProgress",
+      "method": "timeline/setFollowProgress",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Enable or disable timeline follow-progress mode."
+    },
+    {
+      "id": "timeline.addMarker",
+      "method": "timeline/addMarker",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Add extension timeline marker."
+    },
+    {
+      "id": "timeline.clearMarkers",
+      "method": "timeline/clearMarkers",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Clear extension timeline markers."
+    },
+    {
+      "id": "timeline.addBand",
+      "method": "timeline/addBand",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Add extension timeline band."
+    },
+    {
+      "id": "timeline.addVerticalLine",
+      "method": "timeline/addVerticalLine",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Add extension timeline vertical line."
+    },
+    {
+      "id": "timeline.clearVisuals",
+      "method": "timeline/clearVisuals",
+      "permission": "timeline.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Clear extension timeline visuals."
+    },
+    {
+      "id": "preview.getState",
+      "method": "preview/getState",
+      "permission": "preview.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get preview state."
+    },
+    {
+      "id": "preview.getRenderState",
+      "method": "preview/getRenderState",
+      "permission": "preview.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get preview canvas and render option state."
+    },
+    {
+      "id": "preview.play",
+      "method": "preview/play",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Play preview."
+    },
+    {
+      "id": "preview.pause",
+      "method": "preview/pause",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Pause preview."
+    },
+    {
+      "id": "preview.stop",
+      "method": "preview/stop",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Stop preview."
+    },
+    {
+      "id": "preview.seek",
+      "method": "preview/seek",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Seek preview."
+    },
+    {
+      "id": "preview.setSpeed",
+      "method": "preview/setSpeed",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Set preview speed."
+    },
+    {
+      "id": "preview.setMineSkinEnabled",
+      "method": "preview/setMineSkinEnabled",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Choose dedicated or normal sprites for mine notes."
+    },
+    {
+      "id": "preview.setMineSfxEnabled",
+      "method": "preview/setMineSfxEnabled",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Enable or mute type-based SFX for mine notes."
+    },
+    {
+      "id": "preview.addOverlay",
+      "method": "preview/addOverlay",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Add a rendered text overlay above the preview."
+    },
+    {
+      "id": "preview.updateOverlay",
+      "method": "preview/updateOverlay",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Update a preview overlay."
+    },
+    {
+      "id": "preview.removeOverlay",
+      "method": "preview/removeOverlay",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Remove a preview overlay."
+    },
+    {
+      "id": "preview.clearOverlays",
+      "method": "preview/clearOverlays",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Clear preview overlays."
+    },
+    {
+      "id": "preview.getOverlays",
+      "method": "preview/getOverlays",
+      "permission": "preview.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List preview overlays."
+    },
+    {
+      "id": "preview.renderOverlayLayer",
+      "method": "preview/renderOverlayLayer",
+      "permission": "preview.control",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Refresh the preview overlay layer."
+    },
+    {
+      "id": "preview.hitTestOverlay",
+      "method": "preview/hitTestOverlay",
+      "permission": "preview.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Hit-test preview overlays."
+    },
+    {
+      "id": "ui.registerBottomTabView",
+      "method": "contributions/register",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register and render a bottom-tab extension view."
+    },
+    {
+      "id": "ui.registerToolbarButton",
+      "method": "contributions/register",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register and render an extension toolbox button."
+    },
+    {
+      "id": "ui.registerFloatingPanel",
+      "method": "contributions/register",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register and render a modeless floating extension panel."
+    },
+    {
+      "id": "ui.registerPetOverlay",
+      "method": "ui/registerPetOverlay",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register a controlled preview pet overlay using extension-local resources."
+    },
+    {
+      "id": "ui.registerSceneOverlay",
+      "method": "ui/registerSceneOverlay",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register a controlled preview scene/canvas overlay."
+    },
+    {
+      "id": "ui.getContributions",
+      "method": "ui/getContributions",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Get registered UI contributions."
+    },
+    {
+      "id": "ui.getViews",
+      "method": "ui/getViews",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "List rendered extension views."
+    },
+    {
+      "id": "ui.unregisterView",
+      "method": "ui/unregisterView",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Unregister rendered extension views."
+    },
+    {
+      "id": "ui.refreshViews",
+      "method": "ui/refreshViews",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Refresh extension view hosts."
+    },
+    {
+      "id": "ui.renderDeclarativeView",
+      "method": "ui/renderDeclarativeView",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Render a declarative extension view."
+    },
+    {
+      "id": "ui.renderBottomTabView",
+      "method": "ui/renderBottomTabView",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Render a bottom-tab extension view."
+    },
+    {
+      "id": "ui.renderFloatingPanel",
+      "method": "ui/renderFloatingPanel",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Render a modeless floating extension panel."
+    },
+    {
+      "id": "ui.renderToolbarButton",
+      "method": "ui/renderToolbarButton",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Render an extension toolbox button."
+    },
+    {
+      "id": "ui.renderSceneOverlay",
+      "method": "ui/renderSceneOverlay",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Render a controlled scene overlay above the preview."
+    },
+    {
+      "id": "ui.renderWebView",
+      "method": "ui/renderWebView",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Render an HTML-lite view in a controlled host."
+    },
+    {
+      "id": "ui.renderCanvasView",
+      "method": "ui/renderCanvasView",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Render a declarative canvas/scene view."
+    },
+    {
+      "id": "logs.writeExtensionLog",
+      "method": "logs/append",
+      "permission": "logs.write",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Append to an extension log."
+    },
+    {
+      "id": "logs.openFolder",
+      "method": "logs/open",
+      "permission": "logs.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Open extension logs."
+    },
+    {
+      "id": "logs.getPath",
+      "method": "logs/getPath",
+      "permission": "logs.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Get extension log path."
+    },
+    {
+      "id": "logs.readRecent",
+      "method": "logs/readRecent",
+      "permission": "logs.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Read recent extension log lines."
+    },
+    {
+      "id": "input.registerWheelGesture",
+      "method": "input/registerWheelGesture",
+      "permission": "input.listen",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register a controlled wheel gesture that invokes an extension command."
+    },
+    {
+      "id": "input.registerKeyGesture",
+      "method": "input/registerKeyGesture",
+      "permission": "input.listen",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register a controlled key gesture that invokes an extension command."
+    },
+    {
+      "id": "input.registerMouseGesture",
+      "method": "input/registerMouseGesture",
+      "permission": "input.listen",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register a controlled mouse gesture that invokes an extension command."
+    },
+    {
+      "id": "input.getGestures",
+      "method": "input/getGestures",
+      "permission": "input.listen",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List registered extension input gestures."
+    },
+    {
+      "id": "events.subscribe",
+      "method": "events/register",
+      "permission": "events.subscribe",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Subscribe to an exact event name or namespace wildcard with optional filters."
+    },
+    {
+      "id": "providers.registerHoverProvider",
+      "method": "contributions/register",
+      "permission": "providers.register",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register an editor hover provider descriptor."
+    },
+    {
+      "id": "providers.registerCompletionProvider",
+      "method": "contributions/register",
+      "permission": "providers.register",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register an editor completion provider descriptor."
+    },
+    {
+      "id": "providers.registerCodeActionProvider",
+      "method": "contributions/register",
+      "permission": "providers.register",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register an editor code-action provider descriptor."
+    },
+    {
+      "id": "providers.getRegistered",
+      "method": "providers/getRegistered",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List registered provider descriptors."
+    },
+    {
+      "id": "providers.collectHover",
+      "method": "providers/collectHover",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Collect hover providers for the current editor context."
+    },
+    {
+      "id": "providers.collectCompletions",
+      "method": "providers/collectCompletions",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Collect completion providers for a context."
+    },
+    {
+      "id": "providers.collectCodeActions",
+      "method": "providers/collectCodeActions",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Collect code-action providers for a context."
+    },
+    {
+      "id": "providers.showHover",
+      "method": "providers/showHover",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show hover provider output in host UI."
+    },
+    {
+      "id": "providers.showCompletions",
+      "method": "providers/showCompletions",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show completion provider output in host UI."
+    },
+    {
+      "id": "providers.showCodeActions",
+      "method": "providers/showCodeActions",
+      "permission": "providers.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Show code-action provider output in host UI."
+    },
+    {
+      "id": "ui.registerSidebarView",
+      "method": "ui/renderSidebarView",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register and render a sidebar-style extension view."
+    },
+    {
+      "id": "ui.registerPreferencesPage",
+      "method": "ui/renderPreferencesPage",
+      "permission": "ui.contribute",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register and render an extension preferences page."
+    },
+    {
+      "id": "export.hooks",
+      "method": "contributions/register",
+      "permission": "export.write",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Register export hook/template/provider descriptors."
+    },
+    {
+      "id": "media",
+      "method": "media/*",
+      "permission": "resources.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Read media metadata and chart media paths."
+    },
+    {
+      "id": "theme",
+      "method": "theme/*",
+      "permission": "settings.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Read theme state and theme colors."
+    },
+    {
+      "id": "backup",
+      "method": "backup/*",
+      "permission": "backup.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Read and write extension backup snapshots."
+    },
+    {
+      "id": "shortcuts",
+      "method": "shortcuts/*",
+      "permission": "settings.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Read and register extension shortcut descriptors."
+    },
+    {
+      "id": "shortcuts.list",
+      "method": "shortcuts/list",
+      "permission": "settings.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List extension shortcut bindings."
+    },
+    {
+      "id": "shortcuts.getEditable",
+      "method": "shortcuts/getEditable",
+      "permission": "settings.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "List shortcuts visible in Preferences > Shortcuts."
+    },
+    {
+      "id": "shortcuts.getKeybinding",
+      "method": "shortcuts/getKeybinding",
+      "permission": "settings.read",
+      "risk": "low",
+      "status": "implemented",
+      "description": "Read one extension shortcut binding."
+    },
+    {
+      "id": "shortcuts.register",
+      "method": "shortcuts/register",
+      "permission": "settings.write",
+      "risk": "medium",
+      "status": "implemented",
+      "description": "Register an extension command shortcut that can be edited in Preferences > Shortcuts."
+    },
+    {
+      "id": "shell.execute",
+      "method": "shell/execute",
+      "permission": "shell.execute",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw shell execution API; starts a detached shell command."
+    },
+    {
+      "id": "process.spawn",
+      "method": "process/spawn",
+      "permission": "process.manage",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw process API; starts a detached process."
+    },
+    {
+      "id": "native",
+      "method": "native/raw",
+      "permission": "native.unsafe",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw native API namespace."
+    },
+    {
+      "id": "internal.raw",
+      "method": "internal/raw",
+      "permission": "internal.raw",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw internal API namespace."
+    },
+    {
+      "id": "renderer.raw",
+      "method": "renderer/raw",
+      "permission": "renderer.raw",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw renderer API namespace."
+    },
+    {
+      "id": "export.raw",
+      "method": "export/raw",
+      "permission": "export.raw",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw export API namespace."
+    },
+    {
+      "id": "security",
+      "method": "security/raw",
+      "permission": "security.override",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw security API namespace."
+    },
+    {
+      "id": "updates",
+      "method": "updates/raw",
+      "permission": "updates.modify",
+      "risk": "high",
+      "status": "implemented",
+      "description": "Experimental raw updater API namespace."
+    }
+  ]
+}

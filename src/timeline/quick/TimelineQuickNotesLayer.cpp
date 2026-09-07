@@ -15,6 +15,7 @@ namespace {
 
 struct TimelineQuickNotesRootNode : public QSGNode {
     quint64 revision = 0;
+    quint64 layoutRevision = 0;
     quint64 appearanceRevision = 0;
 };
 
@@ -216,7 +217,9 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
         matrix.translate(-static_cast<float>(state.horizontalScrollValue), 0.0f);
         transformRoot->setMatrix(matrix);
     }
-    if (root->revision == state.notesRevision && root->appearanceRevision == state.appearanceRevision) {
+    if (root->revision == state.notesRevision
+        && root->layoutRevision == state.layoutRevision
+        && root->appearanceRevision == state.appearanceRevision) {
         return root;
     }
     // Keep sprite batching, but do not recycle QSGGeometry objects.
@@ -318,6 +321,7 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
     }
 
     root->revision = state.notesRevision;
+    root->layoutRevision = state.layoutRevision;
     root->appearanceRevision = state.appearanceRevision;
     return root;
 }

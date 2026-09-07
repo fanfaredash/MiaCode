@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Windows Idle Freeze Diagnostics Design
 
 ## Context

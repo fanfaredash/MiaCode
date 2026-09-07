@@ -1,3 +1,9 @@
+---
+lifecycle: working
+---
+
+> 工作资料：包含待复核的实现描述或阶段目标，不能整体视为当前规范；以代码和 [文档索引](../../INDEX.md) 中的现行契约为准。
+
 # 谱面诊断与规范化规格
 
 本文档梳理三个相关但独立的子系统，它们都作用于 simai 谱面文本，并把结果
@@ -356,13 +362,15 @@ Lenient 的存在意义现在只剩一件事：抽取一组可用的 timeline ma
 
 ### 1.4 隐藏的运行时开关 —— invalid-star 预览
 
-`SimaiNativeParser::setInvalidStarPreviewEnabled(bool)` /
-`invalidStarPreviewEnabled()`（`SimaiNativeParser.h:65-66`，
-Driver.cpp:976-984）控制一个仅 debug 用的预览路径，让用户在写谱时
+`SimaiNativeParser::invalidStarPreviewEnabled()`（`SimaiNativeParser.h`，
+`Driver.cpp`）读取一个仅 debug 用的预览开关，控制用户在写谱时是否能
 看到「非法」星 slide 长什么样。仅 `parseForTimeline` 尊重该 flag
 （通过 `parseInternal` 的第三个参数）；`validateSyntax` 始终传
-`false`。这个 flag 是设置项驱动的、不属于公共规格的一部分，但在分析
-两种模式下 marker 数量发散时会用到。
+`false`。原先的 setter（`setInvalidStarPreviewEnabled`）只有一个调用方
+——shell 里一个点击「关于」图标三次的隐藏彩蛋——该彩蛋已随死分支清理
+一起删除（2026-09），所以这个 flag 目前永远是默认值 `false`，没有任何
+运行时路径能再把它翻转为 `true`。这个 flag 不属于公共规格的一部分，
+但在分析两种模式下 marker 数量发散时会用到。
 
 ### 1.5 问题呈现
 
@@ -455,9 +463,9 @@ UI 上的呈现：
 - `wifiNeedC` —— wifi 几何规则是否需要中心 C
 - `excludeTouchFromMultiTouch` —— 把 touch 从 hand-count 中排除
 
-用户可配置的静态阈值通过 Validation 菜单 →
-`onEditStaticTapOnSlideThreshold()`（`MainWindow.ValidationSection.h:63`）触发，
-范围 `[kStaticTapOnSlideThresholdMinMs, kStaticTapOnSlideThresholdMaxMs]`。
+静态阈值仍由 `staticTapOnSlideThresholdMs` 状态读取并进入分析请求，范围为
+`[kStaticTapOnSlideThresholdMinMs, kStaticTapOnSlideThresholdMaxMs]`；旧 Validation 菜单的
+Widget 配置入口已随 native shell 退役，当前 QML 产品面不暴露该设置入口。
 
 ### 已有详细规格
 

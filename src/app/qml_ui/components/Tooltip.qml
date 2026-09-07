@@ -5,6 +5,9 @@ import MiaCode.UI
 ToolTip {
     id: root
 
+    enter: FadeTransition {}
+    exit: FadeTransition { appearing: false }
+
     delay: 550
     timeout: 3500
     padding: 6
@@ -16,10 +19,6 @@ ToolTip {
         font.pixelSize: Theme.uiFontSize
     }
 
-    background: Rectangle {
-        color: Theme.colors.background.elevated
-        border.color: Theme.colors.border.normal
-        radius: Theme.itemRadius
-    }
+    background: FloatingCard {}
 }
 

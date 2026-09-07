@@ -3,6 +3,7 @@
 #include "core/scene/PreviewFrameState.h"
 
 #include <QtGlobal>
+#include <QColor>
 
 class QImage;
 class QQuickWindow;
@@ -17,7 +18,8 @@ public:
         const miacode::preview::scene::PreviewFrameState& state,
         const QSize& renderSize,
         QQuickWindow* window,
-        PreviewTextureRepository* textures
+        PreviewTextureRepository* textures,
+        const QColor& backgroundColor = QColor(QStringLiteral("#191A1B"))
     ) const;
 
 private:

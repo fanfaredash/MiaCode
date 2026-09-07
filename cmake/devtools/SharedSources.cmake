@@ -1,0 +1,42 @@
+# Source groups shared across several dev tools / specs, listed once
+# instead of being copy-pasted into every target.
+set(_miacode_chart_core
+    src/core/chart/document/SimaiDocument.h
+    src/core/chart/document/SimaiDocument.cpp
+    src/core/chart/document/SimaiTimingMetadata.h
+    src/core/chart/document/SimaiTimingMetadata.cpp
+    src/core/chart/parser/SimaiNativeParser.h
+    src/core/chart/parser/SimaiNativeParser.cpp
+)
+set(_miacode_log_core
+    src/common/OperationLog.h
+    src/common/OperationLog.cpp
+    src/common/DebugLog.h
+    src/common/DebugLog.cpp
+)
+set(_miacode_muri_analysis_core
+    src/common/MuriTypes.h
+    src/common/MuriTypes.cpp
+    src/tools/muri/MuriAnalyzer.h
+    src/tools/muri/MuriAnalyzer.cpp
+    src/tools/muri/MuriAnalyzerGeometry.h
+    src/tools/muri/MuriAnalyzerGeometry.cpp
+    src/tools/muri/MuriAnalyzerModel.h
+    src/tools/muri/MuriSlideReferenceData.h
+    src/tools/muri/MuriSlideReferenceData.cpp
+    src/tools/muri/MuriAnalyzerInternal.h
+    src/tools/muri/MuriDiagnosticCollector.h
+    src/tools/muri/MuriDiagnosticCollector.cpp
+    src/tools/muri/MuriDiagnosticLabels.h
+    src/tools/muri/MuriDiagnosticLabels.cpp
+    src/tools/muri/MuriRuntimeModelBuilder.h
+    src/tools/muri/MuriRuntimeModelBuilder.cpp
+    src/tools/muri/MuriOverlayBuilder.h
+    src/tools/muri/MuriOverlayBuilder.cpp
+    src/tools/muri/MuriSlideWifiJudge.h
+    src/tools/muri/MuriSlideWifiJudge.cpp
+    src/tools/muri/MuriSimpleNoteJudge.h
+    src/tools/muri/MuriSimpleNoteJudge.cpp
+    src/tools/muri/MuriStaticChecker.h
+    src/tools/muri/MuriStaticChecker.cpp
+)

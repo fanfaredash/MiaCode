@@ -2,7 +2,6 @@
 
 #include "common/InputShortcutGesture.h"
 
-#include <QAction>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -10,7 +9,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QShortcut>
 
 namespace {
 
@@ -31,6 +29,7 @@ const QStringList& editableShortcutIds()
         QStringLiteral("transform.toggle_firework"),
         QStringLiteral("transform.random_rotate"),
         QStringLiteral("transform.clear_complete_elements"),
+        QStringLiteral("transform.reset_tap_notes"),
         QStringLiteral("preview.stop_or_play"),
         QStringLiteral("preview.play_pause_global"),
         QStringLiteral("preview.speed_down"),
@@ -110,31 +109,6 @@ QJsonValue sequenceJsonValue(const QStringList& shortcuts)
         }
     }
     return array;
-}
-
-QList<QKeySequence> runtimeSequencesForAction(const QList<QKeySequence>& sequences)
-{
-    QList<QKeySequence> expanded;
-    const auto appendUnique = [&expanded](const QKeySequence& sequence) {
-        if (!sequence.isEmpty() && !expanded.contains(sequence)) {
-            expanded.append(sequence);
-        }
-    };
-    for (const QKeySequence& sequence : sequences) {
-        appendUnique(sequence);
-        const QString portable = sequence.toString(QKeySequence::PortableText);
-        if (portable == QStringLiteral("Ctrl+Shift+=")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl++")));
-        } else if (portable == QStringLiteral("Ctrl++")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+=")));
-        } else if (portable == QStringLiteral("Ctrl+Shift+-")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+_")));
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+_")));
-        } else if (portable == QStringLiteral("Ctrl+_") || portable == QStringLiteral("Ctrl+Shift+_")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+-")));
-        }
-    }
-    return expanded;
 }
 
 QStringList shortcutTextsFromKeySequences(const QList<QKeySequence>& sequences)
@@ -255,34 +229,6 @@ bool ShortcutRegistry::registerExtensionShortcut(
         shortcutTexts_.insert(normalizedId, defaultTexts);
     }
     return true;
-}
-
-void ShortcutRegistry::applyShortcut(QAction* action, const QString& id, const QKeySequence& fallback) const
-{
-    if (action == nullptr) {
-        return;
-    }
-    const QKeySequence matched = sequence(id, fallback);
-    action->setShortcuts(runtimeSequencesForAction(matched.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{matched}));
-}
-
-void ShortcutRegistry::applyShortcuts(
-    QAction* action,
-    const QString& id,
-    const QList<QKeySequence>& fallback) const
-{
-    if (action == nullptr) {
-        return;
-    }
-    action->setShortcuts(runtimeSequencesForAction(sequences(id, fallback)));
-}
-
-void ShortcutRegistry::applyShortcut(QShortcut* shortcut, const QString& id, const QKeySequence& fallback) const
-{
-    if (shortcut == nullptr) {
-        return;
-    }
-    shortcut->setKey(sequence(id, fallback));
 }
 
 bool ShortcutRegistry::setUserShortcut(const QString& id, const QKeySequence& sequence)

@@ -115,7 +115,6 @@ bool tokenContainsSlideShape(const QString& token)
     return false;
 }
 
-bool g_invalidStarPreviewEnabled = false;
 
 // Negative HS (`<HS*-N>`, a Majdata reverse-flow gimmick). DEFAULT ON: the
 // parser accepts negative hs and freezes it onto the marker; the preview/export

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
@@ -9,16 +10,18 @@ Rectangle {
     property string documentName: ""
     property int cursorLine: 1
     property int cursorColumn: 1
+    property string selectionBeatText: ""
+    property string selectionBeatTooltip: ""
 
     implicitHeight: 23
-    color: Theme.colors.background.surface
+    color: Theme.colors.background.statusBar
 
     Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         height: 1
-        color: Theme.colors.border.normal
+        color: Theme.colors.border.status
     }
 
     RowLayout {
@@ -41,7 +44,13 @@ Rectangle {
         Item { Layout.fillWidth: root.documentName.length === 0 }
 
         StatusText {
-            text: qsTr("行 %1，列 %2").arg(root.cursorLine).arg(root.cursorColumn)
+            text: UiText.text("行 %1，列 %2").arg(root.cursorLine).arg(root.cursorColumn)
+            Layout.preferredWidth: implicitWidth
+        }
+        StatusText {
+            text: root.selectionBeatText
+            tooltipText: root.selectionBeatTooltip
+            visible: text.length > 0
             Layout.preferredWidth: implicitWidth
         }
         StatusText {
@@ -51,8 +60,18 @@ Rectangle {
     }
 
     component StatusText: Text {
-        color: Theme.colors.text.secondary
+        id: statusText
+        property string tooltipText: ""
+        color: Theme.colors.text.status
         font.family: Theme.uiFont
         font.pixelSize: Theme.secondaryFontSize
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            visible: statusText.tooltipText.length > 0
+            ToolTip.visible: containsMouse
+            ToolTip.text: statusText.tooltipText
+        }
     }
 }

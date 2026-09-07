@@ -23,7 +23,8 @@ float smoothStep01(float t)
 void main()
 {
     vec2 stageCenter = stageRect.xy + stageRect.zw * 0.5;
-    float layoutSquareSide = max(1.0, max(1.0, geometryParams.y) * geometryParams.z);
+    float shortSide = min(max(geometryParams.x, 1.0), max(geometryParams.y, 1.0));
+    float layoutSquareSide = max(1.0, shortSide * geometryParams.z);
     float outerRadius = max(1.0, layoutSquareSide * 0.5);
     float radius = distance(vPosition, stageCenter);
 

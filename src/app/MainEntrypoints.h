@@ -12,7 +12,7 @@
 #include <QString>
 #include <QStringList>
 
-class QApplication;
+class QGuiApplication;
 class QCommandLineParser;
 class QQuickWindow;
 
@@ -24,7 +24,7 @@ namespace miacode::app::entry {
 // `phase` tags the batch ("boot" early in main(), "log_dir_rebound" after the
 // runtime log directory rebinds to a chart's .miacode/logs/) so these process-
 // invariant facts are visible in whichever log file a user collects. Call after
-// QApplication is constructed.
+// QGuiApplication is constructed.
 void logProcessStartupDiagnostics(const QString& phase);
 
 // ===== Actual GPU adapter / renderer probe (gpu_adapter_probe.cpp) =====
@@ -78,7 +78,7 @@ void addSharedCliDebugOption(QCommandLineParser& parser);
 QString currentExceptionDetail();
 
 // ===== CLI video export handlers =====
-int runCliVideoExport(QApplication& app, QString* errorMessage);          // cli_video_export.cpp
-int runCliVideoExportWorker(QApplication& app, QString* errorMessage);    // cli_video_export_worker.cpp
+int runCliVideoExport(QGuiApplication& app, QString* errorMessage);          // cli_video_export.cpp
+int runCliVideoExportWorker(QGuiApplication& app, QString* errorMessage);    // cli_video_export_worker.cpp
 
 }  // namespace miacode::app::entry

@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # MiaCode 0.5.0-beta9 至当前版本预览帧率回退审计
 
 - 审计日期：2026-08-05（Asia/Shanghai）

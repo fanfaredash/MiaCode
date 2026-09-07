@@ -47,15 +47,24 @@ Item {
     property string activeChartFrameKey: ""      // only this chart frame hosts the live scene
     // §4 — which layer wears the selection chrome (any kind, incl. the card). Driven
     // two-way: C++ pushes it (list / inspector selection → blue box moves), and a
-    // canvas tap / drag pushes it back via chartSceneBinder.selectLayerKey. The
+    // canvas tap / drag pushes it back via selectionBinder.selectLayerKey. The
     // editor's selectedIndex is DERIVED from this (key-based → reorder/add/remove safe).
     property string selectedKey: ""
     property bool editable: true            // false in the export render (no chrome/handlers)
-    // A2 — the CoverComposerView (live path only) sets this so the chart-frame
-    // layer can host a LIVE PreviewQuickSceneRoot instead of the static grab Image:
+    // The v2 page provides the QML-facing cover session as the binder facade for
+    // the one active live chart scene; export rendering leaves it null and uses
+    // the cached still image.
+    property var selectionBinder: null
+    // The page uses this callback to route canvas selection to its inspector tab.
+    // Selection itself remains owned by selectionBinder.
+    property var layerSelectionCallback: null
+    // A2 — a live-only consumer can set this so the chart-frame layer hosts a
+    // PreviewQuickSceneRoot instead of the static grab Image:
     // scrubbing/playback then only moves the shared playhead (zero readback). Stays
     // null in the export render, where the static grab Image is used instead.
     property var chartSceneBinder: null
+    readonly property bool liveChartSceneBound:
+        chartSceneBinder !== null && chartSceneBinder.liveChartSceneBound === true
 
     // ---- Editor state ----
     // Derived from selectedKey so reordering / adding / removing layers never points
@@ -171,6 +180,17 @@ Item {
         if (s.charAt(0) === "/") return "file://" + encodeURI(s)
         return "file:///" + encodeURI(s)   // Windows drive path (C:/…)
     }
+
+    function selectLayerKey(key) {
+        if (!key)
+            return
+        if (canvas.layerSelectionCallback)
+            canvas.layerSelectionCallback.call(canvas, key)
+        if (canvas.selectionBinder)
+            canvas.selectionBinder.selectLayerKey(key)
+        else if (canvas.chartSceneBinder)
+            canvas.chartSceneBinder.selectLayerKey(key)
+    }
     // Text-layer font: the layer's custom fontPath (absolute) if set, else the
     // bundled Heavy display font.
     function fontSourceUrlForLayer(ld) {
@@ -227,9 +247,10 @@ Item {
     function dragLayerAt(px, py) {
         if (pointInSelectionScaleHandle(px, py))
             return null
-        if (selectedLayer && !selectedLayer.locked && pointInLayer(selectedLayer, px, py))
-            return selectedLayer
-        return topHitLayerAt(px, py)
+        var layer = topHitLayerAt(px, py)
+        // A locked top layer still owns the hit. It may be selected, but a
+        // drag must not tunnel through it to a visually lower layer.
+        return layer && !layer.locked ? layer : null
     }
     function hitKeyAt(px, py) {
         var l = topHitLayerAt(px, py)
@@ -240,6 +261,11 @@ Item {
             ? coverLayout.layers[selectedIndex] : null
 
     function clearGuides() { guideX = -1; guideY = -1 }
+
+    function commitGeometry() {
+        if (canvas.selectionBinder && canvas.selectionBinder.commitActiveLayerGeometry)
+            canvas.selectionBinder.commitActiveLayerGeometry()
+    }
 
     // Clamp a proposed CENTRE so at least 25% of a `size`-wide layer stays inside
     // [0, span] — a layer can never be dragged fully off the clipped canvas and
@@ -274,8 +300,7 @@ Item {
         enabled: canvas.editable
         gesturePolicy: TapHandler.WithinBounds
         onTapped: {
-            if (canvas.chartSceneBinder)
-                canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
+            canvas.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
         }
     }
 
@@ -298,30 +323,32 @@ Item {
         onActiveChanged: {
             if (active) {
                 dragLayer = canvas.dragLayerAt(
-                        centroid.scenePressPosition.x,
-                        centroid.scenePressPosition.y)
+                        centroid.position.x,
+                        centroid.position.y)
                 if (!dragLayer) {
                     dragLayer = null
                     return
                 }
-                if (canvas.chartSceneBinder)
-                    canvas.chartSceneBinder.selectLayerKey(dragLayer.key)
+                canvas.selectLayerKey(dragLayer.key)
                 startNx = dragLayer.nx
                 startNy = dragLayer.ny
                 // Reference the delta from the centroid AT ACTIVATION, not the
                 // press: a DragHandler only activates AFTER the cursor passes the
                 // drag threshold, so press-referenced movement would jump.
-                grabSceneX = centroid.scenePosition.x
-                grabSceneY = centroid.scenePosition.y
+                grabSceneX = centroid.position.x
+                grabSceneY = centroid.position.y
             } else {
+                var hadDragLayer = dragLayer !== null
                 dragLayer = null
                 canvas.clearGuides()
+                if (hadDragLayer)
+                    canvas.commitGeometry()
             }
         }
         onCentroidChanged: {
             if (!active || !dragLayer) return
-            var dx = centroid.scenePosition.x - grabSceneX
-            var dy = centroid.scenePosition.y - grabSceneY
+            var dx = centroid.position.x - grabSceneX
+            var dy = centroid.position.y - grabSceneY
             var w = canvas.layerContentW(dragLayer)
             var h = canvas.layerContentH(dragLayer)
             var cx = startNx * canvas.width + dx
@@ -359,6 +386,7 @@ Item {
         visible: !canvas.transparentBg && !canvas.blurEnabled
                  && source.toString().length > 0 && status === Image.Ready
         asynchronous: false
+        cache: false
         smooth: true
         mipmap: true
     }
@@ -467,6 +495,7 @@ Item {
                     source: layerItem.isChartFrame ? canvas.backdropSourceUrl : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: false
+                    cache: false
                     smooth: true
                     mipmap: true
                 }
@@ -541,16 +570,27 @@ Item {
                             && layerItem.isActiveChartFrame
                             && layerItem.ld && layerItem.ld.visible
                     sourceComponent: liveChartComponent
-                    // Only ever BIND (the active frame's loader is the one that has an
-                    // item). Never unbind on item==null: when a second frame is added
-                    // the Repeater rebuilds every delegate, and an old loader's unload
-                    // would otherwise clear the binding the NEW active frame just made
-                    // (order isn't guaranteed) → the active frame renders blank and you
-                    // only see the first frame's still. The bound root is a QPointer, so
-                    // it self-nulls when the loader genuinely unloads it.
-                    onItemChanged: {
-                        if (canvas.chartSceneBinder && item)
-                            canvas.chartSceneBinder.bindLiveChartScene(item)
+                    property var boundItem: null
+                    property var boundBinder: null
+                    function syncLiveChartBinding() {
+                        var nextBinder = canvas.chartSceneBinder
+                        if (boundBinder && boundItem
+                                && (boundBinder !== nextBinder || boundItem !== item)
+                                && boundBinder.unbindLiveChartScene)
+                            boundBinder.unbindLiveChartScene(boundItem)
+                        if (!item)
+                            return
+                        boundBinder = nextBinder
+                        boundItem = item
+                        if (boundBinder && boundItem && boundBinder.bindLiveChartScene)
+                            boundBinder.bindLiveChartScene(boundItem)
+                    }
+                    onItemChanged: syncLiveChartBinding()
+                    Connections {
+                        target: canvas
+                        function onChartSceneBinderChanged() {
+                            liveChartLoader.syncLiveChartBinding()
+                        }
                     }
                 }
                 // Static grab still: a square playfield grab served by the
@@ -561,7 +601,8 @@ Item {
                 Image {
                     anchors.fill: parent
                     opacity: layerItem.ld && layerItem.ld.opacity !== undefined ? layerItem.ld.opacity : 1.0
-                    visible: layerItem.isChartFrame && !liveChartLoader.active
+                    visible: layerItem.isChartFrame
+                             && !(layerItem.isActiveChartFrame && canvas.liveChartSceneBound)
                              && layerItem.ld && layerItem.ld.imageRevision >= 0
                     source: (layerItem.isChartFrame && layerItem.ld && layerItem.ld.imageRevision >= 0)
                             ? ("image://coverchart/" + layerItem.ld.key + "?r=" + layerItem.ld.imageRevision)
@@ -634,9 +675,9 @@ Item {
             TapHandler {
                 enabled: canvas.editable
                 onTapped: {
-                    if (canvas.chartSceneBinder) {
+                    if (canvas.selectionBinder || canvas.chartSceneBinder) {
                         var p = layerItem.mapToItem(canvas, point.position.x, point.position.y)
-                        canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(p.x, p.y))
+                        canvas.selectLayerKey(canvas.hitKeyAt(p.x, p.y))
                     }
                 }
             }
@@ -648,6 +689,8 @@ Item {
         id: cardComponent
         MaimaiBannerCard {
             anchors.fill: parent
+            cacheStaticImages: true
+            cacheDynamicImages: false
             externalTemplate: canvas.cardTemplate
             trackOverrides: canvas.trackOverrides
             jacketImage: canvas.jacketImage
@@ -658,12 +701,17 @@ Item {
 
     // Live chart-frame scene (edit mode, A2). A bare PreviewQuickSceneRoot whose
     // layer flags / shared frame state are wired in C++ by
-    // CoverComposerView::bindLiveChartScene (overlay layers only over transparent).
+    // A live scene binding (overlay layers only over transparent).
     // anchors.fill tracks the layer's drag/scale.
     Component {
         id: liveChartComponent
         PreviewQuickSceneRoot {
             anchors.fill: parent
+            // The scene is a paint-only child of the editable layer. Leaving the
+            // preview root enabled would let its QQuickItem mouse grab swallow
+            // the parent canvas' tap/drag handlers before they can select/move
+            // this layer.
+            enabled: false
             // The export grab clips overlay geometry to its square framebuffer
             // (SceneFrameRenderer renders into a side×side window). Clip the live
             // scene to the same square box so out-of-bounds effects (fireworks /
@@ -728,17 +776,19 @@ Item {
             property real startHeightPx: 0
             onActiveChanged: {
                 if (active && scaleHandle.l) {
-                    grabSceneY = centroid.scenePosition.y
+                    grabSceneY = centroid.position.y
                     startHeightPx = scaleHandle.l.sizeFraction * canvas.height
                 } else {
                     canvas.clearGuides()
+                    if (!active)
+                        canvas.commitGeometry()
                 }
             }
             onCentroidChanged: {
                 if (!active || !scaleHandle.l) return
                 // The layer scales about its centre, so the bottom handle tracks the
                 // cursor 1:1 while the height changes by 2× the cursor's vertical delta.
-                var dy = centroid.scenePosition.y - grabSceneY
+                var dy = centroid.position.y - grabSceneY
                 var newH = Math.max(canvas.height * 0.05, startHeightPx + 2 * dy)
                 scaleHandle.l.sizeFraction = newH / canvas.height
             }

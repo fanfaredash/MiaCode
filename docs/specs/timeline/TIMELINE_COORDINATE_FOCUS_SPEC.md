@@ -1,3 +1,11 @@
+---
+lifecycle: stable-current
+canonical_id: timeline.coordinate-focus
+owner: src/timeline
+last_verified: 2026-09-06
+code_anchors: ["src/timeline", "src/app/runtime/playback", "src/tools/timeline/TimelineModelSpec.cpp"]
+---
+
 # Timeline 坐标与聚焦规格
 
 本文档汇总当前确定的 Timeline 运行时坐标、状态切换、跨区联动规则，以及相关 UI 设计约束。

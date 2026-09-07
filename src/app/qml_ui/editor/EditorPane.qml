@@ -3,19 +3,32 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property var viewState
     required property var documentSession
     required property var commands
+    required property var editorController
+    required property var editorSync
+    required property var preferences
 
-    readonly property bool metadataSourceActive: viewState.metadataEditorActive
-        && viewState.metadataEditorMode === 1
     readonly property bool sourceVisible: viewState.difficultyEditorActive
-        || metadataSourceActive
     readonly property bool canUndo: sourceVisible && sourceEditor.canUndo
     readonly property bool canRedo: sourceVisible && sourceEditor.canRedo
+    readonly property bool canCut: sourceVisible && sourceEditor.canCut
+    readonly property bool canCopy: sourceVisible && sourceEditor.canCopy
+    readonly property bool canPaste: sourceVisible && sourceEditor.canPaste
+    readonly property string selectionBeatStatusText:
+        sourceVisible ? sourceEditor.selectionBeatStatusText : ""
+    readonly property string selectionBeatTooltipText:
+        sourceVisible ? sourceEditor.selectionBeatTooltipText : ""
+    // Metadata actions use one shared column width so the button geometry does
+    // not change with translated label length or with the input-field width.
+    readonly property int metadataActionButtonWidth: 168
+    property double pendingActivationSequence: 0
+    property var pendingActivationCompletion: null
+    property var pendingActivationCancellation: null
 
     function undo() {
         if (sourceVisible)
@@ -27,17 +40,144 @@ Rectangle {
             sourceEditor.redo()
     }
 
+    function cut() {
+        if (sourceVisible)
+            sourceEditor.cut()
+    }
+
+    function copy() {
+        if (sourceVisible)
+            sourceEditor.copy()
+    }
+
+    function paste() {
+        if (sourceVisible)
+            sourceEditor.paste()
+    }
+
+    // Keyboard tab-close must use the same three-way guard as the tab's x
+    // button. Calling ViewState.closeEditor directly would discard a dirty
+    // metadata or difficulty view without asking.
+    function requestCloseActiveEditor() {
+        if (viewState.activeEditorKey.length > 0)
+            tabs.requestCloseTab(viewState.activeEditorKey)
+    }
+
     function selectAll() {
         if (sourceVisible)
             sourceEditor.selectAll()
     }
 
-    function revealSyntaxIssue(line, column, endColumn) {
-        viewState.openDifficultyEditor(root.documentSession.currentDifficultyId)
-        sourceEditor.revealSyntaxIssue(line, column, endColumn)
+    function openFindReplace() {
+        if (sourceVisible)
+            sourceEditor.openFindReplace()
     }
 
-    color: Theme.colors.background.editor
+    function selectCurrentLine() {
+        if (sourceVisible)
+            sourceEditor.selectCurrentLine()
+    }
+
+    function applyChartTransform(opId) {
+        return sourceVisible && sourceEditor.applyChartTransform(opId)
+    }
+
+    function canNormalizeChart() {
+        return sourceVisible
+    }
+
+    function normalizationSelectionDescription() {
+        return canNormalizeChart() ? sourceEditor.selectionDescription() : ""
+    }
+
+    function applyNormalization(options) {
+        return canNormalizeChart() && sourceEditor.applyNormalization(options)
+    }
+
+    function revealSyntaxIssue(difficultyId, revision, line, column, endColumn) {
+        if (revision !== root.documentSession.validationRevision
+                || revision !== root.documentSession.documentRevision
+                || root.documentSession.validationPending)
+            return
+        requestIssueNavigation(difficultyId, revision, line, column, endColumn, null, null)
+    }
+
+    function revealAnalysisRow(difficultyId, revision, line, column, endColumn, second, analysisSession) {
+        const cancel = () => analysisSession.cancelRowActivation(
+            difficultyId, revision, line, column, endColumn, second)
+        if (revision !== root.documentSession.validationRevision
+                || revision !== root.documentSession.documentRevision
+                || root.documentSession.validationPending) {
+            cancel()
+            return
+        }
+        requestIssueNavigation(
+            difficultyId, revision, line, column, endColumn,
+            () => analysisSession.completeRowActivation(
+                difficultyId, revision, line, column, endColumn, second),
+            cancel)
+    }
+
+    function requestIssueNavigation(difficultyId, revision, line, column, endColumn,
+                                    completion, cancellation) {
+        if (difficultyId !== root.documentSession.currentDifficultyId)
+            root.documentSession.selectDifficulty(difficultyId)
+        root.viewState.openDifficultyEditor(difficultyId)
+        Qt.callLater(() => {
+            if (difficultyId !== root.documentSession.currentDifficultyId
+                    || revision !== root.documentSession.documentRevision) {
+                if (cancellation)
+                    cancellation()
+                return
+            }
+            if (line <= 0) {
+                if (completion)
+                    completion()
+                return
+            }
+            const start = root.documentSession.chartPosition(line, column)
+            const end = Math.max(start + 1, root.documentSession.chartPosition(
+                line, Math.max(column, endColumn + 1)))
+            const sequence = root.editorSync.requestNavigation(
+                difficultyId, revision, start, end, true, true)
+            if (sequence <= 0) {
+                if (cancellation)
+                    cancellation()
+                return
+            }
+            root.pendingActivationSequence = sequence
+            root.pendingActivationCompletion = completion
+            root.pendingActivationCancellation = cancellation
+        })
+    }
+
+    Connections {
+        target: root.editorSync
+        function onNavigationFinished(sequence, applied) {
+            if (sequence !== root.pendingActivationSequence)
+                return
+            const completion = root.pendingActivationCompletion
+            const cancellation = root.pendingActivationCancellation
+            root.pendingActivationSequence = 0
+            root.pendingActivationCompletion = null
+            root.pendingActivationCancellation = null
+            if (applied) {
+                if (completion)
+                    completion()
+            } else if (cancellation) {
+                cancellation()
+            }
+        }
+    }
+
+    // Header/form background stops where the independently shaded source begins.
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: tabs.height
+        height: (root.sourceVisible ? sourceEditor.y : root.height) - y
+        color: Theme.surfaceColor(Theme.colors.background.panel)
+    }
 
     EditorTabBar {
         id: tabs
@@ -46,271 +186,312 @@ Rectangle {
         anchors.top: parent.top
         viewState: root.viewState
         documentSession: root.documentSession
+        commands: root.commands
     }
 
-    Rectangle {
+    component DifficultyHeaderField: Item {
+        id: fieldGroup
+
+        required property string labelText
+        required property string value
+        required property real editorWidth
+        property bool stacked: false
+        property bool commitOnEditingFinished: false
+        signal committed(string value)
+
+        implicitWidth: fieldLabel.implicitWidth + 8 + fieldEditor.editorWidth
+        implicitHeight: stacked
+            ? fieldLabel.implicitHeight + 8 + fieldEditor.implicitHeight
+            : fieldEditor.implicitHeight
+
+        Label {
+            id: fieldLabel
+            x: 0
+            y: fieldGroup.stacked ? 0 : (fieldEditor.implicitHeight - height) / 2
+            text: fieldGroup.labelText
+            color: Theme.colors.text.primary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.uiFontSize
+        }
+
+        AppTextField {
+            id: fieldEditor
+            readonly property real editorWidth: fieldGroup.editorWidth
+
+            x: fieldGroup.stacked ? 0 : fieldLabel.width + 8
+            y: fieldGroup.stacked ? fieldLabel.height + 8 : 0
+            width: fieldGroup.stacked ? fieldGroup.width : editorWidth
+            text: fieldGroup.value
+            onTextEdited: if (!fieldGroup.commitOnEditingFinished) fieldGroup.committed(text)
+            onEditingFinished: if (fieldGroup.commitOnEditingFinished) fieldGroup.committed(text)
+        }
+    }
+
+    Item {
         id: difficultyHeader
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
-        height: 42
+        height: headerContent.height + 12
         visible: root.viewState.difficultyEditorActive
-        color: Theme.colors.background.surface
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 8
-            spacing: 8
+        Item {
+            id: headerContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Theme.panelPadding
+            anchors.rightMargin: Theme.panelPadding
+            readonly property real gap: 8
+            readonly property real wideWidth:
+                levelField.implicitWidth + designerField.implicitWidth
+                + offsetField.implicitWidth + removeDifficultyButton.implicitWidth
+                + 3 * gap
+            readonly property real firstRowWidth:
+                levelField.implicitWidth + offsetField.implicitWidth + gap
+            readonly property real secondRowWidth:
+                designerField.implicitWidth + removeDifficultyButton.implicitWidth + gap
+            readonly property real twoRowWidth:
+                firstRowWidth >= secondRowWidth ? firstRowWidth : secondRowWidth
+            readonly property bool wide: width >= wideWidth
+            readonly property bool twoRows: !wide && width >= twoRowWidth
 
-            Label {
-                text: root.documentSession.currentDifficultyName
-                color: Theme.colors.text.primary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.uiFontSize
+            height: removeDifficultyButton.y + removeDifficultyButton.height
+
+            DifficultyHeaderField {
+                id: levelField
+                x: 0
+                y: 0
+                stacked: !headerContent.wide && !headerContent.twoRows
+                    && headerContent.width < implicitWidth
+                width: stacked ? headerContent.width : implicitWidth
+                labelText: UiText.text("等级")
+                value: root.documentSession.currentDifficultyLevel
+                editorWidth: 48
+                onCommitted: value => root.documentSession.currentDifficultyLevel = value
             }
 
-            AppTextField {
-                Layout.preferredWidth: 90
-                placeholderText: qsTr("等级")
-                text: root.documentSession.currentDifficultyLevel
-                onEditingFinished: root.documentSession.currentDifficultyLevel = text
+            DifficultyHeaderField {
+                id: designerField
+                x: headerContent.wide
+                    ? offsetField.x + offsetField.width + headerContent.gap : 0
+                y: headerContent.wide ? 0
+                    : headerContent.twoRows
+                        ? levelField.height + headerContent.gap
+                        : offsetField.y + offsetField.height + headerContent.gap
+                stacked: !headerContent.wide && !headerContent.twoRows
+                    && headerContent.width < implicitWidth
+                width: stacked ? headerContent.width : implicitWidth
+                labelText: UiText.text("谱师")
+                value: root.documentSession.currentDifficultyDesigner
+                editorWidth: 100
+                onCommitted: value => root.documentSession.currentDifficultyDesigner = value
             }
 
-            AppTextField {
-                id: difficultyDesignerField
-                property bool userEdited: false
-
-                Layout.fillWidth: true
-                placeholderText: qsTr("谱师")
-                text: root.documentSession.currentDifficultyDesigner
-                // 文档打开、难度切换和焦点转移都可能结束编辑状态。只有收到
-                // TextInput 的真实编辑信号后，才把显示值提交给文档模型。
-                onTextEdited: userEdited = true
-                onEditingFinished: {
-                    if (userEdited)
-                        root.documentSession.currentDifficultyDesigner = text
-                    userEdited = false
-                }
+            DifficultyHeaderField {
+                id: offsetField
+                x: headerContent.wide || headerContent.twoRows
+                    ? levelField.x + levelField.width + headerContent.gap : 0
+                y: headerContent.wide || headerContent.twoRows
+                    ? 0 : levelField.y + levelField.height + headerContent.gap
+                stacked: !headerContent.wide && !headerContent.twoRows
+                    && headerContent.width < implicitWidth
+                width: stacked ? headerContent.width : implicitWidth
+                labelText: UiText.text("延迟")
+                value: root.documentSession.currentDifficultyOffset
+                editorWidth: 64
+                commitOnEditingFinished: true
+                onCommitted: value => root.documentSession.currentDifficultyOffset = value
             }
 
             AppButton {
-                text: qsTr("删除难度")
+                id: removeDifficultyButton
+                x: parent.width - width
+                y: headerContent.wide ? 0
+                    : headerContent.twoRows
+                        ? designerField.y
+                        : designerField.y + designerField.height + headerContent.gap
+                text: UiText.text("删除难度")
+                emphasized: true
                 enabled: root.documentSession.currentDifficultyId > 0
                 onClicked: removeDifficultyDialog.open()
             }
         }
     }
 
-    Rectangle {
-        id: metadataModeBar
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: tabs.bottom
-        height: 42
-        visible: root.viewState.metadataEditorActive
-        color: Theme.colors.background.surface
-
-        AppButton {
-            anchors.left: parent.left
-            anchors.leftMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.viewState.metadataEditorMode === 0
-                ? qsTr("字段源码")
-                : qsTr("表单")
-            onClicked: root.viewState.metadataEditorMode
-                = root.viewState.metadataEditorMode === 0 ? 1 : 0
-        }
-
-        AppSwitch {
-            id: unifiedDesignerSwitch
-            anchors.right: parent.right
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("统一谱师")
-
-            onToggled: {
-                if (checked === root.documentSession.unifiedDesignerEnabled)
-                    return
-                if (!checked) {
-                    root.commands.disableUnifiedDesigner()
-                    return
-                }
-                const candidates = root.documentSession.designerCandidates
-                if (candidates.length > 1) {
-                    canonicalDesignerDialog.candidates = candidates
-                    designerChoice.currentIndex = 0
-                    checked = root.documentSession.unifiedDesignerEnabled
-                    canonicalDesignerDialog.open()
-                    return
-                }
-                root.commands.enableUnifiedDesigner(
-                    candidates.length === 1 ? candidates[0] : "")
-            }
-
-            Binding {
-                target: unifiedDesignerSwitch
-                property: "checked"
-                value: root.documentSession.unifiedDesignerEnabled
-            }
-        }
-    }
-
-    Label {
-        id: metadataSourceError
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: metadataModeBar.bottom
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        height: visible ? implicitHeight + 8 : 0
-        visible: root.metadataSourceActive && !root.documentSession.metadataSourceValid
-        text: root.documentSession.metadataSourceError
-        color: Theme.colors.syntax.error
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.secondaryFontSize
-        verticalAlignment: Text.AlignVCenter
-        wrapMode: Text.Wrap
-    }
-
-    // 难度正文与头字段源码共用这一套编辑控件。标签或模式切换只改变
-    // SourceEditor 的业务数据源，光标、滚动和编辑命令始终由这一实例持有。
     SourceEditor {
         id: sourceEditor
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: root.metadataSourceActive
-            ? metadataSourceError.bottom
-            : difficultyHeader.bottom
+        anchors.top: difficultyHeader.bottom
         anchors.bottom: parent.bottom
         visible: root.sourceVisible
-        metadataMode: root.metadataSourceActive
+        navigationVisible: root.visible && root.viewState.difficultyEditorActive
         viewState: root.viewState
         documentSession: root.documentSession
+        editorController: root.editorController
+        syncController: root.editorSync
+        preferences: root.preferences
     }
 
     Flickable {
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: metadataModeBar.bottom
+        anchors.top: tabs.bottom
         anchors.bottom: parent.bottom
         visible: root.viewState.metadataEditorActive
-            && root.viewState.metadataEditorMode === 0
         contentHeight: metadataColumn.implicitHeight + 32
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: AppScrollBar {}
 
         Column {
             id: metadataColumn
             x: 20
             y: 16
-            width: Math.max(240, parent.width - 40)
+            width: parent.width - 40
             spacing: 12
 
             Label {
-                text: qsTr("元数据")
+                text: UiText.text("dialog.unsaved_field_changes.field.metadata")
                 color: Theme.colors.text.primary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.uiFontSize + 2
             }
 
+            Label {
+                visible: root.documentSession.metadataNeedsAttention
+                width: metadataColumn.width
+                text: root.documentSession.metadataAttentionText
+                color: Theme.colors.syntax.warning
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+                wrapMode: Text.WordWrap
+            }
+
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("标题")
+                label: UiText.text("标题")
                 value: root.documentSession.metadataTitle
+                actionText: UiText.text("track_metadata.read_from_audio")
                 onCommitted: value => root.documentSession.metadataTitle = value
+                onActionRequested: root.documentSession.readTitleFromAudioFile()
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("艺术家")
+                label: UiText.text("曲师")
                 value: root.documentSession.metadataArtist
+                actionText: UiText.text("track_metadata.read_from_audio")
                 onCommitted: value => root.documentSession.metadataArtist = value
+                onActionRequested: root.documentSession.readArtistFromAudioFile()
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("谱师")
+                label: UiText.text("谱师")
                 value: root.documentSession.metadataDesigner
+                actionText: UiText.text("谱师名义管理")
                 onCommitted: value => root.documentSession.metadataDesigner = value
+                onActionRequested: designerSlotsDialog.open()
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("初始偏移")
+                label: UiText.text("metadata.field.first")
                 value: root.documentSession.metadataFirst
                 onCommitted: value => root.documentSession.metadataFirst = value
             }
             MetadataField {
                 width: metadataColumn.width
-                label: qsTr("视频路径")
-                value: root.documentSession.metadataVideoPath
-                onCommitted: value => root.documentSession.metadataVideoPath = value
+                label: UiText.text("media_tools.beats")
+                value: root.documentSession.metadataClockCount
+                onCommitted: value => root.documentSession.metadataClockCount = value
+            }
+            MetadataMediaField {
+                width: metadataColumn.width
+                label: UiText.text("metadata.field.cover")
+                firstActionText: UiText.text("track_metadata.read_from_audio")
+                secondActionText: UiText.text("track_metadata.import_file")
+                onFirstActionRequested: root.documentSession.extractCoverFromAudioFile()
+                onSecondActionRequested: root.documentSession.importChartBackgroundImage()
+            }
+            MetadataMediaField {
+                width: metadataColumn.width
+                label: UiText.text("metadata.field.background_video")
+                firstActionText: UiText.text("track_metadata.import_pv")
+                secondActionText: UiText.text("track_metadata.remove_pv")
+                secondActionEnabled: root.documentSession.metadataHasVideo
+                onFirstActionRequested: root.documentSession.importChartBackgroundVideo()
+                onSecondActionRequested: root.documentSession.removeChartPv()
             }
 
             Label {
-                text: qsTr("其他字段")
+                text: UiText.text("其他字段")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize
             }
             AppTextArea {
+                id: extraFieldsEdit
+                property bool userEdited: false
+
                 width: metadataColumn.width
                 height: 150
                 text: root.documentSession.metadataExtraText
-                placeholderText: qsTr("每行一个 &字段=值")
+                placeholderText: UiText.text("每行一个 &字段=值")
+                onTextChanged: {
+                    if (activeFocus && text !== root.documentSession.metadataExtraText)
+                        extraFieldsEdit.userEdited = true
+                }
                 onActiveFocusChanged: {
-                    if (!activeFocus)
+                    if (!activeFocus && extraFieldsEdit.userEdited) {
                         root.documentSession.metadataExtraText = text
+                        extraFieldsEdit.userEdited = false
+                    }
                 }
             }
+        }
+    }
+
+    Connections {
+        target: root.documentSession
+        function onEditingFinishedRequested() {
+            root.forceActiveFocus()
+        }
+        function onMetadataChanged() {
+            if (extraFieldsEdit.activeFocus)
+                return
+            extraFieldsEdit.userEdited = false
+            extraFieldsEdit.text = root.documentSession.metadataExtraText
         }
     }
 
     Label {
         anchors.centerIn: parent
         visible: !root.viewState.hasActiveEditor
-        text: qsTr("从左侧打开元数据或难度")
+        text: UiText.text("从左侧打开元数据或难度")
         color: Theme.colors.text.secondary
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
     }
 
-    Dialog {
-        id: canonicalDesignerDialog
-        property var candidates: []
-
-        anchors.centerIn: parent
-        modal: true
-        title: qsTr("选择统一谱师")
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: root.commands.enableUnifiedDesigner(designerChoice.currentText)
-        onRejected: unifiedDesignerSwitch.checked = root.documentSession.unifiedDesignerEnabled
-
-        Column {
-            spacing: 8
-
-            Label {
-                text: qsTr("当前存在多个谱师名义，请选择要统一使用的值。")
-                color: Theme.colors.text.primary
-            }
-            AppComboBox {
-                id: designerChoice
-                width: 280
-                model: canonicalDesignerDialog.candidates
-            }
-        }
+    DesignerSlotsDialog {
+        id: designerSlotsDialog
+        documentSession: root.documentSession
+        commands: root.commands
     }
 
-    Dialog {
+    ChoiceDialog {
         id: removeDifficultyDialog
-        anchors.centerIn: parent
-        modal: true
-        title: qsTr("删除当前难度")
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
 
-        Label {
-            text: qsTr("当前难度及其正文将从文档中删除。")
-            color: Theme.colors.text.primary
+        title: UiText.text("删除当前难度")
+        message: UiText.text("当前难度及其正文将从文档中删除。")
+        dismissChoiceId: "cancel"
+        choices: [
+            { id: "cancel", label: UiText.text("取消"), role: "reject" },
+            { id: "remove", label: UiText.text("确定"), role: "accept" }
+        ]
+        onChosen: function(choiceId) {
+            if (choiceId === "remove")
+                root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
         }
     }
 
@@ -318,7 +499,10 @@ Rectangle {
         id: field
         required property string label
         required property string value
+        property string actionText: ""
+        readonly property int actionWidth: root.metadataActionButtonWidth
         signal committed(string value)
+        signal actionRequested()
         spacing: 4
 
         Label {
@@ -327,17 +511,66 @@ Rectangle {
             font.family: Theme.uiFont
             font.pixelSize: Theme.secondaryFontSize
         }
-        AppTextField {
-            property bool userEdited: false
+        Item {
             width: field.width
-            text: field.value
-            onTextEdited: userEdited = true
-            onEditingFinished: {
-                if (userEdited)
-                    field.committed(text)
-                userEdited = false
+            implicitHeight: Math.max(Theme.controlMinHeight, actionButton.implicitHeight)
+            height: implicitHeight
+
+            AppTextField {
+                id: metadataInput
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: actionButton.visible ? actionButton.left : parent.right
+                anchors.rightMargin: actionButton.visible ? 8 : 0
+                text: field.value
+                onEditingFinished: field.committed(text)
+            }
+            AppButton {
+                id: actionButton
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: field.actionWidth
+                visible: field.actionText.length > 0
+                text: field.actionText
+                onClicked: field.actionRequested()
+            }
+        }
+    }
+
+    component MetadataMediaField: Column {
+        id: mediaField
+        required property string label
+        required property string firstActionText
+        required property string secondActionText
+        readonly property int actionWidth: root.metadataActionButtonWidth
+        property bool secondActionEnabled: true
+        signal firstActionRequested()
+        signal secondActionRequested()
+        spacing: 4
+
+        Label {
+            text: mediaField.label
+            color: Theme.colors.text.secondary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.secondaryFontSize
+        }
+        Row {
+            width: mediaField.width
+            spacing: 8
+
+            AppButton {
+                width: mediaField.actionWidth
+                text: mediaField.firstActionText
+                onClicked: mediaField.firstActionRequested()
+            }
+            AppButton {
+                width: mediaField.actionWidth
+                enabled: mediaField.secondActionEnabled
+                text: mediaField.secondActionText
+                onClicked: mediaField.secondActionRequested()
             }
         }
     }
 }
-

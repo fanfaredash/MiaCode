@@ -2,11 +2,14 @@
 
 #include "LatencyTestChartBuilder.h"
 
-#include "mainwindow/MainWindow.h"
-#include "mainwindow/MainWindowShared.h"
+#include "app/v2/PlaybackStateAuthority.h"
+#include "common/ChartClockCount.h"
+#include "runtime/Session.h"
+#include "runtime/Shared.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "timeline/TimelineMarkerOffset.h"
 #include "timeline/TimelineQuickModel.h"
 #include "timeline/TimelineSlowRefresh.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
@@ -23,7 +26,7 @@ constexpr double kFallbackAudioDurationSeconds = 180.0;
 
 }  // namespace
 
-LatencySandboxController::LatencySandboxController(MainWindow* owner, QObject* parent)
+LatencySandboxController::LatencySandboxController(Session* owner, QObject* parent)
     : QObject(parent)
     , owner_(owner)
     , tickTimer_(new QTimer(this))
@@ -57,7 +60,7 @@ double LatencySandboxController::playheadSeconds() const
     if (owner_.isNull()) {
         return 0.0;
     }
-    return qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
+    return qMax(0.0, owner_->state_.pauseSecond_);
 }
 
 void LatencySandboxController::setBpm(double bpm)
@@ -118,7 +121,7 @@ void LatencySandboxController::setSfxVolumePercent(int percent)
 // NOTE (FAILED ATTEMPT, reverted): playSfxAuditionSample() used to fire a single
 // "tap" SFX while the SFX-volume slider was dragged, so the user could hear the
 // level. It could not be kept silent during playback - the tap still sounded
-// while the chart was playing despite guarding on qtPreviewPlaying_. Primary
+// while the chart was playing despite guarding on playing_. Primary
 // suspicion: a stray play/audition event is scheduled elsewhere. The method (and
 // its page-side caller) were removed; the slider now only sets the volume.
 
@@ -133,7 +136,7 @@ void LatencySandboxController::installSandboxScene()
 
     // Cache the pre-sandbox timeline state so we can roll back cleanly when the
     // user leaves the page. Audio levels are NOT snapshotted: they are re-derived
-    // from the current mode by MainWindow::applyPreviewAudioSettingsToRuntime, so
+    // from the current mode by Session::applyPreviewAudioSettingsToRuntime, so
     // entering the page dispatches the audition mix and leaving it re-dispatches
     // the user's normal mix (see the dispatch calls in install/teardown below).
     cachedNoteMarkers_ = owner_->state_.latestTimelineNoteMarkers_;
@@ -163,8 +166,8 @@ void LatencySandboxController::installSandboxScene()
     // chart's duration. Mirrors difficulty-switch behaviour.
     const double sandboxDuration = resolveAudioDurationSeconds();
     const double restoreSecond = sandboxDuration > 0.0
-        ? qBound(0.0, owner_->state_.qtPreviewPauseSecond_, sandboxDuration)
-        : qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
+        ? qBound(0.0, owner_->state_.pauseSecond_, sandboxDuration)
+        : qMax(0.0, owner_->state_.pauseSecond_);
 
     // Install the test chart as the preview source + dispatch the per-page
     // audition mix. onPage_ is already true (setOnPage flips it before calling
@@ -188,6 +191,7 @@ void LatencySandboxController::teardownSandboxScene()
     if (!owner_.isNull()) {
         owner_->stopQtPreviewPlayback(true);  // stop the real transport if it's running
         owner_->state_.latencySandboxAuditionActive_ = false;
+        owner_->clearAuditionSceneReady();
         // Don't let a later difficulty reuse the sandbox's "ready" snapshot.
         owner_->state_.latestTimelinePreviewSnapshotReady_ = false;
     }
@@ -232,8 +236,8 @@ void LatencySandboxController::onTick()
     if (owner_.isNull()) {
         return;
     }
-    const bool playing = owner_->state_.qtPreviewPlaying_;
-    const double second = qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
+    const bool playing = owner_->state_.playing_;
+    const double second = qMax(0.0, owner_->state_.pauseSecond_);
     if (playing != auditionRunning_) {
         auditionRunning_ = playing;
         emit auditionStateChanged(playing);
@@ -255,9 +259,9 @@ void LatencySandboxController::regenerateAndPushIfActive()
     // current play position (see setupSandboxPreviewState), so the music keeps
     // playing while only the SFX and the on-screen notes move to the new params.
     setupSandboxPreviewState();
-    const double second = owner_->state_.qtPreviewPlaying_
+    const double second = owner_->state_.playing_
         ? owner_->currentPreviewAuthoritativeAudioClockSecond()
-        : qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
+        : qMax(0.0, owner_->state_.pauseSecond_);
     applyPlayheadToScene(second);
 }
 
@@ -267,22 +271,19 @@ void LatencySandboxController::applyPlayheadToScene(double seconds)
         return;
     }
     const double clamped = qMax(0.0, seconds);
-    // Goes through the single writer like every other write to this member: the
-    // sandbox's hot-apply path re-anchors the playhead when BPM / offset /
-    // subdivision change mid-session, so it can move the pause second BACKWARD
-    // while paused — exactly the move the log line exists to attribute.
-    miacode::mainwindow::shared::writePreviewPauseSecond(
-        owner_->state_.qtPreviewPauseSecond_,
-        clamped,
-        owner_->state_.qtPreviewPlaying_,
-        "latency_sandbox_apply_playhead");
+    // Non-command write: the sandbox's hot-apply path re-anchors the playhead
+    // when BPM / offset / subdivision change mid-session, which can move the
+    // pause second BACKWARD while paused — see PlaybackStateAuthority.h.
+    if (auto* authority = owner_->applicationServices_.playbackStateAuthority(); authority != nullptr) {
+        authority->repositionSilently(clamped, "latency_sandbox_apply_playhead");
+    }
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
         owner_->state_.timelineQuickStateBridge_->setPlayheadSeconds(clamped, false);
     }
-    if (owner_->state_.previewCanvas_ != nullptr) {
-        owner_->state_.previewCanvas_->setPlayheadSeconds(clamped, true);
+    if (owner_->state_.scene_ != nullptr) {
+        owner_->state_.scene_->setPlayheadSeconds(clamped, true);
     }
-    owner_->updatePreviewSliderPosition(clamped);
+    owner_->publishPreviewPlayhead();
 }
 
 void LatencySandboxController::setupSandboxPreviewState()
@@ -303,8 +304,15 @@ void LatencySandboxController::setupSandboxPreviewState()
     owner_->state_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
     owner_->state_.latestTimelinePreviewRevision_ = owner_->state_.timelineRevision_;
     owner_->state_.latestTimelinePreviewSnapshotReady_ = true;
-    if (owner_->state_.previewCanvas_ != nullptr) {
-        owner_->state_.previewCanvas_->setNoteMarkers(previewState.shiftedNoteMarkers);
+    // The sandbox's test chart is synthesized here and cannot change underneath
+    // the scene, so it is always current; the rebuild is only a safety net.
+    owner_->setAuditionSceneReady({}, [this]() {
+        if (!owner_.isNull()) {
+            installSandboxScene();
+        }
+    });
+    if (owner_->state_.scene_ != nullptr) {
+        owner_->state_.scene_->setNoteMarkers(previewState.shiftedNoteMarkers);
     }
 
     // Bottom timeline — reuse the real timeline model so the test chart's notes
@@ -314,7 +322,6 @@ void LatencySandboxController::setupSandboxPreviewState()
         owner_->state_.timelineQuickStateBridge_->setTimelineData(
             owner_->state_.timelineQuickModel_.snapshot());
     }
-    owner_->updatePreviewSliderRange();
 
     // SFX timeline for the test taps.
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
@@ -329,7 +336,7 @@ void LatencySandboxController::setupSandboxPreviewState()
         // Only the SFX event cursor is touched — the background music is never
         // seeked, so it keeps playing. drainEvents() runs on this same (UI)
         // thread via the preview tick, so the reposition is atomic w.r.t. it.
-        if (owner_->state_.qtPreviewPlaying_) {
+        if (owner_->state_.playing_) {
             owner_->state_.previewSfxRuntime_->resetCursor(
                 owner_->currentPreviewAuthoritativeAudioClockSecond(), false);
         }
@@ -343,13 +350,12 @@ void LatencySandboxController::restoreOriginalTimeline()
     }
     owner_->state_.latestTimelineNoteMarkers_ = cachedNoteMarkers_;
     owner_->state_.latestTimelineNoteMarkerSignature_ = cachedNoteMarkerSignature_;
-    if (owner_->state_.previewCanvas_ != nullptr) {
-        owner_->state_.previewCanvas_->setNoteMarkers(cachedNoteMarkers_);
+    if (owner_->state_.scene_ != nullptr) {
+        owner_->state_.scene_->setNoteMarkers(cachedNoteMarkers_);
     }
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
         owner_->state_.timelineQuickStateBridge_->setTimelineData(cachedSnapshot_);
     }
-    owner_->updatePreviewSliderRange();
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
         owner_->state_.previewSfxRuntime_->configureTimeline(
             cachedNoteMarkers_,
@@ -372,6 +378,89 @@ double LatencySandboxController::resolveAudioDurationSeconds() const
         return trackDuration;
     }
     return kFallbackAudioDurationSeconds;
+}
+
+double LatencySandboxController::documentWholeBpm() const
+{
+    if (owner_.isNull()) {
+        return 0.0;
+    }
+    bool ok = false;
+    const double whole = owner_->parsedWholeBpm(&ok);
+    if (ok && whole > 0.0) {
+        return whole;
+    }
+    for (const int id : owner_->applicationServices_.workspace().document().difficultyIds()) {
+        const SimaiDifficultyData* difficultyData =
+            owner_->applicationServices_.workspace().document().difficulty(id);
+        if (difficultyData == nullptr || difficultyData->chart.isEmpty()) {
+            continue;
+        }
+        const double firstBpm = miacode::chart_clock::firstBpmFromChart(difficultyData->chart);
+        if (firstBpm > 0.0) {
+            return firstBpm;
+        }
+    }
+    return 0.0;
+}
+
+double LatencySandboxController::documentOffsetSeconds() const
+{
+    if (owner_.isNull()) {
+        return 0.0;
+    }
+    return miacode::timeline::offset::parsedFirstSeconds(
+        owner_->applicationServices_.workspace().document().first);
+}
+
+int LatencySandboxController::documentClockCount() const
+{
+    if (owner_.isNull()) {
+        return 0;
+    }
+    return owner_->parsedClockCount();
+}
+
+QString LatencySandboxController::trackPath() const
+{
+    if (owner_.isNull()) {
+        return QString();
+    }
+    return owner_->latencyTrackPath();
+}
+
+void LatencySandboxController::applyDetectorBpm(double bpm)
+{
+    if (owner_.isNull()) {
+        return;
+    }
+    owner_->applyLatencyDetectorBpm(bpm);
+}
+
+void LatencySandboxController::applyDetectorOffset(double seconds)
+{
+    if (owner_.isNull()) {
+        return;
+    }
+    owner_->applyLatencyDetectorOffset(seconds);
+}
+
+void LatencySandboxController::applyDetectorClockCount(int clockCount)
+{
+    if (owner_.isNull()) {
+        return;
+    }
+    owner_->applyLatencyDetectorClockCount(clockCount);
+}
+
+LatencySandboxController* LatencySandboxController::sandbox() const
+{
+    return const_cast<LatencySandboxController*>(this);
+}
+
+void LatencySandboxController::exitSandboxIfActive()
+{
+    exitIfActive();
 }
 
 }  // namespace miacode::latency

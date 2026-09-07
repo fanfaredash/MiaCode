@@ -693,7 +693,9 @@ bool verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(QTextStream& er
                          && !hasRouteCall("pause")
                          && !hasRouteCall("resetCursor"),
                      "paused route invalidation tears down the old endpoint without writing a second pause clock", err);
-        ok &= expect(runtime.beginManualPlaybackAfterDeviceCutoff()
+        ok &= expect(runtime.isDeviceCutoffActive()
+                         && runtime.beginManualPlaybackAfterDeviceCutoff()
+                         && !runtime.isDeviceCutoffActive()
                          && !runtime.beginManualPlaybackAfterDeviceCutoff(),
                      "paused route invalidation forces exactly the next explicit Play onto cold Prepare", err);
         runtime.prepareForShutdown();
@@ -728,20 +730,19 @@ bool verifyFacadeAuditionRequiresCurrentAssetReadiness(QTextStream& err)
                      });
 
     bool ok = true;
-    const auto warmup = runtime.setWarmupResolvedPaths(
-        QStringLiteral("chart"), QStringLiteral("track"), QStringLiteral("sfx"));
-    ok &= expect(warmup.post.accepted && warmup.identity.sequence == warmup.post.sequence,
-                 "warmup submission carries the worker sequence needed by GUI consumers",
-                 err);
     ok &= expect(!runtime.audition(QStringLiteral("judge")),
                  "facade rejects audition until the latest asset generation is ready",
                  err);
 
-    const auto reload = runtime.reloadAssets(PreviewAudioSettings());
+    const auto reload = runtime.reloadAssetsForChartWithWarmupPaths(
+        QStringLiteral("chart"),
+        QStringLiteral("track"),
+        QStringLiteral("sfx"),
+        PreviewAudioSettings());
     ok &= expect(reload.post.accepted
                      && reload.identity.sequence == reload.post.sequence
-                     && reload.identity.assetGeneration > warmup.identity.assetGeneration,
-                 "reload submission advances the asset generation for superseding settings",
+                     && reload.identity.assetGeneration != 0,
+                 "atomic warmup reload carries one current asset generation",
                  err);
     ok &= expect(processEventsUntil([&] {
                      return std::any_of(completions.cbegin(), completions.cend(), [](const auto& completion) {
@@ -749,6 +750,20 @@ bool verifyFacadeAuditionRequiresCurrentAssetReadiness(QTextStream& err)
                      });
                  }),
                  "facade observes the matching asset reload completion",
+                 err);
+    const std::vector<QString> reloadCalls = state->callNames();
+    const auto warmupCall = std::find(
+        reloadCalls.cbegin(), reloadCalls.cend(), QStringLiteral("setWarmupResolvedPaths"));
+    const auto chartPathCall = std::find(
+        reloadCalls.cbegin(), reloadCalls.cend(), QStringLiteral("setChartPath"));
+    const auto reloadCall = std::find(
+        reloadCalls.cbegin(), reloadCalls.cend(), QStringLiteral("reloadAssets"));
+    ok &= expect(warmupCall != reloadCalls.cend()
+                     && chartPathCall != reloadCalls.cend()
+                     && reloadCall != reloadCalls.cend()
+                     && warmupCall < chartPathCall
+                     && chartPathCall < reloadCall,
+                 "atomic warmup reload installs paths and chart before loading assets",
                  err);
 
     const bool auditionAccepted = runtime.audition(QStringLiteral("judge"));

@@ -1,0 +1,201 @@
+#pragma once
+
+#include "runtime/Session.h"
+
+#include "app/v2/DocumentBridge.h"
+#include "app/v2/EditorPageRouter.h"
+#include "app/v2/PlaybackDocumentPort.h"
+
+class QTextCursor;
+
+namespace miacode::runtime {
+
+class DocumentSessionHost final : public miacode::v2::DocumentBridge,
+                                      public miacode::v2::EditorPageRouter,
+                                      public miacode::v2::PlaybackDocumentPort {
+public:
+    using CommitKind = miacode::v2::DocumentBridge::CommitKind;
+
+    DocumentSessionHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
+
+    // The v2 shell has no place to run a nested event loop from — a window's
+    // close handler least of all — so the answer arrives as a continuation and
+    // the prompt itself is a QML dialog. `onDecided(true)` means "the document
+    // may be left behind".
+    void requestLeaveDocument(std::function<void(bool)> onDecided) override;
+    bool applyCurrentFieldToDocument() override;
+    QString documentField(Session::DocumentField field) const;
+    QString difficultyField(int difficultyId, Session::DifficultyField field) const;
+    bool updateDocumentField(Session::DocumentField field, const QString& value);
+    bool updateDifficultyField(int difficultyId, Session::DifficultyField field, const QString& value);
+    bool updateActiveChartText(const QString& value);
+    Session::DocumentSourceReplaceResult replaceDocumentSourceText(const QString& value);
+    bool addDocumentDifficulty(int difficultyId);
+    bool applyDocumentDesignerSlots(const QVector<QPair<int, QString>>& slotValues,
+                                    bool unified, const QString& canonicalName) override;
+    bool applyCommittedQmlDocument(
+        const QString& sourceText, const QString& filePath, int activeDifficultyId,
+        bool dirty, quint64 revision, Session::QmlDocumentCommitKind kind,
+        bool usedSystemEncoding);
+    // Reconciles the project's "all difficulties share one designer"
+    // preference with the document that was just opened. The document is the
+    // source of truth: when it no longer satisfies the preference the
+    // PREFERENCE is lowered (silently, on disk), never the document. Nothing
+    // here may write a document field — that is what keeps a freshly opened
+    // chart clean. Also used after a whole-source replacement, where the user
+    // can hand-edit &des_N past the mode's back.
+    void reconcileUnifiedDocumentDesigner(
+        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason reason) override;
+    bool openFileAtPath(const QString& path, bool showErrors = true);
+    void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
+    // Continuation of restoreBackupFilePath once the confirm is answered.
+    void applyBackupFile(const QString& normalizedPath, const QString& title);
+    bool restoreLastSessionFile();
+    void scheduleStartupRestoreLastSessionFile();
+    void cancelPendingStartupRestore();
+    void applyPreparedStartupRestoreDocument(const Session::PreparedStartupRestoreDocument& prepared);
+    void applyOpenedDocumentState(
+        const QString& normalizedPath,
+        Session::TextEncoding encodingUsed,
+        const SimaiDocument& document,
+        double knownTrackDurationSeconds = -1.0
+    );
+    void resetAutosaveState(const QString& referenceText);
+    // Drop the in-memory crash-recovery snapshot AND delete the
+    // on-disk recovery file for the current chart. Called from the
+    // close-event path so a clean exit doesn't leave a stale recovery
+    // file that would prompt "recover unsaved changes?" on next open.
+    void cleanupCrashRecoveryForCleanExit();
+    QString resolveAutosaveDirectoryPath() const;
+    // The 恢复备份 list as values, so a QML menu can show it. Same entries and
+    // same labels as the Widgets menu built, including its collision rule.
+    QVariantList backupDocumentEntries() override;
+    QString currentDocumentTextForAutosave() const;
+    void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
+    void runAutosaveCheck(bool allowHistory = true);
+    bool saveToPath(const QString& path);
+    void updatePauseButtonAppearance();
+    void updateDirtyState() override;
+    // The workspace revision QML last committed — see PlaybackDocumentPort.h
+    // for why this is a query rather than a relocation of the field.
+    quint64 appliedWorkspaceRevision() const override;
+    bool currentFieldHasUndoChanges() const;
+    void anchorCurrentFieldCleanState();
+    void refreshCurrentFieldDirtyState();
+    void markCurrentFieldDirty();
+    // The per-edit autosave safety net: restart the 2s debounce that writes
+    // latest.bak, and push the document into the crash handler's snapshot
+    // mailbox so an abnormal exit in the next moments still leaves something
+    // recoverable.
+    //
+    // Its driver used to be the hidden chart editor's textChanged, and it went
+    // out with that editor — leaving v2 with only the 2-minute routine snapshot
+    // and, worse, with nothing at all in the crash mailbox. The v2 commit path
+    // calls it now, which is where an edit actually lands.
+    void noteDocumentEditedForAutosave();
+    void clearDeletedDifficultyUndoState();
+    bool undoDeletedDifficultyField();
+    void clearChartSelectionTransformUndoEntries();
+    void syncChartSelectionTransformUndoState();
+    // `originalAnchor`/`originalPosition` are PRE-EDIT offsets and must be read
+    // as ints before the document is touched: a live QTextCursor is adjusted by
+    // the very edit being recorded, so reading .position() off one afterwards
+    // hands undo an offset shifted by the inserted/removed length.
+    void recordChartCursorUndoEntry(
+        int originalAnchor,
+        int originalPosition,
+        const QTextCursor& transformedCursor,
+        double previewSecond);
+    void recordChartSelectionUndoRestoreAfterNextEdit(int originalAnchor, int originalPosition);
+    bool undoChartEditorWithSelectionRestore();
+    bool redoChartEditorWithSelectionRestore();
+    QString resolveInitialOpenDirectory() const;
+    void setLastOpenDirectory(const QString& pathOrDir);
+    using DroppedChartCandidate = miacode::v2::ChartDropCandidate;
+    miacode::v2::DocumentImportAdapter chartDropImportAdapter();
+    void finishChartsFromAudioDrop(
+        const QList<DroppedChartCandidate>& candidates,
+        QElapsedTimer dropTimer,
+        std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished);
+    void onNormalizeWholeChart();
+    // DifficultyList.qml owns the confirmation; this method only applies the
+    // already-confirmed document mutation.
+    bool deleteDifficultyField(int difficultyId);
+    bool switchToMetadataField();
+    bool switchToWelcomePage();
+    bool switchToDifficultyField(int difficultyId);
+    bool switchToLatencyField();
+    bool switchToExportField();
+    // Floats the busy spinner over the "Export" sidebar row / hides it. Shown
+    // while the (slow) export-page build runs after switchToExportField().
+    // Positioning is separate so sidebar rebuilds can re-anchor an active
+    // spinner after rows move.
+    void activateInitialField();
+    void loadDocument();
+    void syncRuntimeFromWorkspace();
+    void clearTimelineAndPreview(bool preservePresentation = false);
+    void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
+
+    QString sourceText() const override;
+    QString filePath() const override;
+    int activeDifficultyId() const override;
+    bool applyCommittedDocument(const QString& sourceText, const QString& filePath,
+                                int activeDifficultyId, bool dirty, quint64 revision,
+                                CommitKind kind, bool usedSystemEncoding) override;
+    QVariantList recentDocumentEntries() override;
+    void noteRecentDocument(const QString& path) override;
+    void restoreBackupDocument(const QString& path) override;
+    miacode::chart_transform::ChartNormalizationOptions normalizationOptions() const override;
+    void setNormalizationOptions(
+        const miacode::chart_transform::ChartNormalizationOptions& options) override;
+    // Overrides both DocumentBridge::requestEditorNavigation and
+    // PlaybackDocumentPort::requestEditorNavigation, which share this exact
+    // signature.
+    bool requestEditorNavigation(int line, int column, int endLine, int endColumn,
+                                 bool selectToken, bool focusEditor, bool centerView) override;
+    void setDocumentSaveHandler(std::function<bool(const QString&)> handler) override;
+    void setChartTextHandler(std::function<bool(const QString&)> handler) override;
+    void setLeaveDocumentHandler(
+        std::function<void(std::function<void(bool)>)> handler) override;
+    void importDroppedAudio(const QStringList& audioPaths, quint64 requestId,
+                            quint64 generation,
+                            miacode::v2::ChartDropImportService::Completion completion) override;
+    void releaseChartDropImport() override;
+
+    bool hasActiveDifficulty() const override;
+    bool enterDifficultyPage(int difficultyId) override;
+    bool enterMetadataPage() override;
+    bool enterLatencyPage() override;
+    bool enterExportPage() override;
+    bool clearEditorPresentation() override;
+    void packChartAsZip() override;
+    void openPreferences() override;
+    void requestShellClose(std::function<void(bool)> onDecided) override;
+
+private:
+    void schedulePendingAbnormalExitBackupRestore();
+    void runPendingAbnormalExitBackupRestore();
+    // Records the mode in the chart project's preferences sidecar. A document
+    // with no path yet keeps the value in State::pendingUnifiedDesignerPreference_
+    // until the first save gives it somewhere to live.
+    void writeUnifiedDesignerPreference(bool enabled);
+    // Steps the mode down when a wholesale source replacement left the
+    // document no longer satisfying it.
+    void demoteUnifiedDesignerAfterSourceReplacement();
+    // Writes the choice an untitled document could not record, once a save has
+    // given the project a directory.
+    void flushPendingUnifiedDesignerPreference();
+    // Applies the mode the workspace now reports to the dirty state, window
+    // title and field-commit anchor after a designer transaction.
+    void refreshAfterDesignerTransaction();
+    // The heavy body of switchToExportField(), run one event-loop tick later so
+    // the busy spinner can paint before the build blocks the UI thread.
+    void performSwitchToExportField();
+    void setChartBottomTabsMode(bool enabled);
+
+    Session& session_;
+    RuntimeContext::Ui& ui_;
+    RuntimeContext::State& state_;
+};
+
+}  // namespace miacode::runtime

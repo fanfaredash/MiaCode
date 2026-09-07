@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QHash>
 #include <QRegularExpression>
 #include <QRegularExpressionMatchIterator>
 #include <QSet>
@@ -49,17 +50,58 @@ const QSet<QString> kRetiredFlags = {
     QStringLiteral("MIACODE_PREVIEW_DCOMP_QUIESCE_QSG"),
 };
 
-// This spec embeds flag-name literals (the retired allowlist above), which are
-// not real env reads, so its own source file is skipped during the code scan.
-const QString kSelfFileName = QStringLiteral("DebugFlagIndexSpec.cpp");
+// Spec files that embed MIACODE_* flag-name literals for contract checking
+// rather than reading them as real env flags, so they are skipped during the
+// code scan. This spec's own file is here for the retired allowlist above;
+// V1ShellRemovalSpec.cpp is here because it pins MIACODE_UI_SKIN as a token
+// that must NOT survive v1 shell removal — that literal would otherwise look
+// like a live flag read to this scan. See:
+// docs/specs/ui/plans/2026-08-25-v2-stage0a-remove-v1-shell.md
+//
+// The exclusion is only valid for files that embed literals for contract
+// checking, not files that actually read env flags — see the exclusionAbuse
+// check below, which fails loudly if an excluded file ever adds a real
+// qgetenv/qEnvironmentVariable call.
+const QSet<QString> kSelfExcludedFileNames = {
+    QStringLiteral("DebugFlagIndexSpec.cpp"),
+    QStringLiteral("V1ShellRemovalSpec.cpp"),
+};
 
-// MIACODE_* tokens that are CMake compile definitions (injected via
-// target_compile_definitions), not runtime env flags read with qgetenv. These
+// MIACODE_* tokens the build supplies rather than the environment: injected via
+// target_compile_definitions, or #defined into a header CMake configures (see
+// src/app/AppVersion.h.in). They are never read with qgetenv, so they
 // legitimately do not belong in docs/ops/DEBUG_INDEX.md. Any spec that consumes
 // the source-root compile define (this one, ui_text_locale_spec, …) references
 // the token in source, so filter it out globally rather than per-file.
 const QSet<QString> kCompileDefinitions = {
     QStringLiteral("MIACODE_SOURCE_ROOT"),
+    // Path to the spec-only MiaCode.UI import mirror; a dev-tools compile
+    // definition, not a runtime env flag.
+    QStringLiteral("MIACODE_QML_SPEC_IMPORT_ROOT"),
+    // Baked into the configured src/app/AppVersion.h.in; the About page reads it
+    // as a compile-time constant, not as a switch.
+    QStringLiteral("MIACODE_VERSION_STRING"),
+};
+
+// MIACODE_* tokens that are in-source preprocessor selectors: they are #defined
+// and #undef'd inside the tree to pick an include mode or to generate repeated
+// static assertions. They are never read with qgetenv, so they do not belong in
+// docs/ops/DEBUG_INDEX.md either. Kept separate from kCompileDefinitions so the
+// two reasons a MIACODE_* token can legitimately skip the doc stay distinct.
+const QSet<QString> kSourcePreprocessorMacros = {
+    // runtime/SessionMembers.inc is included twice with different meanings:
+    // once to define the Ui/State records, once to inject Session's borrowing
+    // reference members. Stage 4.9a.
+    QStringLiteral("MIACODE_SESSION_RUNTIME_MEMBERS"),
+    QStringLiteral("MIACODE_RUNTIME_CONTEXT_TYPES"),
+    // Per-field static assertion generator in RuntimeContextBoundarySpec.cpp.
+    // Stage 4.9b.
+    QStringLiteral("MIACODE_TIMELINE_STORAGE_MOVED"),
+    // Per-field static assertion generator in PlaybackStorageBoundarySpec.cpp.
+    // Stage 4.9e-4.
+    QStringLiteral("MIACODE_PLAYBACK_STORAGE_MOVED"),
+    // Setter-boilerplate generator in qml_ui/TimelineThemeBridge.cpp.
+    QStringLiteral("MIACODE_TIMELINE_THEME_SETTER"),
 };
 
 QSet<QString> collectFlags(const QString& text)
@@ -69,7 +111,8 @@ QSet<QString> collectFlags(const QString& text)
     QRegularExpressionMatchIterator it = re.globalMatch(text);
     while (it.hasNext()) {
         const QString flag = it.next().captured(0);
-        if (kCompileDefinitions.contains(flag)) {
+        if (kCompileDefinitions.contains(flag)
+            || kSourcePreprocessorMacros.contains(flag)) {
             continue;
         }
         flags.insert(flag);
@@ -98,9 +141,14 @@ int main(int argc, char* argv[])
     const QString srcDir = root + QStringLiteral("/src");
     const QString docPath = root + QStringLiteral("/docs/ops/DEBUG_INDEX.md");
 
-    // 1. Every MIACODE_* literal read across the source tree (this spec's own
-    //    file excluded — it embeds the retired allowlist).
+    // 1. Every MIACODE_* literal read across the source tree (the spec files
+    //    in kSelfExcludedFileNames excluded — they embed flag-name literals
+    //    for contract checking, not real env reads). Matched by bare
+    //    filename (QDirIterator::fileName()), not a path-tail endsWith,
+    //    so a file merely sharing a name suffix (e.g. a hypothetical
+    //    LegacyV1ShellRemovalSpec.cpp) is not silently excluded too.
     QSet<QString> codeFlags;
+    QHash<QString, QString> excludedFilePaths;
     int scanned = 0;
     QDirIterator it(
         srcDir,
@@ -109,7 +157,8 @@ int main(int argc, char* argv[])
         QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QString path = it.next();
-        if (path.endsWith(kSelfFileName)) {
+        if (kSelfExcludedFileNames.contains(it.fileName())) {
+            excludedFilePaths.insert(it.fileName(), path);
             continue;
         }
         codeFlags.unite(collectFlags(readFile(path)));
@@ -120,6 +169,29 @@ int main(int argc, char* argv[])
             << " — is MIACODE_SOURCE_ROOT correct?" << Qt::endl;
         return 1;
     }
+
+    // 1b. The exclusion above is only valid for files that embed flag-name
+    //     literals for contract checking, not files that actually read env
+    //     flags. A genuine call to qgetenv or qEnvironmentVariable slipped
+    //     into an excluded file would go undocumented and unnoticed, so
+    //     check for it. Matched as call syntax (name followed by an opening
+    //     paren), not a bare substring, so prose that merely mentions the
+    //     function name in a comment — as this file's own comments do, to
+    //     explain the exclusion — does not self-trip it.
+    static const QRegularExpression envReadCall(
+        QStringLiteral("\\b(qgetenv|qEnvironmentVariable)\\s*\\("));
+    QStringList exclusionAbuse;
+    for (const QString& name : kSelfExcludedFileNames) {
+        const QString excludedPath = excludedFilePaths.value(name);
+        if (excludedPath.isEmpty()) {
+            continue;
+        }
+        const QString excludedText = readFile(excludedPath);
+        if (envReadCall.match(excludedText).hasMatch()) {
+            exclusionAbuse.append(name);
+        }
+    }
+    exclusionAbuse.sort();
 
     // 2. Every flag mentioned in DEBUG_INDEX.md.
     const QString doc = readFile(docPath);
@@ -166,6 +238,18 @@ int main(int argc, char* argv[])
         }
         err << "Fix: delete from DEBUG_INDEX.md, or move it to the doc's retired list "
                "and add it to kRetiredFlags in this spec." << Qt::endl;
+    }
+    if (!exclusionAbuse.isEmpty()) {
+        ok = false;
+        err << exclusionAbuse.size()
+            << " file(s) in kSelfExcludedFileNames actually read an env flag:" << Qt::endl;
+        for (const QString& name : exclusionAbuse) {
+            err << "  - " << name << Qt::endl;
+        }
+        err << "Fix: the exclusion in kSelfExcludedFileNames is only valid for files that "
+               "embed MIACODE_* literals for contract checking, not files that call "
+               "qgetenv/qEnvironmentVariable to read a real flag. Remove the file from "
+               "kSelfExcludedFileNames and document the flag instead." << Qt::endl;
     }
 
     if (!ok) {

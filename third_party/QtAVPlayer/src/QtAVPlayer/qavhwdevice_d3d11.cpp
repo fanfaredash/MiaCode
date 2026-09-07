@@ -162,6 +162,30 @@ std::atomic<unsigned long long> g_copiedSingle{ 0 };
 std::atomic<unsigned long long> g_copiedTwoDevice{ 0 };
 std::atomic<unsigned long long> g_texturesCreated{ 0 };
 std::atomic<unsigned long long> g_acquireTimeouts{ 0 };
+std::atomic<unsigned long long> g_srcAcquireWaitSamples{ 0 };
+std::atomic<unsigned long long> g_srcAcquireWaitTotalUs{ 0 };
+std::atomic<unsigned long long> g_srcAcquireWaitMaxUs{ 0 };
+std::atomic<unsigned long long> g_destAcquireWaitSamples{ 0 };
+std::atomic<unsigned long long> g_destAcquireWaitTotalUs{ 0 };
+std::atomic<unsigned long long> g_destAcquireWaitMaxUs{ 0 };
+std::atomic<unsigned long long> g_twoDeviceBridgeSamples{ 0 };
+std::atomic<unsigned long long> g_twoDeviceBridgeTotalUs{ 0 };
+std::atomic<unsigned long long> g_twoDeviceBridgeMaxUs{ 0 };
+std::atomic<unsigned long long> g_twoDeviceSourceSetupSamples{ 0 };
+std::atomic<unsigned long long> g_twoDeviceSourceSetupTotalUs{ 0 };
+std::atomic<unsigned long long> g_twoDeviceSourceSetupMaxUs{ 0 };
+std::atomic<unsigned long long> g_twoDeviceDestinationSetupSamples{ 0 };
+std::atomic<unsigned long long> g_twoDeviceDestinationSetupTotalUs{ 0 };
+std::atomic<unsigned long long> g_twoDeviceDestinationSetupMaxUs{ 0 };
+std::atomic<unsigned long long> g_sourceTextureCreateSamples{ 0 };
+std::atomic<unsigned long long> g_sourceTextureCreateTotalUs{ 0 };
+std::atomic<unsigned long long> g_sourceTextureCreateMaxUs{ 0 };
+std::atomic<unsigned long long> g_destinationTextureCreateSamples{ 0 };
+std::atomic<unsigned long long> g_destinationTextureCreateTotalUs{ 0 };
+std::atomic<unsigned long long> g_destinationTextureCreateMaxUs{ 0 };
+std::atomic<unsigned long long> g_sharedResourceOpenSamples{ 0 };
+std::atomic<unsigned long long> g_sharedResourceOpenTotalUs{ 0 };
+std::atomic<unsigned long long> g_sharedResourceOpenMaxUs{ 0 };
 std::atomic<unsigned long long> g_copyFailures{ 0 };
 std::atomic<unsigned long long> g_resolutionChanges{ 0 };
 std::atomic<unsigned long long> g_hwFramesDumped{ 0 };
@@ -182,12 +206,31 @@ std::atomic<const char *> g_codecName{ nullptr };
 // steady_clock ns at the last arm (= playback start / each seek); the dump line's
 // since_seek_ms quantifies "green only within N ms after a seek" (§10.5).
 std::atomic<long long> g_seekEpochNs{ 0 };
+// This is published once from the GUI thread with the --debug runtime-log gate.
+// Keeping it false in ordinary runs avoids calling the clock in the render hot path.
+std::atomic<int> g_diagTimingEnabled{ 0 };
 
 inline long long steadyNowNs()
 {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
                std::chrono::steady_clock::now().time_since_epoch())
         .count();
+}
+
+void noteTimedPhase(std::atomic<unsigned long long>& samples,
+                    std::atomic<unsigned long long>& totalUs,
+                    std::atomic<unsigned long long>& maxUs,
+                    long long startedNs)
+{
+    const auto elapsedUs = static_cast<unsigned long long>(
+        qMax<qint64>(0, (steadyNowNs() - startedNs) / 1000));
+    samples.fetch_add(1, std::memory_order_relaxed);
+    totalUs.fetch_add(elapsedUs, std::memory_order_relaxed);
+    auto observed = maxUs.load(std::memory_order_relaxed);
+    while (observed < elapsedUs
+           && !maxUs.compare_exchange_weak(
+               observed, elapsedUs, std::memory_order_relaxed, std::memory_order_relaxed)) {
+    }
 }
 
 std::atomic<int> g_lastCodedW{ 0 };
@@ -469,6 +512,11 @@ void qavSetPreviewHwDecodeFixConfig(int completionWait, int dropCorrupt)
     g_dropCorrupt.store(dropCorrupt != 0 ? 1 : 0, std::memory_order_release);
 }
 
+void qavSetPreviewDiagTimingEnabled(int enabled)
+{
+    g_diagTimingEnabled.store(enabled != 0 ? 1 : 0, std::memory_order_release);
+}
+
 void qavGetPreviewDiagCounters(QAVPreviewDiagCounters *out)
 {
     if (!out) return;
@@ -476,6 +524,30 @@ void qavGetPreviewDiagCounters(QAVPreviewDiagCounters *out)
     out->copiedFramesTwoDevice = g_copiedTwoDevice.load(std::memory_order_relaxed);
     out->texturesCreated = g_texturesCreated.load(std::memory_order_relaxed);
     out->acquireSyncTimeouts = g_acquireTimeouts.load(std::memory_order_relaxed);
+    out->srcAcquireWaitSamples = g_srcAcquireWaitSamples.load(std::memory_order_relaxed);
+    out->srcAcquireWaitTotalUs = g_srcAcquireWaitTotalUs.load(std::memory_order_relaxed);
+    out->srcAcquireWaitMaxUs = g_srcAcquireWaitMaxUs.load(std::memory_order_relaxed);
+    out->destAcquireWaitSamples = g_destAcquireWaitSamples.load(std::memory_order_relaxed);
+    out->destAcquireWaitTotalUs = g_destAcquireWaitTotalUs.load(std::memory_order_relaxed);
+    out->destAcquireWaitMaxUs = g_destAcquireWaitMaxUs.load(std::memory_order_relaxed);
+    out->twoDeviceBridgeSamples = g_twoDeviceBridgeSamples.load(std::memory_order_relaxed);
+    out->twoDeviceBridgeTotalUs = g_twoDeviceBridgeTotalUs.load(std::memory_order_relaxed);
+    out->twoDeviceBridgeMaxUs = g_twoDeviceBridgeMaxUs.load(std::memory_order_relaxed);
+    out->twoDeviceSourceSetupSamples = g_twoDeviceSourceSetupSamples.load(std::memory_order_relaxed);
+    out->twoDeviceSourceSetupTotalUs = g_twoDeviceSourceSetupTotalUs.load(std::memory_order_relaxed);
+    out->twoDeviceSourceSetupMaxUs = g_twoDeviceSourceSetupMaxUs.load(std::memory_order_relaxed);
+    out->twoDeviceDestinationSetupSamples = g_twoDeviceDestinationSetupSamples.load(std::memory_order_relaxed);
+    out->twoDeviceDestinationSetupTotalUs = g_twoDeviceDestinationSetupTotalUs.load(std::memory_order_relaxed);
+    out->twoDeviceDestinationSetupMaxUs = g_twoDeviceDestinationSetupMaxUs.load(std::memory_order_relaxed);
+    out->sourceTextureCreateSamples = g_sourceTextureCreateSamples.load(std::memory_order_relaxed);
+    out->sourceTextureCreateTotalUs = g_sourceTextureCreateTotalUs.load(std::memory_order_relaxed);
+    out->sourceTextureCreateMaxUs = g_sourceTextureCreateMaxUs.load(std::memory_order_relaxed);
+    out->destinationTextureCreateSamples = g_destinationTextureCreateSamples.load(std::memory_order_relaxed);
+    out->destinationTextureCreateTotalUs = g_destinationTextureCreateTotalUs.load(std::memory_order_relaxed);
+    out->destinationTextureCreateMaxUs = g_destinationTextureCreateMaxUs.load(std::memory_order_relaxed);
+    out->sharedResourceOpenSamples = g_sharedResourceOpenSamples.load(std::memory_order_relaxed);
+    out->sharedResourceOpenTotalUs = g_sharedResourceOpenTotalUs.load(std::memory_order_relaxed);
+    out->sharedResourceOpenMaxUs = g_sharedResourceOpenMaxUs.load(std::memory_order_relaxed);
     out->copyFailures = g_copyFailures.load(std::memory_order_relaxed);
     out->resolutionChanges = g_resolutionChanges.load(std::memory_order_relaxed);
     out->hwFramesDumped = g_hwFramesDumped.load(std::memory_order_relaxed);
@@ -636,7 +708,7 @@ public:
     bool isCorrupt() const { return m_corrupt; }
 
 private:
-    bool copyToShared();
+    bool copyToShared(bool collectTiming);
 
     const ComPtr<ID3D11Texture2D> m_texture;
     const UINT m_textureIndex = 0;
@@ -664,8 +736,19 @@ private:
     ComPtr<IDXGIKeyedMutex> m_destMutex;
 };
 
-bool QAVVideoFrame_D3D11::copyToShared()
+bool QAVVideoFrame_D3D11::copyToShared(bool collectTiming)
 {
+    const bool timeBridge = collectTiming;
+    const long long sourceSetupStartedNs = timeBridge ? steadyNowNs() : 0;
+    const auto sourceSetupTimer = qScopeGuard([&] {
+        if (timeBridge) {
+            noteTimedPhase(
+                g_twoDeviceSourceSetupSamples,
+                g_twoDeviceSourceSetupTotalUs,
+                g_twoDeviceSourceSetupMaxUs,
+                sourceSetupStartedNs);
+        }
+    });
     m_hwctx->lock(m_hwctx->lock_ctx);
     QScopeGuard autoUnlock([&] { m_hwctx->unlock(m_hwctx->lock_ctx); });
 
@@ -676,7 +759,17 @@ bool QAVVideoFrame_D3D11::copyToShared()
     texDesc.MipLevels = 1;
     texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
     texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    ENSURE(m_hwctx->device->CreateTexture2D(&texDesc, nullptr, m_srcTex.ReleaseAndGetAddressOf()), false);
+    const long long sourceCreateStartedNs = timeBridge ? steadyNowNs() : 0;
+    const HRESULT sourceCreateHr =
+        m_hwctx->device->CreateTexture2D(&texDesc, nullptr, m_srcTex.ReleaseAndGetAddressOf());
+    if (timeBridge) {
+        noteTimedPhase(
+            g_sourceTextureCreateSamples,
+            g_sourceTextureCreateTotalUs,
+            g_sourceTextureCreateMaxUs,
+            sourceCreateStartedNs);
+    }
+    ENSURE(sourceCreateHr, false);
     g_texturesCreated.fetch_add(1, std::memory_order_relaxed);
 
     // §10 PRIMARY FIX: force the decode GPU work for this DPB slot to COMPLETE before we
@@ -708,7 +801,13 @@ bool QAVVideoFrame_D3D11::copyToShared()
     // ReleaseSync, drop the frame (copyTexture/handle return {} -> RHI reuses the
     // previous frame). m_srcTex + its keyed mutex are rebuilt next frame, so there is
     // no lingering key state to rebalance.
+    const bool timeAcquire = timeBridge;
+    const long long srcAcquireStartedNs = timeAcquire ? steadyNowNs() : 0;
     const HRESULT srcAcq = m_srcMutex->AcquireSync(m_srcKey, kPreviewAcquireSyncTimeoutMs);
+    if (timeAcquire) {
+        noteTimedPhase(
+            g_srcAcquireWaitSamples, g_srcAcquireWaitTotalUs, g_srcAcquireWaitMaxUs, srcAcquireStartedNs);
+    }
     if (srcAcq != S_OK) {
         g_acquireTimeouts.fetch_add(1, std::memory_order_relaxed);
         qWarning() << QString::fromLatin1("Error@%1. AcquireSync(src) timeout/fail: (0x%2)")
@@ -723,10 +822,41 @@ bool QAVVideoFrame_D3D11::copyToShared()
 ComPtr<ID3D11Texture2D> QAVVideoFrame_D3D11::copyTexture(const ComPtr<ID3D11Device1> &dev,
                                                          const ComPtr<ID3D11DeviceContext> &ctx)
 {
-    if (!copyToShared())
+    const bool timeBridge = g_diagTimingEnabled.load(std::memory_order_relaxed) != 0;
+    const long long bridgeStartedNs = timeBridge ? steadyNowNs() : 0;
+    const auto bridgeTimer = qScopeGuard([&] {
+        if (timeBridge) {
+            noteTimedPhase(
+                g_twoDeviceBridgeSamples,
+                g_twoDeviceBridgeTotalUs,
+                g_twoDeviceBridgeMaxUs,
+                bridgeStartedNs);
+        }
+    });
+    if (!copyToShared(timeBridge))
         return {};
 
-    ENSURE(dev->OpenSharedResource1(m_sharedHandle.get(), IID_PPV_ARGS(&m_destTex)), {});
+    const long long destinationSetupStartedNs = timeBridge ? steadyNowNs() : 0;
+    const auto destinationSetupTimer = qScopeGuard([&] {
+        if (timeBridge) {
+            noteTimedPhase(
+                g_twoDeviceDestinationSetupSamples,
+                g_twoDeviceDestinationSetupTotalUs,
+                g_twoDeviceDestinationSetupMaxUs,
+                destinationSetupStartedNs);
+        }
+    });
+    const long long openSharedStartedNs = timeBridge ? steadyNowNs() : 0;
+    const HRESULT openSharedHr =
+        dev->OpenSharedResource1(m_sharedHandle.get(), IID_PPV_ARGS(&m_destTex));
+    if (timeBridge) {
+        noteTimedPhase(
+            g_sharedResourceOpenSamples,
+            g_sharedResourceOpenTotalUs,
+            g_sharedResourceOpenMaxUs,
+            openSharedStartedNs);
+    }
+    ENSURE(openSharedHr, {});
     CD3D11_TEXTURE2D_DESC desc{};
     m_destTex->GetDesc(&desc);
 
@@ -739,14 +869,30 @@ ComPtr<ID3D11Texture2D> QAVVideoFrame_D3D11::copyTexture(const ComPtr<ID3D11Devi
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
     ComPtr<ID3D11Texture2D> outputTex;
-    ENSURE(dev->CreateTexture2D(&desc, nullptr, outputTex.ReleaseAndGetAddressOf()), {});
+    const long long destinationCreateStartedNs = timeBridge ? steadyNowNs() : 0;
+    const HRESULT destinationCreateHr =
+        dev->CreateTexture2D(&desc, nullptr, outputTex.ReleaseAndGetAddressOf());
+    if (timeBridge) {
+        noteTimedPhase(
+            g_destinationTextureCreateSamples,
+            g_destinationTextureCreateTotalUs,
+            g_destinationTextureCreateMaxUs,
+            destinationCreateStartedNs);
+    }
+    ENSURE(destinationCreateHr, {});
     g_texturesCreated.fetch_add(1, std::memory_order_relaxed);
     ENSURE(m_destTex.As(&m_destMutex), {});
     // MiaCode S1: bounded acquire (was INFINITE). See copyToShared. A dest-side
     // timeout just drops the frame (return {}); no rebalance — this whole per-frame
     // QAVVideoFrame_D3D11 (srcTex/sharedHandle/destTex + keyed mutex) is rebuilt fresh
     // next frame, so the 0->1->0 handoff self-resets.
+    const bool timeAcquire = timeBridge;
+    const long long destAcquireStartedNs = timeAcquire ? steadyNowNs() : 0;
     const HRESULT destAcq = m_destMutex->AcquireSync(m_destKey, kPreviewAcquireSyncTimeoutMs);
+    if (timeAcquire) {
+        noteTimedPhase(
+            g_destAcquireWaitSamples, g_destAcquireWaitTotalUs, g_destAcquireWaitMaxUs, destAcquireStartedNs);
+    }
     if (destAcq != S_OK) {
         g_acquireTimeouts.fetch_add(1, std::memory_order_relaxed);
         qWarning() << QString::fromLatin1("Error@%1. AcquireSync(dest) timeout/fail: (0x%2)")

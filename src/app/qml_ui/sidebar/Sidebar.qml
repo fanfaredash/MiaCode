@@ -1,7 +1,7 @@
 import QtQuick
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property var viewState
@@ -11,16 +11,19 @@ Rectangle {
     required property var pages
     property bool compact: false
     readonly property bool primarySidebarVisible: compact || viewState.sidebarVisible
+    readonly property real activityBarWidth: activityBar.width
 
     signal settingsRequested()
 
-    color: Theme.colors.background.surface
     clip: true
 
     // Activity Bar 只负责功能域导航。再次选择当前功能时，桌面端切换
     // Primary Sidebar；紧凑布局直接关闭当前覆盖层。
     function activateView(viewId) {
-        if (viewState.activeSidebarView === viewId) {
+        const pageAlreadyActive = viewId === "export"
+            ? root.pages.activePageId === "export"
+            : !root.pages.overlayActive
+        if (viewState.activeSidebarView === viewId && pageAlreadyActive) {
             if (compact) {
                 viewState.compactPanel = ""
                 return
@@ -39,28 +42,32 @@ Rectangle {
             root.preferences.sidebarVisible = true
         }
 
-        if (viewId === "export")
+        if (viewId === "export") {
+            root.pages.rememberEditorReturnTarget(root.viewState.activeEditorKey)
             root.pages.openVideoExportPage()
-        else if (viewId === "tools")
-            root.pages.openLatencyPage()
+        }
     }
 
     ActivityBar {
         id: activityBar
+        color: root.compact ? "transparent" : Theme.surfaceColor(Theme.colors.background.activityBar)
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         activeView: root.viewState.activeSidebarView
+        normalizationEnabled: root.pages.activePageId !== "export"
         onViewRequested: viewId => root.activateView(viewId)
+        onToolRequested: function(toolId) {
+            if (toolId === "latency") {
+                root.pages.rememberEditorReturnTarget(root.viewState.activeEditorKey)
+                root.pages.openLatencyPage()
+            }
+            else if (toolId === "media")
+                root.pages.openMediaProcessingTools()
+            else if (toolId === "normalize")
+                root.pages.openNormalizeWholeChart()
+        }
         onSettingsRequested: root.settingsRequested()
-    }
-
-    Rectangle {
-        anchors.left: activityBar.right
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 1
-        color: Theme.colors.border.normal
     }
 
     Item {
@@ -72,6 +79,7 @@ Rectangle {
         visible: root.primarySidebarVisible
 
         ChartFieldSidebar {
+            color: root.compact ? "transparent" : Theme.surfaceColor(Theme.colors.background.panel)
             anchors.fill: parent
             visible: root.viewState.activeSidebarView === "chart"
             viewState: root.viewState
@@ -81,14 +89,9 @@ Rectangle {
         }
 
         ExportSidebarPage {
+            color: root.compact ? "transparent" : Theme.surfaceColor(Theme.colors.background.panel)
             anchors.fill: parent
             visible: root.viewState.activeSidebarView === "export"
-            pages: root.pages
-        }
-
-        ToolsSidebarPage {
-            anchors.fill: parent
-            visible: root.viewState.activeSidebarView === "tools"
             pages: root.pages
         }
     }

@@ -126,6 +126,33 @@ void runSpecs(QTextStream& out, int* failed)
         expectEqual(rendered.join(','), "2:Two,4:Four,6:", "perDifficultyDesigners merges & sorts", failed, out);
     }
 
+    // --- isUnifiedDesignerTriviallySafe: the load-time judgement. ---
+    //
+    // Opening a chart asks this whether the project's stored "all difficulties
+    // share one designer" preference still matches the file. True restores the
+    // mode; false silently lowers the PREFERENCE and leaves the document
+    // untouched, which is why a freshly opened chart is never dirty. Every
+    // designer-bearing slot counts, chart-less `&des_N` included.
+    {
+        const auto verdict = [](const char* text) {
+            return SimaiDocument::fromText(QString::fromUtf8(text)).isUnifiedDesignerTriviallySafe();
+        };
+        expectTrue(verdict("&des=X\n&lv_5=12\n&des_5=X\n&inote_5=(120){1}1,\n"
+                           "&lv_6=13\n&des_6=X\n&inote_6=(120){1}2,\n"),
+                   "every &des_N matching &des satisfies the shared-designer mode", failed, out);
+        expectTrue(verdict("&des=X\n&title=Song\n"),
+                   "a chart with no difficulties satisfies it", failed, out);
+        expectTrue(verdict("&title=Song\n&lv_5=12\n&des_5=\n&inote_5=(120){1}1,\n"),
+                   "an all-blank project satisfies it", failed, out);
+        expectTrue(!verdict("&des=X\n&lv_5=12\n&des_5=\n&inote_5=(120){1}1,\n"),
+                   "a difficulty with no name of its own does not satisfy it", failed, out);
+        expectTrue(!verdict("&des=X\n&lv_5=12\n&des_5=X\n&inote_5=(120){1}1,\n"
+                            "&lv_6=13\n&des_6=Y\n&inote_6=(120){1}2,\n"),
+                   "a second distinct name does not satisfy it", failed, out);
+        expectTrue(!verdict("&des=X\n&des_3=Y\n&lv_5=12\n&des_5=X\n&inote_5=(120){1}1,\n"),
+                   "a chart-less &des_N that disagrees does not satisfy it either", failed, out);
+    }
+
     // --- A fully-empty difficulty (no name) is NOT swept into standalone. ---
     {
         // An empty &inote_7 with no name is a freshly-added blank difficulty;
@@ -265,6 +292,44 @@ void runSpecs(QTextStream& out, int* failed)
             inUnmanaged = inUnmanaged || field.key == QLatin1String("miacode_bookmarks");
         }
         expectTrue(!inUnmanaged, "parseUnmanagedFields hides miacode_bookmarks", failed, out);
+    }
+
+    // --- Dedicated &clock_count is not shown again in "Other &xx Fields". ---
+    {
+        const QVector<SimaiRawField> unmanaged = SimaiDocument::parseUnmanagedFields(
+            "&title=Song\n&first=0\n&clock_count=6\n&custom=value\n");
+        bool hasClockCount = false;
+        bool hasCustom = false;
+        for (const SimaiRawField& field : unmanaged) {
+            hasClockCount = hasClockCount || field.key == QLatin1String("clock_count");
+            hasCustom = hasCustom || field.key == QLatin1String("custom");
+        }
+        expectTrue(!hasClockCount, "parseUnmanagedFields hides dedicated clock_count", failed, out);
+        expectTrue(hasCustom, "parseUnmanagedFields keeps unrelated extra fields", failed, out);
+    }
+
+    // --- Extra-field validation reports the exact property-looking line. ---
+    {
+        const QVector<SimaiPropertyIssue> issues =
+            SimaiDocument::invalidPropertyLineNumbers(
+                "  &missing_equals\r\n&=empty_key\r\n&dummy=value\r\n");
+        expectTrue(issues.size() == 2, "invalid extra fields are reported without rejecting valid fields",
+                   failed, out);
+        if (issues.size() == 2) {
+            expectTrue(issues.at(0).line == 1 && issues.at(0).column == 3
+                           && issues.at(0).endColumn == 17
+                           && issues.at(0).code == QLatin1String("invalid_property"),
+                       "indented missing-equals field reports its line and ampersand column",
+                       failed, out);
+            expectTrue(issues.at(1).line == 2 && issues.at(1).column == 1
+                           && issues.at(1).endColumn == 11,
+                       "empty-key field reports the full property span", failed, out);
+        }
+        expectTrue(SimaiDocument::invalidPropertyLineNumbers(
+                       "  &dummy=value\r\n  &empty=\r\n").isEmpty(),
+                   "indented fields with empty values remain valid", failed, out);
+        expectTrue(SimaiDocument::invalidPropertyLineNumbers("plain text").size() == 1,
+                   "non-property text is rejected instead of being silently discarded", failed, out);
     }
 
     // --- Bad/empty obsolete bookmark payload never blocks parsing and is never emitted. ---

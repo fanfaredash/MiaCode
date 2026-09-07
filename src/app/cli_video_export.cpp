@@ -1,11 +1,12 @@
 #include "MainEntrypoints.h"
 
-#include "mainwindow/MainWindow.h"
+#include "runtime/Session.h"
+#include "app/v2/ApplicationServices.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 
-#include <QApplication>
+#include <QGuiApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QDir>
@@ -59,7 +60,7 @@ bool parseCliResolutionToken(const QString& token, int* outputWidth, int* output
 
 namespace miacode::app::entry {
 
-int runCliVideoExport(QApplication& app, QString* errorMessage)
+int runCliVideoExport(QGuiApplication& app, QString* errorMessage)
 {
     MC_OP("runCliVideoExport");
     try {
@@ -310,7 +311,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         }
     }
 
-    MainWindow::CliVideoExportRequest request;
+    Session::CliVideoExportRequest request;
     request.chartPathOrDirectory = chartInput;
     request.difficulty = parser.value(QStringLiteral("difficulty")).trimmed();
     request.outputPath = parser.value(QStringLiteral("output")).trimmed();
@@ -343,7 +344,11 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.touchFlowSpeed = request.noteFlowSpeed;
     request.skinLoadWaitMs = skinWaitMs;
 
-    MainWindow window;
+    // The CLI export path builds the same application services the shell does:
+    // they own the document domain and the job/UI boundaries, and the window
+    // only borrows them (stage 3.5 item 1).
+    miacode::v2::ApplicationServices applicationServices;
+    Session window(applicationServices);
     QString resolvedOutputPath;
     QString exportError;
     QString exportDetails;

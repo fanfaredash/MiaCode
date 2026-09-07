@@ -1,117 +1,104 @@
 import QtQuick
+import QtQuick.Controls
 import MiaCode.UI
 
 Rectangle {
     id: root
 
+    required property var hostWindow
+
     signal toggleSidebarRequested()
     signal toggleBottomRequested()
-    signal togglePreviewRequested()
     signal openRequested()
     signal saveRequested()
     signal undoRequested()
     signal redoRequested()
-    signal toggleMuriPreviewRequested()
+    signal audioSettingsRequested()
+    signal previewSettingsRequested()
+    signal unavailableFeatureRequested(string featureName)
 
     property bool sidebarActive: false
     property bool bottomActive: false
-    property bool previewActive: false
     property bool canUndo: false
     property bool canRedo: false
-    property bool muriPreviewActive: false
 
-    implicitHeight: 36
-    color: Theme.colors.background.surface
+    implicitHeight: 32
+    color: Theme.surfaceColor(Theme.colors.background.activityBar)
+
+    component ToolBarButton: IconButton {
+        stateColors: Theme.colors.activityState
+    }
+
+    WindowGestureArea {
+        anchors.fill: parent
+        hostWindow: root.hostWindow
+        z: 0
+    }
 
     Row {
+        id: leftActions
         anchors.left: parent.left
         anchors.leftMargin: 8
         anchors.verticalCenter: parent.verticalCenter
         spacing: 5
+        z: 1
 
-        IconButton {
+        ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/folder-open.svg")
-            tooltip: qsTr("打开")
+            tooltip: UiText.text("打开")
             onClicked: root.openRequested()
         }
-        IconButton {
+        ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/save.svg")
-            tooltip: qsTr("保存")
+            tooltip: UiText.text("保存")
             onClicked: root.saveRequested()
         }
-        IconButton {
+        ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/undo.svg")
-            tooltip: qsTr("撤销")
+            tooltip: UiText.text("撤销")
             enabled: root.canUndo
             onClicked: root.undoRequested()
         }
-        IconButton {
+        ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/redo.svg")
-            tooltip: qsTr("重做")
+            tooltip: UiText.text("重做")
             enabled: root.canRedo
             onClicked: root.redoRequested()
-        }
-        ToolSeparator {}
-        IconButton {
-            iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
-            tooltip: qsTr("音频设置")
-            enabled: false
-        }
-        IconButton {
-            iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
-            tooltip: qsTr("预览设置")
-            enabled: false
         }
     }
 
     Row {
+        id: rightActions
         anchors.right: parent.right
         anchors.rightMargin: 8
         anchors.verticalCenter: parent.verticalCenter
         spacing: 5
+        z: 1
 
-        IconButton {
-            iconSource: Qt.resolvedUrl(root.muriPreviewActive
-                                       ? "icons/preview-mode.svg"
-                                       : "icons/muri-mode.svg")
-            iconWidth: 22
-            tooltip: root.muriPreviewActive
-                     ? qsTr("切换到预览")
-                     : qsTr("切换到无理")
-            onClicked: root.toggleMuriPreviewRequested()
+        ToolBarButton {
+            iconSource: Qt.resolvedUrl("icons/audio-settings.svg")
+            label: UiText.text("音频设置")
+            tooltip: UiText.text("音频设置")
+            onClicked: root.audioSettingsRequested()
         }
-        IconButton {
+        ToolBarButton {
+            iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
+            label: UiText.text("预览设置")
+            tooltip: UiText.text("预览设置")
+            onClicked: root.previewSettingsRequested()
+        }
+        ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/panel-left.svg")
-            tooltip: qsTr("切换侧栏 (Ctrl+B)")
+            tooltip: UiText.text("切换侧栏")
             active: root.sidebarActive
             onClicked: root.toggleSidebarRequested()
         }
-        IconButton {
+        ToolBarButton {
             iconSource: Qt.resolvedUrl("icons/panel-bottom.svg")
-            tooltip: qsTr("切换底部面板")
+            tooltip: UiText.text("切换底部面板")
             active: root.bottomActive
             onClicked: root.toggleBottomRequested()
         }
-        IconButton {
-            iconSource: Qt.resolvedUrl("icons/panel-right.svg")
-            tooltip: qsTr("切换预览区")
-            active: root.previewActive
-            onClicked: root.togglePreviewRequested()
-        }
     }
 
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 1
-        color: Theme.colors.border.normal
-    }
-
-    component ToolSeparator: Rectangle {
-        width: 1
-        height: 20
-        color: Theme.colors.border.normal
-    }
 }
-

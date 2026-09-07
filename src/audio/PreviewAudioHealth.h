@@ -115,6 +115,59 @@ inline bool shouldLogHealth(
     return delta < 0.0 || delta >= intervalSeconds;
 }
 
+// A1: `BASS_MIXER_NONSTOP` (see PREVIEW_AUDIO_MASTER_MIXER_STALL_REVIEW_ZH.md) makes the
+// mixer output silence instead of stalling when a source runs dry, so
+// `BASS_ChannelIsActive`/`BASS_Mixer_ChannelIsActive` report PLAYING even during a
+// under-delivery event -- `isUnderrun` above can never trip for that failure mode. This is
+// a backend-independent substitute: it compares how far the BGM's own decode position
+// (bgmRawSecond) advanced between two samples against how much wall-clock time (scaled by
+// playback rate) actually elapsed. A ratio well under 1.0 means BASS delivered less audio
+// than it should have.
+struct AdvanceProbe {
+    bool valid = false;          // false: the sample pair is not comparable; ignore.
+    double advanceRatio = -1.0;  // -1.0 when !valid; otherwise (Δbgm_raw) / (Δt * rate).
+    bool underrunEstimate = false;
+};
+
+// Below this, the probe is treated as under-delivery. 0.97 (not 1.0) tolerates ordinary
+// timer/scheduling jitter between two ~1 Hz worker samples.
+inline constexpr double kAdvanceProbeUnderrunThreshold = 0.97;
+
+// Only meaningful when both samples come from the same continuous playback segment (same
+// continuityEpoch) and both observed the BGM source actually running -- otherwise a
+// deliberate seek/pause/live-rate-change jump would read as a bogus underrun or mask a
+// real one. Any other case returns `valid=false` and the caller should log the raw values
+// without an estimate.
+inline AdvanceProbe computeAdvanceProbe(
+    ChannelActivity previousActivity,
+    double previousBgmRawSecond,
+    qint64 previousSampledAtMs,
+    quint64 previousContinuityEpoch,
+    ChannelActivity currentActivity,
+    double currentBgmRawSecond,
+    qint64 currentSampledAtMs,
+    quint64 currentContinuityEpoch,
+    double playbackRate)
+{
+    AdvanceProbe result;
+    if (previousActivity != ChannelActivity::Playing
+        || currentActivity != ChannelActivity::Playing
+        || previousContinuityEpoch != currentContinuityEpoch) {
+        return result;
+    }
+    const double elapsedSeconds =
+        static_cast<double>(currentSampledAtMs - previousSampledAtMs) / 1000.0;
+    const double rate = playbackRate > 0.0 ? playbackRate : 1.0;
+    const double expectedAdvance = elapsedSeconds * rate;
+    if (expectedAdvance <= 0.0) {
+        return result;
+    }
+    result.valid = true;
+    result.advanceRatio = (currentBgmRawSecond - previousBgmRawSecond) / expectedAdvance;
+    result.underrunEstimate = result.advanceRatio < kAdvanceProbeUnderrunThreshold;
+    return result;
+}
+
 // Buffer / device numbers read straight out of BASS. `-1` marks a field the backend could
 // not read (engine not initialised, channel handle zero, unsupported device).
 struct BufferSnapshot {
@@ -144,13 +197,15 @@ inline QString healthPayload(
     const StallTracker& tracker,
     const BufferSnapshot& buffers,
     bool mmcssRegisteredOnAudioThreads,
-    const QString& appMmcssTaskClass)
+    const QString& appMmcssTaskClass,
+    const AdvanceProbe& advanceProbe)
 {
     return QStringLiteral(
                "bass_audio_health txn=%1 second=%2 mixer_active=%3 bgm_active=%4 underrun=%5 "
                "stall_count=%6 stall_ms=%7 buffered_ms=%8 buffered_bytes=%9 config_buffer_ms=%10 "
                "min_buffer_ms=%11 update_period_ms=%12 update_threads=%13 init_latency_ms=%14 "
-               "device_freq=%15 bass_mmcss_registered_by_app=%16 app_mmcss_task_class=%17")
+               "device_freq=%15 bass_mmcss_registered_by_app=%16 app_mmcss_task_class=%17 "
+               "advance_ratio=%18 underrun_est=%19")
         .arg(transactionId)
         .arg(second, 0, 'f', 3)
         .arg(QLatin1String(activityName(mixerActivity)))
@@ -167,7 +222,9 @@ inline QString healthPayload(
         .arg(buffers.initLatencyMs)
         .arg(buffers.deviceFreq)
         .arg(mmcssRegisteredOnAudioThreads ? 1 : 0)
-        .arg(appMmcssTaskClass.isEmpty() ? QStringLiteral("(none)") : appMmcssTaskClass);
+        .arg(appMmcssTaskClass.isEmpty() ? QStringLiteral("(none)") : appMmcssTaskClass)
+        .arg(advanceProbe.advanceRatio, 0, 'f', 3)
+        .arg(advanceProbe.underrunEstimate ? 1 : 0);
 }
 
 // Build the immediate stall-edge payload. Emitted the moment BASS reports STALLED and

@@ -75,6 +75,20 @@ void probeAndLog(QQuickWindow* window, const QString& surfaceLabel)
                 && dxgiDevice != nullptr) {
                 IDXGIAdapter* adapter = nullptr;
                 if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) && adapter != nullptr) {
+                    // User-mode driver build for THIS adapter. There is no other place in
+                    // the log that names the graphics driver, and "which AMD/NVIDIA/Intel
+                    // driver build" is the first question asked about any first-submit
+                    // stall report (audit §5.6). CheckInterfaceSupport is the only DXGI
+                    // call that exposes it without WMI / setupapi.
+                    QString umdVersion = QStringLiteral("(unavailable)");
+                    LARGE_INTEGER umd{};
+                    if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd))) {
+                        umdVersion = QStringLiteral("%1.%2.%3.%4")
+                                         .arg(HIWORD(umd.HighPart))
+                                         .arg(LOWORD(umd.HighPart))
+                                         .arg(HIWORD(umd.LowPart))
+                                         .arg(LOWORD(umd.LowPart));
+                    }
                     DXGI_ADAPTER_DESC desc{};
                     if (SUCCEEDED(adapter->GetDesc(&desc))) {
                         const quint64 dedicatedMb =
@@ -87,7 +101,8 @@ void probeAndLog(QQuickWindow* window, const QString& surfaceLabel)
                             QStringLiteral(
                                 "surface=%1 rhi_api=Direct3D11 adapter=\"%2\" vendor_id=0x%3 "
                                 "device_id=0x%4 subsys_id=0x%5 revision=%6 luid=0x%7:0x%8 "
-                                "dedicated_video_mb=%9 shared_system_mb=%10 dedicated_system_mb=%11")
+                                "dedicated_video_mb=%9 shared_system_mb=%10 dedicated_system_mb=%11 "
+                                "umd_driver_version=%12 feature_level=0x%13")
                                 .arg(surfaceLabel)
                                 .arg(QString::fromWCharArray(desc.Description))
                                 .arg(desc.VendorId, 4, 16, QLatin1Char('0'))
@@ -98,7 +113,10 @@ void probeAndLog(QQuickWindow* window, const QString& surfaceLabel)
                                 .arg(static_cast<quint32>(desc.AdapterLuid.LowPart), 0, 16)
                                 .arg(dedicatedMb)
                                 .arg(sharedMb)
-                                .arg(dedicatedSysMb));
+                                .arg(dedicatedSysMb)
+                                .arg(umdVersion)
+                                .arg(static_cast<quint32>(device->GetFeatureLevel()), 4, 16,
+                                     QLatin1Char('0')));
                     }
                     adapter->Release();
                 }

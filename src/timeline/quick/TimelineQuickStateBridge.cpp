@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include <QDir>
-#include <QFontDatabase>
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -12,7 +11,8 @@
 #include "UiText.h"
 #include "common/TimelineThemeConfig.h"
 #include "timeline/TimelineSceneStateBuilder.h"
-#include "timeline/TimelineView.h"
+
+#include <QVariant>
 
 namespace {
 
@@ -146,13 +146,12 @@ QHash<quint64, QString> muriMarkerTooltipsForReport(const MuriAnalysisReport& re
 
 }  // namespace
 
-TimelineQuickStateBridge::TimelineQuickStateBridge(QObject* parent)
+TimelineQuickStateBridge::TimelineQuickStateBridge(QObject* parent, const QFont& font)
     : QObject(parent)
     , zoomPresets_(makeTimelineZoomPresets())
 {
-    headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    headerLineNumberFont_.setStyleHint(QFont::Monospace);
-    headerLineNumberFont_.setFixedPitch(true);
+    headerLineNumberFont_ = font;
+    headerLineNumberFont_.setPointSize(11);
 }
 
 void TimelineQuickStateBridge::bumpAllRevisions()
@@ -183,21 +182,6 @@ void TimelineQuickStateBridge::bumpOverlayRevision()
 void TimelineQuickStateBridge::bumpOverlayDynamicRevision()
 {
     ++overlayDynamicRevision_;
-}
-
-void TimelineQuickStateBridge::attachReferenceView(TimelineView* referenceView)
-{
-    if (referenceView_ == referenceView) {
-        return;
-    }
-    if (referenceView_ != nullptr && referenceView_->stateBridge() == this) {
-        referenceView_->setStateBridge(nullptr);
-    }
-    referenceView_ = referenceView;
-    if (referenceView_ != nullptr) {
-        referenceView_->setStateBridge(this);
-    }
-    emit renderStateChanged();
 }
 
 void TimelineQuickStateBridge::clear()
@@ -275,14 +259,6 @@ QHash<quint64, QString> TimelineQuickStateBridge::muriMarkerTooltips() const
     return muriMarkerTooltips_;
 }
 
-void TimelineQuickStateBridge::setHeaderLineNumberFont(const QFont& font)
-{
-    headerLineNumberFont_ = font;
-    ++gridRevision_;
-    bumpHeaderRevision();
-    emit renderStateChanged();
-}
-
 QFont TimelineQuickStateBridge::headerLineNumberFont() const
 {
     return headerLineNumberFont_;
@@ -316,8 +292,13 @@ void TimelineQuickStateBridge::setQuickViewportSize(const QSize& viewportSize)
     }
     quickViewportSize_ = normalized;
     refreshLayoutMetrics();
-    bumpAllRevisions();
+    ++layoutRevision_;
     emit renderStateChanged();
+}
+
+int TimelineQuickStateBridge::timelineTop() const
+{
+    return layoutMetricsValid_ ? layoutMetrics_.timelineTop : 0;
 }
 
 QSize TimelineQuickStateBridge::effectiveViewportSize() const
@@ -337,6 +318,7 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.skinDirectory = skinDirectory_;
     request.zoomScale = zoomScale();
     request.contentScale = contentScale_;
+    request.fitViewportHeight = true;
     request.waveformBrightness = waveformBrightness_;
     request.measureLineBrightness = measureLineBrightness_;
     request.waveformPhaseCompensationSeconds = waveformPhaseCompensationSeconds_;
@@ -396,6 +378,21 @@ QVector<double> TimelineQuickStateBridge::zoomPresets() const
     return zoomPresets_;
 }
 
+QVariantList TimelineQuickStateBridge::zoomPresetValues() const
+{
+    QVariantList values;
+    values.reserve(zoomPresets_.size());
+    for (double scale : zoomPresets_) {
+        values.append(scale);
+    }
+    return values;
+}
+
+void TimelineQuickStateBridge::applyZoomPreset(double scale)
+{
+    setZoomScaleAnchored(scale, viewportCenterSecond());
+}
+
 QStringList TimelineQuickStateBridge::zoomInWheelShortcuts() const
 {
     return zoomInWheelShortcuts_;
@@ -435,6 +432,11 @@ double TimelineQuickStateBridge::viewportCenterSecond()
                 - static_cast<double>(layoutMetrics_.leadingCenteringPadding)
                 - static_cast<double>(layoutMetrics_.timelineLeft))
                / pixelsPerSecond));
+}
+
+QSize TimelineQuickStateBridge::viewportSize() const
+{
+    return effectiveViewportSize();
 }
 
 double TimelineQuickStateBridge::contentScale() const

@@ -2,6 +2,9 @@
 
 #include <QPainter>
 #include <QPainterPath>
+#include <QQuickWindow>
+#include <QSGTextNode>
+#include <QTextLayout>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
@@ -58,29 +61,20 @@ QImage makeTimelineGlyphImage(const miacode::timeline::TimelineSceneGlyph& glyph
     return image;
 }
 
-TimelineQuickRasterizedImage makeTimelineTextImage(
-    const miacode::timeline::TimelineSceneTextLabel& label,
-    qreal devicePixelRatio)
+QSGNode* buildTimelineTextNode(
+    QQuickWindow* window,
+    const miacode::timeline::TimelineSceneTextLabel& label)
 {
-    const qreal dpr = qMax<qreal>(1.0, devicePixelRatio);
-    const QFontMetricsF metrics(label.font);
-    const QSizeF logicalSize(
-        qMax<qreal>(1.0, qCeil(metrics.horizontalAdvance(label.text) + 4.0)),
-        qMax<qreal>(1.0, qCeil(metrics.height() + 2.0)));
-    const QSize pixelSize(
-        qMax(1, qCeil(logicalSize.width() * dpr)),
-        qMax(1, qCeil(logicalSize.height() * dpr)));
-    QImage image(pixelSize, QImage::Format_ARGB32_Premultiplied);
-    image.fill(Qt::transparent);
+    QTextLayout layout(label.text, label.font);
+    layout.beginLayout();
+    layout.createLine().setLineWidth(label.logicalSize.width());
+    layout.endLayout();
 
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.setPen(label.color);
-    painter.setFont(label.font);
-    painter.scale(dpr, dpr);
-    painter.drawText(QPointF(2.0, metrics.ascent() + 1.0), label.text);
-    image.setDevicePixelRatio(dpr);
-    return TimelineQuickRasterizedImage{image, logicalSize};
+    QSGTextNode* node = window->createTextNode();
+    node->setRenderType(static_cast<QSGTextNode::RenderType>(QQuickWindow::textRenderType()));
+    node->setColor(label.color);
+    node->addTextLayout(label.topLeft + QPointF(2.0, 1.0), &layout);
+    return node;
 }
 
 QSGNode* buildTimelineLineNode(const miacode::timeline::TimelineSceneLine& line)

@@ -13,6 +13,9 @@
 #include "qavhwdevice_p.h"
 #include "qaviodevice.h"
 #include <QtAVPlayer/qtavplayerglobal.h>
+#include "qavpreviewdemuxdiag_p.h"
+
+#include <atomic>
 
 #if defined(QT_AVPLAYER_VA_X11) && QT_CONFIG(opengl)
 #include "qavhwdevice_vaapi_x11_glx_p.h"
@@ -60,6 +63,48 @@ extern "C" {
 }
 
 QT_BEGIN_NAMESPACE
+
+// ---------------------------------------------------------------------------
+// MiaCode addition: end-of-file provenance counters (see qavpreviewdemuxdiag_p.h).
+// Observation only — no decode behaviour changes here.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct PreviewDemuxEofCounters
+{
+    std::atomic<unsigned long long> eofEvents{0};
+    std::atomic<unsigned long long> eofFromAvErrorEof{0};
+    std::atomic<unsigned long long> eofFromAvioFeof{0};
+    std::atomic<unsigned long long> readFailures{0};
+    std::atomic<long long> lastReadResult{0};
+    std::atomic<long long> lastAvioError{0};
+    std::atomic<long long> lastEofBytePos{-1};
+    std::atomic<unsigned long long> seekResets{0};
+};
+
+PreviewDemuxEofCounters &previewDemuxEofCounters()
+{
+    static PreviewDemuxEofCounters counters;
+    return counters;
+}
+
+}  // namespace
+
+void qavGetPreviewDemuxEofDiag(QAVPreviewDemuxEofDiag *out)
+{
+    if (!out)
+        return;
+    PreviewDemuxEofCounters &c = previewDemuxEofCounters();
+    out->eofEvents = c.eofEvents.load(std::memory_order_relaxed);
+    out->eofFromAvErrorEof = c.eofFromAvErrorEof.load(std::memory_order_relaxed);
+    out->eofFromAvioFeof = c.eofFromAvioFeof.load(std::memory_order_relaxed);
+    out->readFailures = c.readFailures.load(std::memory_order_relaxed);
+    out->lastReadResult = c.lastReadResult.load(std::memory_order_relaxed);
+    out->lastAvioError = c.lastAvioError.load(std::memory_order_relaxed);
+    out->lastEofBytePos = c.lastEofBytePos.load(std::memory_order_relaxed);
+    out->seekResets = c.seekResets.load(std::memory_order_relaxed);
+}
+
 
 namespace {
 
@@ -733,16 +778,42 @@ int QAVDemuxer::read(QAVPacket &pkt)
 
     av_packet_unref(pkt.packet());
     bool eof = false;
+    // MiaCode addition: remember WHICH condition latched eof, and what the AVIO layer's
+    // own error field said. avio_feof() is also set after a failed byte read, so "eof"
+    // here is not proof that the stream ended (audit §5.2). Recorded below, under the
+    // same mutex that publishes d->eof, so the first-latch test cannot race.
+    bool eofFromAvErrorEof = false;
+    long long avioErrorAtEof = 0;
+    long long avioBytePosAtEof = -1;
     int ret = av_read_frame(d->ctx->ctx(), pkt.packet());
     if (ret < 0) {
-        if (ret == AVERROR_EOF || avio_feof(d->ctx->ctx()->pb)) {
+        AVIOContext *pb = d->ctx->ctx()->pb;
+        const bool avioEof = (pb != nullptr && avio_feof(pb) != 0);
+        eofFromAvErrorEof = (ret == AVERROR_EOF);
+        if (eofFromAvErrorEof || avioEof) {
             eof = true;
+            avioErrorAtEof = pb != nullptr ? pb->error : 0;
+            avioBytePosAtEof = pb != nullptr ? static_cast<long long>(avio_tell(pb)) : -1;
         } else {
+            PreviewDemuxEofCounters &c = previewDemuxEofCounters();
+            c.readFailures.fetch_add(1, std::memory_order_relaxed);
+            c.lastReadResult.store(ret, std::memory_order_relaxed);
             qDebug() << "av_read_frame: unexpected result:" << ret;
         }
     }
     {
         QMutexLocker locker(&d->mutex);
+        if (eof && !d->eof) {
+            PreviewDemuxEofCounters &c = previewDemuxEofCounters();
+            c.eofEvents.fetch_add(1, std::memory_order_relaxed);
+            if (eofFromAvErrorEof)
+                c.eofFromAvErrorEof.fetch_add(1, std::memory_order_relaxed);
+            else
+                c.eofFromAvioFeof.fetch_add(1, std::memory_order_relaxed);
+            c.lastReadResult.store(ret, std::memory_order_relaxed);
+            c.lastAvioError.store(avioErrorAtEof, std::memory_order_relaxed);
+            c.lastEofBytePos.store(avioBytePosAtEof, std::memory_order_relaxed);
+        }
         d->eof = eof;
         if ((ret >= 0 || eof) && pkt.packet()->stream_index < d->availableStreams.size()) {
             auto stream = d->availableStreams[pkt.packet()->stream_index];
@@ -841,6 +912,8 @@ int QAVDemuxer::seek(double sec)
     if (!d->ctx || !d->ctx->ctx() || !d->seekable)
         return AVERROR(EINVAL);
 
+    if (d->eof)
+        previewDemuxEofCounters().seekResets.fetch_add(1, std::memory_order_relaxed);
     d->eof = false;
     locker.unlock();
 

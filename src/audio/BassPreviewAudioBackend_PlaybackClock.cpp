@@ -239,11 +239,58 @@ void BassPreviewAudioBackend::stopAudioHealthSampler()
     // No independent producer remains to stop or join.
 }
 
+// Drains the lock-free ring the output-glitch DSP callback (masterMixer_, see
+// PreviewAudioOutputGlitchProbe.h / attachOutputGlitchProbe) fills, formatting each
+// event into the audio debug log. Runs on PreviewAudioWorker's thread, called from
+// sampleHealth() below on its existing ~1 Hz cadence -- the master mixer stays
+// ACTIVE_PLAYING (and so the DSP callback keeps firing) for the engine's whole
+// lifetime, independent of whether a playback session is active, so this drains
+// unconditionally whenever the engine is initialized rather than gating on
+// audioHealthPlaybackRunning_ like the rest of this function does.
+void BassPreviewAudioBackend::drainOutputGlitchEvents()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    namespace glitch = miacode::preview_audio::output_glitch;
+    const bool debugEnabled = runtimeAudioDebugEnabled();
+    glitch::GlitchEvent event;
+    // Bounded by the ring's own capacity so this cannot spin longer than one full
+    // ring's worth of events even if the producer is (implausibly, at a ~1 Hz drain
+    // cadence) still pushing as fast as this pops.
+    for (std::size_t drained = 0;
+         drained < glitch::GlitchRing::kCapacity && outputGlitchProbeState_.ring.tryPop(&event);
+         ++drained) {
+        if (debugEnabled) {
+            appendAudioDebugLog(glitch::glitchEventPayload(
+                playbackTransactionId_, outputGlitchProbeState_.sampleRateHz, event));
+        }
+    }
+    const quint64 dropped = outputGlitchProbeState_.ring.takeDroppedCount();
+    if (dropped > 0 && debugEnabled) {
+        appendAudioDebugLog(glitch::glitchDroppedPayload(playbackTransactionId_, dropped));
+    }
+#endif
+}
+
 miacode::preview_audio::PreviewAudioHealthSample BassPreviewAudioBackend::sampleHealth()
 {
     miacode::preview_audio::PreviewAudioHealthSample sample;
 #ifdef MIACODE_HAS_BASS_AUDIO
+    // See drainOutputGlitchEvents()'s own comment for why this runs unconditionally
+    // rather than after the early-return below.
+    if (engineInitialized_) {
+        drainOutputGlitchEvents();
+    }
     if (!engineInitialized_ || !audioHealthPlaybackRunning_.load(std::memory_order_acquire)) {
+        // A2: this used to return before latestHealthSample_ was ever assigned below, so
+        // the member stayed frozen on whatever it read last while playing -- up to a
+        // full pause's worth of staleness. `sample` here is a fresh default (bgmRawSecond
+        // = -1, both activities Unknown, per the struct's own "could not read" sentinel
+        // convention used elsewhere in this type), so publishing it now correctly marks
+        // the snapshot as unavailable instead of silently keeping a stale one alive.
+        sample.sampledAtMs = QDateTime::currentMSecsSinceEpoch();
+        sample.continuityEpoch = backgroundTrackContinuityEpoch_;
+        sample.bgmPlaybackRate = playbackSession_.backgroundTrackPlaybackRate;
+        latestHealthSample_ = sample;
         return sample;
     }
     const DWORD mixer = static_cast<DWORD>(masterMixer_);
@@ -261,6 +308,10 @@ miacode::preview_audio::PreviewAudioHealthSample BassPreviewAudioBackend::sample
             BASS_Mixer_ChannelGetPosition(source, BASS_POS_BYTE));
     }
     sample.sampledAtMs = QDateTime::currentMSecsSinceEpoch();
+    // A1: stamped on every sample so PreviewAudioWorker's advance-rate probe can tell
+    // whether this sample and the previous one belong to the same continuous segment.
+    sample.continuityEpoch = backgroundTrackContinuityEpoch_;
+    sample.bgmPlaybackRate = playbackSession_.backgroundTrackPlaybackRate;
     // PreviewAudioWorker owns stall transitions and buffer-health log emission. Keeping
     // this backend method to sampling makes every native query and diagnostic state update
     // run in the one worker scheduler rather than in an independent producer.
@@ -339,6 +390,13 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     // The latest sample was produced by PreviewAudioWorker before this status row. Nothing
     // here calls BASS under schedulerMutex_.
     const miacode::preview_audio::PreviewAudioHealthSample healthSample = latestHealthSample_;
+    // A2: how stale bgm_raw below is, in wall-clock milliseconds. During a pause (or right
+    // after resuming, before the worker's next ~1 Hz sample) sampledAtMs is old -- this
+    // says so explicitly instead of leaving a reader to infer it from bgm_delta_ms looking
+    // implausible. -1 when no sample has ever been taken (sampledAtMs == 0).
+    const qint64 bgmRawAgeMs = healthSample.sampledAtMs > 0
+        ? (QDateTime::currentMSecsSinceEpoch() - healthSample.sampledAtMs)
+        : -1;
     {
         QMutexLocker schedulerLocker(&schedulerMutex_);
         mixerSecond = (authoritativeSecond - playbackSession_.sessionStartSecond)
@@ -381,7 +439,7 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     }
     const double driftMs = (authoritativeSecond - fallbackSecond) * 1000.0;
     appendAudioDebugLog(
-        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24 armed_group_idx=%25 armed_action=%26")
+        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24 armed_group_idx=%25 armed_action=%26 bgm_raw_age_ms=%27")
             .arg(playbackTransactionId_)
             .arg(authoritativeSecond, 0, 'f', 6)
             .arg(mixerSecond, 0, 'f', 6)
@@ -407,7 +465,8 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
             .arg(retainedPlaybackModeLabel(retainedPlaybackMode_))
             .arg(statusLogIntervalSeconds * 1000.0, 0, 'f', 3)
             .arg(armedGroupIndex)
-            .arg(armedActionLabel));
+            .arg(armedActionLabel)
+            .arg(bgmRawAgeMs));
 #else
     Q_UNUSED(authoritativeSecond);
     Q_UNUSED(fallbackSecond);

@@ -4,6 +4,7 @@
 #include <QTextStream>
 #include <QtMath>
 
+#include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewActiveMarkerView.h"
 #include "core/scene/PreviewMarkerDrawOrder.h"
 #include "core/scene/PreviewMuriActionLayerState.h"
@@ -986,8 +987,14 @@ bool verifyTouchJudgeUsesTwoEightSparkleRings(QTextStream& err)
         }
     }
 
+    // Probe playheads are expressed as a fraction of the real clip duration so
+    // they follow kJudgeEffectTouchDurationSeconds instead of drifting when the
+    // effect is retuned. 0.8x lands after the circle has faded out (the circle
+    // fade ends at half the sparkle fade) but before the clip is culled.
+    constexpr qreal kTouchJudgeDurationSeconds =
+        static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectTouchDurationSeconds);
     PreviewFrameState lateState = state;
-    lateState.playheadSeconds = 1.2;
+    lateState.playheadSeconds = 1.0 + kTouchJudgeDurationSeconds * 0.8;
     lateState.noteMarkers = {makeTouchMarker(1.0, QPointF(240.0, 270.0))};
     const PreviewTouchJudgeLayerState lateLayerState = miacode::preview::scene::buildPreviewTouchJudgeLayerState(
         lateState,
@@ -995,7 +1002,7 @@ bool verifyTouchJudgeUsesTwoEightSparkleRings(QTextStream& err)
         playfieldRect
     );
     if (!require(
-            lateLayerState.sprites.size() == 16,
+            lateLayerState.sprites.size() == kSpritesPerTouch - 1,
             QStringLiteral("touch judge circle glow ends halfway while sparkles continue"),
             err)) {
         return false;
@@ -1010,13 +1017,21 @@ bool verifyTouchJudgeUsesTwoEightSparkleRings(QTextStream& err)
         playfieldRect
     );
     PreviewFrameState movingEndState = state;
-    movingEndState.playheadSeconds = 1.3;
+    movingEndState.playheadSeconds = 1.0 + kTouchJudgeDurationSeconds * 0.96;
     movingEndState.noteMarkers = {makeTouchMarker(1.0, QPointF(240.0, 270.0))};
     const PreviewTouchJudgeLayerState movingEndLayerState = miacode::preview::scene::buildPreviewTouchJudgeLayerState(
         movingEndState,
         PreviewActiveMarkerView(movingEndState.noteMarkers),
         playfieldRect
     );
+    if (!require(
+            movingStartLayerState.sprites.size() == kSpritesPerTouch
+                && movingEndLayerState.sprites.size() == kSpritesPerTouch - 1,
+            QStringLiteral("touch judge ring probes land inside the clip window"),
+            err)) {
+        return false;
+    }
+
     const QPointF movingCenter(240.0, 270.0);
     const qreal earlyInnerDistance = qSqrt(QPointF::dotProduct(
         movingStartLayerState.sprites.at(1).center - movingCenter,
@@ -1056,7 +1071,11 @@ bool verifyTouchJudgeUsesTwoEightSparkleRings(QTextStream& err)
             PreviewActiveMarkerView(rotatedState.noteMarkers),
             playfieldRect
         );
-        return requireNear(
+        return require(
+                rotatedLayerState.sprites.size() == kSpritesPerTouch,
+                label + QStringLiteral(" emits a full sparkle ring"),
+                err)
+            && requireNear(
                 rotatedLayerState.sprites.at(1).rotationDegrees,
                 expectedRotationDegrees,
                 label,

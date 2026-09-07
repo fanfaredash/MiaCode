@@ -20,6 +20,7 @@
 #include <QFileInfo>
 #include <QtMath>
 
+#include <chrono>
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 #include <mutex>
 
@@ -131,6 +132,131 @@ DefaultBassEndpoint resolveDefaultBassEndpoint()
 
 }  // namespace
 #endif
+
+#ifdef MIACODE_HAS_BASS_AUDIO
+namespace {
+
+// Output-glitch DSP callback. Runs on BASS's own mixing thread (there is no
+// separate "audio thread" spawned by MiaCode for the master mixer -- BASS pulls
+// masterMixer_ synchronously when the output driver wants data, and every DSP
+// attached to a channel is invoked inline on that same pull per bass.h's
+// DSPPROC contract). That makes this function subject to the audio-callback
+// rules PreviewAudioHealth.h's schedulerMutex_ comment already documents for
+// handleMixerGroupSync: NO I/O, NO logging (miacode::debug_log takes a
+// std::mutex -- see DebugLog.cpp/DocumentAutosave.cpp), NO locks (QMutex or
+// otherwise), NO heap allocation. Every write below is either a POD scalar in
+// *state or a fixed-capacity array slot inside state->ring (see
+// PreviewAudioOutputGlitchRing.h) -- nothing here can block or allocate.
+//
+// masterMixer_ is BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP | BASS_MIXER_POSEX
+// (see the BASS_Mixer_StreamCreate call below), so `buffer` is interleaved
+// float32 PCM: samples[frame * channelCount + channel].
+//
+// Attached via BASS_ChannelSetDSPEx(..., BASS_DSP_READONLY) below: that flag
+// documents in bass.h's own BASS_ChannelSetDSPEx flag list (BASS_DSP_READONLY
+// = 1) that this DSP does not modify the buffer, which is exactly this
+// function's contract -- it only reads samples to feed the trackers below.
+void CALLBACK outputGlitchDspProc(HDSP handle, DWORD channel, void* buffer, DWORD length, void* user)
+{
+    Q_UNUSED(handle);
+    Q_UNUSED(channel);
+    auto* state = static_cast<miacode::audio::bass_detail::OutputGlitchProbeState*>(user);
+    if (state == nullptr || buffer == nullptr || length == 0 || state->channelCount <= 0) {
+        return;
+    }
+    namespace glitch = miacode::preview_audio::output_glitch;
+
+    const int channels = state->channelCount;
+    const DWORD frameBytes = static_cast<DWORD>(channels) * static_cast<DWORD>(sizeof(float));
+    const DWORD frames = frameBytes > 0 ? (length / frameBytes) : 0;
+    const auto* samples = static_cast<const float*>(buffer);
+
+    for (DWORD frame = 0; frame < frames; ++frame) {
+        const quint64 currentFrame = state->frameCursor + frame;
+        for (int ch = 0; ch < channels && ch < miacode::audio::bass_detail::kOutputGlitchProbeMaxChannels; ++ch) {
+            const float sample = samples[frame * static_cast<DWORD>(channels) + static_cast<DWORD>(ch)];
+
+            float stepMagnitude = 0.0f;
+            if (glitch::updateStepDetector(
+                    &state->step[static_cast<std::size_t>(ch)],
+                    sample,
+                    glitch::kDefaultStepThreshold,
+                    &stepMagnitude)) {
+                glitch::GlitchEvent event;
+                event.kind = glitch::GlitchKind::Step;
+                event.channel = static_cast<quint8>(ch);
+                event.frame = currentFrame;
+                event.magnitude = stepMagnitude;
+                state->ring.tryPush(event);
+            }
+
+            const glitch::ClipRunUpdate clipUpdate = glitch::updateClipRun(
+                &state->clip[static_cast<std::size_t>(ch)],
+                sample,
+                glitch::kDefaultClipThreshold,
+                currentFrame);
+            if (clipUpdate.runEnded) {
+                glitch::GlitchEvent event;
+                event.kind = glitch::GlitchKind::Clip;
+                event.channel = static_cast<quint8>(ch);
+                event.frame = clipUpdate.startFrame;
+                event.length = clipUpdate.length;
+                state->ring.tryPush(event);
+            }
+        }
+    }
+    state->frameCursor += frames;
+
+    const qint64 arrivalNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                  std::chrono::steady_clock::now().time_since_epoch())
+                                  .count();
+    const glitch::LateCallbackProbe lateProbe = glitch::computeLateCallback(
+        state->lastCallbackArrivalNs, state->lastBlockFrames, state->sampleRateHz, arrivalNs);
+    if (glitch::isLate(lateProbe, glitch::kDefaultLateCallbackThresholdMs)) {
+        glitch::GlitchEvent event;
+        event.kind = glitch::GlitchKind::LateCallback;
+        event.frame = state->frameCursor;
+        event.magnitude = static_cast<double>(lateProbe.lateMs);
+        event.length = frames;
+        state->ring.tryPush(event);
+    }
+    state->lastCallbackArrivalNs = arrivalNs;
+    state->lastBlockFrames = frames;
+}
+
+}  // namespace
+#endif  // MIACODE_HAS_BASS_AUDIO
+
+void BassPreviewAudioBackend::attachOutputGlitchProbe()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    outputGlitchProbeState_.reset();
+    outputGlitchProbeState_.sampleRateHz = deviceSampleRate_;
+    outputGlitchProbeState_.channelCount = miacode::preview_audio::kMixChannels;
+    outputGlitchDspHandle_ = BASS_ChannelSetDSPEx(
+        masterMixer_,
+        &outputGlitchDspProc,
+        &outputGlitchProbeState_,
+        /*priority=*/0,
+        BASS_DSP_READONLY);
+    noteBassErr("engine_init/output_glitch_dsp_attach");
+#endif
+}
+
+void BassPreviewAudioBackend::detachOutputGlitchProbe()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // Drain before tearing the state down so an in-flight event from the last
+    // block is not silently lost.
+    drainOutputGlitchEvents();
+    if (outputGlitchDspHandle_ != 0 && masterMixer_ != 0) {
+        BASS_ChannelRemoveDSP(masterMixer_, outputGlitchDspHandle_);
+        noteBassErr("engine_teardown/output_glitch_dsp_remove");
+    }
+    outputGlitchDspHandle_ = 0;
+    outputGlitchProbeState_.reset();
+#endif
+}
 
 bool BassPreviewAudioBackend::ensureBassFxLoaded()
 {
@@ -392,6 +518,10 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
             true);
         return false;
     }
+    // Diagnostic-only: see PreviewAudioOutputGlitchProbe.h. Attached after the master
+    // mixer is already ACTIVE_PLAYING so nothing here can affect whether that call
+    // above succeeded.
+    attachOutputGlitchProbe();
     engineInitialized_ = true;
 #ifdef Q_OS_WIN
     // Publish only a fully initialized concrete endpoint. The native device callback
@@ -439,6 +569,11 @@ void BassPreviewAudioBackend::invalidateOutputDevice()
     audioHealthPlaybackRunning_.store(false, std::memory_order_release);
     stopAudioHealthSampler();
     resetAssets();
+    // Diagnostic-only: drops the DSP handle before the stream it is attached to goes
+    // away. BASS_StreamFree below would free it anyway, but detaching explicitly
+    // first also drains any events still sitting in the ring and resets the tracker
+    // state for the next initializeAudioEngine().
+    detachOutputGlitchProbe();
     if (masterMixer_ != 0) {
         if (!BASS_StreamFree(masterMixer_)) {
             lastNativeErrorCode_ = static_cast<int>(BASS_ErrorGetCode());

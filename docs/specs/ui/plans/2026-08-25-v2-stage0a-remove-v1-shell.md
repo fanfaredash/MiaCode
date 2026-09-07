@@ -1,0 +1,719 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](../CURRENT_ARCHITECTURE_ZH.md) 和 [文档索引](../../../INDEX.md)。
+
+# 阶段 0a：移除 v1 QuickShell 外壳与其入口 — 实施计划
+
+> **状态：已完成（2026-08-25）。** 源码净 −7,770 行（39 文件，+284/−8,054），16 个提交。
+> 两个漂移守卫（`v1_shell_removal_spec`、`debug_flag_index_spec`）均为绿；全量 Release 构建 0 error；
+> 全量 CTest 71/72，唯一失败 `qtavplayer_platform_spec` 为既有问题（本阶段起点 `31922400` 即复现）；
+> 运行时冒烟三个预览表面全部创建成功、无新增 QML 错误。
+>
+> 执行中发现并修正了本计划的 5 处缺陷，均记录在对应 Task 内，其中 Task 4a 是整段新增的前置任务。
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 删除 v1 QuickShell 外壳、它的启动入口和原生表面再宿主机制，使 `MiaCode` 只剩一条 UI 启动路径。
+
+**Architecture:** v1 外壳由 `QuickShellBootstrap` 启动，通过 `QuickShellNativeSurfaceHost` 把 Widgets 表面再宿主进 QML 场景。v2 从不使用这条路径：它构造 `QuickShellController` 时 `surfaceHost` 传 `nullptr`，控制器内 29 处 `surfaceHost_` 分支在 v2 下全是死代码。删除 v1 引导后这些分支随之消失。`QuickShellController` 本身**保留**（v2 仍在用，按设计第 8 节于阶段 2 退役）。
+
+**Tech Stack:** C++20 / Qt 6.10.2 / CMake / CTest。构建与测试一律 Release。
+
+**前置阅读:** [架构设计](../QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md) 第 8 节阶段 0。
+
+---
+
+## 事实底座（已核实，勿重新推导）
+
+- v1 专属文件外部引用**只有注释**，无代码依赖。真实代码引用仅在 `src/app/main.cpp` 的皮肤分支。
+- `QuickShellController` 构造点只有两处：`QuickShellBootstrap.cpp:275`（v1，传真 surfaceHost）与 `QmlUiBootstrap.cpp:89`（v2，传 `nullptr`）。
+- `MIACODE_UI_SKIN` 已登记在 `docs/ops/DEBUG_INDEX.md`；`debug_flag_index_spec` 会在代码不再读取该变量而文档仍列出时**失败**。这是本计划的自动闸门。
+- **闸门的前提条件（Task 1 已处理）：** `debug_flag_index_spec` 扫描 `src/**` 里所有 `MIACODE_*`
+  字面量。`V1ShellRemovalSpec.cpp` 因契约检查也嵌了 `MIACODE_UI_SKIN`，若不排除，Task 2 之后它会
+  成为该 flag 在 `src/` 下的唯一出现处，使闸门在 Task 2 静默通过、在 Task 5 反向误报。因此该 spec
+  已加入 `DebugFlagIndexSpec.cpp` 的"嵌有 flag 字面量的 spec"排除集合。新增同类 spec 时必须同样处理。
+
+## 文件结构
+
+**删除**
+- `src/app/quick_shell/QuickShellBootstrap.{h,cpp}` — v1 启动编排
+- `src/app/quick_shell/QuickShellNativeSurfaceHost.{h,cpp}` — Widgets 表面再宿主
+- `src/app/quick_shell/QuickShellStyleBridge.{h,cpp}` — v1 主题桥
+- `src/app/quick_shell/QuickShellMacSurfaceSupport.{h,mm}` — v1 macOS 表面支持
+- `src/app/quick_shell/qml/` 整个目录 — v1 QML
+- `resources/quick_shell_qml.qrc`
+
+**保留**（v2 在用，阶段 2 再处理）
+- `QuickShellController.{h,cpp}`、`QuickShellContracts.h`、`QuickShellPreviewCompositeSurface.{h,cpp}`、`QuickShellPreviewSurfacePolicy.h`、`QuickShellPopupPosition.h`、`QuickShellKeyboardActivation.h`
+
+**修改**
+- `src/app/main.cpp` — 删除 `UiSkin`、`resolveUiSkin()`、v1 分支
+- `src/app/quick_shell/QuickShellController.{h,cpp}` — 删除 `surfaceHost` 构造参数与全部 `surfaceHost_` 分支
+- `src/app/qml_ui/QmlUiBootstrap.cpp` — 构造调用少一个参数
+- `CMakeLists.txt` — 删除对应源文件与 qrc 条目
+- `docs/ops/DEBUG_INDEX.md`、`.claude/skills/miacode-dev-guide/references/*` — 同步
+
+**新建**
+- `src/tools/qml_ui/V1ShellRemovalSpec.cpp` — 结构契约回归
+
+---
+
+## Task 1: 结构契约回归（先红）
+
+删除类改动无法用行为测试驱动，但**结构契约**可以。仓库已有先例（`debug_flag_index_spec`、`ui_text_locale_spec` 都断言源码事实）。
+
+**Files:**
+- Create: `src/tools/qml_ui/V1ShellRemovalSpec.cpp`
+- Modify: `CMakeLists.txt`（dev-tools 块内，紧邻 `qml_shortcut_binding_spec`）
+
+- [ ] **Step 1: 写失败测试**
+
+创建 `src/tools/qml_ui/V1ShellRemovalSpec.cpp`：
+
+```cpp
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStringList>
+#include <QTextStream>
+
+namespace {
+
+bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
+{
+    out << (condition ? "[PASS] " : "[FAIL] ") << message << '\n';
+    if (!condition) ++*failed;
+    return condition;
+}
+
+QString sourceRoot() { return QStringLiteral(MIACODE_SOURCE_ROOT); }
+
+QString readSource(const QString& relativePath)
+{
+    QFile file(sourceRoot() + QLatin1Char('/') + relativePath);
+    if (!file.open(QIODevice::ReadOnly)) return QString();
+    return QString::fromUtf8(file.readAll());
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    QCoreApplication app(argc, argv);
+    Q_UNUSED(app);
+    QTextStream out(stdout);
+    int failed = 0;
+
+    // v1 外壳的启动编排、原生表面再宿主、主题桥与 macOS 表面支持全部删除。
+    // QuickShellController 不在此列：v2 仍在使用，按架构设计阶段 2 退役。
+    const QStringList removedFiles{
+        QStringLiteral("src/app/quick_shell/QuickShellBootstrap.h"),
+        QStringLiteral("src/app/quick_shell/QuickShellBootstrap.cpp"),
+        QStringLiteral("src/app/quick_shell/QuickShellNativeSurfaceHost.h"),
+        QStringLiteral("src/app/quick_shell/QuickShellNativeSurfaceHost.cpp"),
+        QStringLiteral("src/app/quick_shell/QuickShellStyleBridge.h"),
+        QStringLiteral("src/app/quick_shell/QuickShellStyleBridge.cpp"),
+        QStringLiteral("src/app/quick_shell/QuickShellMacSurfaceSupport.h"),
+        QStringLiteral("src/app/quick_shell/QuickShellMacSurfaceSupport.mm"),
+        QStringLiteral("resources/quick_shell_qml.qrc"),
+    };
+    QStringList survivors;
+    for (const QString& path : removedFiles) {
+        if (QFileInfo::exists(sourceRoot() + QLatin1Char('/') + path)) survivors.append(path);
+    }
+    if (!survivors.isEmpty()) out << "  still present: " << survivors.join(QStringLiteral(", ")) << '\n';
+    expect(survivors.isEmpty(), QStringLiteral("v1 shell sources are gone"), out, &failed);
+
+    expect(!QFileInfo::exists(sourceRoot() + QStringLiteral("/src/app/quick_shell/qml")),
+           QStringLiteral("the v1 shell QML directory is gone"), out, &failed);
+
+    // 只剩一条 UI 启动路径。
+    const QString mainSource = readSource(QStringLiteral("src/app/main.cpp"));
+    expect(!mainSource.isEmpty(), QStringLiteral("main.cpp is readable"), out, &failed);
+    QStringList entryLeftovers;
+    for (const QString& token : {QStringLiteral("UiSkin"), QStringLiteral("resolveUiSkin"),
+                                 QStringLiteral("MIACODE_UI_SKIN"), QStringLiteral("--ui=")}) {
+        if (mainSource.contains(token)) entryLeftovers.append(token);
+    }
+    if (!entryLeftovers.isEmpty()) {
+        out << "  main.cpp still carries: " << entryLeftovers.join(QStringLiteral(", ")) << '\n';
+    }
+    expect(entryLeftovers.isEmpty(),
+           QStringLiteral("main.cpp has a single UI entry with no skin switch"), out, &failed);
+
+    // 表面再宿主分支随 v1 一起消失，否则阶段 2 会继承 29 处死分支。
+    const QString controller = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.cpp"));
+    const QString controllerHeader = readSource(QStringLiteral("src/app/quick_shell/QuickShellController.h"));
+    expect(!controller.isEmpty() && !controllerHeader.isEmpty(),
+           QStringLiteral("QuickShellController is still present for v2"), out, &failed);
+    expect(!controller.contains(QStringLiteral("surfaceHost_"))
+               && !controllerHeader.contains(QStringLiteral("QuickShellNativeSurfaceHost")),
+           QStringLiteral("QuickShellController no longer branches on a native surface host"),
+           out, &failed);
+
+    // 构建系统不得再引用已删除的源文件。
+    const QString cmake = readSource(QStringLiteral("CMakeLists.txt"));
+    QStringList cmakeLeftovers;
+    for (const QString& token : {QStringLiteral("QuickShellBootstrap"),
+                                 QStringLiteral("QuickShellNativeSurfaceHost"),
+                                 QStringLiteral("QuickShellStyleBridge"),
+                                 QStringLiteral("QuickShellMacSurfaceSupport"),
+                                 QStringLiteral("quick_shell_qml.qrc")}) {
+        if (cmake.contains(token)) cmakeLeftovers.append(token);
+    }
+    if (!cmakeLeftovers.isEmpty()) {
+        out << "  CMakeLists.txt still lists: " << cmakeLeftovers.join(QStringLiteral(", ")) << '\n';
+    }
+    expect(cmakeLeftovers.isEmpty(),
+           QStringLiteral("the build no longer references removed v1 shell sources"), out, &failed);
+
+    if (failed != 0) {
+        out << "V1ShellRemoval spec failed: " << failed << '\n';
+        return 1;
+    }
+    out << "V1ShellRemoval spec passed.\n";
+    return 0;
+}
+```
+
+在 `CMakeLists.txt` 中，`miacode_add_dev_tool(qml_shortcut_binding_spec TEST ...)` 那一段的**紧后面**插入：
+
+```cmake
+    miacode_add_dev_tool(v1_shell_removal_spec TEST
+        SOURCES
+            src/tools/qml_ui/V1ShellRemovalSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    target_compile_definitions(v1_shell_removal_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+```
+
+- [ ] **Step 2: 运行，确认它失败**
+
+```bash
+cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target v1_shell_removal_spec --parallel 4 && ./build-macos-spec/v1_shell_removal_spec
+```
+
+预期：退出码 1。7 条断言中 5 条 `[FAIL]`、2 条 `[PASS]`（"main.cpp is readable" 与
+"QuickShellController is still present for v2" 是有意的正向锚点，用来防止 `MIACODE_SOURCE_ROOT`
+指错时所有"是否已删除"的检查空过）。输出应包含 `still present: ...` 与
+`main.cpp still carries: UiSkin, resolveUiSkin, MIACODE_UI_SKIN, --ui=`。
+
+- [ ] **Step 3: 提交这个红测试**
+
+```bash
+git add src/tools/qml_ui/V1ShellRemovalSpec.cpp CMakeLists.txt
+git commit -m "test(v2): pin the v1 shell removal contract"
+```
+
+---
+
+## Task 2: 收敛为单一 UI 启动路径
+
+**Files:**
+- Modify: `src/app/main.cpp`
+
+- [ ] **Step 1: 删除皮肤枚举与解析函数**
+
+删除 `src/app/main.cpp` 中整个 `enum class UiSkin { ... };`（约 70–73 行）以及紧随其后的注释行 `// Default: v2. Opt into QuickShell with --ui=v1 or MIACODE_UI_SKIN=v1.` 与整个 `UiSkin resolveUiSkin(const QStringList& arguments) { ... }` 函数（约 76–93 行）。
+
+- [ ] **Step 2: 展平启动分支**
+
+把 `const UiSkin uiSkin = resolveUiSkin(app.arguments());` 那一行删除。将其后的
+
+```cpp
+#ifdef Q_OS_WIN
+        miacode::oplog::appendStartupBeaconLine(
+            uiSkin == UiSkin::QmlUiV2
+                ? "phase=before_qml_ui_bootstrap_start"
+                : "phase=before_quick_shell_bootstrap_start");
+#endif
+        if (uiSkin == UiSkin::QmlUiV2) {
+```
+
+替换为
+
+```cpp
+#ifdef Q_OS_WIN
+        miacode::oplog::appendStartupBeaconLine("phase=before_qml_ui_bootstrap_start");
+#endif
+        {
+```
+
+然后删除与之配对的 `else { ... }` 分支整块（其中构造 `QuickShellBootstrap` 的部分），并删除 `#include` 里的 `"quick_shell/QuickShellBootstrap.h"`。
+
+- [ ] **Step 3: 构建**
+
+```bash
+cmake --build build-macos-spec --target MiaCode --parallel 4
+```
+
+预期：编译通过，无 error。若报未使用变量或未定义符号，说明上一步有残留分支未删净。
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add src/app/main.cpp
+git commit -m "refactor(app): collapse startup to the single QML UI entry"
+```
+
+---
+
+## Task 3: 删除 v1 引导与表面再宿主，简化控制器
+
+**Files:**
+- Delete: `src/app/quick_shell/QuickShellBootstrap.{h,cpp}`、`QuickShellNativeSurfaceHost.{h,cpp}`、`QuickShellStyleBridge.{h,cpp}`、`QuickShellMacSurfaceSupport.{h,mm}`
+- Modify: `src/app/quick_shell/QuickShellController.{h,cpp}`、`src/app/qml_ui/QmlUiBootstrap.{h,cpp}`、`src/app/main.cpp`、`CMakeLists.txt`
+
+- [ ] **Step 1: 删除文件**
+
+```bash
+git rm src/app/quick_shell/QuickShellBootstrap.h src/app/quick_shell/QuickShellBootstrap.cpp \
+       src/app/quick_shell/QuickShellNativeSurfaceHost.h src/app/quick_shell/QuickShellNativeSurfaceHost.cpp \
+       src/app/quick_shell/QuickShellStyleBridge.h src/app/quick_shell/QuickShellStyleBridge.cpp \
+       src/app/quick_shell/QuickShellMacSurfaceSupport.h src/app/quick_shell/QuickShellMacSurfaceSupport.mm
+```
+
+- [ ] **Step 2: 从 CMakeLists.txt 移除对应条目**
+
+删除第 138–139、141–144、149–150 行附近这几条（保留 `QuickShellContracts.h`、`QuickShellPreviewCompositeSurface.*`、`QuickShellPreviewSurfacePolicy.h`、`QuickShellController.*`）：
+
+```
+    src/app/quick_shell/QuickShellBootstrap.h
+    src/app/quick_shell/QuickShellBootstrap.cpp
+    src/app/quick_shell/QuickShellNativeSurfaceHost.h
+    src/app/quick_shell/QuickShellNativeSurfaceHost.cpp
+    src/app/quick_shell/QuickShellMacSurfaceSupport.h
+    src/app/quick_shell/QuickShellStyleBridge.h
+    src/app/quick_shell/QuickShellStyleBridge.cpp
+```
+
+以及第 966 行附近 macOS 专属列表中的 `src/app/quick_shell/QuickShellMacSurfaceSupport.mm`。
+
+- [ ] **Step 3: 从控制器移除 surfaceHost 参数**
+
+在 `QuickShellController.h`：删除前置声明 `class QuickShellNativeSurfaceHost;`（第 11 行）、构造函数中的 `QuickShellNativeSurfaceHost* surfaceHost,` 参数（第 74 行）、成员 `QuickShellNativeSurfaceHost* surfaceHost_ = nullptr;`（第 188 行）。
+
+在 `QuickShellController.cpp`：删除构造函数初始化列表里的 `, surfaceHost_(surfaceHost)`（第 344 行），并删除全部 `surfaceHost_` 分支。处理规则始终一致——**保留 `surfaceHost_ == nullptr` 时会走的那一侧，删除另一侧**。
+
+用这条命令逐处定位（改前 29 处，改完应为 0）：
+
+```bash
+grep -n "surfaceHost_" src/app/quick_shell/QuickShellController.cpp
+```
+
+三种形态各举一例。
+
+**形态 A —— 提前返回型**（第 1128 行附近）。整个函数体在 v2 下就是空操作，因此函数**整体删除**，并从头文件删除其声明；再删除 QML 侧对它的调用（`grep -rn "syncTopChromeSurfaceSize" src/app/qml_ui/`，若无命中则只删 C++ 侧）：
+
+```cpp
+void QuickShellController::syncTopChromeSurfaceSize(int width, int height)
+{
+    if (surfaceHost_ == nullptr) {
+        return;
+    }
+    surfaceHost_->syncTopChromeSurfaceSize(width, height);
+    // ...
+}
+```
+
+**形态 B —— 三元取值型**（第 448、541、546 行等）。`surfaceHost_` 恒为空，所以整个表达式恒为 `nullptr`：
+
+```cpp
+// 改前
+return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().previewCompositeWindow : nullptr;
+// 改后：该 getter 恒返回 nullptr，连同其调用方一并删除；
+// 若调用方只是把结果与 nullptr 比较，则删除整个分支。
+```
+
+**形态 C —— 条件语句内的副作用**（如 `if (surfaceHost_ != nullptr) { surfaceHost_->showBottomTabsSpeedToast(...); }`）。直接删除整个 `if` 块。
+
+每删一处后重新构建，编译器会指出因此变成未使用的成员函数与包含。
+
+- [ ] **Step 4: 更新 v2 的构造调用**
+
+在 `src/app/qml_ui/QmlUiBootstrap.cpp:87-91` 附近，把三参数构造改为两参数，并删除上方那条解释 `surfaceHost_` 空指针的注释（它描述的机制已不存在）。
+
+- [ ] **Step 5: 清理指向已删除类型的陈旧注释**
+
+删除引导与再宿主后，三处注释变成错的。它们都不含 `MIACODE_*` 环境变量，因此
+`debug_flag_index_spec` 抓不到；`--ui=v1` 那处由 `v1_shell_removal_spec` 覆盖，另外两处只能靠这一步。
+
+1. `src/app/qml_ui/QmlUiBootstrap.h:22` —— 注释仍写着 `QuickShell: --ui=v1.` 与
+   `no NativeSurfaceHost / StyleBridge`。改成只描述 v2 自身：它是唯一 UI 入口，与隐藏的
+   `MainWindow` 后端共享状态。**这一处有守卫**：改完 `v1_shell_removal_spec` 的
+   "no source file still documents the removed --ui=v1 entry" 断言必须转绿。
+2. `src/app/main.cpp:611` 附近 —— 注释写着 *"QML root windows are themed by QuickShellBootstrap"*，
+   而实际主题化发生在 `QmlUiBootstrap.cpp` 调用 `UiNativeWindowTheme::applyToWindow(window)`。
+   把 `QuickShellBootstrap` 改为 `QmlUiBootstrap`。
+3. `CMakeLists.txt:659` 附近 —— `# Default UI (v2). QuickShell v1: --ui=v1 / MIACODE_UI_SKIN=v1.`
+   删除后半句，只保留 v2 的说明。
+
+- [ ] **Step 6: 给承重的裸作用域加一行说明**
+
+Task 2 把 `if (uiSkin == UiSkin::QmlUiV2) {` 换成了裸 `{`。这个作用域**是承重的**：它把
+`qmlUiBootstrap` 的析构点限定在 `event_loop_exit` 计时与 `postExecObjectTeardownElapsed.start()`
+**之前**。删掉这对花括号会把析构推迟到外层作用域结束，静默破坏这两处关机计时，而编译不会报错。
+
+在 `src/app/main.cpp` 该裸 `{` 上方加一行：
+
+```cpp
+        // Scope the bootstrap so it is destroyed before the teardown timing below.
+        {
+```
+
+- [ ] **Step 7: 修好因删除而失效的 spec**
+
+`src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp` 把 `QuickShellBootstrap.cpp` 当作
+**文本**读取来做契约断言。文件删除后它读到空串并失败——而且这类耦合**编译期不可见**，只在运行
+spec 时暴露。把它改为读取存活的 GUI 引导 `src/app/qml_ui/QmlUiBootstrap.cpp`：四个 token 条件
+（含 `ui/ChartDropOverlay.h`、含 `syncChartDropOverlay`、不含 `PreviewDCompSurface`、
+不含 `createInProcessPreviewSurface`）在新文件上同样成立，守卫语义得以保留。
+
+> **教训（已对本阶段其余部分做过排查）：** 删除源文件前，先找出把它当文本读的 spec：
+> `grep -rln "<被删文件名>" src/tools/`。本阶段其余的 quick_shell 耦合都是对**保留**头文件的
+> `#include`（`QuickShellKeyboardActivation.h`、`QuickShellPopupPosition.h`）或注释，编译期可见，
+> 因此 Task 4 不存在同类隐藏断裂。
+
+- [ ] **Step 8: 构建**
+
+```bash
+cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCode --parallel 4
+```
+
+预期：编译通过。
+
+- [ ] **Step 9: 提交**
+
+```bash
+git add -A
+git commit -m "refactor(shell): delete the v1 bootstrap and native surface re-hosting"
+```
+
+---
+
+### Task 3 结束时的守卫状态（勿误判）
+
+`v1_shell_removal_spec` 此时仍有 **3 条** `[FAIL]`，不是 2 条：`resources/quick_shell_qml.qrc`
+同时出现在"v1 shell sources are gone"的文件清单与"the build no longer references removed v1 shell
+sources"的 token 清单里，而它归 Task 4 删除。因此这两条断言都要等 Task 4 才转绿，加上
+"the v1 shell QML directory is gone" 共 3 条。Task 3 应转绿的是另外三条：
+"v1 shell sources are gone" 之外的 `--ui=v1`、`surfaceHost` 与 `main.cpp` 入口断言。
+
+## Task 4a: 把预览表面搬出 v1 目录（Task 4 的前置）
+
+**计划缺陷修正。** 原 Task 4 假设 `src/app/quick_shell/qml/` 整体不可达。这对其中 9 个文件成立
+（它们的非注释引用只剩自己的 qrc 条目），但 **`QuickShellPreviewSurface.qml` 有三个活消费者**：
+
+1. `src/app/qml_ui/preview/PreviewPane.qml:3,51` —— v2 的常规预览面板
+2. `src/app/qml_ui/layout/MainSplitView.qml:7,244` —— v2 的全屏预览覆盖层
+3. `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp:75` —— `setSource()` 按 qrc 路径加载；
+   该类在保留清单上，且由 `MainWindow::PreviewSection::ensureQuickShellPreviewCompositeSurfaceInitialized()`
+   在 v2 活路径上构造
+
+直接删目录会打断 v2 的预览渲染。它本来就不是外壳代码——它包装 `PreviewStageMediaItem`、
+`PreviewQuickSceneRoot`、`PreviewQuickHudLayer`，属于预览栈，放在 shell 目录里只是历史遗留。
+
+**Files:**
+- Move: `src/app/quick_shell/qml/QuickShellPreviewSurface.qml` → `src/preview/runtime/qml/PreviewSurface.qml`
+- Modify: `resources/preview_runtime_qml.qrc`、`resources/quick_shell_qml.qrc`、
+  `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp`、
+  `src/app/qml_ui/preview/PreviewPane.qml`、`src/app/qml_ui/layout/MainSplitView.qml`
+
+- [ ] **Step 1: 移动并改名**
+
+`git mv` 到 `src/preview/runtime/qml/PreviewSurface.qml`，与它包装的 `PreviewStageMediaItem.qml` 同置。
+改名去掉已死外壳的名字。
+
+- [ ] **Step 2: 换 qrc 注册**
+
+从 `resources/quick_shell_qml.qrc` 删除该条；在 `resources/preview_runtime_qml.qrc` 加入
+`<file alias="preview/runtime/qml/PreviewSurface.qml">../src/preview/runtime/qml/PreviewSurface.qml</file>`。
+
+- [ ] **Step 3: 更新三个消费者**
+
+- `QuickShellPreviewCompositeSurface.cpp:75` 的 `setSource` 改为
+  `qrc:/preview/runtime/qml/PreviewSurface.qml`
+- 两个 v2 QML 的 `import "qrc:/quick_shell/qml" as Shell` 改为
+  `import "qrc:/preview/runtime/qml" as Preview`，实例化改为 `Preview.PreviewSurface { ... }`
+  （保持 `surfaceRole` 等属性绑定不变）
+
+- [ ] **Step 4: 构建并实际运行**
+
+```bash
+cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCode --parallel 4
+```
+
+**这一步必须真的启动程序**：QML 的 qrc 路径错误编译期不报错，只在运行时炸。启动后确认预览面板
+出画，并切一次全屏预览（两个消费者各覆盖一次）。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git commit -m "refactor(preview): move the preview surface out of the v1 shell directory"
+```
+
+## Task 4: 删除 v1 外壳 QML
+
+**Files:**
+- Delete: `src/app/quick_shell/qml/`、`resources/quick_shell_qml.qrc`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: 删除**
+
+```bash
+git rm -r src/app/quick_shell/qml resources/quick_shell_qml.qrc
+```
+
+- [ ] **Step 2: 从 CMakeLists.txt 删除 qrc 条目**
+
+删除第 618 行附近的 `resources/quick_shell_qml.qrc`。
+
+- [ ] **Step 3: 构建**
+
+```bash
+cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target MiaCode --parallel 4
+```
+
+预期：编译通过。若报缺少 qrc 资源，说明仍有代码用 `qrc:/quick_shell/...` 路径，用 `grep -rn "quick_shell" src/ --include=*.cpp` 定位后一并清理。
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add -A
+git commit -m "refactor(shell): delete the v1 shell QML"
+```
+
+---
+
+## Task 5: 同步文档与漂移守卫
+
+`MIACODE_UI_SKIN` 不再被代码读取，而 `docs/ops/DEBUG_INDEX.md` 仍列着它——`debug_flag_index_spec` 会因此失败。这是设计好的闸门，不是意外。
+
+**Files:**
+- Modify: `docs/ops/DEBUG_INDEX.md`、`.claude/skills/miacode-dev-guide/references/debug-and-logging.md`、`.claude/skills/miacode-dev-guide/references/architecture-and-layout.md`、`docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`
+
+- [ ] **Step 1: 确认守卫已变红**
+
+```bash
+cmake --build build-macos-spec --target debug_flag_index_spec --parallel 4 && ./build-macos-spec/debug_flag_index_spec
+```
+
+预期：失败，报 `MIACODE_UI_SKIN` 在文档中但代码已不再读取。
+
+- [ ] **Step 2: 从 DEBUG_INDEX.md 删除该条**
+
+删除 `## Misc / Platform` 一节中这两行：
+
+```
+- `MIACODE_UI_SKIN` — select the UI shell. Default is the QML v2 shell; set to `v1` (or pass
+  `--ui=v1`) to launch the QuickShell v1 shell instead (`app/main.cpp`, `resolveUiSkin()`).
+```
+
+- [ ] **Step 3: 更新仓库指南**
+
+在 `debug-and-logging.md` 中删除 `### UI shell selection` 一节里关于 `MIACODE_UI_SKIN` 的段落，保留 `MIACODE_QML_SPEC_IMPORT_ROOT` 的说明。
+
+在 `architecture-and-layout.md` 中，把 `src/app/quick_shell/` 的描述改为：
+
+```
+- QuickShell 遗留：`src/app/quick_shell/` 仅剩 `QuickShellController` 与预览表面策略，v2 仍在使用；
+  v1 外壳、原生表面再宿主与主题桥已于 2026-08-25 删除，`--ui=v1` 入口不再存在。控制器本身按
+  `docs/specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md` 阶段 2 退役。
+```
+
+- [ ] **Step 4: 清理源码树里对已删类型的引用**
+
+`v1_shell_removal_spec` 的 "no source file still names a deleted v1 shell type" 断言会列出全部
+残留。当前应为 5 处（守卫加上之前，它们全部未被发现——这正是加这条扫描的理由）：
+
+1. `src/README.md:94` —— 仍把 `QuickShellBootstrap` 写成"正常 GUI 启动路径"，并称 widget 外壳
+   "作为原生表面宿主在 QuickShell 内"。两句都已不成立，且就在"Current defaults"一节里。
+   改为描述 `QmlUiBootstrap` 是唯一启动路径。
+2. `src/app/mainwindow/MainWindow.h:306` —— "Called from QuickShellBootstrap after the UI is ready"，
+   实际调用方是 `QmlUiBootstrap`。
+3. `src/app/qml_ui/QmlEditorPageHost.cpp:60` —— "same early-bind pattern as
+   QuickShellNativeSurfaceHost"，读者已无从查证该模式；改写为自述其绑定时机。
+4. `src/app/WindowsIdleEventDiagnostics.cpp:235` —— 注释称两个调用方之一是
+   `QuickShellBootstrap::beginAcceptedRootWindowShutdown`。**注意**：详见下方"Windows 诊断已死"。
+5. `src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp` —— Task 3 已把读取目标改为
+   `QmlUiBootstrap.cpp`，但注释里仍留有旧文件名。
+
+改完该断言必须转绿。
+
+> **Windows 诊断已死（记录，本阶段不处理）：** 追查第 4 条时发现，`WindowsIdleEventMonitor` 现在
+> 整体是死代码——生产代码里既无 `registerWindow()` 也无 `unregisterWindow()` 调用方，Windows 因此
+> 失去了空闲事件诊断。这是**既有问题**而非本次删除造成：v1 在本阶段开始前就已不可达
+> （`main.cpp` 只构造 `QmlUiBootstrap`），Task 3 只是移除了最后一个本已失效的调用方。
+> 需要单独决策是恢复接线还是删除该监视器。
+
+- [ ] **Step 5: 更新一阶段 TODO 的范围声明**
+
+在 `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md` 的「范围与契约」一节，删除这两条已不成立的条目：
+
+```
+- v1 / v2 共存，保留 QuickShell 再宿主路径：`NativeSurfaceHost`、`StyleBridge`、`QuickShellMain.qml`。
+```
+```
+- v1 入口：`--ui=v1` / `MIACODE_UI_SKIN=v1` → QuickShell
+```
+
+- [ ] **Step 6: 确认守卫转绿，且结构契约通过**
+
+```bash
+cmake --build build-macos-spec --target debug_flag_index_spec v1_shell_removal_spec --parallel 4
+./build-macos-spec/debug_flag_index_spec && ./build-macos-spec/v1_shell_removal_spec
+```
+
+预期：两者都退出码 0，`V1ShellRemoval spec passed.`
+
+- [ ] **Step 7: 提交**
+
+```bash
+git add -A
+git commit -m "docs(v2): drop the v1 shell entry from the flag index and guide"
+```
+
+---
+
+## Task 6: 全量验证
+
+- [ ] **Step 1: Release 构建**
+
+```bash
+cmake --build build-macos-spec --target MiaCode --parallel 4
+```
+
+预期：`[100%] Built target MiaCode`，无 error。
+
+- [ ] **Step 2: 全量定向 CTest**
+
+```bash
+ctest --test-dir build-macos-spec -C Release --output-on-failure
+```
+
+预期：除下列**既有失败**外全部通过。若有目标未构建（`Not Run`），先
+`cmake --build build-macos-spec --parallel 4` 再重跑。
+
+- `qtavplayer_platform_spec` — `FAIL: prepared playback commit always seeks before starting
+  either backend`。**与本阶段无关**：在 stage 0a 起点 `31922400`（本计划任何改动之前）复现同样的
+  失败，已实测确认。不要因它阻塞本阶段验收，也不要在本阶段顺手修它——它属于预览播放域，另行处理。
+- `v1_shell_removal_spec` — 到 Task 5 结束前一直为红，这是本计划的设计。Task 6 时它应已转绿。
+
+- [ ] **Step 3: 启动一次，确认 v2 正常**
+
+```bash
+./build-macos-spec/MiaCode.app/Contents/MacOS/MiaCode --debug
+```
+
+预期：v2 界面正常启动；打开一个谱面，编辑器、时间轴、预览均工作。传 `--ui=v1` 不再有任何特殊行为（作为普通未知参数被忽略）。
+
+- [ ] **Step 4: 记录阶段完成**
+
+在 `docs/specs/ui/QML_UI_V2_ARCHITECTURE_DESIGN_ZH.md` 第 8 节的阶段 0 行后追加一行完成标记，写明实际删除行数（用 `git diff --stat` 的净删除数）。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add -A
+git commit -m "docs(v2): record stage 0a completion"
+```
+
+---
+
+## 完成判据
+
+1. `v1_shell_removal_spec` 通过。
+2. `debug_flag_index_spec` 通过（`MIACODE_UI_SKIN` 已从代码与文档双双消失）。
+3. Release `MiaCode` 构建通过；全量 CTest 除既有的 `qtavplayer_platform_spec` 外全部通过。
+4. v2 桌面启动正常。
+5. `QuickShellController` 仍在，且不再有任何 `surfaceHost_` 分支。
+
+## 不在本计划范围内
+
+- `QuickShellController` 本身的退役（阶段 2）。**退役面比表面看到的大一个量级**：审查实测，
+  控制器现存接口中 **34 个 `Q_PROPERTY` 有 14 个、35 个 `Q_INVOKABLE` 有 7 个在 v2 完全无消费者**，
+  其唯一调用方都在 Task 4 删除的 v1 QML 里。阶段 2 应以这份实测清单为范围依据，而不是靠零星发现。
+  另有 `previewUsesSeparateSurface` 与其契约侧 `shellPreviewUsesSeparateSurface()`：它是已删的
+  `previewCompositeWindow` 的搭档（v1 QML 里作 `Loader.active` 门控），v2 零消费者，一并退役。
+  届时还要清理 Task 3 之后变成死代码的两处：
+  `QuickShellContracts.h` 里的 `QuickShellSurfaceBundle`（全仓零使用）与
+  `QuickShellStateSource::shellPreviewCompositeWindow()`（无调用方，实现一直下探到
+  `MainWindow::WindowSection`）。它们位于本阶段标记为"保留"的文件中，故不在此处动。
+- 扩展宿主删除、被舍弃的三组页面删除——它们是阶段 0 的另外两个独立单元，各自单独成计划。
+- 任何 `ChartWorkspace` 相关工作（阶段 1）。
+
+---
+
+# 执行总结（2026-08-25）
+
+## 交付
+
+源码净 **−7,770 行**（39 文件，+284/−8,054），17 个提交。执行方式为子代理驱动：每个 Task 派一个全新
+子代理实现，之后依次做规格合规审查与代码质量审查，发现问题回到同一实现者修复再复审。
+
+| 提交 | 内容 |
+| --- | --- |
+| `1f61a691` `0c885454` `a61e6aae` `a8a30139` | Task 1：结构契约守卫（先红），及其三轮打磨 |
+| `2009c291` | Task 2：收敛为单一 UI 启动路径 |
+| `57780e6e` | Task 3：删除 v1 引导与表面再宿主，清掉控制器 29 处死分支（−3,758） |
+| `984a4faf` | 删除随 v1 失去接线的 `WindowsIdleEventMonitor` |
+| `22cc8db8` | Task 4a：预览表面搬出 v1 目录 |
+| `f3be3979` | Task 4：删除 v1 外壳 QML（−3,787） |
+| `5026cbc4` | Task 5：文档与两个漂移守卫转绿 |
+| `adb86dd1` `54c308d7` | 守卫扩展（见下文缺陷 3） |
+| `bc8f554e` `9341cfa8` `08882918` `96bea9ee` `85d6dc78` | 计划自身的修正与记录 |
+
+## 验证证据
+
+- Release 全量构建：0 error。
+- 全量 CTest：**71/72**。唯一失败 `qtavplayer_platform_spec` 为既有问题——已通过 checkout
+  本阶段起点 `31922400` 并在该处运行确认，非本阶段引入。
+- 两个漂移守卫均为绿。
+- 运行时冒烟：三个预览表面全部创建成功（`preview_surface_created` ×3），无新增 QML 错误。
+  **这一步不可省略**：QML 在加载时才解析 qrc 路径，构建期发现不了路径错误。
+
+## 计划自身暴露的 5 处缺陷
+
+全部由审查或实现者发现，无一是实现错误。记录成因而非仅记录症状，因为其中三类会在 0b / 0c 复现。
+
+| # | 缺陷 | 后果 | 发现方式 |
+| --- | --- | --- | --- |
+| 1 | 本计划依赖 `debug_flag_index_spec` 作闸门，却没意识到守卫自身嵌入的 `MIACODE_UI_SKIN` 字面量会污染它的扫描 | 闸门**反转**：Task 2 后静默通过（本该红），Task 5 后误报并建议重新登记一个已不存在的变量 | 质量审查**模拟下游状态实测**得出，读码看不出来 |
+| 2 | 排除机制用 `path.endsWith(name)` 匹配路径尾而非文件名 | `LegacyV1ShellRemovalSpec.cpp` 一类命名会被静默误排除 | 质量审查写探针证明 |
+| 3 | Task 3 文件清单漏了 `QmlUiBootstrap.h`，**且当时没有任何守卫覆盖这类残留** | 会静默活过整个阶段 | 质量审查。它指出的是「缺少守卫覆盖」这一根因，而非孤立的一处残留 |
+| 4 | 删除源文件会打断把该文件**当作文本读取**的 spec | 编译期完全不可见，只在运行 spec 时暴露 | Task 3 实现者遇到后上报 |
+| 5 | 「v1 QML 目录整体不可达」这一前提**是错的** | 按原计划执行会打断 v2 的预览渲染 | Task 4 实现者拒绝执行并上报 |
+
+## 给 0b / 0c 的可复用规则
+
+1. **按内容判断归属，不按目录。** 缺陷 5 的成因是 `QuickShellPreviewSurface.qml` 从来就不是外壳代码
+   ——它包装预览栈，只是历史上被放在 shell 目录里。删除任何目录前，逐文件确认其真实归属。
+2. **删除源文件前先跑** `grep -rln "<文件名>" src/tools/`。把源码当文本读的 spec 是编译期不可见的耦合。
+3. **守卫要扫全仓，不要只扫单个文件。** 缺陷 3 修复后，守卫从只扫 `main.cpp` 扩为扫描 `src/` 全树，
+   立即一次抓到全部 5 处残留，其中一处是人工排查没发现的。0b / 0c 的守卫应照此设计。
+4. **嵌有 `MIACODE_*` 字面量的新 spec** 必须加入 `DebugFlagIndexSpec.cpp` 的 `kSelfExcludedFileNames`，
+   否则重演缺陷 1。该文件现在有一条正向断言会在被排除文件真的读取 env 时报错。
+5. **涉及 QML 的删除必须实际运行程序验证**，构建通过不构成证据。
+6. **先确立既有失败基线。** 本阶段起点就有一个红测试；不先确认，收尾判据会被它误挡，或被误当成自己造成的。
+
+## 交接给阶段 2（`QuickShellController` 退役）
+
+- 退役面比零星发现的大一个量级：审查实测，控制器 **34 个 `Q_PROPERTY` 有 14 个、35 个 `Q_INVOKABLE`
+  有 7 个在 v2 完全无消费者**——它们唯一的调用方随 Task 4 的 v1 QML 一并删除了。阶段 2 应以这份
+  实测清单定范围。
+- 另有三处已确认死代码，因位于本阶段「保留」文件中而未动：`QuickShellContracts.h` 的
+  `QuickShellSurfaceBundle`（全仓零使用）、`QuickShellStateSource::shellPreviewCompositeWindow()`
+  （无调用方，实现下探至 `MainWindow::WindowSection`）、`previewUsesSeparateSurface` 与其契约侧
+  `shellPreviewUsesSeparateSurface()`。
+
+## 遗留的独立决策
+
+`WindowsIdleEventMonitor` 已按所有者决定删除（`984a4faf`）。它并非过时功能，而是随 v1 失去接线——
+它是为**尚未解决的** Windows 冻结问题做的取证工具，且该问题只在用户机器上可复现。若日后重启该调查，
+需要重建取证接线。历史记录保留在 `docs/ops/WINDOWS_IDLE_FREEZE_REPRO_ZH.md` 与
+`docs/audit/BRANCH_AUDIT_WINDOWS_IDLE_FREEZE_DIAGNOSTICS_ZH.md`。

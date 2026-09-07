@@ -10,7 +10,7 @@ Rectangle {
     required property var commands
     property var pages
 
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
 
     PanelHeader {
@@ -18,7 +18,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: qsTr("谱面")
+        title: UiText.text("谱面")
+        sidebarTitle: true
         showMore: false
     }
 
@@ -39,7 +40,7 @@ Rectangle {
 
             NavRow {
                 width: parent.width
-                text: qsTr("元数据")
+                text: UiText.text("dialog.unsaved_field_changes.field.metadata")
                 selected: root.viewState.metadataEditorActive
                 onClicked: {
                     if (root.pages && root.pages.overlayActive)
@@ -57,6 +58,6 @@ Rectangle {
             }
         }
 
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: AppScrollBar {}
     }
 }

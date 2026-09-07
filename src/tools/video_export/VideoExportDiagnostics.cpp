@@ -36,7 +36,6 @@
 #include <QMutexLocker>
 #include <QPainter>
 #include <QProcess>
-#include <QProgressDialog>
 #include <QRect>
 #include <QRegularExpression>
 #include <QSet>

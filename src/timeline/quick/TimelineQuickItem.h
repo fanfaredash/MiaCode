@@ -35,7 +35,10 @@ class TimelineQuickItem : public QQuickItem
     Q_PROPERTY(bool viewportLockEnabled READ viewportLockEnabled WRITE setViewportLockEnabled NOTIFY viewportLockEnabledChanged)
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
     Q_PROPERTY(int timelineTop READ timelineTop NOTIFY sceneMetricsChanged)
+    Q_PROPERTY(int minimumViewportHeight READ minimumViewportHeight CONSTANT)
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)
+    Q_PROPERTY(QString hoverTooltipText READ hoverTooltipText NOTIFY hoverTooltipChanged)
+    Q_PROPERTY(QPointF hoverTooltipPosition READ hoverTooltipPosition NOTIFY hoverTooltipChanged)
 
 public:
     explicit TimelineQuickItem(QQuickItem* parent = nullptr);
@@ -63,15 +66,14 @@ public:
     bool followProgressEnabled() const;
     void setFollowProgressEnabled(bool enabled);
     int timelineTop() const;
+    int minimumViewportHeight() const;
     bool isReady() const;
+    QString hoverTooltipText() const;
+    QPointF hoverTooltipPosition() const;
 
     Q_INVOKABLE void cycleZoomPreset();
     Q_INVOKABLE void stepZoomPreset(int deltaSteps);
     Q_INVOKABLE void setZoomScale(qreal scale);
-    Q_INVOKABLE void setZoomControlPressedPart(int part);
-    Q_INVOKABLE void setZoomControlHoveredPart(int part);
-    Q_INVOKABLE void setSettingsControlHovered(bool hovered);
-    Q_INVOKABLE void setSettingsControlPressed(bool pressed);
     Q_INVOKABLE void refreshTheme();
 
 signals:
@@ -83,6 +85,7 @@ signals:
     void followProgressEnabledChanged();
     void sceneMetricsChanged();
     void readyChanged();
+    void hoverTooltipChanged();
     void timelineSurfaceReady();
     void playheadChanged(double second);
     void headerNavigateRequested(double second);
@@ -94,10 +97,10 @@ signals:
     void followPreviewToggled(bool enabled);
     void viewportLockToggled(bool enabled);
     void followProgressToggled(bool enabled);
-    void previewPlayPauseRequested();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
+    void updatePolish() override;
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
     void itemChange(ItemChange change, const ItemChangeData& value) override;
     void hoverMoveEvent(QHoverEvent* event) override;
@@ -121,6 +124,7 @@ private:
     void stopHeldHorizontalKeyScroll(int key = 0);
     void applyHeldHorizontalKeyScrollTick();
     void bindRenderCadence(QQuickWindow* window);
+    void updateHoverTooltip(const QString& text, const QPointF& position);
     QPointer<TimelineQuickStateBridge> stateBridge_;
     QMetaObject::Connection bridgeRenderStateConnection_;
     QMetaObject::Connection bridgePlayheadConnection_;
@@ -132,16 +136,14 @@ private:
     int headerRightLimit_ = 0;
     int headerMarkerLeftLimit_ = 0;
     int headerMarkerRightLimit_ = 0;
-    int zoomControlPressedPart_ = 0;
-    int zoomControlHoveredPart_ = 0;
-    bool settingsControlHovered_ = false;
-    bool settingsControlPressed_ = false;
     qreal cachedZoomScale_ = 0.5;
     bool cachedFollowPreviewEnabled_ = false;
     bool cachedViewportLockEnabled_ = false;
     bool cachedFollowProgressEnabled_ = true;
     int cachedTimelineTop_ = 0;
     bool ready_ = false;
+    QString hoverTooltipText_;
+    QPointF hoverTooltipPosition_;
     quint64 appearanceRevision_ = 0;
     qreal cachedDevicePixelRatio_ = 0.0;
     // Phase-4e-old-opt — was QString built via per-paint label-name
@@ -165,12 +167,6 @@ private:
     // INT_MIN is the "never built" sentinel so the first call always
     // rebuilds.
     mutable int cachedScrollBucket_ = INT_MIN;
-    // Phase 9d-native polish — header-control state participates in
-    // the cache key so the native zoom-button text + follow-check tick
-    // update on click rather than waiting for a playback tick to bump
-    // an unrelated revision.
-    mutable bool cachedSceneBuildFollowPreviewEnabled_ = false;
-    mutable bool cachedSceneBuildFollowProgressEnabled_ = true;
     mutable double cachedSceneBuildZoomScale_ = -1.0;  // sentinel: forces first build
     mutable double cachedSceneBuildContentScale_ = -1.0;
     mutable int cachedSceneBuildHeaderLeftLimit_ = 0;
@@ -178,6 +174,7 @@ private:
     mutable int cachedSceneBuildHeaderMarkerLeftLimit_ = 0;
     mutable int cachedSceneBuildHeaderMarkerRightLimit_ = 0;
     mutable quint64 cachedSceneBuildAppearanceRevision_ = 0;
+    mutable quint64 cachedSceneBuildLayoutRevision_ = 0;
     mutable quint64 cachedSceneBuildGridRevision_ = 0;
     mutable quint64 cachedSceneBuildWaveformRevision_ = 0;
     mutable quint64 cachedSceneBuildHeaderRevision_ = 0;
@@ -206,6 +203,8 @@ private:
     double heldHorizontalKeyScrollRemainderPixels_ = 0.0;
     QElapsedTimer heldHorizontalKeyScrollElapsed_;
     QTimer heldHorizontalKeyScrollTimer_;
+    QSize pendingViewportSize_;
+    bool viewportUpdatePending_ = false;
     std::unique_ptr<TimelineQuickTextureCache> textures_;
     std::unique_ptr<TimelineQuickGridLayer> gridLayer_;
     std::unique_ptr<TimelineQuickWaveformLayer> waveformLayer_;

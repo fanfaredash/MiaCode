@@ -101,15 +101,6 @@ constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineLaneHeight = 20;
 constexpr int kTimelineLaneCount = 9;
 
-constexpr int kPreviewFullscreenHintTopMargin = 28;
-constexpr int kPreviewFullscreenOverlaySideMargin = 18;
-constexpr int kPreviewFullscreenOverlayBottomMargin = 24;
-constexpr int kPreviewFullscreenOverlayMaxWidth = 10000;
-constexpr int kPreviewFullscreenOverlayHideOffset = 20;
-constexpr int kPreviewFullscreenControlsRevealHotzoneHeight = 120;
-constexpr int kPreviewFullscreenControlsAutoHideDelayMs = 1600;
-constexpr int kPreviewFullscreenHintAutoHideDelayMs = 2200;
-
 struct PreviewStatsLayout {
     int columns = kPreviewStatsWideLayoutCols;
     int rows = 2;

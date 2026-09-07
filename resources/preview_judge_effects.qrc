@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file alias="preview/judge_effects/judge_effect_firework.png">preview/judge_effects/judge_effect_firework.png</file>
+        <file alias="preview/judge_effects/judge_effect_firework_bright_block.png">preview/judge_effects/judge_effect_firework_bright_block.png</file>
         <file alias="preview/judge_effects/judge_effect_firework_color_ball.png">preview/judge_effects/judge_effect_firework_color_ball.png</file>
         <file alias="preview/judge_effects/judge_effect_hold_sustain_circle.png">preview/judge_effects/judge_effect_hold_sustain_circle.png</file>
         <file alias="preview/judge_effects/judge_effect_hold_sustain_circle_DX.png">preview/judge_effects/judge_effect_hold_sustain_circle_DX.png</file>

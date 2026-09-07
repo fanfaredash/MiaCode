@@ -736,8 +736,232 @@ bool runFolderMatchSpec(const QString& inputPath, QTextStream& out, QTextStream&
     return allPassed;
 }
 
+void expectClearCompleteElements(
+    const QString& input,
+    int selectionStart,
+    int selectionEnd,
+    const QString& expected,
+    int expectedChanged,
+    const QString& message,
+    int* failed,
+    QTextStream& err)
+{
+    int changed = -1;
+    const QString actual = miacode::chart_transform::clearCompleteElementsInSelection(
+        input,
+        selectionStart,
+        selectionEnd,
+        &changed);
+    expectTrue(
+        actual == expected && changed == expectedChanged,
+        QStringLiteral("%1 (actual='%2', changed=%3)")
+            .arg(message, actual)
+            .arg(changed),
+        failed,
+        err);
+}
+
+void expectClearCompleteElementsReplacement(
+    const QString& input,
+    int selectionStart,
+    int selectionEnd,
+    const QString& expectedReplacement,
+    const QString& message,
+    int* failed,
+    QTextStream& err)
+{
+    int changed = -1;
+    const QString transformedFull = miacode::chart_transform::clearCompleteElementsInSelection(
+        input,
+        selectionStart,
+        selectionEnd,
+        &changed);
+    const int unchangedSuffixLength = input.size() - selectionEnd;
+    const int transformedSelectionEnd = transformedFull.size() - unchangedSuffixLength;
+    const QString replacement = transformedFull.mid(selectionStart, transformedSelectionEnd - selectionStart);
+    expectTrue(
+        replacement == expectedReplacement,
+        QStringLiteral("%1 (replacement='%2', changed=%3)")
+            .arg(message, replacement)
+            .arg(changed),
+        failed,
+        err);
+}
+
+void expectResetTapNotes(
+    const QString& input,
+    int selectionStart,
+    int selectionEnd,
+    const QString& expected,
+    int expectedChanged,
+    const QString& message,
+    int* failed,
+    QTextStream& err)
+{
+    int changed = -1;
+    const QString actual = miacode::chart_transform::resetTapNotesInSelection(
+        input, selectionStart, selectionEnd, &changed);
+    expectTrue(
+        actual == expected && changed == expectedChanged,
+        QStringLiteral("%1 (actual='%2', changed=%3)")
+            .arg(message, actual)
+            .arg(changed),
+        failed,
+        err);
+}
+
 void runInlineSpecs(QTextStream& err, int* failed)
 {
+    // 一键清空 (moved here with clearCompleteElementsInSelection when it left
+    // the Widgets editor's header — it is a selection transform like the rest).
+    const QString measure = QStringLiteral("{16}1,1,1,1-3[9:1],");
+    expectClearCompleteElements(
+        measure,
+        0,
+        measure.size(),
+        QStringLiteral("{16},,,,"),
+        4,
+        QStringLiteral("Ctrl+Q clears every complete selected element and keeps subdivision prefix"),
+        failed,
+        err);
+    expectResetTapNotes(
+        QStringLiteral("{16}7,7,E1,A1,,8/2,,3,3^6[8:1]*^8[8:1],4,C,,3b,,,,"),
+        0,
+        QStringLiteral("{16}7,7,E1,A1,,8/2,,3,3^6[8:1]*^8[8:1],4,C,,3b,,,,").size(),
+        QStringLiteral("{16}1,1,1,1,,1,,1,1,1,1,,1,,,,"),
+        10,
+        QStringLiteral("reset tap notes reduces each occupied beat to one lane-1 tap"),
+        failed,
+        err);
+    expectResetTapNotes(
+        QStringLiteral("(120){8}1, 2,|| keep 3,4,\n{16}A1,,"),
+        0,
+        QStringLiteral("(120){8}1, 2,|| keep 3,4,\n{16}A1,,").size(),
+        QStringLiteral("(120){8}1, 1,|| keep 3,4,\n{16}1,,"),
+        2,
+        QStringLiteral("reset tap notes preserves timing, whitespace, and comments"),
+        failed,
+        err);
+    expectClearCompleteElements(
+        measure,
+        0,
+        QStringLiteral("{16}1,1,1").size(),
+        QStringLiteral("{16},,1,1-3[9:1],"),
+        2,
+        QStringLiteral("Ctrl+Q leaves an incomplete selected trailing element unchanged"),
+        failed,
+        err);
+    expectClearCompleteElements(
+        measure,
+        0,
+        QStringLiteral("{16}1,1,1,1-3[9:").size(),
+        QStringLiteral("{16},,,1-3[9:1],"),
+        3,
+        QStringLiteral("Ctrl+Q does not clear an incomplete bracketed selected element"),
+        failed,
+        err);
+    expectClearCompleteElements(
+        QStringLiteral("1,1"),
+        0,
+        QStringLiteral("1,1").size(),
+        QStringLiteral(",1"),
+        1,
+        QStringLiteral("Ctrl+Q requires element plus comma, so final unterminated element stays"),
+        failed,
+        err);
+    expectClearCompleteElements(
+        QStringLiteral("1,|| 2,3,\n4,"),
+        0,
+        QStringLiteral("1,|| 2,3,\n4,").size(),
+        QStringLiteral(",|| 2,3,\n,"),
+        2,
+        QStringLiteral("Ctrl+Q skips comment text for now"),
+        failed,
+        err);
+    {
+        const QString compound = QStringLiteral("4^6[8:1],,,3h[16:3],");
+        const int start = compound.indexOf(QStringLiteral("6[8:1]"));
+        expectClearCompleteElements(
+            compound,
+            start,
+            compound.size(),
+            QStringLiteral("4^6[8:1],,,,"),
+            1,
+            QStringLiteral("Ctrl+Q does not clear from the middle of a compound element"),
+            failed,
+            err);
+        expectClearCompleteElementsReplacement(
+            compound,
+            start,
+            compound.size(),
+            QStringLiteral("6[8:1],,,,"),
+            QStringLiteral("Ctrl+Q document-aware replacement keeps the unselected compound prefix"),
+            failed,
+            err);
+    }
+    {
+        const QString prefixed = QStringLiteral("{16}3,4,3,5h[16:5],");
+        const int start = prefixed.indexOf(QStringLiteral("6}3"));
+        expectClearCompleteElements(
+            prefixed,
+            start,
+            prefixed.size(),
+            QStringLiteral("{16},,,,"),
+            4,
+            QStringLiteral("Ctrl+Q preserves a partially-selected subdivision prefix"),
+            failed,
+            err);
+        expectClearCompleteElementsReplacement(
+            prefixed,
+            start,
+            prefixed.size(),
+            QStringLiteral("6},,,,"),
+            QStringLiteral("Ctrl+Q document-aware replacement keeps the unselected subdivision prefix"),
+            failed,
+            err);
+    }
+    {
+        // A passage spanning several {} subdivisions must keep every directive
+        // and line break — clearing must NOT collapse it into one {} (the bug).
+        const QString multi = QStringLiteral("{8}1,2,\n{16}3,4,");
+        expectClearCompleteElements(
+            multi,
+            0,
+            multi.size(),
+            QStringLiteral("{8},,\n{16},,"),
+            4,
+            QStringLiteral("Ctrl+Q keeps every subdivision across line breaks"),
+            failed,
+            err);
+    }
+    {
+        // A subdivision directive after whitespace (not tight against the prior
+        // comma) must still survive the clear.
+        const QString spaced = QStringLiteral("{8}1, {16}2,");
+        expectClearCompleteElements(
+            spaced,
+            0,
+            spaced.size(),
+            QStringLiteral("{8}, {16},"),
+            2,
+            QStringLiteral("Ctrl+Q keeps a space-preceded subdivision prefix"),
+            failed,
+            err);
+    }
+    {
+        // BPM marks and subdivisions both survive across a line break.
+        const QString bpm = QStringLiteral("(120){8}1,\n(140){4}2,");
+        expectClearCompleteElements(
+            bpm,
+            0,
+            bpm.size(),
+            QStringLiteral("(120){8},\n(140){4},"),
+            2,
+            QStringLiteral("Ctrl+Q keeps BPM marks and subdivisions across line breaks"),
+            failed,
+            err);
+    }
+
     {
         int changed = 0;
         const QString input = QStringLiteral("12 3h[4:1] A1 C1h[4:1] 1-5[8:1]");
@@ -1935,6 +2159,56 @@ void runInlineSpecs(QTextStream& err, int* failed)
             failed,
             err
         );
+
+        QJsonObject legacyFpd;
+        legacyFpd.insert(QStringLiteral("chart_normalize_syntax"), QStringLiteral("fpd"));
+        QJsonObject canonicalSegment;
+        canonicalSegment.insert(
+            QStringLiteral("chart_normalize_syntax"), QStringLiteral("segment_preserving"));
+        QJsonObject legacyHinata;
+        legacyHinata.insert(QStringLiteral("chart_normalize_syntax"), QStringLiteral("hinata"));
+        QJsonObject canonicalCompact;
+        canonicalCompact.insert(
+            QStringLiteral("chart_normalize_syntax"), QStringLiteral("compact_single_line"));
+        const QString normalizationFixture = QStringLiteral("{4}1,2,3,4,\nE");
+        const auto legacySegmentResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(legacyFpd, defaults));
+        const auto canonicalSegmentResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(canonicalSegment, defaults));
+        const auto legacyCompactResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(legacyHinata, defaults));
+        const auto canonicalCompactResult = miacode::chart_transform::normalizeChartText(
+            normalizationFixture,
+            miacode::simai::SimaiTimingMetadata(),
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(canonicalCompact, defaults));
+        expectTrue(
+            legacySegmentResult.ok && canonicalSegmentResult.ok
+                && legacySegmentResult.text == canonicalSegmentResult.text,
+            QStringLiteral("legacy fpd and canonical segment-preserving preferences normalize identically"),
+            failed,
+            err);
+        expectTrue(
+            legacyCompactResult.ok && canonicalCompactResult.ok
+                && legacyCompactResult.text == canonicalCompactResult.text,
+            QStringLiteral("legacy hinata and canonical compact-single-line preferences normalize identically"),
+            failed,
+            err);
+        QJsonObject saved;
+        miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
+            &saved, miacode::chart_transform::ChartNormalizationOptions{
+                true, true, true, miacode::chart_transform::ChartNormalizationSyntax::CompactSingleLine, 4});
+        expectTrue(
+            saved.value(QStringLiteral("chart_normalize_syntax")).toString()
+                == QStringLiteral("compact_single_line"),
+            QStringLiteral("normalization writes the canonical compact-single-line token"),
+            failed,
+            err);
     }
 
     {

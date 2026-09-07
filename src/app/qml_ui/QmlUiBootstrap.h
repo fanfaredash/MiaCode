@@ -1,5 +1,6 @@
 #pragma once
 
+#include "QmlUiRootLifecycle.h"
 #include "QmlUiWindowChrome.h"
 
 #include <memory>
@@ -11,12 +12,24 @@
 class QQmlApplicationEngine;
 class QQuickWindow;
 
-class MainWindow;
+class Session;
 class QmlApplicationContext;
-class QuickShellController;
+class QmlCoverExportWindow;
+namespace miacode::v2 {
+class ApplicationServices;
+}
+namespace miacode::qml_ui {
+class QmlChartDropBridge;
+}
 
-// Default UI entry (v2). Shares the hidden MainWindow backend with
-// QuickShell; no NativeSurfaceHost / StyleBridge. QuickShell: --ui=v1.
+// The single UI entry. Builds the non-Widget application services first, then
+// drives the runtime Session backend while the whole visible shell is QML. The
+// document domain, the UI-request boundary and the job-progress surface are no
+// longer among what it owns — they belong to ApplicationServices, which is
+// constructed before the window and destroyed after it. The Session backend
+// still contains non-visual migration state, but the product source set no
+// longer depends on Qt Widgets; QML owns file dialogs, unsaved-change choices,
+// and page navigation confirmations.
 class QmlUiBootstrap final : public QObject
 {
     Q_OBJECT
@@ -26,21 +39,26 @@ public:
     ~QmlUiBootstrap() override;
 
     bool start(const QString& startupOpenTarget = QString());
-    void setShowWelcomeDialogOnStartup(bool show) { showWelcomeDialogOnStartup_ = show; }
 
 private:
+    void openCoverExportWindow(int difficultyId);
     void beginAcceptedRootWindowShutdown(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
+    void releaseRootWindowResources();
 
     QIcon appIcon_;
-    std::unique_ptr<MainWindow> backend_;
-    std::unique_ptr<QuickShellController> controller_;
+    // Declared before backend_ so it is destroyed after it: the window's
+    // teardown still talks to these services.
+    std::unique_ptr<miacode::v2::ApplicationServices> applicationServices_;
+    std::unique_ptr<Session> backend_;
     std::unique_ptr<QmlApplicationContext> applicationContext_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
     // Owns the native-event filter; must outlive the root window.
     std::unique_ptr<QmlUiWindowChrome> windowChrome_;
+    std::unique_ptr<miacode::qml_ui::QmlChartDropBridge> chartDropBridge_;
     QPointer<QQuickWindow> rootWindow_;
+    QPointer<QmlCoverExportWindow> coverWindow_;
+    miacode::qml_ui::RootLifecycle rootLifecycle_;
     bool acceptedRootWindowShutdownStarted_ = false;
     bool acceptedRootWindowDestroyStarted_ = false;
-    bool showWelcomeDialogOnStartup_ = false;
 };

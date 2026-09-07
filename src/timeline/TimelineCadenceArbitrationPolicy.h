@@ -68,4 +68,26 @@ inline bool watchdogShouldFlush(const ArbitrationState& state)
     return sinceCadenceMs >= state.thresholdMs;
 }
 
+// Phase-locked rate gate for render-cadence samples. afterAnimating can run at the
+// display's full refresh rate, while the user may have selected a lower timeline rate.
+inline bool renderCadenceShouldFlush(qint64 nowNs, qint64 targetIntervalNs, qint64* lastFlushNs)
+{
+    if (lastFlushNs == nullptr) {
+        return false;
+    }
+    const qint64 interval = qMax<qint64>(1, targetIntervalNs);
+    if (*lastFlushNs < 0 || nowNs < *lastFlushNs) {
+        *lastFlushNs = nowNs;
+        return true;
+    }
+    const qint64 elapsed = nowNs - *lastFlushNs;
+    const qint64 slop = interval / 8;
+    if (elapsed + slop < interval) {
+        return false;
+    }
+    const qint64 nextScheduledNs = *lastFlushNs + interval;
+    *lastFlushNs = nowNs - nextScheduledNs > interval * 2 ? nowNs : nextScheduledNs;
+    return true;
+}
+
 }  // namespace miacode::timeline::cadence

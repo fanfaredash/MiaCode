@@ -49,27 +49,31 @@ bool verifyPolicy(QTextStream& err)
 
 bool verifyChartDropUsesQsgOnly(QTextStream& err)
 {
-    const QString bootstrap = readSource(QStringLiteral("src/app/quick_shell/QuickShellBootstrap.cpp"));
-    const QString mainWindowHeader = readSource(QStringLiteral("src/app/mainwindow/MainWindow.h"));
+    // The v1 shell is gone; the surviving GUI bootstrap is the v2 QML entry below.
+    const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));
     return require(
-               bootstrap.contains(QStringLiteral("ui/ChartDropOverlay.h")),
-               QStringLiteral("audio drop must keep the QuickShell overlay"),
+               bootstrap.contains(QStringLiteral("drop/QmlChartDropBridge.h")),
+               QStringLiteral("audio drop must use the QML bridge"),
                err)
         && require(
-            bootstrap.contains(QStringLiteral("syncChartDropOverlay")),
-            QStringLiteral("audio drop must keep the QuickShell overlay lifecycle"),
+            bootstrap.contains(QStringLiteral("installDropBridge")),
+            QStringLiteral("audio drop must be part of the root lifecycle gate"),
+            err)
+        && require(
+            !bootstrap.contains(QStringLiteral("ChartDropOverlay")),
+            QStringLiteral("audio drop must not construct the removed native overlay"),
             err)
         && require(
             !bootstrap.contains(QStringLiteral("PreviewDCompSurface")),
-            QStringLiteral("QuickShell audio drop must not restore the removed DComp surface"),
+            QStringLiteral("audio drop must not restore the removed DComp surface"),
             err)
         && require(
             !bootstrap.contains(QStringLiteral("createInProcessPreviewSurface")),
-            QStringLiteral("QuickShell audio drop must stay on the QSG render path"),
+            QStringLiteral("audio drop must stay on the QSG render path"),
             err)
         && require(
-            mainWindowHeader.contains(QStringLiteral("chartDropOverlayVisibleChanged")),
-            QStringLiteral("audio drop must retain the MainWindow overlay signal"),
+            bootstrap.contains(QStringLiteral("ItemAcceptsDrops")),
+            QStringLiteral("audio drop must preserve the QML content-item drop flag"),
             err);
 }
 

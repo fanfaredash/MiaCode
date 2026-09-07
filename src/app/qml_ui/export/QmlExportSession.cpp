@@ -1,23 +1,27 @@
 #include "QmlExportSession.h"
 
-#include "mainwindow/MainWindow.h"
-#include "mainwindow/sections/export/MainWindow.ExportSection.h"
-#include "DialogLocalization.h"
+#include "core/chart/document/SimaiDocument.h"
+
+#include "app/v2/JobProgressService.h"
 #include "UiText.h"
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "core/scene/PreviewHudState.h"
 #include "core/video/PreviewRenderSettings.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "audio/QtPreviewSfxRuntime.h"
 #include "tools/video_export/VideoExportPreferences.h"
 #include "tools/video_export/VideoExportSettings.h"
+#include "tools/video_export/FontLibrary.h"
 
-#include <QDesktopServices>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QEventLoop>
-#include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonObject>
-#include <QMessageBox>
 #include <QSettings>
 #include <QUrl>
 
@@ -29,14 +33,32 @@ inline constexpr auto& kResolutionPresets = miacode::video_export::kVideoExportR
 inline constexpr auto& kFpsOptions = miacode::video_export::kVideoExportFpsOptions;
 inline constexpr auto& kAudioBitrateOptions =
     miacode::video_export::kVideoExportAudioBitrateOptionsKbps;
+constexpr double kMinimumExportRangeSeconds = 5.0;
+
+double minimumExportRangeSecondsForChart(double chartDurationSeconds)
+{
+    return qMin(kMinimumExportRangeSeconds, qMax(0.0, chartDurationSeconds));
+}
 
 }  // namespace
 
-QmlExportSession::QmlExportSession(MainWindow& backend, QObject* parent)
+QmlExportSession::QmlExportSession(miacode::v2::ShellNotifications& notifications,
+                                   miacode::v2::UiRequestService& uiRequests,
+                                   miacode::v2::JobProgressService& jobProgress,
+                                   miacode::v2::PreviewAppearanceState& appearance,
+                                   miacode::v2::ExportEngine*& engineSlot,
+                                   miacode::v2::PreviewSurface*& previewSlot,
+                                   QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , uiRequests_(&uiRequests)
+    // From the application assembly, not from the hidden window.
+    , jobProgress_(&jobProgress)
+    , appearance_(&appearance)
+    , engineSlot_(&engineSlot)
+    , previewSlot_(&previewSlot)
+    , notifications_(&notifications)
 {
-    connect(&backend, &MainWindow::videoExportWorkerRunningChanged, this, [this](bool running) {
+    connect(&notifications, &miacode::v2::ShellNotifications::videoExportWorkerRunningChanged, this, [this](bool running) {
         if (batchExportRunning_ || exportRunning_ == running) {
             return;
         }
@@ -165,9 +187,192 @@ bool QmlExportSession::introLevelTextRender() const
     return task_.intro.lvRenderMode.compare(QStringLiteral("text"), Qt::CaseInsensitive) == 0;
 }
 
+QVariantList QmlExportSession::introSoundOptions() const
+{
+    QVariantList list;
+    list.append(QVariantMap{
+        {QStringLiteral("label"),
+         UiText::text(QStringLiteral("dialog.render_settings.music.default_intro_sound"))},
+        {QStringLiteral("fileName"), QString()},
+    });
+    const QString musicDirectory = miacode::preview_sfx::assetMusicDirectory();
+    if (musicDirectory.isEmpty()) {
+        return list;
+    }
+    const QFileInfoList entries = QDir(musicDirectory).entryInfoList(
+        miacode::preview_sfx::supportedIntroSoundFileExtensions(),
+        QDir::Files,
+        QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo& entry : entries) {
+        list.append(QVariantMap{
+            {QStringLiteral("label"), entry.fileName()},
+            {QStringLiteral("fileName"), entry.fileName()},
+        });
+    }
+    return list;
+}
+
+int QmlExportSession::introSoundIndex() const
+{
+    const QString selected = miacode::preview_sfx::normalizeIntroSoundFileName(
+        task_.introSoundFileName);
+    const QVariantList options = introSoundOptions();
+    for (int i = 0; i < options.size(); ++i) {
+        if (options.at(i).toMap().value(QStringLiteral("fileName")).toString() == selected) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+QVariantList QmlExportSession::fontLibraryOptions() const
+{
+    const QString defaultLabel = UiText::text(QStringLiteral("card_font.default"));
+    if (fontLibraryOptionsCacheValid_
+        && fontLibraryOptionsCacheDefaultLabel_ == defaultLabel) {
+        return fontLibraryOptionsCache_;
+    }
+    QVariantList list;
+    const QVector<miacode::video_export::FontLibraryEntry> entries =
+        miacode::video_export::fontLibraryEntries(true, defaultLabel);
+    for (const miacode::video_export::FontLibraryEntry& entry : entries) {
+        list.append(QVariantMap{
+            {QStringLiteral("label"), entry.label},
+            {QStringLiteral("path"), entry.path},
+            {QStringLiteral("family"), entry.family},
+        });
+    }
+    fontLibraryOptionsCache_ = list;
+    fontLibraryOptionsCacheDefaultLabel_ = defaultLabel;
+    fontLibraryOptionsCacheValid_ = true;
+    return fontLibraryOptionsCache_;
+}
+
+QVariantList QmlExportSession::skinOptions() const
+{
+    QVariantList list;
+    if (preview() == nullptr) {
+        return list;
+    }
+    for (const QString& name : preview()->availableSkinDirectoryNames()) {
+        list.append(QVariantMap{
+            {QStringLiteral("id"), name},
+            {QStringLiteral("label"), preview()->skinDisplayName(name)},
+        });
+    }
+    return list;
+}
+
+int QmlExportSession::skinIndex() const
+{
+    if (preview() == nullptr) {
+        return -1;
+    }
+    const QStringList names = preview()->availableSkinDirectoryNames();
+    for (int i = 0; i < names.size(); ++i) {
+        if (names.at(i).compare(appearance_->skinDirectoryName(), Qt::CaseInsensitive) == 0) {
+            return i;
+        }
+    }
+    return names.isEmpty() ? -1 : 0;
+}
+
+QVariantList QmlExportSession::skinJudgeEffectOptions() const
+{
+    return QVariantList{
+        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.standard")),
+        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.starry")),
+    };
+}
+
+int QmlExportSession::skinJudgeEffectIndex() const
+{
+    return appearance_->judgeEffectStyle() == PreviewJudgeEffectStyle::Starry ? 1 : 0;
+}
+
+QVariantList QmlExportSession::outlineOptions() const
+{
+    return QVariantList{
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.point")),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.line")),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area")),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area_labeled")),
+    };
+}
+
+int QmlExportSession::outlineIndex() const
+{
+    if (preview() == nullptr) {
+        return 1;
+    }
+    switch (appearance_->outlineVariant()) {
+    case PreviewOutlineVariant::Point:
+        return 0;
+    case PreviewOutlineVariant::JudgeArea:
+        return 2;
+    case PreviewOutlineVariant::JudgeAreaLabeled:
+        return 3;
+    case PreviewOutlineVariant::Line:
+    default:
+        return 1;
+    }
+}
+
+QVariantList QmlExportSession::hudFontAreaOptions() const
+{
+    QVariantList result;
+    for (const auto& choice : miacode::preview::scene::previewHudFontAreaChoices()) {
+        result.append(QVariantMap{
+            {QStringLiteral("label"), UiText::text(QLatin1String(choice.labelKey))},
+            {QStringLiteral("sample"), QLatin1String(choice.sample)},
+            {QStringLiteral("areaId"), miacode::preview::scene::previewHudFontAreaId(choice.area)},
+        });
+    }
+    return result;
+}
+
+int QmlExportSession::hudFontAreaIndex() const
+{
+    return miacode::preview::scene::previewHudFontAreaIndex(
+        miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_));
+}
+
+QString QmlExportSession::hudFontPath() const
+{
+    return miacode::preview::scene::previewHudCustomFontPath(
+        miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_));
+}
+
+QString QmlExportSession::hudFontSample() const
+{
+    const QVariantList areas = hudFontAreaOptions();
+    return areas.at(qBound(0, hudFontAreaIndex(), static_cast<int>(areas.size()) - 1))
+        .toMap().value(QStringLiteral("sample")).toString();
+}
+
+QString QmlExportSession::introSoundLabel() const
+{
+    return UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound"));
+}
+
+QString QmlExportSession::introSoundVolumeLabel() const
+{
+    return UiText::text(QStringLiteral("dialog.render_settings.music.intro_sound_volume"));
+}
+
+QString QmlExportSession::introSoundImportLabel() const
+{
+    return UiText::text(QStringLiteral("dialog.render_settings.video.skin.import"));
+}
+
 double QmlExportSession::exportEndSeconds() const
 {
     return task_.exportStartSeconds + qMax(0.0, task_.contentDurationSeconds);
+}
+
+double QmlExportSession::minimumExportRangeSeconds() const
+{
+    return minimumExportRangeSecondsForChart(chartDurationSeconds_);
 }
 
 IntroBannerSpec QmlExportSession::previewIntroSpec() const
@@ -201,9 +406,11 @@ void QmlExportSession::setUnavailableReason(const QString& reason)
 
 bool QmlExportSession::difficultyExists(int difficultyId) const
 {
-    return backend_ != nullptr
+    // documentDifficultyIds() lists exactly the difficulties the document
+    // holds, so membership is the same question as difficulty(id) != nullptr.
+    return engine() != nullptr
         && SimaiDocument::isDifficultyId(difficultyId)
-        && backend_->document_.difficulty(difficultyId) != nullptr;
+        && engine()->difficultyIds().contains(difficultyId);
 }
 
 bool QmlExportSession::difficultyHasChartBody(int difficultyId) const
@@ -211,8 +418,7 @@ bool QmlExportSession::difficultyHasChartBody(int difficultyId) const
     if (!difficultyExists(difficultyId)) {
         return false;
     }
-    const SimaiDifficultyData* difficulty = backend_->document_.difficulty(difficultyId);
-    return difficulty != nullptr && !difficulty->chart.trimmed().isEmpty();
+    return !engine()->difficultyChartText(difficultyId).trimmed().isEmpty();
 }
 
 int QmlExportSession::resolveDefaultDifficultyId(int previousActiveDifficultyId) const
@@ -223,11 +429,11 @@ int QmlExportSession::resolveDefaultDifficultyId(int previousActiveDifficultyId)
     if (difficultyExists(selectedDifficultyId_)) {
         return selectedDifficultyId_;
     }
-    if (backend_ != nullptr && difficultyExists(backend_->projectLastOpenedDifficultyId_)) {
-        return backend_->projectLastOpenedDifficultyId_;
+    if (engine() != nullptr && difficultyExists(engine()->lastOpenedDifficultyId())) {
+        return engine()->lastOpenedDifficultyId();
     }
-    if (backend_ != nullptr) {
-        const QVector<int> ids = backend_->document_.difficultyIds();
+    if (engine() != nullptr) {
+        const QVector<int> ids = engine()->difficultyIds();
         if (!ids.isEmpty()) {
             return ids.constFirst();
         }
@@ -241,9 +447,21 @@ void QmlExportSession::enter(int previousActiveDifficultyId)
         pageSessionActive_ = true;
         emit pageSessionActiveChanged();
     }
-    selectDifficulty(resolveDefaultDifficultyId(previousActiveDifficultyId));
-    refreshFromDocument();
+    const int nextDifficultyId = resolveDefaultDifficultyId(previousActiveDifficultyId);
+    if (selectedDifficultyId_ != nextDifficultyId) {
+        selectedDifficultyId_ = nextDifficultyId;
+        emit selectedDifficultyIdChanged();
+    }
+    rebuildDifficultyList();
+    seedFromDifficulty(selectedDifficultyId_);
+    syncAudition();
+    // Re-scan once per real page entry so imports made by another QML surface
+    // are visible, while repeated property reads during this entry share the
+    // materialized option list.
+    fontLibraryOptionsCacheValid_ = false;
+    emit fontLibraryChanged();
     emit skinChanged();
+    emit hudFontChanged();
 }
 
 void QmlExportSession::leave()
@@ -284,9 +502,6 @@ void QmlExportSession::setActiveTab(const QString& tabId)
     }
     activeTab_ = next;
     emit activeTabChanged();
-    if (activeTab_ == QLatin1String("batch") && settingsTab_ == QLatin1String("range")) {
-        setSettingsTab(QStringLiteral("output"));
-    }
     if (pageSessionActive_) {
         syncAudition();
     }
@@ -294,18 +509,21 @@ void QmlExportSession::setActiveTab(const QString& tabId)
 
 void QmlExportSession::setSettingsTab(const QString& tabId)
 {
-    if (settingsTab_ == tabId) {
+    const QString next = tabId == QLatin1String("range")
+        ? QStringLiteral("output")
+        : tabId;
+    if (settingsTab_ == next) {
         return;
     }
-    settingsTab_ = tabId;
+    settingsTab_ = next;
     emit settingsTabChanged();
 }
 
 void QmlExportSession::rebuildDifficultyList()
 {
     QVariantList next;
-    if (backend_ != nullptr) {
-        for (int id : backend_->document_.difficultyIds()) {
+    if (engine() != nullptr) {
+        for (int id : engine()->difficultyIds()) {
             QVariantMap row;
             row.insert(QStringLiteral("id"), id);
             row.insert(QStringLiteral("name"), SimaiDocument::difficultyShortName(id));
@@ -341,6 +559,10 @@ void QmlExportSession::applyPreferences()
     task_.intro.mode = QStringLiteral("auto");
     task_.intro.lvRenderMode = QStringLiteral("atlas");
     miacode::video_export::applyVideoExportPreferences(settings, &task_);
+    miacode::preview_sfx::setSelectedIntroSoundVolume(task_.introSoundVolume);
+    if (preview() != nullptr) {
+        preview()->applySfxLevels();
+    }
     const int savedWidth = task_.outputWidth;
     const int savedHeight = task_.outputHeight;
     resolutionIndex_ = 1;
@@ -363,7 +585,7 @@ void QmlExportSession::savePreferences() const
 
 void QmlExportSession::seedFromDifficulty(int difficultyId)
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr || !difficultyHasChartBody(difficultyId)) {
+    if (engine() == nullptr || !difficultyHasChartBody(difficultyId)) {
         setUnavailableReason(
             difficultyExists(difficultyId)
                 ? UiText::text(QStringLiteral("export_page.the_selected_difficulty_has_no"))
@@ -371,7 +593,7 @@ void QmlExportSession::seedFromDifficulty(int difficultyId)
         return;
     }
     setUnavailableReason(QString());
-    VideoExportTask seededTask = backend_->exportSection_->buildVideoExportSeedTaskPublic(difficultyId);
+    VideoExportTask seededTask = engine()->buildSeedTask(difficultyId);
     if (hasSeededTask_) {
         miacode::video_export::copyVideoExportUserSettings(task_, &seededTask);
     }
@@ -397,50 +619,53 @@ void QmlExportSession::seedFromDifficulty(int difficultyId)
     emit introChanged();
     emit rangeChanged();
     emit batchChanged();
+    // Applied last: this may re-emit rangeChanged()/introChanged() with the
+    // requested range, overriding the full-range default just seeded above.
+    applyPendingSelectionRangeExport();
 }
 
 void QmlExportSession::syncAudition()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr || !pageSessionActive_) {
+    if (engine() == nullptr || !pageSessionActive_) {
         return;
     }
     if (!difficultyHasChartBody(selectedDifficultyId_)) {
         stopAudition();
         return;
     }
-    backend_->exportSection_->startQmlExportAudition(selectedDifficultyId_, task_);
+    engine()->startAudition(selectedDifficultyId_, task_);
 }
 
 void QmlExportSession::applyLivePreviewSettings()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     VideoExportTask liveTask = task_;
     applyOwnerLiveFields(&liveTask);
-    backend_->exportSection_->applySharedExportTaskSettings(liveTask);
+    engine()->applySharedTaskSettings(liveTask);
     syncAudition();
 }
 
 void QmlExportSession::stopAudition()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
-    backend_->exportSection_->stopQmlExportAudition();
+    engine()->stopAudition();
 }
 
 void QmlExportSession::applyOwnerLiveFields(VideoExportTask* task) const
 {
-    if (task == nullptr || backend_ == nullptr) {
+    if (task == nullptr || preview() == nullptr) {
         return;
     }
-    task->outlineVariant = backend_->previewOutlineVariant_;
-    task->slideEarlierSecondAndTextOnTop = backend_->previewSlideEarlierSecondAndTextOnTop_;
-    task->tapJudgeTextDistance = backend_->previewTapJudgeTextDistance_;
-    task->judgeEffectStyle = backend_->previewJudgeEffectStyle_;
-    task->centerDisplayMode = backend_->previewCenterDisplayMode_;
-    task->muriRenderOptions = backend_->muriRenderOptions_;
+    task->outlineVariant = appearance_->outlineVariant();
+    task->slideEarlierSecondAndTextOnTop = appearance_->slideEarlierSecondAndTextOnTop();
+    task->tapJudgeTextDistance = appearance_->tapJudgeTextDistance();
+    task->judgeEffectStyle = appearance_->judgeEffectStyle();
+    task->centerDisplayMode = appearance_->centerDisplayMode();
+    task->muriRenderOptions = engine()->muriRenderOptions();
 }
 
 VideoExportTask QmlExportSession::buildRequestedTask() const
@@ -456,7 +681,7 @@ VideoExportTask QmlExportSession::buildRequestedTask() const
 
 void QmlExportSession::startExport()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     if (activeTab_ == QLatin1String("batch")) {
@@ -465,20 +690,40 @@ void QmlExportSession::startExport()
         batchExportRunning_ = true;
         exportRunning_ = true;
         emit exportRunningChanged();
-        MainWindow::ExportSection::BatchExportResult result;
-        MainWindow::ExportSection::BatchExportCallbacks callbacks;
-        callbacks.progressChanged = [](int, const QString&) {
+        miacode::v2::ExportEngine::BatchResult result;
+        miacode::v2::ExportEngine::BatchCallbacks callbacks;
+        // Batch runs synchronously on the UI thread, so it reports onto the same
+        // shell overlay every other job uses. Before this the callback pumped
+        // events and threw the percentage away, leaving batch with no progress
+        // at all.
+        miacode::v2::JobProgressService* const jobProgress =
+            jobProgress_;
+        const QString batchJobTitle = UiText::text(QStringLiteral("dialog.batch_export.title"));
+        quint64 batchJobToken = 0;
+        if (jobProgress != nullptr) {
+            batchJobToken = jobProgress->begin(
+                batchJobTitle,
+                UiText::text(QStringLiteral("export.preparing_package")),
+                /*cancellable=*/true);
+        }
+        callbacks.progressChanged = [jobProgress, batchJobToken](int percent, const QString& label) {
+            if (jobProgress != nullptr && jobProgress->token() == batchJobToken) {
+                jobProgress->report(percent, label);
+            }
             QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         };
-        callbacks.cancellationRequested = [this]() {
-            return batchCancellationRequested_;
+        callbacks.cancellationRequested = [this, jobProgress, batchJobToken]() {
+            const bool shellCancelled = jobProgress != nullptr
+                && jobProgress->token() == batchJobToken
+                && jobProgress->cancelRequested();
+            return batchCancellationRequested_ || shellCancelled;
         };
         VideoExportTask batchTask = buildRequestedTask();
         // Batch is always full-range, so keep the user's intro preference even
         // if the single-export range currently starts after chart zero.
         batchTask.intro.enabled = task_.intro.enabled;
         QString error;
-        const bool launched = backend_->exportSection_->launchQmlBatchExport(
+        const bool launched = engine()->launchBatchExport(
             batchTask,
             chartDirectories_,
             batchSelectedDifficultyIds_,
@@ -486,24 +731,26 @@ void QmlExportSession::startExport()
             &result,
             callbacks,
             &error);
+        if (jobProgress != nullptr && jobProgress->token() == batchJobToken) {
+            jobProgress->end();
+        }
         batchExportRunning_ = false;
         exportRunning_ = false;
         emit exportRunningChanged();
+        const QString batchTitle = UiText::text(QStringLiteral("dialog.batch_export.title"));
         if (!launched) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Critical,
-                backend_,
-                UiText::text(QStringLiteral("dialog.batch_export.title")),
+            uiRequests_->postNotice(
+                miacode::v2::NoticeSeverity::Error,
+                batchTitle,
                 error.isEmpty()
                     ? UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"))
                     : error);
             return;
         }
         if (result.canceled) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Information,
-                backend_,
-                UiText::text(QStringLiteral("dialog.batch_export.title")),
+            uiRequests_->postNotice(
+                miacode::v2::NoticeSeverity::Information,
+                batchTitle,
                 UiText::text(QStringLiteral("dialog.batch_export.message.canceled")));
             return;
         }
@@ -512,25 +759,22 @@ void QmlExportSession::startExport()
         };
         const QString successDetails = shortenDetails(result.exportedFiles.join(QLatin1Char('\n')));
         if (result.failedCharts.isEmpty()) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Information,
-                backend_,
-                UiText::text(QStringLiteral("dialog.batch_export.title")),
-                UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(result.successCount)
-                    + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails));
+            uiRequests_->postNotice(
+                miacode::v2::NoticeSeverity::Information,
+                batchTitle,
+                UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(result.successCount),
+                successDetails);
             return;
         }
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            backend_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
+        uiRequests_->postNotice(
+            miacode::v2::NoticeSeverity::Warning,
+            batchTitle,
             UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
-                .arg(result.successCount).arg(result.failedCharts.size())
-                + (successDetails.isEmpty() ? QString()
-                    : QStringLiteral("\n\n")
-                        + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
-                        + QStringLiteral("\n") + successDetails)
-                + QStringLiteral("\n\n") + shortenDetails(result.failedCharts.join(QLatin1Char('\n'))));
+                .arg(result.successCount).arg(result.failedCharts.size()),
+            (successDetails.isEmpty() ? QString()
+                : UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
+                    + QStringLiteral("\n") + successDetails + QStringLiteral("\n\n"))
+                + shortenDetails(result.failedCharts.join(QLatin1Char('\n'))));
         return;
     }
 
@@ -541,13 +785,12 @@ void QmlExportSession::startExport()
     QString error;
     exportRunning_ = true;
     emit exportRunningChanged();
-    if (!backend_->exportSection_->launchQmlVideoExport(
+    if (!engine()->launchVideoExport(
             buildRequestedTask(), selectedDifficultyId_, &error)) {
         exportRunning_ = false;
         emit exportRunningChanged();
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            backend_,
+        uiRequests_->postNotice(
+            miacode::v2::NoticeSeverity::Error,
             UiText::text(QStringLiteral("dialog.video_export.title")),
             error.isEmpty()
                 ? UiText::text(QStringLiteral("dialog.video_export.error.launch_failed"))
@@ -558,57 +801,208 @@ void QmlExportSession::startExport()
 
 void QmlExportSession::cancelExport()
 {
-    if (backend_ == nullptr || backend_->exportSection_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
     if (batchExportRunning_) {
         batchCancellationRequested_ = true;
         return;
     }
-    backend_->exportSection_->cancelVideoExportWorker();
+    engine()->cancelVideoExport();
 }
 
 void QmlExportSession::browseOutputPath()
 {
-    const QString path = QFileDialog::getSaveFileName(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.video_export.title")),
-        task_.outputPath,
-        QStringLiteral("MP4 (*.mp4)"));
-    if (!path.isEmpty()) {
-        setOutputPath(path);
-    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.video_export.title"));
+    request.startPath = task_.outputPath;
+    request.nameFilters = QStringList{QStringLiteral("MP4 (*.mp4)")};
+    request.saveMode = true;
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        if (!path.isEmpty()) {
+            setOutputPath(path);
+        }
+    });
 }
 
 void QmlExportSession::browseIntroBackground()
 {
-    const QString path = QFileDialog::getOpenFileName(
-        nullptr,
-        QStringLiteral("选择片头背景"),
-        task_.intro.customBackgroundPath,
-        QStringLiteral("Images (*.png *.jpg *.jpeg *.webp)"));
-    if (!path.isEmpty()) {
-        setIntroCustomBackgroundPath(path);
+    miacode::v2::FileRequest request;
+    request.title = QStringLiteral("选择片头背景");
+    request.startPath = task_.intro.customBackgroundPath;
+    request.nameFilters = QStringList{QStringLiteral("Images (*.png *.jpg *.jpeg *.webp)")};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        if (!path.isEmpty()) {
+            setIntroCustomBackgroundPath(path);
+        }
+    });
+}
+
+void QmlExportSession::importIntroSound()
+{
+    miacode::v2::FileRequest request;
+    request.title = introSoundLabel();
+    request.nameFilters = QStringList{QStringLiteral("Audio (*.wav *.mp3 *.ogg *.flac)")};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        applyIntroSoundImport(path);
+    });
+}
+
+void QmlExportSession::importIntroFont()
+{
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("card_font.import"));
+    request.nameFilters = QStringList{QStringLiteral("Font Files (*.ttf *.otf)")};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        applyFontImport(path);
+    });
+}
+
+void QmlExportSession::applyFontImport(const QString& selectedPath)
+{
+    if (selectedPath.isEmpty()) {
+        return;
     }
+    const miacode::video_export::FontImportResult result =
+        miacode::video_export::importFontFileIntoLibrary(selectedPath);
+    if (result.path.isEmpty()) {
+        const QString text = result.failure == miacode::video_export::FontImportFailure::CopyFailed
+            ? UiText::text(QStringLiteral("card_font.copy_failed"))
+            : UiText::text(QStringLiteral("card_font.invalid_font"));
+        uiRequests_->postNotice(miacode::v2::NoticeSeverity::Warning,
+                                UiText::text(QStringLiteral("card_font.import")), text);
+        return;
+    }
+
+    fontLibraryOptionsCacheValid_ = false;
+    emit fontLibraryChanged();
+    // Match the established card-font picker: an imported font becomes the
+    // title/display choice while the body selection remains independent.
+    setIntroFontDisplayPath(result.path);
+}
+
+void QmlExportSession::importHudFont()
+{
+    if (uiRequests_ == nullptr) {
+        return;
+    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font"));
+    request.nameFilters = QStringList{QStringLiteral("Font Files (*.ttf *.otf)")};
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        applyHudFontImport(path);
+    });
+}
+
+void QmlExportSession::applyHudFontImport(const QString& selectedPath)
+{
+    if (selectedPath.isEmpty()) {
+        return;
+    }
+    const miacode::video_export::FontImportResult result =
+        miacode::video_export::importFontFileIntoLibrary(selectedPath);
+    if (result.path.isEmpty()) {
+        if (uiRequests_ != nullptr) {
+            uiRequests_->postNotice(
+                miacode::v2::NoticeSeverity::Warning,
+                UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
+                result.failure == miacode::video_export::FontImportFailure::CopyFailed
+                    ? UiText::text(QStringLiteral("card_font.copy_failed"))
+                    : UiText::text(QStringLiteral("card_font.invalid_font")));
+        }
+        return;
+    }
+    fontLibraryOptionsCacheValid_ = false;
+    emit fontLibraryChanged();
+    setHudFontPath(result.path);
+}
+
+void QmlExportSession::resetHudFont()
+{
+    setHudFontPath(QString());
+}
+
+void QmlExportSession::openSkinDirectory()
+{
+    if (preview() == nullptr) {
+        return;
+    }
+    const QString skinRoot = preview()->resolveSkinRootDir();
+    if (!skinRoot.isEmpty()) {
+        QDir().mkpath(skinRoot);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
+    }
+}
+
+void QmlExportSession::openJudgeLineDirectory()
+{
+    if (preview() == nullptr) {
+        return;
+    }
+    const QString outlineDir = preview()->resolveCustomOutlineDir();
+    if (!outlineDir.isEmpty()) {
+        QDir().mkpath(outlineDir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
+    }
+}
+
+void QmlExportSession::applyIntroSoundImport(const QString& selectedPath)
+{
+    if (selectedPath.isEmpty()) {
+        return;
+    }
+
+    const QString musicDirectory = miacode::preview_sfx::assetMusicDirectory();
+    if (musicDirectory.isEmpty() || !QDir().mkpath(musicDirectory)) {
+        return;
+    }
+
+    const QFileInfo sourceInfo(selectedPath);
+    QString importedName = sourceInfo.fileName();
+    QString importedPath = QDir(musicDirectory).filePath(importedName);
+    if (QFileInfo(selectedPath).canonicalFilePath() != QFileInfo(importedPath).canonicalFilePath()) {
+        int suffix = 2;
+        while (QFileInfo::exists(importedPath)) {
+            importedName = QStringLiteral("%1_%2.%3")
+                .arg(sourceInfo.completeBaseName())
+                .arg(suffix++)
+                .arg(sourceInfo.suffix());
+            importedPath = QDir(musicDirectory).filePath(importedName);
+        }
+        if (!QFile::copy(selectedPath, importedPath)) {
+            return;
+        }
+    }
+
+    emit introSoundOptionsChanged();
+    setIntroSoundFileName(importedName);
 }
 
 void QmlExportSession::browseBatchOutputDirectory()
 {
-    const QString path = QFileDialog::getExistingDirectory(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.batch_export.select_folder")),
-        batchOutputDirectory_);
-    if (!path.isEmpty()) {
-        setBatchOutputDirectory(path);
-    }
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.batch_export.select_folder"));
+    request.startPath = batchOutputDirectory_;
+    request.selectFolder = true;
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        if (!path.isEmpty()) {
+            setBatchOutputDirectory(path);
+        }
+    });
 }
 
 void QmlExportSession::addChartDirectories()
 {
-    const QString path = QFileDialog::getExistingDirectory(
-        nullptr,
-        UiText::text(QStringLiteral("dialog.batch_export.select_charts")),
-        QString());
+    miacode::v2::FileRequest request;
+    request.title = UiText::text(QStringLiteral("dialog.batch_export.select_charts"));
+    request.selectFolder = true;
+    uiRequests_->requestFile(request, [this](const QString& path) {
+        addChartDirectory(path);
+    });
+}
+
+void QmlExportSession::addChartDirectory(const QString& path)
+{
     if (path.isEmpty() || chartDirectories_.contains(path)) {
         return;
     }
@@ -653,18 +1047,57 @@ void QmlExportSession::setBatchDifficultyChecked(int difficultyId, bool checked)
 
 void QmlExportSession::setExportStartToCurrentPreview()
 {
-    if (backend_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
-    setExportStartSeconds(backend_->currentPreviewAuthoritativeAudioClockSecond());
+    setExportStartSeconds(engine()->currentAudioClockSecond());
 }
 
 void QmlExportSession::setExportEndToCurrentPreview()
 {
-    if (backend_ == nullptr) {
+    if (engine() == nullptr) {
         return;
     }
-    setExportEndSeconds(backend_->currentPreviewAuthoritativeAudioClockSecond());
+    setExportEndSeconds(engine()->currentAudioClockSecond());
+}
+
+void QmlExportSession::setExportRangeSeconds(double start, double end)
+{
+    if (!qIsFinite(start) || !qIsFinite(end)) {
+        return;
+    }
+    const double minimumDuration = minimumExportRangeSeconds();
+    const double boundedStart = qBound(0.0, start, qMax(0.0, chartDurationSeconds_ - minimumDuration));
+    const double boundedEnd = qBound(boundedStart + minimumDuration, end, chartDurationSeconds_);
+    task_.exportStartSeconds = boundedStart;
+    task_.contentDurationSeconds = qMax(0.0, boundedEnd - boundedStart);
+    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
+    emit rangeChanged();
+    emit introChanged();
+}
+
+void QmlExportSession::requestSelectionRangeExport(double startSecond, double endSecond)
+{
+    if (!qIsFinite(startSecond) || !qIsFinite(endSecond) || endSecond <= startSecond) {
+        return;
+    }
+    hasPendingSelectionRangeExport_ = true;
+    pendingRangeStartSeconds_ = startSecond;
+    pendingRangeEndSeconds_ = endSecond;
+}
+
+void QmlExportSession::applyPendingSelectionRangeExport()
+{
+    if (!hasPendingSelectionRangeExport_) {
+        return;
+    }
+    hasPendingSelectionRangeExport_ = false;
+    setExportRangeSeconds(pendingRangeStartSeconds_, pendingRangeEndSeconds_);
+}
+
+void QmlExportSession::clearPendingSelectionRangeExport()
+{
+    hasPendingSelectionRangeExport_ = false;
 }
 
 QString QmlExportSession::setExportStartText(const QString& text)
@@ -884,122 +1317,39 @@ void QmlExportSession::setTouchFlowSpeed(double value)
     applyLivePreviewSettings();
 }
 
-QVariantList QmlExportSession::skinOptions() const
-{
-    QVariantList list;
-    if (backend_ == nullptr) {
-        return list;
-    }
-    for (const QString& name : backend_->availablePreviewSkinDirectoryNames()) {
-        QVariantMap row;
-        row.insert(QStringLiteral("id"), name);
-        row.insert(QStringLiteral("label"), backend_->previewSkinDisplayName(name));
-        list.append(row);
-    }
-    return list;
-}
-
-int QmlExportSession::skinIndex() const
-{
-    if (backend_ == nullptr) {
-        return -1;
-    }
-    const QStringList names = backend_->availablePreviewSkinDirectoryNames();
-    for (int i = 0; i < names.size(); ++i) {
-        if (names.at(i).compare(backend_->previewSkinDirectoryName_, Qt::CaseInsensitive) == 0) {
-            return i;
-        }
-    }
-    return names.isEmpty() ? -1 : 0;
-}
-
-QVariantList QmlExportSession::judgeEffectOptions() const
-{
-    return QVariantList{
-        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.standard")),
-        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.starry")),
-    };
-}
-
-int QmlExportSession::judgeEffectIndex() const
-{
-    if (backend_ == nullptr) {
-        return 0;
-    }
-    return backend_->previewJudgeEffectStyle_ == PreviewJudgeEffectStyle::Starry ? 1 : 0;
-}
-
-QVariantList QmlExportSession::outlineOptions() const
-{
-    return QVariantList{
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.point")),
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.line")),
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area")),
-        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area_labeled")),
-    };
-}
-
-int QmlExportSession::outlineIndex() const
-{
-    if (backend_ == nullptr) {
-        return 1;
-    }
-    switch (backend_->previewOutlineVariant_) {
-    case PreviewOutlineVariant::Point:
-        return 0;
-    case PreviewOutlineVariant::JudgeArea:
-        return 2;
-    case PreviewOutlineVariant::JudgeAreaLabeled:
-        return 3;
-    case PreviewOutlineVariant::Line:
-    default:
-        return 1;
-    }
-}
-
 void QmlExportSession::setSkinIndex(int index)
 {
-    if (backend_ == nullptr) {
+    if (preview() == nullptr) {
         return;
     }
-    const QStringList names = backend_->availablePreviewSkinDirectoryNames();
+    const QStringList names = preview()->availableSkinDirectoryNames();
     if (index < 0 || index >= names.size()) {
         return;
     }
     const QString skinDirectoryName = names.at(index);
-    if (backend_->previewSkinDirectoryName_.compare(skinDirectoryName, Qt::CaseInsensitive) == 0) {
+    // The owner decides whether this is a real change; the window reacts by
+    // re-applying the skin to every surface and persisting it.
+    if (!appearance_->setSkinDirectory(skinDirectoryName)) {
         return;
     }
-    backend_->previewSkinDirectoryName_ = skinDirectoryName;
-    backend_->previewSkinVariant_ =
-        skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
-            ? MainWindow::PreviewSkinVariant::Dx
-            : MainWindow::PreviewSkinVariant::Standard;
-    backend_->applyPreviewSkinDirectoryToSurfaces();
-    backend_->savePortableState();
     emit skinChanged();
 }
 
-void QmlExportSession::setJudgeEffectIndex(int index)
+void QmlExportSession::setSkinJudgeEffectIndex(int index)
 {
-    if (backend_ == nullptr) {
+    if (preview() == nullptr) {
         return;
     }
     const auto style = index == 1 ? PreviewJudgeEffectStyle::Starry : PreviewJudgeEffectStyle::Standard;
-    if (backend_->previewJudgeEffectStyle_ == style) {
+    if (!appearance_->setJudgeEffectStyle(style)) {
         return;
     }
-    backend_->previewJudgeEffectStyle_ = style;
-    if (backend_->previewCanvas_ != nullptr) {
-        backend_->previewCanvas_->setJudgeEffectStyle(style);
-    }
-    backend_->savePortableState();
     emit skinChanged();
 }
 
 void QmlExportSession::setOutlineIndex(int index)
 {
-    if (backend_ == nullptr) {
+    if (preview() == nullptr) {
         return;
     }
     PreviewOutlineVariant variant = PreviewOutlineVariant::Line;
@@ -1015,37 +1365,37 @@ void QmlExportSession::setOutlineIndex(int index)
         break;
     case 1:
     default:
-        variant = PreviewOutlineVariant::Line;
         break;
     }
-    backend_->applyPreviewOutlineVariant(variant, /*useAutoSelection=*/false, /*persistState=*/true);
+    preview()->applyOutlineVariant(variant, /*useAutoSelection=*/false, /*persistState=*/true);
     emit skinChanged();
 }
 
-void QmlExportSession::openSkinDirectory()
+void QmlExportSession::setHudFontAreaIndex(int index)
 {
-    if (backend_ == nullptr) {
+    const auto choices = miacode::preview::scene::previewHudFontAreaChoices();
+    if (choices.isEmpty()) return;
+    const int normalized = qBound(0, index, choices.size() - 1);
+    const int nextAreaId = miacode::preview::scene::previewHudFontAreaId(
+        choices.at(normalized).area);
+    if (hudFontAreaId_ == nextAreaId) {
         return;
     }
-    const QString skinRoot = backend_->resolvePreviewSkinRootDir();
-    if (skinRoot.isEmpty()) {
-        return;
-    }
-    QDir().mkpath(skinRoot);
-    QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
+    hudFontAreaId_ = nextAreaId;
+    emit hudFontChanged();
 }
 
-void QmlExportSession::openJudgeLineDirectory()
+void QmlExportSession::setHudFontPath(const QString& path)
 {
-    if (backend_ == nullptr) {
+    const auto area = miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_);
+    if (miacode::preview::scene::previewHudCustomFontPath(area) == path) {
         return;
     }
-    const QString outlineDir = backend_->resolvePreviewCustomOutlineDir();
-    if (outlineDir.isEmpty()) {
-        return;
+    miacode::preview::scene::setPreviewHudCustomFontPath(area, path);
+    if (preview() != nullptr) {
+        preview()->refreshSurfaces();
     }
-    QDir().mkpath(outlineDir);
-    QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
+    emit hudFontChanged();
 }
 
 void QmlExportSession::setIntroEnabled(bool value)
@@ -1053,8 +1403,8 @@ void QmlExportSession::setIntroEnabled(bool value)
     task_.intro.enabled = value;
     emit introChanged();
     savePreferences();
-    if (backend_ != nullptr) {
-        backend_->refreshExportIntroState();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
     }
 }
 
@@ -1063,8 +1413,8 @@ void QmlExportSession::setIntroBackgroundModeIndex(int index)
     task_.intro.backgroundMode = index == 1 ? QStringLiteral("custom") : QStringLiteral("jacket");
     emit introChanged();
     savePreferences();
-    if (backend_ != nullptr) {
-        backend_->refreshExportIntroState();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
     }
 }
 
@@ -1073,8 +1423,8 @@ void QmlExportSession::setIntroCustomBackgroundPath(const QString& path)
     task_.intro.customBackgroundPath = path;
     emit introChanged();
     savePreferences();
-    if (backend_ != nullptr) {
-        backend_->refreshExportIntroState();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
     }
 }
 
@@ -1083,8 +1433,8 @@ void QmlExportSession::setIntroBlurBackground(bool value)
     task_.intro.blurBackground = value;
     emit introChanged();
     savePreferences();
-    if (backend_ != nullptr) {
-        backend_->refreshExportIntroState();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
     }
 }
 
@@ -1099,8 +1449,8 @@ void QmlExportSession::setIntroModeIndex(int index)
     }
     emit introChanged();
     savePreferences();
-    if (backend_ != nullptr) {
-        backend_->refreshExportIntroState();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
     }
 }
 
@@ -1109,8 +1459,8 @@ void QmlExportSession::setIntroCardShadow(bool value)
     task_.intro.cardShadow = value;
     emit introChanged();
     savePreferences();
-    if (backend_ != nullptr) {
-        backend_->refreshExportIntroState();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
     }
 }
 
@@ -1119,9 +1469,91 @@ void QmlExportSession::setIntroLevelTextRender(bool value)
     task_.intro.lvRenderMode = value ? QStringLiteral("text") : QStringLiteral("atlas");
     emit introChanged();
     savePreferences();
-    if (backend_ != nullptr) {
-        backend_->refreshExportIntroState();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
     }
+}
+
+void QmlExportSession::setIntroFontDisplayPath(const QString& path)
+{
+    if (task_.intro.fontDisplayPath == path) {
+        return;
+    }
+    task_.intro.fontDisplayPath = path;
+    emit introChanged();
+    savePreferences();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
+    }
+}
+
+void QmlExportSession::setIntroFontBodyPath(const QString& path)
+{
+    if (task_.intro.fontBodyPath == path) {
+        return;
+    }
+    task_.intro.fontBodyPath = path;
+    emit introChanged();
+    savePreferences();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
+    }
+}
+
+void QmlExportSession::resetIntroFonts()
+{
+    const bool changed = !task_.intro.fontDisplayPath.isEmpty() || !task_.intro.fontBodyPath.isEmpty();
+    task_.intro.fontDisplayPath.clear();
+    task_.intro.fontBodyPath.clear();
+    if (!changed) {
+        return;
+    }
+    emit introChanged();
+    savePreferences();
+    if (engine() != nullptr) {
+        engine()->refreshIntroState();
+    }
+}
+
+void QmlExportSession::setIntroSoundIndex(int index)
+{
+    const QVariantList options = introSoundOptions();
+    if (index < 0 || index >= options.size()) {
+        return;
+    }
+    setIntroSoundFileName(
+        options.at(index).toMap().value(QStringLiteral("fileName")).toString());
+}
+
+void QmlExportSession::setIntroSoundFileName(const QString& fileName)
+{
+    const QString normalized = miacode::preview_sfx::normalizeIntroSoundFileName(fileName);
+    if (task_.introSoundFileName == normalized) {
+        return;
+    }
+    task_.introSoundFileName = normalized;
+    miacode::preview_sfx::setSelectedIntroSoundFileName(normalized);
+    // The window reloads the SFX bank and persists in reaction to this.
+    appearance_->setIntroSoundFileName(normalized);
+    emit introChanged();
+}
+
+void QmlExportSession::setIntroSoundVolume(double value)
+{
+    if (!qIsFinite(value)) {
+        return;
+    }
+    const double normalized = qBound(0.0, value, 2.0);
+    if (qFuzzyCompare(task_.introSoundVolume + 1.0, normalized + 1.0)) {
+        return;
+    }
+    task_.introSoundVolume = normalized;
+    miacode::preview_sfx::setSelectedIntroSoundVolume(normalized);
+    if (preview() != nullptr) {
+        preview()->applySfxLevels();
+    }
+    emit introChanged();
+    savePreferences();
 }
 
 void QmlExportSession::setExportStartSeconds(double value)
@@ -1129,14 +1561,9 @@ void QmlExportSession::setExportStartSeconds(double value)
     if (!qIsFinite(value)) {
         return;
     }
-    const double clamped = qBound(0.0, value, chartDurationSeconds_);
-    task_.exportStartSeconds = clamped;
-    if (task_.exportStartSeconds + task_.contentDurationSeconds > chartDurationSeconds_) {
-        task_.contentDurationSeconds = qMax(0.0, chartDurationSeconds_ - task_.exportStartSeconds);
-    }
-    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
-    emit rangeChanged();
-    emit introChanged();
+    const double end = exportEndSeconds();
+    const double maximumStart = qMax(0.0, end - minimumExportRangeSeconds());
+    setExportRangeSeconds(qBound(0.0, value, maximumStart), end);
 }
 
 void QmlExportSession::setExportEndSeconds(double value)
@@ -1144,10 +1571,9 @@ void QmlExportSession::setExportEndSeconds(double value)
     if (!qIsFinite(value)) {
         return;
     }
-    const double end = qBound(task_.exportStartSeconds, value, chartDurationSeconds_);
-    task_.contentDurationSeconds = qMax(0.0, end - task_.exportStartSeconds);
-    task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
-    emit rangeChanged();
+    const double start = task_.exportStartSeconds;
+    const double minimumEnd = start + minimumExportRangeSeconds();
+    setExportRangeSeconds(start, qBound(minimumEnd, value, chartDurationSeconds_));
 }
 
 void QmlExportSession::setBatchOutputDirectory(const QString& path)

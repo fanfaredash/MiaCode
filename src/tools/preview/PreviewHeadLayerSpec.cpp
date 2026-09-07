@@ -5,7 +5,10 @@
 
 #include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewActiveMarkerView.h"
+#include "core/scene/PreviewChartReviewLayerState.h"
 #include "core/scene/PreviewHeadLayerState.h"
+#include "core/scene/PreviewJudgeOverlayShared.h"
+#include "core/scene/PreviewMaimuriDxJudgeLayerState.h"
 #include "core/scene/PreviewOpacityCurves.h"
 #include "core/scene/PreviewPreparedSceneCache.h"
 #include "core/scene/PreviewSceneConstants.h"
@@ -752,6 +755,102 @@ bool verifyNormalMineModeRestoresExOverlay(QTextStream& err)
     return verifyMaterial(false, err) && verifyMaterial(true, err);
 }
 
+bool verifyVerticalStraightSlideCpUsesMirroredSprite(QTextStream& err)
+{
+    const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+        QStringLiteral("(120){4}8-5[4:1],4-1[4:1],\nE")
+    );
+    if (!require(parsed.ok, QStringLiteral("vertical straight-slide CP chart parses"), err)) {
+        return false;
+    }
+
+    QVector<const TimelineNoteMarker*> slides;
+    for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+        if (marker.type != QLatin1String("slide")) {
+            continue;
+        }
+        slides.append(&marker);
+        miacode::preview::scene::PreviewJudgeOverlayPlacement placement;
+        bool useRightImage = true;
+        if (!require(
+                miacode::preview::scene::buildJudgeOverlayStraightPlacement(
+                    marker,
+                    &placement,
+                    &useRightImage),
+                QStringLiteral("vertical straight-slide CP placement builds"),
+                err)) {
+            return false;
+        }
+        const bool expectedRightImage = marker.lane == 4 && marker.endLane == 1;
+        if (!require(
+                useRightImage == expectedRightImage,
+                QStringLiteral("%1-%2 CP selects the expected mirrored sprite")
+                    .arg(marker.lane)
+                    .arg(marker.endLane),
+                err)) {
+            return false;
+        }
+    }
+    if (!require(slides.size() == 2,
+                 QStringLiteral("vertical straight-slide CP test checks both 8-5 and 4-1"),
+                 err)) {
+        return false;
+    }
+
+    const auto reviewEvents = miacode::preview::scene::buildPreviewChartReviewPreparedEvents(
+        parsed.noteMarkers,
+        true,
+        false,
+        false,
+        false);
+    if (!require(reviewEvents.size() == 2,
+                 QStringLiteral("chart review prepares both vertical straight slides"),
+                 err)
+        || !require(
+            reviewEvents.at(0).kind == miacode::preview::scene::PreviewChartReviewPreparedKind::StraightLeft,
+            QStringLiteral("chart review uses left sprite for 8-5"),
+            err)
+        || !require(
+            reviewEvents.at(1).kind == miacode::preview::scene::PreviewChartReviewPreparedKind::StraightRight,
+            QStringLiteral("chart review uses right sprite for 4-1"),
+            err)) {
+        return false;
+    }
+
+    PreviewFrameState state;
+    state.noteMarkers = parsed.noteMarkers;
+    state.playheadSeconds = 0.1;
+    state.muriRenderOptions.renderMode = RenderMode::MaimuriDxStyle;
+    state.judgeOverlay.fastGood.straightLeftImage = QImage(8, 8, QImage::Format_ARGB32_Premultiplied);
+    state.judgeOverlay.fastGood.straightRightImage = QImage(9, 9, QImage::Format_ARGB32_Premultiplied);
+    state.judgeOverlay.fastGood.straightLeftImage.fill(Qt::white);
+    state.judgeOverlay.fastGood.straightRightImage.fill(Qt::black);
+
+    QVector<MuriJudgeSpriteEvent> activeEvents;
+    for (const TimelineNoteMarker* slide : slides) {
+        MuriJudgeSpriteEvent event;
+        event.kind = MuriJudgeSpriteKind::SlideStraight;
+        event.second = 0.0;
+        event.spawnSecond = 0.0;
+        event.markerKey = makeMarkerAnalysisKey(*slide);
+        activeEvents.append(event);
+    }
+    const auto muriSprites = miacode::preview::scene::buildPreviewMaimuriDxJudgeLayerSprites(
+        state,
+        miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers),
+        activeEvents,
+        QRectF(0.0, 0.0, 540.0, 540.0));
+    return require(muriSprites.size() == 2,
+                   QStringLiteral("Maimuri DX builds both vertical straight-slide sprites"),
+                   err)
+        && require(muriSprites.at(0).image == &state.judgeOverlay.fastGood.straightLeftImage,
+                   QStringLiteral("Maimuri DX uses left sprite for 8-5"),
+                   err)
+        && require(muriSprites.at(1).image == &state.judgeOverlay.fastGood.straightRightImage,
+                   QStringLiteral("Maimuri DX uses right sprite for 4-1"),
+                   err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -791,6 +890,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyNormalMineModeRestoresExOverlay(err)) {
+        return 1;
+    }
+    if (!verifyVerticalStraightSlideCpUsesMirroredSprite(err)) {
         return 1;
     }
 

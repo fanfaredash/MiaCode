@@ -375,7 +375,8 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     const miacode::preview::scene::PreviewFrameState& state,
     const QSize& renderSize,
     QQuickWindow* window,
-    PreviewTextureRepository* textures
+    PreviewTextureRepository* textures,
+    const QColor& backgroundColor
 ) const
 {
     Q_UNUSED(window);
@@ -391,8 +392,16 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
         state.media.presentationMode == miacode::preview::scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem;
     const QImage mediaImage = usesExternalMedia ? QImage() : media.image;
     const bool hasMedia = !mediaImage.isNull();
-    const double outerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0);
-    const double innerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessInner, 1.0);
+    const bool hasVisibleStageMedia = hasMedia || (usesExternalMedia && state.media.stageMediaAvailable);
+    // 媒体显示状态决定内圈亮度，涵盖暂停设置、Alt 切换和导出。
+    // 缺少可见媒体时使用不透明黑色圆盘，隔离主题与窗口背景。
+    const double innerBrightness = hasVisibleStageMedia
+        ? state.render.backgroundBrightnessInner
+        : miacode::preview_video::kInactiveBackgroundBrightnessInner;
+    const double outerDarkAlpha = hasVisibleStageMedia
+        ? qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0)
+        : 0.0;
+    const double innerDarkAlpha = qBound(0.0, 1.0 - innerBrightness, 1.0);
     if (!usesExternalMedia
         && media.sourceKind == StageMediaSourceKind::ResolvedFrame
         && state.media.stageMediaSerial > 0
@@ -413,7 +422,7 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     if (usesExternalMedia && state.media.stageMediaAvailable) {
         root->baseNode->setColor(Qt::transparent);
     } else {
-        root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : QColor(QStringLiteral("#1F2833")));
+        root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : backgroundColor);
     }
 
     if ((!hasMedia || usesExternalMedia) && textures != nullptr) {

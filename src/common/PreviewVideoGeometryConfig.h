@@ -11,6 +11,7 @@ namespace miacode::preview_video {
 
 inline constexpr double kBackgroundBrightnessDefault = 0.50;
 inline constexpr double kBackgroundBrightnessInnerDefault = 0.20;
+inline constexpr double kInactiveBackgroundBrightnessInner = 0.0;
 inline constexpr double kLayoutSquareScaleDefault = 0.95;
 inline constexpr double kLayoutSquareScaleMin = 0.5;
 inline constexpr double kLayoutSquareScaleMax = 1.0;
@@ -31,14 +32,18 @@ inline double normalizedLayoutSquareScale(double value)
     return clampLayoutSquareScale(kLayoutSquareScaleMin + steps * kLayoutSquareScaleStep);
 }
 
-inline double layoutSquareSideForCanvasHeight(double canvasHeight, double layoutSquareScale)
+inline double layoutSquareSideForStage(const QRectF& stageRect, double layoutSquareScale)
 {
-    return std::max(1.0, std::max(1.0, canvasHeight) * normalizedLayoutSquareScale(layoutSquareScale));
+    const double shortSide = std::max(
+        1.0,
+        std::min(std::max(1.0, stageRect.width()), std::max(1.0, stageRect.height()))
+    );
+    return std::max(1.0, shortSide * normalizedLayoutSquareScale(layoutSquareScale));
 }
 
 inline QRectF centeredLayoutRectForStage(const QRectF& stageRect, double layoutSquareScale)
 {
-    const double side = layoutSquareSideForCanvasHeight(stageRect.height(), layoutSquareScale);
+    const double side = layoutSquareSideForStage(stageRect, layoutSquareScale);
     const QPointF center = stageRect.center();
     return QRectF(
         center.x() - side * 0.5,

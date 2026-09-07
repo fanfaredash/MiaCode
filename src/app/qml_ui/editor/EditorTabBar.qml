@@ -9,14 +9,18 @@ Rectangle {
 
     required property var viewState
     required property var documentSession
+    required property var commands
 
     readonly property int minimumTabWidth: 100
     readonly property int preferredTabWidth: 160
+    readonly property int tabSpacing: 8
     readonly property int tabCount: viewState.openEditorTabs.length
-    readonly property bool tabsOverflow: tabCount * minimumTabWidth > width
+    readonly property real availableTabWidth: width - 2 * (Theme.panelPadding - Theme.chromeInsetX)
+        - Math.max(0, tabCount - 1) * (tabSpacing - 2 * Theme.chromeInsetX)
+    readonly property bool tabsOverflow: tabCount * minimumTabWidth > availableTabWidth
     readonly property real tabWidth: tabCount === 0 ? preferredTabWidth
         : tabsOverflow ? minimumTabWidth
-        : Math.min(preferredTabWidth, width / tabCount)
+        : Math.min(preferredTabWidth, availableTabWidth / tabCount)
 
     function difficultyData(id) {
         const difficulties = root.documentSession.difficulties
@@ -27,6 +31,16 @@ Rectangle {
         return null
     }
 
+    // Closing a dirty editor asks about that editor's staged content.
+    function requestCloseTab(key) {
+        const difficultyId = root.difficultyIdForKey(key)
+        if (key === root.viewState.metadataEditorKey) {
+            root.viewState.closeEditor(key)
+            return
+        }
+        root.documentSession.requestCloseDifficulty(difficultyId)
+    }
+
     function difficultyIdForKey(key) {
         return key.startsWith("difficulty:")
             ? Number(key.substring("difficulty:".length))
@@ -35,14 +49,9 @@ Rectangle {
 
     function titleForKey(key) {
         if (key === viewState.metadataEditorKey)
-            return qsTr("元数据")
+            return UiText.text("dialog.unsaved_field_changes.field.metadata")
         const difficulty = difficultyData(difficultyIdForKey(key))
-        return difficulty ? difficulty.label : qsTr("难度")
-    }
-
-    function displayTitleForKey(key) {
-        const dirty = root.documentSession.dirtyEditorKeys.indexOf(key) >= 0
-        return (dirty ? "*" : "") + titleForKey(key)
+        return difficulty ? difficulty.label : UiText.text("难度")
     }
 
     function tooltipForKey(key) {
@@ -56,12 +65,24 @@ Rectangle {
             : root.documentSession.currentFileName
         let result = fileIdentity + "\n" + difficulty.label
         if (difficulty.designer.length > 0)
-            result += qsTr(" · 谱师：%1").arg(difficulty.designer)
+            result += UiText.text(" · 谱师：%1").arg(difficulty.designer)
         return result
     }
 
     function activateTab(key) {
         viewState.activateEditor(key)
+    }
+
+    function editorKeyAt(rowX) {
+        for (let index = 0; index < tabRepeater.count; ++index) {
+            const key = root.viewState.openEditorTabs[index]
+            const item = tabRepeater.itemAt(index)
+            if (!item)
+                continue
+            if (rowX >= item.x && rowX < item.x + item.width)
+                return key
+        }
+        return ""
     }
 
     function revealActiveTab() {
@@ -76,13 +97,15 @@ Rectangle {
     }
 
     implicitHeight: 34
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor(Theme.colors.background.panel)
 
     Flickable {
         id: tabViewport
 
         anchors.left: parent.left
         anchors.right: root.tabsOverflow ? overflowButton.left : parent.right
+        anchors.leftMargin: Theme.panelPadding - Theme.chromeInsetX
+        anchors.rightMargin: Theme.panelPadding - Theme.chromeInsetX
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         contentWidth: tabRow.width
@@ -90,7 +113,8 @@ Rectangle {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
-        ScrollBar.horizontal: ScrollBar {
+        interactive: root.draggingEditorKey.length === 0
+        ScrollBar.horizontal: AppScrollBar {
             policy: root.tabsOverflow ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
             height: 3
         }
@@ -100,6 +124,7 @@ Rectangle {
 
             width: childrenRect.width
             height: parent.height
+            spacing: root.tabSpacing - 2 * Theme.chromeInsetX
 
             Repeater {
                 id: tabRepeater
@@ -108,34 +133,75 @@ Rectangle {
                 delegate: AppTab {
                     required property string modelData
 
+                    property bool suppressClickAfterDrag: false
+
                     width: root.tabWidth
                     height: parent.height
                     preferredTabWidth: root.tabWidth
-                    text: root.displayTitleForKey(modelData)
+                    text: (root.documentSession.dirtyEditorKeys.indexOf(modelData) >= 0 ? "*" : "")
+                          + root.titleForKey(modelData)
                     secondaryText: ""
                     iconSource: modelData === root.viewState.metadataEditorKey
                         ? Qt.resolvedUrl("icons/metadata.svg")
-                        : Qt.resolvedUrl("icons/chart.svg")
+                        : ""
+                    difficultyId: root.difficultyIdForKey(modelData)
                     tooltip: root.tooltipForKey(modelData)
                     active: root.viewState.activeEditorKey === modelData
                     closable: true
-                    onClicked: root.activateTab(modelData)
-                    onCloseRequested: root.viewState.closeEditor(modelData)
+                    opacity: tabDrag.active ? 0.65 : 1
+                    onClicked: {
+                        if (!tabDrag.active && !suppressClickAfterDrag)
+                            root.activateTab(modelData)
+                    }
+                    onCloseRequested: root.requestCloseTab(modelData)
+
+                    DragHandler {
+                        id: tabDrag
+
+                        target: null
+                        acceptedButtons: Qt.LeftButton
+
+                        onActiveChanged: {
+                            if (active) {
+                                root.draggingEditorKey = modelData
+                                return
+                            }
+                            if (root.draggingEditorKey !== modelData)
+                                return
+                            root.draggingEditorKey = ""
+                            const positionInRow = tabRow.mapFromItem(
+                                parent, centroid.position.x, centroid.position.y)
+                            const targetKey = root.editorKeyAt(positionInRow.x)
+                            if (targetKey.length > 0)
+                                root.viewState.swapEditorTabs(modelData, targetKey)
+                            suppressClickAfterDrag = true
+                            Qt.callLater(function() { suppressClickAfterDrag = false })
+                        }
+                    }
                 }
             }
         }
     }
 
+    Connections {
+        target: root.documentSession
+        function onDifficultyCloseAccepted(difficultyId) {
+            root.viewState.closeEditor(root.viewState.difficultyEditorKey(difficultyId))
+        }
+    }
+    property string draggingEditorKey: ""
+
     IconButton {
         id: overflowButton
 
         anchors.right: parent.right
+        anchors.rightMargin: Theme.panelPadding - horizontalInset
         anchors.top: parent.top
         width: 30
         height: parent.height
         visible: root.tabsOverflow
         iconSource: Qt.resolvedUrl("icons/more.svg")
-        tooltip: qsTr("显示所有已打开的编辑器")
+        tooltip: UiText.text("显示所有已打开的编辑器")
         onClicked: overflowMenu.open()
 
         AppMenu {
@@ -149,7 +215,9 @@ Rectangle {
                 delegate: AppMenuItem {
                     required property string modelData
 
-                    text: root.displayTitleForKey(modelData)
+                    text: (root.documentSession.dirtyEditorKeys.indexOf(modelData) >= 0 ? "*" : "")
+                          + root.titleForKey(modelData)
+                    difficultyId: root.difficultyIdForKey(modelData)
                     checkable: true
                     checked: root.viewState.activeEditorKey === modelData
                     onTriggered: root.activateTab(modelData)
@@ -170,4 +238,3 @@ Rectangle {
         }
     }
 }
-

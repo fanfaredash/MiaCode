@@ -187,6 +187,21 @@ mach_o_files() {
   find "$app_path/Contents" -type f \( -name '*.dylib' -o -name '*.so' -o -perm -111 \) -print0
 }
 
+assert_no_packaged_extensions() {
+  local app_path="$1"
+  local dist_path="$(dirname "$app_path")"
+  local forbidden_path
+  for forbidden_path in \
+    "$dist_path/extensions" \
+    "$app_path/Contents/Resources/extensions" \
+    "$app_path/Contents/MacOS/extensions"; do
+    if [[ -e "$forbidden_path" || -L "$forbidden_path" ]]; then
+      echo "Product extension host payload must not be packaged: $forbidden_path" >&2
+      return 1
+    fi
+  done
+}
+
 is_external_dylib() {
   local dependency="$1"
   case "$dependency" in
@@ -582,6 +597,7 @@ fi
 package_step "Deploying Qt frameworks, plugins, and QML imports (macdeployqt may be quiet for several minutes)"
 macdeployqt "$DIST_DIR/MiaCode.app" -qmldir="$ROOT_DIR/src" -always-overwrite
 package_step "Removing non-release Qt helper components"
+assert_no_packaged_extensions "$DIST_DIR/MiaCode.app"
 
 # Qt Multimedia can pull Homebrew's dynamically linked ffprobe into the bundle.
 # MiaCode does not invoke it; export uses the pinned static ffmpeg below. Leaving
@@ -656,6 +672,8 @@ if [[ -n "$DEPLOYMENT_TARGET" ]]; then
     validate_minos "$bass_frameworks_dir/$bass_library" "$DEPLOYMENT_TARGET"
   done
 fi
+
+assert_no_packaged_extensions "$DIST_DIR/MiaCode.app"
 
 package_step "Creating ZIP archive"
 ZIP_PATH="${DIST_DIR}.zip"

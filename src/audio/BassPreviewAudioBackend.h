@@ -9,6 +9,7 @@
 
 #include "common/PreviewAudioMixConfig.h"
 #include "BassPreviewDebugLogRouting.h"
+#include "BassPreviewOutputGlitchProbeState.h"
 #include "BassPreviewSfxSchedulerPolicy.h"
 #include "PreviewBassDeviceLease.h"
 #include "PreviewAudioBackend.h"
@@ -243,6 +244,15 @@ private:
     void startAudioHealthSampler();
     void stopAudioHealthSampler();
     void publishAudioHealthHandles();
+    // Diagnostic-only DSP probe on masterMixer_ (see PreviewAudioOutputGlitchProbe.h).
+    // attach/detach bracket the master mixer's own lifetime in initializeAudioEngine /
+    // every teardown path (dtor, invalidateOutputDevice); drain runs on the worker
+    // thread's existing ~1 Hz sampleHealth() cadence, since the master mixer -- and so
+    // the DSP callback -- keeps running for the engine's lifetime independent of
+    // whether playback is active.
+    void attachOutputGlitchProbe();
+    void detachOutputGlitchProbe();
+    void drainOutputGlitchEvents();
 
     // Retained for transport paths that already bracket active playback. The worker reads
     // it when taking the once-per-second BASS sample; it is not an independent producer.
@@ -261,11 +271,21 @@ private:
     PreparedPlaybackState preparedPlayback_;
     PlaybackSessionState playbackSession_;
     quint64 playbackTransactionId_ = 0;
+    // A1: bumped whenever the BGM cursor is discontinuously repositioned (seek, live rate
+    // change) -- see configureBackgroundTrackForSecond and applyPlaybackRateAtChartSecond.
+    // Stamped onto every PreviewAudioHealthSample so the underrun advance-rate probe can
+    // tell whether two samples came from the same continuous playback segment.
+    quint64 backgroundTrackContinuityEpoch_ = 0;
     quint32 deviceSampleRate_ = static_cast<quint32>(miacode::preview_audio::kMixSampleRate);
     double preparedTimelinePlaybackRate_ = 1.0;
     bool engineInitialized_ = false;
     int lastNativeErrorCode_ = 0;
     quint32 masterMixer_ = 0;
+    // HDSP handle for the output-glitch probe attached to masterMixer_; 0 when not
+    // attached. outputGlitchProbeState_ is the audio-thread-owned tracker state the DSP
+    // callback mutates -- see BassPreviewOutputGlitchProbeState.h.
+    quint32 outputGlitchDspHandle_ = 0;
+    miacode::audio::bass_detail::OutputGlitchProbeState outputGlitchProbeState_;
     quint32 pluginAac_ = 0;
     quint32 pluginOpus_ = 0;
     miacode::preview_audio::PreviewBassDeviceLease bassDeviceLease_;

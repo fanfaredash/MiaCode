@@ -49,6 +49,7 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
     stopPlaybackSession();
     resetAssets();
     unloadOptionalPlugins();
+    detachOutputGlitchProbe();
     if (masterMixer_ != 0) {
         BASS_StreamFree(masterMixer_);
         noteBassErr("dtor/master_stream_free");

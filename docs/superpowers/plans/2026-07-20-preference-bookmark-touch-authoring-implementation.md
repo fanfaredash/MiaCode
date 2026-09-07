@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Preference, Bookmark, and Touch Authoring Implementation Plan
 
 > Execute in the current MiaCode workspace with regression tests written before each production change. Build and test Release targets with the repository concurrent-build policy.

@@ -12,11 +12,21 @@ Item {
     id: root
 
     required property var commands
+    required property var shortcuts
+    // Source of the 调整 menu's operation rows; see chartTransformMenu().
+    required property var documentSession
     property bool commandsEnabled: true
+    property bool normalizationEnabled: true
+    // Re-read each time the menu opens rather than kept live: the list only
+    // changes when a document is opened, and a menu nobody is looking at has no
+    // reason to hold a copy.
+    property var recentDocuments: []
+    property var backupDocuments: []
     property real availableWidth: Number.POSITIVE_INFINITY
 
     readonly property int overflowButtonWidth: 30
-    property int visibleCount: 6
+    property int visibleCount: 5
+    property bool layoutReady: false
     property var _activeMenu: null
 
     implicitHeight: 34
@@ -25,19 +35,18 @@ Item {
     width: barRow.width
     enabled: commandsEnabled
 
-    onAvailableWidthChanged: root.scheduleReflow()
-    Component.onCompleted: root.scheduleReflow()
-
-    function scheduleReflow() {
-        Qt.callLater(root.reflow)
+    onAvailableWidthChanged: root.reflow()
+    Component.onCompleted: {
+        root.layoutReady = true
+        root.reflow()
     }
 
     function topButtons() {
-        return [fileButton, editButton, toolsButton, adjustButton, previewButton, helpButton]
+        return [fileButton, editButton, adjustButton, toolsButton, previewButton]
     }
 
     function topMenus() {
-        return [fileMenu, editMenu, toolsMenu, adjustMenu, previewMenu, helpMenu]
+        return [fileMenu, editMenu, adjustMenu, toolsMenu, previewMenu]
     }
 
     function closeActiveMenu() {
@@ -46,13 +55,42 @@ Item {
         root._activeMenu = null
     }
 
+    function toggleAnchoredMenu(menu, anchor) {
+        if (root._activeMenu === menu)
+            root.closeActiveMenu()
+        else
+            root.openAnchoredMenu(menu, anchor)
+    }
+
+    function hoverAnchoredMenu(menu, anchor) {
+        if (root._activeMenu && root._activeMenu !== menu)
+            root.openAnchoredMenu(menu, anchor)
+    }
+
     function openAnchoredMenu(menu, anchor) {
         if (!menu || !anchor)
             return
-        if (root._activeMenu && root._activeMenu !== menu && root._activeMenu.visible)
-            root._activeMenu.close()
+        const previous = root._activeMenu
+        if (previous === menu)
+            return
+        // Adjacent entries switch immediately; opening and closing the menu
+        // session use the regular fade transitions.
+        if (previous) {
+            previous.exit.enabled = false
+            previous.close()
+            previous.exit.enabled = true
+            menu.enter.enabled = false
+            menu.opacity = 1
+        }
         root._activeMenu = menu
+        menu.closePolicy = Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
         menu.popup(anchor, 0, anchor.height)
+        menu.enter.enabled = true
+    }
+
+    Connections {
+        target: root._activeMenu
+        function onAboutToHide() { root._activeMenu = null }
     }
 
     function plainTitle(text) {
@@ -80,8 +118,8 @@ Item {
     }
 
     function reflow() {
-        root.closeActiveMenu()
-        root.detachAllOverflowMenus()
+        if (!root.layoutReady)
+            return
 
         const buttons = root.topButtons()
         const menus = root.topMenus()
@@ -99,6 +137,12 @@ Item {
             --n
         }
 
+        // 尺寸变化当下更新折叠状态，原生窗口动画期间也使用当前宽度。
+        // 跨过折叠阈值时才迁移菜单，保留同一布局内的活动菜单。
+        if (root.visibleCount === n)
+            return
+        root.closeActiveMenu()
+        root.detachAllOverflowMenus()
         root.visibleCount = n
 
         // Register overflowed entries as real Menu submenus (parent= alone does nothing).
@@ -107,53 +151,49 @@ Item {
     }
 
     // Top-level entry: real control width drives overflow math.
-    component TopLevelItem: AbstractButton {
+    component TopLevelItem: ChromeRow {
         id: btn
 
         required property var menu
         required property int menuIndex
+        stateColors: Theme.colors.activityState
 
-        height: root.height
+        y: (root.height - height) / 2
+        height: Theme.controlMinHeight
         padding: 0
         leftPadding: 8
         rightPadding: 8
         topPadding: 0
         bottomPadding: 0
         visible: root.visibleCount > btn.menuIndex
-        hoverEnabled: true
         focusPolicy: Qt.NoFocus
+        selected: btn.menuOpen
 
-        readonly property bool menuOpen: btn.menu && btn.menu.visible
+        readonly property bool menuOpen: btn.menu.active
 
         implicitWidth: Math.ceil(label.implicitWidth) + leftPadding + rightPadding
+        onImplicitWidthChanged: root.reflow()
 
         contentItem: ControlsImpl.MnemonicLabel {
             id: label
             text: btn.menu ? btn.menu.title : ""
             mnemonicVisible: true
             color: (btn.hovered || btn.menuOpen) ? Theme.colors.text.active
-                                                 : Theme.colors.text.secondary
+                                                 : Theme.colors.text.chrome
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
 
-        background: HoverChrome {
-            selected: btn.menuOpen
-            hovered: btn.hovered
-            pressed: btn.down
-            tone: "bar"
-        }
 
-        onClicked: root.openAnchoredMenu(btn.menu, btn)
+        onClicked: root.toggleAnchoredMenu(btn.menu, btn)
 
         // Menubar-style: while a menu is open, hovering another top item switches it.
         onHoveredChanged: {
             if (!btn.hovered || !btn.visible || !btn.menu)
                 return
-            if (root._activeMenu && root._activeMenu.visible && root._activeMenu !== btn.menu)
-                root.openAnchoredMenu(btn.menu, btn)
+            root.hoverAnchoredMenu(btn.menu, btn)
         }
     }
 
@@ -173,13 +213,13 @@ Item {
             menuIndex: 1
         }
         TopLevelItem {
-            id: toolsButton
-            menu: toolsMenu
+            id: adjustButton
+            menu: adjustMenu
             menuIndex: 2
         }
         TopLevelItem {
-            id: adjustButton
-            menu: adjustMenu
+            id: toolsButton
+            menu: toolsMenu
             menuIndex: 3
         }
         TopLevelItem {
@@ -187,22 +227,23 @@ Item {
             menu: previewMenu
             menuIndex: 4
         }
-        TopLevelItem {
-            id: helpButton
-            menu: helpMenu
-            menuIndex: 5
-        }
-
         IconButton {
             id: moreButton
+            stateColors: Theme.colors.activityState
             width: root.overflowButtonWidth
-            height: root.height
-            visible: root.visibleCount < 6
+            y: (root.height - height) / 2
+            height: Theme.controlMinHeight
+            visible: root.visibleCount < 5
             iconSource: Qt.resolvedUrl("icons/more.svg")
             iconWidth: 16
             iconHeight: 16
-            tooltip: qsTr("更多")
-            onClicked: root.openAnchoredMenu(overflowMenu, moreButton)
+            tooltip: UiText.text("更多")
+            active: overflowMenu.active
+            onClicked: root.toggleAnchoredMenu(overflowMenu, moreButton)
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoverAnchoredMenu(overflowMenu, moreButton)
+            }
         }
     }
 
@@ -214,70 +255,193 @@ Item {
 
         AppMenu {
             id: fileMenu
-            title: qsTr("文件(&F)")
-            Action {
-                text: qsTr("打开")
-                shortcut: StandardKey.Open
+            title: UiText.text("文件(&F)")
+            // 新建 / 打开 keep v1's Ctrl+Shift+N / Ctrl+Shift+O rather than the
+            // platform standard keys. StandardKey.New and StandardKey.Open are
+            // Ctrl+N and Ctrl+O, which the registry already hands to
+            // transform.toggle_ex and preview.speed_down; two window-context
+            // shortcuts on one sequence are ambiguous to Qt, which then fires
+            // NEITHER. qml_shortcut_binding_spec guards the whole class.
+            AppMenuAction {
+                text: UiText.text("新建")
+                shortcut: root.shortcuts.revision >= 0
+                    ? root.shortcuts.sequence("file.new", "Ctrl+Shift+N")
+                    : ""
+                shortcutText: root.shortcuts.displayText("file.new", "Ctrl+Shift+N")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.newDocumentRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("打开")
+                shortcut: root.shortcuts.revision >= 0
+                    ? root.shortcuts.sequence("file.open", "Ctrl+Shift+O")
+                    : ""
+                shortcutText: root.shortcuts.displayText("file.open", "Ctrl+Shift+O")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.openRequested()
             }
-            Action {
-                text: qsTr("保存")
+            AppMenu {
+                id: recentMenu
+                title: UiText.text("打开最近")
+                enabled: root.commandsEnabled
+                onAboutToShow: root.recentDocuments = root.documentSession.recentDocuments()
+
+                // The empty-state row is a model entry, not a hidden sibling.
+                // A Menu lays out its statically declared children before a
+                // Repeater's, so a placeholder that merely set visible:false
+                // still held a row — at the TOP of the list, above the first
+                // real chart.
+                Repeater {
+                    model: root.recentDocuments.length > 0
+                           ? root.recentDocuments
+                           : [{ label: UiText.text("暂无最近文档"), path: "" }]
+                    delegate: AppMenuItem {
+                        required property var modelData
+                        // The chart's folder name, not its path: every path here
+                        // shares a long prefix and ends in the same file name, so
+                        // the full one is both unreadable and too wide for a menu.
+                        text: modelData.label
+                        tooltip: modelData.path
+                        enabled: modelData.path.length > 0
+                        onTriggered: {
+                            if (modelData.path.length > 0)
+                                root.commands.openRecentRequested(modelData.path)
+                        }
+                    }
+                }
+            }
+            AppMenu {
+                id: restoreBackupMenu
+                title: UiText.text("恢复备份")
+                enabled: root.commandsEnabled
+                onAboutToShow: root.backupDocuments = root.documentSession.backupDocuments()
+
+                contentItem: ListView {
+                    readonly property real averageItemHeight:
+                        count > 0 ? contentHeight / count : 0
+                    implicitHeight: Math.min(contentHeight, averageItemHeight * 10)
+                    model: restoreBackupMenu.contentModel
+                    delegate: restoreBackupMenu.delegate
+                    clip: true
+                    interactive: contentHeight > height
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: AppScrollBar {}
+                }
+
+                Repeater {
+                    model: root.backupDocuments.length > 0
+                           ? root.backupDocuments
+                           : [{ label: UiText.text("暂无备份"), path: "" }]
+                    delegate: AppMenuItem {
+                        required property var modelData
+                        text: modelData.label
+                        tooltip: modelData.path
+                        enabled: modelData.path.length > 0
+                        onTriggered: {
+                            if (modelData.path.length > 0)
+                                root.commands.restoreBackupRequested(modelData.path)
+                        }
+                    }
+                }
+            }
+            AppMenuAction {
+                text: UiText.text("关闭文档")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.closeDocumentRequested()
+            }
+            AppMenuSeparator {}
+            AppMenuAction {
+                text: UiText.text("保存")
                 shortcut: StandardKey.Save
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Save)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.saveRequested()
             }
-            Action {
-                text: qsTr("另存为")
+            AppMenuAction {
+                text: UiText.text("保存整个文档")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.saveWholeDocumentRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("另存为")
                 shortcut: StandardKey.SaveAs
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.SaveAs)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.saveAsRequested()
-            }
-            AppMenuSeparator {}
-            Action {
-                text: qsTr("退出")
-                shortcut: StandardKey.Quit
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.exitRequested()
             }
         }
 
         AppMenu {
             id: editMenu
-            title: qsTr("编辑(&E)")
-            Action {
-                text: qsTr("撤销")
+            title: UiText.text("编辑(&E)")
+            AppMenuAction {
+                text: UiText.text("撤销")
                 shortcut: StandardKey.Undo
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Undo)
                 enabled: root.commandsEnabled && root.commands.canUndo
                 onTriggered: root.commands.undoRequested()
             }
-            Action {
-                text: qsTr("重做")
+            AppMenuAction {
+                text: UiText.text("重做")
                 shortcut: StandardKey.Redo
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Redo)
                 enabled: root.commandsEnabled && root.commands.canRedo
                 onTriggered: root.commands.redoRequested()
             }
-            Action { text: qsTr("查找"); enabled: false }
             AppMenuSeparator {}
-            Action {
-                text: qsTr("全选")
+            AppMenuAction {
+                text: UiText.text("剪切")
+                shortcut: StandardKey.Cut
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Cut)
+                enabled: root.commandsEnabled && root.commands.canCut
+                onTriggered: root.commands.cutRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("复制")
+                shortcut: StandardKey.Copy
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Copy)
+                enabled: root.commandsEnabled && root.commands.canCopy
+                onTriggered: root.commands.copyRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("粘贴")
+                shortcut: StandardKey.Paste
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Paste)
+                enabled: root.commandsEnabled && root.commands.canPaste
+                onTriggered: root.commands.pasteRequested()
+            }
+            AppMenuSeparator {}
+            AppMenuAction {
+                text: UiText.text("查找")
+                shortcut: StandardKey.Find
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Find)
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.findRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("全选")
                 shortcut: StandardKey.SelectAll
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.SelectAll)
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.selectAllRequested()
             }
-            Action { text: qsTr("选择当前行"); enabled: false }
+            AppMenuAction {
+                text: UiText.text("选择当前行")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.selectCurrentLineRequested()
+            }
         }
 
         AppMenu {
             id: toolsMenu
-            title: qsTr("工具(&T)")
-            Action {
-                text: qsTr("元数据")
+            title: UiText.text("工具(&T)")
+            AppMenuAction {
+                text: UiText.text("dialog.unsaved_field_changes.field.metadata")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.metadataRequested()
             }
-            Action {
-                text: qsTr("检查谱面")
+            AppMenuAction {
+                text: UiText.text("检查谱面")
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.validateRequested()
             }
@@ -285,35 +449,106 @@ Item {
 
         AppMenu {
             id: adjustMenu
-            title: qsTr("调整(&M)")
-            Action {
-                text: qsTr("切换侧栏")
-                shortcut: "Ctrl+B"
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.toggleSidebarRequested()
+            objectName: "adjustMenu"
+            title: UiText.text("调整(&M)")
+
+            // Rows, labels and grouping come from the shared transform table,
+            // so this menu cannot drift from the shortcut editor or the
+            // editor's context menu.
+            readonly property var transformRows: root.documentSession.chartTransformMenu()
+
+            Repeater {
+                model: adjustMenu.transformRows.filter(row => row.section === 0)
+                delegate: AppMenuItem {
+                    required property var modelData
+                    objectName: "adjustTransform_" + modelData.id
+                    text: modelData.label
+                    shortcutText: root.shortcuts.displayText(modelData.id)
+                    enabled: root.commandsEnabled
+                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                }
             }
-            Action {
-                text: qsTr("切换时间轴")
-                enabled: root.commandsEnabled
-                onTriggered: root.commands.toggleBottomPanelRequested()
+            AppMenuSeparator {}
+            Repeater {
+                model: adjustMenu.transformRows.filter(row => row.section === 1)
+                delegate: AppMenuItem {
+                    required property var modelData
+                    objectName: "adjustTransform_" + modelData.id
+                    text: modelData.label
+                    shortcutText: root.shortcuts.displayText(modelData.id)
+                    enabled: root.commandsEnabled
+                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                }
             }
+            AppMenuSeparator {}
+            Repeater {
+                model: adjustMenu.transformRows.filter(row => row.section === 2)
+                delegate: AppMenuItem {
+                    required property var modelData
+                    objectName: "adjustTransform_" + modelData.id
+                    text: modelData.label
+                    shortcutText: root.shortcuts.displayText(modelData.id)
+                    enabled: root.commandsEnabled
+                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                }
+            }
+            AppMenuAction {
+                text: UiText.text("整谱规范化")
+                enabled: root.commandsEnabled && root.normalizationEnabled
+                onTriggered: root.commands.normalizeChartRequested()
+            }
+
+            AppMenu {
+                id: adjustMoreMenu
+                objectName: "adjustMoreMenu"
+                title: root.documentSession.chartTransformMoreLabel()
+                Repeater {
+                    model: adjustMenu.transformRows.filter(row => row.section === 3)
+                    delegate: AppMenuItem {
+                        required property var modelData
+                        objectName: "adjustTransform_" + modelData.id
+                        text: modelData.label
+                        shortcutText: root.shortcuts.displayText(modelData.id)
+                        enabled: root.commandsEnabled
+                        onTriggered: root.commands.chartTransformRequested(modelData.id)
+                    }
+                }
+            }
+
         }
 
         AppMenu {
             id: previewMenu
-            title: qsTr("预览(&P)")
-            Action {
-                text: qsTr("切换实时预览")
+            title: UiText.text("预览(&P)")
+            // Display-only spellings: ShortcutBindings.qml owns these two
+            // bindings, and a `shortcut:` here would be the second claim on the
+            // same sequence — the very ambiguity that killed them in the File
+            // menu. The rows exist so the binding is discoverable, as in v1.
+            AppMenuAction {
+                text: UiText.text("action.preview_speed_down")
+                shortcutText: root.shortcuts.displayText("preview.speed_down", "Ctrl+O")
                 enabled: root.commandsEnabled
-                onTriggered: root.commands.togglePreviewRequested()
+                onTriggered: root.commands.previewRateStepRequested(-1)
+            }
+            AppMenuAction {
+                text: UiText.text("action.preview_speed_up")
+                shortcutText: root.shortcuts.displayText("preview.speed_up", "Ctrl+P")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.previewRateStepRequested(1)
+            }
+            AppMenuSeparator {}
+            AppMenuAction {
+                text: UiText.text("音频设置")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.audioSettingsRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("预览设置")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.previewSettingsRequested()
             }
         }
 
-        AppMenu {
-            id: helpMenu
-            title: qsTr("帮助(&H)")
-            Action { text: qsTr("关于 MiaCode"); enabled: false }
-        }
     }
 
     // Overflowed top-level AppMenus are inserted via addMenu() as submenus.

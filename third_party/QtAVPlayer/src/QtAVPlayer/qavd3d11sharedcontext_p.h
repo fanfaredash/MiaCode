@@ -90,6 +90,33 @@ struct QAVPreviewDiagCounters
     unsigned long long copiedFramesTwoDevice;// copyTexture successes (legacy bridge)
     unsigned long long texturesCreated;      // CreateTexture2D calls in the copy paths
     unsigned long long acquireSyncTimeouts;  // S1 keyed-mutex AcquireSync !=S_OK (two-device)
+    unsigned long long srcAcquireWaitSamples;
+    unsigned long long srcAcquireWaitTotalUs; // source mutex wait, debug diagnostic only
+    unsigned long long srcAcquireWaitMaxUs;
+    unsigned long long destAcquireWaitSamples;
+    unsigned long long destAcquireWaitTotalUs; // destination mutex wait, debug diagnostic only
+    unsigned long long destAcquireWaitMaxUs;
+    // Two-device bridge phase timings. These are populated only while MiaCode's
+    // runtime --debug logging is enabled, so normal playback keeps the existing
+    // hot path (no clocks, no formatting, no I/O).
+    unsigned long long twoDeviceBridgeSamples;
+    unsigned long long twoDeviceBridgeTotalUs;
+    unsigned long long twoDeviceBridgeMaxUs;
+    unsigned long long twoDeviceSourceSetupSamples;
+    unsigned long long twoDeviceSourceSetupTotalUs;
+    unsigned long long twoDeviceSourceSetupMaxUs;
+    unsigned long long twoDeviceDestinationSetupSamples;
+    unsigned long long twoDeviceDestinationSetupTotalUs;
+    unsigned long long twoDeviceDestinationSetupMaxUs;
+    unsigned long long sourceTextureCreateSamples;
+    unsigned long long sourceTextureCreateTotalUs;
+    unsigned long long sourceTextureCreateMaxUs;
+    unsigned long long destinationTextureCreateSamples;
+    unsigned long long destinationTextureCreateTotalUs;
+    unsigned long long destinationTextureCreateMaxUs;
+    unsigned long long sharedResourceOpenSamples;
+    unsigned long long sharedResourceOpenTotalUs;
+    unsigned long long sharedResourceOpenMaxUs;
     unsigned long long copyFailures;         // copy/CreateTexture2D failures that dropped a frame
     unsigned long long resolutionChanges;    // coded WxH changed between frames
     unsigned long long hwFramesDumped;        // successful readback dumps so far
@@ -106,6 +133,9 @@ struct QAVPreviewDiagCounters
     const char* codecName;                   // avcodec_get_name(codec_id); null pre-decode
 };
 Q_AVPLAYER_EXPORT void qavGetPreviewDiagCounters(QAVPreviewDiagCounters *out);
+// Enables aggregate two-device bridge timing used by the debug-only summary.
+// It adds no timing calls to the per-frame bridge while disabled.
+Q_AVPLAYER_EXPORT void qavSetPreviewDiagTimingEnabled(int enabled);
 
 // Catch-up (decode-but-don't-display) skip counter for the S-SEEK GOP-burst
 // signature. Incremented on the decode thread in skipFrame; read-and-reset on

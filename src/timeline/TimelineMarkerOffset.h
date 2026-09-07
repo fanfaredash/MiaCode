@@ -25,9 +25,9 @@
 // explicit at every call site:
 //
 //   PassThrough (guard present) — preview/timeline/muri: markers come back untouched.
-//     TimelineSlowRefresh.cpp, MainWindow.PreviewTimelineFlow.cpp, MuriDump.cpp, MuriSpec.cpp
+//     TimelineSlowRefresh.cpp, runtime/playback/TimelineFlow.cpp, MuriDump.cpp, MuriSpec.cpp
 //   Propagate (no guard) — both export paths: every shifted field becomes NaN.
-//     VideoExportSnapshot.cpp, MainWindow.ExportSnapshot.cpp
+//     VideoExportSnapshot.cpp, runtime/export/ExportSnapshot.cpp
 //
 // There is intentionally no default argument: every caller must state which behavior it
 // expects if a non-finite value is introduced somewhere other than raw `&first` parsing.

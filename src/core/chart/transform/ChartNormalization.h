@@ -8,15 +8,15 @@
 namespace miacode::chart_transform {
 
 enum class ChartNormalizationSyntax {
-    Fpd,
-    Hinata,
+    SegmentPreserving,
+    CompactSingleLine,
 };
 
 struct ChartNormalizationOptions {
     bool startAtNewMeasure = true;
     bool reduceTo384Grid = true;
     bool splitEveryFourMeasures = true;
-    ChartNormalizationSyntax syntax = ChartNormalizationSyntax::Fpd;
+    ChartNormalizationSyntax syntax = ChartNormalizationSyntax::SegmentPreserving;
     int sectionMeasureCount = 4;
 };
 
@@ -58,5 +58,14 @@ ChartNormalizationResult normalizeChartSelectionText(
     int selectionEnd,
     const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata(),
     const ChartNormalizationOptions& options = ChartNormalizationOptions());
+
+// Normalized output is always whole measure lines. When the replaced selection
+// did not begin at a line start, or did not end at a line boundary, splice in
+// the separators that keep the surrounding text intact.
+QString composeNormalizedSelectionReplacement(
+    const QString& original,
+    int selectionStart,
+    int selectionEnd,
+    const QString& normalizedText);
 
 }  // namespace miacode::chart_transform

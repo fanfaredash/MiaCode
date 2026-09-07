@@ -10,6 +10,13 @@ struct SimaiRawField {
     QString value;
 };
 
+struct SimaiPropertyIssue {
+    int line = 1;
+    int column = 1;
+    int endColumn = 1;
+    QString code;
+};
+
 inline bool operator==(const SimaiRawField& lhs, const SimaiRawField& rhs)
 {
     return lhs.key == rhs.key && lhs.value == rhs.value;
@@ -34,6 +41,10 @@ public:
     static SimaiDocument fromText(const QString& text);
 
     static QVector<SimaiRawField> parseRawFields(const QString& text, bool prefixDummyIfNeeded = false);
+    // Returns structured locations for property-looking lines that are not a
+    // complete `&key=value` assignment. Lines are one-based and CRLF is
+    // treated as one line terminator.
+    static QVector<SimaiPropertyIssue> invalidPropertyLineNumbers(const QString& text);
     // Like parseRawFields, but drops keys that already have dedicated model
     // storage and editor UI (title/artist/first/des/video and the
     // per-difficulty lv_/des_/inote_). Used by the free-form "Other &xx
@@ -74,13 +85,9 @@ public:
     // survey / broadcast so chart-less names participate too.
     QVector<QPair<int, QString>> perDifficultyDesigners() const;
 
-    // Default for the "all difficulties share the same designer name"
-    // project preference when no explicit value is recorded yet.
-    // Currently *always false* — auto-enabling has no entirely-safe
-    // fallback, so we require the user to opt in. The heuristic that
-    // detects "this project is already trivially unified" lives in
-    // isUnifiedDesignerTriviallySafe() below and is preserved for a
-    // future preferences/onboarding flow that might surface a suggestion.
+    // Legacy default helper for the "all difficulties share the same designer
+    // name" mode. Project-preference wiring is currently detached pending a
+    // v1 behavior review; the helper remains available for that investigation.
     bool inferUnifiedDesignerDefault() const;
 
     // Returns true when every &des_N already matches the top-level &des

@@ -1,3 +1,11 @@
+---
+lifecycle: stable-current
+canonical_id: chart.slide-head-material
+owner: src/core/chart
+last_verified: 2026-09-06
+code_anchors: ["src/core/chart/parser", "src/core/scene/PreviewSkinSelectors.cpp", "src/tools/simai_parser/SimaiParserSpec.cpp"]
+---
+
 # 延迟 Slide、头材质与无头 Slide 规则
 
 本文档整理当前仓库中已经落地的最终规则，用作后续 parser / timeline / preview / export / transform 的统一依据。

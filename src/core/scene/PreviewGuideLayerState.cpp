@@ -1,11 +1,14 @@
 #include "core/scene/PreviewGuideLayerState.h"
 
+#include "core/scene/PreviewJudgeOverlayShared.h"
 #include "core/scene/PreviewOpacityCurves.h"
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSceneMath.h"
 #include "core/scene/PreviewSkinSelectors.h"
 
 #include <QHash>
+#include <QSet>
+#include <QString>
 
 namespace {
 
@@ -100,6 +103,15 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
     PreviewSpriteDescriptors sprites;
     sprites.reserve(markers.size() * 2);
 
+    // A '*' same-head slide (`4-2[16:1]*-1[16:1]`) expands to one marker per
+    // branch, all sharing a single head star on one lane. Each-group size here
+    // decides which connector art is drawn, so counting the branches
+    // separately inflates a 2-note each into a 3+ each and swaps the short
+    // connector for the full ring. Collapse the branches the way the head
+    // layer does (buildSlideHeadRepresentatives) and the way the parser's own
+    // each accounting does (headStarLanes in finalizeEachGroup).
+    QSet<QString> seenSlideHeadKeys;
+
     QHash<int, QVector<ActiveEachCandidate>> eachGroupsById;
     QHash<qint64, QVector<ActiveEachCandidate>> fallbackEachGroupsBySecond;
     const auto addEachCandidate = [&eachGroupsById, &fallbackEachGroupsBySecond](const TimelineNoteMarker& marker) {
@@ -142,6 +154,13 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
             const TapApproachSample approach = tapApproachWith(tapTiming, deltaSeconds);
             if (state.playheadSeconds > marker.second || approach.scale <= 0.0) {
                 continue;
+            }
+            if (slideHeadStar) {
+                const QString headKey = slideHeadEventKey(marker);
+                if (seenSlideHeadKeys.contains(headKey)) {
+                    continue;
+                }
+                seenSlideHeadKeys.insert(headKey);
             }
             appendConcentricGuide(
                 &sprites,

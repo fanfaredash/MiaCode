@@ -67,11 +67,7 @@ void QmlUiWindowChrome::attach(QWindow* window)
         window,
         &QWindow::visibleChanged,
         this,
-        [this](bool visible) {
-            if (visible) {
-                refreshTitleBarMetrics();
-            }
-        },
+        &QmlUiWindowChrome::handleWindowVisibleChanged,
         static_cast<Qt::ConnectionType>(Qt::UniqueConnection));
 #else
     Q_UNUSED(window);
@@ -89,6 +85,13 @@ void QmlUiWindowChrome::refreshTitleBarMetrics()
 #else
     setTitleBarLeadingInset(0);
 #endif
+}
+
+void QmlUiWindowChrome::handleWindowVisibleChanged(bool visible)
+{
+    if (visible) {
+        refreshTitleBarMetrics();
+    }
 }
 
 bool QmlUiWindowChrome::nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result)

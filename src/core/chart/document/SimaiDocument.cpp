@@ -54,7 +54,8 @@ QString serializeField(const QString& key, const QString& value)
 // line alongside the model-owned one.
 bool isReservedMetadataKey(const QString& key)
 {
-    if (key == QLatin1String("title") || key == QLatin1String("artist")
+    if (key.compare(QLatin1String("clock_count"), Qt::CaseInsensitive) == 0
+        || key == QLatin1String("title") || key == QLatin1String("artist")
         || key == QLatin1String("first") || key == QLatin1String("des")
         || key == QLatin1String("video") || key == kBookmarksFieldKey) {
         return true;
@@ -229,6 +230,38 @@ QVector<SimaiRawField> SimaiDocument::parseRawFields(const QString& text, bool p
     }
 
     return fields;
+}
+
+QVector<SimaiPropertyIssue> SimaiDocument::invalidPropertyLineNumbers(const QString& text)
+{
+    QVector<SimaiPropertyIssue> issues;
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        QString line = lines.at(lineIndex);
+        if (line.endsWith(QLatin1Char('\r'))) {
+            line.chop(1);
+        }
+        const int firstNonSpace = line.indexOf(QRegularExpression(QStringLiteral("\\S")));
+        if (firstNonSpace < 0) {
+            continue;
+        }
+        if (line.at(firstNonSpace) != QLatin1Char('&')) {
+            issues.append({lineIndex + 1, firstNonSpace + 1,
+                           qMax(firstNonSpace + 1, static_cast<int>(line.size())),
+                           QStringLiteral("invalid_property")});
+            continue;
+        }
+        const int equals = line.indexOf(QLatin1Char('='), firstNonSpace + 1);
+        const QString key = equals >= 0
+            ? line.mid(firstNonSpace + 1, equals - firstNonSpace - 1).trimmed()
+            : QString();
+        if (equals <= firstNonSpace + 1 || key.isEmpty()) {
+            issues.append({lineIndex + 1, firstNonSpace + 1,
+                           qMax(firstNonSpace + 1, static_cast<int>(line.size())),
+                           QStringLiteral("invalid_property")});
+        }
+    }
+    return issues;
 }
 
 QVector<SimaiRawField> SimaiDocument::parseUnmanagedFields(const QString& text, bool prefixDummyIfNeeded)
@@ -523,10 +556,9 @@ bool SimaiDocument::isUnifiedDesignerTriviallySafe() const
     //   &des="",  &des_5="X"                            → false (5 disagrees)
     //   &des="X", &des_5="X", &des_6="Y"                → false (6 disagrees)
     //
-    // Currently unused by the load-time default (see
-    // inferUnifiedDesignerDefault). Preserved for a future
-    // suggestion-style UI that might prompt the user "this project
-    // looks unified, enable the option?".
+    // Currently not wired to document loading. Preserved for a future
+    // suggestion-style UI that might prompt the user "this project looks
+    // unified, enable the option?" after the v1 behavior is understood.
     for (auto it = difficulties_.cbegin(); it != difficulties_.cend(); ++it) {
         if (it.value().designer != designer) {
             return false;

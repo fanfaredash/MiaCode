@@ -253,12 +253,54 @@ center-offset calibrated against a reference image. **Build measurement tools**
 (`measure_lv_alignment.py`, `render-lv-samples.ps1`) — alignment converged in 2 rounds
 WITH tools vs. blind guessing. Commits: d3392de, 9466496.
 
+### Q7. Canvas line numbers sit above or below TextEdit glyphs
+
+Canvas `middle` centers glyphs within the requested row box, while `QTextLayout` places text
+from an alphabetic baseline derived from the font ascent. Extra block spacing makes the two
+positions diverge further. Set the Canvas baseline to `alphabetic` and draw at
+`lineTop + FontMetrics.ascent`, using the same font as the editor.
+
+### Q8. Editor scroll is slow, scrollbar disappears, or cursor stays an arrow
+
+A full-area context-menu `MouseArea` sits above the `TextArea`. Pass trackpad gestures
+through with `scrollGestureEnabled: false`, leave its wheel event unhandled so the surrounding
+`ScrollView` receives physical-wheel input, and set `cursorShape: Qt.IBeamCursor`.
+The Basic style fades an idle scrollbar handle, so editor scrollbars that must remain
+discoverable use the same native `ScrollBar.vertical: ScrollBar {}` setup as other QML lists.
+
 ---
 
 ## Z — stacking, paint order, windows, events
 
 ### Z1. Wrong stacking (层叠关系错误)
 
+- **Surface backgrounds:** use one background owner per region; structural children inherit
+  it through transparent Items. Wallpaper visibility and surface alpha share
+  `Theme.backgroundActive` (`enabled && imageReadable`). Independently shaded adjacent regions
+  paint disjoint rectangles; do not place a full-area background beneath them.
+  `Theme.surfaceColor` folds shared opacity and theme-derived darkening into one fill;
+  controls and interaction fills use `Theme.overlayColor` with the shared overlay alpha;
+  floating fills use its popup-alpha argument plus the shared floating border. Multiply
+  source alpha and leave text/icons and enter/exit opacity intact. `AppDialog` uses the
+  shared frosted `FloatingCard` and a transparent header in both wallpaper states.
+  Wallpaper-off returns the exact original fill. Native QSG backgrounds use region colors across the
+  full viewport, including content padding, and honor content clips rather than covering overflow
+  with opaque rectangles. The workspace preview's empty base is transparent to its panel;
+  export and chart media keep independent background ownership.
+- **Menu backdrop sampling:** `Main.sceneContent` holds the
+  background and UI while popups remain in `ApplicationWindow.Overlay`. `BackdropBlur`
+  captures a padded local rectangle from that scene and, for dialog dropdowns, the anchor's
+  owning overlay item. Exclude the current popup from its sources; sampling an ancestor
+  containing the effect creates a feedback loop. Keep tint, border and menu text after the
+  blurred backdrop. The menu Loader releases its sampling/effect subtree when closed.
+  Shared popup references must use `QtQuick.Templates.Popup`. `QtQuick.Controls.Popup`
+  resolves to a styled QML subtype; styled Menu is a separate branch over `Templates.Menu`,
+  so using the styled Popup type rejects Menu references and leaves its effects inactive.
+  This applies to `FloatingCard` and `BackdropBlur` alike.
+  Declare wallpaper, main UI and drag hint directly inside `sceneContent`, in that order.
+  Declaring them in `ApplicationWindow.contentData` and assigning `parent: sceneContent`
+  mixes the window's content parenting with visual reparenting; the lost background order
+  produced wallpaper over the entire UI after the blur integration.
 - **QML:** declaration order = paint order. The intro card's required order is documented:
   frame plate → Tab → clipped jacket → thin frame stroke → LV pill. Comment the intended
   order; insert new layers by moving declarations, not by sprinkling `z:`.
@@ -277,6 +319,20 @@ One canonical source function (e.g. `handleCenterX()` derived from `displayedPro
 handle, fill, tooltip AND the hit test all read it. Constrain the interaction band with
 explicit anchors+height — `anchors.fill` on an oversized parent makes dead-looking zones
 clickable. Commit: e17c598.
+
+**Dialog placement:** `AppDialog.parent` is the window Overlay, which owns permanent
+centering and size bounds. Product policy keeps dialogs stationary; title drag handlers
+and remembered positions have been removed. Settings and compact prompts use stable
+preferred-height tiers; `ChoiceDialog` notices use their implicit height to keep actions
+close to short messages. All heights are capped to the window with scrolling overflow. All application
+dialogs inherit one header, scrollable body and stationary action footer.
+
+**QML form-page clipping:** a nested `Flickable` contributes no natural form height to
+its parent `ColumnLayout`. With `Layout.fillHeight` and a trailing stretch, it shares the
+remaining height with that stretch, clips mid-control, and hides overflow from the outer
+dialog ScrollView. Preferences form pages use natural-height ColumnLayouts and delegate
+scrolling to `AppDialog`. Virtualized ListViews (shortcuts and job queues) retain their own
+viewport and consume the remaining body height; do not turn them into full-height lists.
 
 ### Z3. Platform blue-fill fallback in custom-painted views
 
@@ -332,29 +388,39 @@ the host window with an event filter so a click on the preview can't swallow Esc
 `QGuiApplication::topLevelWindows()` before/after the repro step — a surface whose
 `global == geom` and a new visible `QWidgetWindow <surface>Window` entry = de-embedded.
 
-### Z7. macOS popup displaced from its QWidget anchor inside QuickShell
+### Z8. Application-modal dialog falls behind the visible QuickShell window
 
-**Symptom:** text and caret render in the correct place, but a top-level popup opened from
-the embedded editor/menu appears offset by the old bridge-panel origin. Moving the main
-window preserves the wrong delta or makes it obvious.
+**Symptom:** the dialog is no longer visible, but every click on the application only plays
+the platform task-dialog warning sound. The application is not frozen: Qt's modal gate is
+still correctly rejecting input while the blocking window sits behind the main window.
 
-**Root cause:** QuickShell adopts a bridge surface's content `NSView` into its `QQuickWindow`,
-but Qt's QWidget hierarchy still belongs logically to the orphan `NSPanel`. Local QWidget
-coordinates remain correct; `QWidget::mapToGlobal()` crosses the stale top-level boundary and
-returns the wrong screen point. This is the same mechanism previously found in first-level
-menu placement, not a font metric, DPR, or caret-rectangle error.
+**Root cause:** QuickShell's visible top level is a `QQuickWindow`, while `MainWindow` is a
+hidden native QWidget backend marked `miacode.dialog_parentless`. Detached dialogs therefore
+have application modality but no native owner relationship to the visible root. A one-shot
+`raise()` at show time does not survive activation changes or Windows Z-order repair.
 
-**Recipe:** associate the bridge `QWidget` with the adopted `QWindow`. For any child popup
-anchor, first use `child->mapTo(bridgeSurface, localPoint)`, then use
-`adoptedWindow->mapToGlobal(surfacePoint)`. MiaCode centralizes this in
-`common/AdoptedWidgetCoordinates`; callers fall back to ordinary `QWidget::mapToGlobal()` when
-no adopted ancestor exists. Both initial popup opening and subsequent re-anchoring must use
-the same mapper. Do not add a platform-specific pixel delta: it breaks when the main window,
-screen, scale factor, or workspace geometry changes.
+**Recipe:** install the shared `UiDialogs::DialogStackingGuard`, register the live QuickShell
+root through `setApplicationDialogTransientParent()`, and bind shown top-level dialogs whose
+native owner is absent or hidden to that root with `QWindow::setTransientParent()`. Preserve an
+existing visible owner so nested dialogs remain above their parent dialog. On application or
+root-window activation, re-raise and activate only the visible blocking modal; showing a
+non-modal dialog must not steal focus. Keep the root in
+a `QPointer`, because QuickShell teardown destroys it before the application object. Do not
+use `Qt::WindowStaysOnTopHint`: the dialog should stay above MiaCode, not above other apps.
 
-**Regression:** `PlainCodeEditorSpec` verifies that a nested widget resolves through its
-bound bridge surface. The macOS build additionally proves that `QuickShellNativeSurfaceHost`
-binds the workspace surface and the completion popup uses the shared mapper.
+---
+
+### Z9. Combo popup collapses to an empty padding strip
+
+When a reusable Popup declares a bare `Connections` child, it enters the default
+`contentData` list. Qt's `QQuickPopupPrivate::contentData()` accesses/creates the deferred
+content item during base construction, interfering with a derived popup's ListView.
+Keep transition objects and interrupted-close state directly on `AppDropdownPanel` and
+`AppMenu`; their lifecycle callbacks then end with the popup and stay outside contentData.
+`AppStickyPopup` inherits the panel. Preserve ComboBox's delegateModel and Menu's
+item/action handling.
+Runtime acceptance: decoder/bitrate options appear and select, and rate menus still
+open, select and close, including reopening during a fade-out.
 
 ---
 

@@ -1,10 +1,12 @@
 #include "tools/cover_export/CoverCompositionState.h"
 #include "tools/cover_export/CoverCompositionPersistenceGuard.h"
 #include "tools/cover_export/CoverLayoutModel.h"
+#include "tools/cover_export/CoverFrameExportPlan.h"
 #include "app/ui/UiText.h"
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QImage>
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -13,6 +15,7 @@ using miacode::cover_export::CoverCompositionState;
 using miacode::cover_export::CoverCompositionPersistenceGuard;
 using miacode::cover_export::CoverLayer;
 using miacode::cover_export::CoverLayoutModel;
+using miacode::cover_export::CoverFrameExportPlan;
 
 namespace {
 
@@ -84,6 +87,15 @@ bool testMultiFrameModel(QTextStream& err)
     if (!require(qAbs(copy->frameBgBrightness() - 0.42) < 0.001, QStringLiteral("duplicate keeps brightness"), err)) return false;
     if (!require(qAbs(copy->frameBgTransparency() - 0.73) < 0.001, QStringLiteral("duplicate keeps transparency"), err)) return false;
     if (!require(qAbs(copy->opacity() - 0.55) < 0.001, QStringLiteral("duplicate keeps opacity"), err)) return false;
+
+    QImage still(2, 2, QImage::Format_ARGB32);
+    still.fill(Qt::white);
+    model.setLayerImage(first->key(), still);
+    if (!require(first->imageRevision() >= 0 && !first->frameImage().isNull(),
+                 QStringLiteral("stores a rendered chart still"), err)) return false;
+    model.clearLayerImage(first->key());
+    if (!require(first->imageRevision() < 0 && first->frameImage().isNull(),
+                 QStringLiteral("clears a stale chart still before a new renderer"), err)) return false;
 
     if (!require(!model.removeLayer(CoverLayoutModel::cardKey()), QStringLiteral("card cannot be removed"), err)) return false;
     if (!require(model.removeLayer(first->key()), QStringLiteral("frame can be removed"), err)) return false;
@@ -340,6 +352,37 @@ bool testBackgroundBrightnessRoundTrip(QTextStream& err)
     return true;
 }
 
+// The output folder is part of the remembered composition. Without it the page
+// re-derives the folder from the chart on every difficulty switch, silently
+// discarding the one the user picked.
+bool testOutputDirectoryRoundTrip(QTextStream& err)
+{
+    CoverCompositionState state;
+    state.size = QSize(1080, 1080);
+    state.outputDirectory = QStringLiteral("/tmp/miacode-cover-output");
+
+    CoverCompositionState restored;
+    if (!require(CoverCompositionState::fromJson(state.toJson(), &restored),
+                 QStringLiteral("composition with an output folder parses"), err)) return false;
+    if (!require(restored.outputDirectory == state.outputDirectory,
+                 QStringLiteral("output folder round-trips"), err)) return false;
+
+    // Layouts written before the field, and presets (which are deliberately
+    // machine-agnostic), simply carry no folder.
+    QJsonObject legacy = state.toJson();
+    legacy.remove(QStringLiteral("output"));
+    CoverCompositionState legacyState;
+    if (!require(CoverCompositionState::fromJson(legacy, &legacyState),
+                 QStringLiteral("legacy composition without an output folder parses"), err)) return false;
+    if (!require(legacyState.outputDirectory.isEmpty(),
+                 QStringLiteral("a missing output folder restores as empty"), err)) return false;
+
+    CoverCompositionState empty;
+    empty.size = QSize(1080, 1080);
+    return require(!empty.toJson().contains(QStringLiteral("output")),
+                   QStringLiteral("an unset output folder writes no key"), err);
+}
+
 bool testCoverPresetPersistence(QTextStream& err)
 {
     QJsonObject composition;
@@ -460,6 +503,27 @@ bool testImageAndTextLayers(QTextStream& err)
     return true;
 }
 
+bool testExportPlanPreservesFrameTimes(QTextStream& err)
+{
+    CoverLayoutModel model;
+    CoverLayer* first = model.addChartFrameLayer(12.5);
+    CoverLayer* second = model.addChartFrameLayer(73.25);
+    if (!require(first != nullptr && second != nullptr,
+                 QStringLiteral("export-plan setup creates two frames"), err)) return false;
+
+    const CoverFrameExportPlan plan = CoverFrameExportPlan::fromVisibleLayers(
+        model, second->key(), second->frameSeconds());
+    const auto frames = plan.frames();
+    if (!require(frames.size() == 2, QStringLiteral("export plan includes both visible frames"), err)) return false;
+    if (!require(frames[0].key == first->key() && qAbs(frames[0].seconds - 12.5) < 0.001,
+                 QStringLiteral("export plan keeps the first frame time"), err)) return false;
+    if (!require(frames[1].key == second->key() && qAbs(frames[1].seconds - 73.25) < 0.001,
+                 QStringLiteral("export plan keeps the second frame time"), err)) return false;
+    return require(plan.activeLayerKey() == second->key()
+                       && qAbs(plan.activeLayerSeconds() - second->frameSeconds()) < 0.001,
+                   QStringLiteral("export plan records the shared playhead restore point"), err);
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -481,7 +545,9 @@ int main(int argc, char** argv)
     if (!testBackgroundBrightnessRoundTrip(err)) return 1;
     if (!testMoveByViewRows(err)) return 1;
     if (!testImageAndTextLayers(err)) return 1;
+    if (!testExportPlanPreservesFrameTimes(err)) return 1;
     if (!testCoverPresetPersistence(err)) return 1;
+    if (!testOutputDirectoryRoundTrip(err)) return 1;
     QFile::remove(UiText::preferencesFilePath());
     return 0;
 }

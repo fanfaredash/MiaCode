@@ -1,25 +1,19 @@
 cmake_minimum_required(VERSION 3.21)
 
-set(MIACODE_VERSION_MAJOR "1")
-set(MIACODE_VERSION_MINOR "1")
+set(MIACODE_VERSION_MAJOR "2")
+set(MIACODE_VERSION_MINOR "0")
 set(MIACODE_VERSION_PATCH "0")
-# Single source of truth for the prerelease tag. Both the package
-# filename (MiaCode-v<version>-win64.zip via package-win.ps1) and the
-# user-visible "About" dialog read this. Beta20 unified the previously
-# split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
-# they always drifted apart in practice (e.g. beta20 zip shipping with
-# beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.10")
+# Single source of truth for the prerelease tag and package version. The
+# About dialog appends its compile date to this version at runtime.
+set(MIACODE_VERSION_PRERELEASE "alpha")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-# Display version is identical to the package version. Kept as a
-# distinct preprocessor define so consumers in `app.setApplicationVersion`
-# and the About dialog don't need a code change; they just both resolve
-# to the same string now.
+# The application metadata version remains the package version. The About
+# dialog adds its compile date to the visible version separately.
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION_STRING}")
 
 if (APPLE)
@@ -98,7 +92,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Multimedia Quick Qml QuickControls2 ShaderTools)
 
 qt_policy(SET QTP0001 NEW)
 
@@ -122,11 +116,56 @@ endif()
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
+    src/app/v2/ApplicationServices.cpp
+    src/app/v2/ApplicationServices.h
+    src/app/v2/DocumentBridge.h
+    src/app/v2/EditorPageRouter.h
+    src/app/v2/ExportEngine.h
+    src/app/v2/LatencyEngine.h
+    src/app/v2/MediaToolsEngine.h
+    src/app/v2/PreferencesStore.h
+    src/app/v2/PreviewSurface.h
+    src/app/v2/PlaybackControl.h
+    src/app/v2/PlaybackStateAuthority.h
+    src/app/v2/SessionGeneration.h
+    src/app/v2/AudioClockSource.h
+    src/app/v2/PreviewPlaybackPort.h
+    src/app/v2/ShellNotifications.cpp
+    src/app/v2/ShellNotifications.h
+    src/app/v2/TimelineSurface.h
+    src/app/v2/PreviewAppearanceState.cpp
+    src/app/v2/PreviewAppearanceState.h
+    src/app/v2/ChartWorkspace.cpp
+    src/app/v2/ChartWorkspace.h
+    src/app/v2/ChartMediaService.cpp
+    src/app/v2/ChartMediaService.h
+    src/common/ChartMediaImport.cpp
+    src/common/ChartMediaImport.h
+    src/app/v2/ChartWorkspaceFileService.cpp
+    src/app/v2/ChartWorkspaceFileService.h
+    src/app/v2/AnalysisService.cpp
+    src/app/v2/AnalysisService.h
+    src/app/v2/EditorSyncController.cpp
+    src/app/v2/EditorSyncController.h
+    src/app/v2/UiRequestService.cpp
+    src/app/v2/UiRequestService.h
+    src/app/v2/JobProgressService.cpp
+    src/app/v2/JobProgressService.h
+    src/app/qml_ui/media/QmlMediaToolsModel.cpp
+    src/app/qml_ui/media/QmlMediaToolsModel.h
+    src/app/qml_ui/preview/QmlAudioSettingsModel.cpp
+    src/app/qml_ui/preview/QmlAudioSettingsModel.h
+    src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp
+    src/app/qml_ui/preview/QmlPreviewSettingsModel.h
+    src/app/qml_ui/preferences/QmlPreferencesModel.cpp
+    src/app/qml_ui/preferences/QmlPreferencesModel.h
+    src/app/qml_ui/preferences/QmlAppBackgroundModel.cpp
+    src/app/qml_ui/preferences/QmlAppBackgroundModel.h
+    src/app/qml_ui/latency/QmlLatencyModel.cpp
+    src/app/qml_ui/latency/QmlLatencyModel.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
-    src/app/WindowsIdleEventDiagnostics.h
-    src/app/WindowsIdleEventDiagnostics.cpp
     src/app/WindowVisibilityDiagnostics.h
     src/app/WindowVisibilityDiagnostics.cpp
     src/app/gpu_adapter_probe.cpp
@@ -135,102 +174,90 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/cli_shared.cpp
     src/app/cli_video_export.cpp
     src/app/cli_video_export_worker.cpp
-    src/app/quick_shell/QuickShellBootstrap.h
-    src/app/quick_shell/QuickShellBootstrap.cpp
-    src/app/quick_shell/QuickShellContracts.h
-    src/app/quick_shell/QuickShellNativeSurfaceHost.h
-    src/app/quick_shell/QuickShellNativeSurfaceHost.cpp
-    src/app/quick_shell/QuickShellMacSurfaceSupport.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp
     src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
-    src/app/quick_shell/QuickShellController.h
-    src/app/quick_shell/QuickShellController.cpp
-    src/app/quick_shell/QuickShellStyleBridge.h
-    src/app/quick_shell/QuickShellStyleBridge.cpp
-    src/common/AdoptedWidgetCoordinates.h
-    src/common/AdoptedWidgetCoordinates.cpp
-    src/app/mainwindow/MainWindow.h
-    src/app/mainwindow/MainWindow.cpp
-    src/app/mainwindow/MainWindowShared.h
-    src/app/mainwindow/MainWindowShared.cpp
-    src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp
-    src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp
-    src/app/mainwindow/sections/document/MainWindow.DocumentDesignerFlow.cpp
-    src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp
-    src/app/mainwindow/sections/document/MainWindow.DocumentEditorState.cpp
-    src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp
-    src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.AudioSettings.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.TrackMetadata.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp
-    src/app/mainwindow/sections/dialogs/MainWindow.DialogsSection.cpp
-    src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp
-    src/app/mainwindow/sections/editor/MainWindow.EditorState.cpp
-    src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp
-    src/app/mainwindow/sections/export/MainWindow.ExportSnapshot.cpp
-    src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp
-    src/app/mainwindow/sections/export/MainWindow.ExportWorker.cpp
-    src/app/mainwindow/sections/export/MainWindow.PackZip.cpp
-    src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp
-    src/app/mainwindow/sections/frame/MainWindow.ExtensionHostRequests.cpp
-    src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
-    src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
-    src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp
-    src/app/mainwindow/sections/preferences/MainWindow.WelcomeDialog.cpp
-    src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp
-    src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelineAnalysisFlow.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelineQuickParse.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelineFramePacing.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelineFullscreenUI.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelineLayoutUI.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelineForwarding.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.PreviewSeek.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackState.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.PreviewIntroRegion.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.PreviewTick.cpp
-    src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackGlue.cpp
-    src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp
-    src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp
-    src/app/mainwindow/sections/validation/MainWindow.ValidationRender.cpp
-    src/app/mainwindow/sections/validation/MainWindow.ValidationRuntime.cpp
-    src/app/mainwindow/sections/window/MainWindow.BottomTabsHost.cpp
-    src/app/mainwindow/sections/window/MainWindow.WindowInteraction.cpp
-    src/app/mainwindow/sections/window/MainWindow.WindowRuntime.cpp
-    src/app/mainwindow/sections/window/MainWindow.WindowSection.cpp
-    src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
+    src/app/runtime/Session.h
+    src/app/runtime/SessionLifecycle.cpp
+    src/app/runtime/RuntimeContext.h
+    src/app/runtime/Shared.h
+    src/app/runtime/Shared.cpp
+    src/app/runtime/Shared.Preview.cpp
+    src/app/runtime/document/DocumentFlow.cpp
+    src/app/runtime/document/DocumentBridge.cpp
+    src/app/runtime/document/DocumentFileFlow.cpp
+    src/app/runtime/document/DocumentDesignerFlow.cpp
+    src/app/runtime/document/DocumentAutosave.cpp
+    src/app/runtime/document/DocumentEditorState.cpp
+    src/app/runtime/document/DocumentTransforms.cpp
+    src/app/runtime/document/DocumentPages.cpp
+    src/app/runtime/media/MediaJobs.cpp
+    src/app/runtime/media/MediaTools.cpp
+    src/app/runtime/media/MediaJobsHost.cpp
+    src/app/runtime/editor/EditorDisplay.cpp
+    src/app/runtime/editor/EditorState.cpp
+    src/app/runtime/export/ExportFlow.cpp
+    src/app/runtime/export/ExportSnapshot.cpp
+    src/app/runtime/export/VideoExportHost.cpp
+    src/app/runtime/export/ExportWorker.cpp
+    src/app/runtime/export/PackZip.cpp
+    src/app/runtime/SessionBootstrap.cpp
+    src/app/runtime/SessionBootstrapFinalize.cpp
+    src/app/runtime/settings/Settings.cpp
+    src/app/runtime/preview/StageMediaRoute.cpp
+    src/app/runtime/preview/WarmupAndSettings.cpp
+    src/app/runtime/playback/TimelineFlow.cpp
+    src/app/runtime/playback/SessionForwarding.TimelineFlow.cpp
+    src/app/runtime/playback/FollowSync.cpp
+    src/app/runtime/playback/AnalysisFlow.cpp
+    src/app/runtime/playback/QuickParse.cpp
+    src/app/runtime/playback/Layout.cpp
+    src/app/runtime/playback/FramePacing.cpp
+    src/app/runtime/playback/SessionForwarding.FramePacing.cpp
+    src/app/runtime/playback/LayoutUi.cpp
+    src/app/runtime/playback/SessionForwarding.cpp
+    src/app/runtime/playback/Playback.cpp
+    src/app/runtime/playback/SessionForwarding.Playback.cpp
+    src/app/runtime/playback/Seek.cpp
+    src/app/runtime/playback/PlaybackState.cpp
+    src/app/runtime/playback/IntroRegion.cpp
+    src/app/runtime/playback/Tick.cpp
+    src/app/runtime/playback/PlaybackGlue.cpp
+    src/app/runtime/playback/SessionForwarding.PlaybackGlue.cpp
+    src/app/runtime/playback/PlaybackCoordinator.h
+    src/app/runtime/playback/CoordinatorContract.cpp
+    src/app/runtime/playback/PlaybackIdentityGate.cpp
+    src/app/runtime/playback/PlaybackIdentityGate.h
+    src/app/runtime/playback/PlaybackSurfaceAdapters.cpp
+    src/app/runtime/playback/PlaybackSurfaceAdapters.h
+    src/app/runtime/timeline/TimelineCommandGate.cpp
+    src/app/runtime/timeline/TimelineCommandGate.h
+    src/app/runtime/timeline/TimelineHost.cpp
+    src/app/runtime/timeline/TimelineHost.h
+    src/app/runtime/preview/PreviewHost.cpp
+    src/app/runtime/preview/PreviewHost.h
+    src/app/runtime/validation/ValidationFlow.cpp
+    src/app/runtime/validation/ValidationListUi.cpp
+    src/app/runtime/validation/ValidationRender.cpp
+    src/app/runtime/validation/ValidationRuntime.cpp
+    src/app/runtime/playback/SurfaceContract.cpp
+    src/app/runtime/playback/SessionForwarding.SurfaceContract.cpp
+    src/app/runtime/shell/ShellHost.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
-    src/app/ui/ChartDropOverlay.h
-    src/app/ui/ChartDropOverlay.cpp
     src/app/ui/AppBackgroundSettings.h
     src/app/ui/AppBackgroundSettings.cpp
-    src/app/ui/AppBackgroundPainter.h
-    src/app/ui/AppBackgroundPainter.cpp
+    src/app/ui/ThemeVariantResolver.h
+    src/app/ui/ThemeVariantResolver.cpp
     src/app/ui/ShortcutRegistry.h
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h
     src/app/ui/UiTheme.cpp
-    src/app/ui/UiComponents.h
-    src/app/ui/UiComponents.cpp
     src/app/ui/UiNativeWindowTheme.h
     src/app/ui/UiNativeWindowTheme.cpp
     src/app/ui/UiNativeWindowThemePolicy.h
     src/app/ui/WindowParityMetrics.h
     src/app/ui/WindowParityMetrics.cpp
-    src/app/ui/FlowLayout.h
-    src/app/ui/FlowLayout.cpp
-    src/app/ui/EditableValueLabel.h
-    src/app/ui/EditableValueLabel.cpp
-    src/app/ui/BusySpinner.h
-    src/app/ui/BusySpinner.cpp
     src/common/MuriTypes.h
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h
@@ -266,21 +293,14 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/ChartClockCount.h
     src/common/PreviewSfxTiming.h
     src/common/PreviewSfxTimeline.h
-    src/editor/PlainCodeEditor.h
-    src/editor/PlainCodeEditor.cpp
-    src/editor/PlainCodeEditor.Layout.cpp
-    src/editor/PlainCodeEditor.HighlightAndCaret.cpp
-    src/editor/PlainCodeEditor.BracketCompletion.cpp
-    src/editor/PlainCodeEditor.Input.cpp
-    src/editor/PlainCodeEditor.Bookmarks.cpp
     src/editor/BookmarkCommentSyntax.h
     src/editor/BookmarkCommentSyntax.cpp
     src/editor/TouchPadAuthoringEdit.h
     src/editor/TouchPadAuthoringEdit.cpp
-    src/editor/BracketCompletionPopup.h
-    src/editor/BracketCompletionPopup.cpp
     src/editor/SimaiCompletionCatalog.h
     src/editor/SimaiCompletionCatalog.cpp
+    src/editor/SimaiTextEditPolicy.h
+    src/editor/SimaiTextEditPolicy.cpp
     src/editor/BracketScopeHighlighter.h
     src/editor/BracketScopeHighlighter.cpp
     src/tools/latency/LatencyAnalysis.h
@@ -289,10 +309,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/latency/LatencyTestChartBuilder.cpp
     src/tools/latency/LatencySandboxController.h
     src/tools/latency/LatencySandboxController.cpp
-    src/tools/latency/LatencyDetectionPage.h
-    src/tools/latency/LatencyDetectionPage.cpp
-    src/tools/export_page/ExportLauncherPage.h
-    src/tools/export_page/ExportLauncherPage.cpp
     src/tools/muri/MuriAnalyzer.h
     src/tools/muri/MuriAnalyzer.cpp
     src/tools/muri/MuriAnalyzerGeometry.h
@@ -317,24 +333,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/muri/MuriPanelEntries.cpp
     src/tools/muri/MuriStaticChecker.h
     src/tools/muri/MuriStaticChecker.cpp
-    src/tools/video_export/VideoExportDialog.h
-    src/tools/video_export/VideoExportDialog.cpp
-    src/tools/video_export/VideoExportDialog.SettingsPersistence.cpp
-    src/tools/video_export/VideoExportDialog.IntroControls.cpp
-    src/tools/video_export/VideoExportDialog.ExportFlow.cpp
     src/tools/video_export/VideoExportSettings.h
     src/tools/video_export/VideoExportSettings.cpp
-    src/tools/video_export/HudFontSettings.h
-    src/tools/video_export/HudFontSettings.cpp
     src/tools/video_export/FontLibrary.h
     src/tools/video_export/FontLibrary.cpp
-    src/tools/video_export/CardFontSettings.h
-    src/tools/video_export/CardFontSettings.cpp
-    src/tools/video_export/BatchExportPanel.h
-    src/tools/video_export/BatchExportTaskLayout.h
-    src/tools/video_export/BatchExportTaskLayout.cpp
-    src/tools/video_export/BatchExportSelectionState.cpp
-    src/tools/video_export/BatchExportPanel.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
     src/tools/video_export/VideoExportEncoder.cpp
@@ -342,62 +344,38 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportFrameRender.cpp
     src/tools/video_export/VideoExportPipeline.cpp
     src/tools/video_export/VideoExportPreparedTask.cpp
+    src/tools/video_export/VideoExportMediaTimeline.h
+    src/tools/video_export/VideoExportMediaTimeline.cpp
     src/tools/video_export/VideoExportRuntimePolicy.h
     src/tools/video_export/VideoExportRuntimePolicy.cpp
     src/tools/video_export/VideoExportQuickRenderBackend.h
     src/tools/video_export/VideoExportQuickRenderBackend.cpp
-    src/tools/video_export/IntroPreviewWidget.h
-    src/tools/video_export/IntroPreviewWidget.cpp
     src/tools/video_export/RawVideoPipeTransport.h
     src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h
     src/tools/video_export/VideoExportSnapshot.cpp
     src/tools/zip_export/ChartZipPackager.h
     src/tools/zip_export/ChartZipPackager.cpp
-    src/tools/net/NetClient.h
-    src/tools/net/NetClient.cpp
-    src/tools/net/NetBatchDownloadWorker.h
-    src/tools/net/NetBatchDownloadWorker.cpp
-    src/tools/net/NetBatchDownloadDialog.h
-    src/tools/net/NetBatchDownloadDialog.cpp
-    src/tools/net/NetBatchUploadWorker.h
-    src/tools/net/NetBatchUploadScanner.h
-    src/tools/net/NetBatchUploadScanner.cpp
-    src/tools/net/NetUploadDiagnostics.h
-    src/tools/net/NetUploadDiagnostics.cpp
-    src/tools/net/NetBatchUploadWorker.cpp
-    src/tools/net/NetBatchUploadDialog.h
-    src/tools/net/NetBatchUploadDialog.cpp
     src/tools/media/PvBatchCompressionScanner.h
     src/tools/media/PvBatchCompressionScanner.cpp
+    src/tools/media/PvCompressionPolicy.h
+    src/tools/media/PvCompressionPolicy.cpp
     src/tools/media/PvBatchCompressionWorker.h
     src/tools/media/PvBatchCompressionWorker.cpp
-    src/tools/media/PvBatchCompressionDialog.h
-    src/tools/media/PvBatchCompressionDialog.cpp
     src/tools/cover_export/CoverLayoutModel.h
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverCompositionState.h
     src/tools/cover_export/CoverCompositionState.cpp
-    src/tools/cover_export/CoverCompositionPersistenceGuard.h
-    src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
-    src/tools/cover_export/CoverLayerListModel.h
-    src/tools/cover_export/CoverLayerListModel.cpp
-    src/tools/cover_export/CoverLayerListPanel.h
-    src/tools/cover_export/CoverLayerListPanel.cpp
-    src/tools/cover_export/CoverInspectorPanel.h
-    src/tools/cover_export/CoverInspectorPanel.cpp
-    src/tools/cover_export/CoverFramePickerPanel.h
-    src/tools/cover_export/CoverFramePickerPanel.cpp
-    src/tools/cover_export/CoverStudioPanel.h
-    src/tools/cover_export/CoverStudioPanel.cpp
-    src/tools/cover_export/CoverStudioWindow.h
-    src/tools/cover_export/CoverStudioWindow.cpp
-    src/tools/cover_export/CoverComposerView.h
-    src/tools/cover_export/CoverComposerView.cpp
+    src/tools/cover_export/CoverCompositeRenderer.h
+    src/tools/cover_export/CoverCompositeRenderer.cpp
     src/tools/cover_export/SceneFrameRenderer.h
     src/tools/cover_export/SceneFrameRenderer.cpp
-    src/tools/cover_export/ExportCoverDialog.h
-    src/tools/cover_export/ExportCoverDialog.cpp
+    src/tools/cover_export/CoverFramePlaybackController.h
+    src/tools/cover_export/CoverFramePlaybackController.cpp
+    src/tools/cover_export/CoverFrameSceneBinder.h
+    src/tools/cover_export/CoverFrameSceneBinder.cpp
+    src/tools/cover_export/CoverFrameExportPlan.h
+    src/tools/cover_export/CoverFrameExportPlan.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewQuickD3D11ExportSession.h
@@ -557,6 +535,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/core/chart/parser/SimaiNativeParser.cpp
     src/core/chart/parser/SimaiCommentScan.h
     src/core/chart/parser/SimaiCommentScan.cpp
+    src/core/chart/selection/ChartSelectionBeatSummary.h
+    src/core/chart/selection/ChartSelectionBeatSummary.cpp
     src/timeline/TimelineData.h
     src/timeline/TimelineRenderData.h
     src/timeline/TimelineQuickModel.h
@@ -572,8 +552,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/TimelineNoteAssets.cpp
     src/timeline/TimelineSlowRefresh.h
     src/timeline/TimelineSlowRefresh.cpp
-    src/timeline/TimelineView.h
-    src/timeline/TimelineView.cpp
     src/timeline/quick/TimelineQuickItem.h
     src/timeline/quick/TimelineQuickItem.cpp
     src/timeline/quick/TimelineQuickStateBridge.h
@@ -595,20 +573,15 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickNotesLayer.cpp
     src/timeline/quick/TimelineQuickOverlayLayer.h
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
-    src/extensions/ExtensionManifest.h
-    src/extensions/ExtensionManifest.cpp
-    src/extensions/ExtensionOpenBridge.h
-    src/extensions/ExtensionOpenBridge.cpp
-    src/extensions/EmbeddedExtensionRuntime.h
-    src/extensions/EmbeddedExtensionRuntime.cpp
-    src/extensions/ExtensionManager.h
-    src/extensions/ExtensionManager.cpp
+    src/app/qml_ui/drop/QmlChartDropBridge.h
+    src/app/qml_ui/drop/QmlChartDropBridge.cpp
+    src/app/v2/ChartDropImportService.h
+    src/app/v2/ChartDropImportService.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc
     resources/preview_judge_effects.qrc
     resources/preview_runtime_qml.qrc
-    resources/quick_shell_qml.qrc
     resources/intro.qrc
 )
 
@@ -626,6 +599,11 @@ qt_add_shaders(MiaCode "intro_shaders"
     PREFIX "/"
     FILES
         src/intro/shaders/bg_texture.frag
+)
+qt_add_shaders(MiaCode "ui_shaders"
+    PREFIX "/"
+    FILES
+        src/app/qml_ui/shaders/corner_mask.frag
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
@@ -649,18 +627,24 @@ if (APPLE AND EXISTS "${MIACODE_MACOS_APP_ICON}")
     )
 endif()
 
-# Default UI (v2). QuickShell v1: --ui=v1 / MIACODE_UI_SKIN=v1.
+# Default UI (v2).
 # QTP0001 NEW embeds this module at :/qt/qml/MiaCode/UI/.
 set(MIACODE_UI_QML_FILES
     src/app/qml_ui/Main.qml
+    src/app/qml_ui/UiText.qml
     src/app/qml_ui/ViewState.qml
     src/app/qml_ui/theme/Theme.qml
     src/app/qml_ui/components/IconButton.qml
+    src/app/qml_ui/components/AppCheckBox.qml
+    src/app/qml_ui/components/AppDropDownButton.qml
     src/app/qml_ui/components/AppTab.qml
+    src/app/qml_ui/components/DifficultySwatch.qml
     src/app/qml_ui/components/PanelHeader.qml
     src/app/qml_ui/components/SplitHandle.qml
+    src/app/qml_ui/components/CornerMask.qml
     src/app/qml_ui/components/Tooltip.qml
     src/app/qml_ui/components/HoverChrome.qml
+    src/app/qml_ui/components/ChromeRow.qml
     src/app/qml_ui/components/NavRow.qml
     src/app/qml_ui/components/AppTextField.qml
     src/app/qml_ui/components/AppTextArea.qml
@@ -668,12 +652,31 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/AppSwitch.qml
     src/app/qml_ui/components/AppComboBox.qml
     src/app/qml_ui/components/AppSlider.qml
+    src/app/qml_ui/components/AppScrollBar.qml
     src/app/qml_ui/components/AppMenu.qml
+    src/app/qml_ui/components/AppMenuAction.qml
+    src/app/qml_ui/components/FloatingCard.qml
+    src/app/qml_ui/components/BackdropBlur.qml
+    src/app/qml_ui/components/FadeTransition.qml
+    src/app/qml_ui/components/AppDialog.qml
+    src/app/qml_ui/components/AppStickyPopup.qml
+    src/app/qml_ui/components/AppDropdownPanel.qml
     src/app/qml_ui/components/AppMenuItem.qml
     src/app/qml_ui/components/AppMenuSeparator.qml
+    src/app/qml_ui/components/UiRequestHost.qml
+    src/app/qml_ui/components/DialogFooter.qml
+    src/app/qml_ui/components/ChoiceDialog.qml
+    src/app/qml_ui/components/EditableValue.qml
+    src/app/qml_ui/components/LabeledCombo.qml
+    src/app/qml_ui/components/LabeledSlider.qml
+    src/app/qml_ui/components/SettingsSection.qml
+    src/app/qml_ui/components/AboutDialog.qml
+    src/app/qml_ui/components/JobProgressOverlay.qml
+    src/app/qml_ui/chrome/WindowGestureArea.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml
+    src/app/qml_ui/chrome/ShortcutBindings.qml
     src/app/qml_ui/chrome/MainMenuCommands.qml
     src/app/qml_ui/chrome/MainToolBar.qml
     src/app/qml_ui/chrome/StatusBar.qml
@@ -685,17 +688,38 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/sidebar/ChartFieldSidebar.qml
     src/app/qml_ui/sidebar/DifficultyList.qml
     src/app/qml_ui/sidebar/ExportSidebarPage.qml
-    src/app/qml_ui/sidebar/ToolsSidebarPage.qml
+    src/app/qml_ui/export/ExportRangeSelector.qml
     src/app/qml_ui/export/ExportVideoPage.qml
+    src/app/qml_ui/export/CoverExportPage.qml
+    src/app/qml_ui/export/CoverExportWindow.qml
     src/app/qml_ui/editor/EditorPane.qml
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
+    src/app/qml_ui/editor/EditorPointerArea.qml
+    src/app/qml_ui/editor/CompletionPopup.qml
+    src/app/qml_ui/editor/NormalizeOptionsDialog.qml
+    src/app/qml_ui/editor/DesignerSlotsDialog.qml
+    src/app/qml_ui/media/MediaToolsDialog.qml
+    src/app/qml_ui/media/PvBatchCompressionDialog.qml
+    src/app/qml_ui/media/PrependBlankDialog.qml
+    src/app/qml_ui/preferences/PreferencesDialog.qml
+    src/app/qml_ui/latency/LatencyPage.qml
+    src/app/qml_ui/editor/FindReplaceBar.qml
+    src/app/qml_ui/editor/BookmarkList.qml
     src/app/qml_ui/editor/LineNumberGutter.qml
     src/app/qml_ui/timeline/BottomPanel.qml
     src/app/qml_ui/timeline/BottomTabBar.qml
+    src/app/qml_ui/timeline/TimelineZoomMenu.qml
+    src/app/qml_ui/timeline/TimelineBrightnessMenu.qml
     src/app/qml_ui/preview/PreviewPane.qml
+    src/app/qml_ui/preview/PreviewRenderModeMenu.qml
+    src/app/qml_ui/preview/PreviewRateMenu.qml
+    src/app/qml_ui/preview/PreviewRateToast.qml
+    src/app/qml_ui/preview/PreviewCanvasMenu.qml
     src/app/qml_ui/preview/PreviewTransport.qml
     src/app/qml_ui/preview/NoteStatistics.qml
+    src/app/qml_ui/preview/AudioSettingsDialog.qml
+    src/app/qml_ui/preview/PreviewSettingsDialog.qml
 )
 foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
     get_filename_component(qml_name "${qml_file}" NAME)
@@ -703,6 +727,7 @@ foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
 endforeach()
 set_source_files_properties(
     src/app/qml_ui/theme/Theme.qml
+    src/app/qml_ui/UiText.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -724,12 +749,15 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/tools.svg
     src/app/qml_ui/resources/icons/audio-settings.svg
     src/app/qml_ui/resources/icons/preview-settings.svg
-    src/app/qml_ui/resources/icons/muri-mode.svg
-    src/app/qml_ui/resources/icons/preview-mode.svg
     src/app/qml_ui/resources/icons/close.svg
     src/app/qml_ui/resources/icons/more.svg
     src/app/qml_ui/resources/icons/metadata.svg
     src/app/qml_ui/resources/icons/app-icon.svg
+    src/app/qml_ui/resources/icons/app-titlebar.png
+    src/app/qml_ui/resources/icons/app-titlebar@2x.png
+    src/app/qml_ui/resources/icons/chevron-down.svg
+    src/app/qml_ui/resources/icons/add.svg
+    src/app/qml_ui/resources/icons/remove.svg
     # Canonical MiaCode brand PNG (same asset as resources/app_icons.qrc).
     resources/icons/app.png
 )
@@ -744,25 +772,55 @@ qt_add_qml_module(MiaCode
     SOURCES
         src/app/qml_ui/SimaiSyntaxHighlighter.cpp
         src/app/qml_ui/SimaiSyntaxHighlighter.h
+        src/app/qml_ui/EditorTextStyle.cpp
+        src/app/qml_ui/EditorTextStyle.h
         src/app/qml_ui/QmlApplicationContext.cpp
         src/app/qml_ui/QmlApplicationContext.h
         src/app/qml_ui/QmlCommandService.cpp
         src/app/qml_ui/QmlCommandService.h
+        src/app/qml_ui/QmlShortcutCommands.h
         src/app/qml_ui/QmlDocumentModel.cpp
         src/app/qml_ui/QmlDocumentModel.h
+        src/core/chart/selection/ChartSelectionBeatSummary.h
+        src/core/chart/selection/ChartSelectionBeatSummary.cpp
+        src/app/qml_ui/QmlDocumentProjection.cpp
+        src/app/qml_ui/QmlDocumentProjection.h
+        src/app/qml_ui/QmlAnalysisProjection.cpp
+        src/app/qml_ui/QmlAnalysisProjection.h
+        src/app/qml_ui/QmlAnalysisModel.cpp
+        src/app/qml_ui/QmlAnalysisModel.h
         src/app/qml_ui/QmlPreviewModel.cpp
         src/app/qml_ui/QmlPreviewModel.h
+        src/app/qml_ui/QmlTimelineModel.cpp
+        src/app/qml_ui/QmlTimelineModel.h
+        src/app/qml_ui/QmlShellLifecycle.cpp
+        src/app/qml_ui/QmlShellLifecycle.h
+        src/app/qml_ui/QmlNoteImageProvider.cpp
+        src/app/qml_ui/QmlNoteImageProvider.h
         src/app/qml_ui/QmlUiSettings.cpp
         src/app/qml_ui/QmlUiSettings.h
         src/app/qml_ui/QmlUiPlatformChrome.h
         src/app/qml_ui/QmlEditorPageHost.cpp
         src/app/qml_ui/QmlEditorPageHost.h
+        src/app/qml_ui/QmlEditorController.cpp
+        src/app/qml_ui/QmlEditorController.h
+        src/app/qml_ui/QmlShortcutModel.cpp
+        src/app/qml_ui/QmlShortcutModel.h
+        src/app/qml_ui/QmlEditorInputBridge.cpp
+        src/app/qml_ui/QmlEditorInputBridge.h
         src/app/qml_ui/export/QmlExportSession.cpp
         src/app/qml_ui/export/QmlExportSession.h
+        src/app/qml_ui/export/QmlCoverExportSession.cpp
+        src/app/qml_ui/export/QmlCoverExportSession.h
+        src/app/qml_ui/export/QmlCoverExportWindow.cpp
+        src/app/qml_ui/export/QmlCoverExportWindow.h
         src/app/qml_ui/QmlUiWindowChrome.cpp
         src/app/qml_ui/QmlUiWindowChrome.h
         src/app/qml_ui/QmlUiBootstrap.cpp
         src/app/qml_ui/QmlUiBootstrap.h
+        src/app/qml_ui/QmlUiRootLifecycle.h
+        src/app/qml_ui/TimelineThemeBridge.cpp
+        src/app/qml_ui/TimelineThemeBridge.h
     QML_FILES
         ${MIACODE_UI_QML_FILES}
     RESOURCES
@@ -813,8 +871,6 @@ target_link_libraries(MiaCode PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
-    Qt6::Widgets
-    Qt6::Network
     soundtouch
     miniz
 )
@@ -839,7 +895,6 @@ target_include_directories(MiaCode PRIVATE
     src/timeline
     src/tools/latency
     src/tools/video_export
-    src/tools/net
 )
 
 target_sources(MiaCode PRIVATE
@@ -932,12 +987,18 @@ elseif (APPLE)
     )
 endif()
 
+# Extension packages are archive/offline inputs only. Remove any stale
+# install-root payload left by an older build so an incremental build cannot
+# accidentally turn historical extension folders into shipped product data.
+add_custom_command(TARGET MiaCode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "$<TARGET_FILE_DIR:MiaCode>/extensions"
+    COMMENT "Removing archived extension payload from product output"
+    VERBATIM
+)
+
 if (APPLE)
-    # macOS-only Objective-C++ helper that hides the orphan Qt::Tool NSPanel left
-    # behind by each QuickShell bridge surface once its content view is adopted by
-    # the QML WindowContainer (otherwise it floats over the UI as a white block).
     target_sources(MiaCode PRIVATE
-        src/app/quick_shell/QuickShellMacSurfaceSupport.mm
         src/app/ui/UiNativeWindowThemeMac.h
         src/app/ui/UiNativeWindowThemeMac.mm
         src/app/qml_ui/QmlUiWindowChrome.mm
@@ -947,21 +1008,6 @@ endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
-# Qt SVG — renders the Google Material "settings" gear toolbar icon
-# (makeSettingsGearIcon, MainWindowShared.cpp) via QSvgRenderer.
-target_link_libraries(MiaCode PRIVATE Qt6::Svg)
-
-set(MIACODE_BUNDLED_EXTENSIONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/extensions/bundled")
-add_custom_command(TARGET MiaCode POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:MiaCode>/extensions"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${MIACODE_BUNDLED_EXTENSIONS_DIR}"
-        "$<TARGET_FILE_DIR:MiaCode>/extensions"
-    COMMENT "Deploying bundled extensions next to MiaCode.exe"
-    VERBATIM
-)
-
 # ---------------------------------------------------------------------------
 # QtAVPlayer (FFmpeg) — preview background-video decode backend.
 #
@@ -1147,22 +1193,38 @@ if (WIN32)
 endif()
 
 if (MIACODE_BUILD_DEV_TOOLS)
-    # Source groups shared across several dev tools / specs, listed once
-    # instead of being copy-pasted into every target.
-    set(_miacode_chart_core
-        src/core/chart/document/SimaiDocument.h
-        src/core/chart/document/SimaiDocument.cpp
-        src/core/chart/document/SimaiTimingMetadata.h
-        src/core/chart/document/SimaiTimingMetadata.cpp
-        src/core/chart/parser/SimaiNativeParser.h
-        src/core/chart/parser/SimaiNativeParser.cpp
-    )
-    set(_miacode_log_core
-        src/common/OperationLog.h
-        src/common/OperationLog.cpp
-        src/common/DebugLog.h
-        src/common/DebugLog.cpp
-    )
+    include(cmake/devtools/SharedSources.cmake)
+
+    # Qt Test and Qt Widgets are dev-tools-only dependencies: QML input
+    # regressions need a supported way to deliver real mouse/key events into a
+    # QQuickWindow, while a few legacy specs still exercise widget helpers.
+    # Neither component is part of the MiaCode product target.
+    #
+    # Qt Network is dev-tools-only for the same reason: the Net page was removed
+    # from the v2 product runtime, so its engine lives on in net_client_spec
+    # alone. See docs/ops/DEPENDENCY_ALLOWLIST.md — linking it into MiaCode is a
+    # spec failure, not a style preference.
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network Widgets)
+
+    # MiaCode.UI is compiled into the app target, so a spec executable cannot
+    # import it. Mirror the module into a plain file-system import directory so
+    # QML regressions can instantiate the real .qml files instead of retyping a
+    # copy of them. configure_file() re-runs CMake when a source .qml changes,
+    # which keeps the mirror in step with the module.
+    set(MIACODE_QML_SPEC_IMPORT_ROOT "${CMAKE_CURRENT_BINARY_DIR}/qml_spec_imports")
+    set(_miacode_qml_spec_module_dir "${MIACODE_QML_SPEC_IMPORT_ROOT}/MiaCode/UI")
+    set(_miacode_qml_spec_qmldir "module MiaCode.UI\n")
+    foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
+        get_filename_component(_qml_name "${qml_file}" NAME)
+        get_filename_component(_qml_type "${qml_file}" NAME_WE)
+        if (_qml_name STREQUAL "Theme.qml" OR _qml_name STREQUAL "UiText.qml")
+            string(APPEND _miacode_qml_spec_qmldir "singleton ${_qml_type} 1.0 ${_qml_name}\n")
+        else()
+            string(APPEND _miacode_qml_spec_qmldir "${_qml_type} 1.0 ${_qml_name}\n")
+        endif()
+        configure_file("${qml_file}" "${_miacode_qml_spec_module_dir}/${_qml_name}" COPYONLY)
+    endforeach()
+    file(WRITE "${_miacode_qml_spec_module_dir}/qmldir" "${_miacode_qml_spec_qmldir}")
 
     # Declare a dev-only helper / spec executable. Collapses the repeated
     # add_executable + target_link_libraries + target_include_directories
@@ -1176,6 +1238,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
     function(miacode_add_dev_tool NAME)
         cmake_parse_arguments(DT "TEST" "" "SOURCES;LIBS;INCLUDES" ${ARGN})
         add_executable(${NAME} ${DT_SOURCES})
+        # Keep QObject-based specs self-contained even when a source header is
+        # also part of the main application target.
+        set_target_properties(${NAME} PROPERTIES AUTOMOC ON)
         if (DT_LIBS)
             target_link_libraries(${NAME} PRIVATE ${DT_LIBS})
         endif()
@@ -1183,7 +1248,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
             target_include_directories(${NAME} PRIVATE ${DT_INCLUDES})
         endif()
         if (DT_TEST)
-            add_test(NAME ${NAME} COMMAND ${NAME})
+            # Run from the source tree: specs that touch runtime assets resolve
+            # them relative to the working directory (e.g. resolveSfxDirectory in
+            # VideoExportAudioRenderPlan), so launching from the build dir made
+            # them fail with "preview SFX directory could not be resolved".
+            add_test(NAME ${NAME} COMMAND ${NAME} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
             # Spec exes are not deployed with the Qt runtime, so prepend Qt's
             # bin directory to PATH for the test run. Without this, ctest
             # launches them and Windows raises "Qt6*.dll not found" loader
@@ -1318,836 +1387,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/tools/latency
     )
 
-    # ---- Spec executables (registered with CTest) ----
-    miacode_add_dev_tool(oplog_self_test TEST
-        SOURCES
-            src/tools/oplog/OperationLogSpec.cpp
-            src/common/CrashRecovery.h
-            src/common/CrashRecovery.cpp
-            ${_miacode_log_core}
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(simai_parser_spec TEST
-        SOURCES
-            src/tools/simai_parser/SimaiParserSpec.cpp
-            ${_miacode_chart_core}
-            ${_miacode_log_core}
-            resources/fonts.qrc
-            resources/slide_data.qrc
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/core/chart src/core/chart/parser src/timeline
-    )
-
-    miacode_add_dev_tool(chart_batch_transform_spec TEST
-        SOURCES
-            src/tools/chart_transform/ChartBatchTransformSpec.cpp
-            src/core/chart/transform/ChartBatchTransform.h
-            src/core/chart/transform/ChartBatchTransform.Parsers.cpp
-            src/core/chart/transform/ChartBatchTransform.Subdivision.cpp
-            src/core/chart/transform/ChartBatchTransform.Selection.cpp
-            src/core/chart/transform/ChartBatchTransform.Transform.cpp
-            src/core/chart/transform/ChartNormalization.h
-            src/core/chart/transform/ChartNormalization.cpp
-            src/core/chart/transform/ChartNormalizationSegmentPolicy.h
-            src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp
-            src/core/chart/transform/Non384SnapTable.h
-            src/core/chart/transform/Non384SnapTable.cpp
-            ${_miacode_chart_core}
-            ${_miacode_log_core}
-            resources/fonts.qrc
-            resources/slide_data.qrc
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES
-            src src/app/ui src/common src/core/chart
-            src/core/chart/document src/core/chart/parser src/core/chart/transform src/timeline
-    )
-
-    miacode_add_dev_tool(extension_manifest_spec TEST
-        SOURCES
-            src/tools/extensions/ExtensionManifestSpec.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(extension_open_bridge_spec TEST
-        SOURCES
-            src/tools/extensions/ExtensionOpenBridgeSpec.cpp
-            src/extensions/ExtensionOpenBridge.h
-            src/extensions/ExtensionOpenBridge.cpp
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(extension_runtime_spec TEST
-        SOURCES
-            src/tools/extensions/ExtensionRuntimeSpec.cpp
-            src/extensions/EmbeddedExtensionRuntime.h
-            src/extensions/EmbeddedExtensionRuntime.cpp
-        LIBS Qt6::Core Qt6::Qml
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(simai_document_spec TEST
-        SOURCES
-            src/tools/chart_document/SimaiDocumentSpec.cpp
-            src/core/chart/document/SimaiDocument.h
-            src/core/chart/document/SimaiDocument.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/core/chart/document
-    )
-
-    miacode_add_dev_tool(cover_layout_model_spec TEST
-        SOURCES
-            src/tools/cover_export/CoverLayoutModelSpec.cpp
-            src/tools/cover_export/CoverLayoutModel.h
-            src/tools/cover_export/CoverLayoutModel.cpp
-            src/tools/cover_export/CoverCompositionState.h
-            src/tools/cover_export/CoverCompositionState.cpp
-            src/tools/cover_export/CoverCompositionPersistenceGuard.h
-            src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
-            src/app/ui/UiText.h
-            src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/extensions
-    )
-
-    miacode_add_dev_tool(font_combo_width_spec TEST
-        SOURCES
-            src/tools/video_export/FontComboWidthSpec.cpp
-            src/tools/video_export/FontLibrary.h
-            src/tools/video_export/FontLibrary.cpp
-            src/app/ui/UiText.h
-            src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/extensions
-    )
-
-    miacode_add_dev_tool(muri_spec TEST
-        SOURCES
-            src/tools/muri/MuriSpec.cpp
-            src/common/MuriTypes.h
-            src/common/MuriTypes.cpp
-            ${_miacode_chart_core}
-            ${_miacode_log_core}
-            src/tools/muri/MuriAnalyzer.h
-            src/tools/muri/MuriAnalyzer.cpp
-            src/tools/muri/MuriAnalyzerGeometry.h
-            src/tools/muri/MuriAnalyzerGeometry.cpp
-            src/tools/muri/MuriAnalyzerModel.h
-            src/tools/muri/MuriSlideReferenceData.h
-            src/tools/muri/MuriSlideReferenceData.cpp
-            src/tools/muri/MuriAnalyzerInternal.h
-            src/tools/muri/MuriDiagnosticCollector.h
-            src/tools/muri/MuriDiagnosticCollector.cpp
-            src/tools/muri/MuriDiagnosticLabels.h
-            src/tools/muri/MuriDiagnosticLabels.cpp
-            src/tools/muri/MuriRuntimeModelBuilder.h
-            src/tools/muri/MuriRuntimeModelBuilder.cpp
-            src/tools/muri/MuriOverlayBuilder.h
-            src/tools/muri/MuriOverlayBuilder.cpp
-            src/tools/muri/MuriSlideWifiJudge.h
-            src/tools/muri/MuriSlideWifiJudge.cpp
-            src/tools/muri/MuriSimpleNoteJudge.h
-            src/tools/muri/MuriSimpleNoteJudge.cpp
-            src/tools/muri/MuriPanelEntries.h
-            src/tools/muri/MuriPanelEntries.cpp
-            src/tools/muri/MuriStaticChecker.h
-            src/tools/muri/MuriStaticChecker.cpp
-            resources/fonts.qrc
-            resources/slide_data.qrc
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
-    )
-
-    miacode_add_dev_tool(timeline_model_spec TEST
-        SOURCES
-            src/tools/timeline/TimelineModelSpec.cpp
-            ${_miacode_chart_core}
-            src/timeline/TimelineQuickModel.h
-            src/timeline/TimelineQuickModel.cpp
-            src/timeline/TimelineQuickModelParser.cpp
-            src/timeline/TimelineQuickModelSnapshot.cpp
-            src/timeline/TimelineQuickModelIndexing.cpp
-            ${_miacode_log_core}
-            resources/fonts.qrc
-            resources/slide_data.qrc
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/core/chart src/core/chart/parser src/timeline src/tools
-    )
-
-    miacode_add_dev_tool(timeline_marker_offset_spec TEST
-        SOURCES
-            src/tools/timeline/TimelineMarkerOffsetSpec.cpp
-            src/timeline/TimelineMarkerOffset.h
-            src/timeline/TimelineData.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/timeline
-    )
-
-    miacode_add_dev_tool(plain_code_editor_spec TEST
-        SOURCES
-            src/tools/editor/PlainCodeEditorSpec.cpp
-            src/editor/PlainCodeEditor.h
-            src/editor/PlainCodeEditor.cpp
-            src/editor/PlainCodeEditor.Layout.cpp
-            src/editor/PlainCodeEditor.HighlightAndCaret.cpp
-            src/editor/PlainCodeEditor.BracketCompletion.cpp
-            src/editor/PlainCodeEditor.Input.cpp
-            src/editor/PlainCodeEditor.Bookmarks.cpp
-            src/editor/BookmarkCommentSyntax.h
-            src/editor/BookmarkCommentSyntax.cpp
-            src/editor/TouchPadAuthoringEdit.h
-            src/editor/TouchPadAuthoringEdit.cpp
-            src/core/chart/parser/SimaiCommentScan.h
-            src/core/chart/parser/SimaiCommentScan.cpp
-            src/editor/BracketCompletionPopup.h
-            src/editor/BracketCompletionPopup.cpp
-            src/editor/SimaiCompletionCatalog.h
-            src/editor/SimaiCompletionCatalog.cpp
-            src/app/ui/UiText.h
-            src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-            src/app/ui/AppBackgroundSettings.h
-            src/app/ui/AppBackgroundSettings.cpp
-            src/app/ui/AppBackgroundPainter.h
-            src/app/ui/AppBackgroundPainter.cpp
-            src/app/ui/UiTheme.h
-            src/app/ui/UiTheme.cpp
-            src/app/ui/ShortcutRegistry.h
-            src/app/ui/ShortcutRegistry.cpp
-            src/common/InputShortcutGesture.h
-            src/common/InputShortcutGesture.cpp
-            src/common/AdoptedWidgetCoordinates.h
-            src/common/AdoptedWidgetCoordinates.cpp
-            ${_miacode_log_core}
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/common src/extensions
-    )
-
-    miacode_add_dev_tool(simai_completion_catalog_spec TEST
-        SOURCES
-            src/tools/editor/SimaiCompletionCatalogSpec.cpp
-            src/editor/SimaiCompletionCatalog.h
-            src/editor/SimaiCompletionCatalog.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/editor
-    )
-
-    miacode_add_dev_tool(preview_asset_loader_spec TEST
-        SOURCES
-            src/tools/preview/PreviewSceneAssetLoaderSpec.cpp
-            src/preview/runtime/PreviewSceneAssetLoader.h
-            src/preview/runtime/PreviewSceneAssetLoader.cpp
-            src/core/scene/PreviewFrameState.h
-            ${_miacode_log_core}
-            resources/preview_judge_effects.qrc
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src src/common src/preview src/preview/runtime src/core/scene src/core/video src/timeline
-    )
-
-    miacode_add_dev_tool(preview_firework_lifecycle_spec TEST
-        SOURCES
-            src/tools/preview/PreviewFireworkLifecycleSpec.cpp
-            src/core/scene/PreviewFrameState.h
-            src/core/scene/PreviewJudgeFireworkLayerState.h
-            src/core/scene/PreviewJudgeFireworkLayerState.cpp
-            src/core/scene/PreviewSceneMath.h
-            src/core/scene/PreviewSceneMath.cpp
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src src/common src/preview src/core/scene src/core/video src/timeline
-    )
-
-    miacode_add_dev_tool(preview_head_layer_spec TEST
-        SOURCES
-            src/tools/preview/PreviewHeadLayerSpec.cpp
-            ${_miacode_chart_core}
-            ${_miacode_log_core}
-            src/core/scene/PreviewFrameState.h
-            src/core/scene/PreviewPreparedSceneCache.h
-            src/core/scene/PreviewPreparedSceneCache.cpp
-            src/core/scene/PreviewChartReviewLayerState.h
-            src/core/scene/PreviewChartReviewLayerState.cpp
-            src/core/scene/PreviewHeadLayerState.h
-            src/core/scene/PreviewHeadLayerState.cpp
-            src/core/scene/PreviewMarkerDrawOrder.h
-            src/core/scene/PreviewMarkerDrawOrder.cpp
-            src/core/scene/PreviewAnimatedSpriteHelpers.h
-            src/core/scene/PreviewAnimatedSpriteHelpers.cpp
-            src/core/scene/PreviewJudgeOverlayShared.h
-            src/core/scene/PreviewJudgeOverlayShared.cpp
-            src/core/scene/PreviewOpacityCurves.h
-            src/core/scene/PreviewOpacityCurves.cpp
-            src/core/scene/PreviewSceneConstants.h
-            src/core/scene/PreviewSceneMath.h
-            src/core/scene/PreviewSceneMath.cpp
-            src/core/scene/PreviewSkinSelectors.h
-            src/core/scene/PreviewSkinSelectors.cpp
-            src/common/MuriTypes.h
-            src/common/MuriTypes.cpp
-            src/timeline/TimelineData.h
-            resources/fonts.qrc
-            resources/slide_data.qrc
-        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES
-            src src/common src/preview src/core/scene src/core/chart
-            src/core/chart/document src/core/chart/parser src/timeline
-    )
-
-    miacode_add_dev_tool(preview_slide_vanilla_trim_spec TEST
-        SOURCES
-            src/tools/preview/PreviewSlideVanillaTrimSpec.cpp
-            ${_miacode_chart_core}
-            ${_miacode_log_core}
-            src/core/scene/PreviewTrackShared.h
-            src/core/scene/PreviewTrackShared.cpp
-            src/core/scene/PreviewSceneConstants.h
-            src/common/MuriTypes.h
-            src/common/MuriTypes.cpp
-            src/timeline/TimelineData.h
-            resources/slide_data.qrc
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES
-            src src/common src/preview src/core/scene src/core/chart
-            src/core/chart/document src/core/chart/parser src/timeline
-    )
-
-    miacode_add_dev_tool(preview_realtime_object_hot_path_spec TEST
-        SOURCES
-            src/tools/preview/PreviewRealtimeObjectHotPathSpec.cpp
-            ${_miacode_log_core}
-            src/core/scene/PreviewActiveMarkerView.h
-            src/core/scene/PreviewPreparedSceneCache.h
-            src/core/scene/PreviewPreparedSceneCache.cpp
-            src/core/scene/PreviewFrameState.h
-            src/core/scene/PreviewChartReviewLayerState.h
-            src/core/scene/PreviewChartReviewLayerState.cpp
-            src/core/scene/PreviewMarkerDrawOrder.h
-            src/core/scene/PreviewMarkerDrawOrder.cpp
-            src/core/scene/PreviewSlideMotionLayerState.h
-            src/core/scene/PreviewSlideMotionLayerState.cpp
-            src/core/scene/PreviewTouchJudgeLayerState.h
-            src/core/scene/PreviewTouchJudgeLayerState.cpp
-            src/core/scene/PreviewTrackLayerState.h
-            src/core/scene/PreviewTrackLayerState.cpp
-            src/core/scene/PreviewTrackShared.h
-            src/core/scene/PreviewTrackShared.cpp
-            src/core/scene/PreviewMuriActionLayerState.h
-            src/core/scene/PreviewMuriActionLayerState.cpp
-            src/core/scene/PreviewAnimatedSpriteHelpers.h
-            src/core/scene/PreviewAnimatedSpriteHelpers.cpp
-            src/core/scene/PreviewJudgeOverlayShared.h
-            src/core/scene/PreviewJudgeOverlayShared.cpp
-            src/core/scene/PreviewOpacityCurves.h
-            src/core/scene/PreviewOpacityCurves.cpp
-            src/core/scene/PreviewSceneConstants.h
-            src/core/scene/PreviewSceneMath.h
-            src/core/scene/PreviewSceneMath.cpp
-            src/core/scene/PreviewSkinSelectors.h
-            src/core/scene/PreviewSkinSelectors.cpp
-            src/common/MuriTypes.h
-            src/common/MuriTypes.cpp
-            src/timeline/TimelineData.h
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src src/common src/preview src/core/scene src/timeline
-    )
-
-    miacode_add_dev_tool(preview_quick_sprite_batch_spec TEST
-        SOURCES
-            src/tools/preview/PreviewQuickSpriteBatchSpec.cpp
-            src/preview/quick_scene/PreviewQuickSpriteBatchPolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/preview src/preview/quick_scene
-    )
-
-    miacode_add_dev_tool(preview_texture_generation_policy_spec TEST
-        SOURCES
-            src/tools/preview/PreviewTextureGenerationPolicySpec.cpp
-            src/preview/quick_scene/PreviewTextureGenerationPolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/preview src/preview/quick_scene
-    )
-
-    miacode_add_dev_tool(timeline_quick_texture_cache_policy_spec TEST
-        SOURCES
-            src/tools/timeline/TimelineQuickTextureCachePolicySpec.cpp
-            src/timeline/quick/TimelineQuickTextureCachePolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/timeline src/timeline/quick
-    )
-
-    miacode_add_dev_tool(preview_sfx_timeline_spec TEST
-        SOURCES
-            src/tools/preview/PreviewSfxTimelineSpec.cpp
-            src/common/PreviewTimingSettings.h
-            src/common/PreviewSfxTiming.h
-            src/common/PreviewSfxTimeline.h
-            src/common/PreviewGameplayConfig.h
-            src/timeline/TimelineData.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/timeline
-    )
-
-    miacode_add_dev_tool(preview_audio_settings_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioSettingsSpec.cpp
-            src/audio/PreviewAudioSettings.h
-            src/audio/PreviewAudioSettings.cpp
-            src/common/PreviewSfxAssets.h
-            src/common/PreviewSfxSemantics.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/preview src/audio
-    )
-
-    miacode_add_dev_tool(preview_audio_command_queue_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioCommandQueueSpec.cpp
-            src/audio/PreviewAudioCommandQueue.h
-            src/audio/PreviewAudioCommandQueue.cpp
-            src/audio/PreviewAudioWorkerProtocol.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/audio src/timeline
-    )
-
-    miacode_add_dev_tool(preview_audio_worker_protocol_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioWorkerProtocolSpec.cpp
-            src/audio/PreviewAudioWorkerProtocol.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/audio src/timeline
-    )
-
-    miacode_add_dev_tool(preview_audio_playback_flow_policy_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioPlaybackFlowPolicySpec.cpp
-            src/audio/PreviewAudioPlaybackFlowPolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/audio src/timeline
-    )
-
-    miacode_add_dev_tool(timeline_cadence_arbitration_policy_spec TEST
-        SOURCES
-            src/tools/timeline/TimelineCadenceArbitrationPolicySpec.cpp
-            src/timeline/TimelineCadenceArbitrationPolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/timeline
-    )
-
-    # Keep this copy of the production factory on the no-BASS route even when
-    # the worker spec also compiles the platform BASS backend sources.
-    add_library(preview_audio_worker_spec_miniaudio_factory OBJECT
-        src/audio/PreviewAudioWorkerFactory.cpp
-    )
-    target_link_libraries(preview_audio_worker_spec_miniaudio_factory PRIVATE Qt6::Core)
-    target_include_directories(preview_audio_worker_spec_miniaudio_factory PRIVATE src src/audio)
-
-    miacode_add_dev_tool(preview_audio_worker_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioWorkerSpec.cpp
-            ${_miacode_log_core}
-            src/common/Mmcss.h
-            src/common/Mmcss.cpp
-            src/audio/PreviewAudioSettings.h
-            src/audio/PreviewAudioSettings.cpp
-            src/audio/MiniaudioPreviewAudioBackend.h
-            src/audio/MiniaudioPreviewAudioBackend.cpp
-            src/audio/PreviewAudioCommandQueue.h
-            src/audio/PreviewAudioCommandQueue.cpp
-            src/audio/PreviewAudioWorkerProtocol.h
-            src/audio/PreviewAudioWorkerFactory.h
-            src/audio/PreviewAudioWorker.h
-            src/audio/PreviewAudioWorker.cpp
-            src/audio/QtPreviewSfxRuntime.h
-            src/audio/QtPreviewSfxRuntime.cpp
-            src/audio/PreviewBassEmergencyPause.h
-            src/audio/PreviewBassEmergencyPause.cpp
-            src/audio/PreviewBassDeviceLease.h
-            src/audio/PreviewBassDeviceLease.cpp
-        LIBS Qt6::Core soundtouch
-        INCLUDES src src/audio src/common src/preview src/timeline
-    )
-    target_sources(preview_audio_worker_spec PRIVATE
-        $<TARGET_OBJECTS:preview_audio_worker_spec_miniaudio_factory>
-    )
-    target_compile_definitions(preview_audio_worker_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-    if (WIN32 OR APPLE)
-        target_sources(preview_audio_worker_spec PRIVATE
-            src/audio/BassPreviewAudioBackend.h
-            src/audio/BassPreviewAudioBackend.cpp
-            src/audio/BassPreviewAudioBackend_EngineInit.cpp
-            src/audio/BassPreviewAudioBackend_Assets.cpp
-            src/audio/BassPreviewAudioBackend_Transport.cpp
-            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
-            src/audio/BassPreviewAudioBackend_EventDrain.cpp
-        )
-        target_compile_definitions(preview_audio_worker_spec PRIVATE MIACODE_HAS_BASS_AUDIO=1)
-        target_include_directories(preview_audio_worker_spec PRIVATE third_party/bass/include)
-        if (WIN32)
-            target_link_libraries(preview_audio_worker_spec PRIVATE
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
-                avrt
-            )
-            add_custom_command(TARGET preview_audio_worker_spec POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
-                    $<TARGET_FILE_DIR:preview_audio_worker_spec>
-            )
-        elseif (APPLE)
-            target_link_libraries(preview_audio_worker_spec PRIVATE
-                "${MIACODE_BASS_MACOS_DIR}/libbass.dylib"
-                "${MIACODE_BASS_MACOS_DIR}/libbassmix.dylib"
-            )
-        endif()
-    endif()
-
-    miacode_add_dev_tool(preview_audio_non_gui_barrier_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioNonGuiBarrierSpec.cpp
-            ${_miacode_log_core}
-            src/common/Mmcss.h
-            src/common/Mmcss.cpp
-            src/audio/PreviewAudioSettings.h
-            src/audio/PreviewAudioSettings.cpp
-            src/audio/PreviewAudioCommandQueue.h
-            src/audio/PreviewAudioCommandQueue.cpp
-            src/audio/PreviewAudioWorkerProtocol.h
-            src/audio/PreviewAudioWorkerFactory.h
-            src/audio/PreviewAudioWorker.h
-            src/audio/PreviewAudioWorker.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/audio src/common src/timeline
-    )
-    if (WIN32)
-        target_link_libraries(preview_audio_non_gui_barrier_spec PRIVATE avrt)
-    endif()
-
-    miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
-        SOURCES
-            src/tools/preview/TouchPadAuthoringStateSpec.cpp
-            src/core/scene/TouchPadAuthoringState.h
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src
-    )
-    target_compile_definitions(touch_pad_authoring_state_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-    miacode_add_dev_tool(bass_preview_retained_state_spec TEST
-        SOURCES
-            src/tools/preview/BassPreviewRetainedStateSpec.cpp
-            src/audio/BassPreviewRetainedState.h
-            src/audio/PreviewAudioBackend.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/preview src/audio
-    )
-
-    miacode_add_dev_tool(bass_preview_debug_log_routing_spec TEST
-        SOURCES
-            src/tools/preview/BassPreviewDebugLogRoutingSpec.cpp
-            src/audio/BassPreviewDebugLogRouting.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/preview src/audio
-    )
-
-    miacode_add_dev_tool(preview_bass_device_lease_spec TEST
-        SOURCES
-            src/tools/preview/PreviewBassDeviceLeaseSpec.cpp
-            src/audio/PreviewBassDeviceLease.h
-            src/audio/PreviewBassDeviceLease.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/audio
-    )
-
-    miacode_add_dev_tool(preview_audio_health_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioHealthSpec.cpp
-            src/audio/PreviewAudioHealth.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/preview src/audio
-    )
-
-    miacode_add_dev_tool(preview_audio_device_change_policy_spec TEST
-        SOURCES
-            src/tools/preview/PreviewAudioDeviceChangePolicySpec.cpp
-            src/audio/PreviewAudioDeviceChangePolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/preview src/audio
-    )
-
-    miacode_add_dev_tool(bass_preview_sfx_scheduler_policy_spec TEST
-        SOURCES
-            src/tools/preview/BassPreviewSfxSchedulerPolicySpec.cpp
-            src/audio/BassPreviewSfxSchedulerPolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/common src/preview src/audio
-    )
-
-    # Simulation spec for the preview audio/stage-media cache mechanism: the
-    # content-stamp skip decision (size:mtime, NOT path-only) and the live,
-    # uncached track/bg resolvers. Drives the real production functions against
-    # real temp files, simulating an in-place track.mp3/bg.png rewrite.
-    miacode_add_dev_tool(preview_media_cache_stamp_spec TEST
-        SOURCES
-            src/tools/preview/PreviewMediaCacheStampSpec.cpp
-            src/common/FileContentStamp.h
-            src/common/ChartAssetPaths.h
-        LIBS Qt6::Core
-        INCLUDES src src/common
-    )
-
-    miacode_add_dev_tool(pv_memory_diagnostics_spec TEST
-        SOURCES
-            src/tools/preview/PvMemoryDiagnosticsSpec.cpp
-            src/preview/runtime/PvMemoryDiagnostics.h
-            src/preview/runtime/PvMemoryDiagnostics.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/preview src/preview/runtime
-    )
-    target_compile_definitions(pv_memory_diagnostics_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-    miacode_add_dev_tool(pv_memory_host_contract_spec TEST
-        SOURCES
-            src/tools/preview/PvMemoryHostContractSpec.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/preview src/preview/runtime
-    )
-    target_compile_definitions(pv_memory_host_contract_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-    miacode_add_dev_tool(qtavplayer_platform_spec TEST
-        SOURCES
-            src/tools/preview/QtAVPlayerPlatformSpec.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/preview src/preview/runtime
-    )
-    target_compile_definitions(qtavplayer_platform_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-    miacode_add_dev_tool(quickshell_preview_surface_policy_spec TEST
-        SOURCES
-            src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp
-            src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
-        LIBS Qt6::Core
-        INCLUDES src src/app/quick_shell
-    )
-    target_compile_definitions(quickshell_preview_surface_policy_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-    miacode_add_dev_tool(video_export_runtime_policy_spec TEST
-        SOURCES
-            src/tools/video_export/VideoExportRuntimePolicySpec.cpp
-            src/tools/video_export/VideoExportRuntimePolicy.h
-            src/tools/video_export/VideoExportRuntimePolicy.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/tools
-    )
-
-    miacode_add_dev_tool(batch_export_panel_spec TEST
-        SOURCES
-            src/tools/video_export/BatchExportPanelSpec.cpp
-            src/tools/video_export/BatchExportPanel.h
-            src/tools/video_export/BatchExportTaskLayout.h
-            src/tools/video_export/BatchExportTaskLayout.cpp
-            src/tools/video_export/BatchExportSelectionState.cpp
-        LIBS Qt6::Core Qt6::Widgets
-        INCLUDES src src/app/ui src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
-    )
-
-    miacode_add_dev_tool(video_export_intro_mode_spec TEST
-        SOURCES
-            src/tools/video_export/VideoExportIntroModeSpec.cpp
-            src/tools/video_export/VideoExportController.h
-            src/timeline/TimelineData.h
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
-    )
-
-    miacode_add_dev_tool(video_export_audio_render_plan_spec TEST
-        SOURCES
-            src/tools/video_export/VideoExportAudioRenderPlanSpec.cpp
-            src/tools/video_export/VideoExportAudioRenderPlan.h
-            src/tools/video_export/VideoExportAudioRenderPlan.cpp
-            src/tools/video_export/VideoExportController.h
-            src/common/PreviewAudioMixConfig.h
-            src/common/PreviewTimingSettings.h
-            src/common/PreviewSfxTiming.h
-            src/common/PreviewSfxTimeline.h
-            src/common/PreviewSfxAssets.h
-            src/common/PreviewSfxSemantics.h
-            src/common/VideoExportConfig.h
-            src/audio/PreviewAudioSettings.h
-            src/audio/PreviewAudioSettings.cpp
-            src/timeline/TimelineData.h
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
-    )
-
-    miacode_add_dev_tool(chart_zip_packager_spec TEST
-        SOURCES
-            src/tools/zip_export/ChartZipPackagerSpec.cpp
-            src/tools/zip_export/ChartZipPackager.h
-            src/tools/zip_export/ChartZipPackager.cpp
-            src/common/ChartAssetPaths.h
-        LIBS Qt6::Core Qt6::Gui miniz
-        INCLUDES src src/common src/tools
-    )
-
-    miacode_add_dev_tool(net_client_spec TEST
-        SOURCES
-            src/tools/net/NetClientSpec.cpp
-            src/tools/net/NetClient.h
-            src/tools/net/NetClient.cpp
-            src/tools/net/NetBatchUploadScanner.h
-            src/tools/net/NetBatchUploadScanner.cpp
-            src/tools/net/NetUploadDiagnostics.h
-            src/tools/net/NetUploadDiagnostics.cpp
-            src/tools/media/PvBatchCompressionScanner.h
-            src/tools/media/PvBatchCompressionScanner.cpp
-            src/tools/zip_export/ChartZipPackager.h
-            src/tools/zip_export/ChartZipPackager.cpp
-            src/common/ChartAssetPaths.h
-        LIBS Qt6::Core Qt6::Network miniz
-        INCLUDES src src/common src/tools
-    )
-
-    # Drift guard: every MIACODE_* env flag read in src/ must be documented in
-    # docs/ops/DEBUG_INDEX.md, and every flag the doc names must still be read in code
-    # (or be in the spec's retired allowlist). Reads the tree + doc from disk;
-    # the repo root is injected as a compile definition.
-    miacode_add_dev_tool(debug_flag_index_spec TEST
-        SOURCES
-            src/tools/debug_index/DebugFlagIndexSpec.cpp
-        LIBS Qt6::Core
-    )
-    target_compile_definitions(debug_flag_index_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-    # Drift guard for the UiText localization tables: built-in en/zh/ja key parity plus
-    # source/resource literal key checks. Reads the tree from disk; repo root
-    # injected as a compile definition.
-    miacode_add_dev_tool(ui_text_locale_spec TEST
-        SOURCES
-            src/tools/ui_text/UiTextLocaleSpec.cpp
-            src/app/ui/UiText.h
-            src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/app/ui src/extensions
-    )
-    target_compile_definitions(ui_text_locale_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-    miacode_add_dev_tool(native_chrome_policy_spec TEST
-        SOURCES
-            src/tools/ui/NativeChromePolicySpec.cpp
-            src/app/quick_shell/QuickShellPopupPosition.h
-            src/app/ui/UiNativeWindowThemePolicy.h
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(ui_text_preferences_spec TEST
-        SOURCES
-            src/tools/ui_text/UiTextPreferencesSpec.cpp
-            src/app/ui/UiText.h
-            src/app/ui/UiText.cpp
-            src/extensions/ExtensionManifest.h
-            src/extensions/ExtensionManifest.cpp
-        LIBS Qt6::Core
-        INCLUDES src src/app/ui src/extensions
-    )
-
-    # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,
-    # debug-category gating), the safety net for any future table-driven
-    # registry refactor.
-    miacode_add_dev_tool(debug_options_spec TEST
-        SOURCES
-            src/tools/debug_index/DebugOptionsSpec.cpp
-            src/common/DebugOptions.h
-        LIBS Qt6::Core
-        INCLUDES src src/common
-    )
-
-    miacode_add_dev_tool(process_identity_fields_spec TEST
-        SOURCES
-            src/tools/debug_index/ProcessIdentityFieldsSpec.cpp
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(ui_hang_watchdog_policy_spec TEST
-        SOURCES
-            src/tools/debug_index/UiHangWatchdogPolicySpec.cpp
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(log_pruning_policy_spec TEST
-        SOURCES
-            src/tools/debug_index/LogPruningPolicySpec.cpp
-            src/common/LogEmissionPolicy.h
-            src/common/UiHangWatchdogPolicy.h
-            src/audio/BassPreviewSfxSchedulerPolicy.h
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(process_diagnostics_spec TEST
-        SOURCES
-            src/tools/debug_index/ProcessDiagnosticsSpec.cpp
-            src/common/ProcessDiagnostics.h
-            src/common/ProcessDiagnostics.cpp
-            ${_miacode_log_core}
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src
-    )
-    if (WIN32)
-        # Per-adapter VRAM gauge: CreateDXGIFactory1 + IDXGIAdapter3::QueryVideoMemoryInfo.
-        target_link_libraries(process_diagnostics_spec PRIVATE dxgi)
-    endif()
-
-    miacode_add_dev_tool(windows_idle_event_diagnostics_spec TEST
-        SOURCES
-            src/tools/debug_index/WindowsIdleEventDiagnosticsSpec.cpp
-            src/app/WindowsIdleEventDiagnostics.h
-            src/app/WindowsIdleEventDiagnostics.cpp
-            ${_miacode_log_core}
-        LIBS Qt6::Core
-        INCLUDES src
-    )
-    if (WIN32)
-        target_link_libraries(windows_idle_event_diagnostics_spec PRIVATE User32 Wtsapi32)
-    endif()
-
-    miacode_add_dev_tool(window_visibility_diagnostics_spec TEST
-        SOURCES
-            src/tools/debug_index/WindowVisibilityDiagnosticsSpec.cpp
-            src/app/WindowVisibilityDiagnostics.h
-            src/app/WindowVisibilityDiagnostics.cpp
-            ${_miacode_log_core}
-        LIBS Qt6::Core Qt6::Gui
-        INCLUDES src
-    )
-
-    miacode_add_dev_tool(idle_freeze_repro_script_spec TEST
-        SOURCES
-            src/tools/debug_index/IdleFreezeReproScriptSpec.cpp
-        LIBS Qt6::Core
-    )
-    target_compile_definitions(idle_freeze_repro_script_spec PRIVATE
-        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+    include(cmake/devtools/MiaCodeSpecRegistry.cmake)
+    include(cmake/devtools/specs/index.cmake)
+    miacode_finalize_spec_registry()
 endif()
 
 if (WIN32)

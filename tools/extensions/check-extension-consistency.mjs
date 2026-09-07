@@ -21,8 +21,45 @@ function qStringLiterals(block) {
 
 const schema = JSON.parse(read("resources/extensions/miacode-extension.schema.json"));
 const schemaPermissions = new Set(schema.properties.permissions.items.enum);
-
 const manifestCpp = read("src/extensions/ExtensionManifest.cpp");
+const archiveRegistry = JSON.parse(read("tools/extensions/extension-api-registry.json"));
+
+if (typeof archiveRegistry.version !== "string" || archiveRegistry.version.trim() === "") {
+  fail("archive API fixture has no version string");
+}
+if (!Array.isArray(archiveRegistry.apis)) {
+  fail("archive API fixture has no apis array");
+}
+
+const apiFieldNames = ["id", "method", "permission", "risk", "status", "description"];
+const apiIds = new Set();
+const allowedStatuses = new Set(["implemented", "planned", "blocked"]);
+for (const [index, api] of (archiveRegistry.apis ?? []).entries()) {
+  if (api === null || typeof api !== "object") {
+    fail(`archive API entry ${index} is not an object`);
+    continue;
+  }
+  const keys = Object.keys(api).sort();
+  if (keys.join("|") !== apiFieldNames.slice().sort().join("|")) {
+    fail(`archive API entry ${index} must contain exactly id/method/permission/risk/status/description`);
+  }
+  for (const field of apiFieldNames) {
+    if (typeof api[field] !== "string") {
+      fail(`archive API entry ${index} has a non-string ${field}`);
+    }
+  }
+  if (api.id && apiIds.has(api.id)) {
+    fail(`archive API id is duplicated: ${api.id}`);
+  }
+  if (api.id) apiIds.add(api.id);
+  if (api.status && !allowedStatuses.has(api.status)) {
+    fail(`unsupported registry status: ${api.status}`);
+  }
+}
+if (!(archiveRegistry.apis ?? []).some((api) => api.status === "implemented")) {
+  fail("archive API fixture has no implemented APIs");
+}
+
 const supportedBlock = manifestCpp.match(/bool isSupportedPermission[\s\S]*?static const QSet<QString> allowed\{([\s\S]*?)\};/);
 if (!supportedBlock) {
   fail("cannot find C++ supported permission list");
@@ -40,51 +77,6 @@ if (!supportedBlock) {
   }
 }
 
-const managerCpp = read("src/extensions/ExtensionManager.cpp");
-const registryBlock = managerCpp.match(/QVector<QJsonObject> extensionApiRegistry\(\)[\s\S]*?return registry;\r?\n}/);
-if (!registryBlock) {
-  fail("cannot find extension API registry");
-} else {
-  const statuses = registryBlock[0]
-    .split(/\r?\n/)
-    .filter((line) => line.includes("apiDescriptor("))
-    .map((line) => {
-      const literals = qStringLiterals(line);
-      return literals[literals.length - 2];
-    })
-    .filter(Boolean);
-  const allowedStatuses = new Set(["implemented", "planned", "blocked"]);
-  for (const status of statuses) {
-    if (!allowedStatuses.has(status)) {
-      fail(`unsupported registry status: ${status}`);
-    }
-  }
-  if (!statuses.includes("implemented")) {
-    fail("registry has no implemented APIs");
-  }
-}
-
-const blockedBlock = managerCpp.match(/bool isBlockedPermission[\s\S]*?static const QSet<QString> blocked\{([\s\S]*?)\};/);
-if (!blockedBlock) {
-  fail("cannot find blocked permission list");
-} else {
-  const blockedPermissions = qStringLiterals(blockedBlock[1]);
-  const expectedBlockedPermissions = [];
-  if (blockedPermissions.length !== expectedBlockedPermissions.length) {
-    fail(`blocked permission list has unexpected size: ${blockedPermissions.join(", ")}`);
-  }
-  for (const permission of expectedBlockedPermissions) {
-    if (!blockedPermissions.includes(permission)) {
-      fail(`blocked permission list is missing: ${permission}`);
-    }
-  }
-  for (const permission of blockedPermissions) {
-    if (!schemaPermissions.has(permission)) {
-      fail(`blocked permission is missing from schema: ${permission}`);
-    }
-  }
-}
-
 const requiredExperimentalRawApiIds = [
   "shell.execute",
   "process.spawn",
@@ -96,10 +88,15 @@ const requiredExperimentalRawApiIds = [
   "updates",
 ];
 for (const id of requiredExperimentalRawApiIds) {
-  const descriptor = new RegExp(`apiDescriptor\\(QStringLiteral\\("${id.replace(".", "\\.")}"\\)[\\s\\S]*?QStringLiteral\\("implemented"\\)`);
-  if (!descriptor.test(managerCpp)) {
-    fail(`registry is missing experimental raw API descriptor: ${id}`);
+  const descriptor = archiveRegistry.apis?.find((api) => api.id === id);
+  if (!descriptor || descriptor.status !== "implemented") {
+    fail(`archive API fixture is missing implemented experimental raw API descriptor: ${id}`);
   }
+}
+
+const bundledManifest = JSON.parse(read("resources/extensions/bundled/miacode-mine-skin-toggle/miacode-extension.json"));
+if (typeof bundledManifest.id !== "string" || bundledManifest.id.trim() === "") {
+  fail("bundled manifest fixture is missing its id");
 }
 
 const publicDocs = [

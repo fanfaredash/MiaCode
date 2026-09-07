@@ -1,78 +1,32 @@
 ---
 name: miacode-dev-guide
-description: Repository-specific guide for MiaCode. Use when working in this repo to locate implementations down to files, classes, and functions; trace linked behavior across document parsing, timeline, preview, audio, latency detection, Muri analysis, assets, scripts, and video export; check fixed-vs-flexible design rules; review hardcoded values and resource conventions; or update the guide after structural changes.
+description: Use when working in MiaCode to locate module owners, reuse QML controls or shared services, change chart/playback/export behavior, or find build and specification entry points.
 ---
 
-# MiaCode Dev Guide
+# MiaCode 开发指引
 
-Use this skill as the repo memory layer for MiaCode. Start from the user-facing feature, map it to the owning entry point, then open only the reference files needed for that task.
+MiaCode 是 Qt 6 / C++ / QML 的 simai 谱面编辑、预览和导出工具。
+先找功能 owner，再读相关代码与规格；代码是事实来源，设计提案和历史记录只供参考。
 
-## Route The Task
+## 按任务阅读
 
-- For feature location, ownership, or impact analysis, read `references/feature-index.md`.
-- For parser/timeline/preview/audio/export coupling, read `references/cross-chain-linkage.md`.
-- For product logic, interaction expectations, and "must vs flexible" decisions, read `references/design-ledger.md`.
-- For constants, thresholds, tuning numbers, and magic-value ownership, read `references/hardcode-registry.md`.
-- For assets, filenames, lookup rules, build/package tooling, and helper scripts, read `references/assets-and-tools.md`.
-- For repo-wide debug switches, runtime timing logs, preview overrides, and export diagnostics, read `references/debug-flags.md`.
+- 找目录、功能入口、可复用组件 → [仓库与复用地图](references/architecture-and-layout.md)
+- 修改谱面、时间、播放、渲染或导出语义 → [跨模块同步](references/cross-chain-linkage.md)
+- 构建、Spec、调试、资源与文档维护 → [开发与验证](references/build-and-tools.md)
+- UI 布局或裁剪问题 → 使用仓库的 `qt-ui-layout-pitfalls` skill。
 
-## Work The Repo In This Order
+## 长期边界
 
-1. Identify the user-facing capability and its primary entry point.
-2. Follow downstream consumers before editing. In MiaCode, many behaviors are mirrored across runtime and export paths.
-3. If a behavior exists in both preview-time and export-time code, treat it as a sync pair unless the references explicitly say otherwise.
-4. Prefer code over docs when they disagree. If code disproves a reference, update the reference in the same change.
-5. For routine compile, test, and verification work, use the `Release` configuration only; do not spin a separate `Debug` build unless the task explicitly targets debug-only diagnostics.
-6. Before every commit and push, inspect the staged/worktree diff for erroneous code, duplicate logic, and redundant code, then fix or explicitly report any remaining risk before committing or pushing.
+- `src/app/qml_ui/` 是产品前端；`src/app/v2/ChartWorkspace.h` 定义文档、revision 和保存点的所有权。
+- `src/app/v2/ApplicationServices.h` 持有共享服务与 typed slots；`src/app/runtime/` 的 Session 装配运行时宿主，前端通过服务/端口调用。
+- 谱面数据与场景数学分别归 `src/core/chart/`、`src/core/scene/`；不要把 UI 或 GPU 依赖引入这些层。
+- 预览与导出复用进程内 Qt Quick/QSG 场景；音频设备、QML engine、异步任务的生命周期由各自 owner 管理。
+- 先复用已有控件、主题、文案、路径解析和领域 helper，再考虑新增抽象。
 
-## Core Anchors
+## 维护方式
 
-- App boot and CLI: `src/app/main.cpp`
-- Main window orchestration: `src/app/mainwindow/`
-- Document model: `src/core/chart/document/`
-- Parser and validation primitives: `src/core/chart/parser/`
-- Timeline data and UI: `src/timeline/`
-- Preview video: `src/preview/video/`
-- Preview audio: `src/preview/audio/`
-- Tools: `src/tools/latency/`, `src/tools/muri/`, `src/tools/video_export/`
-- Shared config headers: `src/common/`
-
-## Maintenance Rules
-
-- Keep `SKILL.md` short. Put repo-specific detail into `references/*.md`, and point to those files from here.
-- After renames, moves, or architectural splits, update the affected file paths, class names, function names, and ownership notes in `references/feature-index.md`.
-- After changing cross-module behavior, update `references/cross-chain-linkage.md` in the same change.
-- After changing product behavior, expectations, defaults, or decision boundaries, update `references/design-ledger.md`.
-- After introducing, removing, centralizing, or re-scoping constants, update `references/hardcode-registry.md`.
-- After changing filenames, lookup order, packaged dependencies, helper scripts, or debug tooling, update `references/assets-and-tools.md`.
-- After adding, removing, centralizing, or re-scoping debug flags, timing logs, or diagnostic env vars, update `references/debug-flags.md`.
-- The English files in this skill directory are the only maintained source of truth; do not create or update a mirrored translation tree for this skill.
-- When adding a new hardcoded value, first check whether an existing `src/common/*.h` config header should own it. If it must stay local, document the file, meaning, unit, and linked surfaces.
-- When adding a new feature path, record both its primary owner and every mirrored or downstream path that must stay in sync.
-- When removing a feature, delete stale breadcrumbs instead of leaving dead references behind.
-
-## High-Risk Sync Areas
-
-- Windows preview-audio device cutoff spans `PreviewAudioDeviceWatcher` (Core Audio
-  callback; `QMediaDevices` is only the native-registration fallback), `QtPreviewSfxRuntime` (generation/cutoff second),
-  `PreviewBassEmergencyPause` (synchronous old-output pause), `PreviewAudioWorker`
-  (stream cleanup), `BassPreviewAudioBackend` (concrete endpoint rebuild), and
-  `TimelineSection` (single GUI freeze second). Keep the cutoff second and generation
-  single-source. A change while paused still needs a route-invalidation-only worker
-  barrier (no second GUI clock sample); the first explicit post-change Play must use
-  cold Prepare, never retained resume. Pause-hide PV/BG/outline state is synchronous
-  with the GUI playing-state flip, not a deferred UI-tail action.
-- Runtime SFX timeline and export SFX timeline must stay aligned.
-- Background media resolution is implemented in both preview-time and export-time code.
-- Track path resolution is implemented in multiple places.
-- `&first` and timing offsets affect parser output, preview positioning, export timing, and latency detection.
-- Export uses a snapshot/worker boundary; changes to serialized task shape must be reflected on both sides.
-
-## References
-
-- `references/feature-index.md`
-- `references/cross-chain-linkage.md`
-- `references/design-ledger.md`
-- `references/hardcode-registry.md`
-- `references/assets-and-tools.md`
-- `references/debug-flags.md`
+唯一维护源是 `.agents/skills/miacode-dev-guide/`，另两份由
+`python3 scripts/governance/sync_guides.py --sync` 生成；提交前运行 `--check`。
+只在模块归属、公共复用入口或跨模块契约改变时更新本 skill。
+不要加入逐函数索引、行号、完整参数/flag 清单、UI 像素值或阶段完成记录。
+具体行为放代码/Spec，公开规范从 `docs/INDEX.md` 查找。

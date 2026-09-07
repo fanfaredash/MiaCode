@@ -20,6 +20,12 @@ struct PreviewTextureLayerStats {
     qint64 candidateCount = 0;
     qint64 activeCount = 0;
     double buildMs = 0.0;
+    // Whether the layer returned a node this frame, i.e. whether it was actually
+    // drawn. The first frame a layer draws is the frame that binds its material
+    // pipeline and uploads its textures for the first time, which is what
+    // PreviewQuickSceneRoot's layer_first_draw log exists to timestamp
+    // (docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md §5.4).
+    bool nodeProduced = false;
 };
 
 struct PreviewSpriteBatchFrameProfile {

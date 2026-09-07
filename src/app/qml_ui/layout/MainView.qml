@@ -6,42 +6,76 @@ Item {
     id: root
 
     required property var hostWindow
+    required property Item backgroundSource
     required property var applicationContext
     readonly property var documentSession: applicationContext.document
+    readonly property var analysisSession: applicationContext.analysis
     readonly property var preferences: applicationContext.preferences
+    readonly property var appBackground: applicationContext.appBackground
     readonly property var previewSession: applicationContext.preview
     readonly property var commands: applicationContext.commands
-    readonly property var shellController: applicationContext.shell
+    readonly property var timelineSession: applicationContext.timeline
     readonly property var pages: applicationContext.pages
+    readonly property var editorController: applicationContext.editor
+    readonly property var editorSync: applicationContext.editorSync
     readonly property var platform: applicationContext.platform
+    readonly property var uiRequests: applicationContext.uiRequests
+    readonly property var jobProgress: applicationContext.jobProgress
+    readonly property var mediaTools: applicationContext.mediaTools
+    readonly property var preferencesModel: applicationContext.preferencesModel
+    readonly property var latency: applicationContext.latency
+    readonly property var shortcutModel: applicationContext.shortcuts
     readonly property string documentTitle: documentSession.documentTitle
-    readonly property bool compact: width < 720
-    // 打开文件时的未保存决策。关闭应用走 v1 shell confirmClose 协议，
-    // 不在这里再维护一套 closeApproved / pendingClose。
-    property url pendingOpenFile
-    property bool continueAfterSaveAs: false
+    readonly property real minimumWidth: splitView.minimumWorkspaceWidth
+    readonly property real minimumHeight: titleBar.height + platformMenuLoader.height
+        + mainToolBar.height + statusBar.height + splitView.minimumHeight
+    readonly property bool compact: width < minimumWidth + splitView.expandedSidebarWidth
 
     ViewState { id: state }
+
+    // 保存 means "save what I am working in", so the document model has to know
+    // whether the view in front is one difficulty or the whole source.
+    Binding {
+        target: root.documentSession
+        property: "wholeSourceEditorActive"
+        value: state.metadataEditorActive
+        restoreMode: Binding.RestoreNone
+    }
 
     MainMenuCommands {
         id: menuCommands
         canUndo: splitView.canUndo
         canRedo: splitView.canRedo
-        onToggleSidebarRequested: root.toggleSidebar()
-        onToggleBottomPanelRequested: {
-            state.bottomPanelVisible = !state.bottomPanelVisible
-            root.preferences.bottomPanelVisible = state.bottomPanelVisible
-        }
-        onTogglePreviewRequested: root.togglePreview()
+        canCut: splitView.canCut
+        canCopy: splitView.canCopy
+        canPaste: splitView.canPaste
         onExitRequested: root.requestClose()
         onUndoRequested: root.undo()
         onRedoRequested: root.redo()
+        onCutRequested: splitView.cut()
+        onCopyRequested: splitView.copy()
+        onPasteRequested: splitView.paste()
         onSelectAllRequested: root.selectAll()
+        onFindRequested: splitView.showFindReplace()
+        onSelectCurrentLineRequested: splitView.selectCurrentLine()
         onValidateRequested: root.validateChart()
         onMetadataRequested: state.openMetadataEditor()
+        onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         onOpenRequested: openFileDialog.open()
         onSaveRequested: root.saveDocument()
+        onSaveWholeDocumentRequested: root.commands.saveWholeDocument()
         onSaveAsRequested: saveFileDialog.open()
+        onChartTransformRequested: opId => root.applyChartTransform(opId)
+        onNormalizeChartRequested: root.pages.openNormalizeWholeChart()
+        onAboutRequested: aboutDialog.open()
+        onPreferencesRequested: preferencesDialog.open()
+        onNewDocumentRequested: root.commands.newDocument()
+        onOpenRecentRequested: path => root.commands.openRecentDocument(path)
+        onRestoreBackupRequested: path => root.commands.restoreBackupDocument(path)
+        onCloseDocumentRequested: root.commands.closeDocument()
+        onAudioSettingsRequested: audioSettingsDialog.open()
+        onPreviewSettingsRequested: previewSettingsDialog.open()
+        onPreviewRateStepRequested: direction => root.previewSession.adjustRate(direction)
     }
 
     function toggleSidebar() {
@@ -57,19 +91,6 @@ Item {
         root.preferences.sidebarVisible = state.sidebarVisible
     }
 
-    function togglePreview() {
-        if (root.compact) {
-            if (!state.previewVisible) {
-                state.previewVisible = true
-                root.preferences.previewVisible = true
-            }
-            state.compactPanel = state.compactPanel === "preview" ? "" : "preview"
-            return
-        }
-        state.previewVisible = !state.previewVisible
-        root.preferences.previewVisible = state.previewVisible
-    }
-
     function undo() {
         splitView.undo()
     }
@@ -82,9 +103,18 @@ Item {
         splitView.selectAll()
     }
 
+    function applyChartTransform(opId) {
+        return splitView.applyChartTransform(opId)
+    }
+
     function validateChart() {
         splitView.validateChart()
         root.preferences.bottomPanelVisible = true
+    }
+
+    function showUnavailableFeature(featureName) {
+        unavailableFeatureDialog.featureName = featureName
+        unavailableFeatureDialog.open()
     }
 
     function saveDocument() {
@@ -95,35 +125,21 @@ Item {
         root.commands.saveDocument()
     }
 
+    // The unsaved-changes question is not asked here any more. It is asked by
+    // commands.openDocument itself, along with every other action that would
+    // discard the document — there used to be two three-way prompts written
+    // twice, and only one of them covered anything but 打开.
     function requestOpenFile(fileUrl) {
-        if (!root.documentSession.dirty) {
-            root.commands.openDocument(fileUrl)
-            return
-        }
-        root.pendingOpenFile = fileUrl
-        unsavedChangesDialog.open()
+        root.commands.openDocument(fileUrl)
     }
 
     function requestClose() {
         root.hostWindow.close()
     }
 
-    function clearPendingAction() {
-        root.pendingOpenFile = ""
-        root.continueAfterSaveAs = false
-    }
-
-    function continuePendingAction() {
-        const fileToOpen = root.pendingOpenFile
-        root.clearPendingAction()
-        if (fileToOpen.toString().length > 0)
-            root.commands.openDocument(fileToOpen)
-    }
-
     Component.onCompleted: {
         state.sidebarVisible = root.preferences.sidebarVisible
         state.bottomPanelVisible = root.preferences.bottomPanelVisible
-        state.previewVisible = root.preferences.previewVisible
         state.resetEditorTabs(root.documentSession.currentDifficultyId)
     }
 
@@ -141,10 +157,13 @@ Item {
             hostWindow: root.hostWindow
             platform: root.platform
             menuCommands: menuCommands
+            shortcuts: root.applicationContext.shortcuts
+            documentSession: root.documentSession
             leadingInset: root.applicationContext.windowChrome
                 ? root.applicationContext.windowChrome.titleBarLeadingInset
                 : 0
             documentTitle: root.documentSession.documentTitle
+            normalizationEnabled: root.pages.activePageId !== "export"
         }
 
         Loader {
@@ -157,22 +176,22 @@ Item {
                 height: 30
                 availableWidth: width
                 commands: menuCommands
+                shortcuts: root.applicationContext.shortcuts
+                documentSession: root.documentSession
                 commandsEnabled: true
+                normalizationEnabled: root.pages.activePageId !== "export"
             }
         }
 
         MainToolBar {
             id: mainToolBar
             width: parent.width
-            height: 36
+            height: implicitHeight
+            hostWindow: root.hostWindow
             sidebarActive: root.compact
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible
-            bottomActive: state.bottomPanelVisible && root.shellController.bottomTabsVisible
-            previewActive: root.compact
-                           ? state.compactPanel === "preview"
-                           : state.previewVisible
-            muriPreviewActive: root.previewSession.muriMode
+            bottomActive: state.bottomPanelVisible && root.timelineSession.panelVisible
             canUndo: splitView.canUndo
             canRedo: splitView.canRedo
             onToggleSidebarRequested: root.toggleSidebar()
@@ -180,12 +199,13 @@ Item {
                 state.bottomPanelVisible = !state.bottomPanelVisible
                 root.preferences.bottomPanelVisible = state.bottomPanelVisible
             }
-            onTogglePreviewRequested: root.togglePreview()
-            onToggleMuriPreviewRequested: root.previewSession.muriMode = !root.previewSession.muriMode
             onUndoRequested: root.undo()
             onRedoRequested: root.redo()
             onOpenRequested: openFileDialog.open()
             onSaveRequested: root.saveDocument()
+            onAudioSettingsRequested: audioSettingsDialog.open()
+            onPreviewSettingsRequested: previewSettingsDialog.open()
+            onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         }
 
         Item {
@@ -197,15 +217,23 @@ Item {
             MainSplitView {
                 id: splitView
                 anchors.fill: parent
+                backgroundSource: root.backgroundSource
+                backgroundOffset: root.mapToItem(root.backgroundSource,
+                                                 mainViewHost.x, mainViewHost.y)
                 viewState: state
-                documentSession: root.documentSession
+        documentSession: root.documentSession
+        analysisSession: root.analysisSession
                 preferences: root.preferences
                 previewSession: root.previewSession
                 commands: root.commands
-                shellController: root.shellController
+                timelineSession: root.timelineSession
+                preferencesModel: root.preferencesModel
                 pages: root.pages
+                editorController: root.editorController
+                editorSync: root.editorSync
+                latency: root.latency
                 compact: root.compact
-                onSettingsRequested: root.commands.openPreferences()
+                onSettingsRequested: preferencesDialog.open()
             }
 
             CompactPanelLayer {
@@ -213,16 +241,10 @@ Item {
                 viewState: state
                 documentSession: root.documentSession
                 preferences: root.preferences
-                previewSession: root.previewSession
                 commands: root.commands
-                shellController: root.shellController
                 pages: root.pages
                 compact: root.compact
-                onSettingsRequested: root.commands.openPreferences()
-                onFullscreenRequested: {
-                    state.compactPanel = ""
-                    splitView.showFullscreenPreview()
-                }
+                onSettingsRequested: preferencesDialog.open()
             }
         }
 
@@ -236,79 +258,57 @@ Item {
                 : state.difficultyEditorActive ? root.documentSession.currentFilePath : ""
             cursorLine: state.editorCursorLine
             cursorColumn: state.editorCursorColumn
+            selectionBeatText: splitView.selectionBeatStatusText
+            selectionBeatTooltip: splitView.selectionBeatTooltipText
         }
     }
 
     Shortcut {
         sequence: StandardKey.Close
-        onActivated: state.closeActiveEditor()
+        onActivated: splitView.requestCloseActiveEditor()
     }
 
     Shortcut {
         sequence: "Ctrl+F4"
-        onActivated: state.closeActiveEditor()
+        onActivated: splitView.requestCloseActiveEditor()
     }
 
     FileDialog {
         id: openFileDialog
-        title: qsTr("打开 simai 文件")
+        title: UiText.text("打开 simai 文件")
         fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Simai 文件 (*.txt *.simai)"), qsTr("所有文件 (*.*)")]
+        nameFilters: [UiText.text("Simai 文件 (*.txt *.simai)"), UiText.text("所有文件 (*.*)")]
         onAccepted: root.requestOpenFile(selectedFile)
     }
 
     FileDialog {
         id: saveFileDialog
-        title: qsTr("保存 simai 文件")
+        title: UiText.text("保存 simai 文件")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "txt"
-        nameFilters: [qsTr("Simai 文件 (*.txt *.simai)"), qsTr("所有文件 (*.*)")]
-        onAccepted: {
-            const saved = root.commands.saveDocumentAs(selectedFile)
-            if (saved && root.continueAfterSaveAs) {
-                root.continuePendingAction()
-            } else if (!saved && root.continueAfterSaveAs) {
-                root.clearPendingAction()
-            }
-        }
-        onRejected: {
-            if (root.continueAfterSaveAs)
-                root.clearPendingAction()
-        }
+        nameFilters: [UiText.text("Simai 文件 (*.txt *.simai)"), UiText.text("所有文件 (*.*)")]
+        onAccepted: root.commands.saveDocumentAs(selectedFile)
     }
 
-    MessageDialog {
+    ChoiceDialog {
         id: fileErrorDialog
-        buttons: MessageDialog.Ok
+        objectName: "shellFileErrorDialog"
+        choices: [{ id: "ok", label: UiText.text("确定"), role: "accept" }]
+        dismissChoiceId: "ok"
     }
 
-    MessageDialog {
-        id: unsavedChangesDialog
-        title: qsTr("未保存的更改")
-        text: qsTr("当前谱面有未保存的更改。")
-        informativeText: qsTr("保存更改后继续，或丢弃本次编辑。")
-        buttons: MessageDialog.Save | MessageDialog.Discard | MessageDialog.Cancel
-
-        onButtonClicked: function(button, role) {
-            if (button === MessageDialog.Save) {
-                if (root.documentSession.currentFilePath.length === 0) {
-                    root.continueAfterSaveAs = true
-                    saveFileDialog.open()
-                } else {
-                    if (root.commands.saveDocument())
-                        root.continuePendingAction()
-                    else
-                        root.clearPendingAction()
-                }
-                return
-            }
-            if (button === MessageDialog.Discard) {
-                root.commands.discardDocumentChanges()
-                root.continuePendingAction()
-                return
-            }
-            root.clearPendingAction()
-        }
+    // These actions remain discoverable while their dedicated QML pages and
+    // business APIs are pending. Keeping the explanation in the visible root
+    // window gives keyboard and pointer users the same immediate feedback.
+    ChoiceDialog {
+        id: unavailableFeatureDialog
+        objectName: "shellUnavailableFeatureDialog"
+        property string featureName: ""
+        title: UiText.text("暂未更新支持")
+        message: UiText.text("%1 尚未更新到 QML 界面。").arg(featureName)
+        details: UiText.text("入口会保留，功能完成后将在此处提供。")
+        choices: [{ id: "ok", label: UiText.text("确定"), role: "accept" }]
+        dismissChoiceId: "ok"
     }
 
     Connections {
@@ -316,15 +316,26 @@ Item {
 
         function onDocumentReplaced() {
             state.resetEditorTabs(root.documentSession.currentDifficultyId)
+            // The projection is queued, so this can run while the incoming
+            // document's active difficulty is not set yet. Healing here means a
+            // replacement never leaves the editor with no tab at all.
+            state.syncDifficultyEditors(root.documentSession.difficulties,
+                                        root.documentSession.currentDifficultyId)
         }
 
         function onDifficultiesChanged() {
-            state.syncDifficultyEditors(root.documentSession.difficulties)
+            state.syncDifficultyEditors(root.documentSession.difficulties,
+                                        root.documentSession.currentDifficultyId)
+        }
+
+        function onCurrentDifficultyChanged() {
+            state.syncDifficultyEditors(root.documentSession.difficulties,
+                                        root.documentSession.currentDifficultyId)
         }
 
         function onOperationFailed(title, message) {
             fileErrorDialog.title = title
-            fileErrorDialog.text = message
+            fileErrorDialog.message = message
             fileErrorDialog.open()
         }
     }
@@ -333,10 +344,143 @@ Item {
         target: state
 
         function onDifficultyEditorActivationRequested(difficultyId) {
-            if (root.pages.overlayActive)
-                root.pages.leaveOverlayPage()
+            if (root.pages.overlayActive) {
+                // Overlay exit may need an asynchronous unsaved-field answer.
+                // Keep the requested difficulty until the page host confirms
+                // the exit; selecting it here would bypass a cancellation.
+                pendingDifficultyActivation = difficultyId
+                if (!root.pages.leaveOverlayPage())
+                    pendingDifficultyActivation = 0
+                return
+            }
             root.commands.selectDifficulty(difficultyId)
+            root.pages.ensureDifficultyPageActive(difficultyId)
             state.activeSidebarView = "chart"
         }
+
+        function onEditorPresentationCleared() {
+            root.pages.clearEditorPresentation()
+        }
+    }
+
+    property int pendingDifficultyActivation: 0
+
+    Connections {
+        target: root.pages
+
+        function onOverlayPageLeft() {
+            if (root.pendingDifficultyActivation <= 0)
+                return
+            const difficultyId = root.pendingDifficultyActivation
+            root.pendingDifficultyActivation = 0
+            root.commands.selectDifficulty(difficultyId)
+            root.pages.ensureDifficultyPageActive(difficultyId)
+            state.activeSidebarView = "chart"
+        }
+
+        function onNavigationRejected() {
+            root.pendingDifficultyActivation = 0
+            if (root.pages.activePageId === "export"
+                    || root.pages.activePageId === "cover")
+                state.activeSidebarView = "export"
+            else if (root.pages.activePageId === "latency")
+                state.activeSidebarView = "tools"
+            else
+                state.activeSidebarView = "chart"
+        }
+    }
+
+    // One host for the whole shell. Every Widgets-free flow — export, pack as
+    // ZIP, the tool pages — routes its file picks and messages here, so a page
+    // never owns dialog code and two pages can never open competing pickers.
+    UiRequestHost {
+        objectName: "shellUiRequestHost"
+        requests: root.uiRequests
+    }
+
+    JobProgressOverlay {
+        objectName: "shellJobProgress"
+        anchors.fill: parent
+        progress: root.jobProgress
+    }
+
+    // Window-level tool overlays keep the current center page mounted.
+    MediaToolsDialog {
+        id: mediaToolsDialog
+        objectName: "shellMediaToolsDialog"
+        mediaTools: root.mediaTools
+        onPrependRequested: function(isTrack) {
+            const context = root.mediaTools.prependContext(isTrack)
+            // An unavailable target has already explained itself as a notice.
+            if (!context.available)
+                return
+            prependBlankDialog.loadContext(context)
+            prependBlankDialog.open()
+        }
+    }
+
+    PrependBlankDialog {
+        id: prependBlankDialog
+        objectName: "shellPrependBlankDialog"
+        mediaTools: root.mediaTools
+    }
+
+    NormalizeOptionsDialog {
+        id: normalizeDialog
+        objectName: "shellNormalizeOptionsDialog"
+        documentSession: root.documentSession
+
+        onAccepted: {
+            const options = {
+                reduceTo384Grid: normalizeDialog.reduceTo384Grid,
+                sectionMeasureCount: normalizeDialog.sectionMeasureCount,
+                syntax: normalizeDialog.syntax
+            }
+            root.documentSession.setNormalizeOptions(options)
+            splitView.applyNormalization(options)
+        }
+    }
+
+    AudioSettingsDialog {
+        id: audioSettingsDialog
+        objectName: "shellAudioSettingsDialog"
+        audioSettings: root.applicationContext.audioSettings
+    }
+
+    PreviewSettingsDialog {
+        id: previewSettingsDialog
+        objectName: "shellPreviewSettingsDialog"
+        previewSettings: root.applicationContext.previewSettings
+    }
+
+    AboutDialog {
+        id: aboutDialog
+        objectName: "shellAboutDialog"
+        preferences: root.preferences
+    }
+
+    PreferencesDialog {
+        id: preferencesDialog
+        objectName: "shellPreferencesDialog"
+        preferencesModel: root.preferencesModel
+        shortcuts: root.shortcutModel
+        preferences: root.preferences
+        appBackground: root.appBackground
+    }
+
+    Connections {
+        target: root.pages
+        function onMediaToolsRequested() { mediaToolsDialog.open() }
+        function onNormalizeWholeChartRequested() {
+            if (root.pages.activePageId === "export" || !splitView.canNormalizeChart())
+                return
+            const stored = root.documentSession.normalizeOptions()
+            normalizeDialog.reduceTo384Grid = stored.reduceTo384Grid
+            normalizeDialog.sectionMeasureCount = stored.sectionMeasureCount
+            normalizeDialog.syntax = stored.syntax
+            normalizeDialog.selectionDescription = splitView.normalizationSelectionDescription()
+            normalizeDialog.open()
+        }
+        function onPreferencesRequested() { preferencesDialog.open() }
     }
 }

@@ -1,87 +1,67 @@
 #include "QmlEditorPageHost.h"
 
-#include "mainwindow/MainWindow.h"
-#include "UiTheme.h"
-#include "common/AdoptedWidgetCoordinates.h"
 #include "common/DebugLog.h"
+#include "QmlDocumentModel.h"
 #include "app/qml_ui/export/QmlExportSession.h"
-#include "tools/latency/LatencyDetectionPage.h"
 
-#include <QBoxLayout>
-#include <QStackedWidget>
-#include <QTimer>
-#include <QWindow>
-
-namespace {
-
-void appendPageHostLog(const QString& action, const QString& detail = QString())
-{
-    QString text = QStringLiteral("action=%1").arg(action);
-    if (!detail.trimmed().isEmpty()) {
-        text += QStringLiteral(" ") + detail.trimmed();
-    }
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("qml_ui/page_host"),
-        text);
-}
-
-void applySurfaceStyle(QWidget* surface)
-{
-    if (surface == nullptr) {
-        return;
-    }
-    const UiTheme::Colors& colors = UiTheme::colors();
-    QPalette palette = surface->palette();
-    palette.setColor(QPalette::Window, colors.windowBg);
-    surface->setPalette(palette);
-    surface->setAutoFillBackground(true);
-}
-
-void activateSurfaceLayout(QWidget* surface)
-{
-    if (surface == nullptr) {
-        return;
-    }
-    if (QLayout* layout = surface->layout(); layout != nullptr) {
-        layout->activate();
-    }
-    surface->updateGeometry();
-    surface->update();
-}
-
-} // namespace
-
-QmlEditorPageHost::QmlEditorPageHost(MainWindow& backend, QObject* parent)
+QmlEditorPageHost::QmlEditorPageHost(miacode::v2::ShellNotifications& notifications,
+                                     QmlDocumentModel& document,
+                                     miacode::v2::EditorPageRouter*& routerSlot,
+                                     QObject*& exportSessionSlot,
+                                     QObject* parent)
     : QObject(parent)
-    , backend_(&backend)
+    , notifications_(&notifications)
+    , document_(&document)
+    , routerSlot_(&routerSlot)
+    , exportSessionSlot_(&exportSessionSlot)
 {
-    // Eager surface so QML WindowContainer can bind pageWindow before the
-    // first overlay open (same early-bind pattern as QuickShellNativeSurfaceHost).
-    ensureSurface();
+    // The menu action and the chart.normalize shortcut land on MainWindow;
+    // re-emit so the editor sees one request regardless of where it came from.
+    connect(&notifications, &miacode::v2::ShellNotifications::normalizeWholeChartRequested, this, [this]() {
+        openNormalizeWholeChart();
+    });
+    connect(&notifications, &miacode::v2::ShellNotifications::mediaToolsRequested, this, [this]() {
+        openMediaProcessingTools();
+    });
+    connect(&notifications, &miacode::v2::ShellNotifications::preferencesRequested, this, [this]() {
+        if (overlayActive()) {
+            requestPageSwitch([this]() {
+                if (!finishLeaveOverlay()) {
+                    return false;
+                }
+                emit preferencesRequested();
+                return true;
+            });
+        } else if (!navigationPending_) {
+            emit preferencesRequested();
+        }
+    });
+    connect(&notifications, &miacode::v2::ShellNotifications::coverExportRequested, this, [this](int difficultyId) {
+        openCoverExport(difficultyId);
+    });
+    connect(&notifications, &miacode::v2::ShellNotifications::selectionRangeExportPageRequested, this, [this]() {
+        openVideoExportPage();
+    });
+    // requestPageSwitch() is asynchronous: openVideoExportPage() returns true
+    // once the switch is queued, and a refusal arrives here instead. Drop the
+    // staged range then, so it cannot be applied by a later unrelated entry.
+    connect(this, &QmlEditorPageHost::navigationRejected, this, [this]() {
+        if (QmlExportSession* const session = exportSessionObject(); session != nullptr) {
+            session->clearPendingSelectionRangeExport();
+        }
+    });
 }
 
-QmlEditorPageHost::~QmlEditorPageHost()
+QmlExportSession* QmlEditorPageHost::exportSessionObject() const
 {
-    detachCurrentPage(true);
-    if (pageWindow_ != nullptr) {
-        pageWindow_->setParent(nullptr);
-        delete pageWindow_.data();
-        pageWindow_ = nullptr;
-    }
-    delete surfaceWidget_;
-    surfaceWidget_ = nullptr;
-    surfaceLayout_ = nullptr;
-}
-
-QWindow* QmlEditorPageHost::pageWindow() const
-{
-    return pageWindow_.data();
+    return exportSessionSlot_ != nullptr
+        ? qobject_cast<QmlExportSession*>(*exportSessionSlot_)
+        : nullptr;
 }
 
 QObject* QmlEditorPageHost::exportSession() const
 {
-    return backend_ != nullptr ? static_cast<QObject*>(backend_->qmlExportSession_) : nullptr;
+    return exportSessionSlot_ != nullptr ? *exportSessionSlot_ : nullptr;
 }
 
 void QmlEditorPageHost::markExportPageActive()
@@ -89,192 +69,125 @@ void QmlEditorPageHost::markExportPageActive()
     if (activePageId_ == QLatin1String("export")) {
         return;
     }
-    // Detach latency (or any) full-page widget before marking export active —
-    // export chrome is QML, not this WindowContainer surface.
-    if (attachedPage_ != nullptr) {
-        detachCurrentPage(true);
-    } else if (!activePageId_.isEmpty()) {
-        activePageId_.clear();
-        emit activePageIdChanged();
-    }
     activePageId_ = QStringLiteral("export");
     emit activePageIdChanged();
 }
 
-void QmlEditorPageHost::ensureSurface()
-{
-    if (surfaceWidget_ != nullptr) {
-        return;
-    }
-
-    surfaceWidget_ = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint);
-    surfaceWidget_->setObjectName(QStringLiteral("QmlUiEditorPageSurface"));
-    surfaceWidget_->setAttribute(Qt::WA_NativeWindow);
-    surfaceWidget_->setAttribute(Qt::WA_StyledBackground, true);
-    surfaceWidget_->setFocusPolicy(Qt::StrongFocus);
-    surfaceWidget_->setContentsMargins(0, 0, 0, 0);
-    surfaceWidget_->setMinimumSize(QSize(64, 64));
-    surfaceWidget_->resize(960, 720);
-    applySurfaceStyle(surfaceWidget_);
-    // hide() before winId() — same flash-avoidance contract as QuickShell.
-    surfaceWidget_->hide();
-    surfaceWidget_->winId();
-
-    surfaceLayout_ = new QVBoxLayout(surfaceWidget_);
-    surfaceLayout_->setContentsMargins(0, 0, 0, 0);
-    surfaceLayout_->setSpacing(0);
-
-    pageWindow_ = QWindow::fromWinId(surfaceWidget_->winId());
-    if (pageWindow_ != nullptr) {
-        pageWindow_->QObject::setParent(this);
-        miacode::ui::bindAdoptedSurfaceWindow(surfaceWidget_, pageWindow_.data());
-    }
-    appendPageHostLog(
-        QStringLiteral("surface_ready"),
-        QStringLiteral("window=%1").arg(pageWindow_ != nullptr ? 1 : 0));
-    emit pageWindowChanged();
-}
-
-void QmlEditorPageHost::setSurfaceVisible(bool visible)
-{
-    if (surfaceWidget_ == nullptr) {
-        return;
-    }
-#ifdef Q_OS_MACOS
-    // After WindowContainer adoption, QWidget::show/hide on the Qt::Tool
-    // panel can rip the content NSView back out of the Quick window.
-    // Keep the bridge permanently shown; visibility is driven by the
-    // foreign QWindow / WindowContainer only.
-    if (visible && !surfaceWidget_->isVisible()) {
-        surfaceWidget_->show();
-    }
-#else
-    if (visible) {
-        if (!surfaceWidget_->isVisible()) {
-            surfaceWidget_->show();
-        }
-    } else if (surfaceWidget_->isVisible()) {
-        surfaceWidget_->hide();
-    }
-#endif
-    if (pageWindow_ != nullptr && pageWindow_->isVisible() != visible) {
-        pageWindow_->setVisible(visible);
-    }
-}
-
-bool QmlEditorPageHost::attachPageWidget(QWidget* page, const QString& pageId)
-{
-    if (page == nullptr || backend_ == nullptr) {
-        return false;
-    }
-
-    ensureSurface();
-    if (surfaceWidget_ == nullptr || surfaceLayout_ == nullptr || pageWindow_ == nullptr) {
-        appendPageHostLog(QStringLiteral("attach_failed"), pageId);
-        return false;
-    }
-
-    if (attachedPage_ == page && activePageId_ == pageId) {
-        applySurfaceStyle(surfaceWidget_);
-        page->show();
-        setSurfaceVisible(true);
-        activateSurfaceLayout(surfaceWidget_);
-        return true;
-    }
-
-    detachCurrentPage(true);
-
-    if (backend_->editorStack_ != nullptr && page->parentWidget() == backend_->editorStack_) {
-        backend_->editorStack_->removeWidget(page);
-    }
-    surfaceLayout_->addWidget(page);
-    page->show();
-    attachedPage_ = page;
-    applySurfaceStyle(surfaceWidget_);
-    activateSurfaceLayout(surfaceWidget_);
-
-    // Flip overlayActive first so WindowContainer adopts the HWND, then show
-    // the bridge widget (Windows needs QWidget::show for paint; after adoption
-    // the HWND is already reparented into the Quick window — no floating Tool).
-    if (activePageId_ != pageId) {
-        activePageId_ = pageId;
-        emit activePageIdChanged();
-    }
-    setSurfaceVisible(true);
-
-    appendPageHostLog(
-        QStringLiteral("attach_ok"),
-        QStringLiteral("page=%1 size=%2x%3")
-            .arg(pageId)
-            .arg(surfaceWidget_->width())
-            .arg(surfaceWidget_->height()));
-    return true;
-}
-
-void QmlEditorPageHost::detachCurrentPage(bool restoreToEditorStack)
-{
-    if (attachedPage_ == nullptr) {
-        return;
-    }
-
-    QWidget* page = attachedPage_.data();
-    attachedPage_ = nullptr;
-    if (surfaceLayout_ != nullptr) {
-        surfaceLayout_->removeWidget(page);
-    }
-    page->setParent(nullptr);
-
-    if (restoreToEditorStack && backend_ != nullptr && backend_->editorStack_ != nullptr) {
-        backend_->editorStack_->addWidget(page);
-    }
-
-    setSurfaceVisible(false);
-
-    if (!activePageId_.isEmpty()) {
-        activePageId_.clear();
-        emit activePageIdChanged();
-    }
-}
-
 void QmlEditorPageHost::rememberResumeDifficulty()
 {
-    if (backend_ == nullptr) {
+    if (resumeEditorKeyExplicit_) {
         return;
     }
-    if (backend_->hasActiveDifficulty() && backend_->activeDifficultyId_ > 0) {
-        resumeDifficultyId_ = backend_->activeDifficultyId_;
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr) {
+        return;
     }
+    if (pages->hasActiveDifficulty() && pages->activeDifficultyId() > 0) {
+        resumeDifficultyId_ = pages->activeDifficultyId();
+    } else {
+        resumeDifficultyId_ = 0;
+    }
+}
+
+void QmlEditorPageHost::rememberEditorReturnTarget(const QString& editorKey)
+{
+    resumeEditorKey_ = editorKey;
+    resumeEditorKeyExplicit_ = true;
+    resumeDifficultyId_ = 0;
 }
 
 bool QmlEditorPageHost::resumeChartOrMetadata()
 {
-    if (backend_ == nullptr) {
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr) {
         return false;
     }
-    if (resumeDifficultyId_ > 0 && backend_->switchToDifficultyField(resumeDifficultyId_)) {
+    if (resumeEditorKeyExplicit_ && resumeEditorKey_.isEmpty()) {
+        resumeEditorKey_.clear();
+        resumeEditorKeyExplicit_ = false;
+        return pages->clearEditorPresentation();
+    }
+    int difficultyId = resumeDifficultyId_;
+    if (resumeEditorKeyExplicit_ && resumeEditorKey_.startsWith(QStringLiteral("difficulty:"))) {
+        difficultyId = resumeEditorKey_.mid(QStringLiteral("difficulty:").size()).toInt();
+    }
+    if (difficultyId > 0) {
+        // The export session owns its selected difficulty independently from
+        // the document workspace. Restore the editor data source before
+        // restoring the runtime page, so the tab and editor text use one id.
+        if (document_ != nullptr) {
+            document_->selectDifficulty(difficultyId);
+        }
+    }
+    if (difficultyId > 0 && pages->enterDifficultyPage(difficultyId)) {
+        resumeEditorKey_.clear();
+        resumeEditorKeyExplicit_ = false;
+        resumeDifficultyId_ = 0;
         return true;
     }
-    return backend_->switchToMetadataField();
+    const bool restored = !resumeEditorKeyExplicit_ || resumeEditorKey_ == QLatin1String("metadata")
+        ? pages->enterMetadataPage()
+        : pages->clearEditorPresentation();
+    resumeEditorKey_.clear();
+    resumeEditorKeyExplicit_ = false;
+    resumeDifficultyId_ = 0;
+    return restored;
+}
+
+bool QmlEditorPageHost::requestPageSwitch(std::function<bool()> action)
+{
+    if (navigationPending_ || document_ == nullptr || !action) {
+        return false;
+    }
+
+    navigationPending_ = true;
+    emit navigationPendingChanged();
+    const qulonglong documentGeneration = document_->documentGeneration();
+    QPointer<QmlEditorPageHost> self(this);
+    document_->requestLeaveCurrentField(
+        [self, documentGeneration, action = std::move(action)](bool mayLeave) mutable {
+            if (!self) {
+                return;
+            }
+            self->navigationPending_ = false;
+            emit self->navigationPendingChanged();
+            if (!mayLeave || self->document_ == nullptr
+                || self->document_->documentGeneration() != documentGeneration
+                || !action()) {
+                emit self->navigationRejected();
+                return;
+            }
+        });
+    return true;
 }
 
 bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
 {
-    if (backend_ == nullptr || backend_->qmlExportSession_ == nullptr) {
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr || exportSessionObject() == nullptr) {
         return false;
+    }
+    const QString requestedTab = tab == QLatin1String("batch")
+        ? QStringLiteral("batch") : QStringLiteral("export");
+    if (activePageId_ == QLatin1String("export")) {
+        // The export page is a resident QML surface. Re-clicking its sidebar
+        // entry only changes the single/batch tab; tearing down and rebuilding
+        // the audition here made an otherwise harmless navigation expensive.
+        exportSessionObject()->setActiveTab(requestedTab);
+        return true;
     }
     rememberResumeDifficulty();
-    if (tab == QLatin1String("batch")) {
-        backend_->qmlExportSession_->setActiveTab(QStringLiteral("batch"));
-    } else {
-        backend_->qmlExportSession_->setActiveTab(QStringLiteral("export"));
-    }
-    if (!backend_->switchToExportField()) {
-        return false;
-    }
-    QTimer::singleShot(0, this, [this]() {
+    return requestPageSwitch([this, requestedTab]() {
+        if (exportSessionObject() == nullptr || router() == nullptr) {
+            return false;
+        }
+        exportSessionObject()->setActiveTab(requestedTab);
+        if (!router()->enterExportPage()) {
+            return false;
+        }
         markExportPageActive();
+        return true;
     });
-    return true;
 }
 
 bool QmlEditorPageHost::openExportPage()
@@ -284,88 +197,119 @@ bool QmlEditorPageHost::openExportPage()
 
 bool QmlEditorPageHost::openLatencyPage()
 {
-    if (backend_ == nullptr) {
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr) {
         return false;
     }
     rememberResumeDifficulty();
-    if (!backend_->switchToLatencyField()) {
-        return false;
-    }
-    if (!attachPageWidget(backend_->latencyDetectionPage_, QStringLiteral("latency"))) {
-        return false;
-    }
-    QTimer::singleShot(0, this, [this]() {
-        if (surfaceWidget_ != nullptr && attachedPage_ != nullptr) {
-            syncPageSize(surfaceWidget_->width(), surfaceWidget_->height());
-            activateSurfaceLayout(surfaceWidget_);
-            attachedPage_->update();
+    return requestPageSwitch([this]() {
+        const bool leavingExportPage = activePageId_ == QLatin1String("export");
+        if (router() == nullptr || !router()->enterLatencyPage()) {
+            return false;
         }
+        if (leavingExportPage && exportSessionObject() != nullptr) {
+            exportSessionObject()->leave();
+        }
+        // The page is QML now; only the active id has to change so MainSplitView
+        // shows it.
+        if (activePageId_ != QLatin1String("latency")) {
+            activePageId_ = QStringLiteral("latency");
+            emit activePageIdChanged();
+        }
+        return true;
     });
-    return true;
 }
 
-bool QmlEditorPageHost::leaveOverlayPage()
+bool QmlEditorPageHost::finishLeaveOverlay()
 {
-    if (backend_ == nullptr) {
+    if (router() == nullptr) {
         return false;
     }
     if (!overlayActive()) {
         return true;
     }
 
-    const bool leavingExport = activePageId_ == QLatin1String("export");
-    if (leavingExport) {
-        if (backend_->qmlExportSession_ != nullptr) {
-            backend_->qmlExportSession_->leave();
-        }
-        if (!activePageId_.isEmpty()) {
-            activePageId_.clear();
-            emit activePageIdChanged();
-        }
-    } else {
-        detachCurrentPage(true);
+    if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
+        exportSessionObject()->leave();
     }
-    return resumeChartOrMetadata();
+    if (!resumeChartOrMetadata()) {
+        return false;
+    }
+    activePageId_.clear();
+    emit activePageIdChanged();
+    emit overlayPageLeft();
+    return true;
+}
+
+bool QmlEditorPageHost::leaveOverlayPage()
+{
+    if (router() == nullptr) {
+        return false;
+    }
+    if (!overlayActive()) {
+        return true;
+    }
+    return requestPageSwitch([this]() { return finishLeaveOverlay(); });
+}
+
+bool QmlEditorPageHost::ensureDifficultyPageActive(int difficultyId)
+{
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr || difficultyId <= 0) {
+        return false;
+    }
+    if (pages->hasActiveDifficulty() && pages->activeDifficultyId() == difficultyId) {
+        return true;
+    }
+    return pages->enterDifficultyPage(difficultyId);
+}
+
+bool QmlEditorPageHost::clearEditorPresentation()
+{
+    miacode::v2::EditorPageRouter* const pages = router();
+    if (pages == nullptr || overlayActive() || navigationPending_) {
+        return false;
+    }
+    return pages->clearEditorPresentation();
 }
 
 void QmlEditorPageHost::openMediaProcessingTools()
 {
+    if (navigationPending_) {
+        return;
+    }
     if (overlayActive()) {
-        leaveOverlayPage();
+        requestPageSwitch([this]() {
+            if (!finishLeaveOverlay()) {
+                return false;
+            }
+            emit mediaToolsRequested();
+            return true;
+        });
+        return;
     }
-    if (backend_ != nullptr) {
-        backend_->onMediaProcessingTools();
-    }
+    emit mediaToolsRequested();
 }
 
 void QmlEditorPageHost::openNormalizeWholeChart()
 {
+    if (navigationPending_) {
+        return;
+    }
+    if (activePageId_ == QLatin1String("export")) {
+        return;
+    }
     if (overlayActive()) {
-        leaveOverlayPage();
+        requestPageSwitch([this]() {
+            if (!finishLeaveOverlay()) {
+                return false;
+            }
+            emit normalizeWholeChartRequested();
+            return true;
+        });
+        return;
     }
-    if (backend_ != nullptr) {
-        backend_->onNormalizeWholeChart();
-    }
-}
-
-void QmlEditorPageHost::openNetBatchDownload()
-{
-    if (overlayActive()) {
-        leaveOverlayPage();
-    }
-    if (backend_ != nullptr) {
-        backend_->onNetBatchDownload();
-    }
-}
-
-void QmlEditorPageHost::openNetBatchUpload()
-{
-    if (overlayActive()) {
-        leaveOverlayPage();
-    }
-    if (backend_ != nullptr) {
-        backend_->onNetBatchUpload();
-    }
+    emit normalizeWholeChartRequested();
 }
 
 void QmlEditorPageHost::openBatchExport()
@@ -373,38 +317,27 @@ void QmlEditorPageHost::openBatchExport()
     openVideoExportPage(QStringLiteral("batch"));
 }
 
-void QmlEditorPageHost::openCoverExport()
+bool QmlEditorPageHost::openCoverExport(int difficultyId)
 {
-    if (backend_ == nullptr) {
-        return;
+    if (router() == nullptr) {
+        return false;
     }
-    backend_->onExportCover();
+    rememberResumeDifficulty();
+    const int selectedDifficultyId = difficultyId > 0 ? difficultyId
+        : activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr
+            ? exportSessionObject()->selectedDifficultyId() : resumeDifficultyId_;
+    return requestPageSwitch([this, selectedDifficultyId]() {
+        if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
+            exportSessionObject()->leave();
+        }
+        emit coverWindowRequested(selectedDifficultyId);
+        return true;
+    });
 }
 
 void QmlEditorPageHost::packAsZip()
 {
-    if (backend_ == nullptr) {
-        return;
-    }
-    backend_->onPackAsZip();
-}
-
-void QmlEditorPageHost::syncPageSize(int width, int height)
-{
-    if (surfaceWidget_ == nullptr) {
-        return;
-    }
-    const int w = qMax(64, width);
-    const int h = qMax(64, height);
-    const QSize nextSize(w, h);
-    if (surfaceWidget_->size() != nextSize) {
-        surfaceWidget_->resize(nextSize);
-    }
-    if (attachedPage_ != nullptr && attachedPage_->size() != nextSize) {
-        attachedPage_->resize(nextSize);
-    }
-    activateSurfaceLayout(surfaceWidget_);
-    if (attachedPage_ != nullptr) {
-        attachedPage_->update();
+    if (miacode::v2::EditorPageRouter* const pages = router(); pages != nullptr) {
+        pages->packChartAsZip();
     }
 }

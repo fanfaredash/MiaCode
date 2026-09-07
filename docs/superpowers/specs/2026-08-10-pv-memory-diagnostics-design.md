@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # PV Memory Diagnostics Design
 
 ## Goal

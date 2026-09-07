@@ -6,6 +6,8 @@ import MiaCode.UI
 TextArea {
     id: root
 
+    property bool reservesPlainSpace: true
+
     font: Theme.codeFont
     color: Theme.colors.text.editor
     placeholderTextColor: Theme.colors.text.secondary
@@ -20,10 +22,11 @@ TextArea {
 
     background: Rectangle {
         radius: Theme.controlRadius
-        color: Theme.colors.background.editor
-        border.width: Theme.controlBorderWidth
-        border.color: !root.enabled ? Theme.colors.border.normal
-                     : (root.activeFocus || root.hovered) ? Theme.colors.accent.primary
-                     : Theme.colors.border.control
+        color: Theme.overlayColor(root.enabled
+               ? Theme.colors.background.control
+               : Theme.colors.background.controlDisabled)
+        border.width: root.enabled && (root.activeFocus || root.hovered)
+                      ? Theme.controlBorderWidth : 0
+        border.color: Theme.colors.accent.primary
     }
 }

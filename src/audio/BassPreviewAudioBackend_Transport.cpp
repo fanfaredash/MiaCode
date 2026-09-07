@@ -337,6 +337,11 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
     // event is the brief BGM gap (~50-100ms typically) covered by the
     // pause flag flip.
     const double oldRate = playbackSession_.backgroundTrackPlaybackRate;
+    // A1: this pause-modify-resume sequence re-anchors the BGM cursor below (setCurrentSec)
+    // while audioHealthPlaybackRunning_ stays true the whole time -- unlike a UI pause, the
+    // health sampler will not see a gap here, so the advance-rate probe needs its own
+    // signal that this pair of samples is not comparable. See backgroundTrackContinuityEpoch_.
+    ++backgroundTrackContinuityEpoch_;
     miacode::oplog::appendStartupBeaconLine("audio/rate/bass_about_to_pause");
     backgroundTrackSample_->pause();
     miacode::oplog::appendStartupBeaconLine("audio/rate/bass_about_to_setspeed");
@@ -529,6 +534,11 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
             route == miacode::preview_audio::bass::BassDebugRoute::Init);
         return;
     }
+
+    // A1: every branch below repositions the BGM cursor (setCurrentSec), which is a
+    // discontinuous jump in bgmRawSecond -- the advance-rate probe must not compare across
+    // it. See BassPreviewAudioBackend::backgroundTrackContinuityEpoch_.
+    ++backgroundTrackContinuityEpoch_;
 
     backgroundTrackSample_->setLoop(false);
     // G1 Commit 6: setSpeed is no longer called from this per-seek / per-pause helper.

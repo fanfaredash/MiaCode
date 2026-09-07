@@ -103,6 +103,27 @@ QtPreviewSfxRuntime::AssetSubmission QtPreviewSfxRuntime::reloadAssetsForChart(
     return submission;
 }
 
+QtPreviewSfxRuntime::AssetSubmission QtPreviewSfxRuntime::reloadAssetsForChartWithWarmupPaths(
+    const QString& chartPath,
+    const QString& trackPath,
+    const QString& sfxDir,
+    const PreviewAudioSettings& settings)
+{
+    PreviewAudioCommand command = makeCommand(CommandKind::ReloadAssets);
+    command.identity.assetGeneration = assetGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    command.chartPath = chartPath;
+    command.trackPath = trackPath;
+    command.sfxDirectory = sfxDir;
+    command.applyWarmupPathsBeforeReload = true;
+    command.applyChartPathBeforeReload = true;
+    command.settings = settings;
+    AssetSubmission submission;
+    submission.identity = command.identity;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
+}
+
 bool QtPreviewSfxRuntime::audioEngineInitialized() const
 {
     const PreviewAudioSnapshot snapshot = lastSnapshot();
@@ -383,6 +404,11 @@ miacode::preview_audio::PreviewAudioDeviceCutoff QtPreviewSfxRuntime::requestDev
 bool QtPreviewSfxRuntime::beginManualPlaybackAfterDeviceCutoff()
 {
     return deviceCutoffActive_.exchange(false, std::memory_order_acq_rel);
+}
+
+bool QtPreviewSfxRuntime::isDeviceCutoffActive() const noexcept
+{
+    return deviceCutoffActive_.load(std::memory_order_acquire);
 }
 
 std::optional<QtPreviewSfxRuntime::Completion>

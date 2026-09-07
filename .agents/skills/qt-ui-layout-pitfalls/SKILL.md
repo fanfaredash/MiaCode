@@ -54,7 +54,12 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | 素材对不齐/凸起 (sprite misaligned, bump pokes out) | Baked transparent padding in prefab sprites | Q4 |
 | 文本溢出卡槽 (text overflows a fixed slot) | No overflow mode; ellipsis loses data; headless can't animate | Q5 |
 | 字符间隙/挤压 (glyph gaps or squash from an atlas) | Monospaced atlas cells + AA tails | Q6 |
+| Canvas 行号与 TextEdit 文字高低错位 | Canvas `middle` baseline differs from QTextLayout baseline | Q7 |
+| 编辑器滚动迟缓、滚动条消失、光标为箭头 | Full-area `MouseArea` consumes wheel/trackpad input and supplies its default cursor; Basic scrollbar fades while idle | Q8 |
 | 层叠关系错误 (element above/below the wrong thing) | QML: declaration order = paint order; widget: `paintEvent` draw order | Z1 |
+| 同色面板明暗不同 / 关闭壁纸后仍透明 | Parent/child surface fills compound alpha; wallpaper and surface alpha use different enable gates | Z1 |
+| 模态弹窗藏到主窗口下方 / clicks only play the task-dialog warning sound | QuickShell uses a hidden QWidget backend, so parentless application-modal dialogs lack a native owner and can fall behind the visible QQuickWindow | Z8 |
+| 下拉列表弹出为空白细条 (combo popup collapses to padding) | A base Popup's default contentData can force contentItem initialization before a derived ListView is installed | Z9 |
 | 点击区域错位 (hit area ≠ visual) | Hit geometry and visuals derived from different sources | Z2 |
 | 平台蓝色填充闪现 (platform blue-fill flashes) | Viewport default paint path fires on style/palette events | Z3 |
 | 取消关闭但弹窗已没了 (cancel close, popups already gone) | Side-effect sweep ran BEFORE the cancellable prompt | Z4 |
@@ -97,6 +102,10 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   marquee (two-copy wrap, `(frame - begin) * pxPerFrame % period`), tunables in template.
 - **Q6**: per-glyph alpha bounds table + `sourceClipRect` + small negative `Row.spacing`
   (−1/−2) to close AA tails; calibrate offsets with a measurement script.
+- **Q7**: Canvas uses `alphabetic` baseline at `lineTop + FontMetrics.ascent`; TextEdit and
+  Canvas must read the same font.
+- **Q8**: Context-menu overlays pass gestures to the `ScrollView`, set an I-beam cursor,
+  and leave wheel events unhandled so the native scrollbar and scrolling path stay intact.
 - **Z1**: QML stacking = declaration order (document the intended order in a comment);
   widget stacking = `paintEvent` draw order (background → grid → content → overlays).
   When a new layer must sit between existing ones, move the draw call, don't add `z` hacks.
@@ -116,6 +125,14 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
 - **Z7**: bind the bridge surface to its adopted `QWindow`, convert child-local coordinates
   to bridge-surface coordinates in the QWidget hierarchy, then call the adopted window's
   `mapToGlobal()`; never compensate with a fixed x/y offset.
+- **Z8**: bind ownerless/hidden-owner top-level dialogs' native `QWindow::transientParent`
+  to the visible QuickShell root and re-raise only blocking modals on app/root activation.
+  Preserve visible owners for nested dialogs and never force-activate non-modal dialogs. Never use
+  `WindowStaysOnTopHint`, which would incorrectly place it above other applications.
+
+- **Z9**: attach popup lifecycle helpers through explicit object properties. Keep base
+  popup infrastructure out of default `contentData`, which accesses deferred `contentItem`.
+  See `references/recipes.md` for the shared lifecycle pattern.
 
 ## Known rejected approaches — do not retry
 

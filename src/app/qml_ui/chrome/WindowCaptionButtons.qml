@@ -13,14 +13,18 @@ Row {
 
     CaptionButton {
         glyph: "\uE921"
-        accessibleName: qsTr("最小化")
+        accessibleName: UiText.text("最小化")
         onClicked: root.hostWindow.showMinimized()
     }
 
     CaptionButton {
         glyph: root.hostWindow.visibility === Window.Maximized ? "\uE923" : "\uE922"
+        // 还原 here means "restore the window", not the 还原 the HUD-font and
+        // export pages use for "reset". The Chinese source is the same string,
+        // so this one call site passes the key explicitly rather than relying on
+        // the shared source-to-key table.
         accessibleName: root.hostWindow.visibility === Window.Maximized
-                        ? qsTr("还原") : qsTr("最大化")
+                        ? UiText.text("window.restore") : UiText.text("最大化")
         onClicked: {
             if (root.hostWindow.visibility === Window.Maximized)
                 root.hostWindow.showNormal()
@@ -31,8 +35,7 @@ Row {
 
     CaptionButton {
         glyph: "\uE8BB"
-        accessibleName: qsTr("关闭")
-        closeButton: true
+        accessibleName: UiText.text("关闭")
         onClicked: root.hostWindow.close()
     }
 
@@ -41,7 +44,6 @@ Row {
 
         required property string glyph
         required property string accessibleName
-        property bool closeButton: false
 
         width: 46
         height: root.height
@@ -50,33 +52,18 @@ Row {
 
         contentItem: Text {
             text: button.glyph
-            color: button.closeButton && button.hovered ? "#FFFFFF"
-                   : (button.hovered ? Theme.colors.text.active : Theme.colors.text.secondary)
+            color: button.hovered || button.visualFocus ? Theme.colors.text.active : Theme.colors.text.secondary
             font.family: "Segoe Fluent Icons"
             font.pixelSize: 10
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
 
-        background: Item {
-            HoverChrome {
-                anchors.fill: parent
-                visible: !button.closeButton
-                hovered: button.hovered
-                pressed: button.down
-                tone: "icon"
-            }
-            Rectangle {
-                anchors.fill: parent
-                visible: button.closeButton
-                color: {
-                    if (button.down)
-                        return "#A92317"
-                    if (button.hovered)
-                        return "#C42B1C"
-                    return "transparent"
-                }
-            }
+        background: HoverChrome {
+            stateColors: Theme.colors.activityState
+            hovered: button.hovered
+            pressed: button.down
+            focused: button.visualFocus
         }
     }
 }

@@ -222,6 +222,9 @@ public:
     // Store a freshly-rendered chart still on `key`'s layer and bump its
     // imageRevision so the QML Image reloads it from the "coverchart" provider.
     void setLayerImage(const QString& key, const QImage& image);
+    // Drop a still when the renderer/difficulty changes. Reusing a layer object
+    // must not make a frame from the previous chart look current.
+    void clearLayerImage(const QString& key);
 
     // Paint-order helpers (z based, list order untouched). Bounds-checked.
     Q_INVOKABLE void bringToFront(int index);

@@ -1,0 +1,236 @@
+﻿#include "runtime/playback/PlaybackCoordinator.h"
+#include "runtime/Shared.h"
+#include "runtime/media/MediaJobsHost.h"
+
+#include "BracketScopeHighlighter.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "UiText.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/ChartClockCount.h"
+#include "common/CrashRecovery.h"
+#include "common/DebugLog.h"
+#include "common/ProcessDiagnostics.h"
+#include "common/DebugOptions.h"
+#include "common/PreviewInteractionConfig.h"
+#include "common/WaveformCache.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
+#include "timeline/TimelineAnalysisPublication.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+#include "tools/latency/LatencySandboxController.h"
+
+#include <QtCore>
+
+#include "runtime/playback/TimelineFlow.Internal.h"
+
+using namespace miacode::runtime::shared;
+using namespace miacode::runtime::preview_timeline_detail;
+
+namespace {
+
+constexpr int kTimelineAnalysisIdleDelayMs = 180;
+
+}  // namespace
+
+// Session::invalidateDocumentValidationRevision() moved to SessionForwarding.cpp
+// (stage 4.9d-6: TU boundary split so this file holds only Coordinator::
+// methods and can link independently of the Session assembly).
+
+void miacode::runtime::PlaybackCoordinator::scheduleTimelineAnalysisRefresh(
+    const TimelineSlowRefreshRequest& request,
+    const SimaiNativeParseResult& parseResult,
+    const TimelinePreviewRefreshState& previewState)
+{
+    state_.pendingTimelineAnalysisRefresh_.revision = request.revision;
+    state_.pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
+    state_.pendingTimelineAnalysisRefresh_.chartText = request.chartText;
+    state_.pendingTimelineAnalysisRefresh_.validationLocale = request.validationLocale;
+    state_.pendingTimelineAnalysisRefresh_.timingMetadata = request.timingMetadata;
+    state_.pendingTimelineAnalysisRefresh_.parseResult = parseResult;
+    state_.pendingTimelineAnalysisRefresh_.noteMarkerSignature = previewState.noteMarkerSignature;
+    state_.pendingTimelineAnalysisRefresh_.noteMarkers = previewState.shiftedNoteMarkers;
+    state_.pendingTimelineAnalysisRefresh_.renderOptions = state_.muriRenderOptions_;
+    state_.pendingTimelineAnalysisRefresh_.staticTapOnSlideThresholdSeconds =
+        static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0;
+    state_.timelineAnalysisRequestedRevision_ = request.revision;
+    requestTimelineAnalysisDispatch();
+}
+
+bool miacode::runtime::PlaybackCoordinator::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs)
+{
+    if (!hasActiveDifficulty()
+        || !state_.latestTimelinePreviewSnapshotReady_
+        || state_.lastTimelineParseDifficultyId_ != activeDifficultyId()
+        || state_.lastTimelineParseChartText_ != activeChartText()
+        || state_.lastTimelineParseTimingMetadata_ != currentTimingMetadata()) {
+        return false;
+    }
+
+    TimelineSlowRefreshRequest request;
+    request.revision = state_.latestTimelinePreviewRevision_;
+    request.difficultyId = activeDifficultyId();
+    request.chartText = state_.lastTimelineParseChartText_;
+    request.timingMetadata = state_.lastTimelineParseTimingMetadata_;
+    request.validationLocale = uiValidationLocale();
+
+    state_.pendingTimelineAnalysisRefresh_.revision = request.revision;
+    state_.pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
+    state_.pendingTimelineAnalysisRefresh_.chartText = request.chartText;
+    state_.pendingTimelineAnalysisRefresh_.validationLocale = request.validationLocale;
+    state_.pendingTimelineAnalysisRefresh_.timingMetadata = request.timingMetadata;
+    state_.pendingTimelineAnalysisRefresh_.parseResult = state_.lastTimelineParseResult_;
+    state_.pendingTimelineAnalysisRefresh_.noteMarkerSignature = state_.latestTimelineNoteMarkerSignature_;
+    state_.pendingTimelineAnalysisRefresh_.noteMarkers = state_.latestTimelineNoteMarkers_;
+    state_.pendingTimelineAnalysisRefresh_.renderOptions = state_.muriRenderOptions_;
+    state_.pendingTimelineAnalysisRefresh_.staticTapOnSlideThresholdSeconds =
+        static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0;
+    state_.timelineAnalysisRequestedRevision_ = request.revision;
+    requestTimelineAnalysisDispatch(delayMs);
+    return true;
+}
+
+void miacode::runtime::PlaybackCoordinator::requestTimelineAnalysisDispatch(int delayMs)
+{
+    if (state_.pendingTimelineAnalysisRefresh_.revision == 0) {
+        return;
+    }
+    if (state_.playing_) {
+        if (ui_.timelineAnalysisIdleTimer_ != nullptr) {
+            ui_.timelineAnalysisIdleTimer_->stop();
+        }
+        return;
+    }
+    if (ui_.timelineAnalysisIdleTimer_ != nullptr) {
+        const int effectiveDelayMs = delayMs >= 0 ? delayMs : kTimelineAnalysisIdleDelayMs;
+        ui_.timelineAnalysisIdleTimer_->start(effectiveDelayMs);
+        return;
+    }
+    dispatchTimelineAnalysisRefresh();
+}
+
+void miacode::runtime::PlaybackCoordinator::dispatchTimelineAnalysisRefresh()
+{
+    if (!hasActiveDifficulty() || state_.playing_ || state_.timelineAnalysisWorkerRunning_ || state_.pendingTimelineAnalysisRefresh_.revision == 0) {
+        return;
+    }
+
+    const TimelineAnalysisRefreshRequest request = state_.pendingTimelineAnalysisRefresh_;
+    state_.pendingTimelineAnalysisRefresh_ = TimelineAnalysisRefreshRequest();
+    state_.timelineAnalysisWorkerRunning_ = true;
+    state_.timelineAnalysisRunningRevision_ = request.revision;
+    QPointer<QObject> guard(&owner_);
+    QThreadPool* const pool = state_.timelineAnalysisPool_ != nullptr
+        ? state_.timelineAnalysisPool_
+        : QThreadPool::globalInstance();
+    pool->start([this, guard, request]() {
+        miacode::diag::MemoryStageScope memScope("preview/mem_stage", "analysis_build");
+        TimelineAnalysisRefreshResult result;
+        {
+            // beta7 probe 2.1 — tight core bracket around the parse + Muri-analyze build only.
+            miacode::diag::MemoryStageScope memScopeCore("preview/mem_stage", "analysis_core");
+            result = buildTimelineAnalysisRefreshResult(request);
+        }
+        if (guard.isNull()) {
+            return;
+        }
+        miacode::diag::leak_gauge::noteInflightDispatch();
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [this, guard, result = std::move(result)]() mutable {
+                miacode::diag::leak_gauge::noteInflightApplied();
+                if (guard.isNull()) {
+                    return;
+                }
+
+                miacode::diag::MemoryStageScope memScope("preview/mem_stage", "analysis_apply");
+                QElapsedTimer applyTimer;
+                applyTimer.start();
+
+                state_.timelineAnalysisWorkerRunning_ = false;
+                if (result.revision != state_.timelineAnalysisRequestedRevision_
+                    || result.revision != state_.timelineRevision_
+                    || !hasActiveDifficulty()
+                    || result.difficultyId != activeDifficultyId()
+                    || result.chartText != activeChartText()
+                    || result.timingMetadata != currentTimingMetadata()
+                    || result.noteMarkerSignature != state_.latestTimelineNoteMarkerSignature_) {
+                    requestTimelineAnalysisDispatch();
+                    return;
+                }
+
+                Session::ValidationCacheEntry entry;
+                entry.chartText = result.chartText;
+                entry.validationLocale = result.validationReport.issues.isEmpty() ? uiValidationLocale() : result.validationLocale;
+                entry.timingMetadata = result.timingMetadata;
+                entry.validationRevision = result.revision;
+                entry.ok = result.validationReport.ok;
+                entry.errorCount = result.validationReport.errorCount;
+                entry.warningCount = result.validationReport.warningCount;
+                entry.lenientNoteCount = result.validationReport.lenientNoteCount;
+                entry.lenientErrorCount = result.validationReport.lenientErrorCount;
+                entry.strictNoteCount = result.validationReport.strictNoteCount;
+                entry.strictErrorCount = result.validationReport.strictErrorCount;
+                entry.issues.reserve(result.validationReport.issues.size());
+                for (const SimaiNativeValidationIssue& issue : result.validationReport.issues) {
+                    Session::ValidationCachedIssue cachedIssue;
+                    cachedIssue.line = issue.line;
+                    cachedIssue.col = issue.col;
+                    cachedIssue.endCol = issue.endCol;
+                    cachedIssue.severity = issue.severity;
+                    cachedIssue.rawMessage = issue.rawMessage;
+                    cachedIssue.displayMessage = issue.displayMessage;
+                    entry.issues.append(cachedIssue);
+                }
+                const int validationIssueCount = entry.issues.size();
+                const int muriDiagnosticCount = result.analysisReport.diagnostics.size();
+                const int muriStaticReferenceCount = result.staticReferences.size();
+                miacode::timeline::publishTimelineAnalysisState(
+                    [&] {
+                        state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
+                        state_.pendingDeferredValidationUiRefresh_ = true;
+                    },
+                    [&] {
+                        state_.muriAnalysisReport_ = std::move(result.analysisReport);
+                        state_.muriAnalysisReport_.revision = ++state_.muriAnalysisReportRevisionCounter_;
+                        state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
+                        state_.muriAnalysisReportDifficultyId_ = result.difficultyId;
+                        state_.muriAnalysisReportTimelineRevision_ = result.revision;
+                        state_.muriAnalysisResultAvailable_ = true;
+                    },
+                    [&] {
+                        state_.muriStaticReferences_ = std::move(result.staticReferences);
+                        state_.muriStaticReferencesNoteMarkerSignature_ = result.noteMarkerSignature;
+                        state_.muriStaticReferencesDifficultyId_ = result.difficultyId;
+                        state_.muriStaticReferencesTimelineRevision_ = result.revision;
+                        state_.muriStaticReferencesAvailable_ = true;
+                        state_.pendingDeferredMuriUiRefresh_ = true;
+                    },
+                    [&] { validation_.notifyDocumentValidationChanged(); });
+                if (!state_.playing_) {
+                    validation_.applyDeferredAnalysisUiUpdates();
+                }
+                if (state_.runtimeDebugOutputEnabled_) {
+                    appendTimelinePerfLog(
+                        QStringLiteral("edit/muri_perf"),
+                        QStringLiteral("phase=analysis_apply validation_issues=%1 diagnostics=%2 static_refs=%3 elapsed_ms=%4")
+                            .arg(validationIssueCount)
+                            .arg(muriDiagnosticCount)
+                            .arg(muriStaticReferenceCount)
+                            .arg(applyTimer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+                    );
+                }
+                requestTimelineAnalysisDispatch();
+            },
+            Qt::QueuedConnection
+        );
+    });
+}

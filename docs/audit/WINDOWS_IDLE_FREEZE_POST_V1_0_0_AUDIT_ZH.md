@@ -1,3 +1,7 @@
+---
+lifecycle: working
+---
+
 # Windows 空闲卡死调研报告：`0.5.2-beta3` → beta2 故障快照
 
 - 更新日期：2026-08-03

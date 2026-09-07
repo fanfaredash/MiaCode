@@ -8,13 +8,29 @@ import MiaCode.UI
 MenuItem {
     id: root
 
-    font.family: Theme.uiFont
-    font.pixelSize: Theme.uiFontSize
-    implicitHeight: 28
+    property bool compact: false
+
+    implicitHeight: compact ? Theme.compactControlHeight : 28
     leftPadding: 12
     rightPadding: subMenu ? 22 : 16
     topPadding: 3
     bottomPadding: 3
+    font.family: Theme.uiFont
+    font.pixelSize: compact ? Theme.compactFontSize : Theme.uiFontSize
+    // Where the full identity goes when the label is deliberately short — the
+    // recent-charts and backup lists show a folder name or a timestamp, and the
+    // path they stand for is too wide to be a menu row.
+    property string tooltip: ""
+    // Dynamic menus own their rows directly, rather than wrapping them in an
+    // Action. Keep their shortcut spelling on the visual item so Qt can both
+    // insert it into Menu and render the binding.
+    property string shortcutText: ""
+    property int difficultyId: 0
+    implicitWidth: Math.ceil(label.implicitWidth + chromeWidth
+                             + (shortcutLabel.text.length > 0 ? shortcutLabel.implicitWidth + row.spacing : 0))
+    readonly property real chromeWidth: leftPadding + rightPadding
+                                        + (checkable ? 12 + row.spacing : 0)
+                                        + (difficultyId > 0 ? Theme.difficultySwatchSize + row.spacing : 0)
 
     readonly property color labelColor: {
         if (!root.enabled)
@@ -24,20 +40,32 @@ MenuItem {
         return Theme.colors.text.secondary
     }
 
+    Tooltip {
+        visible: root.tooltip.length > 0 && root.hovered
+        text: root.tooltip
+    }
+
     contentItem: RowLayout {
+        id: row
         spacing: 10
 
-        Text {
+        Item {
             Layout.preferredWidth: root.checkable ? 12 : 0
             visible: root.checkable
-            text: root.checked ? "✓" : ""
-            color: Theme.colors.text.active
-            font: root.font
-            horizontalAlignment: Text.AlignHCenter
+        }
+
+        DifficultySwatch {
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
+            Layout.alignment: Qt.AlignVCenter
+            visible: root.difficultyId > 0
+            difficultyId: root.difficultyId
         }
 
         ControlsImpl.MnemonicLabel {
+            id: label
             Layout.fillWidth: true
+            Layout.preferredWidth: implicitWidth
             text: root.text
             font: root.font
             color: root.labelColor
@@ -46,8 +74,16 @@ MenuItem {
         }
 
         Text {
-            visible: (root.shortcut || "").length > 0
-            text: root.shortcut || ""
+            id: shortcutLabel
+            Layout.minimumWidth: implicitWidth
+            // Static rows receive their spelling from an Action; dynamic rows
+            // provide shortcutText directly because Repeater must create a
+            // visual MenuItem, not a non-visual Action.
+            text:
+                root.shortcutText.length > 0
+                    ? root.shortcutText
+                    : (root.action && root.action.shortcutText ? root.action.shortcutText : "")
+            visible: text.length > 0
             font: root.font
             color: Theme.colors.text.disabled
             opacity: root.enabled ? 1 : 0.55
@@ -55,8 +91,23 @@ MenuItem {
     }
 
     background: HoverChrome {
-        selected: root.highlighted
-        tone: "nav"
+        stateColors: Theme.colors.popupState
+        selected: root.checked
+        hovered: root.highlighted || root.hovered
+        pressed: root.down
+        focused: root.visualFocus
+    }
+
+    indicator: Text {
+        x: root.mirrored ? root.width - width - root.rightPadding : root.leftPadding
+        y: root.topPadding + (root.availableHeight - height) / 2
+        width: 12
+        height: implicitHeight
+        visible: root.checkable
+        text: root.checked ? "✓" : ""
+        color: Theme.colors.text.active
+        font: root.font
+        horizontalAlignment: Text.AlignHCenter
     }
 
     // Same placement contract as Qt Basic MenuItem; sized down slightly.

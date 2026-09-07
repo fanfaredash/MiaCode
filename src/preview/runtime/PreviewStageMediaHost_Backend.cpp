@@ -241,17 +241,37 @@ void PreviewStageMediaHost::initializeBackendObjects()
             .arg(QString::fromLatin1(prefName)));
 #endif
 
-    // Seek landing (frame-accurate). Backs up the pts match in
-    // handleDecodedVideoFrame for the paused-seek / prepared-start handshakes —
-    // it covers low-fps sources where the decoded frame pts can sit a whole
-    // frame interval before the requested target.
+    // 定位通知用于播放准备与末尾恢复；暂停 seek 等待视频帧送入显示端。
     seekedConnection_ = connect(player_, &QAVPlayer::seeked, this, [this](qint64 posMs) {
         if (mediaKind_ != MediaKind::Video) {
             return;
         }
         const double mediaSecond = static_cast<double>(posMs) / 1000.0;
         lastTimelineSecond_ = qMax(0.0, mediaSecond - timelineOffsetSeconds_);
-        settlePendingSeekAcks(mediaSecond, mediaSecond);
+        settlePendingSeekAcks(mediaSecond, mediaSecond, false);
+        if (staleEndOfMediaResumePending_) {
+            // The stale-EndOfMedia recovery seek landed, so the player's end-of-file
+            // latch is cleared and play() will resume here instead of restarting the
+            // clip from zero. See tryRecoverFromStaleEndOfMedia.
+            staleEndOfMediaResumePending_ = false;
+            ++staleEndOfMediaResumeSerial_;
+            if (player_ != nullptr) {
+                player_->play();
+            }
+            videoPlaybackActive_ = true;
+            videoPlaybackPendingStart_ = false;
+            videoPlaybackActiveElapsed_.restart();
+            if (videoFrameElapsed_.isValid()) {
+                videoFrameElapsed_.restart();
+            }
+            appendPreviewStageMediaLog(
+                QStringLiteral("stale_end_of_media_resumed"),
+                QString("second=%1 position_ms=%2 recoveries=%3")
+                    .arg(mediaSecond, 0, 'f', 6)
+                    .arg(posMs)
+                    .arg(staleEndOfMediaRecoveries_));
+            emit diagnosticsChanged();
+        }
         updateClockDelta();
 #if defined(Q_OS_WIN)
         // HW-decode diag: the demuxer seek landed; the decoder now catches up to the
@@ -269,11 +289,18 @@ void PreviewStageMediaHost::initializeBackendObjects()
     connect(player_, &QAVPlayer::mediaStatusChanged, this, [this](QAVPlayer::MediaStatus status) {
         appendPreviewStageMediaLog(
             QStringLiteral("media_status"),
-            QString("status=%1 state=%2 position_ms=%3 kind=%4")
+            QString("status=%1 state=%2 position_ms=%3 kind=%4 txn=%5 last_seek_ms=%6 "
+                    "active_elapsed_ms=%7 frames=%8 last_pts_ms=%9 prepared_pending=%10")
                 .arg(avMediaStatusName(status))
                 .arg(avStateName(player_ != nullptr ? player_->state() : QAVPlayer::StoppedState))
                 .arg(player_ != nullptr ? player_->position() : -1)
-                .arg(debugMediaTypeName()));
+                .arg(debugMediaTypeName())
+                .arg(playbackTransactionId_)
+                .arg(lastSeekMs_)
+                .arg(videoPlaybackActiveElapsed_.isValid() ? videoPlaybackActiveElapsed_.elapsed() : -1)
+                .arg(videoFrameCountTotal_)
+                .arg(lastFramePtsSeconds_ >= 0.0 ? qRound64(lastFramePtsSeconds_ * 1000.0) : -1)
+                .arg(preparedPlaybackPending_ ? 1 : 0));
         if (status == QAVPlayer::LoadedMedia) {
             videoBackendLoaded_ = true;
             return;
@@ -287,6 +314,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             // transport's lifetime owner. Leave lastVideoFrame_ in both video
             // sinks so the final decoded frame stays visible while the chart,
             // BGM and SFX continue to the unified content-duration endpoint.
+            const bool wasPlaybackActive = videoPlaybackActive_;
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
@@ -294,6 +322,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             updateClockDelta();
             updateVideoFrameStallState(true);
             emitHwDecodeDiagSummary("eom");
+            handleVideoEndOfMedia(wasPlaybackActive);
             emit diagnosticsChanged();
             return;
         }
@@ -384,6 +413,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             );
             preparedPlaybackPending_ = false;
             preparedPlaybackReady_ = true;
+            preparedPlaybackLandingConfirmed_ = true;
             emit playbackStartPrepared(preparedPlaybackTargetSecond_, preparedPlaybackTransaction_);
         }
         emit playbackPositionChanged(lastTimelineSecond_);
@@ -463,6 +493,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             // and end only this subordinate video stream. The main preview
             // transport is completed exclusively by the timeline/content
             // duration policy.
+            const bool wasPlaybackActive = videoPlaybackActive_;
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
@@ -470,6 +501,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             recordPvMemoryBoundary(PvMemoryBoundary::EndOfMedia);
             updateClockDelta();
             updateVideoFrameStallState(true);
+            handleVideoEndOfMedia(wasPlaybackActive);
             emit diagnosticsChanged();
             return;
         }
@@ -688,6 +720,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
     ++videoPlaybackWatchdogSerial_;
     pausedSeekCompletionPending_ = false;
     preparedPlaybackPending_ = false;
+    preparedPlaybackLandingConfirmed_ = false;
     if (completePreparedPlayback) {
         preparedPlaybackReady_ = true;
     }

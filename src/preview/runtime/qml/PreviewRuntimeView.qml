@@ -6,7 +6,7 @@ Rectangle {
 
     property var runtime: null
 
-    color: "#1F2833"
+    color: "#191A1B"
     implicitWidth: 480
     implicitHeight: 480
 

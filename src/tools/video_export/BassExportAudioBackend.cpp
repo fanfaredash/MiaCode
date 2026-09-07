@@ -359,6 +359,24 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
 
         if (sourceStartSecond > 0.0) {
             const QWORD sourcePosition = BASS_ChannelSeconds2Bytes(stream, sourceStartSecond);
+            const QWORD sourceLengthBytes = BASS_ChannelGetLength(stream, BASS_POS_BYTE);
+            if (tag != QStringLiteral("bgm")
+                && sourceLengthBytes != static_cast<QWORD>(-1)
+                && sourcePosition >= sourceLengthBytes) {
+                // A one-shot sample asked to start past its own end has nothing to
+                // contribute — this is how a touch-hold that outlives the riser
+                // behaves in preview too (miniaudio stops the voice once the offset
+                // passes the sample length). Skip it instead of failing the export.
+                appendExportLog(
+                    QStringLiteral("audio_backend_source_skip"),
+                    QStringLiteral("backend=%1 tag=%2 path=%3 reason=source_start_past_end source_start=%4")
+                        .arg(backendId())
+                        .arg(tag)
+                        .arg(path)
+                        .arg(sourceStartSecond, 0, 'f', 6));
+                BASS_StreamFree(stream);
+                return true;
+            }
             if (!BASS_ChannelSetPosition(stream, sourcePosition, BASS_POS_BYTE)) {
                 BASS_StreamFree(stream);
                 if (errorMessage != nullptr) {
@@ -430,13 +448,13 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
         }
     }
 
-    for (int index = 0; index < plan.mergedTouchholdSpans.size(); ++index) {
-        const auto& span = plan.mergedTouchholdSpans.at(index);
+    for (int index = 0; index < plan.touchholdSpanPlaybacks.size(); ++index) {
+        const auto& span = plan.touchholdSpanPlaybacks.at(index);
         const QString path = miacode::preview_sfx::assetFilePathForKind(plan.sfxDirectory, span.assetKind);
         if (!addScheduledFile(
                 path,
                 span.mixSecond,
-                0.0,
+                span.sourceStartSecond,
                 span.durationSeconds,
                 span.gain,
                 QStringLiteral("touchhold:%1").arg(index))) {
@@ -500,7 +518,7 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
             .arg(outputPath)
             .arg(plan.backgroundTrack.enabled ? 1 : 0)
             .arg(plan.scheduledSfxPlaybacks.size())
-            .arg(plan.mergedTouchholdSpans.size())
+            .arg(plan.touchholdSpanPlaybacks.size())
             .arg(totalFrames)
             .arg(plan.alignedTotalSeconds, 0, 'f', 6));
     return true;

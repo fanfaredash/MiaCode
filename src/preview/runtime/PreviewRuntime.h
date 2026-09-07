@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QPointer>
 #include <QSize>
 #include <QUrl>
@@ -87,7 +88,7 @@ public:
     void notifyVisibleFramePresented();
     // Called from the QSG render thread when the firework layer emits a node;
     // drives the firework warm-up completion check (atomic — thread-safe).
-    void notifyFireworkLayerProducedNode();
+    void notifyFireworkLayerPresentedNode();
     QQuickWindow* visibleHostWindow() const;
     void requestActivate();
     void update();
@@ -175,7 +176,7 @@ public:
     void setJudgeEffectStyle(PreviewJudgeEffectStyle style);
     void setHoveredTouchPad(const QString& pad);
     bool beginTouchPadAuthoringPress(const QString& pad);
-    bool finishTouchPadAuthoringPress(const QString& pad, bool backtickSeparator);
+    bool finishTouchPadAuthoringPress(const QString& pad, QChar separator);
     void cancelTouchPadAuthoringPress();
     bool touchPadAuthoringEnabled() const { return frameState_.touchPadAuthoringEnabled; }
     bool touchPadAuthoringPressActive() const { return !frameState_.pressedTouchPad.isEmpty(); }
@@ -217,6 +218,13 @@ public:
     void noteFixedGatePresentWithoutTick(qint64 gateWaitNs);
     void noteFixedGateWatchdogKick();
     void noteFixedGateMissedTargetSlots(qint64 count);
+    // --debug-only v2 UI probe. PreviewQuickSceneRoot reports its live binding
+    // and each frame-state fan-out here; payload is emitted only in the
+    // existing pause resource gauge, never per frame.
+    void noteV2UiSceneRootBound(quint64 instanceId, bool visible);
+    void noteV2UiSceneRootUnbound(quint64 instanceId);
+    void noteV2UiSceneRootVisibility(quint64 instanceId, bool visible);
+    void noteV2UiSceneRootFrameStateDispatch(bool visible);
     void setActivePlaybackProfilingEnabled(bool enabled);
     void notePreviewClockMetrics(
         double audioDeltaSeconds,
@@ -248,7 +256,7 @@ signals:
     void framePresented();
     void introOverlayDataChanged();
     void introOverlayStateChanged();
-    void touchPadAuthoringClicked(const QString& pad, bool backtickSeparator);
+    void touchPadAuthoringClicked(const QString& pad, QChar separator);
 
 private:
     void publishFrameStateSnapshot();
@@ -289,17 +297,27 @@ private:
     // benign moment.
     //
     // `armed_` flips true when assets are ready. COMPLETION IS GATED ON A
-    // CONFIRMED DRAW, not a blind present count: the firework layer bumps
-    // `fireworkLayerDrawSignal_` (render thread) every time it actually emits a
+    // CONFIRMED PRESENT, not a blind present count and not a bare node emission:
+    // the scene root bumps `fireworkLayerDrawSignal_` (render thread) from a direct
+    // frameSwapped hook for each swapped frame that actually contained a firework
     // node, and `done_` only flips once that signal has advanced past the value
     // captured at arm (`fireworkWarmupArmDrawSignal_`) — i.e. once the synthetic
-    // has genuinely compiled the PSO + uploaded the texture. To guarantee the
+    // has genuinely compiled the PSO, uploaded the texture AND reached the screen. To guarantee the
     // synthetic is drawable wherever the playhead happens to be, it is
-    // RE-CENTERED on the live playhead on every playhead change and every marker
-    // refresh while armed-but-not-done (its lifecycle window is fixed relative
-    // to its trigger second, so a seek / negative pre-roll / play-start would
-    // otherwise move the playhead out of the window and the layer would never
-    // draw it — the historical "probabilistic first-firework hitch").
+    // RE-CENTERED on the live playhead whenever the playhead has travelled far
+    // enough to be about to leave the synthetic's lifecycle window, and on every
+    // marker refresh / reset while armed-but-not-done (its lifecycle window is
+    // fixed relative to its trigger second, so a seek / negative pre-roll /
+    // play-start would otherwise move the playhead out of the window and the
+    // layer would never draw it — the historical "probabilistic first-firework
+    // hitch"). The travel test is core/scene/PreviewFireworkWarmupPolicy.h,
+    // calibrated against the layer's real window by
+    // preview_firework_warmup_policy_spec; it replaced an unconditional
+    // per-playhead-change re-centre that cost a full PreviewPreparedSceneCache
+    // rebuild on EVERY preview frame for as long as the warm-up stayed armed.
+    // INVARIANT: while armed-but-not-done, exactly one synthetic is present in
+    // frameState_.noteMarkers and fireworkWarmupCenterSecond_ is its centre —
+    // any site that clears noteMarkers must re-append (setNoteMarkers, reset).
     // `fireworkWarmupArmPresentCount_` + a present-count cap is only a backstop:
     // if the firework never renders at all (layer disabled, non-rendering
     // surface) the warm-up is abandoned so the synthetic and the per-playhead
@@ -309,10 +327,25 @@ private:
     bool fireworkWarmupArmed_ = false;
     bool fireworkWarmupDone_ = false;
     qint64 fireworkWarmupArmPresentCount_ = -1;
-    // Monotonic count of firework-layer node emissions, bumped on the QSG render
-    // thread (notifyFireworkLayerProducedNode) and read on the GUI thread
-    // (handlePresentedFrame / armFireworkPsoWarmupIfReady) — std::atomic crosses
-    // that boundary. `armDrawSignal_` snapshots it at arm time.
+    QElapsedTimer fireworkWarmupElapsed_;
+    // Playhead the synthetic is currently centred on. The re-centre test compares
+    // against this instead of firing on every playhead change — see
+    // core/scene/PreviewFireworkWarmupPolicy.h and
+    // refreshFireworkWarmupForPlayheadChange().
+    double fireworkWarmupCenterSecond_ = 0.0;
+    // Monotonic count of PRESENTED frames that contained a firework-layer node,
+    // bumped on the QSG render thread (notifyFireworkLayerPresentedNode, called from
+    // a direct frameSwapped hook) and read on the GUI thread (handlePresentedFrame /
+    // armFireworkPsoWarmupIfReady) — std::atomic crosses that boundary.
+    // `armDrawSignal_` snapshots it at arm time.
+    //
+    // Counting at NODE-EMISSION time was the earlier, weaker criterion: the node is
+    // emitted during updatePaintNode, one whole render+swap before the pixels exist,
+    // while the GUI-thread completion check runs off a QUEUED frameSwapped hop that
+    // can lag a frame. That combination could retire the warm-up on a frame whose
+    // pipeline build had not actually happened yet — the "warm-up done means the
+    // marker was drawn, not that a render/present completed" gap called out in
+    // docs/audit/PREVIEW_FIRST_PLAY_RENDER_STALL_HANDOFF_AUDIT_ZH.md §6D-2.
     std::atomic<quint64> fireworkLayerDrawSignal_{0};
     quint64 fireworkWarmupArmDrawSignal_ = 0;
     bool requestedShowObjectStatsHud_ = false;
@@ -413,6 +446,13 @@ private:
     double playbackTickIntervalSumMs_ = 0.0;
     double playbackTickIntervalMaxMs_ = 0.0;
     qint64 playbackTickIntervalSampleCount_ = 0;
+    // v2 UI probe state. All access is on the GUI thread. The map is retained
+    // across play transactions so the pause gauge can report current roots;
+    // dispatch counters reset on each explicit Play.
+    QHash<quint64, bool> v2UiSceneRootVisibility_;
+    qint64 v2UiSceneRootDispatchCount_ = 0;
+    qint64 v2UiSceneRootVisibleDispatchCount_ = 0;
+    qint64 v2UiSceneRootHiddenDispatchCount_ = 0;
     // Fixed-gate metrics (doc section 5.1): emitted by the present-driven fixed FPS gate path.
     qint64 fixedGateVisualTickCount_ = 0;
     qint64 fixedGatePresentWithoutTickCount_ = 0;

@@ -7,7 +7,7 @@ Rectangle {
 
     required property var pages
 
-    color: Theme.colors.background.surface
+    color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
 
     PanelHeader {
@@ -15,7 +15,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: qsTr("导出")
+        title: UiText.text("导出")
+        sidebarTitle: true
         showMore: false
     }
 
@@ -37,22 +38,22 @@ Rectangle {
 
             NavRow {
                 width: parent.width
-                text: qsTr("视频导出")
+                text: UiText.text("视频导出")
                 selected: root.pages.activePageId === "export"
                 onClicked: root.pages.openVideoExportPage()
             }
             NavRow {
                 width: parent.width
-                text: qsTr("封面导出")
+                text: UiText.text("封面导出")
                 onClicked: root.pages.openCoverExport()
             }
             NavRow {
                 width: parent.width
-                text: qsTr("打包 ZIP")
+                text: UiText.text("打包 ZIP")
                 onClicked: root.pages.packAsZip()
             }
         }
 
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: AppScrollBar {}
     }
 }

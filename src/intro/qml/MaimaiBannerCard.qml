@@ -32,6 +32,8 @@ Item {
     property url templateSource: Qt.resolvedUrl("../templates/maimai_banner.json")
     property url backgroundImage: ""
     property url jacketImage: ""
+    property bool cacheStaticImages: true
+    property bool cacheDynamicImages: true
     // Fallback art when no 曲绘 is available (see effectiveJacket).
     property url logoImage: "qrc:/icons/app.png"
     property var trackOverrides: ({})
@@ -161,8 +163,8 @@ Item {
             },
             colors: {
                 titleOnDark: "#FFFFFF", artistOnDark: "#E8E4F5",
-                designerOnWhite: "#8091AE", bpmOnWhite: "#4F4F4F",
-                labelOnWhite: "#0E2A60",
+                designerOnWhite: "#365B84", bpmOnWhite: "#4F4F4F",
+                labelOnWhite: "#244A78",
                 lvNumber: "#FFFFFF", lvNumberShadow: "#3A1060",
                 placeholderFill: "#DDD9D2", placeholderEdge: "#DDD9D2"
             },
@@ -467,6 +469,7 @@ Item {
         property string textValue: ""
         property color textColor: "white"
         property string fontFamily: ""
+        property int fontWeight: Font.Normal
         property real basePixel: 20
         property real minPixel: 10
         property int baseAlign: Text.AlignHCenter
@@ -502,6 +505,7 @@ Item {
                 visible: false
                 text: mq.textValue
                 font.family: mq.fontFamily
+                font.weight: mq.fontWeight
                 font.pixelSize: mq.basePixel
                 wrapMode: Text.NoWrap
                 maximumLineCount: 1
@@ -516,6 +520,7 @@ Item {
                 text: mq.textValue
                 color: mq.textColor
                 font.family: mq.fontFamily
+                font.weight: mq.fontWeight
                 font.pixelSize: mq.basePixel
                 // Shrink mode goes much lower than the intro min so the whole string fits.
                 minimumPixelSize: mq.stillEllipsis ? mq.basePixel : Math.max(6, Math.round(mq.basePixel * 0.25))
@@ -536,6 +541,7 @@ Item {
                 text: mq.textValue
                 color: mq.textColor
                 font.family: mq.fontFamily
+                font.weight: mq.fontWeight
                 font.pixelSize: mq.basePixel
                 wrapMode: Text.NoWrap
                 maximumLineCount: 1
@@ -557,6 +563,7 @@ Item {
     // on it stays hidden and feeds the MultiEffect below as the blur source.
     Image {
         id: backdropSource
+        cache: root.cacheDynamicImages
         anchors.fill: parent
         source: root.effectiveBackdrop
         fillMode: Image.PreserveAspectCrop
@@ -638,6 +645,7 @@ Item {
             anchors.fill: parent
             opacity: root.stageOpacity("frame")
             source: root.assetUrl(root.template.assets.frame[root.trackValue("difficulty")])
+            cache: root.cacheStaticImages
             smooth: true
             mipmap: true
         }
@@ -680,6 +688,7 @@ Item {
             Image {
                 anchors.fill: parent
                 source: root.effectiveJacket
+                cache: root.cacheDynamicImages
                 fillMode: Image.PreserveAspectCrop
                 visible: root.effectiveJacket.toString().length > 0
                 smooth: true
@@ -699,6 +708,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.tab[root.trackValue("difficulty")])
+            cache: root.cacheStaticImages
             // The prefab tab only ships a LEFT tall shoulder (the でらっくす seat).
             // For Standard (SD) charts mirror it so the shoulder moves to the
             // right and seats the スタンダード plate symmetrically.
@@ -714,6 +724,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.plateDeluxe)
+            cache: root.cacheStaticImages
             visible: root.trackValue("mode") !== "Standard"
             smooth: true
             mipmap: true
@@ -723,6 +734,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.plateStandard)
+            cache: root.cacheStaticImages
             visible: root.trackValue("mode") === "Standard"
             smooth: true
             mipmap: true
@@ -753,6 +765,7 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("level")
             source: root.assetUrl(root.template.assets.lvPill[root.trackValue("difficulty")])
+            cache: root.cacheStaticImages
             smooth: true
             mipmap: true
         }
@@ -802,6 +815,7 @@ Item {
 
                 Image {
                     id: lvLabelSprite
+                    cache: root.cacheStaticImages
                     height: 60
                     width: root.lvGlyphWidth(14)
                     source: root.lvAtlasUrl()
@@ -817,6 +831,7 @@ Item {
                     Repeater {
                         model: root.lvDigitSequence(root.trackValue("level"))
                         Image {
+                            cache: root.cacheStaticImages
                             height: 60
                             width: root.lvGlyphWidth(modelData)
                             source: root.lvAtlasUrl()
@@ -967,8 +982,9 @@ Item {
             text: "NOTES DESIGNER"
             color: root.template.colors.labelOnWhite
             font.family: displayFont.name
-            font.pixelSize: Math.round(b.h * 0.55)
-            font.letterSpacing: 0.5
+            font.weight: Font.Black
+            font.pixelSize: Math.round(b.h * 0.62)
+            font.letterSpacing: 0.35
             horizontalAlignment: Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
         }
@@ -985,10 +1001,11 @@ Item {
             }
             textColor: root.template.colors.designerOnWhite
             fontFamily: bodyFont.name
-            basePixel: Math.round(b.h * 0.96)
+            fontWeight: Font.Bold
+            basePixel: Math.round(b.h * 1.18)
             minPixel: Math.round(b.h * 0.5)
             baseAlign: Text.AlignLeft
-            horizontalPadding: 4
+            horizontalPadding: 0
         }
 
         // 9) BPM — prefab TMP_BPM uses MaruGothic DB → body font.
@@ -1002,7 +1019,8 @@ Item {
             textValue: "BPM " + root.oneLine(root.trackValue("bpm"))
             textColor: root.template.colors.bpmOnWhite
             fontFamily: bodyFont.name
-            basePixel: Math.round(b.h * 0.92)
+            fontWeight: Font.Bold
+            basePixel: Math.round(b.h * 1.10)
             minPixel: Math.round(b.h * 0.5)
             baseAlign: Text.AlignLeft
         }

@@ -1,3 +1,9 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](CURRENT_RENDER_EXPORT_CONTRACT_ZH.md) 和 [文档索引](../../INDEX.md)。
+
 ﻿# 预览运行时与导出架构
 
 ## 范围

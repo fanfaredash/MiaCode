@@ -1,0 +1,317 @@
+// Contract regression for the Widgets-free UI request boundary.
+//
+// This target deliberately links Qt6::Core only.  If any file it pulls in
+// reaches for QFileDialog / QMessageBox again, the spec fails to build, which
+// is a stronger guarantee than scanning the source for forbidden strings.
+
+#include "app/v2/UiRequestService.h"
+
+#include <QCoreApplication>
+#include <QSignalSpy>
+#include <QTextStream>
+#include <QUrl>
+#include <QVariantMap>
+
+namespace {
+
+bool require(bool condition, const QString& message, QTextStream& err)
+{
+    if (!condition) {
+        err << "FAIL: " << message << Qt::endl;
+    }
+    return condition;
+}
+
+miacode::v2::FileRequest sampleRequest()
+{
+    miacode::v2::FileRequest request;
+    request.title = QStringLiteral("Choose output");
+    request.startPath = QStringLiteral("/tmp/out.mp4");
+    request.nameFilters = QStringList{QStringLiteral("MP4 (*.mp4)")};
+    request.saveMode = true;
+    return request;
+}
+
+bool verifyFileRequestRoundTrip(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy requested(&service, &miacode::v2::UiRequestService::fileRequested);
+
+    QStringList resolved;
+    const QString id = service.requestFile(sampleRequest(), [&resolved](const QString& path) {
+        resolved.append(path);
+    });
+
+    bool ok = require(!id.isEmpty() && requested.count() == 1
+                          && service.pendingFileRequestCount() == 1,
+                      QStringLiteral("requestFile emits exactly one request and keeps it pending"),
+                      err);
+    if (!ok) {
+        return false;
+    }
+
+    const QVariantMap payload = requested.at(0).at(1).toMap();
+    ok &= require(requested.at(0).at(0).toString() == id
+                      && payload.value(QStringLiteral("title")).toString()
+                          == QStringLiteral("Choose output")
+                      && payload.value(QStringLiteral("startPath")).toString()
+                          == QStringLiteral("/tmp/out.mp4")
+                      && payload.value(QStringLiteral("nameFilters")).toStringList()
+                          == QStringList{QStringLiteral("MP4 (*.mp4)")}
+                      && payload.value(QStringLiteral("saveMode")).toBool()
+                      && !payload.value(QStringLiteral("selectFolder")).toBool(),
+                  QStringLiteral("the emitted payload carries every field QML needs to build the dialog"),
+                  err);
+
+    service.submitFileResult(id, QUrl::fromLocalFile(QStringLiteral("/tmp/picked.mp4")));
+    ok &= require(resolved == QStringList{QStringLiteral("/tmp/picked.mp4")}
+                      && service.pendingFileRequestCount() == 0,
+                  QStringLiteral("submitting a result delivers the local path once and clears the request"),
+                  err);
+
+    service.submitFileResult(id, QUrl::fromLocalFile(QStringLiteral("/tmp/again.mp4")));
+    service.cancelFileRequest(id);
+    ok &= require(resolved.size() == 1,
+                  QStringLiteral("a resolved request never fires again for a repeated submit or cancel"),
+                  err);
+    return ok;
+}
+
+bool verifyCancellationAndUnknownIds(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QStringList resolved;
+    const QString id = service.requestFile(sampleRequest(), [&resolved](const QString& path) {
+        resolved.append(path);
+    });
+
+    service.cancelFileRequest(QStringLiteral("no-such-request"));
+    service.submitFileResult(QStringLiteral("no-such-request"),
+                            QUrl::fromLocalFile(QStringLiteral("/tmp/x.mp4")));
+    bool ok = require(resolved.isEmpty() && service.pendingFileRequestCount() == 1,
+                      QStringLiteral("unknown request ids are ignored without touching pending work"),
+                      err);
+
+    service.cancelFileRequest(id);
+    ok &= require(resolved == QStringList{QString()} && service.pendingFileRequestCount() == 0,
+                  QStringLiteral("cancelling delivers an empty path so callers can treat it as a value"),
+                  err);
+
+    miacode::v2::UiRequestService other;
+    QString firstPath;
+    QString secondPath;
+    const QString firstId = other.requestFile(sampleRequest(),
+                                              [&firstPath](const QString& p) { firstPath = p; });
+    miacode::v2::FileRequest folderRequest;
+    folderRequest.title = QStringLiteral("Choose folder");
+    folderRequest.selectFolder = true;
+    const QString secondId = other.requestFile(folderRequest,
+                                               [&secondPath](const QString& p) { secondPath = p; });
+    ok &= require(firstId != secondId && other.pendingFileRequestCount() == 2,
+                  QStringLiteral("concurrent requests get distinct ids"), err);
+
+    other.submitFileResult(secondId, QUrl::fromLocalFile(QStringLiteral("/tmp/folder")));
+    ok &= require(secondPath == QStringLiteral("/tmp/folder") && firstPath.isEmpty()
+                      && other.pendingFileRequestCount() == 1,
+                  QStringLiteral("resolving one request leaves the other pending and untouched"),
+                  err);
+    return ok;
+}
+
+bool verifyNotices(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy notices(&service, &miacode::v2::UiRequestService::noticeRequested);
+
+    service.postNotice(miacode::v2::NoticeSeverity::Error,
+                       QStringLiteral("Export"),
+                       QStringLiteral("Launch failed"),
+                       QStringLiteral("ffmpeg missing"));
+    service.postNotice(miacode::v2::NoticeSeverity::Information, QStringLiteral("Export"),
+                       QStringLiteral("Done"));
+    service.postNotice(miacode::v2::NoticeSeverity::Warning, QStringLiteral("Export"),
+                       QStringLiteral("Partly failed"));
+
+    bool ok = require(notices.count() == 3, QStringLiteral("every notice is published"), err);
+    if (!ok) {
+        return false;
+    }
+    const QVariantMap error = notices.at(0).at(1).toMap();
+    ok &= require(error.value(QStringLiteral("severity")).toString() == QStringLiteral("error")
+                      && error.value(QStringLiteral("title")).toString() == QStringLiteral("Export")
+                      && error.value(QStringLiteral("text")).toString()
+                          == QStringLiteral("Launch failed")
+                      && error.value(QStringLiteral("details")).toString()
+                          == QStringLiteral("ffmpeg missing"),
+                  QStringLiteral("an error notice carries severity, title, text and details"), err);
+    ok &= require(notices.at(1).at(1).toMap().value(QStringLiteral("severity")).toString()
+                      == QStringLiteral("information")
+                      && notices.at(2).at(1).toMap().value(QStringLiteral("severity")).toString()
+                          == QStringLiteral("warning"),
+                  QStringLiteral("severity maps to stable lowercase identifiers for QML"), err);
+    ok &= require(notices.at(1).at(1).toMap().value(QStringLiteral("details")).toString().isEmpty(),
+                  QStringLiteral("an omitted detail block stays empty rather than absent"), err);
+    ok &= require(notices.at(0).at(0).toString().isEmpty()
+                      && notices.at(0).at(1).toMap().value(QStringLiteral("actionLabel"))
+                          .toString().isEmpty(),
+                  QStringLiteral("a fire-and-forget notice carries no request id and no action"), err);
+    return ok;
+}
+
+bool verifyActionableNotices(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy notices(&service, &miacode::v2::UiRequestService::noticeRequested);
+
+    QList<bool> outcomes;
+    const QString id = service.requestNoticeAction(
+        miacode::v2::NoticeSeverity::Information,
+        QStringLiteral("Pack as ZIP"),
+        QStringLiteral("Exported 12 files"),
+        QStringLiteral("maidata.txt"),
+        QStringLiteral("Open folder"),
+        [&outcomes](bool actionChosen) { outcomes.append(actionChosen); });
+
+    bool ok = require(!id.isEmpty() && notices.count() == 1
+                          && service.pendingNoticeCount() == 1,
+                      QStringLiteral("an actionable notice stays pending until the viewer answers"),
+                      err);
+    if (!ok) {
+        return false;
+    }
+    ok &= require(notices.at(0).at(0).toString() == id
+                      && notices.at(0).at(1).toMap().value(QStringLiteral("actionLabel")).toString()
+                          == QStringLiteral("Open folder"),
+                  QStringLiteral("the payload carries the id and the extra action's label"), err);
+
+    service.submitNoticeResult(id, true);
+    ok &= require(outcomes == QList<bool>{true} && service.pendingNoticeCount() == 0,
+                  QStringLiteral("choosing the action resolves the notice once"), err);
+
+    service.submitNoticeResult(id, false);
+    ok &= require(outcomes.size() == 1,
+                  QStringLiteral("a resolved notice never fires again"), err);
+
+    QList<bool> dismissed;
+    const QString second = service.requestNoticeAction(
+        miacode::v2::NoticeSeverity::Error, QStringLiteral("t"), QStringLiteral("x"),
+        QString(), QStringLiteral("Retry"),
+        [&dismissed](bool actionChosen) { dismissed.append(actionChosen); });
+    service.submitNoticeResult(second, false);
+    ok &= require(dismissed == QList<bool>{false},
+                  QStringLiteral("dismissing without the action still resolves, with false"), err);
+
+    service.submitNoticeResult(QStringLiteral("notice-does-not-exist"), true);
+    ok &= require(dismissed.size() == 1,
+                  QStringLiteral("an unknown notice id is ignored"), err);
+    return ok;
+}
+
+bool verifyConfirmations(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy notices(&service, &miacode::v2::UiRequestService::noticeRequested);
+
+    QList<bool> answers;
+    const QString id = service.requestConfirmation(
+        QStringLiteral("Sample rate"),
+        QStringLiteral("Convert track.mp3 to 44100 Hz?"),
+        QStringLiteral("Convert"),
+        [&answers](bool accepted) { answers.append(accepted); });
+
+    bool ok = require(notices.count() == 1 && service.pendingNoticeCount() == 1,
+                      QStringLiteral("a confirmation is published and stays pending"), err);
+    if (!ok) {
+        return false;
+    }
+    const QVariantMap payload = notices.at(0).at(1).toMap();
+    ok &= require(payload.value(QStringLiteral("confirmation")).toBool()
+                      && payload.value(QStringLiteral("actionLabel")).toString()
+                          == QStringLiteral("Convert"),
+                  QStringLiteral("the shell can tell a question from a plain message"), err);
+
+    service.submitNoticeResult(id, true);
+    ok &= require(answers == QList<bool>{true}, QStringLiteral("accepting answers true"), err);
+
+    // The one that matters: dismissing must never read as consent.
+    QList<bool> dismissedAnswers;
+    const QString second = service.requestConfirmation(
+        QStringLiteral("t"), QStringLiteral("x"), QStringLiteral("Go"),
+        [&dismissedAnswers](bool accepted) { dismissedAnswers.append(accepted); });
+    service.submitNoticeResult(second, false);
+    ok &= require(dismissedAnswers == QList<bool>{false},
+                  QStringLiteral("declining or dismissing a confirmation answers false"), err);
+
+    ok &= require(!notices.at(0).at(0).toString().isEmpty()
+                      && notices.at(0).at(0).toString() != QStringLiteral("notice-1"),
+                  QStringLiteral("confirmations get their own request ids"), err);
+    return ok;
+}
+
+bool verifyChoices(QTextStream& err)
+{
+    miacode::v2::UiRequestService service;
+    QSignalSpy requests(&service, &miacode::v2::UiRequestService::choiceRequested);
+
+    const QVariantList choices{
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("save")},
+                    {QStringLiteral("label"), QStringLiteral("Save")},
+                    {QStringLiteral("role"), QStringLiteral("accept")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("discard")},
+                    {QStringLiteral("label"), QStringLiteral("Discard")},
+                    {QStringLiteral("role"), QStringLiteral("destructive")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("cancel")},
+                    {QStringLiteral("label"), QStringLiteral("Cancel")},
+                    {QStringLiteral("role"), QStringLiteral("reject")}},
+    };
+
+    QStringList answers;
+    const QString id = service.requestChoice(
+        QStringLiteral("Unsaved changes"), QStringLiteral("The chart has unsaved changes."),
+        choices, QStringLiteral("cancel"),
+        [&answers](const QString& choiceId) { answers.append(choiceId); });
+
+    bool ok = require(requests.count() == 1 && service.pendingChoiceCount() == 1,
+                      QStringLiteral("a choice is published and stays pending"), err);
+    if (!ok) {
+        return false;
+    }
+    ok &= require(requests.at(0).at(1).toMap().value(QStringLiteral("choices")).toList().size() == 3,
+                  QStringLiteral("the shell is handed every answer to draw"), err);
+
+    service.submitChoiceResult(id, QStringLiteral("discard"));
+    ok &= require(answers == QStringList{QStringLiteral("discard")}
+                      && service.pendingChoiceCount() == 0,
+                  QStringLiteral("the chosen id reaches the caller once"), err);
+
+    service.submitChoiceResult(id, QStringLiteral("save"));
+    ok &= require(answers.size() == 1, QStringLiteral("a second answer cannot re-run it"), err);
+
+    // The one that matters for a three-way question: a shell that answers with
+    // something the request never offered must still land on a listed decision,
+    // and that decision is the dismissal — never Save, never Discard.
+    QStringList strayAnswers;
+    const QString second = service.requestChoice(
+        QStringLiteral("t"), QStringLiteral("x"), choices, QStringLiteral("cancel"),
+        [&strayAnswers](const QString& choiceId) { strayAnswers.append(choiceId); });
+    service.submitChoiceResult(second, QStringLiteral("something-else"));
+    ok &= require(strayAnswers == QStringList{QStringLiteral("cancel")},
+                  QStringLiteral("an unoffered answer resolves as the dismissal"), err);
+    return ok;
+}
+
+}  // namespace
+
+int main(int argc, char** argv)
+{
+    QCoreApplication app(argc, argv);
+    QTextStream err(stderr);
+    const bool ok = verifyFileRequestRoundTrip(err) && verifyCancellationAndUnknownIds(err)
+        && verifyNotices(err) && verifyActionableNotices(err) && verifyConfirmations(err)
+        && verifyChoices(err);
+    if (ok) {
+        QTextStream out(stdout);
+        out << "ui_request_service_spec ok" << Qt::endl;
+    }
+    return ok ? 0 : 1;
+}

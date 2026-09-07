@@ -7,11 +7,13 @@ Rectangle {
     id: root
 
     property string activeView: "chart"
+    property bool normalizationEnabled: true
     signal viewRequested(string viewId)
+    signal toolRequested(string toolId)
     signal settingsRequested()
 
-    implicitWidth: 48
-    color: Theme.colors.background.editor
+    implicitWidth: Theme.activityButtonSize
+    color: Theme.surfaceColor(Theme.colors.background.activityBar)
 
     Column {
         anchors.left: parent.left
@@ -20,21 +22,46 @@ Rectangle {
 
         ActivityButton {
             iconSource: Qt.resolvedUrl("icons/chart.svg")
-            tooltip: qsTr("谱面")
+            tooltip: UiText.text("谱面")
             selected: root.activeView === "chart"
             onClicked: root.viewRequested("chart")
         }
         ActivityButton {
             iconSource: Qt.resolvedUrl("icons/export.svg")
-            tooltip: qsTr("导出")
+            tooltip: UiText.text("导出")
             selected: root.activeView === "export"
             onClicked: root.viewRequested("export")
         }
         ActivityButton {
+            id: toolsButton
             iconSource: Qt.resolvedUrl("icons/tools.svg")
-            tooltip: qsTr("工具")
-            selected: root.activeView === "tools"
-            onClicked: root.viewRequested("tools")
+            tooltip: UiText.text("工具")
+            selected: toolsPopup.active
+            onClicked: {
+                if (toolsPopup.active)
+                    toolsPopup.close()
+                else
+                    toolsPopup.popup(toolsButton, toolsButton.width, 0)
+            }
+        }
+    }
+
+    AppMenu {
+        id: toolsPopup
+        hugContent: true
+
+        AppMenuAction {
+            text: UiText.text("延迟校准")
+            onTriggered: root.toolRequested("latency")
+        }
+        AppMenuAction {
+            text: UiText.text("media_tools.audio_video_processing")
+            onTriggered: root.toolRequested("media")
+        }
+        AppMenuAction {
+            text: UiText.text("整谱规范化")
+            enabled: root.normalizationEnabled
+            onTriggered: root.toolRequested("normalize")
         }
     }
 
@@ -43,7 +70,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         iconSource: Qt.resolvedUrl("icons/settings.svg")
-        tooltip: qsTr("视图设置")
+        tooltip: UiText.text("视图设置")
         onClicked: root.settingsRequested()
     }
 
@@ -54,35 +81,37 @@ Rectangle {
         required property string tooltip
         property bool selected: false
 
-        width: 48
-        height: 48
+        width: Theme.activityButtonSize
+        height: Theme.activityButtonSize
         hoverEnabled: true
 
         contentItem: ControlsImpl.IconImage {
             anchors.centerIn: parent
-            width: 24
-            height: 24
+            width: Theme.activityIconSize
+            height: Theme.activityIconSize
             source: button.iconSource
-            sourceSize: Qt.size(24, 24)
-            color: button.selected || button.hovered
-                   ? Theme.colors.text.active
-                   : Theme.colors.text.secondary
+            sourceSize: Qt.size(Theme.activityIconSize, Theme.activityIconSize)
+            color: button.selected ? Theme.colors.activityIcon.active
+                 : button.hovered ? Theme.colors.activityIcon.hover
+                 : Theme.colors.activityIcon.idle
         }
 
         background: Item {
             HoverChrome {
                 anchors.fill: parent
-                margins: 6
+                contentWidth: Theme.activityIconSize
+                contentHeight: Theme.activityIconSize
+                stateColors: Theme.colors.activityState
                 hovered: button.hovered
                 pressed: button.down
-                tone: "icon"
+                selected: button.selected
             }
 
             Rectangle {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 width: 2
-                height: 24
+                height: Theme.activityIconSize
                 radius: 1
                 visible: button.selected
                 color: Theme.colors.accent.primary
@@ -95,4 +124,3 @@ Rectangle {
         }
     }
 }
-

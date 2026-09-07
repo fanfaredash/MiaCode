@@ -13,6 +13,7 @@ namespace {
 
 struct TimelineQuickWaveformRootNode : public QSGNode {
     quint64 revision = 0;
+    quint64 layoutRevision = 0;
     quint64 appearanceRevision = 0;
 };
 
@@ -124,7 +125,9 @@ QSGNode* TimelineQuickWaveformLayer::updateNode(
         matrix.translate(-static_cast<float>(snappedScroll), 0.0f);
         transformRoot->setMatrix(matrix);
     }
-    if (root->revision == state.waveformRevision && root->appearanceRevision == state.appearanceRevision) {
+    if (root->revision == state.waveformRevision
+        && root->layoutRevision == state.layoutRevision
+        && root->appearanceRevision == state.appearanceRevision) {
         return root;
     }
     clearChildren(contentRoot);
@@ -140,6 +143,7 @@ QSGNode* TimelineQuickWaveformLayer::updateNode(
         waveformBatch.flush();
     }
     root->revision = state.waveformRevision;
+    root->layoutRevision = state.layoutRevision;
     root->appearanceRevision = state.appearanceRevision;
     return root;
 }

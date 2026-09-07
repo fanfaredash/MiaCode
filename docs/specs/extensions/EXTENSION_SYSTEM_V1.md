@@ -1,4 +1,16 @@
+---
+lifecycle: archive-legacy
+---
+
+> 历史资料：保留当时的设计与实施背景，不代表当前产品路径。当前入口见 [架构与契约](../ui/CURRENT_ARCHITECTURE_ZH.md) 和 [文档索引](../../INDEX.md)。
+
 # MiaCode Extension System v1
+
+> **Archive status (2026-09-01):** The extension host, embedded runtime, Open Bridge, watcher,
+> preferences page, event/gesture integration, and bundled deployment were removed from the
+> product runtime. This document is retained as the v1 compatibility/archive contract for the
+> manifest, permissions, SDK, examples, and offline validation tools; it does not describe an
+> extension system currently shipped by the application.
 
 MiaCode v1 extensions are local packages loaded exclusively from the install-root `extensions` directory. v1 is a small closed loop, not a broad platform catalog: public APIs must be real, callable, and documented.
 

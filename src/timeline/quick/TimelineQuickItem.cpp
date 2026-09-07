@@ -13,7 +13,6 @@
 #include <QSGNode>
 #include <QSGRendererInterface>
 #include <QStringList>
-#include <QToolTip>
 #include <QMetaObject>
 #include <QtMath>
 
@@ -1069,6 +1068,21 @@ int TimelineQuickItem::timelineTop() const
     return cachedTimelineTop_;
 }
 
+int TimelineQuickItem::minimumViewportHeight() const
+{
+    return miacode::timeline::TimelineSceneStateBuilder::minimumViewportHeight();
+}
+
+QString TimelineQuickItem::hoverTooltipText() const
+{
+    return hoverTooltipText_;
+}
+
+QPointF TimelineQuickItem::hoverTooltipPosition() const
+{
+    return hoverTooltipPosition_;
+}
+
 bool TimelineQuickItem::isReady() const
 {
     return ready_;
@@ -1106,48 +1120,6 @@ void TimelineQuickItem::setZoomScale(qreal scale)
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
 }
 
-void TimelineQuickItem::setZoomControlPressedPart(int part)
-{
-    const int normalized = qBound(-2, part, 2);
-    if (zoomControlPressedPart_ == normalized) {
-        return;
-    }
-    zoomControlPressedPart_ = normalized;
-    ++appearanceRevision_;
-    update();
-}
-
-void TimelineQuickItem::setZoomControlHoveredPart(int part)
-{
-    const int normalized = qBound(-2, part, 2);
-    if (zoomControlHoveredPart_ == normalized) {
-        return;
-    }
-    zoomControlHoveredPart_ = normalized;
-    ++appearanceRevision_;
-    update();
-}
-
-void TimelineQuickItem::setSettingsControlHovered(bool hovered)
-{
-    if (settingsControlHovered_ == hovered) {
-        return;
-    }
-    settingsControlHovered_ = hovered;
-    ++appearanceRevision_;
-    update();
-}
-
-void TimelineQuickItem::setSettingsControlPressed(bool pressed)
-{
-    if (settingsControlPressed_ == pressed) {
-        return;
-    }
-    settingsControlPressed_ = pressed;
-    ++appearanceRevision_;
-    update();
-}
-
 void TimelineQuickItem::refreshTheme()
 {
     cachedThemeSignature_ = 0;
@@ -1164,17 +1136,7 @@ void TimelineQuickItem::syncSourceState()
     const bool nextFollow = stateBridge_ != nullptr && stateBridge_->followPreviewEnabled();
     const bool nextViewportLock = stateBridge_ != nullptr && stateBridge_->viewportLockEnabled();
     const bool nextProgressFollow = stateBridge_ == nullptr || stateBridge_->followProgressEnabled();
-    const int nextTimelineTop = static_cast<int>(currentSceneState().timelineTop);
-    // Header-control visuals (zoom% text + follow-check tick + colour)
-    // are emitted in TimelineQuickHeaderLayer's staticRoot rebuild,
-    // which is gated on `appearanceChanged || gridRevision changed`.
-    // Toggling followPreview / zoom triggers a scene-state rebuild
-    // (cachedSceneBuildFollowPreviewEnabled_ check at the rebuildNeeded
-    // gate) but DOESN'T bump appearanceRevision_, so the QSG layer
-    // would keep rendering the previous control state until some
-    // unrelated theme/DPR/grid event happened to bump it. Bump it
-    // explicitly here so the visual reflects the new state on the
-    // next paint pass.
+    const int nextTimelineTop = stateBridge_ != nullptr ? stateBridge_->timelineTop() : 0;
     bool appearanceBumpNeeded = false;
     if (!qFuzzyCompare(cachedZoomScale_ + 1.0, nextZoom + 1.0)) {
         cachedZoomScale_ = nextZoom;
@@ -1258,17 +1220,12 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         || cachedSceneBuildHeaderMarkerLeftLimit_ != headerMarkerLeftLimit_
         || cachedSceneBuildHeaderMarkerRightLimit_ != headerMarkerRightLimit_
         || cachedSceneBuildAppearanceRevision_ != appearanceRevision_
+        || cachedSceneBuildLayoutRevision_ != stateBridge_->layoutRevision()
         || cachedSceneBuildGridRevision_ != stateBridge_->gridRevision()
         || cachedSceneBuildWaveformRevision_ != stateBridge_->waveformRevision()
         || cachedSceneBuildHeaderRevision_ != stateBridge_->headerRevision()
         || cachedSceneBuildNotesRevision_ != stateBridge_->notesRevision()
         || cachedSceneBuildOverlayRevision_ != stateBridge_->overlayRevision()
-        // Phase 9d-native polish — header-control state. Without these
-        // the native zoom-button text + follow-check tick only update
-        // when some other revision happens to bump (e.g., a playback
-        // tick), making the click feel unresponsive.
-        || cachedSceneBuildFollowPreviewEnabled_ != stateBridge_->followPreviewEnabled()
-        || cachedSceneBuildFollowProgressEnabled_ != stateBridge_->followProgressEnabled()
         || !qFuzzyCompare(cachedSceneBuildZoomScale_ + 1.0,
                           stateBridge_->zoomScale() + 1.0)
         || !qFuzzyCompare(cachedSceneBuildContentScale_ + 1.0,
@@ -1299,6 +1256,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         headerMarkerRightLimit_ > 0 ? headerMarkerRightLimit_ : request.viewportSize.width();
     request.zoomScale = stateBridge_->zoomScale();
     request.contentScale = stateBridge_->contentScale();
+    request.fitViewportHeight = true;
     request.waveformBrightness = stateBridge_->waveformBrightness();
     request.measureLineBrightness = stateBridge_->measureLineBrightness();
     request.waveformPhaseCompensationSeconds = stateBridge_->waveformPhaseCompensationSeconds();
@@ -1309,15 +1267,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.showSlideTracks = stateBridge_->showSlideTracks();
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
-    // Phase 9d-native — header-control state for the zoom button,
-    // emitted by the builder and drawn by TimelineQuickHeaderLayer.
-    request.zoomControlPressedPart = zoomControlPressedPart_;
-    request.zoomControlHoveredPart = zoomControlHoveredPart_;
-    request.settingsControlHovered = settingsControlHovered_;
-    request.settingsControlPressed = settingsControlPressed_;
-    request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
-    request.followProgressEnabled = stateBridge_->followProgressEnabled();
     request.appearanceRevision = appearanceRevision_;
+    request.layoutRevision = stateBridge_->layoutRevision();
     request.gridRevision = stateBridge_->gridRevision();
     request.waveformRevision = stateBridge_->waveformRevision();
     request.headerRevision = stateBridge_->headerRevision();
@@ -1334,15 +1285,12 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildHeaderMarkerLeftLimit_ = headerMarkerLeftLimit_;
         cachedSceneBuildHeaderMarkerRightLimit_ = headerMarkerRightLimit_;
         cachedSceneBuildAppearanceRevision_ = appearanceRevision_;
+        cachedSceneBuildLayoutRevision_ = stateBridge_->layoutRevision();
         cachedSceneBuildGridRevision_ = stateBridge_->gridRevision();
         cachedSceneBuildWaveformRevision_ = stateBridge_->waveformRevision();
         cachedSceneBuildHeaderRevision_ = stateBridge_->headerRevision();
         cachedSceneBuildNotesRevision_ = stateBridge_->notesRevision();
         cachedSceneBuildOverlayRevision_ = stateBridge_->overlayRevision();
-        // Phase 9d-native polish — record header-control state so the
-        // next call's rebuildNeeded check can detect a change.
-        cachedSceneBuildFollowPreviewEnabled_ = stateBridge_->followPreviewEnabled();
-        cachedSceneBuildFollowProgressEnabled_ = stateBridge_->followProgressEnabled();
         cachedSceneBuildZoomScale_ = stateBridge_->zoomScale();
         cachedSceneBuildContentScale_ = stateBridge_->contentScale();
     }
@@ -1558,7 +1506,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         return gridLayer_->updateNode(oldChild, state, window(), textures_.get());
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
-        return headerLayer_->updateNode(oldChild, state, window(), textures_.get());
+        return headerLayer_->updateNode(oldChild, state, window());
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return gridLinesLayer_->updateNode(oldChild, state, window());
@@ -1682,10 +1630,22 @@ void TimelineQuickItem::geometryChange(const QRectF& newGeometry, const QRectF& 
 {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() != oldGeometry.size()) {
-        if (stateBridge_ != nullptr) {
-            stateBridge_->setQuickViewportSize(newGeometry.size().toSize());
-        }
-        syncSourceState();
+        pendingViewportSize_ = QSize(
+            qMax(1, qRound(newGeometry.width())),
+            qMax(1, qRound(newGeometry.height())));
+        viewportUpdatePending_ = true;
+        polish();
+    }
+}
+
+void TimelineQuickItem::updatePolish()
+{
+    if (!viewportUpdatePending_) {
+        return;
+    }
+    viewportUpdatePending_ = false;
+    if (stateBridge_ != nullptr) {
+        stateBridge_->setQuickViewportSize(pendingViewportSize_);
     }
 }
 
@@ -1754,7 +1714,12 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     const miacode::timeline::TimelineSceneState state = currentSceneState();
     const double clickSecond = clampSceneSecond(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, event->position().x()));
-    const QRectF headerRect(state.timelineLeft, 0.0, width() - state.timelineLeft, 28.0);
+    // The number strip is the timeline's navigation area.
+    const QRectF headerRect(
+        state.timelineLeft,
+        0.0,
+        width() - state.timelineLeft,
+        static_cast<qreal>(state.timelineTop));
     const QRectF bodyRect(state.timelineLeft, state.timelineTop, width() - state.timelineLeft, state.timelineHeight);
     if (headerRect.contains(event->position())) {
         emit timelineUserInteractionStarted();
@@ -1832,18 +1797,24 @@ void TimelineQuickItem::hoverMoveEvent(QHoverEvent* event)
             break;
         }
     }
-    if (tooltipText.isEmpty()) {
-        QToolTip::hideText();
-    } else {
-        QToolTip::showText(window()->mapToGlobal(event->scenePosition().toPoint()), tooltipText);
-    }
+    updateHoverTooltip(tooltipText, event->position());
     QQuickItem::hoverMoveEvent(event);
 }
 
 void TimelineQuickItem::hoverLeaveEvent(QHoverEvent* event)
 {
-    QToolTip::hideText();
+    updateHoverTooltip(QString(), hoverTooltipPosition_);
     QQuickItem::hoverLeaveEvent(event);
+}
+
+void TimelineQuickItem::updateHoverTooltip(const QString& text, const QPointF& position)
+{
+    if (hoverTooltipText_ == text && hoverTooltipPosition_ == position) {
+        return;
+    }
+    hoverTooltipText_ = text;
+    hoverTooltipPosition_ = position;
+    emit hoverTooltipChanged();
 }
 
 void TimelineQuickItem::mouseReleaseEvent(QMouseEvent* event)
@@ -1931,14 +1902,6 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
 void TimelineQuickItem::keyPressEvent(QKeyEvent* event)
 {
     if (event != nullptr
-        && !event->isAutoRepeat()
-        && event->modifiers() == Qt::NoModifier
-        && event->key() == Qt::Key_Space) {
-        emit previewPlayPauseRequested();
-        event->accept();
-        return;
-    }
-    if (event != nullptr
         && stateBridge_ != nullptr
         && event->modifiers() == Qt::NoModifier
         && (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right)) {
@@ -1958,12 +1921,6 @@ void TimelineQuickItem::keyPressEvent(QKeyEvent* event)
 
 void TimelineQuickItem::keyReleaseEvent(QKeyEvent* event)
 {
-    if (event != nullptr
-        && event->modifiers() == Qt::NoModifier
-        && event->key() == Qt::Key_Space) {
-        event->accept();
-        return;
-    }
     if (event != nullptr
         && event->modifiers() == Qt::NoModifier
         && !event->isAutoRepeat()

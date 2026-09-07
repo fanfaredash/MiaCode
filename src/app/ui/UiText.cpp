@@ -8,12 +8,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QPair>
 #include <QSaveFile>
-#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
-
-#include "extensions/ExtensionManifest.h"
 
 namespace {
 
@@ -24,17 +22,8 @@ constexpr auto kPreferencesSchema = "miacode_preferences_v4";
 constexpr auto kUiSectionKey = "ui";
 constexpr auto kAppSectionKey = "app";
 constexpr auto kPreviewSectionKey = "preview";
-constexpr auto kExtensionsSectionKey = "extensions";
-constexpr auto kDisabledExtensionsKey = "disabled";
 constexpr auto kLanguageKey = "language";
 constexpr auto kThemeKey = "theme";
-
-struct ExternalLanguagePack {
-    QString id;
-    QString label;
-    QString ownerExtensionId;
-    QHash<QString, QString> translations;
-};
 
 QString preferencesPath()
 {
@@ -96,7 +85,7 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     QJsonObject normalized = raw;
     normalized.remove(kUiSectionKey);
     normalized.remove(kAppSectionKey);
-    normalized.remove(kExtensionsSectionKey);
+    normalized.remove(QStringLiteral("extensions"));
     normalized.insert("schema", kPreferencesSchema);
 
     QJsonObject ui = raw.value(kUiSectionKey).toObject();
@@ -247,10 +236,6 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     }
     normalized.insert(kAppSectionKey, app);
 
-    const QJsonObject extensions = raw.value(kExtensionsSectionKey).toObject();
-    if (!extensions.isEmpty()) {
-        normalized.insert(kExtensionsSectionKey, extensions);
-    }
     static const char* const legacyKeys[] = {
         "ui_language", "ui_theme", "theme", "last_open_dir", "last_track_path",
         "show_slide_tracks", "show_judge_markers", "show_touch_trail",
@@ -414,12 +399,6 @@ UiText::LanguagePreference resolvedLanguagePreference()
     return UiText::LanguagePreference::English;
 }
 
-QVector<ExternalLanguagePack>& externalLanguagePacksStorage()
-{
-    static QVector<ExternalLanguagePack> packs;
-    return packs;
-}
-
 bool isBuiltInLanguageToken(const QString& raw)
 {
     const QString token = normalizedLanguageToken(raw);
@@ -446,76 +425,6 @@ QString builtInLanguageToken(const QString& raw)
     return QStringLiteral("system");
 }
 
-QJsonObject disabledExtensionsObject()
-{
-    const QJsonObject root = UiText::loadPreferencesObject();
-    return root.value(QString::fromLatin1(kExtensionsSectionKey)).toObject()
-        .value(QString::fromLatin1(kDisabledExtensionsKey)).toObject();
-}
-
-bool isExtensionDisabled(const QString& qualifiedId)
-{
-    return disabledExtensionsObject().value(qualifiedId).toBool(false);
-}
-
-void appendExtensionRootLanguagePacks(const QFileInfo& entry, QVector<ExternalLanguagePack>* packs, QSet<QString>* seenLanguageIds)
-{
-    if (packs == nullptr || seenLanguageIds == nullptr) {
-        return;
-    }
-    const auto parsed = miacode::extensions::loadExtensionManifest(entry.absoluteFilePath());
-    if (!parsed.ok || isExtensionDisabled(parsed.manifest.qualifiedId())) {
-        return;
-    }
-    for (const auto& language : parsed.manifest.languages) {
-        const QString languageId = normalizedLanguageToken(language.id);
-        if (languageId.isEmpty() || isBuiltInLanguageToken(languageId) || seenLanguageIds->contains(languageId)) {
-            continue;
-        }
-        const QString translationsPath = QDir(parsed.manifest.rootPath).absoluteFilePath(language.translations);
-        const QJsonObject translationsObject = loadJsonObjectFromFile(translationsPath);
-        if (translationsObject.isEmpty()) {
-            continue;
-        }
-        ExternalLanguagePack pack;
-        pack.id = languageId;
-        pack.label = language.label;
-        pack.ownerExtensionId = parsed.manifest.qualifiedId();
-        for (auto it = translationsObject.constBegin(); it != translationsObject.constEnd(); ++it) {
-            if (it.value().isString()) {
-                pack.translations.insert(it.key(), it.value().toString());
-            }
-        }
-        if (pack.translations.isEmpty()) {
-            continue;
-        }
-        seenLanguageIds->insert(languageId);
-        packs->append(pack);
-    }
-}
-
-QVector<ExternalLanguagePack> scanExtensionLanguagePacks()
-{
-    QVector<ExternalLanguagePack> packs;
-    QSet<QString> seenLanguageIds;
-    for (const QString& rootPath : miacode::extensions::defaultExtensionSearchPaths()) {
-        QDir root(rootPath);
-        if (!root.exists()) {
-            continue;
-        }
-        if (QFileInfo::exists(root.filePath(QStringLiteral("miacode-extension.json")))
-            || QFileInfo::exists(root.filePath(QStringLiteral("package.json")))) {
-            appendExtensionRootLanguagePacks(QFileInfo(root.absolutePath()), &packs, &seenLanguageIds);
-            continue;
-        }
-        const QFileInfoList entries = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QFileInfo& entry : entries) {
-            appendExtensionRootLanguagePacks(entry, &packs, &seenLanguageIds);
-        }
-    }
-    return packs;
-}
-
 QString resolvedLanguageTokenFromStorage()
 {
     const QByteArray env = qgetenv("MIACODE_LANG").trimmed();
@@ -523,11 +432,6 @@ QString resolvedLanguageTokenFromStorage()
         const QString envToken = normalizedLanguageToken(QString::fromUtf8(env));
         if (isBuiltInLanguageToken(envToken)) {
             return builtInLanguageToken(envToken);
-        }
-        for (const auto& pack : externalLanguagePacksStorage()) {
-            if (pack.id == envToken) {
-                return envToken;
-            }
         }
     }
 
@@ -538,12 +442,6 @@ QString resolvedLanguageTokenFromStorage()
         const QString normalized = builtInLanguageToken(storedToken);
         if (normalized != QStringLiteral("system")) {
             return normalized;
-        }
-    } else {
-        for (const auto& pack : externalLanguagePacksStorage()) {
-            if (pack.id == storedToken) {
-                return storedToken;
-            }
         }
     }
 
@@ -578,6 +476,7 @@ const QHash<QString, QString>& enMap()
         {"menu.help", "Help(&H)"},
         {"menu.bpm_latency", "BPM && Latency"},
         {"menu.clear_elements", "Clear Elements"},
+        {"menu.reset_tap_notes", "Reset Tap Notes"},
         {"menu.export_as_zip", "Export as ZIP..."},
         {"menu.find_replace", "Find/Replace"},
         {"menu.format_chart", "Format Chart"},
@@ -668,6 +567,9 @@ const QHash<QString, QString>& enMap()
         {"preview.fullscreen.exit_hint", "Press Esc to exit fullscreen"},
         {"preview.fullscreen.exit_tooltip", "Exit fullscreen preview (Esc)"},
         {"preview.fullscreen.enter_tooltip", "Open fullscreen preview"},
+        {"preview.canvas.free_aspect", "Free Aspect"},
+        {"preview.canvas.menu_tooltip", "Preview canvas"},
+        {"preview.canvas.menu_description", "Open preview canvas menu"},
         {"editor.metadata", "Metadata"},
         {"editor.welcome", "Welcome to MiaCode!"},
         {"editor.des", "Des"},
@@ -680,11 +582,16 @@ const QHash<QString, QString>& enMap()
         {"editor.untitled_bookmark", "Untitled Bookmark"},
         {"metadata.information", "Information"},
         {"metadata.other_fields", "Other &xx Fields"},
+        {"metadata.needs_attention", "Attention required: %1."},
+        {"metadata.extra_not_committed", "Extra fields were not committed; the original value is still kept. %1"},
+        {"metadata.invalid_property", "Expected &key=value (line %1, column %2)."},
         {"metadata.field.title", "title"},
         {"metadata.field.artist", "artist"},
         {"metadata.field.first", "Offset"},
         {"metadata.field.des", "des"},
         {"metadata.field.cover", "cover"},
+        {"metadata.field.background_video", "PV"},
+        {"metadata.no_video", "No PV selected"},
         {"metadata.choose_an_mp3_and_pull", "Choose an MP3 and pull the title from its ID3 tag."},
         {"metadata.choose_an_mp3_and_pull_2", "Choose an MP3 and pull the artist from its ID3 tag."},
         {"metadata.choose_an_mp3_and_write", "Choose an MP3 and write its embedded cover artwork as bg.jpg next to the chart."},
@@ -729,6 +636,9 @@ const QHash<QString, QString>& enMap()
         {"dialog.preferences.background.choose", "Choose..."},
         {"dialog.preferences.background.clear", "Clear"},
         {"dialog.preferences.background.image_filter", "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All Files (*)"},
+        {"dialog.preferences.background.image_error", "The selected image cannot be read."},
+        {"dialog.preferences.background.save_error", "Failed to save background settings."},
+        {"dialog.preferences.background.file_picker_unavailable", "The image picker is unavailable."},
         {"dialog.preferences.background.opacity", "Opacity"},
         {"dialog.preferences.background.overlay", "Cover opacity"},
         {"dialog.preferences.background.overlay_button", "Cover opacity..."},
@@ -792,14 +702,13 @@ const QHash<QString, QString>& enMap()
          "choose \"Normalize full-width symbols\"."},
         {"dialog.welcome.get_started", "Get Started"},
         {"dialog.preferences.editor_group", "Editor"},
-        {"dialog.preferences.editor_top_display", "Header Field"},
-        {"dialog.preferences.editor_top_display.latency", "Offset"},
-        {"dialog.preferences.editor_top_display.designer", "Designer"},
         {"dialog.preferences.editor_font_size", "Text Font Size"},
         {"dialog.preferences.editor_line_spacing", "Line Spacing"},
         {"dialog.preferences.editor_half_width_input", "Lock half-width symbol input"},
         {"dialog.preferences.editor_auto_completion", "Auto-complete brackets"},
         {"dialog.preferences.editor_ime_input_disabled", "Block IME input"},
+        {"preferences.editor_scroll_past_end", "Scroll to top of final line"},
+        {"preferences.editor_selection_beat_display", "Show selection beat count"},
         {"dialog.preferences.performance_group", "Performance"},
         {"dialog.preferences.shortcuts_group", "Shortcuts"},
         {"dialog.preferences.shortcuts.edit", "Edit Shortcuts"},
@@ -821,6 +730,8 @@ const QHash<QString, QString>& enMap()
         {"dialog.unsaved_field_changes.title", "Unsaved Field Changes"},
         {"dialog.unsaved_field_changes.message", "%1 has unsaved changes. Save before switch?"},
         {"dialog.unsaved_field_changes.field.metadata", "Metadata"},
+        {"dialog.unsaved_tab_changes.title", "Save Changes"},
+        {"dialog.unsaved_tab_changes.message", "%1 has unsaved changes. Save before closing this tab?"},
         {"dialog.audio_settings.title", "Audio Settings"},
         {"dialog.video_settings.title", "Preview Settings"},
         {"dialog.render_settings.audio_group", "Audio"},
@@ -966,6 +877,7 @@ const QHash<QString, QString>& enMap()
         {"dialog.video_export.option.hud_font_area", "Area"},
         {"dialog.video_export.option.hud_font_area.chart_info", "Top-left export info"},
         {"dialog.video_export.option.hud_font_area.timestamp", "Bottom-left timestamp"},
+        {"dialog.video_export.option.hud_font_area.center_display", "Center display"},
         {"dialog.video_export.option.hud_font_area.object_stats", "Object stats"},
         {"dialog.video_export.option.hud_font_area.debug", "Debug info"},
         {"dialog.video_export.error.invalid_hud_font", "Please select a .ttf or .otf font file."},
@@ -1202,6 +1114,7 @@ const QHash<QString, QString>& enMap()
         {"cover.custom_background_image_path", "Custom background image path"},
         {"cover.custom_image", "Custom image"},
         {"cover.delete_preset", "Delete preset"},
+        {"cover.duplicate_layer", "Duplicate layer"},
         {"cover.delete_the_selected_layer_delete", "Delete the selected layer (Delete)"},
         {"cover.delete_this_preset", "Delete this preset?"},
         {"cover.difficulty_card", "Difficulty card"},
@@ -1245,6 +1158,9 @@ const QHash<QString, QString>& enMap()
         {"cover.move_down", "Move down"},
         {"cover.move_up", "Move up"},
         {"cover.no_recent_files", "(No recent files)"},
+        {"cover.no_presets", "No saved presets"},
+        {"cover.no_difficulty_selected", "No difficulty is selected, so the cover cannot be exported."},
+        {"cover.no_output_directory", "Choose an output folder before exporting the cover."},
         {"cover.opacity", "Opacity"},
         {"cover.open", "Open"},
         {"cover.open_recent", "Open recent"},
@@ -1323,6 +1239,8 @@ const QHash<QString, QString>& enMap()
         {"document.select_chart_folder", "Select Chart Folder"},
         {"document.selection_full_chart", "Selection: full chart"},
         {"document.selection_l_1c_2_l", "Selection: L%1C%2 ~ L%3C%4"},
+        {"document.selection_beats", "Selection beats: %1"},
+        {"document.selection_beats_inexact", "Partial token; subdivision is approximate: %1"},
         {"document.snap_approximately_to_384_grid", "Reduce to 384 subdivisions"},
         {"document.chart_sectioning", "Chart sectioning"},
         {"document.chart_section_every_4_measures", "Every 4 measures"},
@@ -1457,7 +1375,6 @@ const QHash<QString, QString>& enMap()
         {"preferences.ignore_muri_issue_prompts", "Ignore muri issue prompts"},
         {"preferences.off", "Off"},
         {"preferences.on", "On"},
-        {"preferences.the_field_next_to_lv", "The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer."},
 
         {"shell.follow_code", "Follow Code"},
         {"shell.timeline_measure_line_brightness", "Grid Line Brightness"},
@@ -1477,6 +1394,7 @@ const QHash<QString, QString>& enMap()
         {"shortcut.timeline.zoom_in", "Timeline Zoom In"},
         {"shortcut.timeline.zoom_out", "Timeline Zoom Out"},
         {"shortcut.transform.clear_complete_elements", "Clear Complete Elements"},
+        {"shortcut.transform.reset_tap_notes", "Reset Tap Notes"},
 
         {"timeline.follow_code", "Follow Code"},
         {"timeline.follow_code_tooltip", "During playback, bind the editor cursor to the latest comma at or before preview time"},
@@ -1503,6 +1421,9 @@ const QHash<QString, QString>& enMap()
         {"validation.muri.kind.tap_on_slide", "Tail"},
         {"validation.no_muri_issues_detected", "No muri issues detected."},
         {"validation.no_syntax_errors_detected", "No syntax errors detected."},
+        {"validation.difficulty_level_missing", "Difficulty level is required."},
+        {"validation.difficulty_level_missing_type", "Missing difficulty level"},
+        {"validation.difficulty_header", "Difficulty header"},
         {"validation.stop_ignoring_this_issue_type", "Stop Ignoring This Issue Type"},
         {"validation.tap_on_slide_threshold", "Tap-On-Slide Threshold"},
         {"validation.tap_on_slide_threshold_set", "Tap-On-Slide threshold set to %1 ms."},
@@ -1536,9 +1457,30 @@ const QHash<QString, QString>& enMap()
         {"window.replaced_1_occurrence_s", "Replaced %1 occurrence(s)."},
         {"window.syntax", "Syntax"},
         {"window.timeline", "Timeline"},
+        {"window.restore", "Restore"},
 
         {"track_metadata.artist", "artist"},
+        {"track_metadata.all_files", "All files (*)"},
+        {"track_metadata.metadata_audio_file_filter", "MP3 audio (*.mp3)"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg already exists. Overwrite?"},
+        {"track_metadata.background_image_exists_overwrite", "This chart already has cover media. Replace it? The old file will be kept as a backup."},
+        {"track_metadata.background_video_exists_overwrite", "This chart already has a PV. Replace it? The old file will be kept as a backup."},
+        {"track_metadata.delete_pv", "Remove PV"},
+        {"track_metadata.remove_pv", "Remove PV"},
+        {"track_metadata.delete_pv_confirm", "Remove the PV from this chart? It will be moved to a timestamped backup."},
+        {"track_metadata.deleted_pv", "PV removed; the old file was kept as a backup."},
+        {"track_metadata.failed_to_remove_media", "Could not remove the PV.\n\nError: %1"},
+        {"track_metadata.failed_to_import_media", "Could not import the media.\n\nError: %1"},
+        {"track_metadata.failed_to_read_image", "The selected file could not be decoded as an image."},
+        {"track_metadata.image_file_filter", "Images (*.jpg *.jpeg *.png)"},
+        {"track_metadata.import_background_image", "Import cover"},
+        {"track_metadata.import_background_video", "Import PV"},
+        {"track_metadata.import_pv", "Import PV"},
+        {"track_metadata.import_file", "Import file"},
+        {"track_metadata.imported_background_image", "Cover imported to %1."},
+        {"track_metadata.imported_background_video", "PV imported to %1."},
+        {"track_metadata.unsupported_media_file", "The selected media file has an unsupported format."},
+        {"track_metadata.video_file_filter", "MP4 video (*.mp4)"},
         {"track_metadata.extract_cover_to_bg_jpg", "Extract Cover to bg.jpg"},
         {"track_metadata.failed_to_decode_embedded_cover", "Failed to decode embedded cover (MIME=%1)."},
         {"track_metadata.failed_to_write_bg_jpg", "Failed to write bg.jpg."},
@@ -1549,6 +1491,7 @@ const QHash<QString, QString>& enMap()
         {"track_metadata.overwrote_bg_jpg_with_embedded", "Overwrote bg.jpg with embedded cover from the selected MP3."},
         {"track_metadata.read_artist_from_mp3", "Read Artist from MP3"},
         {"track_metadata.read_title_from_mp3", "Read Title from MP3"},
+        {"track_metadata.read_from_audio", "Read from audio file"},
         {"track_metadata.the_selected_mp3_has_no", "The selected MP3 has no embedded cover artwork."},
         {"track_metadata.the_selected_mp3_s_id3", "The selected MP3's ID3 tag carries no %1."},
         {"track_metadata.title", "title"},
@@ -1563,11 +1506,11 @@ const QHash<QString, QString>& enMap()
         {"media_tools.black_screen", "black screen"},
         {"media_tools.cancel", "Cancel"},
         {"media_tools.canceled", "Canceled."},
-        {"media_tools.compress_1_under_20_mib", "Compress %1 under 20 MiB and create/replace backup %2?"},
-        {"media_tools.compress_the_background_video_under", "Compress the background video under 20 MiB (the original is backed up)."},
+        {"media_tools.compress_1_under_20_mib", "Compress %1 under 20 MB, remove its audio track, and create/replace backup %2?"},
+        {"media_tools.compress_the_background_video_under", "Compress the background video under 20 MB, remove its audio track, and back up the original."},
         {"media_tools.compress_video", "Compress Video"},
-        {"media_tools.compressed_1_under_20_mib", "Compressed %1 under 20 MiB."},
-        {"media_tools.compressed_1_under_20_mib_2", "Compressed %1 under 20 MiB (original backed up as %2)."},
+        {"media_tools.compressed_1_under_20_mib", "Compressed %1 under 20 MB."},
+        {"media_tools.compressed_1_under_20_mib_2", "Compressed %1 under 20 MB with its audio track removed (original backed up as %2)."},
         {"media_tools.compressing_video", "Compressing video..."},
         {"media_tools.convert_track_mp3_to_44100", "Convert track.mp3 to 44100 Hz and create/replace backup track_bak.mp3?"},
         {"media_tools.convert_track_mp3_to_44100_2", "Convert track.mp3 to 44100 Hz (the original is backed up)."},
@@ -1596,8 +1539,8 @@ const QHash<QString, QString>& enMap()
         {"media_tools.sample_rate_conversion_canceled", "Sample-rate conversion canceled."},
         {"media_tools.silence", "silence"},
         {"media_tools.the_background_video", "the background video"},
-        {"media_tools.the_current_video_is_already", "The current video is already under 20 MiB; compression is not needed."},
-        {"media_tools.the_current_video_is_already_2", "The current video is already under 20 MiB (%1); compression is not needed."},
+        {"media_tools.the_current_video_is_already", "The current video is already under 20 MB; compression is not needed."},
+        {"media_tools.the_current_video_is_already_2", "The current video is already under 20 MB (%1); compression is not needed."},
         {"media_tools.track_mp3_failed", "track.mp3 Failed"},
         {"media_tools.track_mp3_processing_canceled", "track.mp3 processing canceled."},
         {"media_tools.track_mp3_was_not_found", "track.mp3 was not found next to the current chart."},
@@ -1672,7 +1615,7 @@ const QHash<QString, QString>& enMap()
         {"net.upload_waiting_before_next_1", "Next upload starts in %1 s"},
         {"media_tools.batch_pv_add", "Add"},
         {"media_tools.batch_pv_added_1_total_2", "Added %1 folder(s); %2 folder(s) in the list."},
-        {"media_tools.batch_pv_already_small", "Already under 20 MiB; not compressed"},
+        {"media_tools.batch_pv_already_small", "Already under 20 MB; not compressed"},
         {"media_tools.batch_pv_backup_failed", "Could not create or replace the video backup."},
         {"media_tools.batch_pv_cancel", "Cancel Compression"},
         {"media_tools.batch_pv_canceled", "Batch compression canceled."},
@@ -1682,8 +1625,8 @@ const QHash<QString, QString>& enMap()
         {"media_tools.batch_pv_complete_1_2", "Batch compression complete: %1 succeeded, %2 failed."},
         {"media_tools.batch_pv_compressing", "Compressing..."},
         {"media_tools.batch_pv_compressing_1", "Compressing: %1"},
-        {"media_tools.batch_pv_confirm_1", "Compress all %1 videos in the list? Originals will be backed up as bg_bak.mp4 or pv_bak.mp4."},
-        {"media_tools.batch_pv_description", "Scan the selected folder and its immediate subfolders for bg.mp4 or pv.mp4, then compress videos under 20 MiB."},
+        {"media_tools.batch_pv_confirm_1", "Compress all %1 videos in the list and remove their audio tracks? Originals will be backed up as bg_bak.mp4 or pv_bak.mp4."},
+        {"media_tools.batch_pv_description", "Scan the selected folder and its immediate subfolders for bg.mp4 or pv.mp4, then compress videos under 20 MB with audio tracks removed."},
         {"media_tools.batch_pv_done_1", "Compression succeeded (%1)"},
         {"media_tools.batch_pv_duration_failed", "Could not read the video duration."},
         {"media_tools.batch_pv_empty", "The video compression list is empty."},
@@ -1694,7 +1637,7 @@ const QHash<QString, QString>& enMap()
         {"media_tools.batch_pv_invalid_file", "Invalid or empty video file"},
         {"media_tools.batch_pv_invalid_folder", "Choose a valid folder."},
         {"media_tools.batch_pv_original_size", "Original Size"},
-        {"media_tools.batch_pv_output_invalid", "Output was not smaller than the original and under 20 MiB."},
+        {"media_tools.batch_pv_output_invalid", "Output was not smaller than the original and under 20 MB."},
         {"media_tools.batch_pv_path", "Path"},
         {"media_tools.batch_pv_pending", "Pending"},
         {"media_tools.batch_pv_no_video", "No video"},
@@ -1722,6 +1665,7 @@ const QHash<QString, QString>& zhMap()
         {"menu.help", "帮助(&H)"},
         {"menu.bpm_latency", "BPM && 延迟检测"},
         {"menu.clear_elements", "一键清空"},
+        {"menu.reset_tap_notes", "重置摆键"},
         {"menu.export_as_zip", "导出为ZIP"},
         {"menu.find_replace", "查找/替换"},
         {"menu.format_chart", "谱面整理"},
@@ -1815,6 +1759,9 @@ const QHash<QString, QString>& zhMap()
         {"preview.fullscreen.exit_hint", "按 Esc 退出全屏"},
         {"preview.fullscreen.exit_tooltip", "退出全屏预览（Esc）"},
         {"preview.fullscreen.enter_tooltip", "打开全屏预览"},
+        {"preview.canvas.free_aspect", "自由比例"},
+        {"preview.canvas.menu_tooltip", "预览画布"},
+        {"preview.canvas.menu_description", "打开预览画布菜单"},
 
         {"editor.metadata", "谱面信息设置"},
         {"editor.welcome", "欢迎使用MiaCode！"},
@@ -1829,11 +1776,16 @@ const QHash<QString, QString>& zhMap()
 
         {"metadata.information", "基础信息"},
         {"metadata.other_fields", "其他 &xx 字段"},
+        {"metadata.needs_attention", "以下信息尚未填写：%1。"},
+        {"metadata.extra_not_committed", "其他字段未提交，原值仍保留。%1"},
+        {"metadata.invalid_property", "应为 &key=value（第 %1 行，第 %2 列）。"},
         {"metadata.field.title", "标题"},
         {"metadata.field.artist", "曲师"},
         {"metadata.field.first", "偏移"},
         {"metadata.field.des", "谱师"},
         {"metadata.field.cover", "曲绘"},
+        {"metadata.field.background_video", "PV"},
+        {"metadata.no_video", "未选择 PV"},
         {"metadata.choose_an_mp3_and_pull", "选择一个 MP3，从它的 ID3 标签里读取标题。"},
         {"metadata.choose_an_mp3_and_pull_2", "选择一个 MP3，从它的 ID3 标签里读取曲师。"},
         {"metadata.choose_an_mp3_and_write", "选择一个 MP3，把它内嵌的封面图写到当前谱面目录的 bg.jpg。"},
@@ -1855,7 +1807,6 @@ const QHash<QString, QString>& zhMap()
         {"metadata.latency_card.title", "延迟与偏移校准"},
         {"metadata.latency_card.open", "打开延迟设置 →"},
         {"metadata.ln_1_col_1", "1行 1列"},
-        {"metadata.manage_per_difficulty_designers", "管理多个难度名义"},
         {"metadata.open_the_latency_settings_page", "打开延迟设置页：调整 BPM/Offset，并通过试听校准。"},
         {"metadata.preview_p", "预览(&P)"},
         {"metadata.read_from_mp3", "从 MP3 读取"},
@@ -1881,6 +1832,9 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.background.choose", "选择..."},
         {"dialog.preferences.background.clear", "清除"},
         {"dialog.preferences.background.image_filter", "图片 (*.png *.jpg *.jpeg *.bmp *.webp);;所有文件 (*)"},
+        {"dialog.preferences.background.image_error", "所选图片无法读取。"},
+        {"dialog.preferences.background.save_error", "无法保存背景设置。"},
+        {"dialog.preferences.background.file_picker_unavailable", "图片选择器不可用。"},
         {"dialog.preferences.background.opacity", "不透明度"},
         {"dialog.preferences.background.overlay", "遮盖度"},
         {"dialog.preferences.background.overlay_button", "遮盖度..."},
@@ -1944,14 +1898,13 @@ const QHash<QString, QString>& zhMap()
          "如果您使用注释功能，且希望减少类似 1h【8:1】 的全角符号误输入，推荐选择“转换全角符号”。"},
         {"dialog.welcome.get_started", "开始使用"},
         {"dialog.preferences.editor_group", "编辑器"},
-        {"dialog.preferences.editor_top_display", "顶部显示"},
-        {"dialog.preferences.editor_top_display.latency", "偏移"},
-        {"dialog.preferences.editor_top_display.designer", "谱师"},
         {"dialog.preferences.editor_font_size", "字号"},
         {"dialog.preferences.editor_line_spacing", "行距"},
         {"dialog.preferences.editor_half_width_input", "锁定半角符号输入"},
         {"dialog.preferences.editor_auto_completion", "自动补全括号"},
         {"dialog.preferences.editor_ime_input_disabled", "禁止输入法输入"},
+        {"preferences.editor_scroll_past_end", "允许滚动到末行顶部"},
+        {"preferences.editor_selection_beat_display", "显示选区拍数"},
         {"dialog.preferences.performance_group", "性能"},
         {"dialog.preferences.shortcuts_group", "快捷键"},
         {"dialog.preferences.extensions_group", "扩展"},
@@ -2017,6 +1970,8 @@ const QHash<QString, QString>& zhMap()
         {"dialog.unsaved_field_changes.title", "未保存的字段更改"},
         {"dialog.unsaved_field_changes.message", "%1 有未保存的更改。切换前是否保存？"},
         {"dialog.unsaved_field_changes.field.metadata", "谱面信息"},
+        {"dialog.unsaved_tab_changes.title", "保存修改"},
+        {"dialog.unsaved_tab_changes.message", "关闭“%1”前保存修改？"},
 
         {"dialog.audio_settings.title", "音频设置"},
         {"dialog.video_settings.title", "预览设置"},
@@ -2164,6 +2119,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.option.hud_font_area", "区域"},
         {"dialog.video_export.option.hud_font_area.chart_info", "左上角导出信息"},
         {"dialog.video_export.option.hud_font_area.timestamp", "左下角时间戳"},
+        {"dialog.video_export.option.hud_font_area.center_display", "中心显示"},
         {"dialog.video_export.option.hud_font_area.object_stats", "物量统计"},
         {"dialog.video_export.option.hud_font_area.debug", "调试信息"},
         {"dialog.video_export.error.invalid_hud_font", "请选择有效的 .ttf 或 .otf 字体文件。"},
@@ -2386,6 +2342,7 @@ const QHash<QString, QString>& zhMap()
         {"cover.custom_background_image_path", "自定义背景图片路径"},
         {"cover.custom_image", "自定义图片"},
         {"cover.delete_preset", "删除预设"},
+        {"cover.duplicate_layer", "复制图层"},
         {"cover.delete_the_selected_layer_delete", "删除当前图层（Delete）"},
         {"cover.delete_this_preset", "删除这个预设？"},
         {"cover.difficulty_card", "难度卡"},
@@ -2429,6 +2386,9 @@ const QHash<QString, QString>& zhMap()
         {"cover.move_down", "下移"},
         {"cover.move_up", "上移"},
         {"cover.no_recent_files", "（无最近文件）"},
+        {"cover.no_presets", "没有已保存的预设"},
+        {"cover.no_difficulty_selected", "当前未选中难度，无法导出封面。"},
+        {"cover.no_output_directory", "请先选择输出文件夹，再导出封面。"},
         {"cover.opacity", "不透明度"},
         {"cover.open", "打开"},
         {"cover.open_recent", "打开最近"},
@@ -2507,6 +2467,8 @@ const QHash<QString, QString>& zhMap()
         {"document.select_chart_folder", "选择谱面文件夹"},
         {"document.selection_full_chart", "选中范围：全文"},
         {"document.selection_l_1c_2_l", "选中范围：%1行%2列 ~ %3行%4列"},
+        {"document.selection_beats", "选区拍数：%1"},
+        {"document.selection_beats_inexact", "选区包含半个要素，分音仅供参考：%1"},
         {"document.snap_approximately_to_384_grid", "约分至384分音"},
         {"document.chart_sectioning", "谱面分段"},
         {"document.chart_section_every_4_measures", "每 4 小节"},
@@ -2641,7 +2603,6 @@ const QHash<QString, QString>& zhMap()
         {"preferences.ignore_muri_issue_prompts", "忽略无理报错提示"},
         {"preferences.off", "关闭"},
         {"preferences.on", "开启"},
-        {"preferences.the_field_next_to_lv", "谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。"},
 
         {"shell.follow_code", "代码跟随"},
         {"shell.timeline_measure_line_brightness", "网格线亮度"},
@@ -2661,6 +2622,7 @@ const QHash<QString, QString>& zhMap()
         {"shortcut.timeline.zoom_in", "Timeline 放大"},
         {"shortcut.timeline.zoom_out", "Timeline 缩小"},
         {"shortcut.transform.clear_complete_elements", "一键清空要素"},
+        {"shortcut.transform.reset_tap_notes", "重置摆键"},
 
         {"timeline.follow_code", "代码跟随"},
         {"timeline.follow_code_tooltip", "仅在播放中将编辑器光标绑定到预览时间前最近的逗号"},
@@ -2687,6 +2649,9 @@ const QHash<QString, QString>& zhMap()
         {"validation.muri.kind.tap_on_slide", "撞尾"},
         {"validation.no_muri_issues_detected", "未检测到无理。"},
         {"validation.no_syntax_errors_detected", "未检测到语法错误。"},
+        {"validation.difficulty_level_missing", "当前难度缺少等级。"},
+        {"validation.difficulty_level_missing_type", "缺少难度等级"},
+        {"validation.difficulty_header", "难度头字段"},
         {"validation.stop_ignoring_this_issue_type", "取消忽视该类型提示"},
         {"validation.tap_on_slide_threshold", "撞尾阈值"},
         {"validation.tap_on_slide_threshold_set", "撞尾阈值已更新为 %1 ms。"},
@@ -2720,9 +2685,30 @@ const QHash<QString, QString>& zhMap()
         {"window.replaced_1_occurrence_s", "已替换 %1 处。"},
         {"window.syntax", "语法"},
         {"window.timeline", "时间轴"},
+        {"window.restore", "还原"},
 
         {"track_metadata.artist", "曲师"},
+        {"track_metadata.all_files", "所有文件 (*)"},
+        {"track_metadata.metadata_audio_file_filter", "MP3 音频 (*.mp3)"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg 已经存在，是否覆盖？"},
+        {"track_metadata.background_image_exists_overwrite", "当前谱面已经包含曲绘，是否替换？原文件将保留为备份副本。"},
+        {"track_metadata.background_video_exists_overwrite", "当前谱面已经包含 PV，是否替换？原文件将保留为备份副本。"},
+        {"track_metadata.delete_pv", "移除 PV"},
+        {"track_metadata.import_pv", "导入PV"},
+        {"track_metadata.remove_pv", "移除PV"},
+        {"track_metadata.delete_pv_confirm", "确定移除当前谱面的 PV 吗？原文件会移动到带时间戳的备份。"},
+        {"track_metadata.deleted_pv", "PV 已移除，原文件已保留为备份。"},
+        {"track_metadata.failed_to_remove_media", "无法移除 PV。\n\n错误：%1"},
+        {"track_metadata.failed_to_import_media", "无法导入媒体文件。\n\n错误：%1"},
+        {"track_metadata.failed_to_read_image", "无法将所选文件解码为图片。"},
+        {"track_metadata.image_file_filter", "图片 (*.jpg *.jpeg *.png)"},
+        {"track_metadata.import_background_image", "导入曲绘"},
+        {"track_metadata.import_background_video", "导入 PV"},
+        {"track_metadata.import_file", "导入文件"},
+        {"track_metadata.imported_background_image", "曲绘已导入到 %1。"},
+        {"track_metadata.imported_background_video", "PV 已导入到 %1。"},
+        {"track_metadata.unsupported_media_file", "所选媒体文件格式不受支持。"},
+        {"track_metadata.video_file_filter", "MP4 视频 (*.mp4)"},
         {"track_metadata.extract_cover_to_bg_jpg", "提取封面为 bg.jpg"},
         {"track_metadata.failed_to_decode_embedded_cover", "内嵌封面解码失败（MIME=%1）。"},
         {"track_metadata.failed_to_write_bg_jpg", "写入 bg.jpg 失败。"},
@@ -2733,6 +2719,7 @@ const QHash<QString, QString>& zhMap()
         {"track_metadata.overwrote_bg_jpg_with_embedded", "已覆盖 bg.jpg（来源：所选 MP3 内嵌封面）。"},
         {"track_metadata.read_artist_from_mp3", "从 MP3 读取曲师"},
         {"track_metadata.read_title_from_mp3", "从 MP3 读取标题"},
+        {"track_metadata.read_from_audio", "从音频文件读取"},
         {"track_metadata.the_selected_mp3_has_no", "所选 MP3 中没有内嵌的封面图。"},
         {"track_metadata.the_selected_mp3_s_id3", "所选 MP3 的 ID3 标签里没有%1信息。"},
         {"track_metadata.title", "标题"},
@@ -2747,11 +2734,11 @@ const QHash<QString, QString>& zhMap()
         {"media_tools.black_screen", "黑幕"},
         {"media_tools.cancel", "取消"},
         {"media_tools.canceled", "已取消。"},
-        {"media_tools.compress_1_under_20_mib", "将压缩 %1 到 20M 内，并生成/覆盖备份 %2。是否继续？"},
-        {"media_tools.compress_the_background_video_under", "将背景视频压缩到 20M 以内，并自动备份原文件。"},
+        {"media_tools.compress_1_under_20_mib", "将 %1 压缩到 20 MB 以下并移除音轨，同时生成/覆盖备份 %2。是否继续？"},
+        {"media_tools.compress_the_background_video_under", "将背景视频压缩到 20 MB 以下并移除音轨，同时备份原文件。"},
         {"media_tools.compress_video", "视频压缩"},
-        {"media_tools.compressed_1_under_20_mib", "已压缩 %1 到 20M 内。"},
-        {"media_tools.compressed_1_under_20_mib_2", "已压缩 %1 到 20M 内（原文件已备份为 %2）。"},
+        {"media_tools.compressed_1_under_20_mib", "已将 %1 压缩到 20 MB 以下。"},
+        {"media_tools.compressed_1_under_20_mib_2", "已将 %1 压缩到 20 MB 以下并移除音轨（原文件已备份为 %2）。"},
         {"media_tools.compressing_video", "正在压缩视频..."},
         {"media_tools.convert_track_mp3_to_44100", "将 track.mp3 处理为 44100Hz，并生成/覆盖备份 track_bak.mp3。是否继续？"},
         {"media_tools.convert_track_mp3_to_44100_2", "将 track.mp3 转换为 44100Hz，并自动备份原文件。"},
@@ -2767,8 +2754,8 @@ const QHash<QString, QString>& zhMap()
         {"media_tools.insert_silence_at_the_start", "在 track.mp3 开头插入一段静音，并自动备份原文件。"},
         {"media_tools.no_background_mp4_video_was", "当前谱面目录缺少背景视频 .mp4。"},
         {"media_tools.open_or_save_a_chart", "请先打开或保存一个谱面文件。"},
-        {"media_tools.prepend_pv_black_screen", "视频开头黑幕处理"},
-        {"media_tools.prepend_track_silence", "音频开头静音处理"},
+        {"media_tools.prepend_pv_black_screen", "视频前置黑幕"},
+        {"media_tools.prepend_track_silence", "音频前置空白"},
         {"media_tools.prepended_2_s_of_3", "已为 %1 开头添加 %2 秒%3（原文件已备份为 %4）。"},
         {"media_tools.prepended_2_seconds_of_blank", "已为 %1 开头添加 %2 秒空白。"},
         {"media_tools.prepends_1_to_2_3", "将在 %2 开头增加一段%1，时长为 BPM %4 下的 %3 个 4 分音（约 %5 秒）。"},
@@ -2780,8 +2767,8 @@ const QHash<QString, QString>& zhMap()
         {"media_tools.sample_rate_conversion_canceled", "已取消采样率转换。"},
         {"media_tools.silence", "空白"},
         {"media_tools.the_background_video", "背景视频"},
-        {"media_tools.the_current_video_is_already", "当前视频已经小于 20 MiB，无需压缩。"},
-        {"media_tools.the_current_video_is_already_2", "当前视频已经小于 20 MiB（%1），无需压缩。"},
+        {"media_tools.the_current_video_is_already", "当前视频已经小于 20 MB，无需压缩。"},
+        {"media_tools.the_current_video_is_already_2", "当前视频已经小于 20 MB（%1），无需压缩。"},
         {"media_tools.track_mp3_failed", "track.mp3 处理失败"},
         {"media_tools.track_mp3_processing_canceled", "已取消 track.mp3 处理。"},
         {"media_tools.track_mp3_was_not_found", "当前谱面目录缺少 track.mp3。"},
@@ -2856,7 +2843,7 @@ const QHash<QString, QString>& zhMap()
         {"net.upload_waiting_before_next_1", "%1 秒后开始下一项上传"},
         {"media_tools.batch_pv_add", "加入"},
         {"media_tools.batch_pv_added_1_total_2", "本次加入 %1 个文件夹，列表共 %2 个文件夹。"},
-        {"media_tools.batch_pv_already_small", "已小于 20 MiB，未压缩"},
+        {"media_tools.batch_pv_already_small", "已小于 20 MB，未压缩"},
         {"media_tools.batch_pv_backup_failed", "无法创建或覆盖视频备份。"},
         {"media_tools.batch_pv_cancel", "取消压缩"},
         {"media_tools.batch_pv_canceled", "批量压缩已取消。"},
@@ -2866,8 +2853,8 @@ const QHash<QString, QString>& zhMap()
         {"media_tools.batch_pv_complete_1_2", "批量压缩完成：成功 %1，失败 %2。"},
         {"media_tools.batch_pv_compressing", "正在压缩..."},
         {"media_tools.batch_pv_compressing_1", "正在压缩：%1"},
-        {"media_tools.batch_pv_confirm_1", "压缩列表中的 %1 个视频？原文件会备份为 bg_bak.mp4 或 pv_bak.mp4。"},
-        {"media_tools.batch_pv_description", "扫描所选文件夹及其直接子文件夹中的 bg.mp4 或 pv.mp4，并将视频压缩到 20 MiB 以内。"},
+        {"media_tools.batch_pv_confirm_1", "压缩列表中的 %1 个视频并移除音轨？原文件会备份为 bg_bak.mp4 或 pv_bak.mp4。"},
+        {"media_tools.batch_pv_description", "扫描所选文件夹及其直接子文件夹中的 bg.mp4 或 pv.mp4，并将视频压缩到 20 MB 以下且移除音轨。"},
         {"media_tools.batch_pv_done_1", "压缩成功（%1）"},
         {"media_tools.batch_pv_duration_failed", "无法读取视频时长。"},
         {"media_tools.batch_pv_empty", "视频压缩列表为空。"},
@@ -2878,7 +2865,7 @@ const QHash<QString, QString>& zhMap()
         {"media_tools.batch_pv_invalid_file", "视频文件无效或为空"},
         {"media_tools.batch_pv_invalid_folder", "请选择有效文件夹。"},
         {"media_tools.batch_pv_original_size", "原始大小"},
-        {"media_tools.batch_pv_output_invalid", "输出未同时满足小于原文件且不超过 20 MiB。"},
+        {"media_tools.batch_pv_output_invalid", "输出未同时满足小于原文件且小于 20 MB。"},
         {"media_tools.batch_pv_path", "路径"},
         {"media_tools.batch_pv_pending", "等待压缩"},
         {"media_tools.batch_pv_no_video", "无视频"},
@@ -2901,6 +2888,7 @@ const QHash<QString, QString>& jaMap()
         {"menu.help", "ヘルプ(&H)"},
         {"menu.bpm_latency", "BPM && 遅延検出"},
         {"menu.clear_elements", "すべて消去"},
+        {"menu.reset_tap_notes", "タップノーツをリセット"},
         {"menu.export_as_zip", "ZIP で出力"},
         {"menu.find_replace", "検索/置換"},
         {"menu.format_chart", "譜面を整形"},
@@ -2994,6 +2982,9 @@ const QHash<QString, QString>& jaMap()
         {"preview.fullscreen.exit_hint", "Esc で全画面を終了"},
         {"preview.fullscreen.exit_tooltip", "全画面表示を終了（Esc）"},
         {"preview.fullscreen.enter_tooltip", "全画面表示を開く"},
+        {"preview.canvas.free_aspect", "フリーアスペクト"},
+        {"preview.canvas.menu_tooltip", "プレビューキャンバス"},
+        {"preview.canvas.menu_description", "プレビューキャンバスメニューを開く"},
 
         {"editor.metadata", "譜面情報設定"},
         {"editor.welcome", "MiaCode へようこそ！"},
@@ -3008,11 +2999,16 @@ const QHash<QString, QString>& jaMap()
 
         {"metadata.information", "基本情報"},
         {"metadata.other_fields", "その他の &xx 欄"},
+        {"metadata.needs_attention", "要確認：%1。"},
+        {"metadata.extra_not_committed", "その他のフィールドは未反映です。元の値を保持しています。%1"},
+        {"metadata.invalid_property", "&key=value の形式が必要です（%1 行 %2 列）。"},
         {"metadata.field.title", "Title"},
         {"metadata.field.artist", "Artist"},
         {"metadata.field.first", "開始ずれ"},
         {"metadata.field.des", "Designer"},
         {"metadata.field.cover", "Jacket"},
+        {"metadata.field.background_video", "PV"},
+        {"metadata.no_video", "PV 未選択"},
         {"metadata.choose_an_mp3_and_pull", "MP3 を選び、その ID3 タグからタイトルを読み込みます。"},
         {"metadata.choose_an_mp3_and_pull_2", "MP3 を選び、その ID3 タグからアーティストを読み込みます。"},
         {"metadata.choose_an_mp3_and_write", "MP3 を選び、その埋め込みカバー画像を現在の譜面フォルダーの bg.jpg に書き出します。"},
@@ -3060,6 +3056,9 @@ const QHash<QString, QString>& jaMap()
         {"dialog.preferences.background.choose", "選択..."},
         {"dialog.preferences.background.clear", "クリア"},
         {"dialog.preferences.background.image_filter", "画像 (*.png *.jpg *.jpeg *.bmp *.webp);;すべてのファイル (*)"},
+        {"dialog.preferences.background.image_error", "選択した画像を読み込めません。"},
+        {"dialog.preferences.background.save_error", "背景設定を保存できません。"},
+        {"dialog.preferences.background.file_picker_unavailable", "画像選択を利用できません。"},
         {"dialog.preferences.background.opacity", "不透明度"},
         {"dialog.preferences.background.overlay", "カバー不透明度"},
         {"dialog.preferences.background.overlay_button", "カバー不透明度..."},
@@ -3123,14 +3122,13 @@ const QHash<QString, QString>& jaMap()
          "コメント機能を使い、1h【8:1】のような全角記号の誤入力を減らしたい場合は「全角記号を変換」がおすすめです。"},
         {"dialog.welcome.get_started", "始める"},
         {"dialog.preferences.editor_group", "編集"},
-        {"dialog.preferences.editor_top_display", "上部表示"},
-        {"dialog.preferences.editor_top_display.latency", "開始ずれ"},
-        {"dialog.preferences.editor_top_display.designer", "譜面作者"},
         {"dialog.preferences.editor_font_size", "文字サイズ"},
         {"dialog.preferences.editor_line_spacing", "行間"},
         {"dialog.preferences.editor_half_width_input", "半角記号入力に固定"},
         {"dialog.preferences.editor_auto_completion", "括弧を自動補完"},
         {"dialog.preferences.editor_ime_input_disabled", "IMEを禁止"},
+        {"preferences.editor_scroll_past_end", "末行を上部までスクロール"},
+        {"preferences.editor_selection_beat_display", "選択範囲の拍数を表示"},
         {"dialog.preferences.performance_group", "性能"},
         {"dialog.preferences.shortcuts_group", "ショートカット"},
         {"dialog.preferences.shortcuts.edit", "キー設定を編集"},
@@ -3196,6 +3194,8 @@ const QHash<QString, QString>& jaMap()
         {"dialog.unsaved_field_changes.title", "未保存の欄があります"},
         {"dialog.unsaved_field_changes.message", "%1 に未保存の変更があります。切り替える前に保存しますか？"},
         {"dialog.unsaved_field_changes.field.metadata", "譜面情報"},
+        {"dialog.unsaved_tab_changes.title", "変更の保存"},
+        {"dialog.unsaved_tab_changes.message", "%1 に未保存の変更があります。このタブを閉じる前に保存しますか？"},
 
         {"dialog.audio_settings.title", "音量調整"},
         {"dialog.video_settings.title", "表示設定"},
@@ -3344,6 +3344,7 @@ const QHash<QString, QString>& jaMap()
         {"dialog.video_export.option.hud_font_area", "領域"},
         {"dialog.video_export.option.hud_font_area.chart_info", "左上の出力情報"},
         {"dialog.video_export.option.hud_font_area.timestamp", "左下の時刻"},
+        {"dialog.video_export.option.hud_font_area.center_display", "中央表示"},
         {"dialog.video_export.option.hud_font_area.object_stats", "物量統計"},
         {"dialog.video_export.option.hud_font_area.debug", "デバッグ情報"},
         {"dialog.video_export.error.invalid_hud_font", "有効な .ttf または .otf 字体ファイルを選んでください。"},
@@ -3539,6 +3540,7 @@ const QHash<QString, QString>& jaMap()
         {"cover.custom_background_image_path", "カスタム背景画像のパス"},
         {"cover.custom_image", "カスタム画像"},
         {"cover.delete_preset", "プリセットを削除"},
+        {"cover.duplicate_layer", "レイヤーを複製"},
         {"cover.delete_the_selected_layer_delete", "選択中のレイヤーを削除（Delete）"},
         {"cover.delete_this_preset", "このプリセットを削除しますか？"},
         {"cover.difficulty_card", "難易度カード"},
@@ -3582,6 +3584,9 @@ const QHash<QString, QString>& jaMap()
         {"cover.move_down", "下へ移動"},
         {"cover.move_up", "上へ移動"},
         {"cover.no_recent_files", "（最近のファイルなし）"},
+        {"cover.no_presets", "保存されたプリセットはありません"},
+        {"cover.no_difficulty_selected", "難易度が選択されていないため、カバーを出力できません。"},
+        {"cover.no_output_directory", "カバーを出力する前に、出力フォルダーを選んでください。"},
         {"cover.opacity", "不透明度"},
         {"cover.open", "開く"},
         {"cover.open_recent", "最近のファイルを開く"},
@@ -3660,6 +3665,8 @@ const QHash<QString, QString>& jaMap()
         {"document.select_chart_folder", "譜面フォルダーを選択"},
         {"document.selection_full_chart", "選択範囲：譜面全体"},
         {"document.selection_l_1c_2_l", "選択範囲：%1 行 %2 列 ~ %3 行 %4 列"},
+        {"document.selection_beats", "選択拍数：%1"},
+        {"document.selection_beats_inexact", "要素の一部を含むため分割は目安です：%1"},
         {"document.snap_approximately_to_384_grid", "384分音に約分"},
         {"document.chart_sectioning", "譜面の区切り"},
         {"document.chart_section_every_4_measures", "4小節ごと"},
@@ -3794,7 +3801,6 @@ const QHash<QString, QString>& jaMap()
         {"preferences.ignore_muri_issue_prompts", "無理の警告表示を無視"},
         {"preferences.off", "オフ"},
         {"preferences.on", "オン"},
-        {"preferences.the_field_next_to_lv", "譜面編集ページ上部の Lv の横に表示するフィールド：オフセット（&first）または現在の難易度の作者（&des_N）。"},
 
         {"shell.follow_code", "コード追従"},
         {"shell.timeline_measure_line_brightness", "グリッド線の明るさ"},
@@ -3814,6 +3820,7 @@ const QHash<QString, QString>& jaMap()
         {"shortcut.timeline.zoom_in", "Timeline を拡大"},
         {"shortcut.timeline.zoom_out", "Timeline を縮小"},
         {"shortcut.transform.clear_complete_elements", "要素をすべて消去"},
+        {"shortcut.transform.reset_tap_notes", "タップノーツをリセット"},
 
         {"timeline.follow_code", "コード追従"},
         {"timeline.follow_code_tooltip", "再生中、エディタカーソルをプレビュー時刻以前の直近のカンマに連動させます"},
@@ -3840,6 +3847,9 @@ const QHash<QString, QString>& jaMap()
         {"validation.muri.kind.tap_on_slide", "末尾衝突"},
         {"validation.no_muri_issues_detected", "無理は検出されませんでした。"},
         {"validation.no_syntax_errors_detected", "構文エラーは検出されませんでした。"},
+        {"validation.difficulty_level_missing", "現在の難易度にレベルがありません。"},
+        {"validation.difficulty_level_missing_type", "難易度レベル不足"},
+        {"validation.difficulty_header", "難易度ヘッダー"},
         {"validation.stop_ignoring_this_issue_type", "この種類の警告表示を再開"},
         {"validation.tap_on_slide_threshold", "末尾衝突しきい値"},
         {"validation.tap_on_slide_threshold_set", "末尾衝突しきい値を %1 ms に更新しました。"},
@@ -3873,9 +3883,30 @@ const QHash<QString, QString>& jaMap()
         {"window.replaced_1_occurrence_s", "%1 か所を置換しました。"},
         {"window.syntax", "構文"},
         {"window.timeline", "タイムライン"},
+        {"window.restore", "元のサイズに戻す"},
 
         {"track_metadata.artist", "アーティスト"},
+        {"track_metadata.all_files", "すべてのファイル (*)"},
+        {"track_metadata.metadata_audio_file_filter", "MP3 オーディオ (*.mp3)"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg は既に存在します。上書きしますか？"},
+        {"track_metadata.background_image_exists_overwrite", "この譜面には既に背景画像があります。置き換えますか？元のファイルはバックアップとして保存されます。"},
+        {"track_metadata.background_video_exists_overwrite", "この譜面には既に PV があります。置き換えますか？元のファイルはバックアップとして保存されます。"},
+        {"track_metadata.delete_pv", "PV を削除"},
+        {"track_metadata.delete_pv_confirm", "この譜面の PV を削除しますか？元のファイルはタイムスタンプ付きバックアップに移動します。"},
+        {"track_metadata.deleted_pv", "PV を削除しました。元のファイルはバックアップに残っています。"},
+        {"track_metadata.failed_to_remove_media", "PV を削除できませんでした。\n\nエラー: %1"},
+        {"track_metadata.failed_to_import_media", "メディアを読み込めませんでした。\n\nエラー: %1"},
+        {"track_metadata.failed_to_read_image", "選択したファイルを画像としてデコードできませんでした。"},
+        {"track_metadata.image_file_filter", "画像 (*.jpg *.jpeg *.png)"},
+        {"track_metadata.import_background_image", "背景画像を読み込む"},
+        {"track_metadata.import_background_video", "PV を読み込む"},
+        {"track_metadata.import_pv", "PV を読み込む"},
+        {"track_metadata.remove_pv", "PV を削除"},
+        {"track_metadata.import_file", "ファイルを読み込む"},
+        {"track_metadata.imported_background_image", "背景画像を %1 に読み込みました。"},
+        {"track_metadata.imported_background_video", "PV を %1 に読み込みました。"},
+        {"track_metadata.unsupported_media_file", "選択したメディア形式には対応していません。"},
+        {"track_metadata.video_file_filter", "MP4 動画 (*.mp4)"},
         {"track_metadata.extract_cover_to_bg_jpg", "カバーを bg.jpg に抽出"},
         {"track_metadata.failed_to_decode_embedded_cover", "埋め込みカバーのデコードに失敗しました（MIME=%1）。"},
         {"track_metadata.failed_to_write_bg_jpg", "bg.jpg の書き込みに失敗しました。"},
@@ -3886,6 +3917,7 @@ const QHash<QString, QString>& jaMap()
         {"track_metadata.overwrote_bg_jpg_with_embedded", "bg.jpg を上書きしました（選択した MP3 の埋め込みカバーから）。"},
         {"track_metadata.read_artist_from_mp3", "MP3 からアーティストを読み込む"},
         {"track_metadata.read_title_from_mp3", "MP3 からタイトルを読み込む"},
+        {"track_metadata.read_from_audio", "音声ファイルから読み込む"},
         {"track_metadata.the_selected_mp3_has_no", "選択した MP3 に埋め込みカバー画像がありません。"},
         {"track_metadata.the_selected_mp3_s_id3", "選択した MP3 の ID3 タグに%1情報がありません。"},
         {"track_metadata.title", "タイトル"},
@@ -3900,11 +3932,11 @@ const QHash<QString, QString>& jaMap()
         {"media_tools.black_screen", "黒画面"},
         {"media_tools.cancel", "キャンセル"},
         {"media_tools.canceled", "キャンセルしました。"},
-        {"media_tools.compress_1_under_20_mib", "%1 を 20 MiB 以内に圧縮し、バックアップ %2 を作成/上書きします。続行しますか？"},
-        {"media_tools.compress_the_background_video_under", "背景動画を 20 MiB 以内に圧縮し、元ファイルを自動でバックアップします。"},
+        {"media_tools.compress_1_under_20_mib", "%1 を 20 MB 未満に圧縮し、音声トラックを削除してバックアップ %2 を作成/上書きします。続行しますか？"},
+        {"media_tools.compress_the_background_video_under", "背景動画を 20 MB 未満に圧縮し、音声トラックを削除して元ファイルをバックアップします。"},
         {"media_tools.compress_video", "動画圧縮"},
-        {"media_tools.compressed_1_under_20_mib", "%1 を 20 MiB 以内に圧縮しました。"},
-        {"media_tools.compressed_1_under_20_mib_2", "%1 を 20 MiB 以内に圧縮しました（元ファイルは %2 にバックアップ）。"},
+        {"media_tools.compressed_1_under_20_mib", "%1 を 20 MB 未満に圧縮しました。"},
+        {"media_tools.compressed_1_under_20_mib_2", "%1 を音声トラックなしで 20 MB 未満に圧縮しました（元ファイルは %2 にバックアップ）。"},
         {"media_tools.compressing_video", "動画を圧縮中..."},
         {"media_tools.convert_track_mp3_to_44100", "track.mp3 を 44100Hz に変換し、バックアップ track_bak.mp3 を作成/上書きします。続行しますか？"},
         {"media_tools.convert_track_mp3_to_44100_2", "track.mp3 を 44100Hz に変換し、元ファイルを自動でバックアップします。"},
@@ -3933,8 +3965,8 @@ const QHash<QString, QString>& jaMap()
         {"media_tools.sample_rate_conversion_canceled", "サンプルレート変換をキャンセルしました。"},
         {"media_tools.silence", "空白"},
         {"media_tools.the_background_video", "背景動画"},
-        {"media_tools.the_current_video_is_already", "現在の動画は既に 20 MiB 未満です。圧縮は不要です。"},
-        {"media_tools.the_current_video_is_already_2", "現在の動画は既に 20 MiB 未満です（%1）。圧縮は不要です。"},
+        {"media_tools.the_current_video_is_already", "現在の動画は既に 20 MB 未満です。圧縮は不要です。"},
+        {"media_tools.the_current_video_is_already_2", "現在の動画は既に 20 MB 未満です（%1）。圧縮は不要です。"},
         {"media_tools.track_mp3_failed", "track.mp3 の処理に失敗しました"},
         {"media_tools.track_mp3_processing_canceled", "track.mp3 の処理をキャンセルしました。"},
         {"media_tools.track_mp3_was_not_found", "現在の譜面フォルダーに track.mp3 がありません。"},
@@ -3967,7 +3999,7 @@ const QHash<QString, QString>& jaMap()
         {"net.upload_password", "Password"},
         {"net.upload_path", "Path"},
         {"net.upload_pending", "Pending upload"},
-        {"net.upload_clear_queue", "Clear Queue"},
+        {"net.upload_clear_queue", "キューを空にする"},
         {"net.upload_queue", "Upload Queue"},
         {"net.upload_queue_total_1", "%1 folder(s) in the upload queue."},
         {"net.upload_remove_selected", "Remove Selected"},
@@ -4009,18 +4041,18 @@ const QHash<QString, QString>& jaMap()
         {"net.upload_waiting_before_next_1", "Next upload starts in %1 s"},
         {"media_tools.batch_pv_add", "Add"},
         {"media_tools.batch_pv_added_1_total_2", "Added %1 folder(s); %2 folder(s) in the list."},
-        {"media_tools.batch_pv_already_small", "Already under 20 MiB; not compressed"},
+        {"media_tools.batch_pv_already_small", "Already under 20 MB; not compressed"},
         {"media_tools.batch_pv_backup_failed", "Could not create or replace the video backup."},
         {"media_tools.batch_pv_cancel", "Cancel Compression"},
         {"media_tools.batch_pv_canceled", "Batch compression canceled."},
         {"media_tools.batch_pv_chart_folder", "Folder"},
         {"media_tools.batch_pv_choose_folder", "Choose a Folder to Scan for Videos"},
-        {"media_tools.batch_pv_clear_queue", "Clear Queue"},
+        {"media_tools.batch_pv_clear_queue", "キューを空にする"},
         {"media_tools.batch_pv_complete_1_2", "Batch compression complete: %1 succeeded, %2 failed."},
         {"media_tools.batch_pv_compressing", "Compressing..."},
         {"media_tools.batch_pv_compressing_1", "Compressing: %1"},
-        {"media_tools.batch_pv_confirm_1", "Compress all %1 videos in the list? Originals will be backed up as bg_bak.mp4 or pv_bak.mp4."},
-        {"media_tools.batch_pv_description", "Scan the selected folder and its immediate subfolders for bg.mp4 or pv.mp4, then compress videos under 20 MiB."},
+        {"media_tools.batch_pv_confirm_1", "Compress all %1 videos in the list and remove their audio tracks? Originals will be backed up as bg_bak.mp4 or pv_bak.mp4."},
+        {"media_tools.batch_pv_description", "Scan the selected folder and its immediate subfolders for bg.mp4 or pv.mp4, then compress videos under 20 MB with audio tracks removed."},
         {"media_tools.batch_pv_done_1", "Compression succeeded (%1)"},
         {"media_tools.batch_pv_duration_failed", "Could not read the video duration."},
         {"media_tools.batch_pv_empty", "The video compression list is empty."},
@@ -4031,7 +4063,7 @@ const QHash<QString, QString>& jaMap()
         {"media_tools.batch_pv_invalid_file", "Invalid or empty video file"},
         {"media_tools.batch_pv_invalid_folder", "Choose a valid folder."},
         {"media_tools.batch_pv_original_size", "Original Size"},
-        {"media_tools.batch_pv_output_invalid", "Output was not smaller than the original and under 20 MiB."},
+        {"media_tools.batch_pv_output_invalid", "Output was not smaller than the original and under 20 MB."},
         {"media_tools.batch_pv_path", "Path"},
         {"media_tools.batch_pv_pending", "Pending"},
         {"media_tools.batch_pv_no_video", "No video"},
@@ -4110,9 +4142,6 @@ QVector<UiText::LanguageOption> UiText::availableLanguageOptions()
             ? QStringLiteral("Japanese")
             : text(QStringLiteral("dialog.preferences.language.japanese")), true},
     };
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        options.append(UiText::LanguageOption{pack.id, pack.label, false});
-    }
     return options;
 }
 
@@ -4121,11 +4150,6 @@ bool UiText::isLanguageAvailable(const QString& token)
     const QString normalized = normalizedLanguageToken(token);
     if (isBuiltInLanguageToken(normalized)) {
         return true;
-    }
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        if (pack.id == normalized) {
-            return true;
-        }
     }
     return false;
 }
@@ -4138,11 +4162,6 @@ bool UiText::ensurePreferredLanguageAvailable()
     }
     setPreferredLanguageToken(QStringLiteral("system"));
     return true;
-}
-
-void UiText::reloadExtensionLanguagePacks()
-{
-    externalLanguagePacksStorage() = scanExtensionLanguagePacks();
 }
 
 UiText::ThemePreference UiText::preferredTheme()
@@ -4198,15 +4217,7 @@ QStringList UiText::translationKeyMismatches()
 
 bool UiText::hasTranslationKey(const QString& key)
 {
-    if (enMap().contains(key) && zhMap().contains(key) && jaMap().contains(key)) {
-        return true;
-    }
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        if (pack.translations.contains(key)) {
-            return true;
-        }
-    }
-    return false;
+    return enMap().contains(key) && zhMap().contains(key) && jaMap().contains(key);
 }
 
 QString UiText::preferencesFilePath()
@@ -4290,18 +4301,6 @@ QString UiText::text(const QString& key)
         preferredMap = &enMap();
         break;
     }
-    const QString language = resolvedLanguageToken();
-    for (const auto& pack : externalLanguagePacksStorage()) {
-        if (pack.id != language) {
-            continue;
-        }
-        const auto it = pack.translations.constFind(key);
-        if (it != pack.translations.constEnd()) {
-            return it.value();
-        }
-        break;
-    }
-
     const QString localized = mapValue(*preferredMap, key);
     if (!localized.isEmpty()) {
         return localized;
@@ -4311,4 +4310,338 @@ QString UiText::text(const QString& key)
         return english;
     }
     return key;
+}
+
+namespace {
+
+// UIv2 QML passes visible Chinese source strings (the cover page passes catalog
+// keys). Several of those Chinese strings are homographs in the v1 catalog —
+// “关闭” is Close / Off / Disabled, “还原” is Reset / restore-window — so a bare
+// reverse lookup could land on an unrelated legacy meaning, and QHash iteration
+// order would make the pick differ between runs. This table names the canonical
+// key for every homograph v2 actually uses.
+//
+// It maps to a KEY, never to a translation: the catalog stays the single source
+// of truth, so a wording fix there reaches QML with no second table to update.
+// A source whose meaning is genuinely split *inside* QML (the caption bar's
+// 还原 = restore window vs. the HUD font's 还原 = reset) cannot be pinned here —
+// that call site passes an explicit key instead.
+const QHash<QString, QString>& qmlSourceKeys()
+{
+    static const QHash<QString, QString> map{
+        {QStringLiteral("偏移"), QStringLiteral("latency.offset")},
+        {QStringLiteral("停止"), QStringLiteral("dialog.video_export.preview.stop")},
+        {QStringLiteral("关闭"), QStringLiteral("action.close")},
+        {QStringLiteral("删除书签"), QStringLiteral("editor.bookmark.delete")},
+        {QStringLiteral("取消"), QStringLiteral("action.cancel")},
+        {QStringLiteral("取消导出"), QStringLiteral("video_export.cancel_export")},
+        {QStringLiteral("字体"), QStringLiteral("cover.font")},
+        {QStringLiteral("导出"), QStringLiteral("sidebar.export")},
+        {QStringLiteral("导出区间"), QStringLiteral("video_export.export_range")},
+        {QStringLiteral("平滑亮度"), QStringLiteral("video_export.smooth_brightness")},
+        {QStringLiteral("开始"), QStringLiteral("dialog.video_export.range.start")},
+        {QStringLiteral("开始导出"), QStringLiteral("video_export.start_export")},
+        {QStringLiteral("性能"), QStringLiteral("dialog.preferences.performance_group")},
+        {QStringLiteral("打开"), QStringLiteral("action.open")},
+        {QStringLiteral("批量导出"), QStringLiteral("action.batch_export")},
+        {QStringLiteral("播放"), QStringLiteral("preview.play")},
+        {QStringLiteral("显示左下角时间戳"), QStringLiteral("video_export.show_bottom_left_timestamp")},
+        {QStringLiteral("暂停"), QStringLiteral("preview.pause")},
+        {QStringLiteral("曲绘"), QStringLiteral("cover.jacket")},
+        {QStringLiteral("标题"), QStringLiteral("net.title")},
+        {QStringLiteral("浏览..."), QStringLiteral("action.browse")},
+        {QStringLiteral("清空队列"), QStringLiteral("media_tools.batch_pv_clear_queue")},
+        {QStringLiteral("游戏"), QStringLiteral("video_export.gameplay")},
+        {QStringLiteral("片头"), QStringLiteral("video_export.intro")},
+        {QStringLiteral("皮肤"), QStringLiteral("video_export.skin")},
+        {QStringLiteral("结束"), QStringLiteral("dialog.video_export.range.end")},
+        {QStringLiteral("编辑器"), QStringLiteral("dialog.preferences.editor_group")},
+        {QStringLiteral("背景"), QStringLiteral("dialog.preferences.background_group")},
+        {QStringLiteral("自动检测"), QStringLiteral("latency.auto_detect")},
+        {QStringLiteral("视频"), QStringLiteral("video_export.video")},
+        {QStringLiteral("谱师"), QStringLiteral("net.designer")},
+        {QStringLiteral("谱面文件夹"), QStringLiteral("dialog.batch_export.chart_folders")},
+        {QStringLiteral("输出"), QStringLiteral("video_export.output")},
+        {QStringLiteral("还原"), QStringLiteral("action.reset")},
+        {QStringLiteral("重命名书签"), QStringLiteral("editor.bookmark.rename")},
+        {QStringLiteral("音频设置"), QStringLiteral("action.audio_settings")},
+        {QStringLiteral("预览设置"), QStringLiteral("action.video_settings")},
+    };
+    return map;
+}
+
+// Chinese value -> key, built once. Resolving a source used to iterate the whole
+// catalog on every lookup, i.e. on every QML binding evaluation. Duplicate
+// Chinese values resolve to the lexicographically first key so the choice is
+// stable across runs; every duplicate QML actually uses is pinned by
+// qmlSourceKeys() above, which is consulted first.
+const QHash<QString, QString>& qmlSourceReverseIndex()
+{
+    static const QHash<QString, QString> map = [] {
+        QHash<QString, QString> reverse;
+        const auto& chinese = zhMap();
+        for (auto it = chinese.constBegin(); it != chinese.constEnd(); ++it) {
+            const auto existing = reverse.constFind(it.value());
+            if (existing == reverse.constEnd() || it.key() < existing.value()) {
+                reverse.insert(it.value(), it.key());
+            }
+        }
+        return reverse;
+    }();
+    return map;
+}
+
+// UIv2-only strings that have no v1 catalog entry at all. Their three language
+// forms live next to the canonical catalog rather than in QML (where `qsTr` had
+// no installed translator). Promoting one into the keyed catalog is the
+// preferred fix once v1 grows an equivalent label.
+const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
+{
+    static const QHash<QString, QPair<QString, QString>> map{
+        {QStringLiteral(" · 谱师：%1"), {QStringLiteral(" · Chart Designer: %1"), QStringLiteral(" ・譜面制作者：%1")}},
+        {QStringLiteral("%1 个错误，%2 个警告"), {QStringLiteral("%1 errors, %2 warnings"), QStringLiteral("エラー %1 件、警告 %2 件")}},
+        {QStringLiteral("%1 尚未更新到 QML 界面。"), {QStringLiteral("%1 has not yet been migrated to the QML interface."), QStringLiteral("%1 はまだ QML インターフェースに移行されていません。")}},
+        {QStringLiteral("%1%"), {QStringLiteral("%1%"), QStringLiteral("%1%")}},
+        {QStringLiteral("%1x"), {QStringLiteral("%1x"), QStringLiteral("%1倍")}},
+        {QStringLiteral("%1，第 %2 行"), {QStringLiteral("%1, line %2"), QStringLiteral("%1、%2 行目")}},
+        {QStringLiteral("A / B / C / D / E 各区半径不同，暂不可调。"), {QStringLiteral("The A / B / C / D / E areas use different radii and cannot be adjusted yet."), QStringLiteral("A / B / C / D / E の各エリアは半径が異なるため、現在は調整できません。")}},
+        {QStringLiteral("BPM"), {QStringLiteral("BPM"), QStringLiteral("BPM")}},
+        {QStringLiteral("Enter 跳转；Ctrl+Shift+B 创建；Delete 删除；F2 重命名；右键打开书签菜单"), {QStringLiteral("Enter to jump; Ctrl+Shift+B to create; Delete to remove; F2 to rename; right-click for the bookmark menu"), QStringLiteral("Enter で移動、Ctrl+Shift+B で作成、Delete で削除、F2 で名前変更、右クリックでブックマークメニュー")}},
+        {QStringLiteral("HUD 字体区域"), {QStringLiteral("HUD font area"), QStringLiteral("HUD フォント領域")}},
+        {QStringLiteral("Muri"), {QStringLiteral("Muri"), QStringLiteral("無理")}},
+        {QStringLiteral("PV 帧率"), {QStringLiteral("PV frame rate"), QStringLiteral("PV フレームレート")}},
+        {QStringLiteral("Simai 文件 (*.txt *.simai)"), {QStringLiteral("Simai files (*.txt *.simai)"), QStringLiteral("Simai ファイル (*.txt *.simai)")}},
+        {QStringLiteral("「%1」有未保存的更改。"), {QStringLiteral("\"%1\" has unsaved changes."), QStringLiteral("「%1」には未保存の変更があります。")}},
+        {QStringLiteral("上一个"), {QStringLiteral("Previous"), QStringLiteral("前へ")}},
+        {QStringLiteral("下一个"), {QStringLiteral("Next"), QStringLiteral("次へ")}},
+        {QStringLiteral("书签"), {QStringLiteral("Bookmarks"), QStringLiteral("ブックマーク")}},
+        {QStringLiteral("书签 %1：%2"), {QStringLiteral("Bookmark %1: %2"), QStringLiteral("ブックマーク %1：%2")}},
+        {QStringLiteral("书签与行号：第 %1 行无书签"), {QStringLiteral("Bookmarks and line numbers: no bookmark on line %1"), QStringLiteral("ブックマークと行番号：%1 行目にブックマークはありません")}},
+        {QStringLiteral("书签与行号：第 %1 行有书签"), {QStringLiteral("Bookmarks and line numbers: line %1 has a bookmark"), QStringLiteral("ブックマークと行番号：%1 行目にブックマークがあります")}},
+        {QStringLiteral("书签名称"), {QStringLiteral("Bookmark name"), QStringLiteral("ブックマーク名")}},
+        {QStringLiteral("从左侧打开元数据或难度"), {QStringLiteral("Open metadata or a difficulty from the sidebar"), QStringLiteral("サイドバーからメタデータまたは難易度を開いてください")}},
+        {QStringLiteral("保存 simai 文件"), {QStringLiteral("Save Simai file"), QStringLiteral("Simai ファイルを保存")}},
+        {QStringLiteral("保存只写入这个难度，其他难度在文件里保持原样；放弃把这个难度还原到上次保存时的内容。"), {QStringLiteral("Save writes only this difficulty and leaves the others unchanged; discard restores this difficulty to its last saved content."), QStringLiteral("保存はこの難易度だけを書き込み、他の難易度は変更しません。破棄するとこの難易度を前回保存時の内容に戻します。")}},
+        {QStringLiteral("修正 HUD 文本布局"), {QStringLiteral("Fix HUD text layout"), QStringLiteral("HUD テキスト配置を補正")}},
+        {QStringLiteral("入口会保留，功能完成后将在此处提供。"), {QStringLiteral("This entry will remain here and become available when the feature is complete."), QStringLiteral("この入口は残し、機能の完成後にここで提供します。")}},
+        {QStringLiteral("全词"), {QStringLiteral("Whole words"), QStringLiteral("単語全体")}},
+        {QStringLiteral("全部恢复默认"), {QStringLiteral("Restore all defaults"), QStringLiteral("すべて既定値に戻す")}},
+        {QStringLiteral("关于 MiaCode"), {QStringLiteral("About MiaCode"), QStringLiteral("MiaCode について")}},
+        {QStringLiteral("关闭 %1"), {QStringLiteral("Close %1"), QStringLiteral("%1 を閉じる")}},
+        {QStringLiteral("关闭 (Ctrl+W)"), {QStringLiteral("Close (Ctrl+W)"), QStringLiteral("閉じる (Ctrl+W)")}},
+        {QStringLiteral("关闭「%1」"), {QStringLiteral("Close \"%1\""), QStringLiteral("「%1」を閉じる")}},
+        {QStringLiteral("关闭文档"), {QStringLiteral("Close document"), QStringLiteral("ドキュメントを閉じる")}},
+        {QStringLiteral("内圈亮度"), {QStringLiteral("Inner brightness"), QStringLiteral("内側の明るさ")}},
+        {QStringLiteral("切换侧栏"), {QStringLiteral("Toggle sidebar"), QStringLiteral("サイドバーを切り替え")}},
+        {QStringLiteral("切换底部面板"), {QStringLiteral("Toggle bottom panel"), QStringLiteral("下部パネルを切り替え")}},
+        {QStringLiteral("创建书签"), {QStringLiteral("Create bookmark"), QStringLiteral("ブックマークを作成")}},
+        {QStringLiteral("删除当前难度"), {QStringLiteral("Delete current difficulty"), QStringLiteral("現在の難易度を削除")}},
+        {QStringLiteral("区分大小写"), {QStringLiteral("Match case"), QStringLiteral("大文字と小文字を区別")}},
+        {QStringLiteral("半角输入转换"), {QStringLiteral("Convert half-width input"), QStringLiteral("半角入力を変換")}},
+        {QStringLiteral("取消静音"), {QStringLiteral("Unmute"), QStringLiteral("ミュート解除")}},
+        {QStringLiteral("右侧"), {QStringLiteral("Right"), QStringLiteral("右側")}},
+        {QStringLiteral("启用 clock_count"), {QStringLiteral("Enable clock_count"), QStringLiteral("clock_count を有効化")}},
+        {QStringLiteral("在 %1 开头插入 %2 拍（BPM %3）静音，约 %4 秒，并自动备份原文件。"), {QStringLiteral("Insert %2 beats of silence (BPM %3, about %4 seconds) at the beginning of %1. The original file is backed up."), QStringLiteral("%1 の先頭に %2 拍（BPM %3、約 %4 秒）の無音を挿入します。元ファイルは自動でバックアップされます。")}},
+        {QStringLiteral("在 %1 开头插入 %2 拍（BPM %3）黑屏，约 %4 秒，并自动备份原文件。"), {QStringLiteral("Insert %2 beats of black screen (BPM %3, about %4 seconds) at the beginning of %1. The original file is backed up."), QStringLiteral("%1 の先頭に %2 拍（BPM %3、約 %4 秒）の黒画面を挿入します。元ファイルは自動でバックアップされます。")}},
+        {QStringLiteral("在 track.mp3 开头插入一段静音。"), {QStringLiteral("Insert silence at the start of track.mp3."), QStringLiteral("track.mp3 の先頭に無音を挿入します。")}},
+        {QStringLiteral("在背景视频开头插入一段黑屏。"), {QStringLiteral("Insert black screen at the start of the background video."), QStringLiteral("背景動画の先頭に黒画面を挿入します。")}},
+        {QStringLiteral("外圈亮度"), {QStringLiteral("Outer brightness"), QStringLiteral("外側の明るさ")}},
+        {QStringLiteral("对齐到 384 分网格"), {QStringLiteral("Align to the 1/384 grid"), QStringLiteral("384 分グリッドに整列")}},
+        {QStringLiteral("导出选区"), {QStringLiteral("Export selection"), QStringLiteral("選択範囲をエクスポート")}},
+        {QStringLiteral("导入 HUD 字体"), {QStringLiteral("Import HUD font"), QStringLiteral("HUD フォントを読み込む")}},
+        {QStringLiteral("导入片头难度卡字体"), {QStringLiteral("Import intro difficulty-card fonts"), QStringLiteral("イントロ難度カードのフォントを読み込む")}},
+        {QStringLiteral("将规范化整份谱面正文。"), {QStringLiteral("Normalize the entire chart source."), QStringLiteral("譜面ソース全体を正規化します。")}},
+        {QStringLiteral("将规范化选中的第 %1 - %2 行。"), {QStringLiteral("Normalize selected lines %1–%2."), QStringLiteral("選択した %1～%2 行を正規化します。")}},
+        {QStringLiteral("展开书签"), {QStringLiteral("Expand bookmarks"), QStringLiteral("ブックマークを展開")}},
+        {QStringLiteral("展开难度"), {QStringLiteral("Expand difficulties"), QStringLiteral("難易度を展開")}},
+        {QStringLiteral("工具"), {QStringLiteral("Tools"), QStringLiteral("ツール")}},
+        {QStringLiteral("等级"), {QStringLiteral("Level"), QStringLiteral("レベル")}},
+        {QStringLiteral("延迟"), {QStringLiteral("Offset"), QStringLiteral("オフセット")}},
+        {QStringLiteral("左侧"), {QStringLiteral("Left"), QStringLiteral("左側")}},
+        {QStringLiteral("常规渲染"), {QStringLiteral("Normal rendering"), QStringLiteral("通常レンダリング")}},
+        {QStringLiteral("平滑星星消去动画"), {QStringLiteral("Smooth star-clear animation"), QStringLiteral("星消去アニメーションを滑らかにする")}},
+        {QStringLiteral("延迟校准"), {QStringLiteral("Latency calibration"), QStringLiteral("レイテンシー調整")}},
+        {QStringLiteral("开始压缩"), {QStringLiteral("Start compression"), QStringLiteral("圧縮を開始")}},
+        {QStringLiteral("开始试听"), {QStringLiteral("Start audition"), QStringLiteral("試聴を開始")}},
+        {QStringLiteral("当前存在多个谱师名义，请选择要统一使用的值。"), {QStringLiteral("Multiple chart-designer names exist. Choose the value to use everywhere."), QStringLiteral("複数の譜面制作者名があります。統一して使用する値を選択してください。")}},
+        {QStringLiteral("当前难度及其正文将从文档中删除。"), {QStringLiteral("The current difficulty and its source will be removed from the document."), QStringLiteral("現在の難易度とその本文をドキュメントから削除します。")}},
+        {QStringLiteral("录制中…"), {QStringLiteral("Recording…"), QStringLiteral("記録中…")}},
+        {QStringLiteral("总时长 %1 s"), {QStringLiteral("Total duration: %1 s"), QStringLiteral("合計時間：%1 秒")}},
+        {QStringLiteral("恢复备份"), {QStringLiteral("Restore backup"), QStringLiteral("バックアップを復元")}},
+        {QStringLiteral("恢复备份 (%1)"), {QStringLiteral("Restore backup (%1)"), QStringLiteral("バックアップを復元 (%1)")}},
+        {QStringLiteral("恢复本地默认"), {QStringLiteral("Restore local defaults"), QStringLiteral("ローカル既定値に戻す")}},
+        {QStringLiteral("恢复默认"), {QStringLiteral("Restore defaults"), QStringLiteral("既定値に戻す")}},
+        {QStringLiteral("返回"), {QStringLiteral("Back"), QStringLiteral("戻る")}},
+        {QStringLiteral("所有文件 (*)"), {QStringLiteral("All files (*)"), QStringLiteral("すべてのファイル (*)")}},
+        {QStringLiteral("所有文件 (*.*)"), {QStringLiteral("All files (*.*)"), QStringLiteral("すべてのファイル (*.*)")}},
+        {QStringLiteral("打开 simai 文件"), {QStringLiteral("Open Simai file"), QStringLiteral("Simai ファイルを開く")}},
+        {QStringLiteral("打开播放速度预设"), {QStringLiteral("Open playback-speed presets"), QStringLiteral("再生速度プリセットを開く")}},
+        {QStringLiteral("打开时间轴缩放预设"), {QStringLiteral("Open timeline zoom presets"), QStringLiteral("タイムライン拡大率プリセットを開く")}},
+        {QStringLiteral("打开波形和小节线亮度设置"), {QStringLiteral("Open waveform and beat-line brightness settings"), QStringLiteral("波形と拍線の明るさ設定を開く")}},
+        {QStringLiteral("打开预览渲染模式菜单"), {QStringLiteral("Open preview rendering-mode menu"), QStringLiteral("プレビューレンダリングモードメニューを開く")}},
+        {QStringLiteral("转换采样率"), {QStringLiteral("Convert sample rate"), QStringLiteral("サンプルレートを変換")}},
+        {QStringLiteral("将 track.mp3 的采样率转换为 44100 Hz，并自动备份原文件。"), {QStringLiteral("Convert the sample rate of track.mp3 to 44100 Hz and automatically back up the original file."), QStringLiteral("track.mp3 のサンプルレートを 44100 Hz に変換し、元のファイルを自動的にバックアップします。")}},
+        {QStringLiteral("音频前置空白"), {QStringLiteral("Prepend blank audio"), QStringLiteral("音声の先頭に無音を追加")}},
+        {QStringLiteral("在 track.mp3 开头插入指定时长的空白音频，并自动备份原文件。"), {QStringLiteral("Insert blank audio of the specified duration at the beginning of track.mp3 and automatically back up the original file."), QStringLiteral("track.mp3 の先頭に指定した長さの無音を挿入し、元のファイルを自動的にバックアップします。")}},
+        {QStringLiteral("视频前置黑幕"), {QStringLiteral("Prepend black screen"), QStringLiteral("動画の先頭に黒画面を追加")}},
+        {QStringLiteral("在背景视频开头插入指定时长的黑幕，并自动备份原文件。"), {QStringLiteral("Insert a black screen of the specified duration at the beginning of the background video and automatically back up the original file."), QStringLiteral("背景動画の先頭に指定した長さの黒画面を挿入し、元のファイルを自動的にバックアップします。")}},
+        {QStringLiteral("将背景视频压缩至 20 MiB 以内，并自动备份原文件。"), {QStringLiteral("Compress the background video to 20 MiB or less and automatically back up the original file."), QStringLiteral("背景動画を 20 MiB 以下に圧縮し、元のファイルを自動的にバックアップします。")}},
+        {QStringLiteral("批量"), {QStringLiteral("Batch"), QStringLiteral("バッチ")}},
+        {QStringLiteral("批量压缩视频"), {QStringLiteral("Batch-compress videos"), QStringLiteral("動画を一括圧縮")}},
+        {QStringLiteral("选择目录并批量压缩其中的背景视频。"), {QStringLiteral("Choose a folder and batch-compress the background videos it contains."), QStringLiteral("フォルダーを選択し、その中の背景動画を一括圧縮します。")}},
+        {QStringLiteral("折叠书签"), {QStringLiteral("Collapse bookmarks"), QStringLiteral("ブックマークを折りたたむ")}},
+        {QStringLiteral("折叠难度"), {QStringLiteral("Collapse difficulties"), QStringLiteral("難易度を折りたたむ")}},
+        {QStringLiteral("按下新的快捷键，Esc 取消。"), {QStringLiteral("Press a new shortcut; Esc cancels."), QStringLiteral("新しいショートカットを押してください。Esc でキャンセルします。")}},
+        {QStringLiteral("撤销"), {QStringLiteral("Undo"), QStringLiteral("元に戻す")}},
+        {QStringLiteral("播放速度"), {QStringLiteral("Playback speed"), QStringLiteral("再生速度")}},
+        {QStringLiteral("整理语法"), {QStringLiteral("Format syntax"), QStringLiteral("構文を整形")}},
+        {QStringLiteral("整谱规范化"), {QStringLiteral("Normalize whole chart"), QStringLiteral("譜面全体を正規化")}},
+        {QStringLiteral("无理判定半径"), {QStringLiteral("Muri judgement radius"), QStringLiteral("無理判定半径")}},
+        {QStringLiteral("无理检测"), {QStringLiteral("Muri analysis"), QStringLiteral("無理検出")}},
+        {QStringLiteral("时间轴亮度"), {QStringLiteral("Timeline brightness"), QStringLiteral("タイムラインの明るさ")}},
+        {QStringLiteral("时间轴帧率"), {QStringLiteral("Timeline frame rate"), QStringLiteral("タイムラインのフレームレート")}},
+        {QStringLiteral("时间轴缩放"), {QStringLiteral("Timeline zoom"), QStringLiteral("タイムラインの拡大率")}},
+        {QStringLiteral("显示所有已打开的编辑器"), {QStringLiteral("Show all open editors"), QStringLiteral("開いているすべてのエディターを表示")}},
+        {QStringLiteral("显示谱面信息"), {QStringLiteral("Show chart information"), QStringLiteral("譜面情報を表示")}},
+        {QStringLiteral("暂无备份"), {QStringLiteral("No backups"), QStringLiteral("バックアップはありません")}},
+        {QStringLiteral("暂无最近文档"), {QStringLiteral("No recent documents"), QStringLiteral("最近のドキュメントはありません")}},
+        {QStringLiteral("暂未更新支持"), {QStringLiteral("Not yet available in QML"), QStringLiteral("QML 版ではまだ利用できません")}},
+        {QStringLiteral("更多"), {QStringLiteral("More"), QStringLiteral("その他")}},
+        {QStringLiteral("最大化"), {QStringLiteral("Maximize"), QStringLiteral("最大化")}},
+        {QStringLiteral("最小化"), {QStringLiteral("Minimize"), QStringLiteral("最小化")}},
+        {QStringLiteral("未发现 Muri 问题"), {QStringLiteral("No Muri issues found"), QStringLiteral("無理の問題は見つかりませんでした")}},
+        {QStringLiteral("未发现验证问题"), {QStringLiteral("No validation issues found"), QStringLiteral("検証上の問題は見つかりませんでした")}},
+        {QStringLiteral("查找与替换"), {QStringLiteral("Find and replace"), QStringLiteral("検索と置換")}},
+        {QStringLiteral("标题字体预览"), {QStringLiteral("Title-font preview"), QStringLiteral("タイトルフォントのプレビュー")}},
+        {QStringLiteral("检查谱面"), {QStringLiteral("Validate chart"), QStringLiteral("譜面を検証")}},
+        {QStringLiteral("检测"), {QStringLiteral("Detect"), QStringLiteral("検出")}},
+        {QStringLiteral("正在分析…"), {QStringLiteral("Analyzing…"), QStringLiteral("解析中…")}},
+        {QStringLiteral("正在取消…"), {QStringLiteral("Cancelling…"), QStringLiteral("キャンセル中…")}},
+        {QStringLiteral("正文字体预览"), {QStringLiteral("Body-font preview"), QStringLiteral("本文フォントのプレビュー")}},
+        {QStringLiteral("添加"), {QStringLiteral("Add"), QStringLiteral("追加")}},
+        {QStringLiteral("点击一行以录制新的快捷键。"), {QStringLiteral("Click a row to record a new shortcut."), QStringLiteral("行をクリックして新しいショートカットを記録します。")}},
+        {QStringLiteral("片头标题字体"), {QStringLiteral("Intro title font"), QStringLiteral("イントロタイトルフォント")}},
+        {QStringLiteral("片头正文字体"), {QStringLiteral("Intro body font"), QStringLiteral("イントロ本文フォント")}},
+        {QStringLiteral("画布帧率"), {QStringLiteral("Canvas frame rate"), QStringLiteral("キャンバスのフレームレート")}},
+        {QStringLiteral("画面"), {QStringLiteral("Visuals"), QStringLiteral("画面")}},
+        {QStringLiteral("界面"), {QStringLiteral("Interface"), QStringLiteral("インターフェース")}},
+        {QStringLiteral("硬件解码"), {QStringLiteral("Hardware decoding"), QStringLiteral("ハードウェアデコード")}},
+        {QStringLiteral("禁用输入法"), {QStringLiteral("Disable IME"), QStringLiteral("IME を無効化")}},
+        {QStringLiteral("移除"), {QStringLiteral("Remove"), QStringLiteral("削除")}},
+        {QStringLiteral("第 %1 行：%2"), {QStringLiteral("Line %1: %2"), QStringLiteral("%1 行目：%2")}},
+        {QStringLiteral("等级文本渲染"), {QStringLiteral("Render level as text"), QStringLiteral("レベルをテキストで描画")}},
+        {QStringLiteral("细分"), {QStringLiteral("Subdivision"), QStringLiteral("細分")}},
+        {QStringLiteral("背景缩放"), {QStringLiteral("Background scaling"), QStringLiteral("背景の拡大縮小")}},
+        {QStringLiteral("启用应用背景"), {QStringLiteral("Enable application background"), QStringLiteral("アプリ背景を有効にする")}},
+        {QStringLiteral("未选择背景图片"), {QStringLiteral("No background image selected"), QStringLiteral("背景画像が選択されていません")}},
+        {QStringLiteral("背景覆盖层"), {QStringLiteral("Background overlays"), QStringLiteral("背景オーバーレイ")}},
+        {QStringLiteral("缩放模式"), {QStringLiteral("Scale mode"), QStringLiteral("拡大縮小モード")}},
+        {QStringLiteral("工具栏（深色）"), {QStringLiteral("Toolbar (Dark)"), QStringLiteral("ツールバー（ダーク）")}},
+        {QStringLiteral("工具栏（浅色）"), {QStringLiteral("Toolbar (Light)"), QStringLiteral("ツールバー（ライト）")}},
+        {QStringLiteral("状态栏（深色）"), {QStringLiteral("Status bar (Dark)"), QStringLiteral("ステータスバー（ダーク）")}},
+        {QStringLiteral("状态栏（浅色）"), {QStringLiteral("Status bar (Light)"), QStringLiteral("ステータスバー（ライト）")}},
+        {QStringLiteral("面板（深色）"), {QStringLiteral("Panel (Dark)"), QStringLiteral("パネル（ダーク）")}},
+        {QStringLiteral("面板（浅色）"), {QStringLiteral("Panel (Light)"), QStringLiteral("パネル（ライト）")}},
+        {QStringLiteral("编辑器标题（深色）"), {QStringLiteral("Editor header (Dark)"), QStringLiteral("エディターヘッダー（ダーク）")}},
+        {QStringLiteral("编辑器标题（浅色）"), {QStringLiteral("Editor header (Light)"), QStringLiteral("エディターヘッダー（ライト）")}},
+        {QStringLiteral("输入控件（深色）"), {QStringLiteral("Input controls (Dark)"), QStringLiteral("入力コントロール（ダーク）")}},
+        {QStringLiteral("输入控件（浅色）"), {QStringLiteral("Input controls (Light)"), QStringLiteral("入力コントロール（ライト）")}},
+        {QStringLiteral("代码编辑器（深色）"), {QStringLiteral("Code editor (Dark)"), QStringLiteral("コードエディター（ダーク）")}},
+        {QStringLiteral("代码编辑器（浅色）"), {QStringLiteral("Code editor (Light)"), QStringLiteral("コードエディター（ライト）")}},
+        {QStringLiteral("自动"), {QStringLiteral("Automatic"), QStringLiteral("自動")}},
+        {QStringLiteral("自定义"), {QStringLiteral("Custom"), QStringLiteral("カスタム")}},
+        {QStringLiteral("行 %1，列 %2"), {QStringLiteral("Line %1, column %2"), QStringLiteral("%1 行、%2 列")}},
+        {QStringLiteral("视频解码"), {QStringLiteral("Video decoding"), QStringLiteral("動画デコード")}},
+        {QStringLiteral("视图设置"), {QStringLiteral("View settings"), QStringLiteral("ビュー設定")}},
+        {QStringLiteral("解码器"), {QStringLiteral("Decoder"), QStringLiteral("デコーダー")}},
+        {QStringLiteral("警报"), {QStringLiteral("Alerts"), QStringLiteral("警告")}},
+        {QStringLiteral("计数拍"), {QStringLiteral("Count-in beats"), QStringLiteral("カウントイン拍")}},
+        {QStringLiteral("设为本地默认"), {QStringLiteral("Set as local default"), QStringLiteral("ローカル既定値に設定")}},
+        {QStringLiteral("语言与主题的更改将在重启后生效。"), {QStringLiteral("Language and theme changes take effect after restarting."), QStringLiteral("言語とテーマの変更は再起動後に反映されます。")}},
+        {QStringLiteral("谱面"), {QStringLiteral("Chart"), QStringLiteral("譜面")}},
+        {QStringLiteral("跟随当前谱面代码位置"), {QStringLiteral("Follow current chart-source position"), QStringLiteral("現在の譜面ソース位置に追従")}},
+        {QStringLiteral("跳转到此行"), {QStringLiteral("Jump to this line"), QStringLiteral("この行へ移動")}},
+        {QStringLiteral("软件解码"), {QStringLiteral("Software decoding"), QStringLiteral("ソフトウェアデコード")}},
+        {QStringLiteral("输出文件夹"), {QStringLiteral("Output folder"), QStringLiteral("出力フォルダー")}},
+        {QStringLiteral("还原 HUD 字体"), {QStringLiteral("Reset HUD font"), QStringLiteral("HUD フォントをリセット")}},
+        {QStringLiteral("退出全屏预览"), {QStringLiteral("Exit fullscreen preview"), QStringLiteral("全画面プレビューを終了")}},
+        {QStringLiteral("选择当前行"), {QStringLiteral("Select current line"), QStringLiteral("現在の行を選択")}},
+        {QStringLiteral("选择统一谱师"), {QStringLiteral("Choose unified chart designer"), QStringLiteral("統一する譜面制作者を選択")}},
+        {QStringLiteral("选择要扫描的目录"), {QStringLiteral("Choose a folder to scan"), QStringLiteral("スキャンするフォルダーを選択")}},
+        {QStringLiteral("重新检查"), {QStringLiteral("Recheck"), QStringLiteral("再チェック")}},
+        {QStringLiteral("重置片头难度卡字体"), {QStringLiteral("Reset intro difficulty-card fonts"), QStringLiteral("イントロ難度カードのフォントをリセット")}},
+        {QStringLiteral("错误"), {QStringLiteral("Errors"), QStringLiteral("エラー")}},
+        {QStringLiteral("难度卡字体"), {QStringLiteral("Difficulty-card fonts"), QStringLiteral("難度カードのフォント")}},
+        {QStringLiteral("静音"), {QStringLiteral("Mute"), QStringLiteral("ミュート")}},
+        {QStringLiteral("静音 Break 星星尾判音"), {QStringLiteral("Mute Break star-tail judgement sound"), QStringLiteral("Break 星の終端判定音をミュート")}},
+        {QStringLiteral("音效"), {QStringLiteral("Sound effects"), QStringLiteral("効果音")}},
+        {QStringLiteral("音效音量"), {QStringLiteral("Sound-effect volume"), QStringLiteral("効果音の音量")}},
+
+    };
+    return map;
+}
+
+QString localizedQmlOnlyEntry(const QPair<QString, QString>& entry, const QString& chineseSource)
+{
+    switch (resolvedLanguagePreference()) {
+    case UiText::LanguagePreference::Japanese:
+        return entry.second;
+    case UiText::LanguagePreference::Chinese:
+        return chineseSource;
+    case UiText::LanguagePreference::English:
+    case UiText::LanguagePreference::System:
+    default:
+        return entry.first;
+    }
+}
+
+}  // namespace
+
+QString UiText::textForQmlSource(const QString& source)
+{
+    if (source.isEmpty()) {
+        return source;
+    }
+
+    const auto& pinned = qmlSourceKeys();
+    if (const auto it = pinned.constFind(source); it != pinned.constEnd()) {
+        return text(it.value());
+    }
+
+    // All authored UIv2 strings are Simplified Chinese, and the v1 catalog is the
+    // product's canonical wording, so its Chinese table is the reverse index
+    // rather than a duplicate copy of those already-translated strings in QML.
+    const auto& reverse = qmlSourceReverseIndex();
+    if (const auto it = reverse.constFind(source); it != reverse.constEnd()) {
+        return text(it.value());
+    }
+
+    const auto& only = qmlOnlyEntries();
+    if (const auto it = only.constFind(source); it != only.constEnd()) {
+        return localizedQmlOnlyEntry(it.value(), source);
+    }
+
+    // Deliberately visible rather than an opaque marker, so a new label stays
+    // readable while it is promoted into the catalog. ui_text_locale_spec fails
+    // the build before that can turn into silent debt: it requires every QML
+    // `UiText.text("…")` literal to satisfy hasQmlSourceTranslation() below.
+    return source;
+}
+
+bool UiText::hasQmlSourceTranslation(const QString& source)
+{
+    if (source.isEmpty()) {
+        return false;
+    }
+    if (hasTranslationKey(source)) {
+        return true;
+    }
+    // A pinned source has to name a key that really exists: a typo in the table
+    // would otherwise reach the UI as the raw key, which is exactly the failure
+    // this predicate exists to catch.
+    const auto& pinned = qmlSourceKeys();
+    if (const auto it = pinned.constFind(source); it != pinned.constEnd()) {
+        return hasTranslationKey(it.value());
+    }
+    return qmlSourceReverseIndex().contains(source) || qmlOnlyEntries().contains(source);
 }

@@ -1,12 +1,15 @@
 #include "QmlUiBootstrap.h"
 
 #include "QmlApplicationContext.h"
+#include "QmlNoteImageProvider.h"
+#include "export/QmlCoverExportWindow.h"
 #include "QmlUiPlatformChrome.h"
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
-#include "mainwindow/MainWindow.h"
-#include "QuickShellController.h"
+#include "runtime/Session.h"
+#include "app/v2/ApplicationServices.h"
 #include "UiNativeWindowTheme.h"
+#include "drop/QmlChartDropBridge.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
@@ -17,6 +20,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QTextStream>
 #include <QTimer>
@@ -58,45 +62,41 @@ QmlUiBootstrap::QmlUiBootstrap(const QIcon& appIcon, QObject* parent)
 
 QmlUiBootstrap::~QmlUiBootstrap()
 {
-    rootWindow_ = nullptr;
+    delete coverWindow_.data();
+    releaseRootWindowResources();
     engine_.reset();
     windowChrome_.reset();
     applicationContext_.reset();
-    controller_.reset();
     backend_.reset();
+    // Last: the services outlive everything that borrows them.
+    applicationServices_.reset();
 }
 
 bool QmlUiBootstrap::start(const QString& startupOpenTarget)
 {
     miacode::oplog::appendStartupBeaconLine("qml_ui/start_enter");
     appendQmlUiRuntimeLog(QStringLiteral("start_enter"));
+    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
 
-    backend_ = std::make_unique<MainWindow>(true);
-    backend_->setQuickShellBackendActive(true);
-    backend_->setQmlExportCenterActive(true);
-    backend_->hide();
-    backend_->setVisible(false);
+    applicationServices_ = std::make_unique<miacode::v2::ApplicationServices>();
+    backend_ = std::make_unique<Session>(*applicationServices_);
+    backend_->setBackendActive(true);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
-    // v2 chrome stays pure QML. Export/Latency editor overlays may use a
-    // local WindowContainer via QmlEditorPageHost; the main shell still
-    // avoids NativeSurfaceHost rehost of the whole MainWindow.
-    // QuickShellController already null-checks surfaceHost_ for every
-    // bridge API used by preview/timeline.
-    controller_ = std::make_unique<QuickShellController>(
-        backend_.get(), backend_.get(), nullptr, this);
+    applicationContext_ = std::make_unique<QmlApplicationContext>(*applicationServices_, this);
+    QObject::connect(static_cast<QmlEditorPageHost*>(applicationContext_->pages()),
+        &QmlEditorPageHost::coverWindowRequested, this, &QmlUiBootstrap::openCoverExportWindow);
     QObject::connect(
-        controller_.get(),
-        &QuickShellController::rootCloseAccepted,
+        static_cast<miacode::qml_ui::QmlShellLifecycle*>(applicationContext_->shell()),
+        &miacode::qml_ui::QmlShellLifecycle::rootCloseAccepted,
         this,
         [this](const QString& source) {
             beginAcceptedRootWindowShutdown(source);
         });
-
-    applicationContext_ = std::make_unique<QmlApplicationContext>(
-        *backend_, *controller_, this);
     engine_ = std::make_unique<QQmlApplicationEngine>(this);
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+    registerQmlNoteImageProvider(
+        engine_.get(), static_cast<QmlPreviewModel*>(applicationContext_->preview()));
     ensurePreviewQuickTypesRegisteredForQmlUi();
 
     windowChrome_ = std::make_unique<QmlUiWindowChrome>(this);
@@ -123,12 +123,6 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             QTextStream(stderr).flush();
         });
 
-    qmlRegisterUncreatableType<QuickShellController>(
-        "MiaCode.QuickShell",
-        1,
-        0,
-        "QuickShellController",
-        "Quick shell controller is provided by bootstrap.");
 
     engine_->setInitialProperties({
         {QStringLiteral("applicationContext"),
@@ -144,16 +138,65 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         appendQmlUiRuntimeLog(QStringLiteral("load_failed"));
         QTextStream(stderr) << "[QmlUi QML] no root object created for MiaCode.UI/Main\n";
         QTextStream(stderr).flush();
+        releaseRootWindowResources();
         engine_.reset();
         applicationContext_.reset();
-        controller_.reset();
-        backend_.reset();
+            backend_.reset();
         return false;
     }
 
     if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst());
         window != nullptr) {
         rootWindow_ = window;
+        // The QML root owns the visual drop surface. The bridge is only a
+        // window-level event adapter and the sole owner of the OS drag route.
+        if (!rootLifecycle_.registerRoot()) {
+            releaseRootWindowResources();
+            return false;
+        }
+        backend_->attachRootWindow(window);
+        if (QQuickItem* rootItem = window->contentItem(); rootItem != nullptr) {
+            rootItem->setFlag(QQuickItem::ItemAcceptsDrops, true);
+        }
+        if (!rootLifecycle_.installRootEventFilter()) {
+            releaseRootWindowResources();
+            return false;
+        }
+        chartDropBridge_ = std::make_unique<miacode::qml_ui::QmlChartDropBridge>(
+            *window,
+            [window]() {
+                if (QQuickItem* contentItem = window->contentItem(); contentItem != nullptr) {
+                    contentItem->setFlag(QQuickItem::ItemAcceptsDrops, true);
+                }
+            },
+            [this](const QStringList& paths, quint64 requestId, quint64 generation,
+                   std::function<void(const miacode::qml_ui::QmlChartDropResult&)> done) {
+                applicationServices_->documentBridge()->importDroppedAudio(
+                    paths,
+                    requestId,
+                    generation,
+                    [done = std::move(done)](const miacode::v2::ChartDropImportResult& result) mutable {
+                        if (done) {
+                            done({result.requestId, result.generation, result.accepted,
+                                  result.completed, result.cancelled, result.createdCount,
+                                  result.failedCount, result.targetPath});
+                        }
+                    });
+            },
+            [](const miacode::qml_ui::QmlChartDropResult&) {},
+            this);
+        applicationContext_->setChartDropBridge(chartDropBridge_.get());
+        if (!rootLifecycle_.installDropBridge()) {
+            releaseRootWindowResources();
+            return false;
+        }
+        QObject::connect(window, &QObject::destroyed, this, [this]() {
+            // QObject destruction can arrive outside the accepted-close path;
+            // never touch the dying QQuickWindow while releasing its overlay.
+            rootWindow_ = nullptr;
+            releaseRootWindowResources();
+        });
+        backend_->setRootWindowFrameGeometry(window->frameGeometry());
         if (!appIcon_.isNull()) {
             window->setIcon(appIcon_);
         }
@@ -163,7 +206,6 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         auto* platform = qobject_cast<QmlUiPlatformChrome*>(applicationContext_->platform());
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         // Timing comes from applicationContext.platform (hide before / attach after show).
-        // QuickShellBootstrap (v1) never constructs QmlUiWindowChrome.
         if (platform != nullptr && platform->hideBeforeChromeAttach()) {
             window->setVisible(false);
             windowChrome_->attach(window);
@@ -171,6 +213,21 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         }
 #endif
         UiNativeWindowTheme::applyToWindow(window);
+        // The native frame is applied, not bound: without re-applying it the
+        // titlebar keeps the palette it was born with while every QML surface
+        // and the QSG timeline follow the new theme. Same call, repeated.
+        if (auto* settings = qobject_cast<QmlUiSettings*>(applicationContext_->preferences());
+            settings != nullptr) {
+            QObject::connect(settings, &QmlUiSettings::themeChanged, this, [this]() {
+                if (rootWindow_ != nullptr) {
+                    UiNativeWindowTheme::applyToWindow(rootWindow_);
+                }
+            });
+        }
+        if (!rootLifecycle_.canShowRoot()) {
+            releaseRootWindowResources();
+            return false;
+        }
         window->show();
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         if (platform != nullptr && platform->attachChromeAfterShow()) {
@@ -178,23 +235,48 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
             appendQmlUiRuntimeLog(QStringLiteral("window_chrome_attached"));
         }
 #endif
+
+        // The stage-media route defers its first chart-path load until the
+        // frontend window is ready. UIv2 has no native surface host to forward
+        // that readiness notification, so release the shared backend gate here
+        // after the QML root window has been created and shown.
+        backend_->noteRootWindowReady();
     }
 
-    if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {
-        backend_->openFileAtPath(startupOpenTarget.trimmed(), true, true);
-    }
-
-    if (showWelcomeDialogOnStartup_ && backend_ != nullptr) {
-        QTimer::singleShot(0, backend_.get(), [backend = backend_.get()]() {
-            if (backend != nullptr) {
-                backend->showWelcomeDialog();
-            }
-        });
+    if (!startupOpenTarget.trimmed().isEmpty() && applicationContext_ != nullptr) {
+        auto* document = qobject_cast<QmlDocumentModel*>(applicationContext_->document());
+        if (document != nullptr) {
+            document->openFile(QUrl::fromLocalFile(startupOpenTarget.trimmed()));
+        }
     }
 
     appendQmlUiRuntimeLog(QStringLiteral("start_ok"));
     miacode::oplog::appendStartupBeaconLine("qml_ui/start_ok");
     return true;
+}
+
+void QmlUiBootstrap::openCoverExportWindow(int difficultyId)
+{
+    if (coverWindow_) {
+        coverWindow_->raise();
+        return;
+    }
+    if (rootWindow_.isNull() || applicationServices_->exportEngine() == nullptr) {
+        return;
+    }
+    auto* preferences = static_cast<QmlUiSettings*>(applicationContext_->preferences());
+    auto* window = new QmlCoverExportWindow(*applicationServices_->exportEngine(),
+        applicationServices_->uiRequests(),
+        applicationServices_->playbackControlSlot(),
+        *preferences, appIcon_, this);
+    coverWindow_ = window;
+    if (!window->show(rootWindow_, difficultyId)) {
+        delete window;
+        applicationServices_->uiRequests().postNotice(miacode::v2::NoticeSeverity::Error,
+            preferences->localizedText(QStringLiteral("cover.export_cover")),
+            preferences->localizedText(QStringLiteral("cover.cover_export_failed_1"))
+                .arg(QStringLiteral("Failed to create the cover export window.")));
+    }
 }
 
 void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
@@ -211,8 +293,10 @@ void QmlUiBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
     if (!rootWindow_.isNull()) {
         rootWindow_->hide();
     }
-    if (backend_ != nullptr) {
-        backend_->preparePreviewForShutdown();
+    if (applicationServices_ != nullptr && applicationServices_->documentBridge() != nullptr
+        && applicationServices_->previewSurface() != nullptr) {
+        applicationServices_->documentBridge()->releaseChartDropImport();
+        applicationServices_->previewSurface()->prepareForShutdown();
     }
 
     QTimer::singleShot(0, this, [this, source]() {
@@ -225,17 +309,49 @@ void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& so
     if (acceptedRootWindowDestroyStarted_) {
         return;
     }
+    // Capture/export can be inside a nested event loop. Keep the application
+    // services alive until the independent window finishes and destroys itself.
+    if (coverWindow_) {
+        QObject::connect(coverWindow_, &QObject::destroyed, this, [this, source] {
+            destroyAcceptedRootWindowResourcesAndQuit(source);
+        }, Qt::QueuedConnection);
+        coverWindow_->close();
+        return;
+    }
     acceptedRootWindowDestroyStarted_ = true;
     appendQmlUiRuntimeLog(QStringLiteral("shutdown_destroy"), source);
 
-    rootWindow_ = nullptr;
+    releaseRootWindowResources();
     engine_.reset();
     windowChrome_.reset();
     applicationContext_.reset();
-    controller_.reset();
     backend_.reset();
+    // Last: the services outlive everything that borrows them.
+    applicationServices_.reset();
 
     if (qApp != nullptr) {
         qApp->quit();
     }
+}
+
+void QmlUiBootstrap::releaseRootWindowResources()
+{
+    if (!rootLifecycle_.beginRelease()) {
+        return;
+    }
+    if (applicationServices_ != nullptr
+        && applicationServices_->documentBridge() != nullptr) {
+        applicationServices_->documentBridge()->releaseChartDropImport();
+    }
+    if (chartDropBridge_ != nullptr) {
+        chartDropBridge_->release();
+    }
+    if (backend_ != nullptr) {
+        backend_->attachRootWindow(nullptr);
+    }
+    if (applicationContext_ != nullptr) {
+        applicationContext_->setChartDropBridge(nullptr);
+    }
+    chartDropBridge_.reset();
+    rootWindow_ = nullptr;
 }

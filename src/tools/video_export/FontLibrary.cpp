@@ -2,17 +2,12 @@
 
 #include "UiText.h"
 
-#include <QComboBox>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QHash>
-#include <QMessageBox>
-#include <QSizePolicy>
-#include <QSignalBlocker>
 #include <QUrl>
 
 namespace miacode::video_export {
@@ -65,6 +60,39 @@ QString fontFamilyForFile(const QString& path)
 
 QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault, const QString& defaultLabel)
 {
+    QDir dir(fontLibraryDirPath());
+    const QFileInfoList files = dir.entryInfoList(
+        QStringList{QStringLiteral("*.ttf"), QStringLiteral("*.otf")},
+        QDir::Files | QDir::Readable,
+        QDir::Name | QDir::IgnoreCase
+    );
+
+    // The QML export page asks for the same model from several independent
+    // combo-box bindings. Keep the directory enumeration as the cheap change
+    // detector, but avoid rebuilding and re-registering the same entry list
+    // for every getter call. mtime/size invalidates the cache after an import
+    // or an edited library file; the localized default label is part of the
+    // key because the application can switch languages without restarting in
+    // tests and embedded shells.
+    QString signature;
+    signature.reserve(files.size() * 48);
+    for (const QFileInfo& file : files) {
+        signature += file.absoluteFilePath();
+        signature += QLatin1Char('\0');
+        signature += QString::number(file.lastModified().toMSecsSinceEpoch());
+        signature += QLatin1Char(':');
+        signature += QString::number(file.size());
+        signature += QLatin1Char('\n');
+    }
+    static QString cachedSignature;
+    static QString cachedDefaultLabel;
+    static bool cachedIncludeDefault = false;
+    static QVector<FontLibraryEntry> cachedEntries;
+    if (cachedSignature == signature && cachedIncludeDefault == includeDefault
+        && cachedDefaultLabel == defaultLabel) {
+        return cachedEntries;
+    }
+
     QVector<FontLibraryEntry> entries;
     if (includeDefault) {
         entries.push_back({
@@ -73,13 +101,6 @@ QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault, const QString&
             QString()
         });
     }
-
-    QDir dir(fontLibraryDirPath());
-    const QFileInfoList files = dir.entryInfoList(
-        QStringList{QStringLiteral("*.ttf"), QStringLiteral("*.otf")},
-        QDir::Files | QDir::Readable,
-        QDir::Name | QDir::IgnoreCase
-    );
     for (const QFileInfo& file : files) {
         const QString path = file.absoluteFilePath();
         const QString family = fontFamilyForFile(path);
@@ -92,6 +113,10 @@ QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault, const QString&
             family
         });
     }
+    cachedSignature = signature;
+    cachedIncludeDefault = includeDefault;
+    cachedDefaultLabel = defaultLabel;
+    cachedEntries = entries;
     return entries;
 }
 
@@ -116,76 +141,27 @@ QString uniqueFontLibraryPath(const QFileInfo& sourceInfo)
 
 }  // namespace
 
-QString importFontIntoLibrary(QWidget* parent)
+FontImportResult importFontFileIntoLibrary(const QString& sourcePath)
 {
-    const QString title = UiText::text(QStringLiteral("card_font.import"));
-    const QString selected = QFileDialog::getOpenFileName(
-        parent,
-        title,
-        QString(),
-        QStringLiteral("Font Files (*.ttf *.otf)")
-    );
-    if (selected.isEmpty()) {
-        return QString();
+    const QFileInfo sourceInfo(sourcePath);
+    const QString suffix = sourceInfo.suffix().toLower();
+    if (!sourceInfo.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
+        return {{}, FontImportFailure::NotFontFile};
     }
-    const QFileInfo info(selected);
-    const QString suffix = info.suffix().toLower();
-    if (!info.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
-        QMessageBox::warning(parent, title, UiText::text(QStringLiteral("card_font.invalid_font")));
-        return QString();
+    if (fontFamilyForFile(sourceInfo.absoluteFilePath()).isEmpty()) {
+        return {{}, FontImportFailure::InvalidFont};
     }
-    // Validate it actually loads / carries a family before copying.
-    const int fontId = QFontDatabase::addApplicationFont(info.absoluteFilePath());
-    const QStringList families = fontId >= 0 ? QFontDatabase::applicationFontFamilies(fontId) : QStringList();
-    if (families.isEmpty()) {
-        QMessageBox::warning(parent, title, UiText::text(QStringLiteral("card_font.invalid_font")));
-        return QString();
-    }
-    const QString targetPath = uniqueFontLibraryPath(info);
-    if (!QFile::copy(info.absoluteFilePath(), targetPath)) {
-        QMessageBox::warning(parent, title, UiText::text(QStringLiteral("card_font.copy_failed")));
-        return QString();
-    }
-    return targetPath;
-}
 
-void populateFontCombo(QComboBox* combo,
-                       const QString& selectedPath,
-                       bool includeDefault,
-                       const QString& defaultLabel)
-{
-    if (combo == nullptr) {
-        return;
+    const QDir libraryDir(fontLibraryDirPath());
+    if (sourceInfo.absoluteDir() == libraryDir) {
+        return {sourceInfo.absoluteFilePath(), FontImportFailure::None};
     }
-    const QSignalBlocker blocker(combo);
-    combo->clear();
-    const QVector<FontLibraryEntry> entries = fontLibraryEntries(includeDefault, defaultLabel);
-    const QString normalizedSelected = selectedPath.isEmpty()
-        ? QString()
-        : QFileInfo(selectedPath).absoluteFilePath();
-    int selectedIndex = 0;
-    for (int i = 0; i < entries.size(); ++i) {
-        combo->addItem(entries[i].label, entries[i].path);
-        if (!normalizedSelected.isEmpty()
-            && QFileInfo(entries[i].path).absoluteFilePath() == normalizedSelected) {
-            selectedIndex = i;
-        }
-    }
-    if (combo->count() > 0) {
-        combo->setCurrentIndex(selectedIndex);
-    }
-}
 
-void configureFontComboWidth(QComboBox* combo, FontComboWidthMode mode)
-{
-    if (combo == nullptr) {
-        return;
+    const QString targetPath = uniqueFontLibraryPath(sourceInfo);
+    if (!QFile::copy(sourceInfo.absoluteFilePath(), targetPath)) {
+        return {{}, FontImportFailure::CopyFailed};
     }
-    combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    combo->setMinimumContentsLength(
-        mode == FontComboWidthMode::NarrowInspector ? 8 : 18);
-    combo->setMinimumWidth(0);
-    combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    return {targetPath, FontImportFailure::None};
 }
 
 void applyBannerFontOverride(QVariantMap& templateMap,

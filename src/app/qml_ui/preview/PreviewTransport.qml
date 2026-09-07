@@ -3,17 +3,20 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-Rectangle {
+Item {
     id: root
 
     required property var previewSession
-    property var shellController
+    required property var preferences
+    // True while the export page is up. The canvas menu hides there:
+    // entering preview fullscreen on that page crashes the Intel iGPU D3D11
+    // driver with hardware decode. Supplied by the caller, which knows the
+    // active page.
+    property bool exportPageActive: false
     signal fullscreenRequested()
 
-    readonly property bool exportPageActive: !!(root.shellController && root.shellController.exportPageActive)
 
     implicitHeight: 63
-    color: Theme.colors.background.surface
 
     Rectangle {
         anchors.left: parent.left
@@ -24,17 +27,31 @@ Rectangle {
     }
 
     function formatTime(totalSeconds) {
-        const minutes = Math.floor(totalSeconds / 60)
-        const seconds = Math.floor(totalSeconds % 60)
-        return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
+        const negative = totalSeconds < -0.0001
+        const safeSeconds = Math.floor(Math.abs(totalSeconds) + 0.0001)
+        const minutes = Math.floor(safeSeconds / 60)
+        const seconds = safeSeconds % 60
+        return (negative ? "-" : "") + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
     }
+
+    readonly property real lowerBoundSeconds: {
+        const bound = root.previewSession && root.previewSession.lowerBoundSeconds !== undefined
+                      ? root.previewSession.lowerBoundSeconds
+                      : 0
+        return Math.min(0, bound)
+    }
+    property bool scrubActive: false
+    property real activeScrubSecond: root.previewSession.positionSeconds
+    readonly property real displayedSeconds: root.scrubActive
+        ? root.activeScrubSecond
+        : root.previewSession.positionSeconds
 
     // Shorten "pos / dur" only when the control row would actually collide —
     // independent of NoteStatistics column switching.
-    readonly property int _fixedChromeWidth: {
-        const fullscreenW = exportPageActive ? 0 : 28
-        return 28 + 5 + 28 + 5 + 72 + 5 + fullscreenW
-    }
+    readonly property real _fixedChromeWidth: stopButton.implicitWidth + playButton.implicitWidth
+        + rateButton.implicitWidth + (canvasMenuButton.visible ? canvasMenuButton.implicitWidth : 0)
+        + transportRow.spacing * (canvasMenuButton.visible ? 4 : 3)
+    readonly property real minimumWidth: _fixedChromeWidth + 16 + 40
     readonly property bool timeFitsFull: {
         const margins = 16
         const fullTimeW = fullTimeMetrics.width + 8
@@ -45,7 +62,7 @@ Rectangle {
         id: fullTimeMetrics
         font.family: Theme.uiFont
         font.pixelSize: Theme.secondaryFontSize
-        text: root.formatTime(root.previewSession.positionSeconds)
+        text: root.formatTime(root.displayedSeconds)
               + " / " + root.formatTime(root.previewSession.durationSeconds)
     }
 
@@ -58,13 +75,38 @@ Rectangle {
         anchors.rightMargin: 8
         anchors.topMargin: 3
         height: 24
-        from: 0
+        from: root.lowerBoundSeconds
         to: root.previewSession.durationSeconds
-        value: root.previewSession.positionSeconds
-        onMoved: root.previewSession.positionSeconds = value
+        live: true
+        onPressedChanged: {
+            if (pressed) {
+                root.scrubActive = true
+                root.activeScrubSecond = value
+                root.previewSession.beginScrub()
+                return
+            }
+            if (!root.scrubActive)
+                return
+            const releaseSecond = root.activeScrubSecond
+            root.scrubActive = false
+            root.previewSession.endScrub(releaseSecond)
+        }
+        onMoved: {
+            root.activeScrubSecond = value
+            root.previewSession.updateScrub(root.activeScrubSecond)
+        }
+    }
+
+    Binding {
+        target: progress
+        property: "value"
+        // 范围重建时按当前进度定位，涵盖位置数值保持不变的页面切换。
+        value: Math.max(progress.from, Math.min(progress.to, root.previewSession.positionSeconds))
+        when: !progress.pressed
     }
 
     RowLayout {
+        id: transportRow
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -74,17 +116,19 @@ Rectangle {
         spacing: 5
 
         IconButton {
+            id: stopButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl("icons/stop.svg")
-            tooltip: qsTr("停止")
+            tooltip: UiText.text("停止")
             onClicked: root.previewSession.stop()
         }
         IconButton {
+            id: playButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl(root.previewSession.playing ? "icons/pause.svg" : "icons/play.svg")
-            tooltip: root.previewSession.playing ? qsTr("暂停") : qsTr("播放")
+            tooltip: root.previewSession.playing ? UiText.text("暂停") : UiText.text("播放")
             onClicked: root.previewSession.playing = !root.previewSession.playing
         }
 
@@ -94,7 +138,7 @@ Rectangle {
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
             text: {
-                const pos = root.formatTime(root.previewSession.positionSeconds)
+                const pos = root.formatTime(root.displayedSeconds)
                 if (root.timeFitsFull)
                     return pos + " / " + root.formatTime(root.previewSession.durationSeconds)
                 return pos
@@ -104,24 +148,51 @@ Rectangle {
             font.pixelSize: Theme.secondaryFontSize
         }
 
-        AppComboBox {
-            id: rateBox
-            Layout.preferredWidth: 72
+        AppDropDownButton {
+            id: rateButton
+            Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
-            compact: true
-            model: ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x"]
-            readonly property var rates: [0.5, 0.75, 1, 1.25, 1.5, 2]
-            currentIndex: Math.max(0, rates.indexOf(root.previewSession.rate))
-            onActivated: root.previewSession.rate = rates[currentIndex]
+            text: UiText.text("%1x").arg(root.previewSession.rate)
+            sizeToLabels: rateMenu.rateLabels
+            tooltip: UiText.text("播放速度")
+            expanded: rateMenu.active
+            Accessible.description: UiText.text("打开播放速度预设")
+            onClicked: {
+                if (rateMenu.active) {
+                    rateMenu.close()
+                    return
+                }
+                rateMenu.openAt(rateButton)
+            }
         }
 
         IconButton {
+            id: canvasMenuButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             visible: !root.exportPageActive
-            iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
-            tooltip: qsTr("全屏预览")
-            onClicked: root.fullscreenRequested()
+            active: canvasMenu.active
+            iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
+            tooltip: UiText.text("预览画布")
+            Accessible.description: UiText.text("打开预览画布菜单")
+            onClicked: {
+                if (canvasMenu.active) {
+                    canvasMenu.close()
+                    return
+                }
+                canvasMenu.openAt(canvasMenuButton)
+            }
         }
+    }
+
+    PreviewRateMenu {
+        id: rateMenu
+        previewSession: root.previewSession
+    }
+
+    PreviewCanvasMenu {
+        id: canvasMenu
+        preferences: root.preferences
+        onFullscreenRequested: root.fullscreenRequested()
     }
 }

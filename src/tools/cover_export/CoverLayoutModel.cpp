@@ -631,6 +631,15 @@ void CoverLayoutModel::setLayerImage(const QString& key, const QImage& image)
     emit l->imageRevisionChanged();
 }
 
+void CoverLayoutModel::clearLayerImage(const QString& key)
+{
+    CoverLayer* l = layer(key);
+    if (l == nullptr || (l->imageRevision_ < 0 && l->frameImage_.isNull())) return;
+    l->frameImage_ = QImage();
+    l->imageRevision_ = -1;
+    emit l->imageRevisionChanged();
+}
+
 int CoverLayoutModel::minZ() const
 {
     int z = std::numeric_limits<int>::max();

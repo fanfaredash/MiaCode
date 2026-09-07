@@ -4,15 +4,11 @@
 #include <QVariantMap>
 #include <QVector>
 
-class QComboBox;
-class QWidget;
-
 namespace miacode::video_export {
 
 // Portable user font library — the `<preferences dir>/fonts` directory that
-// holds imported .ttf/.otf files. Shared by the HUD font picker
-// (HudFontSettings) and the difficulty-card font selectors (CardFontSettings),
-// so a font imported for one surface is immediately offered to the others.
+// holds imported .ttf/.otf files. Its API is UI-neutral so every QML surface
+// can expose the same entries without a QWidget adapter.
 
 // Absolute path to the font-library directory (not created here).
 QString fontLibraryDirPath();
@@ -21,6 +17,21 @@ struct FontLibraryEntry {
     QString label;   // "Family (file.ttf)"; the default entry uses defaultLabel.
     QString path;    // absolute path in the library; empty == default/none.
     QString family;  // resolved font family; empty for the default entry.
+};
+
+// Result of importing one file into the portable font library.  The QML shell
+// owns user interaction, so this data-layer operation deliberately has no
+// dialog or message-box dependency.
+enum class FontImportFailure {
+    None,
+    NotFontFile,
+    InvalidFont,
+    CopyFailed,
+};
+
+struct FontImportResult {
+    QString path;
+    FontImportFailure failure = FontImportFailure::None;
 };
 
 // Every .ttf/.otf in the library, family-resolved (unreadable files skipped),
@@ -34,29 +45,10 @@ QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault = false,
 // family (empty on failure). Registration is idempotent for the same file.
 QString fontFamilyForFile(const QString& path);
 
-// Prompt for a .ttf/.otf, validate it, and copy it into the library. Returns the
-// resulting library path (empty on cancel or error; an error shows a warning box
-// parented to `parent`).
-QString importFontIntoLibrary(QWidget* parent);
-
-// Populate `combo` with the library entries (data = each entry's absolute path),
-// selecting the row whose path matches `selectedPath` (else the first row).
-// Signals are blocked during the repopulate.
-void populateFontCombo(QComboBox* combo,
-                       const QString& selectedPath,
-                       bool includeDefault = true,
-                       const QString& defaultLabel = QString());
-
-enum class FontComboWidthMode {
-    StandardForm,
-    NarrowInspector,
-};
-
-// Keeps the shared font selector visually themed while tuning only its layout
-// budget for the host. Long names elide in the closed field; popup entries stay
-// complete. Every mode remains horizontally expanding so a layout cannot
-// collapse the visible control.
-void configureFontComboWidth(QComboBox* combo, FontComboWidthMode mode);
+// Validate a local .ttf/.otf and copy it into the portable library.  A file
+// already in that library is returned unchanged.  Callers present any error
+// through their own UI boundary.
+FontImportResult importFontFileIntoLibrary(const QString& sourcePath);
 
 // Overlay the user's difficulty-card font choice onto a parsed banner template's
 // `fonts` block (keys `display` / `body`). An absolute path is injected as a

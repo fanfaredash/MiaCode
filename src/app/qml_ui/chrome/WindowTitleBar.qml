@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import MiaCode.UI
 
 Rectangle {
@@ -6,74 +7,122 @@ Rectangle {
 
     required property var hostWindow
     required property var menuCommands
+    required property var shortcuts
+    required property var documentSession
     required property var platform
     property string documentTitle: ""
     property real leadingInset: 0
+    property bool normalizationEnabled: true
 
     readonly property bool useEmbeddedMenu: root.platform.embeddedMenuInTitleBar
     readonly property bool useCaptionButtons: root.platform.captionButtons
+    readonly property real brandContentPadding: Theme.chromePadding
+    readonly property real brandLeadingMargin:
+        (root.leadingInset > 0 ? root.leadingInset : 10) - brandContentPadding
 
-    implicitHeight: 34
-    color: Theme.colors.background.surface
+    implicitHeight: 32
+    color: Theme.surfaceColor(Theme.colors.background.titleBar)
 
-    // Title stays window-centered. Menu only yields to the painted glyph width
-    // (capped by the max title band), not the whole empty center band.
-    readonly property real titleBandMax: Math.min(320, width * 0.3)
-    readonly property real titleGlyphWidth: {
-        const glyph = titleLabel.implicitWidth
-        if (glyph <= 1)
-            return 0
-        return Math.min(glyph, root.titleBandMax)
-    }
-    readonly property real titleBandLeft: (width - titleGlyphWidth) / 2
+    // 标题以窗口中心为轴，左右留白取菜单与窗口按钮所需空间的较大值。
     readonly property real menuGap: 16
-    readonly property real menuLeft: brand.x + brand.width + 12
+    readonly property real menuLeft: brand.x + brand.width
     readonly property real menuAvailableWidth: root.useEmbeddedMenu
-        ? Math.max(0, titleBandLeft - menuGap - menuLeft)
+        ? Math.max(0, width / 2 - menuGap - menuLeft)
         : 0
+    readonly property real titleAreaLeft: menuHost.x + menuHost.width + menuGap
+    readonly property real titleAreaRight: width - captionButtons.width - menuGap
+    readonly property real titleAvailableWidth: Math.max(0,
+        2 * Math.min(width / 2 - titleAreaLeft, titleAreaRight - width / 2))
 
-    function scheduleMainMenuReflow() {
-        if (mainMenuLoader.item)
-            mainMenuLoader.item.scheduleReflow()
+    WindowGestureArea {
+        anchors.fill: parent
+        hostWindow: root.hostWindow
+        z: 0
     }
 
-    onWidthChanged: root.scheduleMainMenuReflow()
-    onMenuAvailableWidthChanged: root.scheduleMainMenuReflow()
-    onDocumentTitleChanged: root.scheduleMainMenuReflow()
-
-    Row {
+    ChromeRow {
         id: brand
         anchors.left: parent.left
-        anchors.leftMargin: 10 + root.leadingInset
+        anchors.leftMargin: root.brandLeadingMargin
         anchors.verticalCenter: parent.verticalCenter
         // Font ascent makes glyphs look high; nudge down for optical center.
         anchors.verticalCenterOffset: 1
-        spacing: 7
+        height: Theme.controlMinHeight
+        leftPadding: root.brandContentPadding
+        rightPadding: root.brandContentPadding
+        topPadding: 0
+        bottomPadding: 0
+        stateColors: Theme.colors.activityState
+        selected: brandMenu.active
+        Accessible.name: "MiaCode"
         z: 2
 
-        Image {
-            width: 18
-            height: 18
-            anchors.verticalCenter: parent.verticalCenter
-            source: Qt.resolvedUrl("icons/app.png")
-            sourceSize: Qt.size(18, 18)
-            smooth: true
+        implicitWidth: brandContent.implicitWidth + leftPadding + rightPadding
+
+        contentItem: Row {
+            id: brandContent
+            spacing: 7
+
+            Image {
+                width: Theme.titleBarBrandIconSize
+                height: Theme.titleBarBrandIconSize
+                anchors.verticalCenter: parent.verticalCenter
+                source: Qt.resolvedUrl("icons/app-titlebar.png")
+                smooth: true
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "MiaCode"
+                color: brand.hovered || brandMenu.active
+                       ? Theme.colors.text.active : Theme.colors.text.chrome
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                font.bold: true
+            }
         }
 
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "MiaCode"
-            color: Theme.colors.text.secondary
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.uiFontSize
-            font.bold: true
+        onClicked: {
+            if (mainMenuLoader.item)
+                mainMenuLoader.item.toggleAnchoredMenu(brandMenu, brand)
+            else if (brandMenu.active)
+                brandMenu.close()
+            else
+                brandMenu.popup(brand, 0, brand.height)
+        }
+        onHoveredChanged: {
+            if (hovered && mainMenuLoader.item)
+                mainMenuLoader.item.hoverAnchoredMenu(brandMenu, brand)
+        }
+    }
+
+    AppMenu {
+        id: brandMenu
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+        AppMenuAction {
+            text: UiText.text("关于 MiaCode")
+            enabled: root.visible
+            onTriggered: root.menuCommands.aboutRequested()
+        }
+        AppMenuAction {
+            text: UiText.text("dialog.preferences.title")
+            enabled: root.visible
+            onTriggered: root.menuCommands.preferencesRequested()
+        }
+        AppMenuSeparator {}
+        AppMenuAction {
+            text: UiText.text("退出")
+            shortcut: StandardKey.Quit
+            shortcutText: root.shortcuts.standardDisplayText(StandardKey.Quit)
+            enabled: root.visible
+            onTriggered: root.menuCommands.exitRequested()
         }
     }
 
     Item {
         id: menuHost
         anchors.left: brand.right
-        anchors.leftMargin: 12
         anchors.verticalCenter: parent.verticalCenter
         height: parent.height
         width: root.useEmbeddedMenu && mainMenuLoader.item ? mainMenuLoader.item.width : 0
@@ -90,36 +139,10 @@ Rectangle {
                 height: menuHost.height
                 availableWidth: root.menuAvailableWidth
                 commands: root.menuCommands
+                shortcuts: root.shortcuts
+                documentSession: root.documentSession
                 commandsEnabled: root.visible
-            }
-            onLoaded: root.scheduleMainMenuReflow()
-        }
-    }
-
-    Item {
-        id: dragArea
-        anchors.left: menuHost.right
-        anchors.right: captionButtons.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        z: 0
-
-        DragHandler {
-            target: null
-            acceptedButtons: Qt.LeftButton
-            onActiveChanged: {
-                if (active)
-                    root.hostWindow.startSystemMove()
-            }
-        }
-
-        TapHandler {
-            acceptedButtons: Qt.LeftButton
-            onDoubleTapped: {
-                if (root.hostWindow.visibility === Window.Maximized)
-                    root.hostWindow.showNormal()
-                else
-                    root.hostWindow.showMaximized()
+                normalizationEnabled: root.normalizationEnabled
             }
         }
     }
@@ -127,19 +150,20 @@ Rectangle {
     Text {
         id: titleLabel
         anchors.centerIn: parent
-        width: root.titleBandMax
+        width: Math.min(implicitWidth, root.titleAvailableWidth)
         z: 1
-        text: root.documentTitle
-        color: Theme.colors.text.secondary
+        text: (root.documentSession.dirty ? "* " : "") + root.documentTitle
+        color: Theme.colors.text.chrome
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
-        // Let drag / menu hit-testing win under the label.
-        enabled: false
-
-        onImplicitWidthChanged: root.scheduleMainMenuReflow()
+        HoverHandler { id: titleHover }
+        Tooltip {
+            visible: titleHover.hovered && titleLabel.truncated
+            text: titleLabel.text
+        }
     }
 
     WindowCaptionButtons {
@@ -149,13 +173,5 @@ Rectangle {
         visible: root.useCaptionButtons
         width: root.useCaptionButtons ? implicitWidth : 0
         hostWindow: root.hostWindow
-    }
-
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 1
-        color: Theme.colors.border.normal
     }
 }

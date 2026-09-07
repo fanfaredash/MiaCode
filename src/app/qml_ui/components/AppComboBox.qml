@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import MiaCode.UI
 
 // Shared combo — geometry mirrors v1 dialogComboBoxStyleSheet (QML Popup, no Win11 chrome).
@@ -10,10 +11,14 @@ ComboBox {
 
     font.family: Theme.uiFont
     font.pixelSize: root.compact ? Theme.secondaryFontSize : Theme.uiFontSize
-    implicitHeight: root.compact ? 27 : Theme.controlMinHeight
+    implicitHeight: Theme.controlMinHeight
+    Layout.preferredHeight: implicitHeight
+    Layout.maximumHeight: implicitHeight
     leftPadding: 10
     rightPadding: 28
     hoverEnabled: true
+
+    readonly property FontMetrics textMetrics: FontMetrics { font: root.font }
 
     contentItem: Text {
         leftPadding: 0
@@ -52,45 +57,46 @@ ComboBox {
     }
 
     background: Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: Theme.chromeInsetY
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.chromeInsetY
         implicitHeight: root.implicitHeight
         radius: Theme.controlRadius
-        color: root.enabled ? Theme.colors.background.editor : Theme.colors.background.elevated
-        border.width: Theme.controlBorderWidth
-        border.color: !root.enabled ? Theme.colors.border.normal
-                     : (root.activeFocus || root.hovered || root.down) ? Theme.colors.accent.primary
-                     : Theme.colors.border.control
+        color: Theme.overlayColor(root.enabled
+               ? Theme.colors.background.control
+               : Theme.colors.background.controlDisabled)
+        border.width: root.enabled && (root.visualFocus || root.hovered || root.down)
+                      ? Theme.controlBorderWidth : 0
+        border.color: Theme.colors.accent.primary
     }
 
-    delegate: ItemDelegate {
+    delegate: ChromeRow {
+        stateColors: Theme.colors.popupState
         id: itemDelegate
         width: ListView.view ? ListView.view.width : root.width
         height: 28
         highlighted: root.highlightedIndex === index
-        hoverEnabled: true
-
-        contentItem: Text {
-            text: root.textAt(index)
-            font: root.font
-            color: itemDelegate.highlighted || itemDelegate.hovered
-                   ? Theme.colors.text.active
-                   : Theme.colors.text.secondary
-            elide: Text.ElideRight
-            verticalAlignment: Text.AlignVCenter
-            leftPadding: 10
-            rightPadding: 10
-        }
-
-        background: HoverChrome {
-            selected: itemDelegate.highlighted || itemDelegate.hovered
-            tone: "nav"
-        }
+        text: root.textAt(index)
+        labelFont: root.font
     }
 
-    popup: Popup {
+    popup: AppDropdownPanel {
+        property real optionWidth: 0
+
         y: root.height + 2
-        width: Math.max(root.width, 100)
-        padding: 6
+        implicitWidth: Math.max(root.width, 100, optionWidth + leftPadding + rightPadding)
+        width: Math.min(implicitWidth, Overlay.overlay ? Overlay.overlay.width : implicitWidth)
         implicitHeight: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, 260)
+
+        onAboutToShow: {
+            let widest = 0
+            for (let i = 0; i < root.count; ++i)
+                widest = Math.max(widest, root.textMetrics.advanceWidth(root.textAt(i)))
+            optionWidth = Math.ceil(widest) + 2 * Theme.rowPaddingX
+        }
 
         contentItem: ListView {
             clip: true
@@ -98,13 +104,6 @@ ComboBox {
             model: root.delegateModel
             currentIndex: root.highlightedIndex
             ScrollIndicator.vertical: ScrollIndicator {}
-        }
-
-        background: Rectangle {
-            radius: Theme.controlRadius
-            color: Theme.colors.background.elevated
-            border.width: Theme.controlBorderWidth
-            border.color: Theme.colors.border.normal
         }
     }
 }

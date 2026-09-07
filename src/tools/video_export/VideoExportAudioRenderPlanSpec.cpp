@@ -142,10 +142,10 @@ bool verifyPartialExportClampsTouchholdSpanIntoSegment(QTextStream& err)
         return false;
     }
 
-    if (!require(plan.mergedTouchholdSpans.size() == 1, QStringLiteral("partial export should keep the spanning touchhold"), err)) {
+    if (!require(plan.touchholdSpanPlaybacks.size() == 1, QStringLiteral("partial export should keep the spanning touchhold"), err)) {
         return false;
     }
-    const auto& span = plan.mergedTouchholdSpans.first();
+    const auto& span = plan.touchholdSpanPlaybacks.first();
     if (!require(
             qAbs(span.mixSecond - plan.leadInSeconds) <= 1e-6,
             QStringLiteral("touchhold span that begins inside pre-range should clamp to segment start"),
@@ -158,6 +158,15 @@ bool verifyPartialExportClampsTouchholdSpanIntoSegment(QTextStream& err)
     if (!require(
             qAbs(span.durationSeconds - 1.5) <= 1e-6,
             QStringLiteral("clamped touchhold span should keep the portion past the cutoff"),
+            err)) {
+        return false;
+    }
+    // Preview resumes a touch-hold it seeked into mid-sample (restoreTouchholdVoices
+    // reconciles to second - span.startSecond), so the clamped export playback has to
+    // enter the riser at the same offset instead of restarting it at the cutoff.
+    if (!require(
+            qAbs(span.sourceStartSecond - 0.5) <= 1e-6,
+            QStringLiteral("clamped touchhold span should enter the riser mid-sample"),
             err)) {
         return false;
     }
@@ -184,7 +193,7 @@ bool verifyPartialExportDropsTouchholdSpanEntirelyInPreRange(QTextStream& err)
     }
 
     return require(
-        plan.mergedTouchholdSpans.isEmpty(),
+        plan.touchholdSpanPlaybacks.isEmpty(),
         QStringLiteral("touchhold span fully inside the partial pre-range should be dropped"),
         err);
 }
@@ -317,17 +326,25 @@ bool verifySubSampleSupersedeDropsMaskedAnswer(QTextStream& err)
     return true;
 }
 
-bool verifyTouchholdSpanMerge(QTextStream& err)
+bool verifyTouchholdSpanLatestWinsPlaybacks(QTextStream& err)
 {
+    // Export mirrors the preview voice: the riser is owned latest-wins, so a
+    // seamless join / overlap / nesting each hand the sound to the newer
+    // touch-hold, which restarts the sample from its own start. Spans must NOT
+    // be merged into one long playback (that made the second touch-hold sound
+    // like a continuation of the first).
     VideoExportTask task;
     task.noteMarkers = {
-        makeTouchHold(1.0, 2.0),
-        makeTouchHold(1.5, 3.0),
-        makeTouchHold(4.0, 4.5),
+        makeTouchHold(1.0, 2.0),   // seamless join with the next one
+        makeTouchHold(2.0, 3.0),
+        makeTouchHold(4.0, 6.0),   // outer span of a nesting pair
+        makeTouchHold(5.0, 5.5),   // nested inside [4, 6]
+        makeTouchHold(7.0, 9.0),   // overlapped by the next one
+        makeTouchHold(8.0, 10.0),
     };
     task.exportStartSeconds = 0.0;
-    task.contentDurationSeconds = 5.0;
-    task.fullRangeExport = false;
+    task.contentDurationSeconds = 11.0;
+    task.fullRangeExport = true;
     task.fps = 60;
 
     VideoExportAudioRenderPlan plan;
@@ -337,20 +354,58 @@ bool verifyTouchholdSpanMerge(QTextStream& err)
         return false;
     }
 
-    if (!require(plan.mergedTouchholdSpans.size() == 2, QStringLiteral("touchhold spans should merge overlapping sustains"), err)) {
-        return false;
-    }
-    // touchhold chart-time [1.0, 2.0] ⊕ [1.5, 3.0] merges into [1.0, 3.0] chart.
-    // mixSecond = chart - timelineOrigin, timelineOrigin = -leadIn = -1.5
-    // ⇒ mix [2.5, 4.5] ⇒ first span mixSecond=2.5, duration=2.0.
+    struct ExpectedPlayback {
+        double chartStartSecond;
+        double durationSeconds;
+        double sourceStartSecond;
+    };
+    // chart second -> mix second is a pure shift by the timeline origin.
+    const ExpectedPlayback expected[] = {
+        {1.0, 1.0, 0.0},   // first of the seamless pair
+        {2.0, 1.0, 0.0},   // second one restarts the riser instead of continuing
+        {4.0, 1.0, 0.0},   // outer span up to the nested one
+        {5.0, 0.5, 0.0},   // nested span takes over from its own start
+        {5.5, 0.5, 1.5},   // outer span resumes mid-sample, as the voice would
+        {7.0, 1.0, 0.0},   // overlapped span up to the takeover
+        {8.0, 2.0, 0.0},   // newer span takes over and runs to its own end
+    };
+    const int expectedCount = static_cast<int>(sizeof(expected) / sizeof(expected[0]));
+
     if (!require(
-            qAbs(plan.mergedTouchholdSpans.at(0).mixSecond - (1.0 + plan.leadInSeconds)) <= 1e-6,
-            QStringLiteral("merged touchhold span should preserve delayed preload start"),
+            plan.touchholdSpanPlaybacks.size() == expectedCount,
+            QStringLiteral("touchhold ownership should emit one playback per owned stretch (got %1, want %2)")
+                .arg(plan.touchholdSpanPlaybacks.size())
+                .arg(expectedCount),
             err)) {
         return false;
     }
-    if (!require(qAbs(plan.mergedTouchholdSpans.at(0).durationSeconds - 2.0) <= 1e-6, QStringLiteral("merged touchhold span should cover full overlapped duration"), err)) {
-        return false;
+
+    for (int index = 0; index < expectedCount; ++index) {
+        const auto& playback = plan.touchholdSpanPlaybacks.at(index);
+        const double wantMixSecond = expected[index].chartStartSecond - plan.timelineOriginSecond;
+        if (!require(
+                qAbs(playback.mixSecond - wantMixSecond) <= 1e-6,
+                QStringLiteral("touchhold playback %1 should start at chart %2")
+                    .arg(index)
+                    .arg(expected[index].chartStartSecond),
+                err)) {
+            return false;
+        }
+        if (!require(
+                qAbs(playback.durationSeconds - expected[index].durationSeconds) <= 1e-6,
+                QStringLiteral("touchhold playback %1 should last until ownership changes")
+                    .arg(index),
+                err)) {
+            return false;
+        }
+        if (!require(
+                qAbs(playback.sourceStartSecond - expected[index].sourceStartSecond) <= 1e-6,
+                QStringLiteral("touchhold playback %1 should enter the riser at %2 s")
+                    .arg(index)
+                    .arg(expected[index].sourceStartSecond),
+                err)) {
+            return false;
+        }
     }
     return true;
 }
@@ -520,7 +575,7 @@ int main(int argc, char* argv[])
     if (!verifySubSampleSupersedeDropsMaskedAnswer(err)) {
         return 1;
     }
-    if (!verifyTouchholdSpanMerge(err)) {
+    if (!verifyTouchholdSpanLatestWinsPlaybacks(err)) {
         return 1;
     }
     if (!verifyPositiveOriginTrackSeek(err)) {

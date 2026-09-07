@@ -183,6 +183,9 @@ void installPreviewDecodeDiagnostics()
     installed = true;
 
     qavSetPreviewDiagLogSink(&previewHwDiagLogSink);
+    qavSetPreviewDiagTimingEnabled(
+        miacode::debug_options::runtimeDebugOutputEnabled()
+            && miacode::debug_options::previewFramePacingDiagnosticsEnabled() ? 1 : 0);
 
     const int dumpBudget = miacode::debug_options::previewDumpHwFrameBudget();
     qavSetPreviewHwFrameDumpConfig(dumpBudget);
