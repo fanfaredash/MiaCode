@@ -459,6 +459,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Settings host + batch page: `VideoExportDialog.{h,cpp}` (single-export dialog and the shared
   tab host), `BatchExportPanel.{h,cpp}` + `BatchExportSelectionState.cpp` (embedded batch queue
   form), `VideoExportPreferences.h`. The former `BatchVideoExportDialog` is deleted.
+  The dialog's selected-range playback monitor treats MainWindow's asynchronous preview startup
+  (`previewStartupSyncPending_`, deferred `pendingPreviewPlaybackStart_`, and late-video startup)
+  as active transport; its pause callback cancels an uncommitted start through the Stop path.
+  Omitting those states makes the first 33 ms range tick disarm itself before playback commits,
+  leaving “播放导出片段” running past the selected end.
 - Controller + pipeline: `VideoExportController.{h,cpp}` (⚠ ~5000 lines — see god-file list),
   `VideoExportQuickRenderBackend.*`, `VideoExportAudioRenderPlan.*`, `VideoExportAudioBackend.h`,
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,

@@ -707,10 +707,29 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
             if (owner_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_) {
                 owner_.onTogglePreviewPause();
                 owner_.updatePauseButtonAppearance();
+                return;
+            }
+            // A clip stop can arrive before the asynchronous preview startup
+            // group commits. The normal pause toggle would interpret that as a
+            // new Play request, so cancel the pending start through the Stop
+            // path instead.
+            if (state_.previewStartupSyncPending_
+                || state_.previewLateVideoStartPending_
+                || state_.pendingPreviewPlaybackStart_) {
+                owner_.onStopPreview();
+                owner_.updatePauseButtonAppearance();
             }
         },
         [this]() -> bool {
-            return owner_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_;
+            // VideoExportDialog owns the selected-range stop monitor. Keep it
+            // armed while preview startup is pending; otherwise its first 33ms
+            // tick sees "not playing", drops the monitor, and the asynchronous
+            // start later commits as an unbounded normal preview.
+            return owner_.qtPreviewPlaying_
+                || state_.previewStartupSyncPending_
+                || state_.previewLateVideoStartPending_
+                || state_.pendingPreviewPlaybackStart_
+                || state_.exportIntroLeadInActive_;
         },
         currentPreviewSecond,
         [this](bool showTimestamp) {
