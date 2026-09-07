@@ -77,21 +77,22 @@ int main()
     ok &= require(nearlyEqual(parsedFirstSeconds(QStringLiteral("abc")), 0.0),
                   QStringLiteral("unparseable text is 0.0 without an ok out-param"), err);
 
-    // This is the load-bearing case behind NonFiniteHandling: QString::toDouble ACCEPTS
-    // "inf" and "nan" and reports success, so a non-finite offset reaches the shift
-    // helpers with ok == true and no upstream rejection.
+    // QString::toDouble accepts "inf" and "nan", but chart offsets must remain finite.
+    // Reject both at the shared parser so preview, export, Muri, and tooling cannot diverge.
     {
-        bool parsedOk = false;
+        bool parsedOk = true;
         const double value = parsedFirstSeconds(QStringLiteral("inf"), &parsedOk);
-        ok &= require(parsedOk && qIsInf(value),
-                      QStringLiteral("\"inf\" parses successfully into a non-finite offset"), err);
+        ok &= require(!parsedOk && nearlyEqual(value, 0.0),
+                      QStringLiteral("\"inf\" is rejected as a non-finite offset"), err);
     }
     {
-        bool parsedOk = false;
+        bool parsedOk = true;
         const double value = parsedFirstSeconds(QStringLiteral("nan"), &parsedOk);
-        ok &= require(parsedOk && qIsNaN(value),
-                      QStringLiteral("\"nan\" parses successfully into a non-finite offset"), err);
+        ok &= require(!parsedOk && nearlyEqual(value, 0.0),
+                      QStringLiteral("\"nan\" is rejected as a non-finite offset"), err);
     }
+    ok &= require(nearlyEqual(parsedFirstSeconds(QStringLiteral("-inf")), 0.0),
+                  QStringLiteral("non-finite text falls back to 0.0 without an ok out-param"), err);
 
     // ---- shiftedTimelineSecond: the two inherited modes ----
 

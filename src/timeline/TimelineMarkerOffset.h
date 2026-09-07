@@ -20,20 +20,17 @@
 //
 // Six hand-copied versions of `shiftedTimelineSecond` had drifted apart before this header
 // existed, and the parameter preserves that drift verbatim rather than picking a winner.
-// It matters because `QString::toDouble` accepts "inf" and "nan" and reports ok == true, so
-// a chart whose `&first` is literally `inf` yields a non-finite offset that reaches these
-// functions with no upstream rejection:
+// The raw `&first` parser below now rejects non-finite text, but these helpers can also be
+// called with computed offsets or non-finite marker fields. Keep their defensive policy
+// explicit at every call site:
 //
 //   PassThrough (guard present) — preview/timeline/muri: markers come back untouched.
 //     TimelineSlowRefresh.cpp, MainWindow.PreviewTimelineFlow.cpp, MuriDump.cpp, MuriSpec.cpp
 //   Propagate (no guard) — both export paths: every shifted field becomes NaN.
 //     VideoExportSnapshot.cpp, MainWindow.ExportSnapshot.cpp
 //
-// Nobody chose to have the exporter NaN out a chart the editor renders fine; the two export
-// copies were simply written without the guard. Unifying them is a real behavior change and
-// deliberately out of scope here — this header only makes the divergence visible at each
-// call site so that decision can be taken with the evidence in hand. There is intentionally
-// no default argument: every caller must state which group it belongs to.
+// There is intentionally no default argument: every caller must state which behavior it
+// expects if a non-finite value is introduced somewhere other than raw `&first` parsing.
 namespace miacode::timeline::offset {
 
 enum class NonFiniteHandling {
@@ -89,17 +86,19 @@ inline QVector<TimelineNoteMarker> shiftedNoteMarkers(
 
 // Raw `&first` text to seconds. Empty (or all-whitespace) is a valid "no offset" and reports
 // ok == true, so callers can tell "the field is blank" from "the field is broken" — an
-// unparseable value yields 0.0 with ok == false. Callers that read the value from a live
-// widget rather than the document resolve that string themselves and pass it in here.
+// unparseable or non-finite value yields 0.0 with ok == false. Callers that read the value
+// from a live widget rather than the document resolve that string themselves and pass it in
+// here.
 inline double parsedFirstSeconds(const QString& rawValue, bool* ok = nullptr)
 {
     const QString trimmed = rawValue.trimmed();
     bool localOk = false;
     const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&localOk);
+    const bool accepted = trimmed.isEmpty() || (localOk && qIsFinite(value));
     if (ok != nullptr) {
-        *ok = trimmed.isEmpty() ? true : localOk;
+        *ok = accepted;
     }
-    return (trimmed.isEmpty() || localOk) ? value : 0.0;
+    return accepted ? value : 0.0;
 }
 
 }  // namespace miacode::timeline::offset

@@ -453,7 +453,14 @@ bool buildVideoExportTaskFromSnapshot(
     const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(
         difficulty->chart,
         timingMetadata);
-    const double firstSeconds = parsedFirstSeconds(document.first);
+    bool firstOk = false;
+    const double firstSeconds = parsedFirstSeconds(document.first, &firstOk);
+    if (!firstOk) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("snapshot contains an invalid &first value");
+        }
+        return false;
+    }
 
     VideoExportTask built;
     built.outputPath = snapshot.outputPath;

@@ -74,8 +74,9 @@ public:
     QJsonObject devtoolsSnapshotForUi() const;
     void publishEvent(const QString& name, const QJsonObject& payload = {}, bool coalescible = false);
     // Cheap pre-check for publishers on a hot path: skip building the payload
-    // at all when no running extension subscribes to `name`.
-    bool hasEventSubscribers(const QString& name) const;
+    // at all when no running extension subscribes to `name`, while recording
+    // that skipped publication in the DevTools counters.
+    bool hasEventSubscribers(const QString& name);
     void refreshExtensions();
     void refreshMenuSelectionIcons();
     void setExtensionEnabled(const QString& qualifiedId, bool enabled);

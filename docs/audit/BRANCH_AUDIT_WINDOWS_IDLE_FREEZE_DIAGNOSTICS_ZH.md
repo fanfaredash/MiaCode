@@ -13,6 +13,10 @@
 >
 > 其余结论经实施与编译/测试验证后成立。
 
+> **后续变更（2026-09-08）**：L-14 已补充按事件类型累计的 DevTools
+> `skippedNoSubscriber` 计数，高频预览事件在构造 payload 前的预检早退也计入；共享
+> `&first` 解析现在拒绝 `inf` / `nan`，导出 worker 对无效值明确失败，不再生成 NaN marker。
+
 ## 处理状态总表（截至 2026-08-07）
 
 第 1–3 类已实施，共 33 个提交（`f82cfa64..HEAD`，169 files，+1452 / −13398）。构建绿；`ctest` 46/49，3 个失败（`oplog_self_test`、`plain_code_editor_spec`、`preview_firework_lifecycle_spec`）为分支既有，已逐项核对这三个目标的 `SOURCES` 未被本轮改动触及。
@@ -25,6 +29,7 @@
 | L-2 调度器自我禁用无日志 | 已修复 | `9b6ba7fb` |
 | L-3 mixer sync 丢弃分支静默 | 已修复 | `1ab03a41` |
 | L-13 `bass_status` 不报实际布防组 + 失效注释 | 已修复 | `94db28bc` |
+| L-14 扩展事件被跳过时不可见 | 已修复（DevTools 按事件类型计数） | 2026-09-08 后续修复 |
 | L-7 原生 COM 注册无日志 | 已修复 | `7168745d` |
 | L-8 设备变更被忽略分支静默 | 已修复 | `b6cf8eba` |
 | L-9 `unregisterWindow()` 不记录 | 已修复 | `16afb366` |
@@ -48,6 +53,7 @@
 | O-9 `MIACODE_SKIP_DIAG_D3D11` 不可达 | 已退役 | `dbb0b6aa` |
 | O-10 `videoExportBackgroundScaleModeToken()` | 已删除 | `de3751d1` |
 | R-3 `&first` / `shifted*` 去重 | 已修复（纯去重，零行为变化） | `5dcf6cc1` |
+| `&first=inf` 导出 marker 为 NaN | 已修复（共享解析拒绝非有限值，worker 明确报错） | 2026-09-08 后续修复 |
 | R-1 DComp/D3D11 栈清除 | 已删除（71 files / 11404 行 / 6 flags） | `8e53d5ae`…`364a936d` |
 | R-5 MMCSS 说明失实 | **已撤回** — 结论错误，见勘误 | — |
 | O-1 / R-2 `TimelineView` 死代码 | **已撤回** — 结论错误，见勘误 | — |
@@ -74,7 +80,8 @@
 - **`docs/ops/DEBUG_INDEX.md` 的 flag 计数**：91 live / 8 retired → **85 live / 14 retired**。仓库自带漂移守卫 `debug_flag_index_spec` 是真正的强制点，其正则扫描源码文本且不区分注释——退役 flag 的字面名不可留在注释里。
 - **skill 参考文档有三份镜像**（`.claude/`、`.codex/`、`.agents/`），三份都会漂移，flag / 结构变更需同时更新。
 - **`PreviewStageMediaHost::currentBackgroundImage()` 现已零调用**（唯一消费者 `StageBackgroundSource` 随 DComp 删除）。这意味着 `noteVideoFrameArrived()` 中每帧的 `QVideoFrame::toImage()` 成为 GUI 线程上的纯无效开销。删除是实质性能收益，但会改变当前行为，未在本轮夹带。
-- **导出路径 `&first=inf` 会产出全 NaN 的 marker**，预览路径不会。按「纯去重、零行为变化」的决定原样保留，但这看起来是缺陷而非设计。
+- **导出路径 `&first=inf` 曾会产出全 NaN 的 marker**，预览路径不会。2026-09-08
+  的后续修复已在共享解析入口拒绝 `inf` / `nan`，并让导出 worker 对无效值明确失败。
 
 **总体判断**：诊断能力的建设方向和落点都对（idle 心跳、GUI 线程自栈回溯、DXGI per-adapter VRAM、窗口遮挡、BASS underrun），策略层拆成纯函数 + spec 的做法也符合仓库惯例。真正的问题集中在两处：**(a) 新增的观测点自身在关键分支上"静默"**，导致一份 capture 仍然无法区分"没发生"和"发生了但没记"；**(b) 新增的 SFX mixer 调度器把 BASS 音频回调线程和 GUI 线程用同一把 `schedulerMutex_` 绑在了一起，而 GUI 侧在持锁期间写日志** —— 这恰好是本分支想要诊断的那类卡顿的成因。
 
@@ -176,6 +183,10 @@
 - 建议：删除失效注释，行内补 `armed_group_idx=%1 armed_action=%2`。
 
 ### L-14（低）扩展事件被跳过时不可见
+
+> **已修复（2026-09-08）**：`EmbeddedExtensionRuntime` 现在按事件类型累计
+> `skippedNoSubscriber`，并由扩展 DevTools 快照暴露。`onQtPreviewTick()` 在构造高频
+> payload 前的订阅预检也走同一计数入口，因此不会只统计进入 `dispatchEvent()` 的低频事件。
 
 - 位置：`EmbeddedExtensionRuntime::dispatchEvent()` 新增的 `if (!hasEventSubscriber(kind)) return;`
 - 无订阅者时事件被静默丢弃，扩展作者报"我的订阅不触发"时无法区分"事件没发"与"发了但没匹配上"。附带行为变化：`nextEventSequence_` 不再为被跳过的事件自增（`sequence` 语义从"发布序号"变成"投递序号"）。
@@ -529,5 +540,5 @@ logPlaybackStatus()                       handleMixerGroupSync()
 | P1 | T-3（`playbackSession_` 跨线程竞态）、T-4（COM 引用计数非原子 + 析构 UAF） | 真实数据竞争 / UAF |
 | P2 | T-6 / T-7（启动路径上的诊断副作用：GUI 线程建 DXGI 工厂、watchdog 线程 `SymInitialize` 争 loader lock） | 与本分支自己的「诊断不得拖累正常启动」原则冲突 |
 | P3 | T-9（波形构建与预览预热共用 2 线程池）、T-5（GUI 线程 `CoInitializeEx` MTA） | 可感知的交互延迟 / 潜在公寓模型破坏 |
-| P4 | T-8（挂起报告可被它要报告的挂起阻塞）、T-10（栈捕获超时后不可恢复）、L-14（扩展事件跳过不可见） | 清扫 |
-| 附带 | `currentBackgroundImage()` 死链导致的每帧 `toImage()`；导出路径 `&first=inf` → NaN | 均为独立行为变更，需单独决策（见文首补充事实） |
+| P4 | T-8（挂起报告可被它要报告的挂起阻塞）、T-10（栈捕获超时后不可恢复） | 清扫 |
+| 附带 | `currentBackgroundImage()` 死链导致的 `toImage()` | 独立行为变更，需单独决策（见文首补充事实） |

@@ -122,6 +122,14 @@ module.exports = { activate: activate };
                 QStringLiteral("events/register descriptor should still reach host")) &&
          ok;
 
+    const QString unmatchedKind = QStringLiteral("events/preview.unobserved");
+    runtime.dispatchEvent(unmatchedKind, QJsonObject{});
+    runtime.dispatchEvent(unmatchedKind, QJsonObject{}, true);
+    const QJsonObject skippedNoSubscriber = runtime.skippedNoSubscriberEventCountsForDevtools();
+    ok = expect(skippedNoSubscriber.value(unmatchedKind).toDouble() == 2.0,
+                QStringLiteral("unmatched event dispatches should be counted by kind for DevTools")) &&
+         ok;
+
     runtime.dispatchEvent(QStringLiteral("events/document.onDidChangeText"), QJsonObject{
         {QStringLiteral("textLength"), 42},
     });
@@ -153,5 +161,8 @@ module.exports = { activate: activate };
 
     runtime.stop();
     ok = expect(runtime.registeredEventCallbackCount() == 0, QStringLiteral("stop should clear event callbacks")) && ok;
+    ok = expect(runtime.skippedNoSubscriberEventCountsForDevtools().isEmpty(),
+                QStringLiteral("stop should clear unmatched event counters")) &&
+         ok;
     return ok ? 0 : 1;
 }

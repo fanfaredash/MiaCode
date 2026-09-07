@@ -30,6 +30,8 @@ public:
     bool executeCommand(const QString& command, QString* errorMessage = nullptr);
     int registeredEventCallbackCount(const QString& kind = {}) const;
     QJsonArray registeredEventCallbacksForDevtools() const;
+    QJsonObject skippedNoSubscriberEventCountsForDevtools() const;
+    void recordEventSkippedNoSubscriber(const QString& kind);
     // True when at least one live (non-suspended) subscription matches `kind`,
     // wildcard patterns included. Lets a per-frame publisher skip building its
     // payload when nothing would receive it.
@@ -89,6 +91,7 @@ private:
     QTimer eventFlushTimer_;
     quint64 nextEventSubscriptionId_ = 1;
     quint64 nextEventSequence_ = 1;
+    QHash<QString, quint64> skippedNoSubscriberByKind_;
     QHash<QString, QJSValue> loadedExports_;
     QStringList loadedExtensionIds_;
     QString currentExtensionId_;

@@ -1495,6 +1495,7 @@ void EmbeddedExtensionRuntime::stop()
     eventFlushTimer_.stop();
     eventCallbacks_.clear();
     pendingEvents_.clear();
+    skippedNoSubscriberByKind_.clear();
     extensionById_.clear();
     commandOwnerById_.clear();
     loadedExports_.clear();
@@ -1591,6 +1592,22 @@ QJsonArray EmbeddedExtensionRuntime::registeredEventCallbacksForDevtools() const
     return callbacks;
 }
 
+QJsonObject EmbeddedExtensionRuntime::skippedNoSubscriberEventCountsForDevtools() const
+{
+    QJsonObject counts;
+    for (auto it = skippedNoSubscriberByKind_.constBegin(); it != skippedNoSubscriberByKind_.constEnd(); ++it) {
+        counts.insert(it.key(), static_cast<double>(it.value()));
+    }
+    return counts;
+}
+
+void EmbeddedExtensionRuntime::recordEventSkippedNoSubscriber(const QString& kind)
+{
+    if (running_ && !kind.trimmed().isEmpty()) {
+        ++skippedNoSubscriberByKind_[kind];
+    }
+}
+
 bool EmbeddedExtensionRuntime::hasEventSubscriber(const QString& kind) const
 {
     if (!running_ || kind.trimmed().isEmpty()) {
@@ -1616,6 +1633,7 @@ void EmbeddedExtensionRuntime::dispatchEvent(const QString& kind, const QJsonObj
     // preview.position.changed is published on every playback tick, so with the
     // runtime up and nobody listening that was pure per-frame GUI-thread waste.
     if (!hasEventSubscriber(kind)) {
+        recordEventSkippedNoSubscriber(kind);
         return;
     }
     QJsonObject event = payload;

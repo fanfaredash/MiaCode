@@ -11,6 +11,7 @@
 #include "UiTheme.h"
 
 #include "common/ChartClockCount.h"
+#include "timeline/TimelineMarkerOffset.h"
 
 #include <QApplication>
 #include <QButtonGroup>
@@ -854,9 +855,7 @@ double LatencyDetectionPage::documentOffsetSeconds() const
     if (owner_.isNull()) {
         return 0.0;
     }
-    bool ok = false;
-    const double value = owner_->state_.document_.first.trimmed().toDouble(&ok);
-    return ok ? value : 0.0;
+    return miacode::timeline::offset::parsedFirstSeconds(owner_->state_.document_.first);
 }
 
 double LatencyDetectionPage::documentWholeBpm() const

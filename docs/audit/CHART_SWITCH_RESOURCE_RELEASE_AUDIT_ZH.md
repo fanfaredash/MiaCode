@@ -24,7 +24,7 @@
 | **F-1** | `TimelineQuickTextureCache` 三个缓存无上限、无切谱失效 → 跨谱面单调累积 | **高 → 下调为低**（见下方实测） | 已加容量兜底（`beta.7-test.4`） | `src/timeline/quick/` |
 | **F-2** | `PreviewQuickSceneRoot::invalidateTextureCache()` 是死代码（零调用方）→ 预览纹理缓存只能靠撞 96 MB 上限自清 | 中 | 实测下**未构成问题**（全程 0 次冲刷，占用平台化于 ~92 条 / 32 MB）；相关的读数可信度缺陷已修，见 §7.4 | `src/preview/quick_scene/` |
 | **F-3** | `ignoredHeaderIssueTypesByFile_` 按文件路径累积，永不清理 | 低 | 未处理 | `src/app/mainwindow/` |
-| **F-4** | `clearTimelineAndPreview()` 清了 `muriAnalysisReport_` 但没清 `muriStaticReferences_` | 低（正确性，非泄漏） | 未处理 | `src/app/mainwindow/` |
+| **F-4** | `clearTimelineAndPreview()` 清了 `muriAnalysisReport_` 但没清 `muriStaticReferences_` | 低（正确性，非泄漏） | 已修复（2026-09-08） | `src/app/mainwindow/` |
 | — | 音频 / 视频 / 异步 / 定时器 / 撤销栈 / 波形 / 校验缓存 | **未发现问题** | — | 见 §5 |
 
 > **实测补充（`1.1.0-beta.7-test.3-win64`，10 次切谱 / 26 个采样点）**：`tex_rot` 0→293、
@@ -189,6 +189,10 @@ src/preview/quick_scene/PreviewQuickSceneRoot.h:64      （声明）
 **F-4** `MainWindow.DocumentUi.cpp:1449-1451`
 `clearTimelineAndPreview()` 重置了 `muriAnalysisReport_`，但**没有**重置 `muriStaticReferences_`。后者要等异步分析 worker 回填才被整体替换（`MainWindow.TimelineAnalysisFlow.cpp:199`）。
 这不是泄漏（永远是整体赋值，不累积），但在切难度到新分析落地之间存在一个窗口，旧难度的 static reference 仍会参与渲染（`MainWindow.ValidationRender.cpp:80`）。**建议单独确认是否有意**，不要和本文的泄漏项混在一起改。
+
+> **已修复（2026-09-08）**：切换路径现在与 `muriAnalysisReport_` 同步清空
+> `muriStaticReferences_`；旧 worker 结果仍由 revision、难度、文本和 marker signature
+> 四重校验阻止回填，因此新分析落地前不会再渲染旧难度的静态引用。
 
 ---
 

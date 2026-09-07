@@ -920,9 +920,16 @@ void ExtensionManager::publishEvent(const QString& name, const QJsonObject& payl
     }
 }
 
-bool ExtensionManager::hasEventSubscribers(const QString& name) const
+bool ExtensionManager::hasEventSubscribers(const QString& name)
 {
-    return runtime_ != nullptr && runtime_->isRunning() && runtime_->hasEventSubscriber(name);
+    if (runtime_ == nullptr || !runtime_->isRunning()) {
+        return false;
+    }
+    if (runtime_->hasEventSubscriber(name)) {
+        return true;
+    }
+    runtime_->recordEventSkippedNoSubscriber(name);
+    return false;
 }
 
 void ExtensionManager::refreshExtensions()
@@ -1660,6 +1667,7 @@ QJsonObject ExtensionManager::devtoolsSnapshot(const QString& extensionId) const
         {QStringLiteral("recentCalls"), recentHostCalls_},
         {QStringLiteral("eventCallbackCount"), runtime_ ? runtime_->registeredEventCallbackCount() : 0},
         {QStringLiteral("eventCallbacks"), eventCallbacks},
+        {QStringLiteral("skippedNoSubscriber"), runtime_ ? runtime_->skippedNoSubscriberEventCountsForDevtools() : QJsonObject()},
         {QStringLiteral("uiContributions"), uiContributions},
         {QStringLiteral("uiViews"), uiViews},
         {QStringLiteral("runtimeRegistrations"), runtimeRegistrations},

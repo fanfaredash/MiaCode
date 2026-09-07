@@ -951,7 +951,7 @@ bool loadChartFromArgs(
     const QString rawFirst = parser.value(QStringLiteral("first")).trimmed();
     const bool firstOverrideSet = !rawFirst.isEmpty();
     bool firstOk = !firstOverrideSet;
-    const double firstOverride = firstOverrideSet ? rawFirst.toDouble(&firstOk) : 0.0;
+    const double firstOverride = firstOverrideSet ? parsedFirstSeconds(rawFirst, &firstOk) : 0.0;
     if (!firstOk) {
         *outErrorMessage = QStringLiteral("--first must be a number.");
         return false;
