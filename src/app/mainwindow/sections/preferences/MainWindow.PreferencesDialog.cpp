@@ -1482,7 +1482,7 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* backgroundImageLabel =
         new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.image")), backgroundGroup);
     auto* backgroundImageRow = new QWidget(backgroundGroup);
-    auto* backgroundImageRowLayout = new QHBoxLayout(backgroundImageRow);
+    auto* backgroundImageRowLayout = new QVBoxLayout(backgroundImageRow);
     backgroundImageRowLayout->setContentsMargins(0, 0, 0, 0);
     backgroundImageRowLayout->setSpacing(8);
     auto* backgroundImageEdit = new QLineEdit(backgroundImageRow);
@@ -1490,17 +1490,23 @@ void MainWindow::PreferencesSection::onPreferences()
     backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
     backgroundImageEdit->setMinimumWidth(0);
     backgroundImageEdit->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    auto* backgroundImageButtonRow = new QWidget(backgroundImageRow);
+    auto* backgroundImageButtonLayout = new QHBoxLayout(backgroundImageButtonRow);
+    backgroundImageButtonLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundImageButtonLayout->setSpacing(8);
     auto* chooseBackgroundButton = miacode::ui::createDialogPushButton(
         UiText::text(QStringLiteral("dialog.preferences.background.choose")),
-        backgroundImageRow);
+        backgroundImageButtonRow);
     auto* clearBackgroundButton = miacode::ui::createDialogPushButton(
         UiText::text(QStringLiteral("dialog.preferences.background.clear")),
-        backgroundImageRow);
+        backgroundImageButtonRow);
     styleRegisteredDialogButton(chooseBackgroundButton);
     styleRegisteredDialogButton(clearBackgroundButton);
-    backgroundImageRowLayout->addWidget(backgroundImageEdit, 1);
-    backgroundImageRowLayout->addWidget(chooseBackgroundButton, 0);
-    backgroundImageRowLayout->addWidget(clearBackgroundButton, 0);
+    backgroundImageButtonLayout->addWidget(chooseBackgroundButton, 0);
+    backgroundImageButtonLayout->addWidget(clearBackgroundButton, 0);
+    backgroundImageButtonLayout->addStretch(1);
+    backgroundImageRowLayout->addWidget(backgroundImageEdit);
+    backgroundImageRowLayout->addWidget(backgroundImageButtonRow);
     connect(chooseBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
         const QString initialDir = selectedBackgroundSettings.imagePath.isEmpty()
             ? QString()
