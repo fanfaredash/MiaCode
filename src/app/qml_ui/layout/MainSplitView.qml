@@ -117,12 +117,6 @@ Item {
         return editorPane.applyChartTransform(opId)
     }
 
-    function validateChart() {
-        root.commands.validateDocument()
-        root.viewState.bottomPanelVisible = true
-        root.timelineSession.setCurrentTabId("validation")
-    }
-
     function showFullscreenPreview() {
         // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash.
         if (root.exportVideoActive)
@@ -274,7 +268,6 @@ Item {
                     documentSession: root.documentSession
                     analysisSession: root.analysisSession
                     preferences: root.preferences
-                    commands: root.commands
                     timelineSession: root.timelineSession
                     previewSession: root.previewSession
                     SplitView.minimumHeight: root.bottomPanelEffectivelyVisible

@@ -1278,10 +1278,6 @@ bool QmlDocumentModel::removeDifficulty(int id)
     publishWorkspaceCommit(WorkspaceCommitKind::Structure);
     return true;
 }
-void QmlDocumentModel::validateChart()
-{
-    if (analysisService_ != nullptr) analysisService_->requestAnalysis();
-}
 int QmlDocumentModel::chartPosition(int line, int column) const
 {
     const QString text = chartText();

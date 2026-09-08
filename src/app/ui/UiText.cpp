@@ -1,5 +1,7 @@
 #include "UiText.h"
 
+#include "common/MuriTypes.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -1424,6 +1426,7 @@ const QHash<QString, QString>& enMap()
         {"validation.muri.kind.tap_on_slide", "Tail"},
         {"validation.no_muri_issues_detected", "No muri issues detected."},
         {"validation.no_syntax_errors_detected", "No syntax errors detected."},
+        {"validation.muri.summary", "%1 muri, %2 warnings"},
         {"validation.difficulty_level_missing", "Difficulty level is required."},
         {"validation.difficulty_level_missing_type", "Missing difficulty level"},
         {"validation.difficulty_header", "Difficulty header"},
@@ -2655,6 +2658,7 @@ const QHash<QString, QString>& zhMap()
         {"validation.muri.kind.tap_on_slide", "撞尾"},
         {"validation.no_muri_issues_detected", "未检测到无理。"},
         {"validation.no_syntax_errors_detected", "未检测到语法错误。"},
+        {"validation.muri.summary", "%1 个无理，%2 个警告"},
         {"validation.difficulty_level_missing", "当前难度缺少等级。"},
         {"validation.difficulty_level_missing_type", "缺少难度等级"},
         {"validation.difficulty_header", "难度头字段"},
@@ -3856,6 +3860,7 @@ const QHash<QString, QString>& jaMap()
         {"validation.muri.kind.tap_on_slide", "末尾衝突"},
         {"validation.no_muri_issues_detected", "無理は検出されませんでした。"},
         {"validation.no_syntax_errors_detected", "構文エラーは検出されませんでした。"},
+        {"validation.muri.summary", "無理 %1 件、警告 %2 件"},
         {"validation.difficulty_level_missing", "現在の難易度にレベルがありません。"},
         {"validation.difficulty_level_missing_type", "難易度レベル不足"},
         {"validation.difficulty_header", "難易度ヘッダー"},
@@ -4321,6 +4326,23 @@ QString UiText::text(const QString& key)
     return key;
 }
 
+QString UiText::muriKindText(MuriKind kind)
+{
+    switch (kind) {
+    case MuriKind::SlideTooFast:
+        return text(QStringLiteral("validation.muri.kind.slide_too_fast"));
+    case MuriKind::SlideHeadTap:
+        return text(QStringLiteral("validation.muri.kind.slide_head_tap"));
+    case MuriKind::TapOnSlide:
+        return text(QStringLiteral("validation.muri.kind.tap_on_slide"));
+    case MuriKind::Overlap:
+        return text(QStringLiteral("validation.muri.kind.overlap"));
+    case MuriKind::MultiTouch:
+        return text(QStringLiteral("validation.muri.kind.multi_touch"));
+    }
+    return QString();
+}
+
 namespace {
 
 // UIv2 QML passes visible Chinese source strings (the cover page passes catalog
@@ -4518,11 +4540,8 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("更多"), {QStringLiteral("More"), QStringLiteral("その他")}},
         {QStringLiteral("最大化"), {QStringLiteral("Maximize"), QStringLiteral("最大化")}},
         {QStringLiteral("最小化"), {QStringLiteral("Minimize"), QStringLiteral("最小化")}},
-        {QStringLiteral("未发现 Muri 问题"), {QStringLiteral("No Muri issues found"), QStringLiteral("無理の問題は見つかりませんでした")}},
-        {QStringLiteral("未发现验证问题"), {QStringLiteral("No validation issues found"), QStringLiteral("検証上の問題は見つかりませんでした")}},
         {QStringLiteral("查找与替换"), {QStringLiteral("Find and replace"), QStringLiteral("検索と置換")}},
         {QStringLiteral("标题字体预览"), {QStringLiteral("Title-font preview"), QStringLiteral("タイトルフォントのプレビュー")}},
-        {QStringLiteral("检查谱面"), {QStringLiteral("Validate chart"), QStringLiteral("譜面を検証")}},
         {QStringLiteral("检测"), {QStringLiteral("Detect"), QStringLiteral("検出")}},
         {QStringLiteral("正在分析…"), {QStringLiteral("Analyzing…"), QStringLiteral("解析中…")}},
         {QStringLiteral("正在取消…"), {QStringLiteral("Cancelling…"), QStringLiteral("キャンセル中…")}},
@@ -4577,7 +4596,6 @@ const QHash<QString, QPair<QString, QString>>& qmlOnlyEntries()
         {QStringLiteral("选择当前行"), {QStringLiteral("Select current line"), QStringLiteral("現在の行を選択")}},
         {QStringLiteral("选择统一谱师"), {QStringLiteral("Choose unified chart designer"), QStringLiteral("統一する譜面制作者を選択")}},
         {QStringLiteral("选择要扫描的目录"), {QStringLiteral("Choose a folder to scan"), QStringLiteral("スキャンするフォルダーを選択")}},
-        {QStringLiteral("重新检查"), {QStringLiteral("Recheck"), QStringLiteral("再チェック")}},
         {QStringLiteral("重置片头难度卡字体"), {QStringLiteral("Reset intro difficulty-card fonts"), QStringLiteral("イントロ難度カードのフォントをリセット")}},
         {QStringLiteral("错误"), {QStringLiteral("Errors"), QStringLiteral("エラー")}},
         {QStringLiteral("难度卡字体"), {QStringLiteral("Difficulty-card fonts"), QStringLiteral("難度カードのフォント")}},

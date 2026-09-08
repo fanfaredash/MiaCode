@@ -440,10 +440,21 @@ Item {
                 enabled: root.commandsEnabled
                 onTriggered: root.commands.metadataRequested()
             }
+            AppMenuSeparator {}
             AppMenuAction {
-                text: UiText.text("检查谱面")
+                text: UiText.text("延迟校准")
                 enabled: root.commandsEnabled
-                onTriggered: root.commands.validateRequested()
+                onTriggered: root.commands.latencyCalibrationRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("media_tools.audio_video_processing")
+                enabled: root.commandsEnabled
+                onTriggered: root.commands.mediaToolsRequested()
+            }
+            AppMenuAction {
+                text: UiText.text("整谱规范化")
+                enabled: root.commandsEnabled && root.normalizationEnabled
+                onTriggered: root.commands.normalizeChartRequested()
             }
         }
 

@@ -4,6 +4,25 @@
 
 #include <utility>
 
+namespace {
+
+QString validationDetailText(const QString& message)
+{
+    QString detail = message.trimmed();
+    const auto stripPrefix = [&detail](const QString& prefix) {
+        if (!detail.startsWith(prefix)) return false;
+        detail = detail.mid(prefix.size()).trimmed();
+        return true;
+    };
+    if (stripPrefix(QStringLiteral("[ERROR]"))) return detail;
+    if (stripPrefix(QStringLiteral("[WARNING]"))) return detail;
+    if (stripPrefix(QStringLiteral("[错误]"))) return detail;
+    stripPrefix(QStringLiteral("[警告]"));
+    return detail;
+}
+
+}  // namespace
+
 namespace miacode::qml_ui {
 
 AnalysisProjection projectAnalysis(const AnalysisProjectionInput& input)
@@ -35,7 +54,7 @@ AnalysisProjection projectAnalysis(const AnalysisProjectionInput& input)
         row.code = issue.code;
         row.title = row.severity == QLatin1String("warning")
             ? QStringLiteral("Warning") : QStringLiteral("Error");
-        row.detail = issue.message;
+        row.detail = validationDetailText(issue.message);
         row.difficultyId = input.activeDifficultyId;
         row.revision = input.validation.revision;
         row.second = -1.0;
@@ -45,7 +64,6 @@ AnalysisProjection projectAnalysis(const AnalysisProjectionInput& input)
     for (AnalysisRow& row : result.muriRows) {
         row.difficultyId = input.activeDifficultyId;
         row.revision = input.validation.revision;
-        row.title = QStringLiteral("Muri: %1").arg(row.title);
     }
     return result;
 }
@@ -81,7 +99,7 @@ AnalysisProjection projectAnalysis(
             ? QStringLiteral("warning") : QStringLiteral("error");
         row.title = row.severity == QLatin1String("warning")
             ? QStringLiteral("Warning") : QStringLiteral("Error");
-        row.detail = issue.displayMessage;
+        row.detail = validationDetailText(issue.displayMessage);
         row.code = QString();
         row.difficultyId = activeDifficultyId;
         row.revision = documentRevision;
@@ -92,7 +110,6 @@ AnalysisProjection projectAnalysis(
     for (AnalysisRow& row : result.muriRows) {
         row.difficultyId = activeDifficultyId;
         row.revision = documentRevision;
-        row.title = QStringLiteral("Muri: %1").arg(row.title);
     }
     return result;
 }

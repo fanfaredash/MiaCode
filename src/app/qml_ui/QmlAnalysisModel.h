@@ -7,9 +7,6 @@
 #include "app/v2/AnalysisService.h"
 #include "app/v2/ChartWorkspace.h"
 
-#include "app/v2/TimelineSurface.h"
-
-
 class QmlAnalysisModel final : public QObject
 {
     Q_OBJECT
@@ -24,8 +21,7 @@ class QmlAnalysisModel final : public QObject
 public:
     QmlAnalysisModel(
         miacode::v2::ChartWorkspace& workspace,
-        miacode::v2::AnalysisService& analysisService,
-        miacode::v2::TimelineSurface*& surfaceSlot, QObject* parent = nullptr);
+        miacode::v2::AnalysisService& analysisService, QObject* parent = nullptr);
 
     QVariantList validationRows() const;
     QVariantList muriRows() const;
@@ -36,7 +32,7 @@ public:
     int markerCount() const;
     void refreshPreferences();
     Q_INVOKABLE void activateRow(const QVariantMap& row);
-    Q_INVOKABLE void completeRowActivation(
+    Q_INVOKABLE bool completeRowActivation(
         int difficultyId, qulonglong revision, int line, int column, int endColumn, double second);
     Q_INVOKABLE void cancelRowActivation(
         int difficultyId, qulonglong revision, int line, int column, int endColumn, double second);
@@ -49,13 +45,6 @@ private:
     void refresh();
     QVariantList rowsToVariantList(const QVector<miacode::qml_ui::AnalysisRow>& rows) const;
 
-    // Jumping to an issue's second and the 无理 prompt preference both belong
-    // to the timeline surface, not to the window.
-    miacode::v2::TimelineSurface** surfaceSlot_ = nullptr;
-    miacode::v2::TimelineSurface* surface() const
-    {
-        return surfaceSlot_ != nullptr ? *surfaceSlot_ : nullptr;
-    }
     miacode::v2::ChartWorkspace* workspace_ = nullptr;
     miacode::v2::AnalysisService* analysisService_ = nullptr;
     miacode::qml_ui::AnalysisProjection projection_;

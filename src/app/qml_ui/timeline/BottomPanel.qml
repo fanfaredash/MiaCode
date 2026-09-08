@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import MiaCode.UI
 import MiaCode.Timeline
 
@@ -12,7 +11,6 @@ Item {
     required property var documentSession
     required property var analysisSession
     required property var preferences
-    required property var commands
     required property var timelineSession
     required property var previewSession
     signal analysisRowActivated(int difficultyId, var revision, int line, int column, int endColumn, double second)
@@ -30,6 +28,69 @@ Item {
         zoomButton.x + zoomButton.width + Theme.panelPadding
     readonly property int timelineHeaderRightLimit:
         brightnessButton.x - Theme.panelPadding
+    readonly property real analysisTextLeftInset:
+        Theme.panelPadding - Theme.chromeInsetX + Theme.compactTabContentPadding
+    readonly property real analysisListLeftInset:
+        Math.max(0, analysisTextLeftInset - Theme.rowPaddingX)
+    readonly property real analysisVerticalSpacing: Theme.chromeInsetY
+    readonly property int muriWarningCount: countMuriRows("warning")
+    readonly property int muriIssueCount: countMuriRows("muri")
+
+    function countMuriRows(alert) {
+        const rows = analysisSession.muriRows
+        let count = 0
+        for (let index = 0; index < rows.length; ++index) {
+            if (rows[index].alert === alert)
+                ++count
+        }
+        return count
+    }
+
+    component AnalysisIssueRow: ChromeRow {
+        id: issueRow
+
+        required property var modelData
+        required property string leadingText
+        required property string bodyText
+
+        readonly property color leadingColor: modelData.severity === "error"
+            ? Theme.colors.syntax.error
+            : Theme.colors.syntax.warning
+
+        width: ListView.view.width
+        height: implicitHeight
+        onClicked: root.analysisSession.activateRow(modelData)
+
+        contentItem: Item {
+            implicitHeight: issueContent.implicitHeight
+
+            Column {
+                id: issueContent
+
+                width: parent.width
+                y: (parent.height - implicitHeight) / 2
+                spacing: 2
+
+                Label {
+                    width: parent.width
+                    text: issueRow.leadingText
+                    color: issueRow.leadingColor
+                    wrapMode: Text.Wrap
+                    font.family: Theme.codeFont.family
+                    font.pixelSize: Theme.compactFontSize
+                }
+
+                Label {
+                    width: parent.width
+                    text: issueRow.bodyText
+                    color: Theme.colors.text.primary
+                    wrapMode: Text.Wrap
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.compactFontSize
+                }
+            }
+        }
+    }
 
     // 时间轴外壳颜色的唯一来源是 Theme.qml 的 colors.timeline 分组。
     // 桥接对象必须先于 TimelineQuickItem 创建，颜色才会在首次绘制前进入
@@ -171,8 +232,9 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 8
-            spacing: 12
+            anchors.leftMargin: root.analysisTextLeftInset
+            anchors.rightMargin: Theme.panelPadding
+            anchors.topMargin: root.analysisVerticalSpacing
 
             Label {
                 anchors.verticalCenter: parent.verticalCenter
@@ -183,12 +245,7 @@ Item {
                         .arg(root.documentSession.syntaxWarningCount)
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
-                font.pixelSize: Theme.secondaryFontSize
-            }
-
-            AppButton {
-                text: UiText.text("重新检查")
-                onClicked: root.commands.validateDocument()
+                font.pixelSize: Theme.compactFontSize
             }
         }
 
@@ -197,47 +254,20 @@ Item {
             anchors.right: parent.right
             anchors.top: summaryRow.bottom
             anchors.bottom: parent.bottom
-            anchors.topMargin: 8
+            anchors.topMargin: root.analysisVerticalSpacing
+            anchors.leftMargin: root.analysisListLeftInset
+            anchors.rightMargin: Theme.panelPadding
             clip: true
             model: root.analysisSession.validationRows
 
-            // The severity column is measured, not guessed: a hard-coded width
-            // let "警告 · L44:C1" overflow its box and the detail column then
-            // painted straight over the tail. The floor only aligns the columns
-            // when the label happens to be narrower.
-            delegate: ChromeRow {
+            delegate: AnalysisIssueRow {
                 id: issueDelegate
-                required property var modelData
-                width: ListView.view.width
-                height: 34
-                onClicked: root.analysisSession.activateRow(modelData)
-
-                contentItem: RowLayout {
-                    spacing: 10
-                    Label {
-                        id: issueLocation
-                        Layout.preferredWidth: Math.max(implicitWidth, 100)
-                        text: issueDelegate.modelData.code === "missing_difficulty_level"
-                            ? UiText.text("validation.difficulty_header")
-                            : "%1 · L%2:C%3".arg(issueDelegate.modelData.severity === "error"
-                                ? UiText.text("错误") : UiText.text("警告"))
-                                .arg(issueDelegate.modelData.line).arg(issueDelegate.modelData.column)
-                        color: issueDelegate.modelData.severity === "error"
-                               ? Theme.colors.syntax.error
-                               : Theme.colors.syntax.warning
-                        font: Theme.codeFont
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: issueDelegate.modelData.detail
-                        color: Theme.colors.text.primary
-                        elide: Text.ElideRight
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.uiFontSize
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
+                leadingText: modelData.code === "missing_difficulty_level"
+                    ? UiText.text("validation.difficulty_header")
+                    : "%1 · L%2:C%3".arg(modelData.severity === "error"
+                        ? UiText.text("错误") : UiText.text("警告"))
+                        .arg(modelData.line).arg(modelData.column)
+                bodyText: modelData.detail
             }
 
             ScrollBar.vertical: AppScrollBar {}
@@ -246,10 +276,12 @@ Item {
         Label {
             anchors.centerIn: parent
             visible: root.analysisSession.validationRows.length === 0
-            text: root.analysisSession.pending ? UiText.text("正在分析…") : UiText.text("未发现验证问题")
+            text: root.analysisSession.pending
+                ? UiText.text("正在分析…")
+                : UiText.text("validation.no_syntax_errors_detected")
             color: Theme.colors.text.secondary
             font.family: Theme.uiFont
-            font.pixelSize: Theme.uiFontSize
+            font.pixelSize: Theme.compactFontSize
         }
     }
 
@@ -261,51 +293,60 @@ Item {
         anchors.bottom: parent.bottom
         visible: root.timelineSession.currentTabId === "muri"
 
+        Row {
+            id: muriSummaryRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.leftMargin: root.analysisTextLeftInset
+            anchors.rightMargin: Theme.panelPadding
+            anchors.topMargin: root.analysisVerticalSpacing
+
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.analysisSession.pending
+                    ? UiText.text("正在分析…")
+                    : UiText.text("validation.muri.summary")
+                        .arg(root.muriIssueCount)
+                        .arg(root.muriWarningCount)
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.compactFontSize
+            }
+        }
+
         ListView {
             id: muriList
-            anchors.fill: parent
-            anchors.margins: 8
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: muriSummaryRow.bottom
+            anchors.bottom: parent.bottom
+            anchors.topMargin: root.analysisVerticalSpacing
+            anchors.leftMargin: root.analysisListLeftInset
+            anchors.rightMargin: Theme.panelPadding
             clip: true
             model: root.analysisSession.muriRows
-            delegate: ChromeRow {
+            delegate: AnalysisIssueRow {
                 id: muriDelegate
-                required property var modelData
-                width: ListView.view.width
-                height: 42
-                onClicked: root.analysisSession.activateRow(modelData)
-                contentItem: ColumnLayout {
-                    spacing: 2
-                    Label {
-                        Layout.fillWidth: true
-                        text: "[%1] %2 · L%3:C%4".arg(muriDelegate.modelData.alert === "warning"
-                            ? UiText.text("警告") : UiText.text("警报"))
-                            .arg(muriDelegate.modelData.title)
-                            .arg(muriDelegate.modelData.line).arg(muriDelegate.modelData.column)
-                        color: muriDelegate.modelData.severity === "warning"
-                               ? Theme.colors.syntax.warning : Theme.colors.syntax.error
-                        elide: Text.ElideRight
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.uiFontSize
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: muriDelegate.modelData.detail
-                        elide: Text.ElideRight
-                        color: Theme.colors.text.secondary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.secondaryFontSize
-                    }
-                }
+                leadingText: "%1 · %2 · L%3:C%4".arg(modelData.alert === "warning"
+                    ? UiText.text("validation.muri.alert.warning")
+                    : UiText.text("validation.muri.alert.muri"))
+                    .arg(modelData.title)
+                    .arg(modelData.line)
+                    .arg(modelData.column)
+                bodyText: modelData.detail
             }
             ScrollBar.vertical: AppScrollBar {}
         }
         Label {
             anchors.centerIn: parent
             visible: root.analysisSession.muriRows.length === 0
-            text: root.analysisSession.pending ? UiText.text("正在分析…") : UiText.text("未发现 Muri 问题")
+            text: root.analysisSession.pending
+                ? UiText.text("正在分析…")
+                : UiText.text("validation.no_muri_issues_detected")
             color: Theme.colors.text.secondary
             font.family: Theme.uiFont
-            font.pixelSize: Theme.uiFontSize
+            font.pixelSize: Theme.compactFontSize
         }
     }
 

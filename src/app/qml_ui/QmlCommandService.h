@@ -37,7 +37,6 @@ public:
     Q_INVOKABLE bool saveWholeDocument();
     Q_INVOKABLE bool saveDocumentAs(const QUrl& fileUrl);
     Q_INVOKABLE void discardDocumentChanges();
-    Q_INVOKABLE void validateDocument();
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);

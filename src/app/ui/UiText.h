@@ -5,6 +5,8 @@
 #include <QString>
 #include <QStringList>
 
+enum class MuriKind;
+
 namespace UiText {
 
 enum class LanguagePreference {
@@ -30,6 +32,7 @@ struct LanguageOption {
 // first, then English, then the key itself as the final missing-translation
 // marker. The product catalog contains only the built-in language set.
 QString text(const QString& key);
+QString muriKindText(MuriKind kind);
 // Transitional QML-source bridge. UIv2 was authored with Chinese `qsTr()`
 // literals while the application already owns the canonical three-language
 // key catalog. Resolve an exact Chinese source string back to that catalog so

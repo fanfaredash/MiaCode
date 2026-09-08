@@ -179,7 +179,6 @@ public:
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);
-    Q_INVOKABLE void validateChart();
     Q_INVOKABLE int chartPosition(int line, int column) const;
     // Paired with the editor/document_replaced projection line: what the
     // visible editor actually ended up showing. The two together identify

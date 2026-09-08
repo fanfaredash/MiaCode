@@ -60,8 +60,10 @@ Item {
                 id: contentRow
 
                 anchors.fill: parent
-                anchors.leftMargin: root.compact ? 8 : root.panelTab ? 12 : 10
-                anchors.rightMargin: root.compact ? 8 : root.panelTab ? 12 : 5
+                anchors.leftMargin: root.compact ? Theme.compactTabContentPadding
+                                                  : root.panelTab ? 12 : 10
+                anchors.rightMargin: root.compact ? Theme.compactTabContentPadding
+                                                   : root.panelTab ? 12 : 5
                 spacing: 6
 
                 DifficultySwatch {

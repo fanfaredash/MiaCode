@@ -6,6 +6,7 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
+#include "ui/UiText.h"
 
 #include <QtCore>
 
@@ -189,13 +190,7 @@ Session::QmlAnalysisSnapshot miacode::runtime::ValidationHost::qmlAnalysisSnapsh
                 ? QStringLiteral("warning") : QStringLiteral("error");
             row.alert = entry.alertLevel == MuriAlertLevel::Warning
                 ? QStringLiteral("warning") : QStringLiteral("muri");
-            switch (entry.kind) {
-            case MuriKind::SlideTooFast: row.title = QStringLiteral("Slide too fast"); break;
-            case MuriKind::SlideHeadTap: row.title = QStringLiteral("Slide head tap"); break;
-            case MuriKind::TapOnSlide: row.title = QStringLiteral("Tap on slide"); break;
-            case MuriKind::Overlap: row.title = QStringLiteral("Overlap"); break;
-            case MuriKind::MultiTouch: row.title = QStringLiteral("Multi-touch"); break;
-            }
+            row.title = UiText::muriKindText(entry.kind);
             row.detail = renderMuriDetail(entry.detailKind, entry.detailArgs, miacode::v2::uiValidationLocale()).trimmed();
             if (row.detail.isEmpty()) row.detail = entry.rawDetail;
             input.muriRows.append(row);

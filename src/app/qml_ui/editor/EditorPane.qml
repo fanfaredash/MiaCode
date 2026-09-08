@@ -113,8 +113,13 @@ Item {
         }
         requestIssueNavigation(
             difficultyId, revision, line, column, endColumn,
-            () => analysisSession.completeRowActivation(
-                difficultyId, revision, line, column, endColumn, second),
+            () => {
+                if (analysisSession.completeRowActivation(
+                        difficultyId, revision, line, column, endColumn, second)) {
+                    root.editorSync.seekPreviewToEditorLocation(
+                        difficultyId, revision, line, column)
+                }
+            },
             cancel)
     }
 

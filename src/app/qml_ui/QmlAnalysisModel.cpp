@@ -28,13 +28,7 @@ QVector<miacode::qml_ui::AnalysisRow> muriRowsForSnapshot(
             ? QStringLiteral("warning") : QStringLiteral("error");
         row.alert = entry.alertLevel == MuriAlertLevel::Warning
             ? QStringLiteral("warning") : QStringLiteral("muri");
-        switch (entry.kind) {
-        case MuriKind::SlideTooFast: row.title = QStringLiteral("Slide too fast"); break;
-        case MuriKind::SlideHeadTap: row.title = QStringLiteral("Slide head tap"); break;
-        case MuriKind::TapOnSlide: row.title = QStringLiteral("Tap on slide"); break;
-        case MuriKind::Overlap: row.title = QStringLiteral("Overlap"); break;
-        case MuriKind::MultiTouch: row.title = QStringLiteral("Multi-touch"); break;
-        }
+        row.title = UiText::muriKindText(entry.kind);
         row.detail = renderMuriDetail(
             entry.detailKind, entry.detailArgs, snapshot.locale).trimmed();
         if (row.detail.isEmpty()) row.detail = entry.rawDetail;
@@ -47,10 +41,8 @@ QVector<miacode::qml_ui::AnalysisRow> muriRowsForSnapshot(
 
 QmlAnalysisModel::QmlAnalysisModel(
     miacode::v2::ChartWorkspace& workspace,
-    miacode::v2::AnalysisService& analysisService,
-    miacode::v2::TimelineSurface*& surfaceSlot, QObject* parent)
+    miacode::v2::AnalysisService& analysisService, QObject* parent)
     : QObject(parent)
-    , surfaceSlot_(&surfaceSlot)
     , workspace_(&workspace)
     , analysisService_(&analysisService)
 {
@@ -102,7 +94,7 @@ void QmlAnalysisModel::activateRow(const QVariantMap& row)
         difficultyId, revision, qMax(1, line), qMax(1, column), qMax(column, endColumn), second);
 }
 
-void QmlAnalysisModel::completeRowActivation(
+bool QmlAnalysisModel::completeRowActivation(
     int difficultyId, qulonglong revision, int line, int column, int endColumn, double second)
 {
     miacode::qml_ui::AnalysisRow completionIdentity;
@@ -113,13 +105,12 @@ void QmlAnalysisModel::completeRowActivation(
     completionIdentity.endColumn = endColumn;
     completionIdentity.second = second;
     miacode::qml_ui::AnalysisRow pending;
-    if (!activationState_.complete(completionIdentity, &pending)) return;
+    if (!activationState_.complete(completionIdentity, &pending)) return false;
     refresh();
     const miacode::qml_ui::AnalysisProjection current = projection_;
     if (!miacode::qml_ui::analysisRowCanActivate(
-            current, pending, current.difficultyId)) return;
-    if (pending.second >= 0.0 && surface() != nullptr)
-        surface()->navigateToSecond(pending.second);
+            current, pending, current.difficultyId)) return false;
+    return true;
 }
 
 void QmlAnalysisModel::cancelRowActivation(

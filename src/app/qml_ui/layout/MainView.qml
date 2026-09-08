@@ -58,8 +58,12 @@ Item {
         onSelectAllRequested: root.selectAll()
         onFindRequested: splitView.showFindReplace()
         onSelectCurrentLineRequested: splitView.selectCurrentLine()
-        onValidateRequested: root.validateChart()
         onMetadataRequested: state.openMetadataEditor()
+        onLatencyCalibrationRequested: {
+            root.pages.rememberEditorReturnTarget(state.activeEditorKey)
+            root.pages.openLatencyPage()
+        }
+        onMediaToolsRequested: root.pages.openMediaProcessingTools()
         onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
         onOpenRequested: openFileDialog.open()
         onSaveRequested: root.saveDocument()
@@ -105,11 +109,6 @@ Item {
 
     function applyChartTransform(opId) {
         return splitView.applyChartTransform(opId)
-    }
-
-    function validateChart() {
-        splitView.validateChart()
-        root.preferences.bottomPanelVisible = true
     }
 
     function showUnavailableFeature(featureName) {

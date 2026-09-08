@@ -304,6 +304,7 @@ QtObject {
     readonly property int compactControlHeight: 24
     readonly property int compactFontSize: uiFontSize - 2
     readonly property int panelPadding: 8
+    readonly property int compactTabContentPadding: 8
     readonly property int dialogPadding: 16
     readonly property int dialogMargin: 24
     readonly property int dialogHeight: 560

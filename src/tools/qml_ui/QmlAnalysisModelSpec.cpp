@@ -142,7 +142,7 @@ int main()
     ok &= require(aligned.available && !aligned.pending && aligned.validationRows.size() == 1
                       && aligned.muriRows.size() == 1 && aligned.validationRows.constFirst().revision == 72
                       && aligned.muriRows.constFirst().difficultyId == 5
-                      && aligned.muriRows.constFirst().title == QLatin1String("Muri: Overlap"),
+                      && aligned.muriRows.constFirst().title == QLatin1String("Overlap"),
                   QStringLiteral("matching validation and Muri snapshots display only their current rows"), err);
     ok &= require(aligned.validationRows.constFirst().endColumn == 4,
                   QStringLiteral("validation multi-column range keeps its end column through the analysis row"), err);

@@ -9,8 +9,7 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
     , document_(services.shellNotifications(), services.workspace(), services.files(), services.analysis(),
                 services.uiRequests(), services.documentBridgeSlot(),
                 services.previewSurfaceSlot(), this)
-    , analysis_(services.workspace(), services.analysis(),
-                services.timelineSurfaceSlot(), this)
+    , analysis_(services.workspace(), services.analysis(), this)
     , preview_(services.shellNotifications(), services.previewSurfaceSlot(), services.playbackControlSlot(), this)
     , timeline_(services.shellNotifications(), services.timelineSurfaceSlot(), this)
     , commands_(document_, services.documentBridgeSlot(), this)
