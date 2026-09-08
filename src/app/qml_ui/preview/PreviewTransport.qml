@@ -16,7 +16,11 @@ Item {
     signal fullscreenRequested()
 
 
-    implicitHeight: 63
+    readonly property real progressTopInset: 3
+    readonly property real controlsBottomInset: 5
+    readonly property real interactionGap: Theme.panelPadding
+    implicitHeight: progressTopInset + progress.height + interactionGap
+                    + transportRow.implicitHeight + controlsBottomInset
 
     Rectangle {
         anchors.left: parent.left
@@ -73,7 +77,7 @@ Item {
         anchors.top: parent.top
         anchors.leftMargin: 8
         anchors.rightMargin: 8
-        anchors.topMargin: 3
+        anchors.topMargin: root.progressTopInset
         height: 24
         from: root.lowerBoundSeconds
         to: root.previewSession.durationSeconds
@@ -112,7 +116,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.leftMargin: 8
         anchors.rightMargin: 8
-        anchors.bottomMargin: 5
+        anchors.bottomMargin: root.controlsBottomInset
         spacing: 5
 
         IconButton {
