@@ -743,6 +743,7 @@
     MainWindowState state_;
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
     std::unique_ptr<miacode::extensions::ExtensionManager> extensionManager_;
+    bool welcomeDialogOpen_ = false;
     QWidget*& editorWidget_ = ui_.editorWidget_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;

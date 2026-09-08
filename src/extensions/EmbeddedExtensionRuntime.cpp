@@ -172,6 +172,11 @@ public:
         return hostCall(QStringLiteral("app/openAboutDialog"));
     }
 
+    Q_INVOKABLE QJSValue openWelcomeDialog()
+    {
+        return hostCall(QStringLiteral("app/openWelcomeDialog"));
+    }
+
     Q_INVOKABLE QJSValue reloadExtensions()
     {
         return hostCall(QStringLiteral("app/reloadExtensions"));

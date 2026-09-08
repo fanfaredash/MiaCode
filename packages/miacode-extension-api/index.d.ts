@@ -174,6 +174,7 @@ export interface MiaCodeApi {
     getInfo(): ApiResult<Record<string, unknown>>;
     openPreferences(): ApiResult;
     openAboutDialog(): ApiResult;
+    openWelcomeDialog(): ApiResult;
     reloadExtensions(): ApiResult;
   };
   commands: {

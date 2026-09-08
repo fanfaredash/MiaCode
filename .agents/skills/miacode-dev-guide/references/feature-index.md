@@ -20,6 +20,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   token and mask an old file). Result is passed to
   `QuickShellBootstrap::setShowWelcomeDialogOnStartup`, which fires `MainWindow::showWelcomeDialog()`
   from its post-show hook. Dialog body: `sections/preferences/MainWindow.WelcomeDialog.cpp` (see §2).
+  Extensions can request the same dialog through `miacode.app.openWelcomeDialog()` / the
+  `app.openWelcomeDialog` Open Bridge method. The host queues that request until the startup
+  callbacks and any other modal startup prompts have settled, and `MainWindow::showWelcomeDialog()`
+  suppresses nested duplicates.
 - CLI export: `wantsCliVideoExport`, `runCliVideoExport`.
 - **Export** worker (this is the export subprocess — keep): `wantsCliVideoExportWorker`,
   `runCliVideoExportWorker`.
@@ -81,7 +85,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`MainWindow::PreferencesSection::onPreferences`, `MainWindow.PreferencesDialog.cpp`) AND in the
   first-run welcome dialog (`PreferencesSection::showWelcomeDialog`, `MainWindow.WelcomeDialog.cpp`)
   — both drive the same setters; the welcome dialog keeps its self-contained `WelcomeLayoutPreview`
-  schematic. The welcome dialog also exposes a 中文输入法 radio group (关闭输入法 default / 开启输入法 /
+  schematic and also offers a compact app-background row (enable, image path, choose, clear) backed
+  by `applyAppBackgroundSettings`. The welcome dialog also exposes a 中文输入法 radio group (关闭输入法 default / 开启输入法 /
   转换全角字符) wired to `applyEditorHalfWidthInputEnabled` + `applyEditorImeInputDisabled` — the same
   two prefs as the Preferences 中文输入 combo (2026-06-19). A round "?" help badge
   (`QLabel#WelcomeHelpBadge`, styled in `preferencesDialogStyleSheet` so it re-themes, +

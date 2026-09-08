@@ -641,6 +641,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("app.getInfo"), QStringLiteral("app/getInfo"), QStringLiteral("app.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get MiaCode version, platform, install roots, locale, and runtime information.")),
         apiDescriptor(QStringLiteral("app.openPreferences"), QStringLiteral("app/openPreferences"), QStringLiteral("ui.prompt"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Open Preferences.")),
         apiDescriptor(QStringLiteral("app.openAboutDialog"), QStringLiteral("app/openAboutDialog"), QStringLiteral("ui.prompt"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Open About dialog.")),
+        apiDescriptor(QStringLiteral("app.openWelcomeDialog"), QStringLiteral("app/openWelcomeDialog"), QStringLiteral("ui.prompt"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Open the welcome and initial-configuration tutorial.")),
         apiDescriptor(QStringLiteral("app.reloadExtensions"), QStringLiteral("app/reloadExtensions"), QStringLiteral("extensions.manage"), QStringLiteral("high"), QStringLiteral("implemented"), QStringLiteral("Reload local extensions.")),
 
         apiDescriptor(QStringLiteral("capabilities.list"), QStringLiteral("api/list"), QString(), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List public v1 extension capabilities.")),

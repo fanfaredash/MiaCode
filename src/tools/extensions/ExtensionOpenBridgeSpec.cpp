@@ -99,6 +99,9 @@ int main(int argc, char** argv)
 
     ok = expect(methodCount >= 1, QStringLiteral("Open Bridge registry should contain methods")) && ok;
     ok = expect(objectIds.contains(QStringLiteral("ui")), QStringLiteral("Open Bridge should expose the ui facade object")) && ok;
+    ok = expect(!miacode::extensions::extensionOpenBridgeDescribeMethod(QStringLiteral("app"), QStringLiteral("openWelcomeDialog")).isEmpty(),
+                QStringLiteral("Open Bridge should describe app.openWelcomeDialog")) &&
+         ok;
     ok = expect(!miacode::extensions::extensionOpenBridgeDescribeMethod(QStringLiteral("ui"), QStringLiteral("registerPetOverlay")).isEmpty(),
                 QStringLiteral("Open Bridge should describe ui.registerPetOverlay")) &&
          ok;

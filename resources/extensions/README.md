@@ -116,6 +116,7 @@ module.exports = { activate, deactivate };
 
 | Area / 范围 | APIs / API |
 | --- | --- |
+| App / 应用 | `miacode.app.getInfo`, `openPreferences`, `openAboutDialog`, `openWelcomeDialog`, `reloadExtensions` |
 | Commands / 命令 | `miacode.commands.registerCommand`, `executeCommand`, `setChecked`, `getCommands`, `getInternalCommands`, `executeInternal` |
 | Window / 窗口 | `showInformationMessage`, `showWarningMessage`, `showErrorMessage`, `showInputBox`, `showQuickPick`, `createStatusBarItem` |
 | Workspace / 工作区 | `getActiveDocument`, `applyDocumentEdit`, `getChartMetadata`, `updateChartMetadata`, `save`, `saveAs` |

@@ -47,6 +47,7 @@ int main(int argc, char** argv)
 function activate(context) {
   context.log("activate");
   miacode.commands.setChecked("runtime-test.toggle", true);
+  miacode.app.openWelcomeDialog();
   miacode.devtools.snapshot();
   miacode.events.onDidChangeText(function(event) {
     context.log("event:" + event.kind + ":" + event.textLength);
@@ -65,6 +66,7 @@ module.exports = { activate: activate };
 
     int snapshotCalls = 0;
     int diagnoseCalls = 0;
+    int welcomeDialogCalls = 0;
     QString diagnoseExtensionId;
     QStringList logMessages;
     QStringList runtimeErrors;
@@ -88,6 +90,10 @@ module.exports = { activate: activate };
             commandChecked = params.value(QStringLiteral("command")).toString() == QStringLiteral("runtime-test.toggle")
                 && params.value(QStringLiteral("checked")).toBool()
                 && params.value(QStringLiteral("extensionId")).toString() == QStringLiteral("local.runtime-test");
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("app/openWelcomeDialog")) {
+            ++welcomeDialogCalls;
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("devtools/snapshot")) {
@@ -114,6 +120,7 @@ module.exports = { activate: activate };
     ok = expect(runtime.start(QJsonArray{extension}, &error), QStringLiteral("runtime should start: %1").arg(error)) && ok;
     ok = expect(runtimeErrors.isEmpty(), QStringLiteral("runtime errors: %1").arg(runtimeErrors.join(QStringLiteral(" | ")))) && ok;
     ok = expect(snapshotCalls == 1, QStringLiteral("devtools.snapshot should be callable during activation")) && ok;
+    ok = expect(welcomeDialogCalls == 1, QStringLiteral("app.openWelcomeDialog should be callable during activation")) && ok;
     ok = expect(commandChecked, QStringLiteral("commands.setChecked should preserve command state and extension identity")) && ok;
     ok = expect(runtime.registeredEventCallbackCount(QStringLiteral("events/document.onDidChangeText")) == 1,
                 QStringLiteral("document change callback should be stored")) &&

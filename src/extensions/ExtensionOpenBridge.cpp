@@ -143,6 +143,7 @@ QVector<ExtensionOpenBridgeObject> extensionOpenBridgeObjects()
                {
                    method(QStringLiteral("openPreferences"), QStringLiteral("app.openPreferences"), QStringLiteral("ui.prompt"), QStringLiteral("Open Preferences.")),
                    method(QStringLiteral("openAboutDialog"), QStringLiteral("app.openAboutDialog"), QStringLiteral("ui.prompt"), QStringLiteral("Open About dialog.")),
+                   method(QStringLiteral("openWelcomeDialog"), QStringLiteral("app.openWelcomeDialog"), QStringLiteral("ui.prompt"), QStringLiteral("Open the welcome and initial-configuration tutorial.")),
                }),
         object(QStringLiteral("workspace"), QStringLiteral("open.workspace"), QStringLiteral("Workspace file and save operations exposed through a facade."),
                {

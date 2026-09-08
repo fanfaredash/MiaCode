@@ -3,6 +3,7 @@
 #include "../window/MainWindow.WindowSection.h"
 
 #include "DialogLocalization.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/OperationLog.h"
@@ -225,6 +226,115 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
         }
     });
 
+    // --- App background group ---------------------------------------------
+    auto* backgroundHeading = new QLabel(
+        UiText::text(QStringLiteral("dialog.preferences.background_group")), &dialog);
+    backgroundHeading->setFont(uiAccentFont(10, QFont::DemiBold));
+    root->addWidget(backgroundHeading);
+
+    miacode::ui::AppBackgroundSettings selectedBackgroundSettings = owner_.appBackgroundSettings_;
+    auto* backgroundImageRow = new QWidget(&dialog);
+    auto* backgroundImageRowLayout = new QHBoxLayout(backgroundImageRow);
+    backgroundImageRowLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundImageRowLayout->setSpacing(8);
+    auto* backgroundEnabledCheck = new QCheckBox(
+        UiText::text(QStringLiteral("dialog.preferences.background.enabled")), backgroundImageRow);
+    backgroundEnabledCheck->setChecked(selectedBackgroundSettings.enabled);
+    auto* backgroundImageEdit = new QLineEdit(backgroundImageRow);
+    backgroundImageEdit->setReadOnly(true);
+    backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
+    backgroundImageEdit->setMinimumWidth(0);
+    backgroundImageEdit->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    auto* backgroundButtonRow = new QWidget(&dialog);
+    auto* chooseBackgroundButton = new QPushButton(
+        UiText::text(QStringLiteral("dialog.preferences.background.choose")), backgroundButtonRow);
+    auto* clearBackgroundButton = new QPushButton(
+        UiText::text(QStringLiteral("dialog.preferences.background.clear")), backgroundButtonRow);
+    clearBackgroundButton->setEnabled(!selectedBackgroundSettings.imagePath.isEmpty());
+    backgroundImageRowLayout->addWidget(backgroundEnabledCheck, 0);
+    backgroundImageRowLayout->addWidget(backgroundImageEdit, 1);
+    root->addWidget(backgroundImageRow);
+
+    auto* backgroundButtonRowLayout = new QHBoxLayout(backgroundButtonRow);
+    backgroundButtonRowLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundButtonRowLayout->setSpacing(8);
+    backgroundButtonRowLayout->addStretch(1);
+    backgroundButtonRowLayout->addWidget(chooseBackgroundButton, 0);
+    backgroundButtonRowLayout->addWidget(clearBackgroundButton, 0);
+    root->addWidget(backgroundButtonRow);
+
+    const auto applyBackgroundControlStyles = [
+        backgroundImageEdit,
+        chooseBackgroundButton,
+        clearBackgroundButton]() {
+        backgroundImageEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+        backgroundImageEdit->ensurePolished();
+        backgroundImageEdit->setFixedHeight(qMax(backgroundImageEdit->sizeHint().height(), 30) + 4);
+        for (QPushButton* button : {chooseBackgroundButton, clearBackgroundButton}) {
+            miacode::ui::applyDialogAuxiliaryButtonStyle(button);
+            button->ensurePolished();
+            button->setFixedHeight(qMax(button->sizeHint().height(), 30) + 4);
+        }
+    };
+    applyBackgroundControlStyles();
+    QObject::connect(darkRadio, &QRadioButton::toggled, &dialog, [applyBackgroundControlStyles](bool checked) {
+        if (checked) {
+            applyBackgroundControlStyles();
+        }
+    });
+    QObject::connect(lightRadio, &QRadioButton::toggled, &dialog, [applyBackgroundControlStyles](bool checked) {
+        if (checked) {
+            applyBackgroundControlStyles();
+        }
+    });
+
+    const auto persistBackgroundSettings = [this, &selectedBackgroundSettings]() {
+        selectedBackgroundSettings =
+            miacode::ui::normalizedAppBackgroundSettings(selectedBackgroundSettings);
+        owner_.applyAppBackgroundSettings(selectedBackgroundSettings, true);
+    };
+    QObject::connect(
+        backgroundEnabledCheck,
+        &QCheckBox::toggled,
+        &dialog,
+        [&, persistBackgroundSettings](bool enabled) {
+            selectedBackgroundSettings.enabled = enabled;
+            persistBackgroundSettings();
+        });
+    QObject::connect(chooseBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString initialDir = selectedBackgroundSettings.imagePath.isEmpty()
+            ? QString()
+            : QFileInfo(selectedBackgroundSettings.imagePath).absolutePath();
+        const QString filePath = QFileDialog::getOpenFileName(
+            &dialog,
+            UiText::text(QStringLiteral("dialog.preferences.background.choose")),
+            initialDir,
+            UiText::text(QStringLiteral("dialog.preferences.background.image_filter")));
+        if (filePath.isEmpty()) {
+            return;
+        }
+        selectedBackgroundSettings.imagePath = QDir::cleanPath(filePath);
+        selectedBackgroundSettings.enabled = true;
+        backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
+        clearBackgroundButton->setEnabled(true);
+        {
+            QSignalBlocker blocker(backgroundEnabledCheck);
+            backgroundEnabledCheck->setChecked(true);
+        }
+        persistBackgroundSettings();
+    });
+    QObject::connect(clearBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
+        selectedBackgroundSettings.imagePath.clear();
+        selectedBackgroundSettings.enabled = false;
+        backgroundImageEdit->clear();
+        clearBackgroundButton->setEnabled(false);
+        {
+            QSignalBlocker blocker(backgroundEnabledCheck);
+            backgroundEnabledCheck->setChecked(false);
+        }
+        persistBackgroundSettings();
+    });
+
     // --- IME-block group ----------------------------------------------------
     // The same three graduated levels as Preferences' IME block combo, surfaced
     // on first run (default: block IME). The two underlying editor preferences are:
@@ -341,5 +451,21 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
 
 void MainWindow::showWelcomeDialog()
 {
+    if (welcomeDialogOpen_) {
+        return;
+    }
+    QScopedValueRollback<bool> welcomeDialogGuard(welcomeDialogOpen_, true);
     preferencesSection_->showWelcomeDialog();
+}
+
+void MainWindow::showExtensionRequestedWelcomeDialogWhenReady()
+{
+    if (welcomeDialogOpen_) {
+        return;
+    }
+    if (QApplication::activeModalWidget() != nullptr) {
+        QTimer::singleShot(250, this, &MainWindow::showExtensionRequestedWelcomeDialogWhenReady);
+        return;
+    }
+    showWelcomeDialog();
 }

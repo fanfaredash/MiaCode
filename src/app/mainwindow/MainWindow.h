@@ -403,6 +403,7 @@ private:
     };
 
     #include "MainWindowPrivateMethodsA.inc"
+    void showExtensionRequestedWelcomeDialogWhenReady();
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
