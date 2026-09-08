@@ -143,3 +143,10 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 Preview effect tuning in `src/core/scene/*.cpp`; latency scan parameters; export encoder/bitrate
 heuristics; parser geometry/timing assumptions; duplicated filename/asset literals outside
 `src/common/`.
+
+### Application background controls (2026-09-08)
+
+`AppBackgroundSettings.h` owns image opacity (0..0.8, default 0.2) and theme cover
+alpha bounds (0..255). Cards are opaque; blur is not an active setting.
+`MainWindow.PreferencesDialog.cpp` coalesces live slider previews at 33 ms and
+converts cover percentages to the existing 8-bit persisted alpha values.

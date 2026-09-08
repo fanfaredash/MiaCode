@@ -462,7 +462,8 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             window, QStringLiteral("quick_shell_root_window"));
 
         if (surfaceHost_ != nullptr) {
-            surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
+            surfaceHost_->updateRootWindowFrameGeometry(
+                window->frameGeometry(), QRect(window->mapToGlobal(QPoint()), window->size()));
         }
         appendQuickShellRuntimeLog(
             QStringLiteral("root_window_ready"),
@@ -512,27 +513,18 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
                 QStringLiteral("active=%1").arg(window->isActive() ? 1 : 0)
             );
         });
-        QObject::connect(window, &QQuickWindow::xChanged, this, [this, window]() {
-            if (surfaceHost_ != nullptr) {
-                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-            }
-        });
-        QObject::connect(window, &QQuickWindow::yChanged, this, [this, window]() {
-            if (surfaceHost_ != nullptr) {
-                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-            }
-        });
-        QObject::connect(window, &QQuickWindow::widthChanged, this, [this, window]() {
-            if (surfaceHost_ != nullptr) {
-                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-            }
-        });
-        QObject::connect(window, &QQuickWindow::heightChanged, this, [this, window]() {
-            if (surfaceHost_ != nullptr) {
-                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-            }
-        });
 #endif
+        const auto syncBackgroundCanvas = [this, window]() {
+            if (surfaceHost_ != nullptr) {
+                surfaceHost_->updateRootWindowFrameGeometry(
+                    window->frameGeometry(), QRect(window->mapToGlobal(QPoint()), window->size()));
+            }
+        };
+        QObject::connect(window, &QQuickWindow::xChanged, this, syncBackgroundCanvas);
+        QObject::connect(window, &QQuickWindow::yChanged, this, syncBackgroundCanvas);
+        QObject::connect(window, &QQuickWindow::widthChanged, this, syncBackgroundCanvas);
+        QObject::connect(window, &QQuickWindow::heightChanged, this, syncBackgroundCanvas);
+        QObject::connect(window, &QQuickWindow::screenChanged, this, syncBackgroundCanvas);
         QPointer<QQuickWindow> windowGuard(window);
         QTimer::singleShot(0, this, [this, windowGuard]() {
             if (windowGuard.isNull()) {
@@ -540,7 +532,8 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             }
             auto* window = windowGuard.data();
             if (surfaceHost_ != nullptr) {
-                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
+                surfaceHost_->updateRootWindowFrameGeometry(
+                    window->frameGeometry(), QRect(window->mapToGlobal(QPoint()), window->size()));
             }
             applyNativeThemeToQuickWindow(window);
 #ifdef Q_OS_WIN

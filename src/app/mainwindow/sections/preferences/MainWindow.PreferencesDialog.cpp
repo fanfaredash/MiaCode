@@ -16,6 +16,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "app/ui/AppBackgroundSettings.h"
+#include "app/ui/AppBackgroundPainter.h"
 #include "app/ui/EditableValueLabel.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
@@ -1376,14 +1377,25 @@ void MainWindow::PreferencesSection::onPreferences()
     backgroundLayout->setVerticalSpacing(8);
 
     miacode::ui::AppBackgroundSettings selectedBackgroundSettings = state_.appBackgroundSettings_;
+    QTimer backgroundPreviewTimer;
+    backgroundPreviewTimer.setSingleShot(true);
+    backgroundPreviewTimer.setInterval(33);
+    connect(&backgroundPreviewTimer, &QTimer::timeout, &dialog, [&]() {
+        owner_.applyAppBackgroundSettings(selectedBackgroundSettings, false);
+    });
+    bool backgroundSliderPersistPending = false;
     const auto persistBackgroundSettings = [&]() {
+        backgroundPreviewTimer.stop();
+        backgroundSliderPersistPending = false;
         selectedBackgroundSettings = miacode::ui::normalizedAppBackgroundSettings(selectedBackgroundSettings);
         owner_.applyAppBackgroundSettings(selectedBackgroundSettings, true);
     };
-    bool backgroundSliderPersistPending = false;
     const auto persistBackgroundSettingsAfterSliderInput = [&](QSlider* slider) {
         if (slider != nullptr && slider->isSliderDown()) {
             backgroundSliderPersistPending = true;
+            if (!backgroundPreviewTimer.isActive()) {
+                backgroundPreviewTimer.start();
+            }
             return;
         }
         persistBackgroundSettings();
@@ -1395,6 +1407,7 @@ void MainWindow::PreferencesSection::onPreferences()
         backgroundSliderPersistPending = false;
         persistBackgroundSettings();
     };
+    connect(&dialog, &QDialog::finished, &dialog, [&](int) { flushBackgroundSliderSettings(); });
     const auto createBackgroundComboRow = [](QComboBox* combo, QWidget* parent) -> QWidget* {
         auto* row = new QWidget(parent);
         auto* rowLayout = new QHBoxLayout(row);
@@ -1500,6 +1513,11 @@ void MainWindow::PreferencesSection::onPreferences()
         if (filePath.isEmpty()) {
             return;
         }
+        if (QDir::cleanPath(filePath) == selectedBackgroundSettings.imagePath) {
+            if (auto* painter = miacode::ui::appBackgroundPainterForWidget(&owner_)) {
+                painter->reloadSource();
+            }
+        }
         selectedBackgroundSettings.imagePath = QDir::cleanPath(filePath);
         backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
         persistBackgroundSettings();
@@ -1514,6 +1532,9 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* backgroundOpacityLabel =
         new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.opacity")), backgroundGroup);
     auto* backgroundOpacitySlider = new QSlider(Qt::Horizontal, backgroundGroup);
+    const QString backgroundOpacityHint = UiText::text(QStringLiteral("dialog.preferences.background.opacity_hint"));
+    backgroundOpacityLabel->setToolTip(backgroundOpacityHint);
+    backgroundOpacitySlider->setToolTip(backgroundOpacityHint);
     backgroundOpacitySlider->setRange(0, 80);
     backgroundOpacitySlider->setValue(qRound(selectedBackgroundSettings.opacity * 100.0));
     backgroundOpacitySlider->setSingleStep(1);
@@ -1560,14 +1581,15 @@ void MainWindow::PreferencesSection::onPreferences()
             const std::function<void(int)>& setter) -> OverlayRow {
             auto* slider = new QSlider(Qt::Horizontal, overlayGroup);
             miacode::ui::EditableValueLabel* valueLabel = nullptr;
-            slider->setRange(miacode::ui::kAppBackgroundOverlayAlphaMin, miacode::ui::kAppBackgroundOverlayAlphaMax);
+            slider->setRange(0, 100);
+            slider->setToolTip(UiText::text(QStringLiteral("dialog.preferences.background.overlay_hint")));
             slider->setSingleStep(1);
-            slider->setPageStep(10);
-            slider->setValue(value);
+            slider->setPageStep(5);
+            slider->setValue(qRound(value * 100.0 / 255.0));
             auto* label = new QLabel(labelText, overlayGroup);
             overlayFormLayout->addRow(
                 label,
-                miacode::ui::createSliderValueRow(slider, &valueLabel, QString(), overlayGroup));
+                miacode::ui::createSliderValueRow(slider, &valueLabel, QStringLiteral("%"), overlayGroup));
             return OverlayRow{label, slider, valueLabel, setter};
         };
 
@@ -1576,7 +1598,7 @@ void MainWindow::PreferencesSection::onPreferences()
             OverlayRow row = addOverlaySliderRow(labelText, value, setter);
             QSlider* rowSlider = row.slider;
             connect(row.slider, &QSlider::valueChanged, &overlayDialog, [&, setter, rowSlider](int sliderValue) {
-                setter(sliderValue);
+                setter(qRound(sliderValue * 255.0 / 100.0));
                 persistBackgroundSettingsAfterSliderInput(rowSlider);
             });
             connect(row.slider, &QSlider::sliderReleased, &overlayDialog, flushBackgroundSliderSettings);
@@ -1647,9 +1669,9 @@ void MainWindow::PreferencesSection::onPreferences()
                     continue;
                 }
                 QSignalBlocker blocker(overlayRows[index].slider);
-                overlayRows[index].slider->setValue(values[index]);
+                overlayRows[index].slider->setValue(qRound(values[index] * 100.0 / 255.0));
                 if (overlayRows[index].valueLabel != nullptr) {
-                    overlayRows[index].valueLabel->setText(QString::number(values[index]));
+                    overlayRows[index].valueLabel->setText(QString::number(qRound(values[index] * 100.0 / 255.0)) + QStringLiteral("%"));
                 }
             }
         };
@@ -1674,6 +1696,7 @@ void MainWindow::PreferencesSection::onPreferences()
         overlayLayout->addWidget(buttonRow);
         overlayDialog.resize(560, 0);
         overlayDialog.exec();
+        flushBackgroundSliderSettings();
     };
 
     auto* backgroundOverlayLabel =
@@ -1686,6 +1709,9 @@ void MainWindow::PreferencesSection::onPreferences()
         UiText::text(QStringLiteral("dialog.preferences.background.overlay_button")),
         backgroundOverlayRow);
     styleRegisteredDialogButton(backgroundOverlayButton);
+    const QString backgroundOverlayHint = UiText::text(QStringLiteral("dialog.preferences.background.overlay_hint"));
+    backgroundOverlayLabel->setToolTip(backgroundOverlayHint);
+    backgroundOverlayButton->setToolTip(backgroundOverlayHint);
     backgroundOverlayRowLayout->addWidget(backgroundOverlayButton, 0);
     backgroundOverlayRowLayout->addStretch(1);
     connect(backgroundOverlayButton, &QPushButton::clicked, &dialog, openBackgroundOverlayDialog);

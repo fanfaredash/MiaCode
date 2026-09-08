@@ -1,6 +1,5 @@
 ﻿import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Window
 import MiaCode.Preview
@@ -17,7 +16,16 @@ ApplicationWindow {
         Image {
             anchors.fill: parent
             visible: root.appBackgroundActive()
-            source: visible ? String(root.appBackgroundMap.sourceUrl) : ""
+            property int sourceRevision: Number(root.appBackgroundMap.sourceRevision || 0)
+            function refreshSource() {
+                source = ""
+                source = visible ? String(root.appBackgroundMap.sourceUrl) : ""
+            }
+            onSourceRevisionChanged: refreshSource()
+            onVisibleChanged: refreshSource()
+            property string backgroundUrl: String(root.appBackgroundMap.sourceUrl || "")
+            onBackgroundUrlChanged: refreshSource()
+            Component.onCompleted: refreshSource()
             opacity: root.appBackgroundOpacity()
             fillMode: root.appBackgroundFillMode()
             horizontalAlignment: root.appBackgroundHorizontalAlignment()
@@ -25,13 +33,7 @@ ApplicationWindow {
             smooth: true
             mipmap: true
             asynchronous: true
-            cache: true
-            layer.enabled: visible && root.appBackgroundBlur() > 0
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blurMax: 64
-                blur: Math.min(1.0, root.appBackgroundBlur() / 100.0)
-            }
+            cache: false
         }
     }
 
@@ -117,13 +119,6 @@ ApplicationWindow {
         if (!isFinite(value))
             return 0
         return Math.max(0, Math.min(0.8, value))
-    }
-
-    function appBackgroundBlur() {
-        const value = Number(appBackgroundMap && appBackgroundMap.blur !== undefined ? appBackgroundMap.blur : 0)
-        if (!isFinite(value))
-            return 0
-        return Math.max(0, Math.min(100, value))
     }
 
     function appBackgroundFillMode() {

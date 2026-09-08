@@ -43,7 +43,7 @@ if (MSVC)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
         "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
     )
-    add_compile_options(/MP)
+    # Build concurrency is owned by cmake --build --parallel (at most four jobs).
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -1370,6 +1370,22 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src src/common src/timeline
     )
+
+    miacode_add_dev_tool(app_background_spec TEST
+        SOURCES
+            src/tools/ui/AppBackgroundSpec.cpp
+            src/app/ui/AppBackgroundSettings.cpp
+            src/app/ui/AppBackgroundPainter.cpp
+            src/common/AdoptedWidgetCoordinates.cpp
+            ${_miacode_log_core}
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES src src/common
+    )
+
+    if (TARGET Qt6::QOffscreenIntegrationPlugin)
+        set_tests_properties(app_background_spec PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>")
+    endif()
 
     miacode_add_dev_tool(plain_code_editor_spec TEST
         SOURCES

@@ -16,8 +16,6 @@ AppBackgroundOverlaySettings normalizedAppBackgroundOverlaySettings(const AppBac
     normalized.statusAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.statusAlphaLight, kAppBackgroundOverlayAlphaMax);
     normalized.panelAlphaDark = qBound(kAppBackgroundOverlayAlphaMin, normalized.panelAlphaDark, kAppBackgroundOverlayAlphaMax);
     normalized.panelAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.panelAlphaLight, kAppBackgroundOverlayAlphaMax);
-    normalized.cardAlphaDark = kAppBackgroundOverlayAlphaMax;
-    normalized.cardAlphaLight = kAppBackgroundOverlayAlphaMax;
     normalized.editorHeaderAlphaDark = qBound(
         kAppBackgroundOverlayAlphaMin,
         normalized.editorHeaderAlphaDark,
@@ -48,8 +46,6 @@ AppBackgroundOverlaySettings appBackgroundOverlaySettingsFromJson(const QJsonObj
     settings.statusAlphaLight = object.value(QStringLiteral("status_light")).toInt(settings.statusAlphaLight);
     settings.panelAlphaDark = object.value(QStringLiteral("panel_dark")).toInt(settings.panelAlphaDark);
     settings.panelAlphaLight = object.value(QStringLiteral("panel_light")).toInt(settings.panelAlphaLight);
-    settings.cardAlphaDark = object.value(QStringLiteral("card_dark")).toInt(settings.cardAlphaDark);
-    settings.cardAlphaLight = object.value(QStringLiteral("card_light")).toInt(settings.cardAlphaLight);
     settings.editorHeaderAlphaDark =
         object.value(QStringLiteral("editor_header_dark")).toInt(settings.editorHeaderAlphaDark);
     settings.editorHeaderAlphaLight =
@@ -73,8 +69,6 @@ QJsonObject appBackgroundOverlaySettingsToJson(const AppBackgroundOverlaySetting
     object.insert(QStringLiteral("status_light"), normalized.statusAlphaLight);
     object.insert(QStringLiteral("panel_dark"), normalized.panelAlphaDark);
     object.insert(QStringLiteral("panel_light"), normalized.panelAlphaLight);
-    object.insert(QStringLiteral("card_dark"), normalized.cardAlphaDark);
-    object.insert(QStringLiteral("card_light"), normalized.cardAlphaLight);
     object.insert(QStringLiteral("editor_header_dark"), normalized.editorHeaderAlphaDark);
     object.insert(QStringLiteral("editor_header_light"), normalized.editorHeaderAlphaLight);
     object.insert(QStringLiteral("input_dark"), normalized.inputAlphaDark);
@@ -184,7 +178,6 @@ AppBackgroundSettings normalizedAppBackgroundSettings(const AppBackgroundSetting
         normalized.imagePath.clear();
     }
     normalized.opacity = qBound(kAppBackgroundOpacityMin, normalized.opacity, kAppBackgroundOpacityMax);
-    normalized.blur = qBound(kAppBackgroundBlurMin, normalized.blur, kAppBackgroundBlurMax);
     normalized.overlays = normalizedAppBackgroundOverlaySettings(normalized.overlays);
     return normalized;
 }
@@ -195,7 +188,6 @@ AppBackgroundSettings appBackgroundSettingsFromJson(const QJsonObject& object)
     settings.enabled = object.value(QStringLiteral("enabled")).toBool(false);
     settings.imagePath = object.value(QStringLiteral("image_path")).toString();
     settings.opacity = object.value(QStringLiteral("opacity")).toDouble(kAppBackgroundOpacityDefault);
-    settings.blur = object.value(QStringLiteral("blur")).toInt(kAppBackgroundBlurDefault);
     settings.overlays = appBackgroundOverlaySettingsFromJson(object.value(QStringLiteral("overlay_alpha")).toObject());
     settings.sizeMode = appBackgroundSizeModeFromToken(object.value(QStringLiteral("size_mode")).toString());
     settings.position = appBackgroundPositionFromToken(object.value(QStringLiteral("position")).toString());
@@ -209,7 +201,6 @@ QJsonObject appBackgroundSettingsToJson(const AppBackgroundSettings& settings)
     object.insert(QStringLiteral("enabled"), normalized.enabled);
     object.insert(QStringLiteral("image_path"), normalized.imagePath);
     object.insert(QStringLiteral("opacity"), normalized.opacity);
-    object.insert(QStringLiteral("blur"), normalized.blur);
     object.insert(QStringLiteral("overlay_alpha"), appBackgroundOverlaySettingsToJson(normalized.overlays));
     object.insert(QStringLiteral("size_mode"), appBackgroundSizeModeToken(normalized.sizeMode));
     object.insert(QStringLiteral("position"), appBackgroundPositionToken(normalized.position));

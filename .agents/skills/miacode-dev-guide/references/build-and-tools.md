@@ -159,3 +159,11 @@ source — not part of the build.
 - A target is added/removed/re-gated, or the spec/CTest convention changes.
 - A build or packaging script is added, renamed, or changes responsibility.
 - An asset directory, filename convention, or required packaged binary changes.
+
+### Application background regression (2026-09-08)
+
+`app_background_spec` renders native background crops and checks physical-pixel detail,
+all scale/alignment modes, nested composition, opacity changes, same-path image reload,
+decode failure/recovery, and legacy preferences. Run with `QT_SCALE_FACTOR=1`, `1.5`,
+and `2` using CTest in `build-devtools`, Release. MSVC compilation uses outer build
+parallelism only; no global `/MP` option multiplies the four-job limit.

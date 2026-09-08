@@ -1211,6 +1211,23 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`
   constant (feature kept: `copyAreaPanel_`/`fullCopyAreaAction_`/`setFullCopyAreaVisible`).
 
+### Application custom background (2026-09-08)
+
+- Settings/serialization: `src/app/ui/AppBackgroundSettings.{h,cpp}`. Image opacity and
+  per-theme area covers are independent; legacy blur/card-alpha keys are ignored on load
+  and omitted on save. Cards retain an opaque theme surface.
+- Native rendering: `AppBackgroundPainter` caches image pixels by source, canvas size,
+  scale, alignment, and DPR. Opacity/cover changes reuse the raster. Each surface starts
+  from the application window color before image composition, preventing nested opacity
+  accumulation. Adopted surfaces use `AdoptedWidgetCoordinates` for global mapping.
+- QuickShell passes client geometry separately from frame geometry; frame geometry still
+  owns dialog positioning. `QuickShellMain.qml` renders the same background settings.
+- Choosing the same image again calls `reloadSource`; a source revision refreshes QML too.
+  A full decode determines whether translucent theme surfaces are enabled.
+- Preferences: slider previews are coalesced at 33 ms, with persistence on release; area
+  covers display percentages while the persisted alpha values remain 0..255.
+- Regression owner: `src/tools/ui/AppBackgroundSpec.cpp` / `app_background_spec`.
+
 ## Update this file when
 
 - A feature owner moves file, or a class/function becomes the new canonical entry point.

@@ -82,7 +82,7 @@ QVariantMap buildAppBackgroundMap()
         {QStringLiteral("imagePath"), qApp->property("miacode.appBackgroundImagePath").toString()},
         {QStringLiteral("sourceUrl"), qApp->property("miacode.appBackgroundSourceUrl").toString()},
         {QStringLiteral("opacity"), qApp->property("miacode.appBackgroundOpacity").toDouble()},
-        {QStringLiteral("blur"), qApp->property("miacode.appBackgroundBlur").toInt()},
+        {QStringLiteral("sourceRevision"), qApp->property("miacode.appBackgroundSourceRevision").toInt()},
         {QStringLiteral("panelAlphaDark"), qApp->property("miacode.appBackgroundPanelAlphaDark").toInt()},
         {QStringLiteral("panelAlphaLight"), qApp->property("miacode.appBackgroundPanelAlphaLight").toInt()},
         {QStringLiteral("sizeMode"), qApp->property("miacode.appBackgroundSizeMode").toString()},
