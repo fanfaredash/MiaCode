@@ -169,6 +169,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   changes without mutating the `QTextDocument` or its undo history. Preference key
   `ui.editor_scroll_beyond_last_line`, default on, is exposed in Preferences → Editor and applied
   to both the main chart editor and full-copy editor.
+- Repeated-click selection suppression: `PlainCodeEditor::setPreventMultiClickSelectionEnabled`
+  converts double-click events into ordinary caret-placement clicks, preventing automatic word /
+  paragraph selection without changing drag or keyboard selection. Preference key
+  `ui.editor_prevent_multi_click_selection`, default off, is a checkbox in Preferences → Editor
+  and applies to both the main chart editor and full-copy editor.
 - Bracket-completion dropdown ("tab 补全"): typing `( [ {` pops a simai-aware suggestion list under
   the caret; typing `h` pops the full-bracket hold durations (`[8:1]` …). Candidate
   data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure — `candidatesForOpening` for the

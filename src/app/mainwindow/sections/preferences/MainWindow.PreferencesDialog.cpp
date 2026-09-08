@@ -1794,12 +1794,14 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedAutoCompletionEnabled = state_.editorAutoCompletionEnabled_;
     bool selectedScrollBeyondLastLineEnabled = state_.editorScrollBeyondLastLineEnabled_;
     bool selectedEditorSelectionBeatDisplayEnabled = state_.editorSelectionBeatDisplayEnabled_;
+    bool selectedEditorPreventMultiClickSelectionEnabled =
+        state_.editorPreventMultiClickSelectionEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
     // Row order (top to bottom): font size, line spacing, auto-completion,
-    // scroll beyond last line, header display, IME block, and ignore muri issue prompts.
-    // out, so it trails the prioritised rows.
+    // scroll beyond last line, selection beat display, header display, IME block,
+    // ignore muri issue prompts, and repeated-click selection.
     auto* editorFontSizeLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_font_size")), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
     auto* fontSizeRowLayout = new QHBoxLayout(fontSizeRow);
@@ -2064,9 +2066,24 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
-    // Ignore muri issue prompts sits below IME block (last row) per the 2026-06-19 review.
+    // Ignore muri issue prompts sits below IME block per the 2026-06-19 review.
     editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
+    auto* preventMultiClickSelectionCheckbox = new QCheckBox(
+        UiText::text(QStringLiteral("preferences.prevent_multi_click_selection")), editorGroup);
+    preventMultiClickSelectionCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    preventMultiClickSelectionCheckbox->setChecked(
+        selectedEditorPreventMultiClickSelectionEnabled);
+    preventMultiClickSelectionCheckbox->setToolTip(
+        UiText::text(QStringLiteral("preferences.prevent_multi_click_selection_hint")));
+    connect(preventMultiClickSelectionCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedEditorPreventMultiClickSelectionEnabled = checked;
+        owner_.applyEditorPreventMultiClickSelectionEnabled(
+            selectedEditorPreventMultiClickSelectionEnabled, true);
+        owner_.statusBar()->showMessage(
+            UiText::text(QStringLiteral("status.preferences_updated")));
+    });
+    editorLayout->addRow(QString(), preventMultiClickSelectionCheckbox);
 
     // The preferences dialog font spin-box reuses the editor.font_* shortcut
     // IDs so a single binding controls both the editor and the dialog.

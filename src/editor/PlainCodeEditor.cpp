@@ -115,6 +115,11 @@ void PlainCodeEditor::setScrollBeyondLastLineEnabled(bool enabled)
     updateScrollBeyondLastLineRange();
 }
 
+void PlainCodeEditor::setPreventMultiClickSelectionEnabled(bool enabled)
+{
+    preventMultiClickSelectionEnabled_ = enabled;
+}
+
 void PlainCodeEditor::setWholeBpmCandidate(const QString& bpm)
 {
     wholeBpmCandidate_ = bpm.trimmed();

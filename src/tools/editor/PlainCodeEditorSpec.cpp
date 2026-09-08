@@ -16,6 +16,11 @@
 
 namespace {
 
+class TestPlainCodeEditor : public PlainCodeEditor {
+public:
+    using PlainCodeEditor::mouseDoubleClickEvent;
+};
+
 bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
 {
     if (condition) {
@@ -608,6 +613,48 @@ int main(int argc, char** argv)
         QStringLiteral("Ctrl+Shift+_ key press is forwarded as Ctrl+Shift+- by PlainCodeEditor"),
         out,
         &failed);
+    {
+        TestPlainCodeEditor clickEditor;
+        clickEditor.resize(480, 240);
+        clickEditor.setPlainText(QStringLiteral("alpha beta"));
+        clickEditor.show();
+        QApplication::processEvents();
+
+        QTextCursor alphaCursor(clickEditor.document());
+        alphaCursor.setPosition(2);
+        const QPointF alphaPosition = clickEditor.cursorRect(alphaCursor).center();
+        const auto sendDoubleClick = [&clickEditor, alphaPosition]() {
+            QMouseEvent doubleClick(
+                QEvent::MouseButtonDblClick,
+                alphaPosition,
+                alphaPosition,
+                QPointF(clickEditor.viewport()->mapToGlobal(alphaPosition.toPoint())),
+                Qt::LeftButton,
+                Qt::LeftButton,
+                Qt::NoModifier);
+            clickEditor.mouseDoubleClickEvent(&doubleClick);
+        };
+
+        expect(
+            !clickEditor.preventMultiClickSelectionEnabled(),
+            QStringLiteral("repeated-click selection prevention defaults off"),
+            out,
+            &failed);
+        sendDoubleClick();
+        expect(
+            clickEditor.textCursor().selectedText() == QLatin1String("alpha"),
+            QStringLiteral("the default repeated-click behavior selects a word"),
+            out,
+            &failed);
+
+        clickEditor.setPreventMultiClickSelectionEnabled(true);
+        sendDoubleClick();
+        expect(
+            !clickEditor.textCursor().hasSelection(),
+            QStringLiteral("turning repeated-click prevention on keeps the click as caret placement"),
+            out,
+            &failed);
+    }
     {
         PlainCodeEditor scrollEditor;
         scrollEditor.resize(480, 240);

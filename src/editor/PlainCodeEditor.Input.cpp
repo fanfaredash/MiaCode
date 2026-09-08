@@ -953,3 +953,25 @@ void PlainCodeEditor::mousePressEvent(QMouseEvent* event)
     QTextEdit::mousePressEvent(&adjustedEvent);
     event->setAccepted(adjustedEvent.isAccepted());
 }
+
+void PlainCodeEditor::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (event == nullptr || !preventMultiClickSelectionEnabled_) {
+        QTextEdit::mouseDoubleClickEvent(event);
+        return;
+    }
+
+    QMouseEvent pressEvent(
+        QEvent::MouseButtonPress,
+        event->position(),
+        event->scenePosition(),
+        event->globalPosition(),
+        event->button(),
+        event->buttons(),
+        event->modifiers(),
+        event->pointingDevice()
+    );
+    pressEvent.setAccepted(false);
+    mousePressEvent(&pressEvent);
+    event->setAccepted(pressEvent.isAccepted());
+}

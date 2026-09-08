@@ -50,6 +50,9 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
+- `src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp` — built-in editor preference
+  defaults and `preferences.json` persistence. `ui.editor_prevent_multi_click_selection` defaults
+  to `false` and is applied to both `PlainCodeEditor` instances.
 - `src/editor/SimaiCompletionCatalog.cpp` — bracket-completion suggestion lists. Fixed,
   product-decided order (do NOT sort): `[` durations `{8:1] 4:1] 16:3] 384:1]}`, `{`
   subdivisions `{16} 24} 32}}`. `(` BPM list is dynamic (scanned `(<n>)` markers +

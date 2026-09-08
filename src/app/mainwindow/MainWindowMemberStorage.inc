@@ -673,6 +673,9 @@
         // space only; it never changes the chart text or saved document.
         bool editorScrollBeyondLastLineEnabled_ = true;
         bool editorSelectionBeatDisplayEnabled_ = true;
+        // Prevent QTextEdit's repeated-click word/paragraph selection while
+        // leaving drag and keyboard selection unchanged.
+        bool editorPreventMultiClickSelectionEnabled_ = false;
         // 顶部显示 preference: which field pair the difficulty header shows next
         // to Lv — the chart-wide offset (default) or the per-difficulty
         // designer. Persisted as ui.editor_header_top_display.

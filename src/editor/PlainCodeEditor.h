@@ -82,6 +82,11 @@ public:
     // visual only and never mutates the QTextDocument or its undo history.
     void setScrollBeyondLastLineEnabled(bool enabled);
     bool scrollBeyondLastLineEnabled() const { return scrollBeyondLastLineEnabled_; }
+    // Treat double-clicks and subsequent clicks as ordinary clicks so repeated
+    // clicking only moves the caret instead of selecting a word or paragraph.
+    // Drag selection and keyboard selection are unaffected.
+    void setPreventMultiClickSelectionEnabled(bool enabled);
+    bool preventMultiClickSelectionEnabled() const { return preventMultiClickSelectionEnabled_; }
     // Feeds the '(' suggestion list. The chart body editor never holds the
     // &wholebpm metadata line, so the owning window pushes it in on load /
     // difficulty switch (see MainWindow::DocumentSection::setEditorText).
@@ -114,6 +119,7 @@ protected:
     void inputMethodEvent(QInputMethodEvent* event) override;
     void insertFromMimeData(const QMimeData* source) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -178,6 +184,7 @@ private:
     bool imeInputDisabled_ = false;
     bool autoCompletionEnabled_ = true;
     bool scrollBeyondLastLineEnabled_ = true;
+    bool preventMultiClickSelectionEnabled_ = false;
     int verticalScrollBaseMaximum_ = 0;
     bool updatingScrollBeyondLastLineRange_ = false;
     // Live state for the bracket-completion popup. completionOpening_ is null
