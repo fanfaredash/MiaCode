@@ -6,7 +6,7 @@
 namespace miacode::preview_audio::bass {
 
 inline constexpr double kDefaultMasterMixerBufferMs = 30.0;
-inline constexpr int kDefaultMasterMixerThreadCount = 1;
+inline constexpr int kDefaultMasterMixerThreadCount = 4;
 inline constexpr double kMaxMasterMixerBufferMs = 500.0;
 inline constexpr int kMaxMasterMixerThreadCount = 16;
 
