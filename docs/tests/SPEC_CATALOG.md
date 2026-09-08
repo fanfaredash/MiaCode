@@ -3,7 +3,7 @@
 Generated from `cmake/devtools/specs/` by `cmake -P cmake/devtools/SpecCatalog.cmake`.
 Check without writing: `cmake -DMIACODE_SPEC_CATALOG_CHECK=ON -P cmake/devtools/SpecCatalog.cmake`.
 
-115 independent specs; source lists and link dependencies are maintained only in CMake.
+116 independent specs; source lists and link dependencies are maintained only in CMake.
 All existing assertions and target/CTest names are retained. No bundles or retirements.
 
 `platform:all` means the target is registered on every platform, not that all platforms
@@ -28,6 +28,7 @@ Owners name production modules; kinds describe the checked boundary, not runtime
 | `src/tools/debug_index/LogPruningPolicySpec.cpp` | `log_pruning_policy_spec` | `src/common` | `debug-index.log-pruning-policy` | debug_index | behavior | normal | all | ctest | active |
 | `src/tools/debug_index/ProcessDiagnosticsSpec.cpp` | `process_diagnostics_spec` | `src/common` | `debug-index.process-diagnostics` | debug_index | behavior | normal | all | ctest | active |
 | `src/tools/debug_index/ProcessIdentityFieldsSpec.cpp` | `process_identity_fields_spec` | `src/app` | `debug-index.process-identity-fields` | debug_index | behavior | normal | all | ctest | active |
+| `src/tools/debug_index/UiHangWatchdogLifecycleSpec.cpp` | `ui_hang_watchdog_lifecycle_spec` | `src/common` | `debug-index.ui-hang-watchdog-lifecycle` | debug_index | behavior | high | all | ctest | active |
 | `src/tools/debug_index/UiHangWatchdogPolicySpec.cpp` | `ui_hang_watchdog_policy_spec` | `src/common` | `debug-index.ui-hang-watchdog-policy` | debug_index | behavior | normal | all | ctest | active |
 | `src/tools/debug_index/WindowVisibilityDiagnosticsSpec.cpp` | `window_visibility_diagnostics_spec` | `src/app` | `debug-index.window-visibility-diagnostics` | debug_index | behavior | normal | all | ctest | active |
 | `src/tools/deps/DependencyAllowlistSpec.cpp` | `dependency_allowlist_spec` | `src/common` | `deps.dependency-allowlist` | deps | source-contract | normal | all | ctest | active |

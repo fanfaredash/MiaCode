@@ -53,6 +53,21 @@ miacode_add_spec(ui_hang_watchdog_policy_spec
     INCLUDES src
 )
 
+miacode_add_spec(ui_hang_watchdog_lifecycle_spec
+    OWNER src/common
+    CONTRACT debug-index.ui-hang-watchdog-lifecycle
+    DOMAIN debug_index KIND behavior RISK high
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/debug_index/UiHangWatchdogLifecycleSpec.cpp
+        src/common/UiHangWatchdog.h
+        src/common/UiHangWatchdog.cpp
+        src/common/DebugOptions.h
+        ${_miacode_log_core}
+    LIBS Qt6::Core
+    INCLUDES src
+)
+
 miacode_add_spec(log_pruning_policy_spec
     OWNER src/common
     CONTRACT debug-index.log-pruning-policy

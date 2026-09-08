@@ -65,6 +65,7 @@ std::atomic_bool g_diagnosticCrashTriggered{false};
 #endif
 std::once_flag g_threadOnce;
 std::thread g_thread;
+std::mutex g_threadMutex;
 std::mutex g_phaseMutex;
 PhaseState g_phase;
 
@@ -430,16 +431,13 @@ void installGuiHeartbeat(QObject* owner)
 
     std::call_once(g_threadOnce, []() {
         g_stop.store(false, std::memory_order_release);
+        std::lock_guard<std::mutex> lock(g_threadMutex);
         g_thread = std::thread(&watchdogLoop);
     });
 
     if (QCoreApplication* app = QCoreApplication::instance(); app != nullptr) {
         QObject::connect(app, &QCoreApplication::aboutToQuit, []() {
-            g_enabled.store(false, std::memory_order_release);
-            g_stop.store(true, std::memory_order_release);
-            if (g_thread.joinable()) {
-                g_thread.join();
-            }
+            shutdownGuiHeartbeat();
         });
     }
 
@@ -452,6 +450,16 @@ void installGuiHeartbeat(QObject* owner)
             .arg(activePhaseHangMs())
             .arg(idleHeartbeatHangMs())
             .arg(miacode::debug_options::uiHangCrashAfterMs()));
+}
+
+void shutdownGuiHeartbeat()
+{
+    g_enabled.store(false, std::memory_order_release);
+    g_stop.store(true, std::memory_order_release);
+    std::lock_guard<std::mutex> lock(g_threadMutex);
+    if (g_thread.joinable()) {
+        g_thread.join();
+    }
 }
 
 void setPhase(const char* phase, const QString& detail)

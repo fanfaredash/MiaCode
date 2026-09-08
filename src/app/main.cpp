@@ -30,6 +30,7 @@
 #include <QRegularExpression>
 #include <QQuickWindow>
 #include <QQuickStyle>
+#include <QScopeGuard>
 #include <QSGRendererInterface>
 
 #include <cmath>
@@ -404,6 +405,9 @@ int main(int argc, char* argv[])
 #endif
     QGuiApplication app(argc, argv);
     miacode::hang_watchdog::installGuiHeartbeat(&app);
+    const auto shutdownGuiHeartbeat = qScopeGuard([]() {
+        miacode::hang_watchdog::shutdownGuiHeartbeat();
+    });
     miacode::diag::installPeriodicProcessResourceGauge(&app);
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=after_qapplication_construct");
@@ -665,6 +669,7 @@ int main(int argc, char* argv[])
     );
     // Permanently shut down the async log writer last so any teardown logs above are
     // drained to disk and the worker thread is joined before the process exits.
+    miacode::hang_watchdog::shutdownGuiHeartbeat();
     miacode::debug_log::shutdownAsyncLogWriter();
     return exitCode;
 }

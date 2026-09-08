@@ -9,6 +9,10 @@ class QObject;
 namespace miacode::hang_watchdog {
 
 void installGuiHeartbeat(QObject* owner);
+// Stops and joins the monitor thread. Call before a process returns without
+// entering the Qt event loop; unlike a GUI quit, that path does not emit
+// QCoreApplication::aboutToQuit.
+void shutdownGuiHeartbeat();
 void setPhase(const char* phase, const QString& detail = QString());
 void clearPhase(const char* phase = nullptr);
 
