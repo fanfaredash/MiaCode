@@ -13,6 +13,7 @@ Item {
     // driver with hardware decode. Supplied by the caller, which knows the
     // active page.
     property bool exportPageActive: false
+    property bool showCanvasMenuButton: !root.exportPageActive
     signal fullscreenRequested()
 
 
@@ -52,9 +53,11 @@ Item {
 
     // Shorten "pos / dur" only when the control row would actually collide —
     // independent of NoteStatistics column switching.
+    readonly property int _visibleButtonCount: 3 + (canvasMenuButton.visible ? 1 : 0)
     readonly property real _fixedChromeWidth: stopButton.implicitWidth + playButton.implicitWidth
-        + rateButton.implicitWidth + (canvasMenuButton.visible ? canvasMenuButton.implicitWidth : 0)
-        + transportRow.spacing * (canvasMenuButton.visible ? 4 : 3)
+        + rateButton.implicitWidth
+        + (canvasMenuButton.visible ? canvasMenuButton.implicitWidth : 0)
+        + transportRow.spacing * _visibleButtonCount
     readonly property real minimumWidth: _fixedChromeWidth + 16 + 40
     readonly property bool timeFitsFull: {
         const margins = 16
@@ -174,7 +177,7 @@ Item {
             id: canvasMenuButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
-            visible: !root.exportPageActive
+            visible: root.showCanvasMenuButton
             active: canvasMenu.active
             iconSource: Qt.resolvedUrl("icons/preview-settings.svg")
             tooltip: UiText.text("预览画布")

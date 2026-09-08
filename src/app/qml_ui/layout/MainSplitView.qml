@@ -378,43 +378,59 @@ Item {
         z: 80
         color: Theme.surfaceColor(Theme.colors.background.panel)
 
-        Loader {
-            anchors.centerIn: parent
-            width: root.freeAspectActive
-                   ? parent.width
-                   : root.fittedFullscreenWidth(parent.width, parent.height)
-            height: root.freeAspectActive
-                    ? parent.height
-                    : root.fittedFullscreenHeight(parent.width, parent.height)
-            active: fullscreenPreview.visible && width >= 64 && height >= 64
+        Item {
+            id: fullscreenStage
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: fullscreenTransport.top
 
-            sourceComponent: Preview.PreviewSurface {
+            Loader {
+                anchors.centerIn: parent
+                width: root.freeAspectActive
+                       ? parent.width
+                       : root.fittedFullscreenWidth(parent.width, parent.height)
+                height: root.freeAspectActive
+                        ? parent.height
+                        : root.fittedFullscreenHeight(parent.width, parent.height)
+                active: fullscreenPreview.visible && width >= 64 && height >= 64
+
+                sourceComponent: Preview.PreviewSurface {
+                    anchors.fill: parent
+                    runtime: root.previewSession.runtime
+                    mediaHost: root.previewSession.mediaHost
+                    logger: root.previewSession
+                    surfaceRole: "fullscreen"
+                    backgroundColor: "transparent"
+                    hudTextColor: Theme.colors.previewHud.text
+                    hudShadowColor: Theme.colors.previewHud.shadow
+                }
+            }
+
+            // Over the stage, under the exit button: QML stacking is declaration order.
+            PreviewRateToast {
                 anchors.fill: parent
-                runtime: root.previewSession.runtime
-                mediaHost: root.previewSession.mediaHost
-                logger: root.previewSession
-                surfaceRole: "fullscreen"
-                backgroundColor: "transparent"
-                hudTextColor: Theme.colors.previewHud.text
-                hudShadowColor: Theme.colors.previewHud.shadow
+                previewSession: root.previewSession
+            }
+
+            IconButton {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 12
+                iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
+                tooltip: UiText.text("退出全屏预览")
+                onClicked: fullscreenPreview.visible = false
             }
         }
 
-        // Over the stage, under the exit button: QML stacking is declaration
-        // order. Fullscreen is where the rate HUD matters most — the transport
-        // that spells the rate out is not on screen at all.
-        PreviewRateToast {
-            anchors.fill: parent
-            previewSession: root.previewSession
-        }
-
-        IconButton {
+        PreviewTransport {
+            id: fullscreenTransport
+            anchors.left: parent.left
             anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 12
-            iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
-            tooltip: UiText.text("退出全屏预览")
-            onClicked: fullscreenPreview.visible = false
+            anchors.bottom: parent.bottom
+            previewSession: root.previewSession
+            preferences: root.preferences
+            showCanvasMenuButton: false
         }
     }
 }
