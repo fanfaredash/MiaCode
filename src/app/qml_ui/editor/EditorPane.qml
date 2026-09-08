@@ -236,7 +236,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: tabs.bottom
-        height: headerContent.height + 12
+        height: headerContent.height + 12 - Theme.workspaceHeaderContentOffsetY
         visible: root.viewState.difficultyEditorActive
 
         Item {

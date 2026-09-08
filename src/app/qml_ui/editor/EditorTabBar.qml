@@ -96,7 +96,7 @@ Rectangle {
             tabViewport.contentX = item.x + item.width - tabViewport.width
     }
 
-    implicitHeight: 34
+    implicitHeight: Theme.workspaceHeaderHeight
     color: Theme.surfaceColor(Theme.colors.background.panel)
 
     Flickable {
@@ -135,6 +135,7 @@ Rectangle {
 
                     property bool suppressClickAfterDrag: false
 
+                    transform: Translate { y: Theme.workspaceHeaderContentOffsetY }
                     width: root.tabWidth
                     height: parent.height
                     preferredTabWidth: root.tabWidth

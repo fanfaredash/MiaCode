@@ -16,9 +16,10 @@ Rectangle {
     }
 
     implicitHeight: root.sidebarTitle
-                    ? Math.max(Math.ceil(titleLabel.y + titleLabel.implicitHeight + Theme.chromeInsetY),
+                    ? Math.max(Theme.workspaceHeaderHeight,
+                               Math.ceil(titleLabel.y + titleLabel.implicitHeight + Theme.chromeInsetY),
                                trailingRow.implicitHeight)
-                    : 34
+                    : Theme.workspaceHeaderHeight
     color: "transparent"
 
     FontMetrics {
@@ -36,6 +37,9 @@ Rectangle {
                            ? Math.max(0, Theme.activityIconTop - root.titleInkTop)
                            : 0
         anchors.verticalCenter: root.sidebarTitle ? undefined : parent.verticalCenter
+        transform: Translate {
+            y: root.sidebarTitle ? Theme.workspaceHeaderContentOffsetY : 0
+        }
         text: root.title
         color: root.sidebarTitle ? Theme.colors.text.heading : Theme.colors.text.primary
         font.family: Theme.uiFont
@@ -48,14 +52,18 @@ Rectangle {
         id: trailingRow
         anchors.right: parent.right
         anchors.rightMargin: 10
-        anchors.verticalCenter: parent.verticalCenter
+        y: (root.sidebarTitle ? Theme.workspaceHeaderHeight : root.height) / 2
+           + (root.sidebarTitle ? Theme.workspaceHeaderContentOffsetY : 0)
+           - height / 2
         spacing: 5
     }
 
     Text {
         anchors.right: parent.right
         anchors.rightMargin: 10
-        anchors.verticalCenter: parent.verticalCenter
+        y: (root.sidebarTitle ? Theme.workspaceHeaderHeight : root.height) / 2
+           + (root.sidebarTitle ? Theme.workspaceHeaderContentOffsetY : 0)
+           - height / 2
         visible: root.showMore && trailingRow.children.length === 0
         text: "..."
         color: Theme.colors.text.secondary

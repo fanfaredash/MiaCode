@@ -23,7 +23,8 @@ Item {
     signal clicked()
     signal closeRequested()
 
-    implicitHeight: compact ? Theme.compactControlHeight : panelTab ? 28 : 34
+    implicitHeight: compact ? Theme.compactControlHeight
+                            : panelTab ? 28 : Theme.workspaceHeaderHeight
     implicitWidth: panelTab
         ? contentRow.implicitWidth + contentRow.anchors.leftMargin + contentRow.anchors.rightMargin
         : preferredTabWidth
