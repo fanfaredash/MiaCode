@@ -479,6 +479,7 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
         }
     }
     loadOptionalPlugins();
+    masterMixerOutputBufferSeconds_ = 0.0;
     masterMixer_ = BASS_Mixer_StreamCreate(
         deviceSampleRate_,
         miacode::preview_audio::kMixChannels,
@@ -495,10 +496,29 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
             true);
         return false;
     }
-    BASS_ChannelSetAttribute(masterMixer_, BASS_ATTRIB_BUFFER, 0.0f);
+    const miacode::preview_audio::bass::MasterMixerPolicy mixerPolicy =
+        miacode::preview_audio::bass::masterMixerPolicyFromOverrides(
+            qEnvironmentVariable("MIACODE_BASS_MASTER_BUFFER_MS"),
+            qEnvironmentVariable("MIACODE_BASS_MIXER_THREADS"));
+    const float requestedBufferSeconds = static_cast<float>(mixerPolicy.bufferMs / 1000.0);
+    const bool bufferSet = BASS_ChannelSetAttribute(
+        masterMixer_, BASS_ATTRIB_BUFFER, requestedBufferSeconds) != FALSE;
     noteBassErr("engine_init/master_buffer_attr");
-    BASS_ChannelSetAttribute(masterMixer_, BASS_ATTRIB_MIXER_THREADS, 8.0f);
+    const bool threadsSet = BASS_ChannelSetAttribute(
+        masterMixer_, BASS_ATTRIB_MIXER_THREADS, static_cast<float>(mixerPolicy.threadCount)) != FALSE;
     noteBassErr("engine_init/master_mixer_threads_attr");
+    float effectiveBufferSeconds = -1.0f;
+    const bool bufferRead = BASS_ChannelGetAttribute(
+        masterMixer_, BASS_ATTRIB_BUFFER, &effectiveBufferSeconds) != FALSE;
+    noteBassErr("engine_init/master_buffer_attr_readback");
+    float effectiveThreadCount = -1.0f;
+    const bool threadsRead = BASS_ChannelGetAttribute(
+        masterMixer_, BASS_ATTRIB_MIXER_THREADS, &effectiveThreadCount) != FALSE;
+    noteBassErr("engine_init/master_mixer_threads_attr_readback");
+    masterMixerOutputBufferSeconds_ = bufferRead
+            && qIsFinite(effectiveBufferSeconds) && effectiveBufferSeconds >= 0.0f
+        ? static_cast<double>(effectiveBufferSeconds)
+        : (bufferSet ? static_cast<double>(requestedBufferSeconds) : 0.0);
     // G1 Commit 6: master mixer stays ACTIVE_PLAYING for the lifetime of the engine.
     // Pre-G1 we cycled it via BASS_ChannelPause / BASS_ChannelPlay / BASS_ChannelStop
     // at every session-state change; each cold-start churned BASS_FX SoundTouch
@@ -511,6 +531,7 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
         noteBassErrCode("engine_init/master_play_once", errorCode);
         BASS_StreamFree(masterMixer_);
         masterMixer_ = 0;
+        masterMixerOutputBufferSeconds_ = 0.0;
         bassDeviceLease_.release();
         appendBassDebugLog(
             miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
@@ -531,11 +552,23 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     // Started after engineInitialized_, so the sampler never queries a half-built engine.
     startAudioHealthSampler();
     appendAudioDebugLog(
-        QString("bass_engine_ready sample_rate=%1 output_index=%2 output_endpoint=%3")
+        QString("bass_engine_ready sample_rate=%1 output_index=%2 output_endpoint=%3 master_buffer_requested_ms=%4 master_buffer_effective_ms=%5 master_buffer_set=%6 master_buffer_read=%7 master_buffer_override_set=%8 master_buffer_override_valid=%9 master_threads_requested=%10 master_threads_effective=%11 master_threads_set=%12 master_threads_read=%13 master_threads_override_set=%14 master_threads_override_valid=%15")
             .arg(deviceSampleRate_)
             .arg(bassOutputDeviceIndex_)
             .arg(bassOutputEndpointId_.isEmpty() ? QStringLiteral("(default)")
-                                                  : bassOutputEndpointId_));
+                                                  : bassOutputEndpointId_)
+            .arg(mixerPolicy.bufferMs, 0, 'f', 3)
+            .arg(masterMixerOutputBufferSeconds_ * 1000.0, 0, 'f', 3)
+            .arg(bufferSet ? 1 : 0)
+            .arg(bufferRead ? 1 : 0)
+            .arg(mixerPolicy.bufferOverrideSet ? 1 : 0)
+            .arg(mixerPolicy.bufferOverrideValid ? 1 : 0)
+            .arg(mixerPolicy.threadCount)
+            .arg(static_cast<double>(effectiveThreadCount), 0, 'f', 3)
+            .arg(threadsSet ? 1 : 0)
+            .arg(threadsRead ? 1 : 0)
+            .arg(mixerPolicy.threadOverrideSet ? 1 : 0)
+            .arg(mixerPolicy.threadOverrideValid ? 1 : 0));
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
         QString("reused=0 elapsed_ms=%1 ok=1 sample_rate=%2")
@@ -579,6 +612,7 @@ void BassPreviewAudioBackend::invalidateOutputDevice()
             lastNativeErrorCode_ = static_cast<int>(BASS_ErrorGetCode());
         }
         masterMixer_ = 0;
+        masterMixerOutputBufferSeconds_ = 0.0;
     }
     unloadOptionalPlugins();
     bassDeviceLease_.release();

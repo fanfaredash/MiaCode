@@ -226,6 +226,13 @@ void BassPreviewAudioBackend::applySampleLevels()
 
 BassPreviewAudioBackend::Sample* BassPreviewAudioBackend::sampleForKind(const QString& kind) const
 {
+    // Prepared timeline kinds are already canonical. The direct lookup keeps the BASS
+    // callback path allocation-free; normalization remains as a compatibility fallback
+    // for audition callers that supply mixed-case or padded text.
+    const auto existing = samplesByKind_.constFind(kind);
+    if (existing != samplesByKind_.constEnd()) {
+        return existing.value();
+    }
     return samplesByKind_.value(previewSfxNormalizedKind(kind), nullptr);
 }
 

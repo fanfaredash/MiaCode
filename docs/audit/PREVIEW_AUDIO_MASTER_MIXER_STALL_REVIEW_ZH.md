@@ -20,8 +20,8 @@ lifecycle: working
 | A2 | 暂停期间 `latestHealthSample_` 不刷新，恢复后最长 1 s 内 `bass_status.bgm_raw` 是**暂停前**的旧值 | 日志伪影（非音频故障） | 中（误导分析） | 确凿 | 无：解释了"恢复后第一拍 ±36/-145/-75/+3.7 s"现象，与 H2 无关。**已修复，见 §7.1** |
 | A3 | `bass_status.bgm_raw` 与 `auth` 时基不同步（bgm_raw 最多陈旧 1 s，auth 是现场值）→ `bgm_delta_ms` 本身带 0~+1000 ms 的采样相位噪声 | 分析方法层面 | 中 | 确凿 | 中：H2 的"单拍 0.85-0.94 s"必须用相邻两次 worker 样本的 `sampledAtMs` 差归一化后才可信（当前 bass_status 不打印 sampledAtMs） |
 | A4 | 现有日志**无法区分**"BGM 源单独断供"与"整条 master 混音停顿"；SFX 的触发是按 master 混音位置（`BASS_SYNC_POS|MIXTIME`）驱动的，master 停顿时 SFX 触发行照样"正常"出现 | 分析框架 | 高 | 高 | 强：H2 的"BGM-only"结论目前证据不足；见 §2.4 的判别方法 |
-| A5 | master mixer 以 `BASS_ATTRIB_BUFFER=0`（零播放缓冲）+ `BASS_ATTRIB_MIXER_THREADS=8` 运行，且从未设置 `BASS_CONFIG_DEV_BUFFER/UPDATEPERIOD`；任何 >1 个设备周期的处理抖动都会直接掉音 | 架构隐患 | 高 | 高（机制确定，是否为本次根因未证） | 强候选：仓库历史（Tick.cpp:216-220、PREVIEW_PLAYBACK_STUTTER_AUDIT_ZH.md:68）明确记录过 master 游标 "~50-100 ms stalls"，量级与 H2 一致；G1 只是把视觉时钟改成墙钟，把这个抖动从视觉里"藏"起来，没有修 |
-| A6 | 混音线程回调 `handleMixerGroupSync` 在音频线程持 `QMutex`、深拷贝 `CollapsedEventGroup`、拼 `QString`、走 DebugLog 的 `std::mutex` 队列；`QMutex` 无优先级继承 → 经典优先级反转 | 实时性隐患 | 中高 | 高（机制确定） | 中：是 A5 的一种触发源 |
+| A5 | master mixer 以 `BASS_ATTRIB_BUFFER=0`（零播放缓冲）+ `BASS_ATTRIB_MIXER_THREADS=8` 运行，且从未设置 `BASS_CONFIG_DEV_BUFFER/UPDATEPERIOD`；任何 >1 个设备周期的处理抖动都会直接掉音 | 架构隐患 | 高 | 高（机制确定，是否为本次根因未证） | **已实现代码级缓解，硬件复测待完成，见 §7.7**：默认改为 30 ms / 1 线程，保留 env A/B，并按实际缓冲补偿 SFX 调度。 |
+| A6 | 混音线程回调 `handleMixerGroupSync` 在音频线程持 `QMutex`、深拷贝 `CollapsedEventGroup`、拼 `QString`、走 DebugLog 的 `std::mutex` 队列；`QMutex` 无优先级继承 → 经典优先级反转 | 实时性隐患 | 中高 | 高（机制确定） | **已完成代码路径修复，硬件复测待完成，见 §7.7**：回调不再等待互斥锁，且不再深拷贝、构造日志字符串或写日志。 |
 | A7 | `anchorSfxScheduler` 在锁外先读 master 位置、再在锁内 `BASS_ChannelSetSync`；若目标位置在这几毫秒内已被越过，sync 永不触发且链式调度整体卡死到下次 seek/pause | 竞态（假设） | 高（若成立则 SFX 全部静音） | 中（需 BASS 文档确认"已越过位置的 SYNC_POS 是否触发"） | 弱 |
 | A8 | BGM 的 `setCurrentSec` 用 `BASS_ChannelSetPosition`，而同文件的 SFX `stop/playOneShot` 用 `BASS_Mixer_ChannelSetPosition`；BASSmix 要求混音源 seek 用后者以复位 resampler/ramp/缓冲 | 库语义不符 | 中 | 高（不一致是事实；后果需复核文档） | 弱-中：只在 seek/变速时触发，不解释稳态缺口 |
 | A9 | `PreviewBassDeviceLease` 是"先到先得、不校验参数"的进程级租约；三处 `BASS_Init` 参数互不相同（预览 `-1/48000/0`，波形 `0/24000/NOSPEAKER`，导出 `0/48000/NOSPEAKER`）；macOS 上没有 Windows 那样的 `process_device_conflict` 检查 | 生命周期隐患 | 中高 | 高（代码事实）；实际触发条件未证 | 弱 |
@@ -304,8 +304,36 @@ lifecycle: working
 
 **结论**：设备级极短欠载（A5 的具体表现）现在有了跟症状精确对应的实测时间戳和量级证据，从"理论候选"升级为**当前证据下最直接的根因**，且这条证据同时适用于 H2（卡顿型）和本节的 click/pop 型两种症状——两者很可能同源，只是欠载时长不同导致听感不同（更长的欠载表现为卡顿，更短的表现为一声啪）。
 
-### 7.6 下一步（未执行，留给后续会话）
+### 7.6 下一步（后续会话已开始执行）
 
-- 若要验证"给 master 一点缓冲余量能否消除 click/pop"：按 §4 建议 4 给 `BASS_ATTRIB_BUFFER`/`MIXER_THREADS` 加 env 覆盖做 A/B 对比，用本节的探针做验收（复测后 `kind=late_callback` 的离群值计数应显著下降）。
+- "给 master 一点缓冲余量能否消除 click/pop"的代码准备已完成：`BASS_ATTRIB_BUFFER`/`MIXER_THREADS` 已有受校验的 env 覆盖，见 §7.7；仍需在复现硬件上用本节探针完成 A/B 验收（复测后 `kind=late_callback` 的离群值计数应显著下降）。
 - 若要进一步定位"迟到之后设备具体怎么补空档"：`step` 阈值 0.25 可能偏高，可以尝试调低阈值再测一轮，或者在设备输出更靠后的位置（如果 BASS/CoreAudio 允许）再加一层探针。
-- A6（混音线程回调内的锁/堆分配/日志）仍未处理，是 A5/欠载的一个具体触发源，可以独立立项。
+- A6（混音线程回调内的锁等待/堆分配/日志）已完成代码路径修复，见 §7.7；仍需与 A5 一起做硬件复测。
+
+### 7.7 A5/A6 代码级修复（2026-09-08，硬件验收待完成）
+
+本轮按 §7.6 落地了两组改动：
+
+- **A5 缓冲与线程策略**：master mixer 默认从 `BUFFER=0 / MIXER_THREADS=8` 改为
+  `30 ms / 1`。新增 `MIACODE_BASS_MASTER_BUFFER_MS`（`0..500`）和
+  `MIACODE_BASS_MIXER_THREADS`（`1..16`）作为受校验的 A/B 覆盖；非法、非有限或越界值
+  回退到新默认。`bass_engine_ready` 同时记录请求值、BASS 实际回读值、set/read 成功与覆盖
+  有效性，避免测试者误以为属性已生效。旧组合可显式设为 `0 / 8` 复现。
+- **SFX 可听时间补偿**：`SfxSchedulerAnchor` 携带 BASS 实际回读的输出缓冲秒数，
+  `mixerSecondForChartSecond()` 将 sync 提前该时长。decode 游标到 chart time 的反换算保持不变，
+  因为缓冲只改变声音何时抵达设备，不改变 master decode 游标的推进速度。
+- **A6 实时回调**：`handleMixerGroupSync()` 改用无等待 `tryLock()`；若 worker 正持锁，回调只把
+  当前唯一 sync handle 写入原子槽，下一次 worker tick 在缓冲提前量内完成该动作。回调诊断通过
+  固定容量 POD SPSC ring 交给 worker 格式化，BASS 错误也通过 thread-local POD 槽延迟报告。
+  `CollapsedEventGroup` 改为常量引用，已规范化的 SFX kind 优先直接查表，回调路径不再构造
+  `QString`、深拷贝组或进入 DebugLog。`bass_sfx_mixer_deferred` 和最终行的 `deferred=1` 可量化
+  实际发生过多少次互斥争用。
+
+代码验证已完成：Windows Release `MiaCode` 目标成功编译链接，
+`bass_preview_sfx_scheduler_policy_spec` 通过，覆盖新默认、旧组合 A/B、非法值回退、30 ms 调度
+提前量以及 callback ring 的 FIFO/满载行为。
+
+**仍不能仅凭代码验证宣称症状消失。** 下一步必须在原复现硬件上分别运行新默认 `30 / 1` 与
+旧组合 `0 / 8`，比较相同播放区间内 `bass_output_glitch kind=late_callback` 的次数/离群值，并
+主观确认 click/pop 与 H2 卡顿是否消失。若 30 ms 仍有离群，可在 `20..40 ms` 内继续 A/B；若
+需要超过 40 ms 才稳定，应继续排查设备周期和系统调度，而不是无限增加延迟。

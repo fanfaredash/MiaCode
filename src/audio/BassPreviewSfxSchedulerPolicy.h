@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "BassPreviewMasterMixerPolicy.h"
+
 namespace miacode::preview_audio::bass {
 
 inline bool shouldLogDisarm(bool wasActive, bool hadSync, int groupIndex) noexcept
@@ -17,6 +19,7 @@ struct SfxSchedulerAnchor {
     double chartSecond = 0.0;
     double mixerSecond = 0.0;
     double playbackRate = 1.0;
+    double outputBufferSeconds = 0.0;
 };
 
 inline double mixerSecondForChartSecond(const SfxSchedulerAnchor& anchor, double chartSecond)
@@ -24,7 +27,8 @@ inline double mixerSecondForChartSecond(const SfxSchedulerAnchor& anchor, double
     const double rate = std::isfinite(anchor.playbackRate) && anchor.playbackRate > 0.0
         ? anchor.playbackRate
         : 1.0;
-    return anchor.mixerSecond + (chartSecond - anchor.chartSecond) / rate;
+    return anchor.mixerSecond + (chartSecond - anchor.chartSecond) / rate
+        - validOutputBufferSeconds(anchor.outputBufferSeconds);
 }
 
 inline double chartSecondForMixerSecond(const SfxSchedulerAnchor& anchor, double mixerSecond)

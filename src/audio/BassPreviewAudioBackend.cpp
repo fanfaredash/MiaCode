@@ -54,6 +54,7 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
         BASS_StreamFree(masterMixer_);
         noteBassErr("dtor/master_stream_free");
         masterMixer_ = 0;
+        masterMixerOutputBufferSeconds_ = 0.0;
     }
     unloadBassFx();
     bassDeviceLease_.release();

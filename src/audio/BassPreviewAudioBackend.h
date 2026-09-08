@@ -9,6 +9,7 @@
 
 #include "common/PreviewAudioMixConfig.h"
 #include "BassPreviewDebugLogRouting.h"
+#include "BassPreviewSfxCallbackRing.h"
 #include "BassPreviewOutputGlitchProbeState.h"
 #include "BassPreviewSfxSchedulerPolicy.h"
 #include "PreviewBassDeviceLease.h"
@@ -194,6 +195,14 @@ private:
     void anchorSfxScheduler(double chartSecond);
     double currentSfxSchedulerChartSecond(double fallbackSecond) const;
     void armNextGroupSyncLocked();
+    void processMixerGroupSyncLocked(
+        quint32 handle,
+        bool processedAfterContention,
+        miacode::preview_audio::bass::SfxCallbackEvent* event);
+    void drainDeferredMixerSync();
+    void drainSfxCallbackEvents();
+    void logSfxCallbackEvent(
+        const miacode::preview_audio::bass::SfxCallbackEvent& event) const;
     // Must be called with schedulerMutex_ released.
     void logSfxSchedulerArmFailure(const SfxSchedulerArmFailure& failure) const;
     void stopAllSamples();
@@ -225,15 +234,14 @@ private:
     // logs directly, which is correct only on the GUI path where no lock is held.
     void reconcileTouchholdVoice(double second, TouchholdTransition* out = nullptr);
     void logTouchholdTransition(const TouchholdTransition& transition) const;
-    // `playedKindsOut`, when non-null, receives a compact "kind:gain" list of the
-    // samples that ACTUALLY started. The group-level logs record a decision to
-    // trigger; this records the sound. Collected rather than logged in place
-    // because the mixer-sync caller runs under the scheduler mutex on the BASS
-    // audio thread and must not log there.
+    // Worker paths can collect a compact QString list in playedKindsOut. The mixer
+    // callback instead supplies playedSnapshotOut, which records the same successful
+    // starts in fixed POD storage for deferred worker-thread formatting.
     void triggerGroup(
         const CollapsedEventGroup& group,
         QString* playedKindsOut = nullptr,
-        TouchholdTransition* touchholdOut = nullptr);
+        TouchholdTransition* touchholdOut = nullptr,
+        miacode::preview_audio::bass::PlayedSfxSnapshot* playedSnapshotOut = nullptr);
     // Stable bass_status token for the action the mixer sync is armed for. A member
     // rather than a neighbour of retainedPlaybackModeLabel in
     // BassPreviewAudioBackendImpl.h because ScheduledMixerAction is private here.
@@ -281,6 +289,7 @@ private:
     bool engineInitialized_ = false;
     int lastNativeErrorCode_ = 0;
     quint32 masterMixer_ = 0;
+    double masterMixerOutputBufferSeconds_ = 0.0;
     // HDSP handle for the output-glitch probe attached to masterMixer_; 0 when not
     // attached. outputGlitchProbeState_ is the audio-thread-owned tracker state the DSP
     // callback mutates -- see BassPreviewOutputGlitchProbeState.h.
@@ -300,23 +309,14 @@ private:
     quint64 transportReadyGeneration_ = 0;
     bool trackMissingAfterLoadLogged_ = false;
     std::atomic_bool shuttingDown_ = false;
-    // Held by the GUI thread AND by the BASS mixer callback thread (handleMixerGroupSync).
-    // That makes it an audio-callback lock, so its rule is stricter than "guard the shared
-    // fields":
-    //
-    //   While holding schedulerMutex_: NO I/O, NO logging, NO calls back into BASS.
-    //
-    // Time under this lock is time the mixer callback cannot trigger its next group of note
-    // sounds; it turns directly into late notes and underruns. Calling into BASS under it
-    // is worse than slow -- BASS_ChannelRemoveSync waits for the very sync callback that is
-    // itself waiting on this mutex, an ABBA deadlock that presents as a frozen GUI thread
-    // and is indistinguishable from the freezes this branch exists to diagnose.
-    //
-    // Snapshot into locals, release, then format / write / call out. Four sites do this:
-    // handleMixerGroupSync, disarmSfxScheduler, logPlaybackStatus, and -- reached from
-    // handleMixerGroupSync via triggerGroup, which is why it was the easiest to miss --
-    // reconcileTouchholdVoice, whose row is deferred through TouchholdTransition.
+    // Shared with the BASS mixer callback. The callback only uses tryLock(): contention is
+    // handed back to PreviewAudioWorker through deferredMixerSyncHandle_, so the real-time
+    // thread never waits on this mutex. Callback diagnostics use sfxCallbackEventRing_ and
+    // are formatted/written by the worker. Worker-owned paths may take the lock normally,
+    // but must not format or write logs while holding it.
     mutable QMutex schedulerMutex_;
+    std::atomic<quint32> deferredMixerSyncHandle_{0};
+    miacode::preview_audio::bass::SfxCallbackEventRing sfxCallbackEventRing_;
     quint32 scheduledGroupSync_ = 0;
     int scheduledGroupIndex_ = -1;
     ScheduledMixerAction scheduledMixerAction_ = ScheduledMixerAction::None;

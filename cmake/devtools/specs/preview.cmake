@@ -497,6 +497,8 @@ miacode_add_spec(bass_preview_sfx_scheduler_policy_spec
     EXECUTION ctest STATUS active PLATFORM all
     SOURCES
         src/tools/preview/BassPreviewSfxSchedulerPolicySpec.cpp
+        src/audio/BassPreviewMasterMixerPolicy.h
+        src/audio/BassPreviewSfxCallbackRing.h
         src/audio/BassPreviewSfxSchedulerPolicy.h
     LIBS Qt6::Core
     INCLUDES src src/common src/preview src/audio

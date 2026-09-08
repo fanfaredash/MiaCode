@@ -228,6 +228,33 @@ inline void appendAudioDebugLog(const QString& message)
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
 }
 
+// BASS sync callbacks run on the real-time mixer thread. Any BASS failure there must be
+// captured as POD and reported later instead of constructing a QString and entering the
+// debug logger. The callback installs this thread-local sink for its duration; ordinary
+// worker-thread calls keep the existing immediate diagnostic behavior.
+inline thread_local int* realtimeBassErrorSink = nullptr;
+
+class ScopedRealtimeBassErrorSink
+{
+public:
+    explicit ScopedRealtimeBassErrorSink(int* sink)
+        : previous_(realtimeBassErrorSink)
+    {
+        realtimeBassErrorSink = sink;
+    }
+
+    ~ScopedRealtimeBassErrorSink()
+    {
+        realtimeBassErrorSink = previous_;
+    }
+
+    ScopedRealtimeBassErrorSink(const ScopedRealtimeBassErrorSink&) = delete;
+    ScopedRealtimeBassErrorSink& operator=(const ScopedRealtimeBassErrorSink&) = delete;
+
+private:
+    int* previous_ = nullptr;
+};
+
 // G1 Commit 1: unified BASS error-code reporting. Call immediately after
 // any BASS_* / BASS_Mixer_* / BASS_FX_* invocation. If BASS_ErrorGetCode()
 // is non-zero, emits a single `bass_err ctx=<ctx> code=<n>` line to the
@@ -238,6 +265,12 @@ inline void noteBassErrCode(const char* ctx, int code)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (code == 0) {
+        return;
+    }
+    if (realtimeBassErrorSink != nullptr) {
+        if (*realtimeBassErrorSink == 0) {
+            *realtimeBassErrorSink = code;
+        }
         return;
     }
     appendAudioDebugLog(QString("bass_err ctx=%1 code=%2").arg(QLatin1String(ctx)).arg(code));

@@ -22,6 +22,7 @@
 #include <QtMath>
 
 #include <limits>
+#include <mutex>
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 
 #ifdef MIACODE_HAS_BASS_AUDIO
@@ -68,16 +69,23 @@ void BassPreviewAudioBackend::resetCursor(double second, bool includeCurrentSeco
 void BassPreviewAudioBackend::triggerGroup(
     const CollapsedEventGroup& group,
     QString* playedKindsOut,
-    TouchholdTransition* touchholdOut)
+    TouchholdTransition* touchholdOut,
+    miacode::preview_audio::bass::PlayedSfxSnapshot* playedSnapshotOut)
 {
-    const auto record = [playedKindsOut](const QString& kind, double gain, bool started) {
-        if (playedKindsOut == nullptr || !started) {
+    const auto record = [playedKindsOut, playedSnapshotOut](
+                            const QString& kind, double gain, bool started) {
+        if (!started) {
             return;
         }
-        if (!playedKindsOut->isEmpty()) {
-            playedKindsOut->append(QLatin1Char(','));
+        if (playedSnapshotOut != nullptr) {
+            playedSnapshotOut->record(kind, gain);
         }
-        playedKindsOut->append(QStringLiteral("%1:%2").arg(kind).arg(gain, 0, 'f', 2));
+        if (playedKindsOut != nullptr) {
+            if (!playedKindsOut->isEmpty()) {
+                playedKindsOut->append(QLatin1Char(','));
+            }
+            playedKindsOut->append(QStringLiteral("%1:%2").arg(kind).arg(gain, 0, 'f', 2));
+        }
     };
 
     for (const Event& event : group.orderedEvents) {
@@ -174,18 +182,16 @@ void BassPreviewAudioBackend::disarmSfxScheduler(const char* reason)
         sfxSchedulerActive_ = false;
         sfxSchedulerAnchorDecodePosition_ = 0;
     }
-    // BASS_ChannelRemoveSync runs OUTSIDE schedulerMutex_ because the two locks involved
-    // are otherwise taken in opposite orders on the two threads that matter:
+    // BASS_ChannelRemoveSync remains OUTSIDE schedulerMutex_. Before A6, the two locks
+    // were taken in opposite orders on the two threads that matter:
     //
     //   GUI thread    : schedulerMutex_ -> BASS internal sync lock (inside RemoveSync)
     //   BASS callback : BASS internal sync lock -> schedulerMutex_ (handleMixerGroupSync)
     //
-    // RemoveSync waits for an in-flight sync callback to finish, and that callback can be
-    // blocked acquiring schedulerMutex_ -- whose holder is the very thread sitting inside
-    // RemoveSync. Textbook ABBA, and its symptom is an unresponsive GUI thread, which is
-    // indistinguishable from the freeze this branch exists to diagnose. The exposure is
-    // every ordinary interaction, not an edge case: this function has 16 call sites
-    // covering pause, seek, chart switch, volume and rate.
+    // RemoveSync waits for an in-flight sync callback to finish. The callback now uses
+    // tryLock and defers on contention, which breaks that ABBA cycle; keeping the native
+    // removal outside the mutex makes the invariant structural and prevents a future
+    // callback change from silently restoring the deadlock.
     //
     // Clearing the scheduler state above is what makes the hoist safe rather than merely
     // narrower: sfxSchedulerActive_ is already false by the time the lock is dropped, so a
@@ -196,9 +202,14 @@ void BassPreviewAudioBackend::disarmSfxScheduler(const char* reason)
         // Read now (BASS keeps only the most recent per-thread code), report below.
         removeSyncError = static_cast<int>(BASS_ErrorGetCode());
     }
-    // Both lines land after the locker's scope ends: schedulerMutex_ is also taken by
-    // the mixer sync callback on the BASS audio thread, so a log write underneath it
-    // stalls playback. The anchor side has always been logged; without the disarm side
+    // A callback that lost tryLock() may have published this handle while
+    // BASS_ChannelRemoveSync waited for it to return. The disarm owns cancellation, so
+    // it also owns discarding that deferred action after the native callback is gone.
+    deferredMixerSyncHandle_.store(0, std::memory_order_release);
+    drainSfxCallbackEvents();
+    // Both lines land after the locker's scope ends. The callback no longer waits for
+    // this lock, but formatting and I/O still do not belong in a scheduler critical
+    // section. The anchor side has always been logged; without the disarm side
     // a session that never re-anchors just stops producing anchor rows, which reads
     // identically to a session that was never armed.
     noteBassErrCode("sfx_scheduler/remove_sync", removeSyncError);
@@ -244,6 +255,7 @@ void BassPreviewAudioBackend::anchorSfxScheduler(double chartSecond)
         sfxSchedulerAnchor_.chartSecond = clampTimelineSecond(chartSecond);
         sfxSchedulerAnchor_.mixerSecond = BASS_ChannelBytes2Seconds(masterMixer_, position);
         sfxSchedulerAnchor_.playbackRate = playbackSession_.backgroundTrackPlaybackRate;
+        sfxSchedulerAnchor_.outputBufferSeconds = masterMixerOutputBufferSeconds_;
         sfxSchedulerAnchorDecodePosition_ = position;
         sfxSchedulerActive_ = true;
         armNextGroupSyncLocked();
@@ -390,114 +402,219 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
         return;
     }
 
-    // Set only when this callback actually emits sound, so the log write below can
-    // happen after the scheduler mutex is released. This runs on the BASS mixer
-    // thread: holding an audio-callback lock across a log write is exactly the kind
-    // of stall the buffer-health probe exists to catch.
-    bool triggered = false;
-    int triggeredGroupIndex = -1;
-    double triggeredGroupSecond = 0.0;
-    quint64 triggeredCount = 0;
-    bool startedBackground = false;
-    QString playedKinds;
-    SfxSchedulerArmFailure armFailure;
-    QString dropReason;
-    quint32 expectedSyncHandle = 0;
-    // Same deal as playedKinds: filled under the lock, logged after it. Touch-hold was the
-    // one sound source still writing its row from inside the critical section.
-    TouchholdTransition touchholdTransition;
-
-    {
-        QMutexLocker locker(&schedulerMutex_);
-        if (shuttingDown_.load(std::memory_order_acquire)) {
-            return;  // teardown, not a dropped group
-        }
-        // Either branch means the group this sync was armed for is discarded outright:
-        // silence where the chart has a note. Recorded rather than logged here for the
-        // same reason as the trigger row below -- this is the BASS mixer thread holding
-        // the scheduler lock.
-        if (!sfxSchedulerActive_) {
-            dropReason = QStringLiteral("inactive");
-        } else if (handle == 0 || handle != scheduledGroupSync_) {
-            dropReason = QStringLiteral("stale_handle");
-        }
-        if (!dropReason.isEmpty()) {
-            expectedSyncHandle = scheduledGroupSync_;
-        } else {
-            const int groupIndex = scheduledGroupIndex_;
-            const ScheduledMixerAction action = scheduledMixerAction_;
-            scheduledGroupSync_ = 0;
-            scheduledGroupIndex_ = -1;
-            scheduledMixerAction_ = ScheduledMixerAction::None;
-
-            const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
-                || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
-            if (startBackground && backgroundTrackSample_ != nullptr
-                && playbackSession_.backgroundTrackPendingStart
-                && !playbackSession_.backgroundTrackPastEnd) {
-                backgroundTrackSample_->play();
-                playbackSession_.backgroundTrackPendingStart = false;
-                playbackSession_.backgroundTrackRunning = true;
-                startedBackground = true;
-            }
-
-            const bool shouldTriggerGroup = action == ScheduledMixerAction::SfxGroup
-                || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
-            if (shouldTriggerGroup && groupIndex >= 0 && groupIndex < preparedGroups_.size()) {
-                const CollapsedEventGroup group = preparedGroups_[groupIndex];
-                if (playbackSession_.eventGroupIndex <= groupIndex) {
-                    playbackSession_.eventGroupIndex = groupIndex + 1;
-                }
-                playbackSession_.lastTriggeredGroupIndex = groupIndex;
-                playbackSession_.lastTriggeredGroupSecond = group.second;
-                ++playbackSession_.triggeredGroupCount;
-                triggerGroup(
-                    group,
-                    runtimeAudioDebugEnabled() ? &playedKinds : nullptr,
-                    &touchholdTransition);
-                triggered = true;
-                triggeredGroupIndex = groupIndex;
-                triggeredGroupSecond = group.second;
-                triggeredCount = playbackSession_.triggeredGroupCount;
-            }
-            armNextGroupSyncLocked();
-            armFailure = sfxSchedulerArmFailure_;
-            sfxSchedulerArmFailure_ = SfxSchedulerArmFailure();
-        }
-    }
-
-    if (!dropReason.isEmpty()) {
-        appendAudioDebugLog(
-            QString("bass_sfx_mixer_drop reason=%1 handle=%2 expected=%3")
-                .arg(dropReason)
-                .arg(handle)
-                .arg(expectedSyncHandle));
+    using namespace miacode::preview_audio::bass;
+    if (!schedulerMutex_.tryLock()) {
+        quint32 emptyHandle = 0;
+        deferredMixerSyncHandle_.compare_exchange_strong(
+            emptyHandle, handle, std::memory_order_release, std::memory_order_relaxed);
+        SfxCallbackEvent event;
+        event.kind = SfxCallbackEventKind::Deferred;
+        event.handle = handle;
+        event.expectedHandle = emptyHandle;
+        sfxCallbackEventRing_.tryPush(event);
         return;
     }
 
-    // The GUI fallback path logs every drain as `bass_sfx_drain`, but this path --
-    // the one a LIVE session actually uses -- logged nothing, which made "did an SFX
-    // fire after the transport was paused?" unanswerable from a capture. It is the
-    // only remaining way a note sound can be emitted while playing, so it has to be
-    // visible. One line per triggered group, `--debug` only, same cadence as the
-    // groups themselves.
-    if (triggered || startedBackground) {
-        appendAudioDebugLog(
-            QString("bass_sfx_mixer_trigger group_idx=%1 group_second=%2 count=%3 started_bgm=%4 played=%5")
-                .arg(triggeredGroupIndex)
-                .arg(triggeredGroupSecond, 0, 'f', 6)
-                .arg(triggeredCount)
-                .arg(startedBackground ? 1 : 0)
-                .arg(playedKinds.isEmpty() ? QStringLiteral("(none)") : playedKinds));
+    int callbackBassError = 0;
+    ScopedRealtimeBassErrorSink errorSink(&callbackBassError);
+    SfxCallbackEvent event;
+    {
+        std::lock_guard<QMutex> locker(schedulerMutex_, std::adopt_lock);
+        processMixerGroupSyncLocked(handle, false, &event);
     }
-    // After the trigger row, so a touch-hold ownership change reads as a consequence of
-    // the group that caused it. No-op unless the voice actually changed hands.
-    logTouchholdTransition(touchholdTransition);
-    // Last, so the row order matches the order of events: this group fired, and then
-    // re-arming for the next one failed and left the scheduler off.
-    logSfxSchedulerArmFailure(armFailure);
+    event.callbackBassError = callbackBassError;
+    if (event.kind != SfxCallbackEventKind::None || callbackBassError != 0) {
+        sfxCallbackEventRing_.tryPush(event);
+    }
 #else
     Q_UNUSED(handle);
+#endif
+}
+
+void BassPreviewAudioBackend::processMixerGroupSyncLocked(
+    quint32 handle,
+    bool processedAfterContention,
+    miacode::preview_audio::bass::SfxCallbackEvent* event)
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    using namespace miacode::preview_audio::bass;
+    if (event == nullptr || shuttingDown_.load(std::memory_order_acquire)) {
+        return;
+    }
+    event->handle = handle;
+    event->processedAfterContention = processedAfterContention;
+    if (!sfxSchedulerActive_) {
+        event->kind = SfxCallbackEventKind::Drop;
+        event->dropReason = SfxCallbackDropReason::Inactive;
+        event->expectedHandle = scheduledGroupSync_;
+        return;
+    }
+    if (handle == 0 || handle != scheduledGroupSync_) {
+        event->kind = SfxCallbackEventKind::Drop;
+        event->dropReason = SfxCallbackDropReason::StaleHandle;
+        event->expectedHandle = scheduledGroupSync_;
+        return;
+    }
+
+    const int groupIndex = scheduledGroupIndex_;
+    const ScheduledMixerAction action = scheduledMixerAction_;
+    scheduledGroupSync_ = 0;
+    scheduledGroupIndex_ = -1;
+    scheduledMixerAction_ = ScheduledMixerAction::None;
+
+    const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
+        || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
+    if (startBackground && backgroundTrackSample_ != nullptr
+        && playbackSession_.backgroundTrackPendingStart
+        && !playbackSession_.backgroundTrackPastEnd) {
+        backgroundTrackSample_->play();
+        playbackSession_.backgroundTrackPendingStart = false;
+        playbackSession_.backgroundTrackRunning = true;
+        event->startedBackground = true;
+    }
+
+    const bool shouldTriggerGroup = action == ScheduledMixerAction::SfxGroup
+        || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
+    if (shouldTriggerGroup && groupIndex >= 0 && groupIndex < preparedGroups_.size()) {
+        const CollapsedEventGroup& group = preparedGroups_[groupIndex];
+        if (playbackSession_.eventGroupIndex <= groupIndex) {
+            playbackSession_.eventGroupIndex = groupIndex + 1;
+        }
+        playbackSession_.lastTriggeredGroupIndex = groupIndex;
+        playbackSession_.lastTriggeredGroupSecond = group.second;
+        ++playbackSession_.triggeredGroupCount;
+        TouchholdTransition touchholdTransition;
+        triggerGroup(group, nullptr, &touchholdTransition, &event->played);
+        event->kind = SfxCallbackEventKind::Trigger;
+        event->groupIndex = groupIndex;
+        event->groupSecond = group.second;
+        event->triggeredCount = playbackSession_.triggeredGroupCount;
+        event->touchholdChanged = touchholdTransition.changed;
+        event->touchholdOwner = touchholdTransition.owner;
+        event->touchholdPreviousOwner = touchholdTransition.previousOwner;
+        event->touchholdSecond = touchholdTransition.second;
+        event->touchholdSpanStartSecond = touchholdTransition.spanStartSecond;
+    } else if (event->startedBackground) {
+        event->kind = SfxCallbackEventKind::Trigger;
+    }
+
+    armNextGroupSyncLocked();
+    event->armFailurePending = sfxSchedulerArmFailure_.pending;
+    event->armFailureBassError = sfxSchedulerArmFailure_.bassError;
+    event->armFailureTargetChartSecond = sfxSchedulerArmFailure_.targetChartSecond;
+    sfxSchedulerArmFailure_ = SfxSchedulerArmFailure();
+#else
+    Q_UNUSED(handle);
+    Q_UNUSED(processedAfterContention);
+    Q_UNUSED(event);
+#endif
+}
+
+void BassPreviewAudioBackend::drainDeferredMixerSync()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    const quint32 handle = deferredMixerSyncHandle_.exchange(0, std::memory_order_acq_rel);
+    if (handle == 0) {
+        return;
+    }
+    int callbackBassError = 0;
+    miacode::preview_audio::bass::SfxCallbackEvent event;
+    {
+        ScopedRealtimeBassErrorSink errorSink(&callbackBassError);
+        QMutexLocker locker(&schedulerMutex_);
+        processMixerGroupSyncLocked(handle, true, &event);
+    }
+    event.callbackBassError = callbackBassError;
+    logSfxCallbackEvent(event);
+#endif
+}
+
+void BassPreviewAudioBackend::drainSfxCallbackEvents()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    using namespace miacode::preview_audio::bass;
+    SfxCallbackEvent event;
+    for (std::size_t drained = 0;
+         drained < SfxCallbackEventRing::kCapacity && sfxCallbackEventRing_.tryPop(&event);
+         ++drained) {
+        logSfxCallbackEvent(event);
+    }
+    const quint64 dropped = sfxCallbackEventRing_.takeDroppedCount();
+    if (dropped > 0 && runtimeAudioDebugEnabled()) {
+        appendAudioDebugLog(QString("bass_sfx_mixer_diag_drop count=%1").arg(dropped));
+    }
+#endif
+}
+
+void BassPreviewAudioBackend::logSfxCallbackEvent(
+    const miacode::preview_audio::bass::SfxCallbackEvent& event) const
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    using namespace miacode::preview_audio::bass;
+    if (!runtimeAudioDebugEnabled()) {
+        return;
+    }
+    if (event.kind == SfxCallbackEventKind::Deferred) {
+        appendAudioDebugLog(
+            QString("bass_sfx_mixer_deferred reason=scheduler_busy handle=%1 pending=%2")
+                .arg(event.handle)
+                .arg(event.expectedHandle));
+        return;
+    }
+    if (event.kind == SfxCallbackEventKind::Drop) {
+        const char* reason = event.dropReason == SfxCallbackDropReason::Inactive
+            ? "inactive"
+            : "stale_handle";
+        appendAudioDebugLog(
+            QString("bass_sfx_mixer_drop reason=%1 handle=%2 expected=%3 deferred=%4")
+                .arg(QLatin1String(reason))
+                .arg(event.handle)
+                .arg(event.expectedHandle)
+                .arg(event.processedAfterContention ? 1 : 0));
+    } else if (event.kind == SfxCallbackEventKind::Trigger) {
+        QString playedKinds;
+        for (std::size_t index = 0; index < kPlayedSfxKindCount; ++index) {
+            if ((event.played.mask & (quint32(1) << static_cast<quint32>(index))) == 0) {
+                continue;
+            }
+            if (!playedKinds.isEmpty()) {
+                playedKinds.append(QLatin1Char(','));
+            }
+            playedKinds.append(QStringLiteral("%1:%2")
+                .arg(QLatin1String(playedSfxKindName(index)))
+                .arg(static_cast<double>(event.played.gains[index]), 0, 'f', 2));
+        }
+        appendAudioDebugLog(
+            QString("bass_sfx_mixer_trigger group_idx=%1 group_second=%2 count=%3 started_bgm=%4 played=%5 deferred=%6")
+                .arg(event.groupIndex)
+                .arg(event.groupSecond, 0, 'f', 6)
+                .arg(event.triggeredCount)
+                .arg(event.startedBackground ? 1 : 0)
+                .arg(playedKinds.isEmpty() ? QStringLiteral("(none)") : playedKinds)
+                .arg(event.processedAfterContention ? 1 : 0));
+    }
+
+    if (event.touchholdChanged) {
+        TouchholdTransition transition;
+        transition.changed = true;
+        transition.owner = event.touchholdOwner;
+        transition.previousOwner = event.touchholdPreviousOwner;
+        transition.second = event.touchholdSecond;
+        transition.spanStartSecond = event.touchholdSpanStartSecond;
+        logTouchholdTransition(transition);
+    }
+    if (event.callbackBassError != 0) {
+        noteBassErrCode("sfx_scheduler/mixer_callback", event.callbackBassError);
+    }
+    if (event.armFailurePending) {
+        SfxSchedulerArmFailure failure;
+        failure.pending = true;
+        failure.bassError = event.armFailureBassError;
+        failure.targetChartSecond = event.armFailureTargetChartSecond;
+        logSfxSchedulerArmFailure(failure);
+    }
+#else
+    Q_UNUSED(event);
 #endif
 }
 

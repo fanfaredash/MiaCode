@@ -241,6 +241,8 @@ Still active:
 - `MIACODE_BASS_BGM_RATE_MODE` (Windows/macOS BASS preview BGM; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening)
 - `MIACODE_BASS_BGM_TEMPO_PRESET` (Windows/macOS BASS preview BGM, only when tempo mode is active; BASS_FX window presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`)
 - `MIACODE_BASS_BGM_TEMPO_PARAMS` (Windows/macOS BASS preview BGM, only when tempo mode is active; overrides preset with custom `sequence_ms,seek_ms,overlap_ms`, accepting comma, slash, semicolon, pipe, `x`, or spaces as separators)
+- `MIACODE_BASS_MASTER_BUFFER_MS` (Windows/macOS BASS preview master mixer; default `30`, valid range `0..500` ms. Set `0` together with `MIACODE_BASS_MIXER_THREADS=8` to reproduce the former zero-buffer configuration for A/B. Invalid or non-finite values fall back to `30`. The scheduler advances mixer syncs by the effective BASS read-back value so note SFX remain aligned with audible output.)
+- `MIACODE_BASS_MIXER_THREADS` (Windows/macOS BASS preview master mixer; default `1`, valid range `1..16`. Invalid values fall back to `1`. The former value `8` remains available only as an A/B override.)
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG` (`1` enables low-noise `preview/frame_pacing` diagnostics. Combined with `--debug`, it also enables the first-PV-play two-device bridge trace and its per-frame timing counters.)
 - `MIACODE_PREVIEW_HUD_PAINT_DIAG` (`1` enables focused `PreviewQuickHudLayer` / HUD painter crash breadcrumbs in the runtime log. It force-writes `preview/hud_state` GUI-thread HUD mutations and `preview/hud_paint` render-thread paint stages, including a flushed `draw_text_before` line before each HUD `QPainter::drawText` call. It also allows the project-log binding `logging/crash_breadcrumb_hint` signpost to be written without global `--debug`.)
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
@@ -339,6 +341,7 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - BASS `bass_sfx_scheduler action=anchor` records a chart/decode-position anchor.
   - BASS `bass_sfx_scheduler action=disarm` is retained unless it proves a no-op
     (`was_active=0 had_sync=0 group_idx=-1`).
+  - `bass_engine_ready` reports requested/effective master buffer and mixer-thread values plus set/read-back and override-validity fields. `bass_sfx_mixer_deferred reason=scheduler_busy` means the real-time callback refused to wait for the scheduler mutex and handed that one sync to `PreviewAudioWorker`; the eventual trigger/drop row carries `deferred=1`. `bass_sfx_mixer_diag_drop` reports overflow of the diagnostic-only callback ring and does not mean an SFX action was dropped.
   - Ordinary `preview/stage_media action=playback_rate` rows are edge-triggered by `(rate, media
     kind)` and reset on a chart/media change. `playback_rate_deferred`, `playback_rate_flushed`, and
     error records remain independent evidence.
