@@ -75,11 +75,19 @@ void QmlEditorInputBridge::setTextDocument(QQuickTextDocument* document)
 
 void QmlEditorInputBridge::applyInputMethodState()
 {
-    if (auto* item = qobject_cast<QQuickItem*>(target_.data()); item != nullptr) {
+    auto* item = qobject_cast<QQuickItem*>(target_.data());
+    if (item != nullptr) {
         item->setFlag(QQuickItem::ItemAcceptsInputMethod, !imeInputDisabled_);
     }
     if (QInputMethod* inputMethod = QGuiApplication::inputMethod(); inputMethod != nullptr) {
+        if (imeInputDisabled_ && item != nullptr && item->hasActiveFocus()) {
+            inputMethod->reset();
+        }
         inputMethod->update(Qt::ImEnabled);
+    }
+    if (imeInputDisabled_ && imeComposing_) {
+        imeComposing_ = false;
+        emit imeComposingChanged(false);
     }
 }
 
@@ -134,6 +142,10 @@ bool QmlEditorInputBridge::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched != target_ || event->type() != QEvent::InputMethod)
         return QObject::eventFilter(watched, event);
+    if (imeInputDisabled_) {
+        event->accept();
+        return true;
+    }
     auto* input = static_cast<QInputMethodEvent*>(event);
     const quint64 sequence = ++imeEventSequence_;
     miacode::debug_log::appendLine(

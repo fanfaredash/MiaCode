@@ -226,23 +226,22 @@ AppDialog {
                 currentValue: root.preferencesModel.editorLineSpacing
                 onPicked: function(value) { root.preferencesModel.editorLineSpacing = value }
             }
+            LabeledCombo {
+                objectName: "preferencesInputHandlingCombo"
+                label: UiText.text("preferences.input_handling")
+                options: [
+                    { value: 0, label: UiText.text("preferences.correct_full_width_only") },
+                    { value: 1, label: UiText.text("preferences.block_input_methods_and_correct_full_width") },
+                    { value: 2, label: UiText.text("preferences.leave_input_unchanged") }
+                ]
+                currentValue: root.preferencesModel.editorInputHandlingMode
+                onPicked: function(value) { root.preferencesModel.editorInputHandlingMode = value }
+            }
             AppSwitch {
                 objectName: "preferencesAutoCompletionSwitch"
                 text: UiText.text("自动补全")
                 checked: root.preferencesModel.editorAutoCompletion
                 onToggled: root.preferencesModel.editorAutoCompletion = checked
-            }
-            AppSwitch {
-                objectName: "preferencesHalfWidthSwitch"
-                text: UiText.text("半角输入转换")
-                checked: root.preferencesModel.editorHalfWidthInput
-                onToggled: root.preferencesModel.editorHalfWidthInput = checked
-            }
-            AppSwitch {
-                objectName: "preferencesImeSwitch"
-                text: UiText.text("禁用输入法")
-                checked: root.preferencesModel.editorImeDisabled
-                onToggled: root.preferencesModel.editorImeDisabled = checked
             }
             AppSwitch {
                 objectName: "preferencesScrollPastEndSwitch"

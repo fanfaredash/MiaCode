@@ -895,8 +895,7 @@ Rectangle {
             // underneath the glyphs instead.
             selectedTextColor: Qt.rgba(0, 0, 0, 0)
             selectionColor: Qt.rgba(0, 0, 0, 0)
-            inputMethodHints: root.editorController.halfWidthInputEnabled
-                ? Qt.ImhLatinOnly : Qt.ImhNone
+            inputMethodHints: Qt.ImhNone
             persistentSelection: true
             selectByMouse: false
             font: Theme.codeFont

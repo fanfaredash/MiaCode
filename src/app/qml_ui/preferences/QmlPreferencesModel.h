@@ -10,9 +10,9 @@ class QmlUiSettings;
 
 namespace miacode::qml_ui {
 
-// QML-facing projection of 偏好设置. Every setting already had an
-// apply/set accessor taking a "persist" flag on MainWindow, so this adds no
-// policy of its own — it only names the settings and reports what changed.
+// QML-facing projection of 偏好设置. Store accessors keep the durable
+// values; this model combines related values into the interaction modes shown
+// by the settings page and reports what changed.
 //
 // Language and theme are deliberately not live-applied: both need a restart to
 // take full effect, and the Widgets dialog prompted for one. The QML page shows
@@ -20,6 +20,14 @@ namespace miacode::qml_ui {
 class QmlPreferencesModel final : public QObject
 {
     Q_OBJECT
+
+public:
+    enum EditorInputHandlingMode {
+        CorrectFullWidthOnly = 0,
+        BlockInputMethodsAndCorrectFullWidth = 1,
+        LeaveInputUnchanged = 2,
+    };
+    Q_ENUM(EditorInputHandlingMode)
 
     // Interface
     Q_PROPERTY(QVariantList languageOptions READ languageOptions NOTIFY interfaceChanged)
@@ -35,8 +43,7 @@ class QmlPreferencesModel final : public QObject
     Q_PROPERTY(QVariantList lineSpacingOptions READ lineSpacingOptions CONSTANT)
     Q_PROPERTY(double editorLineSpacing READ editorLineSpacing WRITE setEditorLineSpacing NOTIFY editorChanged)
     Q_PROPERTY(bool editorAutoCompletion READ editorAutoCompletion WRITE setEditorAutoCompletion NOTIFY editorChanged)
-    Q_PROPERTY(bool editorHalfWidthInput READ editorHalfWidthInput WRITE setEditorHalfWidthInput NOTIFY editorChanged)
-    Q_PROPERTY(bool editorImeDisabled READ editorImeDisabled WRITE setEditorImeDisabled NOTIFY editorChanged)
+    Q_PROPERTY(int editorInputHandlingMode READ editorInputHandlingMode WRITE setEditorInputHandlingMode NOTIFY editorChanged)
     Q_PROPERTY(bool editorScrollPastEnd READ editorScrollPastEnd WRITE setEditorScrollPastEnd NOTIFY editorChanged)
     Q_PROPERTY(bool editorSelectionBeatDisplay READ editorSelectionBeatDisplay WRITE setEditorSelectionBeatDisplay NOTIFY editorChanged)
 
@@ -76,6 +83,8 @@ public:
     void setEditorLineSpacing(double factor);
     bool editorAutoCompletion() const;
     void setEditorAutoCompletion(bool enabled);
+    int editorInputHandlingMode() const;
+    void setEditorInputHandlingMode(int mode);
     bool editorHalfWidthInput() const;
     void setEditorHalfWidthInput(bool enabled);
     bool editorImeDisabled() const;

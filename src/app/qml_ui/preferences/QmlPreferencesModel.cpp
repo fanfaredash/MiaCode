@@ -151,6 +151,30 @@ void QmlPreferencesModel::setEditorAutoCompletion(bool enabled)
     emit editorChanged();
 }
 
+int QmlPreferencesModel::editorInputHandlingMode() const
+{
+    if (editorImeDisabled()) {
+        return BlockInputMethodsAndCorrectFullWidth;
+    }
+    return editorHalfWidthInput() ? CorrectFullWidthOnly : LeaveInputUnchanged;
+}
+
+void QmlPreferencesModel::setEditorInputHandlingMode(int mode)
+{
+    if (store() == nullptr || mode < CorrectFullWidthOnly || mode > LeaveInputUnchanged) {
+        return;
+    }
+    const bool correctFullWidth = mode != LeaveInputUnchanged;
+    const bool blockInputMethods = mode == BlockInputMethodsAndCorrectFullWidth;
+    if (editorHalfWidthInput() == correctFullWidth
+        && editorImeDisabled() == blockInputMethods) {
+        return;
+    }
+    store()->applyEditorHalfWidthInputEnabled(correctFullWidth, false);
+    store()->applyEditorImeInputDisabled(blockInputMethods, true);
+    emit editorChanged();
+}
+
 bool QmlPreferencesModel::editorHalfWidthInput() const
 {
     return store() != nullptr && store()->editorHalfWidthInputEnabled();

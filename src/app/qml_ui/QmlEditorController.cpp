@@ -167,14 +167,16 @@ miacode::editor::SimaiTextEditResult QmlEditorController::processPaste(
 {
     miacode::editor::SimaiTextEditRequest request;
     request.text = text; request.anchor = anchor; request.position = position;
-    request.input = pastedText; request.autoCompletionEnabled = false;
+    request.input = pastedText;
+    request.halfWidthInputEnabled = false;
+    request.autoCompletionEnabled = false;
     return process(request);
 }
 
 miacode::editor::SimaiTextEditResult QmlEditorController::process(const miacode::editor::SimaiTextEditRequest& input)
 {
     auto request = input;
-    request.halfWidthInputEnabled = halfWidthInputEnabled_;
+    request.halfWidthInputEnabled = halfWidthInputEnabled_ && input.halfWidthInputEnabled;
     request.overwriteMode = overwriteMode_;
     request.autoCompletionEnabled = autoCompletionEnabled_ && request.autoCompletionEnabled;
     request.wholeBpm = wholeBpm_;

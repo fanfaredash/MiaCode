@@ -43,10 +43,14 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
             this, syncEditorAppearance);
 
     const auto applyEditorSettings = [this] {
-        editor_.setHalfWidthInputEnabled(preferences_.editorHalfWidthInputEnabled());
+        const int inputHandlingMode = preferencesModel_.editorInputHandlingMode();
+        editor_.setHalfWidthInputEnabled(
+            inputHandlingMode != miacode::qml_ui::QmlPreferencesModel::LeaveInputUnchanged);
         editor_.setOverwriteMode(preferences_.editorOverwriteModeEnabled());
         editor_.setAutoCompletionEnabled(preferences_.editorAutoCompletionEnabled());
-        editor_.setImeInputDisabled(preferences_.editorImeInputDisabled());
+        editor_.setImeInputDisabled(
+            inputHandlingMode
+            == miacode::qml_ui::QmlPreferencesModel::BlockInputMethodsAndCorrectFullWidth);
     };
     connect(&preferences_, &QmlUiSettings::editorSettingsChanged,
             this, applyEditorSettings);

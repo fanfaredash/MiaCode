@@ -10,7 +10,7 @@
 namespace miacode::qml_ui {
 
 // 处理 TextArea 的输入法事件，并提供鼠标选择使用的文字命中坐标和单词边界。
-// 预编辑事件交给 Qt；提交文字由 QML 事务适配器处理一次。
+// 输入法开启时，预编辑事件交给 Qt，提交文字由 QML 事务适配器处理一次。
 class QmlEditorInputBridge : public QObject
 {
     Q_OBJECT

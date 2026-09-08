@@ -11,15 +11,26 @@ QChar normalizedHalfWidthChar(QChar ch)
 {
     const ushort code = ch.unicode();
     if (code == 0x3000) return QLatin1Char(' ');
-    if (code >= 0xFF01 && code <= 0xFF5E) return QChar(code - 0xFEE0);
+    if (code >= 0xFF10 && code <= 0xFF19) return QChar(code - 0xFEE0);
+    if (code >= 0xFF01 && code <= 0xFF5E) {
+        static const QString fullWidthNoteLetters = QStringLiteral(
+            "ＡＢＣＤＥａｂｃｄｅｘｈｆｍＸＨＦＭｖＶｐｑｓｚｗ");
+        static const QString simaiPunctuation = QStringLiteral("!#$()*,-./:;<>?@[]^`{|}~");
+        const QChar halfWidth(code - 0xFEE0);
+        if (fullWidthNoteLetters.contains(ch)) return halfWidth;
+        if (simaiPunctuation.contains(halfWidth)) return halfWidth;
+    }
     switch (code) {
     case 0x3001: return QLatin1Char('/');
     case 0x3002: return QLatin1Char('.');
     case 0x00B7: return QLatin1Char('`');
     case 0x300A: return QLatin1Char('<');
     case 0x300B: return QLatin1Char('>');
+    case 0x300C: return QLatin1Char('{');
+    case 0x300D: return QLatin1Char('}');
     case 0x3010: return QLatin1Char('[');
     case 0x3011: return QLatin1Char(']');
+    case 0x00A5: return QLatin1Char('$');
     case 0xFFE5: return QLatin1Char('$');
     default: return ch;
     }
@@ -28,12 +39,9 @@ QChar normalizedHalfWidthChar(QChar ch)
 QString normalizedInput(const SimaiTextEditRequest& request)
 {
     if (!request.halfWidthInputEnabled) return request.input;
-    if (!request.isImeCommit && request.modifiers == Qt::ShiftModifier) {
-        if (request.key == Qt::Key_6) return QStringLiteral("^");
-        if (request.key == Qt::Key_4) return QStringLiteral("$");
-    }
-    if (request.input == QStringLiteral("……") || request.input == QStringLiteral("…")) return QStringLiteral("^");
     QString result = request.input;
+    result.replace(QStringLiteral("……"), QStringLiteral("^"));
+    result.replace(QChar(0x2026), QLatin1Char('^'));
     for (QChar& ch : result) ch = normalizedHalfWidthChar(ch);
     return result;
 }
