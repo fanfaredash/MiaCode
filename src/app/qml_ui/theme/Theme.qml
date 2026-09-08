@@ -101,7 +101,6 @@ QtObject {
             keyword: "#F5AE9C",
             comment: "#71B77A",
             duration: "#A0B6FF",
-            modifier: "#D2A8FF",
             error: "#C62828",
             warning: "#B07B00"
         },
@@ -216,7 +215,6 @@ QtObject {
             keyword: "#4B69C6",
             comment: "#448C27",
             duration: "#9C5D27",
-            modifier: "#7A3E9D",
             error: "#CD3131",
             warning: "#9C5D27"
         },

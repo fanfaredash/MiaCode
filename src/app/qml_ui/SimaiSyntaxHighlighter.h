@@ -16,9 +16,9 @@
 // simai 源码编辑器的原生高亮器。它直接格式化 TextArea 使用的
 // QTextDocument，因此输入法预编辑、选区、光标和文本布局始终共享同一份文档。
 //
-// 词法分类沿用工作台规格的五类高亮：指令（BPM、拍号、HS 变速）、时值、
-// 修饰符、数字和注释；括号作用域状态机参考 MiaCode 的 BracketScopeHighlighter，
-// 使 ( { [ 的着色可以跨行延续，并避免把滑条方向 < > 误判成指令块。
+// 词法高亮包含指令（BPM、拍号、HS 变速）、时值和注释；
+// 括号作用域状态机参考 MiaCode 的 BracketScopeHighlighter，
+// 使 ( { [ 的着色可以跨行延续；滑条方向 < > 使用普通文本色。
 class SimaiSyntaxHighlighter : public QSyntaxHighlighter
 {
     Q_OBJECT
@@ -27,7 +27,6 @@ class SimaiSyntaxHighlighter : public QSyntaxHighlighter
     Q_PROPERTY(QColor keywordColor READ keywordColor WRITE setKeywordColor NOTIFY keywordColorChanged)
     Q_PROPERTY(QColor commentColor READ commentColor WRITE setCommentColor NOTIFY commentColorChanged)
     Q_PROPERTY(QColor durationColor READ durationColor WRITE setDurationColor NOTIFY durationColorChanged)
-    Q_PROPERTY(QColor modifierColor READ modifierColor WRITE setModifierColor NOTIFY modifierColorChanged)
     Q_PROPERTY(QColor errorColor READ errorColor WRITE setErrorColor NOTIFY errorColorChanged)
     Q_PROPERTY(QColor warningColor READ warningColor WRITE setWarningColor NOTIFY warningColorChanged)
     Q_PROPERTY(QVariantList diagnostics READ diagnostics WRITE setDiagnostics NOTIFY diagnosticsChanged)
@@ -48,7 +47,6 @@ public:
     QColor keywordColor() const;
     QColor commentColor() const;
     QColor durationColor() const;
-    QColor modifierColor() const;
     QColor errorColor() const;
     QColor warningColor() const;
     QVariantList diagnostics() const;
@@ -57,7 +55,6 @@ public:
     void setKeywordColor(const QColor& value);
     void setCommentColor(const QColor& value);
     void setDurationColor(const QColor& value);
-    void setModifierColor(const QColor& value);
     void setErrorColor(const QColor& value);
     void setWarningColor(const QColor& value);
     void setDiagnostics(const QVariantList& value);
@@ -67,7 +64,6 @@ signals:
     void keywordColorChanged();
     void commentColorChanged();
     void durationColorChanged();
-    void modifierColorChanged();
     void errorColorChanged();
     void warningColorChanged();
     void diagnosticsChanged();
@@ -97,7 +93,6 @@ private:
 
     static bool isOpeningBracket(QChar ch, BracketKind* kindOut, QChar* closingOut);
     static bool isClosingBracket(QChar ch, BracketKind* kindOut);
-    static QString modifierCharacters();
     QTextCharFormat formatForKind(BracketKind kind) const;
     void applyDiagnostics(const QString& text);
 
@@ -107,11 +102,9 @@ private:
     QColor keywordColor_;
     QColor commentColor_;
     QColor durationColor_;
-    QColor modifierColor_;
     QColor errorColor_;
     QColor warningColor_;
     QVariantList diagnostics_;
     // 诊断按行索引，避免每次高亮块时遍历全部诊断。
     QHash<int, QVariantList> diagnosticsByLine_;
 };
-

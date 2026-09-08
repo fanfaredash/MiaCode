@@ -1097,7 +1097,6 @@ Rectangle {
                 keywordColor: Theme.colors.syntax.keyword
                 commentColor: Theme.colors.syntax.comment
                 durationColor: Theme.colors.syntax.duration
-                modifierColor: Theme.colors.syntax.modifier
                 errorColor: Theme.colors.syntax.error
                 warningColor: Theme.colors.syntax.warning
                 diagnostics: root.documentSession.validationPending

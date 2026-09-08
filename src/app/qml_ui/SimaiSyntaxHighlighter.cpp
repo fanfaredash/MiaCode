@@ -168,7 +168,6 @@ QColor SimaiSyntaxHighlighter::keywordColor() const
 
 QColor SimaiSyntaxHighlighter::commentColor() const { return commentColor_; }
 QColor SimaiSyntaxHighlighter::durationColor() const { return durationColor_; }
-QColor SimaiSyntaxHighlighter::modifierColor() const { return modifierColor_; }
 QColor SimaiSyntaxHighlighter::errorColor() const { return errorColor_; }
 QColor SimaiSyntaxHighlighter::warningColor() const { return warningColor_; }
 QVariantList SimaiSyntaxHighlighter::diagnostics() const { return diagnostics_; }
@@ -209,14 +208,6 @@ void SimaiSyntaxHighlighter::setDurationColor(const QColor& value)
     durationColor_ = value;
     rehighlight();
     emit durationColorChanged();
-}
-
-void SimaiSyntaxHighlighter::setModifierColor(const QColor& value)
-{
-    if (modifierColor_ == value) return;
-    modifierColor_ = value;
-    rehighlight();
-    emit modifierColorChanged();
 }
 
 void SimaiSyntaxHighlighter::setErrorColor(const QColor& value)
@@ -301,15 +292,6 @@ QTextCharFormat SimaiSyntaxHighlighter::formatForKind(BracketKind kind) const
     return format;
 }
 
-QString SimaiSyntaxHighlighter::modifierCharacters()
-{
-    // simai note 语法中的修饰符与方向符号：hold h、break b、ex x、mine m、
-    // 烟花 f、滑条方向 - > < ^ v V、滑条类型 p q s w、touch z、star $ @、
-    // 无头滑条 ? !、星形分支 *，以及 each 分隔 / 与反引号。
-    static const QString characters = QStringLiteral("-^vV<>pqszwWbxhmf$@?!*/`");
-    return characters;
-}
-
 void SimaiSyntaxHighlighter::applyDiagnostics(const QString& text)
 {
     const QColor errorColor = errorColor_;
@@ -349,16 +331,11 @@ void SimaiSyntaxHighlighter::highlightBlock(const QString& text)
 
     QTextCharFormat directiveFormat;
     directiveFormat.setForeground(keywordColor_);
-    QTextCharFormat durationFormat;
-    durationFormat.setForeground(durationColor_);
-    QTextCharFormat modifierFormat;
-    modifierFormat.setForeground(modifierColor_);
 
     // 颜色由 QML 从 Theme.colors.syntax 注入；绑定生效前或主题缺失时
     // 跳过对应分类，避免用无效色覆盖文本。
     const bool hasKeyword = keywordColor_.isValid();
     const bool hasDuration = durationColor_.isValid();
-    const bool hasModifier = modifierColor_.isValid();
 
     for (int index = 0; index < syntaxEnd;) {
         const QChar ch = text.at(index);
@@ -373,8 +350,7 @@ void SimaiSyntaxHighlighter::highlightBlock(const QString& text)
             }
         }
 
-        // <HS*N> 变速指令整体作为指令染色。单独的 < > 属于滑条方向，
-        // 走下面的修饰符分支，避免把 1<5 这类滑条误染成指令块。
+        // <HS*N> 变速指令整体使用指令色。单独的 < > 使用普通文本色。
         if (ch == QLatin1Char('<')
             && index + 4 <= syntaxEnd
             && text.mid(index + 1, 3) == QLatin1String("HS*")) {
@@ -425,9 +401,6 @@ void SimaiSyntaxHighlighter::highlightBlock(const QString& text)
             continue;
         }
 
-        if (!insideScope && hasModifier && modifierCharacters().contains(ch)) {
-            setFormat(index, 1, modifierFormat);
-        }
         ++index;
     }
 
