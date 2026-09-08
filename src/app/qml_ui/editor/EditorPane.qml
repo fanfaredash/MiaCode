@@ -196,6 +196,7 @@ Item {
         required property string value
         required property real editorWidth
         property bool stacked: false
+        property bool fillEditorWidth: false
         property bool commitOnEditingFinished: false
         signal committed(string value)
 
@@ -220,7 +221,10 @@ Item {
 
             x: fieldGroup.stacked ? 0 : fieldLabel.width + 8
             y: fieldGroup.stacked ? fieldLabel.height + 8 : 0
-            width: fieldGroup.stacked ? fieldGroup.width : editorWidth
+            width: fieldGroup.stacked ? fieldGroup.width
+                : fieldGroup.fillEditorWidth
+                    ? Math.max(0, fieldGroup.width - x)
+                    : editorWidth
             text: fieldGroup.value
             onTextEdited: if (!fieldGroup.commitOnEditingFinished) fieldGroup.committed(text)
             onEditingFinished: if (fieldGroup.commitOnEditingFinished) fieldGroup.committed(text)
@@ -245,18 +249,15 @@ Item {
             readonly property real gap: 8
             readonly property real wideWidth:
                 levelField.implicitWidth + designerField.implicitWidth
-                + offsetField.implicitWidth + removeDifficultyButton.implicitWidth
-                + 3 * gap
+                + offsetField.implicitWidth + 2 * gap
             readonly property real firstRowWidth:
                 levelField.implicitWidth + offsetField.implicitWidth + gap
-            readonly property real secondRowWidth:
-                designerField.implicitWidth + removeDifficultyButton.implicitWidth + gap
             readonly property real twoRowWidth:
-                firstRowWidth >= secondRowWidth ? firstRowWidth : secondRowWidth
+                Math.max(firstRowWidth, designerField.implicitWidth)
             readonly property bool wide: width >= wideWidth
             readonly property bool twoRows: !wide && width >= twoRowWidth
 
-            height: removeDifficultyButton.y + removeDifficultyButton.height
+            height: designerField.y + designerField.height
 
             DifficultyHeaderField {
                 id: levelField
@@ -281,10 +282,11 @@ Item {
                         : offsetField.y + offsetField.height + headerContent.gap
                 stacked: !headerContent.wide && !headerContent.twoRows
                     && headerContent.width < implicitWidth
-                width: stacked ? headerContent.width : implicitWidth
+                width: Math.max(0, headerContent.width - x)
                 labelText: UiText.text("谱师")
                 value: root.documentSession.currentDifficultyDesigner
                 editorWidth: 100
+                fillEditorWidth: true
                 onCommitted: value => root.documentSession.currentDifficultyDesigner = value
             }
 
@@ -304,18 +306,6 @@ Item {
                 onCommitted: value => root.documentSession.currentDifficultyOffset = value
             }
 
-            AppButton {
-                id: removeDifficultyButton
-                x: parent.width - width
-                y: headerContent.wide ? 0
-                    : headerContent.twoRows
-                        ? designerField.y
-                        : designerField.y + designerField.height + headerContent.gap
-                text: UiText.text("删除难度")
-                emphasized: true
-                enabled: root.documentSession.currentDifficultyId > 0
-                onClicked: removeDifficultyDialog.open()
-            }
         }
     }
 
@@ -477,22 +467,6 @@ Item {
         id: designerSlotsDialog
         documentSession: root.documentSession
         commands: root.commands
-    }
-
-    ChoiceDialog {
-        id: removeDifficultyDialog
-
-        title: UiText.text("删除当前难度")
-        message: UiText.text("当前难度及其正文将从文档中删除。")
-        dismissChoiceId: "cancel"
-        choices: [
-            { id: "cancel", label: UiText.text("取消"), role: "reject" },
-            { id: "remove", label: UiText.text("确定"), role: "accept" }
-        ]
-        onChosen: function(choiceId) {
-            if (choiceId === "remove")
-                root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
-        }
     }
 
     component MetadataField: Column {
